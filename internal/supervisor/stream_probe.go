@@ -240,6 +240,9 @@ func RunClaudeStreamProbe(ctx context.Context, root, cli, private string) (resul
 		return result, err
 	}
 	defer lock.Release()
+	if err := checkStartupLease(); err != nil {
+		return result, err
+	}
 	if err := reconcileRuns(root); err != nil {
 		return result, err
 	}

@@ -68,13 +68,25 @@ func (s *Supervisor) runStream(parent context.Context, token string, launcher St
 	s.current = job
 	s.mu.Unlock()
 	defer func() { s.mu.Lock(); s.current = nil; s.mu.Unlock() }()
-	process, err := launcher.StartStream(spec, "http://"+ln.Addr().String()+"/mcp", secret)
+	s.dispatch.Unlock()
+	process, err := s.startStream(ctx, launcher, spec, "http://"+ln.Addr().String()+"/mcp", secret)
+	s.dispatch.Lock()
 	if err != nil {
+		if errors.Is(err, errNotStarted) {
+			_ = s.store.FailStreamStart(token, err.Error())
+		}
 		s.dispatch.Unlock()
 		return
 	}
 	obs := process.Observation
 	job.pgid = obs.PGID
+	if ctx.Err() != nil || s.stopping.Load() {
+		s.dispatch.Unlock()
+		process.Input.Close()
+		process.Output.Close()
+		go process.Wait()
+		return
+	}
 	if err := s.store.RecordProcess(token, obs); err != nil {
 		s.dispatch.Unlock()
 		process.Input.Close()
@@ -113,20 +125,36 @@ func (s *Supervisor) runStream(parent context.Context, token string, launcher St
 	}()
 	exited := make(chan streamExit, 1)
 	go func() { code, err := process.Wait(); exited <- streamExit{code, err} }()
+	observed := make(chan struct{})
+	go func() {
+		defer close(observed)
+		record := func(exit streamExit) {
+			if exit.err == nil {
+				_ = s.store.RecordStreamExit(token, exit.code)
+			} else {
+				_ = s.store.StopStream(token, "CLI wait failed; MCP revoked")
+			}
+			cancel()
+		}
+		select {
+		case exit := <-exited:
+			record(exit)
+		case <-ctx.Done():
+			select {
+			case exit := <-exited:
+				record(exit)
+			case <-time.After(200 * time.Millisecond):
+			}
+		}
+	}()
 	defer func() {
-		// Revoke before closing input or releasing the supervisor lock. Do not wait
-		// indefinitely for a CLI or for descendants holding stdout open.
 		_ = s.store.StopStream(token, "stream ending; MCP revoked")
 		cancel()
 		_ = process.Input.Close()
 		_ = server.Close()
-		select {
-		case exit := <-exited:
-			if exit.err == nil {
-				_ = s.store.RecordStreamExit(token, exit.code)
-			}
-		case <-time.After(200 * time.Millisecond):
-		}
+		// The observer must finish before Run closes the database. The raw Wait
+		// goroutine never accesses it and may outlive the controller.
+		<-observed
 	}()
 	pending := true
 	ticker := time.NewTicker(50 * time.Millisecond)

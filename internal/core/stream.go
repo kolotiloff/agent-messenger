@@ -46,6 +46,39 @@ func (s *Store) BeginStream(token string) error {
 	})
 }
 
+// FailStreamStart is only for a definite OS refusal before the target executable
+// ran, after its provisional user reservation has been removed. It never retries
+// the failed message. Attempts and journal history remain; only unused stream
+// transport rows are removed so a later, explicitly queued message can start.
+func (s *Store) FailStreamStart(run, reason string) error {
+	return s.tx(func(tx *sql.Tx) error {
+		row, err := owned(tx, run, "launching", "uncertain")
+		if err != nil {
+			return err
+		}
+		var safe int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM stream_runs r JOIN stream_turns t ON t.run_id=r.id JOIN attempts a ON a.token=t.attempt_token WHERE r.id=? AND t.attempt_token=? AND t.sent_intent=0 AND COALESCE(a.pid,0)=0 AND NOT EXISTS(SELECT 1 FROM replies WHERE attempt_token=?)`, run, run, run).Scan(&safe); err != nil {
+			return err
+		}
+		if safe != 1 {
+			return ErrRejected
+		}
+		if err := revoke(tx, row, "not_started", reason); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM stream_turns WHERE run_id=?`, run); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM stream_runs WHERE id=?`, run); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE sessions SET active_token=NULL WHERE key=? AND active_token=?`, row.sessionKey, run); err != nil {
+			return err
+		}
+		return insertEvent(tx, "stream_not_started", row.sessionKey, run, "definite exec refusal; no automatic retry")
+	})
+}
+
 func streamCurrent(tx *sql.Tx, run string) (attemptRow, error) {
 	var token, state string
 	if err := tx.QueryRow(`SELECT COALESCE(current_token,''),state FROM stream_runs WHERE id=?`, run).Scan(&token, &state); err != nil {

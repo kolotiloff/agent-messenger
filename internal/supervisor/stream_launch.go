@@ -1,15 +1,20 @@
 package supervisor
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"syscall"
 
 	"github.com/kolotiloff/agent-messenger/internal/adapters"
 	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
+
+var errNotStarted = errors.New("CLI definitely did not start")
 
 type StreamProcess struct {
 	Observation platform.Observation
@@ -20,12 +25,12 @@ type StreamProcess struct {
 
 type StreamLauncher interface {
 	StreamingEnabled() bool
-	StartStream(Spec, string, string) (StreamProcess, error)
+	StartStream(context.Context, Spec, string, string) (StreamProcess, error)
 }
 
 func (l AdapterLauncher) StreamingEnabled() bool { return l.ClaudeStream }
 
-func (l AdapterLauncher) StartStream(spec Spec, url, secret string) (StreamProcess, error) {
+func (l AdapterLauncher) StartStream(ctx context.Context, spec Spec, url, secret string) (StreamProcess, error) {
 	if !l.AllowModels || !l.ClaudeStream {
 		return StreamProcess{}, errModelsNotAuthorized
 	}
@@ -73,9 +78,20 @@ func (l AdapterLauncher) StartStream(spec Spec, url, secret string) (StreamProce
 	if err := rememberRun(run); err != nil {
 		return StreamProcess{}, err
 	}
+	if err := ctx.Err(); err != nil {
+		return StreamProcess{}, errors.Join(err, forgetRunID(id))
+	}
 	if err := cmd.Start(); err != nil {
+		// Only these definite OS refusals establish that the target executable
+		// never ran. Unknown failures keep their incomplete reservation.
+		if cmd.Process == nil && (errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.ENOENT) || errors.Is(err, syscall.ENOEXEC) || errors.Is(err, syscall.ENOTDIR)) {
+			if cleanupErr := forgetRunID(id); cleanupErr != nil {
+				return StreamProcess{}, errors.Join(err, cleanupErr)
+			}
+			return StreamProcess{}, errors.Join(errNotStarted, err)
+		}
 		return StreamProcess{}, err
-	} // keep incomplete reserve on any ambiguous launch failure
+	}
 	obs, err := platform.ReadObservation(cmd.Process.Pid)
 	if err != nil {
 		_ = cmd.Process.Kill()

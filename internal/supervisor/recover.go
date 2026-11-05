@@ -24,6 +24,9 @@ func RecoverFailed(confirm string) (string, error) {
 		return "", err
 	}
 	defer lock.Release()
+	if err := checkStartupLease(); err != nil {
+		return "", err
+	}
 	runs, err := loadRuns()
 	if err != nil {
 		return "", err

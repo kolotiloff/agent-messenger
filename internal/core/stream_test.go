@@ -29,6 +29,16 @@ func streamTestStore(t *testing.T) (*Store, string) {
 	return s, run
 }
 
+func TestFailStreamStartRejectsObservedProcess(t *testing.T) {
+	s, run := streamTestStore(t)
+	if err := s.FailStreamStart(run, "not a definite refusal"); !errors.Is(err, ErrRejected) {
+		t.Fatal("released an observed process", err)
+	}
+	if _, err := s.Claim("worker"); !errors.Is(err, ErrBusy) {
+		t.Fatal("session owner lost", err)
+	}
+}
+
 func finishTestTurn(t *testing.T, s *Store, run string) StreamMessage {
 	t.Helper()
 	if _, err := s.PrepareStreamSend(run); err != nil {

@@ -74,6 +74,7 @@ type Supervisor struct {
 	beforeSignal func()
 	dispatch     sync.Mutex
 	stopping     atomic.Bool
+	starting     atomic.Bool
 }
 
 type activeJob struct {
@@ -104,6 +105,9 @@ func Run(parent context.Context, root string, launcher Launcher) error {
 		return err
 	}
 	defer lock.Release()
+	if err := checkStartupLease(); err != nil {
+		return err
+	}
 	store, err := core.Open(filepath.Join(root, dbName))
 	if err != nil {
 		return err
@@ -151,7 +155,7 @@ func (s *Supervisor) loop(ctx context.Context) {
 			return
 		case <-ticker.C:
 		}
-		if s.stopping.Load() || !s.launcher.Enabled() {
+		if s.stopping.Load() || s.starting.Load() || !s.launcher.Enabled() {
 			continue
 		}
 		if stream, ok := s.launcher.(StreamLauncher); ok && stream.StreamingEnabled() {
