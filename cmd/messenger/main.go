@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/kolotiloff/agent-messenger/internal/control"
+	"github.com/kolotiloff/agent-messenger/internal/core"
 	"github.com/kolotiloff/agent-messenger/internal/mcp"
 	"github.com/kolotiloff/agent-messenger/internal/platform"
 	"github.com/kolotiloff/agent-messenger/internal/supervisor"
@@ -40,6 +41,19 @@ func main() {
 
 func run(root string, args []string) error {
 	switch args[0] {
+	case "recover-failed":
+		message, err := supervisor.RecoverFailed(request(args).Confirmation)
+		if errors.Is(err, platform.ErrAlreadyRunning) {
+			return errors.New("клиент уже запущен; восстановление не меняет резерв, пока serve работает")
+		}
+		if errors.Is(err, core.ErrBadConfirmation) {
+			return errors.New("нужна точная фраза --confirm actions-may-repeat; резерв не изменён")
+		}
+		if err != nil {
+			return fmt.Errorf("восстановление не завершено, файл резерва не заменён: %w", err)
+		}
+		fmt.Println(message)
+		return nil
 	case "serve":
 		allow, err := serveAllowsModels(args[1:])
 		if err != nil {
@@ -144,6 +158,7 @@ func usage() {
 даже с другим каталогом данных. Реальный CLI запускается только после register-session.
 
   messenger --root КАТАЛОГ serve [--allow-model-calls]
+  messenger recover-failed --confirm actions-may-repeat
   messenger --root КАТАЛОГ register-session --provider claude|codex|cursor --environment КАТАЛОГ --conversation-id ID --alias ИМЯ --cli ФАЙЛ [--workspace КАТАЛОГ]
   messenger --root КАТАЛОГ status
   messenger --root КАТАЛОГ pause
@@ -157,6 +172,7 @@ func usage() {
 pause — новые задания не резервируются, активный процесс не останавливается.
 stop-job — сначала отзывает MCP, затем сигналит группе только если pid, время старта и группа всё ещё принадлежат той же попытке.
 shutdown — очередь остаётся, активный процесс не убивается. Следующий serve сразу отзывает старый MCP и не снимает блокировку сессии.
+recover-failed снимает только неудачную попытку после явного подтверждения, если записанный процесс и его группа уже не работают. История остаётся. Модель при этом не запускается. Пустой, повреждённый или неполный резерв эта команда не удаляет.
 Без --allow-model-calls serve не запускает CLI и не тратит токены.
 С --allow-model-calls запускается только CLI, заранее записанный через register-session, и только точный ID.
 Пустая группа процессов не завершает попытку и не снимает блокировку. Второе письмо той же сессии само не стартует.

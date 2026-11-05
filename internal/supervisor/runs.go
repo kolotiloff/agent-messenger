@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/kolotiloff/agent-messenger/internal/core"
 	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
 
@@ -19,6 +20,11 @@ var ErrRunsCorrupt = errors.New("active-runs.json is empty or damaged")
 
 // beforeRenameHook, when set by tests, runs after the temp file is synced and before rename.
 var beforeRenameHook func() error
+
+// ownsObservation and groupEmpty are the process checks used before a reservation
+// may be retired. Tests replace them to simulate an observation failure.
+var ownsObservation = platform.OwnsObservation
+var groupEmpty = platform.GroupEmpty
 
 type recordedRun struct {
 	ID             string `json:"id"`
@@ -214,6 +220,31 @@ func runBlocks(run recordedRun) (bool, error) {
 		return true, nil
 	}
 	return true, nil
+}
+
+// reservationReadyToRetire reports whether this reservation may be retired.
+// A missing PID, a live process, a live group, or an observation error refuses.
+func reservationReadyToRetire(run recordedRun) error {
+	if run.PID <= 0 || run.PGID <= 1 || run.StartToken == "" || run.BootID == "" {
+		return fmt.Errorf("%w: observation is incomplete", core.ErrRecoveryBlocked)
+	}
+	owned, err := ownsObservation(platform.Observation{
+		PID: run.PID, PGID: run.PGID, StartToken: run.StartToken, BootID: run.BootID,
+	})
+	if err != nil {
+		return fmt.Errorf("%w: %v", core.ErrRecoveryBlocked, err)
+	}
+	if owned {
+		return fmt.Errorf("%w: recorded process is still running", core.ErrRecoveryBlocked)
+	}
+	empty, err := groupEmpty(run.PGID)
+	if err != nil {
+		return fmt.Errorf("%w: %v", core.ErrRecoveryBlocked, err)
+	}
+	if !empty {
+		return fmt.Errorf("%w: a descendant is still in the process group", core.ErrRecoveryBlocked)
+	}
+	return nil
 }
 
 // reconcileRuns refuses a different data directory while any reservation remains.

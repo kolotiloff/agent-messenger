@@ -703,6 +703,126 @@ func (s *Store) Accept(alias string, proof platform.Proof) error {
 	})
 }
 
+// FailedAttemptRecoverable checks a held failure without changing it.
+func (s *Store) FailedAttemptRecoverable(provider, environment, conversationID string) error {
+	return s.tx(func(tx *sql.Tx) error {
+		_, _, _, _, err := failedAttempt(tx, provider, environment, conversationID)
+		return err
+	})
+}
+
+func failedAttempt(tx *sql.Tx, provider, environment, conversationID string) (string, attemptRow, string, bool, error) {
+	var key string
+	var token sql.NullString
+	err := tx.QueryRow(`SELECT key, active_token FROM sessions WHERE provider=? AND environment=? AND conversation_id=?`,
+		provider, environment, conversationID).Scan(&key, &token)
+	if err == sql.ErrNoRows {
+		return "", attemptRow{}, "", false, fmt.Errorf("%w: session is not in the reserved data directory", ErrRejected)
+	}
+	if err != nil {
+		return "", attemptRow{}, "", false, err
+	}
+	if !token.Valid || token.String == "" {
+		existing, err := alreadyRecovered(tx, key)
+		if err != nil {
+			return "", attemptRow{}, "", false, err
+		}
+		if existing == "" {
+			return "", attemptRow{}, "", false, fmt.Errorf("%w: no held attempt", ErrRejected)
+		}
+		return key, attemptRow{}, existing, true, nil
+	}
+	var requestID string
+	if err := tx.QueryRow(`SELECT request_id FROM attempts WHERE token=?`, token.String).Scan(&requestID); err != nil {
+		return "", attemptRow{}, "", false, err
+	}
+	var replies int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM replies WHERE attempt_token=? OR reply_to=?`, token.String, requestID).Scan(&replies); err != nil {
+		return "", attemptRow{}, "", false, err
+	}
+	if replies > 0 {
+		return "", attemptRow{}, "", false, fmt.Errorf("%w: a stored reply cannot be retired as a failure", ErrRejected)
+	}
+	var providerOK int
+	var replyID sql.NullString
+	err = tx.QueryRow(`SELECT provider_ok, reply_id FROM verifications WHERE attempt_token=?`, token.String).
+		Scan(&providerOK, &replyID)
+	if err == nil {
+		if providerOK == 1 {
+			return "", attemptRow{}, "", false, fmt.Errorf("%w: provider result is valid and cannot be retired as a failure", ErrRejected)
+		}
+		if replyID.Valid {
+			return "", attemptRow{}, "", false, fmt.Errorf("%w: a stored reply cannot be retired as a failure", ErrRejected)
+		}
+	} else if err != sql.ErrNoRows {
+		return "", attemptRow{}, "", false, err
+	}
+	row, err := owned(tx, token.String, "uncertain", "running", "launching", "reserved")
+	if err != nil {
+		return "", attemptRow{}, "", false, err
+	}
+	return key, row, "", false, nil
+}
+
+func alreadyRecovered(tx *sql.Tx, key string) (string, error) {
+	var detail string
+	err := tx.QueryRow(`SELECT detail FROM events WHERE session_key=? AND kind='failed_attempt_recovered' ORDER BY id DESC LIMIT 1`, key).Scan(&detail)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	const prefix = "actions may be repeated; new "
+	if !strings.HasPrefix(detail, prefix) || len(detail) == len(prefix) {
+		return "", fmt.Errorf("%w: recovery record is incomplete", ErrRecoveryBlocked)
+	}
+	id := detail[len(prefix):]
+	var state string
+	var retryOf sql.NullString
+	err = tx.QueryRow(`SELECT state, retry_of FROM requests WHERE id=? AND session_key=?`, id, key).Scan(&state, &retryOf)
+	if err != nil {
+		return "", fmt.Errorf("%w: recovered request is missing", ErrRecoveryBlocked)
+	}
+	if state != "queued" || !retryOf.Valid || retryOf.String == "" {
+		return "", fmt.Errorf("%w: recovered request is not waiting", ErrRecoveryBlocked)
+	}
+	return id, nil
+}
+
+// RecoverFailedAttempt keeps a failed attempt and queues one new request.
+// It refuses a valid provider result or a stored reply. The caller must already
+// have checked that the recorded process and its group are not running.
+func (s *Store) RecoverFailedAttempt(provider, environment, conversationID string) (string, error) {
+	var newID string
+	err := s.tx(func(tx *sql.Tx) error {
+		key, row, existing, already, err := failedAttempt(tx, provider, environment, conversationID)
+		if err != nil {
+			return err
+		}
+		if already {
+			newID = existing
+			return nil
+		}
+		if err := revoke(tx, row, "uncertain", "failed attempt kept; detached descendants outside the group were not proven"); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE sessions SET active_token=NULL WHERE key=? AND active_token=?`, key, row.token); err != nil {
+			return err
+		}
+		newID, err = newIDFunc()
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`INSERT INTO requests(id, session_key, sender, text, state, retry_of, created_at) VALUES (?,?,?,?, 'queued', ?, ?)`,
+			newID, key, row.sender, row.text, row.requestID, now()); err != nil {
+			return err
+		}
+		return insertEvent(tx, "failed_attempt_recovered", key, row.token, "actions may be repeated; new "+newID)
+	})
+	return newID, err
+}
+
 // Retry authorizes one new queued request. It refuses unless stop is proven and the
 // operator sent the exact warning phrase. Old rows are not deleted.
 func (s *Store) Retry(alias, confirmation string, proof platform.Proof) (string, error) {
