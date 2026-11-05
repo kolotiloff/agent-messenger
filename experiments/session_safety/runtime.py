@@ -101,16 +101,26 @@ class Store:
             raise Rejected('Inactive, quarantined or unknown execution context')
         return row
 
-    def begin_launch(self, token):
+    def begin_launch(self, token, require_identity=False):
         # Commit intent BEFORE Popen: the child may exist even if no PID was saved.
         with self.transaction():
             row = self._owned(token, ('reserved',))
+            state = 'launching' if require_identity else 'running'
+            self.db.execute('UPDATE attempts SET state=? WHERE token=?', (state, token))
+            self.db.execute('UPDATE requests SET state=? WHERE id=?', (state, row['request']))
+
+    def confirm_identity(self, token, actual_session_key):
+        """Trusted CLI adapter verifies startup identity before enabling MCP calls."""
+        with self.transaction():
+            row = self._owned(token, ('launching',))
+            if row['session'] != actual_session_key:
+                raise Rejected('CLI started a different session')
             self.db.execute("UPDATE attempts SET state='running' WHERE token=?", (token,))
             self.db.execute("UPDATE requests SET state='running' WHERE id=?", (row['request'],))
 
     def record_pid(self, token, pid):
         with self.transaction():
-            self._owned(token, ('running',))
+            self._owned(token, ('launching', 'running'))
             self.db.execute('UPDATE attempts SET child_pid=? WHERE token=?', (pid, token))
 
     def current_message(self, token):
@@ -154,7 +164,7 @@ class Store:
             if not session or not session['active']:
                 return
             token = session['active']
-            row = self._owned(token, ('reserved', 'running', 'uncertain'))
+            row = self._owned(token, ('reserved', 'launching', 'running', 'uncertain'))
             self.db.execute("UPDATE attempts SET state='uncertain' WHERE token=?", (token,))
             self.db.execute("UPDATE requests SET state='uncertain' WHERE id=?", (row['request'],))
 
