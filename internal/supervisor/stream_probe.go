@@ -251,6 +251,9 @@ func RunClaudeStreamProbe(ctx context.Context, root, cli, private string) (resul
 		return result, err
 	}
 	defer store.Close()
+	if err := store.CheckPendingStreamRecovery(); err != nil {
+		return result, err
+	}
 	random, err := newRunID()
 	if err != nil {
 		return result, err

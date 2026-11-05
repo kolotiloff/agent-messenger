@@ -113,6 +113,9 @@ func Run(parent context.Context, root string, launcher Launcher) error {
 		return err
 	}
 	defer store.Close()
+	if err := store.CheckPendingStreamRecovery(); err != nil {
+		return err
+	}
 	if err := reconcileRuns(root); err != nil {
 		return err
 	}

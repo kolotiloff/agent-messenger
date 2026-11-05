@@ -108,14 +108,16 @@ type Reply struct {
 type Row map[string]any
 
 type Snapshot struct {
-	Sessions      []Row
-	Requests      []Row
-	Attempts      []Row
-	Replies       []Row
-	Events        []Row
-	Paused        bool
-	StreamRuns    []Row
-	Verifications []Row
+	Sessions           []Row
+	Requests           []Row
+	Attempts           []Row
+	Replies            []Row
+	Events             []Row
+	Paused             bool
+	StreamRuns         []Row
+	Verifications      []Row
+	ArchivedStreamRuns []Row
+	StreamRecoveries   []Row
 }
 
 func Open(path string) (*Store, error) {
@@ -126,7 +128,7 @@ func Open(path string) (*Store, error) {
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 	store := &Store{db: db}
-	if _, err := db.Exec(schema + streamSchema); err != nil {
+	if _, err := db.Exec(schema + streamSchema + streamRecoverySchema); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -955,6 +957,14 @@ func (s *Store) Snapshot() (Snapshot, error) {
 			return err
 		}
 		snap.StreamRuns, err = readRows(tx, `SELECT id,session_key,state,current_token,exit_observed,exit_code FROM stream_runs ORDER BY rowid`)
+		if err != nil {
+			return err
+		}
+		snap.ArchivedStreamRuns, err = readRows(tx, `SELECT * FROM archived_stream_runs ORDER BY rowid`)
+		if err != nil {
+			return err
+		}
+		snap.StreamRecoveries, err = readRows(tx, `SELECT run_id,phase,proof FROM stream_recoveries ORDER BY rowid`)
 		if err != nil {
 			return err
 		}

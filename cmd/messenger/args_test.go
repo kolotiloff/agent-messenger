@@ -38,3 +38,18 @@ func TestRootFlagWorksBeforeOrAfterCommand(t *testing.T) {
 		t.Fatalf("status = %q %q", root, args)
 	}
 }
+
+func TestRecoverStreamRejectsMissingBindingAndBypassFlags(t *testing.T) {
+	for _, args := range [][]string{
+		{"recover-stream"},
+		{"recover-stream", "--confirm", "preserve-uncertain"},
+		{"recover-stream", "--alias", "worker", "--confirm", "preserve-uncertain"},
+		{"recover-stream", "--run", "run", "--confirm", "preserve-uncertain"},
+		{"recover-stream", "--force"},
+		{"recover-stream", "unexpected"},
+	} {
+		if err := run(t.TempDir(), args); err == nil {
+			t.Fatal("invalid recovery command accepted", args)
+		}
+	}
+}

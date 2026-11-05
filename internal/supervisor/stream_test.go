@@ -20,6 +20,16 @@ import (
 )
 
 func streamFixture(mode string) error {
+	if mode == "resume-only" {
+		resume, fresh := false, false
+		for _, a := range os.Args {
+			resume = resume || a == "--resume"
+			fresh = fresh || a == "--session-id"
+		}
+		if !resume || fresh {
+			return errors.New("recovered session must use exact resume")
+		}
+	}
 	var sid, config string
 	for i, a := range os.Args {
 		if i+1 < len(os.Args) {

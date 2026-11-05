@@ -75,6 +75,10 @@ func (l AdapterLauncher) StartStream(ctx context.Context, spec Spec, url, secret
 		return StreamProcess{}, err
 	}
 	run := recordedRun{ID: id, Root: spec.DataRoot, Provider: spec.Provider, Environment: spec.Environment, ConversationID: spec.ConversationID}
+	run.StreamRunID = spec.Token
+	// Failure to read the epoch does not relax a reservation. Such a run will
+	// remain non-recoverable by the strict reboot recovery command.
+	run.Epoch, _ = platform.CurrentRecoveryEpoch()
 	if err := rememberRun(run); err != nil {
 		return StreamProcess{}, err
 	}

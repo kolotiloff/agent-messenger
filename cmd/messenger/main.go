@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -41,6 +42,23 @@ func main() {
 
 func run(root string, args []string) error {
 	switch args[0] {
+	case "recover-stream":
+		fs := flag.NewFlagSet("recover-stream", flag.ContinueOnError)
+		alias := fs.String("alias", "", "exact session alias")
+		runID := fs.String("run", "", "exact StreamRuns id from inspect")
+		confirm := fs.String("confirm", "", "preserve-uncertain")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 0 {
+			return errors.New("лишние аргументы recover-stream")
+		}
+		message, err := supervisor.RecoverStream(root, *alias, *runID, *confirm)
+		if err != nil {
+			return fmt.Errorf("восстановление канала не завершено: %w", err)
+		}
+		fmt.Println(message)
+		return nil
 	case "recover-failed":
 		message, err := supervisor.RecoverFailed(request(args).Confirmation)
 		if errors.Is(err, platform.ErrAlreadyRunning) {
@@ -166,6 +184,7 @@ func usage() {
   messenger --root КАТАЛОГ serve [--allow-model-calls] [--claude-stream]
   messenger --root КАТАЛОГ create-claude-session --environment КАТАЛОГ --alias ИМЯ --cli ФАЙЛ --workspace КАТАЛОГ
   messenger recover-failed --confirm actions-may-repeat
+  messenger --root КАТАЛОГ recover-stream --alias ИМЯ --run ID_ЗАПУСКА --confirm preserve-uncertain
   messenger --root КАТАЛОГ register-session --provider claude|codex|cursor --environment КАТАЛОГ --conversation-id ID --alias ИМЯ --cli ФАЙЛ [--workspace КАТАЛОГ]
   messenger --root КАТАЛОГ status
   messenger --root КАТАЛОГ pause
@@ -187,6 +206,7 @@ recover-failed снимает только неудачную попытку п�
 create-claude-session создаёт новый точный ID без модели, для последующего запуска с --claude-stream.
 Постоянный процесс сохраняет блокировку после stop/shutdown/restart. Незавершённый ход не повторяется автоматически.
 inspect показывает StreamRuns и Verifications: успешный ход не является выходом процесса.
+recover-stream: только при остановленном serve, после доказанной новой загрузки того же Mac и хотя бы одного проверенного ответа. Старые резервы без заранее записанной идентичности загрузки не подходят. История и неопределённые письма сохраняются, автоматического повтора нет; очередь остаётся на паузе. Модель не вызывается.
 `)
 }
 

@@ -27,15 +27,17 @@ var ownsObservation = platform.OwnsObservation
 var groupEmpty = platform.GroupEmpty
 
 type recordedRun struct {
-	ID             string `json:"id"`
-	Root           string `json:"root"`
-	PID            int    `json:"pid"`
-	PGID           int    `json:"pgid"`
-	StartToken     string `json:"start_token"`
-	BootID         string `json:"boot_id"`
-	Provider       string `json:"provider"`
-	Environment    string `json:"environment"`
-	ConversationID string `json:"conversation_id"`
+	StreamRunID    string                 `json:"stream_run_id,omitempty"`
+	Epoch          platform.RecoveryEpoch `json:"recovery_epoch,omitempty"`
+	ID             string                 `json:"id"`
+	Root           string                 `json:"root"`
+	PID            int                    `json:"pid"`
+	PGID           int                    `json:"pgid"`
+	StartToken     string                 `json:"start_token"`
+	BootID         string                 `json:"boot_id"`
+	Provider       string                 `json:"provider"`
+	Environment    string                 `json:"environment"`
+	ConversationID string                 `json:"conversation_id"`
 }
 
 func runsPath() (string, error) {
