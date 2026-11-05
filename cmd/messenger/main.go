@@ -8,12 +8,15 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/kolotiloff/agent-messenger/internal/buildinfo"
 	"github.com/kolotiloff/agent-messenger/internal/control"
 	"github.com/kolotiloff/agent-messenger/internal/core"
 	"github.com/kolotiloff/agent-messenger/internal/diagnostics"
+	"github.com/kolotiloff/agent-messenger/internal/distribution"
 	"github.com/kolotiloff/agent-messenger/internal/localui"
 	"github.com/kolotiloff/agent-messenger/internal/mcp"
 	"github.com/kolotiloff/agent-messenger/internal/platform"
@@ -33,6 +36,12 @@ func main() {
 		}
 		return
 	}
+	if args[0] == "version" {
+		if err := run(root, args); err != nil {
+			fail(err)
+		}
+		return
+	}
 	if root == "" {
 		var err error
 		root, err = platform.DefaultRoot()
@@ -47,6 +56,40 @@ func main() {
 
 func run(root string, args []string) error {
 	switch args[0] {
+	case "version":
+		if len(args) != 1 {
+			return errors.New("version takes no arguments")
+		}
+		raw, err := json.Marshal(buildinfo.Current())
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(raw))
+		return nil
+	case "install":
+		fs := flag.NewFlagSet("install", flag.ContinueOnError)
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		prefix := fs.String("prefix", filepath.Join(home, ".local"), "absolute user installation directory")
+		if err = fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 0 {
+			return errors.New("install takes only --prefix")
+		}
+		exe, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		installed, err := distribution.Install(exe, *prefix, buildinfo.Current())
+		if err != nil {
+			return err
+		}
+		fmt.Println("Installed:", installed)
+		fmt.Println("No client, model, service or login was started. Add the bin directory to PATH if needed.")
+		return nil
 	case "ui":
 		fs := flag.NewFlagSet("ui", flag.ContinueOnError)
 		port := fs.Int("port", 0, "loopback port; 0 chooses a free port")
@@ -289,6 +332,8 @@ func usage() {
 --root стоит перед командой. Один пользователь может держать только один serve,
 даже с другим каталогом данных. Реальный CLI запускается только после register-session.
 
+  messenger version
+  messenger install [--prefix АБСОЛЮТНЫЙ_КАТАЛОГ]
   messenger --root КАТАЛОГ serve [--allow-model-calls] [--claude-stream]
   messenger --root КАТАЛОГ start [--allow-model-calls] [--claude-stream]
   messenger --root КАТАЛОГ doctor [--json]
