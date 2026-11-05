@@ -1,0 +1,66 @@
+name: Client checks (no real models)
+
+"on":
+  pull_request:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: client-checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    name: Tests / ${{ matrix.runner }} / Go ${{ matrix.go }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            go: '1.22.2'
+            cross: true
+          - runner: macos-15
+            go: '1.22.2'
+            package: true
+          - runner: ubuntu-24.04
+            go: stable
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ matrix.go }}
+          cache: false
+      - name: Format, module integrity, vet and native race tests
+        run: bash scripts/check.sh
+      - name: Compile targets and test binaries (not runtime acceptance)
+        if: matrix.cross == true
+        run: bash scripts/check-builds.sh
+      - name: Build two Mac preview versions
+        if: matrix.package == true
+        env:
+          SOURCE_REVISION: ${{ github.sha }}
+        run: |
+          for version in 0.0.0-preview.ci1 0.0.0-preview.ci2; do
+            go run -ldflags=-linkmode=external ./cmd/package-preview \
+              --version "$version" --revision "$SOURCE_REVISION" \
+              --external-linker --out "$RUNNER_TEMP/mac-preview"
+          done
+      - name: Verify archive, clean install and update without losing queue
+        if: matrix.package == true
+        run: python3 scripts/check-package.py "$RUNNER_TEMP/mac-preview" 0.0.0-preview.ci1 0.0.0-preview.ci2
+      - name: Save tested Mac preview archives (not a release)
+        if: matrix.package == true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mac-preview-${{ github.sha }}
+          path: ${{ runner.temp }}/mac-preview/*
+          if-no-files-found: error
+          retention-days: 7
