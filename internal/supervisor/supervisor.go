@@ -563,6 +563,8 @@ func (s *Supervisor) Enqueue(alias, id, sender, text string) (bool, error) {
 
 func (s *Supervisor) Inspect() (any, error) { return s.store.Snapshot() }
 
+func (s *Supervisor) Overview() (any, error) { return s.store.Overview() }
+
 func (s *Supervisor) Resolve(alias, action, confirmation string) (string, error) {
 	if run, err := s.store.StreamRunForAlias(alias); err != nil {
 		return "", err

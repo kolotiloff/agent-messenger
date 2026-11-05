@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/kolotiloff/agent-messenger/internal/control"
 	"github.com/kolotiloff/agent-messenger/internal/core"
@@ -44,6 +45,21 @@ func main() {
 
 func run(root string, args []string) error {
 	switch args[0] {
+	case "overview":
+		if len(args) != 1 {
+			return errors.New("overview takes no arguments")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		response, err := control.CallContext(ctx, root, control.Request{Cmd: "overview"})
+		if err != nil {
+			return err
+		}
+		if !response.OK {
+			return errors.New(response.Error)
+		}
+		fmt.Println(string(response.Overview))
+		return nil
 	case "check-cli":
 		fs := flag.NewFlagSet("check-cli", flag.ContinueOnError)
 		provider := fs.String("provider", "", "claude|codex|cursor")
@@ -246,6 +262,7 @@ func usage() {
   messenger --root КАТАЛОГ recover-stream --alias ИМЯ --run ID_ЗАПУСКА --confirm preserve-uncertain
   messenger --root КАТАЛОГ register-session --provider claude|codex|cursor --environment КАТАЛОГ --conversation-id ID --alias ИМЯ --cli ФАЙЛ [--workspace КАТАЛОГ]
   messenger --root КАТАЛОГ status
+  messenger --root КАТАЛОГ overview
   messenger --root КАТАЛОГ pause
   messenger --root КАТАЛОГ resume
   messenger --root КАТАЛОГ stop-job

@@ -49,12 +49,13 @@ type StopResult struct {
 }
 
 type Response struct {
-	OK      bool            `json:"ok"`
-	Error   string          `json:"error,omitempty"`
-	Status  *Status         `json:"status,omitempty"`
-	Stop    *StopResult     `json:"stop,omitempty"`
-	Created *bool           `json:"created,omitempty"`
-	Inspect json.RawMessage `json:"inspect,omitempty"`
+	OK       bool            `json:"ok"`
+	Error    string          `json:"error,omitempty"`
+	Status   *Status         `json:"status,omitempty"`
+	Stop     *StopResult     `json:"stop,omitempty"`
+	Created  *bool           `json:"created,omitempty"`
+	Inspect  json.RawMessage `json:"inspect,omitempty"`
+	Overview json.RawMessage `json:"overview,omitempty"`
 }
 
 type Handler interface {
@@ -120,6 +121,20 @@ func Serve(ln net.Listener, handler Handler) error {
 
 func dispatch(handler Handler, request Request) Response {
 	switch request.Cmd {
+	case "overview":
+		reader, ok := handler.(interface{ Overview() (any, error) })
+		if !ok {
+			return Response{Error: "overview unsupported"}
+		}
+		value, err := reader.Overview()
+		if err != nil {
+			return Response{Error: "overview unavailable"}
+		}
+		raw, err := json.Marshal(value)
+		if err != nil {
+			return Response{Error: "overview unavailable"}
+		}
+		return Response{OK: true, Overview: raw}
 	case "status":
 		status, err := handler.Status()
 		if err != nil {
