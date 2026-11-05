@@ -37,7 +37,16 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+func isolateUser(t *testing.T) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "xdg"))
+	t.Setenv("AppData", filepath.Join(home, "appdata"))
+}
+
 func TestIdleAndPauseDoNotLaunch(t *testing.T) {
+	isolateUser(t)
 	root := t.TempDir()
 	env := mkdir(t, filepath.Join(root, "cli"))
 	st := mustStore(t, root)
@@ -100,6 +109,7 @@ func TestIdleAndPauseDoNotLaunch(t *testing.T) {
 }
 
 func TestCommandsDoNotStartASecondSupervisor(t *testing.T) {
+	isolateUser(t)
 	root := t.TempDir()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -152,6 +162,7 @@ func TestCommandsDoNotStartASecondSupervisor(t *testing.T) {
 }
 
 func TestSupervisorRunsExplicitSessionAndBlocksOccupiedGroup(t *testing.T) {
+	isolateUser(t)
 	if _, err := platform.ReadObservation(os.Getpid()); err != nil {
 		if errors.Is(err, platform.ErrUnsupported) {
 			t.Skip(err.Error())
@@ -181,6 +192,7 @@ func TestSupervisorRunsExplicitSessionAndBlocksOccupiedGroup(t *testing.T) {
 }
 
 func TestOccupiedGroupStaysUncertain(t *testing.T) {
+	isolateUser(t)
 	if _, err := platform.ReadObservation(os.Getpid()); err != nil {
 		if errors.Is(err, platform.ErrUnsupported) {
 			t.Skip(err.Error())
@@ -379,6 +391,7 @@ func waitStatus(t *testing.T, root string, done func(control.Status) bool) {
 }
 
 func TestDifferentDataRootsCannotRunTwoSupervisors(t *testing.T) {
+	isolateUser(t)
 	first := t.TempDir()
 	second := t.TempDir()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -515,6 +528,7 @@ func TestStopJobDoesNotSignalRecycledGroup(t *testing.T) {
 }
 
 func TestAdapterLauncherResumesExactID(t *testing.T) {
+	isolateUser(t)
 	if _, err := platform.ReadObservation(os.Getpid()); err != nil {
 		if errors.Is(err, platform.ErrUnsupported) {
 			t.Skip(err.Error())
@@ -571,8 +585,16 @@ func TestAdapterLauncherResumesExactID(t *testing.T) {
 		t.Fatalf("argv = %s", argv)
 	}
 	gotEnv, err := os.ReadFile(envPath)
-	if err != nil || strings.TrimSpace(string(gotEnv)) != env {
-		t.Fatalf("CLAUDE_CONFIG_DIR = %q, want %s", gotEnv, env)
+	wantEnv, err := core.CanonicalEnvironment(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotEnvPath, err := core.CanonicalEnvironment(strings.TrimSpace(string(gotEnv)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotEnvPath != wantEnv {
+		t.Fatalf("CLAUDE_CONFIG_DIR = %s, want %s", gotEnvPath, wantEnv)
 	}
 	waitStatus(t, root, func(status control.Status) bool { return status.Held == 1 && status.CLILaunch == "adapters" })
 	cancel()
@@ -584,6 +606,7 @@ func TestAdapterLauncherResumesExactID(t *testing.T) {
 }
 
 func TestServeWithoutAuthorizationDoesNotStartCLI(t *testing.T) {
+	isolateUser(t)
 	root := t.TempDir()
 	env := mkdir(t, filepath.Join(root, "cli"))
 	workspace := mkdir(t, filepath.Join(root, "workspace"))
@@ -623,6 +646,7 @@ func TestServeWithoutAuthorizationDoesNotStartCLI(t *testing.T) {
 }
 
 func TestShutdownDoesNotWaitAndOtherRootSeesLiveCLI(t *testing.T) {
+	isolateUser(t)
 	if _, err := platform.ReadObservation(os.Getpid()); err != nil {
 		if errors.Is(err, platform.ErrUnsupported) {
 			t.Skip(err.Error())
@@ -693,6 +717,82 @@ func TestShutdownDoesNotWaitAndOtherRootSeesLiveCLI(t *testing.T) {
 	err = Run(context.Background(), other, DisabledLauncher{})
 	if !errors.Is(err, ErrLiveCLI) {
 		t.Fatalf("other root = %v", err)
+	}
+}
+
+func TestPendingReservationAndLiveDescendantBlockOtherRoot(t *testing.T) {
+	isolateUser(t)
+	if err := rememberRun(recordedRun{ID: "before-start", Root: "/old-data", Provider: "codex", ConversationID: "conversation-1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := reconcileRuns("/new-data"); !errors.Is(err, ErrLiveCLI) {
+		t.Fatalf("reservation before start = %v", err)
+	}
+	runs, err := loadRuns()
+	if err != nil || len(runs) != 1 || runs[0].ID != "before-start" {
+		t.Fatalf("pending reservation was dropped: %+v %v", runs, err)
+	}
+
+	if _, err := platform.ReadObservation(os.Getpid()); err != nil {
+		if errors.Is(err, platform.ErrUnsupported) {
+			t.Skip(err.Error())
+		}
+		t.Fatal(err)
+	}
+	cmd := exec.Command("python3", "-c", `
+import os, time, subprocess
+subprocess.Popen(["sleep", "30"])
+print("READY", flush=True)
+time.sleep(0.3)
+os._exit(0)
+`)
+	if err := platform.SetNewGroup(cmd); err != nil {
+		t.Fatal(err)
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	buf := make([]byte, 16)
+	if _, err := stdout.Read(buf); err != nil {
+		t.Fatal(err)
+	}
+	obs, err := platform.ReadObservation(cmd.Process.Pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = platform.SignalGroup(obs.PGID) })
+	if err := rememberRun(recordedRun{
+		ID: "parent-child", Root: "/old-data", PID: obs.PID, PGID: obs.PGID,
+		StartToken: obs.StartToken, BootID: obs.BootID, Provider: "codex", ConversationID: "conversation-1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	empty, err := platform.GroupEmpty(obs.PGID)
+	if err != nil || empty {
+		t.Fatalf("descendant not alive: empty=%t %v", empty, err)
+	}
+	if err := reconcileRuns("/new-data"); !errors.Is(err, ErrLiveCLI) {
+		t.Fatalf("other root was allowed after the parent exited: %v", err)
+	}
+	runs, err = loadRuns()
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, run := range runs {
+		if run.ID == "parent-child" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("reservation was deleted though a descendant is still running")
 	}
 }
 

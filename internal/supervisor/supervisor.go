@@ -40,6 +40,7 @@ type Spec struct {
 	Alias          string
 	CLI            string
 	Workspace      string
+	DataRoot       string
 }
 
 type Started struct {
@@ -179,16 +180,9 @@ func (s *Supervisor) runClaimed(ctx context.Context, token string) {
 		s.mu.Unlock()
 	}()
 	obs := platform.Observation{PID: started.PID, PGID: started.PGID, StartToken: started.StartToken, BootID: started.BootID}
-	if err := rememberRun(rootRun(s.root, spec, obs)); err != nil {
-		_ = s.store.MarkUncertain(token, err.Error())
-		_, _ = started.Wait()
-		_ = forgetRun(obs.PID)
-		return
-	}
 	if err := s.store.RecordProcess(token, obs); err != nil {
 		_ = s.store.MarkUncertain(token, err.Error())
 		_, _ = started.Wait()
-		_ = forgetRun(obs.PID)
 		return
 	}
 	type collected struct {
@@ -203,10 +197,9 @@ func (s *Supervisor) runClaimed(ctx context.Context, token string) {
 	exitCode, waitErr, detached := waitUnlessStopped(ctx, started.Wait)
 	if detached {
 		// The CLI keeps running. Shutdown must not wait for it or hold the lock.
-		// The user-level run record stays so another --root cannot ignore it.
+		// The user-level reservation stays, including when only a descendant remains.
 		return
 	}
-	_ = forgetRun(obs.PID)
 	got := <-done
 	events, readErr := got.events, got.err
 	if waitErr != nil && readErr == nil {
@@ -327,6 +320,7 @@ func (s *Supervisor) spec(token string) (Spec, error) {
 				Alias:          alias,
 				CLI:            text(session["cli_path"]),
 				Workspace:      text(session["workspace"]),
+				DataRoot:       s.root,
 			}, nil
 		}
 	}

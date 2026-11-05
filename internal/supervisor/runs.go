@@ -14,6 +14,7 @@ import (
 var ErrLiveCLI = errors.New("a CLI from another data directory is still running")
 
 type recordedRun struct {
+	ID             string `json:"id"`
 	Root           string `json:"root"`
 	PID            int    `json:"pid"`
 	PGID           int    `json:"pgid"`
@@ -73,7 +74,7 @@ func rememberRun(run recordedRun) error {
 	}
 	replaced := false
 	for i := range runs {
-		if runs[i].PID == run.PID && runs[i].StartToken == run.StartToken {
+		if run.ID != "" && runs[i].ID == run.ID {
 			runs[i] = run
 			replaced = true
 		}
@@ -82,6 +83,23 @@ func rememberRun(run recordedRun) error {
 		runs = append(runs, run)
 	}
 	return saveRuns(runs)
+}
+
+func forgetRunID(id string) error {
+	if id == "" {
+		return nil
+	}
+	runs, err := loadRuns()
+	if err != nil {
+		return err
+	}
+	kept := make([]recordedRun, 0, len(runs))
+	for _, run := range runs {
+		if run.ID != id {
+			kept = append(kept, run)
+		}
+	}
+	return saveRuns(kept)
 }
 
 func forgetRun(pid int) error {
@@ -105,32 +123,48 @@ func rootRun(root string, spec Spec, obs platform.Observation) recordedRun {
 	}
 }
 
-// reconcileRuns drops dead records and refuses a data directory other than the one
-// that still owns a live CLI. The caller must already hold the user supervisor lock.
+// runBlocks reports whether a reservation must keep other data directories from starting.
+// A missing PID, an observation error, or a dead parent with a live process group all block.
+// An empty process group is still not proof that a detached descendant has stopped.
+func runBlocks(run recordedRun) (bool, error) {
+	if run.PID <= 0 || run.PGID <= 1 || run.StartToken == "" || run.BootID == "" {
+		return true, nil
+	}
+	owned, err := platform.OwnsObservation(platform.Observation{
+		PID: run.PID, PGID: run.PGID, StartToken: run.StartToken, BootID: run.BootID,
+	})
+	if err != nil {
+		return true, err
+	}
+	if owned {
+		return true, nil
+	}
+	empty, err := platform.GroupEmpty(run.PGID)
+	if err != nil || !empty {
+		return true, nil
+	}
+	return true, nil
+}
+
+// reconcileRuns refuses a different data directory while any reservation remains.
+// It does not delete a reservation when the original PID is gone or observation fails.
+// The caller must already hold the user supervisor lock.
 func reconcileRuns(root string) error {
 	runs, err := loadRuns()
 	if err != nil {
 		return err
 	}
-	var live []recordedRun
 	for _, run := range runs {
-		owned, ownErr := platform.OwnsObservation(platform.Observation{
-			PID: run.PID, PGID: run.PGID, StartToken: run.StartToken, BootID: run.BootID,
-		})
-		if ownErr != nil {
-			if errors.Is(ownErr, platform.ErrUnsupported) {
-				return ownErr
-			}
-			owned = false
+		blocks, blockErr := runBlocks(run)
+		if blockErr != nil && !errors.Is(blockErr, platform.ErrUnsupported) {
+			blocks = true
 		}
-		if owned {
-			live = append(live, run)
+		if errors.Is(blockErr, platform.ErrUnsupported) {
+			return blockErr
 		}
-	}
-	if err := saveRuns(live); err != nil {
-		return err
-	}
-	for _, run := range live {
+		if !blocks {
+			continue
+		}
 		if filepath.Clean(run.Root) != filepath.Clean(root) {
 			return fmt.Errorf("%w: %s pid %d", ErrLiveCLI, run.Root, run.PID)
 		}

@@ -1,6 +1,8 @@
 package supervisor
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"io"
 	"os"
 	"os/exec"
@@ -62,14 +64,38 @@ func (l AdapterLauncher) Start(spec Spec) (Started, error) {
 		return Started{}, err
 	}
 	cmd.Stderr = io.Discard
-	if err := cmd.Start(); err != nil {
+	// Reserve before Start. A crash before the PID is recorded must still block another root.
+	reservationID, err := newRunID()
+	if err != nil {
 		return Started{}, err
 	}
-	obs, err := platform.ReadObservation(cmd.Process.Pid)
-	if err != nil {
+	pending := recordedRun{
+		ID: reservationID, Root: spec.DataRoot, Provider: spec.Provider,
+		Environment: spec.Environment, ConversationID: spec.ConversationID,
+	}
+	if err := rememberRun(pending); err != nil {
+		return Started{}, err
+	}
+	if err := cmd.Start(); err != nil {
+		_ = forgetRunID(reservationID)
+		return Started{}, err
+	}
+	obs, obsErr := platform.ReadObservation(cmd.Process.Pid)
+	pending.PID = cmd.Process.Pid
+	if obsErr == nil {
+		pending.PGID = obs.PGID
+		pending.StartToken = obs.StartToken
+		pending.BootID = obs.BootID
+	}
+	if err := rememberRun(pending); err != nil {
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
 		return Started{}, err
+	}
+	if obsErr != nil {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		return Started{}, obsErr
 	}
 	return Started{
 		PID: obs.PID, PGID: obs.PGID, StartToken: obs.StartToken, BootID: obs.BootID, Stdout: stdout,
@@ -94,6 +120,14 @@ func commandArgs(spec Spec, messenger string) ([]string, error) {
 	default:
 		return nil, errNoCLI
 	}
+}
+
+func newRunID() (string, error) {
+	var buf [16]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf[:]), nil
 }
 
 func profileVariable(provider string) string {
