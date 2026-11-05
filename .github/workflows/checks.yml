@@ -27,6 +27,8 @@ jobs:
             cross: true
           - runner: macos-15
             go: '1.22.2'
+          - runner: macos-15
+            go: stable
             package: true
           - runner: ubuntu-24.04
             go: stable
