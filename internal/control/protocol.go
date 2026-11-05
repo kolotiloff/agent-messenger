@@ -4,6 +4,7 @@ package control
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -72,11 +73,25 @@ func SocketPath(root string) string { return filepath.Join(root, SocketName) }
 
 // Call sends one command to the running client. It never launches a CLI.
 func Call(root string, request Request) (Response, error) {
-	conn, err := net.Dial("unix", SocketPath(root))
+	response, err := CallContext(context.Background(), root, request)
+	return response, err
+}
+
+// CallContext lets diagnostic/front-end callers bound an unresponsive socket.
+// It never turns a timeout into proof that the supervisor or a CLI stopped.
+func CallContext(ctx context.Context, root string, request Request) (Response, error) {
+	conn, err := (&net.Dialer{}).DialContext(ctx, "unix", SocketPath(root))
 	if err != nil {
-		return Response{}, errors.New("клиент не запущен")
+		return Response{}, fmt.Errorf("клиент недоступен: %w", err)
 	}
 	defer conn.Close()
+	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stop()
+	if deadline, ok := ctx.Deadline(); ok {
+		if err := conn.SetDeadline(deadline); err != nil {
+			return Response{}, err
+		}
+	}
 	return exchange(conn, request)
 }
 

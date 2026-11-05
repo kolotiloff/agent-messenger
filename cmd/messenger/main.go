@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/kolotiloff/agent-messenger/internal/control"
 	"github.com/kolotiloff/agent-messenger/internal/core"
+	"github.com/kolotiloff/agent-messenger/internal/diagnostics"
 	"github.com/kolotiloff/agent-messenger/internal/mcp"
 	"github.com/kolotiloff/agent-messenger/internal/platform"
 	"github.com/kolotiloff/agent-messenger/internal/supervisor"
@@ -42,6 +44,23 @@ func main() {
 
 func run(root string, args []string) error {
 	switch args[0] {
+	case "doctor":
+		fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
+		asJSON := fs.Bool("json", false, "machine-readable diagnostic report")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 0 {
+			return errors.New("лишние аргументы doctor")
+		}
+		report := diagnostics.Collect(context.Background(), root)
+		if *asJSON {
+			encoder := json.NewEncoder(os.Stdout)
+			encoder.SetIndent("", "  ")
+			return encoder.Encode(report)
+		}
+		diagnostics.WriteText(os.Stdout, report)
+		return nil
 	case "start":
 		if _, err := serveAllowsModels(args[1:]); err != nil {
 			return err
@@ -196,6 +215,7 @@ func usage() {
 
   messenger --root КАТАЛОГ serve [--allow-model-calls] [--claude-stream]
   messenger --root КАТАЛОГ start [--allow-model-calls] [--claude-stream]
+  messenger --root КАТАЛОГ doctor [--json]
   messenger --root КАТАЛОГ create-claude-session --environment КАТАЛОГ --alias ИМЯ --cli ФАЙЛ --workspace КАТАЛОГ
   messenger recover-failed --confirm actions-may-repeat
   messenger --root КАТАЛОГ recover-stream --alias ИМЯ --run ID_ЗАПУСКА --confirm preserve-uncertain
@@ -210,6 +230,7 @@ func usage() {
   messenger --root КАТАЛОГ resolve fail|accept|retry --alias ИМЯ [--confirm actions-may-repeat]
 
 pause — новые задания не резервируются, активный процесс не останавливается.
+doctor — показывает наличие CLI в PATH и статус доступного клиента; CLI/модели не запускает, вход не проверяет, блокировки не меняет. Код 0 означает сформированный отчёт, а не готовность агентов.
 start — запускает клиент в фоне, всегда на паузе; не устанавливает службу или автозапуск. Закрытие терминала не останавливает клиент. Повторный start не заменяет живой экземпляр и не меняет его разрешения.
 stop-job — сначала отзывает MCP, затем сигналит группе только если pid, время старта и группа всё ещё принадлежат той же попытке.
 shutdown — очередь остаётся, активный процесс не убивается. Следующий serve сразу отзывает старый MCP и не снимает блокировку сессии.
