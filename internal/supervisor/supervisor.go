@@ -104,6 +104,18 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return err
 	}
+	// Keep the original spelling for the Unix socket: resolving /tmp to
+	// /private/tmp can exceed macOS socket-path limits. Ownership uses the
+	// physical path below; both socket spellings still address the same file.
+	socketRoot := root
+	absoluteRoot, err := filepath.Abs(root)
+	if err != nil {
+		return err
+	}
+	root, err = core.CanonicalEnvironment(absoluteRoot)
+	if err != nil {
+		return err
+	}
 	if err := os.Chmod(root, 0o700); err != nil {
 		return err
 	}
@@ -141,7 +153,7 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 	sup := &Supervisor{store: store, root: root, launcher: launcher, cancel: cancel}
-	ln, err := control.Listen(root)
+	ln, err := control.Listen(socketRoot)
 	if err != nil {
 		return err
 	}

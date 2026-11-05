@@ -67,6 +67,18 @@ func loadRuns() ([]recordedRun, error) {
 	if err := json.Unmarshal(raw, &runs); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrRunsCorrupt, err)
 	}
+	// JSON null decodes successfully into a nil slice, but the persisted
+	// registry must be an array. Treat it as damaged, not as "no owners".
+	if runs == nil {
+		return nil, ErrRunsCorrupt
+	}
+	for _, run := range runs {
+		// A relative path can name a different database after the working directory
+		// changes. Missing roots also clean to "." and must not pass a same-root check.
+		if !filepath.IsAbs(run.Root) {
+			return nil, ErrRunsCorrupt
+		}
+	}
 	return runs, nil
 }
 
@@ -271,7 +283,9 @@ func reconcileRuns(root string) error {
 		if !blocks {
 			continue
 		}
-		if filepath.Clean(run.Root) != filepath.Clean(root) {
+		reservedRoot, rootErr := core.CanonicalEnvironment(run.Root)
+		currentRoot, currentErr := core.CanonicalEnvironment(root)
+		if rootErr != nil || currentErr != nil || reservedRoot != currentRoot {
 			return fmt.Errorf("%w: %s pid %d", ErrLiveCLI, run.Root, run.PID)
 		}
 	}

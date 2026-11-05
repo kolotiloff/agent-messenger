@@ -74,7 +74,15 @@ type Handler interface {
 	RegisterSession(provider, environment, conversationID, alias, cliPath, workspace string) (string, error)
 }
 
-func SocketPath(root string) string { return filepath.Join(root, SocketName) }
+// SocketPath keeps the shorter lexical spelling for Unix socket length limits.
+// It does not resolve symlinks or define ownership; the supervisor does that.
+func SocketPath(root string) string {
+	path := filepath.Join(root, SocketName)
+	if absolute, err := filepath.Abs(path); err == nil && len(absolute) < len(path) {
+		return absolute
+	}
+	return path
+}
 
 // Call sends one command to the running client. It never launches a CLI.
 func Call(root string, request Request) (Response, error) {
