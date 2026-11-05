@@ -187,8 +187,19 @@ func TestSupervisorRunsExplicitSessionAndBlocksOccupiedGroup(t *testing.T) {
 	root := t.TempDir()
 	env := mkdir(t, filepath.Join(root, "cli"))
 	prepare(t, root, env, "conversation-1", "m1", "m2")
+	fixtureDone := make(chan struct{})
 	launcher := &countingLauncher{enabled: true, start: func(spec Spec) (Started, error) {
-		return startAgent(spec)
+		started, err := startAgent(spec)
+		if err != nil {
+			close(fixtureDone)
+			return started, err
+		}
+		wait := started.Wait
+		started.Wait = func() (int, error) {
+			defer close(fixtureDone)
+			return wait()
+		}
+		return started, nil
 	}}
 	ctx, cancel := context.WithCancel(context.Background())
 	errc := make(chan error, 1)
@@ -198,6 +209,16 @@ func TestSupervisorRunsExplicitSessionAndBlocksOccupiedGroup(t *testing.T) {
 		select {
 		case <-errc:
 		case <-time.After(3 * time.Second):
+			t.Error("supervisor did not finish")
+		}
+		// Shutdown deliberately leaves the CLI alive. The fixture must finish
+		// before TempDir cleanup can remove the SQLite files it still uses.
+		if launcher.calls() > 0 {
+			select {
+			case <-fixtureDone:
+			case <-time.After(10 * time.Second):
+				t.Error("fixture did not finish before cleanup")
+			}
 		}
 	})
 	waitSocket(t, root)
