@@ -38,7 +38,8 @@ def command(cli, db, token, conversation_id, resume):
             'Do not choose an address or message ID. After storage is confirmed output DONE and stop.']
 
 
-def run_turn(store, db, key, cli, root, conversation_id, index):
+def run_turn(store, db, key, cli, root, conversation_id, index, adapter=None):
+    provider = adapter.provider if adapter else 'claude'
     token = store.claim(key)
     if token is None:
         raise RuntimeError('Session unavailable; no CLI launched')
@@ -51,7 +52,9 @@ def run_turn(store, db, key, cli, root, conversation_id, index):
     try:
         with (root/('turn-'+str(index)+'.jsonl')).open('wb') as raw, \
                 (root/('turn-'+str(index)+'.stderr')).open('wb') as err:
-            process = subprocess.Popen(command(cli, db, token, conversation_id, index > 1),
+            argv = (adapter.command(cli, db, token, root, conversation_id) if adapter
+                    else command(cli, db, token, conversation_id, index > 1))
+            process = subprocess.Popen(argv,
                 cwd=root/'workspace', stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                 stderr=err, start_new_session=True)
             store.record_pid(token, process.pid)
@@ -83,32 +86,30 @@ def run_turn(store, db, key, cli, root, conversation_id, index):
                             continue
                         event = json.loads(line)
                         events.append(event)
-                        if event.get('type') == 'system' and event.get('subtype') == 'init':
-                            actual = session_key('claude', 'local-default-test', event.get('session_id'))
-                            if set(event.get('tools', [])) != EXPECTED_TOOLS:
+                        sid = (adapter.startup_id(event) if adapter else
+                               event.get('session_id') if event.get('type') == 'system'
+                               and event.get('subtype') == 'init' else None)
+                        if sid is not None:
+                            actual = session_key(provider, 'local-default-test', sid)
+                            if not adapter and set(event.get('tools', [])) != EXPECTED_TOOLS:
                                 raise RuntimeError('Unexpected available tools')
                             store.confirm_identity(token, actual)
                             identity_verified = True
             if pending.strip():
                 raise RuntimeError('Unterminated output event')
             code = process.wait(timeout=max(1, 120-(time.monotonic()-start)))
-        results = [e for e in events if e.get('type') == 'result']
-        if code != 0 or not identity_verified or len(results) != 1:
-            raise RuntimeError('CLI did not finish with one verified result')
-        result = results[0]
-        if (result.get('session_id') != conversation_id or result.get('subtype') != 'success'
-                or result.get('is_error') or result.get('permission_denials')):
-            raise RuntimeError('CLI result or session identity mismatch')
-        calls = [b for e in events if e.get('type') == 'assistant'
-                 for b in e.get('message', {}).get('content', []) if b.get('type') == 'tool_use']
-        if [b['name'] for b in calls] != ['mcp__messenger_bound__read_current', 'mcp__messenger_bound__reply']:
-            raise RuntimeError('Unexpected tool sequence')
+        if code != 0 or not identity_verified:
+            raise RuntimeError('CLI did not exit successfully with verified identity')
+        if adapter:
+            adapter.validate(events, conversation_id)
+        else:
+            validate_claude(events, conversation_id)
         snapshot = store.snapshot()
         request = next(r for r in snapshot['requests'] if r['id'] == 'message-'+str(index))
         replies = [r for r in snapshot['replies'] if r['reply_to'] == request['id']]
         if len(replies) != 1 or replies[0]['text'] != 'ACK:'+request['text']:
             raise RuntimeError('Reply missing, unlinked or incorrect')
-        if (replies[0]['sender'], replies[0]['recipient']) != ('claude-test', 'test-coordinator'):
+        if (replies[0]['sender'], replies[0]['recipient']) != (provider+'-test', 'test-coordinator'):
             raise RuntimeError('Reply route mismatch')
         if store.finish_after_wait(token, code) != 'completed':
             raise RuntimeError('Completion was not committed')
@@ -133,6 +134,19 @@ def run_turn(store, db, key, cli, root, conversation_id, index):
         if process is not None and process.stdout:
             process.stdout.close()
 
+
+def validate_claude(events, conversation_id):
+    results = [e for e in events if e.get('type') == 'result']
+    if len(results) != 1:
+        raise RuntimeError('CLI did not finish with one verified result')
+    result = results[0]
+    if (result.get('session_id') != conversation_id or result.get('subtype') != 'success'
+            or result.get('is_error') or result.get('permission_denials')):
+        raise RuntimeError('CLI result or session identity mismatch')
+    calls = [b for e in events if e.get('type') == 'assistant'
+             for b in e.get('message', {}).get('content', []) if b.get('type') == 'tool_use']
+    if [b['name'] for b in calls] != ['mcp__messenger_bound__read_current', 'mcp__messenger_bound__reply']:
+        raise RuntimeError('Unexpected tool sequence')
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
