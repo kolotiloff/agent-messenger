@@ -29,7 +29,7 @@ func TestUIRejectsUntrustedAccessAndMutations(t *testing.T) {
 		{"GET", "/api/overview", "127.0.0.1:1234", "", "cross-site", "secret", 403},
 		{"POST", "/api/overview", "127.0.0.1:1234", "", "", "secret", 405},
 		{"GET", "/api/shutdown", "127.0.0.1:1234", "", "", "secret", 404},
-		{"GET", "/api/enqueue", "127.0.0.1:1234", "", "", "secret", 404},
+		{"GET", "/api/enqueue", "127.0.0.1:1234", "", "", "secret", 405},
 		{"GET", "/api/inspect", "127.0.0.1:1234", "", "", "secret", 404},
 		{"GET", "/api/timeline?alias=a&limit=101", "127.0.0.1:1234", "", "", "secret", 400},
 		{"GET", "/api/timeline", "127.0.0.1:1234", "", "", "secret", 400},

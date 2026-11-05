@@ -1,5 +1,5 @@
-// Package localui serves a read-only local front end. It cannot launch agents,
-// mutate the queue or expose arbitrary control commands to the browser.
+// Package localui exposes selected local reads and explicit queue actions.
+// It never launches a CLI or proxies arbitrary control commands.
 package localui
 
 import (
@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime"
 	"net"
 	"net/http"
 	"strconv"
@@ -98,9 +99,14 @@ func newHandler(host, token string, call caller, discover func(context.Context) 
 			http.Error(w, "cross-site request refused", http.StatusForbidden)
 			return
 		}
-		if r.Method != http.MethodGet {
-			w.Header().Set("Allow", "GET")
-			http.Error(w, "read-only interface", http.StatusMethodNotAllowed)
+		mutation := r.URL.Path == "/api/enqueue" || r.URL.Path == "/api/pause" || r.URL.Path == "/api/resume"
+		method := http.MethodGet
+		if mutation {
+			method = http.MethodPost
+		}
+		if r.Method != method {
+			w.Header().Set("Allow", method)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 		if !strings.HasPrefix(r.URL.Path, "/api/") {
@@ -132,6 +138,64 @@ func newHandler(host, token string, call caller, discover func(context.Context) 
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 		defer cancel()
+		if mutation {
+			// A key alone is not enough for a browser mutation: require the exact
+			// origin and a JSON envelope, with bounded size and no extra fields.
+			if r.Header.Get("Origin") != "http://"+host {
+				http.Error(w, "origin required", 403)
+				return
+			}
+			media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+			if err != nil || media != "application/json" {
+				http.Error(w, "JSON required", 415)
+				return
+			}
+			r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+			decoder := json.NewDecoder(r.Body)
+			decoder.DisallowUnknownFields()
+			var req control.Request
+			if r.URL.Path == "/api/enqueue" {
+				var envelope struct {
+					ID    string `json:"message_id"`
+					Alias string `json:"alias"`
+					Text  string `json:"text"`
+				}
+				if err := decoder.Decode(&envelope); err != nil {
+					http.Error(w, "invalid message", 400)
+					return
+				}
+				if !validMessageID(envelope.ID) || strings.TrimSpace(envelope.Alias) == "" || len(envelope.Alias) > 4096 || strings.TrimSpace(envelope.Text) == "" || len(envelope.Text) > 16000 {
+					http.Error(w, "invalid message", 400)
+					return
+				}
+				req = control.Request{Cmd: "enqueue", MessageID: envelope.ID, Alias: envelope.Alias, Text: envelope.Text, Sender: "local-user"}
+			} else {
+				var envelope *struct{}
+				if err := decoder.Decode(&envelope); err != nil || envelope == nil {
+					http.Error(w, "invalid command", 400)
+					return
+				}
+				req.Cmd = strings.TrimPrefix(r.URL.Path, "/api/")
+			}
+			if decoder.Decode(new(any)) != io.EOF {
+				http.Error(w, "one JSON object required", 400)
+				return
+			}
+			response, err := call(ctx, req)
+			if err != nil || !response.OK || (req.Cmd == "enqueue" && response.Created == nil) {
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+				w.WriteHeader(http.StatusServiceUnavailable)
+				writeJSON(w, map[string]any{"ok": false, "state": "unconfirmed", "message_id": req.MessageID})
+				return
+			}
+			// This ACK proves queue persistence only, never provider success.
+			if req.Cmd == "enqueue" {
+				writeJSON(w, map[string]any{"ok": true, "message_id": req.MessageID, "created": *response.Created})
+				return
+			}
+			writeJSON(w, map[string]any{"ok": true, "action": req.Cmd})
+			return
+		}
 		if r.URL.Path == "/api/discovery" {
 			writeJSON(w, discover(ctx))
 			return
@@ -183,6 +247,24 @@ func newHandler(host, token string, call caller, discover func(context.Context) 
 			writeRaw(w, response.Timeline)
 		}
 	})
+}
+
+func validMessageID(id string) bool {
+	if len(id) != 39 || !strings.HasPrefix(id, "ui-") {
+		return false
+	}
+	for i, c := range id[3:] {
+		if i == 8 || i == 13 || i == 18 || i == 23 {
+			if c != '-' {
+				return false
+			}
+			continue
+		}
+		if !(c >= '0' && c <= '9') && !(c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func writeRaw(w http.ResponseWriter, raw json.RawMessage) {

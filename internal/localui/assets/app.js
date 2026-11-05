@@ -9,7 +9,81 @@
   } catch (_) { /* A restricted browser can still use the initial URL. */ }
   if (location.hash) history.replaceState(null, '', location.pathname);
   let selected = '', cursor = '', overview = null, timelineVersion = 0, refreshVersion = 0;
-  let timelineAbort = null;
+  let timelineAbort = null, lastStatus = null, sending = false, queueBusy = false, pending = null, pendingBroken = false;
+  const pendingKey = 'messenger-ui-pending:' + token;
+  try {
+    const saved = sessionStorage.getItem(pendingKey);
+    if (saved) {
+      const value = JSON.parse(saved);
+      if (!/^ui-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value.message_id) ||
+          typeof value.alias !== 'string' || !value.alias.trim() || typeof value.text !== 'string' || !value.text.trim()) throw Error('invalid pending');
+      pending = {message_id:value.message_id,alias:value.alias,text:value.text};
+      selected=pending.alias; $('message-text').value=pending.text;
+      $('send-status').textContent='Подтверждение не сохранено. Повтор доставит то же письмо; автоматически оно не отправляется. До подтверждения не закрывайте вкладку и не перезапускайте окно.';
+    }
+  } catch (_) {
+    pendingBroken = true;
+    $('send-status').textContent='Хранилище вкладки недоступно или повреждено. Отправка отключена, чтобы не потерять идентификатор письма.';
+  }
+  function actionControls() {
+    $('message-text').readOnly=!!pending || sending || pendingBroken;
+    $('session').disabled=!lastStatus || !!pending || sending;
+    $('send').disabled=!lastStatus || !selected || sending || queueBusy || pendingBroken || (!pending && !$('message-text').value.trim());
+    $('send').textContent=sending?'Отправляем…':pending?'Повторить доставку':'Отправить';
+    $('pending-id').hidden=!pending;
+    $('pending-id').textContent=pending?'Идентификатор письма: '+pending.message_id:'';
+    $('queue-action').disabled=!lastStatus || queueBusy || sending;
+    $('queue-action').textContent=queueBusy?'Применяем…':lastStatus && lastStatus.paused?'Возобновить очередь':'Приостановить очередь';
+    root.querySelectorAll('.am-agent-action').forEach(b=>b.disabled=!lastStatus || !!pending || sending);
+  }
+  async function postAPI(path, body) {
+    const response=await fetch(path,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body),cache:'no-store',signal:AbortSignal.timeout(4500)});
+    if(!response.ok)throw Error('unconfirmed');
+    const result=await response.json();if(result.ok!==true)throw Error('unconfirmed');return result;
+  }
+  async function sendMessage() {
+    if($('send').disabled || sending)return;
+    sending=true;actionControls();
+    try {
+      if(!pending) {
+        const envelope={message_id:'ui-'+crypto.randomUUID(),alias:selected,text:$('message-text').value};
+        const saved=JSON.stringify(envelope);
+        try {
+          sessionStorage.setItem(pendingKey,saved);
+          if(sessionStorage.getItem(pendingKey)!==saved)throw Error('not persisted');
+        } catch (_) {
+          // No request has been made; leave a readable draft and refuse sending.
+          pendingBroken=true;
+          $('send-status').textContent='Не удалось сохранить идентификатор в этой вкладке. Письмо не отправлялось.';
+          return;
+        }
+        pending=envelope;actionControls();
+      }
+      const result=await postAPI('/api/enqueue',pending);
+      if(result.message_id!==pending.message_id || typeof result.created!=='boolean')throw Error('unconfirmed');
+      // Clear the saved envelope only after an exact queue ACK. If storage fails,
+      // retain the envelope: repeating it still cannot create another request.
+      sessionStorage.removeItem(pendingKey);
+      if(sessionStorage.getItem(pendingKey)!==null)throw Error('not cleared');
+      pending=null;$('message-text').value='';
+      $('send-status').textContent=result.created?'Письмо сохранено в очереди. Ответ агента появится отдельно.':'Это письмо уже было сохранено. Второе письмо не создано.';
+    } catch (_) {
+      $('send-status').textContent='Доставка не подтверждена. Письмо могло сохраниться. Повтор использует тот же идентификатор и текст. До подтверждения не закрывайте вкладку и не перезапускайте окно.';
+    } finally {sending=false;actionControls();}
+    await refresh();
+  }
+  async function changeQueue() {
+    if($('queue-action').disabled || queueBusy || !lastStatus)return;
+    const action=lastStatus.paused?'resume':'pause';queueBusy=true;actionControls();
+    try {
+      const result=await postAPI('/api/'+action,{});
+      if(result.action!==action)throw Error('unconfirmed');
+      $('queue-action-status').textContent=action==='pause'?'Обработка новых писем приостановлена. Текущая работа продолжается.':'Очередь возобновлена. Разрешение запуска моделей не изменено.';
+    } catch (_) {
+      $('queue-action-status').textContent='Команда не подтверждена. Обновляем фактическое состояние; повтор автоматически не выполняется.';
+    } finally {lastStatus=null;queueBusy=false;actionControls();}
+    await refresh();
+  }
   const names = {claude:'Claude Code',codex:'Codex CLI',cursor:'Cursor Agent CLI'};
   const states = {queued:'В очереди',reserved:'Зарезервировано',launching:'Запуск',running:'Обрабатывается',completed:'Обработка завершена',turn_completed:'Ход завершён',uncertain:'Нужен разбор',not_started:'Запуск не состоялся',none:'Попытки нет',idle:'Ожидание письма',active:'Ход активен',starting:'Подготовка'};
   const results = {not_verified:'Успех ещё не подтверждён',verified_turn:'Ответ подтверждён · ход завершён',verified_exit:'Ответ подтверждён · код выхода 0',process_failed:'Процесс завершился с ошибкой'};
@@ -52,7 +126,7 @@
       card.append(dl);
       if(s.aliases_truncated)card.append(el('p','Список адресов сокращён.','am-small am-status-warn'));
       const b=el('button','Открыть переписку','am-agent-action');b.type='button';b.disabled=!alias;
-      b.addEventListener('click',()=>{$('session').value=alias;selected=alias;show('messages');loadTimeline(false);});card.append(b);cards.append(card);
+      b.addEventListener('click',()=>{if(pending||sending)return;$('session').value=alias;selected=alias;show('messages');actionControls();loadTimeline(false);});card.append(b);cards.append(card);
       const row=el('div',undefined,'am-row'),main=el('div',undefined,'am-row-main');
       main.append(el('h3',alias||names[s.provider]||s.provider),el('p','В очереди: '+s.queued+' · Неопределённые в истории: '+s.uncertain,'am-small am-muted'));
       row.append(main,el('span',s.decision_pending?'Есть решение по сессии':s.owner_retained?'Владелец удерживается':'Без владельца','am-small'));queue.append(row);
@@ -101,33 +175,35 @@
     } finally {if(version===timelineVersion)$('older').disabled=false;}
   }
   async function refresh() {
-    const version=++refreshVersion;$('refresh').disabled=true;notice('');
+    const version=++refreshVersion;lastStatus=null;actionControls();$('refresh').disabled=true;notice('');
     clearTimeline('Обновляем данные…');$('session').disabled=true;
     const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),4500);
     try {
       const [status,view]=await Promise.all([api('/api/status',controller.signal),api('/api/overview',controller.signal)]);
       if(version!==refreshVersion)return;
       if(view.schema_version!==1||!Array.isArray(view.sessions))throw Error('Версия сводки не поддерживается.');
-      overview=view;
+      overview=view;lastStatus=status;
       $('connection').textContent='Клиент доступен';$('connection-dot').classList.add('online');
       $('checked').textContent='Обновлено '+new Date().toLocaleTimeString();
       $('processing').textContent=status.paused?'Новые письма на паузе':'Очередь не на паузе';
       $('permission').textContent=status.cli_launch==='not-authorized'?'Запуск моделей не разрешён.':'Разрешение запуска: '+status.cli_launch;
       const select=$('session');select.replaceChildren();
       for(const s of view.sessions)for(const alias of s.aliases){const option=el('option',(names[s.provider]||s.provider)+' · '+alias);option.value=alias;select.append(option);}
+      if(pending && !Array.from(select.options).some(o=>o.value===pending.alias)){const option=el('option',pending.alias);option.value=pending.alias;select.append(option);}
+      if(pending)selected=pending.alias;
       if(!select.options.length){select.append(el('option','Нет зарегистрированных сессий'));select.options[0].value='';selected='';}
       else {if(!Array.from(select.options).some(o=>o.value===selected))selected=select.options[0].value;select.value=selected;select.disabled=false;}
-      renderCards();await loadTimeline(false);
+      renderCards();actionControls();await loadTimeline(false);
     } catch(error) {
       if(version!==refreshVersion)return;
-      overview=null;clearTimeline('Данные клиента недоступны. Сохранённые письма не удалены.');
+      overview=null;lastStatus=null;actionControls();clearTimeline('Данные клиента недоступны. Сохранённые письма не удалены.');
       $('session').replaceChildren(el('option','Клиент недоступен'));$('session').disabled=true;
       $('agents').replaceChildren(el('p','Состояния сессий недоступны.','am-muted'));
       $('queue').replaceChildren(el('p','Очередь не прочитана. Это не означает, что она пуста.','am-muted'));
       $('connection').textContent='Клиент недоступен';$('connection-dot').classList.remove('online');
       $('processing').textContent='Нет актуальных данных';$('permission').textContent='';$('checked').textContent='Обновление не удалось';
       notice(error.name==='AbortError'?'Клиент не ответил вовремя.':error.message);
-    } finally {clearTimeout(timeout);if(version===refreshVersion)$('refresh').disabled=false;}
+    } finally {clearTimeout(timeout);if(version===refreshVersion){$('refresh').disabled=false;actionControls();}}
     try {
       const d=await api('/api/discovery',AbortSignal.timeout(4500));if(version!==refreshVersion)return;
       $('platform').textContent={darwin:'macOS',linux:'Linux',windows:'Windows'}[d.os]||d.os;
@@ -135,7 +211,9 @@
     } catch(_) {if(version===refreshVersion)$('discovery').replaceChildren(el('p','Поиск CLI недоступен.','am-muted'));}
   }
   root.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>show(b.dataset.tab)));
-  $('session').addEventListener('change',()=>{selected=$('session').value;loadTimeline(false);});
+  $('session').addEventListener('change',()=>{if(pending||sending)return;selected=$('session').value;actionControls();loadTimeline(false);});
+  $('message-text').addEventListener('input',actionControls);
+  $('send').addEventListener('click',sendMessage);$('queue-action').addEventListener('click',changeQueue);
   $('refresh').addEventListener('click',refresh);$('older').addEventListener('click',()=>loadTimeline(true));
   refresh();
 })();
