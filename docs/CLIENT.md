@@ -118,4 +118,32 @@ ROOT="$(mktemp -d /tmp/agent-messenger-check.XXXXXX)"
 
 Ожидание: тесты проходят; `status` показывает клиент без обращений к Claude, Codex и Cursor; пауза не удаляет очередь; `shutdown` завершает процесс `serve`, а каталог `ROOT` остаётся. Повторный `serve` в том же каталоге поднимает сохранённое состояние. Второй `serve` при живом первом завершается отказом блокировки.
 
-Эта проверка не подтверждает resume реальных CLI. Для будущей модельной проверки понадобятся отдельные тестовые сессии, явный запуск и запрет рабочих GUI-чатов. Идентификаторы сессий и сырые журналы CLI в git не класть.
+Эта проверка не подтверждает resume реальных CLI. `status` при обычном `serve` показывает `cli_launch=not-authorized`: письма остаются в очереди, модель не вызывается.
+
+## Одна тестовая сессия CLI на Mac
+
+Это отдельный уровень. Он тратит токены. Нужна уже существующая свободная тестовая сессия, не рабочий разговор и не чат GUI. Идентификатор, журналы и `summary` в git не класть. Каталог `--root` — новый, вне репозитория и вне Unity.
+
+Обычный `serve` модели не запускает. Для одной пробы к нему добавляется `--allow-model-calls`. После первого письма сессия остаётся занятой: пустая группа процессов не разрешает второе письмо само.
+
+```sh
+ROOT="$(mktemp -d /tmp/agent-messenger-cli.XXXXXX)"
+/tmp/agent-messenger --root "$ROOT" serve --allow-model-calls
+```
+
+Во втором терминале, подставив свои пути и тестовый UUID:
+
+```sh
+/tmp/agent-messenger --root "$ROOT" register-session \
+  --provider claude \
+  --environment "$HOME/.claude" \
+  --conversation-id 'TEST_SESSION_UUID' \
+  --alias claude-test \
+  --cli /absolute/path/to/claude \
+  --workspace /tmp/agent-messenger-claude-workspace
+/tmp/agent-messenger --root "$ROOT" enqueue \
+  --alias claude-test --id m1 --from test-coordinator --text 'PAYLOAD-one'
+/tmp/agent-messenger --root "$ROOT" status
+```
+
+Для Codex каталог окружения — `CODEX_HOME` или `~/.codex`. Для Cursor укажите `--workspace` и не запускайте, если есть `~/.cursor/mcp.json` или задан `CURSOR_CONFIG_DIR`. Успех этой пробы: один запуск, ответ связан с `m1`, `held=1`. Второе письмо в ту же сессию само не стартует. Потом `shutdown`. Повторите отдельно для `codex` и `cursor` с другими псевдонимами и другими тестовыми ID, не одновременно с живым `serve` другого пользователя.

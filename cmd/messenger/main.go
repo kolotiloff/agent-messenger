@@ -41,7 +41,11 @@ func main() {
 func run(root string, args []string) error {
 	switch args[0] {
 	case "serve":
-		err := supervisor.Run(context.Background(), root, supervisor.AdapterLauncher{})
+		allow, err := serveAllowsModels(args[1:])
+		if err != nil {
+			return err
+		}
+		err = supervisor.Run(context.Background(), root, supervisor.AdapterLauncher{AllowModels: allow})
 		if errors.Is(err, platform.ErrAlreadyRunning) {
 			return errors.New("клиент уже запущен; команды нужно отправлять ему, а не запускать второй экземпляр")
 		}
@@ -107,6 +111,18 @@ func printResponse(response control.Response) {
 	}
 }
 
+func serveAllowsModels(args []string) (bool, error) {
+	allow := false
+	for _, arg := range args {
+		if arg == "--allow-model-calls" {
+			allow = true
+			continue
+		}
+		return false, fmt.Errorf("неизвестный флаг serve: %s", arg)
+	}
+	return allow, nil
+}
+
 func splitArgs(args []string) (string, []string) {
 	root := ""
 	var rest []string
@@ -127,7 +143,7 @@ func usage() {
 --root стоит перед командой. Один пользователь может держать только один serve,
 даже с другим каталогом данных. Реальный CLI запускается только после register-session.
 
-  messenger --root КАТАЛОГ serve
+  messenger --root КАТАЛОГ serve [--allow-model-calls]
   messenger --root КАТАЛОГ register-session --provider claude|codex|cursor --environment КАТАЛОГ --conversation-id ID --alias ИМЯ --cli ФАЙЛ [--workspace КАТАЛОГ]
   messenger --root КАТАЛОГ status
   messenger --root КАТАЛОГ pause
@@ -141,7 +157,9 @@ func usage() {
 pause — новые задания не резервируются, активный процесс не останавливается.
 stop-job — сначала отзывает MCP, затем сигналит группе только если pid, время старта и группа всё ещё принадлежат той же попытке.
 shutdown — очередь остаётся, активный процесс не убивается. Следующий serve сразу отзывает старый MCP и не снимает блокировку сессии.
-Пустая группа процессов не завершает попытку и не снимает блокировку.
+Без --allow-model-calls serve не запускает CLI и не тратит токены.
+С --allow-model-calls запускается только CLI, заранее записанный через register-session, и только точный ID.
+Пустая группа процессов не завершает попытку и не снимает блокировку. Второе письмо той же сессии само не стартует.
 `)
 }
 

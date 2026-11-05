@@ -36,6 +36,24 @@ func TestCommandsUseExactIDOnly(t *testing.T) {
 	}
 }
 
+func TestPrepareCursorWorkspaceStaysInsideWorkspace(t *testing.T) {
+	workspace := t.TempDir()
+	if err := PrepareCursorWorkspace(workspace, "/tmp/messenger", "/tmp/queue.sqlite", "token"); err != nil {
+		t.Fatal(err)
+	}
+	mcp, err := os.ReadFile(filepath.Join(workspace, ".cursor", "mcp.json"))
+	if err != nil || !strings.Contains(string(mcp), "messenger_bound") {
+		t.Fatalf("mcp.json = %s %v", mcp, err)
+	}
+	cli, err := os.ReadFile(filepath.Join(workspace, ".cursor", "cli.json"))
+	if err != nil || !strings.Contains(string(cli), "Shell(*)") {
+		t.Fatalf("cli.json = %s %v", cli, err)
+	}
+	if _, err := os.Stat(filepath.Join(t.TempDir(), ".cursor")); err == nil {
+		t.Fatal("cursor files escaped the workspace")
+	}
+}
+
 func TestCursorIsolationChecksTheGivenHome(t *testing.T) {
 	home := t.TempDir()
 	if err := CheckCursorIsolation(home, ""); err != nil {

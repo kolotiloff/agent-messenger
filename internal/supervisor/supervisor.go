@@ -181,54 +181,89 @@ func (s *Supervisor) runClaimed(ctx context.Context, token string) {
 		_, _ = started.Wait()
 		return
 	}
-	reported, err := readStartupID(started.Stdout, spec.Provider)
-	if err != nil || reported == "" || reported != spec.ConversationID {
-		if reported == "" {
-			reported = "missing"
-		}
-		_ = s.store.ConfirmIdentity(token, spec.Provider, spec.Environment, reported)
-		_, _ = started.Wait()
-		return
+	type collected struct {
+		events []map[string]any
+		err    error
 	}
-	if err := s.store.ConfirmIdentity(token, spec.Provider, spec.Environment, reported); err != nil {
-		_, _ = started.Wait()
-		return
+	done := make(chan collected, 1)
+	go func() {
+		events, err := s.collectEvents(started.Stdout, spec)
+		done <- collected{events, err}
+	}()
+	exitCode, waitErr := started.Wait()
+	got := <-done
+	events, readErr := got.events, got.err
+	if waitErr != nil && readErr == nil {
+		readErr = waitErr
 	}
-	exitCode, err := started.Wait()
-	if err != nil {
-		_ = s.store.MarkUncertain(token, "wait failed")
-		return
+	detail := "empty process group is not descendant proof"
+	if readErr != nil {
+		detail = readErr.Error()
+	}
+	if err := validateProvider(spec.Provider, events, spec.ConversationID); err != nil {
+		detail = err.Error() + "; " + detail
 	}
 	groupEmpty, groupErr := platform.GroupEmpty(started.PGID)
-	detail := "empty process group is not descendant proof"
 	if groupErr != nil {
 		groupEmpty = false
-		detail = groupErr.Error()
+		detail = groupErr.Error() + "; " + detail
 	}
 	// groupEmpty is recorded and does not unlock the session.
 	_, _ = s.store.FinishObserved(token, exitCode, groupEmpty, detail)
 	_ = ctx
 }
 
-func readStartupID(r io.Reader, provider string) (string, error) {
+func (s *Supervisor) collectEvents(r io.Reader, spec Spec) ([]map[string]any, error) {
 	reader := bufio.NewReader(r)
+	var events []map[string]any
+	seen := false
+	var firstErr error
 	for {
 		line, err := reader.ReadString('\n')
 		if strings.TrimSpace(line) != "" {
 			var event map[string]any
 			if json.Unmarshal([]byte(line), &event) == nil {
-				id, idErr := adapters.StartupID(provider, event)
-				if idErr != nil {
-					return "", idErr
-				}
-				if id != "" {
-					return id, nil
+				events = append(events, event)
+				if !seen {
+					id, idErr := adapters.StartupID(spec.Provider, event)
+					if idErr != nil {
+						firstErr = idErr
+					}
+					if id != "" {
+						seen = true
+						if id != spec.ConversationID {
+							id = "mismatch"
+						}
+						if callErr := s.store.ConfirmIdentity(spec.Token, spec.Provider, spec.Environment, id); callErr != nil && firstErr == nil {
+							firstErr = callErr
+						}
+					}
 				}
 			}
 		}
 		if err != nil {
-			return "", err
+			if !seen && firstErr == nil {
+				firstErr = err
+			}
+			break
 		}
+	}
+	if !seen && firstErr == nil {
+		firstErr = errors.New("startup id was not observed")
+	}
+	return events, firstErr
+}
+
+func validateProvider(provider string, events []map[string]any, conversationID string) error {
+	switch provider {
+	case "claude":
+		return adapters.ValidateClaude(events, conversationID)
+	case "codex":
+		return adapters.ValidateCodex(events, conversationID)
+	case "cursor":
+		return adapters.ValidateCursor(events, conversationID)
+	default:
+		return nil
 	}
 }
 

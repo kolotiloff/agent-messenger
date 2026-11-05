@@ -538,7 +538,7 @@ func TestAdapterLauncherResumesExactID(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errc := make(chan error, 1)
-	go func() { errc <- Run(ctx, root, AdapterLauncher{}) }()
+	go func() { errc <- Run(ctx, root, AdapterLauncher{AllowModels: true}) }()
 	waitSocket(t, root)
 	registered, err := control.Call(root, control.Request{
 		Cmd: "register-session", Provider: "claude", Environment: env, ConversationID: "conversation-1",
@@ -573,6 +573,45 @@ func TestAdapterLauncherResumesExactID(t *testing.T) {
 	case <-errc:
 	case <-time.After(3 * time.Second):
 		t.Fatal("supervisor did not exit")
+	}
+}
+
+func TestServeWithoutAuthorizationDoesNotStartCLI(t *testing.T) {
+	root := t.TempDir()
+	env := mkdir(t, filepath.Join(root, "cli"))
+	workspace := mkdir(t, filepath.Join(root, "workspace"))
+	argvPath := filepath.Join(root, "argv.txt")
+	script := filepath.Join(root, "fake-cli")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > "+shellQuote(argvPath)+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	errc := make(chan error, 1)
+	go func() { errc <- Run(ctx, root, AdapterLauncher{}) }()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-errc:
+		case <-time.After(3 * time.Second):
+		}
+	})
+	waitSocket(t, root)
+	if _, err := control.Call(root, control.Request{
+		Cmd: "register-session", Provider: "claude", Environment: env, ConversationID: "conversation-1",
+		Alias: "worker", CLI: script, Workspace: workspace,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := control.Call(root, control.Request{Cmd: "enqueue", Alias: "worker", MessageID: "m1", Sender: "coordinator", Text: "hello"}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(200 * time.Millisecond)
+	if _, err := os.Stat(argvPath); err == nil {
+		t.Fatal("cli started without --allow-model-calls")
+	}
+	status, err := control.Call(root, control.Request{Cmd: "status"})
+	if err != nil || status.Status == nil || status.Status.Queued != 1 || status.Status.Held != 0 || status.Status.CLILaunch != "not-authorized" {
+		t.Fatalf("status = %+v %v", status, err)
 	}
 }
 

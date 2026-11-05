@@ -10,15 +10,25 @@ import (
 )
 
 // AdapterLauncher builds the real Claude, Codex or Cursor command and starts it.
-// It does not decide that a model may be called: that happens only after register-session
-// stored a CLI path and a message is queued. Tests pass a fake executable as that path.
-type AdapterLauncher struct{}
+// AllowModels must be set by `serve --allow-model-calls`. Without that flag the
+// process stays up and does not execute a CLI, so a status check cannot spend tokens.
+type AdapterLauncher struct {
+	AllowModels bool
+}
 
-func (AdapterLauncher) Enabled() bool { return true }
+func (l AdapterLauncher) Enabled() bool { return l.AllowModels }
 
-func (AdapterLauncher) LaunchLabel() string { return "adapters" }
+func (l AdapterLauncher) LaunchLabel() string {
+	if !l.AllowModels {
+		return "not-authorized"
+	}
+	return "adapters"
+}
 
-func (AdapterLauncher) Start(spec Spec) (Started, error) {
+func (l AdapterLauncher) Start(spec Spec) (Started, error) {
+	if !l.AllowModels {
+		return Started{}, errModelsNotAuthorized
+	}
 	if spec.CLI == "" {
 		return Started{}, errNoCLI
 	}
@@ -32,6 +42,9 @@ func (AdapterLauncher) Start(spec Spec) (Started, error) {
 	}
 	if spec.Provider == "cursor" {
 		if err := adapters.CheckCursorIsolation(os.Getenv("HOME"), os.Getenv("CURSOR_CONFIG_DIR")); err != nil {
+			return Started{}, err
+		}
+		if err := adapters.PrepareCursorWorkspace(spec.Workspace, exe, spec.DB, spec.Token); err != nil {
 			return Started{}, err
 		}
 	}
@@ -82,6 +95,7 @@ func commandArgs(spec Spec, messenger string) ([]string, error) {
 }
 
 var errNoCLI = errString("session has no bound CLI")
+var errModelsNotAuthorized = errString("model calls are not authorized; pass serve --allow-model-calls for a test session")
 
 type errString string
 

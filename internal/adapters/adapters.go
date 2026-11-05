@@ -80,6 +80,42 @@ func CodexArgs(cli, mcpBin, db, token, conversationID string) ([]string, error) 
 	return args, ExplicitResume(args, conversationID)
 }
 
+// PrepareCursorWorkspace writes the test MCP and permission files only inside workspace.
+// It does not read or change the user's global Cursor profile.
+func PrepareCursorWorkspace(workspace, mcpBin, db, token string) error {
+	if workspace == "" {
+		return errors.New("cursor workspace is required")
+	}
+	dir := filepath.Join(workspace, ".cursor")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	mcp, err := json.Marshal(map[string]any{
+		"mcpServers": map[string]any{
+			"messenger_bound": map[string]any{
+				"command": mcpBin,
+				"args":    []string{"mcp", "--db", db, "--token", token},
+			},
+		},
+	})
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(dir, "mcp.json"), mcp, 0o600); err != nil {
+		return err
+	}
+	cli, err := json.Marshal(map[string]any{
+		"permissions": map[string]any{
+			"allow": []string{"Mcp(messenger_bound:read_current)", "Mcp(messenger_bound:reply)"},
+			"deny":  []string{"Shell(*)", "Read(*)", "Write(*)", "WebFetch(*)"},
+		},
+	})
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "cli.json"), cli, 0o600)
+}
+
 func CursorArgs(cli, conversationID, workspace string) ([]string, error) {
 	if err := rejectLooseID(conversationID); err != nil {
 		return nil, err
