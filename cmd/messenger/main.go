@@ -7,12 +7,14 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
 	"time"
 
 	"github.com/kolotiloff/agent-messenger/internal/control"
 	"github.com/kolotiloff/agent-messenger/internal/core"
 	"github.com/kolotiloff/agent-messenger/internal/diagnostics"
+	"github.com/kolotiloff/agent-messenger/internal/localui"
 	"github.com/kolotiloff/agent-messenger/internal/mcp"
 	"github.com/kolotiloff/agent-messenger/internal/platform"
 	"github.com/kolotiloff/agent-messenger/internal/supervisor"
@@ -45,6 +47,18 @@ func main() {
 
 func run(root string, args []string) error {
 	switch args[0] {
+	case "ui":
+		fs := flag.NewFlagSet("ui", flag.ContinueOnError)
+		port := fs.Int("port", 0, "loopback port; 0 chooses a free port")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 0 || *port < 0 || *port > 65535 {
+			return errors.New("ui takes only --port 0..65535")
+		}
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+		defer cancel()
+		return localui.Run(ctx, root, *port, os.Stdout)
 	case "timeline":
 		fs := flag.NewFlagSet("timeline", flag.ContinueOnError)
 		alias := fs.String("alias", "", "session mailbox alias")
@@ -285,6 +299,7 @@ func usage() {
   messenger --root КАТАЛОГ register-session --provider claude|codex|cursor --environment КАТАЛОГ --conversation-id ID --alias ИМЯ --cli ФАЙЛ [--workspace КАТАЛОГ]
   messenger --root КАТАЛОГ status
   messenger --root КАТАЛОГ overview
+  messenger --root КАТАЛОГ ui [--port 0]
   messenger --root КАТАЛОГ timeline --alias ИМЯ [--limit 50] [--before ID_ПИСЬМА]
   messenger --root КАТАЛОГ pause
   messenger --root КАТАЛОГ resume
