@@ -525,8 +525,11 @@ func TestAdapterLauncherResumesExactID(t *testing.T) {
 	env := mkdir(t, filepath.Join(root, "cli"))
 	workspace := mkdir(t, filepath.Join(root, "workspace"))
 	argvPath := filepath.Join(root, "argv.txt")
+	envPath := filepath.Join(root, "env.txt")
 	script := filepath.Join(root, "fake-cli")
+	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(root, "wrong-profile"))
 	body := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + shellQuote(argvPath) + "\n" +
+		"printf '%s\\n' \"$CLAUDE_CONFIG_DIR\" > " + shellQuote(envPath) + "\n" +
 		"id=\nprev=\nfor a in \"$@\"; do\n" +
 		"  case \"$a\" in --resume=*) id=${a#--resume=} ;; esac\n" +
 		"  if [ \"$prev\" = \"--resume\" ] || [ \"$prev\" = \"resume\" ]; then id=$a; fi\n" +
@@ -566,6 +569,10 @@ func TestAdapterLauncherResumesExactID(t *testing.T) {
 	}
 	if !strings.Contains(argv, "conversation-1") || !strings.Contains(argv, "--resume") || strings.Contains(argv, "--last") || strings.Contains(argv, "--continue") {
 		t.Fatalf("argv = %s", argv)
+	}
+	gotEnv, err := os.ReadFile(envPath)
+	if err != nil || strings.TrimSpace(string(gotEnv)) != env {
+		t.Fatalf("CLAUDE_CONFIG_DIR = %q, want %s", gotEnv, env)
 	}
 	waitStatus(t, root, func(status control.Status) bool { return status.Held == 1 && status.CLILaunch == "adapters" })
 	cancel()
@@ -612,6 +619,80 @@ func TestServeWithoutAuthorizationDoesNotStartCLI(t *testing.T) {
 	status, err := control.Call(root, control.Request{Cmd: "status"})
 	if err != nil || status.Status == nil || status.Status.Queued != 1 || status.Status.Held != 0 || status.Status.CLILaunch != "not-authorized" {
 		t.Fatalf("status = %+v %v", status, err)
+	}
+}
+
+func TestShutdownDoesNotWaitAndOtherRootSeesLiveCLI(t *testing.T) {
+	if _, err := platform.ReadObservation(os.Getpid()); err != nil {
+		if errors.Is(err, platform.ErrUnsupported) {
+			t.Skip(err.Error())
+		}
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	other := t.TempDir()
+	env := mkdir(t, filepath.Join(root, "cli"))
+	workspace := mkdir(t, filepath.Join(root, "workspace"))
+	pidPath := filepath.Join(root, "pid")
+	script := filepath.Join(root, "fake-cli")
+	body := "#!/bin/sh\nprintf '%s\\n' \"$$\" > " + shellQuote(pidPath) + "\n" +
+		"printf '%s\\n' '{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"conversation-1\"}'\n" +
+		"sleep 30\n"
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	errc := make(chan error, 1)
+	go func() { errc <- Run(ctx, root, AdapterLauncher{AllowModels: true}) }()
+	t.Cleanup(func() {
+		if text, err := os.ReadFile(pidPath); err == nil {
+			pid, _ := strconv.Atoi(strings.TrimSpace(string(text)))
+			if pid > 0 {
+				if proc, err := os.FindProcess(pid); err == nil {
+					_ = proc.Kill()
+				}
+			}
+		}
+		cancel()
+		select {
+		case <-errc:
+		case <-time.After(3 * time.Second):
+		}
+	})
+	waitSocket(t, root)
+	if _, err := control.Call(root, control.Request{
+		Cmd: "register-session", Provider: "claude", Environment: env, ConversationID: "conversation-1",
+		Alias: "worker", CLI: script, Workspace: workspace,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := control.Call(root, control.Request{Cmd: "enqueue", Alias: "worker", MessageID: "m1", Sender: "coordinator", Text: "hello"}); err != nil {
+		t.Fatal(err)
+	}
+	waitFile(t, pidPath)
+	started := time.Now()
+	if _, err := control.Call(root, control.Request{Cmd: "shutdown"}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-errc:
+	case <-time.After(2 * time.Second):
+		t.Fatal("shutdown waited for the hung CLI")
+	}
+	if time.Since(started) > 2*time.Second {
+		t.Fatal("shutdown took too long")
+	}
+	text, err := os.ReadFile(pidPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, _ := strconv.Atoi(strings.TrimSpace(string(text)))
+	if _, err := platform.ReadObservation(pid); err != nil {
+		t.Fatalf("cli was stopped by shutdown: %v", err)
+	}
+	err = Run(context.Background(), other, DisabledLauncher{})
+	if !errors.Is(err, ErrLiveCLI) {
+		t.Fatalf("other root = %v", err)
 	}
 }
 

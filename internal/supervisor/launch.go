@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/kolotiloff/agent-messenger/internal/adapters"
 	"github.com/kolotiloff/agent-messenger/internal/platform"
@@ -49,6 +50,7 @@ func (l AdapterLauncher) Start(spec Spec) (Started, error) {
 		}
 	}
 	cmd := exec.Command(args[0], args[1:]...)
+	cmd.Env = profileEnv(os.Environ(), spec.Provider, spec.Environment)
 	if spec.Workspace != "" {
 		cmd.Dir = spec.Workspace
 	}
@@ -92,6 +94,36 @@ func commandArgs(spec Spec, messenger string) ([]string, error) {
 	default:
 		return nil, errNoCLI
 	}
+}
+
+func profileVariable(provider string) string {
+	switch provider {
+	case "claude":
+		return "CLAUDE_CONFIG_DIR"
+	case "codex":
+		return "CODEX_HOME"
+	case "cursor":
+		return "CURSOR_CONFIG_DIR"
+	default:
+		return ""
+	}
+}
+
+// profileEnv forces the registered profile and drops an inherited value for that variable.
+func profileEnv(parent []string, provider, environment string) []string {
+	key := profileVariable(provider)
+	out := make([]string, 0, len(parent)+1)
+	for _, item := range parent {
+		name, _, _ := strings.Cut(item, "=")
+		if key != "" && name == key {
+			continue
+		}
+		out = append(out, item)
+	}
+	if key != "" && environment != "" {
+		out = append(out, key+"="+environment)
+	}
+	return out
 }
 
 var errNoCLI = errString("session has no bound CLI")

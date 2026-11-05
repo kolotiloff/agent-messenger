@@ -102,6 +102,9 @@ func Run(parent context.Context, root string, launcher Launcher) error {
 		return err
 	}
 	defer store.Close()
+	if err := reconcileRuns(root); err != nil {
+		return err
+	}
 	if _, err := store.RevokeInherited(); err != nil {
 		return err
 	}
@@ -176,9 +179,16 @@ func (s *Supervisor) runClaimed(ctx context.Context, token string) {
 		s.mu.Unlock()
 	}()
 	obs := platform.Observation{PID: started.PID, PGID: started.PGID, StartToken: started.StartToken, BootID: started.BootID}
+	if err := rememberRun(rootRun(s.root, spec, obs)); err != nil {
+		_ = s.store.MarkUncertain(token, err.Error())
+		_, _ = started.Wait()
+		_ = forgetRun(obs.PID)
+		return
+	}
 	if err := s.store.RecordProcess(token, obs); err != nil {
 		_ = s.store.MarkUncertain(token, err.Error())
 		_, _ = started.Wait()
+		_ = forgetRun(obs.PID)
 		return
 	}
 	type collected struct {
@@ -187,10 +197,16 @@ func (s *Supervisor) runClaimed(ctx context.Context, token string) {
 	}
 	done := make(chan collected, 1)
 	go func() {
-		events, err := s.collectEvents(started.Stdout, spec)
+		events, err := s.collectEvents(ctx, started.Stdout, spec)
 		done <- collected{events, err}
 	}()
-	exitCode, waitErr := started.Wait()
+	exitCode, waitErr, detached := waitUnlessStopped(ctx, started.Wait)
+	if detached {
+		// The CLI keeps running. Shutdown must not wait for it or hold the lock.
+		// The user-level run record stays so another --root cannot ignore it.
+		return
+	}
+	_ = forgetRun(obs.PID)
 	got := <-done
 	events, readErr := got.events, got.err
 	if waitErr != nil && readErr == nil {
@@ -200,20 +216,38 @@ func (s *Supervisor) runClaimed(ctx context.Context, token string) {
 	if readErr != nil {
 		detail = readErr.Error()
 	}
-	if err := validateProvider(spec.Provider, events, spec.ConversationID); err != nil {
-		detail = err.Error() + "; " + detail
+	providerErr := validateProvider(spec.Provider, events, spec.ConversationID)
+	if providerErr != nil {
+		detail = providerErr.Error() + "; " + detail
 	}
 	groupEmpty, groupErr := platform.GroupEmpty(started.PGID)
 	if groupErr != nil {
 		groupEmpty = false
 		detail = groupErr.Error() + "; " + detail
 	}
+	providerOK := providerErr == nil && readErr == nil && exitCode == 0
 	// groupEmpty is recorded and does not unlock the session.
-	_, _ = s.store.FinishObserved(token, exitCode, groupEmpty, detail)
-	_ = ctx
+	_, _ = s.store.FinishObserved(token, exitCode, groupEmpty, providerOK, detail)
 }
 
-func (s *Supervisor) collectEvents(r io.Reader, spec Spec) ([]map[string]any, error) {
+func waitUnlessStopped(ctx context.Context, wait func() (int, error)) (int, error, bool) {
+	finished := make(chan struct{})
+	var code int
+	var err error
+	go func() {
+		code, err = wait()
+		close(finished)
+	}()
+	select {
+	case <-finished:
+		return code, err, false
+	case <-ctx.Done():
+		go func() { <-finished }()
+		return 0, ctx.Err(), true
+	}
+}
+
+func (s *Supervisor) collectEvents(ctx context.Context, r io.Reader, spec Spec) ([]map[string]any, error) {
 	reader := bufio.NewReader(r)
 	var events []map[string]any
 	seen := false
@@ -231,6 +265,9 @@ func (s *Supervisor) collectEvents(r io.Reader, spec Spec) ([]map[string]any, er
 					}
 					if id != "" {
 						seen = true
+						if ctx.Err() != nil {
+							break
+						}
 						if id != spec.ConversationID {
 							id = "mismatch"
 						}

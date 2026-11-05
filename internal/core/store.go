@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS verifications (
     exit_observed INTEGER NOT NULL,
     exit_code INTEGER,
     group_empty INTEGER NOT NULL,
+    provider_ok INTEGER NOT NULL DEFAULT 0,
     detail TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS events (
@@ -128,6 +129,10 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	if err := ensureSessionColumns(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := ensureColumn(db, "verifications", "provider_ok", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -476,7 +481,7 @@ func (s *Store) Reply(token, text string) (Reply, error) {
 // FinishObserved records the supervisor's own wait and always leaves the session locked.
 // An empty process group is stored as a note. It is not proof that detached descendants
 // have stopped, so it does not clear the lock or mark the attempt completed.
-func (s *Store) FinishObserved(token string, exitCode int, groupEmpty bool, groupDetail string) (string, error) {
+func (s *Store) FinishObserved(token string, exitCode int, groupEmpty, providerOK bool, groupDetail string) (string, error) {
 	const state = "uncertain"
 	err := s.tx(func(tx *sql.Tx) error {
 		row, err := owned(tx, token, "launching", "running")
@@ -493,16 +498,17 @@ func (s *Store) FinishObserved(token string, exitCode int, groupEmpty bool, grou
 		if groupDetail != "" {
 			detail += "; " + groupDetail
 		}
-		_, err = tx.Exec(`INSERT INTO verifications(attempt_token, identity_confirmed, reply_id, exit_observed, exit_code, group_empty, detail)
-			VALUES (?,?,?,?,?,?,?)
+		_, err = tx.Exec(`INSERT INTO verifications(attempt_token, identity_confirmed, reply_id, exit_observed, exit_code, group_empty, provider_ok, detail)
+			VALUES (?,?,?,?,?,?,?,?)
 			ON CONFLICT(attempt_token) DO UPDATE SET
 			  identity_confirmed = excluded.identity_confirmed,
 			  reply_id = excluded.reply_id,
 			  exit_observed = excluded.exit_observed,
 			  exit_code = excluded.exit_code,
 			  group_empty = excluded.group_empty,
+			  provider_ok = excluded.provider_ok,
 			  detail = excluded.detail`,
-			token, boolInt(identity), nullString(replyID), 1, exitCode, boolInt(groupEmpty), detail)
+			token, boolInt(identity), nullString(replyID), 1, exitCode, boolInt(groupEmpty), boolInt(providerOK), detail)
 		if err != nil {
 			return err
 		}
@@ -667,18 +673,18 @@ func (s *Store) Accept(alias string, proof platform.Proof) error {
 		if !token.Valid || token.String == "" {
 			return fmt.Errorf("%w: no held attempt", ErrRejected)
 		}
-		var identity, exitObserved, exitCode, groupEmpty int
+		var identity, exitObserved, exitCode, groupEmpty, providerOK int
 		var replyID sql.NullString
-		err = tx.QueryRow(`SELECT identity_confirmed, reply_id, exit_observed, exit_code, group_empty FROM verifications WHERE attempt_token = ?`, token.String).
-			Scan(&identity, &replyID, &exitObserved, &exitCode, &groupEmpty)
+		err = tx.QueryRow(`SELECT identity_confirmed, reply_id, exit_observed, exit_code, group_empty, provider_ok FROM verifications WHERE attempt_token = ?`, token.String).
+			Scan(&identity, &replyID, &exitObserved, &exitCode, &groupEmpty, &providerOK)
 		if err == sql.ErrNoRows {
 			return fmt.Errorf("%w: no verification record", ErrNotVerified)
 		}
 		if err != nil {
 			return err
 		}
-		if identity != 1 || !replyID.Valid || exitObserved != 1 || exitCode != 0 {
-			return fmt.Errorf("%w: identity, bound reply and observed exit 0 are required", ErrNotVerified)
+		if identity != 1 || !replyID.Valid || exitObserved != 1 || exitCode != 0 || providerOK != 1 {
+			return fmt.Errorf("%w: identity, bound reply, observed exit 0 and a valid provider result are required", ErrNotVerified)
 		}
 		row, err := owned(tx, token.String, "uncertain", "running", "launching")
 		if err != nil {
@@ -946,6 +952,30 @@ func emptyDetail(detail string) string {
 		return "stop is not proven"
 	}
 	return detail
+}
+
+func ensureColumn(db *sql.DB, table, column, decl string) error {
+	rows, err := db.Query(`PRAGMA table_info(` + table + `)`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid, notNull, pk int
+		var name, ctype string
+		var dflt any
+		if err := rows.Scan(&cid, &name, &ctype, &notNull, &dflt, &pk); err != nil {
+			return err
+		}
+		if name == column {
+			return rows.Err()
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	_, err = db.Exec(`ALTER TABLE ` + table + ` ADD COLUMN ` + column + ` ` + decl)
+	return err
 }
 
 func ensureSessionColumns(db *sql.DB) error {

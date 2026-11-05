@@ -128,7 +128,7 @@ func TestForeignAndCompletedContextCannotReply(t *testing.T) {
 	if _, err := st.Reply(token, "ok"); err != nil {
 		t.Fatal(err)
 	}
-	state, err := st.FinishObserved(token, 0, true, "test")
+	state, err := st.FinishObserved(token, 0, true, true, "test")
 	if err != nil || state != "uncertain" {
 		t.Fatalf("finish = %s %v", state, err)
 	}
@@ -157,7 +157,7 @@ func TestDuplicateDeliveryDoesNotStartAnotherAttempt(t *testing.T) {
 	if _, err := st.Reply(token, "done"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.FinishObserved(token, 0, true, "test"); err != nil {
+	if _, err := st.FinishObserved(token, 0, true, true, "test"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := st.Claim("worker"); !errors.Is(err, ErrBusy) {
@@ -237,7 +237,7 @@ func TestExitCodeOrMissingReplyDoesNotComplete(t *testing.T) {
 	st, env := openTest(t)
 	register(t, st, env, "worker")
 	token := running(t, st, env, "worker", "m1", "conversation-1")
-	state, err := st.FinishObserved(token, 0, true, "no reply")
+	state, err := st.FinishObserved(token, 0, true, true, "no reply")
 	if err != nil || state != "uncertain" {
 		t.Fatalf("clean exit without reply = %s %v", state, err)
 	}
@@ -252,7 +252,7 @@ func TestExitCodeOrMissingReplyDoesNotComplete(t *testing.T) {
 	if _, err := st.Reply(token, "stored"); err != nil {
 		t.Fatal(err)
 	}
-	state, err = st.FinishObserved(token, 1, true, "nonzero")
+	state, err = st.FinishObserved(token, 1, true, true, "nonzero")
 	if err != nil || state != "uncertain" {
 		t.Fatalf("nonzero = %s %v", state, err)
 	}
@@ -271,7 +271,7 @@ func TestGroupNotEmptyDoesNotCompleteAndAcceptNeedsVerification(t *testing.T) {
 	if _, err := st.Reply(token, "stored"); err != nil {
 		t.Fatal(err)
 	}
-	state, err := st.FinishObserved(token, 0, false, "group occupied")
+	state, err := st.FinishObserved(token, 0, false, true, "group occupied")
 	if err != nil || state != "uncertain" {
 		t.Fatalf("occupied group = %s %v", state, err)
 	}
@@ -300,7 +300,7 @@ func TestAcceptRejectsReplyTextWithoutExitVerification(t *testing.T) {
 	if _, err := st.Reply(token, "stored"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.FinishObserved(token, 7, false, "bad exit"); err != nil {
+	if _, err := st.FinishObserved(token, 7, false, true, "bad exit"); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.Accept("worker", platform.Proof{Proven: true, Detail: "injected"}); !errors.Is(err, ErrNotVerified) {
@@ -318,7 +318,7 @@ func TestRetryKeepsHistoryAndRealStopStaysBlocked(t *testing.T) {
 	if _, err := st.Reply(token, "stored"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.FinishObserved(token, 0, false, "not proven"); err != nil {
+	if _, err := st.FinishObserved(token, 0, false, true, "not proven"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := st.Retry("worker", "please", platform.Proof{Proven: true}); !errors.Is(err, ErrBadConfirmation) {
@@ -379,6 +379,24 @@ func TestFailClosedPreservesHistoryAndRefusesRetry(t *testing.T) {
 	}
 }
 
+func TestAcceptRejectsInvalidProviderResult(t *testing.T) {
+	st, env := openTest(t)
+	register(t, st, env, "worker")
+	token := running(t, st, env, "worker", "m1", "conversation-1")
+	if _, err := st.Reply(token, "stored"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.FinishObserved(token, 0, false, false, "provider result rejected"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Accept("worker", platform.Proof{Proven: true, Detail: "injected"}); !errors.Is(err, ErrNotVerified) {
+		t.Fatalf("accept = %v", err)
+	}
+	if _, err := st.Claim("worker"); !errors.Is(err, ErrBusy) {
+		t.Fatalf("invalid result released the lock: %v", err)
+	}
+}
+
 func TestEmptyGroupDoesNotReleaseTheSession(t *testing.T) {
 	st, env := openTest(t)
 	register(t, st, env, "worker")
@@ -386,7 +404,7 @@ func TestEmptyGroupDoesNotReleaseTheSession(t *testing.T) {
 	if _, err := st.Reply(token, "stored"); err != nil {
 		t.Fatal(err)
 	}
-	state, err := st.FinishObserved(token, 0, true, "group empty")
+	state, err := st.FinishObserved(token, 0, true, true, "group empty")
 	if err != nil || state != "uncertain" {
 		t.Fatalf("state = %s %v", state, err)
 	}
