@@ -154,6 +154,28 @@ class SafetyTests(unittest.TestCase):
             self.store.begin_launch(token)
         self.assertEqual(len(self.store.snapshot()['attempts']), 1)
 
+    def test_identity_required_before_mcp_can_read_or_reply(self):
+        self.enqueue()
+        token = self.store.claim(self.key)
+        self.store.begin_launch(token, require_identity=True)
+        results = rpc(self.db, token, [tool('read_current', {}), tool('reply', {'text': 'early'})])
+        self.assertTrue(all(r['isError'] for r in results))
+        self.store.confirm_identity(token, self.key)
+        self.assertEqual(self.store.current_message(token)['id'], 'm1')
+        self.assertEqual(self.store.reply(token, 'after verification')['reply_to'], 'm1')
+
+    def test_mismatched_identity_never_enables_mcp(self):
+        self.enqueue()
+        token = self.store.claim(self.key)
+        self.store.begin_launch(token, require_identity=True)
+        with self.assertRaises(Rejected):
+            self.store.confirm_identity(token, session_key('synthetic', 'local-test', 'wrong-id'))
+        self.store.quarantine(self.key)
+        with self.assertRaises(Rejected):
+            self.store.confirm_identity(token, self.key)
+        self.assertIsNone(self.store.claim(self.key))
+        self.assertEqual(self.store.snapshot()['replies'], [])
+
     def test_clean_exit_without_reply_does_not_complete(self):
         token = self.running()
         self.assertEqual(self.store.finish_after_wait(token, 0), 'uncertain')
