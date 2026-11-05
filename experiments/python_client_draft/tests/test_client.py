@@ -39,6 +39,7 @@ class Client:
         self.extra_args = tuple(extra_args)
         self.proc = None
         self.stderr_path = self.data / 'supervisor.stderr'
+        self._stderr = None
 
     def start(self):
         self.data.mkdir(parents=True, exist_ok=True)
@@ -46,10 +47,10 @@ class Client:
         if self.allow_synthetic:
             command.append('--allow-synthetic')
         command.extend(self.extra_args)
-        stderr = open(self.stderr_path, 'w', encoding='utf-8')
+        self._stderr = open(self.stderr_path, 'w', encoding='utf-8')
         self.proc = subprocess.Popen(
             command, env=self.env, stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE, stderr=stderr, text=True)
+            stdout=subprocess.PIPE, stderr=self._stderr, text=True)
         line = self._read_line()
         try:
             payload = json.loads(line)
@@ -87,14 +88,16 @@ class Client:
         return completed.returncode, body, completed.stderr
 
     def shutdown(self):
-        if self.proc is None or self.proc.poll() is not None:
-            return
-        self.cmd('shutdown')
-        try:
-            self.proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            self.proc.kill()
-            self.proc.wait(timeout=5)
+        if self.proc is not None and self.proc.poll() is None:
+            self.cmd('shutdown')
+            try:
+                self.proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+                self.proc.wait(timeout=5)
+        if self._stderr is not None:
+            self._stderr.close()
+            self._stderr = None
 
     def stop_workers(self):
         runs = self.data / 'runs'

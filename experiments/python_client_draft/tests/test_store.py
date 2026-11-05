@@ -34,8 +34,7 @@ def rpc(db, token, calls):
         [sys.executable, '-m', 'agent_messenger.mcp_server', '--db', str(db), '--token', token],
         input=''.join(json.dumps(item) + '\n' for item in requests),
         capture_output=True, text=True, timeout=10, check=True, env=env)
-    # The first response is initialize; the calls under test follow it.
-    return [json.loads(line)['result'] for line in completed.stdout.splitlines()][1:]
+    return [json.loads(line)['result'] for line in completed.stdout.splitlines()]
 
 
 def tool(name, args):
@@ -162,12 +161,13 @@ class StoreTests(unittest.TestCase):
             tool('reply', {'text': 'ACK:request m1', 'message_id': 'foreign'}),
             tool('reply', {'text': 'ACK:request m1'}),
         ])
+        results = results[1:]
         self.assertEqual([item['name'] for item in results[0]['tools']], ['read_current', 'reply'])
         self.assertTrue(results[2]['isError'])
         self.assertTrue(results[3]['isError'])
         self.assertFalse(results[4]['isError'])
         self.store.finish_after_wait(token, 0)
-        denied = rpc(self.db, token, [tool('read_current', {}), tool('reply', {'text': 'late'})])
+        denied = rpc(self.db, token, [tool('read_current', {}), tool('reply', {'text': 'late'})])[1:]
         self.assertTrue(all(item['isError'] for item in denied))
 
     def test_completion_requires_supervised_exit_and_reply(self):
