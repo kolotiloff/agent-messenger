@@ -129,22 +129,17 @@ func TestForeignAndCompletedContextCannotReply(t *testing.T) {
 		t.Fatal(err)
 	}
 	state, err := st.FinishObserved(token, 0, true, "test")
-	if err != nil || state != "completed" {
+	if err != nil || state != "uncertain" {
 		t.Fatalf("finish = %s %v", state, err)
 	}
-	enqueue(t, st, "worker", "m2")
-	next := claimBeginConfirm(t, st, env, "worker", "conversation-1")
 	if _, err := st.Reply(token, "late"); !errors.Is(err, ErrRejected) {
 		t.Fatalf("old token reply = %v", err)
 	}
 	if _, err := st.Reply("invented-context", "late"); !errors.Is(err, ErrRejected) {
 		t.Fatalf("invented reply = %v", err)
 	}
-	if _, err := st.Reply(next, "second"); err != nil {
-		t.Fatal(err)
-	}
-	if len(mustSnap(t, st).Replies) != 2 {
-		t.Fatal("reply count")
+	if _, err := st.Claim("worker"); !errors.Is(err, ErrBusy) {
+		t.Fatalf("empty group released the lock: %v", err)
 	}
 }
 
@@ -165,8 +160,8 @@ func TestDuplicateDeliveryDoesNotStartAnotherAttempt(t *testing.T) {
 	if _, err := st.FinishObserved(token, 0, true, "test"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.Claim("worker"); !errors.Is(err, ErrEmpty) {
-		t.Fatalf("claim after duplicate = %v", err)
+	if _, err := st.Claim("worker"); !errors.Is(err, ErrBusy) {
+		t.Fatalf("claim after observed exit = %v", err)
 	}
 	if len(mustSnap(t, st).Attempts) != 1 {
 		t.Fatal("attempt count")
@@ -381,6 +376,72 @@ func TestFailClosedPreservesHistoryAndRefusesRetry(t *testing.T) {
 	}
 	if len(mustSnap(t, st).Replies) != 1 {
 		t.Fatal("reply deleted")
+	}
+}
+
+func TestEmptyGroupDoesNotReleaseTheSession(t *testing.T) {
+	st, env := openTest(t)
+	register(t, st, env, "worker")
+	token := running(t, st, env, "worker", "m1", "conversation-1")
+	if _, err := st.Reply(token, "stored"); err != nil {
+		t.Fatal(err)
+	}
+	state, err := st.FinishObserved(token, 0, true, "group empty")
+	if err != nil || state != "uncertain" {
+		t.Fatalf("state = %s %v", state, err)
+	}
+	enqueue(t, st, "worker", "m2")
+	if _, err := st.Claim("worker"); !errors.Is(err, ErrBusy) {
+		t.Fatalf("second message was reserved: %v", err)
+	}
+	if _, err := st.CurrentMessage(token); !errors.Is(err, ErrRejected) {
+		t.Fatal("mcp stayed open after finish")
+	}
+}
+
+func TestRestartRevokesPreviousMCP(t *testing.T) {
+	st, env := openTest(t)
+	register(t, st, env, "worker")
+	token := running(t, st, env, "worker", "m1", "conversation-1")
+	if _, err := st.Reply(token, "still-open"); err != nil {
+		t.Fatal(err)
+	}
+	n, err := st.RevokeInherited()
+	if err != nil || n != 1 {
+		t.Fatalf("revoke = %d %v", n, err)
+	}
+	if _, err := st.Reply(token, "after-restart"); !errors.Is(err, ErrRejected) {
+		t.Fatalf("old mcp after restart = %v", err)
+	}
+	if _, err := st.CurrentMessage(token); !errors.Is(err, ErrRejected) {
+		t.Fatal("old mcp can still read")
+	}
+	enqueue(t, st, "worker", "m2")
+	if _, err := st.Claim("worker"); !errors.Is(err, ErrBusy) {
+		t.Fatalf("restart cleared the lock: %v", err)
+	}
+}
+
+func TestCaseFoldSharesOneSessionKey(t *testing.T) {
+	root := t.TempDir()
+	real := filepath.Join(root, "profile")
+	if err := os.Mkdir(real, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	fold := func(string, string, string) bool { return true }
+	lower, err := foldWalk(real, fold)
+	if err != nil {
+		t.Fatal(err)
+	}
+	upper, err := foldWalk(filepath.Join(root, "Profile"), fold)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lower != upper || upper != real {
+		t.Fatalf("case fold = %s %s", lower, upper)
+	}
+	if _, err := foldWalk(filepath.Join(root, "Profile"), func(string, string, string) bool { return false }); err == nil {
+		t.Fatal("case-sensitive walk accepted a different case")
 	}
 }
 

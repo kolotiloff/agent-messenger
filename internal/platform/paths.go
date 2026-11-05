@@ -7,6 +7,21 @@ import (
 	"runtime"
 )
 
+// SupervisorLockFile is one lock per OS user. A second --root does not get a second supervisor.
+func SupervisorLockFile() (string, error) {
+	root, err := DefaultRoot()
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		return "", err
+	}
+	if err := os.Chmod(root, 0o700); err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "supervisor.lock"), nil
+}
+
 // DefaultRoot is the per-user client directory. Tests pass an explicit root instead.
 func DefaultRoot() (string, error) {
 	switch runtime.GOOS {

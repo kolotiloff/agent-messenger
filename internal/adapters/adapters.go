@@ -125,7 +125,7 @@ func StartupID(provider string, event map[string]any) (string, error) {
 			return "", fmt.Errorf("%w: missing Codex id", errIdentity)
 		}
 		return id, nil
-	case "cursor", "claude":
+	case "cursor", "claude", "synthetic":
 		if event["type"] != "system" || event["subtype"] != "init" {
 			return "", nil
 		}

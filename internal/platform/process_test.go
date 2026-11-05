@@ -2,6 +2,7 @@ package platform
 
 import (
 	"errors"
+	"os"
 	"os/exec"
 	"testing"
 	"time"
@@ -33,6 +34,39 @@ func TestEvaluateStop(t *testing.T) {
 	}
 	if _, err := EvaluateStop(stored, nil, "", errors.New("snapshot failed")); !errors.Is(err, ErrNotProven) {
 		t.Fatalf("snapshot error = %v", err)
+	}
+}
+
+func TestOwnsObservationRejectsMismatchedStartToken(t *testing.T) {
+	if _, err := ReadObservation(os.Getpid()); errors.Is(err, ErrUnsupported) {
+		t.Skip(err.Error())
+	}
+	cmd := exec.Command("/bin/sleep", "30")
+	if err := SetNewGroup(cmd); err != nil {
+		if errors.Is(err, ErrUnsupported) {
+			t.Skip(err.Error())
+		}
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	}()
+	obs, err := ReadObservation(cmd.Process.Pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	owned, err := OwnsObservation(obs)
+	if err != nil || !owned {
+		t.Fatalf("owner = %t %v", owned, err)
+	}
+	obs.StartToken = "not-the-recorded-start"
+	owned, err = OwnsObservation(obs)
+	if err != nil || owned {
+		t.Fatalf("mismatched start token was accepted: %t %v", owned, err)
 	}
 }
 

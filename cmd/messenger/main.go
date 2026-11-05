@@ -14,12 +14,7 @@ import (
 )
 
 func main() {
-	args := os.Args[1:]
-	root := ""
-	if len(args) >= 2 && args[0] == "--root" {
-		root = args[1]
-		args = args[2:]
-	}
+	root, args := splitArgs(os.Args[1:])
 	if len(args) == 0 {
 		usage()
 		os.Exit(2)
@@ -46,7 +41,7 @@ func main() {
 func run(root string, args []string) error {
 	switch args[0] {
 	case "serve":
-		err := supervisor.Run(context.Background(), root, supervisor.DisabledLauncher{})
+		err := supervisor.Run(context.Background(), root, supervisor.AdapterLauncher{})
 		if errors.Is(err, platform.ErrAlreadyRunning) {
 			return errors.New("клиент уже запущен; команды нужно отправлять ему, а не запускать второй экземпляр")
 		}
@@ -54,7 +49,7 @@ func run(root string, args []string) error {
 			return fmt.Errorf("операция этой ОС не поддерживается и не выполнена: %w", err)
 		}
 		return err
-	case "status", "pause", "resume", "stop-job", "shutdown", "enqueue", "inspect", "resolve":
+	case "status", "pause", "resume", "stop-job", "shutdown", "enqueue", "inspect", "resolve", "register-session":
 		response, err := control.Call(root, request(args))
 		if err != nil {
 			return err
@@ -81,7 +76,11 @@ func request(args []string) control.Request {
 			i++
 		}
 	}
-	req := control.Request{Cmd: args[0], Alias: flags["alias"], MessageID: flags["id"], Sender: flags["from"], Text: flags["text"], Confirmation: flags["confirm"]}
+	req := control.Request{
+		Cmd: args[0], Alias: flags["alias"], MessageID: flags["id"], Sender: flags["from"], Text: flags["text"],
+		Confirmation: flags["confirm"], Provider: flags["provider"], Environment: flags["environment"],
+		ConversationID: flags["conversation-id"], CLI: flags["cli"], Workspace: flags["workspace"],
+	}
 	if args[0] == "resolve" && len(args) > 1 && !strings.HasPrefix(args[1], "--") {
 		req.Action = args[1]
 	}
@@ -108,26 +107,41 @@ func printResponse(response control.Response) {
 	}
 }
 
+func splitArgs(args []string) (string, []string) {
+	root := ""
+	var rest []string
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--root" && i+1 < len(args) {
+			root = args[i+1]
+			i++
+			continue
+		}
+		rest = append(rest, args[i])
+	}
+	return root, rest
+}
+
 func usage() {
 	fmt.Fprintf(os.Stderr, `Agent Messenger — локальный клиент без окна.
 
-Запуск реальных Claude, Codex и Cursor этой сборкой выключен.
-Будущее окно посылает команды запущенному клиенту и не становится вторым владельцем CLI.
+--root стоит перед командой. Один пользователь может держать только один serve,
+даже с другим каталогом данных. Реальный CLI запускается только после register-session.
 
-  messenger [--root КАТАЛОГ] serve
-  messenger [--root КАТАЛОГ] status
-  messenger [--root КАТАЛОГ] pause
-  messenger [--root КАТАЛОГ] resume
-  messenger [--root КАТАЛОГ] stop-job
-  messenger [--root КАТАЛОГ] shutdown
-  messenger [--root КАТАЛОГ] enqueue --alias ИМЯ --id ID --from ОТ --text ТЕКСТ
-  messenger [--root КАТАЛОГ] inspect
-  messenger [--root КАТАЛОГ] resolve fail|accept|retry --alias ИМЯ [--confirm actions-may-repeat]
+  messenger --root КАТАЛОГ serve
+  messenger --root КАТАЛОГ register-session --provider claude|codex|cursor --environment КАТАЛОГ --conversation-id ID --alias ИМЯ --cli ФАЙЛ [--workspace КАТАЛОГ]
+  messenger --root КАТАЛОГ status
+  messenger --root КАТАЛОГ pause
+  messenger --root КАТАЛОГ resume
+  messenger --root КАТАЛОГ stop-job
+  messenger --root КАТАЛОГ shutdown
+  messenger --root КАТАЛОГ enqueue --alias ИМЯ --id ID --from ОТ --text ТЕКСТ
+  messenger --root КАТАЛОГ inspect
+  messenger --root КАТАЛОГ resolve fail|accept|retry --alias ИМЯ [--confirm actions-may-repeat]
 
 pause — новые задания не резервируются, активный процесс не останавливается.
-stop-job — активное задание становится uncertain, MCP этой попытки отзывается.
-shutdown — процесс клиента выходит, очередь на диске остаётся, активный процесс не убивается.
-accept и retry в этой версии не снимают блокировку: остановка всех потомков не доказана.
+stop-job — сначала отзывает MCP, затем сигналит группе только если pid, время старта и группа всё ещё принадлежат той же попытке.
+shutdown — очередь остаётся, активный процесс не убивается. Следующий serve сразу отзывает старый MCP и не снимает блокировку сессии.
+Пустая группа процессов не завершает попытку и не снимает блокировку.
 `)
 }
 

@@ -51,3 +51,24 @@ func CurrentProof(stored Observation) (Proof, error) {
 	boot, live, err := Snapshot()
 	return EvaluateStop(stored, live, boot, err)
 }
+
+// OwnsObservation reports whether the recorded pid, start token, boot id and process
+// group still refer to the same live process. A recycled group number is not owned.
+func OwnsObservation(stored Observation) (bool, error) {
+	if stored.PID <= 0 || stored.PGID <= 1 || stored.StartToken == "" || stored.BootID == "" {
+		return false, fmt.Errorf("%w: incomplete observation", ErrNotProven)
+	}
+	boot, live, err := Snapshot()
+	if err != nil {
+		return false, err
+	}
+	if boot != stored.BootID {
+		return false, nil
+	}
+	for _, proc := range live {
+		if proc.PID == stored.PID && proc.StartToken == stored.StartToken && proc.PGID == stored.PGID {
+			return true, nil
+		}
+	}
+	return false, nil
+}

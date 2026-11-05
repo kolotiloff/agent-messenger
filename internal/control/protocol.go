@@ -16,13 +16,18 @@ import (
 const SocketName = "control.sock"
 
 type Request struct {
-	Cmd          string `json:"cmd"`
-	Alias        string `json:"alias,omitempty"`
-	MessageID    string `json:"message_id,omitempty"`
-	Sender       string `json:"sender,omitempty"`
-	Text         string `json:"text,omitempty"`
-	Action       string `json:"action,omitempty"`
-	Confirmation string `json:"confirmation,omitempty"`
+	Cmd            string `json:"cmd"`
+	Alias          string `json:"alias,omitempty"`
+	MessageID      string `json:"message_id,omitempty"`
+	Sender         string `json:"sender,omitempty"`
+	Text           string `json:"text,omitempty"`
+	Action         string `json:"action,omitempty"`
+	Confirmation   string `json:"confirmation,omitempty"`
+	Provider       string `json:"provider,omitempty"`
+	Environment    string `json:"environment,omitempty"`
+	ConversationID string `json:"conversation_id,omitempty"`
+	CLI            string `json:"cli,omitempty"`
+	Workspace      string `json:"workspace,omitempty"`
 }
 
 type Status struct {
@@ -59,6 +64,7 @@ type Handler interface {
 	Enqueue(alias, id, sender, text string) (bool, error)
 	Inspect() (any, error)
 	Resolve(alias, action, confirmation string) (string, error)
+	RegisterSession(provider, environment, conversationID, alias, cliPath, workspace string) (string, error)
 }
 
 func SocketPath(root string) string { return filepath.Join(root, SocketName) }
@@ -144,6 +150,12 @@ func dispatch(handler Handler, request Request) Response {
 			return Response{OK: false, Error: err.Error()}
 		}
 		return Response{OK: true, Status: &Status{Detail: detail}}
+	case "register-session":
+		key, err := handler.RegisterSession(request.Provider, request.Environment, request.ConversationID, request.Alias, request.CLI, request.Workspace)
+		if err != nil {
+			return Response{OK: false, Error: err.Error()}
+		}
+		return Response{OK: true, Status: &Status{Detail: key}}
 	default:
 		return Response{OK: false, Error: "неизвестная команда"}
 	}

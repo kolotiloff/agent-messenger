@@ -2,6 +2,7 @@ package supervisor
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -26,6 +27,13 @@ func TestMain(m *testing.M) {
 		}
 		os.Exit(0)
 	}
+	home, err := os.MkdirTemp("", "am-home-")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv("HOME", home)
+	os.Setenv("XDG_DATA_HOME", filepath.Join(home, "xdg"))
+	os.Setenv("AppData", filepath.Join(home, "appdata"))
 	os.Exit(m.Run())
 }
 
@@ -46,7 +54,8 @@ func TestIdleAndPauseDoNotLaunch(t *testing.T) {
 	launcher := &countingLauncher{enabled: true}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go func() { _ = Run(ctx, root, launcher) }()
+	errc := make(chan error, 1)
+	go func() { errc <- Run(ctx, root, launcher) }()
 	waitSocket(t, root)
 	time.Sleep(180 * time.Millisecond)
 	if launcher.calls() != 0 {
@@ -74,6 +83,11 @@ func TestIdleAndPauseDoNotLaunch(t *testing.T) {
 		cancel()
 		t.Fatal("shutdown did not finish")
 	}
+	select {
+	case <-errc:
+	case <-time.After(3 * time.Second):
+		t.Fatal("supervisor did not exit")
+	}
 	st = mustStore(t, root)
 	defer st.Close()
 	snap, err := st.Snapshot()
@@ -91,8 +105,19 @@ func TestCommandsDoNotStartASecondSupervisor(t *testing.T) {
 	defer cancel()
 	errc := make(chan error, 1)
 	go func() { errc <- Run(ctx, root, DisabledLauncher{}) }()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-errc:
+		case <-time.After(3 * time.Second):
+		}
+	})
 	waitSocket(t, root)
-	if _, err := platform.Acquire(filepath.Join(root, lockName)); !errors.Is(err, platform.ErrAlreadyRunning) {
+	lockPath, err := platform.SupervisorLockFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := platform.Acquire(lockPath); !errors.Is(err, platform.ErrAlreadyRunning) {
 		t.Fatalf("second lock = %v", err)
 	}
 	second := make(chan error, 1)
@@ -140,13 +165,19 @@ func TestSupervisorRunsExplicitSessionAndBlocksOccupiedGroup(t *testing.T) {
 		return startAgent(spec)
 	}}
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() { _ = Run(ctx, root, launcher) }()
+	errc := make(chan error, 1)
+	go func() { errc <- Run(ctx, root, launcher) }()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-errc:
+		case <-time.After(3 * time.Second):
+		}
+	})
 	waitSocket(t, root)
 	waitStatus(t, root, func(status control.Status) bool {
-		return status.Queued == 0 && status.Held == 0 && launcher.calls() == 2
+		return status.Held == 1 && launcher.calls() == 1
 	})
-	cancel()
 }
 
 func TestOccupiedGroupStaysUncertain(t *testing.T) {
@@ -165,10 +196,28 @@ func TestOccupiedGroupStaysUncertain(t *testing.T) {
 		return startAgent(spec, "MESSENGER_KEEP_CHILD=1", "MESSENGER_DIR="+dir)
 	}}
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() { _ = Run(ctx, root, launcher) }()
+	errc := make(chan error, 1)
+	go func() { errc <- Run(ctx, root, launcher) }()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-errc:
+		case <-time.After(3 * time.Second):
+		}
+	})
 	waitSocket(t, root)
-	waitStatus(t, root, func(status control.Status) bool { return status.Held == 1 && launcher.calls() == 1 })
+	waitFile(t, filepath.Join(dir, "child.pid"))
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		inspected, err := control.Call(root, control.Request{Cmd: "inspect"})
+		if err == nil && strings.Contains(string(inspected.Inspect), `"state":"uncertain"`) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("attempt did not settle: %s", inspected.Inspect)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 	response, err := control.Call(root, control.Request{Cmd: "resolve", Action: "retry", Alias: "worker", Confirmation: core.RetryConfirmation})
 	if err == nil && response.OK {
 		t.Fatal("retry succeeded without descendant proof")
@@ -178,14 +227,19 @@ func TestOccupiedGroupStaysUncertain(t *testing.T) {
 		t.Fatal("accept succeeded without descendant proof")
 	}
 	stopped, err := control.Call(root, control.Request{Cmd: "stop-job"})
-	if err != nil || !stopped.OK || stopped.Stop == nil || stopped.Stop.Signal != "sent" || stopped.Stop.State != "uncertain" {
-		t.Fatalf("stop-job = %+v %v", stopped, err)
+	if err != nil || !stopped.OK || stopped.Stop == nil || stopped.Stop.Signal != "not_owner" || stopped.Stop.State != "uncertain" {
+		t.Fatalf("stop-job = %+v %v", stopped.Stop, err)
+	}
+	if text, err := os.ReadFile(filepath.Join(dir, "child.pid")); err == nil {
+		pid, _ := strconv.Atoi(strings.TrimSpace(string(text)))
+		if _, err := platform.ReadObservation(pid); err != nil {
+			t.Fatalf("unowned child was signaled: %v", err)
+		}
 	}
 	after, err := control.Call(root, control.Request{Cmd: "status"})
 	if err != nil || after.Status == nil || after.Status.Held != 1 {
 		t.Fatalf("status after stop = %+v %v", after, err)
 	}
-	cancel()
 }
 
 type countingLauncher struct {
@@ -258,6 +312,9 @@ func prepare(t *testing.T, root, env, conversation string, ids ...string) {
 	if _, err := st.Register("synthetic", env, conversation, "worker"); err != nil {
 		t.Fatal(err)
 	}
+	if err := st.ConfigureLaunch("worker", os.Args[0], env); err != nil {
+		t.Fatal(err)
+	}
 	for _, id := range ids {
 		if _, err := st.Enqueue(id, "worker", "coordinator", "request "+id); err != nil {
 			t.Fatal(err)
@@ -280,6 +337,18 @@ func mkdir(t *testing.T, path string) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+func waitFile(t *testing.T, path string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(path); err == nil {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s", path)
 }
 
 func waitSocket(t *testing.T, root string) {
@@ -309,6 +378,208 @@ func waitStatus(t *testing.T, root string, done func(control.Status) bool) {
 	t.Fatalf("status timeout: %+v", last)
 }
 
+func TestDifferentDataRootsCannotRunTwoSupervisors(t *testing.T) {
+	first := t.TempDir()
+	second := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	errc := make(chan error, 1)
+	go func() { errc <- Run(ctx, first, DisabledLauncher{}) }()
+	waitSocket(t, first)
+	err := Run(context.Background(), second, DisabledLauncher{})
+	if !errors.Is(err, platform.ErrAlreadyRunning) {
+		t.Fatalf("second root started a supervisor: %v", err)
+	}
+	cancel()
+	select {
+	case <-errc:
+	case <-time.After(3 * time.Second):
+		t.Fatal("first supervisor did not exit")
+	}
+}
+
+func TestStopJobRevokesMCPBeforeSignalingOwnedProcess(t *testing.T) {
+	if _, err := platform.ReadObservation(os.Getpid()); err != nil {
+		if errors.Is(err, platform.ErrUnsupported) {
+			t.Skip(err.Error())
+		}
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	env := mkdir(t, filepath.Join(root, "cli"))
+	st := mustStore(t, root)
+	defer st.Close()
+	if _, err := st.Register("synthetic", env, "conversation-1", "worker"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.Enqueue("m1", "worker", "coordinator", "hello"); err != nil {
+		t.Fatal(err)
+	}
+	token, err := st.Claim("worker")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.BeginLaunch(token); err != nil || st.ConfirmIdentity(token, "synthetic", env, "conversation-1") != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("/bin/sleep", "30")
+	if err := platform.SetNewGroup(cmd); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	})
+	obs, err := platform.ReadObservation(cmd.Process.Pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.RecordProcess(token, obs); err != nil {
+		t.Fatal(err)
+	}
+	sup := &Supervisor{store: st}
+	sup.beforeSignal = func() {
+		if _, err := st.Reply(token, "during-signal"); err == nil {
+			t.Error("mcp accepted a reply after stop had begun")
+		}
+	}
+	result, err := sup.StopJob()
+	if err != nil || result.Signal != "sent" {
+		t.Fatalf("stop = %+v %v", result, err)
+	}
+	waited := make(chan error, 1)
+	go func() { waited <- cmd.Wait() }()
+	select {
+	case <-waited:
+	case <-time.After(2 * time.Second):
+		t.Fatal("owned process was not signaled")
+	}
+}
+
+func TestStopJobDoesNotSignalRecycledGroup(t *testing.T) {
+	if _, err := platform.ReadObservation(os.Getpid()); err != nil {
+		if errors.Is(err, platform.ErrUnsupported) {
+			t.Skip(err.Error())
+		}
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	env := mkdir(t, filepath.Join(root, "cli"))
+	st := mustStore(t, root)
+	defer st.Close()
+	if _, err := st.Register("synthetic", env, "conversation-1", "worker"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.Enqueue("m1", "worker", "coordinator", "hello"); err != nil {
+		t.Fatal(err)
+	}
+	token, err := st.Claim("worker")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.BeginLaunch(token); err != nil || st.ConfirmIdentity(token, "synthetic", env, "conversation-1") != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("/bin/sleep", "30")
+	if err := platform.SetNewGroup(cmd); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	})
+	obs, err := platform.ReadObservation(cmd.Process.Pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	obs.StartToken = "stale-start-token"
+	if err := st.RecordProcess(token, obs); err != nil {
+		t.Fatal(err)
+	}
+	sup := &Supervisor{store: st}
+	result, err := sup.StopJob()
+	if err != nil || result.Signal != "not_owner" {
+		t.Fatalf("stop = %+v %v", result, err)
+	}
+	if _, err := platform.ReadObservation(cmd.Process.Pid); err != nil {
+		t.Fatalf("unrelated process was signaled: %v", err)
+	}
+	if _, err := st.Reply(token, "after"); !errors.Is(err, core.ErrRejected) {
+		t.Fatalf("mcp after stop = %v", err)
+	}
+}
+
+func TestAdapterLauncherResumesExactID(t *testing.T) {
+	if _, err := platform.ReadObservation(os.Getpid()); err != nil {
+		if errors.Is(err, platform.ErrUnsupported) {
+			t.Skip(err.Error())
+		}
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	env := mkdir(t, filepath.Join(root, "cli"))
+	workspace := mkdir(t, filepath.Join(root, "workspace"))
+	argvPath := filepath.Join(root, "argv.txt")
+	script := filepath.Join(root, "fake-cli")
+	body := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + shellQuote(argvPath) + "\n" +
+		"id=\nprev=\nfor a in \"$@\"; do\n" +
+		"  case \"$a\" in --resume=*) id=${a#--resume=} ;; esac\n" +
+		"  if [ \"$prev\" = \"--resume\" ] || [ \"$prev\" = \"resume\" ]; then id=$a; fi\n" +
+		"  prev=$a\ndone\n" +
+		"printf '%s\\n' \"{\\\"type\\\":\\\"system\\\",\\\"subtype\\\":\\\"init\\\",\\\"session_id\\\":\\\"$id\\\"}\"\n"
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	errc := make(chan error, 1)
+	go func() { errc <- Run(ctx, root, AdapterLauncher{}) }()
+	waitSocket(t, root)
+	registered, err := control.Call(root, control.Request{
+		Cmd: "register-session", Provider: "claude", Environment: env, ConversationID: "conversation-1",
+		Alias: "worker", CLI: script, Workspace: workspace,
+	})
+	if err != nil || !registered.OK {
+		t.Fatalf("register = %+v %v", registered, err)
+	}
+	queued, err := control.Call(root, control.Request{Cmd: "enqueue", Alias: "worker", MessageID: "m1", Sender: "coordinator", Text: "hello"})
+	if err != nil || !queued.OK {
+		t.Fatalf("enqueue = %+v %v", queued, err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	var argv string
+	for time.Now().Before(deadline) {
+		text, err := os.ReadFile(argvPath)
+		if err == nil && len(text) > 0 {
+			argv = string(text)
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if argv == "" {
+		t.Fatal("adapter did not start the bound cli")
+	}
+	if !strings.Contains(argv, "conversation-1") || !strings.Contains(argv, "--resume") || strings.Contains(argv, "--last") || strings.Contains(argv, "--continue") {
+		t.Fatalf("argv = %s", argv)
+	}
+	waitStatus(t, root, func(status control.Status) bool { return status.Held == 1 && status.CLILaunch == "adapters" })
+	cancel()
+	select {
+	case <-errc:
+	case <-time.After(3 * time.Second):
+		t.Fatal("supervisor did not exit")
+	}
+}
+
+func shellQuote(path string) string {
+	return "'" + strings.ReplaceAll(path, "'", "'\\''") + "'"
+}
+
 func killRecordedChild(dir string) {
 	text, err := os.ReadFile(filepath.Join(dir, "child.pid"))
 	if err != nil {
@@ -334,7 +605,13 @@ func agentFixture() error {
 	if _, err := st.Reply(token, "too-early"); err == nil {
 		return errors.New("reply succeeded before identity")
 	}
-	fmt.Printf("session %s\n", os.Getenv("MESSENGER_EXPECT"))
+	payload, err := json.Marshal(map[string]any{
+		"type": "system", "subtype": "init", "session_id": os.Getenv("MESSENGER_EXPECT"),
+	})
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%s\n", payload)
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		if _, err := st.Reply(token, "synthetic reply"); err == nil {

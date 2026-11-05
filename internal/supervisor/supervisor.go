@@ -5,27 +5,27 @@ package supervisor
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/kolotiloff/agent-messenger/internal/adapters"
 	"github.com/kolotiloff/agent-messenger/internal/control"
 	"github.com/kolotiloff/agent-messenger/internal/core"
 	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
 
-const (
-	dbName   = "queue.sqlite"
-	lockName = "supervisor.lock"
-)
+const dbName = "queue.sqlite"
 
-// Launcher starts a bound CLI. The product binary uses DisabledLauncher so tests
-// and an ordinary serve do not call real models.
+// Launcher starts a bound CLI. Production serve uses AdapterLauncher.
+// Tests inject a launcher that runs a synthetic process instead of a model.
 type Launcher interface {
 	Enabled() bool
 	Start(spec Spec) (Started, error)
@@ -38,6 +38,8 @@ type Spec struct {
 	Environment    string
 	ConversationID string
 	Alias          string
+	CLI            string
+	Workspace      string
 }
 
 type Started struct {
@@ -64,8 +66,9 @@ type Supervisor struct {
 	launcher Launcher
 	cancel   context.CancelFunc
 
-	mu      sync.Mutex
-	current *activeJob
+	mu           sync.Mutex
+	current      *activeJob
+	beforeSignal func()
 }
 
 type activeJob struct {
@@ -77,7 +80,7 @@ type activeJob struct {
 
 func Run(parent context.Context, root string, launcher Launcher) error {
 	if launcher == nil {
-		launcher = DisabledLauncher{}
+		launcher = AdapterLauncher{}
 	}
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return err
@@ -85,7 +88,11 @@ func Run(parent context.Context, root string, launcher Launcher) error {
 	if err := os.Chmod(root, 0o700); err != nil {
 		return err
 	}
-	lock, err := platform.Acquire(filepath.Join(root, lockName))
+	lockPath, err := platform.SupervisorLockFile()
+	if err != nil {
+		return err
+	}
+	lock, err := platform.Acquire(lockPath)
 	if err != nil {
 		return err
 	}
@@ -95,6 +102,9 @@ func Run(parent context.Context, root string, launcher Launcher) error {
 		return err
 	}
 	defer store.Close()
+	if _, err := store.RevokeInherited(); err != nil {
+		return err
+	}
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 	sup := &Supervisor{store: store, root: root, launcher: launcher, cancel: cancel}
@@ -107,8 +117,15 @@ func Run(parent context.Context, root string, launcher Launcher) error {
 		<-ctx.Done()
 		_ = ln.Close()
 	}()
-	go sup.loop(ctx)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		sup.loop(ctx)
+	}()
 	err = control.Serve(ln, sup)
+	cancel()
+	wg.Wait()
 	if ctx.Err() != nil {
 		return nil
 	}
@@ -164,15 +181,11 @@ func (s *Supervisor) runClaimed(ctx context.Context, token string) {
 		_, _ = started.Wait()
 		return
 	}
-	reader := bufio.NewReader(started.Stdout)
-	line, err := reader.ReadString('\n')
-	if err != nil {
-		_ = s.store.MarkUncertain(token, "identity line was not read")
-		_, _ = started.Wait()
-		return
-	}
-	var reported string
-	if _, err := fmt.Sscanf(line, "session %s", &reported); err != nil || reported != spec.ConversationID {
+	reported, err := readStartupID(started.Stdout, spec.Provider)
+	if err != nil || reported == "" || reported != spec.ConversationID {
+		if reported == "" {
+			reported = "missing"
+		}
 		_ = s.store.ConfirmIdentity(token, spec.Provider, spec.Environment, reported)
 		_, _ = started.Wait()
 		return
@@ -187,13 +200,36 @@ func (s *Supervisor) runClaimed(ctx context.Context, token string) {
 		return
 	}
 	groupEmpty, groupErr := platform.GroupEmpty(started.PGID)
-	detail := "group checked by the waiting supervisor"
+	detail := "empty process group is not descendant proof"
 	if groupErr != nil {
 		groupEmpty = false
 		detail = groupErr.Error()
 	}
+	// groupEmpty is recorded and does not unlock the session.
 	_, _ = s.store.FinishObserved(token, exitCode, groupEmpty, detail)
 	_ = ctx
+}
+
+func readStartupID(r io.Reader, provider string) (string, error) {
+	reader := bufio.NewReader(r)
+	for {
+		line, err := reader.ReadString('\n')
+		if strings.TrimSpace(line) != "" {
+			var event map[string]any
+			if json.Unmarshal([]byte(line), &event) == nil {
+				id, idErr := adapters.StartupID(provider, event)
+				if idErr != nil {
+					return "", idErr
+				}
+				if id != "" {
+					return id, nil
+				}
+			}
+		}
+		if err != nil {
+			return "", err
+		}
+	}
 }
 
 func (s *Supervisor) spec(token string) (Spec, error) {
@@ -213,10 +249,12 @@ func (s *Supervisor) spec(token string) (Spec, error) {
 			return Spec{
 				Token:          token,
 				DB:             filepath.Join(s.root, dbName),
-				Provider:       fmt.Sprint(session["provider"]),
-				Environment:    fmt.Sprint(session["environment"]),
-				ConversationID: fmt.Sprint(session["conversation_id"]),
+				Provider:       text(session["provider"]),
+				Environment:    text(session["environment"]),
+				ConversationID: text(session["conversation_id"]),
 				Alias:          alias,
+				CLI:            text(session["cli_path"]),
+				Workspace:      text(session["workspace"]),
 			}, nil
 		}
 	}
@@ -234,8 +272,10 @@ func (s *Supervisor) Status() (control.Status, error) {
 		Broker:     "not_configured",
 		Supervisor: os.Getpid(),
 	}
-	if s.launcher.Enabled() {
-		status.CLILaunch = "test-launcher"
+	if labeled, ok := s.launcher.(interface{ LaunchLabel() string }); ok {
+		status.CLILaunch = labeled.LaunchLabel()
+	} else if s.launcher.Enabled() {
+		status.CLILaunch = "enabled"
 	}
 	for _, session := range snap.Sessions {
 		if session["active_token"] != nil {
@@ -279,22 +319,62 @@ func (s *Supervisor) StopJob() (control.StopResult, error) {
 	if err != nil {
 		return result, err
 	}
-	if obs.PGID > 1 {
-		if err := platform.SignalGroup(obs.PGID); err != nil {
-			if errors.Is(err, platform.ErrUnsupported) {
-				result.Signal = "unsupported"
-			} else {
-				result.Signal = "error"
-			}
-			result.Note = err.Error() + "; " + result.Note
+	owned, ownErr := platform.OwnsObservation(obs)
+	if ownErr != nil {
+		owned = false
+		if errors.Is(ownErr, platform.ErrUnsupported) {
+			result.Signal = "unsupported"
 		} else {
-			result.Signal = "sent"
+			result.Signal = "not_owner"
 		}
+		result.Note = ownErr.Error() + "; номер группы без совпадения владельца не используется"
 	}
+	// Revoke MCP before any signal so the process cannot store a reply after stop.
 	if err := s.store.MarkUncertain(token, "stop-job"); err != nil {
 		return result, err
 	}
+	if s.beforeSignal != nil {
+		s.beforeSignal()
+	}
+	if !owned {
+		if result.Signal == "not_recorded" {
+			result.Signal = "not_owner"
+		}
+		return result, nil
+	}
+	if err := platform.SignalGroup(obs.PGID); err != nil {
+		if errors.Is(err, platform.ErrUnsupported) {
+			result.Signal = "unsupported"
+		} else {
+			result.Signal = "error"
+		}
+		result.Note = err.Error() + "; " + result.Note
+		return result, nil
+	}
+	result.Signal = "sent"
 	return result, nil
+}
+
+func (s *Supervisor) RegisterSession(provider, environment, conversationID, alias, cliPath, workspace string) (string, error) {
+	key, err := s.store.Register(provider, environment, conversationID, alias)
+	if err != nil {
+		return "", err
+	}
+	if err := s.store.ConfigureLaunch(alias, cliPath, workspace); err != nil {
+		return "", err
+	}
+	return key, nil
+}
+
+func text(value any) string {
+	if value == nil {
+		return ""
+	}
+	s := fmt.Sprint(value)
+	if s == "<nil>" {
+		return ""
+	}
+	return s
 }
 
 func (s *Supervisor) Shutdown() error {

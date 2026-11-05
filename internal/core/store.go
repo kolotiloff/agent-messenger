@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -23,6 +24,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     conversation_id TEXT NOT NULL,
     active_token TEXT,
     decision TEXT,
+    cli_path TEXT,
+    workspace TEXT,
     UNIQUE(provider, environment, conversation_id)
 );
 CREATE TABLE IF NOT EXISTS aliases (
@@ -121,6 +124,10 @@ func Open(path string) (*Store, error) {
 	db.SetMaxIdleConns(1)
 	store := &Store{db: db}
 	if _, err := db.Exec(schema); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := ensureSessionColumns(db); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -314,6 +321,7 @@ func (s *Store) ClaimNext() (string, error) {
 			JOIN sessions s ON s.key = r.session_key
 			JOIN aliases a ON a.session_key = s.key
 			WHERE r.state = 'queued' AND s.active_token IS NULL AND s.decision IS NULL
+			  AND s.cli_path IS NOT NULL AND s.cli_path != ''
 			ORDER BY r.rowid, a.alias LIMIT 1`).Scan(&requestID, &key, &alias)
 		if err == sql.ErrNoRows {
 			return ErrEmpty
@@ -465,12 +473,11 @@ func (s *Store) Reply(token, text string) (Reply, error) {
 	return reply, err
 }
 
-// FinishObserved records the supervisor's own wait. Exit code 0, a stored reply,
-// confirmed identity and an empty process group are all required. Any gap becomes
-// uncertain and keeps the session lock. The group check is not a descendant proof
-// for a later recovery.
+// FinishObserved records the supervisor's own wait and always leaves the session locked.
+// An empty process group is stored as a note. It is not proof that detached descendants
+// have stopped, so it does not clear the lock or mark the attempt completed.
 func (s *Store) FinishObserved(token string, exitCode int, groupEmpty bool, groupDetail string) (string, error) {
-	state := "uncertain"
+	const state = "uncertain"
 	err := s.tx(func(tx *sql.Tx) error {
 		row, err := owned(tx, token, "launching", "running")
 		if err != nil {
@@ -482,6 +489,10 @@ func (s *Store) FinishObserved(token string, exitCode int, groupEmpty bool, grou
 			return err
 		}
 		identity := row.state == "running"
+		detail := fmt.Sprintf("exit %d identity %t reply %t group_empty %t; empty group does not unlock", exitCode, identity, replyID.Valid, groupEmpty)
+		if groupDetail != "" {
+			detail += "; " + groupDetail
+		}
 		_, err = tx.Exec(`INSERT INTO verifications(attempt_token, identity_confirmed, reply_id, exit_observed, exit_code, group_empty, detail)
 			VALUES (?,?,?,?,?,?,?)
 			ON CONFLICT(attempt_token) DO UPDATE SET
@@ -491,26 +502,81 @@ func (s *Store) FinishObserved(token string, exitCode int, groupEmpty bool, grou
 			  exit_code = excluded.exit_code,
 			  group_empty = excluded.group_empty,
 			  detail = excluded.detail`,
-			token, boolInt(identity), nullString(replyID), 1, exitCode, boolInt(groupEmpty), groupDetail)
+			token, boolInt(identity), nullString(replyID), 1, exitCode, boolInt(groupEmpty), detail)
 		if err != nil {
 			return err
 		}
-		if identity && exitCode == 0 && replyID.Valid && groupEmpty {
-			state = "completed"
-			if _, err := tx.Exec(`UPDATE attempts SET state = 'completed', mcp_revoked = 1 WHERE token = ?`, token); err != nil {
-				return err
-			}
-			if _, err := tx.Exec(`UPDATE requests SET state = 'completed' WHERE id = ?`, row.requestID); err != nil {
-				return err
-			}
-			if _, err := tx.Exec(`UPDATE sessions SET active_token = NULL WHERE key = ? AND active_token = ?`, row.sessionKey, token); err != nil {
-				return err
-			}
-			return insertEvent(tx, "completed", row.sessionKey, token, "observed exit, reply, identity and empty group")
-		}
-		return revoke(tx, row, "uncertain", fmt.Sprintf("exit %d identity %t reply %t group_empty %t", exitCode, identity, replyID.Valid, groupEmpty))
+		return revoke(tx, row, "uncertain", detail)
 	})
 	return state, err
+}
+
+// RevokeInherited drops MCP access for attempts left by a previous supervisor.
+// The session lock stays, so the new process cannot launch that session again.
+func (s *Store) RevokeInherited() (int, error) {
+	var n int
+	err := s.tx(func(tx *sql.Tx) error {
+		rows, err := tx.Query(`SELECT active_token FROM sessions WHERE active_token IS NOT NULL`)
+		if err != nil {
+			return err
+		}
+		var tokens []string
+		for rows.Next() {
+			var token string
+			if err := rows.Scan(&token); err != nil {
+				rows.Close()
+				return err
+			}
+			tokens = append(tokens, token)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		for _, token := range tokens {
+			row, err := owned(tx, token, "reserved", "launching", "running", "uncertain")
+			if err != nil {
+				return err
+			}
+			if err := revoke(tx, row, "uncertain", "supervisor restarted; previous mcp revoked"); err != nil {
+				return err
+			}
+			n++
+		}
+		return nil
+	})
+	return n, err
+}
+
+// ConfigureLaunch stores the external CLI that the supervisor may execute for this alias.
+func (s *Store) ConfigureLaunch(alias, cliPath, workspace string) error {
+	if !filepath.IsAbs(cliPath) {
+		return fmt.Errorf("%w: cli path must be absolute", ErrRejected)
+	}
+	resolved, err := filepath.EvalSymlinks(cliPath)
+	if err != nil {
+		return fmt.Errorf("%w: cli path must exist", ErrRejected)
+	}
+	info, err := os.Stat(resolved)
+	if err != nil || info.IsDir() {
+		return fmt.Errorf("%w: cli path must be a file", ErrRejected)
+	}
+	if workspace != "" {
+		workspace, err = CanonicalEnvironment(workspace)
+		if err != nil {
+			return err
+		}
+	}
+	return s.tx(func(tx *sql.Tx) error {
+		key, _, err := sessionByAlias(tx, alias)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE sessions SET cli_path = ?, workspace = ? WHERE key = ?`, resolved, workspace, key); err != nil {
+			return err
+		}
+		return insertEvent(tx, "configure_launch", key, "", "cli bound")
+	})
 }
 
 // MarkUncertain freezes the active attempt and revokes its MCP context.
@@ -723,7 +789,7 @@ func (s *Store) Snapshot() (Snapshot, error) {
 		if err != nil {
 			return err
 		}
-		snap.Sessions, err = readRows(tx, `SELECT key, provider, environment, conversation_id, active_token, decision FROM sessions ORDER BY rowid`)
+		snap.Sessions, err = readRows(tx, `SELECT key, provider, environment, conversation_id, active_token, decision, cli_path, workspace FROM sessions ORDER BY rowid`)
 		if err != nil {
 			return err
 		}
@@ -880,6 +946,40 @@ func emptyDetail(detail string) string {
 		return "stop is not proven"
 	}
 	return detail
+}
+
+func ensureSessionColumns(db *sql.DB) error {
+	rows, err := db.Query(`PRAGMA table_info(sessions)`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	have := map[string]bool{}
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notNull int
+		var dflt any
+		var pk int
+		if err := rows.Scan(&cid, &name, &ctype, &notNull, &dflt, &pk); err != nil {
+			return err
+		}
+		have[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if !have["cli_path"] {
+		if _, err := db.Exec(`ALTER TABLE sessions ADD COLUMN cli_path TEXT`); err != nil {
+			return err
+		}
+	}
+	if !have["workspace"] {
+		if _, err := db.Exec(`ALTER TABLE sessions ADD COLUMN workspace TEXT`); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func now() string { return time.Now().UTC().Format(time.RFC3339Nano) }
