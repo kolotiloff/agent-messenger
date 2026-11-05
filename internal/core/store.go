@@ -108,12 +108,14 @@ type Reply struct {
 type Row map[string]any
 
 type Snapshot struct {
-	Sessions []Row
-	Requests []Row
-	Attempts []Row
-	Replies  []Row
-	Events   []Row
-	Paused   bool
+	Sessions      []Row
+	Requests      []Row
+	Attempts      []Row
+	Replies       []Row
+	Events        []Row
+	Paused        bool
+	StreamRuns    []Row
+	Verifications []Row
 }
 
 func Open(path string) (*Store, error) {
@@ -124,7 +126,7 @@ func Open(path string) (*Store, error) {
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 	store := &Store{db: db}
-	if _, err := db.Exec(schema); err != nil {
+	if _, err := db.Exec(schema + streamSchema); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -133,6 +135,10 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	if err := ensureColumn(db, "verifications", "provider_ok", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := ensureColumn(db, "sessions", "start_mode", "TEXT NOT NULL DEFAULT 'resume'"); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -309,7 +315,9 @@ func (s *Store) Claim(alias string) (string, error) {
 }
 
 // ClaimNext reserves the oldest queued request of any free session.
-func (s *Store) ClaimNext() (string, error) {
+func (s *Store) ClaimNext() (string, error) { return s.ClaimNextProvider("") }
+
+func (s *Store) ClaimNextProvider(provider string) (string, error) {
 	var token string
 	err := s.tx(func(tx *sql.Tx) error {
 		paused, err := paused(tx)
@@ -327,7 +335,8 @@ func (s *Store) ClaimNext() (string, error) {
 			JOIN aliases a ON a.session_key = s.key
 			WHERE r.state = 'queued' AND s.active_token IS NULL AND s.decision IS NULL
 			  AND s.cli_path IS NOT NULL AND s.cli_path != ''
-			ORDER BY r.rowid, a.alias LIMIT 1`).Scan(&requestID, &key, &alias)
+              AND (? = '' OR s.provider = ?)
+			ORDER BY r.rowid, a.alias LIMIT 1`, provider, provider).Scan(&requestID, &key, &alias)
 		if err == sql.ErrNoRows {
 			return ErrEmpty
 		}
@@ -450,32 +459,36 @@ func (s *Store) Reply(token, text string) (Reply, error) {
 		if err != nil {
 			return err
 		}
-		var old Reply
-		err = tx.QueryRow(`SELECT id, reply_to, sender, recipient, text FROM replies WHERE reply_to = ?`, row.requestID).
-			Scan(&old.ID, &old.ReplyTo, &old.Sender, &old.Recipient, &old.Text)
-		if err == nil {
-			if old.Text != text {
-				return fmt.Errorf("%w: a different reply is already stored", ErrRejected)
-			}
-			reply = old
-			return nil
-		}
-		if err != sql.ErrNoRows {
-			return err
-		}
-		id, err := newID()
-		if err != nil {
-			return err
-		}
-		reply = Reply{ID: id, ReplyTo: row.requestID, Sender: row.alias, Recipient: row.sender, Text: text}
-		_, err = tx.Exec(`INSERT INTO replies(id, reply_to, attempt_token, sender, recipient, text) VALUES (?,?,?,?,?,?)`,
-			reply.ID, reply.ReplyTo, token, reply.Sender, reply.Recipient, reply.Text)
-		if err != nil {
-			return err
-		}
-		return insertEvent(tx, "reply", row.sessionKey, token, reply.ID)
+		reply, err = replyTx(tx, row, token, text)
+		return err
 	})
 	return reply, err
+}
+
+func replyTx(tx *sql.Tx, row attemptRow, token, text string) (Reply, error) {
+	var old Reply
+	err := tx.QueryRow(`SELECT id, reply_to, sender, recipient, text FROM replies WHERE reply_to = ?`, row.requestID).
+		Scan(&old.ID, &old.ReplyTo, &old.Sender, &old.Recipient, &old.Text)
+	if err == nil {
+		if old.Text != text {
+			return Reply{}, fmt.Errorf("%w: a different reply is already stored", ErrRejected)
+		}
+		return old, nil
+	}
+	if err != sql.ErrNoRows {
+		return Reply{}, err
+	}
+	id, err := newID()
+	if err != nil {
+		return Reply{}, err
+	}
+	reply := Reply{ID: id, ReplyTo: row.requestID, Sender: row.alias, Recipient: row.sender, Text: text}
+	_, err = tx.Exec(`INSERT INTO replies(id, reply_to, attempt_token, sender, recipient, text) VALUES (?,?,?,?,?,?)`,
+		reply.ID, reply.ReplyTo, token, reply.Sender, reply.Recipient, reply.Text)
+	if err != nil {
+		return Reply{}, err
+	}
+	return reply, insertEvent(tx, "reply", row.sessionKey, token, reply.ID)
 }
 
 // FinishObserved records the supervisor's own wait and always leaves the session locked.
@@ -522,7 +535,10 @@ func (s *Store) FinishObserved(token string, exitCode int, groupEmpty, providerO
 func (s *Store) RevokeInherited() (int, error) {
 	var n int
 	err := s.tx(func(tx *sql.Tx) error {
-		rows, err := tx.Query(`SELECT active_token FROM sessions WHERE active_token IS NOT NULL`)
+		if err := stopInheritedStreams(tx); err != nil {
+			return err
+		}
+		rows, err := tx.Query(`SELECT active_token FROM sessions WHERE active_token IS NOT NULL AND key NOT IN (SELECT session_key FROM stream_runs)`)
 		if err != nil {
 			return err
 		}
@@ -722,6 +738,13 @@ func failedAttempt(tx *sql.Tx, provider, environment, conversationID string) (st
 	if err != nil {
 		return "", attemptRow{}, "", false, err
 	}
+	var streamCount int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM stream_runs WHERE session_key=?`, key).Scan(&streamCount); err != nil {
+		return "", attemptRow{}, "", false, err
+	}
+	if streamCount > 0 {
+		return "", attemptRow{}, "", false, fmt.Errorf("%w: persistent process remains reserved; recover-failed is for one-shot attempts", ErrRecoveryBlocked)
+	}
 	if !token.Valid || token.String == "" {
 		existing, err := alreadyRecovered(tx, key)
 		if err != nil {
@@ -915,7 +938,7 @@ func (s *Store) Snapshot() (Snapshot, error) {
 		if err != nil {
 			return err
 		}
-		snap.Sessions, err = readRows(tx, `SELECT key, provider, environment, conversation_id, active_token, decision, cli_path, workspace FROM sessions ORDER BY rowid`)
+		snap.Sessions, err = readRows(tx, `SELECT key, provider, environment, conversation_id, active_token, decision, cli_path, workspace, start_mode FROM sessions ORDER BY rowid`)
 		if err != nil {
 			return err
 		}
@@ -928,6 +951,14 @@ func (s *Store) Snapshot() (Snapshot, error) {
 			return err
 		}
 		snap.Replies, err = readRows(tx, `SELECT id, reply_to, sender, recipient, text FROM replies ORDER BY rowid`)
+		if err != nil {
+			return err
+		}
+		snap.StreamRuns, err = readRows(tx, `SELECT id,session_key,state,current_token,exit_observed,exit_code FROM stream_runs ORDER BY rowid`)
+		if err != nil {
+			return err
+		}
+		snap.Verifications, err = readRows(tx, `SELECT attempt_token,identity_confirmed,reply_id,exit_observed,exit_code,group_empty,provider_ok,detail FROM verifications ORDER BY rowid`)
 		if err != nil {
 			return err
 		}

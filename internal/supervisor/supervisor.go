@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/kolotiloff/agent-messenger/internal/adapters"
@@ -41,6 +42,7 @@ type Spec struct {
 	CLI            string
 	Workspace      string
 	DataRoot       string
+	NewSession     bool
 }
 
 type Started struct {
@@ -70,13 +72,17 @@ type Supervisor struct {
 	mu           sync.Mutex
 	current      *activeJob
 	beforeSignal func()
+	dispatch     sync.Mutex
+	stopping     atomic.Bool
 }
 
 type activeJob struct {
-	token string
-	pgid  int
-	alias string
-	wait  func() (int, error)
+	token    string
+	pgid     int
+	alias    string
+	wait     func() (int, error)
+	streamID string
+	cancel   context.CancelFunc
 }
 
 func Run(parent context.Context, root string, launcher Launcher) error {
@@ -145,7 +151,15 @@ func (s *Supervisor) loop(ctx context.Context) {
 			return
 		case <-ticker.C:
 		}
-		if !s.launcher.Enabled() {
+		if s.stopping.Load() || !s.launcher.Enabled() {
+			continue
+		}
+		if stream, ok := s.launcher.(StreamLauncher); ok && stream.StreamingEnabled() {
+			token, err := s.store.ClaimNextProvider("claude")
+			if err != nil {
+				continue
+			}
+			s.runStream(ctx, token, stream)
 			continue
 		}
 		token, err := s.store.ClaimNext()
@@ -321,6 +335,7 @@ func (s *Supervisor) spec(token string) (Spec, error) {
 				CLI:            text(session["cli_path"]),
 				Workspace:      text(session["workspace"]),
 				DataRoot:       s.root,
+				NewSession:     text(session["start_mode"]) == "new",
 			}, nil
 		}
 	}
@@ -353,17 +368,47 @@ func (s *Supervisor) Status() (control.Status, error) {
 			status.Queued++
 		}
 	}
+	if len(snap.StreamRuns) > 0 {
+		status.StreamState = text(snap.StreamRuns[len(snap.StreamRuns)-1]["state"])
+	}
 	return status, nil
 }
 
-func (s *Supervisor) Pause() error  { return s.store.Pause() }
+func (s *Supervisor) Pause() error {
+	s.dispatch.Lock()
+	defer s.dispatch.Unlock()
+	return s.store.Pause()
+}
 func (s *Supervisor) Resume() error { return s.store.ResumeWork() }
 
 func (s *Supervisor) StopJob() (control.StopResult, error) {
+	s.dispatch.Lock()
+	defer s.dispatch.Unlock()
 	s.mu.Lock()
 	job := s.current
 	s.mu.Unlock()
 	result := control.StopResult{State: "uncertain", Signal: "not_recorded", Note: "сигнал не доказывает остановку потомков"}
+	if job != nil && job.streamID != "" {
+		if err := s.store.StopStream(job.streamID, "stop-job"); err != nil {
+			return result, err
+		}
+		job.cancel()
+		obs, err := s.store.Observation(job.streamID)
+		if err != nil {
+			return result, err
+		}
+		owned, err := platform.OwnsObservation(obs)
+		if err != nil || !owned {
+			result.Signal = "not_owner"
+			return result, nil
+		}
+		if err := platform.SignalGroup(obs.PGID); err != nil {
+			result.Signal = "error"
+			return result, err
+		}
+		result.Signal = "sent"
+		return result, nil
+	}
 	token := ""
 	if job != nil {
 		token = job.token
@@ -371,6 +416,23 @@ func (s *Supervisor) StopJob() (control.StopResult, error) {
 		snap, err := s.store.Snapshot()
 		if err != nil {
 			return result, err
+		}
+		for _, run := range snap.StreamRuns {
+			id := text(run["id"])
+			obs, err := s.store.Observation(id)
+			if err != nil {
+				continue
+			}
+			if owns, err := platform.OwnsObservation(obs); err == nil && owns {
+				if err := s.store.StopStream(id, "stop-job after restart"); err != nil {
+					return result, err
+				}
+				if err := platform.SignalGroup(obs.PGID); err != nil {
+					return result, err
+				}
+				result.Signal = "sent"
+				return result, nil
+			}
 		}
 		for _, session := range snap.Sessions {
 			if session["active_token"] != nil {
@@ -444,6 +506,20 @@ func text(value any) string {
 }
 
 func (s *Supervisor) Shutdown() error {
+	s.dispatch.Lock()
+	s.stopping.Store(true)
+	s.mu.Lock()
+	job := s.current
+	s.mu.Unlock()
+	if job != nil && job.streamID != "" {
+		err := s.store.StopStream(job.streamID, "shutdown")
+		job.cancel()
+		if err != nil {
+			s.dispatch.Unlock()
+			return err
+		}
+	}
+	s.dispatch.Unlock()
 	// Delay only long enough for the command response to be written.
 	// It is not a timer that proves a CLI process has stopped.
 	go func() {
@@ -460,6 +536,11 @@ func (s *Supervisor) Enqueue(alias, id, sender, text string) (bool, error) {
 func (s *Supervisor) Inspect() (any, error) { return s.store.Snapshot() }
 
 func (s *Supervisor) Resolve(alias, action, confirmation string) (string, error) {
+	if run, err := s.store.StreamRunForAlias(alias); err != nil {
+		return "", err
+	} else if run != "" {
+		return "", fmt.Errorf("%w: persistent process remains reserved; no automatic retry or unlock", core.ErrRecoveryBlocked)
+	}
 	switch action {
 	case "fail":
 		if err := s.store.FailClosed(alias); err != nil {
@@ -495,3 +576,31 @@ func (s *Supervisor) Resolve(alias, action, confirmation string) (string, error)
 // PrepareCommand is a helper for tests that build a process in its own group
 // without executing a model CLI.
 func PrepareCommand(cmd *exec.Cmd) error { return platform.SetNewGroup(cmd) }
+
+// CreateClaudeSession allocates a new exact ID without calling a model.
+func (s *Supervisor) CreateClaudeSession(environment, alias, cli, workspace string) (string, error) {
+	s.dispatch.Lock()
+	defer s.dispatch.Unlock()
+	stream, ok := s.launcher.(StreamLauncher)
+	if !ok || !stream.StreamingEnabled() {
+		return "", errors.New("create-claude-session requires serve --claude-stream")
+	}
+	if s.stopping.Load() {
+		return "", errors.New("client is shutting down")
+	}
+	if workspace == "" {
+		return "", errors.New("new Claude session requires an isolated workspace")
+	}
+	id, err := newRunID()
+	if err != nil {
+		return "", err
+	}
+	id = id[:8] + "-" + id[8:12] + "-4" + id[13:16] + "-8" + id[17:20] + "-" + id[20:]
+	if _, err := s.RegisterSession("claude", environment, id, alias, cli, workspace); err != nil {
+		return "", err
+	}
+	if err := s.store.SetNewClaudeSession(alias); err != nil {
+		return "", err
+	}
+	return "new Claude session registered; model not called", nil
+}

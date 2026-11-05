@@ -1,0 +1,102 @@
+package supervisor
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+
+	"github.com/kolotiloff/agent-messenger/internal/adapters"
+	"github.com/kolotiloff/agent-messenger/internal/platform"
+)
+
+type StreamProcess struct {
+	Observation platform.Observation
+	Input       *os.File
+	Output      io.ReadCloser
+	Wait        func() (int, error)
+}
+
+type StreamLauncher interface {
+	StreamingEnabled() bool
+	StartStream(Spec, string, string) (StreamProcess, error)
+}
+
+func (l AdapterLauncher) StreamingEnabled() bool { return l.ClaudeStream }
+
+func (l AdapterLauncher) StartStream(spec Spec, url, secret string) (StreamProcess, error) {
+	if !l.AllowModels || !l.ClaudeStream {
+		return StreamProcess{}, errModelsNotAuthorized
+	}
+	if spec.Provider != "claude" || spec.CLI == "" {
+		return StreamProcess{}, errNoCLI
+	}
+	config, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{"messenger_bound": map[string]any{"type": "http", "url": url, "headers": map[string]string{"Authorization": "Bearer " + secret}}}})
+	args, err := adapters.ClaudeStreamArgs(spec.CLI, spec.ConversationID, string(config), spec.NewSession)
+	if err != nil {
+		return StreamProcess{}, err
+	}
+	cmd := exec.Command(args[0], args[1:]...)
+	cmd.Env = profileEnv(os.Environ(), spec.Provider, spec.Environment)
+	cmd.Dir = spec.Workspace
+	cmd.Stderr = io.Discard
+	if err := platform.SetNewGroup(cmd); err != nil {
+		return StreamProcess{}, err
+	}
+	inputRead, input, err := os.Pipe()
+	if err != nil {
+		return StreamProcess{}, err
+	}
+	output, outputWrite, err := os.Pipe()
+	if err != nil {
+		inputRead.Close()
+		input.Close()
+		return StreamProcess{}, err
+	}
+	cmd.Stdin = inputRead
+	cmd.Stdout = outputWrite
+	started := false
+	defer func() {
+		inputRead.Close()
+		outputWrite.Close()
+		if !started {
+			input.Close()
+			output.Close()
+		}
+	}()
+	id, err := newRunID()
+	if err != nil {
+		return StreamProcess{}, err
+	}
+	run := recordedRun{ID: id, Root: spec.DataRoot, Provider: spec.Provider, Environment: spec.Environment, ConversationID: spec.ConversationID}
+	if err := rememberRun(run); err != nil {
+		return StreamProcess{}, err
+	}
+	if err := cmd.Start(); err != nil {
+		return StreamProcess{}, err
+	} // keep incomplete reserve on any ambiguous launch failure
+	obs, err := platform.ReadObservation(cmd.Process.Pid)
+	if err != nil {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		return StreamProcess{}, err
+	}
+	run.PID = obs.PID
+	run.PGID = obs.PGID
+	run.StartToken = obs.StartToken
+	run.BootID = obs.BootID
+	if err := rememberRun(run); err != nil {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		return StreamProcess{}, err
+	}
+	started = true
+	return StreamProcess{Observation: obs, Input: input, Output: output, Wait: func() (int, error) {
+		err := cmd.Wait()
+		if cmd.ProcessState == nil {
+			return -1, fmt.Errorf("no wait status: %w", err)
+		}
+		return cmd.ProcessState.ExitCode(), nil
+	}}, nil
+}

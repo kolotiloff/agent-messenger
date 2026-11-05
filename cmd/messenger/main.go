@@ -59,7 +59,7 @@ func run(root string, args []string) error {
 		if err != nil {
 			return err
 		}
-		err = supervisor.Run(context.Background(), root, supervisor.AdapterLauncher{AllowModels: allow})
+		err = supervisor.Run(context.Background(), root, supervisor.AdapterLauncher{AllowModels: allow, ClaudeStream: hasFlag(args[1:], "--claude-stream")})
 		if errors.Is(err, platform.ErrAlreadyRunning) {
 			return errors.New("клиент уже запущен; команды нужно отправлять ему, а не запускать второй экземпляр")
 		}
@@ -67,7 +67,7 @@ func run(root string, args []string) error {
 			return fmt.Errorf("операция этой ОС не поддерживается и не выполнена: %w", err)
 		}
 		return err
-	case "status", "pause", "resume", "stop-job", "shutdown", "enqueue", "inspect", "resolve", "register-session":
+	case "status", "pause", "resume", "stop-job", "shutdown", "enqueue", "inspect", "resolve", "register-session", "create-claude-session":
 		response, err := control.Call(root, request(args))
 		if err != nil {
 			return err
@@ -110,6 +110,9 @@ func printResponse(response control.Response) {
 		fmt.Printf("paused=%t cli_launch=%s broker=%s held=%d queued=%d pid=%d\n",
 			response.Status.Paused, response.Status.CLILaunch, response.Status.Broker,
 			response.Status.Held, response.Status.Queued, response.Status.Supervisor)
+		if response.Status.StreamState != "" {
+			fmt.Printf("stream_state=%s\n", response.Status.StreamState)
+		}
 		if response.Status.Detail != "" {
 			fmt.Println(response.Status.Detail)
 		}
@@ -128,6 +131,9 @@ func printResponse(response control.Response) {
 func serveAllowsModels(args []string) (bool, error) {
 	allow := false
 	for _, arg := range args {
+		if arg == "--claude-stream" {
+			continue
+		}
 		if arg == "--allow-model-calls" {
 			allow = true
 			continue
@@ -157,7 +163,8 @@ func usage() {
 --root стоит перед командой. Один пользователь может держать только один serve,
 даже с другим каталогом данных. Реальный CLI запускается только после register-session.
 
-  messenger --root КАТАЛОГ serve [--allow-model-calls]
+  messenger --root КАТАЛОГ serve [--allow-model-calls] [--claude-stream]
+  messenger --root КАТАЛОГ create-claude-session --environment КАТАЛОГ --alias ИМЯ --cli ФАЙЛ --workspace КАТАЛОГ
   messenger recover-failed --confirm actions-may-repeat
   messenger --root КАТАЛОГ register-session --provider claude|codex|cursor --environment КАТАЛОГ --conversation-id ID --alias ИМЯ --cli ФАЙЛ [--workspace КАТАЛОГ]
   messenger --root КАТАЛОГ status
@@ -175,11 +182,24 @@ shutdown — очередь остаётся, активный процесс н
 recover-failed снимает только неудачную попытку после явного подтверждения, если записанный процесс и его группа уже не работают. История остаётся. Модель при этом не запускается. Пустой, повреждённый или неполный резерв эта команда не удаляет.
 Без --allow-model-calls serve не запускает CLI и не тратит токены.
 С --allow-model-calls запускается только CLI, заранее записанный через register-session, и только точный ID.
-Пустая группа процессов не завершает попытку и не снимает блокировку. Второе письмо той же сессии само не стартует.
+Пустая группа процессов не снимает блокировку. В обычном режиме второе письмо той же сессии не стартует.
+--claude-stream: один постоянный Claude, письма по очереди в том же процессе; другие провайдеры остаются в очереди.
+create-claude-session создаёт новый точный ID без модели, для последующего запуска с --claude-stream.
+Постоянный процесс сохраняет блокировку после stop/shutdown/restart. Незавершённый ход не повторяется автоматически.
+inspect показывает StreamRuns и Verifications: успешный ход не является выходом процесса.
 `)
 }
 
 func fail(err error) {
 	fmt.Fprintln(os.Stderr, err)
 	os.Exit(1)
+}
+
+func hasFlag(args []string, flag string) bool {
+	for _, arg := range args {
+		if arg == flag {
+			return true
+		}
+	}
+	return false
 }

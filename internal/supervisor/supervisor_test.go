@@ -20,6 +20,21 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if root := os.Getenv("MESSENGER_STREAM_SERVE_ROOT"); root != "" {
+		os.Unsetenv("MESSENGER_STREAM_SERVE_ROOT")
+		if err := Run(context.Background(), root, AdapterLauncher{AllowModels: true, ClaudeStream: true}); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+	if mode := os.Getenv("MESSENGER_STREAM_FIXTURE"); mode != "" {
+		if err := streamFixture(mode); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
 	if os.Getenv("MESSENGER_FIXTURE") == "agent" {
 		if err := agentFixture(); err != nil {
 			fmt.Fprintln(os.Stderr, err)

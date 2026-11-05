@@ -17,7 +17,8 @@ import (
 // AllowModels must be set by `serve --allow-model-calls`. Without that flag the
 // process stays up and does not execute a CLI, so a status check cannot spend tokens.
 type AdapterLauncher struct {
-	AllowModels bool
+	AllowModels  bool
+	ClaudeStream bool
 }
 
 func (l AdapterLauncher) Enabled() bool { return l.AllowModels }
@@ -25,6 +26,9 @@ func (l AdapterLauncher) Enabled() bool { return l.AllowModels }
 func (l AdapterLauncher) LaunchLabel() string {
 	if !l.AllowModels {
 		return "not-authorized"
+	}
+	if l.ClaudeStream {
+		return "claude-stream"
 	}
 	return "adapters"
 }
@@ -111,6 +115,9 @@ func (l AdapterLauncher) Start(spec Spec) (Started, error) {
 }
 
 func commandArgs(spec Spec, messenger string) ([]string, error) {
+	if spec.NewSession {
+		return nil, errString("new Claude session requires serve --claude-stream")
+	}
 	switch spec.Provider {
 	case "claude":
 		return adapters.ClaudeArgs(spec.CLI, messenger, spec.DB, spec.Token, spec.ConversationID)

@@ -31,13 +31,14 @@ type Request struct {
 }
 
 type Status struct {
-	Paused     bool   `json:"paused"`
-	CLILaunch  string `json:"cli_launch"`
-	Broker     string `json:"broker"`
-	Held       int    `json:"held_sessions"`
-	Queued     int    `json:"queued"`
-	Supervisor int    `json:"supervisor_pid"`
-	Detail     string `json:"detail,omitempty"`
+	StreamState string `json:"stream_state,omitempty"`
+	Paused      bool   `json:"paused"`
+	CLILaunch   string `json:"cli_launch"`
+	Broker      string `json:"broker"`
+	Held        int    `json:"held_sessions"`
+	Queued      int    `json:"queued"`
+	Supervisor  int    `json:"supervisor_pid"`
+	Detail      string `json:"detail,omitempty"`
 }
 
 type StopResult struct {
@@ -146,6 +147,18 @@ func dispatch(handler Handler, request Request) Response {
 		return Response{OK: true, Inspect: raw}
 	case "resolve":
 		detail, err := handler.Resolve(request.Alias, request.Action, request.Confirmation)
+		if err != nil {
+			return Response{OK: false, Error: err.Error()}
+		}
+		return Response{OK: true, Status: &Status{Detail: detail}}
+	case "create-claude-session":
+		creator, ok := handler.(interface {
+			CreateClaudeSession(string, string, string, string) (string, error)
+		})
+		if !ok {
+			return Response{OK: false, Error: "unsupported"}
+		}
+		detail, err := creator.CreateClaudeSession(request.Environment, request.Alias, request.CLI, request.Workspace)
 		if err != nil {
 			return Response{OK: false, Error: err.Error()}
 		}

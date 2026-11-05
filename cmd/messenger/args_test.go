@@ -14,6 +14,14 @@ func TestServeModelFlagIsExplicit(t *testing.T) {
 	if _, err := serveAllowsModels([]string{"--root"}); err == nil {
 		t.Fatal("unknown serve flag accepted")
 	}
+	allow, err = serveAllowsModels([]string{"--claude-stream"})
+	if err != nil || allow {
+		t.Fatal("stream flag authorized model calls", allow, err)
+	}
+	allow, err = serveAllowsModels([]string{"--claude-stream", "--allow-model-calls"})
+	if err != nil || !allow {
+		t.Fatal("stream opt-in rejected", err)
+	}
 }
 
 func TestRootFlagWorksBeforeOrAfterCommand(t *testing.T) {
