@@ -11,3 +11,9 @@ logs/
 *.db
 *.db-wal
 *.db-shm
+__pycache__/
+*.py[cod]
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
