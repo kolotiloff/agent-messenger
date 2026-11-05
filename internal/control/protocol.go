@@ -29,6 +29,8 @@ type Request struct {
 	ConversationID string `json:"conversation_id,omitempty"`
 	CLI            string `json:"cli,omitempty"`
 	Workspace      string `json:"workspace,omitempty"`
+	Limit          int    `json:"limit,omitempty"`
+	Before         string `json:"before,omitempty"`
 }
 
 type Status struct {
@@ -56,6 +58,7 @@ type Response struct {
 	Created  *bool           `json:"created,omitempty"`
 	Inspect  json.RawMessage `json:"inspect,omitempty"`
 	Overview json.RawMessage `json:"overview,omitempty"`
+	Timeline json.RawMessage `json:"timeline,omitempty"`
 }
 
 type Handler interface {
@@ -121,6 +124,29 @@ func Serve(ln net.Listener, handler Handler) error {
 
 func dispatch(handler Handler, request Request) Response {
 	switch request.Cmd {
+	case "timeline":
+		reader, ok := handler.(interface {
+			Timeline(string, int, string) (any, error)
+		})
+		if !ok {
+			return Response{Error: "timeline unsupported"}
+		}
+		limit := request.Limit
+		if limit == 0 {
+			limit = 50
+		}
+		if request.Alias == "" || limit < 1 || limit > 100 {
+			return Response{Error: "timeline requires alias and limit 1..100"}
+		}
+		value, err := reader.Timeline(request.Alias, limit, request.Before)
+		if err != nil {
+			return Response{Error: "timeline unavailable; check alias and cursor"}
+		}
+		raw, err := json.Marshal(value)
+		if err != nil {
+			return Response{Error: "timeline unavailable"}
+		}
+		return Response{OK: true, Timeline: raw}
 	case "overview":
 		reader, ok := handler.(interface{ Overview() (any, error) })
 		if !ok {

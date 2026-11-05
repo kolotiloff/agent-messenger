@@ -45,6 +45,28 @@ func main() {
 
 func run(root string, args []string) error {
 	switch args[0] {
+	case "timeline":
+		fs := flag.NewFlagSet("timeline", flag.ContinueOnError)
+		alias := fs.String("alias", "", "session mailbox alias")
+		limit := fs.Int("limit", 50, "page size 1..100")
+		before := fs.String("before", "", "older than this Messenger request ID")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 0 || strings.TrimSpace(*alias) == "" || *limit < 1 || *limit > 100 {
+			return errors.New("timeline requires --alias and --limit 1..100; no positional arguments")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		response, err := control.CallContext(ctx, root, control.Request{Cmd: "timeline", Alias: *alias, Limit: *limit, Before: *before})
+		if err != nil {
+			return err
+		}
+		if !response.OK {
+			return errors.New(response.Error)
+		}
+		fmt.Println(string(response.Timeline))
+		return nil
 	case "overview":
 		if len(args) != 1 {
 			return errors.New("overview takes no arguments")
@@ -263,6 +285,7 @@ func usage() {
   messenger --root КАТАЛОГ register-session --provider claude|codex|cursor --environment КАТАЛОГ --conversation-id ID --alias ИМЯ --cli ФАЙЛ [--workspace КАТАЛОГ]
   messenger --root КАТАЛОГ status
   messenger --root КАТАЛОГ overview
+  messenger --root КАТАЛОГ timeline --alias ИМЯ [--limit 50] [--before ID_ПИСЬМА]
   messenger --root КАТАЛОГ pause
   messenger --root КАТАЛОГ resume
   messenger --root КАТАЛОГ stop-job

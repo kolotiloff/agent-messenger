@@ -565,6 +565,10 @@ func (s *Supervisor) Inspect() (any, error) { return s.store.Snapshot() }
 
 func (s *Supervisor) Overview() (any, error) { return s.store.Overview() }
 
+func (s *Supervisor) Timeline(alias string, limit int, before string) (any, error) {
+	return s.store.Timeline(alias, limit, before)
+}
+
 func (s *Supervisor) Resolve(alias, action, confirmation string) (string, error) {
 	if run, err := s.store.StreamRunForAlias(alias); err != nil {
 		return "", err

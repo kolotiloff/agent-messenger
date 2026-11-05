@@ -58,6 +58,22 @@ func TestOverviewThroughSocketDoesNotLaunchOrConsumeQueue(t *testing.T) {
 	if launcher.calls() != 0 {
 		t.Fatal("read triggered launcher")
 	}
+	for i := 0; i < 3; i++ {
+		r, err := control.Call(root, control.Request{Cmd: "timeline", Alias: "worker", Limit: 10})
+		if err != nil || !r.OK {
+			t.Fatalf("timeline: %+v %v", r, err)
+		}
+		var page core.Timeline
+		if err := json.Unmarshal(r.Timeline, &page); err != nil {
+			t.Fatal(err)
+		}
+		if len(page.Items) != 1 || page.Items[0].ID != "m1" || page.Items[0].Text != "payload" || page.Items[0].State != "queued" || page.Items[0].Reply != nil || page.Items[0].Result != "not_verified" {
+			t.Fatalf("page %+v", page)
+		}
+	}
+	if launcher.calls() != 0 {
+		t.Fatal("timeline triggered launcher")
+	}
 	r, err := control.Call(root, control.Request{Cmd: "inspect"})
 	if err != nil || !r.OK {
 		t.Fatalf("inspect: %+v %v", r, err)

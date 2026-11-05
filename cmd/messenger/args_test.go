@@ -1,6 +1,18 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+func TestTimelineRejectsInvalidArgumentsBeforeConnecting(t *testing.T) {
+	for _, args := range [][]string{{"timeline"}, {"timeline", "--alias", " "}, {"timeline", "--alias", "worker", "--limit", "0"}, {"timeline", "--alias", "worker", "--limit", "101"}, {"timeline", "--alias", "worker", "extra"}} {
+		err := run(t.TempDir(), args)
+		if err == nil || !strings.Contains(err.Error(), "timeline requires") {
+			t.Fatalf("bad arguments reached socket: %v", err)
+		}
+	}
+}
 
 func TestServeModelFlagIsExplicit(t *testing.T) {
 	allow, err := serveAllowsModels(nil)
