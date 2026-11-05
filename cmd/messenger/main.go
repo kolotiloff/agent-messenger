@@ -42,6 +42,19 @@ func main() {
 
 func run(root string, args []string) error {
 	switch args[0] {
+	case "start":
+		if _, err := serveAllowsModels(args[1:]); err != nil {
+			return err
+		}
+		pid, logPath, err := startBackground(root, args[1:])
+		if err != nil {
+			return err
+		}
+		fmt.Printf("background_pid=%d paused=true\nlog=%s\n", pid, logPath)
+		fmt.Println("Клиент работает в фоне. Терминал можно закрыть. Проверьте status; для доставки нужен отдельный resume. shutdown останавливает клиент и сохраняет защитные резервы.")
+		return nil
+	case "_background-serve":
+		return runBackgroundChild(root, args[1:])
 	case "recover-stream":
 		fs := flag.NewFlagSet("recover-stream", flag.ContinueOnError)
 		alias := fs.String("alias", "", "exact session alias")
@@ -182,6 +195,7 @@ func usage() {
 даже с другим каталогом данных. Реальный CLI запускается только после register-session.
 
   messenger --root КАТАЛОГ serve [--allow-model-calls] [--claude-stream]
+  messenger --root КАТАЛОГ start [--allow-model-calls] [--claude-stream]
   messenger --root КАТАЛОГ create-claude-session --environment КАТАЛОГ --alias ИМЯ --cli ФАЙЛ --workspace КАТАЛОГ
   messenger recover-failed --confirm actions-may-repeat
   messenger --root КАТАЛОГ recover-stream --alias ИМЯ --run ID_ЗАПУСКА --confirm preserve-uncertain
@@ -196,6 +210,7 @@ func usage() {
   messenger --root КАТАЛОГ resolve fail|accept|retry --alias ИМЯ [--confirm actions-may-repeat]
 
 pause — новые задания не резервируются, активный процесс не останавливается.
+start — запускает клиент в фоне, всегда на паузе; не устанавливает службу или автозапуск. Закрытие терминала не останавливает клиент. Повторный start не заменяет живой экземпляр и не меняет его разрешения.
 stop-job — сначала отзывает MCP, затем сигналит группе только если pid, время старта и группа всё ещё принадлежат той же попытке.
 shutdown — очередь остаётся, активный процесс не убивается. Следующий serve сразу отзывает старый MCP и не снимает блокировку сессии.
 recover-failed снимает только неудачную попытку после явного подтверждения, если записанный процесс и его группа уже не работают. История остаётся. Модель при этом не запускается. Пустой, повреждённый или неполный резерв эта команда не удаляет.

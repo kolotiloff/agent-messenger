@@ -87,6 +87,17 @@ type activeJob struct {
 }
 
 func Run(parent context.Context, root string, launcher Launcher) error {
+	return RunWithOptions(parent, root, launcher, RunOptions{})
+}
+
+// RunOptions controls supervisor startup, never provider recovery. A detached
+// client starts paused and acknowledges readiness before its dispatch loop runs.
+type RunOptions struct {
+	StartPaused bool
+	Ready       func() error
+}
+
+func RunWithOptions(parent context.Context, root string, launcher Launcher, options RunOptions) error {
 	if launcher == nil {
 		launcher = AdapterLauncher{}
 	}
@@ -122,6 +133,11 @@ func Run(parent context.Context, root string, launcher Launcher) error {
 	if _, err := store.RevokeInherited(); err != nil {
 		return err
 	}
+	if options.StartPaused {
+		if err := store.Pause(); err != nil {
+			return err
+		}
+	}
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 	sup := &Supervisor{store: store, root: root, launcher: launcher, cancel: cancel}
@@ -130,6 +146,11 @@ func Run(parent context.Context, root string, launcher Launcher) error {
 		return err
 	}
 	defer ln.Close()
+	if options.Ready != nil {
+		if err := options.Ready(); err != nil {
+			return err
+		}
+	}
 	go func() {
 		<-ctx.Done()
 		_ = ln.Close()
