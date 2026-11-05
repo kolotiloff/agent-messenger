@@ -1,0 +1,13 @@
+.DS_Store
+Thumbs.db
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+state/
+logs/
+*.db
+*.db-wal
+*.db-shm
