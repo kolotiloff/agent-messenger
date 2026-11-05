@@ -638,3 +638,10 @@ func (s *Supervisor) CreateClaudeSession(environment, alias, cli, workspace stri
 	}
 	return "new Claude session registered; model not called", nil
 }
+
+func (s *Supervisor) PrepareUIMessage(id, alias, text string) error {
+	return s.store.PrepareUIMessage(id, alias, text)
+}
+func (s *Supervisor) SubmitUIMessage(id string) (bool, error) { return s.store.SubmitUIMessage(id) }
+func (s *Supervisor) AcknowledgeUIMessage(id string) error    { return s.store.AcknowledgeUIMessage(id) }
+func (s *Supervisor) UIOutbox() (any, error)                  { return s.store.UIOutbox() }

@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/kolotiloff/agent-messenger/internal/control"
+	"github.com/kolotiloff/agent-messenger/internal/core"
 	"github.com/kolotiloff/agent-messenger/internal/diagnostics"
 )
 
@@ -99,7 +100,7 @@ func newHandler(host, token string, call caller, discover func(context.Context) 
 			http.Error(w, "cross-site request refused", http.StatusForbidden)
 			return
 		}
-		mutation := r.URL.Path == "/api/enqueue" || r.URL.Path == "/api/pause" || r.URL.Path == "/api/resume"
+		mutation := r.URL.Path == "/api/enqueue" || r.URL.Path == "/api/pause" || r.URL.Path == "/api/resume" || r.URL.Path == "/api/outbox/ack"
 		method := http.MethodGet
 		if mutation {
 			method = http.MethodPost
@@ -164,11 +165,20 @@ func newHandler(host, token string, call caller, discover func(context.Context) 
 					http.Error(w, "invalid message", 400)
 					return
 				}
-				if !validMessageID(envelope.ID) || strings.TrimSpace(envelope.Alias) == "" || len(envelope.Alias) > 4096 || strings.TrimSpace(envelope.Text) == "" || len(envelope.Text) > 16000 {
+				if !core.ValidUIMessageID(envelope.ID) || strings.TrimSpace(envelope.Alias) == "" || len(envelope.Alias) > 4096 || strings.TrimSpace(envelope.Text) == "" || len(envelope.Text) > 16000 {
 					http.Error(w, "invalid message", 400)
 					return
 				}
-				req = control.Request{Cmd: "enqueue", MessageID: envelope.ID, Alias: envelope.Alias, Text: envelope.Text, Sender: "local-user"}
+				req = control.Request{Cmd: "ui-prepare", MessageID: envelope.ID, Alias: envelope.Alias, Text: envelope.Text, Sender: "local-user"}
+			} else if r.URL.Path == "/api/outbox/ack" {
+				var envelope struct {
+					ID string `json:"message_id"`
+				}
+				if err := decoder.Decode(&envelope); err != nil || !core.ValidUIMessageID(envelope.ID) {
+					http.Error(w, "invalid acknowledgment", 400)
+					return
+				}
+				req = control.Request{Cmd: "ui-ack", MessageID: envelope.ID}
 			} else {
 				var envelope *struct{}
 				if err := decoder.Decode(&envelope); err != nil || envelope == nil {
@@ -182,14 +192,18 @@ func newHandler(host, token string, call caller, discover func(context.Context) 
 				return
 			}
 			response, err := call(ctx, req)
-			if err != nil || !response.OK || (req.Cmd == "enqueue" && response.Created == nil) {
+			if req.Cmd == "ui-prepare" && err == nil && response.OK {
+				req = control.Request{Cmd: "ui-submit", MessageID: req.MessageID}
+				response, err = call(ctx, req)
+			}
+			if err != nil || !response.OK || (req.Cmd == "ui-submit" && response.Created == nil) {
 				w.Header().Set("Content-Type", "application/json; charset=utf-8")
 				w.WriteHeader(http.StatusServiceUnavailable)
 				writeJSON(w, map[string]any{"ok": false, "state": "unconfirmed", "message_id": req.MessageID})
 				return
 			}
 			// This ACK proves queue persistence only, never provider success.
-			if req.Cmd == "enqueue" {
+			if req.Cmd == "ui-submit" {
 				writeJSON(w, map[string]any{"ok": true, "message_id": req.MessageID, "created": *response.Created})
 				return
 			}
@@ -202,6 +216,8 @@ func newHandler(host, token string, call caller, discover func(context.Context) 
 		}
 		req := control.Request{}
 		switch r.URL.Path {
+		case "/api/outbox":
+			req.Cmd = "ui-outbox"
 		case "/api/status":
 			req.Cmd = "status"
 		case "/api/overview":
@@ -233,6 +249,8 @@ func newHandler(host, token string, call caller, discover func(context.Context) 
 			return
 		}
 		switch req.Cmd {
+		case "ui-outbox":
+			writeRaw(w, response.Outbox)
 		case "status":
 			if response.Status == nil {
 				http.Error(w, "missing status", 502)
@@ -247,24 +265,6 @@ func newHandler(host, token string, call caller, discover func(context.Context) 
 			writeRaw(w, response.Timeline)
 		}
 	})
-}
-
-func validMessageID(id string) bool {
-	if len(id) != 39 || !strings.HasPrefix(id, "ui-") {
-		return false
-	}
-	for i, c := range id[3:] {
-		if i == 8 || i == 13 || i == 18 || i == 23 {
-			if c != '-' {
-				return false
-			}
-			continue
-		}
-		if !(c >= '0' && c <= '9') && !(c >= 'a' && c <= 'f') {
-			return false
-		}
-	}
-	return true
 }
 
 func writeRaw(w http.ResponseWriter, raw json.RawMessage) {

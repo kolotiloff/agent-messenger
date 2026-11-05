@@ -128,7 +128,7 @@ func Open(path string) (*Store, error) {
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 	store := &Store{db: db}
-	if _, err := db.Exec(schema + streamSchema + streamRecoverySchema); err != nil {
+	if _, err := db.Exec(schema + streamSchema + streamRecoverySchema + uiOutboxSchema); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -163,6 +163,7 @@ func dsn(path string) string {
 	q.Add("_pragma", "busy_timeout(5000)")
 	q.Add("_pragma", "foreign_keys(1)")
 	q.Add("_pragma", "journal_mode(WAL)")
+	q.Add("_pragma", "synchronous(FULL)")
 	q.Add("_txlock", "immediate")
 	u.RawQuery = q.Encode()
 	return u.String()

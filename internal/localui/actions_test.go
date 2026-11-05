@@ -71,8 +71,12 @@ func TestMutationEnvelopeAndOriginRequired(t *testing.T) {
 
 func TestExplicitActionsOnlyAndQueueAck(t *testing.T) {
 	var got control.Request
+	var prepared control.Request
 	h := newHandler(actionHost, "secret", func(ctx context.Context, r control.Request) (control.Response, error) {
 		got = r
+		if r.Cmd == "ui-prepare" {
+			prepared = r
+		}
 		if _, ok := ctx.Deadline(); !ok {
 			t.Fatal("no deadline")
 		}
@@ -85,14 +89,18 @@ func TestExplicitActionsOnlyAndQueueAck(t *testing.T) {
 			body = actionBody
 		}
 		w := postAction(h, cmd, body)
-		if w.Code != 200 || got.Cmd != cmd {
+		expected := cmd
+		if cmd == "enqueue" {
+			expected = "ui-submit"
+		}
+		if w.Code != 200 || got.Cmd != expected {
 			t.Fatalf("%s: %d %+v", cmd, w.Code, got)
 		}
 		if got.CLI != "" || got.Environment != "" || got.ConversationID != "" || got.Confirmation != "" {
 			t.Fatal("unexpected control authority")
 		}
 		if cmd == "enqueue" {
-			if got.Sender != "local-user" || got.MessageID != actionID || got.Text != "hello" || got.Alias != "worker" {
+			if prepared.Sender != "local-user" || prepared.MessageID != actionID || prepared.Text != "hello" || prepared.Alias != "worker" || got.MessageID != actionID {
 				t.Fatalf("wrong envelope: %+v", got)
 			}
 			if strings.Contains(w.Body.String(), "provider_ok") {
@@ -114,7 +122,11 @@ func TestEnqueueLostResponseAndConcurrentRetryPersistOnce(t *testing.T) {
 	var loseFirst atomic.Bool
 	loseFirst.Store(true)
 	h := newHandler(actionHost, "secret", func(_ context.Context, r control.Request) (control.Response, error) {
-		created, err := st.Enqueue(r.MessageID, r.Alias, r.Sender, r.Text)
+		if r.Cmd == "ui-prepare" {
+			err := st.PrepareUIMessage(r.MessageID, r.Alias, r.Text)
+			return control.Response{OK: err == nil}, err
+		}
+		created, err := st.SubmitUIMessage(r.MessageID)
 		if err != nil {
 			return control.Response{OK: false}, nil
 		}
@@ -162,5 +174,50 @@ func TestMissingQueueAcknowledgmentIsUnconfirmed(t *testing.T) {
 	}, nil)
 	if w := postAction(h, "enqueue", actionBody); w.Code != 503 {
 		t.Fatal("missing created accepted")
+	}
+}
+
+func TestUIPrepareDisconnectLeavesRecoverableEnvelopeWithoutQueue(t *testing.T) {
+	st, err := core.Open(filepath.Join(t.TempDir(), "queue.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if _, err = st.Register("synthetic", t.TempDir(), "test-only", "worker"); err != nil {
+		t.Fatal(err)
+	}
+	submitted := 0
+	h := newHandler(actionHost, "secret", func(_ context.Context, r control.Request) (control.Response, error) {
+		switch r.Cmd {
+		case "ui-prepare":
+			if err := st.PrepareUIMessage(r.MessageID, r.Alias, r.Text); err != nil {
+				return control.Response{}, err
+			}
+			return control.Response{}, errors.New("lost preparation ACK")
+		case "ui-submit":
+			submitted++
+			return control.Response{}, errors.New("must not submit")
+		case "ui-outbox":
+			out, err := st.UIOutbox()
+			raw, _ := json.Marshal(out)
+			return control.Response{OK: err == nil, Outbox: raw}, err
+		}
+		return control.Response{}, errors.New("unexpected action")
+	}, nil)
+	if w := postAction(h, "enqueue", actionBody); w.Code != 503 {
+		t.Fatal("preparation ACK failure hidden")
+	}
+	for i := 0; i < 3; i++ {
+		r := httptest.NewRequest("GET", "http://"+actionHost+"/api/outbox", nil)
+		r.Header.Set("Authorization", "Bearer secret")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != 200 || !strings.Contains(w.Body.String(), `"state":"prepared"`) {
+			t.Fatalf("outbox read: %s", w.Body.String())
+		}
+	}
+	snap, err := st.Snapshot()
+	if err != nil || len(snap.Requests) != 0 || len(snap.Attempts) != 0 || submitted != 0 {
+		t.Fatal("outbox read or preparation triggered dispatch")
 	}
 }

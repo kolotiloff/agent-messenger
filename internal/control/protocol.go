@@ -51,6 +51,7 @@ type StopResult struct {
 }
 
 type Response struct {
+	Outbox   json.RawMessage `json:"outbox,omitempty"`
 	OK       bool            `json:"ok"`
 	Error    string          `json:"error,omitempty"`
 	Status   *Status         `json:"status,omitempty"`
@@ -124,6 +125,43 @@ func Serve(ln net.Listener, handler Handler) error {
 
 func dispatch(handler Handler, request Request) Response {
 	switch request.Cmd {
+	case "ui-prepare", "ui-submit", "ui-ack", "ui-outbox":
+		h, ok := handler.(interface {
+			PrepareUIMessage(string, string, string) error
+			SubmitUIMessage(string) (bool, error)
+			AcknowledgeUIMessage(string) error
+			UIOutbox() (any, error)
+		})
+		if !ok {
+			return Response{Error: "UI outbox unsupported"}
+		}
+		var err error
+		switch request.Cmd {
+		case "ui-prepare":
+			err = h.PrepareUIMessage(request.MessageID, request.Alias, request.Text)
+		case "ui-submit":
+			var created bool
+			created, err = h.SubmitUIMessage(request.MessageID)
+			if err == nil {
+				return Response{OK: true, Created: &created}
+			}
+		case "ui-ack":
+			err = h.AcknowledgeUIMessage(request.MessageID)
+		case "ui-outbox":
+			var value any
+			value, err = h.UIOutbox()
+			if err == nil {
+				var raw []byte
+				raw, err = json.Marshal(value)
+				if err == nil {
+					return Response{OK: true, Outbox: raw}
+				}
+			}
+		}
+		if err != nil {
+			return Response{Error: "UI outbox operation rejected"}
+		}
+		return Response{OK: true}
 	case "timeline":
 		reader, ok := handler.(interface {
 			Timeline(string, int, string) (any, error)

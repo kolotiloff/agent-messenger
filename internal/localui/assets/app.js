@@ -10,6 +10,7 @@
   if (location.hash) history.replaceState(null, '', location.pathname);
   let selected = '', cursor = '', overview = null, timelineVersion = 0, refreshVersion = 0;
   let timelineAbort = null, lastStatus = null, sending = false, queueBusy = false, pending = null, pendingBroken = false;
+  let outboxItems = [], outboxReady = false;
   const pendingKey = 'messenger-ui-pending:' + token;
   try {
     const saved = sessionStorage.getItem(pendingKey);
@@ -19,7 +20,7 @@
           typeof value.alias !== 'string' || !value.alias.trim() || typeof value.text !== 'string' || !value.text.trim()) throw Error('invalid pending');
       pending = {message_id:value.message_id,alias:value.alias,text:value.text};
       selected=pending.alias; $('message-text').value=pending.text;
-      $('send-status').textContent='Подтверждение не сохранено. Повтор доставит то же письмо; автоматически оно не отправляется. До подтверждения не закрывайте вкладку и не перезапускайте окно.';
+      $('send-status').textContent='Подтверждение не сохранено. Повтор доставит то же письмо; автоматически оно не отправляется. Если клиент успел сохранить письмо, оно также появится в списке восстановления.';
     }
   } catch (_) {
     pendingBroken = true;
@@ -28,18 +29,51 @@
   function actionControls() {
     $('message-text').readOnly=!!pending || sending || pendingBroken;
     $('session').disabled=!lastStatus || !!pending || sending;
-    $('send').disabled=!lastStatus || !selected || sending || queueBusy || pendingBroken || (!pending && !$('message-text').value.trim());
+    $('send').disabled=!lastStatus || !outboxReady || !selected || sending || queueBusy || pendingBroken || (!pending && outboxItems.length>0) || (!pending && !$('message-text').value.trim());
     $('send').textContent=sending?'Отправляем…':pending?'Повторить доставку':'Отправить';
     $('pending-id').hidden=!pending;
     $('pending-id').textContent=pending?'Идентификатор письма: '+pending.message_id:'';
     $('queue-action').disabled=!lastStatus || queueBusy || sending;
     $('queue-action').textContent=queueBusy?'Применяем…':lastStatus && lastStatus.paused?'Возобновить очередь':'Приостановить очередь';
+    $('outbox-panel').hidden=!outboxItems.length;
+    $('send-hint').textContent=outboxItems.length && !pending?'Сначала разберите сохранённые отправки выше, чтобы случайно не создать повторное задание.':'При разрешённом запуске и работающей очереди письмо может вызвать модель.';
+    root.querySelectorAll('[data-outbox-action]').forEach(b=>b.disabled=!lastStatus || sending || queueBusy || !!pending || pendingBroken);
     root.querySelectorAll('.am-agent-action').forEach(b=>b.disabled=!lastStatus || !!pending || sending);
   }
   async function postAPI(path, body) {
     const response=await fetch(path,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body),cache:'no-store',signal:AbortSignal.timeout(4500)});
     if(!response.ok)throw Error('unconfirmed');
     const result=await response.json();if(result.ok!==true)throw Error('unconfirmed');return result;
+  }
+  function renderOutbox() {
+    const list=$('outbox-items');list.replaceChildren();
+    for(const item of outboxItems) {
+      const row=el('article',undefined,'am-outbox-item');
+      row.append(el('strong',item.alias),el('p',item.text),el('p',item.message_id,'am-small am-muted'));
+      row.append(el('p',item.state==='queued'?'Письмо уже сохранено в очереди. Повторная отправка не нужна.':'Письмо сохранено в исходящих. Доставка в очередь ещё не подтверждена.','am-small'));
+      const button=el('button',item.state==='queued'?'Понятно, убрать из списка':'Восстановить отправку');
+      button.type='button';button.dataset.outboxAction=item.message_id;
+      button.addEventListener('click',async()=>{
+        if(button.disabled || pending || sending || queueBusy)return;
+        if(item.state==='queued') {
+          queueBusy=true;actionControls();
+          try {await acknowledge(item.message_id);$('send-status').textContent='Подтверждение принято. Само письмо и его история остаются в базе.';}
+          catch(_){$('send-status').textContent='Подтверждение не сохранено. Письмо остаётся в очереди; отправлять его заново не нужно.';}
+          finally {queueBusy=false;actionControls();}
+          await refresh();return;
+        }
+        const envelope={message_id:item.message_id,alias:item.alias,text:item.text};
+        try {sessionStorage.setItem(pendingKey,JSON.stringify(envelope));}
+        catch(_) {$('send-status').textContent='Хранилище вкладки недоступно. Исходящее письмо остаётся в базе клиента.';return;}
+        pending=envelope;selected=item.alias;$('message-text').value=item.text;
+        $('send-status').textContent='Восстановлены исходные адрес, текст и идентификатор. Нажмите «Повторить доставку» для явного продолжения.';
+        await refresh();
+      });row.append(button);list.append(row);
+    }
+  }
+  async function acknowledge(id) {
+    const ack=await postAPI('/api/outbox/ack',{message_id:id});
+    if(ack.action!=='ui-ack')throw Error('unconfirmed');
   }
   async function sendMessage() {
     if($('send').disabled || sending)return;
@@ -65,10 +99,11 @@
       // retain the envelope: repeating it still cannot create another request.
       sessionStorage.removeItem(pendingKey);
       if(sessionStorage.getItem(pendingKey)!==null)throw Error('not cleared');
-      pending=null;$('message-text').value='';
+      const acceptedID=pending.message_id;pending=null;$('message-text').value='';
       $('send-status').textContent=result.created?'Письмо сохранено в очереди. Ответ агента появится отдельно.':'Это письмо уже было сохранено. Второе письмо не создано.';
+      try {await acknowledge(acceptedID);}catch(_){$('send-status').textContent+=' Подтверждение просмотра не записано; письмо может остаться в списке восстановления.';}
     } catch (_) {
-      $('send-status').textContent='Доставка не подтверждена. Письмо могло сохраниться. Повтор использует тот же идентификатор и текст. До подтверждения не закрывайте вкладку и не перезапускайте окно.';
+      $('send-status').textContent='Доставка не подтверждена. Письмо могло сохраниться. Повтор использует тот же идентификатор и текст. Если клиент успел сохранить письмо, оно также появится в списке восстановления.';
     } finally {sending=false;actionControls();}
     await refresh();
   }
@@ -175,14 +210,18 @@
     } finally {if(version===timelineVersion)$('older').disabled=false;}
   }
   async function refresh() {
-    const version=++refreshVersion;lastStatus=null;actionControls();$('refresh').disabled=true;notice('');
+    const version=++refreshVersion;lastStatus=null;outboxReady=false;actionControls();$('refresh').disabled=true;notice('');
     clearTimeline('Обновляем данные…');$('session').disabled=true;
     const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),4500);
     try {
-      const [status,view]=await Promise.all([api('/api/status',controller.signal),api('/api/overview',controller.signal)]);
+      const [status,view,outbox]=await Promise.all([api('/api/status',controller.signal),api('/api/overview',controller.signal),api('/api/outbox',controller.signal)]);
       if(version!==refreshVersion)return;
       if(view.schema_version!==1||!Array.isArray(view.sessions))throw Error('Версия сводки не поддерживается.');
-      overview=view;lastStatus=status;
+      if(outbox.schema_version!==1 || !Array.isArray(outbox.items) || outbox.items.some(item=>!['prepared','queued'].includes(item.state)))throw Error('Журнал исходящих недоступен или требует обновления клиента.');
+      outboxItems=outbox.items;outboxReady=true;overview=view;lastStatus=status;
+      renderOutbox();
+      // An accepted envelope may survive a lost browser ACK. Keep local pending
+      // retry available; it uses the same ID. Other stored sends are reviewed first.
       $('connection').textContent='Клиент доступен';$('connection-dot').classList.add('online');
       $('checked').textContent='Обновлено '+new Date().toLocaleTimeString();
       $('processing').textContent=status.paused?'Новые письма на паузе':'Очередь не на паузе';
@@ -196,7 +235,7 @@
       renderCards();actionControls();await loadTimeline(false);
     } catch(error) {
       if(version!==refreshVersion)return;
-      overview=null;lastStatus=null;actionControls();clearTimeline('Данные клиента недоступны. Сохранённые письма не удалены.');
+      overview=null;lastStatus=null;outboxReady=false;actionControls();clearTimeline('Данные клиента недоступны. Сохранённые письма не удалены.');
       $('session').replaceChildren(el('option','Клиент недоступен'));$('session').disabled=true;
       $('agents').replaceChildren(el('p','Состояния сессий недоступны.','am-muted'));
       $('queue').replaceChildren(el('p','Очередь не прочитана. Это не означает, что она пуста.','am-muted'));
