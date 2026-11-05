@@ -13,6 +13,13 @@ import (
 // ErrLiveCLI is returned when another data directory still has a running CLI.
 var ErrLiveCLI = errors.New("a CLI from another data directory is still running")
 
+// ErrRunsCorrupt means active-runs.json exists but is empty or unreadable.
+// That is not the same as "no reservations".
+var ErrRunsCorrupt = errors.New("active-runs.json is empty or damaged")
+
+// beforeRenameHook, when set by tests, runs after the temp file is synced and before rename.
+var beforeRenameHook func() error
+
 type recordedRun struct {
 	ID             string `json:"id"`
 	Root           string `json:"root"`
@@ -45,14 +52,25 @@ func loadRuns() ([]recordedRun, error) {
 	if err != nil {
 		return nil, err
 	}
-	var runs []recordedRun
-	if len(raw) == 0 {
-		return nil, nil
+	if len(bytesTrimSpace(raw)) == 0 {
+		return nil, ErrRunsCorrupt
 	}
+	var runs []recordedRun
 	if err := json.Unmarshal(raw, &runs); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrRunsCorrupt, err)
 	}
 	return runs, nil
+}
+
+func bytesTrimSpace(raw []byte) []byte {
+	start, end := 0, len(raw)
+	for start < end && (raw[start] == ' ' || raw[start] == '\n' || raw[start] == '\t' || raw[start] == '\r') {
+		start++
+	}
+	for end > start && (raw[end-1] == ' ' || raw[end-1] == '\n' || raw[end-1] == '\t' || raw[end-1] == '\r') {
+		end--
+	}
+	return raw[start:end]
 }
 
 func saveRuns(runs []recordedRun) error {
@@ -60,11 +78,63 @@ func saveRuns(runs []recordedRun) error {
 	if err != nil {
 		return err
 	}
+	if runs == nil {
+		runs = []recordedRun{}
+	}
 	raw, err := json.Marshal(runs)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, raw, 0o600)
+	return writeAtomic(path, raw)
+}
+
+// writeAtomic puts the new contents on disk before replacing active-runs.json.
+// A crash while writing the temporary file leaves the previous file intact.
+func writeAtomic(path string, raw []byte) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, ".active-runs-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.Remove(tmpName)
+		}
+	}()
+	if _, err := tmp.Write(raw); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if beforeRenameHook != nil {
+		if err := beforeRenameHook(); err != nil {
+			return err
+		}
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		return err
+	}
+	cleanup = false
+	if err := os.Chmod(path, 0o600); err != nil {
+		return err
+	}
+	dirFile, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer dirFile.Close()
+	return dirFile.Sync()
 }
 
 func rememberRun(run recordedRun) error {
@@ -152,6 +222,9 @@ func runBlocks(run recordedRun) (bool, error) {
 func reconcileRuns(root string) error {
 	runs, err := loadRuns()
 	if err != nil {
+		if errors.Is(err, ErrRunsCorrupt) {
+			return fmt.Errorf("%w: %v", ErrLiveCLI, err)
+		}
 		return err
 	}
 	for _, run := range runs {
