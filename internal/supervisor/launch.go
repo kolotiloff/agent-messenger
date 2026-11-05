@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/kolotiloff/agent-messenger/internal/adapters"
@@ -143,7 +144,10 @@ func profileVariable(provider string) string {
 	}
 }
 
-// profileEnv forces the registered profile and drops an inherited value for that variable.
+// profileEnv binds the process to the registered profile.
+// The standard profile is selected by removing the override: Claude stores the
+// normal macOS login for ~/.claude and stops seeing it when CLAUDE_CONFIG_DIR is set.
+// A different directory still gets the variable, and an inherited value is never kept.
 func profileEnv(parent []string, provider, environment string) []string {
 	key := profileVariable(provider)
 	out := make([]string, 0, len(parent)+1)
@@ -154,10 +158,42 @@ func profileEnv(parent []string, provider, environment string) []string {
 		}
 		out = append(out, item)
 	}
-	if key != "" && environment != "" {
+	if key != "" && environment != "" && !isDefaultProfile(provider, environment) {
 		out = append(out, key+"="+environment)
 	}
 	return out
+}
+
+func isDefaultProfile(provider, environment string) bool {
+	def, err := defaultProfileDir(provider)
+	if err != nil || def == "" || environment == "" {
+		return false
+	}
+	return filepath.Clean(environment) == filepath.Clean(def)
+}
+
+func defaultProfileDir(provider string) (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	var name string
+	switch provider {
+	case "claude":
+		name = ".claude"
+	case "codex":
+		name = ".codex"
+	case "cursor":
+		name = ".cursor"
+	default:
+		return "", nil
+	}
+	path := filepath.Join(home, name)
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return filepath.Clean(path), nil
+	}
+	return resolved, nil
 }
 
 var errNoCLI = errString("session has no bound CLI")

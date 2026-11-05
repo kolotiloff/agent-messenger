@@ -1,6 +1,10 @@
 package supervisor
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestProfileEnvReplacesInheritedProfile(t *testing.T) {
 	parent := []string{"HOME=/users/me", "CODEX_HOME=/wrong", "CLAUDE_CONFIG_DIR=/also-wrong", "PATH=/bin"}
@@ -18,6 +22,36 @@ func TestProfileEnvReplacesInheritedProfile(t *testing.T) {
 	cursor := profileEnv(parent, "cursor", "/profiles/cursor-a")
 	if got := envValue(cursor, "CURSOR_CONFIG_DIR"); got != "/profiles/cursor-a" {
 		t.Fatalf("CURSOR_CONFIG_DIR = %s", got)
+	}
+}
+
+func TestStandardProfileDoesNotOverrideLogin(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	claudeDir := filepath.Join(home, ".claude")
+	if err := os.Mkdir(claudeDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := filepath.EvalSymlinks(claudeDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent := []string{"HOME=" + home, "CLAUDE_CONFIG_DIR=/other-profile", "PATH=/bin"}
+	env := profileEnv(parent, "claude", resolved)
+	if got := envValue(env, "CLAUDE_CONFIG_DIR"); got != "" {
+		t.Fatalf("standard Claude profile set CLAUDE_CONFIG_DIR=%s", got)
+	}
+	custom := filepath.Join(home, "claude-alt")
+	if err := os.Mkdir(custom, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	customResolved, err := filepath.EvalSymlinks(custom)
+	if err != nil {
+		t.Fatal(err)
+	}
+	alt := profileEnv(parent, "claude", customResolved)
+	if got := envValue(alt, "CLAUDE_CONFIG_DIR"); got != customResolved {
+		t.Fatalf("custom profile = %s", got)
 	}
 }
 
