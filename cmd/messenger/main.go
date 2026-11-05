@@ -44,6 +44,30 @@ func main() {
 
 func run(root string, args []string) error {
 	switch args[0] {
+	case "check-cli":
+		fs := flag.NewFlagSet("check-cli", flag.ContinueOnError)
+		provider := fs.String("provider", "", "claude|codex|cursor")
+		cli := fs.String("cli", "", "explicit absolute executable path")
+		environment := fs.String("environment", "", "explicit existing profile directory")
+		asJSON := fs.Bool("json", false, "machine-readable check report")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 0 {
+			return errors.New("лишние аргументы check-cli")
+		}
+		report, err := diagnostics.CheckCLI(context.Background(), *provider, *cli, *environment)
+		if err != nil {
+			return err
+		}
+		if *asJSON {
+			encoder := json.NewEncoder(os.Stdout)
+			encoder.SetIndent("", "  ")
+			return encoder.Encode(report)
+		}
+		fmt.Printf("%s: версия=%s (%s), вход=%s (%s).\n", report.Provider, report.Version.Value, report.Version.State, report.Authentication.State, report.Authentication.Reason)
+		fmt.Println("Это статус выбранного CLI и профиля с текущим окружением. Готовность сессии и доступность модели не проверялись. Вход и выход из аккаунта не выполнялись.")
+		return nil
 	case "doctor":
 		fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
 		asJSON := fs.Bool("json", false, "machine-readable diagnostic report")
@@ -216,6 +240,7 @@ func usage() {
   messenger --root КАТАЛОГ serve [--allow-model-calls] [--claude-stream]
   messenger --root КАТАЛОГ start [--allow-model-calls] [--claude-stream]
   messenger --root КАТАЛОГ doctor [--json]
+  messenger check-cli --provider claude|codex|cursor --cli ФАЙЛ --environment ПРОФИЛЬ [--json]
   messenger --root КАТАЛОГ create-claude-session --environment КАТАЛОГ --alias ИМЯ --cli ФАЙЛ --workspace КАТАЛОГ
   messenger recover-failed --confirm actions-may-repeat
   messenger --root КАТАЛОГ recover-stream --alias ИМЯ --run ID_ЗАПУСКА --confirm preserve-uncertain

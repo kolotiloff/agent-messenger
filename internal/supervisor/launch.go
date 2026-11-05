@@ -156,6 +156,12 @@ func profileVariable(provider string) string {
 // normal macOS login for ~/.claude and stops seeing it when CLAUDE_CONFIG_DIR is set.
 // A different directory still gets the variable, and an inherited value is never kept.
 func profileEnv(parent []string, provider, environment string) []string {
+	return ProfileEnvironment(parent, provider, environment)
+}
+
+// ProfileEnvironment applies the same explicit profile selection to launches
+// and diagnostic subcommands. It does not read or export stored credentials.
+func ProfileEnvironment(parent []string, provider, environment string) []string {
 	key := profileVariable(provider)
 	out := make([]string, 0, len(parent)+1)
 	for _, item := range parent {

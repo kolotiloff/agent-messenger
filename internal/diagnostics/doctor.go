@@ -1,5 +1,5 @@
-// Package diagnostics reports observations without launching a provider,
-// reading credentials, opening a database or changing process ownership.
+// Package diagnostics separates passive discovery from explicitly requested
+// provider status subcommands. Neither operation opens a model conversation.
 package diagnostics
 
 import (
@@ -145,5 +145,5 @@ func WriteText(w io.Writer, r Report) {
 			fmt.Fprintf(w, "%s: исполняемый файл в PATH не подтверждён (%s).\n", a.Name, a.CLI.State)
 		}
 	}
-	fmt.Fprintln(w, "Эта проверка не запускает CLI, не читает учётные данные и не подтверждает готовность сессий. Штатная проверка входа — отдельный будущий шаг.")
+	fmt.Fprintln(w, "Эта проверка не запускает CLI, не читает учётные данные и не подтверждает готовность сессий. Для отдельной проверки версии и входа выбранного CLI используйте check-cli.")
 }
