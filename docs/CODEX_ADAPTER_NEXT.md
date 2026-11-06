@@ -25,9 +25,25 @@ Failure rules:
 - `recover-failed` refuses a reservation held by a Codex setup.
 - An explicit resolution for uncertain setups is not implemented yet (T-007).
 
-No `sessions` row is created yet, so messages cannot be queued for the alias and the generic loop cannot launch a second process for the thread. The setup RPC client allows only `initialize`, `config/read` and `thread/start`; `turn/start` is not reachable. Delivery of messages to the owner is T-002. [Verification report](reports/2026-11-06-codex-setup-linux.md).
+The setup RPC client allows only `initialize`, `config/read` and `thread/start`. On success the session is registered under the alias as `codex_owned`, with no CLI path. Only its live owner serves it: generic claims, `register-session` and `ConfigureLaunch` refuse it, and `resolve` is blocked. An older client cannot launch it, because it only launches sessions that have a CLI path. [Verification report](reports/2026-11-06-codex-setup-linux.md).
 
 Compatibility: an older client ignores `codex_setups`. It would not see the alias reservation, and it would treat the new registry entry as an ordinary blocking reservation. Do not run an older client on a data directory after creating a Codex session.
+
+### Message delivery (T-002)
+
+Each owner has one controller goroutine (`serveCodex`) and a state in `codex_setups`: `created` means idle, `busy` means a turn is in flight.
+
+1. **Idle.** While idle, the controller reads the server output. Notifications are dropped. A server request or EOF makes the owner uncertain. Every 30 ms it checks the queue, which never calls the model. It claims a message only while model calls are allowed for the alias (`--allow-model-calls`, `--only-session`) and the queue is not paused.
+2. **Claim.** `ClaimCodexTurn` reserves the attempt and a one-time receipt (`codex_turns`), and the owner becomes `busy`.
+3. **Send intent.** `PrepareCodexTurnSend` commits `sent_intent` **before** `turn/start` is written. That request is never sent again.
+4. **Turn start.** The only model input is `CodexTurnPrompt`. The message text is read through the bound tool.
+5. **Bind.** The turn ID from the `turn/start` response is bound to the attempt (`BindCodexTurn`); only then do the tools open. Frames that arrive before that response are buffered, at most 256, and handled after binding.
+6. **Tools.** `CodexTurnGuard` enforces `read_current` then `reply` with exact thread and turn IDs, the stored receipt and no model-chosen fields. Read and reply go through SQLite (`CodexRead`, `CodexReply`), and the recipient is the message's sender.
+7. **Other server requests.** Approvals and the like are refused with a JSON-RPC error; the turn can still finish. A repeated server request ID, an unexpected response, a foreign turn, or a rejected tool call ends the turn.
+8. **Success.** Success is only `turn/completed` with status `completed` after the reply is stored. The verification is written with `provider_ok=1` and no exit code, and the owner becomes idle again and keeps the thread.
+9. **Failure.** Any other outcome makes the attempt and the owner uncertain: `failed`/`interrupted`, a missing reply, EOF, the 15-minute timeout, shutdown, or a DB error. The session stays locked and later messages stay queued. stdin is closed, the reservation is kept, and nothing is retried.
+
+A restart cannot reach the old owner, so its setup and any in-flight attempt become uncertain. Shutdown closes the owners' stdin, as process exit would.
 
 On a Mac, three cases were verified with the real installed app-server and empty profiles, without a model: a clean profile was accepted, an inherited MCP was rejected, an explicitly disabled MCP was accepted. [Checks and limitations](reports/2026-11-06-codex-preflight-mac.md).
 

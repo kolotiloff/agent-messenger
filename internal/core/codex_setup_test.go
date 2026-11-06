@@ -71,7 +71,7 @@ func (f codexFixture) toCreated(t *testing.T) {
 
 const fingerprint = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
-func TestCodexSetupHappyPathStoresThreadWithoutSession(t *testing.T) {
+func TestCodexSetupRegistersOwnedSession(t *testing.T) {
 	f := newCodexFixture(t)
 	f.toCreated(t)
 	c, err := f.st.CodexSetup(testSetupID)
@@ -82,12 +82,149 @@ func TestCodexSetupHappyPathStoresThreadWithoutSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(snap.Sessions) != 0 || len(snap.CodexSetups) != 1 {
-		t.Fatalf("sessions %d setups %d", len(snap.Sessions), len(snap.CodexSetups))
+	if len(snap.Sessions) != 1 || snap.Sessions[0]["start_mode"] != "codex_owned" || snap.Sessions[0]["provider"] != "codex" || snap.Sessions[0]["cli_path"] != nil {
+		t.Fatalf("sessions %+v", snap.Sessions)
 	}
-	// No delivery path exists yet: the alias cannot receive messages.
-	if _, err := f.st.Enqueue("m1", "codex-test", "user", "hi"); err == nil {
-		t.Fatal("message queued for a setup without delivery")
+	if owned, err := f.st.CodexOwnedAlias("codex-test"); err != nil || !owned {
+		t.Fatalf("owned %v %v", owned, err)
+	}
+	if _, err := f.st.Enqueue("m1", "codex-test", "user", "hi"); err != nil {
+		t.Fatal(err)
+	}
+	// Only the owner may take it: generic claims and launch configuration refuse.
+	if _, err := f.st.Claim("codex-test"); !errors.Is(err, ErrRejected) {
+		t.Fatalf("generic claim: %v", err)
+	}
+	if _, err := f.st.ClaimNext(); !errors.Is(err, ErrEmpty) {
+		t.Fatalf("claim next: %v", err)
+	}
+	if err := f.st.ConfigureLaunch("codex-test", f.cli, ""); !errors.Is(err, ErrRejected) {
+		t.Fatalf("configure launch: %v", err)
+	}
+}
+
+func TestCodexTurnBindsReplyToAttempt(t *testing.T) {
+	f := newCodexFixture(t)
+	f.toCreated(t)
+	if _, err := f.st.ClaimCodexTurn(testSetupID); !errors.Is(err, ErrEmpty) {
+		t.Fatalf("claim on empty queue: %v", err)
+	}
+	if _, err := f.st.Enqueue("m1", "codex-test", "user", "hello"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.st.Enqueue("m2", "codex-test", "user", "second"); err != nil {
+		t.Fatal(err)
+	}
+	token, err := f.st.ClaimCodexTurn(testSetupID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.state(t) != "busy" {
+		t.Fatal("owner not busy")
+	}
+	if _, err := f.st.ClaimCodexTurn(testSetupID); !errors.Is(err, ErrRejected) {
+		t.Fatalf("second claim while busy: %v", err)
+	}
+	if err := f.st.BindCodexTurn(token, "turn-1"); !errors.Is(err, ErrRejected) {
+		t.Fatalf("bind before send intent: %v", err)
+	}
+	if err := f.st.PrepareCodexTurnSend(token); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.PrepareCodexTurnSend(token); !errors.Is(err, ErrRejected) {
+		t.Fatalf("second send intent: %v", err)
+	}
+	if _, _, err := f.st.CodexRead(token); !errors.Is(err, ErrRejected) {
+		t.Fatalf("read before bind: %v", err)
+	}
+	if err := f.st.BindCodexTurn(token, "turn-1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.BindCodexTurn(token, "turn-2"); !errors.Is(err, ErrRejected) {
+		t.Fatalf("rebind: %v", err)
+	}
+	if err := f.st.CodexReply(token, "x", "early"); !errors.Is(err, ErrRejected) {
+		t.Fatalf("reply before read: %v", err)
+	}
+	if err := f.st.CompleteCodexTurn(token); !errors.Is(err, ErrNotVerified) {
+		t.Fatalf("complete without reply: %v", err)
+	}
+	text, receipt, err := f.st.CodexRead(token)
+	if err != nil || text != "hello" || receipt == "" {
+		t.Fatalf("read %q %q %v", text, receipt, err)
+	}
+	if err := f.st.CodexReply(token, "wrong", "ack"); !errors.Is(err, ErrRejected) {
+		t.Fatalf("wrong receipt: %v", err)
+	}
+	if err := f.st.CodexReply(token, receipt, "ack"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.CompleteCodexTurn(token); err != nil {
+		t.Fatal(err)
+	}
+	if f.state(t) != "created" {
+		t.Fatal("owner not idle after the turn")
+	}
+	if _, _, err := f.st.CodexRead(token); !errors.Is(err, ErrRejected) {
+		t.Fatalf("tools still open after completion: %v", err)
+	}
+	snap, _ := f.st.Snapshot()
+	if len(snap.Replies) != 1 || snap.Replies[0]["recipient"] != "user" || snap.Replies[0]["sender"] != "codex-test" {
+		t.Fatalf("replies %+v", snap.Replies)
+	}
+	next, err := f.st.ClaimCodexTurn(testSetupID)
+	if err != nil || next == token {
+		t.Fatalf("next claim %q %v", next, err)
+	}
+}
+
+func TestCodexTurnFailureLocksSession(t *testing.T) {
+	f := newCodexFixture(t)
+	f.toCreated(t)
+	for _, id := range []string{"m1", "m2"} {
+		if _, err := f.st.Enqueue(id, "codex-test", "user", id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	token, err := f.st.ClaimCodexTurn(testSetupID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.PrepareCodexTurnSend(token); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.FailCodexTurn(token, "EOF"); err != nil {
+		t.Fatal(err)
+	}
+	if f.state(t) != "uncertain" {
+		t.Fatal("owner not uncertain")
+	}
+	if _, err := f.st.ClaimCodexTurn(testSetupID); !errors.Is(err, ErrRejected) {
+		t.Fatalf("claim after failure: %v", err)
+	}
+	if _, err := f.st.Claim("codex-test"); err == nil {
+		t.Fatal("generic claim after failure")
+	}
+	snap, _ := f.st.Snapshot()
+	states := map[string]any{}
+	for _, r := range snap.Requests {
+		states[r["id"].(string)] = r["state"]
+	}
+	if states["m1"] != "uncertain" || states["m2"] != "queued" {
+		t.Fatalf("requests %+v", states)
+	}
+	// A restart keeps the attempt uncertain and does not release the session.
+	f.st.Close()
+	st, err := Open(f.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if _, err := st.RevokeInherited(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.Claim("codex-test"); err == nil {
+		t.Fatal("claim after restart")
 	}
 }
 

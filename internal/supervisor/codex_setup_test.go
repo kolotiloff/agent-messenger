@@ -188,10 +188,7 @@ func TestCreateCodexSessionOwnsThreadWithoutModelTurn(t *testing.T) {
 	if len(runs) != 1 || runs[0].ConversationID != fakeThreadID || runs[0].PID != pidOf(setup) || runs[0].Provider != "codex" {
 		t.Fatalf("reservation %+v", runs)
 	}
-	// The thread cannot receive messages or be registered a second time yet.
-	if r, _ := control.Call(h.root, control.Request{Cmd: "enqueue", Alias: "codex-test", MessageID: "m1", Sender: "user", Text: "hi"}); r.OK {
-		t.Fatal("message accepted without a delivery path")
-	}
+	// The thread cannot be registered a second time or reconfigured.
 	if r, _ := control.Call(h.root, control.Request{Cmd: "register-session", Provider: "codex", Environment: h.profile, ConversationID: fakeThreadID, Alias: "dup", CLI: h.self}); r.OK {
 		t.Fatal("owned thread registered as an ordinary session")
 	}
@@ -319,6 +316,210 @@ func TestInstalledCodexCreateSession(t *testing.T) {
 	runs := codexReservations(t)
 	if len(runs) != 1 || runs[0].ConversationID != thread {
 		t.Fatal("reservation does not name the thread")
+	}
+	h.stop()
+	waitGone(t, pidOf(setup))
+}
+
+func (h *codexHarness) send(id, text string) {
+	h.t.Helper()
+	r, err := control.Call(h.root, control.Request{Cmd: "enqueue", Alias: "codex-test", MessageID: id, Sender: "user", Text: text})
+	if err != nil || !r.OK {
+		h.t.Fatalf("enqueue %s: %+v %v", id, r, err)
+	}
+}
+
+type codexSnap struct {
+	CodexSetups   []map[string]any
+	Requests      []map[string]any
+	Replies       []map[string]any
+	Verifications []map[string]any
+	Sessions      []map[string]any
+}
+
+func (h *codexHarness) snap() codexSnap {
+	h.t.Helper()
+	response, err := control.Call(h.root, control.Request{Cmd: "inspect"})
+	if err != nil || !response.OK {
+		h.t.Fatalf("inspect %v %+v", err, response)
+	}
+	var s codexSnap
+	if err := json.Unmarshal(response.Inspect, &s); err != nil {
+		h.t.Fatal(err)
+	}
+	return s
+}
+
+func (h *codexHarness) waitSnap(what string, done func(codexSnap) bool) codexSnap {
+	h.t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	var last codexSnap
+	for time.Now().Before(deadline) {
+		last = h.snap()
+		if done(last) {
+			return last
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	h.t.Fatalf("%s: %+v", what, last)
+	return last
+}
+
+func requestState(s codexSnap, id string) string {
+	for _, r := range s.Requests {
+		if r["id"] == id {
+			state, _ := r["state"].(string)
+			return state
+		}
+	}
+	return ""
+}
+
+func replyTo(s codexSnap, id string) string {
+	for _, r := range s.Replies {
+		if r["reply_to"] == id {
+			text, _ := r["text"].(string)
+			return text
+		}
+	}
+	return ""
+}
+
+func TestCodexOwnerDeliversTwoMessagesInOneProcess(t *testing.T) {
+	for _, mode := range []string{"ok", "early-call", "approval"} {
+		t.Run(mode, func(t *testing.T) {
+			h := newCodexHarness(t, mode, AdapterLauncher{AllowModels: true})
+			if r := h.create("codex-test"); !r.OK {
+				t.Fatalf("create failed: %+v", r)
+			}
+			setup := h.waitSetup(func(s map[string]any) bool { return s["state"] == "created" })
+			h.send("m1", "one")
+			h.waitSnap("first reply", func(s codexSnap) bool {
+				return requestState(s, "m1") == "completed" && s.CodexSetups[0]["state"] == "created"
+			})
+			h.send("m2", "two")
+			s := h.waitSnap("second reply", func(s codexSnap) bool {
+				return requestState(s, "m2") == "completed" && s.CodexSetups[0]["state"] == "created"
+			})
+			if replyTo(s, "m1") != "ACK:one" || replyTo(s, "m2") != "ACK:two" {
+				t.Fatalf("replies %+v", s.Replies)
+			}
+			for _, r := range s.Replies {
+				if r["sender"] != "codex-test" || r["recipient"] != "user" {
+					t.Fatalf("reply route %+v", r)
+				}
+			}
+			ok := 0
+			for _, v := range s.Verifications {
+				if v["provider_ok"] == float64(1) && v["exit_observed"] == float64(0) {
+					ok++
+				}
+			}
+			if ok != 2 {
+				t.Fatalf("verifications %+v", s.Verifications)
+			}
+			if h.count("turn/start") != 2 {
+				t.Fatalf("turn/start sent %d times", h.count("turn/start"))
+			}
+			if mode == "approval" && h.count("response:1015:error") != 1 {
+				t.Fatalf("approval request was not refused: %v", h.log())
+			}
+			for _, sess := range s.Sessions {
+				if sess["start_mode"] != "codex_owned" || sess["provider"] != "codex" {
+					t.Fatalf("session %+v", sess)
+				}
+			}
+			// One process served both turns.
+			if pidOf(s.CodexSetups[0]) != pidOf(setup) {
+				t.Fatal("owner process changed")
+			}
+			h.stop()
+			waitGone(t, pidOf(setup))
+		})
+	}
+}
+
+func TestCodexOwnerPauseHoldsMessages(t *testing.T) {
+	h := newCodexHarness(t, "ok", AdapterLauncher{AllowModels: true})
+	if r := h.create("codex-test"); !r.OK {
+		t.Fatalf("create failed: %+v", r)
+	}
+	setup := h.waitSetup(func(s map[string]any) bool { return s["state"] == "created" })
+	if r, _ := control.Call(h.root, control.Request{Cmd: "pause"}); !r.OK {
+		t.Fatal("pause failed")
+	}
+	h.send("m1", "one")
+	time.Sleep(300 * time.Millisecond)
+	if h.count("turn/start") != 0 || requestState(h.snap(), "m1") != "queued" {
+		t.Fatal("paused client started a turn")
+	}
+	if r, _ := control.Call(h.root, control.Request{Cmd: "resume"}); !r.OK {
+		t.Fatal("resume failed")
+	}
+	h.waitSnap("reply after resume", func(s codexSnap) bool { return requestState(s, "m1") == "completed" })
+	h.stop()
+	waitGone(t, pidOf(setup))
+}
+
+func TestCodexOwnerTurnFailuresStayUncertainWithoutRetry(t *testing.T) {
+	old := codexTurnTimeout
+	codexTurnTimeout = 2 * time.Second
+	t.Cleanup(func() { codexTurnTimeout = old })
+	for _, mode := range []string{"turn-failed", "no-reply", "foreign-turn", "dup-request", "exit-in-turn", "second-fails"} {
+		t.Run(mode, func(t *testing.T) {
+			h := newCodexHarness(t, mode, AdapterLauncher{AllowModels: true})
+			if r := h.create("codex-test"); !r.OK {
+				t.Fatalf("create failed: %+v", r)
+			}
+			setup := h.waitSetup(func(s map[string]any) bool { return s["state"] == "created" })
+			failing := "m1"
+			if mode == "second-fails" {
+				h.send("m1", "one")
+				h.waitSnap("first reply", func(s codexSnap) bool { return requestState(s, "m1") == "completed" })
+				failing = "m2"
+			}
+			h.send(failing, "x")
+			h.send("later", "y")
+			s := h.waitSnap("uncertain turn", func(s codexSnap) bool {
+				return requestState(s, failing) == "uncertain" && s.CodexSetups[0]["state"] == "uncertain" && s.CodexSetups[0]["exit_observed"] == float64(1)
+			})
+			time.Sleep(200 * time.Millisecond)
+			s = h.snap()
+			if requestState(s, "later") != "queued" {
+				t.Fatalf("message after an uncertain turn was taken: %+v", s.Requests)
+			}
+			want := 1
+			if mode == "second-fails" {
+				want = 2
+			}
+			if h.count("turn/start") != want {
+				t.Fatalf("turn/start sent %d times, want %d", h.count("turn/start"), want)
+			}
+			if len(codexReservations(t)) != 1 {
+				t.Fatal("reservation removed")
+			}
+			if r, _ := control.Call(h.root, control.Request{Cmd: "resolve", Action: "retry", Alias: "codex-test", Confirmation: "actions-may-repeat"}); r.OK {
+				t.Fatal("resolve retried a Codex-owned session")
+			}
+			h.stop()
+			waitGone(t, pidOf(setup))
+		})
+	}
+}
+
+func TestCodexOwnedSessionIsNotLaunchedByGenericLoop(t *testing.T) {
+	h := newCodexHarness(t, "ok", AdapterLauncher{AllowModels: true, OnlySession: "codex-test"})
+	if r := h.create("codex-test"); !r.OK {
+		t.Fatalf("create failed: %+v", r)
+	}
+	setup := h.waitSetup(func(s map[string]any) bool { return s["state"] == "created" })
+	if r, _ := control.Call(h.root, control.Request{Cmd: "register-session", Provider: "codex", Environment: h.profile, ConversationID: "other-thread", Alias: "codex-test", CLI: h.self}); r.OK {
+		t.Fatal("alias rebound")
+	}
+	h.send("m1", "one")
+	h.waitSnap("reply through the owner", func(s codexSnap) bool { return requestState(s, "m1") == "completed" })
+	if h.count("turn/start") != 1 || h.count("args:app-server --listen stdio://") != 1 {
+		t.Fatalf("unexpected launches: %v", h.log())
 	}
 	h.stop()
 	waitGone(t, pidOf(setup))

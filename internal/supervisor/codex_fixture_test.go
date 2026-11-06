@@ -12,8 +12,9 @@ import (
 
 const fakeThreadID = "01a1b0a0-1ef6-7861-8fd1-f7fb5912e2f9"
 
-// fakeCodexServer imitates `codex app-server --listen stdio://` for setup.
-// It never runs a model. The mode is read from CODEX_HOME/fixture-mode and
+// fakeCodexServer imitates `codex app-server --listen stdio://` for setup and
+// turns. It never runs a model: a turn reads the message through read_current
+// and replies "ACK:<text>". The mode is read from CODEX_HOME/fixture-mode and
 // every received method is appended to CODEX_HOME/fixture-log.
 func fakeCodexServer() int {
 	home := os.Getenv("CODEX_HOME")
@@ -48,6 +49,100 @@ func fakeCodexServer() int {
 	}
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Buffer(make([]byte, 64<<10), 4<<20)
+	// await reads the client's answer to one server request.
+	await := func(id int) (json.RawMessage, bool) {
+		if !scanner.Scan() {
+			return nil, false
+		}
+		var resp struct {
+			ID     *int            `json:"id"`
+			Method string          `json:"method"`
+			Result json.RawMessage `json:"result"`
+			Error  json.RawMessage `json:"error"`
+		}
+		if json.Unmarshal(scanner.Bytes(), &resp) != nil || resp.ID == nil || *resp.ID != id || resp.Method != "" {
+			fmt.Fprintf(logFile, "bad-response\n")
+			return nil, false
+		}
+		if len(resp.Error) != 0 {
+			fmt.Fprintf(logFile, "response:%d:error\n", id)
+			return nil, true
+		}
+		fmt.Fprintf(logFile, "response:%d:ok\n", id)
+		return resp.Result, true
+	}
+	turns := 0
+	runTurn := func(reqID int) bool {
+		turns++
+		turnMode := mode
+		if mode == "second-fails" {
+			turnMode = "ok"
+			if turns == 2 {
+				turnMode = "turn-failed"
+			}
+		}
+		if turnMode == "exit-in-turn" {
+			return false
+		}
+		turnID := fmt.Sprintf("0190aaaa-0000-7000-8000-%012d", turns)
+		call := func(id int, tool string, args any, turn string) (json.RawMessage, bool) {
+			send(map[string]any{"id": id, "method": "item/tool/call", "params": map[string]any{
+				"threadId": fakeThreadID, "turnId": turn, "callId": fmt.Sprintf("call-%d", id),
+				"namespace": "messenger_bound", "tool": tool, "arguments": args,
+			}})
+			return await(id)
+		}
+		base := 1000 + 10*turns
+		readID := base
+		if turnMode == "early-call" {
+			send(map[string]any{"id": readID, "method": "item/tool/call", "params": map[string]any{
+				"threadId": fakeThreadID, "turnId": turnID, "callId": "early", "namespace": "messenger_bound", "tool": "read_current", "arguments": map[string]any{},
+			}})
+		}
+		send(map[string]any{"method": "turn/started", "params": map[string]any{"threadId": fakeThreadID, "turn": map[string]any{"id": turnID, "status": "inProgress", "items": []any{}}}})
+		send(map[string]any{"id": reqID, "result": map[string]any{"turn": map[string]any{"id": turnID, "status": "inProgress", "items": []any{}}}})
+		if turnMode == "approval" {
+			send(map[string]any{"id": base + 5, "method": "item/commandExecution/requestApproval", "params": map[string]any{}})
+			if _, ok := await(base + 5); !ok {
+				return false
+			}
+		}
+		var read json.RawMessage
+		var ok bool
+		switch turnMode {
+		case "early-call":
+			read, ok = await(readID)
+		case "foreign-turn":
+			read, ok = call(readID, "read_current", map[string]any{}, "0190ffff-0000-7000-8000-000000000000")
+		default:
+			read, ok = call(readID, "read_current", map[string]any{}, turnID)
+		}
+		if !ok || read == nil {
+			return ok
+		}
+		var output struct {
+			ContentItems []struct{ Text string } `json:"contentItems"`
+		}
+		var message struct{ Text, Receipt string }
+		if json.Unmarshal(read, &output) != nil || len(output.ContentItems) != 1 || json.Unmarshal([]byte(output.ContentItems[0].Text), &message) != nil {
+			return false
+		}
+		if turnMode != "no-reply" {
+			replyID := base + 1
+			if turnMode == "dup-request" {
+				replyID = readID
+			}
+			if _, ok := call(replyID, "reply", map[string]any{"receipt": message.Receipt, "text": "ACK:" + message.Text}, turnID); !ok {
+				return false
+			}
+		}
+		status := "completed"
+		if turnMode == "turn-failed" {
+			status = "failed"
+		}
+		send(map[string]any{"method": "turn/completed", "params": map[string]any{"threadId": fakeThreadID, "turn": map[string]any{"id": turnID, "status": status, "items": []any{}}}})
+		return true
+	}
 	for scanner.Scan() {
 		var req struct {
 			ID     *int            `json:"id"`
@@ -91,8 +186,11 @@ func fakeCodexServer() int {
 			if mode == "idle-request" {
 				send(map[string]any{"id": 77, "method": "item/tool/call", "params": map[string]any{}})
 			}
+		case "turn/start":
+			if !runTurn(*req.ID) {
+				return 0
+			}
 		default:
-			// turn/start or anything else is a test failure.
 			return 4
 		}
 	}

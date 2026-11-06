@@ -2,6 +2,12 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-06 — Claude Code (T-002)
+
+- Codex message delivery: owner controller, `codex_turns`, `RunTurn` with an early-event buffer and server-request handling, bound tools through SQLite. Tests with a fake app-server cover two turns, pause, and six failure modes. No model was called. PR_LINK.
+- Codex sessions are stored without a CLI path, so older clients cannot launch them.
+- The owner reported a Mac freeze and reboot; no Mac action is needed for this work.
+
 ## 2026-11-06 — Claude Code (T-001)
 
 - Installed Codex 0.155.1 from npm in the cloud session. Generated the app-server schema. Confirmed on the real binary that `thread/start` declares dynamic tools, needs no login and leaves no rollout for an empty thread.
