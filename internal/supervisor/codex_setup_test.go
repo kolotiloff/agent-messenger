@@ -69,7 +69,7 @@ func (h *codexHarness) start(launcher Launcher) {
 			h.t.Fatalf("supervisor exited at startup: %v", err)
 		default:
 		}
-		if _, err := os.Stat(control.SocketPath(h.root)); err == nil {
+		if socketAccepts(h.root) {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)

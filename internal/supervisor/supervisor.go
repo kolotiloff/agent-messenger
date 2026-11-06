@@ -72,7 +72,9 @@ type Supervisor struct {
 	ctx        context.Context
 
 	mu           sync.Mutex
-	current      *activeJob
+	jobs         map[string]*activeJob
+	streams      sync.WaitGroup
+	liveStreams  atomic.Int32
 	beforeSignal func()
 	dispatch     sync.Mutex
 	stopping     atomic.Bool
@@ -183,6 +185,7 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 	err = control.Serve(ln, sup)
 	cancel()
 	wg.Wait()
+	sup.streams.Wait()
 	if ctx.Err() != nil {
 		return nil
 	}
@@ -203,6 +206,9 @@ func (s *Supervisor) loop(ctx context.Context) {
 			continue
 		}
 		if stream, ok := launcher.(StreamLauncher); ok && stream.StreamingEnabled() {
+			if s.liveStreams.Load() >= maxClaudeStreams {
+				continue
+			}
 			var token string
 			var err error
 			if scoped, ok := launcher.(interface{ SessionAlias() string }); ok && scoped.SessionAlias() != "" {
@@ -213,7 +219,15 @@ func (s *Supervisor) loop(ctx context.Context) {
 			if err != nil {
 				continue
 			}
-			s.runStream(ctx, token, stream)
+			// Each persistent Claude session has its own controller, like Codex
+			// owners, so one live stream does not starve another session.
+			s.streams.Add(1)
+			s.liveStreams.Add(1)
+			go func() {
+				defer s.streams.Done()
+				defer s.liveStreams.Add(-1)
+				s.runStream(ctx, token, stream)
+			}()
 			continue
 		}
 		var token string
@@ -245,14 +259,8 @@ func (s *Supervisor) runClaimed(ctx context.Context, token string) {
 		_ = s.store.MarkUncertain(token, err.Error())
 		return
 	}
-	s.mu.Lock()
-	s.current = &activeJob{token: token, pgid: started.PGID, alias: spec.Alias, wait: started.Wait}
-	s.mu.Unlock()
-	defer func() {
-		s.mu.Lock()
-		s.current = nil
-		s.mu.Unlock()
-	}()
+	s.addJob(&activeJob{token: token, pgid: started.PGID, alias: spec.Alias, wait: started.Wait})
+	defer s.removeJob(token)
 	obs := platform.Observation{PID: started.PID, PGID: started.PGID, StartToken: started.StartToken, BootID: started.BootID}
 	if err := s.store.RecordProcess(token, obs); err != nil {
 		_ = s.store.MarkUncertain(token, err.Error())
@@ -454,29 +462,27 @@ func (s *Supervisor) Resume() error { return s.store.ResumeWork() }
 func (s *Supervisor) StopJob() (control.StopResult, error) {
 	s.dispatch.Lock()
 	defer s.dispatch.Unlock()
-	s.mu.Lock()
-	job := s.current
-	s.mu.Unlock()
+	jobs := s.jobList()
 	result := control.StopResult{State: "uncertain", Signal: "not_recorded", Note: "сигнал не доказывает остановку потомков"}
-	if job != nil && job.streamID != "" {
-		if err := s.store.StopStream(job.streamID, "stop-job"); err != nil {
-			return result, err
+	// Every live persistent stream is stopped; one-shot jobs are handled below.
+	var job *activeJob
+	streams := 0
+	for _, j := range jobs {
+		if j.streamID == "" {
+			job = j
+			continue
 		}
-		job.cancel()
-		obs, err := s.store.Observation(job.streamID)
+		streams++
+		signal, err := s.stopStreamJob(j)
 		if err != nil {
+			result.Signal = signal
 			return result, err
 		}
-		owned, err := platform.OwnsObservation(obs)
-		if err != nil || !owned {
-			result.Signal = "not_owner"
-			return result, nil
+		if result.Signal != "sent" {
+			result.Signal = signal
 		}
-		if err := platform.SignalGroup(obs.PGID); err != nil {
-			result.Signal = "error"
-			return result, err
-		}
-		result.Signal = "sent"
+	}
+	if streams > 0 {
 		return result, nil
 	}
 	token := ""
@@ -578,10 +584,10 @@ func text(value any) string {
 func (s *Supervisor) Shutdown() error {
 	s.dispatch.Lock()
 	s.stopping.Store(true)
-	s.mu.Lock()
-	job := s.current
-	s.mu.Unlock()
-	if job != nil && job.streamID != "" {
+	for _, job := range s.jobList() {
+		if job.streamID == "" {
+			continue
+		}
 		err := s.store.StopStream(job.streamID, "shutdown")
 		job.cancel()
 		if err != nil {
@@ -716,3 +722,53 @@ func (s *Supervisor) PrepareUIMessage(id, alias, text string) error {
 func (s *Supervisor) SubmitUIMessage(id string) (bool, error) { return s.store.SubmitUIMessage(id) }
 func (s *Supervisor) AcknowledgeUIMessage(id string) error    { return s.store.AcknowledgeUIMessage(id) }
 func (s *Supervisor) UIOutbox() (any, error)                  { return s.store.UIOutbox() }
+
+// maxClaudeStreams bounds how many persistent Claude processes run at once.
+const maxClaudeStreams = 4
+
+func (s *Supervisor) addJob(job *activeJob) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.jobs == nil {
+		s.jobs = map[string]*activeJob{}
+	}
+	s.jobs[job.token] = job
+}
+
+func (s *Supervisor) removeJob(token string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.jobs, token)
+}
+
+func (s *Supervisor) jobList() []*activeJob {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]*activeJob, 0, len(s.jobs))
+	for _, job := range s.jobs {
+		out = append(out, job)
+	}
+	return out
+}
+
+// stopStreamJob revokes the stream's tools first, then signals its group only
+// if the recorded process still owns it. A signal does not prove descendants
+// stopped; the reservation stays.
+func (s *Supervisor) stopStreamJob(job *activeJob) (string, error) {
+	if err := s.store.StopStream(job.streamID, "stop-job"); err != nil {
+		return "not_recorded", err
+	}
+	job.cancel()
+	obs, err := s.store.Observation(job.streamID)
+	if err != nil {
+		return "not_recorded", err
+	}
+	owned, err := platform.OwnsObservation(obs)
+	if err != nil || !owned {
+		return "not_owner", nil
+	}
+	if err := platform.SignalGroup(obs.PGID); err != nil {
+		return "error", err
+	}
+	return "sent", nil
+}

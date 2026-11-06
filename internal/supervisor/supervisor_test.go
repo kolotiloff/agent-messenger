@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -404,9 +405,11 @@ func waitFile(t *testing.T, path string) {
 
 func waitSocket(t *testing.T, root string) {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
+	// The socket file appears at bind(), slightly before listen(). A dial only
+	// succeeds once the client accepts connections, so tests never race it.
+	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		if _, err := os.Stat(control.SocketPath(root)); err == nil {
+		if socketAccepts(root) {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -901,4 +904,13 @@ func agentFixture() error {
 		return os.WriteFile(filepath.Join(os.Getenv("MESSENGER_DIR"), "child.pid"), []byte(strconv.Itoa(cmd.Process.Pid)), 0o600)
 	}
 	return nil
+}
+
+func socketAccepts(root string) bool {
+	conn, err := net.DialTimeout("unix", control.SocketPath(root), time.Second)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
 }

@@ -64,10 +64,8 @@ func (s *Supervisor) runStream(parent context.Context, token string, launcher St
 	go func() { _ = server.Serve(ln) }()
 	defer server.Close()
 	job := &activeJob{token: token, alias: spec.Alias, streamID: token, cancel: cancel}
-	s.mu.Lock()
-	s.current = job
-	s.mu.Unlock()
-	defer func() { s.mu.Lock(); s.current = nil; s.mu.Unlock() }()
+	s.addJob(job)
+	defer s.removeJob(token)
 	s.dispatch.Unlock()
 	process, err := s.startStream(ctx, launcher, spec, "http://"+ln.Addr().String()+"/mcp", secret)
 	s.dispatch.Lock()

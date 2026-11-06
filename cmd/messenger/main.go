@@ -222,6 +222,24 @@ func run(root string, args []string) error {
 		}
 		fmt.Println(message)
 		return nil
+	case "recover-missing-root":
+		fs := flag.NewFlagSet("recover-missing-root", flag.ContinueOnError)
+		confirm := fs.String("confirm", "", "preserve-uncertain")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 0 {
+			return errors.New("лишние аргументы recover-missing-root")
+		}
+		message, err := supervisor.RecoverMissingRoots(*confirm)
+		if errors.Is(err, platform.ErrAlreadyRunning) {
+			return errors.New("клиент уже запущен; остановите его перед снятием резерва")
+		}
+		if err != nil {
+			return fmt.Errorf("резерв не снят: %w", err)
+		}
+		fmt.Println(message)
+		return nil
 	case "recover-codex":
 		fs := flag.NewFlagSet("recover-codex", flag.ContinueOnError)
 		alias := fs.String("alias", "", "exact session alias")
@@ -400,6 +418,7 @@ func usage() {
   messenger recover-failed --confirm actions-may-repeat
   messenger --root КАТАЛОГ recover-stream --alias ИМЯ --run ID_ЗАПУСКА --confirm preserve-uncertain
   messenger --root КАТАЛОГ recover-codex --alias ИМЯ --confirm preserve-uncertain
+  messenger recover-missing-root --confirm preserve-uncertain
   messenger --root КАТАЛОГ register-session --provider claude|codex|cursor --environment КАТАЛОГ --conversation-id ID --alias ИМЯ --cli ФАЙЛ [--workspace КАТАЛОГ]
   messenger --root КАТАЛОГ status
   messenger --root КАТАЛОГ overview

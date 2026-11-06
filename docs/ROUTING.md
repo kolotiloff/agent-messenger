@@ -34,6 +34,6 @@ A delivered message is an ordinary queued message, so the usual rules apply:
 
 ## Limits of this version
 
-- **One persistent Claude at a time.** Codex owners run side by side. A second persistent Claude session waits until the first is released. This is task T-008.
+- **Concurrent owners.** Up to 4 persistent Claude sessions and any number of Codex owners run side by side.
 - **No direct sending by agents.** Agents cannot start a new conversation themselves. Only `read_current` and `reply` exist while a message is processed. A separate coordinator mode for sending new messages is not implemented.
 - **Local only.** Routing works between sessions of one client. Network delivery between computers is a later stage.

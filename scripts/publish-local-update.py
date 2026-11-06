@@ -7,6 +7,7 @@ p=argparse.ArgumentParser()
 p.add_argument('bundle_directory',type=pathlib.Path)
 p.add_argument('--sparkle',required=True,type=pathlib.Path)
 p.add_argument('--notes',required=True,type=pathlib.Path)
+p.add_argument('--key-file',type=pathlib.Path,help='sign with this exported private key instead of the Keychain (CI)')
 p.add_argument('--directory',type=pathlib.Path,default=pathlib.Path.home()/'Library/Application Support/AgentMessenger/updates')
 a=p.parse_args();source=a.bundle_directory.resolve();target=a.directory.resolve()
 app=source/'Agent Messenger.app';archive=source/'Agent-Messenger-mac.zip'
@@ -17,8 +18,14 @@ if info.get('AMClientAPI')!=1: raise SystemExit('Unsupported client API')
 subprocess.run(['/usr/bin/codesign','--verify','--deep','--strict',str(app)],check=True)
 meta=json.loads(subprocess.check_output([str(app/'Contents/Resources/messenger'),'version']))
 if meta['revision']=='0'*40 or meta['version']!=version or meta['os']!='darwin' or not re.fullmatch('[0-9a-f]{40}',meta['revision']): raise SystemExit('Bundle metadata mismatch')
-public=subprocess.check_output([str(a.sparkle/'bin/generate_keys'),'--account','agent-messenger-preview','-p'],text=True).strip()
-if public!=info['SUPublicEDKey']: raise SystemExit('Signing key does not match application')
+if a.key_file is None:
+ public=subprocess.check_output([str(a.sparkle/'bin/generate_keys'),'--account','agent-messenger-preview','-p'],text=True).strip()
+ if public!=info['SUPublicEDKey']: raise SystemExit('Signing key does not match application')
+def verify(path,sig):
+ # With a key file the public key cannot be read back from the Keychain, so
+ # every signature is checked against the app's own key before it is kept.
+ if a.key_file is not None:
+  subprocess.run(['go','run','./scripts/verify-update-signature',info['SUPublicEDKey'],str(path),sig],check=True)
 notes=a.notes.read_text();raw=archive.read_bytes()
 if len(raw)>256*1024*1024 or not raw or len(notes.encode())>16000: raise SystemExit('Update exceeds limits')
 digest=hashlib.sha256(raw).hexdigest()
@@ -29,8 +36,12 @@ with tempfile.TemporaryDirectory(prefix='am-publish-') as d:
  subprocess.run(['/usr/bin/codesign','--verify','--deep','--strict',str(unpacked)],check=True)
  def files(root):return {str(x.relative_to(root)):('link',os.readlink(x)) if x.is_symlink() else ('file',x.stat().st_mode&0o777,hashlib.sha256(x.read_bytes()).hexdigest()) for x in root.rglob('*') if x.is_file() or x.is_symlink()}
  if files(app)!=files(unpacked):raise SystemExit('ZIP and bundle differ; refusing to sign')
-signer=[str(a.sparkle/'bin/sign_update'),'--account','agent-messenger-preview','-p']
+if a.key_file is not None:
+ signer=[str(a.sparkle/'bin/sign_update'),'--ed-key-file',str(a.key_file),'-p']
+else:
+ signer=[str(a.sparkle/'bin/sign_update'),'--account','agent-messenger-preview','-p']
 signature=subprocess.check_output(signer+[str(archive)],text=True).strip()
+verify(archive,signature)
 manifest=dict(schema=1,build=build,version=version,revision=meta['revision'],os=meta['os'],arch=meta['arch'],client_api=1,sha256=digest,length=len(raw),signature=signature,notes=notes)
 target.mkdir(parents=True,exist_ok=True,mode=0o700)
 previous=target/'manifest.json'
@@ -43,6 +54,7 @@ with tempfile.TemporaryDirectory(prefix='.publish-',dir=target) as d:
  temp=pathlib.Path(d);m=temp/'manifest.json'
  m.write_text(json.dumps(manifest,ensure_ascii=False,separators=(',',':'))+'\n')
  signed=subprocess.check_output(signer+[str(m)],text=True).strip()
+ verify(m,signed)
  if len(base64.b64decode(signed,validate=True))!=64:raise SystemExit('Unexpected signature')
  dest=target/(digest+'.zip')
  if dest.exists():
