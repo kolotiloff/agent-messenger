@@ -386,8 +386,18 @@ func newHandlerWithChecks(host, token string, call caller, discover func(context
 			return
 		}
 		response, err := call(ctx, req)
-		if err != nil || !response.OK {
-			http.Error(w, "local client unavailable or request rejected", http.StatusServiceUnavailable)
+		if err != nil {
+			http.Error(w, "client_unavailable: local client unavailable or request rejected", http.StatusServiceUnavailable)
+			return
+		}
+		if !response.OK {
+			// Only the kind of failure is shown; the client's own detail
+			// may name private paths.
+			kind := "client_rejected"
+			if response.Error == "неизвестная команда" {
+				kind = "client_outdated"
+			}
+			http.Error(w, kind+": the local client did not answer this request", http.StatusBadGateway)
 			return
 		}
 		switch req.Cmd {

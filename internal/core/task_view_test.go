@@ -19,8 +19,8 @@ func TestWindowViewAndTaskFeed(t *testing.T) {
 		t.Fatalf("feed of an unlaunched task %+v %v", feed.Task, err)
 	}
 	r := f.launch(t, id, f.sessionOf(t, id))
-	if v, _ = f.st.WindowView("Game", "2000-01-01T00:00:00Z"); v.Tasks[0].PendingLaunch {
-		t.Fatalf("launched task still pending %+v", v.Tasks[0])
+	if v, _ = f.st.WindowView("Game", "2000-01-01T00:00:00Z"); v.Tasks[0].PendingLaunch || v.Tasks[0].StartedAt == "" || v.Tasks[0].StartedAt < v.Tasks[0].CreatedAt {
+		t.Fatalf("launched task %+v", v.Tasks[0])
 	}
 	if err := f.st.AppendTaskRunItem(r.ID, "text", "", "Looking at the menu"); err != nil {
 		t.Fatal(err)

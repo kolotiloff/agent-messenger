@@ -90,12 +90,18 @@
   function remember(key,value){try{localStorage.setItem(key,value);}catch(_){}}
   function recall(key){try{return localStorage.getItem(key)||'';}catch(_){return '';}}
   let view=null,project=recall('messenger-project'),selectedTask='',feed=null,feedSignature='',viewSignature='';
-  let online=false,discovery=[],tab='tasks',refreshing=false,answering=false;
+  let online=false,offlineReason='',discovery=[],tab='tasks',refreshing=false,answering=false;
   const agentChecks=new Map();
   async function api(path,timeout=4500){
     if(!token)throw Error('Откройте приватную ссылку, которую выдала команда ui.');
     const response=await fetch(path,{headers:{Authorization:'Bearer '+token},cache:'no-store',signal:AbortSignal.timeout(timeout)});
-    if(!response.ok){if(response.status===401)throw Error('Ссылка доступа устарела. Откройте окно заново.');throw Error('Клиент Messenger недоступен.');}
+    if(!response.ok){
+      if(response.status===401)throw Error('Ссылка доступа устарела. Откройте окно заново.');
+      const body=await response.text().catch(()=>'');
+      if(body.startsWith('client_outdated'))throw Error('В фоне работает клиент старой версии. Закройте окно Messenger и остановите старый клиент командой shutdown.');
+      if(body.startsWith('client_rejected'))throw Error('Клиент Messenger отклонил запрос окна. Подробности: messenger doctor.');
+      throw Error('Клиент Messenger не запущен или не отвечает. Данные не обновляются.');
+    }
     return response.json();
   }
   async function postAPI(path,body,timeout=6000){
@@ -117,15 +123,15 @@
   function clock(at){const d=new Date(at);return isNaN(d.getTime())?'':d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});}
   const activeStates=['running','waiting_owner','waiting_coordinator'];
   function taskStatus(t){
-    const end=t.finished_at||t.updated_at;
+    const end=t.finished_at||t.updated_at,from=t.started_at||t.created_at;
     switch(t.state){
-      case 'running':return t.pending_launch?['Ждёт запуска','am-status-wait']:['Работает '+minutes(t.created_at),'am-status-run'];
+      case 'running':return t.pending_launch?['Ждёт запуска','am-status-wait']:['Работает '+minutes(from),'am-status-run'];
       case 'waiting_owner':return ['Ждёт вашего ответа','am-status-wait'];
       case 'waiting_coordinator':return ['Ждёт ответа координатора','am-status-run'];
-      case 'done':return ['Завершил за '+minutes(t.created_at,end),'am-muted'];
-      case 'failed':return ['Не прошёл проверку через '+minutes(t.created_at,end),'am-status-bad'];
-      case 'interrupted':return ['Прервался через '+minutes(t.created_at,end),'am-status-bad'];
-      case 'blocked':return ['Заблокирован через '+minutes(t.created_at,end),'am-status-bad'];
+      case 'done':return ['Завершил за '+minutes(from,end),'am-muted'];
+      case 'failed':return ['Не прошёл проверку через '+minutes(from,end),'am-status-bad'];
+      case 'interrupted':return ['Прервался через '+minutes(from,end),'am-status-bad'];
+      case 'blocked':return ['Заблокирован через '+minutes(from,end),'am-status-bad'];
       case 'cancelled':return ['Отменён','am-muted'];
     }
     return [t.state,'am-muted'];
@@ -242,6 +248,36 @@
     renderFeed();
   }
   function roleTag(text){return el('span',text,'am-role');}
+  // Agent text: fenced ``` blocks become code blocks and `inline` spans become
+  // code; everything else stays plain text. Built from DOM nodes, never HTML.
+  function inlineCode(p,text){
+    const parts=text.split(/(`[^`\n]+`)/);
+    for(const part of parts){
+      if(part.length>2&&part.startsWith('`')&&part.endsWith('`'))p.append(el('code',part.slice(1,-1),'am-code'));
+      else if(part)p.append(document.createTextNode(part));
+    }
+    return p;
+  }
+  function richText(text,cls){
+    const box=el('div',undefined,'am-rich'+(cls?' '+cls:''));
+    const pieces=String(text||'').split(/^```[^\n]*\n?/m);
+    pieces.forEach((piece,i)=>{
+      if(i%2===1){box.append(el('pre',piece.replace(/\n$/,''),'am-code-block'));return;}
+      for(const para of piece.split(/\n{2,}/)){if(para.trim())box.append(inlineCode(el('p'),para.replace(/^\n+|\n+$/g,'')));}
+    });
+    return box;
+  }
+  // A tool action as one line: its kind and, shortened, what it acted on.
+  const toolNames={Bash:'Команда',Read:'Чтение',Edit:'Правка',MultiEdit:'Правка',Write:'Запись',Grep:'Поиск',Glob:'Поиск файлов',WebFetch:'Загрузка страницы',WebSearch:'Поиск в интернете',Task:'Подзадача',TodoWrite:'План'};
+  function toolLine(it){
+    const name=toolNames[it.title]||it.title||'Действие';
+    const first=(it.text||'').split('\n')[0];
+    const short=first.length>90?first.slice(0,89)+'…':first;
+    const d=el('details',undefined,'am-tool');const s=el('summary');s.append(el('span',name,'am-tool-name'));
+    if(short)s.append(el('span',' '+short,'am-tool-arg'));
+    d.append(s);if(it.text&&(it.text!==first||first.length>90))d.append(el('pre',it.text));else if(it.text)d.classList.add('am-tool-flat');
+    return d;
+  }
   function renderFeed(){
     const t=feed.task,thread=$('thread'),head=$('task-head');
     const signature=JSON.stringify(feed);if(signature===feedSignature)return;
@@ -258,7 +294,7 @@
       group=null;const g=el('article',undefined,'am-message-group');const row=el('div',undefined,'am-message am-outgoing');
       const body=el('div',undefined,'am-message-body');const meta=el('div',undefined,'am-meta');
       const who=el('strong',author);meta.append(who);if(role)meta.append(roleTag(role));meta.append(el('time',clock(at)));
-      const content=el('div',undefined,'am-message-content');content.append(el('p',text));body.append(meta,content);row.append(body);g.append(row);out.push(g);
+      const content=el('div',undefined,'am-message-content');content.append(richText(text));body.append(meta,content);row.append(body);g.append(row);out.push(g);
     };
     const workerGroup=at=>{
       if(group)return group;
@@ -272,13 +308,10 @@
     for(const it of feed.items){
       if(it.kind==='task'){outgoing(coordLabel,coordProvider,'координатор',it.text,it.at);continue;}
       if(it.kind==='answer'){if(it.author==='owner')outgoing('Вы','owner','',it.text,it.at);else outgoing(coordLabel,coordProvider,'координатор',it.text,it.at);continue;}
-      if(it.kind==='text'){workerGroup(it.at).append(el('p',it.text));continue;}
-      if(it.kind==='tool'){
-        const d=el('details',undefined,'am-tool');const s=el('summary',it.title||'Действие');d.append(s);
-        if(it.text)d.append(el('pre',it.text));workerGroup(it.at).append(d);continue;
-      }
+      if(it.kind==='text'){workerGroup(it.at).append(richText(it.text));continue;}
+      if(it.kind==='tool'){workerGroup(it.at).append(toolLine(it));continue;}
       if(it.kind==='report'||it.kind==='question'){
-        const c=workerGroup(it.at);c.append(el('p',it.text,'am-disposition'));
+        const c=workerGroup(it.at);c.append(richText(it.text,'am-disposition'));
         if(!it.verified)c.append(delivery('Не опубликовано: запуск не прошёл проверку','am-status-bad'));
         else if(it.kind==='report')c.append(delivery('Отчёт отправлен координатору, сессия закрыта','am-status-good'));
         else if(it.audience==='owner')c.append(delivery('Вопрос вам, координатор его не видит','am-status-wait'));
@@ -355,9 +388,13 @@
       const setup=el('button','Настроить');setup.type='button';setup.addEventListener('click',()=>openAgentSetup(provider));
       card.append(tasks,setup);cards.append(card);
     }
+    // Cursor is shown as in the approved mockup; Messenger does not run it.
+    const cursor=el('article',undefined,'am-agent');const ch=el('h3',undefined,'am-provider-heading');ch.append(providerIcon('cursor'),el('span','Cursor'));cursor.append(ch);
+    cursor.append(el('p','Не подключён','am-muted'));const cdl=el('dl');const row=el('div');const dd=el('dd','Пока не поддерживается для задач','am-muted');row.append(el('dt','Программа'),dd);cdl.append(row);cursor.append(cdl);
+    const none=el('button','Задач нет','am-agent-action');none.type='button';none.disabled=true;cursor.append(none);cards.append(cursor);
   }
   function renderNotice(){
-    if(!online){notice(el('p','Клиент Messenger недоступен. Данные не обновляются.'));return;}
+    if(!online){notice(el('p',offlineReason||'Клиент Messenger не запущен или не отвечает. Данные не обновляются.'));return;}
     if(view?.pending_launch>0&&!view.tasks_enabled){notice(el('p','Задачи записаны, но этот клиент не запускает исполнителей: он запущен без разрешения --allow-tasks.'));return;}
     if(view?.pending_launch>0&&view.paused){
       const box=el('div',undefined,'am-notice-row');box.append(el('p','Обработка на паузе: новые задачи не запускаются.'));
@@ -379,13 +416,16 @@
   async function refresh(){
     if(refreshing)return;refreshing=true;
     try{
-      const v=await api('/api/window?project='+encodeURIComponent(project));online=true;
+      let v;
+      try{v=await api('/api/window?project='+encodeURIComponent(project));}
+      catch(error){online=false;offlineReason=error.name==='TimeoutError'||error.name==='TypeError'?'Окно потеряло связь с программой Messenger. Закройте окно и откройте снова.':error.message;renderMachines();renderNotice();return;}
+      online=true;offlineReason='';
       if(!v.projects.some(p=>p.name===project))project=v.project||'';
       const signature=JSON.stringify(v);
       if(signature!==viewSignature){viewSignature=signature;view=v;if(selectedTask&&!v.tasks.some(t=>t.id===selectedTask)){selectedTask='';feed=null;feedSignature='';}render();}
       else{renderMachines();renderNotice();}
       if(selectedTask)await loadFeed();
-    }catch(error){online=false;renderMachines();renderNotice();}
+    }catch(error){notice(el('p','Окно не смогло показать данные: '+error.message));}
     finally{refreshing=false;}
   }
   async function loadDiscovery(){try{const d=await api('/api/discovery',8000);discovery=d.agents||[];renderAgents();}catch(_){}}

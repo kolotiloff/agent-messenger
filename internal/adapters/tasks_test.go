@@ -19,7 +19,7 @@ func TestClaudeTaskArgs(t *testing.T) {
 		t.Fatal(err)
 	}
 	j := joined(args)
-	for _, want := range []string{"\x00--session-id\x00" + testUUID + "\x00", "\x00-p\x00", "mcp__messenger_task__read_task,mcp__messenger_task__report,mcp__messenger_task__ask,mcp__messenger_task__ask_owner", "\"task-mcp\",\"--db\",\"/data/queue.sqlite\",\"--run\",\"run-1\",\"--receipt\",\"r1\""} {
+	for _, want := range []string{"\x00--session-id\x00" + testUUID + "\x00", "\x00-p\x00", "mcp__messenger_task__read_task,mcp__messenger_task__report,mcp__messenger_task__ask,mcp__messenger_task__ask_owner", "\"task-mcp\",\"--db\",\"/data/queue.sqlite\",\"--run\",\"run-1\",\"--receipt\",\"r1\"", "\x00--permission-mode\x00acceptEdits\x00"} {
 		if !strings.Contains(j, want) {
 			t.Errorf("missing %q in %v", want, args)
 		}
@@ -113,7 +113,7 @@ func TestParseTaskEvents(t *testing.T) {
 }
 
 func TestTaskFeedEntries(t *testing.T) {
-	got := TaskFeedEntries("claude", []byte(`{"type":"assistant","message":{"content":[{"type":"text","text":"Reading the code"},{"type":"tool_use","name":"Bash","input":{"command":"go test ./..."}},{"type":"tool_use","name":"mcp__messenger_task__report","input":{"text":"x"}}]}}`))
+	got := TaskFeedEntries("claude", []byte(`{"type":"assistant","message":{"content":[{"type":"text","text":"Reading the code"},{"type":"tool_use","name":"Bash","input":{"command":"go test ./..."}},{"type":"tool_use","name":"mcp__messenger_task__report","input":{"text":"x"}},{"type":"tool_use","name":"ToolSearch","input":{"query":"messenger"}}]}}`))
 	if len(got) != 2 || got[0].Kind != "text" || got[1].Title != "Bash" || got[1].Text != "go test ./..." {
 		t.Fatalf("claude %+v", got)
 	}

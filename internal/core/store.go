@@ -152,6 +152,7 @@ func Open(path string) (*Store, error) {
 	for _, c := range [][3]string{
 		{"replies", "held", "INTEGER NOT NULL DEFAULT 0"},
 		{"coordinator_connections", "client", "TEXT"},
+		{"task_runs", "launched_at", "TEXT"},
 		{"requests", "in_reply_to", "TEXT"},
 		{"requests", "hops", "INTEGER NOT NULL DEFAULT 0"},
 	} {

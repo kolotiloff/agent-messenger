@@ -787,7 +787,7 @@ func (s *Store) BeginTaskRun(run, reservation string) (TaskRun, Task, error) {
 		if err := setRunState(tx, run, "launching", "process may start; never launched again", "intent"); err != nil {
 			return err
 		}
-		_, err = tx.Exec(`UPDATE task_runs SET reservation=? WHERE id=?`, reservation, run)
+		_, err = tx.Exec(`UPDATE task_runs SET reservation=?, launched_at=? WHERE id=?`, reservation, now(), run)
 		r.State, r.Reservation = "launching", reservation
 		return err
 	})

@@ -46,7 +46,9 @@ func runDesktop(root string, args []string) error {
 	}
 	if err != nil || !response.OK || response.Status == nil {
 		// The global supervisor/startup locks arbitrate even if status timed out.
-		// No --allow-model-calls can reach this launch. start always begins paused.
+		// No --allow-model-calls can reach this launch. Task workers are
+		// allowed (D-029): the owner starts them from the coordinator chat and
+		// stops everything with the pause. start always begins paused.
 		executable, cacheErr := os.Executable()
 		if cacheErr != nil {
 			return cacheErr
@@ -59,9 +61,16 @@ func runDesktop(root string, args []string) error {
 		if cacheErr != nil {
 			return cacheErr
 		}
-		if _, _, err = startBackgroundAt(root, []string{"--claude-stream"}, executable); err != nil {
+		if _, _, err = startBackgroundAt(root, []string{"--claude-stream", "--allow-tasks"}, executable); err != nil {
 			return fmt.Errorf("клиент недоступен; другой экземпляр или защитный резерв могут удерживать его. Выберите прежний каталог данных: %w", err)
 		}
+		// D-029: a client the window started itself runs tasks at once. This
+		// launches no model for queued session messages (the window has not
+		// authorized any session yet) and never repeats an uncertain run. If
+		// it fails, the window shows the pause with its "Продолжить" button.
+		resumeCtx, stopResume := context.WithTimeout(ctx, 3*time.Second)
+		_, _ = control.CallContext(resumeCtx, root, control.Request{Cmd: "resume"})
+		stopResume()
 	}
 	home, err := platform.DefaultRoot()
 	if err != nil {

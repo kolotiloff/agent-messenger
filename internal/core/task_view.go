@@ -82,6 +82,14 @@ type WindowTask struct {
 	// PendingLaunch is set while the task's latest run is recorded but not
 	// launched (paused queue or tasks not allowed).
 	PendingLaunch bool `json:"pending_launch,omitempty"`
+	// StartedAt is when the first run was launched; durations count from it.
+	StartedAt string `json:"started_at,omitempty"`
+}
+
+func (s *Store) startedAt(task string) (string, error) {
+	var at sql.NullString
+	err := s.db.QueryRow(`SELECT MIN(launched_at) FROM task_runs WHERE task_id=?`, task).Scan(&at)
+	return at.String, err
 }
 
 func (s *Store) pendingLaunch(task string) (bool, error) {
@@ -208,6 +216,9 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 				return v, err
 			}
 		}
+		if w.StartedAt, err = s.startedAt(t.ID); err != nil {
+			return v, err
+		}
 		v.Tasks = append(v.Tasks, w)
 	}
 	return v, nil
@@ -253,6 +264,9 @@ func (s *Store) TaskFeed(id string) (TaskFeed, error) {
 		if f.Task.PendingLaunch, err = s.pendingLaunch(t.ID); err != nil {
 			return f, err
 		}
+	}
+	if f.Task.StartedAt, err = s.startedAt(t.ID); err != nil {
+		return f, err
 	}
 	f.Items = []FeedItem{{Kind: "task", Author: AudienceCoordinator, Text: t.Text, At: t.CreatedAt, Verified: true}}
 	err = s.tx(func(tx *sql.Tx) error {

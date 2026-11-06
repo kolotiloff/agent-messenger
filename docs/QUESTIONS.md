@@ -27,16 +27,17 @@ Cloud sessions run on Linux. **Options:** the owner runs the steps from an agent
 ### Q-007: How does the managed Codex profile sign in?
 Copying the owner's credentials into the managed profile is not implemented and must not be logged or published. A likely option is a standard login into the managed profile done by the owner. **Blocks:** T-004.
 
-### Q-009: How does the window allow task launches?
-The client launches task workers only with `serve --allow-tasks` (cautious default, T-024). The client the window starts today runs without model permission, so tasks stay recorded but are not launched until the client is started with the flag. **Options:** a confirmed "allow tasks" switch in the window, remembered per data directory; or start the window's client with `--allow-tasks` always; or keep the explicit command. **Chosen for now:** nothing is launched without the explicit flag; the window shows that tasks are waiting for permission. **Blocks:** nothing in code; affects T-027.
-
 ### Q-010: Should workers load Messenger tools without Claude's ToolSearch?
 Claude Code 2.1.319 defers MCP tools behind `ToolSearch` by default. A real model should find `messenger_task` through it, but this was not verified ([report](reports/2026-11-06-task-workers-linux.md)). `ENABLE_TOOL_SEARCH=false` for workers makes them visible at once but changes the owner's normal session behaviour (D-023). **Chosen for now:** Claude's default; check in T-027.
 
-### Q-011: May a Claude worker edit files in the project folder by default?
-In the T-027 run on the Mac, a Claude worker (`claude -p`, worker profile) could not edit `hello.txt`: edits need permission, and a headless run cannot ask. The owner allowed it with the project's `.claude/settings.local.json` (`"allow": ["Edit","Write"]`), and the resumed run succeeded. Codex workers write to the folder through `--sandbox workspace-write`. **Options:** start Claude workers with `--permission-mode acceptEdits` (edits in the project folder, shell commands still under the project's rules), like Codex; or a per-project switch in the window that writes this setting; or keep it to the owner's own settings. **Chosen for now:** the owner's settings (no change). **Recommended:** `acceptEdits` for the worker profile.
-
 ## Answered
+
+### Q-009: How does the window allow task launches?
+The client launches task workers only with `serve --allow-tasks` (cautious default, T-024). The client the window starts today runs without model permission, so tasks stay recorded but are not launched until the client is started with the flag. **Options:** a confirmed "allow tasks" switch in the window, remembered per data directory; or start the window's client with `--allow-tasks` always; or keep the explicit command. **Chosen for now:** nothing is launched without the explicit flag; the window shows that tasks are waiting for permission. **Blocks:** nothing in code; affects T-027. **Answer (2026-11-07):** the window's client always allows tasks and is resumed when the window starts it (D-029).
+
+
+### Q-011: May a Claude worker edit files in the project folder by default?
+In the T-027 run on the Mac, a Claude worker (`claude -p`, worker profile) could not edit `hello.txt`: edits need permission, and a headless run cannot ask. The owner allowed it with the project's `.claude/settings.local.json` (`"allow": ["Edit","Write"]`), and the resumed run succeeded. Codex workers write to the folder through `--sandbox workspace-write`. **Options:** start Claude workers with `--permission-mode acceptEdits` (edits in the project folder, shell commands still under the project's rules), like Codex; or a per-project switch in the window that writes this setting; or keep it to the owner's own settings. **Answer (2026-11-07):** `acceptEdits` for the worker profile (D-028).
 
 ### Q-008: Switch to "one task, one session" with the coordinator in the owner's app?
 Proposal version 3 in [RETHINK.md](RETHINK.md): the coordinator is the owner's own Claude or Codex chat with Messenger connected; every task gets a new worker session that reports and closes; the coordinator waits with a blocking `wait` tool. Replaces versions 1–2, which Codex reviewed in [RETHINK_REVIEW.md](RETHINK_REVIEW.md). It would replace D-005 and D-016 for new work and relax D-004 in part. The owner decides:
