@@ -39,6 +39,7 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - list_agents shows this project's computers, their project folder and agents.
 - start_task starts one task in a new worker session. Give every task a unique op_id and reuse it only to retry the same call after a lost response.
 - wait blocks until something happens in this project's tasks: a report, a question for you, a failure, an interruption, a block or a cancellation. Always pass after = the cursor from the previous wait. When it returns events, act on them (answer questions with answer, tell the owner about reports), then call wait again with the new cursor. When it times out with no events, call wait again without comment.
+- start_task takes an optional model. Leave it out for the agent's default. For Claude use opus for hard work (design, tricky bugs, large refactors), sonnet for ordinary coding, haiku for small mechanical work. For Codex name a model only if the owner told you which names it accepts. Never guess a name: an unknown model fails the run. Tell the owner when you chose a non-default model and why.
 - answer answers a worker's question (pass question_id and a unique op_id); the worker continues in the same session.
 - Never start a task again by yourself after it failed, was interrupted or blocked; tell the owner and let them decide.
 How work is planned and split is decided with the owner under this project's own rules.`
@@ -164,6 +165,7 @@ func coordinatorTools() []map[string]any {
 				"text":     map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxTaskText, "description": "the task: what to do and what to report"},
 				"title":    map[string]any{"type": "string", "maxLength": core.MaxTaskTitle, "description": "short title shown in the window"},
 				"computer": str("computer id from list_agents; default this computer"),
+				"model":    map[string]any{"type": "string", "maxLength": 80, "description": "optional model for the worker, such as opus, sonnet or haiku for claude, or a Codex model name; leave it out to use the agent's default. Never guess a name: an unknown model fails the run."},
 			}, "op_id", "agent", "text")},
 		{"name": "wait", "description": "Block until a new event of this project's tasks arrives after the cursor, or until timeout_seconds. Costs no tokens while blocked. Always pass after.",
 			"inputSchema": obj(map[string]any{
@@ -217,11 +219,12 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 			Text     string `json:"text"`
 			Title    string `json:"title"`
 			Computer string `json:"computer"`
+			Model    string `json:"model"`
 		}
 		if err := strict(&a); err != nil {
 			return nil, err
 		}
-		id, created, err := c.store.StartTask(core.StartTaskRequest{Project: c.project, OpID: a.OpID, Computer: a.Computer, Provider: a.Agent, Title: a.Title, Text: a.Text})
+		id, created, err := c.store.StartTask(core.StartTaskRequest{Project: c.project, OpID: a.OpID, Computer: a.Computer, Provider: a.Agent, Title: a.Title, Text: a.Text, Model: a.Model})
 		if err != nil {
 			return nil, err
 		}

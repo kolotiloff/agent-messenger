@@ -224,6 +224,29 @@ func TestStartTaskIsIdempotentPerOperation(t *testing.T) {
 	}
 }
 
+func TestStartTaskRecordsTheChosenModel(t *testing.T) {
+	f := newTaskFixture(t)
+	id, _, err := f.st.StartTask(StartTaskRequest{Project: "Game", OpID: "op-m", Provider: "claude", Text: "Fix", Model: "opus"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, _ := f.st.TaskByID(id)
+	if task.Model != "opus" {
+		t.Fatalf("model %q", task.Model)
+	}
+	// The same operation with another model is a different task.
+	if _, _, err := f.st.StartTask(StartTaskRequest{Project: "Game", OpID: "op-m", Provider: "claude", Text: "Fix", Model: "sonnet"}); !errors.Is(err, ErrRejected) {
+		t.Fatalf("operation reused with another model: %v", err)
+	}
+	if _, _, err := f.st.StartTask(StartTaskRequest{Project: "Game", OpID: "op-bad", Provider: "claude", Text: "Fix", Model: "--yolo"}); !errors.Is(err, ErrRejected) {
+		t.Fatalf("flag-like model accepted: %v", err)
+	}
+	view, err := f.st.TaskFeed(id)
+	if err != nil || view.Task.Model != "opus" {
+		t.Fatalf("feed model %+v %v", view.Task, err)
+	}
+}
+
 func TestTaskReportIsPublishedOnlyAfterVerification(t *testing.T) {
 	f := newTaskFixture(t)
 	id := f.start(t, "op-1", "claude", "Do it")

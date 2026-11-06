@@ -59,7 +59,14 @@ type TaskRunSpec struct {
 	Session string
 	Resume  bool
 	Profile string
+	// Model is the worker's model; empty keeps the CLI's own default.
+	Model string
 }
+
+// taskModelPattern matches core.ValidTaskModel: a model name never starts
+// with "-" and has no spaces, quotes or "=", so it can not become a flag or
+// break the Codex config override.
+var taskModelPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/\[\]-]{0,79}$`)
 
 func taskMCPArgs(s TaskRunSpec) []string {
 	return []string{"task-mcp", "--db", s.DB, "--run", s.RunID, "--receipt", s.Receipt}
@@ -74,6 +81,9 @@ func TaskArgs(s TaskRunSpec) ([]string, error) {
 	}
 	if s.Profile != ProfileWorker && s.Profile != ProfileMessengerOnly {
 		return nil, errors.New("unknown worker profile")
+	}
+	if s.Model != "" && !taskModelPattern.MatchString(s.Model) {
+		return nil, errors.New("invalid model name")
 	}
 	switch s.Provider {
 	case "claude":
@@ -106,6 +116,9 @@ func claudeTaskArgs(s TaskRunSpec) ([]string, error) {
 	// project folder too. Shell commands still follow the project's rules.
 	if s.Profile == ProfileWorker {
 		args = append(args, "--permission-mode", "acceptEdits")
+	}
+	if s.Model != "" {
+		args = append(args, "--model", s.Model)
 	}
 	args = append(args, "--allowedTools", strings.Join(allowed, ","))
 	if s.Resume {
@@ -149,6 +162,10 @@ func codexTaskArgs(s TaskRunSpec) ([]string, error) {
 	for _, key := range []string{"command", "args", "required", "default_tools_approval_mode"} {
 		encoded, _ := json.Marshal(server[key])
 		args = append(args, "-c", "mcp_servers."+TaskServerName+"."+key+"="+string(encoded))
+	}
+	if s.Model != "" {
+		encoded, _ := json.Marshal(s.Model)
+		args = append(args, "-c", "model="+string(encoded))
 	}
 	if s.Resume {
 		args = append(args, "resume", s.Session, taskPrompt(s.Profile))

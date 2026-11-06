@@ -74,6 +74,7 @@ type WindowTask struct {
 	Agent      string `json:"agent"`
 	State      string `json:"state"`
 	Folder     string `json:"folder"`
+	Model      string `json:"model,omitempty"`
 	CreatedAt  string `json:"created_at"`
 	UpdatedAt  string `json:"updated_at"`
 	FinishedAt string `json:"finished_at,omitempty"`
@@ -207,7 +208,7 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 		return v, err
 	}
 	for _, t := range tasks {
-		w := WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt}
+		w := WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt}
 		if t.OpenQuestion != nil && t.OpenQuestion.Audience == AudienceOwner {
 			w.OwnerQuestion = t.OpenQuestion
 		}
@@ -256,7 +257,7 @@ func (s *Store) TaskFeed(id string) (TaskFeed, error) {
 	if err != nil {
 		return f, err
 	}
-	f.Task = WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt}
+	f.Task = WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt}
 	if t.OpenQuestion != nil && t.OpenQuestion.Audience == AudienceOwner {
 		f.Task.OwnerQuestion = t.OpenQuestion
 	}

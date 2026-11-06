@@ -125,3 +125,31 @@ func TestTaskFeedEntries(t *testing.T) {
 		t.Fatalf("worker tool shown %+v", got)
 	}
 }
+
+func TestTaskModelIsPassedToTheCLI(t *testing.T) {
+	s := taskSpec("claude", ProfileWorker, testUUID, false)
+	s.Model = "opus"
+	args, err := TaskArgs(s)
+	if err != nil || !strings.Contains(joined(args), "\x00--model\x00opus\x00") {
+		t.Fatalf("claude model %v %v", args, err)
+	}
+	s = taskSpec("codex", ProfileWorker, "019a0000-0000-7000-8000-000000000001", true)
+	s.Model = "gpt-5.1-codex"
+	args, err = TaskArgs(s)
+	j := joined(args)
+	if err != nil || !strings.Contains(j, "\x00-c\x00model=\"gpt-5.1-codex\"\x00") || strings.Index(j, "model=") > strings.Index(j, "\x00resume\x00") {
+		t.Fatalf("codex model %v %v", args, err)
+	}
+	// No model means the CLI's own default.
+	args, _ = TaskArgs(taskSpec("claude", ProfileWorker, testUUID, false))
+	if strings.Contains(joined(args), "--model") {
+		t.Fatalf("default model named %v", args)
+	}
+	for _, bad := range []string{"-p", "--dangerously-skip-permissions", "a b", "x\"y", "a=b", strings.Repeat("a", 81)} {
+		s := taskSpec("claude", ProfileWorker, testUUID, false)
+		s.Model = bad
+		if _, err := TaskArgs(s); err == nil {
+			t.Errorf("model %q accepted", bad)
+		}
+	}
+}
