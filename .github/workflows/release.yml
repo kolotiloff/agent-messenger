@@ -74,7 +74,7 @@ jobs:
         run: |
           assets=("$RUNNER_TEMP"/app/release-assets/*)
           [[ ${#assets[@]} == 3 ]] || { echo "Expected exactly 3 release assets" >&2; exit 1; }
-          gh release create "v$VERSION" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --draft \
+          gh release create "v$VERSION" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --draft --prerelease \
             --target "$GITHUB_SHA" --title "Agent Messenger $VERSION" --notes-file "$RUNNER_TEMP/notes.txt"
           gh release edit "v$VERSION" --repo "$GITHUB_REPOSITORY" --draft=false
           gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" --json url,assets --jq '.url, (.assets[].name)'
