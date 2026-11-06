@@ -486,6 +486,9 @@ func (s *Store) CompleteCodexTurn(token string) error {
 		if _, err := tx.Exec(`UPDATE requests SET state='completed' WHERE id=?`, row.requestID); err != nil {
 			return err
 		}
+		if err := publishVerifiedTx(tx, row); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(`UPDATE sessions SET active_token=NULL WHERE key=? AND active_token=?`, row.sessionKey, token); err != nil {
 			return err
 		}

@@ -237,6 +237,9 @@ func (s *Store) CompleteStreamTurn(run string, providerOK bool) error {
 		if _, err := tx.Exec(`UPDATE requests SET state='completed' WHERE id=?`, row.requestID); err != nil {
 			return err
 		}
+		if err := publishVerifiedTx(tx, row); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(`UPDATE stream_runs SET state='idle',current_token=NULL WHERE id=?`, run); err != nil {
 			return err
 		}

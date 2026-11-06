@@ -46,6 +46,7 @@ type Status struct {
 	Queued         int      `json:"queued"`
 	Supervisor     int      `json:"supervisor_pid"`
 	Detail         string   `json:"detail,omitempty"`
+	TasksEnabled   bool     `json:"tasks_enabled,omitempty"`
 }
 
 type StopResult struct {
@@ -217,6 +218,54 @@ func dispatch(handler Handler, request Request) Response {
 			return Response{Error: "timeline unavailable"}
 		}
 		return Response{OK: true, Timeline: raw}
+	case "window-view", "task-feed":
+		reader, ok := handler.(interface {
+			WindowView(string) (any, error)
+			TaskFeed(string) (any, error)
+		})
+		if !ok {
+			return Response{Error: "tasks unsupported; update the background client"}
+		}
+		var value any
+		var err error
+		if request.Cmd == "window-view" {
+			value, err = reader.WindowView(request.Alias)
+		} else {
+			value, err = reader.TaskFeed(request.MessageID)
+		}
+		if err != nil {
+			return Response{Error: err.Error()}
+		}
+		raw, err := json.Marshal(value)
+		if err != nil {
+			return Response{Error: "view unavailable"}
+		}
+		return Response{OK: true, Overview: raw}
+	case "project-create", "project-folder", "task-owner-answer", "agent-set":
+		h, ok := handler.(interface {
+			CreateProject(string, string) error
+			SetProjectFolder(string, string) error
+			OwnerAnswer(string, string, string, string) error
+			SetAgent(string, string, string) error
+		})
+		if !ok {
+			return Response{Error: "tasks unsupported; update the background client"}
+		}
+		var err error
+		switch request.Cmd {
+		case "project-create":
+			err = h.CreateProject(request.Alias, request.Workspace)
+		case "project-folder":
+			err = h.SetProjectFolder(request.Alias, request.Workspace)
+		case "task-owner-answer":
+			err = h.OwnerAnswer(request.MessageID, request.ConversationID, request.Confirmation, request.Text)
+		case "agent-set":
+			err = h.SetAgent(request.Provider, request.CLI, request.Environment)
+		}
+		if err != nil {
+			return Response{Error: err.Error()}
+		}
+		return Response{OK: true}
 	case "overview":
 		reader, ok := handler.(interface{ Overview() (any, error) })
 		if !ok {

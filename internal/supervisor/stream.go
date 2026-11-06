@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/kolotiloff/agent-messenger/internal/adapters"
@@ -25,7 +26,13 @@ type streamExit struct {
 	err  error
 }
 
+// runStream owns one persistent Claude session. The loop counted it in
+// streamOpening; runStream releases that count once its process start has
+// returned, or when it stops before starting one.
 func (s *Supervisor) runStream(parent context.Context, token string, launcher StreamLauncher) {
+	var opened sync.Once
+	open := func() { opened.Do(func() { s.streamOpening.Add(-1) }) }
+	defer open()
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 	s.dispatch.Lock()
@@ -68,6 +75,7 @@ func (s *Supervisor) runStream(parent context.Context, token string, launcher St
 	defer s.removeJob(token)
 	s.dispatch.Unlock()
 	process, err := s.startStream(ctx, launcher, spec, "http://"+ln.Addr().String()+"/mcp", secret)
+	open()
 	s.dispatch.Lock()
 	if err != nil {
 		if errors.Is(err, errNotStarted) {

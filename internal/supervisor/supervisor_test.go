@@ -17,10 +17,21 @@ import (
 
 	"github.com/kolotiloff/agent-messenger/internal/control"
 	"github.com/kolotiloff/agent-messenger/internal/core"
+	"github.com/kolotiloff/agent-messenger/internal/mcp"
 	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
 
 func TestMain(m *testing.M) {
+	if len(os.Args) > 1 && os.Args[1] == "task-mcp" {
+		if err := mcp.TaskMain(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+	if mode := os.Getenv("MESSENGER_TASK_FIXTURE"); mode != "" {
+		os.Exit(taskWorkerFixture(mode))
+	}
 	if len(os.Args) > 1 && os.Args[1] == "app-server" {
 		os.Exit(fakeCodexServer())
 	}

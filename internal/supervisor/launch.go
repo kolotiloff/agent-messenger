@@ -22,6 +22,8 @@ type AdapterLauncher struct {
 	OnlySession  string
 	// AlsoAllowed holds further sessions the window authorized in this run.
 	AlsoAllowed []string
+	// AllowTasks lets this client launch task workers (serve --allow-tasks).
+	AllowTasks bool
 }
 
 // Allows reports whether model calls may run for this alias.

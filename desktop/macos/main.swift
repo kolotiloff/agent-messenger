@@ -34,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         config.websiteDataStore = .nonPersistent()
         config.userContentController.add(self, name: "updates")
         config.userContentController.add(self, name: "appearance")
+        config.userContentController.add(self, name: "folder")
         let savedTheme = UserDefaults.standard.string(forKey: "appearance") ?? "system"
         let safeTheme = ["system", "light", "dark"].contains(savedTheme) ? savedTheme : "system"
         config.userContentController.addUserScript(WKUserScript(source: "window.messengerInitialTheme = '\(safeTheme)'", injectionTime: .atDocumentStart, forMainFrameOnly: true))
@@ -101,12 +102,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         }
         let view = NSMenuItem(); view.title = "Вид"; bar.addItem(view)
         let viewMenu = NSMenu(title: "Вид"); view.submenu = viewMenu
-        let refresh = viewMenu.addItem(withTitle: "Обновить сообщения и статусы", action: #selector(refreshMessages), keyEquivalent: "r"); refresh.target = self
+        let refresh = viewMenu.addItem(withTitle: "Обновить задачи и статусы", action: #selector(refreshMessages), keyEquivalent: "r"); refresh.target = self
         NSApp.mainMenu = bar
     }
     @objc func refreshMessages() {
         guard origin != nil, !web.isHidden else { return }
-        web.evaluateJavaScript("document.getElementById('refresh')?.click()", completionHandler: nil)
+        web.evaluateJavaScript("window.messengerRefresh && window.messengerRefresh()", completionHandler: nil)
     }
     @objc func showWindow() { window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
     @objc func chooseData() {
@@ -192,6 +193,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         guard let data = try? JSONSerialization.data(withJSONObject: status), let json = String(data: data, encoding: .utf8) else { return }
         web?.evaluateJavaScript("window.messengerUpdateStatus && window.messengerUpdateStatus(" + json + ")", completionHandler: nil)
     }
+    // The project folder is chosen in a standard panel; only its path goes to the page.
+    func pickProjectFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true; panel.prompt = "Выбрать"; panel.message = "Папка проекта на этом компьютере"
+        guard let window = window else { return }
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let url = panel.url,
+                  let data = try? JSONSerialization.data(withJSONObject: [url.path]), let json = String(data: data, encoding: .utf8) else { return }
+            self?.web?.evaluateJavaScript("window.messengerFolderPicked && window.messengerFolderPicked(" + json + "[0])", completionHandler: nil)
+        }
+    }
     func applyTheme(_ theme: String) {
         NSApp.appearance = theme == "dark" ? NSAppearance(named: .darkAqua) : theme == "light" ? NSAppearance(named: .aqua) : nil
     }
@@ -200,6 +213,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
               let page = message.frameInfo.request.url, let origin = origin,
               page.scheme == origin.scheme, page.host == origin.host, page.port == origin.port, page.path == "/" else { return }
         if message.name == "updates", message.body as? String == "check" { updates.check() }
+        if message.name == "folder", message.body as? String == "pick" { pickProjectFolder() }
         if message.name == "appearance", let theme = message.body as? String, ["system", "light", "dark"].contains(theme) {
             UserDefaults.standard.set(theme, forKey: "appearance"); applyTheme(theme)
             // A reconnect creates a new document in the same WebView.

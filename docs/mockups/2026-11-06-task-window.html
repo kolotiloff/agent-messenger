@@ -1,0 +1,474 @@
+<title>Окно Messenger</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>/* Product theme and components. The frozen design/v1 concept is not loaded here. */
+:root { color-scheme: light dark; }
+:root[data-theme=light] { color-scheme: light; }
+:root[data-theme=dark] { color-scheme: dark; }
+:root[data-theme=system] { color-scheme: light dark; }
+html, body { height:100%; overflow:hidden; }
+body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff,#191919); }
+#am-concept {
+  --am-bg:light-dark(#fff,#191919);
+  --am-panel:light-dark(#fff,#202020);
+  --am-side:light-dark(#fafafa,#202020);
+  --am-text:light-dark(#303030,#ddd);
+  --am-muted:light-dark(#6b6b6b,#a0a0a0);
+  --am-line:light-dark(#e5e5e5,#333);
+  --am-button:light-dark(#efefef,#404040);
+  --am-button-hover:light-dark(#e3e3e3,#4b4b4b);
+  --am-button-pressed:light-dark(#d8d8d8,#555);
+  --am-disabled:light-dark(#f5f5f5,#282828);
+  --am-disabled-text:light-dark(#929292,#838383);
+  --am-field:light-dark(#f3f3f3,#303030);
+  --am-field-hover:light-dark(#eaeaea,#393939);
+  --am-soft:light-dark(#f3f3f3,#292929);
+  --am-selected:light-dark(#e3e3e3,#404040);
+  --am-active:light-dark(#303030,#ddd);
+  --am-onactive:light-dark(#fff,#202020);
+  --am-menu:light-dark(#fff,#303030);
+  --am-menu-hover:light-dark(#eee,#4b4b4b);
+  --am-composer:light-dark(#fff,#303030);
+  --am-bubble:light-dark(#f3f3f3,#252525);
+  --am-check:light-dark(#287bd7,#67aaf9);
+  --am-good:light-dark(#237449,#8ccda6);
+  --am-warn:light-dark(#8b5d15,#e5bf79);
+  --am-warnbg:light-dark(#fbf4e7,#342d21);
+  --am-shadow:light-dark(#00000018,#00000040);
+  --am-space-1:4px;
+  --am-space-2:8px;
+  --am-space-3:12px;
+  --am-space-4:16px;
+  --am-space-6:24px;
+  --am-scrollbar:6px;
+  --am-scroll-thumb:light-dark(#c9c9c9,#555);
+  --am-scroll-thumb-hover:light-dark(#aaa,#777);
+  --am-pane-inset:var(--am-space-4);
+  --am-nav:204px;
+  height:100%; min-height:0; max-width:1250px; margin:auto;
+  font:400 13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  color:var(--am-text);
+}
+#am-concept * { box-sizing:border-box; }
+/* Fixed width at rest, hover and drag; no expanding native overlay thumb. */
+#am-concept ::-webkit-scrollbar { width:var(--am-scrollbar); height:var(--am-scrollbar); }
+#am-concept ::-webkit-scrollbar-track, #am-concept ::-webkit-scrollbar-corner { background:transparent; }
+#am-concept ::-webkit-scrollbar-thumb { background:var(--am-scroll-thumb); border-radius:999px; }
+#am-concept ::-webkit-scrollbar-thumb:hover { background:var(--am-scroll-thumb-hover); }
+@supports not selector(::-webkit-scrollbar) {
+  #am-concept * { scrollbar-width:thin; scrollbar-color:var(--am-scroll-thumb) transparent; }
+}
+#am-concept [hidden] { display:none!important; }
+#am-concept h2, #am-concept h3, #am-concept p { margin:0; }
+#am-concept h2 { font-size:18px; font-weight:500; line-height:1.35; }
+#am-concept h3 { font-size:14px; font-weight:500; }
+#am-concept .am-muted { color:var(--am-muted); }
+#am-concept .am-small { font-size:12px; }
+#am-concept .am-status-good { color:var(--am-good); }
+#am-concept .am-status-warn { color:var(--am-warn); }
+#am-concept button, #am-concept input, #am-concept textarea, #am-concept select { font:inherit; color:inherit; }
+/* Actions have a persistent fill. Keyboard focus uses a stronger fill, no ring. */
+#am-concept button {
+  appearance:none; display:inline-flex; align-items:center; justify-content:center;
+  gap:6px; padding:7px 11px; border:0; border-radius:8px;
+  background:var(--am-button); color:var(--am-text); font-weight:400;
+  cursor:pointer; outline:none; box-shadow:none;
+}
+#am-concept button:is(:hover,:focus-visible):not(:disabled) { background:var(--am-button-hover); }
+#am-concept button:active:not(:disabled) { background:var(--am-button-pressed); }
+#am-concept button:disabled { background:var(--am-disabled); color:var(--am-disabled-text); cursor:default; }
+#am-concept button.am-primary { background:var(--am-active); color:var(--am-onactive); }
+#am-concept button.am-primary:is(:hover,:focus-visible):not(:disabled) { background:light-dark(#484848,#eee); }
+#am-concept .am-window { height:100%; display:flex; flex-direction:column; overflow:hidden; background:var(--am-bg); border:1px solid var(--am-line); border-radius:12px; }
+#am-concept .am-titlebar { padding:14px 20px; border-bottom:1px solid var(--am-line); display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:var(--am-panel); flex-shrink:0; }
+#am-concept .am-brand { font-size:15px; font-weight:500; }
+#am-concept .am-demo { padding:2px 6px; border-radius:5px; color:var(--am-muted); font-size:11px; background:var(--am-soft); }
+#am-concept .am-shell { display:grid; grid-template-columns:var(--am-nav) minmax(0,1fr); flex:1; min-height:0; }
+#am-concept .am-sidebar { padding:var(--am-space-4) var(--am-space-3) var(--am-space-3); background:var(--am-side); border-right:1px solid var(--am-line); display:flex; flex-direction:column; gap:var(--am-space-6); min-height:0; overflow:hidden; }
+#am-concept .am-workspace { padding:0; flex-shrink:0; }
+#am-concept .am-label { font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--am-muted); margin-bottom:var(--am-space-2); }
+#am-concept .am-machines { display:flex; flex-direction:column; gap:4px; min-height:0; overflow:auto; overscroll-behavior:contain; }
+#am-concept .am-machine { flex-shrink:0; width:100%; text-align:left; justify-content:flex-start; min-height:48px; }
+#am-concept .am-machine .am-dot { margin-left:auto; }
+#am-concept .am-dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--am-muted); flex-shrink:0; }
+#am-concept .am-dot.online { background:var(--am-good); }
+#am-concept .am-side-bottom { display:flex; flex-direction:column; gap:var(--am-space-2); flex-shrink:0; margin-top:auto; padding:var(--am-space-3) 0 0; border-top:1px solid var(--am-line); }
+#am-concept .am-main { min-width:0; min-height:0; padding:var(--am-pane-inset) 0; display:flex; flex-direction:column; gap:12px; overflow:hidden; }
+#am-concept .am-tabs { margin-inline:var(--am-pane-inset); display:flex; align-items:center; gap:5px; border-bottom:1px solid var(--am-line); padding-bottom:var(--am-space-3); flex-shrink:0; }
+#am-concept .am-tab { padding:6px 9px; color:var(--am-muted); white-space:nowrap; }
+#am-concept :is(.am-tab,.am-machine,.am-refresh-icon,.am-panel-toggle,.am-send-icon) { background:transparent; }
+#am-concept :is(.am-tab,.am-machine)[aria-pressed=true] { background:var(--am-selected); color:var(--am-text); }
+#am-concept :is(.am-tab,.am-machine,.am-refresh-icon,.am-panel-toggle,.am-send-icon):is(:hover,:focus-visible):not(:disabled) { background:var(--am-soft); color:var(--am-text); }
+#am-concept :is(.am-tab,.am-machine)[aria-pressed=true]:is(:hover,:focus-visible) { background:var(--am-button-hover); }
+#am-concept .am-refresh-icon { margin-left:auto; width:32px; height:32px; padding:0; font-size:22px; flex-shrink:0; }
+#am-concept .am-screen { flex:1; min-width:0; min-height:0; overflow:auto; scrollbar-gutter:stable; padding-inline:var(--am-pane-inset) calc(var(--am-pane-inset) - var(--am-gutter, 0px)); }
+#am-concept [data-screen=messages] { overflow:hidden; scrollbar-gutter:auto; padding-inline:0; }
+#am-concept .am-chat-layout { display:grid; grid-template-columns:minmax(0,1fr) 240px; gap:16px; height:100%; min-height:0; position:relative; }
+#am-concept .am-chat { display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; }
+#am-concept .am-chat-head { display:flex; align-items:center; gap:12px; padding:0 var(--am-pane-inset) var(--am-space-3); flex-shrink:0; }
+/* Select fields remain visible at rest, including the theme picker. */
+#am-concept .am-select-trigger { display:flex; justify-content:space-between; gap:12px; min-width:0; max-width:100%; text-align:left; padding:8px 10px; background:var(--am-field); border:1px solid var(--am-line); border-radius:9px; }
+#am-concept .am-select-trigger:is(:hover,:focus-visible):not(:disabled) { background:var(--am-field-hover); }
+#am-concept .am-select-trigger[aria-expanded=true] { background:var(--am-field-hover); }
+#am-concept .am-select-trigger:disabled { background:var(--am-disabled); color:var(--am-disabled-text); }
+#am-concept .am-select-value { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#am-concept .am-select-chevron { width:7px; height:7px; border-right:1.5px solid currentColor; border-bottom:1.5px solid currentColor; transform:rotate(45deg) translateY(-2px); margin:0 3px 0 6px; flex-shrink:0; color:var(--am-muted); }
+#am-concept .am-chat-head .am-select-trigger { flex:1; }
+#am-concept .am-theme-setting { display:flex; align-items:center; gap:var(--am-space-3); margin:0; }
+#am-concept .am-theme-setting .am-select-trigger { flex:1; font-size:12px; }
+#am-concept .am-select-menu { position:fixed; inset:auto; margin:0; padding:var(--am-space-2); border:1px solid var(--am-line); border-radius:14px; background:var(--am-menu); color:var(--am-text); box-shadow:0 12px 32px var(--am-shadow); overflow:auto; overscroll-behavior:contain; font:inherit; }
+#am-concept .am-select-menu::backdrop { background:transparent; }
+#am-concept .am-select-option { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 12px; min-height:36px; border-radius:8px; cursor:pointer; outline:none; overflow-wrap:anywhere; }
+#am-concept .am-select-option:is([aria-selected=true],:focus,:hover) { background:var(--am-menu-hover); }
+#am-concept .am-select-option[aria-disabled=true] { color:var(--am-disabled-text); cursor:default; background:transparent; }
+#am-concept .am-select-check { color:var(--am-check); font-size:18px; line-height:1; width:18px; margin-left:auto; flex-shrink:0; }
+/* History scrolls independently; outgoing bubbles never enclose the reply. */
+#am-concept .am-thread { display:flex; flex-direction:column; gap:24px; flex:1; min-height:0; padding:var(--am-space-3) calc(var(--am-pane-inset) - var(--am-gutter, 0px)) var(--am-space-6) var(--am-pane-inset); scrollbar-gutter:stable; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; }
+#am-concept .am-message-group { display:flex; flex-direction:column; gap:var(--am-space-6); min-width:0; }
+#am-concept .am-thread:focus { outline:none; }
+#am-concept .am-message { display:flex; gap:var(--am-space-3); align-items:flex-start; min-width:0; max-width:100%; }
+#am-concept .am-message-body { min-width:0; overflow-wrap:anywhere; }
+#am-concept .am-message p { white-space:pre-wrap; overflow-wrap:anywhere; }
+#am-concept .am-meta { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:6px; }
+#am-concept .am-meta strong { font-weight:500; }
+#am-concept .am-meta time { color:var(--am-muted); font-size:11px; }
+#am-concept .am-message-content { padding:0; line-height:1.65; }
+#am-concept .am-outgoing { align-self:flex-end; max-width:82%; }
+#am-concept .am-outgoing .am-avatar { display:none; }
+#am-concept .am-outgoing .am-meta { justify-content:flex-end; }
+#am-concept .am-outgoing .am-message-content { background:var(--am-bubble); border-radius:18px; padding:12px 16px; }
+#am-concept .am-delivery { margin-top:6px; font-size:11px; color:var(--am-muted); }
+#am-concept .am-delivery.am-status-good { color:var(--am-good); }
+#am-concept .am-delivery.am-status-warn { color:var(--am-warn); }
+#am-concept .am-outgoing .am-delivery { text-align:right; }
+#am-concept .am-avatar { display:flex; align-items:center; justify-content:center; width:24px; height:28px; flex-shrink:0; }
+#am-concept .am-page-actions { padding:0 0 12px; flex-shrink:0; }
+#am-concept .am-page-actions:has(button[hidden]) { display:none; }
+/* A single composer surface. Focus changes only the text caret. */
+#am-concept .am-compose { padding:var(--am-space-3) 0 0; flex-shrink:0; }
+#am-concept .am-compose label { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+#am-concept .am-compose-field { display:flex; align-items:flex-end; gap:4px; background:var(--am-composer); border:1px solid var(--am-line); border-radius:16px; padding-right:6px; box-shadow:0 3px 18px light-dark(#00000009,#00000012); }
+#am-concept .am-compose textarea { display:block; flex:1; min-width:0; width:100%; height:44px; min-height:44px; max-height:140px; overflow:auto; resize:none; padding:12px 16px; border:0; background:transparent; color:var(--am-text); outline:none; box-shadow:none; }
+#am-concept .am-compose textarea::placeholder { color:var(--am-muted); }
+#am-concept .am-send-icon { width:34px; height:34px; flex-shrink:0; margin-bottom:5px; padding:0; font-size:24px; line-height:1; }
+#am-concept .am-send-icon:disabled { background:transparent; color:var(--am-disabled-text); }
+#am-concept .am-compose-foot { margin-top:8px; }
+#am-concept #send-status:empty { display:none; }
+#am-concept #send-status { margin-top:4px; }
+#am-concept #pending-id { overflow-wrap:anywhere; }
+#am-concept .am-outbox { padding:var(--am-space-4); border-radius:12px; background:var(--am-soft); flex-shrink:1; max-height:25%; min-height:0; overflow:auto; }
+#am-concept .am-outbox-item { padding:12px 0; border-top:1px solid var(--am-line); }
+#am-concept .am-outbox-item p { white-space:pre-wrap; overflow-wrap:anywhere; }
+#am-concept .am-outbox-item button { max-width:100%; white-space:normal; }
+#am-concept .am-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:12px; align-items:start; }
+#am-concept .am-agent { padding:var(--am-space-4); background:var(--am-panel); border:1px solid var(--am-line); border-radius:12px; display:flex; flex-direction:column; gap:var(--am-space-3); min-width:0; }
+#am-concept .am-agent h3, #am-concept .am-agent button, #am-concept .am-row-main { overflow-wrap:anywhere; }
+#am-concept .am-agent dl { margin:0; display:grid; gap:12px; }
+#am-concept .am-agent dt { font-size:11px; color:var(--am-muted); }
+#am-concept .am-agent dd { margin:0; overflow-wrap:anywhere; }
+#am-concept .am-agent .am-agent-action { margin-top:auto; }
+#am-concept .am-row { padding:var(--am-space-3) 0; border-bottom:1px solid var(--am-line); display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap; }
+#am-concept .am-row-main { flex:1; min-width:160px; }
+#am-concept .am-settings { max-width:570px; display:flex; flex-direction:column; gap:var(--am-space-4); }
+#am-concept .am-notice { margin-inline:var(--am-pane-inset); padding:var(--am-space-3) var(--am-space-4); border-radius:8px; background:var(--am-soft); overflow-wrap:anywhere; max-height:60px; overflow:auto; flex-shrink:0; }
+#am-concept .am-session-dialog { width:min(680px,calc(100vw - 48px)); max-height:80vh; padding:0; border:1px solid var(--am-line); border-radius:16px; color:var(--am-text); background:var(--am-panel); box-shadow:0 18px 60px var(--am-shadow); }
+#am-concept .am-session-dialog[open] { display:flex; flex-direction:column; }
+#am-concept .am-session-dialog:not([open]) { display:none; }
+#am-concept .am-session-dialog::backdrop { background:#0005; }
+#am-concept .am-dialog-header { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:var(--am-space-4); border-bottom:1px solid var(--am-line); flex-shrink:0; }
+#am-concept .am-dialog-body { min-height:0; overflow:auto; overscroll-behavior:contain; padding:0 var(--am-space-4) var(--am-space-4); }
+#am-concept .am-agent-session { padding:var(--am-space-3) 0; border-top:1px solid var(--am-line); overflow-wrap:anywhere; }
+#am-concept .am-agent-session p { margin:var(--am-space-2) 0; }
+#am-concept .am-dialog-body>.am-agent-session:first-child { border-top:0; }
+#am-concept .am-dialog-body>p:first-child { padding-top:16px; }
+#am-concept .am-provider-heading { display:flex; gap:var(--am-space-2); align-items:center; }
+#am-concept .am-provider-icon { display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; flex-shrink:0; color:var(--am-text); font-size:12px; font-weight:500; }
+#am-concept .am-provider-icon svg { display:block; width:20px; height:20px; fill:currentColor; }
+#am-concept .am-provider-icon[data-provider=claude] { color:#d97757; }
+#am-concept #app-update-button { width:100%; min-height:36px; max-width:100%; margin:0; font-size:12px; padding:var(--am-space-2); text-align:center; }
+body.am-native { padding:0; }
+body.am-native #am-concept { max-width:none; margin:0; }
+body.am-native #am-concept .am-window { border:0; border-radius:0; }
+body.am-native #am-concept .am-titlebar { display:none; }
+@media(max-width:900px) { #am-concept .am-chat-layout { grid-template-columns:minmax(0,1fr) 220px; } }
+@media(max-width:620px) {
+  body { padding:0; }
+  #am-concept .am-shell { grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); }
+  #am-concept .am-sidebar { flex-direction:row; align-items:center; padding:8px 12px; border-right:0; border-bottom:1px solid var(--am-line); gap:12px; overflow:visible; }
+  #am-concept .am-workspace h3 { font-size:12px; }
+  #am-concept .am-workspace .am-label, #am-concept .am-machines, #am-concept #platform { display:none; }
+  #am-concept .am-side-bottom { display:flex; flex-direction:row; align-items:center; margin:0 0 0 auto; border:0; padding:0; gap:8px; min-width:0; }
+  #am-concept .am-theme-setting { margin:0; }
+  #am-concept .am-theme-setting label { display:none; }
+  #am-concept .am-main { --am-pane-inset:12px; padding:12px 0; gap:12px; }
+  #am-concept .am-tabs { gap:2px; }
+  #am-concept .am-tab { padding:7px; }
+  #am-concept .am-cards { grid-template-columns:1fr; }
+  #am-concept .am-outgoing { max-width:90%; }
+}
+@media(max-height:700px) { #am-concept .am-main { gap:12px; padding-block:12px; } #am-concept .am-compose { padding-top:8px; } }
+@media(pointer:coarse) { #am-concept button { min-height:44px; } }
+@media(prefers-reduced-motion:no-preference) { #am-concept button { transition:background-color .12s ease; } }
+
+#am-concept .am-version { font-size:11px; color:var(--am-muted); line-height:1.4; padding:0; }
+
+/* The queue belongs to the conversation, with an independent scroll area. */
+#am-concept .am-chat-layout.am-queue-collapsed { grid-template-columns:minmax(0,1fr); }
+#am-concept .am-panel-toggle { width:32px; height:32px; padding:6px; flex-shrink:0; }
+#am-concept .am-panel-toggle svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.5; }
+#am-concept .am-panel-toggle[aria-expanded=true] { background:var(--am-soft); }
+#am-concept .am-queue-panel { display:flex; flex-direction:column; gap:var(--am-space-3); min-height:0; min-width:0; border-left:1px solid var(--am-line); padding-inline:var(--am-pane-inset); background:var(--am-bg); }
+#am-concept .am-queue-header { display:flex; flex-direction:column; gap:12px; flex-shrink:0; font-size:12px; line-height:1.5; }
+#am-concept #queue-action-status:empty { display:none; }
+#am-concept .am-queue-list { min-height:0; overflow:auto; overscroll-behavior:contain; }
+#am-concept .am-queue-list .am-row { display:flex; flex-direction:column; align-items:stretch; gap:5px; }
+#am-concept .am-queue-list .am-row:first-child { padding-top:0; }
+#am-concept .am-queue-list .am-row-main { min-width:0; }
+@media(max-width:620px) {
+  #am-concept .am-chat-layout { grid-template-columns:minmax(0,1fr); }
+  #am-concept .am-queue-panel { position:absolute; top:0; right:0; bottom:0; z-index:5; width:min(300px,100%); padding:12px; border:1px solid var(--am-line); border-radius:12px; box-shadow:0 8px 24px var(--am-shadow); }
+}
+
+body.am-native #am-concept #refresh { display:none; }
+body.am-native #am-concept .am-panel-toggle { margin-left:auto; }
+
+#am-concept .am-queue-header h3 { display:flex; align-items:center; gap:8px; font-size:13px; }
+#am-concept .am-queue-count { color:var(--am-muted); font-size:12px; font-weight:400; }
+#am-concept .am-queue-controls { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+#am-concept .am-queue-controls button { font-size:12px; padding:5px 9px; flex-shrink:0; }
+#am-concept #queue-action-status:not(:empty) { padding:var(--am-space-3); border-radius:8px; background:var(--am-warnbg); color:var(--am-warn); }
+#am-concept #permission:empty { display:none; }
+#am-concept .am-queue-list { border-top:1px solid var(--am-line); padding-top:var(--am-space-3); font-size:12px; }
+
+/* Overlay scrollbars also need real padding: scrollbar-gutter alone does not reserve it. */
+#am-concept :is(.am-queue-list,.am-dialog-body,.am-select-menu,.am-machines) { scrollbar-gutter:stable; }
+#am-concept .am-queue-list { margin-right:calc(-1 * var(--am-pane-inset)); padding-right:calc(var(--am-pane-inset) - var(--am-gutter, 0px)); }
+#am-concept .am-dialog-body { padding-right:calc(var(--am-space-4) - var(--am-gutter, 0px)); }
+#am-concept .am-select-menu { scrollbar-gutter:stable both-edges; }
+#am-concept .am-machines { margin-right:-12px; padding-right:calc(12px - var(--am-gutter, 0px)); }
+
+/* History owns the full-height scrollbar at the conversation's right edge. */
+#am-concept .am-chat-layout { gap:0; }
+#am-concept .am-chat-body { position:relative; flex:1; min-height:0; --am-footer-height:120px; }
+#am-concept .am-chat-body .am-thread { position:absolute; inset:0; padding-bottom:calc(var(--am-footer-height) + 24px); scroll-padding-bottom:calc(var(--am-footer-height) + 24px); }
+#am-concept .am-chat-footer { position:absolute; bottom:0; left:var(--am-pane-inset); right:var(--am-pane-inset); max-height:65%; overflow:auto; background:var(--am-bg); }
+#am-concept .am-chat-footer .am-outbox { max-height:160px; }
+
+#am-concept .am-setup-body { display:flex; flex-direction:column; gap:var(--am-space-4); padding-top:var(--am-space-4); }
+#am-concept .am-setup-field { display:flex; flex-direction:column; gap:var(--am-space-2); }
+#am-concept .am-setup-field input { width:100%; min-width:0; padding:10px 12px; border:1px solid var(--am-line); border-radius:9px; background:var(--am-field); outline:none; }
+#am-concept .am-setup-field input:focus-visible { background:var(--am-field-hover); }
+#am-concept .am-check-result { display:grid; gap:var(--am-space-3); margin:0; }
+#am-concept .am-check-result dt { color:var(--am-muted); font-size:12px; }
+#am-concept .am-check-result dd { margin:0; overflow-wrap:anywhere; }
+#am-concept #agent-check-status:empty { display:none; }
+
+body{padding:12px max(12px,env(safe-area-inset-right,0px)) 12px max(12px,env(safe-area-inset-left,0px))}
+
+#am-concept .am-task{flex-direction:row!important;align-items:flex-start!important;gap:10px;cursor:pointer;width:100%;text-align:left;background:transparent;justify-content:flex-start;padding:var(--am-space-2) var(--am-space-3);border-radius:8px;border-bottom:0;margin:0 0 var(--am-space-1)}
+#am-concept #task-list .am-label{padding-inline:var(--am-space-3);margin:var(--am-space-4) 0 var(--am-space-2)!important}
+#am-concept .am-task:hover{background:var(--am-soft)}
+#am-concept .am-task.am-task-selected{background:var(--am-selected)}
+#am-concept .am-task .am-row-main{min-width:0}
+#am-concept .am-task-ic{display:flex;padding-top:2px;flex-shrink:0}
+#am-concept .am-task-ic .am-provider-icon,#am-concept .am-task-ic .am-provider-icon svg{width:16px;height:16px}
+#am-concept .am-task-sub{display:block;margin-top:2px;white-space:nowrap}
+#am-concept .am-task-top{display:flex;align-items:baseline;gap:8px}
+#am-concept .am-task-top h3{flex:1;min-width:0}
+#am-concept .am-task-agent{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--am-muted);white-space:nowrap;margin-bottom:2px}
+#am-concept .am-task-agent .am-provider-icon,#am-concept .am-task-agent .am-provider-icon svg{width:13px;height:13px}
+#am-concept .am-task-sub .st-run{color:var(--am-check)}
+#am-concept .am-task-sub .st-ask{color:light-dark(#b57d0a,#e8bf5a)}
+#am-concept .am-task-sub .st-done{color:var(--am-muted)}
+#am-concept .am-task-sub .st-fail{color:var(--am-bad)}
+
+#am-concept .am-tools{margin:8px 0 0;font-size:12px;color:var(--am-muted)}
+#am-concept .am-tools summary{cursor:pointer;list-style:none}
+#am-concept .am-tools summary::before{content:"› ";}
+#am-concept .am-tools[open] summary::before{content:"⌄ ";}
+#am-concept .am-tools ul{margin:6px 0 0;padding-left:14px;display:flex;flex-direction:column;gap:2px;font-family:ui-monospace,Menlo,monospace;font-size:11.5px}
+#am-concept .am-badge{display:inline-block;font-size:11px;border-radius:999px;padding:1px 8px;background:var(--am-soft);color:var(--am-muted);margin-left:6px}
+#am-concept .am-badge.good{background:light-dark(#e9f5ee,#1f2e25);color:var(--am-good)}
+#am-concept .am-badge.warn{background:var(--am-warnbg);color:var(--am-warn)}
+#am-concept .am-folder{display:flex;align-items:center;gap:10px;padding:10px 12px 10px 14px;background:var(--am-panel);border:1px solid var(--am-line);border-radius:12px}
+#am-concept .am-folder-icon{color:var(--am-muted);display:flex}
+#am-concept .am-folder-title{font-weight:500;white-space:nowrap}
+#am-concept .am-folder-path{margin-left:auto;flex:1;text-align:right;direction:rtl;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:var(--am-muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#am-concept .am-folder button{padding:5px 10px;font-size:13px;flex-shrink:0}
+#am-concept .am-folder-warn{display:flex;align-items:center;gap:10px;margin-top:8px;padding:8px 12px;border-radius:10px;background:var(--am-warnbg);color:var(--am-warn);font-size:12.5px}
+#am-concept .am-folder-warn button{margin-left:auto;padding:4px 9px;font-size:12px;flex-shrink:0}
+#am-concept #folder-wrap{margin-bottom:12px}
+#am-concept [data-screen=agents] .am-cards{align-items:stretch}
+#am-concept [data-screen=agents] .am-agent dl{flex:1}
+#am-concept .trust{position:relative;display:flex;align-items:center;gap:6px}
+#am-concept .am-q{width:18px;height:18px;padding:0;border-radius:50%;font-size:11px;line-height:18px;text-align:center;background:var(--am-soft);color:var(--am-muted)}
+#am-concept .am-tip{position:absolute;left:0;top:calc(100% + 6px);z-index:5;width:240px;padding:10px 12px;border-radius:10px;background:var(--am-panel);border:1px solid var(--am-line);box-shadow:0 6px 20px rgb(0 0 0 / .12);font-size:12px;line-height:1.45;color:var(--am-text);display:flex;flex-direction:column;gap:8px}
+#am-concept .am-tip[hidden]{display:none}
+#am-concept .am-tip .chk{align-self:flex-start;padding:4px 9px;font-size:12px}
+#am-concept{--am-bad:light-dark(#a33a2e,#f0a196)}
+#am-concept .am-status-bad{color:var(--am-bad)}
+#am-concept .am-role{margin-left:6px;padding:1px 7px;border-radius:999px;background:var(--am-soft);color:var(--am-muted);font-size:11px;font-weight:400;vertical-align:1px}
+#am-concept .pc-agents{display:flex;flex-direction:column;gap:4px;margin:4px 0 0;width:100%;min-width:0}
+#am-concept .pc-row{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--am-text);min-width:0;white-space:nowrap}
+#am-concept .pc-coord{font-size:11.5px;color:var(--am-muted)}
+#am-concept .pc-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+#am-concept .pc-dot.d-run{background:var(--am-check)}
+#am-concept .pc-dot.d-ask{background:light-dark(#e0a21b,#e8bf5a)}
+#am-concept .pc-dot.d-idle{box-shadow:inset 0 0 0 1.5px var(--am-muted)}
+#am-concept .pc-dot.d-off{background:var(--am-muted);opacity:.5}
+#am-concept .pc-agents.off .pc-row{color:var(--am-muted)}
+#am-concept .am-project{display:flex;flex-direction:column}
+#am-concept .pm-sub{font-size:11.5px;color:var(--am-muted)}
+#am-concept .pm-ask{color:light-dark(#b57d0a,#e8bf5a)}
+#am-concept .np{width:min(480px,calc(100vw - 32px));padding:20px 22px;border:1px solid var(--am-line);border-radius:16px;background:var(--am-menu);color:var(--am-text);box-shadow:0 20px 50px var(--am-shadow)}
+#am-concept .np::backdrop{background:rgb(0 0 0 / .35)}
+#am-concept .np-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+#am-concept .np-head h3{font-size:17px;font-weight:600}
+#am-concept .np-x{width:30px;height:30px;padding:0;font-size:22px;line-height:1;background:transparent;color:var(--am-muted)}
+#am-concept .np-x:hover{background:var(--am-soft);color:var(--am-text)}
+#am-concept .np-lbl{display:block;font-size:13px;margin-bottom:8px}
+#am-concept .np-in{width:100%;padding:11px 13px;border:1px solid light-dark(#dadada,#4a4a4a);border-radius:10px;background:light-dark(#fff,#3a3a3a);color:var(--am-text);font:inherit;outline:none;margin-bottom:18px}
+#am-concept .np-in:focus{border-color:var(--am-muted)}
+#am-concept .np-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+#am-concept .np-row .np-lbl{margin:0}
+#am-concept .np-add{padding:6px 11px;font-size:13px}
+#am-concept .np-box{border:1px dashed light-dark(#cfcfcf,#555);border-radius:10px;padding:14px 14px;color:var(--am-muted);font-size:13px}
+#am-concept .np-box.has{border-style:solid;color:var(--am-text);display:flex;align-items:center;gap:10px}
+#am-concept .np-box .np-path{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,Menlo,monospace;font-size:12.5px}
+#am-concept .np-box .np-rm{width:24px;height:24px;padding:0;background:transparent;color:var(--am-muted);font-size:18px;line-height:1}
+#am-concept .np-err{min-height:18px;margin:8px 0 0;font-size:12px;color:var(--am-bad)}
+#am-concept .np-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
+#am-concept .np-foot button.np-primary:not(:disabled){background:var(--am-active);color:var(--am-onactive)}
+#am-concept .np-foot button.np-primary:not(:disabled):hover{opacity:.9}
+.mock-note{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));font:12px -apple-system,sans-serif;background:light-dark(#303030,#ddd);color:light-dark(#fff,#202020);padding:6px 10px;border-radius:8px;opacity:.85}
+</style>
+<div id="am-concept"><div class="am-window">
+<header class="am-titlebar"><div class="am-brand">Agent Messenger</div><span class="am-demo">Локальный клиент, preview</span></header>
+<div class="am-shell"><aside class="am-sidebar" aria-label="Компьютеры"><div class="am-project"><div class="am-label" style="margin-bottom:6px">Проект</div><button type="button" class="am-select-trigger" id="proj-btn" aria-haspopup="listbox" aria-expanded="false" style="width:100%"><span class="am-select-value" id="proj-val">Пещеры</span><span class="am-select-chevron" aria-hidden="true"></span></button></div><div class="am-workspace"><div class="am-label">Компьютеры</div></div><div class="am-machines" style="margin-top:-16px"><button class="am-machine" data-pc="mac" aria-pressed="true" type="button" style="flex-direction:column;align-items:stretch;gap:2px"><span style="display:flex;align-items:center;gap:8px">MacBook Pro <span class="am-dot online"></span></span><span class="pc-agents" data-agents="mac"></span></button><button class="am-machine" data-pc="win" aria-pressed="false" type="button" style="flex-direction:column;align-items:stretch;gap:2px"><span style="display:flex;align-items:center;gap:8px">Windows ПК <span class="am-dot"></span></span><span class="pc-agents off" data-agents="win"></span></button></div><div class="am-side-bottom"><button id="app-update-button" type="button" hidden="">Проверить обновления</button><p id="app-update-version" class="am-small am-muted" hidden=""></p><div class="am-theme-setting"><label for="theme-select" class="am-small am-muted">Тема</label><select id="theme-select" hidden=""><option value="system">Как в системе</option><option value="light">Светлая</option><option value="dark">Тёмная</option></select><button type="button" class="am-select-trigger" aria-label="Тема" aria-haspopup="listbox" aria-expanded="false" aria-controls="theme-select-menu"><span class="am-select-value">Как в системе</span><span class="am-select-chevron" aria-hidden="true"></span></button></div><p id="app-installed-version" class="am-version" hidden=""></p><p id="connection" hidden="">Клиент доступен</p></div></aside>
+<main class="am-main"><h2 id="screen-title" hidden="">Переписка</h2><p id="checked" hidden="">Данные обновлены 7:09:29 PM</p>
+<nav class="am-tabs" aria-label="Разделы"><button class="am-tab" data-tab="messages" aria-pressed="true">Задачи</button><button class="am-tab" data-tab="agents" aria-pressed="false">Агенты</button><button class="am-tab" data-tab="server" aria-pressed="false">Сервер</button><button id="queue-toggle" class="am-panel-toggle" style="margin-left:auto" type="button" aria-label="Скрыть список задач" title="Скрыть список задач" aria-expanded="true" aria-controls="queue-panel"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"></rect><path d="M15 4v16"></path></svg></button></nav>
+<div id="notice" class="am-notice" role="status" hidden=""></div>
+<section data-screen="messages" class="am-screen" style="--am-gutter: 0px;"><div class="am-chat-layout"><div class="am-chat"><div class="am-chat-head" id="task-head"></div><div class="am-chat-body" style="--am-footer-height: 85.5px;"><div class="am-thread" id="thread" role="region" aria-label="История сообщений" tabindex="0" aria-live="polite" style="--am-gutter: 6px;"></div><div class="am-chat-footer"><div class="am-page-actions"><button id="older" type="button" hidden="">Более ранние письма</button></div><section class="am-outbox" id="outbox-panel" aria-label="Восстановление отправок" hidden=""><h3>Сохранённые отправки</h3><p class="am-small am-muted">После закрытия окна письма восстанавливаются из базы клиента. Автоматических повторов нет.</p><div id="outbox-items"></div></section><div class="am-compose" id="compose"><label for="message-text">Сообщение выбранной сессии</label><div class="am-compose-field"><textarea id="message-text" aria-label="Ответ исполнителю" maxlength="4000" rows="1" placeholder="Ответить исполнителю…"></textarea><button id="send" class="am-send-icon" type="button" aria-label="Отправить" title="Отправить" >↵</button></div><div class="am-compose-foot"><span id="send-hint" class="am-small am-muted">Поле ответа есть, только пока исполнитель ждёт вашего ответа. Ответ уйдёт в его сессию.</span></div><p id="send-status" class="am-small" role="status" aria-live="polite"></p><p id="pending-id" class="am-small am-muted" hidden=""></p></div></div></div></div><aside class="am-queue-panel" id="queue-panel" aria-label="Задачи"><div class="am-queue-header"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><h3>Задачи <span class="am-queue-count" id="task-count"></span></h3><div id="filters"><button type="button" class="am-select-trigger" id="filt-btn" aria-haspopup="listbox" aria-expanded="false" style="font-size:12px;padding:5px 9px"><span class="am-select-value" id="filt-val">Все агенты</span><span class="am-select-chevron" aria-hidden="true"></span></button></div></div><dialog id="np-dialog" class="np" aria-labelledby="np-title"><div class="np-head"><h3 id="np-title">Новый проект</h3><button id="np-close" class="np-x" type="button" aria-label="Закрыть">×</button></div><label class="np-lbl" for="np-name">Имя</label><input id="np-name" class="np-in" type="text" autocomplete="off" placeholder="Например, Гонки"><div class="np-row"><span class="np-lbl">Папка</span><button id="np-pick" class="np-add" type="button">+ Выбрать</button></div><div id="np-box" class="np-box">Выберите папку проекта на этом компьютере.</div><p id="np-err" class="np-err"></p><div class="np-foot"><button id="np-cancel" type="button">Отмена</button><button id="np-save" class="np-primary" type="button" disabled>Создать проект</button></div></dialog>
+<div id="proj-menu" class="am-select-menu" popover="auto" role="listbox" aria-label="Проект"></div><div id="filt-menu" class="am-select-menu" popover="auto" role="listbox" aria-label="Агент"></div></div><div class="am-queue-list" id="task-list" style="border-top:0;padding-top:0"></div></aside></div></section>
+<section data-screen="agents" class="am-screen" hidden="" style="--am-gutter: 6px;"><div id="folder-wrap"><div id="folder-bar" class="am-folder"></div><div id="folder-warn"></div></div><div id="agents" class="am-cards"><article class="am-agent"><h3 class="am-provider-heading"><span class="am-provider-icon" aria-hidden="true" data-provider="claude"><svg viewBox="0 0 24 24" focusable="false"><path d="m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"></path></svg></span><span>Claude Code</span></h3><p class="am-muted">Координатор</p><dl><div><dt>Программа</dt><dd>Найден на компьютере</dd></div><div><dt>Вход в аккаунт</dt><dd>Выполнен</dd></div><div><dt>Рабочая папка</dt><dd class="trust" data-a="claude"></dd></div></dl><button class="am-agent-action" type="button">Задачи: 1 идёт, 2 сегодня</button><button type="button">Настроить</button></article><article class="am-agent"><h3 class="am-provider-heading"><span class="am-provider-icon" aria-hidden="true" data-provider="codex"><svg viewBox="0 0 24 24" focusable="false"><path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"></path></svg></span><span>Codex</span></h3><p class="am-muted">Исполнитель</p><dl><div><dt>Программа</dt><dd>Найден на компьютере</dd></div><div><dt>Вход в аккаунт</dt><dd>Выполнен</dd></div><div><dt>Рабочая папка</dt><dd class="trust" data-a="codex"></dd></div></dl><button class="am-agent-action" type="button">Задачи: 1 идёт, 1 вопрос, 3 сегодня</button><button type="button">Настроить</button></article><article class="am-agent"><h3 class="am-provider-heading"><span class="am-provider-icon" aria-hidden="true" data-provider="cursor"><svg viewBox="0 0 24 24" focusable="false"><path d="M11.503.131 1.891 5.678a.84.84 0 0 0-.42.726v11.188c0 .3.162.575.42.724l9.609 5.55a1 1 0 0 0 .998 0l9.61-5.55a.84.84 0 0 0 .42-.724V6.404a.84.84 0 0 0-.42-.726L12.497.131a1.01 1.01 0 0 0-.996 0M2.657 6.338h18.55c.263 0 .43.287.297.515L12.23 22.918c-.062.107-.229.064-.229-.06V12.335a.59.59 0 0 0-.295-.51l-9.11-5.257c-.109-.063-.064-.23.061-.23"></path></svg></span><span>Cursor</span></h3><p class="am-muted">Не подключён</p><dl><div><dt>Программа</dt><dd>Расположение не определено</dd></div><div><dt>Вход в аккаунт</dt><dd>Не проверен</dd></div><div><dt>Рабочая папка</dt><dd class="trust" data-a="cursor"></dd></div></dl><button class="am-agent-action" type="button" data-empty="true" disabled="">Задач нет</button><button type="button">Настроить</button></article></div></section>
+
+<section data-screen="server" class="am-screen" hidden=""><div class="am-settings"><h3>Сетевой сервер пока не настроен</h3><p>Это локальный клиент одного компьютера. Брокер, подключение других устройств и настройка VPS будут добавлены отдельно.</p><p class="am-muted">Сервер можно будет разместить на выбранном компьютере или VPS.</p></div></section>
+<dialog id="session-dialog" class="am-session-dialog" aria-labelledby="session-dialog-title"><div class="am-dialog-header"><h3 id="session-dialog-title">Сессии</h3><button id="session-dialog-close" type="button" aria-label="Закрыть список сессий">Закрыть</button></div><div id="session-dialog-body" class="am-dialog-body"></div></dialog>
+<dialog id="agent-setup" class="am-session-dialog" aria-labelledby="agent-setup-title"><div class="am-dialog-header"><h3 id="agent-setup-title">Настройка агента</h3><button id="agent-setup-close" type="button">Закрыть</button></div><div class="am-dialog-body am-setup-body">
+<p class="am-muted">Выберите установленную программу и её профиль. Проверка покажет версию и состояние входа, не открывая разговор с моделью.</p>
+<label class="am-setup-field" for="agent-cli">Программа CLI<input id="agent-cli" type="text" autocomplete="off" spellcheck="false" placeholder="Полный путь к программе"></label>
+<label class="am-setup-field" for="agent-profile">Каталог профиля<input id="agent-profile" type="text" autocomplete="off" spellcheck="false" placeholder="Полный путь к профилю"></label>
+<button id="agent-check" type="button">Проверить версию и вход</button><p id="agent-check-status" role="status" aria-live="polite"></p><dl id="agent-check-result" class="am-check-result" hidden=""></dl>
+<p class="am-small am-muted">Вход в аккаунт не подтверждает готовность конкретного разговора. Результат относится только к выбранной программе и профилю.</p>
+<section id="agent-session-setup" class="am-setup-body"><h3>Новая тестовая сессия</h3><p id="agent-session-note" class="am-small am-muted">Создадим отдельный разговор и рабочую папку. Существующие чаты не используются. Создание не отправляет сообщения и не вызывает модель.</p><label class="am-setup-field" for="agent-alias">Название в Messenger<input id="agent-alias" maxlength="128" type="text" autocomplete="off" spellcheck="false"></label><button id="agent-create" type="button">Создать тестовую сессию</button><p id="agent-create-status" role="status" aria-live="polite"></p></section>
+<p id="agent-setup-limit" class="am-small am-muted"></p>
+</div></dialog></main></div></div><div id="theme-select-menu" class="am-select-menu" popover="auto" role="listbox" aria-label="Тема"></div><div id="session-menu" class="am-select-menu" popover="auto" role="listbox" aria-label="Сессия"></div></div><div class="mock-note">Макет с примерными данными</div>
+<script>
+const ICON={"claude": "<span class=\"am-provider-icon\" aria-hidden=\"true\" data-provider=\"claude\"><svg viewBox=\"0 0 24 24\" focusable=\"false\"><path d=\"m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z\"></path></svg></span>", "codex": "<span class=\"am-provider-icon\" aria-hidden=\"true\" data-provider=\"codex\"><svg viewBox=\"0 0 24 24\" focusable=\"false\"><path d=\"M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z\"></path></svg></span>"}, TASKS=[{"id": 1, "pc": "mac", "agent": "codex", "title": "Почистить старые сцены", "status": "ask", "sub": "ждёт вашего ответа", "active": true, "feed": [["c", "21:20", "Найди неиспользуемые сцены и ассеты в Assets/Legacy и убери их из сборки. Перед удалением файлов спроси автора.", "Задача запущена в новой сессии"], ["w", "21:24", "Нашёл 14 сцен и 230 ассетов без ссылок из сборки. Список в Docs/legacy-unused.md.", ["rg -l \"Legacy/\" Assets/Scenes", "Read ProjectSettings/EditorBuildSettings.asset", "Write Docs/legacy-unused.md"]], ["ask", "21:26", "Можно удалить всё из Assets/Legacy, или там есть что-то нужное?"]]}, {"id": 2, "pc": "mac", "agent": "claude", "title": "Починить прыжок персонажа на склонах", "status": "run", "sub": "работает 12 мин", "active": true, "feed": [["c", "21:31", "Персонаж не прыгает на склонах круче 30°. Найди причину в PlayerMovement и исправь, прогони PlayMode-тесты движения.", "Задача запущена в новой сессии"], ["w", "21:36", "Причина: проверка земли берёт угол из Vector3.up, а не из нормали контакта.", ["Read Assets/Scripts/Player/PlayerMovement.cs", "Grep \"slopeLimit\" Assets/Scripts"]], ["qc", "21:38", "Склон считать по нормали коллайдера или по углу из настроек персонажа?"], ["c", "21:39", "По нормали коллайдера, порог бери из настроек PlayerMovement.", "Ответ доставлен в ту же сессию"], ["w", "21:43", "Исправляю проверку и запускаю тесты.", ["Edit Assets/Scripts/Player/PlayerMovement.cs", "Bash unity -runTests -testPlatform PlayMode (идёт)"]], ["run"]]}, {"id": 3, "pc": "mac", "agent": "codex", "title": "Написать тесты для инвентаря", "status": "run", "sub": "работает 4 мин", "active": true, "feed": [["c", "21:39", "Покрой тестами InventoryService: добавление, стак, переполнение. Файлы только в Tests/Inventory.", "Задача запущена в новой сессии"], ["w", "21:41", "Читаю InventoryService и существующие тесты.", ["Read Assets/Scripts/Inventory/InventoryService.cs", "List Tests/"]], ["run"]]}, {"id": 4, "pc": "mac", "agent": "claude", "title": "Обновить документацию по сборке", "status": "done", "sub": "завершил за 35 мин", "active": false, "feed": [["c", "21:05", "Обнови Docs/Build.md под новую версию Unity и шаги сборки для Windows.", "Задача запущена в новой сессии"], ["w", "21:30", "Обновил разделы, проверил шаги на чистой папке.", ["Read Docs/Build.md", "Edit Docs/Build.md", "Bash ./build.sh --dry-run"]], ["rep", "21:40", "Готово. Изменён Docs/Build.md: версия Unity, шаги для Windows, подпись. Не проверено: сборка на самом Windows."]]}, {"id": 5, "pc": "mac", "agent": "codex", "title": "Оптимизировать загрузку уровней", "status": "fail", "sub": "прервался через 22 мин", "active": false, "feed": [["c", "20:50", "Сократи время загрузки уровня 3: асинхронная загрузка, без изменения сцен.", "Задача запущена в новой сессии"], ["w", "21:05", "Перевожу загрузку на SceneManager.LoadSceneAsync.", ["Read Assets/Scripts/Levels/LevelLoader.cs", "Edit Assets/Scripts/Levels/LevelLoader.cs"]], ["fail", "21:12", "Сессия завершилась с ошибкой до отчёта. Автоматически не повторяется: координатор решит, давать ли задачу заново."]]}];
+const $=s=>document.querySelector(s);
+TASKS.forEach(t=>t.proj=t.proj||'caves');
+TASKS.push({id:6,pc:'mac',agent:'codex',title:'Настроить физику машин',status:'run',sub:'работает 8 мин',active:true,proj:'racing',feed:[['c','21:40','Подбери параметры WheelCollider для трёх машин, чтобы не заносило на скорости выше 120. Тестовая сцена Tests/Handling.','Задача запущена в новой сессии'],['w','21:44','Читаю настройки машин и тестовую сцену.',['Read Assets/Cars/CarConfig.asset','Read Assets/Scenes/Tests/Handling.unity']],['run']]});
+TASKS.push({id:7,pc:'mac',agent:'claude',title:'Сделать меню выбора трассы',status:'done',sub:'завершил за 18 мин',active:false,proj:'racing',feed:[['c','21:02','Сделай экран выбора трассы: три трассы, превью, кнопка старта.','Задача запущена в новой сессии'],['w','21:15','Экран готов, проверил переходы.',['Write Assets/UI/TrackSelect.prefab','Edit Assets/Scripts/UI/MainMenu.cs']],['rep','21:20','Готово. Добавлен экран выбора трассы. Не проверено: геймпад.']]});
+const PCN={mac:'MacBook Pro',win:'Windows ПК'};
+let proj='caves';
+const PROJS={caves:{name:'Пещеры'},racing:{name:'Гонки'}};
+const FOLDERS={caves:{mac:{path:'~/Projects/Caves',trust:{claude:true,codex:false}},win:{path:'D:\\Projects\\Caves',trust:null}},racing:{mac:{path:'~/Projects/Racing',trust:{claude:true,codex:true}},win:{path:'',trust:null}}};
+let FOLDER=FOLDERS[proj];
+const base=p=>p?p.split(/[\\/]/).pop():'';
+const FOLD='<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3.6l2 2h7.4A2.5 2.5 0 0 1 21 9.5v8A2.5 2.5 0 0 1 18.5 20h-13A2.5 2.5 0 0 1 3 17.5z"/></svg>';
+const FIX={codex:'Без доверия Codex не загрузит настройки проекта. Откройте эту папку в Codex один раз и подтвердите доверие.',claude:'Без доверия Claude может не подключить серверы проекта. Откройте эту папку в Claude один раз и разрешите их.'};
+const TONE={'Найден на компьютере':'good','Выполнен':'good','Расположение не определено':'warn','Не проверен':'warn','Не найден':'bad','Не выполнен':'bad'};
+function tone(){for(const dd of document.querySelectorAll('[data-screen=agents] .am-agent dd:not(.trust)')){const t=TONE[dd.textContent.trim()];dd.classList.remove('am-status-good','am-status-warn','am-status-bad');if(t)dd.classList.add('am-status-'+t)}}
+const PCA={mac:[['claude','Claude Code: координатор и исполнитель',true],['codex','Codex: исполнитель',false],['cursor','Cursor: исполнитель',false]],win:[['codex','Codex: исполнитель',false]]};
+function sideAgents(){for(const el of document.querySelectorAll('[data-agents]')){const k=el.dataset.agents,off=el.classList.contains('off');el.innerHTML=PCA[k].map(([a,t,c])=>{
+  const ts=TASKS.filter(x=>x.pc===k&&x.agent===a&&x.active);const n=ts.filter(x=>x.status==='run').length,q=ts.some(x=>x.status==='ask');
+  const st=off?['off','Нет связи']:q?['ask','Ждёт вашего ответа']:n?['run',n>1?'Работает над '+n+' задачами':'Работает']:['idle','Свободен'];
+  return '<span class="pc-row" title="'+st[1]+'"><span class="pc-dot d-'+st[0]+'"></span><span class="pc-name">'+({claude:'Claude',codex:'Codex',cursor:'Cursor'})[a]+'</span>'+(c?'<span class="pc-coord">координатор</span>':'')+'</span>'}).join('')}}
+function projects(){tone();
+  for(const el of document.querySelectorAll('.pc-proj')){const f=FOLDER[el.dataset.for];el.textContent=f.path?'Папка: '+base(f.path):'Папка не выбрана'}
+  const f=FOLDER[pc], off=pc==='win';
+  $('#folder-bar').innerHTML='<span class="am-folder-icon">'+FOLD+'</span><span class="am-folder-title">Рабочая папка проекта «'+PROJS[proj].name+'»</span><span class="am-folder-path" title="'+esc(f.path||'')+'"><bdi dir="ltr">'+(f.path?esc(f.path):'не выбрана')+'</bdi></span><button type="button" id="pick"'+(off?' disabled':'')+'>'+(f.path?'Изменить':'Выбрать')+'</button>';
+  const bad=f.trust?['codex','claude'].filter(a=>!f.trust[a]):[];
+  for(const dd of document.querySelectorAll('.trust')){const a=dd.dataset.a;
+    if(a==='cursor'||!f.path){dd.textContent='—';continue}
+    if(!f.trust){dd.innerHTML='<span class="am-status-warn">Не проверено</span>';continue}
+    dd.innerHTML=f.trust[a]?'<span class="am-status-good">Доверяет</span>':'<span class="am-status-bad">Не доверяет</span><button type="button" class="am-q" aria-label="Как исправить" aria-expanded="false">?</button><span class="am-tip" hidden>'+FIX[a]+'<button type="button" class="chk">Проверить снова</button></span>'}
+}
+
+let pc='mac', filt='all', sel=1;
+const DOT={ask:'background:light-dark(#e0a21b,#e8bf5a)',run:'background:var(--am-check)',done:'background:var(--am-good)',fail:'background:light-dark(#a33a2e,#f0a196)'};
+const NAME={claude:'Claude Code',codex:'Codex'};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function list(){
+  const items=TASKS.filter(t=>t.pc===pc&&t.proj===proj&&(filt==='all'||t.agent===filt));
+  $('#task-count').textContent='('+items.length+')';
+  if(!items.length){$('#task-list').innerHTML='<p class="am-small am-muted" style="padding-top:12px">'+(pc==='win'?'Компьютер не в сети. Задач нет.':'Нет задач.')+'</p>';return items}
+  let h='';
+  for(const [g,act] of [['Активные',true],['Завершённые',false]]){
+    const part=items.filter(t=>t.active===act); if(!part.length) continue;
+    h+='<p class="am-label" style="margin:14px 0 6px">'+g+'</p>';
+    for(const t of part) h+='<button type="button" class="am-row am-task'+(t.id===sel?' am-task-selected':'')+'" data-id="'+t.id+'"><span class="am-row-main"><span class="am-task-agent">'+ICON[t.agent]+NAME[t.agent]+'</span><h3>'+esc(t.title)+'</h3><span class="am-small am-task-sub"><span class="st-'+t.status+'">'+t.sub[0].toUpperCase()+t.sub.slice(1)+'</span></span></span></button>';
+  }
+  $('#task-list').innerHTML=h; return items;
+}
+function msgOut(who,t,text,d,ic){return '<article class="am-message-group"><div class="am-message am-outgoing"><div class="am-avatar">'+(ic||'')+'</div><div class="am-message-body"><div class="am-meta"><strong>'+who+'</strong><time>'+t+'</time></div><div class="am-message-content"><p>'+esc(text)+'</p></div>'+(d?'<div class="am-delivery am-status-good">'+d+'</div>':'')+'</div></div></article>'}
+function msgIn(agent,t,text,extra,tools){
+  const tl=tools?'<details class="am-tools"><summary>Использовано: '+tools.length+' '+(tools.length===1?'действие':'действия')+'</summary><ul>'+tools.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul></details>':'';
+  return '<article class="am-message-group"><div class="am-message"><div class="am-avatar">'+ICON[agent]+'</div><div class="am-message-body"><div class="am-meta"><strong>'+NAME[agent]+'<span class="am-role">исполнитель</span></strong><time>'+t+'</time></div><div class="am-message-content"><p>'+esc(text)+'</p></div>'+tl+(extra||'')+'</div></div></article>'}
+function feed(){
+  const t=TASKS.find(x=>x.id===sel);
+  if(PROJS[proj].fresh){$('#task-head').innerHTML='';$('#compose').hidden=true;$('#thread').innerHTML='<div class="am-settings" style="max-width:520px;margin:40px auto 0"><h3>Подключите координатора</h3><p class="am-muted">Откройте папку <b>'+esc(PROJS[proj].path)+'</b> в приложении Claude, вкладка Code, «Этот компьютер», и один раз выполните в терминале в этой папке:</p><pre style="margin:0;padding:10px 12px;border-radius:9px;background:var(--am-field);font:12px ui-monospace,Menlo,monospace;white-space:pre-wrap">claude mcp add --scope local messenger -- messenger mcp --project &quot;'+esc(PROJS[proj].name)+'&quot;</pre><button type="button" id="np-copy" style="align-self:flex-start">Скопировать команду</button><p class="am-small am-muted">Когда чат подключится, здесь появятся задачи проекта.</p><button type="button" id="np-sim" style="align-self:flex-start">Показать, как будет после подключения</button></div>';return}
+if(!t||t.pc!==pc||t.proj!==proj||(filt!=='all'&&t.agent!==filt)){$('#task-head').innerHTML='';$('#thread').innerHTML='<p class="am-muted">Выберите задачу справа.</p>';$('#compose').hidden=true;return}
+  const state={ask:'<span class="am-status-warn">Ждёт вашего ответа</span>',run:'Работает',done:'<span class="am-status-good">Готово в 21:40, работал 35 мин</span>',fail:'<span class="am-status-warn">Не получилось в 21:12, работал 22 мин</span>'}[t.status];
+  $('#task-head').innerHTML='<div style="display:flex;flex-direction:column;gap:2px;min-width:0"><h3 style="font-size:15px">'+esc(t.title)+'</h3><p class="am-small am-muted">'+NAME[t.agent]+' на '+PCN[t.pc]+', папка «'+esc(base(FOLDERS[t.proj][t.pc].path))+'»</p><p class="am-small">'+state+'</p></div>';
+  let h='';
+  for(const m of t.feed){
+    if(m[0]==='c') h+=msgOut('Claude Code<span class="am-role">координатор</span>',m[1],m[2],m[3],ICON.claude);
+    else if(m[0]==='o') h+=msgOut('Вы',m[1],m[2],'Ответ доставлен в ту же сессию');
+    else if(m[0]==='w') h+=msgIn(t.agent,m[1],m[2],'',m[3]);
+    else if(m[0]==='qc') h+=msgIn(t.agent,m[1],m[2],'<div class="am-delivery am-status-warn">Вопрос координатору</div>');
+    else if(m[0]==='ask') h+=msgIn(t.agent,m[1],m[2],'<div class="am-delivery am-status-warn">● Вопрос вам, координатор его не видит</div>');
+    else if(m[0]==='rep') h+=msgIn(t.agent,m[1],m[2],'<div class="am-delivery am-status-good">Отчёт отправлен координатору, сессия закрыта</div>');
+    else if(m[0]==='fail') h+='<p class="am-small am-status-warn" style="align-self:center">'+esc(m[2])+'</p>';
+    else if(m[0]==='run') h+='<p class="am-small am-muted">Исполнитель работает…</p>';
+  }
+  $('#thread').innerHTML=h;
+  $('#compose').hidden=t.status!=='ask';
+}
+function pmenu(){$('#proj-menu').innerHTML=Object.entries(PROJS).map(([k,v])=>{const ts=TASKS.filter(t=>t.proj===k&&t.active);if(v.fresh)return '<div class="am-select-option" role="option" tabindex="-1" data-p="'+k+'" aria-selected="'+(k===proj)+'"><span style="display:flex;flex-direction:column;flex:1;gap:1px"><span>'+esc(v.name)+'</span></span>'+(k===proj?'<span class="am-select-check">✓</span>':'')+'</div>';const q=ts.filter(t=>t.status==='ask').length,r=ts.filter(t=>t.status==='run').length;
+  const dots=(q?'<span class="pc-dot d-ask" title="Ждёт вашего ответа"></span>':'')+(r?'<span class="pc-dot d-run" title="Работает"></span>':'');
+  return '<div class="am-select-option" role="option" tabindex="-1" data-p="'+k+'" aria-selected="'+(k===proj)+'"><span style="flex:1">'+esc(v.name)+'</span>'+(k===proj?'<span class="am-select-check" style="margin-left:6px">✓</span>':'<span style="width:24px"></span>')+'</div>'}).join('')+'<div class="am-select-option" role="option" tabindex="-1" data-new="1" style="border-top:1px solid var(--am-line);border-radius:0 0 8px 8px;margin-top:4px;color:var(--am-muted)">Новый проект…</div>'}
+function render(){sideAgents();const items=list(); if(!items.find(x=>x.id===sel)&&items.length) sel=items[0].id; list(); feed()}
+$('#task-list').addEventListener('click',e=>{const b=e.target.closest('[data-id]');if(!b)return;sel=+b.dataset.id;render()});
+const FOPT=[['all','Все агенты'],['claude','Claude Code'],['codex','Codex']];
+function fmenu(){$('#filt-menu').innerHTML=FOPT.map(([k,l])=>'<div class="am-select-option" role="option" tabindex="-1" data-f="'+k+'" aria-selected="'+(k===filt)+'">'+(k==='all'?'':ICON[k])+'<span style="flex:1">'+l+'</span>'+(k===filt?'<span class="am-select-check">✓</span>':'')+'</div>').join('')}
+$('#filt-btn').addEventListener('click',()=>{fmenu();const m=$('#filt-menu'),r=$('#filt-btn').getBoundingClientRect();m.style.top=(r.bottom+4)+'px';m.style.left=Math.max(8,r.right-200)+'px';m.style.width='200px';m.togglePopover();});
+$('#filt-menu').addEventListener('toggle',e=>$('#filt-btn').setAttribute('aria-expanded',e.newState==='open'));
+$('#filt-menu').addEventListener('click',e=>{const o=e.target.closest('[data-f]');if(!o)return;filt=o.dataset.f;$('#filt-val').textContent=FOPT.find(x=>x[0]===filt)[1];$('#filt-menu').hidePopover();render()});
+document.querySelectorAll('[data-pc]').forEach(b=>b.addEventListener('click',()=>{pc=b.dataset.pc;document.querySelectorAll('[data-pc]').forEach(x=>x.setAttribute('aria-pressed',x===b));render();projects()}));
+document.querySelectorAll('.am-tabs [data-tab]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.am-tabs [data-tab]').forEach(x=>x.setAttribute('aria-pressed',x===b));document.querySelectorAll('[data-screen]').forEach(s=>s.hidden=s.dataset.screen!==b.dataset.tab)}));
+function send(){const ta=$('#message-text');const v=ta.value.trim();if(!v)return;const t=TASKS.find(x=>x.id===sel);t.feed.push(['o',new Date().toTimeString().slice(0,5),v]);t.feed.push(['run']);t.status='run';t.sub='работает';ta.value='';render()}
+$('#send').addEventListener('click',send);
+$('#message-text').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});
+document.addEventListener('click',e=>{const q=e.target.closest('.am-q');document.querySelectorAll('.am-tip').forEach(t=>{const mine=q&&t.previousElementSibling===q;if(!e.target.closest('.am-tip')){t.hidden=mine?!t.hidden:true;t.previousElementSibling.setAttribute('aria-expanded',!t.hidden)}})});
+document.querySelector('[data-screen=agents]').addEventListener('click',e=>{const f=FOLDER[pc];
+  if(e.target.closest('.chk')){f.trust={claude:true,codex:true};projects()}
+  if(e.target.id==='pick'){f.path=f.path==='~/Projects/Tools'?'~/Projects/Game':'~/Projects/Tools';f.trust={claude:true,codex:false};projects()}});
+$('#proj-btn').addEventListener('click',()=>{pmenu();const m=$('#proj-menu'),r=$('#proj-btn').getBoundingClientRect();m.style.top=(r.bottom+4)+'px';m.style.left=r.left+'px';m.style.width=Math.max(220,r.width)+'px';m.togglePopover()});
+$('#proj-menu').addEventListener('toggle',e=>$('#proj-btn').setAttribute('aria-expanded',e.newState==='open'));
+$('#proj-menu').addEventListener('click',e=>{if(e.target.closest('[data-new]')){$('#proj-menu').hidePopover();$('#np-name').value='';npPath='';$('#np-err').textContent='';npBox();$('#np-dialog').showModal();return}const o=e.target.closest('[data-p]');if(!o)return;proj=o.dataset.p;FOLDER=FOLDERS[proj];$('#proj-val').textContent=PROJS[proj].name;$('#proj-menu').hidePopover();sel=0;render();projects()});
+const FOLDICON='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3.6l2 2h7.4A2.5 2.5 0 0 1 21 9.5v8A2.5 2.5 0 0 1 18.5 20h-13A2.5 2.5 0 0 1 3 17.5z"/></svg>';
+let npPath='';
+function npCheck(){$('#np-save').disabled=!($('#np-name').value.trim()&&npPath)}
+function npBox(){const b=$('#np-box');if(npPath){b.className='np-box has';b.innerHTML='<span style="display:flex;color:var(--am-muted)">'+FOLDICON+'</span><span class="np-path">'+esc(npPath)+'</span><button type="button" class="np-rm" id="np-rm" aria-label="Убрать папку">×</button>';$('#np-pick').textContent='Изменить'}else{b.className='np-box';b.textContent='Выберите папку проекта на этом компьютере.';$('#np-pick').textContent='+ Выбрать'}npCheck()}
+$('#np-close').addEventListener('click',()=>$('#np-dialog').close());
+$('#np-cancel').addEventListener('click',()=>$('#np-dialog').close());
+$('#np-name').addEventListener('input',npCheck);
+$('#np-pick').addEventListener('click',()=>{npPath='~/Projects/Farm';if(!$('#np-name').value)$('#np-name').value='Ферма';$('#np-err').textContent='';npBox()});
+$('#np-box').addEventListener('click',e=>{if(e.target.id==='np-rm'){npPath='';npBox()}});
+$('#np-save').addEventListener('click',()=>{const n=$('#np-name').value.trim(),pth=npPath;
+  if(Object.values(PROJS).some(x=>x.name===n)){$('#np-err').textContent='Такой проект уже есть.';return}
+  const k='p'+Date.now();PROJS[k]={name:n,fresh:true,path:pth};FOLDERS[k]={mac:{path:pth,trust:{claude:true,codex:false}},win:{path:'',trust:null}};
+  proj=k;FOLDER=FOLDERS[k];$('#proj-val').textContent=n;$('#np-dialog').close();render();projects()});
+document.addEventListener('click',e=>{if(e.target.id==='np-copy'){e.target.textContent='Скопировано'}if(e.target.id==='np-sim'){PROJS[proj].fresh=false;render()}});
+render();projects();
+</script>

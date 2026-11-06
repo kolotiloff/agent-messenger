@@ -13,18 +13,21 @@ How to use it:
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
-| — | Nothing in progress. Next: T-009 (resume a Codex thread with a new owner). | | |
+| T-027 | Next: Mac acceptance with real models (owner). Code for T-022–T-029 is on `claude/task-core-night`, PR #36 into `claude/vigilant-darwin-34d88b`. | agent + owner | |
 
 ## Next
 
+Order of the task model (D-021), following the review's first slice ([RETHINK_REVIEW_V3.md](RETHINK_REVIEW_V3.md) section 5).
+
 | ID | Task | Owner | Notes |
 |---|---|---|---|
+| T-027 | Mac acceptance with real models in `~/AgentMessengerTest/`: a Claude-app coordinator, one Claude and one Codex worker, a clarification round, two full tasks. | agent + owner | after T-024–T-026 |
+| T-028 | Close or migrate existing persistent sessions and state, then retire the persistent Claude stream and Codex app-server owners. | agent | after T-027 |
 
 ## Backlog
 
 | ID | Task | Owner | Notes |
 |---|---|---|---|
-| T-009 | Resume a saved Codex thread with a new owner after a client or app-server restart (`thread/resume`), with the same safety rules; then an acceptance run on the Mac. | agent + owner | |
 | T-010 | Safely terminate a CLI and release its session within the same Mac boot. This is an open research problem: release by timer, empty process group or one exited PID is not allowed. | agent | see [RELEASE_PLAN.md](RELEASE_PLAN.md) |
 | T-011 | Switch the version of a running background client, plus full rollback. | agent | see [UPDATES.md](UPDATES.md) |
 | T-012 | Persistent Cursor adapter. | agent | blocked: Q-004 |
@@ -40,6 +43,14 @@ How to use it:
 
 | ID | Task | PR |
 |---|---|---|
+| T-029 | Task window: project switcher, computers with agents, three-line task list, task feed, owner answers, agent cards with trust. Mac app not yet checked. | [PR #36](https://github.com/kolotiloff/agent-messenger/pull/36) |
+| T-026 | Worker profile, trust check, runs on real CLIs with fake models ([report](reports/2026-11-06-task-workers-linux.md)). | [PR #36](https://github.com/kolotiloff/agent-messenger/pull/36) |
+| T-025 | Coordinator MCP with `wait` (`messenger coordinator --project`), skill. | [PR #36](https://github.com/kolotiloff/agent-messenger/pull/36) |
+| T-024 | Task core on one computer: projects and folders, tasks, runs, worker tools, verification, events ([TASK_MODEL.md](TASK_MODEL.md)). | [PR #36](https://github.com/kolotiloff/agent-messenger/pull/36) |
+| T-022 | Publish a reply only after verification (held replies and sends). | [PR #36](https://github.com/kolotiloff/agent-messenger/pull/36) |
+| T-023 | Coordinator wait pilot ([experiments/wait_probe](../experiments/wait_probe/README.md)): passed in the Claude app on the Mac ([report](reports/2026-11-06-wait-pilot-claude-mac.md)). Codex as coordinator deferred by the owner. | branch `claude/vigilant-darwin-34d88b` |
+| T-021 | Rethink the product: [RETHINK.md](RETHINK.md) v1–v3, two Codex reviews, owner decision Q-008 → D-021–D-023. | branch `claude/vigilant-darwin-34d88b` |
+| T-009 | Superseded by D-021: persistent Codex threads are no longer resumed for new work. | — |
 | T-004 | First real Codex run on the Mac from the window: two messages answered and verified in one app-server ([report](reports/2026-11-06-codex-window-mac.md)). Exact resume moved to T-009. | [PR #33](https://github.com/kolotiloff/agent-messenger/pull/33) |
 | T-006 | Codex in the window: setup dialog creates a Codex session and grants model calls for it only (`/api/setup-codex` → `setup-codex`). | [PR #32](https://github.com/kolotiloff/agent-messenger/pull/32) |
 | T-020 | After the reboot incident: `recover-missing-root` (proven reboot, missing directory), the window refuses temporary data directories, and an acceptance-run rule in AGENTS.md. | [PR #31](https://github.com/kolotiloff/agent-messenger/pull/31) |
