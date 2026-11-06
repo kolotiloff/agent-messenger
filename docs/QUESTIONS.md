@@ -27,6 +27,9 @@ Cloud sessions run on Linux. **Options:** the owner runs the steps from an agent
 ### Q-007: How does the managed Codex profile sign in?
 Copying the owner's credentials into the managed profile is not implemented and must not be logged or published. A likely option is a standard login into the managed profile done by the owner. **Blocks:** T-004.
 
+### Q-008: Should a reply to an automatically delivered reply be routed again?
+Today every reply goes back to its sender, so "thanks" bounces between agents until the limit of 3 steps. **Proposal:** do not route a reply when the message it answers was itself a routed reply; agents continue only with an explicit `send`. **Blocks:** nothing; it saves tokens.
+
 ## Answered
 
 None yet.

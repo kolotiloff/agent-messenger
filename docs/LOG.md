@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-06 — Claude Code (Claude ↔ Codex on the Mac)
+
+- Released preview.22 from CI. On the Mac, Claude used `send` to ask Codex what day it is, and Codex's answer came back to Claude. All turns were verified. An extra acknowledgment turn led to Q-008.
+
 ## 2026-11-06 — Claude Code (T-004 on the Mac)
 
 - Released preview.21 from CI. The owner updated, logged in to a separate Codex profile and created a Codex session from the window. Real Codex answered both messages, with both turns verified.
