@@ -104,7 +104,7 @@
     $('pending-id').hidden=!pending;
     $('pending-id').textContent=pending?'Идентификатор письма: '+pending.message_id:'';
     $('queue-action').disabled=!lastStatus || queueBusy || sending;
-    $('queue-action').textContent=queueBusy?'Применяем…':lastStatus && lastStatus.paused?'Возобновить очередь':'Приостановить очередь';
+    $('queue-action').textContent=queueBusy?'…':lastStatus && lastStatus.paused?'Продолжить':'Пауза';
     $('outbox-panel').hidden=!outboxItems.length;
     $('send-hint').textContent=outboxItems.length && !pending?'Сначала разберите сохранённые отправки выше, чтобы случайно не создать повторное задание.':!lastStatus?'Проверяем готовность агента…':lastStatus.cli_launch==='not-authorized'?'Агент пока не запущен. Сообщение сохранится в очереди.':lastStatus.paused?'Очередь на паузе. Сообщение будет ждать.':'Сообщение будет передано агенту.';
     root.querySelectorAll('[data-outbox-action]').forEach(b=>b.disabled=!lastStatus || sending || queueBusy || !!pending || pendingBroken);
@@ -184,9 +184,9 @@
     try {
       const result=await postAPI('/api/'+action,{});
       if(result.action!==action)throw Error('unconfirmed');
-      $('queue-action-status').textContent=action==='pause'?'Обработка новых писем приостановлена. Текущая работа продолжается.':'Очередь возобновлена. Разрешение запуска моделей не изменено.';
+      $('queue-action-status').textContent='';
     } catch (_) {
-      $('queue-action-status').textContent='Команда не подтверждена. Обновляем фактическое состояние; повтор автоматически не выполняется.';
+      $('queue-action-status').textContent='Изменение не подтверждено. Повторите после проверки состояния.';
     } finally {lastStatus=null;queueBusy=false;actionControls();}
     await refresh();
   }
@@ -256,7 +256,7 @@
       main.append(el('h3',alias||names[s.provider]||s.provider),el('p','В очереди: '+s.queued+' · Неопределённые в истории: '+s.uncertain,'am-small am-muted'));
       row.append(main,el('span',s.decision_pending?'Есть решение по сессии':s.owner_retained?'Владелец удерживается':'Без владельца','am-small'));queue.append(row);
     }
-    if(!queue.children.length)queue.append(el('p',overview?'Очередь пуста.':'Данные клиента недоступны.','am-muted'));
+    if(!queue.children.length)queue.append(el('p',overview?'Нет ожидающих писем':'Данные клиента недоступны.','am-muted'));
     if(overview?.truncated) {cards.append(el('p','Список сессий неполный.','am-status-warn'));queue.append(el('p','Список сессий неполный.','am-status-warn'));}
   }
   function showSessions(provider) {
@@ -342,8 +342,8 @@
       // retry available; it uses the same ID. Other stored sends are reviewed first.
       $('connection').textContent='Клиент доступен';$('connection-dot').classList.add('online');$('connection-dot').parentElement.title='Этот компьютер подключён';
       $('checked').textContent='Данные обновлены '+new Date().toLocaleTimeString();$('refresh').title='Обновить сообщения и статусы · '+$('checked').textContent;
-      $('processing').textContent=status.paused?'Новые письма на паузе':'Очередь не на паузе';
-      $('permission').textContent=status.cli_launch==='not-authorized'?'Запуск моделей не разрешён.':'Разрешение запуска: '+status.cli_launch;
+      $('processing').textContent=status.paused?'На паузе':'Приём включён';
+      $('permission').textContent=status.cli_launch==='not-authorized'?'Письма будут ждать запуска агента.':'';
       const select=$('session');select.replaceChildren();
       for(const s of view.sessions)for(const alias of s.aliases){const option=el('option',(names[s.provider]||s.provider)+' · '+alias);option.value=alias;option.dataset.provider=s.provider;select.append(option);}
       if(pending && !Array.from(select.options).some(o=>o.value===pending.alias)){const option=el('option',pending.alias);option.value=pending.alias;select.append(option);}
