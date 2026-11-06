@@ -4,11 +4,11 @@ This file is the shared memory between tools (Claude Code, Cursor, Codex). Whoev
 
 ## Current state
 
-Updated 2026-11-06 by Claude Code.
+Updated 2026-11-06 by Codex (T-021 proposal review; product state below retained).
 
 - **`main` ([PR #29](https://github.com/kolotiloff/agent-messenger/pull/29)):** T-001 and T-002 are done. `create-codex-session` creates a Codex thread owned by a live app-server, and queued messages to its alias are delivered one turn at a time in that same process. The turns use the bound `read_current`/`reply` tools. Details: [CODEX_ADAPTER_NEXT.md](CODEX_ADAPTER_NEXT.md), [setup report](reports/2026-11-06-codex-setup-linux.md), [delivery report](reports/2026-11-06-codex-delivery-linux.md).
 - **Verified:** only on Linux, with a fake app-server. No real Codex model turn has run yet.
-- **Under review:** [RETHINK.md](RETHINK.md) proposes one-shot runs over saved conversations instead of persistent processes (branch `claude/vigilant-darwin-34d88b`, T-021, Q-008). Codex reviews it; the owner decides. Until then all current rules stay in force and T-009 waits.
+- **Review complete; owner decision pending:** [RETHINK_REVIEW.md](RETHINK_REVIEW.md) checks [RETHINK.md](RETHINK.md) against `59d58eb` and answers all five review questions (branch `claude/vigilant-darwin-34d88b`, T-021, Q-008). Recommendation: accept the direction with changes, starting with one message per run; clarify ownership guarantees, final-report publication, worker validation and migration first. Mac `scripts/check.sh` passed on Go 1.27.3; no product code or real model calls changed. Until the owner decides, all current rules stay in force and T-009 waits.
 - **`main` ([PR #29](https://github.com/kolotiloff/agent-messenger/pull/29)):** T-007 is done. `recover-codex` retires an uncertain Codex owner after a proven reboot. It is refused on Linux and Windows, which have no boot identity source yet.
 - **`main` ([PR #30](https://github.com/kolotiloff/agent-messenger/pull/30)):** T-005 is done. Replies to another local agent are delivered as new messages, with a limit of 3 per chain ([ROUTING.md](ROUTING.md)). A persistent Claude session and a Codex owner exchange messages side by side; this was verified with fake CLIs.
 - **`main` ([PR #30](https://github.com/kolotiloff/agent-messenger/pull/30)):** T-003 is done. The Codex config is checked again before every turn, and the database has a schema version.
@@ -16,7 +16,7 @@ Updated 2026-11-06 by Claude Code.
 - **Releases:** Mac previews are now built, signed and published by the Release Mac preview workflow, using the `SPARKLE_ED_PRIVATE_KEY` secret ([UPDATES.md](UPDATES.md)). preview.20 was the first one released this way.
 - **`main` ([PR #32](https://github.com/kolotiloff/agent-messenger/pull/32)):** T-006 is done. The window creates a Codex session and allows model calls only for it ([SESSION_SETUP.md](SESSION_SETUP.md)).
 - **T-004 accepted on the Mac with preview.21:** real Codex answered two messages from the window, with both turns verified ([report](reports/2026-11-06-codex-window-mac.md)). A paused queue after setup was found and fixed in [PR #33](https://github.com/kolotiloff/agent-messenger/pull/33).
-- **Next:** T-009, resuming a Codex thread after a restart. Also: Claude ↔ Codex with real models, and the next preview with the queue fix.
+- **Next:** owner decision Q-008 after the T-021 review. T-009 (resuming a Codex thread after a restart) remains paused pending that decision. Claude ↔ Codex with real models and the next preview with the queue fix remain outstanding.
 - **Mac status:** after the freeze and reboot, preview.19 would not open. All reservations pointed to a test directory in `/private/tmp` that macOS had deleted. The owner moved `active-runs.json` aside after checking the evidence, and the window now works with the default data directory and empty history ([report](reports/2026-11-06-reboot-temp-root-mac.md)). The old Claude test session no longer exists. Fixes (`recover-missing-root`, refusing temporary data directories) are in PR #31 and ship with the next build.
 
 Codex CLI for model-free checks in a cloud session: `npm install @openai/codex@0.155.1` in a scratch directory. Then use the native binary under `node_modules/@openai/codex-linux-x64/vendor/*/bin/codex` with `MESSENGER_CODEX_PROBE=...`.
