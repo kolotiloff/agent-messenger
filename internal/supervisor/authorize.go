@@ -26,9 +26,7 @@ func (s *Supervisor) AuthorizeSetup(alias string) error {
 		}
 		return core.ErrRejected
 	}
-	s.mu.Lock()
-	busy := s.current != nil
-	s.mu.Unlock()
+	busy := len(s.jobList()) != 0
 	if busy || s.starting.Load() {
 		return core.ErrBusy
 	}

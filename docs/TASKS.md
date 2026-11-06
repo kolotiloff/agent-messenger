@@ -13,7 +13,7 @@ How to use it:
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
-| — | Nothing in progress. Next without the Mac: T-008; T-004 needs the Mac. | | |
+| — | Nothing in progress. T-004 needs the Mac; T-006 (window) can start without it. | | |
 
 ## Next
 
@@ -21,7 +21,6 @@ How to use it:
 |---|---|---|---|
 | T-004 | Codex acceptance on Mac: two real messages in a new separate test Codex session, then exact resume of the saved session. HANDOFF step 7. | owner + agent | needs the Mac; blocked: Q-005, Q-007 |
 | T-006 | Launch Codex sessions from the window. | agent | |
-| T-008 | Several persistent Claude sessions at once. `Supervisor.current` and `runStream` hold one stream, so a second Claude session waits; Codex owners already run side by side. | agent | |
 
 ## Backlog
 
@@ -42,6 +41,7 @@ How to use it:
 
 | ID | Task | PR |
 |---|---|---|
+| T-008 | Several persistent Claude sessions at once: one controller per session, up to 4 at a time; `stop-job` and shutdown stop all. | PR8_LINK |
 | T-003 | Codex config re-check before every turn (canonical fingerprint; unsent message returned to the queue on a change) and a recorded schema version that newer databases are refused by. | [PR #30](https://github.com/kolotiloff/agent-messenger/pull/30) |
 | T-005 | Replies between agents: a reply to another local alias is queued for it in the same transaction, with a limit of 3 automatic replies per chain; Claude stream and Codex owner exchange messages side by side (fake CLIs). Several Claude streams moved to T-008. | [PR #30](https://github.com/kolotiloff/agent-messenger/pull/30) |
 | T-007 | `recover-codex`: retire an uncertain Codex owner after a proven reboot; session closed without retry, history kept. | [PR #29](https://github.com/kolotiloff/agent-messenger/pull/29) |
