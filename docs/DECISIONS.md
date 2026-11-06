@@ -1,0 +1,21 @@
+# Decisions
+
+Decisions that are already made, so that no tool reopens them by accident. Each entry is short and links to the document with the reasoning. To change a decision, add a new entry that supersedes the old one, and mark the old one `superseded by D-NNN`. Do not edit old entries otherwise.
+
+Format: ID, date, decision, why, where it is discussed.
+
+| ID | Date | Decision | Why | Details |
+|---|---|---|---|---|
+| D-001 | 2026-11-05 | The product client and the future broker are written in Go. Python stays in `experiments` as research only. | One static binary per OS, no runtime to install. | [MVP.md](MVP.md), [CLIENT.md](CLIENT.md) |
+| D-002 | 2026-11-05 | The local queue is SQLite through the pure-Go `modernc.org/sqlite` driver, with `synchronous(FULL)`. | Durable local state without cgo or a separate service. | [CLIENT.md](CLIENT.md) |
+| D-003 | 2026-11-05 | Agents are reached through adapters that own existing CLI sessions (Claude Code, Codex, Cursor), not through a network-agent gateway. Network delivery and execution are kept separate, so an API agent can be added later behind the same address. | Keeps each provider's working folder, tools, login and context. | [AGENTGRAM_REVIEW.md](AGENTGRAM_REVIEW.md), [PLAN.md](PLAN.md) |
+| D-004 | 2026-11-05 | Fail closed. An uncertain result is never retried automatically, and unknown is not success. A reservation is never released by a timeout, a single PID or an empty process group. | A duplicate model call or two owners of one session is worse than a stuck queue. | [MVP.md](MVP.md), [AGENTS.md](../AGENTS.md) |
+| D-005 | 2026-11-05 | Persistent Claude runs as one `stream-json` process that receives messages one turn at a time. The owner is not released between turns. | A one-shot run cannot prove that detached descendants have exited. | [CLAUDE_STREAM.md](CLAUDE_STREAM.md) |
+| D-006 | 2026-11-05 | The coordinator is a role assigned to one of the agents. The broker has no model of its own. The broker can run on any of the computers or on a VPS; a VPS is optional. | Keeps the broker simple and provider-neutral. | [AGENTGRAM_REVIEW.md](AGENTGRAM_REVIEW.md), [DEPLOYMENT.md](DEPLOYMENT.md) |
+| D-007 | 2026-11-05 | Mac first. Network, Windows and Linux follow once the local client is accepted. | The owner's main machine is a Mac. | [MVP.md](MVP.md), [RELEASE_PLAN.md](RELEASE_PLAN.md) |
+| D-008 | 2026-11-06 | Mac app updates use Sparkle with signed packages from public GitHub Releases. The signing key stays in the owner's Keychain. Updating the shell does not replace a running background client. | Standard, verified update path; no home-grown binary replacement. | [UPDATES.md](UPDATES.md) |
+| D-009 | 2026-11-06 | The window keeps the chosen `design/v1` look with light, dark and system themes. `design/v1` is frozen. UI tweaks ship together with the next functional step, not as separate builds. | The owner approved this design. | [design/README.md](../design/README.md) |
+| D-010 | 2026-11-06 | Persistent Codex uses a separate stdio `codex app-server` with a managed profile. The effective config is checked with `config/read` before a thread is created; missing or `null` fields do not count as disabled. | `-c` flags and an empty MCP table do not prove isolation. | [CODEX_ADAPTER_NEXT.md](CODEX_ADAPTER_NEXT.md) |
+| D-011 | 2026-11-05 | Cursor CLI is not launched until the owner says otherwise. | The owner's request. | [HANDOFF.md](HANDOFF.md) |
+| D-012 | 2026-11-06 | Code, documentation, commit messages and PRs are in English. The app UI and CLI messages stay in Russian for now. The owner is addressed in Russian. | English suits every tool and future contributors; the UI language is a separate decision (Q-001). | [AGENTS.md](../AGENTS.md) |
+| D-013 | 2026-11-06 | The repository is the only memory shared between tools. Rules live in `AGENTS.md` (`CLAUDE.md` imports it). State lives in `HANDOFF.md`, `TASKS.md`, `DECISIONS.md`, `QUESTIONS.md` and `LOG.md`. All work is pushed before switching tools. | The owner switches between Claude Code, Cursor and Codex. | [README.md](README.md) |

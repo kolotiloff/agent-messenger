@@ -2,7 +2,7 @@
 
 This file is shared by all coding agents working on this repo (Claude Code reads it via `CLAUDE.md`, Cursor and Codex read `AGENTS.md`). Keep the rules in this one file.
 
-Agent Messenger lets coding agents (Claude Code, Codex, Cursor Agent CLI) exchange messages on macOS, Windows and Linux. It is a technical preview for one Mac, not a release. Read [docs/HANDOFF_CLAUDE.md](docs/HANDOFF_CLAUDE.md) for the current state and next task, and [docs/RELEASE_PLAN.md](docs/RELEASE_PLAN.md) for the overall plan.
+Agent Messenger lets coding agents (Claude Code, Codex, Cursor Agent CLI) exchange messages on macOS, Windows and Linux. It is a technical preview for one Mac, not a release. Read [docs/HANDOFF.md](docs/HANDOFF.md) for the current state and next task, and [docs/RELEASE_PLAN.md](docs/RELEASE_PLAN.md) for the overall plan.
 
 ## Layout
 
@@ -44,10 +44,24 @@ Cloud sessions may run on Linux. Mac-only code (Swift shell, Sparkle, `*_darwin.
 - Work on a feature branch from current `main`; open a PR with the exact head SHA and a list of what was verified.
 - Bundle UI tweaks into the next functional release instead of shipping a build per tweak. Keep the chosen light/dark themes and layout.
 
-## Switching between tools
+## Working documents and switching between tools
 
-The user may stop one agent (Claude Code, Cursor, Codex) and continue in another. Nothing is shared between them except the repository, so:
+The user may stop one agent (Claude Code, Cursor, Codex) and continue in another. Nothing is shared between them except the repository. The working documents are listed in [docs/README.md](docs/README.md).
 
-- Before stopping, commit and push all work to the feature branch, even if unfinished (mark WIP in the commit message).
-- Keep [docs/HANDOFF_CLAUDE.md](docs/HANDOFF_CLAUDE.md) current: what is done, what is in progress on which branch, what is verified and what is next.
-- When starting, `git fetch` and continue from the branch named there or from current `main`; do not assume local state from an earlier session.
+**At the start of a session:**
+1. `git fetch` and start from current `main`, or from the branch named in [docs/HANDOFF.md](docs/HANDOFF.md).
+2. Read `docs/HANDOFF.md` ("Current state"), then [docs/TASKS.md](docs/TASKS.md).
+3. Check [docs/DECISIONS.md](docs/DECISIONS.md) before changing direction, and [docs/QUESTIONS.md](docs/QUESTIONS.md) for answers.
+
+**While working:**
+- Take tasks from `TASKS.md` and put the task ID in branch names, commits and PR titles.
+- Record a new decision in `DECISIONS.md`.
+- Put a question for the user in `QUESTIONS.md` instead of guessing.
+
+**Before stopping, even if the work is unfinished:**
+1. Update "Current state" in `HANDOFF.md`.
+2. Update the task status in `TASKS.md`.
+3. Add an entry to [docs/LOG.md](docs/LOG.md).
+4. Commit and push. Mark unfinished work as WIP.
+
+Do not assume local state from an earlier session.
