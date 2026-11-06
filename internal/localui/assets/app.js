@@ -3,6 +3,18 @@
   const root = document.getElementById('am-concept');
   if(window.webkit?.messageHandlers?.updates)document.body.classList.add('am-native');
   const $ = id => root.querySelector('#' + id);
+  function applyTheme(theme, persist=false) {
+    if(!['system','light','dark'].includes(theme))theme='system';
+    document.documentElement.dataset.theme=theme;$('theme-select').value=theme;
+    if(persist) {
+      if(window.webkit?.messageHandlers?.appearance)window.webkit.messageHandlers.appearance.postMessage(theme);
+      else try {localStorage.setItem('messenger-theme',theme);} catch(_) {}
+    }
+  }
+  let initialTheme=window.messengerInitialTheme;
+  if(!initialTheme)try{initialTheme=localStorage.getItem('messenger-theme');}catch(_){}
+  applyTheme(initialTheme||'system');
+  $('theme-select').addEventListener('change',()=>applyTheme($('theme-select').value,true));
   let token = location.hash.slice(1);
   try {
     if (token) sessionStorage.setItem('messenger-ui-token', token);

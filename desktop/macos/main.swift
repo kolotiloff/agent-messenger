@@ -28,10 +28,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             } else { fatalLaunch("Другое окно Messenger уже запускается. Откройте его через Dock.") }
             return
         }
+        applyTheme(UserDefaults.standard.string(forKey: "appearance") ?? "system")
         buildMenu()
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
         config.userContentController.add(self, name: "updates")
+        config.userContentController.add(self, name: "appearance")
+        let savedTheme = UserDefaults.standard.string(forKey: "appearance") ?? "system"
+        let safeTheme = ["system", "light", "dark"].contains(savedTheme) ? savedTheme : "system"
+        config.userContentController.addUserScript(WKUserScript(source: "window.messengerInitialTheme = '\(safeTheme)'", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         updates.onStatus = { [weak self] _ in self?.showUpdateStatus() }
         web = WKWebView(frame: .zero, configuration: config)
         web.navigationDelegate = self
@@ -176,12 +181,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         guard let data = try? JSONSerialization.data(withJSONObject: status), let json = String(data: data, encoding: .utf8) else { return }
         web?.evaluateJavaScript("window.messengerUpdateStatus && window.messengerUpdateStatus(" + json + ")", completionHandler: nil)
     }
+    func applyTheme(_ theme: String) {
+        NSApp.appearance = theme == "dark" ? NSAppearance(named: .darkAqua) : theme == "light" ? NSAppearance(named: .aqua) : nil
+    }
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.name == "updates", message.body as? String == "check", message.frameInfo.isMainFrame,
+        guard message.frameInfo.isMainFrame,
               let page = message.frameInfo.request.url, let origin = origin,
               page.scheme == origin.scheme, page.host == origin.host, page.port == origin.port, page.path == "/" else { return }
-        updates.check()
+        if message.name == "updates", message.body as? String == "check" { updates.check() }
+        if message.name == "appearance", let theme = message.body as? String, ["system", "light", "dark"].contains(theme) {
+            UserDefaults.standard.set(theme, forKey: "appearance"); applyTheme(theme)
+            // A reconnect creates a new document in the same WebView.
+            web.configuration.userContentController.removeAllUserScripts()
+            web.configuration.userContentController.addUserScript(WKUserScript(source: "window.messengerInitialTheme = '\(theme)'", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        }
     }
+
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { message("Не удалось открыть окно: \(error.localizedDescription)") }
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { message("Ошибка окна: \(error.localizedDescription)") }
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { message("Окно было остановлено системой. Повторите подключение; сохранённые исходящие останутся в клиенте.") }

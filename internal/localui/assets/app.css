@@ -39,3 +39,7 @@ body.am-native{padding:0}body.am-native #am-concept{max-width:none;margin:0}body
 #am-concept .am-session-dialog[open]{display:flex;flex-direction:column}#am-concept .am-session-dialog:not([open]){display:none}
 #am-concept .am-session-dialog::backdrop{background:#0005}#am-concept .am-dialog-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 20px;border-bottom:1px solid var(--am-line);flex-shrink:0}
 #am-concept .am-dialog-body{min-height:0;overflow:auto;overscroll-behavior:contain;padding:0 20px 16px}#am-concept .am-dialog-body>.am-agent-session:first-child{border-top:0}#am-concept .am-dialog-body>p:first-child{padding-top:16px}
+
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}:root[data-theme=system]{color-scheme:light dark}
+#am-concept{--am-bg:light-dark(#faf9f6,#1b1b1a);--am-panel:light-dark(#ffffff,#242423);--am-side:light-dark(#f0efeb,#20201f);--am-text:light-dark(#292925,#e9e8e3);--am-muted:light-dark(#66665f,#aeada5);--am-line:light-dark(#deddd7,#3c3c37);--am-soft:light-dark(#eeede9,#30302e);--am-active:light-dark(#343430,#e5e3da);--am-onactive:light-dark(#ffffff,#20201d)}
+#am-concept .am-theme-setting{display:flex;align-items:center;gap:8px;margin:12px 0}#am-concept .am-theme-setting select{min-width:0;flex:1;font-size:12px}
