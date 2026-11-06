@@ -32,6 +32,8 @@ Updated 2026-11-07 (night) by Claude Code.
 - **Open questions for the owner:**
   - Q-009: how the window allows task launches. Today only `serve --allow-tasks`; the window's own client does not launch tasks.
   - Q-010: Claude Code hides MCP tools behind `ToolSearch`.
+- **Release (2026-11-07):** the owner chose to merge PR #36 into `claude/vigilant-darwin-34d88b` and that into `main`, and to release preview.23 for T-027. Before that, macOS CI found a stream start race in the persistent Claude path (fixed: one stream process starts at a time) and two test-only path and timing issues.
+- **Starting tasks for T-027:** the window's own client does not launch tasks (Q-009). Stop it with `messenger --root DATA shutdown`, start it with `messenger --root DATA start --claude-stream --allow-tasks`, then `messenger --root DATA resume`. `DATA` and the messenger path are shown in the window's coordinator command.
 - **Next:**
   1. Review PR #36.
   2. Decide Q-009.

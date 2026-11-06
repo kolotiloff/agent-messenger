@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-07 — Claude Code (release for T-027)
+
+- The owner asked for a build to test and chose to merge into `main` and release preview.23, so the installed app can update itself.
+- macOS CI was red on PR #36. Two causes were in tests: `/tmp` is a link on macOS, and a reservation check ran a moment too early. One was a product bug in the persistent Claude path: the loop could claim a second stream before the first had taken the exclusive startup lease, so the second message became uncertain. Reproduced on Linux under CPU load; the loop now starts one stream process at a time.
+
 ## 2026-11-06/07 night — Claude Code (T-022, T-024–T-026, T-029)
 
 - The owner asked for autonomous work overnight; PR #35 (T-009) was cancelled and left as is.
