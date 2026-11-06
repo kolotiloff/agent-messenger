@@ -43,7 +43,7 @@ How to use it:
 
 | ID | Task | PR |
 |---|---|---|
-| T-007 | `recover-codex`: retire an uncertain Codex owner after a proven reboot; session closed without retry, history kept. | PR7_LINK |
+| T-007 | `recover-codex`: retire an uncertain Codex owner after a proven reboot; session closed without retry, history kept. | [PR #29](https://github.com/kolotiloff/agent-messenger/pull/29) |
 | T-002 | Deliver queued messages to the Codex owner: one turn per message, send intent before `turn/start`, turn ID bound to the attempt, bound tools through SQLite, success only on verified completion; verified on Linux with a fake app-server. | [PR #29](https://github.com/kolotiloff/agent-messenger/pull/29) |
 | T-001 | Create and persist a Codex session before the first message (`create-codex-session`); verified on Linux with a fake app-server and real Codex 0.155.1, no model. | [PR #28](https://github.com/kolotiloff/agent-messenger/pull/28) |
 | T-100 | Translate documentation to English; shared agent rules in `AGENTS.md`; close stale draft PRs #2–#18. | [#26](https://github.com/kolotiloff/agent-messenger/pull/26) |
