@@ -1,41 +1,41 @@
-# Локальный журнал сообщений v1
+# Local message timeline v1
 
 ```sh
-messenger --root КАТАЛОГ timeline --alias claude-test --limit 50
-messenger --root КАТАЛОГ timeline --alias claude-test --limit 50 --before ID_ПИСЬМА
+messenger --root DIR timeline --alias claude-test --limit 50
+messenger --root DIR timeline --alias claude-test --limit 50 --before MESSAGE_ID
 ```
 
-Команда читает существующий клиент через локальный сокет, не запускает CLI/модель, не создаёт попытки, не подтверждает доставку и не меняет блокировки. Ответ — JSON. Ожидание ограничено пятью секундами; недоступность клиента возвращает ошибку, а не пустую успешную историю.
+The command reads the existing client through the local socket, does not start a CLI/model, does not create attempts, does not acknowledge delivery and does not change locks. The response is JSON. Waiting is limited to five seconds; if the client is unavailable, an error is returned rather than an empty successful history.
 
-IPC-запрос: `{"cmd":"timeline","alias":"claude-test","limit":50,"before":"..."}`. `before` необязателен, это ID письма Messenger. Отсутствующий/нулевой `limit` в IPC означает 50; допустимый явный CLI-лимит — 1..100. Ответ: `{"ok":true,"timeline":{...}}`.
+IPC request: `{"cmd":"timeline","alias":"claude-test","limit":50,"before":"..."}`. `before` is optional; it is a Messenger message ID. A missing/zero `limit` in IPC means 50; the allowed explicit CLI limit is 1..100. Response: `{"ok":true,"timeline":{...}}`.
 
-## Страницы
+## Pages
 
-Без курсора возвращается последняя страница. Внутри страницы письма идут от старого к новому по порядку записи в базу. `has_more` и `next_before` дают следующую, более старую страницу, которую UI добавляет сверху. Курсор обязан указывать на существующее письмо той же сессии; неизвестный или чужой курсор отклоняется. Два псевдонима одной сессии читают одну историю. Новые письма не сдвигают уже выбранную границу страницы.
+Without a cursor, the latest page is returned. Within a page, messages go from oldest to newest in database write order. `has_more` and `next_before` give the next, older page, which the UI prepends at the top. The cursor must point to an existing message of the same session; an unknown or foreign cursor is rejected. Two aliases of the same session read the same history. New messages do not shift an already chosen page boundary.
 
-Это текущий снимок одной страницы, не неизменяемый экспорт всей истории. Ответ или результат ранее прочитанного письма может появиться позже; экран должен обновить соответствующую страницу. Времена могут совпадать или идти назад, поэтому они не используются как курсор.
+This is a current snapshot of one page, not an immutable export of the whole history. A reply or result for a previously read message may appear later; the screen must refresh the corresponding page. Timestamps may coincide or go backwards, so they are not used as a cursor.
 
-## Письмо и ответ
+## Message and reply
 
-`items` всегда массив. У письма есть `id`, `sender`, `text`, `created_at`, `state`, `retry_of` при повторе, `attempt_alias` при наличии попытки, `attempt_state`, `reply`, `result` и `exit_code`.
+`items` is always an array. A message has `id`, `sender`, `text`, `created_at`, `state`, `retry_of` for a retry, `attempt_alias` when there is an attempt, `attempt_state`, `reply`, `result` and `exit_code`.
 
-`session_alias` наверху — выбранный пользователем адрес просмотра. Исходный псевдоним постановки в очередь старая схема не сохраняет; не выдаём выбранное имя за исторического адресата. `attempt_alias` — адрес, записанный при резервировании обработки. У сохранённого ответа есть собственные `id`, `reply_to`, `sender`, `recipient`, `text`.
+The top-level `session_alias` is the viewing address chosen by the user. The old schema does not store the original alias used when enqueuing; we do not present the chosen name as the historical recipient. `attempt_alias` is the address recorded when the processing reservation was made. A stored reply has its own `id`, `reply_to`, `sender`, `recipient`, `text`.
 
-Время ответа старая схема не хранит, поэтому API не придумывает его. Это журнал Messenger, а не полная история или рассуждения CLI. Сетевые ACK здесь также не изображаются: брокер ещё не реализован.
+The old schema does not store reply time, so the API does not invent it. This is the Messenger log, not the full history or reasoning of the CLI. Network ACKs are also not represented here: the broker is not yet implemented.
 
-## Результат обработки
+## Processing result
 
-- `not_verified`: результат не подтверждён. Это может быть ещё не начатое письмо, сохранённый ответ без результата или неполные сведения.
-- `verified_turn`: подтверждены личность сессии, результат провайдера и точная связь ответа; ход постоянного процесса завершён. Кода выхода нет, процесс мог продолжить работу.
-- `verified_exit`: подтверждены те же сведения и наблюдался код выхода 0. Состояние попытки при этом может остаться `uncertain` из-за удержания защитного резерва.
-- `process_failed`: наблюдался ненулевой код выхода. Текст ответа может сохраняться, но зелёный успех не показывается.
+- `not_verified`: the result is not confirmed. This may be a message not yet started, a stored reply without a result, or incomplete information.
+- `verified_turn`: the session identity, the provider result and the exact link to the reply are confirmed; the turn of the persistent process has completed. There is no exit code; the process may have kept running.
+- `verified_exit`: the same information is confirmed and exit code 0 was observed. The attempt state may still remain `uncertain` because the protective reservation is held.
+- `process_failed`: a non-zero exit code was observed. The reply text may be stored, but a green success is not shown.
 
-Сверяются ID ответа и попытки, исходное письмо, отправитель и адресат ответа. Сохранённого текста, `provider_ok` без остальных доказательств или пустой группы процессов недостаточно. Ни один результат не даёт UI права снять резерв или автоматически повторить письмо.
+The reply and attempt IDs, the original message, and the sender and recipient of the reply are cross-checked. Stored text, `provider_ok` without the other evidence, or an empty process group is not sufficient. No result gives the UI the right to release a reservation or to automatically retry a message.
 
-## Ограничения и данные
+## Limits and data
 
-Максимум 100 писем на страницу. Текст каждого письма/ответа ограничен 16 000 символов средствами SQLite, с явным `text_truncated`; исходник в базе не меняется. UI обязан обозначить сокращение и не использовать такой фрагмент как полный текст повторной отправки. Полный экспорт пока отсутствует. Длины ID и пользовательских адресов этот API не ограничивает, поэтому лимит строк не является строгим лимитом байтов ответа.
+At most 100 messages per page. The text of each message/reply is limited to 16,000 characters by SQLite, with an explicit `text_truncated`; the original in the database is not changed. The UI must mark the truncation and must not use such a fragment as the full text for resending. A full export does not exist yet. This API does not limit the length of IDs and user addresses, so the row limit is not a strict limit on response bytes.
 
-CLI-ID, путь профиля, токены попыток, PID и сырые диагностические детали не передаются. Содержимое писем и адреса намеренно передаются и могут быть конфиденциальны: их нельзя автоматически публиковать или писать в общедоступные логи. UI выводит их как текст, не исполняемый HTML. Доступ остаётся локальным с существующими правами сокета.
+CLI IDs, the profile path, attempt tokens, PIDs and raw diagnostic details are not passed through. Message contents and addresses are deliberately passed through and may be confidential: they must not be automatically published or written to publicly accessible logs. The UI renders them as text, not executable HTML. Access remains local with the existing socket permissions.
 
-Связанные материалы: [карточки](UI_READ_API.md), [выбранный стиль](../design/README.md), [план](RELEASE_PLAN.md).
+Related material: [cards](UI_READ_API.md), [chosen style](../design/README.md), [plan](RELEASE_PLAN.md).

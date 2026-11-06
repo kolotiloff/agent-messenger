@@ -1,47 +1,47 @@
-# Реальный Claude под контролем очереди и привязанного MCP
+# Real Claude under queue control and bound MCP
 
-Дата: 2026-11-05. macOS, Python 3.9.6, Claude Code 2.1.318.
+Date: 2026-11-05. macOS, Python 3.9.6, Claude Code 2.1.318.
 
-**Уточнённый опыт PASS:** два последовательных задания в одной новой тестовой CLI-сессии, два связанных ответа, конкурентное резервирование заблокировано. Дополнительно прошли 15 синтетических тестов. Производственный адаптер и интерфейс пока не готовы.
+**Refined experiment PASS:** two sequential jobs in one new test CLI session, two linked replies, concurrent reservation blocked. Additionally, 15 synthetic tests passed. The production adapter and the interface are not ready yet.
 
-## Что проверено
+## What was verified
 
-Новая тестовая сессия создана с заранее заданным UUID. Локальная очередь сразу содержит два письма. Перед каждым запуском фиксируются резервирование и намерение запуска. Состояние `launching` не разрешает MCP читать письмо или сохранять ответ.
+A new test session was created with a predefined UUID. The local queue contains two messages from the start. Before each launch, the reservation and the launch intent are recorded. The `launching` state does not allow MCP to read the message or save a reply.
 
-Контроллер читает структурированный вывод Claude. После события инициализации он проверяет точный ID сессии и список доступных инструментов, затем разрешает `read_current()` и `reply(text)`. Сам агент не выбирает адресата, ID исходного письма или ключ повтора.
+The controller reads Claude's structured output. After the initialization event, it checks the exact session ID and the list of available tools, then allows `read_current()` and `reply(text)`. The agent itself does not choose the recipient, the original message ID or the retry key.
 
-Пока реальный CLI жив, отдельный процесс пытается зарезервировать ту же сессию. В обоих случаях получает отказ. Он не запускает ещё один CLI.
+While the real CLI is alive, a separate process tries to reserve the same session. In both cases it is refused. It does not launch another CLI.
 
-Первый Claude читает письмо только через MCP и отвечает. После выхода основного процесса контроллер проверяет успешный результат, точный ID, последовательность вызовов инструментов и сохранённый связанный ответ, затем завершает исполнение. Соединение с SQLite закрывается и открывается заново. Второй запуск использует `--resume` с тем же ID и обрабатывает второе письмо.
+The first Claude reads the message only via MCP and replies. After the main process exits, the controller checks the successful result, the exact ID, the sequence of tool calls and the saved linked reply, then completes the execution. The SQLite connection is closed and reopened. The second launch uses `--resume` with the same ID and processes the second message.
 
-Итог уточнённого опыта:
-- 2 реальных CLI-запуска; оба завершились успешно.
-- Одна и та же сессия в обоих результатах.
-- 2 записи исполнения, 2 ответа с правильными отправителем, адресатом и связью.
-- Оба письма имеют состояние `completed`; занятость сессии снята после проверки.
-- 2 конкурентные попытки резервирования отклонены.
-- Автоматических повторов нет; окно ожидания не опрашивает модель.
+Result of the refined experiment:
+- 2 real CLI launches; both completed successfully.
+- The same session in both results.
+- 2 execution records, 2 replies with the correct sender, recipient and link.
+- Both messages are in the `completed` state; the session's busy state was cleared after the check.
+- 2 concurrent reservation attempts rejected.
+- No automatic retries; the waiting window does not poll the model.
 
-## Первый опыт сохранён как неуспешный
+## The first experiment is kept as a failure
 
-Первоначальная тестовая инструкция просила добавить `ACK:` перед полученным текстом. Claude добавил ещё один пробел. Адресация и связь были корректны, но проверка точного формата остановила контроллер.
+The original test instruction asked to prepend `ACK:` to the received text. Claude added an extra space. Addressing and linking were correct, but the exact format check stopped the controller.
 
-Сессия получила `uncertain`, второе письмо осталось в очереди; сохранённый ответ не удалён и задача не повторена. После анализа журнала инструкция уточнена: явно запрещён дополнительный пробел и дан пример. Новая проверка выполнена в другой новой сессии и другой базе.
+The session got `uncertain`, the second message stayed in the queue; the saved reply was not deleted and the job was not retried. After analyzing the log, the instruction was refined: the extra space was explicitly forbidden and an example was given. The new check was run in another new session and another database.
 
-Итого при этой работе было 3 реальных запуска Claude: 1 в первом опыте и 2 в уточнённом. Это не скрытый автоматический retry. Сравнение контрольной строки — условие теста; оно не означает, что Messenger сможет автоматически доказать правильность произвольной задачи.
+In total, this work involved 3 real Claude launches: 1 in the first experiment and 2 in the refined one. This is not a hidden automatic retry. Comparing the control string is a test condition; it does not mean Messenger will be able to automatically prove the correctness of an arbitrary task.
 
-## Дополнительные проверки без моделей
+## Additional checks without models
 
-Добавлены два теста: до подтверждения ID MCP не читает письмо и не отвечает; несовпадающий ID не разрешает доступ и не освобождает слот. Существующие 13 тестов очереди, дублей и аварийных состояний также проходят. Итог: 15 тестов, 1,361 секунды.
+Two tests were added: before the ID is confirmed, MCP does not read the message and does not reply; a mismatched ID does not grant access and does not release the slot. The existing 13 tests for the queue, duplicates and crash states also pass. Total: 15 tests, 1.361 seconds.
 
-## Воспроизведение и границы
+## Reproduction and scope
 
-[Инструкция и код](../../experiments/session_safety/README.md). Реальный опыт запускается отдельно через `claude_probe.py` и требует явного `--allow-model-calls`; обычный unittest не вызывает модели. Нужны существующая авторизация Claude и новая папка вне репозитория для данных.
+[Instructions and code](../../experiments/session_safety/README.md). The real experiment is run separately via `claude_probe.py` and requires an explicit `--allow-model-calls`; the regular unittest does not call models. Existing Claude authorization and a new folder outside the repository for data are required.
 
-Тест не меняет глобальные настройки CLI и не подключает рабочий разговор координатора. Сырые журналы, ID разговоров и база остаются локально и не публикуются.
+The test does not change global CLI settings and does not attach the coordinator's working conversation. Raw logs, conversation IDs and the database stay local and are not published.
 
-Подтверждены части H1/H5/H6 на Mac для текущего CLI и этого режима. Нет проверки реального аварийного восстановления, всей иерархии потомков CLI, нативного Windows, сети или часового ожидания. Контроллер ожидает основной процесс и проверяет результат; это ещё не универсальный менеджер дерева процессов. Ошибочный ID проверен синтетически; намеренная подмена реальной истории не выполнялась. На новом интерфейсе Codex/Cursor ещё не запускались.
+Parts of H1/H5/H6 are confirmed on Mac for the current CLI and this mode. There is no verification of real crash recovery, the full CLI descendant hierarchy, native Windows, network or hour-long waits. The controller waits for the main process and checks the result; this is not yet a universal process-tree manager. A wrong ID was verified synthetically; deliberate substitution of real history was not performed. Codex/Cursor have not been run on the new interface yet.
 
-Снятие `uncertain` не реализовано: неизвестное состояние остаётся заблокированным. Новый Python-код — экспериментальная интеграция, не фоновая служба или устанавливаемое приложение.
+Clearing `uncertain` is not implemented: an unknown state stays blocked. The new Python code is an experimental integration, not a background service or an installable application.
 
-Параметры сверены со справкой установленного CLI и [официальным справочником Claude](https://code.claude.com/docs/en/cli-reference).
+The parameters were checked against the installed CLI's help and the [official Claude reference](https://code.claude.com/docs/en/cli-reference).

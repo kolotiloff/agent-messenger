@@ -1,38 +1,38 @@
-# Claude streaming: два письма в одном процессе на Mac
+# Claude streaming: two messages in one process on Mac
 
-Основа: `09d2e3d`; отдельный стенд `experiments/claude_stream`, включаемый тегом `streamprobe`. Claude Code 2.1.318, macOS arm64, временный Go 1.22.2. Продуктовый `serve` не изменён.
+Base: `09d2e3d`; a separate bench `experiments/claude_stream`, enabled by the `streamprobe` tag. Claude Code 2.1.318, macOS arm64, temporary Go 1.22.2. The product `serve` is unchanged.
 
-## Реальные прогоны
+## Real runs
 
-| Проверка | Первый прогон | Исправленный прогон |
+| Check | First run | Fixed run |
 |---|---|---|
-| Запусков CLI | 1 | 1 |
-| Входных писем | 2 | 2 |
-| Проверенных успешных результатов | 1 | 2 |
-| Связанные ответы | `ACK:PAYLOAD-one` | `ACK:PAYLOAD-one`, `ACK:PAYLOAD-two` |
-| Ожидание без новых событий модели | 20 секунд | 40 секунд: две паузы по 20 |
-| Один и тот же процесс для двух проверенных ходов | не зачтено | подтверждено |
-| Наблюдаемый выход CLI | 0 | 0 |
-| Автоматические повторы | 0 | 0 |
+| CLI launches | 1 | 1 |
+| Input messages | 2 | 2 |
+| Verified successful results | 1 | 2 |
+| Bound replies | `ACK:PAYLOAD-one` | `ACK:PAYLOAD-one`, `ACK:PAYLOAD-two` |
+| Wait with no new model events | 20 seconds | 40 seconds: two pauses of 20 |
+| Same process for both verified turns | not counted | confirmed |
+| Observed CLI exit | 0 | 0 |
+| Automatic retries | 0 | 0 |
 
-Первый прогон остановлен из-за ошибки стенда: повторный `system/init` перед вторым ходом ошибочно считался новой сессией. Второй ответ в нём не зачтён. После исправления и регрессионного теста выполнен отдельный прогон в новой тестовой сессии. Итого отправлены четыре входных письма за два прогона; это не число внутренних API-запросов модели.
+The first run was stopped because of a bench bug: a repeated `system/init` before the second turn was wrongly treated as a new session. Its second reply was not counted. After the fix and a regression test, a separate run was done in a new test session. In total, four input messages were sent across two runs; this is not the number of internal model API requests.
 
-Во втором прогоне для обоих ходов проверены точный ID сессии, последовательность MCP `read_current → reply`, успешный результат провайдера без permission denials, квитанция и привязка ответа. Процесс между ходами проверялся по PID, группе, времени старта и boot ID. После завершения не найдено процесса с тестовым ID в командной строке. Это дополнительное наблюдение, не доказательство отсутствия всех отделившихся потомков.
+In the second run, for both turns the exact session ID, the MCP sequence `read_current → reply`, a successful provider result without permission denials, the receipt and the reply binding were verified. Between turns the process was checked by PID, group, start time and boot ID. After completion, no process with the test ID on its command line was found. This is an additional observation, not proof that no detached descendants remain.
 
-Оба резервирования стенда и прежний резерв успешной одноразовой пробы сохранены. История прежней сессии не удалялась. Рабочие/GUI-чаты, Codex и Cursor не запускались.
+Both bench reservations and the earlier reservation from the successful one-shot probe were preserved. The previous session's history was not deleted. Work/GUI chats, Codex and Cursor were not launched.
 
-## Проверки без модели
+## Checks without a model
 
-Полный `go test -race -tags streamprobe -ldflags=-linkmode=external -count=1 ./...` прошёл на Mac. Новые тесты проверяют закрытый MCP до подтверждения ID, старую квитанцию на следующем ходе, конфликтующие параллельные ответы и идемпотентный дубль, ошибку записи журнала, ошибочный/отсутствующий ответ, HTTP-авторизацию, активность/EOF во время ожидания и повторный init с правильным/неправильным ID.
+The full `go test -race -tags streamprobe -ldflags=-linkmode=external -count=1 ./...` passed on Mac. New tests cover MCP being closed until the ID is confirmed, a stale receipt on the next turn, conflicting parallel replies and an idempotent duplicate, a log write error, a wrong/missing reply, HTTP authorization, activity/EOF during the wait, and a repeated init with the correct/wrong ID.
 
-Проверка отдельного `serve` рядом с первым прогоном не зачтена: она началась уже после завершения стенда и истекла по таймауту; дочерний процесс был завершён. Модель у него была отключена. Этот запуск не является доказательством конкурентной блокировки. Стенд использует существующий общий пользовательский замок, покрытый тестами продукта.
+A check of a separate `serve` alongside the first run was not counted: it started only after the bench had finished and timed out; the child process was terminated. Its model was disabled. This run is not proof of competing-lock blocking. The bench uses the existing shared user lock, which is covered by product tests.
 
-## Что доказано и что осталось
+## What was proven and what remains
 
-Постоянный Claude способен получить два последовательных письма через stdin, используя один процесс и одну сессию. В двух наблюдавшихся паузах стенд не отправлял запросов и не получал новых событий модели. Биллинг не измерялся; утверждения «любой простой гарантированно бесплатен» этот опыт не доказывает.
+A persistent Claude can receive two consecutive messages via stdin, using one process and one session. During the two observed pauses, the bench sent no requests and received no new model events. Billing was not measured; this experiment does not prove the claim that "any idle time is guaranteed to be free".
 
-Это исследовательская проверка транспорта и адресации. Два письма находятся в отдельном журнале стенда; в продуктовой SQLite хранится владелец процесса. Очередь, pause/resume, восстановление после падения и завершение постоянного процесса ещё нужно связать в обычном `serve`, разделив состояния процесса и отдельного письма. Автоматического освобождения сессии по пустой группе здесь нет.
+This is a research check of transport and addressing. The two messages are in the bench's separate log; the product SQLite stores the process owner. The queue, pause/resume, crash recovery and termination of the persistent process still need to be wired into the regular `serve`, separating the state of the process from that of an individual message. There is no automatic release of the session on an empty group here.
 
-UUID, квитанции, исходные логи и приватные каталоги в этот отчёт не включены.
+UUIDs, receipts, raw logs and private directories are not included in this report.
 
-После реального прогона усилена отчётность ошибок финальной записи SQLite: такая ошибка также снимает флаг зачёта. Полный набор тестов повторён; дополнительного вызова модели для этой обработки ошибок не делалось.
+After the real run, error reporting for the final SQLite write was strengthened: such an error also clears the counted flag. The full test suite was rerun; no additional model call was made for this error handling.

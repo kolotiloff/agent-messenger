@@ -1,37 +1,37 @@
-# Диагностика: проверка на Mac
+# Diagnostics: check on Mac
 
-Изменение поверх `5a72aa3d851d07f3c9b5e24b096c39f6c1f1faa6` (PR #5). Добавлены `doctor`, `doctor --json`, ограниченный контекстом запрос локального статуса и актуальный [план до релиза](../RELEASE_PLAN.md).
+Change on top of `5a72aa3d851d07f3c9b5e24b096c39f6c1f1faa6` (PR #5). Added `doctor`, `doctor --json`, a context-bounded local status request and an up-to-date [plan to release](../RELEASE_PLAN.md).
 
-## Объём
+## Scope
 
-Команда ищет кандидаты CLI в PATH, проверяет метаданные каталога данных и запрашивает статус существующего клиента. Не исполняет найденные программы, не читает профили/секреты, не создаёт базу и не меняет резервы. Версия, идентичность CLI, авторизация и готовность конкретных сессий остаются `not_checked`.
+The command looks for CLI candidates in PATH, checks the data directory metadata and requests the status of the existing client. It does not execute the programs found, does not read profiles/secrets, does not create a database and does not change reservations. Version, CLI identity, authorization and readiness of specific sessions remain `not_checked`.
 
-Управляющий запрос ограничен 750 мс. Недоступность, таймаут и неуспешный статус не объявляются готовностью и не разрешают новый запуск сессии. В JSON нет переписки, ID разговоров, сырой ошибки сервера или `status.detail`. Поле `probe_cli_starts` относится только к диагностике.
+The control request is limited to 750 ms. Unavailability, a timeout and an unsuccessful status are not declared as readiness and do not permit a new session launch. The JSON contains no conversations, conversation IDs, raw server errors or `status.detail`. The `probe_cli_starts` field refers only to diagnostics.
 
-## Проверки
+## Checks
 
-На macOS arm64, Go 1.22.2, полный набор прошёл:
+On macOS arm64, Go 1.22.2, the full suite passed:
 
 ```sh
 go test -race -tags streamprobe -ldflags=-linkmode=external -count=1 ./...
 ```
 
-Пять новых тестов проверяют поиск фиктивных CLI без их исполнения и создания каталога, отсутствие ложного вывода о входе при отсутствии программы, запрос только `status` и отсутствие приватных полей, ограниченное ожидание неотвечающего сокета с сохранением резерва, отказ трактовать ошибку статуса как доступность клиента.
+Five new tests cover: finding fake CLIs without executing them or creating a directory; no false login conclusion when the program is absent; requesting only `status` and the absence of private fields; a bounded wait on an unresponsive socket with the reservation kept; refusing to treat a status error as client availability.
 
-Нативная проба на Mac проверила:
+A native probe on Mac verified:
 
-- При остановленном Messenger отчёт сформирован; хеши базы, WAL/SHM при наличии и общего реестра не изменились.
-- В несуществующем каталоге отчёт показал `missing`, каталог не создан.
-- В PATH найдены кандидаты для Claude, Codex и Cursor. Это не проверка версий или входа; все три карточки оставили `authentication=not_checked`.
-- После `start --claude-stream` без разрешения моделей диагностика увидела работающий клиент, паузу и `cli_launch=not-authorized`.
-- Запрос диагностики не изменил сессии, письма, попытки, ответы, проверки и архивы. Реестр сохранился без изменений.
-- Флаг `--allow-model-calls` и лишний позиционный аргумент для `doctor` отклонены.
-- Клиент остановлен; CLI и модели этой проверкой не запускались.
+- With Messenger stopped, the report was produced; the hashes of the database, WAL/SHM if present, and the shared registry did not change.
+- In a non-existent directory the report showed `missing`, and the directory was not created.
+- Candidates for Claude, Codex and Cursor were found in PATH. This is not a check of versions or login; all three cards kept `authentication=not_checked`.
+- After `start --claude-stream` without model permission, diagnostics saw the running client, the pause and `cli_launch=not-authorized`.
+- The diagnostic request did not change sessions, messages, attempts, replies, checks or archives. The registry remained unchanged.
+- The `--allow-model-calls` flag and an extra positional argument for `doctor` were rejected.
+- The client was stopped; no CLIs or models were launched by this check.
 
-Сборки linux/amd64 и windows/amd64 с `CGO_ENABLED=0` прошли. Runtime на этих ОС не проверялся. Предупреждения старого Mac-линковщика LC_DYSYMTAB не помешали тестам/сборке.
+Builds for linux/amd64 and windows/amd64 with `CGO_ENABLED=0` passed. Runtime on these OSes was not verified. The old Mac linker's LC_DYSYMTAB warnings did not interfere with tests/build.
 
-## Что это ещё не подтверждает
+## What this does not yet confirm
 
-Пока нет штатной проверки авторизации, определения совместимости версий, ручного выбора CLI вне PATH, индивидуальных статусов привязок, GUI или установщика. Код завершения 0 — сформированный отчёт, не разрешение запускать агента. Полная остановка CLI и снятие резерва в той же загрузке остаются отдельной нерешённой задачей.
+There is not yet a standard authorization check, version compatibility detection, manual selection of a CLI outside PATH, individual binding statuses, GUI or installer. Exit code 0 means a report was produced, not permission to launch an agent. Fully stopping the CLI and lifting the reservation within the same boot remain a separate unresolved task.
 
-Сырые локальные пути, PID и диагностические снимки сохранены приватно и в Git не включены. В репозитории только код, синтетические тесты и обезличенные результаты.
+Raw local paths, PIDs and diagnostic snapshots are saved privately and not included in Git. The repository contains only code, synthetic tests and anonymized results.

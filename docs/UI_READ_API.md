@@ -1,32 +1,32 @@
-# Данные для первого окна: overview v1
+# Data for the first window: overview v1
 
-`messenger --root КАТАЛОГ overview` обращается только к уже запущенному клиенту через его локальный сокет. Вывод — JSON. Ожидание ответа ограничено пятью секундами. Отсутствующий клиент не запускается; CLI, модель и проверка входа не вызываются. Таймаут не доказывает остановку клиента или агента.
+`messenger --root DIR overview` talks only to an already running client through its local socket. The output is JSON. Waiting for a response is limited to five seconds. A missing client is not started; the CLI, the model and the login check are not called. A timeout does not prove that the client or agent has stopped.
 
-Запрос IPC: `{"cmd":"overview"}`. Ответ: `{"ok":true,"overview":{...}}`. Ошибку нужно показать как недоступность данных, сохранив отличие от пустого списка сессий. Сводка не заменяет диагностику `doctor`, а `check-cli` остаётся отдельным явным действием.
+IPC request: `{"cmd":"overview"}`. Response: `{"ok":true,"overview":{...}}`. An error must be shown as data being unavailable, keeping it distinct from an empty session list. The summary does not replace `doctor` diagnostics, and `check-cli` remains a separate explicit action.
 
-## Поля
+## Fields
 
-- `schema_version: 1`, `paused`: версия и общая пауза очереди.
-- `sessions`: зарегистрированные сессии, по одной карточке на каноническую привязку. Несколько псевдонимов одной сессии не создают несколько агентов.
-- `provider`, `aliases`: провайдер и пользовательские почтовые имена.
-- `launch_configured`: записаны путь к CLI и рабочая папка. Это **не** проверка существования программы, версии, входа или пригодности к запуску.
-- `authentication`, `readiness`: всегда `not_checked`. Старые успешные проверки не превращаются в текущую готовность.
-- `owner_retained`: в базе удерживается владелец сессии. Это **не** признак работающей модели и **не** доказательство живого процесса.
-- `recorded_attempt_state`, `recorded_stream_state`: состояния из базы, `none` при отсутствии записи. Например, поток `idle` может удерживать владельца между письмами; `uncertain` требует разбора. Неизвестные будущие состояния нельзя показывать зелёными.
-- `decision_pending`: в базе есть решение по сессии.
-- `queued`, `uncertain`: число писем соответствующего состояния в этой сессии. Неопределённая старая попытка остаётся в истории и может учитываться после восстановления; это не число доступных автоматических повторов.
-- `truncated`, `aliases_truncated`: явные признаки усечения. Максимум 100 сессий и 100 псевдонимов на сессию, стабильный порядок регистрации сессий и алфавитный порядок псевдонимов. Пока нет постраничного просмотра; интерфейс обязан показывать неполноту списка.
+- `schema_version: 1`, `paused`: version and the global queue pause.
+- `sessions`: registered sessions, one card per canonical binding. Several aliases of one session do not create several agents.
+- `provider`, `aliases`: provider and user-facing mail names.
+- `launch_configured`: the CLI path and working folder are recorded. This is **not** a check that the program exists, nor of its version, login or fitness to launch.
+- `authentication`, `readiness`: always `not_checked`. Old successful checks do not turn into current readiness.
+- `owner_retained`: the database holds a session owner. This is **not** a sign of a working model and **not** proof of a live process.
+- `recorded_attempt_state`, `recorded_stream_state`: states from the database, `none` when there is no record. For example, an `idle` stream may hold the owner between messages; `uncertain` requires investigation. Unknown future states must not be shown as green.
+- `decision_pending`: the database has a decision for the session.
+- `queued`, `uncertain`: number of messages in the corresponding state in this session. An uncertain old attempt stays in the history and may be counted after recovery; this is not the number of available automatic retries.
+- `truncated`, `aliases_truncated`: explicit truncation flags. Maximum 100 sessions and 100 aliases per session, stable session registration order and alphabetical alias order. There is no pagination yet; the interface must show that the list is incomplete.
 
-Чтение выполняется одной транзакцией без изменения данных. Число строк ограничено, но длина введённых пользователем псевдонимов не ограничивается этим API. Идентификаторы CLI-сессий, канонические ключи, пути профилей, токены попыток, содержимое писем и сырые ошибки базы не передаются. Пользовательские псевдонимы всё равно могут быть личными данными; сводка не предназначена для публикации.
+The read is done in a single transaction without modifying data. The number of rows is limited, but the length of user-entered aliases is not limited by this API. CLI session IDs, canonical keys, profile paths, attempt tokens, message contents and raw database errors are not passed. User aliases may still be personal data; the summary is not intended for publication.
 
-Это локальный API с прежними правами сокета. Он не добавляет HTTP, удалённый доступ, обнаружение других компьютеров, роль координатора или брокер. Готовность соединения и разрешение вызовов модели читаются отдельно из `status`. Отдельные запросы не образуют общий атомарный снимок.
+This is a local API with the same socket permissions as before. It does not add HTTP, remote access, discovery of other computers, a coordinator role or a broker. Connection readiness and permission to call models are read separately from `status`. Separate requests do not form a single atomic snapshot.
 
-## Следующая часть
+## Next part
 
-Добавлен [timeline](TIMELINE.md) — ограниченный журнал сообщений с постраничным просмотром: письмо, сохранённый ответ и отдельно подтверждённый результат провайдера. Наличие текста ответа само по себе не означает успешное исполнение. [Локальное окно](LOCAL_UI.md) подключено к этим данным; команды отправки и управления очередью описаны отдельно в его контракте.
+A [timeline](TIMELINE.md) has been added — a bounded message log with pagination: the message, the stored reply and, separately, the confirmed provider result. The presence of reply text does not by itself mean successful execution. The [local window](LOCAL_UI.md) is connected to this data; send and queue-control commands are described separately in its contract.
 
-## Предложенный вид приложения
+## Proposed app layout
 
-В чате показан интерактивный концепт с демонстрационными данными: слева компьютеры, в центре переписка, рядом роль координатора; отдельные разделы «Агенты», «Очередь», «Сервер». В карточке независимо показаны установка CLI, вход, сессия и связь. Сервер выбирается на компьютере либо VPS; координатор — отдельная роль. Отправка и переключатели макета не управляют настоящими агентами.
+An interactive concept with demo data was shown in the chat: computers on the left, the conversation in the center, the coordinator role next to it; separate sections «Агенты» ("Agents"), «Очередь» ("Queue"), «Сервер» ("Server"). A card shows CLI installation, login, session and connection independently. The server is chosen on a computer or a VPS; the coordinator is a separate role. Sending and the mockup's toggles do not control real agents.
 
-Пользователь выбрал визуальный стиль этого макета; он сохранён в [design/v1](../design/README.md) как основа реализации. Это ещё не готовое продуктовое окно. Демонстрационные успешные статусы других ОС и серверов не являются результатами приёмки. Требования остаются в [APP.md](APP.md), последовательность — в [RELEASE_PLAN.md](RELEASE_PLAN.md).
+The user chose the visual style of this mockup; it is kept in [design/v1](../design/README.md) as the basis for implementation. It is not yet a finished product window. Demo success statuses for other OSes and servers are not acceptance results. Requirements remain in [APP.md](APP.md), the sequence in [RELEASE_PLAN.md](RELEASE_PLAN.md).

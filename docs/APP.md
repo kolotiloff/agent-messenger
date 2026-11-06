@@ -1,96 +1,95 @@
-# Приложение, установка и интерфейс — требования v0.3
+# Application, installation and interface — requirements v0.3
 
-Согласовано пользователем 5 ноября 2026 года. Это целевой продукт; наличие пункта в плане не означает готовую функцию. Первая пользовательская версия — на Mac, затем Windows x2 и Linux. UI включён в MVP.
+Agreed with the user on November 5, 2026. This is the target product; an item being in the plan does not mean the feature is ready. The first user-facing version is for Mac, then Windows x2 and Linux. The UI is part of the MVP.
 
-Диагностика доступна как [doctor](DIAGNOSTICS.md): обнаружение кандидатов CLI и статус клиента. В пассивном doctor версия, вход и готовность конкретной сессии остаются `not_checked`; для явно выбранного CLI отдельно реализован [check-cli](CLI_CHECK.md) с ограниченной проверенной матрицей Mac. Добавлен [локальный интерфейс](LOCAL_UI.md) в браузере: история, отправка, пауза и возобновление очереди. Исходящие после записи в базу клиента восстанавливаются при полном закрытии окна; есть [технический архив для Mac](INSTALL.md), но нативной оболочки и принятого публичного установщика ещё нет. План выпуска — [RELEASE_PLAN.md](RELEASE_PLAN.md).
+Diagnostics are available as [doctor](DIAGNOSTICS.md): detection of CLI candidates and client status. In passive doctor, the version, login and readiness of a specific session remain `not_checked`; for an explicitly selected CLI, a separate [check-cli](CLI_CHECK.md) is implemented with a limited verified Mac matrix. A [local interface](LOCAL_UI.md) in the browser has been added: history, sending, pausing and resuming the queue. Outgoing messages, once written to the client database, are recovered after the window is fully closed; there is a [technical archive for Mac](INSTALL.md), but there is no native shell and no accepted public installer yet. The release plan is [RELEASE_PLAN.md](RELEASE_PLAN.md).
 
-## Первый запуск
+## First launch
 
-1. Скачать установщик Agent Messenger из GitHub Releases, установить и открыть приложение.
-2. Выбрать «Подключиться к серверу» (адрес и регистрация устройства) либо «Запустить сервер на этом компьютере». Для VPS выбрать готовый сервер либо мастер «Установить брокер на VPS» с временным SSH-доступом.
-3. Увидеть локальный компьютер и карточки Claude Code, Codex и Cursor Agent CLI.
-4. Программа обнаруживает исполняемые файлы и версии, проверяет доступный статус входа штатными средствами CLI, показывает время и результат проверки.
-5. Для отсутствующего CLI доступны «Установить» и понятная инструкция; установка использует проверенный официальный источник для ОС. Для отсутствующего входа — «Войти» через штатный сценарий провайдера. Пользователь сам выполняет требующие его участия действия в браузере.
-6. Создать или явно передать под управление Messenger тестовую CLI-сессию. Уже открытый рабочий разговор автоматически не захватывается.
-7. Отправить тестовое сообщение и увидеть его прохождение и ответ.
-8. Для локального брокера первоначально используется доступ только с этой машины; подключение других устройств и сетевой доступ включаются отдельно.
+1. Download the Agent Messenger installer from GitHub Releases, install and open the application.
+2. Choose "Connect to a server" (address and device registration) or "Run a server on this computer". For a VPS, choose an existing server or the "Install broker on VPS" wizard with temporary SSH access.
+3. See the local computer and cards for Claude Code, Codex and Cursor Agent CLI.
+4. The program detects executables and versions, checks the available login status using the CLI's standard tools, and shows the time and result of the check.
+5. For a missing CLI, "Install" and clear instructions are available; installation uses a verified official source for the OS. For a missing login, "Log in" via the provider's standard flow. The user performs the browser actions that require them personally.
+6. Create a test CLI session or explicitly hand one over to Messenger's control. An already open working conversation is not taken over automatically.
+7. Send a test message and see it go through and the reply.
+8. For a local broker, access is initially limited to this machine; connecting other devices and network access are enabled separately.
 
-Нужна также инструкция установки для агента: выбрать сборку по ОС/архитектуре, проверить целостность, установить, запустить диагностику и показать пользователю оставшиеся действия. Секреты и авторизация не вшиваются в команду установки. Репозиторий сейчас закрыт: доступ к загрузке зависит от доступа пользователя к GitHub. Публичность самовольно не меняем.
+Installation instructions for an agent are also needed: choose the build by OS/architecture, verify integrity, install, run diagnostics and show the user the remaining actions. Secrets and authorization are not embedded in the install command. The repository is currently private: download access depends on the user's access to GitHub. We do not change its visibility on our own.
 
-Установка приложения не означает покупку сервера или подписок. Автонастройка имеющегося VPS запускается отдельным мастером по явному действию пользователя. Устройство может работать с локальным брокером на той же машине. VPS необязателен; сервером может быть любой выбранный поддерживаемый компьютер. Обычные настройки подключения относятся к Messenger; SSH-доступ запрашивается отдельно только мастером установки/обслуживания.
+Installing the application does not mean buying a server or subscriptions. Automatic setup of an existing VPS is started by a separate wizard on explicit user action. A device can work with a local broker on the same machine. A VPS is optional; the server can be any chosen supported computer. Regular connection settings belong to Messenger; SSH access is requested separately and only by the install/maintenance wizard.
 
-## Главное окно
+## Main window
 
-Выбранное пользователем оформление закреплено в [design/v1](../design/README.md): точный исходный макет, CSS, параметры цветов и размеров, открываемая копия. При реализации сохраняем эту визуальную основу.
+The design chosen by the user is fixed in [design/v1](../design/README.md): the exact source mockup, CSS, color and size parameters, and an openable copy. The implementation keeps this visual foundation.
 
-Приложение не привязано к конкретному координатору или внешнему окну. Координатором может быть любой поддерживаемый агент; роль можно передать. Личные предпочтения интерфейса не становятся обязательными сценариями или условиями выпуска.
+The application is not tied to a specific coordinator or external window. Any supported agent can be the coordinator; the role can be handed over. Personal interface preferences do not become mandatory scenarios or release conditions.
 
-Для карточек используется локальный [overview](UI_READ_API.md): записанные состояния сессий, псевдонимы и счётчики очереди. Это не проверка живого процесса или доступности модели. Концепт сохранён отдельно; первый [браузерный интерфейс](LOCAL_UI.md) уже читает эти данные и журнал через локальный клиент.
+The cards use the local [overview](UI_READ_API.md): recorded session states, aliases and queue counters. This is not a check of a live process or model availability. The concept is saved separately; the first [browser interface](LOCAL_UI.md) already reads this data and the log through the local client.
 
-### Компьютеры и агенты
+### Computers and agents
 
-Карточка агента показывает независимые признаки:
-- CLI: найден/не найден/неподдерживаемая версия, версия и выбранный путь.
-- Вход: подтверждён/нужен вход/не удалось проверить; время проверки. Неизвестный статус не показывается как готовность.
-- Исполнение: не настроено/готов/занят/приостановлен/управляется вручную/нужен разбор.
-- Связь: локальный клиент доступен/недоступен, брокер подключён/нет связи, последнее наблюдение удалённого устройства.
-- Очередь: число ожидающих писем и необходимость вмешательства.
-- Роль координатора и её текущий владелец.
+An agent card shows independent indicators:
+- CLI: found/not found/unsupported version, version and selected path.
+- Login: confirmed/login needed/could not check; time of the check. An unknown status is not shown as ready.
+- Execution: not configured/ready/busy/paused/manually managed/needs review.
+- Connection: local client reachable/unreachable, broker connected/no connection, last seen time of the remote device.
+- Queue: number of pending messages and whether intervention is needed.
+- Coordinator role and its current owner.
 
-Действия: «Установить CLI», «Войти», «Проверить», «Настроить сессию», «Приостановить новые задания», «Остановить текущую обработку», «Открыть диагностику». Остановка может оставить неопределённый результат; интерфейс этого не скрывает.
+Actions: "Install CLI", "Log in", "Check", "Set up session", "Pause new jobs", "Stop current processing", "Open diagnostics". Stopping can leave an uncertain result; the interface does not hide this.
 
-«Подключён» относится к управляемому CLI и клиенту Messenger. Оно не означает подключение к открытому чату Cursor GUI, Claude Desktop или текущему чату Codex.
+"Connected" refers to the managed CLI and the Messenger client. It does not mean a connection to an open Cursor GUI chat, Claude Desktop, or the current Codex chat.
 
-### Переписка
+### Conversation
 
-Видны содержимое сообщений и ответов, отправитель, адресат, машина, время, цепочка ответа и отдельно состояния доставки и обработки. Фильтры — по машине, агенту и беседе. Письма сохраняются после закрытия окна и перезапуска клиента.
+Visible: the content of messages and replies, sender, recipient, machine, time, reply chain, and, separately, delivery and processing states. Filters: by machine, agent and conversation. Messages persist after the window is closed and the client is restarted.
 
-Форма нового сообщения позволяет выбрать адресата или координатора. Ответ из окна сохраняет связь с выбранным письмом. Технические подтверждения скрыты из основного диалога, но доступны в диагностике. Видимость переписки не требует запуска модели.
+The new message form lets you choose a recipient or the coordinator. A reply from the window keeps the link to the selected message. Technical acknowledgements are hidden from the main dialog but available in diagnostics. Viewing the conversation does not require running a model.
 
-Это журнал сообщений Messenger, а не обещание показывать внутреннее рассуждение модели или всю историю каждого CLI.
+This is the Messenger message log, not a promise to show the model's internal reasoning or the full history of each CLI.
 
-### Управление и внимание
+### Control and attention
 
-Выбор координатора, список устройств, приостановка очередей и список проблем: нужен вход, отказ инструмента, отсутствующий CLI, потерянная связь, неопределённый запуск. Смена координатора использует проверяемую передачу роли; историю CLI между поставщиками не переносим.
+Coordinator selection, device list, pausing queues and a list of problems: login needed, tool refusal, missing CLI, lost connection, uncertain launch. Changing the coordinator uses a verifiable role handover; we do not move CLI history between providers.
 
-Для каждого сбоя: понятная причина, что уже известно о доставке/ответе, что блокируется и безопасные доступные действия. Одной кнопки «сбросить замок и повторить всё» нет.
+For each failure: a clear reason, what is already known about delivery/reply, what is blocked, and the safe available actions. There is no single "reset the lock and retry everything" button.
 
-## Сервер Messenger
+## Messenger server
 
-В настройках — адрес и идентичность подключённого брокера, регистрация устройства, проверка связи. Для локальной серверной роли — включение/остановка службы, автозапуск, область доступа, адрес/порт, состояние базы и резервных копий, приглашение другого устройства. Отдельно показываются «служба работает» и «сервер доступен этому клиенту».
+Settings contain the address and identity of the connected broker, device registration and a connection check. For the local server role: enabling/stopping the service, autostart, access scope, address/port, database and backup state, inviting another device. "Service running" and "server reachable from this client" are shown separately.
 
-Брокер и агент-координатор — разные роли. Выключение локального брокера не выбирает автоматически нового. Изменение адреса на другой брокер не отправляет ему старую очередь; требуется явная привязка или перенос. [Архитектура размещения](DEPLOYMENT.md).
+The broker and the coordinator agent are different roles. Turning off the local broker does not automatically elect a new one. Changing the address to another broker does not send it the old queue; an explicit binding or migration is required. [Placement architecture](DEPLOYMENT.md).
 
-### Установить брокер на VPS
+### Install broker on VPS
 
-Мастер принимает IP/имя, SSH-порт, пользователя и ключ либо пароль. Проверяет подлинность сервера, совместимость и права; показывает изменения, устанавливает брокер отдельной службой, настраивает защищённое соединение и регистрирует это устройство. После установки SSH-доступ не нужен для обычной переписки.
+The wizard takes the IP/name, SSH port, user, and a key or password. It verifies the server's authenticity, compatibility and permissions; shows the changes, installs the broker as a separate service, configures a secure connection and registers this device. After installation, SSH access is not needed for regular messaging.
 
-Статусы установки показываются по шагам; «Подключено» означает проверенную связь приложения с брокером и успешный технический тест без модели. Необходимость открыть firewall в панели провайдера, ошибочный сертификат или недоступная служба показываются отдельной причиной. Секреты по умолчанию не сохраняются и не передаются агентам. [Полный сценарий и приёмка](DEPLOYMENT.md#мастер-настроить-vps-из-приложения).
+Installation statuses are shown step by step; "Connected" means a verified connection between the application and the broker and a successful technical test without a model. The need to open the firewall in the provider's panel, a wrong certificate, or an unavailable service is shown as a separate reason. Secrets are not saved by default and are not passed to agents. [Full flow and acceptance](DEPLOYMENT.md#vps-setup-wizard-in-the-app).
 
-## Архитектурные требования к UI
+## UI architecture requirements
 
-UI читает состояния и события локального клиента через ограниченный локальный API/IPC. Команды запуска, разрешения и очередь исполняет клиент; окно не является вторым независимым запускателем CLI. Сервисные события, heartbeat и обновление экрана не обращаются к моделям.
+The UI reads the local client's states and events through a restricted local API/IPC. Launch commands, permissions and the queue are executed by the client; the window is not a second independent CLI launcher. Service events, heartbeat and screen updates do not call models.
 
-В локальном MVP закрытие окна не должно терять сообщения или запускать дубликаты. Пользователь явно видит, продолжает ли клиент работу в фоне; есть команда полного выхода с согласованной остановкой. Автозапуск включается явной настройкой.
+In the local MVP, closing the window must not lose messages or start duplicates. The user can clearly see whether the client keeps working in the background; there is a full quit command with a coordinated shutdown. Autostart is enabled by an explicit setting.
 
-Конкретный UI-фреймворк выбирается небольшим техническим опытом: окно на Mac, обмен с локальным клиентом, упаковка, будущая поддержка Windows/Linux. Предварительный Go-стек ядра не фиксирует UI-фреймворк. Python-стенды — проверка контрактов, не окончательный выбор языка продукта.
+The specific UI framework is chosen through a small technical experiment: a window on Mac, communication with the local client, packaging, future Windows/Linux support. The preliminary Go core stack does not fix the UI framework. The Python test benches verify contracts; they are not the final choice of product language.
 
-## Упаковка и обновления
+## Packaging and updates
 
-Для каждого поддержанного выпуска: версия, сборки по ОС/архитектуре, контрольные суммы, инструкция установки/удаления, известные ограничения, минимальные версии CLI и безопасное обновление локальной базы. Подпись/проверка происхождения сборок и системные предупреждения входят в проверку установки.
+For each supported release: version, builds per OS/architecture, checksums, install/uninstall instructions, known limitations, minimum CLI versions, and a safe local database upgrade. Signing/provenance verification of builds and system warnings are part of the installation check.
 
-Обновление не прерывает активную сессию молча. Данные очереди, токены устройств и CLI-история хранятся отдельно от приложения, репозитория исходного кода.
+An update does not silently interrupt an active session. Queue data, device tokens and CLI history are stored separately from the application and the source repository.
 
-## Приёмка первого окна на Mac
+## Acceptance of the first window on Mac
 
-- На машине с отсутствующим CLI видно, что требуется установить; при ошибке проверки нет ложного зелёного статуса.
-- Доступен путь штатной авторизации и повторной проверки без чтения/показа секретов.
-- Сообщение и связанный ответ видны в окне; состояния согласуются с журналом клиента.
-- Два письма одной сессии исполняются последовательно; дубликат не вызывает модель.
-- При потере связи/сбое видна причина и очередь; неопределённость не превращается в автоматический повтор.
-- Просмотр переписки и обновление статусов не запускают модель.
-- Локальный брокер запускается без VPS; клиентский режим подключается по адресу и регистрации устройства. Нет ложного статуса сетевой доступности по одному факту запуска службы.
-- Установка из выпуска и по инструкции для агента проверена на чистом пользовательском окружении; ручные шаги явно описаны.
+- On a machine with a missing CLI, it is visible what needs to be installed; if the check fails, there is no false green status.
+- The standard authorization path and re-check are available without reading/showing secrets.
+- A message and its linked reply are visible in the window; the states match the client log.
+- Two messages for the same session are executed sequentially; a duplicate does not call the model.
+- On connection loss/failure, the reason and the queue are visible; uncertainty does not turn into an automatic retry.
+- Viewing the conversation and updating statuses do not run a model.
+- The local broker starts without a VPS; client mode connects by address and device registration. There is no false network reachability status based only on the fact that the service started.
+- Installation from a release and via the agent instructions is verified in a clean user environment; manual steps are explicitly described.
 
-Окончательная приёмка сети и остальных ОС остаётся отдельным этапом. Telegram — дополнение после основной переписки.
-
+Final acceptance of the network and the other OSes remains a separate stage. Telegram is an add-on after the core messaging.

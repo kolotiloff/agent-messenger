@@ -1,48 +1,48 @@
-# Agentgram: сравнение и идеи для Messenger
+# Agentgram: comparison and ideas for Messenger
 
-Проверено 6 ноября 2026. Исследован репозиторий [dfradehubs/agentgram](https://github.com/dfradehubs/agentgram), состояние `f5bb5f0eb2674592fb82ff9f7d6ce7b753ed423e`: документация, модель агента, маршрутизация контекста и групповой координатор. Agentgram здесь не запускался; это анализ исходников, не полная эксплуатационная или защитная приёмка. Ниже факты об Agentgram отделены от решений для нашего плана.
+Checked on November 6, 2026. The [dfradehubs/agentgram](https://github.com/dfradehubs/agentgram) repository was examined at `f5bb5f0eb2674592fb82ff9f7d6ce7b753ed423e`: documentation, agent model, context routing and the group coordinator. Agentgram was not run here; this is a source analysis, not a full operational or security acceptance. Below, facts about Agentgram are kept separate from decisions for our plan.
 
-## Что у нас общего и где различие
+## What we have in common and where we differ
 
-Оба проекта дают человеку общий интерфейс для нескольких агентов, историю и подключение через MCP. Agentgram уже предлагает веб-интерфейс, потоковые события, групповые разговоры, права пользователей, интеграции и развёртывание сервера. Есть и локальный режим; обязательный Kubernetes ему приписывать нельзя. Это смежный продукт и частичный конкурент. [Описание проекта](https://github.com/dfradehubs/agentgram).
+Both projects give a person a shared interface for several agents, history, and connection via MCP. Agentgram already offers a web interface, streaming events, group conversations, user permissions, integrations and server deployment. It also has a local mode; it must not be described as requiring Kubernetes. It is an adjacent product and a partial competitor. [Project description](https://github.com/dfradehubs/agentgram).
 
-Agentgram подключает агентов преимущественно по сетевым протоколам: REST/SSE, A2A, Google ADK. Указанные Claude Code/Cursor выступают также клиентами его MCP-шлюза: вызывают инструменты подключённых серверных агентов. Это не означает владение их локальными CLI-процессами или безопасный resume существующего разговора. В просмотренных модели, маршрутизации и документации не найден готовый эквивалент нашего управления локальными CLI-сессиями. [MCP](https://github.com/dfradehubs/agentgram/blob/f5bb5f0eb2674592fb82ff9f7d6ce7b753ed423e/docs/MCP.md), [модель агента](https://github.com/dfradehubs/agentgram/blob/f5bb5f0eb2674592fb82ff9f7d6ce7b753ed423e/api/internal/models/agent.go).
+Agentgram connects agents mainly over network protocols: REST/SSE, A2A, Google ADK. The Claude Code/Cursor it mentions also act as clients of its MCP gateway: they call tools of connected server-side agents. This does not mean owning their local CLI processes or safely resuming an existing conversation. In the model, routing and documentation reviewed, no ready equivalent of our management of local CLI sessions was found. [MCP](https://github.com/dfradehubs/agentgram/blob/f5bb5f0eb2674592fb82ff9f7d6ce7b753ed423e/docs/MCP.md), [agent model](https://github.com/dfradehubs/agentgram/blob/f5bb5f0eb2674592fb82ff9f7d6ce7b753ed423e/api/internal/models/agent.go).
 
-| Подход | Преимущества | Цена и ограничения |
+| Approach | Advantages | Cost and limitations |
 |---|---|---|
-| Messenger: адаптер существующей CLI-сессии | Сохраняются рабочая папка, инструменты, вход и контекст выбранного провайдера. Подходит агентам на личных компьютерах. | Зависимость от поведения каждого CLI и ОС; сложные завершение, resume, защита от параллельного запуска. Неоднозначный результат блокирует дальнейшую работу. |
-| Agentgram: общий шлюз сетевых агентов | Универсальнее на уровне протоколов; богаче готовый веб-интерфейс и управление доступом. | Агент должен предоставлять поддерживаемый API или получить обёртку. Существующая локальная CLI-сессия не становится сетевым агентом автоматически. |
-| Только почтовые ящики и MCP | Простое ядро, слабая зависимость от провайдера. | Кто-то всё равно должен разбудить агента, получить письмо и подтвердить обработку. Наличие MCP-инструмента само по себе не запускает ход простаивающего GUI-чата. |
+| Messenger: adapter for an existing CLI session | The working folder, tools, login and context of the chosen provider are preserved. Suits agents on personal computers. | Depends on the behavior of each CLI and OS; completion, resume and protection against parallel runs are complex. An ambiguous result blocks further work. |
+| Agentgram: shared gateway for network agents | More universal at the protocol level; a richer ready-made web interface and access control. | The agent must expose a supported API or get a wrapper. An existing local CLI session does not automatically become a network agent. |
+| Mailboxes and MCP only | Simple core, weak dependence on the provider. | Someone still has to wake the agent, deliver the message and confirm processing. Having an MCP tool does not by itself start a turn in an idle GUI chat. |
 
-Наша текущая реализация менее зрелая по широте возможностей: принят постоянный Claude на Mac; сеть четырёх компьютеров, постоянные Codex/Cursor и остальные ОС ещё не приняты. Соответствие нашему сценарию не доказывает превосходство по надёжности над Agentgram.
+Our current implementation is less mature in breadth of features: persistent Claude on Mac has been accepted; the four-computer network, persistent Codex/Cursor and the other OSes have not yet been accepted. Fitting our scenario does not prove that we are more reliable than Agentgram.
 
-## Решение для нашей архитектуры
+## Decision for our architecture
 
-Сохранить CLI-адаптеры, но разделить сетевую доставку и исполнение. Сетевое ядро адресует логического агента на устройстве, хранит конверт и подтверждения. Локальная привязка определяет, какой адаптер и конкретная сессия получат письмо. Позднее за тем же адресом может стоять API-агент или внешний MCP-клиент.
+Keep the CLI adapters, but separate network delivery from execution. The network core addresses a logical agent on a device and stores the envelope and acknowledgements. The local binding determines which adapter and which specific session receive the message. Later, an API agent or an external MCP client may sit behind the same address.
 
-Сейчас очередь SQLite прямо ссылается на `session_key`; независимость доставки от сессии ещё не реализована. До сетевого этапа нужно определить версию привязки и миграцию. Уже принятое письмо нельзя молча перенаправлять в новую сессию после смены привязки. Блокировка точного CLI ID и правила неопределённого результата остаются в адаптере.
+Currently the SQLite queue references `session_key` directly; delivery independent of the session is not yet implemented. Before the network stage, the binding version and migration must be defined. An already accepted message must not be silently redirected to a new session after the binding changes. Locking of the exact CLI ID and the uncertain-result rules remain in the adapter.
 
-Координатор — назначаемая роль одного из агентов. Обязательную дополнительную модель внутри брокера не вводим. Передача роли не переносит внутреннюю историю между провайдерами.
+The coordinator is an assignable role of one of the agents. We do not introduce a mandatory extra model inside the broker. Handing over the role does not transfer internal history between providers.
 
-## Что берём в план
+## What we take into the plan
 
-| Приоритет и этап | Идея и источник | Условие готовности |
+| Priority and stage | Idea and source | Readiness condition |
 |---|---|---|
-| Этап 3: подключение | Мастер настройки по примеру первого запуска Agentgram: пошаговый выбор агента, подключения и проверок. [Changelog](https://github.com/dfradehubs/agentgram/blob/f5bb5f0eb2674592fb82ff9f7d6ce7b753ed423e/CHANGELOG.md). | Отдельно видны установка CLI, вход, совместимость и готовность сессии. Проверка состояния не вызывает модель. Нет ложного «подключён». |
-| Этапы 2–3: наблюдение | Живой поток доступных событий: ответ, запуск/результат инструмента, ожидание, ошибка. Переподключение интерфейса восстанавливает просмотр по курсору событий. Agentgram документирует буферизацию и возврат к запущенному заданию. [Changelog](https://github.com/dfradehubs/agentgram/blob/f5bb5f0eb2674592fb82ff9f7d6ce7b753ed423e/CHANGELOG.md). | Обрыв окна и повторное подключение не создают новое письмо или запуск модели. Не обещаем скрытые рассуждения, которые провайдер не отдаёт. |
-| Этап 5: сеть | Разделение транспорта и исполнения, логические адреса, версия привязки, идемпотентные ID и подтверждение после записи. [Архитектура Agentgram](https://github.com/dfradehubs/agentgram/blob/f5bb5f0eb2674592fb82ff9f7d6ce7b753ed423e/docs/ARCHITECTURE.md). | Отключение/переподключение устройства не теряет письмо и не повторяет уже начатую модель. Смена привязки не меняет адресата принятого письма. |
-| До автоматических групповых цепочек | Передавать только новый релевантный контекст; ограничивать размер, число переходов и бюджет. Agentgram собирает ограниченную дельту контекста между агентами. [context.go](https://github.com/dfradehubs/agentgram/blob/f5bb5f0eb2674592fb82ff9f7d6ce7b753ed423e/api/internal/proxy/context.go). | Контекст отслеживается по подтверждённым ID/курсорам; обрезка явная. Измерены входные/выходные токены и число вызовов. Цикл останавливается по лимиту без потери истории. |
-| Этап 5: разрешения | Ограниченные MCP-инструменты и разрешённые адресаты, журнал управляющих действий. Agentgram имеет права на инструменты и агентов. [MCP](https://github.com/dfradehubs/agentgram/blob/f5bb5f0eb2674592fb82ff9f7d6ce7b753ed423e/docs/MCP.md). | Агент не получает право менять настройки/ключи только потому, что умеет отправлять сообщение. В журнале нет секретов. |
-| После базового обмена четырёх устройств | Отдельный адаптер REST/A2A, если появится реальный сценарий. | Один API-агент проходит тот же контракт ID, доставки, ошибок и лимитов, без обхода гарантий CLI. |
+| Stage 3: connection | A setup wizard modeled on Agentgram's first run: step-by-step choice of agent, connection and checks. [Changelog](https://github.com/dfradehubs/agentgram/blob/f5bb5f0eb2674592fb82ff9f7d6ce7b753ed423e/CHANGELOG.md). | CLI installation, login, compatibility and session readiness are shown separately. A status check does not call the model. No false "connected". |
+| Stages 2–3: observation | A live stream of available events: reply, tool start/result, waiting, error. Reconnecting the interface restores the view from an event cursor. Agentgram documents buffering and returning to a running job. [Changelog](https://github.com/dfradehubs/agentgram/blob/f5bb5f0eb2674592fb82ff9f7d6ce7b753ed423e/CHANGELOG.md). | A window drop and reconnection do not create a new message or a model run. We do not promise hidden reasoning that the provider does not expose. |
+| Stage 5: network | Separation of transport and execution, logical addresses, binding version, idempotent IDs and acknowledgement after write. [Agentgram architecture](https://github.com/dfradehubs/agentgram/blob/f5bb5f0eb2674592fb82ff9f7d6ce7b753ed423e/docs/ARCHITECTURE.md). | Disconnecting/reconnecting a device does not lose a message and does not repeat a model run already started. Changing the binding does not change the recipient of an accepted message. |
+| Before automatic group chains | Pass only new relevant context; limit size, number of hops and budget. Agentgram assembles a bounded context delta between agents. [context.go](https://github.com/dfradehubs/agentgram/blob/f5bb5f0eb2674592fb82ff9f7d6ce7b753ed423e/api/internal/proxy/context.go). | Context is tracked by confirmed IDs/cursors; truncation is explicit. Input/output tokens and the number of calls are measured. A loop stops at the limit without losing history. |
+| Stage 5: permissions | Restricted MCP tools and allowed recipients, a log of control actions. Agentgram has permissions on tools and agents. [MCP](https://github.com/dfradehubs/agentgram/blob/f5bb5f0eb2674592fb82ff9f7d6ce7b753ed423e/docs/MCP.md). | An agent does not get the right to change settings/keys merely because it can send a message. The log contains no secrets. |
+| After basic exchange between four devices | A separate REST/A2A adapter, if a real scenario appears. | One API agent passes the same contract for IDs, delivery, errors and limits, without bypassing the CLI guarantees. |
 
-Мастер подключения, поток событий и восстановление просмотра — ближайшие продуктовые идеи. Они не заменяют текущий приоритет обновлений. Протоколы REST/A2A, корпоративные SSO/RBAC, Slack, публичные ссылки и маркетплейс не становятся обязательными задачами первого релиза.
+The connection wizard, the event stream and view recovery are the nearest product ideas. They do not replace the current priority of updates. REST/A2A protocols, corporate SSO/RBAC, Slack, public links and a marketplace do not become mandatory tasks for the first release.
 
-## Экономия токенов
+## Token savings
 
-В групповом режиме Agentgram модель выбирает следующего участника; дополнительное сведение итогов также может вызывать модель. Это относится к групповому координатору, не ко всем одиночным сообщениям. [orchestrator.go](https://github.com/dfradehubs/agentgram/blob/f5bb5f0eb2674592fb82ff9f7d6ce7b753ed423e/api/internal/orchestrator/orchestrator.go).
+In Agentgram's group mode, the model chooses the next participant; an additional summary step may also call the model. This applies to the group coordinator, not to all single messages. [orchestrator.go](https://github.com/dfradehubs/agentgram/blob/f5bb5f0eb2674592fb82ff9f7d6ce7b753ed423e/api/internal/orchestrator/orchestrator.go).
 
-У нас маршрутизация, ACK, ожидание, обновление окна и проверка связи выполняются обычным кодом. Агент-координатор всё равно расходует токены, когда планирует или отвечает. Сохранённая CLI-сессия не делает её контекст бесплатным; нулевой расход при бездействии не уникален для Messenger. Обещать процент экономии нельзя без одинакового сценария и измерений. Полезны объединение мелких писем, дельта контекста, защита от циклов и отсутствие LLM для служебной доставки.
+In our case, routing, ACK, waiting, window refresh and connectivity checks are done by ordinary code. A coordinator agent still spends tokens when it plans or replies. A saved CLI session does not make its context free; zero spend while idle is not unique to Messenger. A percentage of savings cannot be promised without an identical scenario and measurements. Useful measures are batching small messages, context deltas, loop protection and no LLM for service delivery.
 
-## Заимствование кода
+## Borrowing code
 
-Пока зафиксированы идеи, код Agentgram не перенесён. Репозиторий использует [MIT](https://github.com/dfradehubs/agentgram/blob/f5bb5f0eb2674592fb82ff9f7d6ce7b753ed423e/LICENSE); при будущем переносе кода сохранять предусмотренные лицензией уведомления. Не переносить весь стек только ради одной возможности.
+So far only ideas have been recorded; no Agentgram code has been carried over. The repository uses [MIT](https://github.com/dfradehubs/agentgram/blob/f5bb5f0eb2674592fb82ff9f7d6ce7b753ed423e/LICENSE); if code is carried over in the future, keep the notices the license requires. Do not carry over the whole stack just for one feature.

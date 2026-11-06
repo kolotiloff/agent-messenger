@@ -1,13 +1,13 @@
-# Рабочий локальный интерфейс: Mac
+# Working local interface: Mac
 
-6 ноября 2026, macOS arm64, Go 1.22.2. Изменения поверх PR #9.
+November 6, 2026, macOS arm64, Go 1.22.2. Changes on top of PR #9.
 
-Полный `go test -race -count=1 -ldflags=-linkmode=external ./...` прошёл. Предупреждение LC_DYSYMTAB внешнего линковщика сохраняется у используемой версии Go; тестовые процессы завершились успешно. JavaScript прошёл синтаксическую проверку. Сборки с CGO_ENABLED=0 для linux/amd64 и windows/amd64 прошли; runtime других ОС не проверялся.
+The full `go test -race -count=1 -ldflags=-linkmode=external ./...` passed. The external linker's LC_DYSYMTAB warning persists with the Go version used; the test processes completed successfully. The JavaScript passed a syntax check. Builds with CGO_ENABLED=0 for linux/amd64 and windows/amd64 passed; the runtime on other OSes was not verified.
 
-Новые серверные тесты проверяют отказ без ключа, неверные Host/Origin и межсайтовый запрос, отсутствие произвольного прокси и запрет команд изменения данных, ограничения страницы, срок запроса к клиенту, отсутствие сырых ошибок/Detail, приватные заголовки ответа и наличие встроенных ресурсов.
+New server tests verify: refusal without a key, wrong Host/Origin and a cross-site request, no arbitrary proxying and a ban on data-modifying commands, page limits, the deadline of a request to the client, no raw errors/Detail, private response headers and the presence of embedded resources.
 
-В браузере проверен настоящий локальный UI-сервер и клиент Messenger с SQLite в отдельном временном профиле. Данные специально подготовлены для теста: три регистрации, 55 писем, один синтетический связанный ответ. Это не результаты настоящих Claude/Codex/Cursor. У клиента не было разрешения запускать модели; исполняемый путь тестовых регистраций — не провайдер.
+In the browser, the real local UI server and the Messenger client with SQLite in a separate temporary profile were tested. The data was prepared specifically for the test: three registrations, 55 messages, one synthetic linked reply. These are not results of real Claude/Codex/Cursor. The client had no authorization to launch models; the executable path of the test registrations is not a provider.
 
-Проверены загрузка последних 50 писем и добавление оставшихся пяти без повторов, пустая другая сессия, карточки, показ подтверждённого тестового ответа, HTML-подобный текст без создания HTML-элементов. После чтения снимок всех таблиц совпал с исходным. После остановки тестового клиента окно показало ошибку связи, очистило прежние карточки и не выдало недоступную очередь за пустую. Проверены ширины 320 и 1024 px; горизонтального переполнения корня на узком экране нет. Добавлена прокрутка области длинной переписки с показом последних писем при открытии.
+Verified: loading the last 50 messages and appending the remaining five without duplicates, an empty other session, cards, display of the confirmed test reply, HTML-like text without creating HTML elements. After reading, the snapshot of all tables matched the original. After the test client was stopped, the window showed a connection error, cleared the previous cards and did not present the unavailable queue as empty. Widths of 320 and 1024 px were checked; there is no horizontal overflow of the root on a narrow screen. Scrolling of the long-conversation area was added, showing the latest messages on open.
 
-Тестовые UI/клиенты остановлены, временная вкладка закрыта. Рабочие пользовательские сессии не запускались. Установщика, автозапуска, отправки из окна и нативной оболочки пока нет. Браузерный preview — проверка чтения и выбранного оформления перед следующими командами UI.
+The test UIs/clients were stopped and the temporary tab was closed. No working user sessions were started. There is no installer, autostart, sending from the window or native shell yet. The browser preview is a check of reading and of the chosen design before the next UI commands.

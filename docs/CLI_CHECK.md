@@ -1,6 +1,6 @@
-# Явная проверка версии и входа
+# Explicit version and login check
 
-`doctor` остаётся пассивным: найденные в PATH программы он не исполняет. Для выбранного пользователем CLI есть отдельная команда:
+`doctor` stays passive: it does not execute programs found in PATH. For a CLI the user has chosen there is a separate command:
 
 ```sh
 messenger check-cli --provider claude \
@@ -8,48 +8,48 @@ messenger check-cli --provider claude \
   --environment /absolute/path/to/.claude --json
 ```
 
-Для Codex укажите `--provider codex`, путь его CLI и профиля; для Cursor — `--provider cursor`, путь `cursor-agent`/`agent` и профиля. Оба пути обязательны, абсолютны и должны существовать. Поиск и автоматическое исполнение произвольного `agent` из PATH не выполняются. Путь CLI может находиться вне PATH.
+For Codex, pass `--provider codex`, the path to its CLI and profile; for Cursor, `--provider cursor`, the path to `cursor-agent`/`agent` and the profile. Both paths are required, must be absolute and must exist. Arbitrary `agent` binaries in PATH are neither searched for nor executed automatically. The CLI path may be outside PATH.
 
-Команда не открывает сессии, не передаёт промпт, не вызывает login/logout и не снимает блокировки. Запускаются только `--version` и, для проверенного контракта версии/ОС, штатный запрос статуса. Это исполнение выбранной программы: использовать следует доверенный установленный CLI. Строка версии не является проверкой цифровой подписи или подлинности файла.
+The command does not open sessions, send a prompt, call login/logout or lift locks. It runs only `--version` and, for a verified version/OS contract, the standard status request. This executes the chosen program: use a trusted installed CLI. The version string is not a check of the file's digital signature or authenticity.
 
-## Проверенные команды и версии
+## Verified commands and versions
 
-На Mac проверены именно диагностические команды следующих версий:
+On a Mac, specifically the diagnostic commands of the following versions were verified:
 
-| Провайдер | Версия | Команда статуса |
+| Provider | Version | Status command |
 |---|---|---|
 | Claude Code | 2.1.318 | `auth status --json` |
 | Codex CLI | 0.155.1 | `login status` |
 | Cursor Agent CLI | 2026.11.05-86047df | `status --format json` |
 
-Если версия изменилась, её распознанный номер показывается, но запрос входа не выполняется до проверки нового контракта. Для неизвестного формата версии статус неизвестен. На Linux/Windows эта первая реализация возвращает `platform_not_qualified`, не исполняя CLI. Это намеренно ограниченная матрица диагностики; она не означает, что все эти CLI приняты для постоянной обработки сообщений Messenger.
+If the version has changed, its recognized number is shown, but the login request is not run until the new contract is verified. For an unknown version format the status is unknown. On Linux/Windows this first implementation returns `platform_not_qualified` without executing the CLI. This is a deliberately limited diagnostic matrix; it does not mean that all these CLIs are accepted for persistent Messenger message handling.
 
-Основания команд: [Claude CLI reference](https://code.claude.com/docs/en/cli-reference), [Codex developer commands](https://learn.chatgpt.com/docs/developer-commands?surface=cli), [Cursor authentication](https://cursor.com/docs/cli/reference/authentication). JSON-флаг Cursor дополнительно подтверждён справкой установленного CLI. Команды не заменяются на prompt/print при ошибке или неизвестной версии.
+Command sources: [Claude CLI reference](https://code.claude.com/docs/en/cli-reference), [Codex developer commands](https://learn.chatgpt.com/docs/developer-commands?surface=cli), [Cursor authentication](https://cursor.com/docs/cli/reference/authentication). Cursor's JSON flag was additionally confirmed by the installed CLI's help. The commands are not replaced with prompt/print on an error or unknown version.
 
-## Что означает результат
+## What the result means
 
-`--json` выдаёт схему версии 1 с временем проверки, выбранными CLI/профилем и независимыми результатами:
+`--json` outputs a version 1 schema with the check time, the selected CLI/profile and independent results:
 
-- `version.state=reported`: распознан ответ выбранного CLI; `value` содержит только номер установленного формата.
-- `authentication.state=authenticated`: штатная команда сообщила о входе/наличии учётных данных. Это не проверка сетевой доступности модели, квоты, актуальности токена на сервере или конкретного рабочего разговора.
-- `not_authenticated`: получен распознанный отрицательный ответ (Claude/Codex). Для отрицательного Cursor-ответа контракт пока не принят, поэтому возвращается `unknown`.
-- `unknown`: ошибка, таймаут, противоречивый код завершения, неожиданный формат или превышение вывода. Повторный вход не выполняется и автоматически не предлагается как единственное решение.
-- `not_checked`: запрос статуса не выполнялся, например из-за версии/ОС.
+- `version.state=reported`: the selected CLI's response was recognized; `value` contains only a number in the established format.
+- `authentication.state=authenticated`: the standard command reported a login/presence of credentials. This is not a check of the model's network availability, quota, the token's validity on the server or a specific working conversation.
+- `not_authenticated`: a recognized negative response was received (Claude/Codex). For a negative Cursor response the contract is not yet accepted, so `unknown` is returned.
+- `unknown`: an error, timeout, contradictory exit code, unexpected format or output limit exceeded. No re-login is performed, and it is not automatically suggested as the only fix.
+- `not_checked`: the status request was not run, e.g. because of the version/OS.
 
-`session` и `messenger_compatibility` остаются `not_checked`. Код завершения 0 означает сформированный отчёт; автоматизация должна смотреть поля состояния, а не считать 0 готовностью агента.
+`session` and `messenger_compatibility` remain `not_checked`. Exit code 0 means a report was produced; automation must look at the state fields and not treat 0 as the agent being ready.
 
-## Профиль, окружение и секреты
+## Profile, environment and secrets
 
-Выбор профиля использует ту же функцию, что запуск сообщений. Для обычных `~/.claude`, `~/.codex`, `~/.cursor` соответствующая переменная переопределения удаляется; для отдельного канонического каталога задаётся выбранное значение. Это сохраняет штатный вход обычного профиля и не наследует чужую настройку каталога.
+Profile selection uses the same function as message launches. For the default `~/.claude`, `~/.codex`, `~/.cursor`, the corresponding override variable is removed; for a separate canonical directory the selected value is set. This keeps the default profile's standard login and does not inherit someone else's directory setting.
 
-Остальное окружение наследуется. API-ключ или другой штатный механизм провайдера может влиять на эффективный вход; отчёт прямо указывает область `selected_profile_and_inherited_environment`. Результат не приписывается автоматически другой зарегистрированной сессии или другому окружению.
+The rest of the environment is inherited. An API key or another standard provider mechanism may affect the effective login; the report explicitly states the scope `selected_profile_and_inherited_environment`. The result is not automatically attributed to another registered session or another environment.
 
-Рабочая папка проверки — новый временный каталог вне проекта, удаляемый после неё. Messenger не открывает файлы учётных данных самостоятельно, но выбранный CLI читает своё хранилище обычным способом и может обслуживать собственный кеш/учётные данные. Утверждение о полной неизменности файлов провайдера не делается.
+The check's working folder is a new temporary directory outside the project, deleted afterwards. Messenger does not open credential files itself, but the selected CLI reads its storage in the usual way and may maintain its own cache/credentials. No claim is made that the provider's files remain completely unchanged.
 
-Сырой stdout/stderr остаётся только в памяти процесса. Адрес почты, организация, userInfo, ключи и их маски, сообщения ошибок не включаются в JSON, журналы или сохранённую историю Messenger. Вывод каждого потока ограничен 64 КиБ; переполнение даёт неизвестный результат. Неизвестные строки версии не публикуются.
+Raw stdout/stderr stays only in process memory. Email address, organization, userInfo, keys and their masks, and error messages are not included in the JSON, logs or saved Messenger history. Each stream's output is limited to 64 KiB; overflow gives an unknown result. Unknown version strings are not published.
 
-Каждой команде даётся до 8 секунд, ожиданию унаследованных каналов — до 500 мс. При отмене/таймауте результат неизвестен. Это ограничивает диагностику и не доказывает остановку всех отделившихся потомков; результат никогда не используется для освобождения сессии. Не выполняются автообновление CLI, установка, вход или выход из аккаунта по инициативе Messenger.
+Each command gets up to 8 seconds, waiting for inherited pipes up to 500 ms. On cancellation/timeout the result is unknown. This bounds the diagnostics and does not prove that all detached descendants stopped; the result is never used to release a session. Messenger never on its own initiative auto-updates the CLI, installs it, or logs into or out of an account.
 
-Результаты не записываются автоматически в `doctor`: там сохраняется `not_checked`. В окне карточка «Настроить» показывает выбранные пути и отдельную кнопку «Проверить версию и вход». Открытие карточки ничего не запускает. Проверка показывает время, путь и профиль; изменение полей сбрасывает предыдущий результат. Отчёт хранится только в текущем окне и не считается проверкой другой сессии.
+Results are not written automatically into `doctor`: it keeps `not_checked`. In the window, the «Настроить» ("Configure") card shows the selected paths and a separate «Проверить версию и вход» ("Check version and login") button. Opening the card launches nothing. The check shows the time, path and profile; changing the fields resets the previous result. The report is kept only in the current window and does not count as a check of another session.
 
-На Mac пассивный поиск для окна дополнительно проверяет `~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`: запущенное из Dock приложение обычно не наследует PATH терминала. Кандидаты не исполняются до явного нажатия. Через HTTP доступны только фиксированные диагностические команды, без передачи произвольных аргументов; проверяется локальный Origin и ключ окна. Одновременно выполняется одна проверка на сервер окна.
+On a Mac, passive discovery for the window additionally checks `~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`: an app launched from the Dock usually does not inherit the terminal's PATH. Candidates are not executed until explicitly clicked. Over HTTP only fixed diagnostic commands are available, without passing arbitrary arguments; the local Origin and the window key are checked. One check runs at a time per window server.

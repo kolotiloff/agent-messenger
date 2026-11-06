@@ -1,35 +1,35 @@
-# Привязка ответов и владение сессией: локальные проверки
+# Reply binding and session ownership: local checks
 
-Дата: 2026-11-05. **PASS: 13 тестов на macOS / Python 3.9.6**, итоговый запуск — 1,291 секунды. Использованы синтетические процессы Python; вызовов моделей и запусков агентских CLI не было.
+Date: 2026-11-05. **PASS: 13 tests on macOS / Python 3.9.6**, final run — 1.291 seconds. Synthetic Python processes were used; there were no model calls and no agent CLI launches.
 
-[Код и инструкция](../../experiments/session_safety/README.md).
+[Code and instructions](../../experiments/session_safety/README.md).
 
-## Подтверждено в стенде
+## Confirmed in the test bench
 
-- MCP предоставляет только чтение текущего письма и ответ текстом. Адресат и связь с исходным письмом задаются программно. Старый способ ошибочной отправки через `send_message` отклоняется.
-- Повтор ответа после потери результата вызова возвращает ту же запись. Изменение текста при повторе отклоняется.
-- Завершённый или выдуманный контекст исполнения не может отправить ответ.
-- Шесть отдельных процессов одновременно запрашивают одну сессию: резервирование получает один, остальные не получают права запуска.
-- Второе письмо остаётся в очереди, пока первый искусственный исполнитель жив, даже если ответ уже сохранён. После его выхода второе письмо обрабатывается.
-- Повторная доставка входящего сообщения не создаёт второе исполнение; конфликт содержимого с тем же ID отклоняется.
-- Независимые сессии могут иметь независимых владельцев; одну резервировку нельзя повторно перевести к запуску.
-- Код выхода 0 без сохранённого ответа и ненулевой код с сохранённым ответом не отмечаются успешным завершением.
-- Принудительное завершение управляющего процесса после резервирования, после намерения запуска, после создания ребёнка до сохранения PID, а также после выхода ребёнка до фиксации итога не разрешает второй запуск.
-- В случае потерянного PID искусственный дочерний процесс действительно продолжал работу после гибели управляющего процесса: это проверено по продолжающему изменяться счётчику активности. Новое исполнение было заблокировано и во время его работы, и после его выхода.
-- Явный перевод в `uncertain` сохраняет блокировку и отклоняет новые записи из старого контекста.
+- MCP provides only reading the current message and replying with text. The recipient and the link to the original message are set programmatically. The old way of mistakenly sending via `send_message` is rejected.
+- Repeating a reply after the call result was lost returns the same record. Changing the text on a repeat is rejected.
+- A finished or made-up execution context cannot send a reply.
+- Six separate processes request one session simultaneously: one gets the reservation, the rest get no right to launch.
+- The second message stays in the queue while the first artificial executor is alive, even if the reply is already saved. After it exits, the second message is processed.
+- Redelivery of an incoming message does not create a second execution; a content conflict with the same ID is rejected.
+- Independent sessions can have independent owners; one reservation cannot be moved to launch again.
+- Exit code 0 without a saved reply and a non-zero code with a saved reply are not marked as successful completion.
+- Forcibly killing the controlling process after the reservation, after the launch intent, after creating the child but before saving the PID, and also after the child exited but before the outcome was recorded, does not allow a second launch.
+- In the lost-PID case, the artificial child process really kept working after the controlling process died: this was verified by an activity counter that kept changing. A new execution was blocked both while it was running and after it exited.
+- An explicit transition to `uncertain` keeps the lock and rejects new writes from the old context.
 
-## Вывод для архитектуры
+## Conclusion for the architecture
 
-Потеря `reply_to`, обнаруженная в предыдущем опыте Codex–Claude, устранена в новом интерфейсе стенда: модель больше не выбирает адрес и ID для ответа. Это ещё не проверка нового интерфейса с реальными CLI.
+The loss of `reply_to` found in the earlier Codex–Claude experiment is fixed in the bench's new interface: the model no longer chooses the address and ID for the reply. This is not yet a check of the new interface with real CLIs.
 
-Для локальной очереди достаточно атомарного резервирования и постоянного состояния в базе. Освобождать сессию по таймеру, отсутствующему PID или одному сохранённому ответу небезопасно. При неопределённости требуется разбор, а не автоматический повтор.
+For the local queue, an atomic reservation and persistent state in the database are sufficient. Releasing a session by timer, by a missing PID, or by a single saved reply is unsafe. Uncertainty requires investigation, not an automatic retry.
 
-Транзакции используют `BEGIN IMMEDIATE`; отдельные процессы согласуют запись через одну SQLite-базу. Документация SQLite описывает сериализацию писателей и поведение этих транзакций: [SQLite transactions](https://sqlite.org/lang_transaction.html). Создание и ожидание дочерних процессов выполняется через стандартный [Python subprocess](https://docs.python.org/3/library/subprocess.html).
+Transactions use `BEGIN IMMEDIATE`; separate processes coordinate writes through one SQLite database. The SQLite documentation describes writer serialization and the behavior of these transactions: [SQLite transactions](https://sqlite.org/lang_transaction.html). Creating and waiting for child processes is done via the standard [Python subprocess](https://docs.python.org/3/library/subprocess.html).
 
-## Что остаётся открытым
+## What remains open
 
-H6/H7 частично подтверждены только для искусственного локального исполнителя. H8 частично проверена на уровне локальных идентификаторов и повторных вызовов MCP; сеть, брокер и потеря сетевых ACK не проверялись. H5 остаётся частичной: новый MCP нужно повторить с агентами. H9 с часовым ожиданием не выполнялась.
+H6/H7 are partially confirmed only for an artificial local executor. H8 is partially verified at the level of local identifiers and repeated MCP calls; the network, the broker and loss of network ACKs were not verified. H5 remains partial: the new MCP must be repeated with agents. H9 with an hour-long wait was not performed.
 
-Не покрыты: Windows/Linux, распределённое владение, ручной обход клиента, открытая GUI-сессия с тем же ID, реальные CLI-потомки, обновление ОС/CLI, отключение питания, повреждение базы, сетевые файловые системы, восстановление из резервной копии, авторизация, восстановление из `uncertain`.
+Not covered: Windows/Linux, distributed ownership, manually bypassing the client, an open GUI session with the same ID, real CLI descendants, OS/CLI updates, power loss, database corruption, network file systems, restoring from a backup, authorization, recovery from `uncertain`.
 
-Тесты не дают гарантии отсутствия параллельного запуска в любом окружении. Гарантия стенда действует для сотрудничающих процессов, использующих одну локальную базу и одну каноническую привязку сессии. Механизм ожидания не обращается к моделям, но часовая и провайдерская статистика этим коротким запуском не измерена.
+The tests do not guarantee the absence of a parallel launch in every environment. The bench's guarantee holds for cooperating processes that use one local database and one canonical session binding. The waiting mechanism does not call models, but hourly and per-provider statistics were not measured by this short run.

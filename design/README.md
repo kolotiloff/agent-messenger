@@ -1,80 +1,79 @@
-# Основа оформления Agent Messenger
+# Agent Messenger design foundation
 
-Пользователь выбрал стиль показанного в чате макета 5 ноября 2026 года: спокойные поверхности, скругления, цвета, отступы и расположение элементов. Сохраняем его как **design v1** и используем при реализации первого окна. Менять визуальное направление без отдельного обсуждения не нужно.
+On November 5, 2026 the user picked the style of the mockup shown in chat: calm surfaces, rounded corners, colors, spacing and element layout. We keep it as **design v1** and use it to implement the first window. The visual direction should not change without a separate discussion.
 
-- [Открываемый макет](v1/preview.html) — скачать файл и открыть в современном браузере. GitHub показывает исходный HTML, не само приложение.
-- [Исходный фрагмент](v1/concept.fragment.html) — согласованный макет; 6 ноября по просьбе владельца убраны детали его рабочего проекта без изменения стиля.
-- [Стили](v1/styles.css) — CSS, извлечённый без изменений из исходного фрагмента.
-- [Параметры оформления](v1/tokens.json) — имена цветов и размеры, пригодные для переноса в выбранную технологию окна.
-- [Контрольные суммы](v1/manifest.json) — проверка исходного фрагмента и CSS.
+- [Openable mockup](v1/preview.html) — download the file and open it in a modern browser. GitHub shows the HTML source, not the app itself.
+- [Source fragment](v1/concept.fragment.html) — the approved mockup; on November 6, at the owner's request, details of their work project were removed without changing the style.
+- [Styles](v1/styles.css) — CSS extracted unchanged from the source fragment.
+- [Design parameters](v1/tokens.json) — color names and sizes suitable for porting to whatever window technology is chosen.
+- [Checksums](v1/manifest.json) — verification of the source fragment and CSS.
 
-## Что сохраняем
+## What we keep
 
-Системный шрифт macOS/Windows/Linux, основной размер 13 px, заголовок 18 px, начертания 400/500. У окна и карточек скругление 12 px, у кнопок 8 px, у полей 7 px. Боковая навигация 204 px, основная область с симметричным отступом 16 px, интервалы карточек 12 px. Основная переписка — центральная часть окна. Порядок разделов в продукте, согласованный 6 ноября: **Переписка → Агенты → Сервер**. При запуске открыта переписка. Сохранённый исходный макет v1 остаётся архивным эталоном стиля; актуальный порядок реализован в окне продукта. Узкие окна перестраиваются, а не уменьшают весь интерфейс.
+System font on macOS/Windows/Linux, 13 px body size, 18 px heading, weights 400/500. Window and card corner radius 12 px, buttons 8 px, fields 7 px. Side navigation 204 px, main area with symmetric 16 px padding, 12 px gaps between cards. The main conversation is the central part of the window. Section order in the product, agreed on November 6: **Переписка → Агенты → Сервер** ("Conversation → Agents → Server"). The conversation is open at launch. The saved original v1 mockup remains the archived style reference; the current order is implemented in the product window. Narrow windows reflow rather than shrinking the whole interface.
 
-Цвета определены парами `light-dark(...)`: фон, панели, текст, разделители, выбранные элементы, спокойный зелёный статус и янтарное внимание. Светлая и тёмная темы — части одной системы. Архивные значения v1 находятся в CSS и tokens.json; уточнения по новым образцам владельца фиксируются ниже и в стилях продукта.
+Colors are defined as `light-dark(...)` pairs: background, panels, text, dividers, selected items, a calm green status and an amber attention color. The light and dark themes are parts of one system. The archived v1 values live in the CSS and tokens.json; refinements based on the owner's new samples are recorded below and in the product styles.
 
-Версия v1 — сохранённый эталон. При переносе используем эти параметры в компонентах продукта. Доступность, масштаб текста и платформенные требования можно улучшать, сохраняя общий вид. Существенные визуальные изменения оформляем следующей версией с описанием отличий.
+Version v1 is a saved reference. When porting, we use these parameters in the product components. Accessibility, text scaling and platform requirements may be improved while keeping the overall look. Significant visual changes go into the next version with a description of the differences.
 
-## Границы макета
+## Mockup boundaries
 
-Все переписки, статусы машин и действия — демонстрационные. Одобрение оформления не означает приёмку сети, авторизации, координатора или настоящего окна. Макет не вызывает CLI и не подключается к Messenger. Демообщение не сохраняется как реальная переписка.
+All conversations, machine statuses and actions are demo data. Approval of the design does not mean acceptance of the network, authorization, coordinator or the real window. The mockup does not call a CLI and does not connect to Messenger. Demo conversation is not saved as a real conversation.
 
-preview.html содержит автономную оболочку для просмотра и настройки темы; вспомогательные скрипты и иконки загружаются с фиксированных CDN-адресов. Это не офлайн-дистрибутив приложения. Исходные CSS и параметры оформления не требуют внешней сети. Host-интеграции фрагмента ограничены сохранением выбранного представления; в обычном браузере их заменяет оболочка. Реальные адреса, пароли и ключи в макет вводить не нужно.
+preview.html contains a standalone shell for viewing and configuring the theme; helper scripts and icons load from pinned CDN addresses. It is not an offline distribution of the app. The source CSS and design parameters need no external network. The fragment's host integrations are limited to saving the selected view; in a regular browser the shell replaces them. Do not enter real addresses, passwords or keys into the mockup.
 
-Полные требования продукта — [APP.md](../docs/APP.md), план — [RELEASE_PLAN.md](../docs/RELEASE_PLAN.md).
+Full product requirements: [APP.md](../docs/APP.md); plan: [RELEASE_PLAN.md](../docs/RELEASE_PLAN.md).
 
-## Уточнения окна от 6 ноября
+## Window refinements of November 6
 
-По просьбе владельца нативное окно не повторяет внешнюю рамку браузерного макета и вторую шапку. Нижняя полоса убрана; уведомление об обновлении располагается внизу левой панели. Прокручивается история сообщений, поле ввода закреплено, компактно и не выделяется заметной рамкой. В разделе агентов три основные карточки провайдеров, сессии открываются отдельным окном с собственной прокруткой. Статусы CLI находятся в карточке без отдельного списка снизу. Эти изменения уточняют применение сохранённого стиля в продукте.
+At the owner's request, the native window does not reproduce the browser mockup's outer frame and second header. The bottom bar was removed; the update notice sits at the bottom of the left panel. The message history scrolls, the input field is pinned, compact and has no prominent border. The agents section has three main provider cards; sessions open in a separate window with its own scrolling. CLI statuses are in the card, with no separate list below. These changes refine how the saved style is applied in the product.
 
-Светлая/тёмная темы и «Как в системе» выбираются внизу левой панели. Нейтральные белые и графитовые поверхности уточнены по скриншотам владельца от 6 ноября, 09:26–09:27; это собственная палитра Messenger, а не извлечённые стили или шрифты Claude. Режимы сверены с [официальной справкой Claude](https://support.claude.com/en/articles/8887527-customizing-your-appearance-settings). Выбор нативного приложения хранится в пользовательских настройках и не зависит от адреса локального окна.
+Light/dark themes and «Как в системе» ("Match system") are selected at the bottom of the left panel. The neutral white and graphite surfaces were refined from the owner's screenshots of November 6, 09:26–09:27; this is Messenger's own palette, not extracted Claude styles or fonts. The modes were checked against the [official Claude help article](https://support.claude.com/en/articles/8887527-customizing-your-appearance-settings). The native app's choice is stored in user settings and does not depend on the local window's address.
 
-Актуальные токены продукта сохранены в `internal/localui/assets/app.css`: фон #ffffff / #191919, боковая панель #fafafa / #202020, текст #303030 / #dddddd. Меню #ffffff / #303030, подсветка #eeeeee / #4b4b4b, голубая галочка выбранного пункта. Выпадающие списки открываются поверх панелей, имеют собственную прокрутку и поддерживают стрелки, Home/End, Enter и Escape. Поле ввода — белая или графитовая поверхность с неизменной тонкой границей: при фокусе появляется только текстовый курсор. Небольшой значок отправки расположен справа внутри общего поля; отдельной большой кнопки нет.
+The current product tokens are stored in `internal/localui/assets/app.css`: background #ffffff / #191919, sidebar #fafafa / #202020, text #303030 / #dddddd. Menu #ffffff / #303030, highlight #eeeeee / #4b4b4b, a blue checkmark on the selected item. Dropdowns open over panels, have their own scrolling and support arrows, Home/End, Enter and Escape. The input field is a white or graphite surface with a constant thin border: on focus only the text cursor appears. A small send icon sits on the right inside the shared field; there is no separate large button.
 
-В карточках, выборе сессии и переписке добавлены векторные значки провайдеров. Отправитель определяется по зарегистрированному псевдониму сессии, а не по тексту сообщения; неизвестному отправителю не назначается чужой логотип. Название и псевдоним сохраняются рядом. Иконки встроены локально, запросов к сайтам провайдеров при просмотре нет.
+Vector provider icons were added to cards, session selection and the conversation. The sender is determined by the session's registered alias, not by the message text; an unknown sender is never given someone else's logo. The name and alias are kept side by side. Icons are embedded locally; viewing makes no requests to provider sites.
 
-Повтор заголовка активной вкладки убран. В нативном приложении обновление данных находится в меню «Вид → Обновить сообщения и статусы»; рядом с вкладками остаётся только переключатель очереди. Пауза и возобновление находятся в правой панели «Очередь сообщений» рядом с перепиской. Техническая фраза о расходе модели и дублирующий статус снизу удалены; связь отражается индикатором компьютера.
+The repeated active-tab heading was removed. In the native app, refreshing data is in the menu «Вид → Обновить сообщения и статусы» ("View → Refresh messages and statuses"); only the queue toggle remains next to the tabs. Pause and resume are in the right-hand «Очередь сообщений» ("Message queue") panel next to the conversation. The technical phrase about model usage and the duplicate status at the bottom were removed; connectivity is shown by the computer indicator.
 
-Кнопки действий заметны без наведения: постоянная заливка #efefef / #404040, при наведении и клавиатурном фокусе #e3e3e3 / #4b4b4b, без обводки. Неактивные действия имеют приглушённую заливку и текст. Вкладки, выбор компьютера и встроенные значки сохраняют отдельный спокойный стиль.
+Action buttons are visible without hover: a constant fill #efefef / #404040, on hover and keyboard focus #e3e3e3 / #4b4b4b, no outline. Inactive actions have a muted fill and text. Tabs, computer selection and inline icons keep their own calm style.
 
-Обновление обнаруживается автоматически при запуске, каждые 5 минут и при возвращении в окно (с общим интервалом не меньше 5 минут). Внизу слева появляется «Доступно обновление» только при доступной версии; номер виден в подсказке. Ручная проверка остаётся в меню приложения. Ошибка сети обозначается кнопкой «Повторить проверку».
+Updates are detected automatically at launch, every 5 minutes and when returning to the window (with a shared interval of at least 5 minutes). «Доступно обновление» ("Update available") appears at the bottom left only when a version is available; the number is shown in the tooltip. Manual checking remains in the app menu. A network error is indicated by a «Повторить проверку» ("Retry check") button.
 
-После preview.13 реализовано: исходящие из локального окна справа в мягком блоке, ответы агентов слева; имя и значок отправителя сохраняются. Для сетевого режима направление должно определяться подтверждённой принадлежностью отправителя устройству, а не догадкой по псевдониму. Пока сетевого идентификатора нет, нельзя выдавать произвольный alias за «этот компьютер». Эта правка поступила после сборки preview.13 и в него не включена.
+Implemented after preview.13: outgoing messages from the local window on the right in a soft block, agent replies on the left; the sender's name and icon are kept. For network mode, direction must be determined by the sender's confirmed association with the device, not by guessing from the alias. Until there is a network identifier, an arbitrary alias must not be presented as «этот компьютер» ("this computer"). This change arrived after the preview.13 build and is not included in it.
 
-Для исходящих: мягкий скруглённый блок с ровным фоном, удобными внутренними отступами и без обводки/тени. Ориентир — присланный владельцем скриншот переписки Claude от 10:08. Входящие располагаются слева без лишней рамки. Обе темы используют общие токены.
+For outgoing messages: a soft rounded block with an even background, comfortable inner padding and no border/shadow. The reference is the owner's screenshot of a Claude conversation from 10:08. Incoming messages are on the left without an extra frame. Both themes use shared tokens.
 
-## Единая палитра продукта
+## Unified product palette
 
-После проверки всех компонентов стили продукта объединены в `internal/localui/assets/app.css`; замороженный `design-v1.css` больше не подключается к окну. Все поверхности, текст, кнопки, поля, меню, состояния и сообщения берут цвета из одного набора токенов.
+After reviewing all components, the product styles were consolidated into `internal/localui/assets/app.css`; the frozen `design-v1.css` is no longer loaded by the window. All surfaces, text, buttons, fields, menus, states and messages take their colors from a single token set.
 
-| Элемент | Светлая | Тёмная |
+| Element | Light | Dark |
 |---|---|---|
-| Основной фон | #ffffff | #191919 |
-| Боковая панель | #fafafa | #202020 |
-| Кнопка / наведение | #efefef / #e3e3e3 | #404040 / #4b4b4b |
-| Поле выбора / наведение | #f3f3f3 / #eaeaea | #303030 / #393939 |
-| Неактивное действие | #f5f5f5 | #282828 |
-| Исходящее сообщение | #f3f3f3 | #252525 |
-| Основной / вторичный текст | #303030 / #6b6b6b | #dddddd / #a0a0a0 |
+| Main background | #ffffff | #191919 |
+| Sidebar | #fafafa | #202020 |
+| Button / hover | #efefef / #e3e3e3 | #404040 / #4b4b4b |
+| Select field / hover | #f3f3f3 / #eaeaea | #303030 / #393939 |
+| Inactive action | #f5f5f5 | #282828 |
+| Outgoing message | #f3f3f3 | #252525 |
+| Primary / secondary text | #303030 / #6b6b6b | #dddddd / #a0a0a0 |
 
-Обводки фокуса у кнопок и поля ввода отсутствуют. Клавиатурный фокус кнопок обозначается фоном. Поля выбора имеют постоянную поверхность и тонкую нейтральную границу; они видны без наведения. Нулевая группа сессий отключает свою кнопку и остаётся отключённой после обновления статусов. Нижний блок компактный, текущая версия берётся из установленного bundle, отдельно от доступного обновления.
+Buttons and the input field have no focus outlines. Keyboard focus on buttons is indicated by background. Select fields have a constant surface and a thin neutral border; they are visible without hover. An empty session group disables its button, and it stays disabled after statuses refresh. The bottom block is compact; the current version is taken from the installed bundle, separately from the available update.
 
-Очередь сообщений отображается справа от переписки по умолчанию; значок вверху скрывает и возвращает панель. Отдельной вкладки очереди нет. Сейчас панель показывает количество ожидающих писем и требующие внимания сессии по данным клиента. У панели очереди, истории сообщений и списка компьютеров отдельная прокрутка; тема, текущая версия и обновление закреплены внизу слева.
+The message queue is shown to the right of the conversation by default; an icon at the top hides and restores the panel. There is no separate queue tab. Currently the panel shows the number of pending messages and the sessions needing attention, based on client data. The queue panel, message history and computer list scroll independently; the theme, current version and update are pinned at the bottom left.
 
 
-## Единая сетка отступов
+## Unified spacing grid
 
-Продукт использует шаги 4/8/12/16/24 px из CSS-переменных `--am-space-*`. Одинаковые типы блоков используют одни значения в обеих темах. Основные поля панели — 16 px с каждой стороны; вложенный компонент не добавляет к ним ещё один внешний отступ. На узком браузерном окне до 620 px поля уменьшаются симметрично до 12 px.
+The product uses 4/8/12/16/24 px steps from the `--am-space-*` CSS variables. Blocks of the same type use the same values in both themes. The main panel padding is 16 px on each side; a nested component does not add another outer margin on top of it. In a narrow browser window up to 620 px, padding shrinks symmetrically to 12 px.
 
-Переключатель сессии, история и поле ввода выровнены по общей правой границе содержимого. Полоса прокрутки находится у края панели, вне полей текста. Сворачивание очереди не меняет величину левого/правого поля. Поле ввода закреплено независимо от истории.
+The session switcher, history and input field are aligned to a shared right content edge. The scrollbar sits at the panel edge, outside the text padding. Collapsing the queue does not change the left/right padding. The input field is pinned independently of the history.
 
-Карточки и окно сессий: внутренние поля 16 px, интервалы групп 12 px. Меню выбора: одинаковые поля 8 px. Нижний блок боковой панели: кнопка обновления занимает общую ширину, далее тема и установленная версия с интервалом 8 px; дополнительного отступа у номера нет. Список компьютеров и нижний блок имеют общие границы.
+Cards and the sessions window: 16 px inner padding, 12 px gaps between groups. Select menus: equal 8 px padding. Sidebar bottom block: the update button spans the full width, followed by the theme and installed version with an 8 px gap; the version number has no extra margin. The computer list and the bottom block share edges.
 
-При изменении компоновки проверять обе темы, очередь открыта/закрыта, все вкладки, меню и окно сессий, длинные имена, многострочный ввод, обычное и минимальное окно. Проверять не только снимок, но и геометрию полей и отсутствие прокрутки всей страницы.
+When changing layout, check both themes, queue open/closed, all tabs, menus and the sessions window, long names, multi-line input, normal and minimum window size. Check not just the screenshot but the padding geometry and the absence of whole-page scrolling.
 
-Полосы прокрутки WebKit/Chromium имеют постоянную ширину 6 px; наведение меняет только цвет. Резерв полосы учтён в полях содержимого, поэтому её появление не добавляет второй правый отступ.
-# Уточнение расчёта полосы прокрутки
+WebKit/Chromium scrollbars have a constant 6 px width; hover changes only the color. The scrollbar's reserved space is accounted for in the content padding, so its appearance does not add a second right margin.
+# Scrollbar calculation refinement
 
-При расчёте симметричных отступов вычитается только реальная ширина занятого scrollbar gutter (`offsetWidth - clientWidth - borders`). При overlay scrollbar она равна нулю. Ширина нарисованного ползунка сама по себе не доказывает резервирование места.
-
+When computing symmetric padding, only the actual width of the occupied scrollbar gutter (`offsetWidth - clientWidth - borders`) is subtracted. With an overlay scrollbar it is zero. The width of the drawn thumb by itself does not prove that space is reserved.

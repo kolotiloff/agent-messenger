@@ -1,73 +1,73 @@
-# Локальный интерфейс: сообщения и очередь
+# Local UI: messages and queue
 
-Это технический preview в браузере, подключённый к настоящему локальному API. Не нативная оболочка macOS и не установщик. Сохранённое оформление [design/v1](../design/README.md) перенесено в продукт; HTML, CSS и JavaScript встроены в Go-бинарник, внешние CDN и Node для запуска не нужны.
+This is a technical preview in the browser, connected to the real local API. It is not the native macOS shell and not an installer. The saved [design/v1](../design/README.md) styling has been carried over into the product; HTML, CSS and JavaScript are embedded in the Go binary, and no external CDN or Node is needed to run it.
 
-## Запуск
+## Running
 
 ```sh
-messenger --root КАТАЛОГ_ДАННЫХ ui
+messenger --root DATA_DIR ui
 ```
 
-Команда выводит приватную локальную ссылку. Откройте её в браузере на этом же компьютере. `--port 0` (по умолчанию) выбирает свободный порт. Доступен только адрес `127.0.0.1`; удалённое подключение не включается.
+The command prints a private local link. Open it in a browser on the same computer. `--port 0` (the default) picks a free port. Only the `127.0.0.1` address is available; remote connections are not enabled.
 
-Клиент `serve`/`start` с тем же каталогом должен уже работать. `ui` сам его не запускает, не открывает SQLite напрямую и не меняет защитные резервы. Если клиент остановлен, окно покажет недоступность данных. Не запускайте другой каталог, чтобы обойти удерживаемую сессию. Для проверки без моделей используйте клиент без `--allow-model-calls`.
+A `serve`/`start` client with the same directory must already be running. `ui` does not start it itself, does not open SQLite directly and does not change the protective reservations. If the client is stopped, the window shows that data is unavailable. Do not start a different directory to get around a held session. To test without models, use a client without `--allow-model-calls`.
 
-Закрытие вкладки не останавливает клиент или UI-процесс. Ctrl+C в терминале `ui` останавливает только HTTP-интерфейс, не `serve` и не CLI. Службы и автозапуск не устанавливаются.
+Closing the tab does not stop the client or the UI process. Ctrl+C in the `ui` terminal stops only the HTTP interface, not `serve` and not the CLI. No services or autostart are installed.
 
-## Что работает
+## What works
 
-- Карточки зарегистрированных сессий: псевдонимы, записанное состояние, удержание владельца, очередь. Вход и готовность остаются непроверенными; найденный CLI не изображается готовым агентом.
-- История выбранной сессии, связанные ответы и результат проверки. Последние 50 писем, затем загрузка более ранних страниц. Разметка сообщений выводится как обычный текст. Сокращённое содержимое явно обозначено.
-- Сводка очереди и пассивный поиск кандидатов CLI в PATH.
-- Явная отправка выбранной зарегистрированной сессии, пауза и возобновление обработки новых писем. Ответ о сохранении письма не означает ответа или успеха модели.
-- Ручное обновление, время наблюдения, явная ошибка недоступности. Экран сам не опрашивает модель; фонового таймера обновления нет.
-- Компоновка выбранного дизайна, светлая/тёмная тема браузера и узкое окно. Прокрутка длинной переписки ограничена её областью.
+- Cards for registered sessions: aliases, recorded state, owner hold, queue. Login and readiness remain unverified; a discovered CLI is not presented as a ready agent.
+- History of the selected session, linked replies and the check result. The last 50 messages, then loading of earlier pages. Message markup is rendered as plain text. Truncated content is clearly marked.
+- A queue summary and passive discovery of CLI candidates in PATH.
+- Explicit sending to the selected registered session, pausing and resuming the processing of new messages. A response confirming that a message was stored does not mean a model reply or model success.
+- Manual refresh, observation time, an explicit unavailability error. The screen does not poll the model itself; there is no background refresh timer.
+- The layout of the chosen design, the browser's light/dark theme and a narrow window. Scrolling of a long conversation is confined to its own area.
 
-Пока отсутствуют вход в аккаунты, создание сессии из окна, серверная настройка, смена координатора и другие компьютеры. Эти функции не изображаются работающими. Исходящие после нажатия отправки сохраняются в базе клиента; полное закрытие окна и повторное открытие проверены на Mac. Добавлена [упаковка preview и локальная установка](INSTALL.md); оставшиеся проверки адаптеров и распространения ещё не закрыты.
+Not yet present: account login, creating a session from the window, server configuration, changing the coordinator, and other computers. These features are not presented as working. Outgoing messages are stored in the client database after Send is pressed; fully closing the window and reopening it has been verified on a Mac. [Preview packaging and local installation](INSTALL.md) have been added; the remaining adapter and distribution checks are not yet closed.
 
-`status` и `overview` читаются отдельно и не являются общим атомарным снимком. Это наблюдение, не разрешение выполнять действия. При выполнении команды действуют проверки самого клиента; состояние на экране может уже устареть.
+`status` and `overview` are read separately and are not a single atomic snapshot. This is an observation, not permission to take actions. When a command runs, the client's own checks apply; the state on screen may already be stale.
 
-## Отправка и повтор транспорта
+## Sending and transport retry
 
-Выберите сессию, напишите сообщение и нажмите «Отправить». Отправитель фиксирован кодом как `local-user`. До HTTP-запроса окно создаёт `ui-UUID` и записывает неизменяемые адрес, текст и идентификатор в sessionStorage. Затем локальный HTTP-сервер вызывает `ui-prepare`: клиент сохраняет конверт в `ui_outbox` той же SQLite, с точной привязкой к зарегистрированной сессии. Только после подтверждения этой записи вызывается `ui-submit`. Подготовка сама не создаёт задание для модели. Если запись/проверка хранилища не удалась, отправки нет. Двойное нажатие блокируется сразу.
+Select a session, type a message and press «Отправить» ("Send"). The sender is fixed in code as `local-user`. Before the HTTP request, the window creates a `ui-UUID` and writes the immutable address, text and ID to sessionStorage. The local HTTP server then calls `ui-prepare`: the client stores the envelope in `ui_outbox` in the same SQLite, bound exactly to the registered session. Only after this write is confirmed is `ui-submit` called. Preparation by itself does not create a job for the model. If the storage write/check fails, nothing is sent. A double click is blocked immediately.
 
-При положительном ACK поле очищается. Надпись подтверждает только запись в SQLite. Если запуск моделей разрешён у работающего клиента и очередь не на паузе, обработка может начаться сразу; отправка не гарантирует отсутствия расхода токенов. Сам показ окна и ожидание модель не вызывают.
+On a positive ACK the field is cleared. The label confirms only the write to SQLite. If model runs are allowed on the running client and the queue is not paused, processing may start immediately; sending does not guarantee that no tokens will be spent. Merely showing the window and waiting do not call the model.
 
-При потерянном ответе неизвестно, дошло ли письмо. Окно сохраняет конверт, блокирует редактирование и смену адресата и предлагает «Повторить доставку». Повтор отправляет тот же ID, адрес и текст. SQLite принимает такой повтор без второго письма; другой текст под тем же ID отклоняется. Перезагрузка этой же вкладки восстанавливает конверт. Ни загрузка страницы, ни восстановление соединения не отправляют его автоматически. Новый запуск модели, `recover-failed` и повтор уже выполненных действий здесь не вызываются.
+If the response is lost, it is unknown whether the message arrived. The window keeps the envelope, locks editing and changing the recipient, and offers «Повторить доставку» ("Retry delivery"). The retry sends the same ID, address and text. SQLite accepts such a retry without creating a second message; different text under the same ID is rejected. Reloading the same tab restores the envelope. Neither page load nor reconnection sends it automatically. A new model run, `recover-failed` and repeating already performed actions are not invoked here.
 
-**Восстановление после закрытия:** новое окно читает `ui_outbox` из того же клиента, даже если сменились порт и ключ UI или браузерная вкладка полностью закрыта. `prepared` означает, что конверт записан, но доставка в очередь не подтверждена; кнопка восстанавливает исходный конверт в поле, затем требуется явное «Повторить доставку». `queued` означает, что письмо уже записано в очередь: его не надо отправлять снова. «Понятно, убрать из списка» подтверждает просмотр и сохраняет само письмо и историю. Это не удаление и не повтор работы модели.
+**Recovery after closing:** a new window reads `ui_outbox` from the same client, even if the UI port and key have changed or the browser tab was fully closed. `prepared` means the envelope was written but delivery to the queue was not confirmed; the button restores the original envelope into the field, and then an explicit «Повторить доставку» is required. `queued` means the message has already been written to the queue: it must not be sent again. «Понятно, убрать из списка» ("Got it, remove from list") acknowledges that it was seen and keeps the message itself and the history. This is not deletion and not a repeat of model work.
 
-Вставка задания и перевод исходящего в `queued` происходят одной транзакцией. Если процесс завершится до неё — останется подготовленный конверт; после неё — уже принятое письмо. `ui-ack` отмечает подтверждение окна, не влияет на обработку. Если этот ACK потерян, окно снова показывает уже принятое письмо, без повторной отправки. При несовпадении текста/маршрута или отсутствии задания при записанном `queued` клиент отказывает; повреждение не разрешает повтор. SQLite использует WAL и явный `synchronous(FULL)`.
+Inserting the job and moving the outgoing entry to `queued` happen in one transaction. If the process exits before it, a prepared envelope remains; after it, an already accepted message. `ui-ack` records the window's acknowledgement and does not affect processing. If this ACK is lost, the window shows the already accepted message again, without resending. If the text/route does not match, or the job is missing while `queued` is recorded, the client refuses; corruption does not permit a retry. SQLite uses WAL and an explicit `synchronous(FULL)`.
 
-До разбора сохранённых отправок окно блокирует создание новых, чтобы пользователь не создал новое задание вместо неизвестного. Одновременно хранится до 100 неподтверждённых конвертов; старые подтверждённые записи остаются в базе, но не загружаются в список восстановления. Адрес, текст и ID сохранённого конверта не редактируются.
+Until saved sends have been resolved, the window blocks creating new ones, so that the user does not create a new job in place of an unknown one. Up to 100 unacknowledged envelopes are kept at a time; older acknowledged records remain in the database but are not loaded into the recovery list. The address, text and ID of a saved envelope cannot be edited.
 
-**Граница сохранения:** текст, который только набран и ещё не отправлен, не является сохранённым черновиком. Если клиент недоступен и `ui-prepare` не был записан, конверт остаётся только в текущей вкладке. Полное закрытие до первой подтверждённой записи клиентом всё ещё не гарантирует сохранения. Интерфейс не обещает и не изображает обратного. Потеря/ручное удаление самой базы также не покрываются восстановлением окна. Автоматического воспроизведения подготовленных писем нет.
+**Persistence boundary:** text that has only been typed and not yet sent is not a saved draft. If the client is unavailable and `ui-prepare` was not written, the envelope exists only in the current tab. Fully closing before the client's first confirmed write still does not guarantee it is saved. The interface does not promise or suggest otherwise. Loss or manual deletion of the database itself is also not covered by window recovery. There is no automatic replay of prepared messages.
 
-## Пауза
+## Pause
 
-«Приостановить очередь» останавливает выдачу новых писем в работу. Уже активная работа продолжается. «Возобновить очередь» снимает эту паузу, но не меняет разрешение запуска моделей, не освобождает защитные резервы и не выполняет resume сессии самостоятельно. При потерянном подтверждении команда не повторяется автоматически; экран перечитывает фактическое состояние.
+«Приостановить очередь» ("Pause queue") stops handing new messages out for work. Work that is already active continues. «Возобновить очередь» ("Resume queue") lifts this pause, but does not change permission to run models, does not release the protective reservations and does not resume a session on its own. If the confirmation is lost, the command is not retried automatically; the screen re-reads the actual state.
 
-## Локальный доступ
+## Local access
 
-Ссылка содержит случайный ключ текущего запуска в URL-фрагменте. Страница переносит его в sessionStorage этой вкладки и убирает из адресной строки. Данные требуют этот ключ в заголовке запроса. Ссылку нельзя публиковать или класть в git; перезапуск UI создаёт новый ключ.
+The link contains a random key for the current run in the URL fragment. The page moves it into this tab's sessionStorage and removes it from the address bar. Data requests require this key in a request header. The link must not be published or committed to git; restarting the UI creates a new key.
 
-Сервер проверяет точный Host и Origin и отклоняет межсайтовые запросы. Пять операций чтения доступны через GET: status, overview, timeline, пассивное discovery и outbox. Только `/api/enqueue`, `/api/pause`, `/api/resume`, `/api/outbox/ack` принимают POST с ключом, обязательным точным Origin и JSON. Неизвестные поля, лишний JSON и слишком большой запрос отклоняются. Общего прокси control-команд нет. Кэширование отключено, встраивание в чужую страницу запрещено, скрипты и стили загружаются только с того же локального адреса. Сырые ошибки клиента и диагностические детали не передаются. Доверенный локальный пользователь и расширения его браузера остаются в границе доверия.
+The server checks the exact Host and Origin and rejects cross-site requests. Five read operations are available via GET: status, overview, timeline, passive discovery and outbox. Only `/api/enqueue`, `/api/pause`, `/api/resume`, `/api/outbox/ack` accept POST with the key, a mandatory exact Origin and JSON. Unknown fields, trailing JSON and oversized requests are rejected. There is no general proxy for control commands. Caching is disabled, embedding into another page is forbidden, and scripts and styles are loaded only from the same local address. Raw client errors and diagnostic details are not passed through. The trusted local user and their browser extensions remain inside the trust boundary.
 
-Шаблон работает без сети; для чтения нужен локальный процесс. В Windows пока остаются ограничения локального клиента и IPC: успешная сборка интерфейса не означает поддержку полного продукта на Windows.
+The template works without a network; reading requires the local process. On Windows, limitations of the local client and IPC still remain: a successful build of the interface does not mean the full product is supported on Windows.
 
-Основания реализации: [Go net/http](https://pkg.go.dev/net/http#Server), [Content Security Policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy). Результаты проверки — [отчёт Mac](reports/2026-11-06-local-ui-mac.md).
+Implementation references: [Go net/http](https://pkg.go.dev/net/http#Server), [Content Security Policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy). Test results: [Mac report](reports/2026-11-06-local-ui-mac.md).
 
-## Контракт команд окна
+## Window command contract
 
-| POST | JSON | Успешный ACK |
+| POST | JSON | Successful ACK |
 |---|---|---|
-| `/api/enqueue` | `message_id` (`ui-` + UUID строчными hex), `alias`, `text` | `ok: true`, тот же `message_id`, `created: true/false` |
+| `/api/enqueue` | `message_id` (`ui-` + UUID in lowercase hex), `alias`, `text` | `ok: true`, the same `message_id`, `created: true/false` |
 | `/api/pause` | `{}` | `ok: true`, `action: "pause"` |
 | `/api/resume` | `{}` | `ok: true`, `action: "resume"` |
-| `/api/outbox/ack` | `message_id` уже принятого письма | `ok: true`, `action: "ui-ack"` |
+| `/api/outbox/ack` | `message_id` of an already accepted message | `ok: true`, `action: "ui-ack"` |
 
-Предел тела — 64 KiB, текста — 16000 байт; поле браузера ограничено 4000 UTF-16 единицами. При ошибке/таймауте control API сервер отвечает 503 с `state: "unconfirmed"`; это не доказательство отсутствия записи. Страница не получает сырые детали ошибки. Отсутствие обязательного подтверждения `created` также считается неизвестным результатом.
+The body limit is 64 KiB and the text limit is 16000 bytes; the browser field is limited to 4000 UTF-16 code units. On a control API error/timeout, the server responds 503 with `state: "unconfirmed"`; this is not proof that nothing was written. The page does not receive raw error details. A missing mandatory `created` confirmation is also treated as an uncertain result.
 
-Проверка отправки, паузы, обрыва и повторов — [отчёт Mac](reports/2026-11-06-ui-actions-mac.md).
+Testing of sending, pausing, connection drops and retries: [Mac report](reports/2026-11-06-ui-actions-mac.md).
 
-`GET /api/outbox` возвращает `schema_version: 1` и `items` с `message_id`, `alias`, `text`, `state`, `created_at`. Данные читаются через control API; UI не открывает базу напрямую. Старый клиент без этих команд требует обновления: окно не обходит журнал исходящих старым enqueue. Проверка полного закрытия и сбоя — [отчёт Mac](reports/2026-11-06-ui-outbox-mac.md).
+`GET /api/outbox` returns `schema_version: 1` and `items` with `message_id`, `alias`, `text`, `state`, `created_at`. Data is read through the control API; the UI does not open the database directly. An old client without these commands must be updated: the window does not bypass the outbox journal with the old enqueue. Testing of full closing and failure: [Mac report](reports/2026-11-06-ui-outbox-mac.md).

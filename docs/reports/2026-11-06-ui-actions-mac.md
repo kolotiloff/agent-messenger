@@ -1,25 +1,25 @@
-# Отправка и управление очередью из окна: Mac, 6 ноября 2026
+# Sending and queue control from the window: Mac, November 6, 2026
 
-Основание: локальный UI из `ae9a3f4`, затем изменения этого PR. macOS arm64, Go 1.22.2. Это приёмка локальной очереди и HTTP/браузерного интерфейса, не вызов настоящих моделей и не сетевой брокер.
+Basis: the local UI from `ae9a3f4`, then the changes in this PR. macOS arm64, Go 1.22.2. This is acceptance of the local queue and the HTTP/browser interface, not a call to real models and not a network broker.
 
-## Реальные проверки
+## Real checks
 
-- Полный `go test -race -count=1 -ldflags=-linkmode=external ./...` прошёл на Mac. Внешний линкер нужен для этой связки Go/macOS; предупреждения `LC_DYSYMTAB` остались, тесты завершились успешно.
-- Новые HTTP-тесты: обязательные Origin/ключ/JSON, запрет дополнительных полей и произвольных control-команд, ограничение размера, корректный адрес отправителя от кода, срок запроса, отсутствие подмены сохранения в очереди успехом провайдера.
-- Реальная SQLite в тесте: письмо записывается, затем caller имитирует потерю ответа. HTTP сообщает `unconfirmed`. Двенадцать конкурентных повторов с тем же ID дают `created=false`; изменённый текст с тем же ID не принят. Повторное владение сессией отклоняется.
-- Native бинарник собран и подписан локальной ad-hoc подписью для запуска теста. Созданы отдельные HOME, профили, рабочая папка и SQLite. `serve` запущен без разрешения моделей, CLI в тестовых привязках — `/usr/bin/false`. Рабочие и GUI-сессии не использованы.
-- В браузере двойное нажатие «Отправить» сохранило одно письмо. Оно видно в истории как ожидающее, без подтверждения модели. Проверено отдельным чтением SQLite.
-- «Возобновить очередь» и «Приостановить очередь» изменили статус клиента. `cli_launch=not-authorized` остался без изменений, новых попыток модели не появилось. Активной модельной работы в этой пробе не было; эта экранная проверка не доказывает её продолжение при паузе. Существующие тесты проверяют удержание живого постоянного процесса между ходами и запрет следующего хода на паузе.
-- Для второго письма клиент остановлен перед отправкой, UI оставлен работающим. Окно показало неизвестный результат, сохранило текст/адрес/ID и заблокировало редактирование. Обновление той же вкладки восстановило тот же ID. После запуска того же клиента и обновления окна автоматической отправки не было: в базе оставалось одно первое письмо.
-- Явное двойное нажатие «Повторить доставку» сохранило второе письмо ровно один раз и с исходным ID. Итого две новые записи `local-user`, обе `queued`; новых попыток и ответов модели нет. Потеря ответа **после** записи проверена HTTP/SQLite-тестом, браузерный обрыв был **до** записи.
-- Новые элементы проверены в обычном и узком окне 320 px; горизонтального переполнения корневой области нет. Исходное оформление `design/v1/styles.css` не менялось.
-- Сборки `CGO_ENABLED=0` для Linux/amd64 и Windows/amd64 прошли. На этих ОС приложение в этой проверке не запускалось.
-- Тестовые UI и оба запуска тестового клиента остановлены. Защитные резервы рабочих сессий не тронуты.
+- The full `go test -race -count=1 -ldflags=-linkmode=external ./...` passed on Mac. The external linker is needed for this Go/macOS combination; `LC_DYSYMTAB` warnings remained, the tests completed successfully.
+- New HTTP tests: required Origin/key/JSON, rejection of extra fields and arbitrary control commands, a size limit, the sender address set correctly by the code, a request deadline, and no passing off of a queue write as provider success.
+- Real SQLite in the test: the message is written, then the caller simulates losing the response. HTTP reports `unconfirmed`. Twelve concurrent retries with the same ID give `created=false`; changed text with the same ID is not accepted. A second ownership of the session is rejected.
+- The native binary was built and signed with a local ad-hoc signature to run the test. A separate HOME, profiles, working folder and SQLite were created. `serve` was started without model authorization; the CLI in the test bindings is `/usr/bin/false`. No working or GUI sessions were used.
+- In the browser, a double click on «Отправить» ("Send") persisted one message. It is visible in the history as pending, with no model confirmation. Verified by a separate SQLite read.
+- «Возобновить очередь» ("Resume queue") and «Приостановить очередь» ("Pause queue") changed the client status. `cli_launch=not-authorized` stayed unchanged, and no new model attempts appeared. There was no active model work in this test; this on-screen check does not prove that such work continues while paused. Existing tests verify that a live persistent process is kept between turns and that the next turn is blocked while paused.
+- For the second message the client was stopped before sending, and the UI was left running. The window showed an unknown result, kept the text/address/ID and locked editing. Reloading the same tab restored the same ID. After starting the same client and reloading the window there was no automatic send: the database still had only the first message.
+- An explicit double click on «Повторить доставку» ("Retry delivery") persisted the second message exactly once and with the original ID. In total, two new `local-user` records, both `queued`; no new model attempts or replies. Losing the response **after** the write was verified by the HTTP/SQLite test; the browser interruption was **before** the write.
+- The new elements were checked in a normal window and a narrow 320 px window; there is no horizontal overflow of the root area. The original styling `design/v1/styles.css` was not changed.
+- `CGO_ENABLED=0` builds for Linux/amd64 and Windows/amd64 passed. The application was not run on those OSes in this check.
+- The test UIs and both test client runs were stopped. The protective reservations of working sessions were not touched.
 
-## Пределы результата
+## Limits of the result
 
-ACK означает только сохранение письма, не успешное исполнение модели. Повтор транспорта использует тот же ID и не повторяет модельную попытку. Если пользователь сознательно создаст новое письмо с новым ID, это другое задание.
+An ACK means only that the message was persisted, not that the model executed successfully. A transport retry uses the same ID and does not repeat the model attempt. If the user deliberately creates a new message with a new ID, that is a different job.
 
-Неподтверждённый конверт пока хранится в sessionStorage одной вкладки одного UI-запуска. Полное закрытие окна/браузера или перезапуск UI не приняты как безопасное восстановление этого конверта. Постоянный исходящий журнал — следующий отдельный этап, до нативной упаковки. Уже принятые SQLite письма не зависят от жизни вкладки.
+An unconfirmed envelope is currently stored in the sessionStorage of one tab of one UI run. Fully closing the window/browser or restarting the UI is not accepted as safe recovery of this envelope. A persistent outbox log is the next separate stage, before native packaging. Messages already accepted into SQLite do not depend on the tab's lifetime.
 
-Серверные функции, авторизация CLI, регистрация сессий из окна и смена координатора не добавлены. Проверка постоянных Codex/Cursor и безопасного завершения владельца остаётся в плане.
+Server functions, CLI authorization, session registration from the window and coordinator switching have not been added. Verification of persistent Codex/Cursor and of safe owner shutdown remains in the plan.

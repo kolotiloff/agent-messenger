@@ -1,22 +1,22 @@
-# Обновления Mac-приложения
+# Mac app updates
 
-Приложение получает подписанные сборки из публичного GitHub Releases `kolotiloff/agent-messenger`. Ключ или вход GitHub для скачивания не нужен. Приватный ключ подписи остаётся в Keychain разработчика; в исходниках и приложении находится только публичный Ed25519-ключ проверки.
+The app receives signed builds from the public GitHub Releases of `kolotiloff/agent-messenger`. No GitHub key or login is needed to download. The private signing key stays in the developer's Keychain; the sources and the app contain only the public Ed25519 verification key.
 
-## Что обновляется
+## What gets updated
 
-Sparkle 2.10.1 заменяет приложение и встроенный интерфейс, затем открывает его снова. Работающий фоновый клиент сохраняется на прежней версии: его процессы, база, очередь, разрешение моделей и защитные резервы не меняются. Новые клиенты запускаются из неизменяемой копии бинарника вне `.app`. Полное обновление фонового клиента, миграции и откат ещё не приняты. Несохранённый текст ввода может исчезнуть при перезапуске окна.
+Sparkle 2.10.1 replaces the app and the embedded interface, then reopens it. A running background client stays on its previous version: its processes, database, queue, model permission and protective reservations do not change. New clients are started from an immutable copy of the binary outside the `.app`. Full background client update, migrations and rollback have not yet been accepted. Unsaved input text may be lost when the window restarts.
 
-## Доставка
+## Delivery
 
-При открытии окна, далее каждые 5 минут и при активации приложения (с общим ограничением одного автоматического запроса в 5 минут), если автоматическая проверка включена, встроенная команда `update-fetch` проверяет 20 последних GitHub Releases. Доступная версия обозначается кнопкой «Доступно обновление» внизу слева. Ручная проверка находится в меню приложения. При отсутствии обновления постоянной большой кнопки нет. Черновики пропускаются; preview-релизы допускаются. Первый опубликованный релиз с метаданными для текущих ОС и архитектуры определяет канал. Имена файлов: `update-darwin-arm64.json`, `update-darwin-arm64.json.sig` и `<sha256>.zip` (для Intel — `darwin-amd64`). Релиз с неполным или повреждённым набором отклоняется, а не маскируется более старым выпуском.
+When the window opens, then every 5 minutes, and when the app is activated (with an overall limit of one automatic request per 5 minutes), if automatic checking is enabled, the built-in `update-fetch` command checks the 20 most recent GitHub Releases. An available version is indicated by the «Доступно обновление» ("Update available") button at the bottom left. A manual check is in the app menu. When there is no update, there is no permanent large button. Drafts are skipped; preview releases are allowed. The first published release with metadata for the current OS and architecture defines the channel. File names: `update-darwin-arm64.json`, `update-darwin-arm64.json.sig` and `<sha256>.zip` (for Intel, `darwin-amd64`). A release with an incomplete or corrupted set is rejected, not masked by an older release.
 
-Команда обращается только к фиксированному репозиторию по HTTPS. Разрешены точные домены API и GitHub asset CDN; перенаправления ограничены. В запросах нет аккаунтных токенов, cookie, провайдерских ключей или локального ключа окна. Ответы ограничены размером и временем. При сетевой ошибке UI сообщает о неудаче, не выдаёт её за отсутствие обновлений. Команда не обращается к supervisor, моделям или базе сессий.
+The command contacts only the fixed repository over HTTPS. Only the exact API and GitHub asset CDN domains are allowed; redirects are restricted. Requests carry no account tokens, cookies, provider keys or the window's local key. Responses are limited in size and time. On a network error the UI reports a failure and does not present it as "no updates". The command does not contact the supervisor, models or the session database.
 
-Подпись JSON проверяется до скачивания архива; затем проверяются ОС, архитектура, API, размер и SHA-256. Номер ниже установленного/сохранённого не устанавливается; другой пакет с тем же номером отклоняется. Один файловый замок запрещает параллельную запись. Архив неизменяемый, а подписанные метаданные переключаются одним атомарным `current.json`. Ошибка сети или подписи оставляет прежний пакет. Повреждённый `current.json` не разрешает откат к старой паре файлов. При первом переходе поддерживается старый локальный формат `manifest.json` + `manifest.sig`.
+The JSON signature is verified before the archive is downloaded; then the OS, architecture, API, size and SHA-256 are checked. A version lower than the installed/saved one is not installed; a different package with the same version is rejected. A single file lock forbids parallel writes. The archive is immutable, and the signed metadata is switched with one atomic `current.json`. A network or signature error leaves the previous package in place. A corrupted `current.json` does not permit rollback to an old pair of files. For the first transition, the old local `manifest.json` + `manifest.sig` format is supported.
 
-Локальный HTTP-мост с отдельным Bearer-ключом окна передаёт проверенный пакет Sparkle. Sparkle дополнительно проверяет EdDSA архива до распаковки. Динамический XML создаётся локально и не является удалённым доверенным feed. Проверка, загрузка, ожидание и установка не вызывают модели.
+A local HTTP bridge with a separate window Bearer key hands the verified package to Sparkle. Sparkle additionally verifies the archive's EdDSA before unpacking. The dynamic XML is generated locally and is not a remote trusted feed. Checking, downloading, waiting and installing do not call models.
 
-## Подготовка выпуска
+## Preparing a release
 
 ```sh
 SPARKLE_DIR=/absolute/path/to/sparkle \
@@ -26,24 +26,23 @@ python3 scripts/publish-local-update.py /absolute/path/to/output \
   --directory /absolute/path/to/staging-channel
 ```
 
-Скрипт использует отдельный Keychain account `agent-messenger-preview`, проверяет совпадение ZIP с bundle и создаёт `release-assets` рядом со сборкой. В GitHub Release загружаются только три файла из этой папки. Сначала загрузить все файлы в черновик, затем опубликовать. Не загружать Keychain, исходные профили, тестовые базы, журналы сессий и внутренний `current.json`. Локальная публикация в основной канал остаётся способом разработки и первого перехода со старого обновлятора.
+The script uses a separate Keychain account `agent-messenger-preview`, checks that the ZIP matches the bundle and creates `release-assets` next to the build. Only the three files from this folder are uploaded to the GitHub Release. Upload all files to a draft first, then publish. Do not upload the Keychain, source profiles, test databases, session logs or the internal `current.json`. Local publishing to the main channel remains a development method and a way to make the first transition from the old updater.
 
-Sparkle загружается из официального выпуска с зафиксированной контрольной суммой; лицензия включена. Python нужен только разработчику для публикации, не приложению. Ad-hoc подпись Mac-приложения не заменяет Developer ID и notarization для распространения на чужих Mac.
+Sparkle is downloaded from the official release with a pinned checksum; its license is included. Python is needed only by the developer for publishing, not by the app. Ad-hoc signing of the Mac app does not replace Developer ID and notarization for distribution to other people's Macs.
 
-## Проверки и оставшиеся этапы
+## Tests and remaining stages
 
-Тесты транспорта проверяют корректную загрузку, разрешённое перенаправление CDN, чужой домен, неправильную подпись, повреждение/обрыв/превышение размера, повтор имени asset, отсутствие подписи, HTTP-ошибки, запрет понижения/конфликта версии, сохранность прежнего канала и блокировку второго писателя. Тест оболочки проверяет сохранение очереди и отсутствие запуска моделей.
+Transport tests cover a correct download, an allowed CDN redirect, a foreign domain, a wrong signature, corruption/truncation/size overrun, a repeated asset name, a missing signature, HTTP errors, rejection of version downgrade/conflict, preservation of the previous channel and blocking of a second writer. A shell test checks that the queue is preserved and that no models are started.
 
-Локальные переходы между preview-сборками через Sparkle проверены на пользовательском Mac. Публичный переход preview.12 → preview.13 на Mac принят: [фактический отчёт](reports/2026-11-06-github-update-mac.md). До полного этапа остаются обновление фонового клиента, резервное копирование и откат, Gatekeeper/notarization на чистом Mac и runtime-приёмка Windows/Linux.
+Local transitions between preview builds via Sparkle have been verified on the user's Mac. The public preview.12 → preview.13 transition on Mac has been accepted: [actual report](reports/2026-11-06-github-update-mac.md). Remaining before the full stage: background client update, backup and rollback, Gatekeeper/notarization on a clean Mac, and runtime acceptance on Windows/Linux.
 
-API-контракты: [GitHub Releases](https://docs.github.com/en/rest/releases/releases), [скачивание assets](https://docs.github.com/en/rest/releases/assets). Подготовка будущего публичного выпуска не означает готовность всех функций Messenger.
+API contracts: [GitHub Releases](https://docs.github.com/en/rest/releases/releases), [downloading assets](https://docs.github.com/en/rest/releases/assets). Preparing a future public release does not mean all Messenger features are ready.
 
-Переход preview.13 → preview.14 также [проверен на Mac](reports/2026-11-06-github-update14-mac.md), с сохранением очереди и прежнего фонового клиента.
+The preview.13 → preview.14 transition has also been [verified on Mac](reports/2026-11-06-github-update14-mac.md), with the queue and the previous background client preserved.
 
-Начиная с preview.15 таймер допускает отклонение до 15 секунд. Автоматические запросы ограничены одним запуском в 5 минут; параллельная загрузка не создаётся. При выключенной автоматической проверке остаётся ручная команда меню. Это периодическая проверка, не push: сон компьютера, сеть и активный установщик могут отложить обнаружение.
+Starting with preview.15, the timer allows a deviation of up to 15 seconds. Automatic requests are limited to one run per 5 minutes; no parallel download is created. With automatic checking disabled, the manual menu command remains. This is a periodic check, not push: computer sleep, the network and an active installer may delay detection.
 
-Переход preview.14 → preview.15 и повторная автоматическая проверка без перезапуска [приняты на Mac](reports/2026-11-06-github-update15-mac.md).
-# Повторное открытие окна во время загрузки
+The preview.14 → preview.15 transition and a repeated automatic check without restart have been [accepted on Mac](reports/2026-11-06-github-update15-mac.md).
+# Reopening the window during a download
 
-Загрузчик может закончить работу после закрытия окна. Новое окно не забирает его блокировку и не считает занятую загрузку недоступностью GitHub: `update-fetch` возвращает `state: busy`, окно показывает «Загружается обновление…» и повторяет проверку через 5 секунд, максимум 5 минут подряд. Пока блокировка занята, повтор не делает сетевой запрос. После освобождения загрузчик проверяет подписанный канал обычным способом. Долгое ожидание предлагает явный повтор. Проверенный доступный пакет остаётся доступен для установки. Ошибки загрузки и проверки подписи не маскируются под отсутствие интернета.
-
+The downloader may finish after the window has been closed. A new window does not take over its lock and does not treat a busy download as GitHub being unavailable: `update-fetch` returns `state: busy`, the window shows «Загружается обновление…» ("Downloading update…") and repeats the check after 5 seconds, for at most 5 minutes in a row. While the lock is held, the retry makes no network request. Once it is released, the downloader checks the signed channel in the usual way. A long wait offers an explicit retry. A verified available package remains available for installation. Download and signature verification errors are not masked as no internet connection.

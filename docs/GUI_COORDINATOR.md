@@ -1,28 +1,28 @@
-# Необязательный сценарий: графическое окно Claude
+# Optional scenario: a graphical Claude window
 
-5 ноября 2026 пользователь описал личное удобство: общаться с координатором во вкладке Code приложения Claude на Mac и пользоваться привычной диктовкой. Это заметка о возможной настройке, а не требование к продукту, приоритет основного плана или условие релиза.
+On November 5, 2026 the user described a personal convenience: talking to the coordinator in the Code tab of the Claude app on the Mac and using their usual dictation. This is a note about a possible setup, not a product requirement, a priority in the main plan, or a release condition.
 
-Messenger остаётся универсальным транспортом. Роль координатора может принадлежать Claude, Codex, Cursor или другому поддерживаемому агенту и передаваться между ними. Выбор провайдера и удобного человеку окна не должен задавать архитектуру брокера, очереди или адресации.
+Messenger remains a universal transport. The coordinator role can belong to Claude, Codex, Cursor or another supported agent, and can be handed between them. The choice of provider and of whichever window is convenient for the human must not dictate the architecture of the broker, the queue or addressing.
 
-Если этот необязательный сценарий понадобится, можно отдельно проверить сессию под управлением Desktop с подключением транспорта Messenger. Параллельный resume запрещён. Ручное чтение почты через MCP не считается автоматической доставкой. До успешной проверки интеграция не обещается; основная разработка от неё не зависит.
+If this optional scenario is ever needed, a Desktop-managed session connected to the Messenger transport can be tested separately. Parallel resume is forbidden. Reading mail manually through MCP does not count as automatic delivery. Until a test succeeds, the integration is not promised; the main development does not depend on it.
 
-## Что подтверждено документацией
+## What the documentation confirms
 
-Вкладка Code в Claude Desktop отличается от обычного чата. Документация описывает перенос разговора CLI в Desktop через `/desktop` либо продолжение закрытой CLI-сессии через `/resume` в приложении. История продолжается в той же сессии; запущенную в терминале или фоне сессию этот путь не переносит. Это передача управления, а не разрешение одновременно запускать один ID двумя владельцами. [Claude Desktop](https://code.claude.com/docs/en/desktop#coming-from-the-cli).
+The Code tab in Claude Desktop differs from a regular chat. The documentation describes moving a CLI conversation to Desktop via `/desktop`, or continuing a closed CLI session via `/resume` in the app. The history continues in the same session; this path does not move a session that is running in a terminal or in the background. This is a handoff of control, not permission to run one ID under two owners at the same time. [Claude Desktop](https://code.claude.com/docs/en/desktop#coming-from-the-cli).
 
-Remote Control предоставляет браузеру и мобильному Claude окно в локально работающую сессию Claude Code; процесс остаётся на компьютере. Это отдельный потенциальный путь для живого графического управления. [Remote Control](https://code.claude.com/docs/en/remote-control).
+Remote Control gives the browser and mobile Claude a window into a locally running Claude Code session; the process stays on the computer. This is a separate potential path for live graphical control. [Remote Control](https://code.claude.com/docs/en/remote-control).
 
-Документация `--remote-control` описывает интерактивную сессию, а текущий адаптер Messenger использует печатный режим со stream-json. Совместимость этих режимов здесь не подтверждена. Нельзя просто добавить флаг и объявить задачу решённой. [CLI reference](https://code.claude.com/docs/en/cli-reference).
+The `--remote-control` documentation describes an interactive session, while the current Messenger adapter uses print mode with stream-json. Compatibility of these modes is not confirmed here. One cannot simply add the flag and declare the task solved. [CLI reference](https://code.claude.com/docs/en/cli-reference).
 
-## Гипотезы для отдельной тестовой сессии
+## Hypotheses for a separate test session
 
-1. Можно ли подключить официальный графический просмотр к одному процессу, которым управляет Messenger, без второго resume и потери MCP-контракта? Проверить точную установленную версию, режимы запуска, идентичность сессии и единственного владельца.
-2. Как сериализуются пользовательский ввод из GUI и письма агентов? Внешний ввод не должен перепутать связанный ответ, прервать незавершённую доставку или породить автоматический повтор.
-3. Если владельцем становится Desktop, как подключить Messenger как транспорт/MCP? Доступность инструментов сама по себе не доказывает, что письмо сможет разбудить простаивающую сессию. Требуется событийная доставка без периодических вызовов модели.
-4. Как безопасно передавать владение CLI↔Desktop, учитывая нерешённое освобождение в той же загрузке Mac? Одного `shutdown` Messenger недостаточно. Не снимать защитные резервы ради открытия GUI.
-5. Как переживаются закрытие окна, сон и обрыв связи? Подтвердить отсутствие второго процесса и повторного исполнения письма.
-6. Проверить привычную пользователю диктовку в нужном поле ввода. Встроенный голосовой режим и диктовка текста — разные функции; наличие первого в выбранном Code-интерфейсе не обещано. Запись голоса не запускается автоматически.
+1. Can the official graphical viewer attach to a single process managed by Messenger, without a second resume and without losing the MCP contract? Check the exact installed version, launch modes, session identity and the single owner.
+2. How are user input from the GUI and agent messages serialized? External input must not mix up a linked reply, interrupt an unfinished delivery or cause an automatic retry.
+3. If Desktop becomes the owner, how is Messenger connected as a transport/MCP? Tool availability by itself does not prove that a message can wake an idle session. Event-driven delivery without periodic model calls is required.
+4. How can ownership be handed over safely CLI↔Desktop, given the unresolved release within the same Mac boot? A Messenger `shutdown` alone is not enough. Do not remove protective reservations just to open the GUI.
+5. How do window close, sleep and connection loss survive? Confirm there is no second process and no re-execution of a message.
+6. Check the user's usual dictation in the relevant input field. The built-in voice mode and text dictation are different features; the presence of the former in the chosen Code interface is not promised. Voice recording does not start automatically.
 
-Собственное окно Messenger остаётся общей перепиской, очередью и панелью состояния для всех поддерживаемых агентов. Возможное подключение внешнего графического окна — отдельная необязательная интеграция. Для других провайдеров выводы Claude не переносятся автоматически.
+Messenger's own window remains the shared conversation, queue and status panel for all supported agents. Possibly connecting an external graphical window is a separate optional integration. Conclusions about Claude do not automatically carry over to other providers.
 
-На этой стадии изучена документация; реальные GUI-сессии, Remote Control и диктовка не включались. Рабочие чаты не используются для опытов.
+At this stage only the documentation has been studied; real GUI sessions, Remote Control and dictation were not turned on. Working chats are not used for experiments.

@@ -1,18 +1,18 @@
-# Codex ↔ Cursor: локальный обмен через MCP на Mac
+# Codex ↔ Cursor: local exchange via MCP on Mac
 
-Дата: 2026-11-05. Результат: **PASS** для описанного ниже сценария.
+Date: 2026-11-05. Result: **PASS** for the scenario described below.
 
-## Сценарий и доказательства
+## Scenario and evidence
 
-Использованы Codex CLI 0.155.1 и Cursor CLI 2026.11.05-86047df.
-Отдельный тестовый MCP-сервер на Python со стандартной библиотекой предоставлял три инструмента: `send_message`, `read_messages`, `reply`.
-Каждый процесс сервера имел фиксированного отправителя; сообщения сохранялись в общей локальной SQLite-базе.
+Codex CLI 0.155.1 and Cursor CLI 2026.11.05-86047df were used.
+A separate test MCP server in Python using only the standard library provided three tools: `send_message`, `read_messages`, `reply`.
+Each server process had a fixed sender; messages were stored in a shared local SQLite database.
 
-1. Новый разговор Codex получил случайную контрольную строку и отправил её Cursor через `send_message`. Процесс Codex завершился.
-2. Отдельный процесс Cursor получил только указание проверить ящик — без контрольной строки в запросе. Через `read_messages` он прочитал письмо и через `reply` отправил `ACK:` с полученной строкой.
-3. Новый процесс Codex продолжил исходный разговор по точному ID. Запрос содержал только уведомление о наличии ответа. Через `read_messages` Codex получил и вернул точный ответ Cursor.
+1. A new Codex conversation received a random control string and sent it to Cursor via `send_message`. The Codex process exited.
+2. A separate Cursor process received only an instruction to check its inbox — with no control string in the prompt. It read the message via `read_messages` and sent `ACK:` with the received string via `reply`.
+3. A new Codex process resumed the original conversation by exact ID. The prompt contained only a notification that a reply was available. Via `read_messages`, Codex received and returned Cursor's exact reply.
 
-Все три запуска завершились с кодом 0. ID разговора Codex до и после продолжения совпал. В базе ровно два сообщения; ответ связан с исходным письмом. Журнал сервера содержит последовательность:
+All three runs exited with code 0. The Codex conversation ID before and after resuming matched. The database contains exactly two messages; the reply is linked to the original message. The server log contains the sequence:
 
 ```text
 codex  send_message
@@ -21,26 +21,26 @@ cursor reply
 codex  read_messages
 ```
 
-JSONL-журналы CLI дополнительно подтвердили успешные вызовы инструментов и завершение ходов. Cursor также использовал служебное обнаружение MCP-инструментов. Перед запуском моделей отдельная проверка протокола подтвердила инициализацию, список инструментов, доставку, отсутствие дубля при повторе ключа и отказ отвечать на письмо вне своего входящего ящика.
+The CLI JSONL logs additionally confirmed successful tool calls and turn completion. Cursor also used its internal MCP tool discovery. Before running models, a separate protocol check confirmed initialization, the tool list, delivery, no duplicate on a repeated key, and refusal to reply to a message outside its own inbox.
 
-## Границы результата
+## Scope of the result
 
-Это экспериментальная локальная связка MCP + SQLite, а не готовый Messenger. Запуски выполнялись последовательно тестовым контроллером; автоматическое пробуждение по событию ещё не реализовано. Содержимое ответа не переносилось вручную в запрос Codex.
+This is an experimental local MCP + SQLite setup, not a finished Messenger. The runs were executed sequentially by a test controller; automatic event-driven wake-up is not implemented yet. The reply content was not manually copied into the Codex prompt.
 
-Подтверждена часть H5: headless-вызовы MCP в Codex/Cursor и сохранность сообщения между отдельными процессами. Проверка локального ключа идемпотентности не закрывает H8 с потерей сетевого ACK и перезапуском брокера.
+Part of H5 is confirmed: headless MCP calls in Codex/Cursor and message persistence across separate processes. The check of the local idempotency key does not close H8 with a lost network ACK and a broker restart.
 
-Не проверены: Claude в этом обмене; Windows/Linux; VPS и сеть; одновременные владельцы сессии; аварийное восстановление; отмена доступа; передача роли координатора; отказ разрешения; длительное ожидание без обращений к модели. Производственная авторизация между машинами здесь отсутствует.
+Not verified: Claude in this exchange; Windows/Linux; VPS and network; concurrent session owners; crash recovery; access revocation; coordinator role handover; permission denial; long waits without calling the model. Production authorization between machines is absent here.
 
-Тест не измеряет экономию токенов. Модели запускались для трёх содержательных ходов; опрос модели в ожидании ответа не использовался. Из этого нельзя заключить, что чтение и продолжение сохранённой истории бесплатны.
+The test does not measure token savings. Models were run for three substantive turns; polling the model while waiting for a reply was not used. This does not allow concluding that reading and resuming saved history is free.
 
-## Ограничение прав
+## Restricting permissions
 
-Для Codex применена отдельная конфигурация запуска с одним тестовым MCP; отключены shell, приложения, плагины, hooks и субагенты. Для Cursor создана отдельная тестовая папка с локальными MCP-настройками и разрешениями на три инструмента, с запретами shell/чтения/записи файлов и web fetch. На момент запуска глобального `~/.cursor/mcp.json` не было; использован `--approve-mcps` для этого тестового набора. Этот флаг нельзя без проверки переносить в окружение с другими серверами.
+For Codex, a separate launch configuration with a single test MCP was used; shell, apps, plugins, hooks and subagents were disabled. For Cursor, a separate test folder was created with local MCP settings and permissions for the three tools, with shell/file read/file write and web fetch denied. At launch time there was no global `~/.cursor/mcp.json`; `--approve-mcps` was used for this test set. This flag must not be carried over without verification into an environment with other servers.
 
-Тест использовал существующую авторизацию CLI. Сырые журналы, ID сессий, контрольные строки и сведения об аккаунтах в этот отчёт не включены.
+The test used existing CLI authorization. Raw logs, session IDs, control strings and account details are not included in this report.
 
-## Следующий шаг
+## Next step
 
-Повторить обмен с Claude, затем отдельно проверить блокировку одной сессии и обработку неопределённого результата при сбое. После этого переходить к минимальному брокеру и клиентам.
+Repeat the exchange with Claude, then separately verify locking of a single session and handling of an uncertain result on failure. After that, move on to a minimal broker and clients.
 
-Источники настроек: [Cursor permissions](https://cursor.com/docs/cli/reference/permissions), [Codex MCP](https://developers.openai.com/codex/mcp), [MCP stdio](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports).
+Configuration sources: [Cursor permissions](https://cursor.com/docs/cli/reference/permissions), [Codex MCP](https://developers.openai.com/codex/mcp), [MCP stdio](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports).

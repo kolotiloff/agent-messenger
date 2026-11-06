@@ -1,43 +1,43 @@
-# Постоянный Claude через обычный serve: Mac
+# Persistent Claude through regular serve: Mac
 
-Основа — `3994901` (стенд PR #2). Здесь проверялся уже `cmd/messenger`, без тега `streamprobe`, с новым явным режимом `serve --claude-stream`. Claude Code 2.1.318, macOS arm64, Go 1.22.2.
+Base: `3994901` (PR #2 test bench). This time `cmd/messenger` itself was tested, without the `streamprobe` tag, with the new explicit mode `serve --claude-stream`. Claude Code 2.1.318, macOS arm64, Go 1.22.2.
 
-## Реальная проба
+## Real probe
 
-Весь сценарий прошёл одним прогоном, без автоматических повторов и без повторного входа в Claude:
+The whole scenario passed in one run, without automatic retries and without signing in to Claude again:
 
-1. Запущен `serve --claude-stream` без разрешения модели. Через `create-claude-session` создана новая отдельная сессия, поставлено первое письмо. Попыток CLI не появилось.
-2. Второй `serve` при живом первом отказал по блокировке пользователя.
-3. После перезапуска с `--allow-model-calls` первое письмо получило связанный `ACK:PAYLOAD-one`, `provider_ok=1`.
-4. Выполнен `pause`, поставлено второе письмо. За 20 секунд оно осталось `queued`, число попыток осталось 1, владелец процесса — `idle`.
-5. После `resume` получен связанный `ACK:PAYLOAD-two`, `provider_ok=1`. PID обеих попыток одинаков; процесс один, session ID не менялся.
-6. На паузе поставлено третье контрольное письмо, выполнен `shutdown`. После нового `serve --claude-stream --allow-model-calls` и `resume` оно осталось в очереди: попыток по-прежнему 2, ответов 2, владелец `uncertain`.
-7. Проверочный Messenger остановлен. При последующей проверке процессов тестовый CLI по точному ID не найден. Все защитные резервы сохранены, включая резервы прежних опытов.
+1. `serve --claude-stream` was started without model permission. A new separate session was created via `create-claude-session`, and the first message was enqueued. No CLI attempts appeared.
+2. A second `serve`, while the first was alive, was refused due to the user lock.
+3. After a restart with `--allow-model-calls`, the first message received a linked `ACK:PAYLOAD-one`, `provider_ok=1`.
+4. `pause` was run and a second message was enqueued. For 20 seconds it remained `queued`, the attempt count stayed at 1, and the process owner was `idle`.
+5. After `resume`, a linked `ACK:PAYLOAD-two`, `provider_ok=1` was received. The PID of both attempts is the same; there was one process, and the session ID did not change.
+6. While paused, a third control message was enqueued and `shutdown` was run. After a new `serve --claude-stream --allow-model-calls` and `resume`, it remained in the queue: still 2 attempts, 2 replies, owner `uncertain`.
+7. The test Messenger was stopped. In a subsequent process check, the test CLI was not found by its exact ID. All protective reservations were preserved, including reservations from earlier experiments.
 
-Два письма реально вызвали модель. Третье было только поставлено в очередь для проверки сохранности и не запускалось. Codex, Cursor и рабочие/GUI-чаты не использовались.
+Two messages actually called the model. The third was only enqueued to check preservation and was not run. Codex, Cursor and working/GUI chats were not used.
 
-В `Verifications` у обоих ходов `provider_ok=1`, `exit_observed=0`, `exit_code=null`. Это правильное разделение успешного ответа и выхода постоянного процесса. При быстром shutdown клиент не успел записать код выхода CLI: в `StreamRuns` также `exit_observed=0`, `exit_code=null`. Поэтому exit 0 этому прогону **не приписывается**, резерв не снимается. Поиск процесса после теста не является доказательством остановки всех отделившихся потомков.
+In `Verifications`, both turns have `provider_ok=1`, `exit_observed=0`, `exit_code=null`. This is the correct separation between a successful reply and the exit of a persistent process. On the fast shutdown, the client did not manage to record the CLI exit code: `StreamRuns` also has `exit_observed=0`, `exit_code=null`. Therefore exit 0 is **not attributed** to this run, and the reservation is not released. A process search after the test is not proof that all detached descendants have stopped.
 
-## Тесты без модели
+## Tests without a model
 
-На Mac прошёл полный набор:
+The full suite passed on Mac:
 
 ```sh
 go test -race -tags streamprobe -ldflags=-linkmode=external -count=1 ./...
 ```
 
-Проверены продуктовые и прежние исследовательские тесты. Новые сценарии: два письма/один PID; запуск без разрешения модели; пауза до запуска и между письмами; старый receipt; ошибочный/дублирующий init; ошибочный provider result; HTTP-авторизация и запрет выбора адреса; stop; shutdown при зависшем синтетическом CLI; запуск с другой базой; перезапуск без повторения; принудительное завершение самого синтетического Messenger с живым CLI, затем перезапуск и stop-job.
+Product tests and the earlier research tests were run. New scenarios: two messages/one PID; launch without model permission; pause before launch and between messages; an old receipt; an erroneous/duplicate init; an erroneous provider result; HTTP authorization and the ban on choosing an address; stop; shutdown with a hung fake CLI; launch with a different database; restart without repetition; forced termination of the fake Messenger itself with a live CLI, followed by restart and stop-job.
 
-Первый прогон тестов выявил гонку в тестовом сценарии зависшего CLI: shutdown выполнялся до того, как фикстура переходила в зависание. Фикстура исправлена, набор повторён. Реальная модель при этих тестах не запускалась.
+The first test run revealed a race in the hung-CLI test scenario: shutdown ran before the fixture had entered the hung state. The fixture was fixed and the suite was rerun. The real model was not run during these tests.
 
-## Открытые ограничения
+## Open limitations
 
-- Возобновление постоянного процесса после shutdown/аварии блокируется; безопасное снятие резерва ещё не реализовано.
-- Реальный `--resume` существующей свободной сессии в новом постоянном режиме отдельно не проверялся; здесь сессия была новой.
-- Пока обслуживается одна постоянная сессия за раз, без переключения между несколькими владельцами.
-- Проверка паузы ограниченная, биллинг не измерялся, часовой H9 не закрыт.
-- Кросс-сборка `CGO_ENABLED=0` для Linux amd64 и Windows amd64 прошла; на Windows/Linux этот код не запускался. Интерфейса, установщика и сетевого брокера нет.
+- Resuming the persistent process after a shutdown/crash is blocked; safe release of the reservation is not yet implemented.
+- A real `--resume` of an existing free session in the new persistent mode was not tested separately; here the session was new.
+- For now, one persistent session is served at a time, without switching between several owners.
+- The pause check is limited, billing was not measured, and the one-hour H9 is not closed.
+- Cross-builds with `CGO_ENABLED=0` for Linux amd64 and Windows amd64 succeeded; this code was not run on Windows/Linux. There is no interface, installer or network broker.
 
-Сырые логи, UUID, квитанции, локальная база и каталоги в отчёт не включены.
+Raw logs, UUIDs, receipts, the local database and directories are not included in the report.
 
-После реальной пробы изменено только объявляемое имя HTTP MCP-сервера с исследовательского на `agent-messenger` (версия `0.2`), без изменения транспорта или инструментов. Полный набор тестов повторён; модель дополнительно не вызывалась.
+After the real probe, only the advertised name of the HTTP MCP server was changed from the research name to `agent-messenger` (version `0.2`), with no change to the transport or tools. The full test suite was rerun; the model was not called again.

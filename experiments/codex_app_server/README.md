@@ -1,21 +1,21 @@
-# Codex app-server: проверка настроек без модели
+# Codex app-server: configuration check without a model
 
-Исследовательская проба для установленного Codex CLI. Продуктовый клиент остаётся на Go; этот сценарий не подключён к `serve` и не является постоянным адаптером.
+A research probe for an installed Codex CLI. The product client remains in Go; this scenario is not wired into `serve` and is not a persistent adapter.
 
 ```sh
 python3 experiments/codex_app_server/config_probe.py --cli /absolute/path/to/codex
 ```
 
-Нужны Python 3 и установленный Codex CLI. Вход в аккаунт не нужен. Проверено на macOS arm64 с Codex 0.155.1. На Windows этот сценарий не принят.
+Requires Python 3 and an installed Codex CLI. No account login is needed. Verified on macOS arm64 with Codex 0.155.1. On Windows this scenario has not been accepted.
 
-Каждый случай запускает собственный stdio app-server с пустыми временными HOME/CODEX_HOME, искусственным профилем и отдельной рабочей папкой. Существующие ключи, настройки и разговоры не читаются и не копируются. Вызываются только `initialize`, `initialized`, `config/read`; другие методы запрещены самим сценарием. Нет `thread/start`, `turn/start` или подключения к демону GUI. Временные данные удаляются, stdout содержит только результат проверок.
+Each case starts its own stdio app-server with empty temporary HOME/CODEX_HOME, an artificial profile and a separate working folder. Existing keys, settings and conversations are not read or copied. Only `initialize`, `initialized`, `config/read` are called; other methods are forbidden by the scenario itself. There is no `thread/start`, `turn/start` or connection to the GUI daemon. Temporary data is deleted; stdout contains only the check results.
 
-Три проверки:
+Three checks:
 
-1. `-c 'mcp_servers={}'` оставляет сервер из файла включённым. Пустая таблица не является сбросом унаследованных MCP.
-2. Явное `mcp_servers.fixture.enabled=false` отключает конкретный сервер.
-3. Чистый профиль не содержит сервера из предыдущих проб.
+1. `-c 'mcp_servers={}'` leaves a server from the file enabled. An empty table does not reset inherited MCP servers.
+2. An explicit `mcp_servers.fixture.enabled=false` disables that specific server.
+3. A clean profile contains no server from previous probes.
 
-Во всех случаях проверяется фактическое отключение восьми запрошенных возможностей: shell, apps, plugins, hooks, multi-agent, browser, computer use и goals. Отсутствующее поле считается отказом, а не отключённой возможностью. Неожиданный сервер, ошибка протокола, изменившееся поведение или таймаут дают ненулевой выход. При неожиданном сервере проба не переходит к созданию разговора.
+In all cases, the actual disabling of eight requested features is checked: shell, apps, plugins, hooks, multi-agent, browser, computer use and goals. A missing field counts as a failure, not as a disabled feature. An unexpected server, a protocol error, changed behavior or a timeout produce a non-zero exit. If there is an unexpected server, the probe does not proceed to creating a conversation.
 
-**Это не доказательство полной изоляции Codex.** Остальные возможности и системные/проектные слои, запуск MCP при создании разговора, изменения конфигурации после проверки и возобновление сохранённой сессии требуют отдельных проверок. Нельзя переносить вывод «конкретный сервер отключён» на весь профиль пользователя. До этого постоянный Codex из продукта не запускается. См. [план адаптера](../../docs/CODEX_ADAPTER_NEXT.md).
+**This is not proof of full Codex isolation.** The remaining features and system/project layers, MCP startup when a conversation is created, configuration changes after the check, and resuming a saved session require separate checks. The conclusion "a specific server is disabled" must not be extended to the user's whole profile. Until then, the product does not start persistent Codex. See the [adapter plan](../../docs/CODEX_ADAPTER_NEXT.md).

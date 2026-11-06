@@ -1,11 +1,11 @@
-# Переход Mac preview.14 → preview.15
+# Mac preview.14 → preview.15 update
 
-6 ноября 2026, Mac Apple Silicon. Исходный коммит `d4f821ae556779a9112346f41142d4b13fd53b9d`.
+November 6, 2026, Mac Apple Silicon. Source commit `d4f821ae556779a9112346f41142d4b13fd53b9d`.
 
-Пакет получен из публичного GitHub Release через встроенный `update-fetch`. Наблюдались предложение версии 15, нажатие «Установить обновление», распаковка и установленная версия 15 в окне. Архив и метаданные в действующий канал вручную не копировались.
+The package was obtained from the public GitHub Release through the built-in `update-fetch`. Observed: the offer of version 15, clicking «Установить обновление» ("Install update"), unpacking, and installed version 15 in the window. The archive and metadata were not copied into the active channel by hand.
 
-После установки все поля снимка `inspect` совпали с исходным, включая 13 писем, 10 попыток и 9 ответов. PID фонового клиента прежний, запуск моделей запрещён. Рабочие сессии не запускались.
+After installation, all fields of the `inspect` snapshot matched the original, including 13 messages, 10 attempts and 9 replies. The background client's PID is unchanged, and model launches are disabled. No working sessions were started.
 
-Отдельное наблюдение процессов зафиксировало автоматический `update-fetch` при запуске версии 15 и второй через 302 секунды. Между ними не выполнялись ручная проверка, перезапуск или активация Messenger средствами проверки. Это подтверждает повторную проверку уже открытого приложения; не является проверкой push-доставки или гарантией обнаружения выпуска за пять минут при любых условиях сети.
+Separate process monitoring recorded an automatic `update-fetch` when version 15 started and a second one 302 seconds later. Between them, the verification tooling performed no manual check, restart or activation of Messenger. This confirms repeated checking by an already open application; it is not a check of push delivery or a guarantee of detecting a release within five minutes under all network conditions.
 
-Все четыре задания [CI](https://github.com/kolotiloff/agent-messenger/actions/runs/42183471895) прошли. В браузерном стенде с демонстрационными данными проверены светлая/тёмная темы, полоса прокрутки у границы очереди, неподвижный ввод и рост многострочного поля. После выпуска владелец обнаружил несимметричные отступы: их исправление относится к preview.16.
+All four [CI](https://github.com/kolotiloff/agent-messenger/actions/runs/42183471895) jobs passed. In the browser test bench with demo data, the following were checked: light/dark themes, the scrollbar at the queue's edge, a fixed input and growth of the multiline field. After the release, the owner noticed asymmetric padding: fixing it belongs to preview.16.

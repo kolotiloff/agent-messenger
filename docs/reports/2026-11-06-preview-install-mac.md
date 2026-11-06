@@ -1,29 +1,29 @@
-# Пакет и установка preview: Mac, 6 ноября 2026
+# Preview package and install: Mac, November 6, 2026
 
-Изменение поверх `29ee58b` (PR #12). macOS arm64, Go 1.22.2. `go test -race -count=1 -ldflags=-linkmode=external ./...` прошёл. После добавления проверки чужой ссылки/повреждённого бинарника отдельно повторён пакет distribution с race. Linux/amd64 и Windows/amd64 скомпилированы, их установщик намеренно отказывает: runtime не принят.
+Change on top of `29ee58b` (PR #12). macOS arm64, Go 1.22.2. `go test -race -count=1 -ldflags=-linkmode=external ./...` passed. After adding the check for a foreign link/corrupted binary, the distribution package was rerun separately with race. Linux/amd64 and Windows/amd64 were compiled; their installer refuses on purpose: the runtime has not been accepted.
 
-## Автоматические проверки
+## Automated checks
 
-- Установка в отдельный пользовательский префикс, повтор той же сборки, переход на другую версию. Старый бинарник сохранён; контрольный файл пользовательских данных не меняется.
-- Установка отказала при занятой блокировке клиента или запуска, пустом/обрезанном/`null` реестре и при любом сохранённом резерве. Никаких изменений целевой ссылки при отказе.
-- Чужой обычный файл и чужая символическая ссылка не заменяются. Несовпадение контрольной суммы установленного бинарника вызывает отказ, а не перезапись.
+- Install into a separate user prefix, repeat with the same build, switch to a different version. The old binary is kept; a control file of user data does not change.
+- Install refused when the client or launch lock was held, with an empty/truncated/`null` registry, and with any saved reservation. No changes to the target link on refusal.
+- A foreign regular file and a foreign symbolic link are not replaced. A checksum mismatch of the installed binary causes a refusal, not an overwrite.
 
-## Проверка настоящих архивов
+## Verifying real archives
 
-Собраны два **тестовых** пакета `0.0.0-preview.test` и `0.0.0-preview.test2`, с явно условной нулевой ревизией. Это проверочные артефакты, не версии релиза. Сборщик запускал Go с внешним линкером, создал нативные бинарники, локально подписал их ad-hoc, выполнил `version` и сформировал архивы/manifest/контрольные суммы.
+Two **test** packages, `0.0.0-preview.test` and `0.0.0-preview.test2`, were built with an explicitly placeholder zero revision. These are verification artifacts, not release versions. The builder ran Go with the external linker, produced native binaries, signed them locally ad-hoc, ran `version` and generated the archives/manifest/checksums.
 
-В отдельном HOME и префиксе:
+In a separate HOME and prefix:
 
-1. Сверены SHA-256 архивов и бинарников внутри. Архивы распакованы без внешних ссылок.
-2. Команда `version` выдала ожидаемую версию, не создав каталога данных.
-3. Первый пакет установлен. Его бинарник запустил `serve` без разрешения моделей. В отдельной базе зарегистрирована синтетическая сессия с `/usr/bin/false`, очередь поставлена на паузу и сохранено одно письмо.
-4. Установка второй версии при живом клиенте отказала; ссылка на первую версию не изменилась.
-5. После штатного shutdown новая версия установлена. Старый бинарник остался, новая команда `version` показала новую версию. Повторная установка той же версии прошла без замены данных.
-6. Новый бинарник открыл прежнюю базу. Полный `inspect` до и после обновления совпал: письмо, сессия, события и состояние паузы сохранены. Разрешение моделей осталось `not-authorized`.
-7. Тестовый клиент остановлен. Рабочие чаты, профили, резервы и реальная пользовательская установка не менялись. Настоящие Claude/Codex/Cursor не запускались.
+1. The SHA-256 of the archives and of the binaries inside were verified. The archives were unpacked without external links.
+2. The `version` command printed the expected version without creating a data directory.
+3. The first package was installed. Its binary started `serve` without model permission. A synthetic session with `/usr/bin/false` was registered in a separate database, the queue was paused and one message was saved.
+4. Installing the second version with a live client refused; the link to the first version did not change.
+5. After a standard shutdown, the new version was installed. The old binary remained, and the new `version` command showed the new version. Reinstalling the same version succeeded without replacing data.
+6. The new binary opened the existing database. A full `inspect` before and after the update matched: the message, session, events and pause state were preserved. Model permission remained `not-authorized`.
+7. The test client was stopped. Work chats, profiles, reservations and the real user installation were not changed. Real Claude/Codex/Cursor were not launched.
 
-Проверочный скрипт сначала ошибочно читал текстовую команду status как JSON; это исправлено, полный опыт установки выполнен повторно и прошёл. Это была ошибка стенда, не изменение формата продукта.
+The verification script initially read the text-format status command as JSON by mistake; this was fixed, and the full install experiment was rerun and passed. This was a test-rig bug, not a change to the product format.
 
-## Что не принято
+## What is not accepted
 
-Это установка из локального архива на этом Mac, не установка загруженного через браузер файла на чистом чужом Mac. Developer ID, notarization и пользовательский путь Gatekeeper не проверены. Сборщик не публикует release и не удостоверяет соответствие произвольного дерева заявленному SHA. Общая цепочка PR пока остаётся draft. Установщик не снимает резервы для удобства обновления; безопасный ежедневный выход CLI остаётся отдельной задачей. Откат SQLite и произвольное понижение версии не поддерживаются.
+This is an install from a local archive on this Mac, not an install of a browser-downloaded file on a clean, unfamiliar Mac. Developer ID, notarization and the user-facing Gatekeeper path have not been verified. The builder does not publish a release and does not attest that an arbitrary tree matches the claimed SHA. The overall PR chain is still a draft. The installer does not release reservations to make updating easier; a safe daily CLI exit remains a separate task. SQLite rollback and arbitrary downgrades are not supported.

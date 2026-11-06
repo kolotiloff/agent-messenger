@@ -1,8 +1,8 @@
-# Постоянный Claude в локальном клиенте
+# Persistent Claude in the local client
 
-`messenger serve --claude-stream` поддерживает последовательные письма Claude в одном процессе. Это явный режим, включаемый отдельно от разрешения обращаться к модели. Codex и Cursor в этом режиме остаются в очереди. В текущей версии один управляющий цикл обслуживает одну постоянную сессию; справедливое переключение между несколькими постоянными сессиями ещё не реализовано.
+`messenger serve --claude-stream` supports sequential Claude messages in a single process. It is an explicit mode, enabled separately from the permission to call the model. In this mode Codex and Cursor stay in the queue. In the current version one control loop serves one persistent session; fair switching between several persistent sessions is not implemented yet.
 
-## Сборка и запуск
+## Build and run
 
 ```sh
 go test -race -count=1 ./...
@@ -10,17 +10,17 @@ go build -o /tmp/agent-messenger ./cmd/messenger
 /tmp/agent-messenger --root /absolute/data/path serve --claude-stream
 ```
 
-Без `--allow-model-calls` никакие CLI не запускаются. Команды управления работают через локальный сокет.
+Without `--allow-model-calls`, no CLIs are launched. Control commands go through a local socket.
 
-Чтобы закрывать терминал, сохраняя клиент и живой CLI, используйте [фоновый `start`](BACKGROUND.md). Каждый такой старт начинает с паузы. Повторное подключение не запускает второй процесс; `shutdown` по-прежнему завершает сам клиент и сохраняет защитные резервы.
+To close the terminal while keeping the client and the live CLI, use [background `start`](BACKGROUND.md). Every such start begins paused. Reconnecting does not launch a second process; `shutdown` still terminates the client itself and keeps the protective reservations.
 
-На проверенном Mac с временным Go 1.22.2 использовался `-ldflags=-linkmode=external`; собранный бинарник подписывался локальной ad-hoc подписью. В иной среде необходимость этого обхода старого тулчейна проверяется отдельно.
+On the verified Mac with a temporary Go 1.22.2, `-ldflags=-linkmode=external` was used; the built binary was signed with a local ad-hoc signature. Whether this workaround for the old toolchain is needed in another environment is verified separately.
 
-Если уже есть глобальный резерв от прежней пробы, требуется прежний каталог `--root`. Смена каталога не обходит резерв. Файл `active-runs.json` вручную не удалять.
+If a global reservation from an earlier trial already exists, the previous `--root` directory is required. Changing the directory does not bypass the reservation. Do not delete the `active-runs.json` file manually.
 
-## Новая отдельная сессия без вызова модели
+## A new separate session without calling the model
 
-При работающем `serve --claude-stream`:
+With `serve --claude-stream` running:
 
 ```sh
 messenger --root /absolute/data/path create-claude-session \
@@ -30,19 +30,19 @@ messenger --root /absolute/data/path create-claude-session \
   --workspace /absolute/isolated/workspace
 ```
 
-Каталоги профиля и workspace должны существовать. Команда генерирует новый точный UUID и сохраняет настройку; Claude ещё не запускается. Первый запуск использует `--session-id` этого UUID. Рабочий или GUI-чат не подменяется. Существующий вход обычного `~/.claude` сохраняется.
+The profile and workspace directories must exist. The command generates a new exact UUID and saves the configuration; Claude is not launched yet. The first launch uses `--session-id` with that UUID. No work or GUI chat is substituted. The existing login of the regular `~/.claude` is kept.
 
-Для уже существующей свободной CLI-сессии остаётся `register-session --provider claude ... --conversation-id EXACT_ID`; первый процесс использует точный `--resume`. Первоначальная проверка проводилась с новой сессией. Затем отдельная проба настоящего Claude на Mac подтвердила точный resume сохранённой тестовой сессии, возврат прежнего маркера и один связанный ответ с `provider_ok=1`: [отчёт](reports/2026-11-05-claude-stream-exact-resume-mac.md). Прямое открытие того же ID мимо Messenger вне гарантии блокировки.
+For an already existing free CLI session, `register-session --provider claude ... --conversation-id EXACT_ID` remains available; the first process uses an exact `--resume`. The initial verification was done with a new session. A separate trial of real Claude on Mac then confirmed an exact resume of a saved test session, the return of the earlier marker and one linked reply with `provider_ok=1`: [report](reports/2026-11-05-claude-stream-exact-resume-mac.md). Opening the same ID directly, bypassing Messenger, is outside the locking guarantee.
 
-## Доставка и управление
+## Delivery and control
 
-После регистрации для разрешённой модельной пробы остановить служащий только для настройки клиент и запустить:
+After registration, for an allowed model trial, stop the client that was used only for setup and run:
 
 ```sh
 messenger --root /absolute/data/path serve --claude-stream --allow-model-calls
 ```
 
-В другом терминале:
+In another terminal:
 
 ```sh
 messenger --root /absolute/data/path enqueue --alias claude-test --id m1 --from coordinator --text 'Reply exactly ACK:PAYLOAD-one'
@@ -52,36 +52,36 @@ messenger --root /absolute/data/path resume
 messenger --root /absolute/data/path inspect
 ```
 
-`pause` не прерывает текущий ответ. Она прекращает отправку следующих сообщений; активный процесс остаётся. `resume` продолжает очередь в том же живом процессе. Пустая очередь опрашивается локальным кодом; промпты, «ты здесь?» и таймерные обращения к модели не посылаются. Наблюдение за паузой не заменяет проверку биллинга и часовой H9.
+`pause` does not interrupt the current reply. It stops sending the next messages; the active process stays. `resume` continues the queue in the same live process. An empty queue is polled by local code; no prompts, "are you there?" messages or timer-driven calls are sent to the model. Observing the pause does not replace verifying billing or the hour-long H9.
 
-Успех письма: связанный `reply_to`, подтверждённый точный ID и `provider_ok=1`. `Attempts.state=turn_completed`, `Requests.state=completed`. У хода `exit_observed=0`, `exit_code=null`: процесс жив. После ответа `StreamRuns.state=idle`, MCP закрыт до следующего подтверждённого хода, блокировка сессии сохранена.
+A message succeeds with a linked `reply_to`, a confirmed exact ID and `provider_ok=1`. `Attempts.state=turn_completed`, `Requests.state=completed`. The turn has `exit_observed=0`, `exit_code=null`: the process is alive. After the reply, `StreamRuns.state=idle`, MCP is closed until the next confirmed turn, and the session lock is kept.
 
-| Команда/событие | Поведение |
+| Command/event | Behavior |
 |---|---|
-| `pause` | Следующие письма остаются в очереди; текущий ответ может завершиться |
-| `resume` | Возобновляет только очередь живого процесса; не снимает `uncertain` |
-| `stop-job` | Сначала отзывает доступ в SQLite, затем отменяет канал и может сигналить только наблюдаемой принадлежащей группе |
-| `shutdown` | Отзывает доступ, закрывает stdin/HTTP, не ждёт зависший CLI бесконечно; очередь и резерв остаются |
-| Ошибка CLI, ID, результата, EOF или таймаут | Незавершённый ход становится `uncertain`; следующего письма и автоматического повторения нет |
-| Перезапуск после сбоя | Старый канал отозван, завершённые ходы сохранены, неотправленные письма остаются в очереди, второй CLI этой сессии не запускается |
+| `pause` | Subsequent messages stay in the queue; the current reply may finish |
+| `resume` | Resumes only the live process's queue; does not clear `uncertain` |
+| `stop-job` | First revokes access in SQLite, then cancels the channel, and may signal only an observed owned process group |
+| `shutdown` | Revokes access, closes stdin/HTTP, does not wait indefinitely for a hung CLI; the queue and reservation remain |
+| CLI, ID or result error, EOF or timeout | The unfinished turn becomes `uncertain`; no next message and no automatic retry |
+| Restart after a crash | The old channel is revoked, completed turns are kept, unsent messages stay in the queue, no second CLI for this session is launched |
 
-Процесс и ход имеют разные записи. Если выход успел наблюдаться в коротком завершении, `StreamRuns` получает `exit_observed=1` и код. Иначе значение остаётся неизвестным. Ни таймаут, ни отсутствие группы, ни успешный ответ не снимают резерв.
+The process and the turn have separate records. If the exit was observed within a short shutdown, `StreamRuns` gets `exit_observed=1` and the code. Otherwise the value stays unknown. Neither a timeout, nor a missing group, nor a successful reply releases the reservation.
 
-Завершение CLI наблюдается независимо от stdout: даже если канал удерживает потомок, MCP отзывается и незавершённый ход становится `uncertain`.
+CLI exit is observed independently of stdout: even if a descendant holds the channel open, MCP is revoked and the unfinished turn becomes `uncertain`.
 
-Во время незавершённого запуска `shutdown` отвечает и завершает контроллер, не ожидая возврата операции запуска. Отдельная блокировка запуска удерживается до её окончания: повторный `serve` с любым `--root`, `recover-failed` и исследовательская проба в это время получают отказ. Если процесс всё же запустился позднее, ему закрывают ввод без отправки письма; его резерв сохраняется. Это не механизм освобождения неизвестных процессов. При аварийном завершении самого Messenger защитой остаются предварительный резерв и сохранённый владелец в SQLite.
+During an unfinished launch, `shutdown` responds and terminates the controller without waiting for the launch operation to return. A separate launch lock is held until it finishes: a repeated `serve` with any `--root`, `recover-failed` and the research probe are refused during that time. If the process does start later, its input is closed without sending a message; its reservation is kept. This is not a mechanism for releasing unknown processes. If Messenger itself crashes, the preliminary reservation and the owner saved in SQLite remain the protection.
 
-Отдельный случай — доказанный отказ ОС до исполнения CLI (нет права исполнения, файл исчез, неверный формат или компонент пути не является каталогом). Только тогда удаляется собственный предварительный резерв, а попытка и письмо сохраняются как `not_started`. Неиспользованные записи канала удаляются, блокировка сессии снимается. После исправления пути можно явно поставить новое письмо; неудачное автоматически не повторяется. Неизвестные ошибки запуска и ошибки сохранения реестра по-прежнему оставляют защиту.
+A separate case is a proven OS refusal before the CLI executes (no execute permission, the file is gone, wrong format, or a path component is not a directory). Only then is Messenger's own preliminary reservation removed, and the attempt and message are saved as `not_started`. Unused channel records are deleted and the session lock is released. After fixing the path, you can explicitly enqueue a new message; the failed one is not retried automatically. Unknown launch errors and registry save errors still leave the protection in place.
 
-Эти границы проверены на Mac синтетическими процессами с race detector после аудита PR #3. Новых вызовов реальных моделей при исправлении не было.
+These boundaries were verified on Mac with synthetic processes and the race detector after the PR #3 audit. No new real model calls were made during the fix.
 
-`recover-failed` и `resolve accept/retry` не восстанавливают постоянный канал. Для новых запусков добавлена отдельная ограниченная команда `recover-stream`, описанная ниже. После прежней реальной пробы в очереди сохранено третье контрольное письмо, которое не было отправлено модели; её старый резерв новая команда не снимает.
+`recover-failed` and `resolve accept/retry` do not recover the persistent channel. For new launches, a separate restricted command `recover-stream` was added, described below. After the earlier real trial, a third control message that was never sent to the model is kept in the queue; the new command does not release that trial's old reservation.
 
-## Явное восстановление после новой загрузки Mac
+## Explicit recovery after a new Mac boot
 
-Это первый ограниченный вариант. Он не разрешает восстановление в той же загрузке ОС, даже если PID исчез, группа пуста или CLI завершился успешно. Сохранённый до запуска идентификатор загрузки `kern.bootsessionuuid` должен отличаться от текущего, а отпечаток компьютера — совпадать. Apple создаёт UUID при загрузке: [исходный код XNU](https://github.com/apple-oss-distributions/xnu/blob/main/iokit/Kernel/IOPMrootDomain.cpp#L3847-L3862). Прежний `kern.boottime` не используется как доказательство этой команды. Идентификатор компьютера хранится в виде хеша, не выводится в результат команды и не отправляется в сеть.
+This is a first, restricted version. It does not allow recovery within the same OS boot, even if the PID is gone, the group is empty or the CLI exited successfully. The boot identifier `kern.bootsessionuuid` saved before the launch must differ from the current one, and the computer fingerprint must match. Apple creates the UUID at boot: [XNU source code](https://github.com/apple-oss-distributions/xnu/blob/main/iokit/Kernel/IOPMrootDomain.cpp#L3847-L3862). The earlier `kern.boottime` is not used as evidence for this command. The computer identifier is stored as a hash, is not printed in the command output and is not sent over the network.
 
-Команда требует остановленный `serve`, точный каталог, псевдоним и ID записи `StreamRuns`, полное совпадение наблюдения в SQLite и реестре, а также хотя бы один завершённый ход с подтверждённым ответом. После уже произошедшей перезагрузки для подходящего нового запуска:
+The command requires a stopped `serve`, the exact directory, alias and `StreamRuns` record ID, a full match between the observation in SQLite and in the registry, and at least one completed turn with a confirmed reply. After a reboot has already happened, for a matching new launch:
 
 ```sh
 messenger --root /absolute/data/path recover-stream \
@@ -89,25 +89,25 @@ messenger --root /absolute/data/path recover-stream \
   --confirm preserve-uncertain
 ```
 
-ID запуска берётся из `inspect` до остановки, это не ID разговора Claude. Сама команда не перезагружает компьютер, не запускает CLI, не посылает сигналов и не отправляет писем. Она архивирует записи канала, сохраняет попытки, ответы и неопределённые исходы, снимает только соответствующий резерв и готовит **точный `--resume` того же разговора**. Старые квитанции закрыты. Новых писем не создаётся. Очередь остаётся на паузе: запуск `serve --claude-stream --allow-model-calls` после восстановления сам по себе её не возобновляет; отправку разрешает отдельный `resume`.
+The run ID is taken from `inspect` before stopping; it is not the Claude conversation ID. The command itself does not reboot the computer, launch the CLI, send signals or send messages. It archives the channel records, keeps attempts, replies and uncertain outcomes, releases only the matching reservation and prepares an **exact `--resume` of the same conversation**. Old receipts are closed. No new messages are created. The queue stays paused: running `serve --claude-stream --allow-model-calls` after recovery does not by itself resume it; sending is allowed by a separate `resume`.
 
-Запись восстановления сначала получает состояние `pending`, при котором `serve` и исследовательская проба в этом каталоге запрещены. Затем заменяется файл резерва и транзакцией завершается восстановление. При сбое повторяется **та же команда с тем же ID запуска**; повтор не дублирует историю, не создаёт сообщений и не удаляет другие резервы. В `inspect` добавлены `ArchivedStreamRuns` и `StreamRecoveries`.
+The recovery record first gets the `pending` state, during which `serve` and the research probe are forbidden in this directory. Then the reservation file is replaced and the recovery is completed in a transaction. On failure, repeat **the same command with the same run ID**; the repeat does not duplicate history, does not create messages and does not remove other reservations. `inspect` now includes `ArchivedStreamRuns` and `StreamRecoveries`.
 
-Старые запуски без заранее записанных `recovery_epoch` и `stream_run_id`, неполные записи, отсутствие подтверждённого ответа, иной компьютер, ошибка чтения и повреждённый реестр дают отказ. Сведения о загрузке не дописываются задним числом. Команда рассчитана на локальные данные одной машины; перенос баз между машинами, клонированные VM и откат снапшотов не входят в гарантию. Прямой запуск того же ID вне Messenger по-прежнему вне гарантии.
+Old runs without `recovery_epoch` and `stream_run_id` recorded in advance, incomplete records, no confirmed reply, a different computer, a read error and a corrupted registry all result in a refusal. Boot information is not filled in retroactively. The command is designed for local data on a single machine; moving databases between machines, cloned VMs and snapshot rollbacks are not covered by the guarantee. Launching the same ID directly outside Messenger is still outside the guarantee.
 
-На Mac выполнены тесты с race detector: положительная смена загрузки была **подставлена в тесте**, реальной перезагрузки и реального Claude resume в этой проверке не было. Тестовый CLI проверил `--resume` вместо создания новой сессии, сохранение `uncertain` и доставку только следующего письма после снятия паузы. Чтение настоящих идентификаторов Mac проверено отдельно без вывода их значений. На Linux/Windows источник идентичности для этой команды пока возвращает явную неподдержку; это не мешает компиляции клиента.
+Tests with the race detector were run on Mac: the positive boot change was **simulated in the test**; there was no real reboot and no real Claude resume in this verification. The fake CLI verified `--resume` instead of creating a new session, preservation of `uncertain`, and delivery of only the next message after unpausing. Reading the real Mac identifiers was verified separately without printing their values. On Linux/Windows the identity source for this command currently returns an explicit "unsupported"; this does not prevent the client from compiling.
 
-Позднее на том же Mac выполнена [настоящая перезагрузка и положительная приёмка](reports/2026-11-05-claude-stream-reboot-mac.md): штатное восстановление сохранило историю и паузу, затем одно новое письмо прошло через точный resume с сохранённым контекстом и `provider_ok=1`. Старые письма не повторялись. Повтор восстановления старого поколения не затронул новый резерв; новое поколение в той же загрузке восстановить нельзя. Перед перезагрузкой клиент был остановлен: аварийный обрыв активного ответа этой пробой не проверен.
+Later, on the same Mac, a [real reboot and positive acceptance](reports/2026-11-05-claude-stream-reboot-mac.md) were carried out: the standard recovery kept the history and the pause, then one new message went through an exact resume with preserved context and `provider_ok=1`. Old messages were not repeated. Repeating recovery of the old generation did not affect the new reservation; the new generation cannot be recovered within the same boot. The client was stopped before the reboot: a crash interrupting an active reply was not verified by this trial.
 
-## Сохранность и доступ
+## Durability and access
 
-- `stream_runs` связывает одного владельца процесса с сессией, `stream_turns` — отдельные попытки с владельцем.
-- Намерение отправки фиксируется до записи в stdin. Если процесс клиента падает в этом промежутке, исход неизвестен и письмо автоматически не повторяется.
-- Переход к следующему письму выполняется одной транзакцией при сохранённом владельце. Другой псевдоним не даёт второй запуск той же сессии.
-- `read_current` возвращает случайную квитанцию текущего письма. `reply(text, receipt)` проверяет её в SQLite. Адрес и связь ответа назначает код; старая квитанция не подходит следующему ходу.
-- HTTP MCP слушает только loopback, использует отдельный bearer capability, отвергает Origin и проверяет состояние в БД при каждом вызове.
-- `inspect` содержит ID, тексты и внутренние токены. Вывод, базы и профили остаются локальными и в Git не попадают.
+- `stream_runs` binds one process owner to a session; `stream_turns` binds individual attempts to the owner.
+- The intent to send is recorded before writing to stdin. If the client process crashes in between, the outcome is unknown and the message is not retried automatically.
+- Moving to the next message happens in a single transaction while the owner is kept. A different alias does not give a second launch of the same session.
+- `read_current` returns a random receipt for the current message. `reply(text, receipt)` checks it in SQLite. The address and reply link are assigned by code; an old receipt does not work for the next turn.
+- HTTP MCP listens only on loopback, uses a separate bearer capability, rejects Origin and checks the state in the database on every call.
+- `inspect` contains IDs, texts and internal tokens. The output, databases and profiles stay local and never go into Git.
 
-Это локальная реализация без сети, установщика или окна. Windows-платформенные операции пока явно не поддержаны. Linux/Windows-кросс-сборка не является выполнением тестов или CLI на этих ОС.
+This is a local implementation without networking, an installer or a window. Windows platform operations are explicitly unsupported for now. Linux/Windows cross-compilation is not the same as running tests or the CLI on those OSes.
 
-Схема SQLite расширяется при открытии базы. Возврат к старому бинарнику для базы с постоянными сессиями не поддерживается; старый клиент не знает состояний `turn_completed` и владельца stream.
+The SQLite schema is extended when the database is opened. Going back to an old binary for a database with persistent sessions is not supported; the old client does not know the `turn_completed` states or the stream owner.

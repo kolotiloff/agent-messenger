@@ -1,46 +1,46 @@
-# Ночная проверка CI и Mac preview — 6 ноября 2026
+# Nightly CI and Mac preview check — November 6, 2026
 
-## Проверенное состояние
+## Verified state
 
-PR [#15](https://github.com/kolotiloff/agent-messenger/pull/15), head `b31596c999f17fffa71bf4b336fd63f97c7f5457`. Все четыре задания [запуска 42125645635](https://github.com/kolotiloff/agent-messenger/actions/runs/42125645635) завершились успешно. Проверка pull request использует merge-ревизию `dc73edc21112bb81804f069430d85fbec9791730`; архив записывает её как источник. Это не публичный release и не слияние цепочки draft PR.
+PR [#15](https://github.com/kolotiloff/agent-messenger/pull/15), head `b31596c999f17fffa71bf4b336fd63f97c7f5457`. All four jobs of [run 42125645635](https://github.com/kolotiloff/agent-messenger/actions/runs/42125645635) completed successfully. The pull request check uses the merge revision `dc73edc21112bb81804f069430d85fbec9791730`; the archive records it as the source. This is not a public release and not a merge of the draft PR chain.
 
-| Среда | Подтверждено |
+| Environment | Confirmed |
 |---|---|
-| macOS 15 arm64 / Go 1.22.2 | Форматирование, проверка модулей, vet и весь нативный набор с race |
-| Ubuntu 24.04 / Go 1.22.2 | Те же проверки; компиляция продукта и тестовых бинарников macOS arm64/amd64, Linux amd64, Windows amd64 |
-| macOS 15 arm64 / Go 1.27.3 | Нативный набор с race; два архива; установка и обновление |
-| Ubuntu 24.04 / Go 1.27.3 | Нативный набор с race |
+| macOS 15 arm64 / Go 1.22.2 | Formatting, module verification, vet and the whole native suite with race |
+| Ubuntu 24.04 / Go 1.22.2 | The same checks; compiling the product and test binaries for macOS arm64/amd64, Linux amd64, Windows amd64 |
+| macOS 15 arm64 / Go 1.27.3 | Native suite with race; two archives; install and update |
+| Ubuntu 24.04 / Go 1.27.3 | Native suite with race |
 
-Stable Go в этом запуске разрешился в 1.27.3. Старый Go 1.22.2 оставлен для проверки совместимости исходников; готовые архивы CI теперь собираются поддерживаемой версией. [Политика поддержки Go](https://go.dev/doc/devel/release#policy).
+Stable Go resolved to 1.27.3 in this run. The old Go 1.22.2 is kept to check source compatibility; ready-made CI archives are now built with a supported version. [Go support policy](https://go.dev/doc/devel/release#policy).
 
-## Что выявила реальная проверка
+## What the real check revealed
 
-Первый Linux stable-Go запуск нашёл гонку очистки теста `TestSupervisorRunsExplicitSessionAndBlocksOccupiedGroup`: клиент уже завершился, но тестовый CLI ещё мог писать в SQLite. Удаление временной папки иногда завершалось `directory not empty`. Это следствие намеренного поведения shutdown: он не убивает CLI. Тест теперь ожидает завершения своего вспомогательного процесса перед удалением временной базы; продуктовая остановка и резервы не ослаблены.
+The first Linux stable-Go run found a cleanup race in the test `TestSupervisorRunsExplicitSessionAndBlocksOccupiedGroup`: the client had already exited, but the test CLI could still be writing to SQLite. Deleting the temporary folder sometimes failed with `directory not empty`. This is a consequence of intentional shutdown behavior: it does not kill the CLI. The test now waits for its helper process to exit before deleting the temporary database; product shutdown and reservations are not weakened.
 
-Исправление прошло 20 последовательных повторов на пользовательском Mac с Go 1.22.2 и race, затем все задания GitHub. Логи не содержат настоящих сессий, поскольку используются подставные процессы.
+The fix passed 20 consecutive repetitions on the user's Mac with Go 1.22.2 and race, then all GitHub jobs. The logs contain no real sessions, since stand-in processes are used.
 
-## Установка и обновление
+## Install and update
 
-Mac CI проверил SHA-256 архива и бинарника, команду version без создания пользовательских данных, чистую установку, отказ обновления живого клиента, обновление остановленного клиента с непустой очередью, повторную установку того же файла, сохранение старого бинарника и полное совпадение снимка очереди до/после. Все тестовые процессы остановлены. Новых обращений к моделям: 0.
+Mac CI verified the SHA-256 of the archive and the binary, the version command without creating user data, a clean install, refusal to update a live client, updating a stopped client with a non-empty queue, reinstalling the same file, preservation of the old binary, and a full match of the queue snapshot before/after. All test processes were stopped. New model calls: 0.
 
-На пользовательском Mac отдельно проверена обычная сборка Go 1.27.3 и запуск version. На старом Go 1.22.2 обычный внешний build мог дать непринимаемую macOS подпись; сборщик preview явно подписывает собственный бинарник ad-hoc и проверяет его запуск. Это не Developer ID/notarization и не обход Gatekeeper.
+On the user's Mac, a regular Go 1.27.3 build and running version were verified separately. On the old Go 1.22.2, a regular external build could produce a signature macOS does not accept; the preview builder explicitly signs its own binary ad-hoc and verifies that it launches. This is not Developer ID/notarization and not a Gatekeeper bypass.
 
-## Дополнительная проверка исходящих при обновлении
+## Additional check of outgoing messages during an update
 
-На пользовательском Mac выполнено реальное обновление двух локальных архивов: `0.0.0-preview.1` (исходники `468648f`, Go 1.22.2) → `0.0.0-preview.2` (исходники `ecc8ff6`, Go 1.27.3). Использовались временные HOME, профиль и очередь; CLI был подставным `/usr/bin/false`, модели не разрешались.
+A real update of two local archives was performed on the user's Mac: `0.0.0-preview.1` (sources `468648f`, Go 1.22.2) → `0.0.0-preview.2` (sources `ecc8ff6`, Go 1.27.3). Temporary HOME, profile and queue were used; the CLI was a stand-in `/usr/bin/false`, models were not permitted.
 
-Кроме обычного письма в очереди сохранены два конверта: `prepared` и `queued` без подтверждения окна. После обновления их адреса, текст, ID, состояние и время сохранились целиком. Неподтверждённый `prepared` не превратился в задание; повтор `ui-submit` для уже принятого ID вернул `created=false`. Число заданий осталось два, попыток — ноль. Тестовые процессы остановлены. Сценарий добавлен в `scripts/check-package.py` для следующих CI-запусков.
+Besides a regular message, two envelopes were kept in the queue: `prepared` and `queued` without window confirmation. After the update, their addresses, text, ID, state and time were fully preserved. The unconfirmed `prepared` did not turn into a job; repeating `ui-submit` for an already accepted ID returned `created=false`. The number of jobs remained two, attempts — zero. Test processes were stopped. The scenario was added to `scripts/check-package.py` for future CI runs.
 
-Локальный архив preview.2 сверён с GitHub: все 137 присутствующих файлов продукта/документации совпали по Git blob SHA; отсутствуют только 28 файлов исторического Python-стенда, не участвующих в сборке. SHA-256 архива: `c7affe854204dc7518a39c7da0537acf2f7cdb5e6caa1a7aadc4b2a19c5b3ed5`. Проверены внутренняя сумма бинарника и manifest. Это архив `ecc8ff6`, а не любой последующий коммит документации.
+The local preview.2 archive was checked against GitHub: all 137 present product/documentation files matched by Git blob SHA; only 28 files of the historical Python test bench, which do not take part in the build, are missing. Archive SHA-256: `c7affe854204dc7518a39c7da0537acf2f7cdb5e6caa1a7aadc4b2a19c5b3ed5`. The internal checksum of the binary and the manifest were verified. This is the `ecc8ff6` archive, not any later documentation commit.
 
-## Инструкции и интерфейс
+## Instructions and interface
 
-README приведён к фактическому состоянию: локальное окно и установка уже существуют, но это ограниченный Mac preview. Исторические ограничения одноразового клиента обозначены как история. Во втором терминале нужно явно задать тот же ROOT; переменная первого терминала не переносится автоматически. Ссылки актуальных инструкций проверены по дереву репозитория.
+The README was brought in line with the actual state: the local window and installation already exist, but this is a limited Mac preview. Historical limitations of the one-shot client are marked as history. In the second terminal, the same ROOT must be set explicitly; the first terminal's variable is not carried over automatically. Links in the current instructions were checked against the repository tree.
 
-Оформление design/v1 не менялось. В продукте остаётся ранее проверенный интерфейс с ручным обновлением. Улучшения черновиков, фонового чтения и клавиатурного фокуса подготовлены отдельно, но не включены: автоматическая проверка разрешений отклонила открытие тестового локального окна. Синтаксическая проверка JavaScript не считается визуальной приёмкой.
+The design/v1 styling did not change. The product keeps the previously verified interface with manual refresh. Improvements to drafts, background reading and keyboard focus were prepared separately but not included: the automatic permission check rejected opening the test local window. A JavaScript syntax check is not considered visual acceptance.
 
-## Что ещё не принято
+## What is not accepted yet
 
-Windows runtime, постоянные продуктовые адаптеры Codex/Cursor, все четыре устройства, сетевой брокер, передача роли координатора, безопасное окончательное освобождение CLI-владельца в той же загрузке Mac, резервное копирование/восстановление, чистое распространение через Gatekeeper и подписанный выпуск. Кодирование и сборка не заменяют эти проверки.
+Windows runtime, persistent product Codex/Cursor adapters, all four devices, the network broker, coordinator role handover, safe final release of a CLI owner within the same Mac boot, backup/restore, clean distribution through Gatekeeper and a signed release. Coding and building do not replace these checks.
 
-Настоящие Claude, Codex и Cursor этой ночью не запускались. Рабочие чаты и профили не использовались, защитные резервы не удалялись, Mac не перезагружался. Cursor CLI не запускался. Полный релиз не объявлен.
+Real Claude, Codex and Cursor were not run tonight. Working chats and profiles were not used, protective reservations were not deleted, the Mac was not rebooted. Cursor CLI was not run. A full release has not been announced.

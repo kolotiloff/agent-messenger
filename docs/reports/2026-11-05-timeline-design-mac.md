@@ -1,15 +1,15 @@
-# Журнал сообщений и сохранение оформления
+# Message log and preserving the design
 
-5 ноября 2026, macOS arm64, Go 1.22.2. Изменения поверх PR #8.
+November 5, 2026, macOS arm64, Go 1.22.2. Changes on top of PR #8.
 
-Полный `go test -race -count=1 -ldflags=-linkmode=external ./...` прошёл на Mac. Сборки `CGO_ENABLED=0` для linux/amd64 и windows/amd64 прошли. На других ОС программа не запускалась. Предупреждение внешнего линковщика об LC_DYSYMTAB остаётся особенностью используемого Go; тестовые программы завершились успешно.
+The full `go test -race -count=1 -ldflags=-linkmode=external ./...` passed on Mac. `CGO_ENABLED=0` builds for linux/amd64 and windows/amd64 passed. The program was not run on other OSes. The external linker's LC_DYSYMTAB warning remains a quirk of the Go version used; the test programs completed successfully.
 
-Проверены страницы истории с совпадающими временами и новым письмом между чтениями, общий журнал двух псевдонимов, отклонение чужого/несуществующего курсора, границы страницы и пустой массив. Чтение не меняет снимок базы. Проверены Unicode-сокращение длинного текста с флагом и сохранение ссылки повторного письма.
+Verified: history pages with identical timestamps and a new message arriving between reads, a shared log of two aliases, rejection of a foreign/nonexistent cursor, page boundaries and an empty array. Reading does not change the database snapshot. Verified: Unicode truncation of long text with a flag, and preservation of the link of a repeated message.
 
-Ответ до подтверждения остаётся `not_verified`. Подтверждённый ход постоянного процесса имеет `verified_turn` без придуманного кода выхода; остановка потока не стирает этот результат. Код выхода 1 даёт `process_failed`, даже при тексте ответа и положительном provider_ok. Подмена ссылки ответа, отправителя/адресата, отсутствие подтверждённой личности или результата провайдера не дают успеха. Исполнительные токены, пути профиля и CLI-ID не входят в результат.
+A reply before confirmation stays `not_verified`. A confirmed turn of the persistent process has `verified_turn` without an invented exit code; stopping the stream does not erase this result. Exit code 1 gives `process_failed`, even with reply text and a positive provider_ok. Spoofing the reply link or the sender/recipient, or missing confirmed identity or provider result, does not yield success. Execution tokens, profile paths and CLI IDs are not included in the result.
 
-Интеграционная проверка трижды читает журнал через настоящий локальный сокет. Очередь остаётся, попыток и ответов не появляется, подставной launcher не вызывается. Реальные модели и рабочие сессии не использовались.
+The integration check reads the log three times through a real local socket. The queue remains, no attempts or replies appear, and the stub launcher is not called. No real models or working sessions were used.
 
-Пользователь выбрал стиль демонстрационного макета. Сохранены неизменённый исходный фрагмент, точный CSS, параметры цветов/размеров, HTML-копия для браузера и SHA-256. Сверка подтверждает совпадение с показанным в чате оригиналом и отсутствие неподдержанных host-вызовов кроме необязательного состояния представления. Это сохранение ранее проверенного макета, не реализация продуктового окна. Вспомогательные скрипты экспортной оболочки используют CDN.
+The user chose the style of the demo mockup. Preserved: the unmodified original fragment, the exact CSS, the color/size parameters, an HTML copy for the browser and SHA-256. Reconciliation confirms a match with the original shown in the chat and the absence of unsupported host calls other than optional view state. This preserves a previously verified mockup; it is not an implementation of the product window. The export shell's helper scripts use a CDN.
 
-По просьбе пользователя изучены официальные документы Claude Desktop и Remote Control, добавлен план проверки графического координатора и диктовки. Совместимость этих режимов с текущим stream-json адаптером не проверена; подключение GUI, авторизация и голосовой ввод не запускались.
+At the user's request, the official Claude Desktop and Remote Control documentation was studied, and a plan was added for verifying a graphical coordinator and dictation. Compatibility of these modes with the current stream-json adapter has not been verified; GUI connection, authorization and voice input were not run.

@@ -1,44 +1,44 @@
-# Codex и Cursor под контролем очереди и привязанного MCP
+# Codex and Cursor under queue control and a bound MCP
 
-Дата: 2026-11-05. macOS / Python 3.9.6.
+Date: 2026-11-05. macOS / Python 3.9.6.
 
-**PASS для обоих CLI:** по два последовательных задания в сохранённой тестовой сессии, правильные связанные ответы и отказ конкурентному резервированию. Дополнительно прошли 19 тестов без моделей.
+**PASS for both CLIs:** two sequential jobs each in a saved test session, correct linked replies and refusal of a competing reservation. In addition, 19 tests without models passed.
 
-| CLI | Версия | Задания | Сохранение ID | Связанные ответы | Конкурентные попытки |
+| CLI | Version | Jobs | ID preserved | Linked replies | Competing attempts |
 |---|---|---|---|---|---|
-| Codex | 0.155.1 | 2 успешных | Тот же ID | 2 | Обе отклонены |
-| Cursor Agent CLI | 2026.11.05-86047df | 2 успешных | Тот же ID | 2 | Обе отклонены |
+| Codex | 0.155.1 | 2 successful | Same ID | 2 | Both rejected |
+| Cursor Agent CLI | 2026.11.05-86047df | 2 successful | Same ID | 2 | Both rejected |
 
-## Сценарий
+## Scenario
 
-Использованы отдельные простаивающие тестовые разговоры из прежних опытов resume. Рабочие чаты не использовались. Для каждого провайдера создана новая закрытая локальная папка данных и отдельная очередь; внутри каждого опыта все конкурирующие процессы использовали одну базу.
+Separate idle test conversations from the earlier resume experiments were used. No work chats were used. For each provider, a new private local data folder and a separate queue were created; within each experiment, all competing processes used the same database.
 
-В очередь заранее записаны два письма. Контроллер резервирует сессию, фиксирует намерение запуска и запускает CLI с точным ID. MCP не может читать письмо или отвечать до подтверждения ID по служебному событию: `thread.started` у Codex, `system/init` у Cursor.
+Two messages were written to the queue in advance. The controller reserves the session, records the launch intent and launches the CLI with the exact ID. MCP cannot read the message or reply until the ID is confirmed by a service event: `thread.started` for Codex, `system/init` for Cursor.
 
-Агент получает текст письма через `read_current()` и вызывает `reply(text)`. Адресат, отправитель и связь ответа определяются сервером. Контрольная строка в запрос запуска не включается.
+The agent receives the message text via `read_current()` and calls `reply(text)`. The recipient, sender and reply link are determined by the server. The control string is not included in the launch prompt.
 
-Пока CLI работает, другой процесс пытается занять ту же сессию. Он получает отказ и не запускает дополнительный CLI. После выхода основного процесса контроллер проверяет события, ответ и ID, отмечает завершение, закрывает и заново открывает SQLite, затем выполняет второе письмо.
+While the CLI is running, another process tries to take the same session. It is refused and does not launch an additional CLI. After the main process exits, the controller checks the events, the reply and the ID, marks completion, closes and reopens SQLite, and then runs the second message.
 
-Каждый опыт завершён двумя состояниями `completed`, двумя исполнениями и двумя ответами; активное резервирование снято. Всего выполнено четыре реальных запуска CLI, без автоматических повторов и без опроса модели в ожидании.
+Each experiment ended with two `completed` states, two executions and two replies; the active reservation was released. In total, four real CLI launches were performed, with no automatic retries and no polling of the model while waiting.
 
-## Различия адаптеров
+## Adapter differences
 
-Codex запускался с отдельной конфигурацией, одним MCP и отключёнными shell, apps, plugins, hooks, multi-agent, browser/computer use. Проверяются завершение хода, отсутствие ошибок, принадлежность MCP-вызовов и их последовательность.
+Codex was launched with a separate configuration, a single MCP, and shell, apps, plugins, hooks, multi-agent and browser/computer use disabled. The checks cover turn completion, absence of errors, ownership of MCP calls and their sequence.
 
-Cursor использовал отдельную тестовую рабочую папку с MCP-конфигурацией, разрешениями на два инструмента и запретами shell/чтения/записи файлов/web fetch. Перед запуском проверено отсутствие глобального `~/.cursor/mcp.json` и переопределённого `CURSOR_CONFIG_DIR`. `--approve-mcps` применён только в этом контролируемом окружении. В журнале допустимо служебное обнаружение MCP-инструментов; остальные действия должны быть `read_current` и `reply`.
+Cursor used a separate test working folder with an MCP configuration, permissions for two tools and prohibitions on shell/file read/file write/web fetch. Before launch, the absence of a global `~/.cursor/mcp.json` and of an overridden `CURSOR_CONFIG_DIR` was checked. `--approve-mcps` was applied only in this controlled environment. Service discovery of MCP tools is acceptable in the log; all other actions must be `read_current` and `reply`.
 
-У Cursor в stdout дополнительно проверяются ID всех событий и результат вызова MCP. Эта проверка фактически выполненных действий не доказывает отсутствие всех прочих инструментов в каталоге.
+For Cursor, the IDs of all events in stdout and the result of the MCP call are additionally checked. This check of actually performed actions does not prove that all other tools are absent from the catalog.
 
-Общий цикл исполнения переиспользован из опыта Claude. Проверка результатов Claude выделена в отдельную функцию; её поведение проверено без модели. Повторного реального запуска Claude в этой работе не было.
+The common execution loop was reused from the Claude experiment. The Claude result check was extracted into a separate function; its behavior was verified without a model. There was no new real Claude launch in this work.
 
-## Тесты и границы
+## Tests and limits
 
-19 тестов прошли за 1,360 секунды: прежние 15 проверок плюс проверки адаптеров. В отрицательных случаях отклоняются ошибочный/отсутствующий ID, отсутствующий или повторный итог, ошибка MCP, чужой сервер и неожиданные действия. Эти отрицательные случаи синтетические.
+19 tests passed in 1.360 seconds: the previous 15 checks plus the adapter checks. Negative cases reject a wrong/missing ID, a missing or duplicate final result, an MCP error, a foreign server and unexpected actions. These negative cases are synthetic.
 
-Вместе с [опытом Claude](2026-11-05-guarded-claude-mac.md) базовая интеграция нового механизма подтверждена для трёх CLI на Mac. Это частичные H1/H3/H5/H6. Сеть, Windows/Linux, реальное аварийное восстановление, ручной обход клиента, вся иерархия процессов и часовой H9 остаются непроверенными. Новый тест не является общением трёх агентов друг с другом: это отдельная проверка каждого адаптера.
+Together with the [Claude experiment](2026-11-05-guarded-claude-mac.md), basic integration of the new mechanism is confirmed for three CLIs on Mac. This is partial H1/H3/H5/H6. Networking, Windows/Linux, real crash recovery, manual bypass of the client, the full process hierarchy and the hour-long H9 remain unverified. The new test is not three agents communicating with each other: it is a separate check of each adapter.
 
-Каждый запуск стенда имеет свою базу. Разные базы не координируют один и тот же ID: нельзя одновременно запускать эти пробы на одной CLI-сессии в разных папках. Будущий клиент должен иметь единый реестр и базу на машине.
+Each run of the test rig has its own database. Different databases do not coordinate the same ID: these probes must not be run simultaneously on one CLI session in different folders. The future client must have a single registry and database per machine.
 
-Сырые журналы, данные входа, реальные ID и контрольные строки не публикуются. [Код и инструкция](../../experiments/session_safety/README.md). Следующий этап — безопасное восстановление и единый локальный клиент/API для интерфейса.
+Raw logs, login data, real IDs and control strings are not published. [Code and instructions](../../experiments/session_safety/README.md). The next stage is safe recovery and a single local client/API for the interface.
 
-Источники параметров и форматов: [Codex non-interactive](https://learn.chatgpt.com/docs/non-interactive-mode), [Cursor CLI parameters](https://cursor.com/docs/cli/reference/parameters), [Cursor permissions](https://cursor.com/docs/cli/reference/permissions).
+Sources for parameters and formats: [Codex non-interactive](https://learn.chatgpt.com/docs/non-interactive-mode), [Cursor CLI parameters](https://cursor.com/docs/cli/reference/parameters), [Cursor permissions](https://cursor.com/docs/cli/reference/permissions).

@@ -1,56 +1,56 @@
-# Приложение Agent Messenger.app
+# Agent Messenger.app
 
-Первая нативная оболочка для Mac: AppKit, системный WKWebView и встроенный Go-клиент. Отдельный браузер, Python, Node, Go и терминал для обычного открытия не нужны. Выбранное оформление design/v1 сохранено. Это локальный preview, не готовый сетевой релиз.
+The first native shell for Mac: AppKit, the system WKWebView and an embedded Go client. A separate browser, Python, Node, Go or a terminal is not needed for normal opening. The chosen design/v1 styling is preserved. This is a local preview, not a finished network release.
 
-## Установка и открытие
+## Installation and opening
 
-1. Скачайте **[Mac preview.19 · Apple Silicon](https://github.com/kolotiloff/agent-messenger/releases/download/v0.0.0-preview.19/4584caecdbb280d861d2d06c812c19c08cde385781b3d632ab7f863339242afa.zip)**. [Описание и файлы выпуска](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.19).
-2. Распакуйте ZIP двойным щелчком. Длинное имя архива — его контрольная сумма; внутри находится `Agent Messenger.app`.
-3. Перенесите `Agent Messenger.app` в пользовательскую папку `~/Applications` («Программы»). Открывайте двойным щелчком или через Spotlight/Dock.
+1. Download **[Mac preview.19 · Apple Silicon](https://github.com/kolotiloff/agent-messenger/releases/download/v0.0.0-preview.19/4584caecdbb280d861d2d06c812c19c08cde385781b3d632ab7f863339242afa.zip)**. [Release notes and files](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.19).
+2. Unpack the ZIP by double-clicking it. The archive's long name is its checksum; inside is `Agent Messenger.app`.
+3. Move `Agent Messenger.app` to the user folder `~/Applications` («Программы», "Applications"). Open it by double-clicking or via Spotlight/Dock.
 
-Дальнейшие версии проверяются автоматически при запуске, каждые 5 минут и при возвращении в окно (с общим интервалом не меньше 5 минут). Слева внизу появляется **«Доступно обновление»**; ручная проверка находится в меню **Agent Messenger → Проверить обновления…**. Вход GitHub не нужен.
+Later versions are checked automatically at launch, every 5 minutes and when you return to the window (with an overall interval of no less than 5 minutes). **«Доступно обновление»** ("Update available") appears at the bottom left; the manual check is in the menu **Agent Messenger → Проверить обновления…** ("Check for Updates…"). No GitHub sign-in is needed.
 
- Пакет пока имеет ad-hoc подпись: чистое распространение через Gatekeeper, Developer ID и notarization не принято. Обход защит macOS не требуется и не предлагается. Проверено локально на Apple Silicon; минимальная версия оболочки — macOS 15, Intel отдельно не принят.
+ The package currently has an ad-hoc signature: clean distribution through Gatekeeper, Developer ID and notarization is not accepted. Bypassing macOS protections is not required and not suggested. Verified locally on Apple Silicon; the minimum version for the shell is macOS 15, Intel is not accepted separately.
 
-При открытии оболочка находит прежнюю базу по существующему защитному реестру либо использует обычный пользовательский каталог, когда резервов нет. Несколько разных каталогов, повреждённый реестр или исчезнувшая сохранённая база дают отказ. Резервы не удаляются и не восстанавливаются автоматически. Если работающий клиент использует другой каталог без записанных резервов, выберите его через меню «Файл → Выбрать каталог данных…»; никакого поиска «последней сессии» нет.
+On opening, the shell finds the previous database via the existing protective registry, or uses the normal user directory when there are no reservations. Several different directories, a corrupted registry or a missing saved database lead to a refusal. Reservations are not deleted or restored automatically. If the running client uses a different directory without recorded reservations, choose it via the menu «Файл → Выбрать каталог данных…» ("File → Choose Data Directory…"); there is no search for a "last session".
 
-Приложение подключается к уже работающему клиенту. Если клиента нет, запускает один фоновый экземпляр, на паузе и без разрешения моделей. Глобальная блокировка защищает и этот путь. Открытие уже работающего клиента не меняет его паузу или ранее выданные разрешения. Собственное окно не вызывает CLI и не авторизуется за пользователя.
+The application connects to an already running client. If there is no client, it starts one background instance, paused and without model permissions. The global lock protects this path too. Opening an already running client does not change its pause or previously granted permissions. The window itself does not invoke a CLI and does not sign in on the user's behalf.
 
-Красная кнопка закрывает окно, но приложение остаётся в Dock; «Файл → Открыть окно» или повторное открытие приложения возвращает его. Cmd+Q закрывает оболочку и её локальный HTTP-процесс. Фоновый клиент, очередь и владельцы CLI остаются. Приложение не вызывает shutdown при закрытии. Свой UI-процесс живёт, пока открыт унаследованный канал stdin; при падении оболочки EOF закрывает HTTP-сервер. Автоматического перезапуска моделей нет.
+The red button closes the window, but the application stays in the Dock; «Файл → Открыть окно» ("File → Open Window") or reopening the application brings it back. Cmd+Q closes the shell and its local HTTP process. The background client, the queue and the CLI owners remain. The application does not call shutdown on close. Its own UI process lives while the inherited stdin channel is open; if the shell crashes, EOF closes the HTTP server. There is no automatic restart of models.
 
-## Границы интерфейса
+## Interface boundaries
 
-Встроенный WebView получает только случайный приватный loopback-адрес своего UI-процесса. Он не открывает внешние сайты, новые окна, file URL и произвольные переходы. Хранилище WebView непостоянное; после полного выхода неотправленный текст может исчезнуть. Уже записанные исходящие восстанавливаются из SQLite по прежним правилам. Дополнительное сохранение неотправленных черновиков пока не включено; обновления устанавливаются по нажатию.
+The embedded WebView receives only the random private loopback address of its UI process. It does not open external sites, new windows, file URLs or arbitrary navigations. WebView storage is non-persistent; after a full quit, unsent text may disappear. Outgoing messages already written are restored from SQLite under the existing rules. Additional saving of unsent drafts is not enabled yet; updates are installed on a button press.
 
-Существующие функции окна — сообщения, история, карточки, отправка, пауза, проверка CLI и создание отдельной тестовой сессии Claude. В preview.19 её можно явно запустить из списка сессий; разрешение ограничено одним разговором. Нужен фоновый клиент версии 19. Вход CLI, брокер, четыре компьютера, безопасное освобождение старых владельцев и Developer ID/notarization остаются отдельными этапами.
+Existing window functions are messages, history, cards, sending, pause, CLI check and creating a separate test Claude session. In preview.19 it can be explicitly launched from the session list; the permission is limited to one conversation. A background client of version 19 is required. CLI login, the broker, four computers, safe release of old owners and Developer ID/notarization remain separate stages.
 
-## Сборка и проверки
+## Build and checks
 
-Из проверенных исходников на Mac со стабильным Go и Apple Command Line Tools:
+From verified sources on a Mac with stable Go and Apple Command Line Tools:
 
 ```sh
-bash scripts/build-mac-app.sh /абсолютный/новый/каталог 0.0.0-preview.3 ПОЛНЫЙ_SHA
-python3 scripts/check-desktop.py '/абсолютный/новый/каталог/Agent Messenger.app/Contents/Resources/messenger'
+bash scripts/build-mac-app.sh /absolute/new/dir 0.0.0-preview.3 FULL_SHA
+python3 scripts/check-desktop.py '/absolute/new/dir/Agent Messenger.app/Contents/Resources/messenger'
 ```
 
-Сборщик отказывается перезаписывать существующий app/zip, собирает Go с CGO_ENABLED=0, компилирует Swift, создаёт иконку, подписывает собственный bundle ad-hoc, проверяет подпись, печатает version и создаёт zip с SHA-256. SOURCE_SHA задаётся вызывающим; для выпуска нужна сверка чистого состояния исходников.
+The builder refuses to overwrite an existing app/zip, builds Go with CGO_ENABLED=0, compiles Swift, creates the icon, signs its own bundle ad-hoc, verifies the signature, prints version and creates a zip with SHA-256. SOURCE_SHA is set by the caller; a release requires checking that the source tree is clean.
 
-Автотест на отдельном HOME проверяет запуск без моделей, подключение двух UI к одному клиенту, EOF/повторное открытие без потери очереди и отсутствие попыток модели. Go-тесты отдельно проверяют выбор каталога, неизменность резервов и отказ от model-флагов. CI собирает bundle и проверяет мост, но не выдаётся за визуальный тест WebView.
+An automated test on a separate HOME verifies launching without models, two UIs connecting to one client, EOF/reopening without losing the queue, and the absence of model attempts. Go tests separately verify directory selection, that reservations stay unchanged, and refusal of model flags. CI builds the bundle and checks the bridge, but this is not presented as a visual test of the WebView.
 
-На пользовательском Mac окно открыто нативно: доступны история и карточки; закрытие окна и возврат через меню проверены. Полный набор Go с race прошёл. В тестах реальных моделей нет.
+On the user's Mac the window opened natively: history and cards are available; closing the window and returning via the menu were verified. The full Go suite with race passed. There are no real models in the tests.
 
-Основания оболочки: [NSApplication](https://developer.apple.com/documentation/appkit/nsapplication), [WKWebView](https://developer.apple.com/documentation/webkit/wkwebview). Ядро Messenger остаётся на Go; Swift — только платформенная оболочка macOS.
+Foundations of the shell: [NSApplication](https://developer.apple.com/documentation/appkit/nsapplication), [WKWebView](https://developer.apple.com/documentation/webkit/wkwebview). The Messenger core remains in Go; Swift is only the macOS platform shell.
 
-## Обновления из окна
+## Updates from the window
 
-Реализованы [подписанные обновления через GitHub Releases](UPDATES.md), с локальным каналом для разработки. Новая версия показывается внизу левой панели, установка и перезапуск выполняются Sparkle по нажатию. Уже работающий фоновый клиент остаётся на своей версии; его процессы, база и сессии не перезапускаются. Совместимость, границы проверки, публикация и границы приёмки описаны отдельно.
+[Signed updates via GitHub Releases](UPDATES.md) are implemented, with a local channel for development. A new version is shown at the bottom of the left panel; installation and restart are done by Sparkle on a button press. An already running background client stays on its version; its processes, database and sessions are not restarted. Compatibility, check boundaries, publishing and acceptance boundaries are described separately.
 
-## Уточнения интерфейса от 6 ноября
+## Interface refinements of November 6
 
-Порядок разделов: **Переписка → Агенты → Сервер**. Переписка открывается первой. История прокручивается внутри своей области, поле ввода остаётся внизу. Убраны нижняя информационная полоса, внешняя рамка браузерного макета и повторная шапка в нативном окне; поле ввода компактное, с мягким фоном. Агенты сгруппированы по провайдерам: Claude Code, Codex, Cursor. Статус поиска CLI находится в карточке без дублирующего списка снизу. Кнопка «Сессии» открывает отдельное окно со своей прокруткой. [Настройка и тестовый запуск Claude](SESSION_SETUP.md) доступны в текущем клиенте; существующие рабочие разговоры не перепривязываются.
+Section order: **«Переписка» ("Conversations") → «Агенты» ("Agents") → «Сервер» ("Server")**. Conversations opens first. History scrolls within its own area; the input field stays at the bottom. The bottom info bar, the outer frame of the browser mockup and the duplicate header in the native window were removed; the input field is compact, with a soft background. Agents are grouped by provider: Claude Code, Codex, Cursor. The CLI discovery status is in the card, without a duplicate list below. The «Сессии» ("Sessions") button opens a separate window with its own scrolling. [Setup and a test launch of Claude](SESSION_SETUP.md) are available in the current client; existing working conversations are not rebound.
 
-Тема выбирается внизу левой панели: светлая, тёмная или системная. Настройка нативного окна сохраняется между запусками/обновлениями и применяется также к системным окнам приложения.
+The theme is chosen at the bottom of the left panel: light, dark or system. The native window setting is kept across launches/updates and also applies to the application's system windows.
 
-Очередь сообщений отображается справа от переписки по умолчанию; значок вверху скрывает и возвращает панель. Отдельной вкладки очереди нет. Сейчас панель показывает количество ожидающих писем и требующие внимания сессии по данным клиента. У панели очереди, истории сообщений и списка компьютеров отдельная прокрутка; тема, текущая версия и обновление закреплены внизу слева.
+By default the message queue is shown to the right of the conversation; an icon at the top hides and restores the panel. There is no separate queue tab. Currently the panel shows the number of pending messages and sessions requiring attention, based on client data. The queue panel, the message history and the list of computers scroll independently; the theme, current version and update are pinned at the bottom left.
 
-Ручное обновление сообщений, очереди и статусов находится в меню **Вид → Обновить сообщения и статусы** (⌘R). Оно не устанавливает новую версию программы. В верхней панели переписки остаётся переключатель правой колонки очереди.
+Manual refresh of messages, queue and statuses is in the menu **«Вид → Обновить сообщения и статусы»** ("View → Refresh Messages and Statuses") (⌘R). It does not install a new version of the program. The top bar of the conversation keeps the toggle for the right queue column.

@@ -1,13 +1,13 @@
-# Сводка карточек: проверка на Mac
+# Card overview: verification on Mac
 
-5 ноября 2026, macOS arm64, Go 1.22.2. Продолжение диагностики после PR #7.
+November 5, 2026, macOS arm64, Go 1.22.2. Continuation of the diagnostics work after PR #7.
 
-Полный `go test -race -count=1 -ldflags=-linkmode=external ./...` прошёл на Mac. Внешняя линковка нужна этому старому Go на текущей macOS; linker предупреждает об LC_DYSYMTAB, тестовые программы завершаются успешно. Сборки `CGO_ENABLED=0` для linux/amd64 и windows/amd64 прошли; исполнения на этих ОС не было.
+The full `go test -race -count=1 -ldflags=-linkmode=external ./...` passed on Mac. External linking is needed for this old Go on the current macOS; the linker warns about LC_DYSYMTAB, and the test programs exit successfully. `CGO_ENABLED=0` builds for linux/amd64 and windows/amd64 passed; nothing was run on those OSes.
 
-Новые проверки покрывают объединение псевдонимов одной привязки, исключение идентификаторов CLI/токенов/путей/текста писем из сводки, неизменность снимка базы после чтения, различие между удержанием владельца, idle и uncertain, явное усечение списков и пустой JSON-массив. Ошибки API не возвращают сырое содержимое ошибок базы.
+The new checks cover merging aliases of a single binding, excluding CLI identifiers/tokens/paths/message texts from the overview, the database snapshot being unchanged after reading, distinguishing owner hold, idle and uncertain, explicit list truncation and an empty JSON array. API errors do not return raw database error contents.
 
-Интеграционная проверка запускает локальный клиент с подставным launcher, запрашивает overview трижды через настоящий локальный сокет и подтверждает: письмо остаётся в очереди, попыток и ответов нет, launcher не вызван. Пользовательский профиль и настоящие модели этой проверкой не используются.
+The integration check starts the local client with a stub launcher, requests the overview three times through the real local socket and confirms: the message stays in the queue, there are no attempts or replies, and the launcher is not called. Neither the user profile nor real models are used by this check.
 
-В чате подготовлен интерактивный концепт приложения. В браузере проверены карточки агентов, переходы между разделами, добавление демонстрационного сообщения с обновлением очереди, выбор VPS и раскладка на узком экране (320 px, без горизонтального переполнения корня). Концепт не соединён с клиентом и не является приёмкой окна. Сервер, сеть, координатор и удалённые агенты в нём — демонстрационные состояния.
+An interactive concept of the app was prepared in the chat. In the browser, the following were checked: agent cards, navigation between sections, adding a demo message with a queue update, VPS selection and the layout on a narrow screen (320 px, no horizontal overflow of the root). The concept is not connected to the client and is not acceptance of the window. The server, network, coordinator and remote agents in it are demo states.
 
-Следующий шаг — ограниченный API журнала писем и связанных ответов, затем первое окно с настоящими локальными данными. Ограничения завершения процессов, постоянных Codex/Cursor и других ОС не сняты.
+The next step is a bounded API for the message log and linked replies, then the first window with real local data. The limitations on process termination, persistent Codex/Cursor and other OSes have not been lifted.
