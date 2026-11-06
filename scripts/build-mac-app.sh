@@ -12,6 +12,12 @@ go_bin="${GO_BIN:-go}"
 CGO_ENABLED=0 "$go_bin" build -trimpath -buildvcs=false -ldflags "-X github.com/kolotiloff/agent-messenger/internal/buildinfo.Version=$version -X github.com/kolotiloff/agent-messenger/internal/buildinfo.Revision=$revision" -o "$app/Contents/Resources/messenger" ./cmd/messenger
 xcrun swiftc -target "$(uname -m)-apple-macos15.0" -swift-version 5 -O -framework AppKit -framework WebKit desktop/macos/main.swift -o "$app/Contents/MacOS/AgentMessenger"
 cp desktop/macos/Info.plist "$app/Contents/Info.plist"
+# Keep the native About panel and future updater aligned with the bundled CLI.
+# Non-numbered CI/development previews have build 0, never a release sequence.
+build_number="${version##*.}"
+[[ "$build_number" =~ ^[1-9][0-9]{0,8}$ ]] || build_number=0
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$app/Contents/Info.plist"
 xcrun swiftc -swift-version 5 desktop/macos/icon.swift -o "$out/icon-generator"
 "$out/icon-generator" "$out/AppIcon.iconset"
 iconutil -c icns "$out/AppIcon.iconset" -o "$app/Contents/Resources/AppIcon.icns"
