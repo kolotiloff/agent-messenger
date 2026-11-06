@@ -84,12 +84,15 @@ func ServeCoordinator(store *core.Store, project string, in io.Reader, out io.Wr
 		case req.Method == "initialize":
 			var p struct {
 				ProtocolVersion string `json:"protocolVersion"`
+				ClientInfo      struct {
+					Name string `json:"name"`
+				} `json:"clientInfo"`
 			}
 			_ = json.Unmarshal(req.Params, &p)
 			if p.ProtocolVersion == "" {
 				p.ProtocolVersion = "2025-06-18"
 			}
-			_ = c.store.TouchCoordinator(c.project)
+			_ = c.store.TouchCoordinatorClient(c.project, p.ClientInfo.Name)
 			c.respond(req.ID, map[string]any{
 				"protocolVersion": p.ProtocolVersion,
 				"capabilities":    map[string]any{"tools": map[string]any{}},

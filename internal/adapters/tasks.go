@@ -212,3 +212,95 @@ func ParseTaskEvent(provider string, line []byte, r *TaskEventResult) {
 		}
 	}
 }
+
+// FeedEntry is one item of a worker's event stream kept for the window: the
+// worker's own text, or one tool action shown as a collapsible line.
+type FeedEntry struct {
+	Kind  string // "text" or "tool"
+	Title string
+	Text  string
+}
+
+func toolSummary(input map[string]any) string {
+	for _, key := range []string{"command", "cmd", "file_path", "path", "pattern", "query", "url", "description", "prompt"} {
+		if v, ok := input[key].(string); ok && v != "" {
+			return v
+		}
+	}
+	if len(input) == 0 {
+		return ""
+	}
+	raw, _ := json.Marshal(input)
+	return string(raw)
+}
+
+// TaskFeedEntries turns one event line into window items. Calls of the
+// Messenger worker tools are left out: the report and questions are shown
+// from their verified records instead.
+func TaskFeedEntries(provider string, line []byte) []FeedEntry {
+	var e map[string]any
+	if json.Unmarshal(line, &e) != nil {
+		return nil
+	}
+	var out []FeedEntry
+	switch provider {
+	case "claude":
+		if e["type"] != "assistant" {
+			return nil
+		}
+		message, _ := e["message"].(map[string]any)
+		content, _ := message["content"].([]any)
+		for _, c := range content {
+			block, _ := c.(map[string]any)
+			switch block["type"] {
+			case "text":
+				if text, _ := block["text"].(string); strings.TrimSpace(text) != "" {
+					out = append(out, FeedEntry{Kind: "text", Text: text})
+				}
+			case "tool_use":
+				name, _ := block["name"].(string)
+				if strings.HasPrefix(name, "mcp__"+TaskServerName+"__") {
+					continue
+				}
+				input, _ := block["input"].(map[string]any)
+				out = append(out, FeedEntry{Kind: "tool", Title: name, Text: toolSummary(input)})
+			}
+		}
+	case "codex":
+		if e["type"] != "item.completed" {
+			return nil
+		}
+		item, _ := e["item"].(map[string]any)
+		switch item["type"] {
+		case "agent_message":
+			if text, _ := item["text"].(string); strings.TrimSpace(text) != "" {
+				out = append(out, FeedEntry{Kind: "text", Text: text})
+			}
+		case "command_execution":
+			command, _ := item["command"].(string)
+			out = append(out, FeedEntry{Kind: "tool", Title: "Команда", Text: command})
+		case "file_change":
+			var paths []string
+			changes, _ := item["changes"].([]any)
+			for _, c := range changes {
+				if m, ok := c.(map[string]any); ok {
+					if p, _ := m["path"].(string); p != "" {
+						paths = append(paths, p)
+					}
+				}
+			}
+			out = append(out, FeedEntry{Kind: "tool", Title: "Изменение файлов", Text: strings.Join(paths, "\n")})
+		case "mcp_tool_call":
+			server, _ := item["server"].(string)
+			tool, _ := item["tool"].(string)
+			if server == TaskServerName {
+				return nil
+			}
+			out = append(out, FeedEntry{Kind: "tool", Title: server + "." + tool})
+		case "web_search":
+			query, _ := item["query"].(string)
+			out = append(out, FeedEntry{Kind: "tool", Title: "Поиск в интернете", Text: query})
+		}
+	}
+	return out
+}

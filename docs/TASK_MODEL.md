@@ -99,3 +99,44 @@ How `wait` behaves (the contract of the [T-023 pilot](reports/2026-11-06-wait-pi
 Events the coordinator caused itself (`started`, its own `answered`) do not wake it. Neither does the owner's exchange with a worker.
 
 Every tool refuses a project that does not exist. `answer` and `cancel` refuse tasks of another project. The first call records the connection (`coordinator_connections`); the window uses it to show whether a coordinator is connected.
+
+## Window (T-029)
+
+The window observes tasks; the owner talks to the coordinator in the Claude app (D-024). Layout, from the approved [mockup](mockups/2026-11-06-task-window.html), built from the existing `app.css` components and `app.js` structure:
+
+- **Sidebar.**
+  - A project switcher (`am-select`) whose last item is "Новый проект…". It opens a dialog for the name and the folder on this computer. In the Mac app, "Выбрать…" opens a standard folder panel through the `folder` bridge.
+  - The computer card. It lists the coordinator (when connected, with the muted word "координатор") and each agent program, one line each, with a status dot:
+    - blue: working;
+    - amber: waits for the owner;
+    - hollow: idle;
+    - grey: no connection.
+
+    The full status is in the tooltip. Agent states count all projects (D-026).
+- **"Задачи" tab.**
+  - **Task list** on the right: active tasks first, then finished ones, with an agent filter. Each row has three lines: the agent, the title and a coloured status ("Работает N мин", "Ждёт вашего ответа", "Завершил за N мин", "Прервался через N мин", …).
+  - **Task feed.** The coordinator's text and answers, and the owner's answers, are shown as outgoing bubbles. The worker's text, its tool actions (collapsible lines from the CLI event stream, stored in `task_run_items`, at most 400 per run), its report or question with a delivery note, and the outcome of a failed, blocked, interrupted or cancelled run are shown in order.
+  - **Answer field.** It appears only while the worker waits for the owner. An answer uses a stable `op_id` stored per question, so a retry cannot answer twice.
+  - **First steps.** Without a project, the window offers to create one. Without a connected coordinator and with no tasks, it shows the `claude mcp add …` command with a copy button.
+  - **Notices.** One says that tasks are recorded but the client runs without `--allow-tasks` (Q-009). Another says that the queue is paused, with "Продолжить".
+- **"Агенты" tab.**
+  - The project folder bar: icon, label, path and "Изменить".
+  - One card per agent. The role is a muted line ("Координатор", "Исполнитель", "Не подключён"). The rows Программа, Вход в аккаунт and Рабочая папка are coloured green, yellow, red or grey.
+  - The trust row shows "Доверяет" or "Не доверяет" with a "?" hint and "Проверить снова".
+  - The tasks button reads "Задачи: N идёт, M сегодня" or "Задач нет". "Настроить" checks the CLI and connects it as a worker.
+- **Removed.** The general composer, the queue panel and the manual refresh button are gone. The window refreshes every 2 s. The Mac menu item "Обновить задачи и статусы" calls `window.messengerRefresh`.
+- **No "·" separators** in the window and the Mac shell.
+
+API (authenticated as before):
+- reads: `GET /api/window?project=`, `GET /api/task?id=`;
+- actions: `POST /api/project-create`, `/api/project-folder`, `/api/task-answer`, `/api/agent-set`.
+
+The client re-checks every rule. The old session and timeline endpoints stay until T-028.
+
+Verified in headless Chromium (Linux) on a test data directory, in light and dark themes:
+- the task list and feed;
+- an owner question and the answer from the window;
+- a new project from the switcher, with the connection command;
+- the Agents tab.
+
+The page logged no errors. Not verified: the Mac app (WKWebView, the folder panel bridge); that needs the next build.

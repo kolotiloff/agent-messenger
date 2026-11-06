@@ -12,7 +12,37 @@ The owner is asleep and asked the agent to work **fully autonomously until morni
 
 ## Current state
 
-Updated 2026-11-06 by Claude Code (D-021–D-026 decided, window approved; product state below retained).
+Updated 2026-11-07 (night) by Claude Code.
+
+- **Built overnight** on `claude/task-core-night` ([PR #36](https://github.com/kolotiloff/agent-messenger/pull/36), into `claude/vigilant-darwin-34d88b`): T-022, T-024, T-025, T-026 and T-029. The task model now works end to end on one computer. Details are in [TASK_MODEL.md](TASK_MODEL.md).
+  - projects and folders;
+  - tasks with verified worker runs;
+  - the coordinator MCP server with `wait`;
+  - the worker profile;
+  - the new window.
+- **Verified on Linux:**
+  - `check.sh` and `check-builds.sh`;
+  - tests with fake CLIs;
+  - real Codex 0.155.1 and Claude Code 2.1.319 as workers against local fake model APIs ([report](reports/2026-11-06-task-workers-linux.md));
+  - the window in headless Chromium.
+- **Not verified:**
+  - real models;
+  - the Mac app (WKWebView, the folder panel bridge, Swift build: CI only);
+  - the Claude app as coordinator with this server (the `wait` contract was proven by the T-023 pilot).
+- **Open questions for the owner:**
+  - Q-009: how the window allows task launches. Today only `serve --allow-tasks`; the window's own client does not launch tasks.
+  - Q-010: Claude Code hides MCP tools behind `ToolSearch`.
+- **Next:**
+  1. Review PR #36.
+  2. Decide Q-009.
+  3. Run T-027 on the Mac with real models: build a preview, create a project in the window, connect the Claude-app coordinator with the shown command, start the client with tasks allowed, then one Claude and one Codex task with a question round.
+  4. Then T-028.
+- **Persistent paths** (Claude stream, Codex app-server) are untouched and still work. Their replies are now published only after verification (T-022).
+- **Schema version is 2.** Older clients refuse a data directory opened by this build.
+
+Earlier state (kept for history):
+
+Previous update 2026-11-06 by Claude Code (D-021–D-026 decided, window approved).
 
 - **`main` ([PR #29](https://github.com/kolotiloff/agent-messenger/pull/29)):** T-001 and T-002 are done. `create-codex-session` creates a Codex thread owned by a live app-server, and queued messages to its alias are delivered one turn at a time in that same process. The turns use the bound `read_current`/`reply` tools. Details: [CODEX_ADAPTER_NEXT.md](CODEX_ADAPTER_NEXT.md), [setup report](reports/2026-11-06-codex-setup-linux.md), [delivery report](reports/2026-11-06-codex-delivery-linux.md).
 - **Verified:** only on Linux, with a fake app-server. No real Codex model turn has run yet.

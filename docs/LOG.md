@@ -2,6 +2,15 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-06/07 night — Claude Code (T-022, T-024–T-026, T-029)
+
+- The owner asked for autonomous work overnight; PR #35 (T-009) was cancelled and left as is.
+- T-022: replies and sends are held until the run is verified.
+- T-024: task core (projects, folders, tasks, runs, worker tools, verification, events). T-025: coordinator MCP with `wait`. T-026: worker profile and trust check.
+- Real Codex 0.155.1 and Claude Code 2.1.319 ran the worker path against local fake model APIs. Found that Claude 2.1.319 defers MCP tools behind ToolSearch (Q-010).
+- T-029: the new window from the approved mockup, checked in headless Chromium. Q-009 (how the window allows task launches) and D-027 recorded.
+- All on `claude/task-core-night`, [PR #36](https://github.com/kolotiloff/agent-messenger/pull/36). Next: T-027 on the Mac.
+
 ## 2026-11-06 — Claude Code with the owner (window direction)
 
 - Agreed the future window with the owner on a mockup built from the real window files: an observation panel with a "Tasks" tab and coordinator status. Owner questions show as a yellow dot and inside the task's conversation, with an answer field only while the worker waits; the coordinator does not read that exchange. Recorded as D-024; added T-029.

@@ -435,6 +435,9 @@ func (s *Supervisor) Status() (control.Status, error) {
 	if adapter, ok := launcher.(AdapterLauncher); ok {
 		status.SessionLaunch = adapter.ClaudeStream && (!adapter.AllowModels || adapter.OnlySession != "")
 	}
+	if tasks, ok := launcher.(TaskLauncher); ok {
+		status.TasksEnabled = tasks.TasksEnabled()
+	}
 	if labeled, ok := launcher.(interface{ LaunchLabel() string }); ok {
 		status.CLILaunch = labeled.LaunchLabel()
 	} else if launcher.Enabled() {

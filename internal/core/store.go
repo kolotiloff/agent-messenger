@@ -133,7 +133,7 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	if _, err := db.Exec(schema + streamSchema + streamRecoverySchema + uiOutboxSchema + codexSetupSchema + taskSchema); err != nil {
+	if _, err := db.Exec(schema + streamSchema + streamRecoverySchema + uiOutboxSchema + codexSetupSchema + taskSchema + taskRunItemsSchema); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -151,6 +151,7 @@ func Open(path string) (*Store, error) {
 	}
 	for _, c := range [][3]string{
 		{"replies", "held", "INTEGER NOT NULL DEFAULT 0"},
+		{"coordinator_connections", "client", "TEXT"},
 		{"requests", "in_reply_to", "TEXT"},
 		{"requests", "hops", "INTEGER NOT NULL DEFAULT 0"},
 	} {

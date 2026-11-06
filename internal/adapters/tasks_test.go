@@ -111,3 +111,17 @@ func TestParseTaskEvents(t *testing.T) {
 		t.Fatalf("codex failure %+v", r)
 	}
 }
+
+func TestTaskFeedEntries(t *testing.T) {
+	got := TaskFeedEntries("claude", []byte(`{"type":"assistant","message":{"content":[{"type":"text","text":"Reading the code"},{"type":"tool_use","name":"Bash","input":{"command":"go test ./..."}},{"type":"tool_use","name":"mcp__messenger_task__report","input":{"text":"x"}}]}}`))
+	if len(got) != 2 || got[0].Kind != "text" || got[1].Title != "Bash" || got[1].Text != "go test ./..." {
+		t.Fatalf("claude %+v", got)
+	}
+	got = TaskFeedEntries("codex", []byte(`{"type":"item.completed","item":{"type":"command_execution","command":"ls","exit_code":0}}`))
+	if len(got) != 1 || got[0].Text != "ls" {
+		t.Fatalf("codex %+v", got)
+	}
+	if got := TaskFeedEntries("codex", []byte(`{"type":"item.completed","item":{"type":"mcp_tool_call","server":"messenger_task","tool":"report"}}`)); len(got) != 0 {
+		t.Fatalf("worker tool shown %+v", got)
+	}
+}

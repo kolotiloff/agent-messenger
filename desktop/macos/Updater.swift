@@ -35,7 +35,7 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverD
         checkItem?.target = self
         automaticItem = menu.addItem(withTitle: "Проверять обновления автоматически", action: #selector(toggleAutomatic), keyEquivalent: "")
         automaticItem?.target = self
-        let source = menu.addItem(withTitle: "Канал: GitHub Releases · подписанные пакеты", action: nil, keyEquivalent: "")
+        let source = menu.addItem(withTitle: "Канал: GitHub Releases, подписанные пакеты", action: nil, keyEquivalent: "")
         source.isEnabled = false
         menu.addItem(.separator())
     }
@@ -136,7 +136,7 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverD
                     let now = ProcessInfo.processInfo.systemUptime
                     if self.busySince == nil { self.busySince = now }
                     guard now - self.busySince! < 300 else {
-                        self.fetchStatus = "Загрузка ещё выполняется · повторить"
+                        self.fetchStatus = "Загрузка ещё выполняется, повторить"
                         self.onStatus?(self.availableVersion)
                         return
                     }
@@ -155,7 +155,7 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverD
                 }
                 self.busySince = nil
                 if child.terminationStatus != 0 {
-                    self.fetchStatus = "Не удалось получить обновление · повторить"; self.onStatus?(self.availableVersion)
+                    self.fetchStatus = "Не удалось получить обновление, повторить"; self.onStatus?(self.availableVersion)
                     if manual { self.remoteMessage("Не удалось получить обновление", "Загрузка или проверка пакета не завершилась. Повторите позже. Сохранённый пакет и работающий клиент не изменены; неподписанные пакеты не принимаются.") }
                     return
                 }

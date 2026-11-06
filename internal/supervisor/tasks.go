@@ -174,6 +174,9 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 			line, err := reader.ReadBytes('\n')
 			if len(line) > 0 {
 				adapters.ParseTaskEvent(task.Provider, line, &result)
+				for _, item := range adapters.TaskFeedEntries(task.Provider, line) {
+					_ = s.store.AppendTaskRunItem(runID, item.Kind, item.Title, item.Text)
+				}
 				if !bound && result.Session != "" {
 					bound = true
 					if s.store.BindTaskSession(runID, result.Session) != nil {
