@@ -9,9 +9,24 @@ app="$out/Agent Messenger.app"
 [[ ! -e "$app" && ! -e "$out/Agent-Messenger-mac.zip" ]] || { echo 'Output already exists; refusing overwrite' >&2; exit 1; }
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 go_bin="${GO_BIN:-go}"
-CGO_ENABLED=0 "$go_bin" build -trimpath -buildvcs=false -ldflags "-X github.com/kolotiloff/agent-messenger/internal/buildinfo.Version=$version -X github.com/kolotiloff/agent-messenger/internal/buildinfo.Revision=$revision" -o "$app/Contents/Resources/messenger" ./cmd/messenger
-xcrun swiftc -target "$(uname -m)-apple-macos15.0" -swift-version 5 -O -framework AppKit -framework WebKit desktop/macos/main.swift -o "$app/Contents/MacOS/AgentMessenger"
+sparkle="${SPARKLE_DIR:-$out/sparkle-sdk}"
+bash scripts/fetch-sparkle.sh "$sparkle"
+public_key="$(cat desktop/macos/update-public-key.txt)"
+[[ "$public_key" =~ ^[A-Za-z0-9/+]{43}=$ ]] || { echo 'Invalid update public key' >&2; exit 1; }
+CGO_ENABLED=0 "$go_bin" build -trimpath -buildvcs=false -ldflags "-X github.com/kolotiloff/agent-messenger/internal/buildinfo.Version=$version -X github.com/kolotiloff/agent-messenger/internal/buildinfo.Revision=$revision -X github.com/kolotiloff/agent-messenger/internal/buildinfo.UpdatePublicKey=$public_key" -o "$app/Contents/Resources/messenger" ./cmd/messenger
+xcrun swiftc -target "$(uname -m)-apple-macos15.0" -swift-version 5 -O -F "$sparkle" -framework Sparkle -Xlinker -rpath -Xlinker @executable_path/../Frameworks -framework AppKit -framework WebKit desktop/macos/main.swift desktop/macos/Updater.swift -o "$app/Contents/MacOS/AgentMessenger"
 cp desktop/macos/Info.plist "$app/Contents/Info.plist"
+mkdir -p "$app/Contents/Frameworks"
+ditto "$sparkle/Sparkle.framework" "$app/Contents/Frameworks/Sparkle.framework"
+cp "$sparkle/LICENSE" "$app/Contents/Resources/Sparkle-LICENSE.txt"
+/usr/libexec/PlistBuddy -c "Add :SUPublicEDKey string $public_key" "$app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :SUEnableAutomaticChecks bool true" "$app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :SUAllowsAutomaticUpdates bool false" "$app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :SUAutomaticallyUpdate bool false" "$app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :SUEnableSystemProfiling bool false" "$app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :SUVerifyUpdateBeforeExtraction bool true" "$app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :SUScheduledCheckInterval integer 3600" "$app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :AMClientAPI integer 1" "$app/Contents/Info.plist"
 # Keep the native About panel and future updater aligned with the bundled CLI.
 # Non-numbered CI/development previews have build 0, never a release sequence.
 build_number="${version##*.}"

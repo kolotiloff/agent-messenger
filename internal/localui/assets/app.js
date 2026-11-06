@@ -1,6 +1,7 @@
 'use strict';
 (() => {
   const root = document.getElementById('am-concept');
+  if(window.webkit?.messageHandlers?.updates)document.body.classList.add('am-native');
   const $ = id => root.querySelector('#' + id);
   let token = location.hash.slice(1);
   try {
@@ -10,7 +11,7 @@
   if (location.hash) history.replaceState(null, '', location.pathname);
   let selected = '', cursor = '', overview = null, timelineVersion = 0, refreshVersion = 0;
   let timelineAbort = null, lastStatus = null, sending = false, queueBusy = false, pending = null, pendingBroken = false;
-  let outboxItems = [], outboxReady = false;
+  let outboxItems = [], outboxReady = false, discoveryAgents = [];
   const pendingKey = 'messenger-ui-pending:' + token;
   try {
     const saved = sessionStorage.getItem(pendingKey);
@@ -119,14 +120,24 @@
     } finally {lastStatus=null;queueBusy=false;actionControls();}
     await refresh();
   }
-  const names = {claude:'Claude Code',codex:'Codex CLI',cursor:'Cursor Agent CLI'};
+  const names = {claude:'Claude Code',codex:'Codex',cursor:'Cursor'};
   const states = {queued:'В очереди',reserved:'Зарезервировано',launching:'Запуск',running:'Обрабатывается',completed:'Обработка завершена',turn_completed:'Ход завершён',uncertain:'Нужен разбор',not_started:'Запуск не состоялся',none:'Попытки нет',idle:'Ожидание письма',active:'Ход активен',starting:'Подготовка'};
   const results = {not_verified:'Успех ещё не подтверждён',verified_turn:'Ответ подтверждён · ход завершён',verified_exit:'Ответ подтверждён · код выхода 0',process_failed:'Процесс завершился с ошибкой'};
   function el(tag, text, cls) { const n=document.createElement(tag); if(text!==undefined)n.textContent=text; if(cls)n.className=cls;return n; }
   function notice(text) { $('notice').textContent=text; $('notice').hidden=!text; }
   function show(tab) {
     root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab);
-    root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
+    window.messengerUpdateStatus = status => {
+    if(!window.webkit?.messageHandlers?.updates)return;
+    const version=typeof status?.version==='string'?status.version:'';
+    $('app-update-button').hidden=false;
+    $('app-update-button').textContent=version?'↓ Доступно обновление':'Проверить обновления';
+    $('app-update-button').classList.toggle('am-update-available',!!version);
+    $('app-update-version').hidden=!version;
+    $('app-update-version').textContent=version;
+  };
+  $('app-update-button').addEventListener('click',()=>window.webkit?.messageHandlers?.updates?.postMessage('check'));
+  root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
     $('screen-title').textContent={messages:'Переписка',agents:'Агенты',queue:'Очередь',server:'Сервер и подключение'}[tab];
   }
   async function api(path, signal) {
@@ -145,28 +156,42 @@
   function stateText(value) { return states[value] || 'Неизвестное состояние: '+String(value); }
   function renderCards() {
     const cards=$('agents'),queue=$('queue');cards.replaceChildren();queue.replaceChildren();
-    if(!overview || !overview.sessions.length) {
-      cards.append(el('p','Управляемые сессии пока не зарегистрированы.','am-muted'));
-      queue.append(el('p','Нет зарегистрированных сессий.','am-muted'));return;
-    }
-    for(const s of overview.sessions) {
-      const alias=s.aliases[0] || '',card=el('article',undefined,'am-agent');
-      card.append(el('h3',names[s.provider]||s.provider));
-      card.append(el('p',s.aliases.join(' · ')||'Нет адреса','am-small am-muted'));
+    const sessions=overview?.sessions || [];
+    const providers=[...new Set([...Object.keys(names),...sessions.map(s=>s.provider)])];
+    for(const provider of providers) {
+      const group=sessions.filter(s=>s.provider===provider),card=el('article',undefined,'am-agent');
+      card.append(el('h3',names[provider]||provider));
+      const candidate=discoveryAgents.find(a=>a.provider===provider);
+      const installed=candidate?.state==='candidate_found'?'Найден на компьютере':candidate?.state==='not_found'?'Не найден':'Не проверено';
+      const attention=group.some(s=>s.decision_pending||s.recorded_attempt_state==='uncertain'||s.recorded_stream_state==='uncertain');
+      card.append(el('p',!overview?'Нет данных клиента':!group.length?'Не подключён':attention?'Требует внимания':'Сессии подключены',attention?'am-status-warn':'am-muted'));
       const dl=el('dl');
-      const phase=s.recorded_stream_state==='none'?s.recorded_attempt_state:s.recorded_stream_state;
-      for(const [label,value] of [['Настройка запуска',s.launch_configured?'Записана · готовность не проверена':'Не завершена'],['Вход в аккаунт','Не проверен'],['Состояние в базе',stateText(phase)],['Владение сессией',s.owner_retained?'Сохраняется':'Не удерживается'],['Ожидают / неопределённые',s.queued+' / '+s.uncertain]]) {
+      for(const [label,value] of [['Программа',installed],['Вход в аккаунт','Не проверен'],['Подключённые сессии',overview?String(group.length):'Неизвестно']]) {
         const pair=el('div');pair.append(el('dt',label),el('dd',value));dl.append(pair);
       }
       card.append(dl);
-      if(s.aliases_truncated)card.append(el('p','Список адресов сокращён.','am-small am-status-warn'));
-      const b=el('button','Открыть переписку','am-agent-action');b.type='button';b.disabled=!alias;
-      b.addEventListener('click',()=>{if(pending||sending)return;$('session').value=alias;selected=alias;show('messages');actionControls();loadTimeline(false);});card.append(b);cards.append(card);
-      const row=el('div',undefined,'am-row'),main=el('div',undefined,'am-row-main');
+      if(group.length) {
+        const details=el('details',undefined,'am-agent-sessions');details.append(el('summary','Сессии и состояние ('+group.length+')'));
+        for(const s of group) {
+          const alias=s.aliases[0]||'',row=el('div',undefined,'am-agent-session');
+          const phase=s.recorded_stream_state==='none'?s.recorded_attempt_state:s.recorded_stream_state;
+          row.append(el('strong',s.aliases.join(' · ')||'Нет адреса'),el('p',stateText(phase),'am-small'),el('p','В очереди: '+s.queued+' · Требуют разбора: '+s.uncertain,'am-small am-muted'));
+          row.append(el('p',s.launch_configured?'Настройка запуска записана; готовность не проверена.':'Настройка запуска не завершена.','am-small am-muted'));
+          if(s.owner_retained)row.append(el('p','Сессия остаётся закреплена за своим процессом.','am-small am-muted'));
+          const button=el('button','Открыть переписку','am-agent-action');button.type='button';button.disabled=!alias;
+          button.addEventListener('click',()=>{if(pending||sending)return;$('session').value=alias;selected=alias;show('messages');actionControls();loadTimeline(false);});row.append(button);details.append(row);
+        }
+        card.append(details);
+      }
+      card.append(el('p','Подключение и перенастройка из окна пока недоступны.','am-small am-muted'));cards.append(card);
+    }
+    for(const s of sessions) {
+      const alias=s.aliases[0]||'',row=el('div',undefined,'am-row'),main=el('div',undefined,'am-row-main');
       main.append(el('h3',alias||names[s.provider]||s.provider),el('p','В очереди: '+s.queued+' · Неопределённые в истории: '+s.uncertain,'am-small am-muted'));
       row.append(main,el('span',s.decision_pending?'Есть решение по сессии':s.owner_retained?'Владелец удерживается':'Без владельца','am-small'));queue.append(row);
     }
-    if(overview.truncated) {cards.append(el('p','Показаны первые 100 сессий. Список неполный.','am-status-warn'));queue.append(el('p','Список сессий неполный.','am-status-warn'));}
+    if(!sessions.length)queue.append(el('p',overview?'Нет зарегистрированных сессий.':'Данные клиента недоступны.','am-muted'));
+    if(overview?.truncated) {cards.append(el('p','Список сессий неполный.','am-status-warn'));queue.append(el('p','Список сессий неполный.','am-status-warn'));}
   }
   function renderMessage(item) {
     const row=el('article',undefined,'am-message'),avatar=el('div','→','am-avatar'),body=el('div',undefined,'am-message-body');
@@ -237,7 +262,7 @@
       if(version!==refreshVersion)return;
       overview=null;lastStatus=null;outboxReady=false;actionControls();clearTimeline('Данные клиента недоступны. Сохранённые письма не удалены.');
       $('session').replaceChildren(el('option','Клиент недоступен'));$('session').disabled=true;
-      $('agents').replaceChildren(el('p','Состояния сессий недоступны.','am-muted'));
+      renderCards();
       $('queue').replaceChildren(el('p','Очередь не прочитана. Это не означает, что она пуста.','am-muted'));
       $('connection').textContent='Клиент недоступен';$('connection-dot').classList.remove('online');
       $('processing').textContent='Нет актуальных данных';$('permission').textContent='';$('checked').textContent='Обновление не удалось';
@@ -245,13 +270,24 @@
     } finally {clearTimeout(timeout);if(version===refreshVersion){$('refresh').disabled=false;actionControls();}}
     try {
       const d=await api('/api/discovery',AbortSignal.timeout(4500));if(version!==refreshVersion)return;
+      discoveryAgents=d.agents;renderCards();actionControls();
       $('platform').textContent={darwin:'macOS',linux:'Linux',windows:'Windows'}[d.os]||d.os;
       $('discovery').replaceChildren();for(const a of d.agents){const row=el('div',undefined,'am-row');row.append(el('span',a.name),el('span',a.state==='candidate_found'?'Найден кандидат CLI':a.state==='not_found'?'Не найден в PATH':'Не удалось определить','am-small am-muted'));$('discovery').append(row);}
     } catch(_) {if(version===refreshVersion)$('discovery').replaceChildren(el('p','Поиск CLI недоступен.','am-muted'));}
   }
+  window.messengerUpdateStatus = status => {
+    if(!window.webkit?.messageHandlers?.updates)return;
+    const version=typeof status?.version==='string'?status.version:'';
+    $('app-update-button').hidden=false;
+    $('app-update-button').textContent=version?'↓ Доступно обновление':'Проверить обновления';
+    $('app-update-button').classList.toggle('am-update-available',!!version);
+    $('app-update-version').hidden=!version;
+    $('app-update-version').textContent=version;
+  };
+  $('app-update-button').addEventListener('click',()=>window.webkit?.messageHandlers?.updates?.postMessage('check'));
   root.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>show(b.dataset.tab)));
   $('session').addEventListener('change',()=>{if(pending||sending)return;selected=$('session').value;actionControls();loadTimeline(false);});
-  $('message-text').addEventListener('input',actionControls);
+  $('message-text').addEventListener('input',()=>{const field=$('message-text');field.style.height='auto';field.style.height=Math.min(140,Math.max(44,field.scrollHeight))+'px';actionControls();});
   $('send').addEventListener('click',sendMessage);$('queue-action').addEventListener('click',changeQueue);
   $('refresh').addEventListener('click',refresh);$('older').addEventListener('click',()=>loadTimeline(true));
   refresh();

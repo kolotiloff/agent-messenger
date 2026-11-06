@@ -2,7 +2,7 @@ import AppKit
 import WebKit
 import Darwin
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     var window: NSWindow!
     var web: WKWebView!
     var statusView: NSStackView!
@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     var origin: URL?
     var generation = 0
     var lockFD: Int32 = -1
+    let updates = DesktopUpdater()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // LaunchServices normally reuses the app. flock also covers open -n and
@@ -30,6 +31,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         buildMenu()
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
+        config.userContentController.add(self, name: "updates")
+        updates.onStatus = { [weak self] _ in self?.showUpdateStatus() }
         web = WKWebView(frame: .zero, configuration: config)
         web.navigationDelegate = self
         web.uiDelegate = self
@@ -73,6 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let appMenu = NSMenu(); appItem.submenu = appMenu
         appMenu.addItem(withTitle: "Об Agent Messenger", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
+        updates.attach(menu: appMenu)
         appMenu.addItem(withTitle: "Скрыть Agent Messenger", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(withTitle: "Закрыть приложение", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         let file = NSMenuItem(); file.title = "Файл"; bar.addItem(file)
@@ -104,6 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         try? input?.fileHandleForWriting.close(); input = nil
         child = nil
         origin = nil
+        updates.endpoint = nil
         web?.stopLoading()
     }
     func message(_ text: String) { statusLabel.stringValue = text; statusView.isHidden = false; web.isHidden = true }
@@ -143,6 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 guard let self = self, self.generation == version, process.isRunning else { return }
                 guard let url = URL(string: text), self.validEndpoint(url) else { self.stopUI(); self.message("Клиент не подтвердил безопасный локальный адрес окна."); return }
                 self.origin = url
+                self.updates.connect(url, window: self.window)
                 self.web.load(URLRequest(url: url))
             }
         }
@@ -164,7 +170,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
               navigationAction.targetFrame?.isMainFrame == true else { decisionHandler(.cancel); return }
         decisionHandler(.allow)
     }
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { statusView.isHidden = true; web.isHidden = false }
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { statusView.isHidden = true; web.isHidden = false; showUpdateStatus() }
+    func showUpdateStatus() {
+        let status: [String: Any] = ["version": updates.availableVersion ?? "", "channel": "local"]
+        guard let data = try? JSONSerialization.data(withJSONObject: status), let json = String(data: data, encoding: .utf8) else { return }
+        web?.evaluateJavaScript("window.messengerUpdateStatus && window.messengerUpdateStatus(" + json + ")", completionHandler: nil)
+    }
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.name == "updates", message.body as? String == "check", message.frameInfo.isMainFrame,
+              let page = message.frameInfo.request.url, let origin = origin,
+              page.scheme == origin.scheme, page.host == origin.host, page.port == origin.port, page.path == "/" else { return }
+        updates.check()
+    }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { message("Не удалось открыть окно: \(error.localizedDescription)") }
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { message("Ошибка окна: \(error.localizedDescription)") }
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { message("Окно было остановлено системой. Повторите подключение; сохранённые исходящие останутся в клиенте.") }

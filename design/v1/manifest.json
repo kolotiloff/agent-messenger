@@ -2,6 +2,8 @@
   "version": 1,
   "approved_date": "2026-11-05",
   "approval": "User approved the visual style in the project chat; demo states are not functional acceptance.",
-  "source_sha256": "f02cbfe5a10fa0a4d672bac9ae876e52f0ea2655088dd0ad607ef8461c798562",
-  "css_sha256": "fa5c35157dcc4d045c8c2a718a5237ea1f09784596fabd06b5d3a1597296c637"
+  "source_sha256": "ca9bf392f438f3dabf38140bd62b23e5c61b87c7ef0d4f8968d0f25ba6dbdd48",
+  "css_sha256": "fa5c35157dcc4d045c8c2a718a5237ea1f09784596fabd06b5d3a1597296c637",
+  "copy_updated_date": "2026-11-06",
+  "copy_update": "Removed project-specific branding at the user’s request; visual style unchanged."
 }

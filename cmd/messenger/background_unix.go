@@ -44,6 +44,14 @@ func startupPair() (net.Conn, *os.File, error) {
 }
 
 func startBackground(root string, flags []string) (int, string, error) {
+	executable, err := os.Executable()
+	if err != nil {
+		return 0, "", err
+	}
+	return startBackgroundAt(root, flags, executable)
+}
+
+func startBackgroundAt(root string, flags []string, executable string) (int, string, error) {
 	// Validate here too: callers other than the CLI must not smuggle child modes.
 	if _, err := serveAllowsModels(flags); err != nil {
 		return 0, "", err
@@ -56,10 +64,6 @@ func startBackground(root string, flags []string) (int, string, error) {
 		return 0, "", err
 	}
 	if err := os.Chmod(root, 0o700); err != nil {
-		return 0, "", err
-	}
-	executable, err := os.Executable()
-	if err != nil {
 		return 0, "", err
 	}
 	conn, child, err := startupPair()

@@ -5,3 +5,32 @@
 #am-concept .am-compose{display:block}#am-concept .am-compose label{display:block;margin-bottom:8px}#am-concept .am-compose textarea{box-sizing:border-box;width:100%;resize:vertical;min-height:80px;color:var(--am-text);background:var(--am-bg);border:1px solid var(--am-line);border-radius:10px;padding:12px;font:inherit}#am-concept .am-compose-foot{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-top:8px}#am-concept #pending-id{overflow-wrap:anywhere}#am-concept .am-heading .am-choice-group{flex-wrap:wrap}#am-concept button:disabled{opacity:.55}@media(max-width:620px){#am-concept .am-heading{flex-wrap:wrap}#am-concept .am-compose-foot{flex-wrap:wrap}}
 
 #am-concept .am-outbox{padding:16px;border-top:1px solid var(--am-line);background:var(--am-soft)}#am-concept .am-outbox-item{padding:12px 0;border-top:1px solid var(--am-line)}#am-concept .am-outbox-item p{white-space:pre-wrap;overflow-wrap:anywhere}#am-concept .am-outbox-item button{max-width:100%;white-space:normal}
+
+/* The composer belongs to the viewport; only the message history scrolls. */
+html,body{height:100%;overflow:hidden}body{box-sizing:border-box;padding:12px}
+#am-concept{height:100%;min-height:0}#am-concept .am-window{height:100%;box-sizing:border-box;display:flex;flex-direction:column}
+#am-concept .am-titlebar,#am-concept .am-footer,#am-concept .am-heading,#am-concept .am-tabs{flex-shrink:0}
+#am-concept .am-shell{flex:1;min-height:0}#am-concept .am-main{min-height:0;overflow:hidden;padding:16px;gap:12px}
+#am-concept .am-sidebar{min-height:0;overflow:auto}#am-concept .am-screen{min-height:0;overflow:auto}
+#am-concept [data-screen=messages]{overflow:hidden}#am-concept .am-chat-layout{height:100%;min-height:0}
+#am-concept .am-chat{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+#am-concept .am-chat-head,#am-concept .am-compose,#am-concept .am-page-actions{flex-shrink:0}
+#am-concept .am-thread{flex:1;min-height:0;max-height:none;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain}
+#am-concept .am-compose textarea{resize:none;height:80px;max-height:100px;overflow:auto}
+#am-concept .am-outbox{flex-shrink:1;max-height:25%;min-height:0;overflow:auto}
+#am-concept .am-conversation-info{min-height:0;overflow:auto}#am-concept #notice{max-height:60px;overflow:auto;flex-shrink:0}
+#am-concept .am-page-actions:has(button[hidden]){display:none}
+@media(max-height:700px){#am-concept .am-titlebar{padding-top:10px;padding-bottom:10px}#am-concept .am-main{gap:8px;padding:12px}#am-concept .am-compose textarea{min-height:60px;height:60px}#am-concept .am-compose{padding:10px}}
+@media(max-width:900px){#am-concept .am-chat-layout{grid-template-columns:minmax(0,1fr)}#am-concept .am-conversation-info{display:none}}
+
+#am-concept #app-update-button{width:100%;margin-bottom:6px;white-space:normal}#am-concept #app-update-version{margin-bottom:12px;overflow-wrap:anywhere}#am-concept .am-update-available{background:var(--am-soft);color:var(--am-text)}#am-concept .am-agent-sessions summary{cursor:pointer;font-weight:500}#am-concept .am-agent-session{padding:14px 0;border-top:1px solid var(--am-line);overflow-wrap:anywhere}#am-concept .am-agent-session p{margin:6px 0}#am-concept .am-agent-sessions{margin-top:8px}
+
+body.am-native{padding:0}body.am-native #am-concept{max-width:none;margin:0}body.am-native #am-concept .am-window{border:0;border-radius:0}body.am-native #am-concept .am-titlebar{display:none}
+
+/* Quiet, compact composer: one soft surface, no nested outline. */
+#am-concept .am-chat{border:0;border-radius:0;background:transparent}
+#am-concept .am-compose{border-top:0;padding:12px 0 0}
+#am-concept .am-compose label{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+#am-concept .am-compose textarea{min-height:44px;height:44px;max-height:140px;border:0;border-radius:14px;background:var(--am-soft);padding:12px 14px;outline:none}
+#am-concept .am-compose textarea:focus-visible{box-shadow:0 0 0 1px var(--am-line)}
+#am-concept .am-chat-head{padding:0 0 12px}#am-concept .am-thread{padding-left:4px;padding-right:8px}

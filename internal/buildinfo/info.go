@@ -6,6 +6,9 @@ import "runtime"
 var Version = "dev"
 var Revision = "unknown"
 
+// Public update verification key; the signing key never enters a build.
+var UpdatePublicKey = ""
+
 type Info struct {
 	Version  string `json:"version"`
 	Revision string `json:"revision"`

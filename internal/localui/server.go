@@ -23,6 +23,7 @@ import (
 	"github.com/kolotiloff/agent-messenger/internal/control"
 	"github.com/kolotiloff/agent-messenger/internal/core"
 	"github.com/kolotiloff/agent-messenger/internal/diagnostics"
+	"github.com/kolotiloff/agent-messenger/internal/updatefeed"
 )
 
 //go:embed assets/*
@@ -33,6 +34,11 @@ type caller func(context.Context, control.Request) (control.Response, error)
 // Run binds only IPv4 loopback, with a fresh capability for each invocation.
 // The URL is private. The caller must not publish or log it to a shared service.
 func Run(ctx context.Context, root string, port int, out io.Writer) error {
+	return RunWithUpdates(ctx, root, port, out, nil)
+}
+
+// Updates is enabled only by the native desktop bridge, never by a browser UI.
+func RunWithUpdates(ctx context.Context, root string, port int, out io.Writer, channel *updatefeed.Channel) error {
 	if port < 0 || port > 65535 {
 		return errors.New("ui port must be 0..65535")
 	}
@@ -50,7 +56,7 @@ func Run(ctx context.Context, root string, port int, out io.Writer) error {
 	call := func(ctx context.Context, r control.Request) (control.Response, error) {
 		return control.CallContext(ctx, root, r)
 	}
-	h := newHandler(host, token, call, func(ctx context.Context) any {
+	h := newHandlerWithUpdates(host, token, call, func(ctx context.Context) any {
 		r := diagnostics.Collect(ctx, root)
 		// Avoid copying private root and profile paths into UI discovery.
 		type candidate struct {
@@ -67,7 +73,7 @@ func Run(ctx context.Context, root string, port int, out io.Writer) error {
 			CheckedAt string      `json:"checked_at"`
 			Agents    []candidate `json:"agents"`
 		}{r.OS, r.CheckedAt, list}
-	})
+	}, channel)
 	srv := &http.Server{Handler: h, ReadHeaderTimeout: 3 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 7 * time.Second, IdleTimeout: 20 * time.Second, MaxHeaderBytes: 8192, ErrorLog: log.New(io.Discard, "", 0)}
 	stop := context.AfterFunc(ctx, func() { _ = srv.Close() })
 	defer stop()
@@ -82,6 +88,10 @@ func Run(ctx context.Context, root string, port int, out io.Writer) error {
 }
 
 func newHandler(host, token string, call caller, discover func(context.Context) any) http.Handler {
+	return newHandlerWithUpdates(host, token, call, discover, nil)
+}
+
+func newHandlerWithUpdates(host, token string, call caller, discover func(context.Context) any, channel *updatefeed.Channel) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -135,6 +145,14 @@ func newHandler(host, token string, call caller, discover func(context.Context) 
 		}
 		if subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte("Bearer "+token)) != 1 {
 			http.Error(w, "access denied", http.StatusUnauthorized)
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/updates/") {
+			if channel == nil {
+				http.NotFound(w, r)
+				return
+			}
+			channel.ServeHTTP(w, r)
 			return
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
