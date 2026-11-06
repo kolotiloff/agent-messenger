@@ -108,7 +108,7 @@
     $('outbox-panel').hidden=!outboxItems.length;
     $('send-hint').textContent=outboxItems.length && !pending?'Сначала разберите сохранённые отправки выше, чтобы случайно не создать повторное задание.':!lastStatus?'Проверяем готовность агента…':lastStatus.cli_launch==='not-authorized'?'Агент пока не запущен. Сообщение сохранится в очереди.':lastStatus.paused?'Очередь на паузе. Сообщение будет ждать.':'Сообщение будет передано агенту.';
     root.querySelectorAll('[data-outbox-action]').forEach(b=>b.disabled=!lastStatus || sending || queueBusy || !!pending || pendingBroken);
-    root.querySelectorAll('.am-agent-action').forEach(b=>b.disabled=!lastStatus || !!pending || sending);
+    root.querySelectorAll('.am-agent-action').forEach(b=>b.disabled=!lastStatus || !!pending || sending || b.dataset.empty==='true');
     syncSelects();
   }
   async function postAPI(path, body) {
@@ -245,7 +245,7 @@
       }
       card.append(dl);
       const sessionsButton=el('button','Сессии ('+group.length+')','am-agent-action');sessionsButton.type='button';
-      sessionsButton.disabled=!overview;sessionsButton.addEventListener('click',()=>showSessions(provider));card.append(sessionsButton);
+      sessionsButton.dataset.empty=String(group.length===0);sessionsButton.disabled=!overview||group.length===0;sessionsButton.addEventListener('click',()=>showSessions(provider));card.append(sessionsButton);
       card.append(el('p','Подключение и перенастройка из окна пока недоступны.','am-small am-muted'));cards.append(card);
     }
     for(const s of sessions) {
@@ -273,22 +273,33 @@
     if(!dialog.open)dialog.showModal();
   }
   function renderMessage(item) {
-    const row=el('article',undefined,'am-message'),avatar=el('div',undefined,'am-avatar'),body=el('div',undefined,'am-message-body');
-    const meta=el('div',undefined,'am-meta');meta.append(el('strong',senderLabel(item.sender)));avatar.append(providerIcon(senderProvider(item.sender)));
-    if(item.created_at) {const date=new Date(item.created_at);meta.append(el('time',isNaN(date.getTime())?item.created_at:date.toLocaleString()));}
-    body.append(meta,el('p',item.text),el('div',stateText(item.state),'am-delivery'));
+    const group=el('article',undefined,'am-message-group');
+    group.setAttribute('aria-label',item.reply?'Письмо и связанный ответ':'Письмо');
+    function message(sender,text,outgoing,date) {
+      const row=el('div',undefined,'am-message '+(outgoing?'am-outgoing':'am-incoming'));
+      const avatar=el('div',undefined,'am-avatar'),body=el('div',undefined,'am-message-body');
+      const meta=el('div',undefined,'am-meta');meta.append(el('strong',senderLabel(sender)));
+      avatar.append(providerIcon(senderProvider(sender)));
+      if(date){const d=new Date(date);meta.append(el('time',isNaN(d.getTime())?date:d.toLocaleString()));}
+      const content=el('div',undefined,'am-message-content');content.append(el('p',text));
+      body.append(meta,content);row.append(avatar,body);group.append(row);return body;
+    }
+    // local-user is the sender assigned by the local UI endpoint. Agent aliases
+    // are not evidence of device identity; network ownership will be explicit.
+    const body=message(item.sender,item.text,item.sender==='local-user',item.created_at);
+    body.append(el('div',stateText(item.state),'am-delivery'));
     if(item.text_truncated)body.append(el('p','Текст сокращён; полная версия остаётся в базе.','am-small am-status-warn'));
     if(item.retry_of)body.append(el('p','Повтор письма: '+item.retry_of,'am-small am-muted'));
+    let resultBody=body;
     if(item.reply) {
-      const reply=el('div',undefined,'am-reply'),heading=el('h3',undefined,'am-provider-heading');heading.append(providerIcon(senderProvider(item.reply.sender)),el('span',senderLabel(item.reply.sender)+' → '+item.reply.recipient));reply.append(heading,el('p',item.reply.text));
-      if(item.reply.text_truncated)reply.append(el('p','Ответ сокращён.','am-small am-status-warn'));
-      body.append(reply);
+      resultBody=message(item.reply.sender,item.reply.text,false,null);
+      if(item.reply.text_truncated)resultBody.append(el('p','Ответ сокращён.','am-small am-status-warn'));
     }
     const verified=item.result==='verified_turn'||item.result==='verified_exit';
-    body.append(el('div',results[item.result]||'Результат неизвестен','am-delivery '+(verified?'am-status-good':item.result==='process_failed'?'am-status-warn':'')));
-    if(item.exit_code!==null && item.exit_code!==undefined)body.append(el('div','Код выхода: '+item.exit_code,'am-small am-muted'));
-    if(verified && item.state==='uncertain')body.append(el('p','Ответ подтверждён; защитный резерв ещё не снят.','am-small am-status-warn'));
-    row.append(avatar,body);return row;
+    resultBody.append(el('div',results[item.result]||'Результат неизвестен','am-delivery '+(verified?'am-status-good':item.result==='process_failed'?'am-status-warn':'')));
+    if(item.exit_code!==null && item.exit_code!==undefined)resultBody.append(el('div','Код выхода: '+item.exit_code,'am-small am-muted'));
+    if(verified && item.state==='uncertain')resultBody.append(el('p','Ответ подтверждён; защитный резерв ещё не снят.','am-small am-status-warn'));
+    return group;
   }
   async function loadTimeline(older) {
     if(!selected){clearTimeline('Выберите зарегистрированную сессию.');return;}
@@ -357,6 +368,10 @@
   window.messengerUpdateStatus = status => {
     if(!window.webkit?.messageHandlers?.updates)return;
     const version=typeof status?.version==='string'?status.version:'';
+    const installed=typeof status?.installedVersion==='string'?status.installedVersion:'';
+    $('app-installed-version').hidden=!installed;
+    $('app-installed-version').textContent=installed?'v'+installed:'';
+    $('app-installed-version').title='Установленная версия приложения';
     const detail=typeof status?.detail==='string'?status.detail:'';
     const failed=detail.includes('недоступен')||detail.includes('не запустилась');
     $('app-update-button').hidden=!version&&!failed;
