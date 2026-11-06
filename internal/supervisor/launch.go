@@ -20,6 +20,32 @@ type AdapterLauncher struct {
 	AllowModels  bool
 	ClaudeStream bool
 	OnlySession  string
+	// AlsoAllowed holds further sessions the window authorized in this run.
+	AlsoAllowed []string
+}
+
+// Allows reports whether model calls may run for this alias.
+func (l AdapterLauncher) Allows(alias string) bool {
+	if !l.AllowModels {
+		return false
+	}
+	if l.OnlySession == "" || alias == l.OnlySession {
+		return true
+	}
+	for _, a := range l.AlsoAllowed {
+		if a == alias {
+			return true
+		}
+	}
+	return false
+}
+
+// SessionAliases lists the scoped sessions, or nil when calls are unscoped.
+func (l AdapterLauncher) SessionAliases() []string {
+	if l.OnlySession == "" {
+		return nil
+	}
+	return append([]string{l.OnlySession}, l.AlsoAllowed...)
 }
 
 func (l AdapterLauncher) SessionAlias() string { return l.OnlySession }
@@ -37,7 +63,7 @@ func (l AdapterLauncher) LaunchLabel() string {
 }
 
 func (l AdapterLauncher) Start(spec Spec) (Started, error) {
-	if !l.AllowModels || (l.OnlySession != "" && spec.Alias != l.OnlySession) {
+	if !l.Allows(spec.Alias) {
 		return Started{}, errModelsNotAuthorized
 	}
 	if spec.CLI == "" {

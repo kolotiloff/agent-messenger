@@ -111,8 +111,9 @@
     $('queue-action').disabled=!lastStatus || queueBusy || sending;
     $('queue-action').textContent=queueBusy?'…':lastStatus && lastStatus.paused?'Продолжить':'Пауза';
     $('outbox-panel').hidden=!outboxItems.length;
-    const scope=lastStatus?.launch_session,scopeCard=scope&&overview?.sessions.find(s=>s.aliases.includes(scope));
-    const outsideScope=scope&&selected!==scope&&!scopeCard?.aliases.includes(selected);
+    const scopes=launchScopes(lastStatus);
+    const selectedCard=overview?.sessions.find(s=>s.aliases.includes(selected));
+    const outsideScope=scopes.length>0&&!scopes.some(a=>a===selected||selectedCard?.aliases.includes(a));
     $('send-hint').textContent=outboxItems.length && !pending?'Сначала разберите сохранённые отправки выше, чтобы случайно не создать повторное задание.':!lastStatus?'Проверяем готовность агента…':lastStatus.cli_launch==='not-authorized'?'Агент пока не запущен. Сообщение сохранится в очереди.':outsideScope?'Для этой сессии запуск выключен. Сообщение останется в очереди.':lastStatus.paused?'Очередь на паузе. Сообщение будет ждать.':'Сообщение будет передано агенту.';
     root.querySelectorAll('[data-outbox-action]').forEach(b=>b.disabled=!lastStatus || sending || queueBusy || !!pending || pendingBroken);
     root.querySelectorAll('.am-agent-action').forEach(b=>b.disabled=!lastStatus || !!pending || sending || b.dataset.empty==='true');
@@ -214,6 +215,7 @@
   function senderLabel(sender){const provider=senderProvider(sender);return provider==='local-user'?'Вы':provider?(names[provider]||provider)+' · '+sender:sender;}
   const states = {queued:'В очереди',reserved:'Зарезервировано',launching:'Запуск',running:'Обрабатывается',completed:'Обработка завершена',turn_completed:'Ход завершён',uncertain:'Нужен разбор',not_started:'Запуск не состоялся',none:'Попытки нет',idle:'Ожидание письма',active:'Ход активен',starting:'Подготовка'};
   const results = {not_verified:'Успех ещё не подтверждён',verified_turn:'Ответ подтверждён · ход завершён',verified_exit:'Ответ подтверждён · код выхода 0',process_failed:'Процесс завершился с ошибкой'};
+  function launchScopes(status){return status?.launch_sessions?.length?status.launch_sessions:status?.launch_session?[status.launch_session]:[];}
   function el(tag, text, cls) { const n=document.createElement(tag); if(text!==undefined)n.textContent=text; if(cls)n.className=cls;return n; }
   function notice(text) { $('notice').textContent=text; $('notice').hidden=!text; }
   function show(tab) {
@@ -279,9 +281,10 @@
       row.append(el('strong',s.aliases.join(' · ')||'Нет адреса'),el('p',stateText(phase),'am-small'),el('p','В очереди: '+s.queued+' · Требуют разбора: '+s.uncertain,'am-small am-muted'));
       row.append(el('p',s.launch_configured?'Настройка запуска записана; готовность не проверена.':'Настройка запуска не завершена.','am-small am-muted'));
       if(s.owner_retained)row.append(el('p','Сессия остаётся закреплена за своим процессом.','am-small am-muted'));
-      if(s.can_launch_test && lastStatus?.session_launch && (!lastStatus.launch_session || s.aliases.includes(lastStatus.launch_session))){
-        row.append(el('p','Запуск включит обработку писем только этой тестовой сессии. Ответы агента расходуют токены.','am-small am-muted'));
-        const launch=el('button',lastStatus.launch_session?'Запуск разрешён':'Запустить тестовую сессию','am-launch-session');launch.type='button';launch.disabled=!!lastStatus.launch_session||launchingSession;
+      const allowed=launchScopes(lastStatus).some(a=>s.aliases.includes(a));
+      if(s.can_launch_test && lastStatus?.session_launch){
+        row.append(el('p','Запуск включит обработку писем этой тестовой сессии (вместе с уже разрешёнными). Ответы агента расходуют токены.','am-small am-muted'));
+        const launch=el('button',allowed?'Запуск разрешён':'Запустить тестовую сессию','am-launch-session');launch.type='button';launch.disabled=allowed||launchingSession;
         const result=el('p','','am-small am-muted');result.setAttribute('role','status');
         launch.addEventListener('click',async()=>{
           if(launchingSession)return;launchingSession=true;launch.disabled=true;result.textContent='Включаем обработку выбранной сессии…';
@@ -459,7 +462,7 @@
       lastStatus=status;
       if(JSON.stringify(view)!==JSON.stringify(overview)){overview=view;renderCards();}
       $('processing').textContent=status.paused?'На паузе':'Приём включён';
-      $('permission').textContent=status.cli_launch==='not-authorized'?'Письма будут ждать запуска агента.':status.launch_session?'Запуск разрешён только для «'+status.launch_session+'».':'';
+      $('permission').textContent=status.cli_launch==='not-authorized'?'Письма будут ждать запуска агента.':launchScopes(status).length?'Запуск разрешён только для '+launchScopes(status).map(a=>'«'+a+'»').join(', ')+'.':'';
       actionControls();
     } catch(_) {
       // Read-only refresh never retries a mutation or erases visible history.
@@ -481,7 +484,7 @@
       $('connection').textContent='Клиент доступен';$('connection-dot').classList.add('online');$('connection-dot').parentElement.title='Этот компьютер подключён';
       $('checked').textContent='Данные обновлены '+new Date().toLocaleTimeString();$('refresh').title='Обновить сообщения и статусы · '+$('checked').textContent;
       $('processing').textContent=status.paused?'На паузе':'Приём включён';
-      $('permission').textContent=status.cli_launch==='not-authorized'?'Письма будут ждать запуска агента.':status.launch_session?'Запуск разрешён только для «'+status.launch_session+'».':'';
+      $('permission').textContent=status.cli_launch==='not-authorized'?'Письма будут ждать запуска агента.':launchScopes(status).length?'Запуск разрешён только для '+launchScopes(status).map(a=>'«'+a+'»').join(', ')+'.':'';
       const select=$('session');select.replaceChildren();
       for(const s of view.sessions)for(const alias of s.aliases){const option=el('option',(names[s.provider]||s.provider)+' · '+alias);option.value=alias;option.dataset.provider=s.provider;select.append(option);}
       if(pending && !Array.from(select.options).some(o=>o.value===pending.alias)){const option=el('option',pending.alias);option.value=pending.alias;select.append(option);}

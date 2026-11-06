@@ -31,7 +31,7 @@ type StreamLauncher interface {
 func (l AdapterLauncher) StreamingEnabled() bool { return l.ClaudeStream }
 
 func (l AdapterLauncher) StartStream(ctx context.Context, spec Spec, url, secret string) (StreamProcess, error) {
-	if !l.AllowModels || !l.ClaudeStream || (l.OnlySession != "" && spec.Alias != l.OnlySession) {
+	if !l.ClaudeStream || !l.Allows(spec.Alias) {
 		return StreamProcess{}, errModelsNotAuthorized
 	}
 	if spec.Provider != "claude" || spec.CLI == "" {

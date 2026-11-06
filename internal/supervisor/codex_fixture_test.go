@@ -72,6 +72,8 @@ func fakeCodexServer() int {
 		return resp.Result, true
 	}
 	turns := 0
+	currentThread := fakeThreadID
+	threadIndex := 0
 	configReads := 0
 	runTurn := func(reqID int) bool {
 		turns++
@@ -85,10 +87,10 @@ func fakeCodexServer() int {
 		if turnMode == "exit-in-turn" {
 			return false
 		}
-		turnID := fmt.Sprintf("0190aaaa-0000-7000-8000-%012d", turns)
+		turnID := fmt.Sprintf("0190aaaa-%04d-7000-8000-%012d", threadIndex, turns)
 		call := func(id int, tool string, args any, turn string) (json.RawMessage, bool) {
 			send(map[string]any{"id": id, "method": "item/tool/call", "params": map[string]any{
-				"threadId": fakeThreadID, "turnId": turn, "callId": fmt.Sprintf("call-%d", id),
+				"threadId": currentThread, "turnId": turn, "callId": fmt.Sprintf("call-%d", id),
 				"namespace": "messenger_bound", "tool": tool, "arguments": args,
 			}})
 			return await(id)
@@ -97,10 +99,10 @@ func fakeCodexServer() int {
 		readID := base
 		if turnMode == "early-call" {
 			send(map[string]any{"id": readID, "method": "item/tool/call", "params": map[string]any{
-				"threadId": fakeThreadID, "turnId": turnID, "callId": "early", "namespace": "messenger_bound", "tool": "read_current", "arguments": map[string]any{},
+				"threadId": currentThread, "turnId": turnID, "callId": "early", "namespace": "messenger_bound", "tool": "read_current", "arguments": map[string]any{},
 			}})
 		}
-		send(map[string]any{"method": "turn/started", "params": map[string]any{"threadId": fakeThreadID, "turn": map[string]any{"id": turnID, "status": "inProgress", "items": []any{}}}})
+		send(map[string]any{"method": "turn/started", "params": map[string]any{"threadId": currentThread, "turn": map[string]any{"id": turnID, "status": "inProgress", "items": []any{}}}})
 		send(map[string]any{"id": reqID, "result": map[string]any{"turn": map[string]any{"id": turnID, "status": "inProgress", "items": []any{}}}})
 		if turnMode == "approval" {
 			send(map[string]any{"id": base + 5, "method": "item/commandExecution/requestApproval", "params": map[string]any{}})
@@ -141,7 +143,7 @@ func fakeCodexServer() int {
 		if turnMode == "turn-failed" {
 			status = "failed"
 		}
-		send(map[string]any{"method": "turn/completed", "params": map[string]any{"threadId": fakeThreadID, "turn": map[string]any{"id": turnID, "status": status, "items": []any{}}}})
+		send(map[string]any{"method": "turn/completed", "params": map[string]any{"threadId": currentThread, "turn": map[string]any{"id": turnID, "status": status, "items": []any{}}}})
 		return true
 	}
 	for scanner.Scan() {
@@ -192,7 +194,17 @@ func fakeCodexServer() int {
 			case "exit-on-thread":
 				return 0
 			}
-			thread := map[string]any{"id": fakeThreadID, "cwd": params.Cwd, "ephemeral": mode == "ephemeral", "status": map[string]any{"type": "idle"}, "turns": []any{}}
+			// The first thread in a profile gets fakeThreadID; later ones differ.
+			threadID := fakeThreadID
+			counter := filepath.Join(home, "fixture-threads")
+			previous, _ := os.ReadFile(counter)
+			if n := len(previous); n > 0 {
+				threadID = fmt.Sprintf("01a1b0a0-1ef6-7861-8fd1-%012d", n)
+			}
+			_ = os.WriteFile(counter, append(previous, 'x'), 0o600)
+			currentThread = threadID
+			threadIndex = len(previous)
+			thread := map[string]any{"id": threadID, "cwd": params.Cwd, "ephemeral": mode == "ephemeral", "status": map[string]any{"type": "idle"}, "turns": []any{}}
 			send(map[string]any{"method": "thread/started", "params": map[string]any{"thread": thread}})
 			send(map[string]any{"id": *req.ID, "result": map[string]any{
 				"approvalPolicy": "never", "sandbox": map[string]any{"type": "readOnly"}, "cwd": params.Cwd, "thread": thread,

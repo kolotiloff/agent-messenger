@@ -53,6 +53,7 @@ func (g *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		result = map[string]any{"tools": []any{
 			map[string]any{"name": "read_current", "description": "Read the assigned message and its one-turn receipt.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false}},
 			map[string]any{"name": "reply", "description": "Reply using the receipt returned by read_current. Routing is assigned by the host.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"text": map[string]any{"type": "string", "minLength": 1, "maxLength": 2000}, "receipt": map[string]any{"type": "string"}}, "required": []string{"text", "receipt"}, "additionalProperties": false}},
+			map[string]any{"name": "send", "description": "Send a new message to another agent, by one of the aliases listed in read_current's agents. Use only when the current message asks you to involve that agent. Its reply will come back to you as a new message. You must still call reply for the current message.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"to": map[string]any{"type": "string"}, "text": map[string]any{"type": "string", "minLength": 1, "maxLength": 2000}, "receipt": map[string]any{"type": "string"}}, "required": []string{"to", "text", "receipt"}, "additionalProperties": false}},
 		}}
 	case "tools/call":
 		name, _ := req.Params["name"].(string)
@@ -86,6 +87,18 @@ func (g *StreamHandler) tool(name string, args map[string]any) (any, error) {
 			return nil, errors.New("reply requires only text and receipt; route is assigned by the host")
 		}
 		return g.Store.StreamReply(g.Run, receipt, text)
+	case "send":
+		receipt, ok := args["receipt"].(string)
+		to, okTo := args["to"].(string)
+		text, valid := args["text"].(string)
+		if len(args) != 3 || !ok || !okTo || !valid {
+			return nil, errors.New("send requires only to, text and receipt")
+		}
+		id, err := g.Store.StreamSend(g.Run, receipt, to, text)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]string{"queued": id}, nil
 	default:
 		return nil, errors.New("unknown tool")
 	}

@@ -1,6 +1,8 @@
 package core
 
 import (
+	"database/sql"
+	"errors"
 	"path/filepath"
 	"testing"
 )
@@ -103,5 +105,64 @@ func TestRepliesToUsersClosedOrOwnSessionsAreNotRouted(t *testing.T) {
 	replyFromA(t, st, env, "b", 0)
 	if snap := mustSnap(t, st); len(snap.Requests) != 1 {
 		t.Fatalf("routed to a closed session: %+v", snap.Requests)
+	}
+}
+
+func sendFromA(t *testing.T, st *Store, token, to, text string) (string, error) {
+	t.Helper()
+	var id string
+	err := st.tx(func(tx *sql.Tx) error {
+		row, err := owned(tx, token, "running")
+		if err != nil {
+			return err
+		}
+		id, err = sendTx(tx, row, to, text)
+		return err
+	})
+	return id, err
+}
+
+func TestAgentSendIsBoundedAndRouted(t *testing.T) {
+	st, env := routingStore(t)
+	if _, err := st.Enqueue("m1", "a", "user", "hello"); err != nil {
+		t.Fatal(err)
+	}
+	token := claimBeginConfirm(t, st, env, "a", "conv-a")
+	for name, to := range map[string]string{"unknown": "nobody", "self": "a", "empty": ""} {
+		if _, err := sendFromA(t, st, token, to, "x"); !errors.Is(err, ErrRejected) {
+			t.Errorf("%s accepted: %v", name, err)
+		}
+	}
+	for i := 0; i < MaxSendsPerTurn; i++ {
+		if _, err := sendFromA(t, st, token, "b", "task"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := sendFromA(t, st, token, "b", "task"); !errors.Is(err, ErrRejected) {
+		t.Fatalf("per-turn limit not enforced: %v", err)
+	}
+	snap := mustSnap(t, st)
+	sent := 0
+	for _, r := range snap.Requests {
+		if r["sender"] == "a" && r["hops"] == int64(1) && r["in_reply_to"] == "m1" {
+			sent++
+		}
+	}
+	if sent != MaxSendsPerTurn {
+		t.Fatalf("sent %d: %+v", sent, snap.Requests)
+	}
+}
+
+func TestAgentSendRespectsChainLimit(t *testing.T) {
+	st, env := routingStore(t)
+	if _, err := st.Enqueue("m1", "a", "b", "hello"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.Exec(`UPDATE requests SET hops=? WHERE id='m1'`, MaxAutoReplyHops); err != nil {
+		t.Fatal(err)
+	}
+	token := claimBeginConfirm(t, st, env, "a", "conv-a")
+	if _, err := sendFromA(t, st, token, "b", "more"); !errors.Is(err, ErrRejected) {
+		t.Fatalf("send past the chain limit: %v", err)
 	}
 }

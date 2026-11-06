@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -118,10 +119,20 @@ func streamFixture(mode string) error {
 		if err != nil {
 			return err
 		}
+		tools := []any{map[string]any{"type": "tool_use", "name": "mcp__messenger_bound__read_current"}}
+		// "send" mode: a message starting with "ask:" makes this agent write to
+		// codex-test with the send tool before replying, like a coordinator.
+		if text, _ := current["text"].(string); mode == "send" && strings.HasPrefix(text, "ask:") {
+			if _, err := call("send", map[string]any{"to": "codex-test", "text": "question from worker", "receipt": current["receipt"]}); err != nil {
+				return err
+			}
+			tools = append(tools, map[string]any{"type": "tool_use", "name": "mcp__messenger_bound__send"})
+		}
 		if _, err := call("reply", map[string]any{"receipt": current["receipt"], "text": "ACK:" + current["text"].(string)}); err != nil {
 			return err
 		}
-		if err := encoder.Encode(map[string]any{"type": "assistant", "session_id": sid, "message": map[string]any{"content": []any{map[string]any{"type": "tool_use", "name": "mcp__messenger_bound__read_current"}, map[string]any{"type": "tool_use", "name": "mcp__messenger_bound__reply"}}}}); err != nil {
+		tools = append(tools, map[string]any{"type": "tool_use", "name": "mcp__messenger_bound__reply"})
+		if err := encoder.Encode(map[string]any{"type": "assistant", "session_id": sid, "message": map[string]any{"content": tools}}); err != nil {
 			return err
 		}
 		success := "success"
