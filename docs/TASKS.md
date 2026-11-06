@@ -14,6 +14,7 @@ How to use it:
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
 | T-021 | Codex [version 3 review complete](RETHINK_REVIEW_V3.md) against `7d02b62`, including all seven questions. Await owner decision Q-008; T-009 waits. | owner | `claude/vigilant-darwin-34d88b`; documentation only |
+| T-023 | Coordinator wait pilot ([experiments/wait_probe](../experiments/wait_probe/README.md)): a test MCP `wait` tool; the owner runs the scenarios in the Claude app and Codex on the Mac and sends back `wait-probe log`. Answers whether the coordinator can wait and wake in the real clients before any product change. | agent + owner | `claude/vigilant-darwin-34d88b`; verified on Linux without models |
 
 ## Next
 
