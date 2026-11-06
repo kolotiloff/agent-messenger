@@ -16,7 +16,7 @@ The owner wrote to `claude-test-4a8255c9`: «Спроси у codex-test-xxxx, к
 1. **Claude sends.** Claude read the message, called `send` to `codex-test-xxxx`, and replied to the owner that the question was sent and the answer would come separately. In the meantime it gave its own date: 2026-11-06, Friday. Turn verified.
 2. **Codex answers.** Codex received the message from `claude-test-4a8255c9` and answered «Сегодня пятница.» ("Today is Friday."). Turn verified.
 3. **The answer comes back.** The answer was routed back to Claude. Claude replied «codex-test-xxxx ответил: «Сегодня пятница». Это совпадает с моей датой (2026-11-06, пятница).» ("codex-test-xxxx answered: 'Today is Friday.' That matches my date (2026-11-06, Friday)."). Turn verified.
-4. **The extra turn.** Under the current routing rule, Claude's last reply was addressed to Codex, so it was queued for Codex once more. The chain then ended at the automatic-step limit.
+4. **The extra turn.** Under the current routing rule, Claude's last reply was addressed to Codex, so it was queued for Codex once more. Codex confirmed with «Да, всё верно: 6 ноября 2026 года — пятница.» ("Yes, that's right: 6 November 2026 is a Friday."), turn verified. That reply was the fourth step, so the automatic-step limit stopped it and it was not routed.
 
 ## Findings
 
@@ -25,6 +25,5 @@ The owner wrote to `claude-test-4a8255c9`: «Спроси у codex-test-xxxx, к
 
 ## Not verified
 
-- The exact Codex events of step 4 (not captured).
 - A run longer than one question.
 - Three or more agents.
