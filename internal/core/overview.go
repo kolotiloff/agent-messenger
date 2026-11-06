@@ -14,6 +14,7 @@ type Overview struct {
 }
 
 type SessionCard struct {
+	CanLaunchTest        bool     `json:"can_launch_test,omitempty"`
 	Provider             string   `json:"provider"`
 	Aliases              []string `json:"aliases"`
 	AliasesTruncated     bool     `json:"aliases_truncated"`
@@ -41,7 +42,10 @@ func (s *Store) Overview() (Overview, error) {
 			s.active_token IS NOT NULL, COALESCE(a.state,'none'),
 			COALESCE(r.state,'none'), s.decision IS NOT NULL,
 			(SELECT COUNT(*) FROM requests q WHERE q.session_key=s.key AND q.state='queued'),
-			(SELECT COUNT(*) FROM requests q WHERE q.session_key=s.key AND q.state='uncertain')
+			(SELECT COUNT(*) FROM requests q WHERE q.session_key=s.key AND q.state='uncertain'),
+            s.provider='claude' AND s.start_mode='new' AND s.active_token IS NULL AND s.decision IS NULL
+            AND COALESCE(s.cli_path,'')!='' AND COALESCE(s.workspace,'')!=''
+            AND (SELECT COUNT(*) FROM events e WHERE e.session_key=s.key AND e.kind='setup_new_claude')=1
 			FROM sessions s LEFT JOIN attempts a ON a.token=s.active_token
 			LEFT JOIN stream_runs r ON r.session_key=s.key
 			ORDER BY s.rowid LIMIT ?`, overviewLimit+1)
@@ -54,7 +58,7 @@ func (s *Store) Overview() (Overview, error) {
 			card := SessionCard{Aliases: []string{}, Authentication: "not_checked", Readiness: "not_checked"}
 			if err := rows.Scan(&key, &card.Provider, &card.LaunchConfigured, &card.OwnerRetained,
 				&card.RecordedAttemptState, &card.RecordedStreamState, &card.DecisionPending,
-				&card.Queued, &card.Uncertain); err != nil {
+				&card.Queued, &card.Uncertain, &card.CanLaunchTest); err != nil {
 				rows.Close()
 				return err
 			}

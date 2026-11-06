@@ -83,6 +83,8 @@
   const agentChecks=new Map(),agentSelections=new Map();
   let setupProvider='',checkingAgent=false;
   let creatingSession=false,setupPending=null;
+  let launchingSession=false;
+  let timelineLoading=false,timelineSignature='',historyExpanded=false,quietBusy=false;
   const pendingKey = 'messenger-ui-pending:' + token;
   try {
     const saved = sessionStorage.getItem(pendingKey);
@@ -230,6 +232,7 @@
     return response.json();
   }
   function clearTimeline(text) {
+    timelineLoading=false;timelineSignature='';historyExpanded=false;
     timelineVersion++; if(timelineAbort)timelineAbort.abort();cursor='';$('older').hidden=true;
     $('thread').replaceChildren(el('p',text,'am-muted'));
   }
@@ -276,6 +279,17 @@
       row.append(el('strong',s.aliases.join(' · ')||'Нет адреса'),el('p',stateText(phase),'am-small'),el('p','В очереди: '+s.queued+' · Требуют разбора: '+s.uncertain,'am-small am-muted'));
       row.append(el('p',s.launch_configured?'Настройка запуска записана; готовность не проверена.':'Настройка запуска не завершена.','am-small am-muted'));
       if(s.owner_retained)row.append(el('p','Сессия остаётся закреплена за своим процессом.','am-small am-muted'));
+      if(s.can_launch_test && lastStatus?.session_launch && (!lastStatus.launch_session || s.aliases.includes(lastStatus.launch_session))){
+        row.append(el('p','Запуск включит обработку писем только этой тестовой сессии. Ответы агента расходуют токены.','am-small am-muted'));
+        const launch=el('button',lastStatus.launch_session?'Запуск разрешён':'Запустить тестовую сессию','am-launch-session');launch.type='button';launch.disabled=!!lastStatus.launch_session||launchingSession;
+        const result=el('p','','am-small am-muted');result.setAttribute('role','status');
+        launch.addEventListener('click',async()=>{
+          if(launchingSession)return;launchingSession=true;launch.disabled=true;result.textContent='Включаем обработку выбранной сессии…';
+          try{await postAPI('/api/authorize-setup',{alias,confirmation:'allow-model-calls'});selected=alias;await refresh();dialog.close();show('messages');$('session').value=alias;actionControls();loadTimeline(false);}
+          catch(_){result.textContent='Запуск не подтверждён. Проверьте состояние; повтор не переключает сессию и не отправляет новое письмо.';launch.disabled=false;}
+          finally{launchingSession=false;}
+        });row.append(launch,result);
+      }
       const button=el('button','Открыть переписку','am-agent-action');button.type='button';button.disabled=!alias||!!pending||sending;
       button.addEventListener('click',()=>{if(pending||sending)return;dialog.close();$('session').value=alias;selected=alias;show('messages');actionControls();loadTimeline(false);});row.append(button);body.append(row);
     }
@@ -377,28 +391,57 @@
     if(verified && item.state==='uncertain')resultBody.append(el('p','Ответ подтверждён; защитный резерв ещё не снят.','am-small am-status-warn'));
     return group;
   }
-  async function loadTimeline(older) {
+  async function loadTimeline(older,quiet=false) {
+    if(quiet&&(timelineLoading||historyExpanded))return;
     if(!selected){clearTimeline('Выберите зарегистрированную сессию.');return;}
+    const thread=$('thread');
+    if(quiet&&thread.scrollHeight-thread.clientHeight-thread.scrollTop>64)return;
     if(timelineAbort)timelineAbort.abort();timelineAbort=new AbortController();
     const version=++timelineVersion,alias=selected,before=older?cursor:'';
+    timelineLoading=true;
+    const timeout=setTimeout(()=>{if(version===timelineVersion)timelineAbort.abort();},4500);
     $('older').disabled=true;
-    if(!older)$('thread').replaceChildren(el('p','Загружаем переписку…','am-muted'));
+    if(!older&&!quiet){historyExpanded=false;timelineSignature='';thread.replaceChildren(el('p','Загружаем переписку…','am-muted'));}
     try {
       const query=new URLSearchParams({alias,limit:'50'});if(before)query.set('before',before);
       const page=await api('/api/timeline?'+query,timelineAbort.signal);
       if(version!==timelineVersion)return;
       if(page.schema_version!==1||!Array.isArray(page.items)||page.session_alias!==alias)throw Error('Версия журнала не поддерживается.');
-      const nodes=page.items.map(renderMessage),thread=$('thread');
+      const signature=JSON.stringify(page);
+      if(quiet&&signature===timelineSignature)return;
+      // A reader can scroll while the request is in flight. Leave their place
+      // and older history untouched; the next visit to the bottom refreshes it.
+      if(quiet&&thread.scrollHeight-thread.clientHeight-thread.scrollTop>64)return;
+      const nodes=page.items.map(renderMessage);
       const oldHeight=thread.scrollHeight,oldTop=thread.scrollTop;
       if(older)$('thread').prepend(...nodes);else $('thread').replaceChildren(...nodes);
       if(!older&&!nodes.length)$('thread').append(el('p','В этой сессии ещё нет писем.','am-muted'));
       thread.scrollTop=older?oldTop+(thread.scrollHeight-oldHeight):thread.scrollHeight;
-      cursor=page.next_before||'';$('older').hidden=!page.has_more||!cursor;notice('');
+      if(older)historyExpanded=true;else timelineSignature=signature;
+      cursor=page.next_before||'';$('older').hidden=!page.has_more||!cursor;if(!quiet)notice('');
     } catch(error) {
       if(version!==timelineVersion||error.name==='AbortError')return;
+      if(quiet)return;
       if(!older)$('thread').replaceChildren(el('p','Переписка не загружена.','am-muted'));
       notice(error.message);
-    } finally {if(version===timelineVersion)$('older').disabled=false;}
+    } finally {clearTimeout(timeout);if(version===timelineVersion){timelineLoading=false;$('older').disabled=false;}}
+  }
+  async function refreshVisibleConversation() {
+    if(quietBusy||document.hidden||root.querySelector('[data-screen="messages"]').hidden||root.querySelector('dialog[open]')||!lastStatus||pending||sending||queueBusy||launchingSession||$('refresh').disabled)return;
+    quietBusy=true;
+    const version=refreshVersion;
+    try {
+      await loadTimeline(false,true);
+      const [status,view]=await Promise.all([api('/api/status',AbortSignal.timeout(4500)),api('/api/overview',AbortSignal.timeout(4500))]);
+      if(version!==refreshVersion||pending||sending||queueBusy||view.schema_version!==1||!Array.isArray(view.sessions))return;
+      lastStatus=status;
+      if(JSON.stringify(view)!==JSON.stringify(overview)){overview=view;renderCards();}
+      $('processing').textContent=status.paused?'На паузе':'Приём включён';
+      $('permission').textContent=status.cli_launch==='not-authorized'?'Письма будут ждать запуска агента.':status.launch_session?'Запуск разрешён только для «'+status.launch_session+'».':'';
+      actionControls();
+    } catch(_) {
+      // Read-only refresh never retries a mutation or erases visible history.
+    } finally {quietBusy=false;}
   }
   async function refresh() {
     const version=++refreshVersion;lastStatus=null;outboxReady=false;actionControls();$('refresh').disabled=true;notice('');
@@ -501,4 +544,5 @@
   });
   root.querySelectorAll('.am-screen,.am-thread,.am-queue-list,.am-dialog-body,.am-machines').forEach(element=>gutterObserver.observe(element));
   refresh();
+  setInterval(refreshVisibleConversation,2000);
 })();

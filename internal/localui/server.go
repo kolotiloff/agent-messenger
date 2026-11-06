@@ -126,7 +126,7 @@ func newHandlerWithChecks(host, token string, call caller, discover func(context
 			http.Error(w, "cross-site request refused", http.StatusForbidden)
 			return
 		}
-		mutation := r.URL.Path == "/api/enqueue" || r.URL.Path == "/api/pause" || r.URL.Path == "/api/resume" || r.URL.Path == "/api/outbox/ack" || r.URL.Path == "/api/check-cli" || r.URL.Path == "/api/setup-claude"
+		mutation := r.URL.Path == "/api/enqueue" || r.URL.Path == "/api/pause" || r.URL.Path == "/api/resume" || r.URL.Path == "/api/outbox/ack" || r.URL.Path == "/api/check-cli" || r.URL.Path == "/api/setup-claude" || r.URL.Path == "/api/authorize-setup"
 		method := http.MethodGet
 		if mutation {
 			method = http.MethodPost
@@ -197,7 +197,17 @@ func newHandlerWithChecks(host, token string, call caller, discover func(context
 				return
 			}
 			var req control.Request
-			if r.URL.Path == "/api/setup-claude" {
+			if r.URL.Path == "/api/authorize-setup" {
+				var input struct {
+					Alias        string `json:"alias"`
+					Confirmation string `json:"confirmation"`
+				}
+				if err := decoder.Decode(&input); err != nil || strings.TrimSpace(input.Alias) == "" || len(input.Alias) > 128 || input.Confirmation != "allow-model-calls" {
+					http.Error(w, "explicit test-session authorization required", 400)
+					return
+				}
+				req = control.Request{Cmd: "authorize-setup", Alias: input.Alias, Confirmation: input.Confirmation}
+			} else if r.URL.Path == "/api/setup-claude" {
 				var input struct {
 					ID          string `json:"id"`
 					Alias       string `json:"alias"`
@@ -246,7 +256,7 @@ func newHandlerWithChecks(host, token string, call caller, discover func(context
 				return
 			}
 			response, err := call(ctx, req)
-			if req.Cmd == "setup-new-claude" && err == nil && !response.OK {
+			if (req.Cmd == "setup-new-claude" || req.Cmd == "authorize-setup") && err == nil && !response.OK {
 				w.Header().Set("Content-Type", "application/json; charset=utf-8")
 				w.WriteHeader(http.StatusConflict)
 				writeJSON(w, map[string]any{"ok": false, "state": "rejected"})

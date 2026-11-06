@@ -10,11 +10,11 @@ import (
 )
 
 func Snapshot() (string, []Proc, error) {
-	bootOut, err := exec.Command("sysctl", "-n", "kern.boottime").Output()
+	bootOut, err := exec.Command("/usr/sbin/sysctl", "-n", "kern.boottime").Output()
 	if err != nil {
 		return "", nil, fmt.Errorf("%w: boot time: %v", ErrNotProven, err)
 	}
-	psOut, err := exec.Command("ps", "-ax", "-o", "pid=,pgid=,lstart=").Output()
+	psOut, err := exec.Command("/bin/ps", "-ax", "-o", "pid=,pgid=,lstart=").Output()
 	if err != nil {
 		return "", nil, fmt.Errorf("%w: ps: %v", ErrNotProven, err)
 	}

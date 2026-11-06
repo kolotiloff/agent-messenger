@@ -64,10 +64,11 @@ func (DisabledLauncher) Start(Spec) (Started, error) {
 }
 
 type Supervisor struct {
-	store    *core.Store
-	root     string
-	launcher Launcher
-	cancel   context.CancelFunc
+	store      *core.Store
+	root       string
+	launcher   Launcher
+	launcherMu sync.RWMutex
+	cancel     context.CancelFunc
 
 	mu           sync.Mutex
 	current      *activeJob
@@ -191,13 +192,14 @@ func (s *Supervisor) loop(ctx context.Context) {
 			return
 		case <-ticker.C:
 		}
-		if s.stopping.Load() || s.starting.Load() || !s.launcher.Enabled() {
+		launcher := s.currentLauncher()
+		if s.stopping.Load() || s.starting.Load() || !launcher.Enabled() {
 			continue
 		}
-		if stream, ok := s.launcher.(StreamLauncher); ok && stream.StreamingEnabled() {
+		if stream, ok := launcher.(StreamLauncher); ok && stream.StreamingEnabled() {
 			var token string
 			var err error
-			if scoped, ok := s.launcher.(interface{ SessionAlias() string }); ok && scoped.SessionAlias() != "" {
+			if scoped, ok := launcher.(interface{ SessionAlias() string }); ok && scoped.SessionAlias() != "" {
 				token, err = s.store.ClaimProvider(scoped.SessionAlias(), "claude")
 			} else {
 				token, err = s.store.ClaimNextProvider("claude")
@@ -210,7 +212,7 @@ func (s *Supervisor) loop(ctx context.Context) {
 		}
 		var token string
 		var err error
-		if scoped, ok := s.launcher.(interface{ SessionAlias() string }); ok && scoped.SessionAlias() != "" {
+		if scoped, ok := launcher.(interface{ SessionAlias() string }); ok && scoped.SessionAlias() != "" {
 			token, err = s.store.Claim(scoped.SessionAlias())
 		} else {
 			token, err = s.store.ClaimNext()
@@ -232,7 +234,7 @@ func (s *Supervisor) runClaimed(ctx context.Context, token string) {
 		_ = s.store.MarkUncertain(token, err.Error())
 		return
 	}
-	started, err := s.launcher.Start(spec)
+	started, err := s.currentLauncher().Start(spec)
 	if err != nil {
 		_ = s.store.MarkUncertain(token, err.Error())
 		return
@@ -395,6 +397,7 @@ func (s *Supervisor) spec(token string) (Spec, error) {
 }
 
 func (s *Supervisor) Status() (control.Status, error) {
+	launcher := s.currentLauncher()
 	snap, err := s.store.Snapshot()
 	if err != nil {
 		return control.Status{}, err
@@ -405,15 +408,18 @@ func (s *Supervisor) Status() (control.Status, error) {
 		Broker:     "not_configured",
 		Supervisor: os.Getpid(),
 	}
-	if scoped, ok := s.launcher.(interface{ SessionAlias() string }); ok {
+	if scoped, ok := launcher.(interface{ SessionAlias() string }); ok {
 		status.LaunchSession = scoped.SessionAlias()
 	}
-	if stream, ok := s.launcher.(StreamLauncher); ok {
+	if stream, ok := launcher.(StreamLauncher); ok {
 		status.SessionSetup = stream.StreamingEnabled()
 	}
-	if labeled, ok := s.launcher.(interface{ LaunchLabel() string }); ok {
+	if adapter, ok := launcher.(AdapterLauncher); ok {
+		status.SessionLaunch = adapter.ClaudeStream && (!adapter.AllowModels || adapter.OnlySession != "")
+	}
+	if labeled, ok := launcher.(interface{ LaunchLabel() string }); ok {
 		status.CLILaunch = labeled.LaunchLabel()
-	} else if s.launcher.Enabled() {
+	} else if launcher.Enabled() {
 		status.CLILaunch = "enabled"
 	}
 	for _, session := range snap.Sessions {
@@ -646,7 +652,7 @@ func PrepareCommand(cmd *exec.Cmd) error { return platform.SetNewGroup(cmd) }
 func (s *Supervisor) SetupNewClaude(environment, id, alias, cli, workspace string) error {
 	s.dispatch.Lock()
 	defer s.dispatch.Unlock()
-	stream, ok := s.launcher.(StreamLauncher)
+	stream, ok := s.currentLauncher().(StreamLauncher)
 	if !ok || !stream.StreamingEnabled() || s.stopping.Load() {
 		return errors.New("new-session setup requires an available streaming client")
 	}
@@ -671,7 +677,7 @@ func (s *Supervisor) SetupNewClaude(environment, id, alias, cli, workspace strin
 func (s *Supervisor) CreateClaudeSession(environment, alias, cli, workspace string) (string, error) {
 	s.dispatch.Lock()
 	defer s.dispatch.Unlock()
-	stream, ok := s.launcher.(StreamLauncher)
+	stream, ok := s.currentLauncher().(StreamLauncher)
 	if !ok || !stream.StreamingEnabled() {
 		return "", errors.New("create-claude-session requires serve --claude-stream")
 	}

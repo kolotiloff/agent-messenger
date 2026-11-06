@@ -34,6 +34,7 @@ type Request struct {
 }
 
 type Status struct {
+	SessionLaunch bool   `json:"session_launch,omitempty"`
 	LaunchSession string `json:"launch_session,omitempty"`
 	SessionSetup  bool   `json:"session_setup,omitempty"`
 	StreamState   string `json:"stream_state,omitempty"`
@@ -135,6 +136,15 @@ func Serve(ln net.Listener, handler Handler) error {
 
 func dispatch(handler Handler, request Request) Response {
 	switch request.Cmd {
+	case "authorize-setup":
+		h, ok := handler.(interface{ AuthorizeSetup(string) error })
+		if !ok || request.Confirmation != "allow-model-calls" {
+			return Response{Error: "explicit test-session authorization required"}
+		}
+		if err := h.AuthorizeSetup(request.Alias); err != nil {
+			return Response{Error: "test-session authorization rejected"}
+		}
+		return Response{OK: true}
 	case "setup-new-claude":
 		h, ok := handler.(interface {
 			SetupNewClaude(string, string, string, string, string) error
