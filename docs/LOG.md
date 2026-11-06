@@ -5,7 +5,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 ## 2026-11-06 — Claude Code (T-004 on the Mac)
 
 - Released preview.21 from CI. The owner updated, logged in to a separate Codex profile and created a Codex session from the window. Real Codex answered both messages, with both turns verified.
-- Found and fixed: the Codex setup from the window did not resume the paused queue. PR4_LINK.
+- Found and fixed: the Codex setup from the window did not resume the paused queue. [PR #33](https://github.com/kolotiloff/agent-messenger/pull/33).
 
 ## 2026-11-06 — Claude Code (releases from CI, T-006)
 

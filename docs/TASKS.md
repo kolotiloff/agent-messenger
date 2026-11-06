@@ -40,7 +40,7 @@ How to use it:
 
 | ID | Task | PR |
 |---|---|---|
-| T-004 | First real Codex run on the Mac from the window: two messages answered and verified in one app-server ([report](reports/2026-11-06-codex-window-mac.md)). Exact resume moved to T-009. | PR4_LINK |
+| T-004 | First real Codex run on the Mac from the window: two messages answered and verified in one app-server ([report](reports/2026-11-06-codex-window-mac.md)). Exact resume moved to T-009. | [PR #33](https://github.com/kolotiloff/agent-messenger/pull/33) |
 | T-006 | Codex in the window: setup dialog creates a Codex session and grants model calls for it only (`/api/setup-codex` → `setup-codex`). | [PR #32](https://github.com/kolotiloff/agent-messenger/pull/32) |
 | T-020 | After the reboot incident: `recover-missing-root` (proven reboot, missing directory), the window refuses temporary data directories, and an acceptance-run rule in AGENTS.md. | [PR #31](https://github.com/kolotiloff/agent-messenger/pull/31) |
 | T-008 | Several persistent Claude sessions at once: one controller per session, up to 4 at a time; `stop-job` and shutdown stop all. | [PR #31](https://github.com/kolotiloff/agent-messenger/pull/31) |
