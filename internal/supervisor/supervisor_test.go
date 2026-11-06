@@ -576,10 +576,12 @@ func TestAdapterLauncherResumesExactID(t *testing.T) {
 	workspace := mkdir(t, filepath.Join(root, "workspace"))
 	argvPath := filepath.Join(root, "argv.txt")
 	envPath := filepath.Join(root, "env.txt")
+	readyPath := filepath.Join(root, "ready")
 	script := filepath.Join(root, "fake-cli")
 	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(root, "wrong-profile"))
 	body := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + shellQuote(argvPath) + "\n" +
 		"printf '%s\\n' \"$CLAUDE_CONFIG_DIR\" > " + shellQuote(envPath) + "\n" +
+		"touch " + shellQuote(readyPath) + "\n" +
 		"id=\nprev=\nfor a in \"$@\"; do\n" +
 		"  case \"$a\" in --resume=*) id=${a#--resume=} ;; esac\n" +
 		"  if [ \"$prev\" = \"--resume\" ] || [ \"$prev\" = \"resume\" ]; then id=$a; fi\n" +
@@ -589,9 +591,16 @@ func TestAdapterLauncherResumesExactID(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	errc := make(chan error, 1)
 	go func() { errc <- Run(ctx, root, AdapterLauncher{AllowModels: true}) }()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-errc:
+		case <-time.After(3 * time.Second):
+			t.Error("supervisor did not exit")
+		}
+	})
 	waitSocket(t, root)
 	registered, err := control.Call(root, control.Request{
 		Cmd: "register-session", Provider: "claude", Environment: env, ConversationID: "conversation-1",
@@ -605,22 +614,31 @@ func TestAdapterLauncherResumesExactID(t *testing.T) {
 		t.Fatalf("enqueue = %+v %v", queued, err)
 	}
 	deadline := time.Now().Add(5 * time.Second)
-	var argv string
+	// The script signals after both writes close; an existing nonempty argv
+	// file can still be only the first printf chunk on a busy runner.
+	ready := false
 	for time.Now().Before(deadline) {
-		text, err := os.ReadFile(argvPath)
-		if err == nil && len(text) > 0 {
-			argv = string(text)
+		if _, err := os.Stat(readyPath); err == nil {
+			ready = true
 			break
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if argv == "" {
-		t.Fatal("adapter did not start the bound cli")
+	if !ready {
+		t.Fatal("bound cli did not finish recording its invocation")
 	}
+	argvBytes, err := os.ReadFile(argvPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	argv := string(argvBytes)
 	if !strings.Contains(argv, "conversation-1") || !strings.Contains(argv, "--resume") || strings.Contains(argv, "--last") || strings.Contains(argv, "--continue") {
 		t.Fatalf("argv = %s", argv)
 	}
 	gotEnv, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
 	wantEnv, err := core.CanonicalEnvironment(env)
 	if err != nil {
 		t.Fatal(err)
@@ -633,12 +651,6 @@ func TestAdapterLauncherResumesExactID(t *testing.T) {
 		t.Fatalf("CLAUDE_CONFIG_DIR = %s, want %s", gotEnvPath, wantEnv)
 	}
 	waitStatus(t, root, func(status control.Status) bool { return status.Held == 1 && status.CLILaunch == "adapters" })
-	cancel()
-	select {
-	case <-errc:
-	case <-time.After(3 * time.Second):
-		t.Fatal("supervisor did not exit")
-	}
 }
 
 func TestServeWithoutAuthorizationDoesNotStartCLI(t *testing.T) {
