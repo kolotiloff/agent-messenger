@@ -562,6 +562,13 @@ func (s *Supervisor) SetupCodexFromWindow(environment, alias, cli, confirmation 
 	}
 	s.dispatch.Unlock()
 	detail, err := s.CreateCodexSession(environment, alias, cli)
+	if err == nil && granted {
+		// Like the Claude test-session launch: the explicit window action also
+		// opens the queue. Model calls stay limited to this one alias.
+		if resumeErr := s.store.ResumeWork(); resumeErr != nil {
+			return detail, fmt.Errorf("session created, but the queue is still paused: %w", resumeErr)
+		}
+	}
 	if err != nil && granted {
 		setup, lookupErr := s.store.CodexSetupByAlias(alias)
 		if errors.Is(lookupErr, sql.ErrNoRows) || (lookupErr == nil && setup.State == "not_started") {

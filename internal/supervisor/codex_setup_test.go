@@ -747,6 +747,10 @@ func TestCodexOwnerRechecksConfigBeforeEachTurn(t *testing.T) {
 
 func TestWindowCodexSetupGrantsOnlyThisSession(t *testing.T) {
 	h := newCodexHarness(t, "ok", AdapterLauncher{ClaudeStream: true})
+	// The window starts its client paused; the setup action opens the queue.
+	if r, _ := control.Call(h.root, control.Request{Cmd: "pause"}); !r.OK {
+		t.Fatal("pause failed")
+	}
 	setup := func(alias, env, confirm string) control.Response {
 		r, err := control.Call(h.root, control.Request{Cmd: "setup-codex", Alias: alias, CLI: h.self, Environment: env, Confirmation: confirm})
 		if err != nil {
