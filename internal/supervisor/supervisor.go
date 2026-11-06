@@ -142,6 +142,9 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 	if err := store.CheckPendingStreamRecovery(); err != nil {
 		return err
 	}
+	if err := store.CheckPendingCodexRecovery(); err != nil {
+		return err
+	}
 	if err := reconcileRuns(root); err != nil {
 		return err
 	}

@@ -122,7 +122,9 @@ func (l AdapterLauncher) StartCodexServer(ctx context.Context, spec CodexServerS
 		return CodexProcess{}, err
 	}
 	run := recordedRun{ID: id, Root: spec.DataRoot, Provider: "codex", Environment: spec.Environment, CodexSetupID: spec.SetupID}
-	run.Epoch, _ = platform.CurrentRecoveryEpoch()
+	// Failure to read the epoch does not relax the reservation; such a setup
+	// can then never be recovered by recover-codex.
+	run.Epoch, _ = recoveryEpoch()
 	if err := rememberRun(run); err != nil {
 		return CodexProcess{}, errors.Join(errNotStarted, err)
 	}

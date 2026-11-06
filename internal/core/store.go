@@ -145,9 +145,15 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	if err := ensureColumn(db, "codex_setups", "session_key", "TEXT REFERENCES sessions(key)"); err != nil {
-		db.Close()
-		return nil, err
+	for column, decl := range map[string]string{
+		"session_key":          "TEXT REFERENCES sessions(key)",
+		"recovery_fingerprint": "TEXT",
+		"recovery_reservation": "TEXT",
+	} {
+		if err := ensureColumn(db, "codex_setups", column, decl); err != nil {
+			db.Close()
+			return nil, err
+		}
 	}
 	_ = os.Chmod(path, 0o600)
 	return store, nil

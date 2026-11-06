@@ -23,7 +23,7 @@ Failure rules:
 - Every failure after step 2 makes the setup `uncertain`: protocol error, timeout, EOF, rejected config, unexpected server request, process exit or client restart. The alias and the reservation stay. Nothing is retried, and `thread/start` is never sent twice.
 - Only a definite OS exec refusal leads to `not_started` and releases the alias.
 - `recover-failed` refuses a reservation held by a Codex setup.
-- An explicit resolution for uncertain setups is not implemented yet (T-007).
+- `recover-codex` resolves an uncertain setup after a proven reboot (see below).
 
 The setup RPC client allows only `initialize`, `config/read` and `thread/start`. On success the session is registered under the alias as `codex_owned`, with no CLI path. Only its live owner serves it: generic claims, `register-session` and `ConfigureLaunch` refuse it, and `resolve` is blocked. An older client cannot launch it, because it only launches sessions that have a CLI path. [Verification report](reports/2026-11-06-codex-setup-linux.md).
 
@@ -44,6 +44,41 @@ Each owner has one controller goroutine (`serveCodex`) and a state in `codex_set
 9. **Failure.** Any other outcome makes the attempt and the owner uncertain: `failed`/`interrupted`, a missing reply, EOF, the 15-minute timeout, shutdown, or a DB error. The session stays locked and later messages stay queued. stdin is closed, the reservation is kept, and nothing is retried.
 
 A restart cannot reach the old owner, so its setup and any in-flight attempt become uncertain. Shutdown closes the owners' stdin, as process exit would.
+
+### Recovering an uncertain owner (T-007)
+
+```sh
+messenger --root DIR recover-codex --alias NAME --confirm preserve-uncertain
+```
+
+The command takes the uncertain Codex setup that holds the alias and removes its reservation.
+
+**When it runs.** All of these must hold:
+
+- the client is stopped;
+- exactly one registry entry with the setup's `codex_setup_id` exists;
+- that entry matches the database: same data directory, profile, thread and process observation;
+- `ProvePreviousBoot` shows that the same host has booted again since launch. The recovery epoch is written into the reservation at launch.
+
+**What it refuses.** The same boot, a missing PID, an empty group, a different host, and launches without a recorded epoch. This is the same rule as `recover-stream`.
+
+**How it records progress.** It is two-phase:
+
+1. `retiring` is committed together with the reservation's fingerprint.
+2. The registry entry is removed.
+3. The setup becomes `retired`.
+
+If the command is interrupted, the client refuses to start until the same command is run again. A repeat finishes the work without changing anything else.
+
+**Result.**
+
+- The session is closed with `closed_without_retry`, so new messages to the alias are refused.
+- Attempts, replies and uncertain messages are kept, and nothing is resent.
+- No model is started.
+- The thread is not resumed: that would need a new owner, which is not implemented.
+- The alias stays bound to the closed session, so its history remains readable. A setup that failed before a thread existed releases its alias.
+
+On Linux and Windows the boot identity source is not implemented. There the command always refuses.
 
 On a Mac, three cases were verified with the real installed app-server and empty profiles, without a model: a clean profile was accepted, an inherited MCP was rejected, an explicitly disabled MCP was accepted. [Checks and limitations](reports/2026-11-06-codex-preflight-mac.md).
 

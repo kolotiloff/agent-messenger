@@ -27,9 +27,10 @@ import (
 //	created          thread ID stored; the live process owns it and is idle
 //	busy             one turn of the owner is in flight (codex_turns)
 //
-// Terminal states: not_started (proven never launched; alias released) and
-// uncertain (alias and process reservation kept until an explicit resolution,
-// which is not implemented yet).
+// Terminal states: not_started (proven never launched; alias released),
+// uncertain (alias and process reservation kept), and retired (recover-codex
+// proved a reboot since launch; reservation removed, session closed, history
+// kept). retiring is the pending step of that recovery.
 const codexSetupSchema = `
 CREATE TABLE IF NOT EXISTS codex_setups (
  id TEXT PRIMARY KEY,
@@ -50,7 +51,8 @@ CREATE TABLE IF NOT EXISTS codex_setups (
  created_at TEXT NOT NULL,
  updated_at TEXT NOT NULL
 );
-CREATE UNIQUE INDEX IF NOT EXISTS codex_setups_active_alias ON codex_setups(alias) WHERE state != 'not_started';
+DROP INDEX IF EXISTS codex_setups_active_alias;
+CREATE UNIQUE INDEX IF NOT EXISTS codex_setups_alias_v2 ON codex_setups(alias) WHERE state NOT IN ('not_started','retired');
 CREATE TABLE IF NOT EXISTS codex_turns (
  attempt_token TEXT PRIMARY KEY REFERENCES attempts(token),
  setup_id TEXT NOT NULL REFERENCES codex_setups(id),
@@ -65,6 +67,8 @@ CREATE TABLE IF NOT EXISTS codex_turns (
 type CodexSetup struct {
 	ID, Alias, Environment, CLI, Workspace, State, ThreadID string
 	ExitObserved                                            bool
+	Observation                                             platform.Observation
+	RecoveryFingerprint, RecoveryReservation                string
 }
 
 var codexFingerprintPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -92,7 +96,7 @@ func canonicalCLI(cli string) (string, error) {
 // aliasReservedBySetup reports whether an active Codex setup holds the alias.
 func aliasReservedBySetup(tx *sql.Tx, alias string) (bool, error) {
 	var n int
-	err := tx.QueryRow(`SELECT COUNT(*) FROM codex_setups WHERE alias=? AND state!='not_started'`, alias).Scan(&n)
+	err := tx.QueryRow(`SELECT COUNT(*) FROM codex_setups WHERE alias=? AND state NOT IN ('not_started','retired')`, alias).Scan(&n)
 	return n != 0, err
 }
 
@@ -536,14 +540,89 @@ func (s *Store) RecordCodexSetupExit(id string, code int) error {
 
 // CodexSetup reads one setup.
 func (s *Store) CodexSetup(id string) (CodexSetup, error) {
+	return s.codexSetupWhere(`id=?`, id)
+}
+
+// CodexSetupForRecovery returns the setup that holds the alias and is waiting
+// for, or in the middle of, recover-codex.
+func (s *Store) CodexSetupForRecovery(alias string) (CodexSetup, error) {
+	c, err := s.codexSetupWhere(`alias=? AND state IN ('uncertain','retiring')`, alias)
+	if errors.Is(err, sql.ErrNoRows) {
+		return c, fmt.Errorf("%w: no uncertain Codex setup holds this alias", ErrRejected)
+	}
+	return c, err
+}
+
+func (s *Store) codexSetupWhere(where string, arg string) (CodexSetup, error) {
 	var c CodexSetup
-	var thread sql.NullString
+	var thread, token, boot, fingerprint, reservation sql.NullString
+	var pid, pgid sql.NullInt64
 	var exit int
-	err := s.db.QueryRow(`SELECT id,alias,environment,cli_path,workspace,state,thread_id,exit_observed FROM codex_setups WHERE id=?`, id).
-		Scan(&c.ID, &c.Alias, &c.Environment, &c.CLI, &c.Workspace, &c.State, &thread, &exit)
+	err := s.db.QueryRow(`SELECT id,alias,environment,cli_path,workspace,state,thread_id,exit_observed,pid,pgid,start_token,boot_id,recovery_fingerprint,recovery_reservation FROM codex_setups WHERE `+where, arg).
+		Scan(&c.ID, &c.Alias, &c.Environment, &c.CLI, &c.Workspace, &c.State, &thread, &exit, &pid, &pgid, &token, &boot, &fingerprint, &reservation)
 	c.ThreadID = thread.String
 	c.ExitObserved = exit != 0
+	c.Observation = platform.Observation{PID: int(pid.Int64), PGID: int(pgid.Int64), StartToken: token.String, BootID: boot.String}
+	c.RecoveryFingerprint, c.RecoveryReservation = fingerprint.String, reservation.String
 	return c, err
+}
+
+// PrepareCodexRecovery records the pending recovery before the registry entry
+// is removed. Repeating it with the same reservation is a no-op.
+func (s *Store) PrepareCodexRecovery(id, fingerprint, reservation, proof string) error {
+	return s.tx(func(tx *sql.Tx) error {
+		var state string
+		var old sql.NullString
+		if err := tx.QueryRow(`SELECT state,recovery_fingerprint FROM codex_setups WHERE id=?`, id).Scan(&state, &old); err != nil {
+			return err
+		}
+		if state == "retiring" {
+			if old.String != fingerprint {
+				return fmt.Errorf("%w: pending recovery reservation changed", ErrRecoveryBlocked)
+			}
+			return nil
+		}
+		if err := codexStep(tx, id, "retiring", proof, "uncertain"); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`UPDATE codex_setups SET recovery_fingerprint=?,recovery_reservation=? WHERE id=?`, fingerprint, reservation, id)
+		return err
+	})
+}
+
+// FinishCodexRecovery closes the session without retry. Attempts, replies and
+// uncertain messages stay as they are; nothing is resent.
+func (s *Store) FinishCodexRecovery(id, fingerprint string) error {
+	return s.tx(func(tx *sql.Tx) error {
+		var old, key sql.NullString
+		if err := tx.QueryRow(`SELECT recovery_fingerprint,session_key FROM codex_setups WHERE id=?`, id).Scan(&old, &key); err != nil {
+			return err
+		}
+		if old.String != fingerprint {
+			return fmt.Errorf("%w: pending recovery reservation changed", ErrRecoveryBlocked)
+		}
+		if err := codexStep(tx, id, "retired", "reservation removed after a proven reboot; session closed without retry", "retiring"); err != nil {
+			return err
+		}
+		if key.Valid {
+			if _, err := tx.Exec(`UPDATE sessions SET decision='closed_without_retry' WHERE key=?`, key.String); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// CheckPendingCodexRecovery refuses startup while a recover-codex is half done.
+func (s *Store) CheckPendingCodexRecovery() error {
+	var n int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM codex_setups WHERE state='retiring'`).Scan(&n); err != nil {
+		return err
+	}
+	if n != 0 {
+		return fmt.Errorf("%w: Codex recovery is pending; rerun the same recover-codex command", ErrRecoveryBlocked)
+	}
+	return nil
 }
 
 // stopInheritedCodexSetups runs at startup. The previous supervisor's pipes to

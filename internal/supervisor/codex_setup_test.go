@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/kolotiloff/agent-messenger/internal/control"
+	"github.com/kolotiloff/agent-messenger/internal/core"
+	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
 
 type codexHarness struct {
@@ -523,4 +525,112 @@ func TestCodexOwnedSessionIsNotLaunchedByGenericLoop(t *testing.T) {
 	}
 	h.stop()
 	waitGone(t, pidOf(setup))
+}
+
+func fakeEpoch(boot string) func() (platform.RecoveryEpoch, error) {
+	return func() (platform.RecoveryEpoch, error) {
+		return platform.RecoveryEpoch{Version: 1, Host: strings.Repeat("a", 64), Boot: boot}, nil
+	}
+}
+
+const bootOne = "11111111-1111-4111-8111-111111111111"
+const bootTwo = "22222222-2222-4222-8222-222222222222"
+
+// uncertainCodexOwner leaves a created owner uncertain: the client restarts
+// and cannot reach the old app-server.
+func uncertainCodexOwner(t *testing.T) *codexHarness {
+	t.Helper()
+	old := recoveryEpoch
+	recoveryEpoch = fakeEpoch(bootOne)
+	t.Cleanup(func() { recoveryEpoch = old })
+	h := newCodexHarness(t, "ok", AdapterLauncher{AllowModels: true})
+	if r := h.create("codex-test"); !r.OK {
+		t.Fatalf("create failed: %+v", r)
+	}
+	setup := h.waitSetup(func(s map[string]any) bool { return s["state"] == "created" })
+	h.send("m1", "one")
+	h.waitSnap("reply", func(s codexSnap) bool { return requestState(s, "m1") == "completed" })
+	h.stop()
+	waitGone(t, pidOf(setup))
+	h.start(AdapterLauncher{})
+	h.waitSetup(func(s map[string]any) bool { return s["state"] == "uncertain" })
+	h.stop()
+	return h
+}
+
+func TestRecoverCodexRequiresProvenReboot(t *testing.T) {
+	h := uncertainCodexOwner(t)
+	if _, err := RecoverCodex(h.root, "codex-test", "wrong"); !errors.Is(err, core.ErrBadConfirmation) {
+		t.Fatalf("bad confirmation: %v", err)
+	}
+	// Same boot: the old process is gone, but that is not proof.
+	if _, err := RecoverCodex(h.root, "codex-test", core.StreamRecoveryConfirmation); !errors.Is(err, core.ErrRecoveryBlocked) {
+		t.Fatalf("same boot accepted: %v", err)
+	}
+	if len(codexReservations(t)) != 1 {
+		t.Fatal("reservation removed without proof")
+	}
+	// While the client runs, recovery is refused.
+	h.start(AdapterLauncher{})
+	recoveryEpoch = fakeEpoch(bootTwo)
+	if _, err := RecoverCodex(h.root, "codex-test", core.StreamRecoveryConfirmation); err == nil {
+		t.Fatal("recovery ran next to a live client")
+	}
+	h.stop()
+	if _, err := RecoverCodex(h.root, "unknown", core.StreamRecoveryConfirmation); err == nil {
+		t.Fatal("unknown alias accepted")
+	}
+	if _, err := RecoverCodex(h.root, "codex-test", core.StreamRecoveryConfirmation); err != nil {
+		t.Fatal(err)
+	}
+	if len(codexReservations(t)) != 0 {
+		t.Fatal("reservation kept after recovery")
+	}
+	h.start(AdapterLauncher{AllowModels: true})
+	s := h.snap()
+	if s.CodexSetups[0]["state"] != "retired" || s.Sessions[0]["decision"] != "closed_without_retry" {
+		t.Fatalf("after recovery: %+v %+v", s.CodexSetups, s.Sessions)
+	}
+	if replyTo(s, "m1") != "ACK:one" {
+		t.Fatal("history lost")
+	}
+	if r, _ := control.Call(h.root, control.Request{Cmd: "enqueue", Alias: "codex-test", MessageID: "m2", Sender: "user", Text: "x"}); r.OK {
+		t.Fatal("closed session accepted a message")
+	}
+	if _, err := RecoverCodex(h.root, "codex-test", core.StreamRecoveryConfirmation); err == nil {
+		t.Fatal("second recovery accepted")
+	}
+	h.stop()
+	if h.count("turn/start") != 1 {
+		t.Fatal("a turn was resent")
+	}
+}
+
+func TestRecoverCodexPendingIsResumable(t *testing.T) {
+	h := uncertainCodexOwner(t)
+	recoveryEpoch = fakeEpoch(bootTwo)
+	beforeRenameHook = func() error { return errors.New("disk full") }
+	_, err := RecoverCodex(h.root, "codex-test", core.StreamRecoveryConfirmation)
+	beforeRenameHook = nil
+	if err == nil {
+		t.Fatal("failed registry write reported success")
+	}
+	if len(codexReservations(t)) != 1 {
+		t.Fatal("reservation removed by a failed write")
+	}
+	// A half-done recovery blocks startup until it is finished.
+	if err := Run(context.Background(), h.root, AdapterLauncher{}); !errors.Is(err, core.ErrRecoveryBlocked) {
+		t.Fatalf("startup with pending recovery: %v", err)
+	}
+	if _, err := RecoverCodex(h.root, "codex-test", core.StreamRecoveryConfirmation); err != nil {
+		t.Fatal(err)
+	}
+	if len(codexReservations(t)) != 0 {
+		t.Fatal("reservation kept")
+	}
+	h.start(AdapterLauncher{})
+	if s := h.snap(); s.CodexSetups[0]["state"] != "retired" {
+		t.Fatalf("state %+v", s.CodexSetups)
+	}
+	h.stop()
 }
