@@ -3,9 +3,64 @@
   const root = document.getElementById('am-concept');
   if(window.webkit?.messageHandlers?.updates)document.body.classList.add('am-native');
   const $ = id => root.querySelector('#' + id);
+  const selectViews = new Map();
+  function syncSelects(){selectViews.forEach(view=>view.sync());}
+  // Keep the existing select as the source of truth for delivery guards. The
+  // visible list is a top-layer popover, so neither pane clips it or grows.
+  function enhanceSelect(select) {
+    const trigger=document.createElement('button');trigger.type='button';trigger.className='am-select-trigger';
+    const label=select.labels[0]?.textContent||'Выбор';
+    trigger.setAttribute('aria-label',label);trigger.setAttribute('aria-haspopup','listbox');trigger.setAttribute('aria-expanded','false');
+    const value=document.createElement('span');value.className='am-select-value';
+    const chevron=document.createElement('span');chevron.className='am-select-chevron';chevron.setAttribute('aria-hidden','true');trigger.append(value,chevron);
+    const menu=document.createElement('div');menu.id=select.id+'-menu';menu.className='am-select-menu';menu.setAttribute('popover','auto');menu.setAttribute('role','listbox');menu.setAttribute('aria-label',label);
+    trigger.setAttribute('aria-controls',menu.id);select.after(trigger);root.append(menu);select.hidden=true;
+    select.labels[0]?.addEventListener('click',event=>{event.preventDefault();trigger.focus();});
+    let options=[];
+    const isOpen=()=>menu.matches(':popover-open');
+    function close(restore=false){if(isOpen())menu.hidePopover();if(restore)trigger.focus();}
+    function sync(){value.textContent=select.selectedOptions[0]?.textContent||'Нет данных';trigger.disabled=select.disabled;if(select.disabled)close();}
+    function choose(index){if(select.disabled||select.options[index]?.disabled)return;select.selectedIndex=index;sync();close(true);select.dispatchEvent(new Event('change',{bubbles:true}));}
+    function open(){
+      if(select.disabled)return;menu.replaceChildren();options=[];
+      Array.from(select.options).forEach((option,index)=>{
+        const row=document.createElement('div');row.className='am-select-option';row.setAttribute('role','option');row.setAttribute('aria-selected',String(option.selected));row.tabIndex=-1;
+        const text=document.createElement('span');text.textContent=option.textContent;
+        const check=document.createElement('span');check.className='am-select-check';check.textContent=option.selected?'✓':'';check.setAttribute('aria-hidden','true');row.append(text,check);
+        if(option.disabled)row.setAttribute('aria-disabled','true');
+        row.addEventListener('click',()=>choose(index));menu.append(row);options.push(row);
+      });
+      menu.showPopover();trigger.setAttribute('aria-expanded','true');
+      const rect=trigger.getBoundingClientRect(),gap=6,margin=8;
+      const below=innerHeight-rect.bottom-gap-margin,above=rect.top-gap-margin;
+      const upwards=below<Math.min(300,menu.scrollHeight)&&above>below;
+      const height=Math.max(0,Math.min(360,upwards?above:below));
+      menu.style.width=Math.min(innerWidth-2*margin,Math.max(rect.width,220))+'px';menu.style.maxHeight=height+'px';
+      menu.style.left=Math.max(margin,Math.min(rect.left,innerWidth-menu.getBoundingClientRect().width-margin))+'px';
+      menu.style.top=(upwards?rect.top-gap-Math.min(menu.scrollHeight+2,height):rect.bottom+gap)+'px';
+      const row=options[select.selectedIndex]||options[0];row?.focus({preventScroll:true});row?.scrollIntoView({block:'nearest'});
+    }
+    trigger.addEventListener('click',()=>isOpen()?close():open());
+    trigger.addEventListener('keydown',event=>{if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)){event.preventDefault();open();if(event.key==='Home')options[0]?.focus();if(event.key==='End')options.at(-1)?.focus();}});
+    menu.addEventListener('keydown',event=>{
+      const index=options.indexOf(document.activeElement);let next=index;
+      if(event.key==='ArrowDown')next=Math.min(options.length-1,index+1);
+      else if(event.key==='ArrowUp')next=Math.max(0,index-1);
+      else if(event.key==='Home')next=0;
+      else if(event.key==='End')next=options.length-1;
+      else if(event.key==='Enter'||event.key===' '){event.preventDefault();choose(index);return;}
+      else if(event.key==='Escape'){event.preventDefault();close(true);return;}
+      else if(event.key==='Tab'){close(true);return;}else return;
+      event.preventDefault();options[next]?.focus();
+    });
+    menu.addEventListener('toggle',()=>trigger.setAttribute('aria-expanded',String(isOpen())));
+    new MutationObserver(()=>{close();sync();}).observe(select,{childList:true,subtree:true,attributes:true,attributeFilter:['disabled']});
+    window.addEventListener('resize',()=>close());select.addEventListener('change',sync);
+    selectViews.set(select.id,{sync});sync();
+  }
   function applyTheme(theme, persist=false) {
     if(!['system','light','dark'].includes(theme))theme='system';
-    document.documentElement.dataset.theme=theme;$('theme-select').value=theme;
+    document.documentElement.dataset.theme=theme;$('theme-select').value=theme;syncSelects();
     if(persist) {
       if(window.webkit?.messageHandlers?.appearance)window.webkit.messageHandlers.appearance.postMessage(theme);
       else try {localStorage.setItem('messenger-theme',theme);} catch(_) {}
@@ -52,6 +107,7 @@
     $('send-hint').textContent=outboxItems.length && !pending?'Сначала разберите сохранённые отправки выше, чтобы случайно не создать повторное задание.':'При разрешённом запуске и работающей очереди письмо может вызвать модель.';
     root.querySelectorAll('[data-outbox-action]').forEach(b=>b.disabled=!lastStatus || sending || queueBusy || !!pending || pendingBroken);
     root.querySelectorAll('.am-agent-action').forEach(b=>b.disabled=!lastStatus || !!pending || sending);
+    syncSelects();
   }
   async function postAPI(path, body) {
     const response=await fetch(path,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body),cache:'no-store',signal:AbortSignal.timeout(4500)});
@@ -139,17 +195,6 @@
   function notice(text) { $('notice').textContent=text; $('notice').hidden=!text; }
   function show(tab) {
     root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab);
-    window.messengerUpdateStatus = status => {
-    if(!window.webkit?.messageHandlers?.updates)return;
-    const version=typeof status?.version==='string'?status.version:'';
-    $('app-update-button').hidden=false;
-    $('app-update-button').textContent=version?'↓ Доступно обновление':'Проверить обновления';
-    $('app-update-button').classList.toggle('am-update-available',!!version);
-    $('app-update-version').hidden=!version;
-    $('app-update-version').textContent=version;
-  };
-  $('session-dialog-close').addEventListener('click',()=>$('session-dialog').close());
-  $('app-update-button').addEventListener('click',()=>window.webkit?.messageHandlers?.updates?.postMessage('check'));
   root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
     $('screen-title').textContent={messages:'Переписка',agents:'Агенты',queue:'Очередь',server:'Сервер и подключение'}[tab];
   }
@@ -309,5 +354,6 @@
   $('message-text').addEventListener('input',()=>{const field=$('message-text');field.style.height='auto';field.style.height=Math.min(140,Math.max(44,field.scrollHeight))+'px';actionControls();});
   $('send').addEventListener('click',sendMessage);$('queue-action').addEventListener('click',changeQueue);
   $('refresh').addEventListener('click',refresh);$('older').addEventListener('click',()=>loadTimeline(true));
+  enhanceSelect($('theme-select'));enhanceSelect($('session'));
   refresh();
 })();

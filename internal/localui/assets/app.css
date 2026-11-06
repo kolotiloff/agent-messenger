@@ -41,5 +41,28 @@ body.am-native{padding:0}body.am-native #am-concept{max-width:none;margin:0}body
 #am-concept .am-dialog-body{min-height:0;overflow:auto;overscroll-behavior:contain;padding:0 20px 16px}#am-concept .am-dialog-body>.am-agent-session:first-child{border-top:0}#am-concept .am-dialog-body>p:first-child{padding-top:16px}
 
 :root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}:root[data-theme=system]{color-scheme:light dark}
-#am-concept{--am-bg:light-dark(#faf9f6,#1b1b1a);--am-panel:light-dark(#ffffff,#242423);--am-side:light-dark(#f0efeb,#20201f);--am-text:light-dark(#292925,#e9e8e3);--am-muted:light-dark(#66665f,#aeada5);--am-line:light-dark(#deddd7,#3c3c37);--am-soft:light-dark(#eeede9,#30302e);--am-active:light-dark(#343430,#e5e3da);--am-onactive:light-dark(#ffffff,#20201d)}
-#am-concept .am-theme-setting{display:flex;align-items:center;gap:8px;margin:12px 0}#am-concept .am-theme-setting select{min-width:0;flex:1;font-size:12px}
+/* Neutral surfaces matched to the user's Claude desktop references (2026-11-06).
+   Product-owned tokens; no external fonts or stylesheet dependency. */
+#am-concept{--am-bg:light-dark(#ffffff,#191919);--am-panel:light-dark(#ffffff,#202020);--am-side:light-dark(#fafafa,#202020);--am-text:light-dark(#303030,#dddddd);--am-muted:light-dark(#787878,#999999);--am-line:light-dark(#e5e5e5,#333333);--am-soft:light-dark(#f3f3f3,#2a2a2a);--am-selected:light-dark(#e3e3e3,#404040);--am-active:light-dark(#303030,#dddddd);--am-onactive:light-dark(#ffffff,#202020);--am-menu:light-dark(#ffffff,#303030);--am-menu-hover:light-dark(#eeeeee,#4b4b4b);--am-composer:light-dark(#ffffff,#303030);--am-focus:light-dark(#939393,#777777);--am-check:light-dark(#287bd7,#67aaf9)}
+body{background:light-dark(#ffffff,#191919)}
+#am-concept button{font-weight:400;border-radius:8px}
+#am-concept button:focus-visible{outline:2px solid var(--am-focus);outline-offset:2px}
+#am-concept .am-machine[aria-pressed=true],#am-concept .am-tab[aria-pressed=true]{background:var(--am-selected);border-color:transparent}
+#am-concept .am-compose{padding:14px 4px 4px}
+#am-concept .am-compose textarea{background:var(--am-composer);border:1px solid var(--am-line);border-radius:16px;padding:12px 16px;box-shadow:0 3px 18px light-dark(#00000009,#00000012)}
+#am-concept .am-compose textarea:focus-visible{box-shadow:inset 0 0 0 1px var(--am-focus),0 3px 18px light-dark(#00000009,#00000012)}
+#am-concept .am-compose textarea::placeholder{color:var(--am-muted)}
+#am-concept .am-conversation-info{border-left:1px solid var(--am-line);padding-left:16px}
+#am-concept .am-agent{border-color:var(--am-line)}
+#am-concept .am-theme-setting{display:flex;align-items:center;gap:8px;margin:12px 0}
+#am-concept .am-theme-setting .am-select-trigger{min-width:0;flex:1;font-size:12px}
+#am-concept .am-select-trigger{display:flex;justify-content:space-between;gap:12px;min-width:0;max-width:100%;text-align:left;background:transparent;border:1px solid var(--am-line);padding:8px 10px}
+#am-concept .am-select-trigger .am-select-value{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#am-concept .am-select-chevron{width:7px;height:7px;border-right:1.5px solid var(--am-muted);border-bottom:1.5px solid var(--am-muted);transform:rotate(45deg) translateY(-2px);margin:0 3px 0 6px;flex-shrink:0}
+#am-concept .am-chat-head .am-select-trigger{flex:1}
+#am-concept .am-select-menu{position:fixed;inset:auto;margin:0;padding:6px;border:1px solid var(--am-line);border-radius:14px;background:var(--am-menu);color:var(--am-text);box-shadow:0 12px 32px #0003;overflow:auto;overscroll-behavior:contain;font:inherit}
+#am-concept .am-select-menu::backdrop{background:transparent}
+#am-concept .am-select-option{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:8px 12px;min-height:36px;border-radius:8px;cursor:pointer;outline:0;overflow-wrap:anywhere}
+#am-concept .am-select-option[aria-selected=true],#am-concept .am-select-option:focus,#am-concept .am-select-option:hover{background:var(--am-menu-hover)}
+#am-concept .am-select-check{color:var(--am-check);font-size:18px;line-height:1;width:18px;flex-shrink:0}
+@media(prefers-reduced-motion:no-preference){#am-concept button{transition:background-color .12s ease}}
