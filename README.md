@@ -6,11 +6,11 @@
 
 ## Скачать приложение
 
-**[↓ Скачать для Mac · Apple Silicon](https://github.com/kolotiloff/agent-messenger/releases/download/v0.0.0-preview.15/c896002ebe2f978a2eed2e44bba50f9ee0d61f2a1e5ceb09c78457096d0296a9.zip)** · [Описание preview.15](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.15) · [Как установить](docs/MAC_APP.md)
+**[↓ Скачать для Mac · Apple Silicon](https://github.com/kolotiloff/agent-messenger/releases/download/v0.0.0-preview.16/3f4209ea972128fb02219188a420aa4af61cf82b587a703699cd294a40c856e1.zip)** · [Описание preview.16](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.16) · [Как установить](docs/MAC_APP.md)
 
 | Платформа | Доступность |
 |---|---|
-| macOS 15+, Apple Silicon | preview.15 — приложение с окном и обновлениями из GitHub |
+| macOS 15+, Apple Silicon | preview.16 — приложение с окном и обновлениями из GitHub |
 | macOS, Intel | Отдельная сборка и проверка готовятся |
 | Windows | Установщик, окно и обновления готовятся; скачивания пока нет |
 | Linux | Пакет, окно и обновления готовятся; скачивания пока нет |

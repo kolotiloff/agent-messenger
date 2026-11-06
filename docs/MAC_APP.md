@@ -4,7 +4,7 @@
 
 ## Установка и открытие
 
-1. Скачайте **[Mac preview.15 · Apple Silicon](https://github.com/kolotiloff/agent-messenger/releases/download/v0.0.0-preview.15/c896002ebe2f978a2eed2e44bba50f9ee0d61f2a1e5ceb09c78457096d0296a9.zip)**. [Описание и файлы выпуска](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.15).
+1. Скачайте **[Mac preview.16 · Apple Silicon](https://github.com/kolotiloff/agent-messenger/releases/download/v0.0.0-preview.16/3f4209ea972128fb02219188a420aa4af61cf82b587a703699cd294a40c856e1.zip)**. [Описание и файлы выпуска](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.16).
 2. Распакуйте ZIP двойным щелчком. Длинное имя архива — его контрольная сумма; внутри находится `Agent Messenger.app`.
 3. Перенесите `Agent Messenger.app` в пользовательскую папку `~/Applications` («Программы»). Открывайте двойным щелчком или через Spotlight/Dock.
 
