@@ -160,6 +160,27 @@ func TestBackgroundParentDisappearsBeforeCommit(t *testing.T) {
 	stopBackground(t, root)
 }
 
+func TestBackgroundScopeSurvivesDetachedStartup(t *testing.T) {
+	root := backgroundTestHome(t)
+	_, _, err := startBackground(root, []string{"--claude-stream", "--allow-model-calls", "--only-session=chosen"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { stopBackground(t, root) })
+	status := backgroundCall(t, root, control.Request{Cmd: "status"}).Status
+	if status.LaunchSession != "chosen" || !status.Paused {
+		t.Fatal("scope lost in child", status)
+	}
+	backgroundCall(t, root, control.Request{Cmd: "register-session", Alias: "other", Provider: "claude", Environment: root, ConversationID: "other-test", CLI: "/usr/bin/false", Workspace: root})
+	backgroundCall(t, root, control.Request{Cmd: "enqueue", Alias: "other", MessageID: "other-message", Sender: "user", Text: "must remain queued"})
+	backgroundCall(t, root, control.Request{Cmd: "resume"})
+	time.Sleep(150 * time.Millisecond)
+	status = backgroundCall(t, root, control.Request{Cmd: "status"}).Status
+	if status.Held != 0 || status.Queued != 1 || status.LaunchSession != "chosen" {
+		t.Fatal("missing selected session fell back to another queue", status)
+	}
+}
+
 func TestBackgroundReportsInitializationFailure(t *testing.T) {
 	root := backgroundTestHome(t)
 	if err := os.MkdirAll(root, 0o700); err != nil {

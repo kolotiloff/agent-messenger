@@ -121,7 +121,7 @@ func startBackgroundAt(root string, flags []string, executable string) (int, str
 }
 
 func runBackgroundChild(root string, flags []string) error {
-	allow, err := serveAllowsModels(flags)
+	options, err := serveOptions(flags)
 	if err != nil {
 		return err
 	}
@@ -152,7 +152,7 @@ func runBackgroundChild(root string, flags []string) error {
 		return conn.Close()
 	}
 	err = supervisor.RunWithOptions(context.Background(), root,
-		supervisor.AdapterLauncher{AllowModels: allow, ClaudeStream: hasFlag(flags, "--claude-stream")},
+		options,
 		supervisor.RunOptions{StartPaused: true, Ready: ready})
 	if err != nil {
 		_ = json.NewEncoder(conn).Encode(backgroundReady{Error: err.Error()})

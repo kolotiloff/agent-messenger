@@ -51,6 +51,32 @@ func TestRootFlagWorksBeforeOrAfterCommand(t *testing.T) {
 	}
 }
 
+func TestScopedSessionNeverGrantsModelPermission(t *testing.T) {
+	for _, args := range [][]string{{"--claude-stream", "--only-session=worker"}, {"--only-session", "worker", "--claude-stream"}} {
+		o, err := serveOptions(args)
+		if err != nil || o.AllowModels || !o.ClaudeStream || o.OnlySession != "worker" {
+			t.Fatalf("scope options = %+v, %v", o, err)
+		}
+		o, err = serveOptions(append(args, "--allow-model-calls"))
+		if err != nil || !o.AllowModels || o.OnlySession != "worker" {
+			t.Fatalf("explicit scope permission = %+v, %v", o, err)
+		}
+	}
+	for _, args := range [][]string{
+		{"--claude-stream", "--only-session"},
+		{"--claude-stream", "--only-session="},
+		{"--claude-stream", "--only-session", "--allow-model-calls"},
+		{"--claude-stream", "--only-session=one", "--only-session=two"},
+		{"--claude-stream", "--only-session= one "},
+		{"--claude-stream", "--only-session=one\ntwo"},
+		{"--only-session=worker", "--allow-model-calls"},
+	} {
+		if _, err := serveOptions(args); err == nil {
+			t.Fatalf("unsafe scope accepted: %q", args)
+		}
+	}
+}
+
 func TestRecoverStreamRejectsMissingBindingAndBypassFlags(t *testing.T) {
 	for _, args := range [][]string{
 		{"recover-stream"},

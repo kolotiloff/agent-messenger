@@ -277,6 +277,12 @@ func (s *Store) Enqueue(messageID, alias, sender, text string) (bool, error) {
 // before any process is created. A paused client, a busy session and an empty queue
 // do not reserve anything.
 func (s *Store) Claim(alias string) (string, error) {
+	return s.ClaimProvider(alias, "")
+}
+
+// ClaimProvider restricts selection before reserving anything. A missing alias,
+// wrong provider or incomplete launch configuration never falls back to another queue.
+func (s *Store) ClaimProvider(alias, provider string) (string, error) {
 	var token string
 	err := s.tx(func(tx *sql.Tx) error {
 		paused, err := paused(tx)
@@ -289,6 +295,15 @@ func (s *Store) Claim(alias string) (string, error) {
 		key, decision, err := sessionByAlias(tx, alias)
 		if err != nil {
 			return err
+		}
+		if provider != "" {
+			var matches int
+			if err := tx.QueryRow(`SELECT COUNT(*) FROM sessions WHERE key=? AND provider=? AND COALESCE(cli_path,'')!=''`, key, provider).Scan(&matches); err != nil {
+				return err
+			}
+			if matches != 1 {
+				return ErrRejected
+			}
 		}
 		if decision == "closed_without_retry" {
 			return fmt.Errorf("%w: session is closed without retry", ErrClosed)

@@ -195,14 +195,26 @@ func (s *Supervisor) loop(ctx context.Context) {
 			continue
 		}
 		if stream, ok := s.launcher.(StreamLauncher); ok && stream.StreamingEnabled() {
-			token, err := s.store.ClaimNextProvider("claude")
+			var token string
+			var err error
+			if scoped, ok := s.launcher.(interface{ SessionAlias() string }); ok && scoped.SessionAlias() != "" {
+				token, err = s.store.ClaimProvider(scoped.SessionAlias(), "claude")
+			} else {
+				token, err = s.store.ClaimNextProvider("claude")
+			}
 			if err != nil {
 				continue
 			}
 			s.runStream(ctx, token, stream)
 			continue
 		}
-		token, err := s.store.ClaimNext()
+		var token string
+		var err error
+		if scoped, ok := s.launcher.(interface{ SessionAlias() string }); ok && scoped.SessionAlias() != "" {
+			token, err = s.store.Claim(scoped.SessionAlias())
+		} else {
+			token, err = s.store.ClaimNext()
+		}
 		if err != nil {
 			continue
 		}
@@ -392,6 +404,9 @@ func (s *Supervisor) Status() (control.Status, error) {
 		CLILaunch:  "disabled",
 		Broker:     "not_configured",
 		Supervisor: os.Getpid(),
+	}
+	if scoped, ok := s.launcher.(interface{ SessionAlias() string }); ok {
+		status.LaunchSession = scoped.SessionAlias()
 	}
 	if stream, ok := s.launcher.(StreamLauncher); ok {
 		status.SessionSetup = stream.StreamingEnabled()

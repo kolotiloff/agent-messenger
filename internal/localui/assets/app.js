@@ -109,7 +109,9 @@
     $('queue-action').disabled=!lastStatus || queueBusy || sending;
     $('queue-action').textContent=queueBusy?'…':lastStatus && lastStatus.paused?'Продолжить':'Пауза';
     $('outbox-panel').hidden=!outboxItems.length;
-    $('send-hint').textContent=outboxItems.length && !pending?'Сначала разберите сохранённые отправки выше, чтобы случайно не создать повторное задание.':!lastStatus?'Проверяем готовность агента…':lastStatus.cli_launch==='not-authorized'?'Агент пока не запущен. Сообщение сохранится в очереди.':lastStatus.paused?'Очередь на паузе. Сообщение будет ждать.':'Сообщение будет передано агенту.';
+    const scope=lastStatus?.launch_session,scopeCard=scope&&overview?.sessions.find(s=>s.aliases.includes(scope));
+    const outsideScope=scope&&selected!==scope&&!scopeCard?.aliases.includes(selected);
+    $('send-hint').textContent=outboxItems.length && !pending?'Сначала разберите сохранённые отправки выше, чтобы случайно не создать повторное задание.':!lastStatus?'Проверяем готовность агента…':lastStatus.cli_launch==='not-authorized'?'Агент пока не запущен. Сообщение сохранится в очереди.':outsideScope?'Для этой сессии запуск выключен. Сообщение останется в очереди.':lastStatus.paused?'Очередь на паузе. Сообщение будет ждать.':'Сообщение будет передано агенту.';
     root.querySelectorAll('[data-outbox-action]').forEach(b=>b.disabled=!lastStatus || sending || queueBusy || !!pending || pendingBroken);
     root.querySelectorAll('.am-agent-action').forEach(b=>b.disabled=!lastStatus || !!pending || sending || b.dataset.empty==='true');
     syncSelects();
@@ -414,7 +416,7 @@
       $('connection').textContent='Клиент доступен';$('connection-dot').classList.add('online');$('connection-dot').parentElement.title='Этот компьютер подключён';
       $('checked').textContent='Данные обновлены '+new Date().toLocaleTimeString();$('refresh').title='Обновить сообщения и статусы · '+$('checked').textContent;
       $('processing').textContent=status.paused?'На паузе':'Приём включён';
-      $('permission').textContent=status.cli_launch==='not-authorized'?'Письма будут ждать запуска агента.':'';
+      $('permission').textContent=status.cli_launch==='not-authorized'?'Письма будут ждать запуска агента.':status.launch_session?'Запуск разрешён только для «'+status.launch_session+'».':'';
       const select=$('session');select.replaceChildren();
       for(const s of view.sessions)for(const alias of s.aliases){const option=el('option',(names[s.provider]||s.provider)+' · '+alias);option.value=alias;option.dataset.provider=s.provider;select.append(option);}
       if(pending && !Array.from(select.options).some(o=>o.value===pending.alias)){const option=el('option',pending.alias);option.value=pending.alias;select.append(option);}

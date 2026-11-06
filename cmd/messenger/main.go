@@ -236,11 +236,11 @@ func run(root string, args []string) error {
 		fmt.Println(message)
 		return nil
 	case "serve":
-		allow, err := serveAllowsModels(args[1:])
+		options, err := serveOptions(args[1:])
 		if err != nil {
 			return err
 		}
-		err = supervisor.Run(context.Background(), root, supervisor.AdapterLauncher{AllowModels: allow, ClaudeStream: hasFlag(args[1:], "--claude-stream")})
+		err = supervisor.Run(context.Background(), root, options)
 		if errors.Is(err, platform.ErrAlreadyRunning) {
 			return errors.New("клиент уже запущен; команды нужно отправлять ему, а не запускать второй экземпляр")
 		}
@@ -294,6 +294,9 @@ func printResponse(response control.Response) {
 		if response.Status.StreamState != "" {
 			fmt.Printf("stream_state=%s\n", response.Status.StreamState)
 		}
+		if response.Status.LaunchSession != "" {
+			fmt.Printf("launch_session=%s\n", response.Status.LaunchSession)
+		}
 		if response.Status.Detail != "" {
 			fmt.Println(response.Status.Detail)
 		}
@@ -310,18 +313,43 @@ func printResponse(response control.Response) {
 }
 
 func serveAllowsModels(args []string) (bool, error) {
-	allow := false
-	for _, arg := range args {
+	options, err := serveOptions(args)
+	return options.AllowModels, err
+}
+
+func serveOptions(args []string) (supervisor.AdapterLauncher, error) {
+	var options supervisor.AdapterLauncher
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
 		if arg == "--claude-stream" {
+			options.ClaudeStream = true
 			continue
 		}
 		if arg == "--allow-model-calls" {
-			allow = true
+			options.AllowModels = true
 			continue
 		}
-		return false, fmt.Errorf("неизвестный флаг serve: %s", arg)
+		if arg == "--only-session" || strings.HasPrefix(arg, "--only-session=") {
+			value := strings.TrimPrefix(arg, "--only-session=")
+			if arg == "--only-session" {
+				i++
+				if i >= len(args) {
+					return options, errors.New("--only-session requires an alias")
+				}
+				value = args[i]
+			}
+			if options.OnlySession != "" || strings.TrimSpace(value) != value || value == "" || len(value) > 128 || strings.HasPrefix(value, "--") || strings.ContainsAny(value, "\r\n\x00") {
+				return options, errors.New("invalid or repeated --only-session")
+			}
+			options.OnlySession = value
+			continue
+		}
+		return options, fmt.Errorf("неизвестный флаг serve: %s", arg)
 	}
-	return allow, nil
+	if options.OnlySession != "" && !options.ClaudeStream {
+		return options, errors.New("--only-session currently requires --claude-stream")
+	}
+	return options, nil
 }
 
 func splitArgs(args []string) (string, []string) {
@@ -377,6 +405,7 @@ recover-failed снимает только неудачную попытку п�
 С --allow-model-calls запускается только CLI, заранее записанный через register-session, и только точный ID.
 Пустая группа процессов не снимает блокировку. В обычном режиме второе письмо той же сессии не стартует.
 --claude-stream: один постоянный Claude, письма по очереди в том же процессе; другие провайдеры остаются в очереди.
+--only-session ИМЯ: в режиме --claude-stream обрабатывается только эта сессия. Остальные очереди не выбираются. Сам флаг вызовы модели не разрешает.
 create-claude-session создаёт новый точный ID без модели, для последующего запуска с --claude-stream.
 Постоянный процесс сохраняет блокировку после stop/shutdown/restart. Незавершённый ход не повторяется автоматически.
 inspect показывает StreamRuns и Verifications: успешный ход не является выходом процесса.

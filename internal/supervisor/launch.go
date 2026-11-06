@@ -19,7 +19,10 @@ import (
 type AdapterLauncher struct {
 	AllowModels  bool
 	ClaudeStream bool
+	OnlySession  string
 }
+
+func (l AdapterLauncher) SessionAlias() string { return l.OnlySession }
 
 func (l AdapterLauncher) Enabled() bool { return l.AllowModels }
 
@@ -34,7 +37,7 @@ func (l AdapterLauncher) LaunchLabel() string {
 }
 
 func (l AdapterLauncher) Start(spec Spec) (Started, error) {
-	if !l.AllowModels {
+	if !l.AllowModels || (l.OnlySession != "" && spec.Alias != l.OnlySession) {
 		return Started{}, errModelsNotAuthorized
 	}
 	if spec.CLI == "" {
