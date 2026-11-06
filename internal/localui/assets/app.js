@@ -212,6 +212,7 @@
   function show(tab) {
     root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab);
   root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
+    $('queue-toggle').hidden=tab!=='messages';
     $('screen-title').textContent={messages:'Переписка',agents:'Агенты',queue:'Очередь',server:'Сервер и подключение'}[tab];
   }
   async function api(path, signal) {
@@ -231,6 +232,7 @@
   function renderCards() {
     const cards=$('agents'),queue=$('queue');cards.replaceChildren();queue.replaceChildren();
     const sessions=overview?.sessions || [];
+    $('queue-count').textContent=overview?'('+sessions.reduce((n,s)=>n+(s.queued||0),0)+')':'';
     const providers=[...new Set([...Object.keys(names),...sessions.map(s=>s.provider)])];
     for(const provider of providers) {
       const group=sessions.filter(s=>s.provider===provider),card=el('article',undefined,'am-agent');
@@ -249,11 +251,12 @@
       card.append(el('p','Подключение и перенастройка из окна пока недоступны.','am-small am-muted'));cards.append(card);
     }
     for(const s of sessions) {
+      if(!s.queued&&!s.uncertain&&!s.decision_pending)continue;
       const alias=s.aliases[0]||'',row=el('div',undefined,'am-row'),main=el('div',undefined,'am-row-main');
       main.append(el('h3',alias||names[s.provider]||s.provider),el('p','В очереди: '+s.queued+' · Неопределённые в истории: '+s.uncertain,'am-small am-muted'));
       row.append(main,el('span',s.decision_pending?'Есть решение по сессии':s.owner_retained?'Владелец удерживается':'Без владельца','am-small'));queue.append(row);
     }
-    if(!sessions.length)queue.append(el('p',overview?'Нет зарегистрированных сессий.':'Данные клиента недоступны.','am-muted'));
+    if(!queue.children.length)queue.append(el('p',overview?'Очередь пуста.':'Данные клиента недоступны.','am-muted'));
     if(overview?.truncated) {cards.append(el('p','Список сессий неполный.','am-status-warn'));queue.append(el('p','Список сессий неполный.','am-status-warn'));}
   }
   function showSessions(provider) {
@@ -338,7 +341,7 @@
       // An accepted envelope may survive a lost browser ACK. Keep local pending
       // retry available; it uses the same ID. Other stored sends are reviewed first.
       $('connection').textContent='Клиент доступен';$('connection-dot').classList.add('online');$('connection-dot').parentElement.title='Этот компьютер подключён';
-      $('checked').textContent='Данные обновлены '+new Date().toLocaleTimeString();$('refresh').title='Обновить данные · '+$('checked').textContent;
+      $('checked').textContent='Данные обновлены '+new Date().toLocaleTimeString();$('refresh').title='Обновить сообщения и статусы · '+$('checked').textContent;
       $('processing').textContent=status.paused?'Новые письма на паузе':'Очередь не на паузе';
       $('permission').textContent=status.cli_launch==='not-authorized'?'Запуск моделей не разрешён.':'Разрешение запуска: '+status.cli_launch;
       const select=$('session');select.replaceChildren();
@@ -354,7 +357,7 @@
       $('session').replaceChildren(el('option','Клиент недоступен'));$('session').disabled=true;
       renderCards();
       $('queue').replaceChildren(el('p','Очередь не прочитана. Это не означает, что она пуста.','am-muted'));
-      $('connection').textContent='Клиент недоступен';$('connection-dot').classList.remove('online');$('connection-dot').parentElement.title='Нет связи с этим компьютером';$('refresh').title='Обновить данные · предыдущая проверка не удалась';
+      $('connection').textContent='Клиент недоступен';$('connection-dot').classList.remove('online');$('connection-dot').parentElement.title='Нет связи с этим компьютером';$('refresh').title='Обновить сообщения и статусы · предыдущая проверка не удалась';
       $('processing').textContent='Нет актуальных данных';$('permission').textContent='';$('checked').textContent='Обновление не удалось';
       notice(error.name==='AbortError'?'Клиент не ответил вовремя.':error.message);
     } finally {clearTimeout(timeout);if(version===refreshVersion){$('refresh').disabled=false;actionControls();}}
@@ -383,6 +386,14 @@
     $('app-update-version').hidden=true;
   };
   $('session-dialog-close').addEventListener('click',()=>$('session-dialog').close());
+  $('queue-toggle').addEventListener('click',()=>{
+    const expanded=$('queue-toggle').getAttribute('aria-expanded')!=='true';
+    $('queue-toggle').setAttribute('aria-expanded',String(expanded));
+    $('queue-toggle').setAttribute('aria-label',expanded?'Скрыть очередь сообщений':'Показать очередь сообщений');
+    $('queue-toggle').title=expanded?'Скрыть очередь сообщений':'Показать очередь сообщений';
+    $('queue-panel').hidden=!expanded;
+    root.querySelector('.am-chat-layout').classList.toggle('am-queue-collapsed',!expanded);
+  });
   $('app-update-button').addEventListener('click',()=>window.webkit?.messageHandlers?.updates?.postMessage('check'));
   root.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>show(b.dataset.tab)));
   $('session').addEventListener('change',()=>{if(pending||sending)return;selected=$('session').value;actionControls();loadTimeline(false);});

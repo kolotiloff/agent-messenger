@@ -95,7 +95,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         for (title, selector, key) in [("Отменить", "undo:", "z"), ("Вырезать", "cut:", "x"), ("Копировать", "copy:", "c"), ("Вставить", "paste:", "v"), ("Выделить всё", "selectAll:", "a")] {
             editMenu.addItem(withTitle: title, action: Selector(selector), keyEquivalent: key)
         }
+        let view = NSMenuItem(); view.title = "Вид"; bar.addItem(view)
+        let viewMenu = NSMenu(title: "Вид"); view.submenu = viewMenu
+        let refresh = viewMenu.addItem(withTitle: "Обновить сообщения и статусы", action: #selector(refreshMessages), keyEquivalent: "r"); refresh.target = self
         NSApp.mainMenu = bar
+    }
+    @objc func refreshMessages() {
+        guard origin != nil, !web.isHidden else { return }
+        web.evaluateJavaScript("document.getElementById('refresh')?.click()", completionHandler: nil)
     }
     @objc func showWindow() { window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
     @objc func chooseData() {
