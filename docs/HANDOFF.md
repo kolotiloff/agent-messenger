@@ -1,6 +1,17 @@
-# Handing development over to Claude Code
+# Handoff: current state
 
-State as of November 6, 2026. Code base: `main` after `fcec2d88cc000ca9afad5427e46bcf5701c7fb15`. [PR #25](https://github.com/kolotiloff/agent-messenger/pull/25) has been merged into the main branch. This file hands over context; starting a new developer session has not itself been done.
+This file is the shared memory between tools (Claude Code, Cursor, Codex). Whoever stops working updates the **Current state** section; whoever starts reads it first. Tasks live in [TASKS.md](TASKS.md), decisions in [DECISIONS.md](DECISIONS.md), open questions in [QUESTIONS.md](QUESTIONS.md), the work history in [LOG.md](LOG.md).
+
+## Current state
+
+Updated 2026-11-06 by Claude Code.
+
+- `main` is at the merge of [PR #26](https://github.com/kolotiloff/agent-messenger/pull/26): documentation in English, shared rules in [AGENTS.md](../AGENTS.md). No code changed since [PR #25](https://github.com/kolotiloff/agent-messenger/pull/25).
+- Working documents added: [README.md](README.md) (map), [TASKS.md](TASKS.md), [DECISIONS.md](DECISIONS.md), [QUESTIONS.md](QUESTIONS.md), [LOG.md](LOG.md); this file was renamed from `HANDOFF_CLAUDE.md`.
+- No work in progress on any branch. Old draft PRs #2–#18 are closed; their content is in `main`.
+- Next task: T-001 in [TASKS.md](TASKS.md), creating and persisting a Codex session before the first message.
+
+The sections below are the original handoff from Codex (2026-11-06, base `fcec2d88cc000ca9afad5427e46bcf5701c7fb15`). They still describe the product state and the plan for the Codex adapter.
 
 ## Product and way of working
 
