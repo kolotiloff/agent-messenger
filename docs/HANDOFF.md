@@ -4,20 +4,59 @@ This file is the shared memory between tools (Claude Code, Cursor, Codex). Whoev
 
 ## Current state
 
-Updated 2026-11-06 by Claude Code.
+Updated 2026-11-06 by Claude Code, before handing over to a new session because the context was full.
 
-- **`main` ([PR #29](https://github.com/kolotiloff/agent-messenger/pull/29)):** T-001 and T-002 are done. `create-codex-session` creates a Codex thread owned by a live app-server, and queued messages to its alias are delivered one turn at a time in that same process. The turns use the bound `read_current`/`reply` tools. Details: [CODEX_ADAPTER_NEXT.md](CODEX_ADAPTER_NEXT.md), [setup report](reports/2026-11-06-codex-setup-linux.md), [delivery report](reports/2026-11-06-codex-delivery-linux.md).
-- **Verified:** only on Linux, with a fake app-server. No real Codex model turn has run yet.
-- **No work in progress on any branch.**
-- **`main` ([PR #29](https://github.com/kolotiloff/agent-messenger/pull/29)):** T-007 is done. `recover-codex` retires an uncertain Codex owner after a proven reboot. It is refused on Linux and Windows, which have no boot identity source yet.
-- **`main` ([PR #30](https://github.com/kolotiloff/agent-messenger/pull/30)):** T-005 is done. Replies to another local agent are delivered as new messages, with a limit of 3 per chain ([ROUTING.md](ROUTING.md)). A persistent Claude session and a Codex owner exchange messages side by side; this was verified with fake CLIs.
-- **`main` ([PR #30](https://github.com/kolotiloff/agent-messenger/pull/30)):** T-003 is done. The Codex config is checked again before every turn, and the database has a schema version.
-- **`main` ([PR #31](https://github.com/kolotiloff/agent-messenger/pull/31)):** T-008 is done. Up to 4 persistent Claude sessions run side by side.
-- **Releases:** Mac previews are now built, signed and published by the Release Mac preview workflow, using the `SPARKLE_ED_PRIVATE_KEY` secret ([UPDATES.md](UPDATES.md)). preview.20 was the first one released this way.
-- **`main` ([PR #32](https://github.com/kolotiloff/agent-messenger/pull/32)):** T-006 is done. The window creates a Codex session and allows model calls only for it ([SESSION_SETUP.md](SESSION_SETUP.md)).
-- **T-004 accepted on the Mac with preview.21:** real Codex answered two messages from the window, with both turns verified ([report](reports/2026-11-06-codex-window-mac.md)). A paused queue after setup was found and fixed in [PR #33](https://github.com/kolotiloff/agent-messenger/pull/33).
-- **Next:** T-009, resuming a Codex thread after a restart. Also: Claude ↔ Codex with real models, and the next preview with the queue fix.
-- **Mac status:** after the freeze and reboot, preview.19 would not open. All reservations pointed to a test directory in `/private/tmp` that macOS had deleted. The owner moved `active-runs.json` aside after checking the evidence, and the window now works with the default data directory and empty history ([report](reports/2026-11-06-reboot-temp-root-mac.md)). The old Claude test session no longer exists. Fixes (`recover-missing-root`, refusing temporary data directories) are in PR #31 and ship with the next build.
+**What works on the owner's Mac (preview.22, released from CI):**
+
+- Claude and Codex test sessions are created from the window.
+- Real Codex answers. Claude asks Codex with the `send` tool, and Codex's answer comes back to Claude.
+- Reports: [Codex](reports/2026-11-06-codex-window-mac.md), [Claude ↔ Codex](reports/2026-11-06-claude-codex-mac.md).
+
+**Releases.** The Actions workflow **Release Mac preview** builds, signs and publishes. The signing key is in the `SPARKLE_ED_PRIVATE_KEY` secret ([UPDATES.md](UPDATES.md)). To release, run it on `main` with the next version (last: `0.0.0-preview.22`) and Russian release notes. The owner updates through the window, then runs `messenger shutdown` for the old background client and reopens the app.
+
+**Open PR.** [PR #34](https://github.com/kolotiloff/agent-messenger/pull/34) is on branch `claude/quirky-cannon-u0n3qm`.
+
+- It stops routing a reply to a routed reply (Q-008, D-021). Its CI was queued at handover.
+- It also contains the first T-009 building blocks (WIP, unused, tested):
+  - `platform.ProcessTree`, `Descendants` and `AnyAlive` (process tree with parent links; `ps -o pid=,ppid=,pgid=,lstart=` on macOS, `/proc` on Linux);
+  - store states for a graceful release and resume: `ReleaseCodexOwner`, `BeginCodexResume`, `ConfirmCodexResumeConfig`, `CompleteCodexResume`, and the new state `released`.
+- When CI is green: merge it, then release preview.23.
+
+**In progress: T-009** (owner decision: option 2, D-022). The goal is to resume a Codex thread after a client restart without a reboot. Remaining steps:
+
+1. **Owner bookkeeping (supervisor).** Give `codexOwner` an `exited` channel, the exit code and an atomic `releasing` flag. The waiter goroutine must not call `RecordCodexSetupExit` while `releasing` is set.
+2. **`releaseCodexOwners()`.** Run it in `RunWithOptions` before `closeAll`: `defer` it after the `closeAll` defer, so it runs first and before `store.Close`. For each owner whose DB state is `created` (idle):
+   1. take `platform.Descendants(obs)`;
+   2. close stdin;
+   3. wait for exit, at most 10 s;
+   4. require `platform.AnyAlive(boot, pgid, descendants) == false`;
+   5. `forgetRunID(owner.proc.run.ID)` first, then `store.ReleaseCodexOwner`.
+
+   Any doubt (busy owner, error, timeout, survivor) leaves it as today: uncertain at the next start.
+3. **`ResumeCodexSession(alias)`.** Mirror `CreateCodexSession`:
+   1. `BeginCodexResume`;
+   2. `StartCodexServer` with the same workspace and home (`root/codex-home/<id>`);
+   3. `RecordCodexSetupProcess`;
+   4. `initialize` and `config/read`; `ConfirmCodexResumeConfig` with `adapters.CodexConfigFingerprint`;
+   5. `PrepareCodexThreadStart`;
+   6. `thread/resume` with `{threadId, cwd, sandbox:"read-only", approvalPolicy:"never", excludeTurns:true}`. Add it to the setup RPC allowlist and write `ParseCodexThreadResume`: same ID, non-ephemeral, same cwd, readOnly, never; turns allowed;
+   7. `CompleteCodexResume`;
+   8. `rememberRun` with the thread;
+   9. start `serveCodex`.
+
+   Refactor the shared owner start out of `CreateCodexSession`.
+4. **Window.**
+   - Overview card flag `can_resume_codex` (a codex_owned session with setup state `released`).
+   - `/api/resume-codex` → control `resume-codex` → `ResumeCodexFromWindow` (grant as in `SetupCodexFromWindow`, resume, `ResumeWork`).
+   - A «Продолжить сессию» ("Resume session") button in the Codex sessions dialog.
+5. **Tests.**
+   - The fake app-server must support `thread/resume` for a thread it created (store IDs in `CODEX_HOME`).
+   - Cases: release on shutdown, then resume after restart with the same thread and a second message answered; busy owner stays uncertain; config change refuses resume; a survivor descendant blocks release.
+6. **Rules and docs.** Update the rule in AGENTS.md (the exception for supervised graceful Codex release), DECISIONS D-022, CODEX_ADAPTER_NEXT.md, TASKS, LOG. Release a preview, then do a Mac acceptance run: update → shutdown → reopen → resume → message.
+
+**Open risk.** It is unknown whether Codex keeps the thread's dynamic tools after `thread/resume` (`ThreadResumeParams` has no `dynamicTools`). If they are lost, the first turn after resume fails closed (uncertain). Check this on the Mac.
+
+**Other next tasks:** Cursor (owner said keep it off), network broker (stage 5), Windows/Linux.
 
 Codex CLI for model-free checks in a cloud session: `npm install @openai/codex@0.155.1` in a scratch directory. Then use the native binary under `node_modules/@openai/codex-linux-x64/vendor/*/bin/codex` with `MESSENGER_CODEX_PROBE=...`.
 

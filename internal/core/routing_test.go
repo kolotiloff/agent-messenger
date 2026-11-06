@@ -166,3 +166,26 @@ func TestAgentSendRespectsChainLimit(t *testing.T) {
 		t.Fatalf("send past the chain limit: %v", err)
 	}
 }
+
+func TestReplyToARoutedReplyIsNotRoutedAgain(t *testing.T) {
+	st, env := routingStore(t)
+	// b answered a's question; that answer reached a as a routed reply.
+	if _, err := st.Enqueue("reply-abc", "a", "b", "the answer"); err != nil {
+		t.Fatal(err)
+	}
+	token := claimBeginConfirm(t, st, env, "a", "conv-a")
+	if _, err := st.Reply(token, "thanks"); err != nil {
+		t.Fatal(err)
+	}
+	snap := mustSnap(t, st)
+	if len(snap.Requests) != 1 || len(snap.Replies) != 1 {
+		t.Fatalf("an acknowledgment was routed: %+v", snap.Requests)
+	}
+	found := false
+	for _, e := range snap.Events {
+		found = found || e["kind"] == "reply_not_routed"
+	}
+	if !found {
+		t.Fatal("not-routed reply was not recorded")
+	}
+}

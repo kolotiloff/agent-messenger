@@ -25,6 +25,23 @@ func Snapshot() (string, []Proc, error) {
 	return strings.TrimSpace(string(bootOut)), live, nil
 }
 
+// ProcessTree is Snapshot with parent links.
+func ProcessTree() (string, []Proc, error) {
+	bootOut, err := exec.Command("/usr/sbin/sysctl", "-n", "kern.boottime").Output()
+	if err != nil {
+		return "", nil, fmt.Errorf("%w: boot time: %v", ErrNotProven, err)
+	}
+	psOut, err := exec.Command("/bin/ps", "-ax", "-o", "pid=,ppid=,pgid=,lstart=").Output()
+	if err != nil {
+		return "", nil, fmt.Errorf("%w: ps: %v", ErrNotProven, err)
+	}
+	live, err := ParsePSTree(string(psOut))
+	if err != nil {
+		return "", nil, err
+	}
+	return strings.TrimSpace(string(bootOut)), live, nil
+}
+
 func ReadObservation(pid int) (Observation, error) {
 	boot, live, err := Snapshot()
 	if err != nil {

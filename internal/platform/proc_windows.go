@@ -8,6 +8,10 @@ func Snapshot() (string, []Proc, error) {
 	return "", nil, fmt.Errorf("%w: process snapshot has no tested Windows implementation", ErrUnsupported)
 }
 
+func ProcessTree() (string, []Proc, error) {
+	return "", nil, fmt.Errorf("%w: process tree has no tested Windows implementation", ErrUnsupported)
+}
+
 func ReadObservation(pid int) (Observation, error) {
 	return Observation{}, fmt.Errorf("%w: process observation has no tested Windows implementation", ErrUnsupported)
 }

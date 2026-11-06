@@ -34,6 +34,9 @@ func Snapshot() (string, []Proc, error) {
 	return strings.TrimSpace(string(boot)), live, nil
 }
 
+// ProcessTree is Snapshot; on Linux it already carries parent links.
+func ProcessTree() (string, []Proc, error) { return Snapshot() }
+
 func ReadObservation(pid int) (Observation, error) {
 	boot, _, err := Snapshot()
 	if err != nil {
@@ -98,5 +101,9 @@ func readProc(pid int) (Proc, error) {
 	if err != nil {
 		return Proc{}, err
 	}
-	return Proc{PID: pid, PGID: pgid, StartToken: fields[19]}, nil
+	ppid, err := strconv.Atoi(fields[1])
+	if err != nil {
+		return Proc{}, err
+	}
+	return Proc{PID: pid, PGID: pgid, StartToken: fields[19], PPID: ppid}, nil
 }

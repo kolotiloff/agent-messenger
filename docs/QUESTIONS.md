@@ -29,4 +29,6 @@ Copying the owner's credentials into the managed profile is not implemented and 
 
 ## Answered
 
-None yet.
+### Q-008: Should a reply to an automatically delivered reply be routed again?
+Today every reply goes back to its sender, so "thanks" bounces between agents until the limit of 3 steps. **Proposal:** do not route a reply when the message it answers was itself a routed reply; agents continue only with an explicit `send`. **Blocks:** nothing; it saves tokens.
+**Answer (2026-11-06):** yes, as proposed. See D-021.

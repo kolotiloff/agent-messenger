@@ -33,3 +33,32 @@ func ParsePS(out string) ([]Proc, error) {
 	}
 	return live, nil
 }
+
+// ParsePSTree reads `ps -o pid=,ppid=,pgid=,lstart=` lines. Any unparsable line
+// fails closed.
+func ParsePSTree(out string) ([]Proc, error) {
+	var live []Proc
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 4 {
+			return nil, fmt.Errorf("%w: unexpected ps line %q", ErrNotProven, line)
+		}
+		var nums [3]int
+		for i := range nums {
+			n, err := strconv.Atoi(fields[i])
+			if err != nil {
+				return nil, fmt.Errorf("%w: number in %q", ErrNotProven, line)
+			}
+			nums[i] = n
+		}
+		live = append(live, Proc{PID: nums[0], PPID: nums[1], PGID: nums[2], StartToken: strings.Join(fields[3:], " ")})
+	}
+	if len(live) == 0 {
+		return nil, fmt.Errorf("%w: ps returned no processes", ErrNotProven)
+	}
+	return live, nil
+}

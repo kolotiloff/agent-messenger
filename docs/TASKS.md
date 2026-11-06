@@ -13,7 +13,7 @@ How to use it:
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
-| — | Nothing in progress. Next: T-009 (resume a Codex thread with a new owner). | | |
+| T-009 | Resume a Codex thread after a client restart via graceful release (option 2, D-022). | agent | WIP on `claude/quirky-cannon-u0n3qm` (PR #34); plan in HANDOFF |
 
 ## Next
 
