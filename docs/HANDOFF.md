@@ -4,7 +4,7 @@ This file is the shared memory between tools (Claude Code, Cursor, Codex). Whoev
 
 ## Current state
 
-Updated 2026-11-06 by Claude Code (Q-008 decided; product state below retained).
+Updated 2026-11-06 by Claude Code (D-021–D-026 decided, window approved; product state below retained).
 
 - **`main` ([PR #29](https://github.com/kolotiloff/agent-messenger/pull/29)):** T-001 and T-002 are done. `create-codex-session` creates a Codex thread owned by a live app-server, and queued messages to its alias are delivered one turn at a time in that same process. The turns use the bound `read_current`/`reply` tools. Details: [CODEX_ADAPTER_NEXT.md](CODEX_ADAPTER_NEXT.md), [setup report](reports/2026-11-06-codex-setup-linux.md), [delivery report](reports/2026-11-06-codex-delivery-linux.md).
 - **Verified:** only on Linux, with a fake app-server. No real Codex model turn has run yet.
@@ -16,7 +16,8 @@ Updated 2026-11-06 by Claude Code (Q-008 decided; product state below retained).
 - **`main` ([PR #32](https://github.com/kolotiloff/agent-messenger/pull/32)):** T-006 is done. The window creates a Codex session and allows model calls only for it ([SESSION_SETUP.md](SESSION_SETUP.md)).
 - **T-004 accepted on the Mac with preview.21:** real Codex answered two messages from the window, with both turns verified ([report](reports/2026-11-06-codex-window-mac.md)). A paused queue after setup was found and fixed in [PR #33](https://github.com/kolotiloff/agent-messenger/pull/33).
 - **Direction decided (2026-11-06):** the product becomes "one task, one session" ([D-021–D-023](DECISIONS.md), [RETHINK.md](RETHINK.md)). The coordinator is the owner's Claude-app chat with Messenger over MCP and a blocking `wait`, confirmed by the [T-023 pilot](reports/2026-11-06-wait-pilot-claude-mac.md). Work so far is on branch `claude/vigilant-darwin-34d88b` (documentation and `experiments/wait_probe`); no product code changed yet.
-- **Next:** T-022 (publish a reply only after verification), then T-024–T-028 in [TASKS.md](TASKS.md). Persistent paths stay until T-028. Claude ↔ Codex with real models now happens in T-027.
+- **Window and projects decided (2026-11-06):** one working folder per project per computer (D-025), several projects at once with one coordinator chat each (D-026), window approved as [docs/mockups/2026-11-06-task-window.html](mockups/2026-11-06-task-window.html) (D-024, details in T-029). PR #35 (T-009) is cancelled: do not merge or build on it.
+- **Next:** T-022 (publish a reply only after verification), then T-024, T-025, T-026, T-029, then the Mac acceptance T-027 and T-028 in [TASKS.md](TASKS.md). Persistent paths stay until T-028. Claude ↔ Codex with real models happens in T-027.
 - **Mac status:** after the freeze and reboot, preview.19 would not open. All reservations pointed to a test directory in `/private/tmp` that macOS had deleted. The owner moved `active-runs.json` aside after checking the evidence, and the window now works with the default data directory and empty history ([report](reports/2026-11-06-reboot-temp-root-mac.md)). The old Claude test session no longer exists. Fixes (`recover-missing-root`, refusing temporary data directories) are in PR #31 and ship with the next build.
 
 Codex CLI for model-free checks in a cloud session: `npm install @openai/codex@0.155.1` in a scratch directory. Then use the native binary under `node_modules/@openai/codex-linux-x64/vendor/*/bin/codex` with `MESSENGER_CODEX_PROBE=...`.
