@@ -71,16 +71,21 @@ type Supervisor struct {
 	cancel     context.CancelFunc
 	ctx        context.Context
 
-	mu           sync.Mutex
-	jobs         map[string]*activeJob
-	streams      sync.WaitGroup
-	liveStreams  atomic.Int32
-	beforeSignal func()
-	dispatch     sync.Mutex
-	stopping     atomic.Bool
-	starting     atomic.Bool
-	codex        codexOwners
-	tasks        taskRuns
+	mu          sync.Mutex
+	jobs        map[string]*activeJob
+	streams     sync.WaitGroup
+	liveStreams atomic.Int32
+	// streamOpening counts stream controllers that have not finished starting
+	// their process. Only one may start at a time: the startup lease is
+	// exclusive, and a second start would fail and leave its message
+	// uncertain.
+	streamOpening atomic.Int32
+	beforeSignal  func()
+	dispatch      sync.Mutex
+	stopping      atomic.Bool
+	starting      atomic.Bool
+	codex         codexOwners
+	tasks         taskRuns
 }
 
 type activeJob struct {
@@ -209,7 +214,7 @@ func (s *Supervisor) loop(ctx context.Context) {
 			continue
 		}
 		if stream, ok := launcher.(StreamLauncher); ok && stream.StreamingEnabled() {
-			if s.liveStreams.Load() >= maxClaudeStreams {
+			if s.liveStreams.Load() >= maxClaudeStreams || s.streamOpening.Load() > 0 {
 				continue
 			}
 			var token string
@@ -226,6 +231,7 @@ func (s *Supervisor) loop(ctx context.Context) {
 			// owners, so one live stream does not starve another session.
 			s.streams.Add(1)
 			s.liveStreams.Add(1)
+			s.streamOpening.Add(1)
 			go func() {
 				defer s.streams.Done()
 				defer s.liveStreams.Add(-1)
