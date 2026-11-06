@@ -54,6 +54,7 @@ messenger --root КАТАЛОГ_ДАННЫХ ui
 - [Установка, обновление и сборка preview](docs/INSTALL.md)
 - [Автоматические проверки и их границы](docs/CI.md)
 - [Локальное окно, сообщения и восстановление отправок](docs/LOCAL_UI.md)
+- [Настройка CLI и создание тестовой сессии из окна](docs/SESSION_SETUP.md)
 - [Фоновый запуск и повторное подключение](docs/BACKGROUND.md)
 - [Пассивная диагностика](docs/DIAGNOSTICS.md) и [явная проверка CLI](docs/CLI_CHECK.md)
 - [Постоянный Claude: очередь и ограничения восстановления](docs/CLAUDE_STREAM.md)

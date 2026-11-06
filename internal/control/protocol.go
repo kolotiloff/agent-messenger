@@ -34,14 +34,15 @@ type Request struct {
 }
 
 type Status struct {
-	StreamState string `json:"stream_state,omitempty"`
-	Paused      bool   `json:"paused"`
-	CLILaunch   string `json:"cli_launch"`
-	Broker      string `json:"broker"`
-	Held        int    `json:"held_sessions"`
-	Queued      int    `json:"queued"`
-	Supervisor  int    `json:"supervisor_pid"`
-	Detail      string `json:"detail,omitempty"`
+	SessionSetup bool   `json:"session_setup,omitempty"`
+	StreamState  string `json:"stream_state,omitempty"`
+	Paused       bool   `json:"paused"`
+	CLILaunch    string `json:"cli_launch"`
+	Broker       string `json:"broker"`
+	Held         int    `json:"held_sessions"`
+	Queued       int    `json:"queued"`
+	Supervisor   int    `json:"supervisor_pid"`
+	Detail       string `json:"detail,omitempty"`
 }
 
 type StopResult struct {
@@ -133,6 +134,17 @@ func Serve(ln net.Listener, handler Handler) error {
 
 func dispatch(handler Handler, request Request) Response {
 	switch request.Cmd {
+	case "setup-new-claude":
+		h, ok := handler.(interface {
+			SetupNewClaude(string, string, string, string, string) error
+		})
+		if !ok {
+			return Response{Error: "setup unsupported; update the background client"}
+		}
+		if err := h.SetupNewClaude(request.Environment, request.ConversationID, request.Alias, request.CLI, request.Workspace); err != nil {
+			return Response{Error: "session setup rejected; existing sessions unchanged"}
+		}
+		return Response{OK: true}
 	case "ui-prepare", "ui-submit", "ui-ack", "ui-outbox":
 		h, ok := handler.(interface {
 			PrepareUIMessage(string, string, string) error

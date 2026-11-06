@@ -393,6 +393,9 @@ func (s *Supervisor) Status() (control.Status, error) {
 		Broker:     "not_configured",
 		Supervisor: os.Getpid(),
 	}
+	if stream, ok := s.launcher.(StreamLauncher); ok {
+		status.SessionSetup = stream.StreamingEnabled()
+	}
 	if labeled, ok := s.launcher.(interface{ LaunchLabel() string }); ok {
 		status.CLILaunch = labeled.LaunchLabel()
 	} else if s.launcher.Enabled() {
@@ -622,6 +625,32 @@ func (s *Supervisor) Resolve(alias, action, confirmation string) (string, error)
 // PrepareCommand is a helper for tests that build a process in its own group
 // without executing a model CLI.
 func PrepareCommand(cmd *exec.Cmd) error { return platform.SetNewGroup(cmd) }
+
+// SetupNewClaude creates an isolated workspace and atomically records the exact
+// idempotent setup operation. It never queues a message or changes permissions.
+func (s *Supervisor) SetupNewClaude(environment, id, alias, cli, workspace string) error {
+	s.dispatch.Lock()
+	defer s.dispatch.Unlock()
+	stream, ok := s.launcher.(StreamLauncher)
+	if !ok || !stream.StreamingEnabled() || s.stopping.Load() {
+		return errors.New("new-session setup requires an available streaming client")
+	}
+	if !core.ValidSetupID(id) || workspace != "" {
+		return core.ErrRejected
+	}
+	parent := filepath.Join(s.root, "workspaces")
+	workspace = filepath.Join(parent, id)
+	for _, dir := range []string{parent, workspace} {
+		if err := os.Mkdir(dir, 0700); err != nil && !os.IsExist(err) {
+			return err
+		}
+		info, err := os.Lstat(dir)
+		if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return core.ErrRejected
+		}
+	}
+	return s.store.SetupNewClaude(environment, id, alias, cli, workspace)
+}
 
 // CreateClaudeSession allocates a new exact ID without calling a model.
 func (s *Supervisor) CreateClaudeSession(environment, alias, cli, workspace string) (string, error) {

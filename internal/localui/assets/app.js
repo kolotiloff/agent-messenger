@@ -80,6 +80,9 @@
   let selected = '', cursor = '', overview = null, timelineVersion = 0, refreshVersion = 0;
   let timelineAbort = null, lastStatus = null, sending = false, queueBusy = false, pending = null, pendingBroken = false;
   let outboxItems = [], outboxReady = false, discoveryAgents = [];
+  const agentChecks=new Map(),agentSelections=new Map();
+  let setupProvider='',checkingAgent=false;
+  let creatingSession=false,setupPending=null;
   const pendingKey = 'messenger-ui-pending:' + token;
   try {
     const saved = sessionStorage.getItem(pendingKey);
@@ -242,13 +245,14 @@
       const attention=group.some(s=>s.decision_pending||s.recorded_attempt_state==='uncertain'||s.recorded_stream_state==='uncertain');
       card.append(el('p',!overview?'Нет данных клиента':!group.length?'Не подключён':attention?'Требует внимания':'Сессии подключены',attention?'am-status-warn':'am-muted'));
       const dl=el('dl');
-      for(const [label,value] of [['Программа',installed],['Вход в аккаунт','Не проверен'],['Подключённые сессии',overview?String(group.length):'Неизвестно']]) {
+      const check=agentChecks.get(provider);
+      for(const [label,value] of [['Программа',check?.version?.value?installed+' · '+check.version.value:installed],['Вход в аккаунт',check?authenticationText(check.authentication.state):'Не проверен'],['Подключённые сессии',overview?String(group.length):'Неизвестно']]) {
         const pair=el('div');pair.append(el('dt',label),el('dd',value));dl.append(pair);
       }
       card.append(dl);
       const sessionsButton=el('button','Сессии ('+group.length+')','am-agent-action');sessionsButton.type='button';
       sessionsButton.dataset.empty=String(group.length===0);sessionsButton.disabled=!overview||group.length===0;sessionsButton.addEventListener('click',()=>showSessions(provider));card.append(sessionsButton);
-      card.append(el('p','Подключение и перенастройка из окна пока недоступны.','am-small am-muted'));cards.append(card);
+      const setup=el('button','Настроить');setup.type='button';setup.disabled=checkingAgent||creatingSession;setup.addEventListener('click',()=>showAgentSetup(provider));card.append(setup);cards.append(card);
     }
     for(const s of sessions) {
       if(!s.queued&&!s.uncertain&&!s.decision_pending)continue;
@@ -274,6 +278,73 @@
       button.addEventListener('click',()=>{if(pending||sending)return;dialog.close();$('session').value=alias;selected=alias;show('messages');actionControls();loadTimeline(false);});row.append(button);body.append(row);
     }
     if(!dialog.open)dialog.showModal();
+  }
+  function authenticationText(state){return {authenticated:'Вход подтверждён',not_authenticated:'Вход не выполнен',unknown:'Не удалось определить',not_checked:'Не проверен'}[state]||'Не удалось определить';}
+  function showAgentSetup(provider){
+    if(checkingAgent||creatingSession)return;
+    setupProvider=provider;
+    const candidate=agentSelections.get(provider)||discoveryAgents.find(a=>a.provider===provider)||{};
+    $('agent-setup-title').textContent='Настройка · '+(names[provider]||provider);
+    $('agent-cli').value=candidate.cli||'';$('agent-profile').value=candidate.environment||'';
+    $('agent-check-status').textContent='';showAgentCheck(agentChecks.get(provider));
+    $('agent-check').disabled=false;$('agent-cli').disabled=false;$('agent-profile').disabled=false;
+    $('agent-session-setup').hidden=provider!=='claude'||lastStatus?.session_setup!==true;
+    $('agent-setup-limit').textContent=provider!=='claude'?'Подключение сессий этого провайдера готовится.':lastStatus?.session_setup!==true?'Для создания сессии требуется обновлённый фоновый клиент. Проверка программы уже доступна.':'';
+    $('agent-alias').value=setupPending?.alias||'claude-test-'+crypto.randomUUID().slice(0,8);
+    $('agent-create-status').textContent=setupPending?'Предыдущая настройка не подтверждена. Повтор использует те же данные.':'';
+    if(setupPending&&provider==='claude'){$('agent-cli').value=setupPending.cli;$('agent-profile').value=setupPending.environment;}
+    setupFields();
+    $('agent-setup').showModal();
+  }
+  function setupFields(){
+    const frozen=creatingSession||checkingAgent||!!setupPending;
+    $('agent-cli').disabled=frozen;$('agent-profile').disabled=frozen;$('agent-alias').disabled=frozen;
+    $('agent-check').disabled=frozen;
+    $('agent-create').disabled=creatingSession||checkingAgent||lastStatus?.session_setup!==true;
+    $('agent-create').textContent=creatingSession?'Создаём сессию…':setupPending?'Повторить подключение':'Создать тестовую сессию';
+  }
+  async function createAgentSession(){
+    if(creatingSession||checkingAgent||setupProvider!=='claude'||lastStatus?.session_setup!==true)return;
+    if(!setupPending){
+      const draft={id:crypto.randomUUID(),alias:$('agent-alias').value.trim(),cli:$('agent-cli').value.trim(),environment:$('agent-profile').value.trim()};
+      if(!draft.alias||!draft.cli||!draft.environment){$('agent-create-status').textContent='Укажите программу, профиль и название сессии.';return;}
+      setupPending=draft;
+    }
+    creatingSession=true;setupFields();renderCards();$('agent-create-status').textContent='Создаём отдельную сессию…';
+    try{
+      const response=await fetch('/api/setup-claude',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(setupPending),cache:'no-store',signal:AbortSignal.timeout(4500)});
+      if(response.status===400||response.status===409){setupPending=null;throw Error('Настройка отклонена. Проверьте пути и выберите свободное название.');}
+      if(!response.ok)throw Error('Настройка не подтверждена. Повтор использует те же данные.');
+      const result=await response.json();if(result.ok!==true||result.id!==setupPending.id||result.alias!==setupPending.alias)throw Error('Настройка не подтверждена. Повтор использует те же данные.');
+      const alias=setupPending.alias;setupPending=null;
+      $('agent-create-status').textContent='Сессия «'+alias+'» создана. Модель не запускалась.';
+      selected=alias;await refresh();
+      $('agent-setup').close();show('messages');$('session').value=alias;actionControls();loadTimeline(false);
+    }catch(error){$('agent-create-status').textContent=error.name==='TimeoutError'||error.name==='AbortError'?'Ответ не получен. Повтор использует те же данные; можно проверить список сессий.':error.message;}
+    finally{creatingSession=false;setupFields();renderCards();}
+  }
+  function showAgentCheck(check){
+    const result=$('agent-check-result');result.replaceChildren();result.hidden=!check;if(!check)return;
+    const reasons={version_not_qualified_for_auth_probe:'Для этой версии проверка входа ещё не подтверждена.',platform_not_qualified:'Проверка на этой ОС ещё не поддерживается.',unrecognized_version_output:'Программа вернула неизвестный формат версии.',timeout_or_cancelled:'Проверка не завершилась вовремя.',execution_failed:'Не удалось выполнить проверку.',output_limit:'Ответ программы превысил допустимый размер.'};
+    for(const [label,value] of [['Версия',check.version?.value||'Не удалось определить'],['Вход в аккаунт',authenticationText(check.authentication?.state)],['Проверено',check.checked_at?new Date(check.checked_at).toLocaleString():'Время неизвестно'],['Программа',check.cli],['Профиль',check.environment]]){
+      if(!value)continue;const pair=el('div');pair.append(el('dt',label),el('dd',value));result.append(pair);
+    }
+    const reason=reasons[check.authentication?.reason]||reasons[check.version?.reason];
+    if(reason)result.append(el('p',reason,'am-small am-muted'));
+  }
+  async function checkAgent(){
+    if(checkingAgent||!setupProvider)return;
+    const provider=setupProvider,selection={provider,cli:$('agent-cli').value.trim(),environment:$('agent-profile').value.trim()};
+    if(!selection.cli||!selection.environment){$('agent-check-status').textContent='Укажите программу и каталог профиля.';return;}
+    checkingAgent=true;agentChecks.delete(provider);agentSelections.set(provider,selection);showAgentCheck(null);setupFields();renderCards();
+    $('agent-cli').disabled=true;$('agent-profile').disabled=true;$('agent-check').disabled=true;$('agent-check-status').textContent='Проверяем версию и вход…';
+    try{
+      const response=await fetch('/api/check-cli',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(selection),cache:'no-store',signal:AbortSignal.timeout(22000)});
+      if(!response.ok)throw Error(response.status===409?'Проверка уже выполняется. Дождитесь её завершения.':response.status===422?'Проверьте путь к программе и существующему профилю.':'Проверка не завершилась. Можно повторить позже.');
+      const result=await response.json();if(result.ok!==true||result.check?.provider!==provider)throw Error('Ответ проверки не подтверждён.');
+      agentChecks.set(provider,result.check);showAgentCheck(result.check);$('agent-check-status').textContent='Проверка завершена.';
+    }catch(error){$('agent-check-status').textContent=error.name==='TimeoutError'||error.name==='AbortError'?'Проверка не завершилась вовремя. Результат неизвестен.':error.message;}
+    finally{checkingAgent=false;setupFields();renderCards();}
   }
   function renderMessage(item) {
     const group=el('article',undefined,'am-message-group');
@@ -390,6 +461,10 @@
     $('app-update-version').hidden=true;
   };
   $('session-dialog-close').addEventListener('click',()=>$('session-dialog').close());
+  $('agent-setup-close').addEventListener('click',()=>$('agent-setup').close());
+  $('agent-check').addEventListener('click',checkAgent);
+  $('agent-create').addEventListener('click',createAgentSession);
+  for(const field of [$('agent-cli'),$('agent-profile')])field.addEventListener('input',()=>{agentChecks.delete(setupProvider);showAgentCheck(null);$('agent-check-status').textContent='';renderCards();});
   $('queue-toggle').addEventListener('click',()=>{
     const expanded=$('queue-toggle').getAttribute('aria-expanded')!=='true';
     $('queue-toggle').setAttribute('aria-expanded',String(expanded));

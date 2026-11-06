@@ -1,5 +1,6 @@
 // Package localui exposes selected local reads and explicit queue actions.
-// It never launches a CLI or proxies arbitrary control commands.
+// Explicit diagnostics execute only the selected CLI's qualified status
+// commands. The UI never opens model sessions or proxies arbitrary commands.
 package localui
 
 import (
@@ -16,6 +17,8 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -57,16 +60,24 @@ func RunWithUpdates(ctx context.Context, root string, port int, out io.Writer, c
 		return control.CallContext(ctx, root, r)
 	}
 	h := newHandlerWithUpdates(host, token, call, func(ctx context.Context) any {
-		r := diagnostics.Collect(ctx, root)
-		// Avoid copying private root and profile paths into UI discovery.
+		r := diagnostics.CollectDesktop(ctx, root)
+		// Only selected installation/profile paths reach this authenticated local
+		// setup UI; never credentials, session IDs or the database inspection.
 		type candidate struct {
-			Provider string `json:"provider"`
-			Name     string `json:"name"`
-			State    string `json:"state"`
+			Provider    string `json:"provider"`
+			Name        string `json:"name"`
+			State       string `json:"state"`
+			CLI         string `json:"cli,omitempty"`
+			Environment string `json:"environment,omitempty"`
 		}
 		list := []candidate{}
+		home, _ := os.UserHomeDir()
 		for _, a := range r.Agents {
-			list = append(list, candidate{a.Provider, a.Name, a.CLI.State})
+			profile := ""
+			if home != "" {
+				profile = filepath.Join(home, "."+a.Provider)
+			}
+			list = append(list, candidate{a.Provider, a.Name, a.CLI.State, a.CLI.Path, profile})
 		}
 		return struct {
 			OS        string      `json:"os"`
@@ -74,7 +85,7 @@ func RunWithUpdates(ctx context.Context, root string, port int, out io.Writer, c
 			Agents    []candidate `json:"agents"`
 		}{r.OS, r.CheckedAt, list}
 	}, channel)
-	srv := &http.Server{Handler: h, ReadHeaderTimeout: 3 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 7 * time.Second, IdleTimeout: 20 * time.Second, MaxHeaderBytes: 8192, ErrorLog: log.New(io.Discard, "", 0)}
+	srv := &http.Server{Handler: h, ReadHeaderTimeout: 3 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 25 * time.Second, IdleTimeout: 20 * time.Second, MaxHeaderBytes: 8192, ErrorLog: log.New(io.Discard, "", 0)}
 	stop := context.AfterFunc(ctx, func() { _ = srv.Close() })
 	defer stop()
 	if _, err := fmt.Fprintf(out, "http://%s/#%s\n", host, token); err != nil {
@@ -92,6 +103,11 @@ func newHandler(host, token string, call caller, discover func(context.Context) 
 }
 
 func newHandlerWithUpdates(host, token string, call caller, discover func(context.Context) any, channel *updatefeed.Channel) http.Handler {
+	return newHandlerWithChecks(host, token, call, discover, channel, diagnostics.CheckCLI)
+}
+
+func newHandlerWithChecks(host, token string, call caller, discover func(context.Context) any, channel *updatefeed.Channel, checker cliChecker) http.Handler {
+	busy := make(chan struct{}, 1)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -110,7 +126,7 @@ func newHandlerWithUpdates(host, token string, call caller, discover func(contex
 			http.Error(w, "cross-site request refused", http.StatusForbidden)
 			return
 		}
-		mutation := r.URL.Path == "/api/enqueue" || r.URL.Path == "/api/pause" || r.URL.Path == "/api/resume" || r.URL.Path == "/api/outbox/ack"
+		mutation := r.URL.Path == "/api/enqueue" || r.URL.Path == "/api/pause" || r.URL.Path == "/api/resume" || r.URL.Path == "/api/outbox/ack" || r.URL.Path == "/api/check-cli" || r.URL.Path == "/api/setup-claude"
 		method := http.MethodGet
 		if mutation {
 			method = http.MethodPost
@@ -155,7 +171,11 @@ func newHandlerWithUpdates(host, token string, call caller, discover func(contex
 			channel.ServeHTTP(w, r)
 			return
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+		deadline := 3 * time.Second
+		if r.URL.Path == "/api/check-cli" {
+			deadline = 20 * time.Second
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), deadline)
 		defer cancel()
 		if mutation {
 			// A key alone is not enough for a browser mutation: require the exact
@@ -172,8 +192,24 @@ func newHandlerWithUpdates(host, token string, call caller, discover func(contex
 			r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 			decoder := json.NewDecoder(r.Body)
 			decoder.DisallowUnknownFields()
+			if r.URL.Path == "/api/check-cli" {
+				serveCLICheck(w, r.WithContext(ctx), decoder, checker, busy)
+				return
+			}
 			var req control.Request
-			if r.URL.Path == "/api/enqueue" {
+			if r.URL.Path == "/api/setup-claude" {
+				var input struct {
+					ID          string `json:"id"`
+					Alias       string `json:"alias"`
+					CLI         string `json:"cli"`
+					Environment string `json:"environment"`
+				}
+				if err := decoder.Decode(&input); err != nil || !core.ValidSetupID(input.ID) || strings.TrimSpace(input.Alias) == "" || len(input.Alias) > 128 || !filepath.IsAbs(input.CLI) || !filepath.IsAbs(input.Environment) || len(input.CLI) > 4096 || len(input.Environment) > 4096 {
+					http.Error(w, "invalid new session", 400)
+					return
+				}
+				req = control.Request{Cmd: "setup-new-claude", ConversationID: input.ID, Alias: input.Alias, CLI: input.CLI, Environment: input.Environment}
+			} else if r.URL.Path == "/api/enqueue" {
 				var envelope struct {
 					ID    string `json:"message_id"`
 					Alias string `json:"alias"`
@@ -210,6 +246,12 @@ func newHandlerWithUpdates(host, token string, call caller, discover func(contex
 				return
 			}
 			response, err := call(ctx, req)
+			if req.Cmd == "setup-new-claude" && err == nil && !response.OK {
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+				w.WriteHeader(http.StatusConflict)
+				writeJSON(w, map[string]any{"ok": false, "state": "rejected"})
+				return
+			}
 			if req.Cmd == "ui-prepare" && err == nil && response.OK {
 				req = control.Request{Cmd: "ui-submit", MessageID: req.MessageID}
 				response, err = call(ctx, req)
@@ -223,6 +265,10 @@ func newHandlerWithUpdates(host, token string, call caller, discover func(contex
 			// This ACK proves queue persistence only, never provider success.
 			if req.Cmd == "ui-submit" {
 				writeJSON(w, map[string]any{"ok": true, "message_id": req.MessageID, "created": *response.Created})
+				return
+			}
+			if req.Cmd == "setup-new-claude" {
+				writeJSON(w, map[string]any{"ok": true, "action": req.Cmd, "id": req.ConversationID, "alias": req.Alias})
 				return
 			}
 			writeJSON(w, map[string]any{"ok": true, "action": req.Cmd})

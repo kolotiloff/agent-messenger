@@ -250,3 +250,12 @@ body.am-native #am-concept .am-panel-toggle { margin-left:auto; }
 #am-concept .am-chat-body .am-thread { position:absolute; inset:0; padding-bottom:calc(var(--am-footer-height) + 24px); scroll-padding-bottom:calc(var(--am-footer-height) + 24px); }
 #am-concept .am-chat-footer { position:absolute; bottom:0; left:var(--am-pane-inset); right:var(--am-pane-inset); max-height:65%; overflow:auto; background:var(--am-bg); }
 #am-concept .am-chat-footer .am-outbox { max-height:160px; }
+
+#am-concept .am-setup-body { display:flex; flex-direction:column; gap:var(--am-space-4); padding-top:var(--am-space-4); }
+#am-concept .am-setup-field { display:flex; flex-direction:column; gap:var(--am-space-2); }
+#am-concept .am-setup-field input { width:100%; min-width:0; padding:10px 12px; border:1px solid var(--am-line); border-radius:9px; background:var(--am-field); outline:none; }
+#am-concept .am-setup-field input:focus-visible { background:var(--am-field-hover); }
+#am-concept .am-check-result { display:grid; gap:var(--am-space-3); margin:0; }
+#am-concept .am-check-result dt { color:var(--am-muted); font-size:12px; }
+#am-concept .am-check-result dd { margin:0; overflow-wrap:anywhere; }
+#am-concept #agent-check-status:empty { display:none; }
