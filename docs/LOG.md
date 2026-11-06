@@ -2,6 +2,12 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-06 — Claude Code (Q-008, T-009 started, handover)
+
+- Q-008 decided and implemented: replies to routed replies are not routed again ([PR #34](https://github.com/kolotiloff/agent-messenger/pull/34), CI queued at handover).
+- T-009 started (owner chose option 2): the process tree with parent links and the store states for graceful release and resume are in place; the supervisor wiring, the window button and the tests are next (see HANDOFF).
+- Handing over to a new session because this one's context is full.
+
 ## 2026-11-06 — Claude Code (Claude ↔ Codex on the Mac)
 
 - Released preview.22 from CI. On the Mac, Claude used `send` to ask Codex what day it is, and Codex's answer came back to Claude. All turns were verified. An extra acknowledgment turn led to Q-008.

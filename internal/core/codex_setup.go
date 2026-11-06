@@ -27,6 +27,10 @@ import (
 //	created          thread ID stored; the live process owns it and is idle
 //	busy             one turn of the owner is in flight (codex_turns)
 //
+//	released         the owner was stopped gracefully and every recorded
+//	                 descendant is gone; the reservation was removed and the
+//	                 thread may be resumed by a new owner (ResumeCodex*)
+//
 // Terminal states: not_started (proven never launched; alias released),
 // uncertain (alias and process reservation kept), and retired (recover-codex
 // proved a reboot since launch; reservation removed, session closed, history
@@ -536,6 +540,60 @@ func (s *Store) AbortCodexTurnUnsent(token, reason string) error {
 			return err
 		}
 		return codexStep(tx, setup, "uncertain", reason, "busy")
+	})
+}
+
+// ReleaseCodexOwner records a graceful stop of an idle owner. The caller has
+// already observed the exit, checked that no recorded descendant or group
+// member is alive, and removed the registry reservation.
+func (s *Store) ReleaseCodexOwner(id, detail string) error {
+	return s.tx(func(tx *sql.Tx) error {
+		if err := codexStep(tx, id, "released", detail, "created"); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`UPDATE codex_setups SET exit_observed=1 WHERE id=?`, id)
+		return err
+	})
+}
+
+// BeginCodexResume starts resuming a released thread with a new owner. It is
+// committed before the reservation and exec, like the first launch.
+func (s *Store) BeginCodexResume(id string) error {
+	return s.tx(func(tx *sql.Tx) error {
+		if err := codexStep(tx, id, "launching", "resuming the saved thread with a new owner", "released"); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`UPDATE codex_setups SET pid=NULL,pgid=NULL,start_token=NULL,boot_id=NULL,exit_observed=0,exit_code=NULL WHERE id=?`, id)
+		return err
+	})
+}
+
+// ConfirmCodexResumeConfig requires the same checked config as at setup.
+func (s *Store) ConfirmCodexResumeConfig(id, fingerprint string) error {
+	return s.tx(func(tx *sql.Tx) error {
+		var stored sql.NullString
+		if err := tx.QueryRow(`SELECT config_fingerprint FROM codex_setups WHERE id=?`, id).Scan(&stored); err != nil {
+			return err
+		}
+		if !stored.Valid || stored.String != fingerprint {
+			return fmt.Errorf("%w: effective config changed since setup", ErrRejected)
+		}
+		return codexStep(tx, id, "configured", "effective config unchanged", "started")
+	})
+}
+
+// CompleteCodexResume records that the new owner resumed exactly the stored
+// thread. The session row and alias are unchanged.
+func (s *Store) CompleteCodexResume(id, threadID string) error {
+	return s.tx(func(tx *sql.Tx) error {
+		var stored sql.NullString
+		if err := tx.QueryRow(`SELECT thread_id FROM codex_setups WHERE id=?`, id).Scan(&stored); err != nil {
+			return err
+		}
+		if !stored.Valid || stored.String != threadID {
+			return fmt.Errorf("%w: resumed a different thread", ErrRejected)
+		}
+		return codexStep(tx, id, "created", "thread resumed; owned by live process", "thread_requested")
 	})
 }
 

@@ -116,3 +116,21 @@ func TestLinuxProcessGroupIsObservedAndNotTreatedAsDescendantProof(t *testing.T)
 		t.Fatalf("absence was treated as proof: %+v %v", proof, err)
 	}
 }
+
+func TestParsePSTreeAndDescendants(t *testing.T) {
+	live, err := ParsePSTree("  1 0 1 Wed Nov  5 12:00:00 2026\n 10 1 10 Wed Nov  5 12:00:01 2026\n 11 10 10 Wed Nov  5 12:00:02 2026\n 12 11 12 Wed Nov  5 12:00:03 2026\n 13 1 10 Wed Nov  5 12:00:04 2026\n 14 1 14 Wed Nov  5 12:00:05 2026\n")
+	if err != nil || len(live) != 6 || live[2].PPID != 10 {
+		t.Fatalf("%+v %v", live, err)
+	}
+	got := map[int]bool{}
+	for _, p := range descendantsOf(Observation{PID: 10, PGID: 10}, live) {
+		got[p.PID] = true
+	}
+	// 11 is a child, 12 a grandchild in its own group, 13 a reparented group member.
+	if len(got) != 3 || !got[11] || !got[12] || !got[13] {
+		t.Fatalf("descendants %v", got)
+	}
+	if _, err := ParsePSTree("10 x 10 Wed\n"); err == nil {
+		t.Fatal("bad line accepted")
+	}
+}

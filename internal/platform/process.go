@@ -14,6 +14,8 @@ type Proc struct {
 	PID        int
 	PGID       int
 	StartToken string
+	// PPID is filled only by ProcessTree; Snapshot leaves it zero.
+	PPID int
 }
 
 // Observation is what the supervisor recorded at launch.
@@ -68,6 +70,72 @@ func OwnsObservation(stored Observation) (bool, error) {
 	for _, proc := range live {
 		if proc.PID == stored.PID && proc.StartToken == stored.StartToken && proc.PGID == stored.PGID {
 			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// Descendants returns the live processes that descend from root through
+// parent links, plus every other live member of root's process group. It is
+// taken just before a graceful stop, so their later absence can be checked. A
+// process that had already detached and been reparented is not visible here.
+func Descendants(root Observation) ([]Proc, error) {
+	boot, live, err := ProcessTree()
+	if err != nil {
+		return nil, err
+	}
+	if boot != root.BootID {
+		return nil, fmt.Errorf("%w: boot changed", ErrNotProven)
+	}
+	return descendantsOf(root, live), nil
+}
+
+func descendantsOf(root Observation, live []Proc) []Proc {
+	children := map[int][]Proc{}
+	for _, p := range live {
+		children[p.PPID] = append(children[p.PPID], p)
+	}
+	seen := map[int]bool{root.PID: true}
+	var out []Proc
+	queue := []int{root.PID}
+	for len(queue) > 0 {
+		pid := queue[0]
+		queue = queue[1:]
+		for _, child := range children[pid] {
+			if !seen[child.PID] {
+				seen[child.PID] = true
+				out = append(out, child)
+				queue = append(queue, child.PID)
+			}
+		}
+	}
+	for _, p := range live {
+		if p.PGID == root.PGID && !seen[p.PID] {
+			seen[p.PID] = true
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// AnyAlive reports whether any recorded process (same pid and start token) or
+// any member of the group is still alive. An error is never "none alive".
+func AnyAlive(boot string, pgid int, recorded []Proc) (bool, error) {
+	current, live, err := ProcessTree()
+	if err != nil {
+		return true, err
+	}
+	if current != boot {
+		return false, nil
+	}
+	for _, p := range live {
+		if pgid > 1 && p.PGID == pgid {
+			return true, nil
+		}
+		for _, r := range recorded {
+			if p.PID == r.PID && p.StartToken == r.StartToken {
+				return true, nil
+			}
 		}
 	}
 	return false, nil
