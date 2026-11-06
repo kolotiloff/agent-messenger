@@ -103,7 +103,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-select-option[aria-disabled=true] { color:var(--am-disabled-text); cursor:default; background:transparent; }
 #am-concept .am-select-check { color:var(--am-check); font-size:18px; line-height:1; width:18px; margin-left:auto; flex-shrink:0; }
 /* History scrolls independently; outgoing bubbles never enclose the reply. */
-#am-concept .am-thread { display:flex; flex-direction:column; gap:24px; flex:1; min-height:0; padding:12px 8px 20px 4px; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; }
+#am-concept .am-thread { display:flex; flex-direction:column; gap:24px; flex:1; min-height:0; padding:12px 24px 20px 4px; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; }
 #am-concept .am-message-group { display:flex; flex-direction:column; gap:22px; min-width:0; }
 #am-concept .am-thread:focus { outline:none; }
 #am-concept .am-message { display:flex; gap:10px; align-items:flex-start; min-width:0; max-width:100%; }
@@ -219,3 +219,18 @@ body.am-native #am-concept .am-panel-toggle { margin-left:auto; }
 #am-concept #queue-action-status:not(:empty) { padding:9px 10px; border-radius:8px; background:var(--am-warnbg); color:var(--am-warn); }
 #am-concept #permission:empty { display:none; }
 #am-concept .am-queue-list { border-top:1px solid var(--am-line); padding-top:14px; font-size:12px; }
+
+/* Overlay scrollbars also need real padding: scrollbar-gutter alone does not reserve it. */
+#am-concept :is(.am-thread,.am-queue-list,.am-dialog-body,.am-select-menu,.am-machines) { scrollbar-gutter:stable; }
+#am-concept .am-queue-list { padding-right:16px; }
+#am-concept .am-dialog-body { padding-right:20px; }
+#am-concept .am-select-menu { padding-right:20px; }
+#am-concept .am-machines { padding-right:12px; }
+
+/* History owns the full-height scrollbar at the conversation's right edge. */
+#am-concept .am-chat-layout { gap:0; }
+#am-concept .am-chat-head { margin-right:24px; }
+#am-concept .am-chat-body { position:relative; flex:1; min-height:0; --am-footer-height:120px; }
+#am-concept .am-chat-body .am-thread { position:absolute; inset:0; padding-bottom:calc(var(--am-footer-height) + 24px); scroll-padding-bottom:calc(var(--am-footer-height) + 24px); }
+#am-concept .am-chat-footer { position:absolute; bottom:0; left:0; right:24px; max-height:65%; overflow:auto; background:var(--am-bg); }
+#am-concept .am-chat-footer .am-outbox { max-height:160px; }

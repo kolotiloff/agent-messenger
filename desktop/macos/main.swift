@@ -71,6 +71,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         connect()
     }
 
+    func applicationDidBecomeActive(_ notification: Notification) {
+        updates.checkAutomaticallyIfDue()
+    }
+
     func fatalLaunch(_ text: String) {
         let alert = NSAlert(); alert.messageText = "Agent Messenger"; alert.informativeText = text
         alert.runModal(); NSApp.terminate(nil)

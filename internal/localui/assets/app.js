@@ -400,6 +400,12 @@
   $('message-text').addEventListener('input',()=>{const field=$('message-text');field.style.height='auto';field.style.height=Math.min(140,Math.max(44,field.scrollHeight))+'px';actionControls();});
   $('send').addEventListener('click',sendMessage);$('queue-action').addEventListener('click',changeQueue);
   $('refresh').addEventListener('click',refresh);$('older').addEventListener('click',()=>loadTimeline(true));
+  const chatBody=root.querySelector('.am-chat-body'),chatFooter=root.querySelector('.am-chat-footer');
+  new ResizeObserver(()=>{
+    const thread=$('thread'),atBottom=thread.scrollHeight-thread.clientHeight-thread.scrollTop<32;
+    chatBody.style.setProperty('--am-footer-height',chatFooter.getBoundingClientRect().height+'px');
+    if(atBottom)thread.scrollTop=thread.scrollHeight;
+  }).observe(chatFooter);
   enhanceSelect($('theme-select'));enhanceSelect($('session'));
   refresh();
 })();

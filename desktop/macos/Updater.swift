@@ -14,6 +14,7 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverD
     var fetching = false
     var fetchStatus = ""
     var fetchTimer: Timer?
+    var lastRemoteCheck = -Double.infinity
     var fetchProcess: Process?
     var watcher: DispatchSourceFileSystemObject?
     var watchWork: DispatchWorkItem?
@@ -43,11 +44,11 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverD
             controller.startUpdater()
             started = true
             startWatchingLocalChannel()
-            fetchTimer = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
-                guard let self = self, self.controller.updater.automaticallyChecksForUpdates else { return }
-                self.fetchRemote(manual: false)
+            fetchTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+                self?.checkAutomaticallyIfDue()
             }
-            if controller.updater.automaticallyChecksForUpdates { fetchRemote(manual: false) }
+            fetchTimer?.tolerance = 15
+            checkAutomaticallyIfDue()
             if controller.updater.automaticallyChecksForUpdates && !controller.updater.sessionInProgress {
                 controller.updater.checkForUpdatesInBackground()
             }
@@ -100,9 +101,16 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverD
             fetchRemote(manual: true)
         }
     }
+    // Focus changes share the same throttle as the timer; waiting never calls a model.
+    func checkAutomaticallyIfDue() {
+        guard started, endpoint != nil, controller.updater.automaticallyChecksForUpdates,
+              ProcessInfo.processInfo.systemUptime - lastRemoteCheck >= 300 else { return }
+        fetchRemote(manual: false)
+    }
     func fetchRemote(manual: Bool) {
         guard !fetching, endpoint != nil, !controller.updater.sessionInProgress,
               let executable = Bundle.main.url(forResource: "messenger", withExtension: nil) else { return }
+        lastRemoteCheck = ProcessInfo.processInfo.systemUptime
         fetching = true; fetchStatus = "Проверяем GitHub…"; onStatus?(availableVersion)
         let process = Process(); process.executableURL = executable; process.arguments = ["update-fetch"]
         // No shell, GitHub token, provider settings or permission flags.
