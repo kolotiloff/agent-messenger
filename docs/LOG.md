@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-06 — Claude Code with the owner (window direction)
+
+- Agreed the future window with the owner on a mockup built from the real window files: an observation panel with a "Tasks" tab, coordinator status, no composer, and direct owner questions only when the project's rules allow them. Recorded as D-024; added T-029.
+
 ## 2026-11-06 — Claude Code with the owner (Q-008 decided)
 
 - The owner accepted the task model: D-021 (one task, one session; Claude-app coordinator with `wait`; clarifications resume the same task session; best-effort cleanup), D-022 (planning rules and parallelism live in each project's docs and the coordinator's judgement; no approval or worker limit in Messenger), D-023 (workers use their project's settings). Codex as coordinator deferred.
