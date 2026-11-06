@@ -32,6 +32,17 @@ const TaskWorkerPrompt = "You are a worker started by Agent Messenger for one ta
 	"ask (a question for the coordinator) or ask_owner (a question for the owner), then stop. " +
 	"Do not call any messenger_task tool after that."
 
+// TaskTestPrompt is the first message in the messenger-only profile, which
+// has no other tools.
+const TaskTestPrompt = "Agent Messenger test run. Use ONLY the messenger_task tools: call read_task, then exactly one of report, ask or ask_owner, then stop."
+
+func taskPrompt(profile string) string {
+	if profile == ProfileMessengerOnly {
+		return TaskTestPrompt
+	}
+	return TaskWorkerPrompt
+}
+
 var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 // TaskRunSpec describes one worker run.
@@ -97,7 +108,7 @@ func claudeTaskArgs(s TaskRunSpec) ([]string, error) {
 	} else {
 		args = append(args, "--session-id", s.Session)
 	}
-	args = append(args, TaskWorkerPrompt)
+	args = append(args, taskPrompt(s.Profile))
 	return args, ExplicitResume(args, s.Session)
 }
 
@@ -135,10 +146,10 @@ func codexTaskArgs(s TaskRunSpec) ([]string, error) {
 		args = append(args, "-c", "mcp_servers."+TaskServerName+"."+key+"="+string(encoded))
 	}
 	if s.Resume {
-		args = append(args, "resume", s.Session, TaskWorkerPrompt)
+		args = append(args, "resume", s.Session, taskPrompt(s.Profile))
 		return args, ExplicitResume(args, s.Session)
 	}
-	return append(args, TaskWorkerPrompt), nil
+	return append(args, taskPrompt(s.Profile)), nil
 }
 
 // TaskEventResult is what a worker run's event stream showed.
