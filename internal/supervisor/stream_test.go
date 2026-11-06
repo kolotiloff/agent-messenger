@@ -181,9 +181,11 @@ func seedStreamClient(t *testing.T, mode string) (string, *core.Store) {
 	return root, st
 }
 
+// The bound is generous: macOS CI runners under -race can be slow to start
+// two stream processes, and the wait returns as soon as the state is reached.
 func waitStreamState(t *testing.T, st *core.Store, condition func(core.Snapshot) bool) core.Snapshot {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		snap, err := st.Snapshot()
 		if err != nil {

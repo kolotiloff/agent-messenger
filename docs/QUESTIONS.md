@@ -27,6 +27,12 @@ Cloud sessions run on Linux. **Options:** the owner runs the steps from an agent
 ### Q-007: How does the managed Codex profile sign in?
 Copying the owner's credentials into the managed profile is not implemented and must not be logged or published. A likely option is a standard login into the managed profile done by the owner. **Blocks:** T-004.
 
+### Q-009: How does the window allow task launches?
+The client launches task workers only with `serve --allow-tasks` (cautious default, T-024). The client the window starts today runs without model permission, so tasks stay recorded but are not launched until the client is started with the flag. **Options:** a confirmed "allow tasks" switch in the window, remembered per data directory; or start the window's client with `--allow-tasks` always; or keep the explicit command. **Chosen for now:** nothing is launched without the explicit flag; the window shows that tasks are waiting for permission. **Blocks:** nothing in code; affects T-027.
+
+### Q-010: Should workers load Messenger tools without Claude's ToolSearch?
+Claude Code 2.1.319 defers MCP tools behind `ToolSearch` by default. A real model should find `messenger_task` through it, but this was not verified ([report](reports/2026-11-06-task-workers-linux.md)). `ENABLE_TOOL_SEARCH=false` for workers makes them visible at once but changes the owner's normal session behaviour (D-023). **Chosen for now:** Claude's default; check in T-027.
+
 ## Answered
 
 ### Q-008: Switch to "one task, one session" with the coordinator in the owner's app?

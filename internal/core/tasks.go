@@ -1,0 +1,1432 @@
+package core
+
+import (
+	"crypto/rand"
+	"database/sql"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"unicode/utf8"
+
+	"github.com/kolotiloff/agent-messenger/internal/platform"
+)
+
+// The task model (D-021, D-025, D-026). A task belongs to a project and runs
+// in that project's folder on one computer. Each task has its own worker
+// conversation; a question ends a run, and the answer resumes the same
+// conversation by exact ID in a new run. A new task always gets a new
+// conversation. Nothing is retried automatically.
+//
+// Task states:
+//
+//	running           a run is recorded (intent), launching or running
+//	waiting_coordinator  the last verified run asked the coordinator
+//	waiting_owner     the last verified run asked the owner
+//	done              the last verified run reported; never resumed again
+//	failed            a run exited cleanly but was invalid (no disposition,
+//	                  non-zero exit, provider error, wrong identity)
+//	interrupted       the client restarted while a run was launching or
+//	                  running; the outcome is unknown
+//	blocked           the evidence after a run is unclear (the process group
+//	                  is not empty, or it could not be observed)
+//	cancelled         cancelled before or between runs, or the cancelled
+//	                  run's process was observed to exit
+//
+// Run states: intent (recorded, nothing launched), launching (committed
+// before exec), running (process recorded), then finished, failed,
+// interrupted, blocked or cancelled. A run's receipt works only while the run
+// is running and its conversation identity is bound.
+const taskSchema = `
+CREATE TABLE IF NOT EXISTS projects (
+ name TEXT PRIMARY KEY,
+ created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS project_folders (
+ project TEXT NOT NULL REFERENCES projects(name),
+ computer TEXT NOT NULL,
+ folder TEXT NOT NULL,
+ updated_at TEXT NOT NULL,
+ PRIMARY KEY (project, computer)
+);
+CREATE TABLE IF NOT EXISTS computer_agents (
+ computer TEXT NOT NULL,
+ provider TEXT NOT NULL,
+ cli_path TEXT NOT NULL,
+ environment TEXT NOT NULL DEFAULT '',
+ profile TEXT NOT NULL DEFAULT 'worker',
+ updated_at TEXT NOT NULL,
+ PRIMARY KEY (computer, provider)
+);
+CREATE TABLE IF NOT EXISTS tasks (
+ id TEXT PRIMARY KEY,
+ project TEXT NOT NULL REFERENCES projects(name),
+ op_id TEXT NOT NULL,
+ computer TEXT NOT NULL,
+ provider TEXT NOT NULL,
+ cli_path TEXT NOT NULL,
+ environment TEXT NOT NULL,
+ profile TEXT NOT NULL,
+ folder TEXT NOT NULL,
+ title TEXT NOT NULL,
+ text TEXT NOT NULL,
+ state TEXT NOT NULL,
+ session_id TEXT,
+ detail TEXT NOT NULL DEFAULT '',
+ cancel_requested INTEGER NOT NULL DEFAULT 0,
+ version INTEGER NOT NULL DEFAULT 1,
+ created_at TEXT NOT NULL,
+ updated_at TEXT NOT NULL,
+ finished_at TEXT,
+ UNIQUE (project, op_id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS tasks_session ON tasks(provider, environment, session_id) WHERE session_id IS NOT NULL;
+CREATE TABLE IF NOT EXISTS task_runs (
+ id TEXT PRIMARY KEY,
+ task_id TEXT NOT NULL REFERENCES tasks(id),
+ ordinal INTEGER NOT NULL,
+ kind TEXT NOT NULL,
+ input TEXT NOT NULL,
+ receipt TEXT NOT NULL UNIQUE,
+ state TEXT NOT NULL,
+ reservation TEXT,
+ pid INTEGER,
+ pgid INTEGER,
+ start_token TEXT,
+ boot_id TEXT,
+ identity_bound INTEGER NOT NULL DEFAULT 0,
+ read_seen INTEGER NOT NULL DEFAULT 0,
+ exit_observed INTEGER NOT NULL DEFAULT 0,
+ exit_code INTEGER,
+ group_empty INTEGER NOT NULL DEFAULT 0,
+ provider_ok INTEGER NOT NULL DEFAULT 0,
+ disposition TEXT,
+ disposition_text TEXT,
+ detail TEXT NOT NULL DEFAULT '',
+ created_at TEXT NOT NULL,
+ finished_at TEXT,
+ UNIQUE (task_id, ordinal)
+);
+CREATE TABLE IF NOT EXISTS task_questions (
+ id TEXT PRIMARY KEY,
+ task_id TEXT NOT NULL REFERENCES tasks(id),
+ run_id TEXT NOT NULL UNIQUE REFERENCES task_runs(id),
+ audience TEXT NOT NULL,
+ text TEXT NOT NULL,
+ state TEXT NOT NULL,
+ answer TEXT,
+ answer_op TEXT UNIQUE,
+ answered_by TEXT,
+ created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS task_events (
+ seq INTEGER PRIMARY KEY AUTOINCREMENT,
+ project TEXT NOT NULL,
+ task_id TEXT NOT NULL,
+ audience TEXT NOT NULL,
+ kind TEXT NOT NULL,
+ text TEXT NOT NULL,
+ question_id TEXT,
+ created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS task_events_project ON task_events(project, seq);
+CREATE TABLE IF NOT EXISTS coordinator_connections (
+ project TEXT PRIMARY KEY,
+ last_seen TEXT NOT NULL
+);
+`
+
+// Bounds on stored text. A report is bounded so wait and the window stay
+// responsive; the limit is far above the old 2000-character reply.
+const (
+	MaxTaskText        = 20000
+	MaxDispositionText = 20000
+	MaxTaskTitle       = 120
+	maxProjectName     = 64
+)
+
+// Dispositions a worker run can end with (exactly one per run).
+const (
+	DispositionReport   = "report"
+	DispositionAsk      = "ask"
+	DispositionAskOwner = "ask_owner"
+)
+
+// Audiences of task events. The coordinator's wait returns only coordinator
+// events of its project; owner questions go to the window (D-024).
+// AudienceLog holds events the coordinator caused itself (a start, its
+// answer); they are history for the window and never wake its wait.
+const (
+	AudienceCoordinator = "coordinator"
+	AudienceOwner       = "owner"
+	AudienceLog         = "log"
+)
+
+// TaskProviders are the agents a task can run. Cursor stays off (D-011).
+var TaskProviders = map[string]bool{"claude": true, "codex": true}
+
+var projectNamePattern = regexp.MustCompile(`^[\p{L}\p{N}][\p{L}\p{N} ._-]*$`)
+
+// TemporaryFolder reports whether a folder is in a system temporary
+// directory, which macOS empties on reboot. Tests replace it.
+var TemporaryFolder = func(path string) bool {
+	candidates := []string{os.TempDir(), "/tmp", "/private/tmp", "/var/folders", "/private/var/folders", "/var/tmp", "/private/var/tmp"}
+	for _, dir := range candidates {
+		if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+			candidates = append(candidates, resolved)
+		}
+	}
+	for _, dir := range candidates {
+		dir = filepath.Clean(dir)
+		if dir == "" || dir == "/" {
+			continue
+		}
+		if path == dir || strings.HasPrefix(path, dir+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
+}
+
+// Task is one row of tasks with its newest run.
+type Task struct {
+	ID, Project, Computer, Provider, Profile, Folder, Title, Text, State string
+	SessionID, Detail, CreatedAt, UpdatedAt, FinishedAt                  string
+	CLI, Environment                                                     string
+	CancelRequested                                                      bool
+	Version                                                              int
+	OpenQuestion                                                         *TaskQuestion
+}
+
+// TaskQuestion is a question that a verified run asked.
+type TaskQuestion struct {
+	ID       string `json:"id"`
+	TaskID   string `json:"task_id"`
+	Audience string `json:"audience"`
+	Text     string `json:"text"`
+	State    string `json:"state"`
+}
+
+// TaskRun is one worker run of a task.
+type TaskRun struct {
+	ID, TaskID, Kind, Input, Receipt, State, Reservation string
+	Ordinal                                              int
+	Observation                                          platform.Observation
+	Disposition, DispositionText, Detail                 string
+}
+
+// TaskEvent is one replayable event. Seq is the cursor.
+type TaskEvent struct {
+	Seq        int64  `json:"seq"`
+	TaskID     string `json:"task_id"`
+	Kind       string `json:"kind"`
+	Text       string `json:"text"`
+	QuestionID string `json:"question_id,omitempty"`
+	CreatedAt  string `json:"created_at"`
+}
+
+// ComputerAgent is an agent program registered on a computer.
+type ComputerAgent struct {
+	Computer, Provider, CLI, Environment, Profile string
+}
+
+func randomID() (string, error) {
+	var buf [16]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf[:]), nil
+}
+
+// NewSessionUUID returns a random version 4 UUID for a new Claude conversation.
+func NewSessionUUID() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	b[6] = b[6]&0x0f | 0x40
+	b[8] = b[8]&0x3f | 0x80
+	h := hex.EncodeToString(b[:])
+	return h[:8] + "-" + h[8:12] + "-" + h[12:16] + "-" + h[16:20] + "-" + h[20:], nil
+}
+
+// LocalComputer returns this data directory's computer ID, created once.
+func (s *Store) LocalComputer() (string, error) {
+	var id string
+	err := s.tx(func(tx *sql.Tx) error {
+		var err error
+		id, err = localComputer(tx)
+		return err
+	})
+	return id, err
+}
+
+func localComputer(tx *sql.Tx) (string, error) {
+	var id string
+	err := tx.QueryRow(`SELECT value FROM meta WHERE key='computer_id'`).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
+	id, err = randomID()
+	if err != nil {
+		return "", err
+	}
+	id = "computer-" + id[:12]
+	_, err = tx.Exec(`INSERT INTO meta(key,value) VALUES ('computer_id',?)`, id)
+	return id, err
+}
+
+// ValidProjectName accepts short human names: letters, digits, spaces, dots,
+// dashes and underscores.
+func ValidProjectName(name string) bool {
+	return name != "" && strings.TrimSpace(name) == name && utf8.RuneCountInString(name) <= maxProjectName && projectNamePattern.MatchString(name)
+}
+
+// CanonicalFolder resolves a project folder: an existing absolute directory,
+// not a temporary one.
+func CanonicalFolder(folder string) (string, error) {
+	if !filepath.IsAbs(folder) {
+		return "", fmt.Errorf("%w: the folder must be an absolute path", ErrRejected)
+	}
+	resolved, err := filepath.EvalSymlinks(folder)
+	if err != nil {
+		return "", fmt.Errorf("%w: the folder does not exist", ErrRejected)
+	}
+	info, err := os.Stat(resolved)
+	if err != nil || !info.IsDir() {
+		return "", fmt.Errorf("%w: not a folder", ErrRejected)
+	}
+	if TemporaryFolder(resolved) {
+		return "", fmt.Errorf("%w: temporary folders are emptied on reboot; choose another folder", ErrRejected)
+	}
+	if resolved == "/" {
+		return "", fmt.Errorf("%w: choose a project folder, not the disk root", ErrRejected)
+	}
+	return resolved, nil
+}
+
+// CreateProject creates a project with its folder on this computer. Creating
+// an existing project with the same folder is a no-op.
+func (s *Store) CreateProject(name, folder string) error {
+	if !ValidProjectName(name) {
+		return fmt.Errorf("%w: invalid project name", ErrRejected)
+	}
+	folder, err := CanonicalFolder(folder)
+	if err != nil {
+		return err
+	}
+	return s.tx(func(tx *sql.Tx) error {
+		computer, err := localComputer(tx)
+		if err != nil {
+			return err
+		}
+		var existing int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM projects WHERE name=?`, name).Scan(&existing); err != nil {
+			return err
+		}
+		if existing != 0 {
+			var old string
+			err := tx.QueryRow(`SELECT folder FROM project_folders WHERE project=? AND computer=?`, name, computer).Scan(&old)
+			if err == nil && old == folder {
+				return nil
+			}
+			return fmt.Errorf("%w: a project with this name already exists", ErrRejected)
+		}
+		at := now()
+		if _, err := tx.Exec(`INSERT INTO projects(name,created_at) VALUES (?,?)`, name, at); err != nil {
+			return err
+		}
+		_, err = tx.Exec(`INSERT INTO project_folders(project,computer,folder,updated_at) VALUES (?,?,?,?)`, name, computer, folder, at)
+		return err
+	})
+}
+
+// SetProjectFolder changes the project's folder on this computer. Only new
+// tasks use it; each task keeps the folder it recorded (D-025).
+func (s *Store) SetProjectFolder(name, folder string) error {
+	folder, err := CanonicalFolder(folder)
+	if err != nil {
+		return err
+	}
+	return s.tx(func(tx *sql.Tx) error {
+		computer, err := localComputer(tx)
+		if err != nil {
+			return err
+		}
+		var n int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM projects WHERE name=?`, name).Scan(&n); err != nil {
+			return err
+		}
+		if n == 0 {
+			return fmt.Errorf("%w: unknown project", ErrRejected)
+		}
+		_, err = tx.Exec(`INSERT INTO project_folders(project,computer,folder,updated_at) VALUES (?,?,?,?) ON CONFLICT(project,computer) DO UPDATE SET folder=excluded.folder,updated_at=excluded.updated_at`, name, computer, folder, now())
+		return err
+	})
+}
+
+// Project is a project with its folder on this computer.
+type Project struct {
+	Name   string `json:"name"`
+	Folder string `json:"folder"`
+}
+
+// Projects lists the projects and their folders on this computer.
+func (s *Store) Projects() ([]Project, error) {
+	var out []Project
+	err := s.tx(func(tx *sql.Tx) error {
+		computer, err := localComputer(tx)
+		if err != nil {
+			return err
+		}
+		rows, err := tx.Query(`SELECT p.name,COALESCE(f.folder,'') FROM projects p LEFT JOIN project_folders f ON f.project=p.name AND f.computer=? ORDER BY p.created_at,p.name`, computer)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var p Project
+			if err := rows.Scan(&p.Name, &p.Folder); err != nil {
+				return err
+			}
+			out = append(out, p)
+		}
+		return rows.Err()
+	})
+	return out, err
+}
+
+// SetComputerAgent registers an agent program on this computer. profile is
+// "worker" (normal tools, D-023) or "messenger-only" (automated tests).
+func (s *Store) SetComputerAgent(provider, cli, environment, profile string) error {
+	if !TaskProviders[provider] {
+		return fmt.Errorf("%w: unsupported agent", ErrRejected)
+	}
+	if profile != "worker" && profile != "messenger-only" {
+		return fmt.Errorf("%w: unknown profile", ErrRejected)
+	}
+	cli, err := canonicalCLI(cli)
+	if err != nil {
+		return fmt.Errorf("%w: the agent program must be an absolute path to an executable", ErrRejected)
+	}
+	if environment != "" {
+		if environment, err = CanonicalEnvironment(environment); err != nil {
+			return err
+		}
+	}
+	return s.tx(func(tx *sql.Tx) error {
+		computer, err := localComputer(tx)
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(`INSERT INTO computer_agents(computer,provider,cli_path,environment,profile,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(computer,provider) DO UPDATE SET cli_path=excluded.cli_path,environment=excluded.environment,profile=excluded.profile,updated_at=excluded.updated_at`,
+			computer, provider, cli, environment, profile, now())
+		return err
+	})
+}
+
+// ComputerAgents lists the agents registered on this computer.
+func (s *Store) ComputerAgents() ([]ComputerAgent, error) {
+	var out []ComputerAgent
+	err := s.tx(func(tx *sql.Tx) error {
+		computer, err := localComputer(tx)
+		if err != nil {
+			return err
+		}
+		rows, err := tx.Query(`SELECT computer,provider,cli_path,environment,profile FROM computer_agents WHERE computer=? ORDER BY provider`, computer)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var a ComputerAgent
+			if err := rows.Scan(&a.Computer, &a.Provider, &a.CLI, &a.Environment, &a.Profile); err != nil {
+				return err
+			}
+			out = append(out, a)
+		}
+		return rows.Err()
+	})
+	return out, err
+}
+
+func insertTaskEvent(tx *sql.Tx, project, task, audience, kind, text, question string) error {
+	_, err := tx.Exec(`INSERT INTO task_events(project,task_id,audience,kind,text,question_id,created_at) VALUES (?,?,?,?,?,?,?)`,
+		project, task, audience, kind, text, nullString(sql.NullString{String: question, Valid: question != ""}), now())
+	return err
+}
+
+func taskTitle(title, text string) string {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		title = strings.TrimSpace(strings.SplitN(text, "\n", 2)[0])
+	}
+	if utf8.RuneCountInString(title) > MaxTaskTitle {
+		r := []rune(title)
+		title = string(r[:MaxTaskTitle-1]) + "…"
+	}
+	return title
+}
+
+// StartTaskRequest is one start_task call. OpID makes it idempotent: a
+// repeated call with the same OpID returns the same task and launches nothing
+// new; the same OpID with different arguments is refused (D-022).
+type StartTaskRequest struct {
+	Project, OpID, Computer, Provider, Title, Text string
+}
+
+// StartTask records a task and its first run's launch intent in one
+// transaction, before anything is launched. The task runs in the project's
+// folder on the chosen computer; a computer without a folder for the project,
+// or without the agent, refuses it. Only this computer is supported until the
+// broker exists. It returns the task ID and whether it was newly created.
+func (s *Store) StartTask(r StartTaskRequest) (string, bool, error) {
+	r.Text = strings.TrimSpace(r.Text)
+	if r.OpID == "" || len(r.OpID) > 128 || r.Text == "" || utf8.RuneCountInString(r.Text) > MaxTaskText {
+		return "", false, fmt.Errorf("%w: start_task needs an operation id and a task text of 1..%d characters", ErrRejected, MaxTaskText)
+	}
+	if !TaskProviders[r.Provider] {
+		return "", false, fmt.Errorf("%w: unsupported agent %q", ErrRejected, r.Provider)
+	}
+	var id string
+	var created bool
+	err := s.tx(func(tx *sql.Tx) error {
+		computer, err := localComputer(tx)
+		if err != nil {
+			return err
+		}
+		if r.Computer == "" {
+			r.Computer = computer
+		}
+		var old struct{ computer, provider, title, text string }
+		err = tx.QueryRow(`SELECT id,computer,provider,title,text FROM tasks WHERE project=? AND op_id=?`, r.Project, r.OpID).Scan(&id, &old.computer, &old.provider, &old.title, &old.text)
+		if err == nil {
+			if old.computer != r.Computer || old.provider != r.Provider || old.text != r.Text || old.title != taskTitle(r.Title, r.Text) {
+				return fmt.Errorf("%w: this operation id was used for a different task", ErrRejected)
+			}
+			return nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		var projects int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM projects WHERE name=?`, r.Project).Scan(&projects); err != nil {
+			return err
+		}
+		if projects == 0 {
+			return fmt.Errorf("%w: unknown project", ErrRejected)
+		}
+		if r.Computer != computer {
+			return fmt.Errorf("%w: only this computer can run tasks until the network broker exists", ErrRejected)
+		}
+		var folder string
+		if err := tx.QueryRow(`SELECT folder FROM project_folders WHERE project=? AND computer=?`, r.Project, computer).Scan(&folder); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("%w: this computer has no folder for the project; the owner chooses it in the window", ErrRejected)
+			}
+			return err
+		}
+		if info, err := os.Stat(folder); err != nil || !info.IsDir() {
+			return fmt.Errorf("%w: the project folder is missing on this computer", ErrRejected)
+		}
+		var agent ComputerAgent
+		if err := tx.QueryRow(`SELECT cli_path,environment,profile FROM computer_agents WHERE computer=? AND provider=?`, computer, r.Provider).Scan(&agent.CLI, &agent.Environment, &agent.Profile); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("%w: agent %s is not set up on this computer", ErrRejected, r.Provider)
+			}
+			return err
+		}
+		id, err = randomID()
+		if err != nil {
+			return err
+		}
+		id = "task-" + id[:16]
+		var session sql.NullString
+		if r.Provider == "claude" {
+			// Claude takes a caller-chosen ID, recorded before launch. Codex
+			// issues its own; it is bound once from the first run's events.
+			uuid, err := NewSessionUUID()
+			if err != nil {
+				return err
+			}
+			session = sql.NullString{String: uuid, Valid: true}
+		}
+		at := now()
+		if _, err := tx.Exec(`INSERT INTO tasks(id,project,op_id,computer,provider,cli_path,environment,profile,folder,title,text,state,session_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,'running',?,?,?)`,
+			id, r.Project, r.OpID, computer, r.Provider, agent.CLI, agent.Environment, agent.Profile, folder, taskTitle(r.Title, r.Text), r.Text, nullString(session), at, at); err != nil {
+			return err
+		}
+		if err := insertTaskRun(tx, id, 1, "start", r.Text); err != nil {
+			return err
+		}
+		created = true
+		return insertTaskEvent(tx, r.Project, id, AudienceLog, "started", taskTitle(r.Title, r.Text), "")
+	})
+	return id, created, err
+}
+
+func insertTaskRun(tx *sql.Tx, task string, ordinal int, kind, input string) error {
+	id, err := randomID()
+	if err != nil {
+		return err
+	}
+	receipt, err := randomID()
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(`INSERT INTO task_runs(id,task_id,ordinal,kind,input,receipt,state,created_at) VALUES (?,?,?,?,?,?,'intent',?)`, "run-"+id[:16], task, ordinal, kind, input, receipt, now())
+	return err
+}
+
+const taskColumns = `id,project,computer,provider,profile,folder,title,text,state,COALESCE(session_id,''),detail,created_at,updated_at,COALESCE(finished_at,''),cli_path,environment,cancel_requested,version`
+
+func scanTask(scan func(...any) error) (Task, error) {
+	var t Task
+	var cancel int
+	err := scan(&t.ID, &t.Project, &t.Computer, &t.Provider, &t.Profile, &t.Folder, &t.Title, &t.Text, &t.State, &t.SessionID, &t.Detail, &t.CreatedAt, &t.UpdatedAt, &t.FinishedAt, &t.CLI, &t.Environment, &cancel, &t.Version)
+	t.CancelRequested = cancel != 0
+	return t, err
+}
+
+func openQuestion(tx *sql.Tx, task string) (*TaskQuestion, error) {
+	var q TaskQuestion
+	err := tx.QueryRow(`SELECT id,task_id,audience,text,state FROM task_questions WHERE task_id=? AND state='open' ORDER BY rowid DESC LIMIT 1`, task).Scan(&q.ID, &q.TaskID, &q.Audience, &q.Text, &q.State)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &q, nil
+}
+
+// TaskByID reads one task with its open question.
+func (s *Store) TaskByID(id string) (Task, error) {
+	var t Task
+	err := s.tx(func(tx *sql.Tx) error {
+		var err error
+		t, err = scanTask(tx.QueryRow(`SELECT `+taskColumns+` FROM tasks WHERE id=?`, id).Scan)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%w: unknown task", ErrRejected)
+		}
+		if err != nil {
+			return err
+		}
+		t.OpenQuestion, err = openQuestion(tx, id)
+		return err
+	})
+	return t, err
+}
+
+// Tasks lists a project's tasks, newest first. An empty project lists all.
+func (s *Store) Tasks(project string, limit int) ([]Task, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 200
+	}
+	var out []Task
+	err := s.tx(func(tx *sql.Tx) error {
+		rows, err := tx.Query(`SELECT `+taskColumns+` FROM tasks WHERE (?='' OR project=?) ORDER BY created_at DESC, rowid DESC LIMIT ?`, project, project, limit)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			t, err := scanTask(rows.Scan)
+			if err != nil {
+				rows.Close()
+				return err
+			}
+			out = append(out, t)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		for i := range out {
+			if out[i].OpenQuestion, err = openQuestion(tx, out[i].ID); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	return out, err
+}
+
+const runColumns = `id,task_id,ordinal,kind,input,receipt,state,COALESCE(reservation,''),COALESCE(pid,0),COALESCE(pgid,0),COALESCE(start_token,''),COALESCE(boot_id,''),COALESCE(disposition,''),COALESCE(disposition_text,''),detail`
+
+func scanRun(scan func(...any) error) (TaskRun, error) {
+	var r TaskRun
+	err := scan(&r.ID, &r.TaskID, &r.Ordinal, &r.Kind, &r.Input, &r.Receipt, &r.State, &r.Reservation, &r.Observation.PID, &r.Observation.PGID, &r.Observation.StartToken, &r.Observation.BootID, &r.Disposition, &r.DispositionText, &r.Detail)
+	return r, err
+}
+
+// TaskRuns lists a task's runs in order.
+func (s *Store) TaskRuns(task string) ([]TaskRun, error) {
+	var out []TaskRun
+	err := s.tx(func(tx *sql.Tx) error {
+		rows, err := tx.Query(`SELECT `+runColumns+` FROM task_runs WHERE task_id=? ORDER BY ordinal`, task)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			r, err := scanRun(rows.Scan)
+			if err != nil {
+				return err
+			}
+			out = append(out, r)
+		}
+		return rows.Err()
+	})
+	return out, err
+}
+
+// TaskRun reads one run.
+func (s *Store) TaskRun(id string) (TaskRun, error) {
+	var r TaskRun
+	err := s.tx(func(tx *sql.Tx) error {
+		var err error
+		r, err = scanRun(tx.QueryRow(`SELECT `+runColumns+` FROM task_runs WHERE id=?`, id).Scan)
+		return err
+	})
+	return r, err
+}
+
+// NextTaskRunIntents lists runs that are recorded but not launched, oldest
+// first. Reading them never launches anything.
+func (s *Store) NextTaskRunIntents(limit int) ([]string, error) {
+	var out []string
+	err := s.tx(func(tx *sql.Tx) error {
+		rows, err := tx.Query(`SELECT r.id FROM task_runs r JOIN tasks t ON t.id=r.task_id WHERE r.state='intent' AND t.state='running' ORDER BY r.created_at,r.rowid LIMIT ?`, limit)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				return err
+			}
+			out = append(out, id)
+		}
+		return rows.Err()
+	})
+	return out, err
+}
+
+func runTask(tx *sql.Tx, run string) (TaskRun, Task, error) {
+	r, err := scanRun(tx.QueryRow(`SELECT `+runColumns+` FROM task_runs WHERE id=?`, run).Scan)
+	if errors.Is(err, sql.ErrNoRows) {
+		return r, Task{}, fmt.Errorf("%w: unknown run", ErrRejected)
+	}
+	if err != nil {
+		return r, Task{}, err
+	}
+	t, err := scanTask(tx.QueryRow(`SELECT `+taskColumns+` FROM tasks WHERE id=?`, r.TaskID).Scan)
+	return r, t, err
+}
+
+func setRunState(tx *sql.Tx, run, state, detail string, from ...string) error {
+	var current string
+	if err := tx.QueryRow(`SELECT state FROM task_runs WHERE id=?`, run).Scan(&current); err != nil {
+		return err
+	}
+	if !contains(from, current) {
+		return fmt.Errorf("%w: run is %s", ErrRejected, current)
+	}
+	_, err := tx.Exec(`UPDATE task_runs SET state=?,detail=? WHERE id=?`, state, detail, run)
+	return err
+}
+
+func setTaskState(tx *sql.Tx, task, state, detail string) error {
+	finished := sql.NullString{}
+	if state == "done" || state == "failed" || state == "cancelled" {
+		finished = sql.NullString{String: now(), Valid: true}
+	}
+	_, err := tx.Exec(`UPDATE tasks SET state=?,detail=?,updated_at=?,version=version+1,finished_at=COALESCE(?,finished_at) WHERE id=?`, state, detail, now(), nullString(finished), task)
+	return err
+}
+
+// BeginTaskRun is committed BEFORE the reservation and exec. From here a
+// crash leaves the run interrupted; it is never launched again.
+func (s *Store) BeginTaskRun(run, reservation string) (TaskRun, Task, error) {
+	var r TaskRun
+	var t Task
+	err := s.tx(func(tx *sql.Tx) error {
+		var err error
+		r, t, err = runTask(tx, run)
+		if err != nil {
+			return err
+		}
+		if t.State != "running" {
+			return fmt.Errorf("%w: task is %s", ErrRejected, t.State)
+		}
+		if p, err := isPaused(tx); err != nil || p {
+			if err == nil {
+				err = ErrPaused
+			}
+			return err
+		}
+		if t.CancelRequested {
+			if err := setRunState(tx, run, "cancelled", "cancelled before launch", "intent"); err != nil {
+				return err
+			}
+			if err := setTaskState(tx, t.ID, "cancelled", "cancelled before launch"); err != nil {
+				return err
+			}
+			if err := insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "cancelled", "cancelled before the run started", ""); err != nil {
+				return err
+			}
+			return ErrCancelled
+		}
+		if err := setRunState(tx, run, "launching", "process may start; never launched again", "intent"); err != nil {
+			return err
+		}
+		_, err = tx.Exec(`UPDATE task_runs SET reservation=? WHERE id=?`, reservation, run)
+		r.State, r.Reservation = "launching", reservation
+		return err
+	})
+	return r, t, err
+}
+
+// ErrCancelled means the task was cancelled before the run launched.
+var ErrCancelled = errors.New("task cancelled")
+
+// TaskRunNotStarted is only for a definite OS refusal before the executable
+// ran. The task fails; nothing is launched again automatically.
+func (s *Store) TaskRunNotStarted(run, reason string) error {
+	return s.tx(func(tx *sql.Tx) error {
+		r, t, err := runTask(tx, run)
+		if err != nil {
+			return err
+		}
+		if r.Observation.PID != 0 {
+			return fmt.Errorf("%w: a process was recorded", ErrRejected)
+		}
+		if err := setRunState(tx, run, "failed", "not started: "+reason, "launching"); err != nil {
+			return err
+		}
+		if err := setTaskState(tx, t.ID, "failed", "the agent program did not start: "+reason); err != nil {
+			return err
+		}
+		return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "failed", "the agent program did not start: "+reason, "")
+	})
+}
+
+// RecordTaskRunProcess stores the observed process. Tools stay closed until
+// the conversation identity is bound.
+func (s *Store) RecordTaskRunProcess(run string, obs platform.Observation) error {
+	if obs.PID <= 0 || obs.PGID <= 1 || obs.StartToken == "" || obs.BootID == "" {
+		return fmt.Errorf("%w: incomplete process observation", ErrRejected)
+	}
+	return s.tx(func(tx *sql.Tx) error {
+		if err := setRunState(tx, run, "running", "process observed", "launching"); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`UPDATE task_runs SET pid=?,pgid=?,start_token=?,boot_id=? WHERE id=?`, obs.PID, obs.PGID, obs.StartToken, obs.BootID, run)
+		return err
+	})
+}
+
+// BindTaskSession checks the conversation ID the CLI reported. A Claude task
+// and every resumed run must match the recorded ID exactly. A new Codex task
+// binds the first ID once; an ID already bound to another task is refused.
+func (s *Store) BindTaskSession(run, session string) error {
+	if session == "" || len(session) > 128 || strings.TrimSpace(session) != session {
+		return fmt.Errorf("%w: invalid conversation id", ErrRejected)
+	}
+	return s.tx(func(tx *sql.Tx) error {
+		r, t, err := runTask(tx, run)
+		if err != nil {
+			return err
+		}
+		if r.State != "running" {
+			return fmt.Errorf("%w: run is %s", ErrRejected, r.State)
+		}
+		var bound int
+		if err := tx.QueryRow(`SELECT identity_bound FROM task_runs WHERE id=?`, run).Scan(&bound); err != nil {
+			return err
+		}
+		if bound != 0 {
+			var current string
+			_ = tx.QueryRow(`SELECT COALESCE(session_id,'') FROM tasks WHERE id=?`, t.ID).Scan(&current)
+			if current == session {
+				return nil
+			}
+			return fmt.Errorf("%w: a second conversation id was reported", ErrIdentity)
+		}
+		if t.SessionID == "" {
+			if t.Provider != "codex" || r.Ordinal != 1 {
+				return fmt.Errorf("%w: no recorded conversation to resume", ErrIdentity)
+			}
+			var other int
+			if err := tx.QueryRow(`SELECT COUNT(*) FROM tasks WHERE provider=? AND environment=? AND session_id=?`, t.Provider, t.Environment, session).Scan(&other); err != nil {
+				return err
+			}
+			if other != 0 {
+				return fmt.Errorf("%w: conversation already belongs to another task", ErrIdentity)
+			}
+			if _, err := tx.Exec(`UPDATE tasks SET session_id=? WHERE id=? AND session_id IS NULL`, session, t.ID); err != nil {
+				return err
+			}
+		} else if t.SessionID != session {
+			return fmt.Errorf("%w: expected the recorded conversation", ErrIdentity)
+		}
+		_, err = tx.Exec(`UPDATE task_runs SET identity_bound=1 WHERE id=?`, run)
+		return err
+	})
+}
+
+// ErrIdentity means the CLI used a different conversation than recorded.
+var ErrIdentity = errors.New("conversation identity mismatch")
+
+// taskRunForReceipt finds the run a worker tool call belongs to. Its tools
+// work only while the run is running and its identity is bound; a receipt of
+// a finished run is refused.
+func taskRunForReceipt(tx *sql.Tx, run, receipt string) (TaskRun, Task, error) {
+	r, t, err := runTask(tx, run)
+	if err != nil {
+		return r, t, err
+	}
+	var bound int
+	if err := tx.QueryRow(`SELECT identity_bound FROM task_runs WHERE id=?`, run).Scan(&bound); err != nil {
+		return r, t, err
+	}
+	if receipt == "" || receipt != r.Receipt || r.State != "running" || bound != 1 {
+		return r, t, fmt.Errorf("%w: this run's tools are closed", ErrRejected)
+	}
+	return r, t, nil
+}
+
+// TaskBrief is what read_task returns to the worker.
+type TaskBrief struct {
+	TaskID   string `json:"task_id"`
+	Project  string `json:"project"`
+	Folder   string `json:"folder"`
+	Title    string `json:"title"`
+	Task     string `json:"task"`
+	Answer   string `json:"answer,omitempty"`
+	Question string `json:"question,omitempty"`
+	Run      int    `json:"run"`
+}
+
+// ReadTask returns the task and, for a resumed run, the question and answer.
+func (s *Store) ReadTask(run, receipt string) (TaskBrief, error) {
+	var b TaskBrief
+	err := s.tx(func(tx *sql.Tx) error {
+		r, t, err := taskRunForReceipt(tx, run, receipt)
+		if err != nil {
+			return err
+		}
+		b = TaskBrief{TaskID: t.ID, Project: t.Project, Folder: t.Folder, Title: t.Title, Task: t.Text, Run: r.Ordinal}
+		if r.Kind == "answer" {
+			b.Answer = r.Input
+			_ = tx.QueryRow(`SELECT text FROM task_questions WHERE task_id=? AND state='answered' ORDER BY rowid DESC LIMIT 1`, t.ID).Scan(&b.Question)
+		}
+		_, err = tx.Exec(`UPDATE task_runs SET read_seen=1 WHERE id=?`, run)
+		return err
+	})
+	return b, err
+}
+
+// RecordDisposition stores the run's one terminal disposition provisionally.
+// It is published only when the run is verified (FinishTaskRun). A second
+// disposition is refused; repeating the identical one is a no-op.
+func (s *Store) RecordDisposition(run, receipt, kind, text string) error {
+	text = strings.TrimSpace(text)
+	if kind != DispositionReport && kind != DispositionAsk && kind != DispositionAskOwner {
+		return fmt.Errorf("%w: unknown disposition", ErrRejected)
+	}
+	if text == "" || utf8.RuneCountInString(text) > MaxDispositionText {
+		return fmt.Errorf("%w: text must be 1..%d characters", ErrRejected, MaxDispositionText)
+	}
+	return s.tx(func(tx *sql.Tx) error {
+		r, _, err := taskRunForReceipt(tx, run, receipt)
+		if err != nil {
+			return err
+		}
+		var read int
+		if err := tx.QueryRow(`SELECT read_seen FROM task_runs WHERE id=?`, run).Scan(&read); err != nil {
+			return err
+		}
+		if read != 1 {
+			return fmt.Errorf("%w: call read_task first", ErrRejected)
+		}
+		if r.Disposition != "" {
+			if r.Disposition == kind && r.DispositionText == text {
+				return nil
+			}
+			return fmt.Errorf("%w: this run already ended with %s; only one report or question per run", ErrRejected, r.Disposition)
+		}
+		_, err = tx.Exec(`UPDATE task_runs SET disposition=?,disposition_text=? WHERE id=?`, kind, text, run)
+		return err
+	})
+}
+
+// RunEvidence is what the supervisor observed after a run's process ended.
+type RunEvidence struct {
+	ExitObserved bool
+	ExitCode     int
+	// GroupEmpty: the process group was signalled after the exit and was then
+	// observed empty. False when it could not be observed.
+	GroupEmpty bool
+	ProviderOK bool
+	Detail     string
+	// Cancelled: the run was stopped on request.
+	Cancelled bool
+}
+
+// FinishTaskRun verifies a run in one transaction: it revokes the receipt,
+// and publishes the disposition only when identity, provider completion, exit
+// 0, an empty group and exactly one disposition are all present. A cleanly
+// observed but invalid run fails the task; unclear evidence blocks it. It
+// returns the run's final state; "finished", "failed" and "cancelled" mean the
+// process group was observed empty, so the caller may retire the reservation.
+func (s *Store) FinishTaskRun(run string, ev RunEvidence) (string, error) {
+	var final string
+	err := s.tx(func(tx *sql.Tx) error {
+		r, t, err := runTask(tx, run)
+		if err != nil {
+			return err
+		}
+		if r.State != "running" && r.State != "launching" {
+			return fmt.Errorf("%w: run is %s", ErrRejected, r.State)
+		}
+		var bound int
+		if err := tx.QueryRow(`SELECT identity_bound FROM task_runs WHERE id=?`, run).Scan(&bound); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE task_runs SET exit_observed=?,exit_code=?,group_empty=?,provider_ok=?,finished_at=? WHERE id=?`,
+			boolInt(ev.ExitObserved), sql.NullInt64{Int64: int64(ev.ExitCode), Valid: ev.ExitObserved}, boolInt(ev.GroupEmpty), boolInt(ev.ProviderOK), now(), run); err != nil {
+			return err
+		}
+		clean := ev.ExitObserved && ev.GroupEmpty
+		valid := clean && bound == 1 && ev.ExitCode == 0 && ev.ProviderOK && r.Disposition != ""
+		var detail string
+		switch {
+		case !clean:
+			final = "blocked"
+			detail = "process exit or empty process group not observed; nothing is retried"
+		case ev.Cancelled:
+			final = "cancelled"
+			detail = "cancelled; the process exited"
+		case valid:
+			final = "finished"
+			detail = "verified: identity, completion, exit 0, empty group, one " + r.Disposition
+		default:
+			final = "failed"
+			detail = fmt.Sprintf("not verified: exit %d, identity %t, provider %t, disposition %q", ev.ExitCode, bound == 1, ev.ProviderOK, r.Disposition)
+		}
+		if ev.Detail != "" {
+			detail += "; " + ev.Detail
+		}
+		if err := setRunState(tx, run, final, detail, "running", "launching"); err != nil {
+			return err
+		}
+		switch final {
+		case "finished":
+			return publishDisposition(tx, t, r)
+		case "cancelled":
+			if err := setTaskState(tx, t.ID, "cancelled", "cancelled by request"); err != nil {
+				return err
+			}
+			return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "cancelled", "the task was cancelled; its report, if any, was not published", "")
+		case "failed":
+			if err := setTaskState(tx, t.ID, "failed", detail); err != nil {
+				return err
+			}
+			text := "the run was not verified: " + detail
+			if r.DispositionText != "" {
+				text += "\nUnverified text from the worker:\n" + r.DispositionText
+			}
+			return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "failed", bound4000(text), "")
+		default:
+			if err := setTaskState(tx, t.ID, "blocked", detail); err != nil {
+				return err
+			}
+			return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "blocked", detail, "")
+		}
+	})
+	return final, err
+}
+
+func bound4000(text string) string {
+	if utf8.RuneCountInString(text) > MaxDispositionText+1000 {
+		return string([]rune(text)[:MaxDispositionText+1000])
+	}
+	return text
+}
+
+func publishDisposition(tx *sql.Tx, t Task, r TaskRun) error {
+	switch r.Disposition {
+	case DispositionReport:
+		if err := setTaskState(tx, t.ID, "done", "reported"); err != nil {
+			return err
+		}
+		return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "report", r.DispositionText, "")
+	case DispositionAsk, DispositionAskOwner:
+		audience, state := AudienceCoordinator, "waiting_coordinator"
+		if r.Disposition == DispositionAskOwner {
+			audience, state = AudienceOwner, "waiting_owner"
+		}
+		id, err := randomID()
+		if err != nil {
+			return err
+		}
+		id = "q-" + id[:16]
+		if _, err := tx.Exec(`UPDATE task_questions SET state='superseded' WHERE task_id=? AND state='open'`, t.ID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`INSERT INTO task_questions(id,task_id,run_id,audience,text,state,created_at) VALUES (?,?,?,?,?,'open',?)`, id, t.ID, r.ID, audience, r.DispositionText, now()); err != nil {
+			return err
+		}
+		if err := setTaskState(tx, t.ID, state, "waiting for an answer"); err != nil {
+			return err
+		}
+		return insertTaskEvent(tx, t.Project, t.ID, audience, "question", r.DispositionText, id)
+	}
+	return fmt.Errorf("%w: unknown disposition", ErrRejected)
+}
+
+// AnswerTask answers the task's open question and records the next run's
+// launch intent, which resumes the same conversation. opID makes it
+// idempotent: repeating the same answer returns without a second run. The
+// question must be the newest open one and addressed to by (coordinator or
+// owner); a late or stale answer is refused.
+func (s *Store) AnswerTask(task, question, opID, text, by string) error {
+	text = strings.TrimSpace(text)
+	if opID == "" || len(opID) > 128 || text == "" || utf8.RuneCountInString(text) > MaxTaskText {
+		return fmt.Errorf("%w: answer needs an operation id and 1..%d characters", ErrRejected, MaxTaskText)
+	}
+	if by != AudienceCoordinator && by != AudienceOwner {
+		return fmt.Errorf("%w: unknown answerer", ErrRejected)
+	}
+	return s.tx(func(tx *sql.Tx) error {
+		var qTask, audience, state string
+		var oldOp, oldAnswer sql.NullString
+		err := tx.QueryRow(`SELECT task_id,audience,state,answer_op,answer FROM task_questions WHERE id=?`, question).Scan(&qTask, &audience, &state, &oldOp, &oldAnswer)
+		if errors.Is(err, sql.ErrNoRows) || (err == nil && qTask != task) {
+			return fmt.Errorf("%w: unknown question for this task", ErrRejected)
+		}
+		if err != nil {
+			return err
+		}
+		if state == "answered" {
+			if oldOp.String == opID && oldAnswer.String == text {
+				return nil
+			}
+			return fmt.Errorf("%w: this question was already answered", ErrRejected)
+		}
+		if state != "open" {
+			return fmt.Errorf("%w: this question is no longer open", ErrRejected)
+		}
+		if audience != by {
+			return fmt.Errorf("%w: this question is for the %s", ErrRejected, audience)
+		}
+		t, err := scanTask(tx.QueryRow(`SELECT `+taskColumns+` FROM tasks WHERE id=?`, task).Scan)
+		if err != nil {
+			return err
+		}
+		want := "waiting_coordinator"
+		if audience == AudienceOwner {
+			want = "waiting_owner"
+		}
+		if t.State != want || t.CancelRequested {
+			return fmt.Errorf("%w: task is %s", ErrRejected, t.State)
+		}
+		if t.SessionID == "" {
+			return fmt.Errorf("%w: no recorded conversation to resume", ErrRejected)
+		}
+		var used int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM task_questions WHERE answer_op=?`, opID).Scan(&used); err != nil {
+			return err
+		}
+		if used != 0 {
+			return fmt.Errorf("%w: this operation id was used for another answer", ErrRejected)
+		}
+		var ordinal int
+		if err := tx.QueryRow(`SELECT MAX(ordinal) FROM task_runs WHERE task_id=?`, task).Scan(&ordinal); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE task_questions SET state='answered',answer=?,answer_op=?,answered_by=? WHERE id=?`, text, opID, by, question); err != nil {
+			return err
+		}
+		if err := insertTaskRun(tx, task, ordinal+1, "answer", text); err != nil {
+			return err
+		}
+		if err := setTaskState(tx, task, "running", "answered; the same conversation resumes"); err != nil {
+			return err
+		}
+		answeredFor := AudienceLog
+		if by == AudienceOwner {
+			answeredFor = AudienceOwner
+		}
+		return insertTaskEvent(tx, t.Project, task, answeredFor, "answered", text, question)
+	})
+}
+
+// CancelTask cancels a task. A task that is waiting, or whose run is only
+// recorded, is cancelled at once. A launched run is stopped by the
+// supervisor, which signals its process group; the task is cancelled when the
+// exit is observed, or blocked if it cannot be. Finished tasks are refused.
+// It returns the resulting state.
+func (s *Store) CancelTask(task string) (string, error) {
+	var state string
+	err := s.tx(func(tx *sql.Tx) error {
+		t, err := scanTask(tx.QueryRow(`SELECT `+taskColumns+` FROM tasks WHERE id=?`, task).Scan)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%w: unknown task", ErrRejected)
+		}
+		if err != nil {
+			return err
+		}
+		state = t.State
+		switch t.State {
+		case "cancelled":
+			return nil
+		case "waiting_coordinator", "waiting_owner":
+			if _, err := tx.Exec(`UPDATE task_questions SET state='superseded' WHERE task_id=? AND state='open'`, task); err != nil {
+				return err
+			}
+			state = "cancelled"
+			if err := setTaskState(tx, task, state, "cancelled while waiting for an answer"); err != nil {
+				return err
+			}
+			return insertTaskEvent(tx, t.Project, task, AudienceCoordinator, "cancelled", "the task was cancelled", "")
+		case "running":
+			if _, err := tx.Exec(`UPDATE tasks SET cancel_requested=1,updated_at=?,version=version+1 WHERE id=?`, now(), task); err != nil {
+				return err
+			}
+			var launched int
+			if err := tx.QueryRow(`SELECT COUNT(*) FROM task_runs WHERE task_id=? AND state IN ('launching','running')`, task).Scan(&launched); err != nil {
+				return err
+			}
+			if launched == 0 {
+				if _, err := tx.Exec(`UPDATE task_runs SET state='cancelled',detail='cancelled before launch' WHERE task_id=? AND state='intent'`, task); err != nil {
+					return err
+				}
+				state = "cancelled"
+				if err := setTaskState(tx, task, state, "cancelled before launch"); err != nil {
+					return err
+				}
+				return insertTaskEvent(tx, t.Project, task, AudienceCoordinator, "cancelled", "the task was cancelled before its run started", "")
+			}
+			state = "cancelling"
+			return nil
+		default:
+			return fmt.Errorf("%w: task is %s", ErrRejected, t.State)
+		}
+	})
+	return state, err
+}
+
+// CancelRequestedRuns lists launched runs whose task asked to be cancelled.
+func (s *Store) CancelRequestedRuns() ([]TaskRun, error) {
+	var out []TaskRun
+	err := s.tx(func(tx *sql.Tx) error {
+		rows, err := tx.Query(`SELECT r.id FROM task_runs r JOIN tasks t ON t.id=r.task_id WHERE t.cancel_requested=1 AND r.state='running'`)
+		if err != nil {
+			return err
+		}
+		var ids []string
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				return err
+			}
+			ids = append(ids, id)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		for _, id := range ids {
+			r, err := scanRun(tx.QueryRow(`SELECT `+runColumns+` FROM task_runs WHERE id=?`, id).Scan)
+			if err != nil {
+				return err
+			}
+			out = append(out, r)
+		}
+		return nil
+	})
+	return out, err
+}
+
+// interruptInheritedTaskRuns runs at startup. A run that was launching or
+// running belonged to the previous client: its outcome is unknown, its
+// reservation stays, and its task is interrupted. It is never relaunched.
+func interruptInheritedTaskRuns(tx *sql.Tx) error {
+	rows, err := tx.Query(`SELECT r.id,r.task_id,t.project FROM task_runs r JOIN tasks t ON t.id=r.task_id WHERE r.state IN ('launching','running')`)
+	if err != nil {
+		return err
+	}
+	type item struct{ run, task, project string }
+	var items []item
+	for rows.Next() {
+		var i item
+		if err := rows.Scan(&i.run, &i.task, &i.project); err != nil {
+			rows.Close()
+			return err
+		}
+		items = append(items, i)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, i := range items {
+		const why = "the client restarted during this run; the outcome is unknown and nothing is retried"
+		if _, err := tx.Exec(`UPDATE task_runs SET state='interrupted',detail=?,finished_at=? WHERE id=?`, why, now(), i.run); err != nil {
+			return err
+		}
+		if err := setTaskState(tx, i.task, "interrupted", why); err != nil {
+			return err
+		}
+		if err := insertTaskEvent(tx, i.project, i.task, AudienceCoordinator, "interrupted", why, ""); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// InterruptInheritedTaskRuns marks the previous client's runs interrupted.
+func (s *Store) InterruptInheritedTaskRuns() error {
+	return s.tx(interruptInheritedTaskRuns)
+}
+
+// TaskEvents returns a project's events after the cursor for one audience,
+// at most limit. Reading never moves anything: a caller that repeats the
+// same cursor gets the same events again.
+func (s *Store) TaskEvents(project, audience string, after int64, limit int) ([]TaskEvent, int64, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	var out []TaskEvent
+	cursor := after
+	err := s.tx(func(tx *sql.Tx) error {
+		rows, err := tx.Query(`SELECT seq,task_id,kind,text,COALESCE(question_id,''),created_at FROM task_events WHERE project=? AND audience=? AND seq>? ORDER BY seq LIMIT ?`, project, audience, after, limit)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var e TaskEvent
+			if err := rows.Scan(&e.Seq, &e.TaskID, &e.Kind, &e.Text, &e.QuestionID, &e.CreatedAt); err != nil {
+				return err
+			}
+			out = append(out, e)
+			cursor = e.Seq
+		}
+		return rows.Err()
+	})
+	return out, cursor, err
+}
+
+// LatestTaskEvent returns the newest event sequence number of a project.
+func (s *Store) LatestTaskEvent(project string) (int64, error) {
+	var seq sql.NullInt64
+	err := s.db.QueryRow(`SELECT MAX(seq) FROM task_events WHERE project=?`, project).Scan(&seq)
+	return seq.Int64, err
+}
+
+// RetireTaskReservation forgets the run's reservation ID after the caller has
+// removed it from the registry. It is only for runs whose exit and empty
+// group were observed.
+func (s *Store) TaskRunReservationRetired(run string) error {
+	return s.tx(func(tx *sql.Tx) error {
+		var state string
+		if err := tx.QueryRow(`SELECT state FROM task_runs WHERE id=?`, run).Scan(&state); err != nil {
+			return err
+		}
+		if state != "finished" && state != "failed" && state != "cancelled" {
+			return fmt.Errorf("%w: run is %s", ErrRejected, state)
+		}
+		_, err := tx.Exec(`UPDATE task_runs SET detail=detail||'; reservation retired' WHERE id=?`, run)
+		return err
+	})
+}
+
+// TouchCoordinator records that a coordinator chat is connected to the
+// project. The window shows how to connect one until this is set.
+func (s *Store) TouchCoordinator(project string) error {
+	_, err := s.db.Exec(`INSERT INTO coordinator_connections(project,last_seen) VALUES (?,?) ON CONFLICT(project) DO UPDATE SET last_seen=excluded.last_seen`, project, now())
+	return err
+}
+
+// CoordinatorLastSeen returns when a coordinator last called this project, or "".
+func (s *Store) CoordinatorLastSeen(project string) (string, error) {
+	var at string
+	err := s.db.QueryRow(`SELECT last_seen FROM coordinator_connections WHERE project=?`, project).Scan(&at)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return at, err
+}
+
+// AgentSummary is one agent of a computer as list_agents shows it.
+type AgentSummary struct {
+	Agent   string `json:"agent"`
+	Profile string `json:"profile"`
+	// Running counts tasks of all projects that run on this agent now.
+	Running int `json:"running"`
+	// Waiting counts this agent's tasks waiting for an answer, all projects.
+	Waiting int `json:"waiting"`
+}
+
+// ComputerSummary is one computer as list_agents shows it for a project.
+type ComputerSummary struct {
+	Computer string         `json:"computer"`
+	Name     string         `json:"name"`
+	This     bool           `json:"this"`
+	Online   bool           `json:"online"`
+	Folder   string         `json:"folder"`
+	Agents   []AgentSummary `json:"agents"`
+	Note     string         `json:"note,omitempty"`
+}
+
+// ProjectAgents lists the computers for a project: today only this one. A
+// computer without the project's folder is listed with a note; it refuses
+// the project's tasks (D-025).
+func (s *Store) ProjectAgents(project string) (map[string]any, error) {
+	var c ComputerSummary
+	err := s.tx(func(tx *sql.Tx) error {
+		computer, err := localComputer(tx)
+		if err != nil {
+			return err
+		}
+		name, _ := os.Hostname()
+		c = ComputerSummary{Computer: computer, Name: name, This: true, Online: true, Agents: []AgentSummary{}}
+		err = tx.QueryRow(`SELECT folder FROM project_folders WHERE project=? AND computer=?`, project, computer).Scan(&c.Folder)
+		if errors.Is(err, sql.ErrNoRows) {
+			c.Note = "no folder for this project on this computer; it refuses the project's tasks"
+		} else if err != nil {
+			return err
+		}
+		rows, err := tx.Query(`SELECT a.provider,a.profile,
+ (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='running'),
+ (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state IN ('waiting_coordinator','waiting_owner'))
+ FROM computer_agents a WHERE a.computer=? ORDER BY a.provider`, computer)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var a AgentSummary
+			if err := rows.Scan(&a.Agent, &a.Profile, &a.Running, &a.Waiting); err != nil {
+				return err
+			}
+			c.Agents = append(c.Agents, a)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"project": project, "computers": []ComputerSummary{c}}, nil
+}

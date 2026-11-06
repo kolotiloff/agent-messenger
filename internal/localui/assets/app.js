@@ -5,6 +5,7 @@
   const $ = id => root.querySelector('#' + id);
   const selectViews = new Map();
   function syncSelects(){selectViews.forEach(view=>view.sync());}
+  function syncSelects(){selectViews.forEach(view=>view.sync());}
   // Keep the existing select as the source of truth for delivery guards. The
   // visible list is a top-layer popover, so neither pane clips it or grows.
   function enhanceSelect(select) {
@@ -59,6 +60,7 @@
     window.addEventListener('resize',()=>close());select.addEventListener('change',sync);
     selectViews.set(select.id,{sync});sync();
   }
+  const providerPaths = {"claude":["m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"],"cursor":["M11.503.131 1.891 5.678a.84.84 0 0 0-.42.726v11.188c0 .3.162.575.42.724l9.609 5.55a1 1 0 0 0 .998 0l9.61-5.55a.84.84 0 0 0 .42-.724V6.404a.84.84 0 0 0-.42-.726L12.497.131a1.01 1.01 0 0 0-.996 0M2.657 6.338h18.55c.263 0 .43.287.297.515L12.23 22.918c-.062.107-.229.064-.229-.06V12.335a.59.59 0 0 0-.295-.51l-9.11-5.257c-.109-.063-.064-.23.061-.23"],"codex":["M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"]};
   function applyTheme(theme, persist=false) {
     if(!['system','light','dark'].includes(theme))theme='system';
     document.documentElement.dataset.theme=theme;$('theme-select').value=theme;syncSelects();
@@ -67,448 +69,374 @@
       else try {localStorage.setItem('messenger-theme',theme);} catch(_) {}
     }
   }
-  let initialTheme=window.messengerInitialTheme;
-  if(!initialTheme)try{initialTheme=localStorage.getItem('messenger-theme');}catch(_){}
-  applyTheme(initialTheme||'system');
-  $('theme-select').addEventListener('change',()=>applyTheme($('theme-select').value,true));
-  let token = location.hash.slice(1);
-  try {
-    if (token) sessionStorage.setItem('messenger-ui-token', token);
-    else token = sessionStorage.getItem('messenger-ui-token') || '';
-  } catch (_) { /* A restricted browser can still use the initial URL. */ }
-  if (location.hash) history.replaceState(null, '', location.pathname);
-  let selected = '', cursor = '', overview = null, timelineVersion = 0, refreshVersion = 0;
-  let timelineAbort = null, lastStatus = null, sending = false, queueBusy = false, pending = null, pendingBroken = false;
-  let outboxItems = [], outboxReady = false, discoveryAgents = [];
-  const agentChecks=new Map(),agentSelections=new Map();
-  let setupProvider='',checkingAgent=false;
-  let creatingSession=false,setupPending=null;
-  let launchingSession=false;
-  let timelineLoading=false,timelineSignature='',historyExpanded=false,quietBusy=false;
-  const pendingKey = 'messenger-ui-pending:' + token;
-  try {
-    const saved = sessionStorage.getItem(pendingKey);
-    if (saved) {
-      const value = JSON.parse(saved);
-      if (!/^ui-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value.message_id) ||
-          typeof value.alias !== 'string' || !value.alias.trim() || typeof value.text !== 'string' || !value.text.trim()) throw Error('invalid pending');
-      pending = {message_id:value.message_id,alias:value.alias,text:value.text};
-      selected=pending.alias; $('message-text').value=pending.text;
-      $('send-status').textContent='Подтверждение не сохранено. Повтор доставит то же письмо; автоматически оно не отправляется. Если клиент успел сохранить письмо, оно также появится в списке восстановления.';
-    }
-  } catch (_) {
-    pendingBroken = true;
-    $('send-status').textContent='Хранилище вкладки недоступно или повреждено. Отправка отключена, чтобы не потерять идентификатор письма.';
-  }
-  function actionControls() {
-    $('message-text').readOnly=!!pending || sending || pendingBroken;
-    $('session').disabled=!lastStatus || !!pending || sending;
-    $('send').disabled=!lastStatus || !outboxReady || !selected || sending || queueBusy || pendingBroken || (!pending && outboxItems.length>0) || (!pending && !$('message-text').value.trim());
-    const sendLabel=sending?'Отправляем…':pending?'Повторить доставку':'Отправить';
-    $('send').textContent=sending?'…':'↵';$('send').setAttribute('aria-label',sendLabel);$('send').title=sendLabel;
-    $('pending-id').hidden=!pending;
-    $('pending-id').textContent=pending?'Идентификатор письма: '+pending.message_id:'';
-    $('queue-action').disabled=!lastStatus || queueBusy || sending;
-    $('queue-action').textContent=queueBusy?'…':lastStatus && lastStatus.paused?'Продолжить':'Пауза';
-    $('outbox-panel').hidden=!outboxItems.length;
-    const scopes=launchScopes(lastStatus);
-    const selectedCard=overview?.sessions.find(s=>s.aliases.includes(selected));
-    const outsideScope=scopes.length>0&&!scopes.some(a=>a===selected||selectedCard?.aliases.includes(a));
-    $('send-hint').textContent=outboxItems.length && !pending?'Сначала разберите сохранённые отправки выше, чтобы случайно не создать повторное задание.':!lastStatus?'Проверяем готовность агента…':lastStatus.cli_launch==='not-authorized'?'Агент пока не запущен. Сообщение сохранится в очереди.':outsideScope?'Для этой сессии запуск выключен. Сообщение останется в очереди.':lastStatus.paused?'Очередь на паузе. Сообщение будет ждать.':'Сообщение будет передано агенту.';
-    root.querySelectorAll('[data-outbox-action]').forEach(b=>b.disabled=!lastStatus || sending || queueBusy || !!pending || pendingBroken);
-    root.querySelectorAll('.am-agent-action').forEach(b=>b.disabled=!lastStatus || !!pending || sending || b.dataset.empty==='true');
-    syncSelects();
-  }
-  async function postAPI(path, body) {
-    const response=await fetch(path,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body),cache:'no-store',signal:AbortSignal.timeout(4500)});
-    if(!response.ok)throw Error('unconfirmed');
-    const result=await response.json();if(result.ok!==true)throw Error('unconfirmed');return result;
-  }
-  function renderOutbox() {
-    const list=$('outbox-items');list.replaceChildren();
-    for(const item of outboxItems) {
-      const row=el('article',undefined,'am-outbox-item');
-      row.append(el('strong',item.alias),el('p',item.text),el('p',item.message_id,'am-small am-muted'));
-      row.append(el('p',item.state==='queued'?'Письмо уже сохранено в очереди. Повторная отправка не нужна.':'Письмо сохранено в исходящих. Доставка в очередь ещё не подтверждена.','am-small'));
-      const button=el('button',item.state==='queued'?'Понятно, убрать из списка':'Восстановить отправку');
-      button.type='button';button.dataset.outboxAction=item.message_id;
-      button.addEventListener('click',async()=>{
-        if(button.disabled || pending || sending || queueBusy)return;
-        if(item.state==='queued') {
-          queueBusy=true;actionControls();
-          try {await acknowledge(item.message_id);$('send-status').textContent='Подтверждение принято. Само письмо и его история остаются в базе.';}
-          catch(_){$('send-status').textContent='Подтверждение не сохранено. Письмо остаётся в очереди; отправлять его заново не нужно.';}
-          finally {queueBusy=false;actionControls();}
-          await refresh();return;
-        }
-        const envelope={message_id:item.message_id,alias:item.alias,text:item.text};
-        try {sessionStorage.setItem(pendingKey,JSON.stringify(envelope));}
-        catch(_) {$('send-status').textContent='Хранилище вкладки недоступно. Исходящее письмо остаётся в базе клиента.';return;}
-        pending=envelope;selected=item.alias;$('message-text').value=item.text;
-        $('send-status').textContent='Восстановлены исходные адрес, текст и идентификатор. Нажмите «Повторить доставку» для явного продолжения.';
-        await refresh();
-      });row.append(button);list.append(row);
-    }
-  }
-  async function acknowledge(id) {
-    const ack=await postAPI('/api/outbox/ack',{message_id:id});
-    if(ack.action!=='ui-ack')throw Error('unconfirmed');
-  }
-  async function sendMessage() {
-    if($('send').disabled || sending)return;
-    sending=true;actionControls();
-    try {
-      if(!pending) {
-        const envelope={message_id:'ui-'+crypto.randomUUID(),alias:selected,text:$('message-text').value};
-        const saved=JSON.stringify(envelope);
-        try {
-          sessionStorage.setItem(pendingKey,saved);
-          if(sessionStorage.getItem(pendingKey)!==saved)throw Error('not persisted');
-        } catch (_) {
-          // No request has been made; leave a readable draft and refuse sending.
-          pendingBroken=true;
-          $('send-status').textContent='Не удалось сохранить идентификатор в этой вкладке. Письмо не отправлялось.';
-          return;
-        }
-        pending=envelope;actionControls();
-      }
-      const result=await postAPI('/api/enqueue',pending);
-      if(result.message_id!==pending.message_id || typeof result.created!=='boolean')throw Error('unconfirmed');
-      // Clear the saved envelope only after an exact queue ACK. If storage fails,
-      // retain the envelope: repeating it still cannot create another request.
-      sessionStorage.removeItem(pendingKey);
-      if(sessionStorage.getItem(pendingKey)!==null)throw Error('not cleared');
-      const acceptedID=pending.message_id;pending=null;$('message-text').value='';
-      $('send-status').textContent=result.created?'Письмо сохранено в очереди. Ответ агента появится отдельно.':'Это письмо уже было сохранено. Второе письмо не создано.';
-      try {await acknowledge(acceptedID);}catch(_){$('send-status').textContent+=' Подтверждение просмотра не записано; письмо может остаться в списке восстановления.';}
-    } catch (_) {
-      $('send-status').textContent='Доставка не подтверждена. Письмо могло сохраниться. Повтор использует тот же идентификатор и текст. Если клиент успел сохранить письмо, оно также появится в списке восстановления.';
-    } finally {sending=false;actionControls();}
-    await refresh();
-  }
-  async function changeQueue() {
-    if($('queue-action').disabled || queueBusy || !lastStatus)return;
-    const action=lastStatus.paused?'resume':'pause';queueBusy=true;actionControls();
-    try {
-      const result=await postAPI('/api/'+action,{});
-      if(result.action!==action)throw Error('unconfirmed');
-      $('queue-action-status').textContent='';
-    } catch (_) {
-      $('queue-action-status').textContent='Изменение не подтверждено. Повторите после проверки состояния.';
-    } finally {lastStatus=null;queueBusy=false;actionControls();}
-    await refresh();
-  }
-  const names = {claude:'Claude Code',codex:'Codex',cursor:'Cursor'};
-  // Vector marks are bundled locally; rendering never contacts the providers.
-  const providerPaths = {"claude":["m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"],"cursor":["M11.503.131 1.891 5.678a.84.84 0 0 0-.42.726v11.188c0 .3.162.575.42.724l9.609 5.55a1 1 0 0 0 .998 0l9.61-5.55a.84.84 0 0 0 .42-.724V6.404a.84.84 0 0 0-.42-.726L12.497.131a1.01 1.01 0 0 0-.996 0M2.657 6.338h18.55c.263 0 .43.287.297.515L12.23 22.918c-.062.107-.229.064-.229-.06V12.335a.59.59 0 0 0-.295-.51l-9.11-5.257c-.109-.063-.064-.23.061-.23"],"codex":["M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"]};
-  function providerIcon(provider) {
+  // Task window (D-024, D-026, T-029). The window observes tasks; the owner
+  // talks to the coordinator in the Claude app. Its only actions are creating
+  // a project, changing the project folder, connecting an agent program and
+  // answering a worker's question to the owner.
+  const names={claude:'Claude Code',codex:'Codex'};
+  function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
+  function providerIcon(provider){
     const wrap=el('span',undefined,'am-provider-icon');wrap.setAttribute('aria-hidden','true');
-    if(!providerPaths[provider]){wrap.textContent=provider==='local-user'?'Я':'→';return wrap;}
+    if(!providerPaths[provider]){wrap.textContent=provider==='owner'?'Я':'→';return wrap;}
     wrap.dataset.provider=provider;
     const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('focusable','false');
     for(const d of providerPaths[provider]){const path=document.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d',d);svg.append(path);}wrap.append(svg);return wrap;
   }
-  function senderProvider(sender){
-    if(sender==='local-user')return sender;
-    return overview?.sessions?.find(s=>s.aliases.includes(sender))?.provider||'';
-  }
-  function senderLabel(sender){const provider=senderProvider(sender);return provider==='local-user'?'Вы':provider?(names[provider]||provider)+' · '+sender:sender;}
-  const states = {queued:'В очереди',reserved:'Зарезервировано',launching:'Запуск',running:'Обрабатывается',completed:'Обработка завершена',turn_completed:'Ход завершён',uncertain:'Нужен разбор',not_started:'Запуск не состоялся',none:'Попытки нет',idle:'Ожидание письма',active:'Ход активен',starting:'Подготовка'};
-  const results = {not_verified:'Успех ещё не подтверждён',verified_turn:'Ответ подтверждён · ход завершён',verified_exit:'Ответ подтверждён · код выхода 0',process_failed:'Процесс завершился с ошибкой'};
-  function launchScopes(status){return status?.launch_sessions?.length?status.launch_sessions:status?.launch_session?[status.launch_session]:[];}
-  function el(tag, text, cls) { const n=document.createElement(tag); if(text!==undefined)n.textContent=text; if(cls)n.className=cls;return n; }
-  function notice(text) { $('notice').textContent=text; $('notice').hidden=!text; }
-  function show(tab) {
-    root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab);
-  root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
-    $('queue-toggle').hidden=tab!=='messages';
-    $('screen-title').textContent={messages:'Переписка',agents:'Агенты',queue:'Очередь',server:'Сервер и подключение'}[tab];
-  }
-  async function api(path, signal) {
-    if (!token) throw Error('Откройте приватную ссылку, которую выдала команда ui.');
-    const response=await fetch(path,{headers:{Authorization:'Bearer '+token},cache:'no-store',signal});
-    if(!response.ok) {
-      if(response.status===401)throw Error('Ссылка доступа устарела. Откройте ссылку текущего запуска ui.');
-      throw Error('Данные недоступны. Проверьте, запущен ли клиент Messenger с этим каталогом данных.');
-    }
+  function notice(node){const n=$('notice');n.replaceChildren();if(node)n.append(node);n.hidden=!node;}
+  let token=location.hash.slice(1);
+  try{if(token)sessionStorage.setItem('messenger-ui-token',token);else token=sessionStorage.getItem('messenger-ui-token')||'';}catch(_){}
+  if(location.hash)history.replaceState(null,'',location.pathname);
+  function remember(key,value){try{localStorage.setItem(key,value);}catch(_){}}
+  function recall(key){try{return localStorage.getItem(key)||'';}catch(_){return '';}}
+  let view=null,project=recall('messenger-project'),selectedTask='',feed=null,feedSignature='',viewSignature='';
+  let online=false,discovery=[],tab='tasks',refreshing=false,answering=false;
+  const agentChecks=new Map();
+  async function api(path,timeout=4500){
+    if(!token)throw Error('Откройте приватную ссылку, которую выдала команда ui.');
+    const response=await fetch(path,{headers:{Authorization:'Bearer '+token},cache:'no-store',signal:AbortSignal.timeout(timeout)});
+    if(!response.ok){if(response.status===401)throw Error('Ссылка доступа устарела. Откройте окно заново.');throw Error('Клиент Messenger недоступен.');}
     return response.json();
   }
-  function clearTimeline(text) {
-    timelineLoading=false;timelineSignature='';historyExpanded=false;
-    timelineVersion++; if(timelineAbort)timelineAbort.abort();cursor='';$('older').hidden=true;
-    $('thread').replaceChildren(el('p',text,'am-muted'));
+  async function postAPI(path,body,timeout=6000){
+    const response=await fetch(path,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body),cache:'no-store',signal:AbortSignal.timeout(timeout)});
+    let result={};try{result=await response.json();}catch(_){}
+    if(response.ok&&result.ok===true)return result;
+    if(response.status===409&&result.detail)throw Error(result.detail);
+    if(response.status===400)throw Error('Проверьте введённые данные.');
+    throw Error('Действие не подтверждено. Проверьте состояние и повторите.');
   }
-  function stateText(value) { return states[value] || 'Неизвестное состояние: '+String(value); }
-  function renderCards() {
-    const cards=$('agents'),queue=$('queue');cards.replaceChildren();queue.replaceChildren();
-    const sessions=overview?.sessions || [];
-    $('queue-count').textContent=overview?'('+sessions.reduce((n,s)=>n+(s.queued||0),0)+')':'';
-    const providers=[...new Set([...Object.keys(names),...sessions.map(s=>s.provider)])];
-    for(const provider of providers) {
-      const group=sessions.filter(s=>s.provider===provider),card=el('article',undefined,'am-agent');
-      const heading=el('h3',undefined,'am-provider-heading');heading.append(providerIcon(provider),el('span',names[provider]||provider));card.append(heading);
-      const candidate=discoveryAgents.find(a=>a.provider===provider);
-      const installed=candidate?.state==='candidate_found'?'Найден на компьютере':candidate?.state==='not_found'?'Расположение не определено':'Не проверено';
-      const attention=group.some(s=>s.decision_pending||s.recorded_attempt_state==='uncertain'||s.recorded_stream_state==='uncertain');
-      card.append(el('p',!overview?'Нет данных клиента':!group.length?'Не подключён':attention?'Требует внимания':'Сессии подключены',attention?'am-status-warn':'am-muted'));
+  function minutes(from,to){
+    const a=Date.parse(from),b=to?Date.parse(to):Date.now();
+    if(isNaN(a)||isNaN(b))return '';
+    const m=Math.max(0,Math.round((b-a)/60000));
+    if(m<1)return 'меньше минуты';
+    if(m<60)return m+' мин';
+    const h=Math.floor(m/60);return h+' ч'+(m%60?' '+m%60+' мин':'');
+  }
+  function clock(at){const d=new Date(at);return isNaN(d.getTime())?'':d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});}
+  const activeStates=['running','waiting_owner','waiting_coordinator'];
+  function taskStatus(t){
+    const end=t.finished_at||t.updated_at;
+    switch(t.state){
+      case 'running':return ['Работает '+minutes(t.created_at),'am-status-run'];
+      case 'waiting_owner':return ['Ждёт вашего ответа','am-status-wait'];
+      case 'waiting_coordinator':return ['Ждёт ответа координатора','am-status-run'];
+      case 'done':return ['Завершил за '+minutes(t.created_at,end),'am-muted'];
+      case 'failed':return ['Не прошёл проверку через '+minutes(t.created_at,end),'am-status-bad'];
+      case 'interrupted':return ['Прервался через '+minutes(t.created_at,end),'am-status-bad'];
+      case 'blocked':return ['Заблокирован через '+minutes(t.created_at,end),'am-status-bad'];
+      case 'cancelled':return ['Отменён','am-muted'];
+    }
+    return [t.state,'am-muted'];
+  }
+  function coordinatorName(){
+    const c=(view?.coordinator?.client||'').toLowerCase();
+    if(c.includes('codex'))return ['codex','Codex'];
+    if(c.includes('claude')||!c)return ['claude','Claude'];
+    return ['',view.coordinator.client];
+  }
+  function agentState(a){
+    if(!online)return ['offline','Нет связи'];
+    if(a.waiting_owner>0)return ['wait','Ждёт ответа'];
+    if(a.running>0)return ['run',a.running>1?'Работает ('+a.running+')':'Работает'];
+    return ['idle','Свободен'];
+  }
+  function renderProjects(){
+    const select=$('project-select');select.replaceChildren();
+    for(const p of view?.projects||[]){const o=el('option',p.name);o.value=p.name;select.append(o);}
+    const add=el('option','Новый проект…');add.value='__new';select.append(add);
+    select.value=view?.project||'__new';
+    if(!view?.project&&select.options.length>1)select.selectedIndex=0;
+    select.disabled=!view;syncSelects();
+  }
+  function renderMachines(){
+    const box=$('machines');box.replaceChildren();
+    const machine=el('div',undefined,'am-machine am-machine-card');machine.setAttribute('aria-current','true');
+    const head=el('div',undefined,'am-machine-name');head.append(el('span',view?.computer_name||'Этот компьютер'));
+    const dot=el('span',undefined,'am-dot'+(online?' online':''));dot.title=online?'На связи':'Нет связи';head.append(dot);machine.append(head);
+    const lines=el('div',undefined,'am-machine-agents');
+    if(view?.coordinator?.connected){
+      const [provider,label]=coordinatorName();
+      const line=el('div',undefined,'am-agent-line');const d=el('span',undefined,'am-dot am-dot-'+(online?'run':'offline'));
+      line.title=online?'Координатор подключён к проекту':'Нет связи';line.append(d,el('span',label),el('span','координатор','am-muted am-small'));
+      if(provider)line.dataset.provider=provider;lines.append(line);
+    }
+    for(const a of view?.agents||[]){
+      const [state,text]=agentState(a);
+      const line=el('div',undefined,'am-agent-line');line.title=(names[a.agent]||a.agent)+': '+text;
+      line.append(el('span',undefined,'am-dot am-dot-'+state),el('span',names[a.agent]||a.agent));lines.append(line);
+    }
+    if(!lines.children.length)lines.append(el('p',online?'Агенты не подключены':'Нет связи','am-small am-muted'));
+    machine.append(lines);box.append(machine);
+  }
+  function visibleTasks(){
+    const filter=$('agent-filter').value;
+    const list=(view?.tasks||[]).filter(t=>!filter||t.agent===filter);
+    const active=list.filter(t=>activeStates.includes(t.state)),done=list.filter(t=>!activeStates.includes(t.state));
+    return [active,done];
+  }
+  function renderTaskList(){
+    const box=$('task-list');box.replaceChildren();
+    const [active,done]=visibleTasks();
+    $('task-count').textContent=view?.tasks?.length?String(view.tasks.length):'';
+    const section=(label,items)=>{
+      if(!items.length)return;
+      box.append(el('div',label,'am-label am-task-section'));
+      for(const t of items){
+        const row=el('button',undefined,'am-row am-task');row.type='button';row.setAttribute('aria-pressed',String(t.id===selectedTask));
+        const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),el('span',names[t.agent]||t.agent));
+        const [text,cls]=taskStatus(t);
+        const status=el('span',undefined,'am-task-status '+cls);
+        if(t.state==='waiting_owner')status.append(el('span',undefined,'am-dot am-dot-wait'));
+        status.append(el('span',text));
+        row.append(agent,el('span',t.title,'am-task-title'),status);
+        row.addEventListener('click',()=>{selectedTask=t.id;feedSignature='';renderTaskList();loadFeed();});
+        box.append(row);
+      }
+    };
+    section('Активные',active);section('Завершённые',done);
+    if(!box.children.length)box.append(el('p',view?.project?'Задач пока нет':'','am-small am-muted'));
+  }
+  function connectHelp(){
+    const box=el('div',undefined,'am-settings am-connect');
+    box.append(el('h3','Подключите координатора'));
+    box.append(el('p','Задачи проекта даёт ваш чат в приложении Claude. Откройте папку проекта в Claude (вкладка Code, этот компьютер) и выполните в Терминале команду ниже. Затем напишите в чате, что нужно сделать.'));
+    const command='cd "'+view.folder+'" && claude mcp add --scope local messenger -- "'+view.messenger+'" --root "'+view.data_root+'" coordinator --project "'+view.project+'"';
+    const pre=el('pre',command,'am-command');box.append(pre);
+    const copy=el('button','Скопировать команду');copy.type='button';
+    copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(command);copy.textContent='Скопировано';}catch(_){copy.textContent='Скопируйте вручную';}setTimeout(()=>copy.textContent='Скопировать команду',2000);});
+    box.append(copy,el('p','Чат-координатор видит только задачи этого проекта.','am-small am-muted'));
+    return box;
+  }
+  function renderThread(){
+    const thread=$('thread'),head=$('task-head');
+    $('compose').hidden=true;feedSignature='';
+    if(!view){head.replaceChildren();return;}
+    if(!view.project){
+      head.replaceChildren();
+      const box=el('div',undefined,'am-settings am-connect');box.append(el('h3','Создайте проект'),el('p','Проект связывает чат-координатора, папку проекта на этом компьютере и задачи.'));
+      const b=el('button','Новый проект…','am-primary');b.type='button';b.addEventListener('click',()=>openProjectDialog(false));box.append(b);
+      thread.replaceChildren(box);return;
+    }
+    if(!view.coordinator.connected&&!view.tasks.length){head.replaceChildren();thread.replaceChildren(connectHelp());return;}
+    if(!selectedTask||!feed||feed.task.id!==selectedTask){
+      head.replaceChildren();
+      if(!selectedTask)thread.replaceChildren(el('p',view.tasks.length?'Выберите задачу в списке справа.':'Задач пока нет. Их создаёт чат-координатор.','am-muted am-empty'));
+      return;
+    }
+    renderFeed();
+  }
+  // Called when only the feed may have changed.
+  function updateFeed(){
+    if(!view?.project||!feed||feed.task.id!==selectedTask){renderThread();return;}
+    renderFeed();
+  }
+  function roleTag(text){return el('span',text,'am-role');}
+  function renderFeed(){
+    const t=feed.task,thread=$('thread'),head=$('task-head');
+    const signature=JSON.stringify(feed);if(signature===feedSignature)return;
+    const atBottom=thread.scrollHeight-thread.clientHeight-thread.scrollTop<40||!feedSignature;feedSignature=signature;
+    const title=el('div',undefined,'am-task-head');title.append(el('h3',t.title));
+    title.append(el('p',(names[t.agent]||t.agent)+' на '+(view.computer_name||'этом компьютере')+', папка '+t.folder,'am-small am-muted'));
+    const [statusText,statusCls]=taskStatus(t);
+    const when=t.finished_at?'Начата в '+clock(t.created_at)+', закончена в '+clock(t.finished_at):'Начата в '+clock(t.created_at);
+    const line=el('p',undefined,'am-small');line.append(el('span',statusText,statusCls),el('span',', '+when.charAt(0).toLowerCase()+when.slice(1),'am-muted'));title.append(line);
+    head.replaceChildren(title);
+    const [coordProvider,coordLabel]=coordinatorName();
+    const out=[];let group=null;
+    const outgoing=(author,provider,role,text,at)=>{
+      group=null;const g=el('article',undefined,'am-message-group');const row=el('div',undefined,'am-message am-outgoing');
+      const body=el('div',undefined,'am-message-body');const meta=el('div',undefined,'am-meta');
+      const who=el('strong',author);meta.append(who);if(role)meta.append(roleTag(role));meta.append(el('time',clock(at)));
+      const content=el('div',undefined,'am-message-content');content.append(el('p',text));body.append(meta,content);row.append(body);g.append(row);out.push(g);
+    };
+    const workerGroup=at=>{
+      if(group)return group;
+      const g=el('article',undefined,'am-message-group');const row=el('div',undefined,'am-message');
+      const avatar=el('div',undefined,'am-avatar');avatar.append(providerIcon(t.agent));
+      const body=el('div',undefined,'am-message-body');const meta=el('div',undefined,'am-meta');
+      meta.append(el('strong',names[t.agent]||t.agent),roleTag('исполнитель'),el('time',clock(at)));
+      const content=el('div',undefined,'am-message-content');body.append(meta,content);row.append(avatar,body);g.append(row);out.push(g);group=content;return content;
+    };
+    const delivery=(text,cls)=>el('div',text,'am-delivery '+cls);
+    for(const it of feed.items){
+      if(it.kind==='task'){outgoing(coordLabel,coordProvider,'координатор',it.text,it.at);continue;}
+      if(it.kind==='answer'){if(it.author==='owner')outgoing('Вы','owner','',it.text,it.at);else outgoing(coordLabel,coordProvider,'координатор',it.text,it.at);continue;}
+      if(it.kind==='text'){workerGroup(it.at).append(el('p',it.text));continue;}
+      if(it.kind==='tool'){
+        const d=el('details',undefined,'am-tool');const s=el('summary',it.title||'Действие');d.append(s);
+        if(it.text)d.append(el('pre',it.text));workerGroup(it.at).append(d);continue;
+      }
+      if(it.kind==='report'||it.kind==='question'){
+        const c=workerGroup(it.at);c.append(el('p',it.text,'am-disposition'));
+        if(!it.verified)c.append(delivery('Не опубликовано: запуск не прошёл проверку','am-status-bad'));
+        else if(it.kind==='report')c.append(delivery('Отчёт отправлен координатору, сессия закрыта','am-status-good'));
+        else if(it.audience==='owner')c.append(delivery('Вопрос вам, координатор его не видит','am-status-wait'));
+        else c.append(delivery('Вопрос координатору','am-status-wait'));
+        group=null;continue;
+      }
+      if(it.kind==='outcome'){
+        group=null;const text={failed:'Запуск не прошёл проверку',blocked:'Задача заблокирована: процесс не завершился полностью',interrupted:'Клиент перезапустился во время работы; результат неизвестен',cancelled:'Задача отменена'}[it.state]||it.state;
+        const note=el('div',undefined,'am-outcome '+(it.state==='cancelled'?'am-muted':'am-status-bad'));note.append(el('p',text));if(it.text)note.append(el('p',it.text,'am-small am-muted'));
+        const g=el('article',undefined,'am-message-group');g.append(note);out.push(g);
+      }
+    }
+    thread.replaceChildren(...out);
+    const q=t.owner_question;
+    $('compose').hidden=!q;
+    if(q&&$('compose').dataset.question!==q.id){$('compose').dataset.question=q.id;$('answer-text').value='';$('answer-status').textContent='';}
+    answerControls();
+    if(atBottom)thread.scrollTop=thread.scrollHeight;
+  }
+  function answerControls(){$('answer-send').disabled=answering||!$('answer-text').value.trim()||!feed?.task?.owner_question;}
+  async function sendAnswer(){
+    const q=feed?.task?.owner_question;if(!q||answering)return;
+    const text=$('answer-text').value.trim();if(!text)return;
+    let op=recall('messenger-answer-op:'+q.id);
+    if(!op){op='window-'+q.id+'-'+crypto.randomUUID();remember('messenger-answer-op:'+q.id,op);}
+    answering=true;answerControls();$('answer-status').textContent='Отправляем ответ…';
+    try{await postAPI('/api/task-answer',{task:feed.task.id,question:q.id,op_id:op,text});$('answer-status').textContent='Ответ записан. Исполнитель продолжит в той же сессии.';$('answer-text').value='';feedSignature='';await refresh();}
+    catch(error){$('answer-status').textContent=error.message+' Повтор с тем же текстом безопасен.';}
+    finally{answering=false;answerControls();}
+  }
+  const folderIcon='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+  function renderAgents(){
+    const bar=$('folder-bar');bar.hidden=!view?.project;bar.replaceChildren();
+    if(view?.project){
+      const icon=el('span',undefined,'am-folder-icon');icon.innerHTML=folderIcon;
+      const edit=el('button','Изменить');edit.type='button';edit.addEventListener('click',()=>openProjectDialog(true));
+      bar.append(icon,el('span','Рабочая папка проекта «'+view.project+'»','am-folder-title'),el('span',view.folder||'не выбрана','am-folder-path'),edit);
+      bar.querySelector('.am-folder-path').title=view.folder||'';
+    }
+    const cards=$('agents');cards.replaceChildren();
+    for(const provider of ['claude','codex']){
+      const a=(view?.agents||[]).find(x=>x.agent===provider);
+      const found=discovery.find(d=>d.provider===provider);
+      const coordinator=view?.coordinator?.connected&&coordinatorName()[0]===provider;
+      const card=el('article',undefined,'am-agent');
+      const heading=el('h3',undefined,'am-provider-heading');heading.append(providerIcon(provider),el('span',names[provider]));card.append(heading);
+      card.append(el('p',coordinator&&a?'Координатор и исполнитель':coordinator?'Координатор':a?'Исполнитель':'Не подключён','am-muted'));
       const dl=el('dl');
+      const pair=(label,value,cls,extra)=>{const p=el('div');const dd=el('dd',undefined,cls);dd.append(el('span',value));if(extra)dd.append(...extra);p.append(el('dt',label),dd);dl.append(p);};
+      if(!a){
+        pair('Программа',found?.state==='candidate_found'?'Найдена, не подключена':found?.state==='not_found'?'Не найдена':'Не проверена',found?.state==='not_found'?'am-status-bad':'am-status-wait');
+      }else{
+        pair('Программа','Подключена','am-status-good');
+      }
       const check=agentChecks.get(provider);
-      for(const [label,value] of [['Программа',check?.version?.value?installed+' · '+check.version.value:installed],['Вход в аккаунт',check?authenticationText(check.authentication.state):'Не проверен'],['Подключённые сессии',overview?String(group.length):'Неизвестно']]) {
-        const pair=el('div');pair.append(el('dt',label),el('dd',value));dl.append(pair);
+      const auth=check?.authentication?.state;
+      pair('Вход в аккаунт',auth==='authenticated'?'Выполнен':auth==='not_authenticated'?'Не выполнен':'Не проверен',!a?'am-muted':auth==='authenticated'?'am-status-good':auth==='not_authenticated'?'am-status-bad':'am-status-wait');
+      if(a){
+        const trust=a.trust?.state;
+        if(trust==='trusted')pair('Рабочая папка','Доверяет','am-status-good');
+        else{
+          const help=el('button','?','am-q');help.type='button';help.setAttribute('aria-label','Как исправить');
+          const hint=el('div',undefined,'am-hint');hint.hidden=true;hint.append(el('p',a.trust?.hint||'Откройте папку проекта в этой программе и подтвердите доверие.'));
+          const again=el('button','Проверить снова');again.type='button';again.addEventListener('click',()=>refresh());hint.append(again);
+          help.addEventListener('click',()=>{hint.hidden=!hint.hidden;});
+          pair('Рабочая папка',trust==='not_trusted'?'Не доверяет':'Не определено',trust==='not_trusted'?'am-status-bad':'am-status-wait',[help]);
+          dl.append(hint);
+        }
       }
       card.append(dl);
-      const sessionsButton=el('button','Сессии ('+group.length+')','am-agent-action');sessionsButton.type='button';
-      sessionsButton.dataset.empty=String(group.length===0);sessionsButton.disabled=!overview||group.length===0;sessionsButton.addEventListener('click',()=>showSessions(provider));card.append(sessionsButton);
-      const setup=el('button','Настроить');setup.type='button';setup.disabled=checkingAgent||creatingSession;setup.addEventListener('click',()=>showAgentSetup(provider));card.append(setup);cards.append(card);
+      const running=a?.project_running||0,today=a?.project_today||0;
+      const tasks=el('button',running||today?'Задачи: '+running+' идёт, '+today+' сегодня':'Задач нет','am-agent-action');tasks.type='button';tasks.disabled=!running&&!today;
+      tasks.addEventListener('click',()=>{$('agent-filter').value=provider;syncSelects();show('tasks');renderTaskList();});
+      const setup=el('button','Настроить');setup.type='button';setup.addEventListener('click',()=>openAgentSetup(provider));
+      card.append(tasks,setup);cards.append(card);
     }
-    for(const s of sessions) {
-      if(!s.queued&&!s.uncertain&&!s.decision_pending)continue;
-      const alias=s.aliases[0]||'',row=el('div',undefined,'am-row'),main=el('div',undefined,'am-row-main');
-      main.append(el('h3',alias||names[s.provider]||s.provider),el('p','В очереди: '+s.queued+' · Неопределённые в истории: '+s.uncertain,'am-small am-muted'));
-      row.append(main,el('span',s.decision_pending?'Есть решение по сессии':s.owner_retained?'Владелец удерживается':'Без владельца','am-small'));queue.append(row);
-    }
-    if(!queue.children.length)queue.append(el('p',overview?'Нет ожидающих писем':'Данные клиента недоступны.','am-muted'));
-    if(overview?.truncated) {cards.append(el('p','Список сессий неполный.','am-status-warn'));queue.append(el('p','Список сессий неполный.','am-status-warn'));}
   }
-  function showSessions(provider) {
-    const dialog=$('session-dialog'),body=$('session-dialog-body');body.replaceChildren();
-    $('session-dialog-title').textContent='Сессии · '+(names[provider]||provider);
-    const sessions=(overview?.sessions||[]).filter(s=>s.provider===provider);
-    if(!sessions.length)body.append(el('p','Подключённых сессий пока нет.','am-muted'));
-    for(const s of sessions) {
-      const alias=s.aliases[0]||'',row=el('article',undefined,'am-agent-session');
-      const phase=s.recorded_stream_state==='none'?s.recorded_attempt_state:s.recorded_stream_state;
-      row.append(el('strong',s.aliases.join(' · ')||'Нет адреса'),el('p',stateText(phase),'am-small'),el('p','В очереди: '+s.queued+' · Требуют разбора: '+s.uncertain,'am-small am-muted'));
-      row.append(el('p',s.launch_configured?'Настройка запуска записана; готовность не проверена.':'Настройка запуска не завершена.','am-small am-muted'));
-      if(s.owner_retained)row.append(el('p','Сессия остаётся закреплена за своим процессом.','am-small am-muted'));
-      const allowed=launchScopes(lastStatus).some(a=>s.aliases.includes(a));
-      if(s.can_launch_test && lastStatus?.session_launch){
-        row.append(el('p','Запуск включит обработку писем этой тестовой сессии (вместе с уже разрешёнными). Ответы агента расходуют токены.','am-small am-muted'));
-        const launch=el('button',allowed?'Запуск разрешён':'Запустить тестовую сессию','am-launch-session');launch.type='button';launch.disabled=allowed||launchingSession;
-        const result=el('p','','am-small am-muted');result.setAttribute('role','status');
-        launch.addEventListener('click',async()=>{
-          if(launchingSession)return;launchingSession=true;launch.disabled=true;result.textContent='Включаем обработку выбранной сессии…';
-          try{await postAPI('/api/authorize-setup',{alias,confirmation:'allow-model-calls'});selected=alias;await refresh();dialog.close();show('messages');$('session').value=alias;actionControls();loadTimeline(false);}
-          catch(_){result.textContent='Запуск не подтверждён. Проверьте состояние; повтор не переключает сессию и не отправляет новое письмо.';launch.disabled=false;}
-          finally{launchingSession=false;}
-        });row.append(launch,result);
-      }
-      const button=el('button','Открыть переписку','am-agent-action');button.type='button';button.disabled=!alias||!!pending||sending;
-      button.addEventListener('click',()=>{if(pending||sending)return;dialog.close();$('session').value=alias;selected=alias;show('messages');actionControls();loadTimeline(false);});row.append(button);body.append(row);
+  function renderNotice(){
+    if(!online){notice(el('p','Клиент Messenger недоступен. Данные не обновляются.'));return;}
+    if(view?.pending_launch>0&&!view.tasks_enabled){notice(el('p','Задачи записаны, но этот клиент не запускает исполнителей: он запущен без разрешения --allow-tasks.'));return;}
+    if(view?.pending_launch>0&&view.paused){
+      const box=el('div',undefined,'am-notice-row');box.append(el('p','Обработка на паузе: новые задачи не запускаются.'));
+      const go=el('button','Продолжить');go.type='button';go.addEventListener('click',async()=>{go.disabled=true;try{await postAPI('/api/resume',{});await refresh();}catch(e){go.disabled=false;}});
+      box.append(go);notice(box);return;
     }
-    if(!dialog.open)dialog.showModal();
+    notice(null);
   }
-  function authenticationText(state){return {authenticated:'Вход подтверждён',not_authenticated:'Вход не выполнен',unknown:'Не удалось определить',not_checked:'Не проверен'}[state]||'Не удалось определить';}
-  function showAgentSetup(provider){
-    if(checkingAgent||creatingSession)return;
-    setupProvider=provider;
-    const candidate=agentSelections.get(provider)||discoveryAgents.find(a=>a.provider===provider)||{};
-    $('agent-setup-title').textContent='Настройка · '+(names[provider]||provider);
-    $('agent-cli').value=candidate.cli||'';$('agent-profile').value=candidate.environment||'';
-    $('agent-check-status').textContent='';showAgentCheck(agentChecks.get(provider));
-    $('agent-check').disabled=false;$('agent-cli').disabled=false;$('agent-profile').disabled=false;
-    const supported=provider==='claude'||provider==='codex';
-    $('agent-session-setup').hidden=!supported||lastStatus?.session_setup!==true;
-    $('agent-setup-limit').textContent=!supported?'Подключение сессий этого провайдера готовится.':lastStatus?.session_setup!==true?'Для создания сессии требуется обновлённый фоновый клиент. Проверка программы уже доступна.':'';
-    $('agent-session-note').textContent=provider==='codex'
-      ?'Нужен отдельный профиль Codex, не ~/.codex. Один раз войдите в него в Терминале: CODEX_HOME="путь к профилю" codex login -c \'cli_auth_credentials_store="file"\'. Кнопка ниже запускает Codex для новой сессии и разрешает вызовы модели только для неё. Существующие чаты не используются, письма не отправляются.'
-      :'Создадим отдельный разговор и рабочую папку. Существующие чаты не используются. Создание не отправляет сообщения и не вызывает модель.';
-    if(provider==='codex'&&!setupPending){const env=$('agent-profile').value;if(!env||/\/\.codex\/?$/.test(env))$('agent-profile').value=env?env.replace(/\/\.codex\/?$/,'/AgentMessengerTest/codex-profile'):'';}
-    $('agent-alias').value=setupPending?.alias||(provider==='codex'?'codex-test-':'claude-test-')+crypto.randomUUID().slice(0,8);
-    $('agent-create-status').textContent=setupPending?'Предыдущая настройка не подтверждена. Повтор использует те же данные.':'';
-    if(setupPending&&provider==='claude'){$('agent-cli').value=setupPending.cli;$('agent-profile').value=setupPending.environment;}
-    setupFields();
+  function render(){
+    renderProjects();renderMachines();renderTaskList();renderThread();renderAgents();renderNotice();
+    $('connection').textContent=online?'Клиент доступен':'Клиент недоступен';
+  }
+  async function loadFeed(){
+    if(!selectedTask){feed=null;renderThread();return;}
+    const id=selectedTask;
+    try{const f=await api('/api/task?id='+encodeURIComponent(id));if(id===selectedTask){feed=f;updateFeed();}}
+    catch(_){}
+  }
+  async function refresh(){
+    if(refreshing)return;refreshing=true;
+    try{
+      const v=await api('/api/window?project='+encodeURIComponent(project));online=true;
+      if(!v.projects.some(p=>p.name===project))project=v.project||'';
+      const signature=JSON.stringify(v);
+      if(signature!==viewSignature){viewSignature=signature;view=v;if(selectedTask&&!v.tasks.some(t=>t.id===selectedTask)){selectedTask='';feed=null;feedSignature='';}render();}
+      else{renderMachines();renderNotice();}
+      if(selectedTask)await loadFeed();
+    }catch(error){online=false;renderMachines();renderNotice();}
+    finally{refreshing=false;}
+  }
+  async function loadDiscovery(){try{const d=await api('/api/discovery',8000);discovery=d.agents||[];renderAgents();}catch(_){}}
+  function show(next){
+    tab=next;root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab);
+    root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
+    $('list-toggle').hidden=tab!=='tasks';$('screen-title').textContent={tasks:'Задачи',agents:'Агенты',server:'Сервер'}[tab];
+  }
+  let editingFolder=false;
+  function openProjectDialog(edit){
+    editingFolder=edit;
+    $('project-dialog-title').textContent=edit?'Папка проекта «'+view.project+'»':'Новый проект';
+    $('project-name-field').hidden=edit;$('project-name').value='';$('project-folder').value=edit?view.folder:'';
+    $('project-save').textContent=edit?'Сохранить папку':'Создать проект';$('project-status').textContent='';
+    $('project-pick').hidden=!window.webkit?.messageHandlers?.folder;
+    $('project-dialog').showModal();
+  }
+  async function saveProject(){
+    const name=editingFolder?view.project:$('project-name').value.trim(),folder=$('project-folder').value.trim();
+    if(!name||!folder){$('project-status').textContent='Укажите имя и папку.';return;}
+    $('project-save').disabled=true;$('project-status').textContent='Сохраняем…';
+    try{
+      await postAPI(editingFolder?'/api/project-folder':'/api/project-create',{name,folder});
+      if(!editingFolder){project=name;remember('messenger-project',name);}
+      $('project-dialog').close();viewSignature='';await refresh();
+    }catch(error){$('project-status').textContent=error.message;}
+    finally{$('project-save').disabled=false;}
+  }
+  let setupProvider='';
+  function openAgentSetup(provider){
+    setupProvider=provider;const a=(view?.agents||[]).find(x=>x.agent===provider),found=discovery.find(d=>d.provider===provider);
+    $('agent-setup-title').textContent='Настройка: '+names[provider];
+    $('agent-cli').value=a?.cli||found?.cli||'';$('agent-profile').value=a?.environment||found?.environment||'';
+    $('agent-check-status').textContent='';$('agent-save-status').textContent='';$('agent-check-result').hidden=true;
     $('agent-setup').showModal();
   }
-  function setupFields(){
-    const frozen=creatingSession||checkingAgent||!!setupPending;
-    $('agent-cli').disabled=frozen;$('agent-profile').disabled=frozen;$('agent-alias').disabled=frozen;
-    $('agent-check').disabled=frozen;
-    $('agent-create').disabled=creatingSession||checkingAgent||lastStatus?.session_setup!==true;
-    $('agent-create').textContent=creatingSession?'Создаём сессию…':setupPending?'Повторить подключение':setupProvider==='codex'?'Создать сессию Codex и разрешить запуск':'Создать тестовую сессию';
-  }
-  async function createCodexSession(){
-    const draft={alias:$('agent-alias').value.trim(),cli:$('agent-cli').value.trim(),environment:$('agent-profile').value.trim(),confirmation:'allow-model-calls'};
-    if(!draft.alias||!draft.cli||!draft.environment){$('agent-create-status').textContent='Укажите программу, профиль и название сессии.';return;}
-    creatingSession=true;setupFields();renderCards();$('agent-create-status').textContent='Запускаем Codex, проверяем настройки и создаём разговор…';
-    try{
-      const response=await fetch('/api/setup-codex',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(draft),cache:'no-store',signal:AbortSignal.timeout(105000)});
-      if(response.status===400)throw Error('Проверьте пути к программе и профилю и название сессии.');
-      if(response.status===409){const result=await response.json().catch(()=>({}));throw Error('Сессия не создана: '+(result.detail||'отклонено')+'. Ничего не повторялось автоматически.');}
-      if(!response.ok)throw Error('Ответ не подтверждён. Не нажимайте повторно: проверьте список сессий.');
-      const result=await response.json();if(result.ok!==true||result.alias!==draft.alias)throw Error('Ответ не подтверждён. Проверьте список сессий.');
-      $('agent-create-status').textContent='Сессия «'+draft.alias+'» создана. Модель будет вызываться только для неё.';
-      selected=draft.alias;await refresh();
-      $('agent-setup').close();show('messages');$('session').value=draft.alias;actionControls();loadTimeline(false);
-    }catch(error){$('agent-create-status').textContent=error.name==='TimeoutError'||error.name==='AbortError'?'Ответ не получен. Не нажимайте повторно: проверьте список сессий.':error.message;}
-    finally{creatingSession=false;setupFields();renderCards();}
-  }
-  async function createAgentSession(){
-    if(setupProvider==='codex'&&!creatingSession&&!checkingAgent&&lastStatus?.session_setup===true)return createCodexSession();
-    if(creatingSession||checkingAgent||setupProvider!=='claude'||lastStatus?.session_setup!==true)return;
-    if(!setupPending){
-      const draft={id:crypto.randomUUID(),alias:$('agent-alias').value.trim(),cli:$('agent-cli').value.trim(),environment:$('agent-profile').value.trim()};
-      if(!draft.alias||!draft.cli||!draft.environment){$('agent-create-status').textContent='Укажите программу, профиль и название сессии.';return;}
-      setupPending=draft;
-    }
-    creatingSession=true;setupFields();renderCards();$('agent-create-status').textContent='Создаём отдельную сессию…';
-    try{
-      const response=await fetch('/api/setup-claude',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(setupPending),cache:'no-store',signal:AbortSignal.timeout(4500)});
-      if(response.status===400||response.status===409){setupPending=null;throw Error('Настройка отклонена. Проверьте пути и выберите свободное название.');}
-      if(!response.ok)throw Error('Настройка не подтверждена. Повтор использует те же данные.');
-      const result=await response.json();if(result.ok!==true||result.id!==setupPending.id||result.alias!==setupPending.alias)throw Error('Настройка не подтверждена. Повтор использует те же данные.');
-      const alias=setupPending.alias;setupPending=null;
-      $('agent-create-status').textContent='Сессия «'+alias+'» создана. Модель не запускалась.';
-      selected=alias;await refresh();
-      $('agent-setup').close();show('messages');$('session').value=alias;actionControls();loadTimeline(false);
-    }catch(error){$('agent-create-status').textContent=error.name==='TimeoutError'||error.name==='AbortError'?'Ответ не получен. Повтор использует те же данные; можно проверить список сессий.':error.message;}
-    finally{creatingSession=false;setupFields();renderCards();}
-  }
-  function showAgentCheck(check){
-    const result=$('agent-check-result');result.replaceChildren();result.hidden=!check;if(!check)return;
-    const reasons={version_not_qualified_for_auth_probe:'Для этой версии проверка входа ещё не подтверждена.',platform_not_qualified:'Проверка на этой ОС ещё не поддерживается.',unrecognized_version_output:'Программа вернула неизвестный формат версии.',timeout_or_cancelled:'Проверка не завершилась вовремя.',execution_failed:'Не удалось выполнить проверку.',output_limit:'Ответ программы превысил допустимый размер.'};
-    for(const [label,value] of [['Версия',check.version?.value||'Не удалось определить'],['Вход в аккаунт',authenticationText(check.authentication?.state)],['Проверено',check.checked_at?new Date(check.checked_at).toLocaleString():'Время неизвестно'],['Программа',check.cli],['Профиль',check.environment]]){
-      if(!value)continue;const pair=el('div');pair.append(el('dt',label),el('dd',value));result.append(pair);
-    }
-    const reason=reasons[check.authentication?.reason]||reasons[check.version?.reason];
-    if(reason)result.append(el('p',reason,'am-small am-muted'));
-  }
   async function checkAgent(){
-    if(checkingAgent||!setupProvider)return;
-    const provider=setupProvider,selection={provider,cli:$('agent-cli').value.trim(),environment:$('agent-profile').value.trim()};
+    const selection={provider:setupProvider,cli:$('agent-cli').value.trim(),environment:$('agent-profile').value.trim()};
     if(!selection.cli||!selection.environment){$('agent-check-status').textContent='Укажите программу и каталог профиля.';return;}
-    checkingAgent=true;agentChecks.delete(provider);agentSelections.set(provider,selection);showAgentCheck(null);setupFields();renderCards();
-    $('agent-cli').disabled=true;$('agent-profile').disabled=true;$('agent-check').disabled=true;$('agent-check-status').textContent='Проверяем версию и вход…';
+    $('agent-check').disabled=true;$('agent-check-status').textContent='Проверяем версию и вход…';
     try{
       const response=await fetch('/api/check-cli',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(selection),cache:'no-store',signal:AbortSignal.timeout(22000)});
-      if(!response.ok)throw Error(response.status===409?'Проверка уже выполняется. Дождитесь её завершения.':response.status===422?'Проверьте путь к программе и существующему профилю.':'Проверка не завершилась. Можно повторить позже.');
-      const result=await response.json();if(result.ok!==true||result.check?.provider!==provider)throw Error('Ответ проверки не подтверждён.');
-      agentChecks.set(provider,result.check);showAgentCheck(result.check);$('agent-check-status').textContent='Проверка завершена.';
-    }catch(error){$('agent-check-status').textContent=error.name==='TimeoutError'||error.name==='AbortError'?'Проверка не завершилась вовремя. Результат неизвестен.':error.message;}
-    finally{checkingAgent=false;setupFields();renderCards();}
+      if(!response.ok)throw Error(response.status===409?'Проверка уже выполняется.':response.status===422?'Проверьте путь к программе и профилю.':'Проверка не выполнена.');
+      const result=await response.json();if(result.ok!==true)throw Error('Ответ проверки не подтверждён.');
+      agentChecks.set(setupProvider,result.check);
+      const dl=$('agent-check-result');dl.replaceChildren();
+      for(const [label,value] of [['Версия',result.check.version?.value||'Не определена'],['Вход в аккаунт',{authenticated:'Выполнен',not_authenticated:'Не выполнен'}[result.check.authentication?.state]||'Не удалось определить']]){const p=el('div');p.append(el('dt',label),el('dd',value));dl.append(p);}
+      dl.hidden=false;$('agent-check-status').textContent='Проверка завершена.';renderAgents();
+    }catch(error){$('agent-check-status').textContent=error.name==='TimeoutError'?'Проверка не завершилась вовремя.':error.message;}
+    finally{$('agent-check').disabled=false;}
   }
-  function renderMessage(item) {
-    const group=el('article',undefined,'am-message-group');
-    group.setAttribute('aria-label',item.reply?'Письмо и связанный ответ':'Письмо');
-    function message(sender,text,outgoing,date) {
-      const row=el('div',undefined,'am-message '+(outgoing?'am-outgoing':'am-incoming'));
-      const avatar=el('div',undefined,'am-avatar'),body=el('div',undefined,'am-message-body');
-      const meta=el('div',undefined,'am-meta');meta.append(el('strong',senderLabel(sender)));
-      avatar.append(providerIcon(senderProvider(sender)));
-      if(date){const d=new Date(date);meta.append(el('time',isNaN(d.getTime())?date:d.toLocaleString()));}
-      const content=el('div',undefined,'am-message-content');content.append(el('p',text));
-      body.append(meta,content);row.append(avatar,body);group.append(row);return body;
-    }
-    // local-user is the sender assigned by the local UI endpoint. Agent aliases
-    // are not evidence of device identity; network ownership will be explicit.
-    const body=message(item.sender,item.text,item.sender==='local-user',item.created_at);
-    body.append(el('div',stateText(item.state),'am-delivery'));
-    if(item.text_truncated)body.append(el('p','Текст сокращён; полная версия остаётся в базе.','am-small am-status-warn'));
-    if(item.retry_of)body.append(el('p','Повтор письма: '+item.retry_of,'am-small am-muted'));
-    let resultBody=body;
-    if(item.reply) {
-      resultBody=message(item.reply.sender,item.reply.text,false,null);
-      if(item.reply.text_truncated)resultBody.append(el('p','Ответ сокращён.','am-small am-status-warn'));
-    }
-    const verified=item.result==='verified_turn'||item.result==='verified_exit';
-    resultBody.append(el('div',results[item.result]||'Результат неизвестен','am-delivery '+(verified?'am-status-good':item.result==='process_failed'?'am-status-warn':'')));
-    if(item.exit_code!==null && item.exit_code!==undefined)resultBody.append(el('div','Код выхода: '+item.exit_code,'am-small am-muted'));
-    if(verified && item.state==='uncertain')resultBody.append(el('p','Ответ подтверждён; защитный резерв ещё не снят.','am-small am-status-warn'));
-    return group;
+  async function saveAgent(){
+    const found=discovery.find(d=>d.provider===setupProvider);
+    let environment=$('agent-profile').value.trim();if(found&&environment===found.environment)environment='';
+    $('agent-save').disabled=true;$('agent-save-status').textContent='Сохраняем…';
+    try{await postAPI('/api/agent-set',{provider:setupProvider,cli:$('agent-cli').value.trim(),environment});$('agent-save-status').textContent='Агент подключён исполнителем.';viewSignature='';await refresh();}
+    catch(error){$('agent-save-status').textContent=error.message;}
+    finally{$('agent-save').disabled=false;}
   }
-  async function loadTimeline(older,quiet=false) {
-    if(quiet&&(timelineLoading||historyExpanded))return;
-    if(!selected){clearTimeline('Выберите зарегистрированную сессию.');return;}
-    const thread=$('thread');
-    if(quiet&&thread.scrollHeight-thread.clientHeight-thread.scrollTop>64)return;
-    if(timelineAbort)timelineAbort.abort();timelineAbort=new AbortController();
-    const version=++timelineVersion,alias=selected,before=older?cursor:'';
-    timelineLoading=true;
-    const timeout=setTimeout(()=>{if(version===timelineVersion)timelineAbort.abort();},4500);
-    $('older').disabled=true;
-    if(!older&&!quiet){historyExpanded=false;timelineSignature='';thread.replaceChildren(el('p','Загружаем переписку…','am-muted'));}
-    try {
-      const query=new URLSearchParams({alias,limit:'50'});if(before)query.set('before',before);
-      const page=await api('/api/timeline?'+query,timelineAbort.signal);
-      if(version!==timelineVersion)return;
-      if(page.schema_version!==1||!Array.isArray(page.items)||page.session_alias!==alias)throw Error('Версия журнала не поддерживается.');
-      const signature=JSON.stringify(page);
-      if(quiet&&signature===timelineSignature)return;
-      // A reader can scroll while the request is in flight. Leave their place
-      // and older history untouched; the next visit to the bottom refreshes it.
-      if(quiet&&thread.scrollHeight-thread.clientHeight-thread.scrollTop>64)return;
-      const nodes=page.items.map(renderMessage);
-      const oldHeight=thread.scrollHeight,oldTop=thread.scrollTop;
-      if(older)$('thread').prepend(...nodes);else $('thread').replaceChildren(...nodes);
-      if(!older&&!nodes.length)$('thread').append(el('p','В этой сессии ещё нет писем.','am-muted'));
-      thread.scrollTop=older?oldTop+(thread.scrollHeight-oldHeight):thread.scrollHeight;
-      if(older)historyExpanded=true;else timelineSignature=signature;
-      cursor=page.next_before||'';$('older').hidden=!page.has_more||!cursor;if(!quiet)notice('');
-    } catch(error) {
-      if(version!==timelineVersion||error.name==='AbortError')return;
-      if(quiet)return;
-      if(!older)$('thread').replaceChildren(el('p','Переписка не загружена.','am-muted'));
-      notice(error.message);
-    } finally {clearTimeout(timeout);if(version===timelineVersion){timelineLoading=false;$('older').disabled=false;}}
-  }
-  async function refreshVisibleConversation() {
-    if(quietBusy||document.hidden||root.querySelector('[data-screen="messages"]').hidden||root.querySelector('dialog[open]')||!lastStatus||pending||sending||queueBusy||launchingSession||$('refresh').disabled)return;
-    quietBusy=true;
-    const version=refreshVersion;
-    try {
-      await loadTimeline(false,true);
-      const [status,view]=await Promise.all([api('/api/status',AbortSignal.timeout(4500)),api('/api/overview',AbortSignal.timeout(4500))]);
-      if(version!==refreshVersion||pending||sending||queueBusy||view.schema_version!==1||!Array.isArray(view.sessions))return;
-      lastStatus=status;
-      if(JSON.stringify(view)!==JSON.stringify(overview)){overview=view;renderCards();}
-      $('processing').textContent=status.paused?'На паузе':'Приём включён';
-      $('permission').textContent=status.cli_launch==='not-authorized'?'Письма будут ждать запуска агента.':launchScopes(status).length?'Запуск разрешён только для '+launchScopes(status).map(a=>'«'+a+'»').join(', ')+'.':'';
-      actionControls();
-    } catch(_) {
-      // Read-only refresh never retries a mutation or erases visible history.
-    } finally {quietBusy=false;}
-  }
-  async function refresh() {
-    const version=++refreshVersion;lastStatus=null;outboxReady=false;actionControls();$('refresh').disabled=true;notice('');
-    clearTimeline('Обновляем данные…');$('session').disabled=true;
-    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),4500);
-    try {
-      const [status,view,outbox]=await Promise.all([api('/api/status',controller.signal),api('/api/overview',controller.signal),api('/api/outbox',controller.signal)]);
-      if(version!==refreshVersion)return;
-      if(view.schema_version!==1||!Array.isArray(view.sessions))throw Error('Версия сводки не поддерживается.');
-      if(outbox.schema_version!==1 || !Array.isArray(outbox.items) || outbox.items.some(item=>!['prepared','queued'].includes(item.state)))throw Error('Журнал исходящих недоступен или требует обновления клиента.');
-      outboxItems=outbox.items;outboxReady=true;overview=view;lastStatus=status;
-      renderOutbox();
-      // An accepted envelope may survive a lost browser ACK. Keep local pending
-      // retry available; it uses the same ID. Other stored sends are reviewed first.
-      $('connection').textContent='Клиент доступен';$('connection-dot').classList.add('online');$('connection-dot').parentElement.title='Этот компьютер подключён';
-      $('checked').textContent='Данные обновлены '+new Date().toLocaleTimeString();$('refresh').title='Обновить сообщения и статусы · '+$('checked').textContent;
-      $('processing').textContent=status.paused?'На паузе':'Приём включён';
-      $('permission').textContent=status.cli_launch==='not-authorized'?'Письма будут ждать запуска агента.':launchScopes(status).length?'Запуск разрешён только для '+launchScopes(status).map(a=>'«'+a+'»').join(', ')+'.':'';
-      const select=$('session');select.replaceChildren();
-      for(const s of view.sessions)for(const alias of s.aliases){const option=el('option',(names[s.provider]||s.provider)+' · '+alias);option.value=alias;option.dataset.provider=s.provider;select.append(option);}
-      if(pending && !Array.from(select.options).some(o=>o.value===pending.alias)){const option=el('option',pending.alias);option.value=pending.alias;select.append(option);}
-      if(pending)selected=pending.alias;
-      if(!select.options.length){select.append(el('option','Нет зарегистрированных сессий'));select.options[0].value='';selected='';}
-      else {if(!Array.from(select.options).some(o=>o.value===selected))selected=select.options[0].value;select.value=selected;select.disabled=false;}
-      renderCards();actionControls();await loadTimeline(false);
-    } catch(error) {
-      if(version!==refreshVersion)return;
-      overview=null;lastStatus=null;outboxReady=false;actionControls();clearTimeline('Данные клиента недоступны. Сохранённые письма не удалены.');
-      $('session').replaceChildren(el('option','Клиент недоступен'));$('session').disabled=true;
-      renderCards();
-      $('queue').replaceChildren(el('p','Очередь не прочитана. Это не означает, что она пуста.','am-muted'));
-      $('connection').textContent='Клиент недоступен';$('connection-dot').classList.remove('online');$('connection-dot').parentElement.title='Нет связи с этим компьютером';$('refresh').title='Обновить сообщения и статусы · предыдущая проверка не удалась';
-      $('processing').textContent='Нет актуальных данных';$('permission').textContent='';$('checked').textContent='Обновление не удалось';
-      notice(error.name==='AbortError'?'Клиент не ответил вовремя.':error.message);
-    } finally {clearTimeout(timeout);if(version===refreshVersion){$('refresh').disabled=false;actionControls();}}
-    try {
-      const d=await api('/api/discovery',AbortSignal.timeout(4500));if(version!==refreshVersion)return;
-      discoveryAgents=d.agents;renderCards();actionControls();
-      $('platform').textContent={darwin:'macOS',linux:'Linux',windows:'Windows'}[d.os]||d.os;
-    } catch(_) {if(version===refreshVersion){discoveryAgents=[];renderCards();actionControls();}}
-
-  }
+  window.messengerRefresh=()=>{viewSignature='';refresh();};
+  window.messengerFolderPicked=path=>{if(typeof path==='string'&&path)$('project-folder').value=path;};
   window.messengerUpdateStatus = status => {
     if(!window.webkit?.messageHandlers?.updates)return;
     const version=typeof status?.version==='string'?status.version:'';
@@ -530,34 +458,34 @@
     $('app-update-button').classList.toggle('am-update-available',!!version);
     $('app-update-version').hidden=true;
   };
-  $('session-dialog-close').addEventListener('click',()=>$('session-dialog').close());
-  $('agent-setup-close').addEventListener('click',()=>$('agent-setup').close());
-  $('agent-check').addEventListener('click',checkAgent);
-  $('agent-create').addEventListener('click',createAgentSession);
-  for(const field of [$('agent-cli'),$('agent-profile')])field.addEventListener('input',()=>{agentChecks.delete(setupProvider);showAgentCheck(null);$('agent-check-status').textContent='';renderCards();});
-  $('queue-toggle').addEventListener('click',()=>{
-    const expanded=$('queue-toggle').getAttribute('aria-expanded')!=='true';
-    $('queue-toggle').setAttribute('aria-expanded',String(expanded));
-    $('queue-toggle').setAttribute('aria-label',expanded?'Скрыть очередь сообщений':'Показать очередь сообщений');
-    $('queue-toggle').title=expanded?'Скрыть очередь сообщений':'Показать очередь сообщений';
-    $('queue-panel').hidden=!expanded;
-    root.querySelector('.am-chat-layout').classList.toggle('am-queue-collapsed',!expanded);
-  });
   $('app-update-button').addEventListener('click',()=>window.webkit?.messageHandlers?.updates?.postMessage('check'));
   root.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>show(b.dataset.tab)));
-  $('session').addEventListener('change',()=>{if(pending||sending)return;selected=$('session').value;actionControls();loadTimeline(false);});
-  $('message-text').addEventListener('input',()=>{const field=$('message-text');field.style.height='auto';field.style.height=Math.min(140,Math.max(44,field.scrollHeight))+'px';actionControls();});
-  $('send').addEventListener('click',sendMessage);$('queue-action').addEventListener('click',changeQueue);
-  $('refresh').addEventListener('click',refresh);$('older').addEventListener('click',()=>loadTimeline(true));
-  const chatBody=root.querySelector('.am-chat-body'),chatFooter=root.querySelector('.am-chat-footer');
-  new ResizeObserver(()=>{
-    const thread=$('thread'),atBottom=thread.scrollHeight-thread.clientHeight-thread.scrollTop<32;
-    chatBody.style.setProperty('--am-footer-height',chatFooter.getBoundingClientRect().height+'px');
-    if(atBottom)thread.scrollTop=thread.scrollHeight;
-  }).observe(chatFooter);
-  enhanceSelect($('theme-select'));enhanceSelect($('session'));
-  // WebKit may overlay scrollbars while Chromium reserves their width. Use
-  // the actual occupied gutter, not the painted thumb width, for equal insets.
+  $('list-toggle').addEventListener('click',()=>{
+    const expanded=$('list-toggle').getAttribute('aria-expanded')!=='true';
+    $('list-toggle').setAttribute('aria-expanded',String(expanded));
+    const label=expanded?'Скрыть список задач':'Показать список задач';$('list-toggle').setAttribute('aria-label',label);$('list-toggle').title=label;
+    $('task-panel').hidden=!expanded;$('task-layout').classList.toggle('am-queue-collapsed',!expanded);
+  });
+  $('project-select').addEventListener('change',()=>{
+    const value=$('project-select').value;
+    if(value==='__new'){$('project-select').value=view?.project||'__new';syncSelects();openProjectDialog(false);return;}
+    project=value;remember('messenger-project',value);selectedTask='';feed=null;feedSignature='';viewSignature='';refresh();
+  });
+  $('agent-filter').addEventListener('change',renderTaskList);
+  $('answer-text').addEventListener('input',()=>{const f=$('answer-text');f.style.height='auto';f.style.height=Math.min(140,Math.max(44,f.scrollHeight))+'px';answerControls();});
+  $('answer-send').addEventListener('click',sendAnswer);
+  $('answer-text').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();sendAnswer();}});
+  $('project-dialog-close').addEventListener('click',()=>$('project-dialog').close());
+  $('project-save').addEventListener('click',saveProject);
+  $('project-pick').addEventListener('click',()=>window.webkit?.messageHandlers?.folder?.postMessage('pick'));
+  $('agent-setup-close').addEventListener('click',()=>$('agent-setup').close());
+  $('agent-check').addEventListener('click',checkAgent);
+  $('agent-save').addEventListener('click',saveAgent);
+  let initialTheme=window.messengerInitialTheme;
+  if(!initialTheme)try{initialTheme=localStorage.getItem('messenger-theme');}catch(_){}
+  enhanceSelect($('theme-select'));enhanceSelect($('project-select'));enhanceSelect($('agent-filter'));
+  applyTheme(initialTheme||'system');
+  $('theme-select').addEventListener('change',()=>applyTheme($('theme-select').value,true));
   const gutterObserver=new ResizeObserver(entries=>{
     for(const {target} of entries){
       if(!target.getClientRects().length)continue;
@@ -568,6 +496,8 @@
     }
   });
   root.querySelectorAll('.am-screen,.am-thread,.am-queue-list,.am-dialog-body,.am-machines').forEach(element=>gutterObserver.observe(element));
-  refresh();
-  setInterval(refreshVisibleConversation,2000);
+  const chatBody=root.querySelector('.am-chat-body'),chatFooter=root.querySelector('.am-chat-footer');
+  new ResizeObserver(()=>chatBody.style.setProperty('--am-footer-height',chatFooter.getBoundingClientRect().height+'px')).observe(chatFooter);
+  show('tasks');refresh();loadDiscovery();
+  setInterval(refresh,2000);setInterval(loadDiscovery,60000);
 })();

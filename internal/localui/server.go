@@ -126,7 +126,7 @@ func newHandlerWithChecks(host, token string, call caller, discover func(context
 			http.Error(w, "cross-site request refused", http.StatusForbidden)
 			return
 		}
-		mutation := r.URL.Path == "/api/enqueue" || r.URL.Path == "/api/pause" || r.URL.Path == "/api/resume" || r.URL.Path == "/api/outbox/ack" || r.URL.Path == "/api/check-cli" || r.URL.Path == "/api/setup-claude" || r.URL.Path == "/api/setup-codex" || r.URL.Path == "/api/authorize-setup"
+		mutation := r.URL.Path == "/api/enqueue" || r.URL.Path == "/api/pause" || r.URL.Path == "/api/resume" || r.URL.Path == "/api/outbox/ack" || r.URL.Path == "/api/check-cli" || r.URL.Path == "/api/setup-claude" || r.URL.Path == "/api/setup-codex" || r.URL.Path == "/api/authorize-setup" || taskMutation(r.URL.Path)
 		method := http.MethodGet
 		if mutation {
 			method = http.MethodPost
@@ -201,6 +201,33 @@ func newHandlerWithChecks(host, token string, call caller, discover func(context
 				return
 			}
 			var req control.Request
+			if taskMutation(r.URL.Path) {
+				var ok bool
+				if req, ok = decodeTaskMutation(r.URL.Path, decoder); !ok {
+					http.Error(w, "invalid request", 400)
+					return
+				}
+				if decoder.Decode(new(any)) != io.EOF {
+					http.Error(w, "one JSON object required", 400)
+					return
+				}
+				response, err := call(ctx, req)
+				if err != nil {
+					w.Header().Set("Content-Type", "application/json; charset=utf-8")
+					w.WriteHeader(http.StatusServiceUnavailable)
+					writeJSON(w, map[string]any{"ok": false, "state": "unconfirmed"})
+					return
+				}
+				if !response.OK {
+					// Task errors are plain rule messages; they carry no secrets.
+					w.Header().Set("Content-Type", "application/json; charset=utf-8")
+					w.WriteHeader(http.StatusConflict)
+					writeJSON(w, map[string]any{"ok": false, "state": "rejected", "detail": response.Error})
+					return
+				}
+				writeJSON(w, map[string]any{"ok": true, "action": req.Cmd})
+				return
+			}
 			if r.URL.Path == "/api/authorize-setup" {
 				var input struct {
 					Alias        string `json:"alias"`
@@ -323,6 +350,20 @@ func newHandlerWithChecks(host, token string, call caller, discover func(context
 			req.Cmd = "status"
 		case "/api/overview":
 			req.Cmd = "overview"
+		case "/api/window":
+			req.Cmd = "window-view"
+			req.Alias = r.URL.Query().Get("project")
+			if len(req.Alias) > 256 {
+				http.Error(w, "invalid project", 400)
+				return
+			}
+		case "/api/task":
+			req.Cmd = "task-feed"
+			req.MessageID = r.URL.Query().Get("id")
+			if req.MessageID == "" || len(req.MessageID) > 128 {
+				http.Error(w, "invalid task", 400)
+				return
+			}
 		case "/api/timeline":
 			req.Cmd = "timeline"
 			req.Alias = r.URL.Query().Get("alias")
@@ -360,7 +401,7 @@ func newHandlerWithChecks(host, token string, call caller, discover func(context
 			status := *response.Status
 			status.Detail = ""
 			writeJSON(w, status)
-		case "overview":
+		case "overview", "window-view", "task-feed":
 			writeRaw(w, response.Overview)
 		case "timeline":
 			writeRaw(w, response.Timeline)
@@ -384,4 +425,51 @@ func writeJSON(w http.ResponseWriter, value any) {
 		return
 	}
 	writeRaw(w, raw)
+}
+
+func taskMutation(path string) bool {
+	switch path {
+	case "/api/project-create", "/api/project-folder", "/api/task-answer", "/api/agent-set":
+		return true
+	}
+	return false
+}
+
+// decodeTaskMutation reads one window action of the task model. The client
+// re-checks every rule; this only bounds the input.
+func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bool) {
+	switch path {
+	case "/api/project-create", "/api/project-folder":
+		var in struct {
+			Name   string `json:"name"`
+			Folder string `json:"folder"`
+		}
+		if decoder.Decode(&in) != nil || !core.ValidProjectName(in.Name) || !filepath.IsAbs(in.Folder) || len(in.Folder) > 4096 {
+			return control.Request{}, false
+		}
+		cmd := strings.TrimPrefix(path, "/api/")
+		return control.Request{Cmd: cmd, Alias: in.Name, Workspace: in.Folder}, true
+	case "/api/task-answer":
+		var in struct {
+			Task     string `json:"task"`
+			Question string `json:"question"`
+			OpID     string `json:"op_id"`
+			Text     string `json:"text"`
+		}
+		if decoder.Decode(&in) != nil || in.Task == "" || len(in.Task) > 128 || in.Question == "" || len(in.Question) > 128 || in.OpID == "" || len(in.OpID) > 128 || strings.TrimSpace(in.Text) == "" || len(in.Text) > 4*core.MaxTaskText {
+			return control.Request{}, false
+		}
+		return control.Request{Cmd: "task-owner-answer", MessageID: in.Task, ConversationID: in.Question, Confirmation: in.OpID, Text: in.Text}, true
+	case "/api/agent-set":
+		var in struct {
+			Provider    string `json:"provider"`
+			CLI         string `json:"cli"`
+			Environment string `json:"environment"`
+		}
+		if decoder.Decode(&in) != nil || !core.TaskProviders[in.Provider] || !filepath.IsAbs(in.CLI) || len(in.CLI) > 4096 || (in.Environment != "" && !filepath.IsAbs(in.Environment)) || len(in.Environment) > 4096 {
+			return control.Request{}, false
+		}
+		return control.Request{Cmd: "agent-set", Provider: in.Provider, CLI: in.CLI, Environment: in.Environment}, true
+	}
+	return control.Request{}, false
 }

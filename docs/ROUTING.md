@@ -2,7 +2,15 @@
 
 A reply always goes to the sender of the message it answers. The code sets the recipient; the model cannot choose it.
 
-When that sender is the alias of another open local session, the reply is also queued for that session as a new message. This happens in the same SQLite transaction that stores the reply, so a stored reply is never left undelivered. This is how Claude and Codex talk to each other on one computer: a message to Codex from the alias `worker`, a Claude session, is answered by Codex. The answer is queued for `worker`, and Claude's answer to it goes back to Codex.
+When that sender is the alias of another open local session, the reply is also queued for that session as a new message.
+
+**Publication after verification (T-022).** A stored reply is first *held* (`replies.held = 1`). It is published, which means routed to its recipient, only in the transaction that marks its attempt complete after verification:
+
+- persistent Claude turn: `CompleteStreamTurn` (provider completion and the bound reply; the process stays alive, so there is no exit code);
+- Codex owner turn: `CompleteCodexTurn` (exact `turn/completed` with status `completed` and the bound reply);
+- one-shot run: `Accept` (identity, bound reply, observed exit 0, valid provider result, and the stop proof).
+
+A reply of a failed or uncertain run stays held and is never published; the window shows it as not verified (`held` in the timeline). Messages a turn started with `send` are held the same way (request state `held`) and are queued only on that turn's verified completion. This is how Claude and Codex talk to each other on one computer: a message to Codex from the alias `worker`, a Claude session, is answered by Codex. The answer is queued for `worker`, and Claude's answer to it goes back to Codex.
 
 The delivered message:
 
@@ -44,7 +52,7 @@ A persistent Claude session has a third tool, `send(to, text, receipt)`. It lets
 
 - **Who it can write to.** `read_current` also returns `from` and `agents`, the aliases of the other open local sessions.
 - **Receipt.** `send` requires the turn's current receipt, like `reply`. The turn still has to end with `reply`.
-- **The new message.** It is queued for the recipient with the ID `send-<id>`, from the sending alias. It has `in_reply_to` set to the current message, and `hops` is one more than the current message's.
+- **The new message.** It is held until the turn is verified, then queued for the recipient with the ID `send-<id>`, from the sending alias. It has `in_reply_to` set to the current message, and `hops` is one more than the current message's.
   - It counts toward the same chain limit, so a send past `MaxAutoReplyHops` is refused.
   - At most `MaxSendsPerTurn` = 3 sends are allowed per turn.
   - The recipient must be another open session, never the sender itself.

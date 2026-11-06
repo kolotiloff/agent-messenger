@@ -34,6 +34,9 @@ type TimelineItem struct {
 type TimelineReply struct {
 	Reply
 	TextTruncated bool `json:"text_truncated"`
+	// Held means the reply is stored but its run was not verified, so it was
+	// not published to its recipient (T-022).
+	Held bool `json:"held"`
 }
 
 // Timeline returns a page of the selected session's newest requests, with each
@@ -57,7 +60,7 @@ func (s *Store) Timeline(alias string, limit int, before string) (Timeline, erro
 		}
 		rows, err := tx.Query(`SELECT q.id,q.sender,substr(q.text,1,?),length(q.text)>?,q.created_at,q.state,COALESCE(q.retry_of,''),
 			COALESCE(a.alias,''),COALESCE(a.state,'none'),
-			r.id,r.sender,r.recipient,substr(r.text,1,?),COALESCE(length(r.text)>?,0),
+			r.id,r.sender,r.recipient,substr(r.text,1,?),COALESCE(length(r.text)>?,0),COALESCE(r.held,0),
 			v.attempt_token IS NOT NULL,COALESCE(v.identity_confirmed,0),COALESCE(v.provider_ok,0),
 			COALESCE(v.exit_observed,0),v.exit_code,COALESCE(v.reply_id=r.id AND r.sender=a.alias AND r.recipient=q.sender,0)
 			FROM requests q
@@ -78,14 +81,14 @@ func (s *Store) Timeline(alias string, limit int, before string) (Timeline, erro
 			var item TimelineItem
 			var replyID, sender, recipient, text sql.NullString
 			var exit sql.NullInt64
-			var truncated, verified, identity, providerOK, exited, linked bool
+			var truncated, held, verified, identity, providerOK, exited, linked bool
 			if err := rows.Scan(&item.ID, &item.Sender, &item.Text, &item.TextTruncated, &item.CreatedAt, &item.State, &item.RetryOf,
-				&item.AttemptAlias, &item.AttemptState, &replyID, &sender, &recipient, &text, &truncated,
+				&item.AttemptAlias, &item.AttemptState, &replyID, &sender, &recipient, &text, &truncated, &held,
 				&verified, &identity, &providerOK, &exited, &exit, &linked); err != nil {
 				return err
 			}
 			if replyID.Valid {
-				item.Reply = &TimelineReply{Reply: Reply{ID: replyID.String, ReplyTo: item.ID, Sender: sender.String, Recipient: recipient.String, Text: text.String}, TextTruncated: truncated}
+				item.Reply = &TimelineReply{Reply: Reply{ID: replyID.String, ReplyTo: item.ID, Sender: sender.String, Recipient: recipient.String, Text: text.String}, TextTruncated: truncated, Held: held}
 			}
 			item.Result = "not_verified"
 			if exited && exit.Valid {

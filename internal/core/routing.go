@@ -14,7 +14,7 @@ import (
 // answering each other forever.
 const MaxAutoReplyHops = 3
 
-// routeReply runs in the transaction that stores the reply. When the reply's
+// routeReply runs in the transaction that publishes a verified reply. When the reply's
 // recipient is the alias of another open local session, the reply becomes a
 // new queued message for it, from the replying alias, linked to the request it
 // answers. The message ID is derived from the reply ID, so it exists exactly
@@ -109,11 +109,12 @@ func sendTx(tx *sql.Tx, row attemptRow, to, text string) (string, error) {
 		return "", err
 	}
 	id = "send-" + id
-	if _, err := tx.Exec(`INSERT INTO requests(id,session_key,sender,text,state,created_at,in_reply_to,hops) VALUES (?,?,?,?,'queued',?,?,?)`,
+	// Held until the turn is verified, like its reply (T-022).
+	if _, err := tx.Exec(`INSERT INTO requests(id,session_key,sender,text,state,created_at,in_reply_to,hops) VALUES (?,?,?,?,'held',?,?,?)`,
 		id, key, row.alias, text, now(), row.requestID, hops+1); err != nil {
 		return "", err
 	}
-	return id, insertEvent(tx, "agent_send", key, row.token, id)
+	return id, insertEvent(tx, "agent_send", key, row.token, id+"; held until the turn is verified")
 }
 
 // StreamSend lets a persistent Claude turn start a message to another agent.

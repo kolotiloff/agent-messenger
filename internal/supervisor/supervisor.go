@@ -71,15 +71,21 @@ type Supervisor struct {
 	cancel     context.CancelFunc
 	ctx        context.Context
 
-	mu           sync.Mutex
-	jobs         map[string]*activeJob
-	streams      sync.WaitGroup
-	liveStreams  atomic.Int32
-	beforeSignal func()
-	dispatch     sync.Mutex
-	stopping     atomic.Bool
-	starting     atomic.Bool
-	codex        codexOwners
+	mu          sync.Mutex
+	jobs        map[string]*activeJob
+	streams     sync.WaitGroup
+	liveStreams atomic.Int32
+	// streamOpening counts stream controllers that have not finished starting
+	// their process. Only one may start at a time: the startup lease is
+	// exclusive, and a second start would fail and leave its message
+	// uncertain.
+	streamOpening atomic.Int32
+	beforeSignal  func()
+	dispatch      sync.Mutex
+	stopping      atomic.Bool
+	starting      atomic.Bool
+	codex         codexOwners
+	tasks         taskRuns
 }
 
 type activeJob struct {
@@ -186,6 +192,7 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 	cancel()
 	wg.Wait()
 	sup.streams.Wait()
+	sup.tasks.wg.Wait()
 	if ctx.Err() != nil {
 		return nil
 	}
@@ -201,12 +208,13 @@ func (s *Supervisor) loop(ctx context.Context) {
 			return
 		case <-ticker.C:
 		}
+		s.dispatchTasks(ctx)
 		launcher := s.currentLauncher()
 		if s.stopping.Load() || s.starting.Load() || !launcher.Enabled() {
 			continue
 		}
 		if stream, ok := launcher.(StreamLauncher); ok && stream.StreamingEnabled() {
-			if s.liveStreams.Load() >= maxClaudeStreams {
+			if s.liveStreams.Load() >= maxClaudeStreams || s.streamOpening.Load() > 0 {
 				continue
 			}
 			var token string
@@ -223,6 +231,7 @@ func (s *Supervisor) loop(ctx context.Context) {
 			// owners, so one live stream does not starve another session.
 			s.streams.Add(1)
 			s.liveStreams.Add(1)
+			s.streamOpening.Add(1)
 			go func() {
 				defer s.streams.Done()
 				defer s.liveStreams.Add(-1)
@@ -431,6 +440,9 @@ func (s *Supervisor) Status() (control.Status, error) {
 	}
 	if adapter, ok := launcher.(AdapterLauncher); ok {
 		status.SessionLaunch = adapter.ClaudeStream && (!adapter.AllowModels || adapter.OnlySession != "")
+	}
+	if tasks, ok := launcher.(TaskLauncher); ok {
+		status.TasksEnabled = tasks.TasksEnabled()
 	}
 	if labeled, ok := launcher.(interface{ LaunchLabel() string }); ok {
 		status.CLILaunch = labeled.LaunchLabel()

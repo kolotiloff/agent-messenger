@@ -133,7 +133,7 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	if _, err := db.Exec(schema + streamSchema + streamRecoverySchema + uiOutboxSchema + codexSetupSchema); err != nil {
+	if _, err := db.Exec(schema + streamSchema + streamRecoverySchema + uiOutboxSchema + codexSetupSchema + taskSchema + taskRunItemsSchema); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -150,6 +150,8 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	for _, c := range [][3]string{
+		{"replies", "held", "INTEGER NOT NULL DEFAULT 0"},
+		{"coordinator_connections", "client", "TEXT"},
 		{"requests", "in_reply_to", "TEXT"},
 		{"requests", "hops", "INTEGER NOT NULL DEFAULT 0"},
 	} {
@@ -548,15 +550,49 @@ func replyTx(tx *sql.Tx, row attemptRow, token, text string) (Reply, error) {
 		return Reply{}, err
 	}
 	reply := Reply{ID: id, ReplyTo: row.requestID, Sender: row.alias, Recipient: row.sender, Text: text}
-	_, err = tx.Exec(`INSERT INTO replies(id, reply_to, attempt_token, sender, recipient, text) VALUES (?,?,?,?,?,?)`,
+	// The reply is held: it reaches its recipient only when the attempt is
+	// verified and marked complete (publishVerifiedTx, T-022).
+	_, err = tx.Exec(`INSERT INTO replies(id, reply_to, attempt_token, sender, recipient, text, held) VALUES (?,?,?,?,?,?,1)`,
 		reply.ID, reply.ReplyTo, token, reply.Sender, reply.Recipient, reply.Text)
 	if err != nil {
 		return Reply{}, err
 	}
-	if err := insertEvent(tx, "reply", row.sessionKey, token, reply.ID); err != nil {
+	if err := insertEvent(tx, "reply", row.sessionKey, token, reply.ID+"; held until the run is verified"); err != nil {
 		return Reply{}, err
 	}
-	return reply, routeReply(tx, row, reply)
+	return reply, nil
+}
+
+// publishVerifiedTx runs in the transaction that marks an attempt complete
+// after its run was verified. It releases the attempt's held reply and routes
+// it, and queues the messages the turn started with send. Nothing held by an
+// attempt that is not completed this way is ever published.
+func publishVerifiedTx(tx *sql.Tx, row attemptRow) error {
+	var reply Reply
+	err := tx.QueryRow(`SELECT id, reply_to, sender, recipient, text FROM replies WHERE attempt_token=? AND reply_to=? AND held=1`, row.token, row.requestID).
+		Scan(&reply.ID, &reply.ReplyTo, &reply.Sender, &reply.Recipient, &reply.Text)
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
+	if err == nil {
+		if _, err := tx.Exec(`UPDATE replies SET held=0 WHERE id=?`, reply.ID); err != nil {
+			return err
+		}
+		if err := insertEvent(tx, "reply_published", row.sessionKey, row.token, reply.ID); err != nil {
+			return err
+		}
+		if err := routeReply(tx, row, reply); err != nil {
+			return err
+		}
+	}
+	r, err := tx.Exec(`UPDATE requests SET state='queued' WHERE in_reply_to=? AND state='held' AND id LIKE 'send-%'`, row.requestID)
+	if err != nil {
+		return err
+	}
+	if n, _ := r.RowsAffected(); n > 0 {
+		return insertEvent(tx, "sends_published", row.sessionKey, row.token, fmt.Sprintf("%d messages released after verification", n))
+	}
+	return nil
 }
 
 // FinishObserved records the supervisor's own wait and always leaves the session locked.
@@ -607,6 +643,9 @@ func (s *Store) RevokeInherited() (int, error) {
 			return err
 		}
 		if err := stopInheritedCodexSetups(tx); err != nil {
+			return err
+		}
+		if err := interruptInheritedTaskRuns(tx); err != nil {
 			return err
 		}
 		rows, err := tx.Query(`SELECT active_token FROM sessions WHERE active_token IS NOT NULL AND key NOT IN (SELECT session_key FROM stream_runs)`)
@@ -787,6 +826,9 @@ func (s *Store) Accept(alias string, proof platform.Proof) error {
 			return err
 		}
 		if _, err := tx.Exec(`UPDATE requests SET state = 'completed' WHERE id = ?`, row.requestID); err != nil {
+			return err
+		}
+		if err := publishVerifiedTx(tx, row); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(`UPDATE sessions SET active_token = NULL WHERE key = ?`, key); err != nil {
@@ -1027,7 +1069,7 @@ func (s *Store) Snapshot() (Snapshot, error) {
 		if err != nil {
 			return err
 		}
-		snap.Replies, err = readRows(tx, `SELECT id, reply_to, sender, recipient, text FROM replies ORDER BY rowid`)
+		snap.Replies, err = readRows(tx, `SELECT id, reply_to, sender, recipient, text, held FROM replies ORDER BY rowid`)
 		if err != nil {
 			return err
 		}
