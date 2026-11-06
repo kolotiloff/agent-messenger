@@ -6,15 +6,12 @@ This file is the shared memory between tools (Claude Code, Cursor, Codex). Whoev
 
 Updated 2026-11-06 by Claude Code.
 
-- **Merged to `main` ([PR #28](https://github.com/kolotiloff/agent-messenger/pull/28)):** T-001, creating a Codex session before its first message.
-  - `messenger create-codex-session` launches a managed app-server, checks its config, and creates a thread with the Messenger tools. It stores the thread ID; the live process stays the owner. No model is called.
-  - Details: [CODEX_ADAPTER_NEXT.md](CODEX_ADAPTER_NEXT.md) ("Session setup"), [report](reports/2026-11-06-codex-setup-linux.md).
-- **Not done yet:**
-  - Messages cannot be sent to a created Codex session (T-002).
-  - Uncertain setups cannot be resolved (T-007).
-  - The setup has not been run on the Mac.
+- **`main` ([PR #29](https://github.com/kolotiloff/agent-messenger/pull/29)):** T-001 and T-002 are done. `create-codex-session` creates a Codex thread owned by a live app-server, and queued messages to its alias are delivered one turn at a time in that same process. The turns use the bound `read_current`/`reply` tools. Details: [CODEX_ADAPTER_NEXT.md](CODEX_ADAPTER_NEXT.md), [setup report](reports/2026-11-06-codex-setup-linux.md), [delivery report](reports/2026-11-06-codex-delivery-linux.md).
+- **Verified:** only on Linux, with a fake app-server. No real Codex model turn has run yet.
 - **No work in progress on any branch.**
-- **Next task:** T-002, delivering messages to the Codex owner. Steps 4–5 of the plan below.
+- **`main` ([PR #29](https://github.com/kolotiloff/agent-messenger/pull/29)):** T-007 is done. `recover-codex` retires an uncertain Codex owner after a proven reboot. It is refused on Linux and Windows, which have no boot identity source yet.
+- **Next:** T-004, the first real run on the Mac, needs the owner (Q-005, Q-007). Meanwhile T-005 (several owners, Claude ↔ Codex) can go ahead without the Mac.
+- **Mac status:** the Mac froze and rebooted on 2026-11-06 after preview.19. The live Claude test owner from that acceptance is gone. Its reservation is kept until `recover-stream` is run on the Mac; this is not needed for current work.
 
 Codex CLI for model-free checks in a cloud session: `npm install @openai/codex@0.155.1` in a scratch directory. Then use the native binary under `node_modules/@openai/codex-linux-x64/vendor/*/bin/codex` with `MESSENGER_CODEX_PROBE=...`.
 

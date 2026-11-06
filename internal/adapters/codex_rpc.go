@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sync"
+	"time"
 )
 
 // Setup-phase methods. None of them starts a model turn. turn/start is not
@@ -306,4 +307,194 @@ func samePath(a, b string) bool {
 	ia, errA := os.Stat(ra)
 	ib, errB := os.Stat(rb)
 	return errA == nil && errB == nil && os.SameFile(ia, ib)
+}
+
+// CodexTurnPrompt is the only model input Messenger sends. The message itself
+// is read through the bound tool, so the reply is tied to its receipt.
+const CodexTurnPrompt = "Authorized Messenger message. Use ONLY the messenger_bound tools. First call read_current, then call reply with your response text and the receipt returned for this message. Never reuse a receipt. Do not choose a recipient or message ID. Do not poll or use other tools."
+
+// Bound on frames kept while turn/start has not been answered yet.
+const codexMaxEarlyFrames = 256
+
+var ErrCodexIdleRequest = errors.New("Codex app-server sent a request while idle")
+
+// WaitIdle consumes output while no turn runs. Notifications are dropped; a
+// server request is an error. Every poll interval it calls ready, and returns
+// nil as soon as ready reports true. It also returns on ctx or EOF.
+func (c *CodexRPC) WaitIdle(ctx context.Context, poll time.Duration, ready func() bool) error {
+	ticker := time.NewTicker(poll)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case frame, ok := <-c.frames:
+			if !ok {
+				c.closed = true
+				return fmt.Errorf("app-server stopped while idle: %w", c.readErr())
+			}
+			if frame.hasID() {
+				c.closed = true
+				return ErrCodexIdleRequest
+			}
+		case <-ticker.C:
+			if ready() {
+				return nil
+			}
+		}
+	}
+}
+
+func (c *CodexRPC) respond(id json.RawMessage, result json.RawMessage, failure string) error {
+	if failure != "" {
+		return c.write(map[string]any{"id": id, "error": map[string]any{"code": -32601, "message": failure}})
+	}
+	return c.write(map[string]any{"id": id, "result": result})
+}
+
+// CodexTurnHooks connect a turn to durable state. Prepare commits the send
+// intent and runs BEFORE turn/start is written. Bind stores the turn ID from
+// the turn/start response before any tool call of that turn is handled.
+type CodexTurnHooks struct {
+	Prepare func() error
+	Bind    func(turnID string) error
+	Tools   CodexBoundTools
+}
+
+// RunTurn sends exactly one turn/start for the thread and serves that turn
+// until turn/completed. It returns nil only when CodexTurnGuard accepted the
+// completion, which requires a stored reply. Every other outcome is an error
+// and the client is closed: the caller must treat the turn as uncertain and
+// must not retry it.
+//
+// Frames that arrive before the turn/start response are kept (bounded) and
+// handled after the turn ID is bound. Server requests other than item/tool/call
+// are refused with an error response; the turn can still complete. A repeated
+// server request ID ends the turn.
+func (c *CodexRPC) RunTurn(ctx context.Context, threadID string, hooks CodexTurnHooks) (err error) {
+	defer func() {
+		if err != nil {
+			c.closed = true
+		}
+	}()
+	if c.closed {
+		return fmt.Errorf("%w: client closed after an earlier failure", ErrCodexProtocol)
+	}
+	if threadID == "" || hooks.Prepare == nil || hooks.Bind == nil {
+		return errors.New("Codex turn requires a thread and durable hooks")
+	}
+	if err := hooks.Prepare(); err != nil {
+		return fmt.Errorf("send intent not recorded; turn/start not sent: %w", err)
+	}
+	c.next++
+	id := c.next
+	if err := c.write(map[string]any{"id": id, "method": "turn/start", "params": map[string]any{
+		"threadId": threadID,
+		"input":    []any{map[string]any{"type": "text", "text": CodexTurnPrompt}},
+	}}); err != nil {
+		return err
+	}
+	var guard *CodexTurnGuard
+	var early []codexFrame
+	seen := map[string]bool{}
+	handle := func(frame codexFrame) (done bool, err error) {
+		if frame.hasID() && frame.Method != "" {
+			key := string(frame.ID)
+			if seen[key] {
+				return false, fmt.Errorf("%w: repeated server request id", ErrCodexProtocol)
+			}
+			seen[key] = true
+			if frame.Method != "item/tool/call" {
+				return false, c.respond(frame.ID, nil, "not supported by Agent Messenger")
+			}
+			result, toolErr := guard.Tool(frame.Params)
+			if toolErr != nil {
+				_ = c.respond(frame.ID, nil, "tool call rejected")
+				return false, toolErr
+			}
+			return false, c.respond(frame.ID, result, "")
+		}
+		switch frame.Method {
+		case "turn/completed":
+			if err := guard.Complete(frame.Params); err != nil {
+				return false, err
+			}
+			return true, nil
+		}
+		return false, nil
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			if guard != nil {
+				guard.Stop()
+			}
+			return fmt.Errorf("turn not finished; outcome unknown: %w", ctx.Err())
+		case frame, ok := <-c.frames:
+			if !ok {
+				if guard != nil {
+					guard.Stop()
+				}
+				return fmt.Errorf("app-server stopped during the turn; outcome unknown: %w", c.readErr())
+			}
+			if guard == nil {
+				if frame.hasID() && frame.Method == "" {
+					var got int
+					if json.Unmarshal(frame.ID, &got) != nil || got != id {
+						return fmt.Errorf("%w: unexpected response id", ErrCodexProtocol)
+					}
+					if len(frame.Error) != 0 || len(frame.Result) == 0 {
+						return errors.New("app-server refused turn/start; outcome unknown")
+					}
+					var result struct {
+						Turn struct {
+							ID string `json:"id"`
+						} `json:"turn"`
+					}
+					if json.Unmarshal(frame.Result, &result) != nil || result.Turn.ID == "" || len(result.Turn.ID) > 128 {
+						return fmt.Errorf("%w: turn id missing", ErrCodexProtocol)
+					}
+					if err := hooks.Bind(result.Turn.ID); err != nil {
+						return fmt.Errorf("turn id not recorded: %w", err)
+					}
+					g, err := NewCodexTurnGuard(threadID, result.Turn.ID, hooks.Tools)
+					if err != nil {
+						return err
+					}
+					guard = g
+					for _, buffered := range early {
+						done, err := handle(buffered)
+						if err != nil || done {
+							if err != nil {
+								guard.Stop()
+							}
+							return err
+						}
+					}
+					early = nil
+					continue
+				}
+				if !frame.hasID() && frame.Method == "" {
+					return fmt.Errorf("%w: response without id", ErrCodexProtocol)
+				}
+				if len(early) >= codexMaxEarlyFrames {
+					return fmt.Errorf("%w: too many events before turn/start response", ErrCodexProtocol)
+				}
+				early = append(early, frame)
+				continue
+			}
+			if frame.hasID() && frame.Method == "" {
+				guard.Stop()
+				return fmt.Errorf("%w: unexpected response during the turn", ErrCodexProtocol)
+			}
+			done, err := handle(frame)
+			if err != nil {
+				guard.Stop()
+				return err
+			}
+			if done {
+				return nil
+			}
+		}
+	}
 }

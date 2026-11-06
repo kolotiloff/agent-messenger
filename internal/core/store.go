@@ -145,6 +145,16 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	for column, decl := range map[string]string{
+		"session_key":          "TEXT REFERENCES sessions(key)",
+		"recovery_fingerprint": "TEXT",
+		"recovery_reservation": "TEXT",
+	} {
+		if err := ensureColumn(db, "codex_setups", column, decl); err != nil {
+			db.Close()
+			return nil, err
+		}
+	}
 	_ = os.Chmod(path, 0o600)
 	return store, nil
 }
@@ -321,6 +331,12 @@ func (s *Store) ClaimProvider(alias, provider string) (string, error) {
 		if decision == "closed_without_retry" {
 			return fmt.Errorf("%w: session is closed without retry", ErrClosed)
 		}
+		if owned, err := codexOwnedSession(tx, key); err != nil || owned {
+			if err == nil {
+				err = fmt.Errorf("%w: session is served by its Codex owner", ErrRejected)
+			}
+			return err
+		}
 		var active sql.NullString
 		if err := tx.QueryRow(`SELECT active_token FROM sessions WHERE key = ?`, key).Scan(&active); err != nil {
 			return err
@@ -366,6 +382,7 @@ func (s *Store) ClaimNextProvider(provider string) (string, error) {
 			JOIN aliases a ON a.session_key = s.key
 			WHERE r.state = 'queued' AND s.active_token IS NULL AND s.decision IS NULL
 			  AND s.cli_path IS NOT NULL AND s.cli_path != ''
+			  AND s.start_mode != 'codex_owned'
               AND (? = '' OR s.provider = ?)
 			ORDER BY r.rowid, a.alias LIMIT 1`, provider, provider).Scan(&requestID, &key, &alias)
 		if err == sql.ErrNoRows {
@@ -626,6 +643,12 @@ func (s *Store) ConfigureLaunch(alias, cliPath, workspace string) error {
 	return s.tx(func(tx *sql.Tx) error {
 		key, _, err := sessionByAlias(tx, alias)
 		if err != nil {
+			return err
+		}
+		if owned, err := codexOwnedSession(tx, key); err != nil || owned {
+			if err == nil {
+				err = fmt.Errorf("%w: session is served by its Codex owner", ErrRejected)
+			}
 			return err
 		}
 		if _, err := tx.Exec(`UPDATE sessions SET cli_path = ?, workspace = ? WHERE key = ?`, resolved, workspace, key); err != nil {

@@ -21,6 +21,13 @@ import (
 	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
 
+// codexTurnTimeout bounds one turn. A timeout is uncertain, never success.
+var codexTurnTimeout = 15 * time.Minute
+
+// codexPoll is how often an idle owner checks the queue. Checking the queue
+// never calls the model.
+var codexPoll = 30 * time.Millisecond
+
 // codexSetupTimeout bounds each setup RPC. Tests shorten it. A timeout is
 // never treated as proof that the server did nothing.
 var codexSetupTimeout = 30 * time.Second
@@ -115,7 +122,9 @@ func (l AdapterLauncher) StartCodexServer(ctx context.Context, spec CodexServerS
 		return CodexProcess{}, err
 	}
 	run := recordedRun{ID: id, Root: spec.DataRoot, Provider: "codex", Environment: spec.Environment, CodexSetupID: spec.SetupID}
-	run.Epoch, _ = platform.CurrentRecoveryEpoch()
+	// Failure to read the epoch does not relax the reservation; such a setup
+	// can then never be recovered by recover-codex.
+	run.Epoch, _ = recoveryEpoch()
 	if err := rememberRun(run); err != nil {
 		return CodexProcess{}, errors.Join(errNotStarted, err)
 	}
@@ -376,23 +385,85 @@ func (s *Supervisor) CreateCodexSession(environment, alias, cli string) (string,
 	registryErr := rememberRun(run)
 	owner := &codexOwner{setupID: id, proc: proc, rpc: rpc}
 	s.codex.add(owner)
-	var once sync.Once
-	go func() {
-		_ = rpc.Drain(func() {
-			once.Do(func() {
-				s.codex.whileOpen(func() { _ = s.store.MarkCodexSetupUncertain(id, "unexpected server request while idle") })
-				_ = proc.Input.Close()
-			})
-		})
-	}()
+	go s.serveCodex(owner, alias, thread)
 	go func() {
 		code, _ := proc.Wait()
 		s.codex.whileOpen(func() { _ = s.store.RecordCodexSetupExit(id, code) })
 		s.codex.remove(id)
 	}()
-	detail := "Codex session created; model not called; message delivery to Codex is not implemented yet"
+	detail := "Codex session created; model not called; queued messages are delivered while model calls are allowed"
 	if registryErr != nil {
 		detail += "; warning: reservation kept without thread id"
 	}
 	return detail, nil
+}
+
+// serveCodex is the single controller of one owner. While idle it drains the
+// server output and claims the next queued message for its session; then it
+// runs exactly one turn for it. Any turn that is not verified, and any server
+// activity that is not allowed while idle, makes the owner uncertain: the
+// attempt and reservation are kept, stdin is closed, and nothing is retried.
+func (s *Supervisor) serveCodex(owner *codexOwner, alias, thread string) {
+	ctx := s.ctx
+	fail := func(token, reason string) {
+		_ = s.codex.write(func() error {
+			if token != "" {
+				return s.store.FailCodexTurn(token, reason)
+			}
+			return s.store.MarkCodexSetupUncertain(owner.setupID, reason)
+		})
+		_ = owner.proc.Input.Close()
+	}
+	for {
+		var token string
+		err := owner.rpc.WaitIdle(ctx, codexPoll, func() bool {
+			launcher, ok := s.currentLauncher().(CodexSetupLauncher)
+			if !ok || !launcher.CodexSetupEnabled(alias) || s.stopping.Load() {
+				return false
+			}
+			var claimErr error
+			_ = s.codex.write(func() error {
+				token, claimErr = s.store.ClaimCodexTurn(owner.setupID)
+				return nil
+			})
+			return claimErr == nil && token != ""
+		})
+		if err != nil {
+			if ctx.Err() == nil {
+				fail("", "app-server stopped or sent a request while idle")
+			}
+			return
+		}
+		turnCtx, cancel := context.WithTimeout(ctx, codexTurnTimeout)
+		err = owner.rpc.RunTurn(turnCtx, thread, adapters.CodexTurnHooks{
+			Prepare: func() error {
+				return s.codex.write(func() error { return s.store.PrepareCodexTurnSend(token) })
+			},
+			Bind: func(turn string) error {
+				return s.codex.write(func() error { return s.store.BindCodexTurn(token, turn) })
+			},
+			Tools: adapters.CodexBoundTools{
+				Read: func() (string, string, error) {
+					var text, receipt string
+					err := s.codex.write(func() error {
+						var err error
+						text, receipt, err = s.store.CodexRead(token)
+						return err
+					})
+					return text, receipt, err
+				},
+				Reply: func(receipt, text string) error {
+					return s.codex.write(func() error { return s.store.CodexReply(token, receipt, text) })
+				},
+			},
+		})
+		cancel()
+		if err == nil {
+			err = s.codex.write(func() error { return s.store.CompleteCodexTurn(token) })
+		}
+		if err != nil {
+			fail(token, "Codex turn not verified; no retry: "+err.Error())
+			return
+		}
+	}
 }

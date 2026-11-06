@@ -69,6 +69,7 @@ type Supervisor struct {
 	launcher   Launcher
 	launcherMu sync.RWMutex
 	cancel     context.CancelFunc
+	ctx        context.Context
 
 	mu           sync.Mutex
 	current      *activeJob
@@ -141,6 +142,9 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 	if err := store.CheckPendingStreamRecovery(); err != nil {
 		return err
 	}
+	if err := store.CheckPendingCodexRecovery(); err != nil {
+		return err
+	}
 	if err := reconcileRuns(root); err != nil {
 		return err
 	}
@@ -154,7 +158,7 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 	}
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
-	sup := &Supervisor{store: store, root: root, launcher: launcher, cancel: cancel}
+	sup := &Supervisor{store: store, root: root, launcher: launcher, cancel: cancel, ctx: ctx}
 	defer sup.codex.closeAll()
 	ln, err := control.Listen(socketRoot)
 	if err != nil {
@@ -612,6 +616,9 @@ func (s *Supervisor) Resolve(alias, action, confirmation string) (string, error)
 		return "", err
 	} else if run != "" {
 		return "", fmt.Errorf("%w: persistent process remains reserved; no automatic retry or unlock", core.ErrRecoveryBlocked)
+	}
+	if owned, err := s.store.CodexOwnedAlias(alias); err == nil && owned {
+		return "", fmt.Errorf("%w: a Codex owner process holds this session; resolution is not implemented", core.ErrRecoveryBlocked)
 	}
 	switch action {
 	case "fail":

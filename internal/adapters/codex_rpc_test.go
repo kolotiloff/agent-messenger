@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -213,5 +215,110 @@ func TestParseCodexThreadStart(t *testing.T) {
 		if _, err := ParseCodexThreadStart(threadStartResult(mutate), "/work"); err == nil {
 			t.Errorf("%s accepted", name)
 		}
+	}
+}
+
+func turnHooks(prepareErr error) (CodexTurnHooks, *[]string) {
+	var calls []string
+	return CodexTurnHooks{
+		Prepare: func() error { calls = append(calls, "prepare"); return prepareErr },
+		Bind:    func(turn string) error { calls = append(calls, "bind:"+turn); return nil },
+		Tools: CodexBoundTools{
+			Read:  func() (string, string, error) { calls = append(calls, "read"); return "hi", "r1", nil },
+			Reply: func(receipt, text string) error { calls = append(calls, "reply:"+text); return nil },
+		},
+	}, &calls
+}
+
+func runTurnWith(t *testing.T, server string, prepareErr error) (error, *lockedBuffer, *[]string) {
+	t.Helper()
+	out := &lockedBuffer{}
+	rpc := NewCodexRPC(out, strings.NewReader(server))
+	hooks, calls := turnHooks(prepareErr)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	return rpc.RunTurn(ctx, "thread-1", hooks), out, calls
+}
+
+func toolCall(id int, turn, tool, args string) string {
+	return `{"id":` + fmt.Sprint(id) + `,"method":"item/tool/call","params":{"threadId":"thread-1","turnId":"` + turn + `","callId":"c` + fmt.Sprint(id) + `","namespace":"messenger_bound","tool":"` + tool + `","arguments":` + args + `}}` + "\n"
+}
+
+func TestCodexRunTurnHappyPathWithEarlyCall(t *testing.T) {
+	server := toolCall(50, "t1", "read_current", `{}`) +
+		`{"id":1,"result":{"turn":{"id":"t1","status":"inProgress","items":[]}}}` + "\n" +
+		toolCall(51, "t1", "reply", `{"receipt":"r1","text":"ACK"}`) +
+		`{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"t1","status":"completed","items":[]}}}` + "\n"
+	err, out, calls := runTurnWith(t, server, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(*calls, ",") != "prepare,bind:t1,read,reply:ACK" {
+		t.Fatalf("calls %v", *calls)
+	}
+	lines := out.lines()
+	if len(lines) != 3 || !strings.Contains(lines[0], `"turn/start"`) || !strings.Contains(lines[1], `"id":50`) || !strings.Contains(lines[2], `"id":51`) {
+		t.Fatalf("wrote %q", lines)
+	}
+}
+
+func TestCodexRunTurnFailsClosed(t *testing.T) {
+	started := `{"id":1,"result":{"turn":{"id":"t1","status":"inProgress","items":[]}}}` + "\n"
+	completed := `{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"t1","status":"completed","items":[]}}}` + "\n"
+	read := toolCall(50, "t1", "read_current", `{}`)
+	for name, server := range map[string]string{
+		"refused":              `{"id":1,"error":{"code":-1,"message":"private-data"}}` + "\n",
+		"completed no reply":   started + read + completed,
+		"failed status":        started + read + toolCall(51, "t1", "reply", `{"receipt":"r1","text":"A"}`) + strings.Replace(completed, "completed\",\"items", "failed\",\"items", 1),
+		"repeated request id":  started + read + toolCall(50, "t1", "reply", `{"receipt":"r1","text":"A"}`),
+		"response mid-turn":    started + `{"id":7,"result":{}}` + "\n",
+		"foreign turn":         started + toolCall(50, "t2", "read_current", `{}`),
+		"eof":                  started + read,
+		"no turn id":           `{"id":1,"result":{"turn":{}}}` + "\n",
+		"wrong response id":    `{"id":2,"result":{"turn":{"id":"t1"}}}` + "\n",
+		"too many early":       strings.Repeat(`{"method":"x","params":{}}`+"\n", codexMaxEarlyFrames+1),
+		"stale receipt":        started + read + toolCall(51, "t1", "reply", `{"receipt":"old","text":"A"}`),
+		"model-chosen address": started + read + toolCall(51, "t1", "reply", `{"receipt":"r1","text":"A","to":"x"}`),
+	} {
+		t.Run(name, func(t *testing.T) {
+			err, out, _ := runTurnWith(t, server, nil)
+			if err == nil {
+				t.Fatal("accepted")
+			}
+			if strings.Contains(err.Error(), "private-data") {
+				t.Fatal("server text leaked")
+			}
+			n := 0
+			for _, line := range out.lines() {
+				if strings.Contains(line, "turn/start") {
+					n++
+				}
+			}
+			if n != 1 {
+				t.Fatalf("turn/start written %d times", n)
+			}
+		})
+	}
+}
+
+func TestCodexRunTurnPrepareFailureWritesNothing(t *testing.T) {
+	err, out, _ := runTurnWith(t, "", errors.New("db down"))
+	if err == nil || len(out.lines()) != 0 {
+		t.Fatalf("err %v wrote %q", err, out.lines())
+	}
+}
+
+func TestCodexRunTurnRefusesOtherServerRequests(t *testing.T) {
+	server := `{"id":1,"result":{"turn":{"id":"t1","status":"inProgress","items":[]}}}` + "\n" +
+		`{"id":40,"method":"item/commandExecution/requestApproval","params":{}}` + "\n" +
+		toolCall(50, "t1", "read_current", `{}`) +
+		toolCall(51, "t1", "reply", `{"receipt":"r1","text":"A"}`) +
+		`{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"t1","status":"completed","items":[]}}}` + "\n"
+	err, out, _ := runTurnWith(t, server, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lines := out.lines(); len(lines) != 4 || !strings.Contains(lines[1], `"id":40`) || !strings.Contains(lines[1], `"error"`) {
+		t.Fatalf("approval not refused: %q", lines)
 	}
 }
