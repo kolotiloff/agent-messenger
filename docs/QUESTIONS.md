@@ -27,13 +27,14 @@ Cloud sessions run on Linux. **Options:** the owner runs the steps from an agent
 ### Q-007: How does the managed Codex profile sign in?
 Copying the owner's credentials into the managed profile is not implemented and must not be logged or published. A likely option is a standard login into the managed profile done by the owner. **Blocks:** T-004.
 
-### Q-008: Switch to one-shot runs that resume a saved conversation?
-Proposal version 2 in [RETHINK.md](RETHINK.md), after the Codex [review](RETHINK_REVIEW.md) (accept the direction with changes). It would relax D-004 in part and replace D-005 and D-016. The owner decides three things:
-1. **Ownership guarantee.** Accept "one managed launch per conversation at a time, best-effort cleanup" instead of "no overlap until a proven reboot"? A process that escaped its group could keep working. With worker tools this is true of the current model too; only an OS sandbox gives a strong guarantee.
-2. **Worker permissions.** With which permission mode do unattended workers run: full tools in their workspace (as today by hand), or a sandbox with limited write and network access?
-3. **Loop budget.** Only the owner starts a new task with a fresh automatic-step budget in the first version; the coordinator cannot reset it. Acceptable?
+### Q-008: Switch to "one task, one session" with the coordinator in the owner's app?
+Proposal version 3 in [RETHINK.md](RETHINK.md): the coordinator is the owner's own Claude or Codex chat with Messenger connected; every task gets a new worker session that reports and closes; the coordinator waits with a blocking `wait` tool. Replaces versions 1–2, which Codex reviewed in [RETHINK_REVIEW.md](RETHINK_REVIEW.md). It would replace D-005 and D-016 for new work and relax D-004 in part. The owner decides:
+1. **The model itself**: accept, accept with changes, or keep persistent processes.
+2. **Plan approval**: approve each `start_task` in the app, or approve the whole plan once in the Messenger window.
+3. **Worker permissions**: full tools in their workspace, or a sandbox limiting writes and network.
+4. **Ownership statement**: accept that a process left behind by a finished task is cleaned up on a best-effort basis (a strong guarantee needs an OS sandbox).
 
-**Options:** accept; accept with changes; keep persistent processes. **Blocks:** T-009 and the stages after it. T-022 does not depend on it.
+**Blocks:** T-009 and the stages after it. T-022 does not depend on it.
 
 ## Answered
 

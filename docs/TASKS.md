@@ -13,7 +13,7 @@ How to use it:
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
-| T-021 | RETHINK proposal: Codex [review](RETHINK_REVIEW.md) done; [version 2](RETHINK.md) takes it in. Await owner decision Q-008; T-009 still waits. | owner | `claude/vigilant-darwin-34d88b`; documentation only |
+| T-021 | RETHINK [version 3](RETHINK.md): one task, one session; coordinator in the owner's app with a blocking `wait`. Next: Codex review of version 3, then owner decision Q-008. T-009 waits. | agent + owner | `claude/vigilant-darwin-34d88b`; documentation only |
 
 ## Next
 
