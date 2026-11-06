@@ -52,6 +52,7 @@ These change all the time. Every tool reads them at the start and updates them a
 | [INSTALL.md](INSTALL.md) | Installing the client from an archive |
 | [UPDATES.md](UPDATES.md) | Mac app updates through Sparkle and GitHub Releases |
 | [CI.md](CI.md) | Automated checks in GitHub Actions |
+| [ACCEPTANCE_CODEX_MAC.md](ACCEPTANCE_CODEX_MAC.md) | Runbook for the first real Codex run on the Mac (T-004) |
 
 ## Reports
 
