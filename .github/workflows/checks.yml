@@ -58,11 +58,20 @@ jobs:
       - name: Verify archive, clean install and update without losing queue
         if: matrix.package == true
         run: python3 scripts/check-package.py "$RUNNER_TEMP/mac-preview" 0.0.0-preview.ci1 0.0.0-preview.ci2
+      - name: Build native Mac app and check client lifecycle (no GUI acceptance)
+        if: matrix.package == true
+        env:
+          SOURCE_REVISION: ${{ github.sha }}
+        run: |
+          bash scripts/build-mac-app.sh "$RUNNER_TEMP/mac-desktop" 0.0.0-preview.appci "$SOURCE_REVISION"
+          python3 scripts/check-desktop.py "$RUNNER_TEMP/mac-desktop/Agent Messenger.app/Contents/Resources/messenger"
       - name: Save tested Mac preview archives (not a release)
         if: matrix.package == true
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mac-preview-${{ github.sha }}
-          path: ${{ runner.temp }}/mac-preview/*
+          path: |
+            ${{ runner.temp }}/mac-preview/*
+            ${{ runner.temp }}/mac-desktop/Agent-Messenger-mac.zip*
           if-no-files-found: error
           retention-days: 7

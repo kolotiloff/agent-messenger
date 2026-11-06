@@ -36,6 +36,12 @@ func main() {
 		}
 		return
 	}
+	if args[0] == "desktop" {
+		if err := runDesktop(root, args[1:]); err != nil {
+			fail(err)
+		}
+		return
+	}
 	if args[0] == "version" {
 		if err := run(root, args); err != nil {
 			fail(err)
@@ -327,12 +333,13 @@ func splitArgs(args []string) (string, []string) {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, `Agent Messenger — локальный клиент без окна.
+	fmt.Fprintf(os.Stderr, `Agent Messenger — локальный клиент и интерфейс.
 
 --root стоит перед командой. Один пользователь может держать только один serve,
 даже с другим каталогом данных. Реальный CLI запускается только после register-session.
 
   messenger version
+  messenger [--root КАТАЛОГ] desktop  (внутренний запуск окна; stdin — канал времени жизни)
   messenger install [--prefix АБСОЛЮТНЫЙ_КАТАЛОГ]
   messenger --root КАТАЛОГ serve [--allow-model-calls] [--claude-stream]
   messenger --root КАТАЛОГ start [--allow-model-calls] [--claude-stream]
