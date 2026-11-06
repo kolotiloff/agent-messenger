@@ -250,7 +250,7 @@ func TestTaskReportIsPublishedOnlyAfterVerification(t *testing.T) {
 	if err := f.st.RecordDisposition(r.ID, r.Receipt, DispositionAsk, "and a question"); !errors.Is(err, ErrRejected) {
 		t.Fatalf("second disposition: %v", err)
 	}
-	if got := kinds(f.events(t, AudienceCoordinator, 0)); got != "started" {
+	if got := kinds(f.events(t, AudienceCoordinator, 0)); got != "" {
 		t.Fatalf("report visible before verification: %s", got)
 	}
 	final, err := f.st.FinishTaskRun(r.ID, cleanExit)
@@ -258,7 +258,7 @@ func TestTaskReportIsPublishedOnlyAfterVerification(t *testing.T) {
 		t.Fatalf("finish %s %v", final, err)
 	}
 	events := f.events(t, AudienceCoordinator, 0)
-	if kinds(events) != "started,report" || events[1].Text != "All done" {
+	if kinds(events) != "report" || events[0].Text != "All done" {
 		t.Fatalf("events %+v", events)
 	}
 	task, _ := f.st.TaskByID(id)
@@ -306,10 +306,10 @@ func TestTaskRunOutcomes(t *testing.T) {
 				t.Fatalf("task %s", task.State)
 			}
 			events := f.events(t, AudienceCoordinator, 0)
-			if kinds(events) != "started,"+c.task {
+			if kinds(events) != c.task {
 				t.Fatalf("events %s", kinds(events))
 			}
-			if c.final == "failed" && c.disposition != "" && !strings.Contains(events[1].Text, "Unverified text from the worker:\npartial work") {
+			if c.final == "failed" && c.disposition != "" && !strings.Contains(events[0].Text, "Unverified text from the worker:\npartial work") {
 				t.Fatalf("failed event text %q", events[1].Text)
 			}
 			// Nothing is relaunched.
@@ -334,7 +334,7 @@ func TestTaskQuestionAnswerResumesSameConversation(t *testing.T) {
 	}
 	q := task.OpenQuestion.ID
 	events := f.events(t, AudienceCoordinator, 0)
-	if kinds(events) != "started,question" || events[1].QuestionID != q {
+	if kinds(events) != "question" || events[0].QuestionID != q {
 		t.Fatalf("events %+v", events)
 	}
 	if err := f.st.AnswerTask(id, q, "a1", "Level 2", AudienceOwner); !errors.Is(err, ErrRejected) {
@@ -381,7 +381,7 @@ func TestTaskQuestionAnswerResumesSameConversation(t *testing.T) {
 	if _, err := f.st.FinishTaskRun(r2.ID, cleanExit); err != nil {
 		t.Fatal(err)
 	}
-	if got := kinds(f.events(t, AudienceCoordinator, 0)); got != "started,question,answered,report" {
+	if got := kinds(f.events(t, AudienceCoordinator, 0)); got != "question,report" {
 		t.Fatalf("events %s", got)
 	}
 	// A late answer after completion is refused.
@@ -398,7 +398,7 @@ func TestOwnerQuestionGoesToTheOwnerOnly(t *testing.T) {
 	if _, err := f.st.FinishTaskRun(r.ID, cleanExit); err != nil {
 		t.Fatal(err)
 	}
-	if got := kinds(f.events(t, AudienceCoordinator, 0)); got != "started" {
+	if got := kinds(f.events(t, AudienceCoordinator, 0)); got != "" {
 		t.Fatalf("coordinator saw the owner question: %s", got)
 	}
 	owner := f.events(t, AudienceOwner, 0)
@@ -517,16 +517,16 @@ func TestTaskEventsReplayByCursorAndProject(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.start(t, "op-2", "claude", "two")
-	first, cursor, err := f.st.TaskEvents("Game", AudienceCoordinator, 0, 1)
+	first, cursor, err := f.st.TaskEvents("Game", AudienceLog, 0, 1)
 	if err != nil || len(first) != 1 || first[0].Text != "one" {
 		t.Fatalf("first %+v %v", first, err)
 	}
 	// The same cursor returns the same events: nothing is lost on a retry.
-	again, _, _ := f.st.TaskEvents("Game", AudienceCoordinator, 0, 1)
+	again, _, _ := f.st.TaskEvents("Game", AudienceLog, 0, 1)
 	if again[0].Seq != first[0].Seq {
 		t.Fatal("replay differs")
 	}
-	rest, _, _ := f.st.TaskEvents("Game", AudienceCoordinator, cursor, 10)
+	rest, _, _ := f.st.TaskEvents("Game", AudienceLog, cursor, 10)
 	if len(rest) != 1 || rest[0].Text != "two" {
 		t.Fatalf("rest %+v", rest)
 	}

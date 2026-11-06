@@ -3,8 +3,10 @@
 package supervisor
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -15,6 +17,7 @@ import (
 
 	"github.com/kolotiloff/agent-messenger/internal/control"
 	"github.com/kolotiloff/agent-messenger/internal/core"
+	"github.com/kolotiloff/agent-messenger/internal/mcp"
 )
 
 type taskHarness struct {
@@ -373,5 +376,62 @@ func TestRestartInterruptsARunningTask(t *testing.T) {
 	}
 	_ = syscall.Kill(-reservations[0].PGID, syscall.SIGKILL)
 	_ = task
+	h.stop()
+}
+
+// End to end on one computer: the coordinator's MCP server records a task,
+// the client launches the worker, and wait returns the verified report.
+func TestCoordinatorStartsATaskAndWaitsForItsReport(t *testing.T) {
+	h := newTaskHarness(t, "ask-then-report", AdapterLauncher{AllowTasks: true})
+	inR, inW := io.Pipe()
+	outR, outW := io.Pipe()
+	go func() { _ = mcp.ServeCoordinator(h.st, "Game", inR, outW); outW.Close() }()
+	defer inW.Close()
+	lines := bufio.NewScanner(outR)
+	lines.Buffer(make([]byte, 64*1024), 4*1024*1024)
+	id := 0
+	call := func(name string, args map[string]any) map[string]any {
+		id++
+		raw, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": id, "method": "tools/call", "params": map[string]any{"name": name, "arguments": args}})
+		if _, err := inW.Write(append(raw, '\n')); err != nil {
+			t.Fatal(err)
+		}
+		for lines.Scan() {
+			var f struct {
+				ID     int `json:"id"`
+				Result struct {
+					Content []struct{ Text string } `json:"content"`
+					IsError bool                    `json:"isError"`
+				} `json:"result"`
+			}
+			if json.Unmarshal(lines.Bytes(), &f) != nil || f.ID != id {
+				continue
+			}
+			if f.Result.IsError || len(f.Result.Content) != 1 {
+				t.Fatalf("%s failed: %+v", name, f.Result)
+			}
+			var out map[string]any
+			if err := json.Unmarshal([]byte(f.Result.Content[0].Text), &out); err != nil {
+				t.Fatal(err)
+			}
+			return out
+		}
+		t.Fatal("server closed")
+		return nil
+	}
+	started := call("start_task", map[string]any{"op_id": "plan-1", "agent": "codex", "text": "Build the level"})
+	task := started["task_id"].(string)
+	w := call("wait", map[string]any{"after": 0, "timeout_seconds": 20})
+	events := w["events"].([]any)
+	question := events[0].(map[string]any)
+	if question["kind"] != "question" || question["text"] != "Which level?" {
+		t.Fatalf("first event %+v", question)
+	}
+	call("answer", map[string]any{"task_id": task, "question_id": question["question_id"], "op_id": "ans-1", "text": "Level 3"})
+	w = call("wait", map[string]any{"after": w["cursor"], "timeout_seconds": 20})
+	report := w["events"].([]any)[0].(map[string]any)
+	if report["kind"] != "report" || report["text"] != "done with Level 3 for Which level?" {
+		t.Fatalf("report %+v", report)
+	}
 	h.stop()
 }

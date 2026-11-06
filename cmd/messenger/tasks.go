@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/kolotiloff/agent-messenger/internal/core"
+	"github.com/kolotiloff/agent-messenger/internal/mcp"
 )
 
 // Task-model commands. They open the data directory's database directly, so
@@ -26,6 +27,13 @@ func runTaskCommand(root string, args []string) (bool, error) {
 		fmt.Println(string(raw))
 	}
 	switch args[0] {
+	case "coordinator":
+		// stdio MCP server for one project's coordinator chat; stdout carries
+		// only JSON-RPC.
+		if err := os.MkdirAll(root, 0o700); err != nil {
+			return true, err
+		}
+		return true, mcp.CoordinatorMain(filepath.Join(root, "queue.sqlite"), args[1:])
 	case "project-add", "project-folder":
 		fs := flag.NewFlagSet(args[0], flag.ContinueOnError)
 		name := fs.String("name", "", "project name")

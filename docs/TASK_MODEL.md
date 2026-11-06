@@ -69,3 +69,33 @@ Replies of the persistent Claude, Codex and one-shot paths are published only af
 - One computer. The broker (T-015) will carry tasks to other computers.
 - There is no OS sandbox. A worker's leftover processes are handled on a best-effort basis (D-021), and a still-busy process group blocks the task.
 - `worker` profile flags for real CLIs were not run against real models here (T-027).
+
+## Coordinator (T-025)
+
+The coordinator is the owner's chat with Messenger connected as an MCP server for one project (D-026):
+
+```sh
+cd ~/Projects/Game
+claude mcp add --scope local messenger -- "/Applications/Agent Messenger.app/Contents/Resources/messenger" coordinator --project Game
+```
+
+`messenger coordinator --project NAME` is a stdio MCP server. It opens the data directory's database and writes task records. It never launches a worker itself; the running client launches the workers (`--allow-tasks`). The skill [skills/messenger-coordinator/SKILL.md](../skills/messenger-coordinator/SKILL.md) explains the tools and nothing else (D-022).
+
+| Tool | Effect |
+|---|---|
+| `list_agents` | This computer: its project folder and its agents, with running and waiting task counts (across all projects). |
+| `start_task(op_id, agent, text, title?, computer?)` | `StartTask`; idempotent by `op_id`. |
+| `wait(after, timeout_seconds?)` | Returns coordinator events of this project after the cursor, at most 20 per call, or `timed_out` after the timeout (default 600 s, maximum 3600 s). |
+| `tasks(state?)` | This project's tasks, open questions for the coordinator, and the current cursor. |
+| `answer(task_id, question_id, op_id, text)` | `AnswerTask` as the coordinator. |
+| `cancel(task_id)` | `CancelTask`. |
+
+How `wait` behaves (the contract of the [T-023 pilot](reports/2026-11-06-wait-pilot-claude-mac.md)):
+- Each call runs in its own goroutine, so a blocked `wait` does not stop `ping`, other tools or cancellation.
+- The cursor is replayable, and the server never moves it.
+- A cancelled call is not answered and loses nothing.
+- When the client sent a progress token, a progress notification goes out every 60 s.
+
+Events the coordinator caused itself (`started`, its own `answered`) do not wake it. Neither does the owner's exchange with a worker.
+
+Every tool refuses a project that does not exist. `answer` and `cancel` refuse tasks of another project. The first call records the connection (`coordinator_connections`); the window uses it to show whether a coordinator is connected.

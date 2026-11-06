@@ -2,6 +2,14 @@
 
 This file is the shared memory between tools (Claude Code, Cursor, Codex). Whoever stops working updates the **Current state** section; whoever starts reads it first. Tasks live in [TASKS.md](TASKS.md), decisions in [DECISIONS.md](DECISIONS.md), open questions in [QUESTIONS.md](QUESTIONS.md), the work history in [LOG.md](LOG.md).
 
+## Owner's standing instruction for the night of 2026-11-06 → 07
+
+The owner is asleep and asked the agent to work **fully autonomously until morning** on branch `claude/task-core-night` (PR #36 into `claude/vigilant-darwin-34d88b`), in this order: T-022, T-024, T-025, T-026, T-029.
+- Do not stop to ask. Make decisions, choose the most cautious option, and record questions in `QUESTIONS.md` and in the PR.
+- Tests that need the owner (Mac, real models) come after the whole program is built. Build everything first; automated tests use fake CLIs only.
+- After each task: `scripts/check.sh`, push, update the PR description.
+- In the morning: update this section, `TASKS.md` and `LOG.md`, and write the owner a plain Russian summary.
+
 ## Current state
 
 Updated 2026-11-06 by Claude Code (D-021–D-026 decided, window approved; product state below retained).

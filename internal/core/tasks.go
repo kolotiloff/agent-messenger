@@ -133,6 +133,10 @@ CREATE TABLE IF NOT EXISTS task_events (
  created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS task_events_project ON task_events(project, seq);
+CREATE TABLE IF NOT EXISTS coordinator_connections (
+ project TEXT PRIMARY KEY,
+ last_seen TEXT NOT NULL
+);
 `
 
 // Bounds on stored text. A report is bounded so wait and the window stay
@@ -153,9 +157,12 @@ const (
 
 // Audiences of task events. The coordinator's wait returns only coordinator
 // events of its project; owner questions go to the window (D-024).
+// AudienceLog holds events the coordinator caused itself (a start, its
+// answer); they are history for the window and never wake its wait.
 const (
 	AudienceCoordinator = "coordinator"
 	AudienceOwner       = "owner"
+	AudienceLog         = "log"
 )
 
 // TaskProviders are the agents a task can run. Cursor stays off (D-011).
@@ -559,7 +566,7 @@ func (s *Store) StartTask(r StartTaskRequest) (string, bool, error) {
 			return err
 		}
 		created = true
-		return insertTaskEvent(tx, r.Project, id, AudienceCoordinator, "started", taskTitle(r.Title, r.Text), "")
+		return insertTaskEvent(tx, r.Project, id, AudienceLog, "started", taskTitle(r.Title, r.Text), "")
 	})
 	return id, created, err
 }
@@ -1155,7 +1162,11 @@ func (s *Store) AnswerTask(task, question, opID, text, by string) error {
 		if err := setTaskState(tx, task, "running", "answered; the same conversation resumes"); err != nil {
 			return err
 		}
-		return insertTaskEvent(tx, t.Project, task, audience, "answered", text, question)
+		answeredFor := AudienceLog
+		if by == AudienceOwner {
+			answeredFor = AudienceOwner
+		}
+		return insertTaskEvent(tx, t.Project, task, answeredFor, "answered", text, question)
 	})
 }
 
@@ -1339,4 +1350,83 @@ func (s *Store) TaskRunReservationRetired(run string) error {
 		_, err := tx.Exec(`UPDATE task_runs SET detail=detail||'; reservation retired' WHERE id=?`, run)
 		return err
 	})
+}
+
+// TouchCoordinator records that a coordinator chat is connected to the
+// project. The window shows how to connect one until this is set.
+func (s *Store) TouchCoordinator(project string) error {
+	_, err := s.db.Exec(`INSERT INTO coordinator_connections(project,last_seen) VALUES (?,?) ON CONFLICT(project) DO UPDATE SET last_seen=excluded.last_seen`, project, now())
+	return err
+}
+
+// CoordinatorLastSeen returns when a coordinator last called this project, or "".
+func (s *Store) CoordinatorLastSeen(project string) (string, error) {
+	var at string
+	err := s.db.QueryRow(`SELECT last_seen FROM coordinator_connections WHERE project=?`, project).Scan(&at)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return at, err
+}
+
+// AgentSummary is one agent of a computer as list_agents shows it.
+type AgentSummary struct {
+	Agent   string `json:"agent"`
+	Profile string `json:"profile"`
+	// Running counts tasks of all projects that run on this agent now.
+	Running int `json:"running"`
+	// Waiting counts this agent's tasks waiting for an answer, all projects.
+	Waiting int `json:"waiting"`
+}
+
+// ComputerSummary is one computer as list_agents shows it for a project.
+type ComputerSummary struct {
+	Computer string         `json:"computer"`
+	Name     string         `json:"name"`
+	This     bool           `json:"this"`
+	Online   bool           `json:"online"`
+	Folder   string         `json:"folder"`
+	Agents   []AgentSummary `json:"agents"`
+	Note     string         `json:"note,omitempty"`
+}
+
+// ProjectAgents lists the computers for a project: today only this one. A
+// computer without the project's folder is listed with a note; it refuses
+// the project's tasks (D-025).
+func (s *Store) ProjectAgents(project string) (map[string]any, error) {
+	var c ComputerSummary
+	err := s.tx(func(tx *sql.Tx) error {
+		computer, err := localComputer(tx)
+		if err != nil {
+			return err
+		}
+		name, _ := os.Hostname()
+		c = ComputerSummary{Computer: computer, Name: name, This: true, Online: true, Agents: []AgentSummary{}}
+		err = tx.QueryRow(`SELECT folder FROM project_folders WHERE project=? AND computer=?`, project, computer).Scan(&c.Folder)
+		if errors.Is(err, sql.ErrNoRows) {
+			c.Note = "no folder for this project on this computer; it refuses the project's tasks"
+		} else if err != nil {
+			return err
+		}
+		rows, err := tx.Query(`SELECT a.provider,a.profile,
+ (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='running'),
+ (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state IN ('waiting_coordinator','waiting_owner'))
+ FROM computer_agents a WHERE a.computer=? ORDER BY a.provider`, computer)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var a AgentSummary
+			if err := rows.Scan(&a.Agent, &a.Profile, &a.Running, &a.Waiting); err != nil {
+				return err
+			}
+			c.Agents = append(c.Agents, a)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"project": project, "computers": []ComputerSummary{c}}, nil
 }
