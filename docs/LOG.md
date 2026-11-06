@@ -133,3 +133,8 @@ Reports for each step are in [reports/](reports/). The handoff is in [HANDOFF.md
 
 - The owner approved the clickable window mockup after a series of changes: one working folder per computer (D-025) shown as a compact bar on the Agents tab with per-agent trust; sidebar agents with status dots and a "координатор" word; task rows in three lines (agent logo and name, title, coloured status with duration); agent filter as a dropdown; role tags next to names in the feed; no "·" separators; capitalised statuses; spacing from stylesheet tokens.
 - The mockup is saved in [docs/mockups/2026-11-06-task-window.html](mockups/2026-11-06-task-window.html) so any agent can open it. It is a layout reference; T-029 builds on the program's own styles and code.
+
+## 2026-11-06 — several projects (D-026)
+
+- The owner wants to be able to run two games at once with two coordinator chats. Recorded as D-026: projects exist from the start (name, coordinator connection, folder per computer, tasks); agents are shared. The idea T-030 is folded into T-024, T-025 and T-029.
+- The approved mockup now has a project switcher at the top of the sidebar ([docs/mockups/2026-11-06-task-window.html](mockups/2026-11-06-task-window.html)).
