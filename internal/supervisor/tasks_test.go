@@ -166,6 +166,24 @@ func taskReservations(t *testing.T) []recordedRun {
 	return out
 }
 
+// waitNoTaskReservations waits for the client to retire the reservations: it
+// does so just after the verified state is committed, so a test that saw the
+// final state may still find them for a moment.
+func waitNoTaskReservations(t *testing.T) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		r := taskReservations(t)
+		if len(r) == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("reservations %+v", r)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 func coordinatorEvents(t *testing.T, st *core.Store) []core.TaskEvent {
 	t.Helper()
 	events, _, err := st.TaskEvents("Game", core.AudienceCoordinator, 0, 100)
@@ -202,9 +220,7 @@ func TestTaskWorkerReportsAndIsVerified(t *testing.T) {
 				t.Fatalf("Codex identity %q args %v", task.SessionID, runs[0].Args)
 			}
 			// Exit and an empty group were observed: the reservation is retired.
-			if r := taskReservations(t); len(r) != 0 {
-				t.Fatalf("reservations %+v", r)
-			}
+			waitNoTaskReservations(t)
 			h.stop()
 		})
 	}
@@ -286,9 +302,7 @@ func TestTaskFailuresAreNotRetried(t *testing.T) {
 					t.Fatal("unverified report published")
 				}
 			}
-			if r := taskReservations(t); len(r) != 0 {
-				t.Fatalf("cleanly observed run kept its reservation: %+v", r)
-			}
+			waitNoTaskReservations(t)
 			h.stop()
 		})
 	}
@@ -331,9 +345,7 @@ func TestCancelStopsARunningTask(t *testing.T) {
 		t.Fatalf("cancel %s %v", state, err)
 	}
 	h.waitState(id, "cancelled")
-	if r := taskReservations(t); len(r) != 0 {
-		t.Fatalf("reservations %+v", r)
-	}
+	waitNoTaskReservations(t)
 	h.stop()
 }
 
