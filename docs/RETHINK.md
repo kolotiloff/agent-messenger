@@ -1,6 +1,6 @@
 # Rethinking the product: one task, one session; the coordinator in the owner's app
 
-Status: **proposal, version 3, not a decision.** Written by Claude Code on 2026-11-06 together with the owner. It replaces versions 1 (`59d58eb`) and 2 (`6fa7f84`), which proposed one-shot runs over long-lived saved worker conversations. Codex reviewed version 1 in [RETHINK_REVIEW.md](RETHINK_REVIEW.md); section 8 maps that review onto this version. The owner decides ([Q-008](QUESTIONS.md)). Until then every rule in [AGENTS.md](../AGENTS.md) and [DECISIONS.md](DECISIONS.md) stays in force. No product code was changed for this document.
+Status: **accepted by the owner on 2026-11-06 as D-021, D-022 and D-023** ([Q-008](QUESTIONS.md)), with these changes to the text below: plan approval is agreed in chat under each project's own rules, not in Messenger (section 3.3 is replaced by D-022: no approval and no worker limit in Messenger, only protection against duplicate operations); workers use their project's own settings (D-023); the Messenger skill explains only its tools. Codex as coordinator is deferred. Written by Claude Code with the owner; reviewed by Codex in [RETHINK_REVIEW.md](RETHINK_REVIEW.md) (versions 1–2) and [RETHINK_REVIEW_V3.md](RETHINK_REVIEW_V3.md) (version 3); the review's technical requirements (idempotent operations, replayable events, verified publication) apply. The Claude-app wait was confirmed by the [T-023 pilot](reports/2026-11-06-wait-pilot-claude-mac.md).
 
 ## 1. Summary
 
