@@ -126,7 +126,7 @@ func newHandlerWithChecks(host, token string, call caller, discover func(context
 			http.Error(w, "cross-site request refused", http.StatusForbidden)
 			return
 		}
-		mutation := r.URL.Path == "/api/enqueue" || r.URL.Path == "/api/pause" || r.URL.Path == "/api/resume" || r.URL.Path == "/api/outbox/ack" || r.URL.Path == "/api/check-cli" || r.URL.Path == "/api/setup-claude" || r.URL.Path == "/api/authorize-setup"
+		mutation := r.URL.Path == "/api/enqueue" || r.URL.Path == "/api/pause" || r.URL.Path == "/api/resume" || r.URL.Path == "/api/outbox/ack" || r.URL.Path == "/api/check-cli" || r.URL.Path == "/api/setup-claude" || r.URL.Path == "/api/setup-codex" || r.URL.Path == "/api/authorize-setup"
 		method := http.MethodGet
 		if mutation {
 			method = http.MethodPost
@@ -175,6 +175,10 @@ func newHandlerWithChecks(host, token string, call caller, discover func(context
 		if r.URL.Path == "/api/check-cli" {
 			deadline = 20 * time.Second
 		}
+		if r.URL.Path == "/api/setup-codex" {
+			// Starting app-server and creating a thread takes a few RPC rounds.
+			deadline = 100 * time.Second
+		}
 		ctx, cancel := context.WithTimeout(r.Context(), deadline)
 		defer cancel()
 		if mutation {
@@ -219,6 +223,18 @@ func newHandlerWithChecks(host, token string, call caller, discover func(context
 					return
 				}
 				req = control.Request{Cmd: "setup-new-claude", ConversationID: input.ID, Alias: input.Alias, CLI: input.CLI, Environment: input.Environment}
+			} else if r.URL.Path == "/api/setup-codex" {
+				var input struct {
+					Alias        string `json:"alias"`
+					CLI          string `json:"cli"`
+					Environment  string `json:"environment"`
+					Confirmation string `json:"confirmation"`
+				}
+				if err := decoder.Decode(&input); err != nil || strings.TrimSpace(input.Alias) == "" || len(input.Alias) > 128 || !filepath.IsAbs(input.CLI) || !filepath.IsAbs(input.Environment) || len(input.CLI) > 4096 || len(input.Environment) > 4096 || input.Confirmation != "allow-model-calls" {
+					http.Error(w, "invalid Codex session", 400)
+					return
+				}
+				req = control.Request{Cmd: "setup-codex", Alias: input.Alias, CLI: input.CLI, Environment: input.Environment, Confirmation: input.Confirmation}
 			} else if r.URL.Path == "/api/enqueue" {
 				var envelope struct {
 					ID    string `json:"message_id"`
@@ -256,6 +272,13 @@ func newHandlerWithChecks(host, token string, call caller, discover func(context
 				return
 			}
 			response, err := call(ctx, req)
+			if req.Cmd == "setup-codex" && err == nil && !response.OK {
+				// Setup errors carry no secrets: no config values, server names or tokens.
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+				w.WriteHeader(http.StatusConflict)
+				writeJSON(w, map[string]any{"ok": false, "state": "rejected", "detail": response.Error})
+				return
+			}
 			if (req.Cmd == "setup-new-claude" || req.Cmd == "authorize-setup") && err == nil && !response.OK {
 				w.Header().Set("Content-Type", "application/json; charset=utf-8")
 				w.WriteHeader(http.StatusConflict)
@@ -275,6 +298,10 @@ func newHandlerWithChecks(host, token string, call caller, discover func(context
 			// This ACK proves queue persistence only, never provider success.
 			if req.Cmd == "ui-submit" {
 				writeJSON(w, map[string]any{"ok": true, "message_id": req.MessageID, "created": *response.Created})
+				return
+			}
+			if req.Cmd == "setup-codex" {
+				writeJSON(w, map[string]any{"ok": true, "action": req.Cmd, "alias": req.Alias})
 				return
 			}
 			if req.Cmd == "setup-new-claude" {

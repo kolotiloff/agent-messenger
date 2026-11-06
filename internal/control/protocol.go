@@ -288,6 +288,18 @@ func dispatch(handler Handler, request Request) Response {
 			return Response{OK: false, Error: err.Error()}
 		}
 		return Response{OK: true, Status: &Status{Detail: detail}}
+	case "setup-codex":
+		h, ok := handler.(interface {
+			SetupCodexFromWindow(string, string, string, string) (string, error)
+		})
+		if !ok {
+			return Response{Error: "Codex setup unsupported; update the background client"}
+		}
+		detail, err := h.SetupCodexFromWindow(request.Environment, request.Alias, request.CLI, request.Confirmation)
+		if err != nil {
+			return Response{Error: err.Error()}
+		}
+		return Response{OK: true, Status: &Status{Detail: detail}}
 	case "create-codex-session":
 		creator, ok := handler.(interface {
 			CreateCodexSession(string, string, string) (string, error)

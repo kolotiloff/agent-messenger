@@ -2,6 +2,7 @@ package supervisor
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -519,4 +520,55 @@ func (s *Supervisor) recheckCodexConfig(owner *codexOwner, workspace string) err
 		return errors.New("effective config changed since setup")
 	}
 	return nil
+}
+
+// SetupCodexFromWindow is the window's one-step "create a Codex session and
+// allow model calls for it". The client started by the window runs without
+// model permission; this grants it for exactly this new alias, like
+// AuthorizeSetup does for a new Claude session, and then creates the session.
+// It refuses when another session already holds the permission in this run.
+// If nothing was launched, the grant is withdrawn again.
+func (s *Supervisor) SetupCodexFromWindow(environment, alias, cli, confirmation string) (string, error) {
+	if confirmation != "allow-model-calls" {
+		return "", errors.New("explicit confirmation required")
+	}
+	s.dispatch.Lock()
+	if s.stopping.Load() {
+		s.dispatch.Unlock()
+		return "", core.ErrRejected
+	}
+	launcher, ok := s.currentLauncher().(AdapterLauncher)
+	if !ok {
+		s.dispatch.Unlock()
+		return "", core.ErrRejected
+	}
+	previous := launcher
+	granted := false
+	if launcher.AllowModels {
+		if launcher.OnlySession != alias {
+			s.dispatch.Unlock()
+			return "", errors.New("model calls are already allowed for another session in this client run")
+		}
+	} else {
+		if len(s.jobList()) != 0 || s.starting.Load() {
+			s.dispatch.Unlock()
+			return "", core.ErrBusy
+		}
+		launcher.AllowModels, launcher.OnlySession = true, alias
+		s.launcherMu.Lock()
+		s.launcher = launcher
+		s.launcherMu.Unlock()
+		granted = true
+	}
+	s.dispatch.Unlock()
+	detail, err := s.CreateCodexSession(environment, alias, cli)
+	if err != nil && granted {
+		setup, lookupErr := s.store.CodexSetupByAlias(alias)
+		if errors.Is(lookupErr, sql.ErrNoRows) || (lookupErr == nil && setup.State == "not_started") {
+			s.launcherMu.Lock()
+			s.launcher = previous
+			s.launcherMu.Unlock()
+		}
+	}
+	return detail, err
 }

@@ -586,6 +586,11 @@ func (s *Store) CodexSetup(id string) (CodexSetup, error) {
 	return s.codexSetupWhere(`id=?`, id)
 }
 
+// CodexSetupByAlias returns the newest setup that used the alias, if any.
+func (s *Store) CodexSetupByAlias(alias string) (CodexSetup, error) {
+	return s.codexSetupWhere(`alias=? ORDER BY rowid DESC LIMIT 1`, alias)
+}
+
 // CodexSetupForRecovery returns the setup that holds the alias and is waiting
 // for, or in the middle of, recover-codex.
 func (s *Store) CodexSetupForRecovery(alias string) (CodexSetup, error) {

@@ -744,3 +744,33 @@ func TestCodexOwnerRechecksConfigBeforeEachTurn(t *testing.T) {
 	h.stop()
 	waitGone(t, pidOf(setup))
 }
+
+func TestWindowCodexSetupGrantsOnlyThisSession(t *testing.T) {
+	h := newCodexHarness(t, "ok", AdapterLauncher{ClaudeStream: true})
+	setup := func(alias, env, confirm string) control.Response {
+		r, err := control.Call(h.root, control.Request{Cmd: "setup-codex", Alias: alias, CLI: h.self, Environment: env, Confirmation: confirm})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	if r := setup("codex-test", h.profile, ""); r.OK {
+		t.Fatal("setup without confirmation")
+	}
+	// A refused setup that launched nothing withdraws the grant.
+	defaultProfile := mkdir(t, filepath.Join(os.Getenv("HOME"), ".codex"))
+	if r := setup("codex-test", defaultProfile, "allow-model-calls"); r.OK {
+		t.Fatal("default profile accepted")
+	}
+	if r := setup("codex-test", h.profile, "allow-model-calls"); !r.OK {
+		t.Fatalf("setup failed: %+v", r)
+	}
+	s := h.waitSetup(func(s map[string]any) bool { return s["state"] == "created" })
+	if r := setup("codex-other", h.profile, "allow-model-calls"); r.OK {
+		t.Fatal("a second session got model permission in the same run")
+	}
+	h.send("m1", "one")
+	h.waitSnap("reply", func(s codexSnap) bool { return requestState(s, "m1") == "completed" })
+	h.stop()
+	waitGone(t, pidOf(s))
+}
