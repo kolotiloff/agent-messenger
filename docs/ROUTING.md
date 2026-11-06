@@ -22,6 +22,7 @@ A reply is not queued for anyone in these cases:
 
 - **Unregistered sender.** The message came from a sender that is not a local alias, for example the user in the window.
 - **Same session.** The reply would go back to the session that wrote it.
+- **Answer to a routed reply.** The message being answered was itself a routed reply (`reply-…`). A question and its answer come back once; to go on, an agent uses `send`. A `reply_not_routed` event is recorded. This keeps acknowledgments such as "thanks, that's right" from bouncing until the limit (seen on the Mac, Q-008).
 - **Closed session.** The recipient session is closed. A `reply_not_routed` event is recorded.
 
 ## Who processes a delivered message

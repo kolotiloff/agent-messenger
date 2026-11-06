@@ -646,7 +646,7 @@ func TestRecoverCodexPendingIsResumable(t *testing.T) {
 	h.stop()
 }
 
-func TestClaudeAndCodexExchangeUntilAutoReplyLimit(t *testing.T) {
+func TestClaudeAndCodexAnswerReturnsOnce(t *testing.T) {
 	t.Setenv("MESSENGER_STREAM_FIXTURE", "normal")
 	launcher := AdapterLauncher{AllowModels: true, ClaudeStream: true}
 	h := newCodexHarnessWith(t, "ok", launcher, func(root string) {
@@ -672,16 +672,18 @@ func TestClaudeAndCodexExchangeUntilAutoReplyLimit(t *testing.T) {
 	if r, err := control.Call(h.root, control.Request{Cmd: "enqueue", Alias: "codex-test", MessageID: "m1", Sender: "worker", Text: "hi"}); err != nil || !r.OK {
 		t.Fatalf("enqueue: %+v %v", r, err)
 	}
-	s := h.waitSnap("exchange to the limit", func(s codexSnap) bool {
-		limited := false
+	// Codex answers worker; the answer comes back to Claude once, and Claude's
+	// reply to it is kept, not routed again.
+	s := h.waitSnap("answer returned and kept", func(s codexSnap) bool {
+		stopped := false
 		for _, e := range s.Events {
-			limited = limited || e["kind"] == "auto_reply_limit"
+			stopped = stopped || e["kind"] == "reply_not_routed"
 		}
-		return limited && len(s.Replies) == 4
+		return stopped && len(s.Replies) == 2
 	})
 	time.Sleep(300 * time.Millisecond)
 	s = h.snap()
-	if len(s.Requests) != 1+core.MaxAutoReplyHops || len(s.Replies) != 1+core.MaxAutoReplyHops {
+	if len(s.Requests) != 2 || len(s.Replies) != 2 {
 		t.Fatalf("requests %d replies %d", len(s.Requests), len(s.Replies))
 	}
 	for _, r := range s.Requests {
@@ -697,12 +699,12 @@ func TestClaudeAndCodexExchangeUntilAutoReplyLimit(t *testing.T) {
 		}
 		texts[r["text"].(string)] = true
 	}
-	for _, text := range []string{"ACK:hi", "ACK:ACK:hi", "ACK:ACK:ACK:hi", "ACK:ACK:ACK:ACK:hi"} {
+	for _, text := range []string{"ACK:hi", "ACK:ACK:hi"} {
 		if !texts[text] {
 			t.Fatalf("missing reply %q in %+v", text, s.Replies)
 		}
 	}
-	if h.count("turn/start") != 2 {
+	if h.count("turn/start") != 1 {
 		t.Fatalf("Codex turns %d", h.count("turn/start"))
 	}
 	// Both owners stay alive and idle: one Claude stream, one Codex app-server.
@@ -824,6 +826,8 @@ func TestWindowGrantsAreBoundedAndRevocable(t *testing.T) {
 
 // Claude, as coordinator, writes to Codex with the send tool; Codex's answer
 // comes back to Claude, and the chain stops at the automatic-step limit.
+// Claude, as coordinator, writes to Codex with the send tool; Codex's answer
+// comes back to Claude once, and Claude's reply to it is kept.
 func TestClaudeAsksCodexWithSendTool(t *testing.T) {
 	t.Setenv("MESSENGER_STREAM_FIXTURE", "send")
 	launcher := AdapterLauncher{AllowModels: true, ClaudeStream: true}
@@ -849,10 +853,10 @@ func TestClaudeAsksCodexWithSendTool(t *testing.T) {
 	if r, err := control.Call(h.root, control.Request{Cmd: "enqueue", Alias: "worker", MessageID: "m1", Sender: "user", Text: "ask:hi"}); err != nil || !r.OK {
 		t.Fatalf("enqueue: %+v %v", r, err)
 	}
-	s := h.waitSnap("exchange to the limit", func(s codexSnap) bool {
+	s := h.waitSnap("answer returned to Claude", func(s codexSnap) bool {
 		for _, e := range s.Events {
-			if e["kind"] == "auto_reply_limit" {
-				return true
+			if e["kind"] == "reply_not_routed" {
+				return len(s.Replies) == 3
 			}
 		}
 		return false
@@ -871,10 +875,10 @@ func TestClaudeAsksCodexWithSendTool(t *testing.T) {
 	if sent == nil || sent["sender"] != "worker" || sent["in_reply_to"] != "m1" || sent["hops"] != float64(1) || sent["text"] != "question from worker" {
 		t.Fatalf("send-initiated message %+v", sent)
 	}
-	if len(s.Requests) != 4 || len(s.Replies) != 4 || replyTo(s, "m1") != "ACK:ask:hi" {
+	if len(s.Requests) != 3 || len(s.Replies) != 3 || replyTo(s, "m1") != "ACK:ask:hi" {
 		t.Fatalf("requests %d replies %d: %+v", len(s.Requests), len(s.Replies), s.Replies)
 	}
-	if h.count("turn/start") != 2 {
+	if h.count("turn/start") != 1 {
 		t.Fatalf("Codex turns %d", h.count("turn/start"))
 	}
 	h.stop()

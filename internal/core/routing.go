@@ -32,6 +32,12 @@ func routeReply(tx *sql.Tx, row attemptRow, reply Reply) error {
 	if key == row.sessionKey {
 		return nil
 	}
+	// A reply to a message that was itself a routed reply is only stored. A
+	// question and its answer come back once; agents continue explicitly with
+	// send, so "thanks, that's right" does not bounce until the limit.
+	if strings.HasPrefix(row.requestID, "reply-") {
+		return insertEvent(tx, "reply_not_routed", key, row.token, "answer to a routed reply; kept, not routed")
+	}
 	if decision.Valid {
 		return insertEvent(tx, "reply_not_routed", key, row.token, "recipient session is closed; reply "+reply.ID)
 	}
