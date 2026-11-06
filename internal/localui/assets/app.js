@@ -136,6 +136,7 @@
     $('app-update-version').hidden=!version;
     $('app-update-version').textContent=version;
   };
+  $('session-dialog-close').addEventListener('click',()=>$('session-dialog').close());
   $('app-update-button').addEventListener('click',()=>window.webkit?.messageHandlers?.updates?.postMessage('check'));
   root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
     $('screen-title').textContent={messages:'Переписка',agents:'Агенты',queue:'Очередь',server:'Сервер и подключение'}[tab];
@@ -162,7 +163,7 @@
       const group=sessions.filter(s=>s.provider===provider),card=el('article',undefined,'am-agent');
       card.append(el('h3',names[provider]||provider));
       const candidate=discoveryAgents.find(a=>a.provider===provider);
-      const installed=candidate?.state==='candidate_found'?'Найден на компьютере':candidate?.state==='not_found'?'Не найден':'Не проверено';
+      const installed=candidate?.state==='candidate_found'?'Найден на компьютере':candidate?.state==='not_found'?'Расположение не определено':'Не проверено';
       const attention=group.some(s=>s.decision_pending||s.recorded_attempt_state==='uncertain'||s.recorded_stream_state==='uncertain');
       card.append(el('p',!overview?'Нет данных клиента':!group.length?'Не подключён':attention?'Требует внимания':'Сессии подключены',attention?'am-status-warn':'am-muted'));
       const dl=el('dl');
@@ -170,19 +171,8 @@
         const pair=el('div');pair.append(el('dt',label),el('dd',value));dl.append(pair);
       }
       card.append(dl);
-      if(group.length) {
-        const details=el('details',undefined,'am-agent-sessions');details.append(el('summary','Сессии и состояние ('+group.length+')'));
-        for(const s of group) {
-          const alias=s.aliases[0]||'',row=el('div',undefined,'am-agent-session');
-          const phase=s.recorded_stream_state==='none'?s.recorded_attempt_state:s.recorded_stream_state;
-          row.append(el('strong',s.aliases.join(' · ')||'Нет адреса'),el('p',stateText(phase),'am-small'),el('p','В очереди: '+s.queued+' · Требуют разбора: '+s.uncertain,'am-small am-muted'));
-          row.append(el('p',s.launch_configured?'Настройка запуска записана; готовность не проверена.':'Настройка запуска не завершена.','am-small am-muted'));
-          if(s.owner_retained)row.append(el('p','Сессия остаётся закреплена за своим процессом.','am-small am-muted'));
-          const button=el('button','Открыть переписку','am-agent-action');button.type='button';button.disabled=!alias;
-          button.addEventListener('click',()=>{if(pending||sending)return;$('session').value=alias;selected=alias;show('messages');actionControls();loadTimeline(false);});row.append(button);details.append(row);
-        }
-        card.append(details);
-      }
+      const sessionsButton=el('button','Сессии ('+group.length+')','am-agent-action');sessionsButton.type='button';
+      sessionsButton.disabled=!overview;sessionsButton.addEventListener('click',()=>showSessions(provider));card.append(sessionsButton);
       card.append(el('p','Подключение и перенастройка из окна пока недоступны.','am-small am-muted'));cards.append(card);
     }
     for(const s of sessions) {
@@ -192,6 +182,22 @@
     }
     if(!sessions.length)queue.append(el('p',overview?'Нет зарегистрированных сессий.':'Данные клиента недоступны.','am-muted'));
     if(overview?.truncated) {cards.append(el('p','Список сессий неполный.','am-status-warn'));queue.append(el('p','Список сессий неполный.','am-status-warn'));}
+  }
+  function showSessions(provider) {
+    const dialog=$('session-dialog'),body=$('session-dialog-body');body.replaceChildren();
+    $('session-dialog-title').textContent='Сессии · '+(names[provider]||provider);
+    const sessions=(overview?.sessions||[]).filter(s=>s.provider===provider);
+    if(!sessions.length)body.append(el('p','Подключённых сессий пока нет.','am-muted'));
+    for(const s of sessions) {
+      const alias=s.aliases[0]||'',row=el('article',undefined,'am-agent-session');
+      const phase=s.recorded_stream_state==='none'?s.recorded_attempt_state:s.recorded_stream_state;
+      row.append(el('strong',s.aliases.join(' · ')||'Нет адреса'),el('p',stateText(phase),'am-small'),el('p','В очереди: '+s.queued+' · Требуют разбора: '+s.uncertain,'am-small am-muted'));
+      row.append(el('p',s.launch_configured?'Настройка запуска записана; готовность не проверена.':'Настройка запуска не завершена.','am-small am-muted'));
+      if(s.owner_retained)row.append(el('p','Сессия остаётся закреплена за своим процессом.','am-small am-muted'));
+      const button=el('button','Открыть переписку','am-agent-action');button.type='button';button.disabled=!alias||!!pending||sending;
+      button.addEventListener('click',()=>{if(pending||sending)return;dialog.close();$('session').value=alias;selected=alias;show('messages');actionControls();loadTimeline(false);});row.append(button);body.append(row);
+    }
+    if(!dialog.open)dialog.showModal();
   }
   function renderMessage(item) {
     const row=el('article',undefined,'am-message'),avatar=el('div','→','am-avatar'),body=el('div',undefined,'am-message-body');
@@ -272,8 +278,8 @@
       const d=await api('/api/discovery',AbortSignal.timeout(4500));if(version!==refreshVersion)return;
       discoveryAgents=d.agents;renderCards();actionControls();
       $('platform').textContent={darwin:'macOS',linux:'Linux',windows:'Windows'}[d.os]||d.os;
-      $('discovery').replaceChildren();for(const a of d.agents){const row=el('div',undefined,'am-row');row.append(el('span',a.name),el('span',a.state==='candidate_found'?'Найден кандидат CLI':a.state==='not_found'?'Не найден в PATH':'Не удалось определить','am-small am-muted'));$('discovery').append(row);}
-    } catch(_) {if(version===refreshVersion)$('discovery').replaceChildren(el('p','Поиск CLI недоступен.','am-muted'));}
+    } catch(_) {if(version===refreshVersion){discoveryAgents=[];renderCards();actionControls();}}
+
   }
   window.messengerUpdateStatus = status => {
     if(!window.webkit?.messageHandlers?.updates)return;
@@ -284,6 +290,7 @@
     $('app-update-version').hidden=!version;
     $('app-update-version').textContent=version;
   };
+  $('session-dialog-close').addEventListener('click',()=>$('session-dialog').close());
   $('app-update-button').addEventListener('click',()=>window.webkit?.messageHandlers?.updates?.postMessage('check'));
   root.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>show(b.dataset.tab)));
   $('session').addEventListener('change',()=>{if(pending||sending)return;selected=$('session').value;actionControls();loadTimeline(false);});

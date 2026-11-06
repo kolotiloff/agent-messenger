@@ -32,5 +32,10 @@ body.am-native{padding:0}body.am-native #am-concept{max-width:none;margin:0}body
 #am-concept .am-compose{border-top:0;padding:12px 0 0}
 #am-concept .am-compose label{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 #am-concept .am-compose textarea{min-height:44px;height:44px;max-height:140px;border:0;border-radius:14px;background:var(--am-soft);padding:12px 14px;outline:none}
-#am-concept .am-compose textarea:focus-visible{box-shadow:0 0 0 1px var(--am-line)}
+#am-concept .am-compose textarea:focus-visible{box-shadow:inset 0 0 0 1px var(--am-line)}
 #am-concept .am-chat-head{padding:0 0 12px}#am-concept .am-thread{padding-left:4px;padding-right:8px}
+
+#am-concept .am-session-dialog{box-sizing:border-box;width:min(680px,calc(100vw - 48px));max-height:80vh;padding:0;border:1px solid var(--am-line);border-radius:16px;color:var(--am-text);background:var(--am-panel);box-shadow:0 18px 60px #0003}
+#am-concept .am-session-dialog[open]{display:flex;flex-direction:column}#am-concept .am-session-dialog:not([open]){display:none}
+#am-concept .am-session-dialog::backdrop{background:#0005}#am-concept .am-dialog-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 20px;border-bottom:1px solid var(--am-line);flex-shrink:0}
+#am-concept .am-dialog-body{min-height:0;overflow:auto;overscroll-behavior:contain;padding:0 20px 16px}#am-concept .am-dialog-body>.am-agent-session:first-child{border-top:0}#am-concept .am-dialog-body>p:first-child{padding-top:16px}
