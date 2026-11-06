@@ -5,7 +5,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 ## 2026-11-06 — Claude Code (T-003)
 
 - Found on real Codex 0.155.1 that `config/read` returns config keys in a different order on every call. Fingerprints are now taken over canonical JSON. Without this, every re-check would have refused the turn.
-- The config is re-checked before every turn; a mismatch returns the unsent message to the queue. Added a schema version with refusal of newer databases. PR3_LINK.
+- The config is re-checked before every turn; a mismatch returns the unsent message to the queue. Added a schema version with refusal of newer databases. [PR #30](https://github.com/kolotiloff/agent-messenger/pull/30).
 
 ## 2026-11-06 — Claude Code (T-005)
 
