@@ -23,6 +23,8 @@ On Linux, without models: `go test -race ./experiments/wait_probe` covers the MC
 
 Not verified here: any real Claude or Codex client. That is what the Mac run is for.
 
+**Claude app on the Mac, 2026-11-06:** passed. The coordinator waited for 5 minutes in the foreground, woke by itself on each event, kept waiting after the owner wrote in between, and lost nothing; no empty wake-ups. [Report](../../docs/reports/2026-11-06-wait-pilot-claude-mac.md). Codex is still open.
+
 ## Client settings used
 
 From the official Claude Code documentation ([MCP](https://code.claude.com/docs/en/mcp), [environment variables](https://code.claude.com/docs/en/env-vars), [desktop](https://code.claude.com/docs/en/desktop)), checked 2026-11-06:
@@ -44,7 +46,15 @@ Use a **new test chat** in the test folder only, never a working chat. Each wake
 bash experiments/wait_probe/setup.sh
 ```
 
-Open `~/AgentMessengerTest/pilot-coordinator` as a new local session in the Claude app (Code tab), approve the `wait_probe` server, and write: "Call status, then wait for events with wait and tell me about each one." Then, in Terminal, run the scenarios and note what the chat shows:
+The Claude app's Code tab did not load the project `.mcp.json` in the first run. Add the server for this folder only:
+
+```bash
+cd ~/AgentMessengerTest/pilot-coordinator
+claude mcp add --scope local wait_probe -- ~/AgentMessengerTest/bin/wait-probe serve
+claude mcp list
+```
+
+Open `~/AgentMessengerTest/pilot-coordinator` as a new local session in the Claude app (Code tab, environment "This computer", not a cloud environment), check with `pwd` in the chat that it runs in that folder, ask whether the `wait` and `status` tools are available, and write: "Call status, then wait for events with wait and tell me about each one." Then, in Terminal, run the scenarios and note what the chat shows:
 
 | # | Scenario | Command | What to note |
 |---|---|---|---|
@@ -65,6 +75,10 @@ After each client, save the output of:
 Send back the log and a line per scenario. Do not send chat transcripts or session IDs.
 
 Cleanup removes everything the pilot created:
+
+```bash
+cd ~/AgentMessengerTest/pilot-coordinator && claude mcp remove --scope local wait_probe; cd ~
+```
 
 ```bash
 rm -rf ~/AgentMessengerTest/pilot-coordinator ~/AgentMessengerTest/wait-probe ~/AgentMessengerTest/bin/wait-probe
