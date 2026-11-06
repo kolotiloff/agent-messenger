@@ -66,3 +66,26 @@ body{background:light-dark(#ffffff,#191919)}
 #am-concept .am-select-option[aria-selected=true],#am-concept .am-select-option:focus,#am-concept .am-select-option:hover{background:var(--am-menu-hover)}
 #am-concept .am-select-check{color:var(--am-check);font-size:18px;line-height:1;width:18px;flex-shrink:0}
 @media(prefers-reduced-motion:no-preference){#am-concept button{transition:background-color .12s ease}}
+
+/* The composer never changes its outline when the text caret is focused. */
+#am-concept .am-compose-field{display:flex;align-items:flex-end;gap:4px;background:var(--am-composer);border:1px solid var(--am-line);border-radius:16px;padding:0 6px 0 0;box-shadow:0 3px 18px light-dark(#00000009,#00000012)}
+#am-concept .am-compose-field textarea,#am-concept .am-compose-field textarea:focus,#am-concept .am-compose-field textarea:focus-visible{flex:1;min-width:0;background:transparent;border:0;outline:none;box-shadow:none}
+#am-concept button.am-send-icon{width:34px;height:34px;flex-shrink:0;margin-bottom:5px;padding:0;border:0;border-radius:8px;background:transparent;color:var(--am-text);font-size:24px;line-height:1}
+#am-concept button.am-send-icon:hover:not(:disabled){background:var(--am-soft)}
+#am-concept button.am-send-icon:disabled{opacity:.35}
+/* Quiet controls: interaction is indicated by a surface, never an outline. */
+#am-concept button,#am-concept button:focus,#am-concept button:focus-visible{border-color:transparent;outline:none;box-shadow:none}
+#am-concept button:focus-visible{background:var(--am-selected)}
+#am-concept .am-select-trigger{border-color:transparent}
+
+#am-concept .am-provider-heading{display:flex;gap:9px;align-items:center}
+#am-concept .am-provider-icon{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;flex-shrink:0;color:var(--am-text);font-size:12px;font-weight:500}
+#am-concept .am-provider-icon svg{display:block;width:20px;height:20px;fill:currentColor}
+#am-concept .am-provider-icon[data-provider=claude]{color:#d97757}
+#am-concept .am-avatar{background:transparent}
+#am-concept .am-select-option>.am-select-check{margin-left:auto}
+#am-concept .am-select-option:has(.am-provider-icon){gap:9px}
+
+#am-concept .am-tabs{align-items:center;flex-wrap:nowrap}
+#am-concept .am-refresh-icon{margin-left:auto;width:32px;height:32px;padding:0;font-size:22px;background:transparent;flex-shrink:0}
+#am-concept .am-queue-toolbar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:4px 0 16px}

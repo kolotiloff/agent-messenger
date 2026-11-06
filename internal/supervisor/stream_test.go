@@ -106,7 +106,15 @@ func streamFixture(mode string) error {
 				time.Sleep(time.Hour)
 			}
 		}
+		// stdout identity and HTTP tools travel independently. A fixed provider
+		// delay cannot prove the gate is open on a loaded race-test runner.
+		// Only the idempotent read may wait/retry; reply is sent once.
 		current, err := call("read_current", map[string]any{})
+		deadline := time.Now().Add(2 * time.Second)
+		for err != nil && time.Now().Before(deadline) {
+			time.Sleep(10 * time.Millisecond)
+			current, err = call("read_current", map[string]any{})
+		}
 		if err != nil {
 			return err
 		}

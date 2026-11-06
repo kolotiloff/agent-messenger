@@ -1,5 +1,5 @@
-// Package updatefeed exposes a signed local development channel to Sparkle.
-// It never downloads remote metadata, starts a process, or touches client data.
+// Package updatefeed verifies signed update packages and exposes them to Sparkle.
+// Update transport never launches agents or touches client/session data.
 package updatefeed
 
 import (
@@ -45,18 +45,36 @@ var versionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+-preview\.[1-9][
 type Channel struct{ Directory, PublicKey string }
 
 func (c Channel) Load() (Manifest, error) {
-	var m Manifest
-	key, err := base64.StdEncoding.DecodeString(c.PublicKey)
-	if err != nil || len(key) != ed25519.PublicKeySize {
-		return m, errors.New("update trust key unavailable")
+	if raw, err := regularRead(filepath.Join(c.Directory, "current.json"), 46000); err == nil {
+		var envelope signedEnvelope
+		d := json.NewDecoder(bytes.NewReader(raw))
+		d.DisallowUnknownFields()
+		if d.Decode(&envelope) != nil || d.Decode(new(any)) != io.EOF {
+			return Manifest{}, errors.New("invalid update envelope")
+		}
+		return VerifyManifest(c.PublicKey, envelope.Manifest, envelope.Signature)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return Manifest{}, err
 	}
 	raw, err := regularRead(filepath.Join(c.Directory, "manifest.json"), 32768)
 	if err != nil {
-		return m, err
+		return Manifest{}, err
 	}
 	sigText, err := regularRead(filepath.Join(c.Directory, "manifest.sig"), 256)
 	if err != nil {
-		return m, err
+		return Manifest{}, err
+	}
+	return VerifyManifest(c.PublicKey, raw, sigText)
+}
+
+func VerifyManifest(publicKey string, raw, sigText []byte) (Manifest, error) {
+	var m Manifest
+	if len(raw) > 32768 || len(sigText) > 256 {
+		return m, errors.New("update metadata exceeds limits")
+	}
+	key, err := base64.StdEncoding.DecodeString(publicKey)
+	if err != nil || len(key) != ed25519.PublicKeySize {
+		return m, errors.New("update trust key unavailable")
 	}
 	sig, err := base64.StdEncoding.DecodeString(string(bytes.TrimSpace(sigText)))
 	if err != nil || !ed25519.Verify(key, raw, sig) {
@@ -91,7 +109,7 @@ func (c Channel) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/api/updates/feed.xml":
 		w.Header().Set("Content-Type", "application/rss+xml; charset=utf-8")
-		_, _ = fmt.Fprintf(w, `<?xml version="1.0" encoding="utf-8"?><rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel><title>Agent Messenger — локальные сборки</title><item><title>%s</title><sparkle:version>%d</sparkle:version><sparkle:shortVersionString>%s</sparkle:shortVersionString><sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion><description><![CDATA[%s]]></description><enclosure url="http://%s/api/updates/%s" sparkle:edSignature="%s" length="%d" type="application/octet-stream"/></item></channel></rss>`, escape(m.Version), m.Build, escape(m.Version), escape(m.Notes)+"\n\nФоновый клиент и активные сессии сохраняются. Обновляется приложение; версия уже работающего клиента может отличаться.", escape(r.Host), name, m.Signature, m.Length)
+		_, _ = fmt.Fprintf(w, `<?xml version="1.0" encoding="utf-8"?><rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel><title>Agent Messenger — проверенные обновления</title><item><title>%s</title><sparkle:version>%d</sparkle:version><sparkle:shortVersionString>%s</sparkle:shortVersionString><sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion><description><![CDATA[%s]]></description><enclosure url="http://%s/api/updates/%s" sparkle:edSignature="%s" length="%d" type="application/octet-stream"/></item></channel></rss>`, escape(m.Version), m.Build, escape(m.Version), escape(m.Notes)+"\n\nФоновый клиент и активные сессии сохраняются. Обновляется приложение; версия уже работающего клиента может отличаться.", escape(r.Host), name, m.Signature, m.Length)
 	case "/api/updates/" + name:
 		f, err := openRegular(filepath.Join(c.Directory, name), MaxArchive)
 		if err != nil {

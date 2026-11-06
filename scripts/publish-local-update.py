@@ -36,6 +36,8 @@ target.mkdir(parents=True,exist_ok=True,mode=0o700)
 previous=target/'manifest.json'
 if previous.exists():
  old=json.loads(previous.read_text())
+ snapshot=target/'current.json'
+ if snapshot.exists():old=json.loads(base64.b64decode(json.loads(snapshot.read_text())['manifest']))
  if int(old['build'])>build or (int(old['build'])==build and old['sha256']!=digest):raise SystemExit('Refusing an older or conflicting build')
 with tempfile.TemporaryDirectory(prefix='.publish-',dir=target) as d:
  temp=pathlib.Path(d);m=temp/'manifest.json'
@@ -51,4 +53,13 @@ with tempfile.TemporaryDirectory(prefix='.publish-',dir=target) as d:
  os.chmod(m,0o600);os.chmod(s,0o600)
  # A check between these replacements fails signature validation safely.
  os.replace(s,target/'manifest.sig');os.replace(m,target/'manifest.json')
+ # A single envelope switches the complete metadata after both files exist.
+ envelope=temp/'current.json'
+ envelope.write_text(json.dumps({'manifest':base64.b64encode((target/'manifest.json').read_bytes()).decode(),'signature':base64.b64encode((signed+'\n').encode()).decode()}))
+ os.chmod(envelope,0o600);os.replace(envelope,target/'current.json')
+ # Ready-to-upload public assets contain only signed metadata and the app.
+ export=source/'release-assets';export.mkdir(exist_ok=True)
+ name='update-'+meta['os']+'-'+meta['arch']+'.json'
+ shutil.copyfile(target/'manifest.json',export/name);shutil.copyfile(target/'manifest.sig',export/(name+'.sig'))
+ shutil.copyfile(dest,export/(digest+'.zip'))
 print(json.dumps(dict(version=version,build=build,channel=str(target),signed=True)))

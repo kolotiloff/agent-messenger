@@ -177,7 +177,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { statusView.isHidden = true; web.isHidden = false; showUpdateStatus() }
     func showUpdateStatus() {
-        let status: [String: Any] = ["version": updates.availableVersion ?? "", "channel": "local"]
+        let status: [String: Any] = ["version": updates.availableVersion ?? "", "channel": "github", "detail": updates.fetchStatus, "checking": updates.fetching]
         guard let data = try? JSONSerialization.data(withJSONObject: status), let json = String(data: data, encoding: .utf8) else { return }
         web?.evaluateJavaScript("window.messengerUpdateStatus && window.messengerUpdateStatus(" + json + ")", completionHandler: nil)
     }
