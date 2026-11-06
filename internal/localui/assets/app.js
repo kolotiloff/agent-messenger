@@ -378,7 +378,7 @@
     const detail=typeof status?.detail==='string'?status.detail:'';
     const failed=detail.includes('недоступен')||detail.includes('не запустилась');
     $('app-update-button').hidden=!version&&!failed;
-    $('app-update-button').textContent=version?'↑ Обновить':'↻';
+    $('app-update-button').textContent=version?'Доступно обновление':'Повторить проверку';
     $('app-update-button').title=version?'Доступно обновление '+version:detail;
     $('app-update-button').setAttribute('aria-label',version?'Установить обновление '+version:'Не удалось проверить обновления. Повторить');
     $('app-update-button').disabled=status?.checking===true;
