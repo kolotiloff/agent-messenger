@@ -16,7 +16,27 @@ The JSON signature is verified before the archive is downloaded; then the OS, ar
 
 A local HTTP bridge with a separate window Bearer key hands the verified package to Sparkle. Sparkle additionally verifies the archive's EdDSA before unpacking. The dynamic XML is generated locally and is not a remote trusted feed. Checking, downloading, waiting and installing do not call models.
 
-## Preparing a release
+## Releasing from GitHub Actions
+
+The **Release Mac preview** workflow (`.github/workflows/release.yml`) builds, signs and publishes a preview from `main`. Run it by hand under Actions → Release Mac preview → Run workflow, with a version such as `0.0.0-preview.20` and release notes.
+
+1. **Checks.** It refuses any ref other than `main`, a malformed version, an existing tag and empty notes. Then it runs `scripts/check.sh`.
+2. **Build.** It builds the app with `build-mac-app.sh` and runs the desktop lifecycle check.
+3. **Signing.** It signs with `publish-local-update.py --key-file`.
+   - The key comes from the repository secret `SPARKLE_ED_PRIVATE_KEY`.
+   - The key is written to a `0600` temporary file and removed after signing.
+   - Each signature (archive and manifest) is verified against `SUPublicEDKey` from the built app by `scripts/verify-update-signature` before anything is kept.
+4. **Publishing.** It uploads the three assets to a draft release, then publishes it.
+
+The secret holds the Sparkle EdDSA key exported once from the developer's Keychain:
+
+```sh
+generate_keys --account agent-messenger-preview -x key.txt
+```
+
+Paste the contents of `key.txt` into Settings → Secrets and variables → Actions → `SPARKLE_ED_PRIVATE_KEY`, then delete the file. Anyone who can change workflows on `main` can use this secret, so keep write access to the repository limited.
+
+## Preparing a release locally
 
 ```sh
 SPARKLE_DIR=/absolute/path/to/sparkle \

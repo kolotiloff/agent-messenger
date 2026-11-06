@@ -1,0 +1,83 @@
+name: Release Mac preview
+
+# Builds, signs and publishes one Mac preview from main. Runs only when
+# started by hand. The signing key comes from the SPARKLE_ED_PRIVATE_KEY
+# secret, lives in a 0600 temp file during signing, and is removed afterwards.
+# Every signature is checked against the app's public key before upload.
+
+"on":
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Preview version, for example 0.0.0-preview.20"
+        required: true
+      notes:
+        description: "Release notes shown in the app (plain text)"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-mac-preview
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, sign and publish
+    runs-on: macos-15
+    timeout-minutes: 40
+    env:
+      VERSION: ${{ inputs.version }}
+      NOTES: ${{ inputs.notes }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Refuse anything but main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "Releases are built from main only." >&2
+          exit 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          cache: false
+      - name: Validate version and tag
+        run: |
+          [[ "$VERSION" =~ ^0\.0\.0-preview\.[1-9][0-9]{0,8}$ ]] || { echo "Version must look like 0.0.0-preview.N" >&2; exit 1; }
+          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release v$VERSION already exists" >&2; exit 1
+          fi
+          [[ -n "$NOTES" && ${#NOTES} -le 4000 ]] || { echo "Notes are required (at most 4000 characters)" >&2; exit 1; }
+      - name: Checks (no real models)
+        run: bash scripts/check.sh
+      - name: Build the app
+        run: |
+          SPARKLE_DIR="$RUNNER_TEMP/sparkle" bash scripts/build-mac-app.sh "$RUNNER_TEMP/app" "$VERSION" "$GITHUB_SHA"
+          python3 scripts/check-desktop.py "$RUNNER_TEMP/app/Agent Messenger.app/Contents/Resources/messenger"
+      - name: Sign
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          [[ -n "$SPARKLE_ED_PRIVATE_KEY" ]] || { echo "Secret SPARKLE_ED_PRIVATE_KEY is not set" >&2; exit 1; }
+          umask 077
+          key="$RUNNER_TEMP/sparkle-key"
+          trap 'rm -f "$key"' EXIT
+          printf '%s' "$SPARKLE_ED_PRIVATE_KEY" > "$key"
+          printf '%s\n' "$NOTES" > "$RUNNER_TEMP/notes.txt"
+          python3 scripts/publish-local-update.py "$RUNNER_TEMP/app" \
+            --sparkle "$RUNNER_TEMP/sparkle" --notes "$RUNNER_TEMP/notes.txt" \
+            --key-file "$key" --directory "$RUNNER_TEMP/channel"
+      - name: Publish (draft first, then public)
+        run: |
+          assets=("$RUNNER_TEMP"/app/release-assets/*)
+          [[ ${#assets[@]} == 3 ]] || { echo "Expected exactly 3 release assets" >&2; exit 1; }
+          gh release create "v$VERSION" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --draft \
+            --target "$GITHUB_SHA" --title "Agent Messenger $VERSION" --notes-file "$RUNNER_TEMP/notes.txt"
+          gh release edit "v$VERSION" --repo "$GITHUB_REPOSITORY" --draft=false
+          gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" --json url,assets --jq '.url, (.assets[].name)'
+      - name: Remove signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/sparkle-key"
