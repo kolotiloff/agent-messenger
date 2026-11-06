@@ -12,7 +12,7 @@ Updated 2026-11-06 by Claude Code.
 - **`main` ([PR #29](https://github.com/kolotiloff/agent-messenger/pull/29)):** T-007 is done. `recover-codex` retires an uncertain Codex owner after a proven reboot. It is refused on Linux and Windows, which have no boot identity source yet.
 - **`main` ([PR #30](https://github.com/kolotiloff/agent-messenger/pull/30)):** T-005 is done. Replies to another local agent are delivered as new messages, with a limit of 3 per chain ([ROUTING.md](ROUTING.md)). A persistent Claude session and a Codex owner exchange messages side by side; this was verified with fake CLIs.
 - **`main` ([PR #30](https://github.com/kolotiloff/agent-messenger/pull/30)):** T-003 is done. The Codex config is checked again before every turn, and the database has a schema version.
-- **`main` (PR8_LINK):** T-008 is done. Up to 4 persistent Claude sessions run side by side.
+- **`main` ([PR #31](https://github.com/kolotiloff/agent-messenger/pull/31)):** T-008 is done. Up to 4 persistent Claude sessions run side by side.
 - **Next:** T-004, the first real run on the Mac, needs the owner (Q-005, Q-007). Without the Mac: T-006, Codex in the window. That work ends in a new app build.
 - **Mac status:** the Mac froze and rebooted on 2026-11-06 after preview.19. The live Claude test owner from that acceptance is gone. Its reservation is kept until `recover-stream` is run on the Mac; this is not needed for current work.
 
