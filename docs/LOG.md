@@ -4,7 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-06 — Claude Code with the owner (window direction)
 
-- Agreed the future window with the owner on a mockup built from the real window files: an observation panel with a "Tasks" tab, coordinator status, no composer, and direct owner questions only when the project's rules allow them. Recorded as D-024; added T-029.
+- Agreed the future window with the owner on a mockup built from the real window files: an observation panel with a "Tasks" tab and coordinator status. Owner questions show as a yellow dot and inside the task's conversation, with an answer field only while the worker waits; the coordinator does not read that exchange. Recorded as D-024; added T-029.
 
 ## 2026-11-06 — Claude Code with the owner (Q-008 decided)
 
