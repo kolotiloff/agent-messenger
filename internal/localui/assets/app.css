@@ -98,7 +98,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept :is(.am-tab,.am-machine,.am-refresh-icon,.am-panel-toggle,.am-send-icon):is(:hover,:focus-visible):not(:disabled) { background:var(--am-soft); color:var(--am-text); }
 #am-concept :is(.am-tab,.am-machine)[aria-pressed=true]:is(:hover,:focus-visible) { background:var(--am-button-hover); }
 #am-concept .am-refresh-icon { margin-left:auto; width:32px; height:32px; padding:0; font-size:22px; flex-shrink:0; }
-#am-concept .am-screen { flex:1; min-width:0; min-height:0; overflow:auto; scrollbar-gutter:stable; padding-inline:var(--am-pane-inset) calc(var(--am-pane-inset) - var(--am-scrollbar)); }
+#am-concept .am-screen { flex:1; min-width:0; min-height:0; overflow:auto; scrollbar-gutter:stable; padding-inline:var(--am-pane-inset) calc(var(--am-pane-inset) - var(--am-gutter, 0px)); }
 #am-concept [data-screen=messages] { overflow:hidden; scrollbar-gutter:auto; padding-inline:0; }
 #am-concept .am-chat-layout { display:grid; grid-template-columns:minmax(0,1fr) 240px; gap:16px; height:100%; min-height:0; position:relative; }
 #am-concept .am-chat { display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; }
@@ -120,7 +120,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-select-option[aria-disabled=true] { color:var(--am-disabled-text); cursor:default; background:transparent; }
 #am-concept .am-select-check { color:var(--am-check); font-size:18px; line-height:1; width:18px; margin-left:auto; flex-shrink:0; }
 /* History scrolls independently; outgoing bubbles never enclose the reply. */
-#am-concept .am-thread { display:flex; flex-direction:column; gap:24px; flex:1; min-height:0; padding:var(--am-space-3) calc(var(--am-pane-inset) - var(--am-scrollbar)) var(--am-space-6) var(--am-pane-inset); scrollbar-gutter:stable; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; }
+#am-concept .am-thread { display:flex; flex-direction:column; gap:24px; flex:1; min-height:0; padding:var(--am-space-3) calc(var(--am-pane-inset) - var(--am-gutter, 0px)) var(--am-space-6) var(--am-pane-inset); scrollbar-gutter:stable; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; }
 #am-concept .am-message-group { display:flex; flex-direction:column; gap:var(--am-space-6); min-width:0; }
 #am-concept .am-thread:focus { outline:none; }
 #am-concept .am-message { display:flex; gap:var(--am-space-3); align-items:flex-start; min-width:0; max-width:100%; }
@@ -239,10 +239,10 @@ body.am-native #am-concept .am-panel-toggle { margin-left:auto; }
 
 /* Overlay scrollbars also need real padding: scrollbar-gutter alone does not reserve it. */
 #am-concept :is(.am-queue-list,.am-dialog-body,.am-select-menu,.am-machines) { scrollbar-gutter:stable; }
-#am-concept .am-queue-list { margin-right:calc(-1 * var(--am-pane-inset)); padding-right:calc(var(--am-pane-inset) - var(--am-scrollbar)); }
-#am-concept .am-dialog-body { padding-right:calc(var(--am-space-4) - var(--am-scrollbar)); }
+#am-concept .am-queue-list { margin-right:calc(-1 * var(--am-pane-inset)); padding-right:calc(var(--am-pane-inset) - var(--am-gutter, 0px)); }
+#am-concept .am-dialog-body { padding-right:calc(var(--am-space-4) - var(--am-gutter, 0px)); }
 #am-concept .am-select-menu { scrollbar-gutter:stable both-edges; }
-#am-concept .am-machines { margin-right:-12px; padding-right:calc(12px - var(--am-scrollbar)); }
+#am-concept .am-machines { margin-right:-12px; padding-right:calc(12px - var(--am-gutter, 0px)); }
 
 /* History owns the full-height scrollbar at the conversation's right edge. */
 #am-concept .am-chat-layout { gap:0; }

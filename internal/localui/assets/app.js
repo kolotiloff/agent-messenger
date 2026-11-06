@@ -373,15 +373,19 @@
     const version=typeof status?.version==='string'?status.version:'';
     const installed=typeof status?.installedVersion==='string'?status.installedVersion:'';
     $('app-installed-version').hidden=!installed;
-    $('app-installed-version').textContent=installed?'v'+installed:'';
-    $('app-installed-version').title='Установленная версия приложения';
+    const preview=installed.match(/^0\.0\.0-preview\.(\d+)$/);
+    $('app-installed-version').textContent=preview?'Предварительная версия '+preview[1]:installed?'Версия '+installed:'';
+    $('app-installed-version').title=installed?'Точная версия: '+installed:'';
     const detail=typeof status?.detail==='string'?status.detail:'';
-    const failed=detail.includes('недоступен')||detail.includes('не запустилась');
-    $('app-update-button').hidden=!version&&!failed;
-    $('app-update-button').textContent=version?'Доступно обновление':'Повторить проверку';
+    const failed=detail.includes('недоступен')||detail.includes('не запустилась')||detail.includes('повторить');
+    const checking=status?.checking===true;
+    const waiting=detail==='Обновление загружается в фоне';
+    $('app-update-button').hidden=!version&&!failed&&!checking;
+    const label=version?'Доступно обновление':waiting?'Загружается обновление…':checking?'Проверяем обновления…':'Повторить проверку';
+    $('app-update-button').textContent=label;
     $('app-update-button').title=version?'Доступно обновление '+version:detail;
-    $('app-update-button').setAttribute('aria-label',version?'Установить обновление '+version:'Не удалось проверить обновления. Повторить');
-    $('app-update-button').disabled=status?.checking===true;
+    $('app-update-button').setAttribute('aria-label',version?'Установить обновление '+version:checking?label:'Не удалось проверить обновления. Повторить');
+    $('app-update-button').disabled=checking&&!version;
     $('app-update-button').classList.toggle('am-update-available',!!version);
     $('app-update-version').hidden=true;
   };
@@ -407,5 +411,17 @@
     if(atBottom)thread.scrollTop=thread.scrollHeight;
   }).observe(chatFooter);
   enhanceSelect($('theme-select'));enhanceSelect($('session'));
+  // WebKit may overlay scrollbars while Chromium reserves their width. Use
+  // the actual occupied gutter, not the painted thumb width, for equal insets.
+  const gutterObserver=new ResizeObserver(entries=>{
+    for(const {target} of entries){
+      if(!target.getClientRects().length)continue;
+      const style=getComputedStyle(target);
+      const gutter=Math.max(0,target.offsetWidth-target.clientWidth-parseFloat(style.borderLeftWidth)-parseFloat(style.borderRightWidth));
+      const value=gutter+'px';
+      if(target.style.getPropertyValue('--am-gutter')!==value)target.style.setProperty('--am-gutter',value);
+    }
+  });
+  root.querySelectorAll('.am-screen,.am-thread,.am-queue-list,.am-dialog-body,.am-machines').forEach(element=>gutterObserver.observe(element));
   refresh();
 })();

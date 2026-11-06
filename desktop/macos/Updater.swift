@@ -16,6 +16,9 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverD
     var fetchTimer: Timer?
     var lastRemoteCheck = -Double.infinity
     var fetchProcess: Process?
+    var waitingForDownload = false
+    var busySince: TimeInterval?
+    var busyRetry: DispatchWorkItem?
     var watcher: DispatchSourceFileSystemObject?
     var watchWork: DispatchWorkItem?
     var lastManifest: Data?
@@ -88,6 +91,7 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverD
     }
     func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: Error?) { scheduleLocalCheck() }
     @objc func check() {
+        busySince = nil
         guard endpoint != nil, started else {
             let alert = NSAlert(); alert.messageText = "Обновления пока недоступны"
             alert.informativeText = "Сначала подключите окно к локальному клиенту. Ни очередь, ни сессии не изменены."
@@ -96,6 +100,7 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverD
         // A gentle background reminder keeps the Sparkle session open. Bring
         // that verified update forward instead of blocking on sessionInProgress.
         if availableVersion != nil, controller.updater.canCheckForUpdates {
+            busyRetry?.cancel(); waitingForDownload = false; busySince = nil
             controller.checkForUpdates(nil)
         } else {
             fetchRemote(manual: true)
@@ -110,6 +115,7 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverD
     func fetchRemote(manual: Bool) {
         guard !fetching, endpoint != nil, !controller.updater.sessionInProgress,
               let executable = Bundle.main.url(forResource: "messenger", withExtension: nil) else { return }
+        busyRetry?.cancel(); waitingForDownload = false
         lastRemoteCheck = ProcessInfo.processInfo.systemUptime
         fetching = true; fetchStatus = "Проверяем GitHub…"; onStatus?(availableVersion)
         let process = Process(); process.executableURL = executable; process.arguments = ["update-fetch"]
@@ -124,9 +130,33 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverD
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 self.fetching = false; self.fetchProcess = nil
+                if child.terminationStatus == 0, result?["state"] as? String == "busy" {
+                    // An updater from an earlier window may still own the download.
+                    // Wait for it; never kill it or mistake the lock for a network error.
+                    let now = ProcessInfo.processInfo.systemUptime
+                    if self.busySince == nil { self.busySince = now }
+                    guard now - self.busySince! < 300 else {
+                        self.fetchStatus = "Загрузка ещё выполняется · повторить"
+                        self.onStatus?(self.availableVersion)
+                        return
+                    }
+                    self.waitingForDownload = true
+                    self.fetchStatus = "Обновление загружается в фоне"
+                    self.onStatus?(self.availableVersion)
+                    let retry = DispatchWorkItem { [weak self] in
+                        guard let self = self else { return }
+                        self.waitingForDownload = false
+                        self.onStatus?(self.availableVersion)
+                        if (manual || self.controller.updater.automaticallyChecksForUpdates) && !self.controller.updater.sessionInProgress { self.fetchRemote(manual: manual) }
+                    }
+                    self.busyRetry = retry
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: retry)
+                    return
+                }
+                self.busySince = nil
                 if child.terminationStatus != 0 {
-                    self.fetchStatus = "GitHub недоступен · повторить"; self.onStatus?(self.availableVersion)
-                    if manual { self.remoteMessage("Не удалось проверить GitHub", "Проверьте подключение и повторите позже. Сохранённый пакет и работающий клиент не изменены. Пакеты с неверной подписью не принимаются.") }
+                    self.fetchStatus = "Не удалось получить обновление · повторить"; self.onStatus?(self.availableVersion)
+                    if manual { self.remoteMessage("Не удалось получить обновление", "Загрузка или проверка пакета не завершилась. Повторите позже. Сохранённый пакет и работающий клиент не изменены; неподписанные пакеты не принимаются.") }
                     return
                 }
                 if result?["state"] as? String == "no_release" {

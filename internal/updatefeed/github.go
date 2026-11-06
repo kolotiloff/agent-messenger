@@ -19,6 +19,8 @@ import (
 	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
 
+var ErrDownloadBusy = errors.New("another update download owns the channel")
+
 const releaseAPI = "https://api.github.com/repos/kolotiloff/agent-messenger/releases"
 
 type releaseAsset struct {
@@ -120,7 +122,10 @@ func (c Channel) syncGitHub(ctx context.Context, minimumBuild int, client *http.
 	}
 	lock, err := platform.Acquire(filepath.Join(c.Directory, "download.lock"))
 	if err != nil {
-		return result, errors.New("another update download owns the channel")
+		if errors.Is(err, platform.ErrAlreadyRunning) {
+			return result, ErrDownloadBusy
+		}
+		return result, errors.New("update channel lock unavailable")
 	}
 	defer lock.Release()
 	current, currentErr := c.Load()

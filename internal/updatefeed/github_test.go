@@ -170,8 +170,8 @@ func TestGitHubDownloadLockRefusesConcurrentWriter(t *testing.T) {
 	defer lock.Release()
 	client := updateHTTPClient()
 	client.Transport = transportFunc(func(*http.Request) (*http.Response, error) { t.Fatal("network reached while locked"); return nil, nil })
-	if _, err = c.syncGitHub(context.Background(), 0, client); err == nil {
-		t.Fatal("parallel update accepted")
+	if _, err = c.syncGitHub(context.Background(), 0, client); !errors.Is(err, ErrDownloadBusy) {
+		t.Fatalf("parallel update must return typed busy status, got %v", err)
 	}
 }
 func TestUpdateURLAllowlist(t *testing.T) {
@@ -180,5 +180,20 @@ func TestUpdateURLAllowlist(t *testing.T) {
 		if allowedUpdateURL(u) {
 			t.Fatal("accepted", value)
 		}
+	}
+}
+
+func TestInvalidDownloadLockIsNotReportedAsBusy(t *testing.T) {
+	c := Channel{Directory: t.TempDir()}
+	if err := os.Mkdir(filepath.Join(c.Directory, "download.lock"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	client := updateHTTPClient()
+	client.Transport = transportFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("network reached without a lock")
+		return nil, nil
+	})
+	if _, err := c.syncGitHub(context.Background(), 0, client); err == nil || errors.Is(err, ErrDownloadBusy) {
+		t.Fatalf("invalid lock must fail, not suggest waiting: %v", err)
 	}
 }

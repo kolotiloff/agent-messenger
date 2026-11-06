@@ -34,6 +34,9 @@ func runUpdateFetch(root string, args []string) error {
 	defer cancel()
 	channel := updatefeed.Channel{Directory: filepath.Join(home, "updates"), PublicKey: buildinfo.UpdatePublicKey}
 	result, err := channel.SyncGitHub(ctx, build)
+	if errors.Is(err, updatefeed.ErrDownloadBusy) {
+		return json.NewEncoder(os.Stdout).Encode(updatefeed.SyncResult{State: "busy"})
+	}
 	if err != nil {
 		return err
 	}
