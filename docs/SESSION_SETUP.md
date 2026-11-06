@@ -11,3 +11,22 @@ The setup is saved in a single transaction. Invalid paths leave no partial recor
 A ready profile and a created record do not mean the model is already running. Until model launches are allowed, messages stay in the queue. In preview.19, a new test session is enabled with a separate button on its card in the session list. Safely terminating the owner remains a separate stage. Installing a new shell does not by itself replace a background process that is already running.
 
 The permission rules and limitations are described in [launching only the selected session](SCOPED_LAUNCH.md). The preview.19 background client is required: an old client is not sent a nonexistent command. A regular application launch still does not allow model calls.
+
+## Codex from the window
+
+Agents → Codex → «Настроить» ("Set up") offers a new Codex test session.
+
+1. **Prepare a profile.** It needs a separate profile, never `~/.codex`. The field suggests `~/AgentMessengerTest/codex-profile`. Log in to it once in Terminal:
+
+   ```sh
+   CODEX_HOME="PROFILE" codex login -c 'cli_auth_credentials_store="file"'
+   ```
+
+   «Проверить версию и вход» ("Check version and login") then shows the login state.
+2. **Create the session.** «Создать сессию Codex и разрешить запуск» ("Create Codex session and allow launch") does the following in one step:
+   - grants model calls for this new alias only, as the Claude test-session launch does;
+   - runs `create-codex-session`: it starts the managed app-server, checks its config and creates the thread.
+
+   A refusal shows the client's reason. If nothing was launched, the permission is withdrawn again. A second session cannot get permission in the same client run.
+3. **Send messages.** The session then appears under Messages, and messages are delivered as described in [CODEX_ADAPTER_NEXT.md](CODEX_ADAPTER_NEXT.md).
+

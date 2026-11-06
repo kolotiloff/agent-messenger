@@ -13,14 +13,13 @@ How to use it:
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
-| — | Nothing in progress. T-004 needs the Mac; T-006 (window) can start without it. | | |
+| — | Nothing in progress. Next: T-004 on the Mac with preview.21 (Codex from the window). | | |
 
 ## Next
 
 | ID | Task | Owner | Notes |
 |---|---|---|---|
 | T-004 | Codex acceptance on Mac: two real messages in a new separate test Codex session, then exact resume of the saved session. HANDOFF step 7. | owner + agent | needs the Mac; blocked: Q-005, Q-007 |
-| T-006 | Launch Codex sessions from the window. | agent | |
 
 ## Backlog
 
@@ -41,6 +40,7 @@ How to use it:
 
 | ID | Task | PR |
 |---|---|---|
+| T-006 | Codex in the window: setup dialog creates a Codex session and grants model calls for it only (`/api/setup-codex` → `setup-codex`). | [PR #32](https://github.com/kolotiloff/agent-messenger/pull/32) |
 | T-020 | After the reboot incident: `recover-missing-root` (proven reboot, missing directory), the window refuses temporary data directories, and an acceptance-run rule in AGENTS.md. | [PR #31](https://github.com/kolotiloff/agent-messenger/pull/31) |
 | T-008 | Several persistent Claude sessions at once: one controller per session, up to 4 at a time; `stop-job` and shutdown stop all. | [PR #31](https://github.com/kolotiloff/agent-messenger/pull/31) |
 | T-003 | Codex config re-check before every turn (canonical fingerprint; unsent message returned to the queue on a change) and a recorded schema version that newer databases are refused by. | [PR #30](https://github.com/kolotiloff/agent-messenger/pull/30) |

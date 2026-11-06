@@ -304,9 +304,14 @@
     $('agent-cli').value=candidate.cli||'';$('agent-profile').value=candidate.environment||'';
     $('agent-check-status').textContent='';showAgentCheck(agentChecks.get(provider));
     $('agent-check').disabled=false;$('agent-cli').disabled=false;$('agent-profile').disabled=false;
-    $('agent-session-setup').hidden=provider!=='claude'||lastStatus?.session_setup!==true;
-    $('agent-setup-limit').textContent=provider!=='claude'?'Подключение сессий этого провайдера готовится.':lastStatus?.session_setup!==true?'Для создания сессии требуется обновлённый фоновый клиент. Проверка программы уже доступна.':'';
-    $('agent-alias').value=setupPending?.alias||'claude-test-'+crypto.randomUUID().slice(0,8);
+    const supported=provider==='claude'||provider==='codex';
+    $('agent-session-setup').hidden=!supported||lastStatus?.session_setup!==true;
+    $('agent-setup-limit').textContent=!supported?'Подключение сессий этого провайдера готовится.':lastStatus?.session_setup!==true?'Для создания сессии требуется обновлённый фоновый клиент. Проверка программы уже доступна.':'';
+    $('agent-session-note').textContent=provider==='codex'
+      ?'Нужен отдельный профиль Codex, не ~/.codex. Один раз войдите в него в Терминале: CODEX_HOME="путь к профилю" codex login -c \'cli_auth_credentials_store="file"\'. Кнопка ниже запускает Codex для новой сессии и разрешает вызовы модели только для неё. Существующие чаты не используются, письма не отправляются.'
+      :'Создадим отдельный разговор и рабочую папку. Существующие чаты не используются. Создание не отправляет сообщения и не вызывает модель.';
+    if(provider==='codex'&&!setupPending){const env=$('agent-profile').value;if(!env||/\/\.codex\/?$/.test(env))$('agent-profile').value=env?env.replace(/\/\.codex\/?$/,'/AgentMessengerTest/codex-profile'):'';}
+    $('agent-alias').value=setupPending?.alias||(provider==='codex'?'codex-test-':'claude-test-')+crypto.randomUUID().slice(0,8);
     $('agent-create-status').textContent=setupPending?'Предыдущая настройка не подтверждена. Повтор использует те же данные.':'';
     if(setupPending&&provider==='claude'){$('agent-cli').value=setupPending.cli;$('agent-profile').value=setupPending.environment;}
     setupFields();
@@ -317,9 +322,26 @@
     $('agent-cli').disabled=frozen;$('agent-profile').disabled=frozen;$('agent-alias').disabled=frozen;
     $('agent-check').disabled=frozen;
     $('agent-create').disabled=creatingSession||checkingAgent||lastStatus?.session_setup!==true;
-    $('agent-create').textContent=creatingSession?'Создаём сессию…':setupPending?'Повторить подключение':'Создать тестовую сессию';
+    $('agent-create').textContent=creatingSession?'Создаём сессию…':setupPending?'Повторить подключение':setupProvider==='codex'?'Создать сессию Codex и разрешить запуск':'Создать тестовую сессию';
+  }
+  async function createCodexSession(){
+    const draft={alias:$('agent-alias').value.trim(),cli:$('agent-cli').value.trim(),environment:$('agent-profile').value.trim(),confirmation:'allow-model-calls'};
+    if(!draft.alias||!draft.cli||!draft.environment){$('agent-create-status').textContent='Укажите программу, профиль и название сессии.';return;}
+    creatingSession=true;setupFields();renderCards();$('agent-create-status').textContent='Запускаем Codex, проверяем настройки и создаём разговор…';
+    try{
+      const response=await fetch('/api/setup-codex',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(draft),cache:'no-store',signal:AbortSignal.timeout(105000)});
+      if(response.status===400)throw Error('Проверьте пути к программе и профилю и название сессии.');
+      if(response.status===409){const result=await response.json().catch(()=>({}));throw Error('Сессия не создана: '+(result.detail||'отклонено')+'. Ничего не повторялось автоматически.');}
+      if(!response.ok)throw Error('Ответ не подтверждён. Не нажимайте повторно: проверьте список сессий.');
+      const result=await response.json();if(result.ok!==true||result.alias!==draft.alias)throw Error('Ответ не подтверждён. Проверьте список сессий.');
+      $('agent-create-status').textContent='Сессия «'+draft.alias+'» создана. Модель будет вызываться только для неё.';
+      selected=draft.alias;await refresh();
+      $('agent-setup').close();show('messages');$('session').value=draft.alias;actionControls();loadTimeline(false);
+    }catch(error){$('agent-create-status').textContent=error.name==='TimeoutError'||error.name==='AbortError'?'Ответ не получен. Не нажимайте повторно: проверьте список сессий.':error.message;}
+    finally{creatingSession=false;setupFields();renderCards();}
   }
   async function createAgentSession(){
+    if(setupProvider==='codex'&&!creatingSession&&!checkingAgent&&lastStatus?.session_setup===true)return createCodexSession();
     if(creatingSession||checkingAgent||setupProvider!=='claude'||lastStatus?.session_setup!==true)return;
     if(!setupPending){
       const draft={id:crypto.randomUUID(),alias:$('agent-alias').value.trim(),cli:$('agent-cli').value.trim(),environment:$('agent-profile').value.trim()};
