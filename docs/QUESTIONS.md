@@ -28,7 +28,12 @@ Cloud sessions run on Linux. **Options:** the owner runs the steps from an agent
 Copying the owner's credentials into the managed profile is not implemented and must not be logged or published. A likely option is a standard login into the managed profile done by the owner. **Blocks:** T-004.
 
 ### Q-008: Switch to one-shot runs that resume a saved conversation?
-Proposal in [RETHINK.md](RETHINK.md): run an agent once per message by exact resume, free the conversation after the process has exited and its group is empty, never retry automatically, and give workers real tools. It would relax D-004 in part and replace D-005 and D-016. Codex reviews it first. **Options:** accept; accept with changes; keep persistent processes. Also to decide if accepted: which permission mode `worker` agents run with. **Blocks:** T-009 and the stages after it.
+Proposal version 2 in [RETHINK.md](RETHINK.md), after the Codex [review](RETHINK_REVIEW.md) (accept the direction with changes). It would relax D-004 in part and replace D-005 and D-016. The owner decides three things:
+1. **Ownership guarantee.** Accept "one managed launch per conversation at a time, best-effort cleanup" instead of "no overlap until a proven reboot"? A process that escaped its group could keep working. With worker tools this is true of the current model too; only an OS sandbox gives a strong guarantee.
+2. **Worker permissions.** With which permission mode do unattended workers run: full tools in their workspace (as today by hand), or a sandbox with limited write and network access?
+3. **Loop budget.** Only the owner starts a new task with a fresh automatic-step budget in the first version; the coordinator cannot reset it. Acceptable?
+
+**Options:** accept; accept with changes; keep persistent processes. **Blocks:** T-009 and the stages after it. T-022 does not depend on it.
 
 ## Answered
 

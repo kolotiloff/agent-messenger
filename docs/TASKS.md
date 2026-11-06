@@ -13,12 +13,13 @@ How to use it:
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
-| T-021 | Codex [review complete](RETHINK_REVIEW.md) against `59d58eb`: accept direction with changes. Await owner decision Q-008; T-009 still waits. | owner | `claude/vigilant-darwin-34d88b`; documentation only, no implementation |
+| T-021 | RETHINK proposal: Codex [review](RETHINK_REVIEW.md) done; [version 2](RETHINK.md) takes it in. Await owner decision Q-008; T-009 still waits. | owner | `claude/vigilant-darwin-34d88b`; documentation only |
 
 ## Next
 
 | ID | Task | Owner | Notes |
 |---|---|---|---|
+| T-022 | Publish a final reply to its recipient only after the run is verified (identity, completion, exit status), in the transaction that marks the attempt complete. Today `replyTx` routes it when it is stored. Applies to the one-shot, Claude stream and Codex paths; does not depend on Q-008. | agent | [RETHINK.md](RETHINK.md) 4.5, review R2 |
 
 ## Backlog
 
