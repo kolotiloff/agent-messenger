@@ -13,18 +13,18 @@ How to use it:
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
-| — | Nothing in progress. Next: T-004 on the Mac with preview.21 (Codex from the window). | | |
+| — | Nothing in progress. Next: T-009 (resume a Codex thread with a new owner). | | |
 
 ## Next
 
 | ID | Task | Owner | Notes |
 |---|---|---|---|
-| T-004 | Codex acceptance on Mac: two real messages in a new separate test Codex session, then exact resume of the saved session. HANDOFF step 7. | owner + agent | needs the Mac; blocked: Q-005, Q-007 |
 
 ## Backlog
 
 | ID | Task | Owner | Notes |
 |---|---|---|---|
+| T-009 | Resume a saved Codex thread with a new owner after a client or app-server restart (`thread/resume`), with the same safety rules; then an acceptance run on the Mac. | agent + owner | |
 | T-010 | Safely terminate a CLI and release its session within the same Mac boot. This is an open research problem: release by timer, empty process group or one exited PID is not allowed. | agent | see [RELEASE_PLAN.md](RELEASE_PLAN.md) |
 | T-011 | Switch the version of a running background client, plus full rollback. | agent | see [UPDATES.md](UPDATES.md) |
 | T-012 | Persistent Cursor adapter. | agent | blocked: Q-004 |
@@ -40,6 +40,7 @@ How to use it:
 
 | ID | Task | PR |
 |---|---|---|
+| T-004 | First real Codex run on the Mac from the window: two messages answered and verified in one app-server ([report](reports/2026-11-06-codex-window-mac.md)). Exact resume moved to T-009. | PR4_LINK |
 | T-006 | Codex in the window: setup dialog creates a Codex session and grants model calls for it only (`/api/setup-codex` → `setup-codex`). | [PR #32](https://github.com/kolotiloff/agent-messenger/pull/32) |
 | T-020 | After the reboot incident: `recover-missing-root` (proven reboot, missing directory), the window refuses temporary data directories, and an acceptance-run rule in AGENTS.md. | [PR #31](https://github.com/kolotiloff/agent-messenger/pull/31) |
 | T-008 | Several persistent Claude sessions at once: one controller per session, up to 4 at a time; `stop-job` and shutdown stop all. | [PR #31](https://github.com/kolotiloff/agent-messenger/pull/31) |
