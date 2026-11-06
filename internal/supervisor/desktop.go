@@ -2,6 +2,8 @@ package supervisor
 
 import (
 	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -23,6 +25,9 @@ func DesktopRoot() (string, error) {
 	for _, run := range runs {
 		root, err := core.CanonicalEnvironment(run.Root)
 		if err != nil {
+			if _, statErr := os.Lstat(run.Root); errors.Is(statErr, fs.ErrNotExist) {
+				return "", fmt.Errorf("каталог данных из защитного реестра больше не существует (%s); после перезагрузки снимите резерв командой messenger recover-missing-root --confirm preserve-uncertain", run.Root)
+			}
 			return "", err
 		}
 		if chosen != "" && chosen != root {
