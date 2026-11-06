@@ -1,54 +1,54 @@
-# Следующий адаптер: постоянный Codex
+# Next adapter: persistent Codex
 
-Исследование и первые компоненты Go от 6 ноября 2026, установленный Codex CLI 0.155.1. Полный постоянный адаптер ещё не подключён к продуктовому клиенту.
+Research and first Go components as of November 6, 2026, with Codex CLI 0.155.1 installed. The full persistent adapter is not yet connected to the product client.
 
-## Реализовано в Go
+## Implemented in Go
 
-`internal/adapters/codex_appserver.go` формирует запуск отдельного stdio app-server для управляемого профиля и проверяет фактический `config/read`: read-only, запрет запроса расширенных разрешений, отключённый web search, двенадцать отключённых возможностей и отсутствие включённых/неопределённых MCP. Пропущенное или `null` поле не считается подтверждением отключения. Ошибки не содержат имён серверов, значений настроек или секретов. Минимальная проверка не является разрешением вызова модели и не доказывает изоляцию всех возможностей Codex.
+`internal/adapters/codex_appserver.go` builds the launch of a separate stdio app-server for a managed profile and checks the actual `config/read`: read-only, a ban on requesting elevated permissions, web search disabled, twelve disabled features, and no enabled/undetermined MCP. A missing or `null` field is not treated as confirmation that something is disabled. Errors do not contain server names, setting values or secrets. The minimal check is not permission to call the model and does not prove isolation of all Codex features.
 
-`internal/adapters/codex_turn.go` проверяет вызовы dynamic tools для одного уже подтверждённого thread/turn. Разрешены только `messenger_bound.read_current` и `reply`, в этом порядке. Ответ использует выданную квитанцию и обработчик записи, привязанный контроллером к конкретной попытке. Адресат от модели не принимается. Ошибка записи, чужой ID, старый receipt, повтор вызова или `failed`/`interrupted` не становятся успехом. После остановки инструменты закрыты. Контроллер обязан отдельно сопоставить RPC ID, записать результат в SQLite и сохранить резерв процесса при неопределённости.
+`internal/adapters/codex_turn.go` checks dynamic tool calls for a single already confirmed thread/turn. Only `messenger_bound.read_current` and `reply` are allowed, in that order. The reply uses the issued receipt and a write handler bound by the controller to a specific attempt. A recipient from the model is not accepted. A write error, someone else's ID, a stale receipt, a repeated call or `failed`/`interrupted` do not become success. After stopping, the tools are closed. The controller must separately match the RPC ID, write the result to SQLite and keep the process reservation in case of uncertainty.
 
-На Mac проверены три случая с настоящим установленным app-server и пустыми профилями, без модели: чистый профиль принят, унаследованный MCP отклонён, явно отключённый MCP принят. [Проверки и ограничения](reports/2026-11-06-codex-preflight-mac.md).
+On a Mac, three cases were verified with the real installed app-server and empty profiles, without a model: a clean profile was accepted, an inherited MCP was rejected, an explicitly disabled MCP was accepted. [Checks and limitations](reports/2026-11-06-codex-preflight-mac.md).
 
-Компоненты пока не вызываются из `serve` и окна. Ещё нужны постоянный транспорт с обработкой порядка событий, атомарная регистрация выданного Codex ID, привязка к SQLite/резервам, управляемый профиль с существующим входом и проверка двух настоящих писем. Наличие этих Go-файлов не означает готовность кнопки запуска Codex.
+The components are not yet called from `serve` or the window. Still needed: a persistent transport that handles event ordering, atomic registration of the ID issued by Codex, binding to SQLite/reservations, a managed profile with an existing login, and a test with two real messages. The existence of these Go files does not mean the Codex launch button is ready.
 
-## Проверено локально без модели
+## Verified locally without a model
 
-Справка предоставляет `codex app-server --listen stdio://` и генерацию схем протокола. Схемы этой установленной версии получены штатной командой `generate-json-schema --experimental`. Пустые отдельные HOME/CODEX_HOME и рабочая папка исключили использование рабочих разговоров и сохранённых входов.
+The help output offers `codex app-server --listen stdio://` and protocol schema generation. The schemas for this installed version were obtained with the standard `generate-json-schema --experimental` command. Empty separate HOME/CODEX_HOME and working folder ruled out use of working conversations and saved logins.
 
-1. `initialize` вернул ответ, после `initialized` процесс штатно завершился при закрытии stdin. `turn/start` не отправлялся.
-2. `thread/start` создал новый ID без вызова модели. После закрытия процесса попытка `thread/resume` в новом процессе с тем же точным ID вернула `-32600`, «no rollout found». Следовательно, создание пустого разговора само по себе не доказывает наличие сохранённой сессии. В этой пробе задания модели не было.
+1. `initialize` returned a response; after `initialized`, the process exited normally when stdin was closed. `turn/start` was not sent.
+2. `thread/start` created a new ID without calling the model. After the process was closed, a `thread/resume` attempt in a new process with the same exact ID returned `-32600`, "no rollout found". Therefore, creating an empty conversation does not by itself prove that a saved session exists. There was no model task in this probe.
 
-ID и полные ответы остались локально, в репозиторий не включены. Нельзя автоматически заменять не найденный разговор новым и считать это продолжением.
+The IDs and full responses stayed local and were not included in the repository. A conversation that was not found must not be automatically replaced with a new one and treated as a continuation.
 
-## Изоляция конфигурации: подтверждённые ограничения
+## Configuration isolation: confirmed limitations
 
-`codex app-server --ignore-user-config --help` в установленной версии 0.155.1 возвращает ошибку неизвестного аргумента. Флаги разового `exec` нельзя автоматически переносить в app-server.
+`codex app-server --ignore-user-config --help` in the installed version 0.155.1 returns an unknown-argument error. Flags of the one-shot `exec` must not be automatically carried over to app-server.
 
-[Воспроизводимая проба](../experiments/codex_app_server/README.md) выполнена на Mac без создания разговоров и вызовов модели. Через `config/read` в трёх отдельных временных профилях подтверждено:
+The [reproducible probe](../experiments/codex_app_server/README.md) was run on a Mac without creating conversations or calling the model. Via `config/read` in three separate temporary profiles, the following was confirmed:
 
-- `-c 'mcp_servers={}'` **не удаляет** MCP-сервер из конфигурационного файла: он остаётся включённым.
-- `-c 'mcp_servers.fixture.enabled=false'` отключает указанный сервер.
-- В чистом профиле сервер отсутствует. В каждом случае восемь явно отключённых возможностей подтверждены фактической конфигурацией.
+- `-c 'mcp_servers={}'` **does not remove** an MCP server from the configuration file: it stays enabled.
+- `-c 'mcp_servers.fixture.enabled=false'` disables the specified server.
+- In a clean profile, the server is absent. In each case, eight explicitly disabled features were confirmed by the actual configuration.
 
-Это согласуется с описанным в [официальной документации](https://learn.chatgpt.com/docs/config-file/config-advanced) наложением настроек по ключам. Нельзя считать пустую таблицу доказательством изоляции или запускать модель сразу после формирования argv. Будущий адаптер должен проверить фактическую конфигурацию до создания разговора, отказать при неизвестном/включённом MCP и не выводить содержимое пользовательской конфигурации в журнал. Проверка чтением сама по себе ещё не решает изменение конфигурации между проверкой и запуском: для продуктового режима требуется неизменяемая управляемая конфигурация либо повторная проверка на границе запуска и подтверждённое поведение загрузчика. Перенос пользовательских credentials в такой профиль этим исследованием не реализован.
+This is consistent with the per-key layering of settings described in the [official documentation](https://learn.chatgpt.com/docs/config-file/config-advanced). An empty table must not be treated as proof of isolation, and the model must not be launched right after building argv. The future adapter must check the actual configuration before creating a conversation, refuse on an unknown/enabled MCP, and not write the contents of the user configuration to the log. A read check by itself does not yet address the configuration changing between the check and the launch: the product mode requires either an immutable managed configuration, or a repeated check at the launch boundary plus confirmed loader behavior. Transferring user credentials into such a profile is not implemented by this research.
 
-Системные слои, прочие возможности Codex, реальный старт инструмента, сохранение dynamic tools и точный resume ещё не приняты. Постоянный Codex в окне пока не включается.
+System layers, other Codex features, actual tool startup, persistence of dynamic tools and exact resume are not yet accepted. Persistent Codex is not yet enabled in the window.
 
-## Протокол и проектное решение
+## Protocol and design decision
 
-[Официальное описание App Server](https://learn.chatgpt.com/docs/app-server) задаёт `initialize`/`initialized`, `thread/start`, точный `thread/resume`, `turn/start` и событие `turn/completed`. Успех требует статуса `completed`; `failed`/`interrupted` не равны успеху. Dynamic tools экспериментальны; протокол позволяет обрабатывать их вызовы на стороне Messenger.
+The [official App Server description](https://learn.chatgpt.com/docs/app-server) defines `initialize`/`initialized`, `thread/start`, exact `thread/resume`, `turn/start` and the `turn/completed` event. Success requires the `completed` status; `failed`/`interrupted` are not success. Dynamic tools are experimental; the protocol allows their calls to be handled on the Messenger side.
 
-Для первого адаптера предлагаем отдельный stdio-процесс на управляемую сессию, без подключения к демону или GUI-процессу пользователя. Это решение проекта, а не свойство, автоматически гарантируемое Codex.
+For the first adapter, we propose a separate stdio process per managed session, without connecting to the user's daemon or GUI process. This is a project decision, not a property automatically guaranteed by Codex.
 
-## Что реализовать и проверить
+## What to implement and verify
 
-- Сначала отдельное состояние создания: адрес Messenger ещё не означает сохранённый разговор Codex. Выданный сервером ID фиксируется атомарно перед первым письмом; потеря ответа оставляет неопределённое состояние, не вызывает повтор создания.
-- Единственный владелец процесса/сессии, те же межпроцессные резервы, что у Claude. До идентификации разрешены только команды протокола настройки; сообщения модели не отправляются.
-- Сопоставление RPC ID, thread ID, turn ID и номера попытки; неожиданные или повторные события не завершают соседнее письмо.
-- Ограниченный набор инструментов Messenger, адрес ответа от кода, одноразовая квитанция. Поддержку и изоляцию инструментов сначала проверить на имитаторе и схеме установленного CLI.
-- Не наследовать рабочие MCP, hooks, задачи или автоматические цели. Конкретные настройки отключения ещё требуют отдельной проверки, до этого реальная модель не запускается.
-- Первые два письма одним процессом, затем отдельная проверка сохранения и точного resume. При ожидании не отправлять `turn/start`, фоновые подсказки или проверки модели.
-- После двух независимых адаптеров — явная маршрутизация Claude ↔ Codex с ограничением автоматических ответов. Простой ответ пользователю ещё не является обменом между агентами.
+- First, a separate creation state: a Messenger address does not yet mean a saved Codex conversation. The ID issued by the server is recorded atomically before the first message; a lost response leaves an uncertain state and does not trigger a repeated creation.
+- A single owner of the process/session, the same cross-process reservations as for Claude. Before identification, only setup protocol commands are allowed; no model messages are sent.
+- Matching of RPC ID, thread ID, turn ID and attempt number; unexpected or repeated events do not complete a neighboring message.
+- A limited set of Messenger tools, a reply address from code, a one-time receipt. Tool support and isolation are verified first on a fake CLI and on the installed CLI's schema.
+- Do not inherit working MCP, hooks, tasks or automatic goals. The specific disabling settings still need a separate check; until then, the real model is not launched.
+- The first two messages in one process, then a separate check of persistence and exact resume. While waiting, do not send `turn/start`, background hints or model checks.
+- After two independent adapters — explicit Claude ↔ Codex routing with a limit on automatic replies. A simple reply to the user is not yet an exchange between agents.
 
-Windows/Linux, завершение всех потомков и Cursor этим исследованием не приняты.
+Windows/Linux, termination of all descendants and Cursor are not accepted by this research.

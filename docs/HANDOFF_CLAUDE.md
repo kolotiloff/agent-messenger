@@ -1,81 +1,81 @@
-# Передача разработки Claude Code
+# Handing development over to Claude Code
 
-Состояние на 6 ноября 2026. База кода: `main` после `fcec2d88cc000ca9afad5427e46bcf5701c7fb15`. [PR #25](https://github.com/kolotiloff/agent-messenger/pull/25) включён в основную ветку. Этот файл передаёт контекст; запуск новой сессии разработчика сам по себе не выполнен.
+State as of November 6, 2026. Code base: `main` after `fcec2d88cc000ca9afad5427e46bcf5701c7fb15`. [PR #25](https://github.com/kolotiloff/agent-messenger/pull/25) has been merged into the main branch. This file hands over context; starting a new developer session has not itself been done.
 
-## Продукт и порядок работы
+## Product and way of working
 
-Agent Messenger — обмен сообщениями между агентами на macOS, Windows и Linux. Координатором может быть любой поддерживаемый агент. Основной клиент написан на Go: `cmd/messenger`, `internal`. Python в `experiments` — исследования, не направление переписывания продукта. Нативное окно Mac находится в `desktop`; интерфейс — в `internal/localui/assets`.
+Agent Messenger is messaging between agents on macOS, Windows and Linux. Any supported agent can be the coordinator. The main client is written in Go: `cmd/messenger`, `internal`. The Python in `experiments` is research, not a direction for rewriting the product. The native Mac window lives in `desktop`; the interface lives in `internal/localui/assets`.
 
-Брокер в будущем работает на одном из компьютеров либо VPS. Программа не привязана к проектам пользователя, игровым движкам или системам хранения их файлов. Общий план: [RELEASE_PLAN.md](RELEASE_PLAN.md).
+In the future the broker runs on one of the computers or on a VPS. The program is not tied to the user's projects, game engines, or the systems that store their files. Overall plan: [RELEASE_PLAN.md](RELEASE_PLAN.md).
 
-Продолжай функциональные этапы. Замечания интерфейса включай в тот же выпуск, не выпускай отдельную сборку на каждую мелочь. Уже выбранные светлая/тёмная темы и компоновка сохраняются. Не выдавай подготовительные компоненты за готовую возможность окна. При завершении этапа обновляй исходники, документацию и результаты проверок вместе.
+Continue with the functional stages. Fold interface feedback into the same release; do not ship a separate build for every small item. The already chosen light/dark themes and layout are kept. Do not present preparatory components as a finished window feature. When a stage is finished, update the sources, the documentation and the verification results together.
 
-## Что действительно работает
+## What actually works
 
-- Установленная пользовательская сборка — preview.19. Подписанный переход оболочки на неё через обновлятор проверен.
-- Через окно создана отдельная новая тестовая сессия настоящего Claude Code 2.1.318. Два сообщения получили `ACK:WINDOW-ONE` и `ACK:WINDOW-TWO` в одном постоянном процессе. Ответы появились автоматически; три старых письма других сессий не обрабатывались.
-- После проверки очередь поставлена на паузу, живой владелец Claude сохранён. На момент передачи новый разработчик не должен останавливать его, снимать его резерв или подхватывать этот разговор как рабочую сессию разработки. Фактическое состояние сначала проверяй штатными средствами, не по PID из старых отчётов.
-- Ожидание и чтение состояния не отправляют модельных запросов. Не нужны подсказки модели по таймеру.
-- Фоновый клиент и обновление оболочки — разные процессы. Автоматическая замена работающего клиента и полный откат ещё не приняты.
+- The installed user build is preview.19. The signed shell update to it through the updater has been verified.
+- A separate new test session of real Claude Code 2.1.318 was created through the window. Two messages got `ACK:WINDOW-ONE` and `ACK:WINDOW-TWO` in one persistent process. The replies appeared automatically; three old messages of other sessions were not processed.
+- After the check the queue was paused and the live Claude owner was kept. As of the handoff, the new developer must not stop it, release its reservation, or take over that conversation as a working development session. Check the actual state first with the standard tools, not by PIDs from old reports.
+- Waiting and reading state do not send model requests. No timer-driven model prompts are needed.
+- The background client and the shell update are separate processes. Automatic replacement of a running client and full rollback are not yet accepted.
 
-Подробности: [отчёт preview.19](reports/2026-11-06-window-launch-mac.md), [ограниченный запуск](SCOPED_LAUNCH.md), [обновления](UPDATES.md).
+Details: [preview.19 report](reports/2026-11-06-window-launch-mac.md), [scoped launch](SCOPED_LAUNCH.md), [updates](UPDATES.md).
 
-## Текущий этап: постоянный Codex
+## Current stage: persistent Codex
 
-Установленный CLI исследовался в версии 0.155.1. Постоянный Codex **ещё не подключён к serve или окну**. Реальные модельные ходы Codex этим новым адаптером не выполнялись.
+The installed CLI was studied at version 0.155.1. Persistent Codex is **not yet connected to serve or the window**. No real Codex model turns have been run with this new adapter.
 
-Добавлено и проверено:
+Added and verified:
 
-- `internal/adapters/codex_appserver.go`: аргументы отдельного stdio app-server для управляемого профиля и проверка фактического `config/read`. Отсутствующие поля и `null` не считаются выключенными возможностями.
-- `internal/adapters/codex_turn.go`: проверка exact thread/turn ID, последовательности `read_current` → `reply`, квитанции и записи ответа через обработчики, привязанные контроллером. Отказ, повтор, старый receipt, `failed`/`interrupted` и завершение без ответа не становятся успехом. Это не RPC-транспорт и не управление процессом.
-- Три проверки настоящего app-server без модели: чистый профиль принят; включённый унаследованный MCP отклонён; явно отключённый MCP принят. Ни `thread/start`, ни `turn/start` эти проверки не вызывают.
-- Полные локальные проверки Mac прошли на Go 1.27.3 и 1.22.2. Все четыре задания [CI 42206000660](https://github.com/kolotiloff/agent-messenger/actions/runs/42206000660) прошли на Mac/Linux. Кросс-компиляция не является приёмкой Windows.
+- `internal/adapters/codex_appserver.go`: arguments for a separate stdio app-server for the managed profile, and a check of the actual `config/read`. Missing fields and `null` are not treated as disabled capabilities.
+- `internal/adapters/codex_turn.go`: checks of the exact thread/turn ID, the `read_current` → `reply` sequence, the receipt, and the reply write through handlers bound by the controller. A refusal, a repeat, an old receipt, `failed`/`interrupted`, and completion without a reply do not become success. This is not an RPC transport and not process management.
+- Three checks of the real app-server without a model: a clean profile was accepted; an enabled inherited MCP was rejected; an explicitly disabled MCP was accepted. None of these checks call `thread/start` or `turn/start`.
+- Full local Mac checks passed on Go 1.27.3 and 1.22.2. All four jobs of [CI 42206000660](https://github.com/kolotiloff/agent-messenger/actions/runs/42206000660) passed on Mac/Linux. Cross-compilation is not Windows acceptance.
 
-Читайте [CODEX_ADAPTER_NEXT.md](CODEX_ADAPTER_NEXT.md) и [отчёт проверок](reports/2026-11-06-codex-preflight-mac.md).
+Read [CODEX_ADAPTER_NEXT.md](CODEX_ADAPTER_NEXT.md) and the [verification report](reports/2026-11-06-codex-preflight-mac.md).
 
-Подтверждённые особенности Codex:
+Confirmed Codex specifics:
 
-1. `app-server` не принимает `--ignore-user-config`; не переноси вслепую флаги разового `exec`.
-2. `-c 'mcp_servers={}'` не удаляет серверы, унаследованные из файла. Одних аргументов запуска для доказательства изоляции недостаточно.
-3. `thread/start` выдаёт ID сам. Пустой новый разговор после выхода процесса в исследовании не имел rollout для `thread/resume`. Не заменяй не найденную сессию новым разговором автоматически.
-4. Dynamic tools экспериментальны; сверяй формат с установленным CLI и [официальным App Server](https://learn.chatgpt.com/docs/app-server).
+1. `app-server` does not accept `--ignore-user-config`; do not blindly carry over flags from one-shot `exec`.
+2. `-c 'mcp_servers={}'` does not remove servers inherited from the file. Launch arguments alone are not enough to prove isolation.
+3. `thread/start` issues the ID itself. In the investigation, an empty new conversation had no rollout for `thread/resume` after the process exited. Do not automatically replace a session that was not found with a new conversation.
+4. Dynamic tools are experimental; check the format against the installed CLI and the [official App Server](https://learn.chatgpt.com/docs/app-server).
 
-## Ближайшая задача
+## Next task
 
-Создание и сохранение сессии Codex до первого письма, затем подключение постоянного транспорта к существующим гарантиям клиента. В последнем заходе изменения для этого ещё не внесены: выполнено только чтение кода и проектирование.
+Create and persist a Codex session before the first message, then connect the persistent transport to the client's existing guarantees. No changes for this were made in the last pass: only code reading and design were done.
 
-Начни с проверки текущих ограничений схемы:
+Start by checking the current schema constraints:
 
-- `SetupNewClaude` использует известный заранее UUID; для серверного ID Codex нужен другой порядок создания.
-- `stream_runs.id` связан внешним ключом с `attempts(token)`. Сейчас владелец процесса не может существовать до первой попытки письма. Не создавай фиктивное письмо или фиктивный ID ради обхода этой связи.
-- `ConfirmStreamIdentity` явно выбирает `provider='claude'`. Нельзя просто убрать условие без проверки провайдера, разговора и конкретного хода.
-- `Supervisor.current` и `runStream` рассчитаны на одного постоянного владельца. Несколько агентов требуют отдельного изменения контроллера; один успешный ответ Codex ещё не доказывает Claude ↔ Codex.
+- `SetupNewClaude` uses a UUID known in advance; Codex's server-issued ID needs a different creation order.
+- `stream_runs.id` has a foreign key to `attempts(token)`. Currently a process owner cannot exist before the first message attempt. Do not create a fake message or a fake ID to work around this link.
+- `ConfirmStreamIdentity` explicitly selects `provider='claude'`. You cannot simply drop the condition without checking the provider, the conversation and the specific turn.
+- `Supervisor.current` and `runStream` are designed for a single persistent owner. Multiple agents require a separate controller change; one successful Codex reply does not yet prove Claude ↔ Codex.
 
-Предлагаемая последовательность реализации, допускающая обоснованное уточнение после чтения кода:
+Proposed implementation sequence, which may be refined with justification after reading the code:
 
-1. Сохранить намерение создания до запуска процесса: случайный setup ID, зарезервированный псевдоним, канонический управляемый профиль, проверенные CLI/workspace и отпечаток конфигурации. Отделить создание владельца от попытки сообщения.
-2. Записать общий резерв до запуска CLI. Проверить фактическую конфигурацию до создания разговора; отдельно решить авторизацию управляемого профиля без публикации или журналирования credentials.
-3. Сопоставить RPC ответа создания. Атомарно сохранить выданный ID и владельца до первого письма. Потерянное подтверждение, ошибка записи или перезапуск оставляют неопределённость; `thread/start` автоматически не повторяется.
-4. Привязать подтверждённый turn ID к конкретной попытке в SQLite. Ограниченно буферизовать события, пришедшие раньше ответа RPC; до подтверждения личности инструменты недоступны. Намерение отправки записывать до stdin.
-5. Связать `CodexTurnGuard` с существующими проверками чтения/квитанции/ответа в базе. Успех — только точный `turn/completed` со статусом `completed` плюс сохранённый связанный ответ. EOF, timeout и stop не освобождают владельца и не вызывают повтор.
-6. Проверить на имитаторе две последовательные обработки, сбои на каждой границе, повторные RPC/call ID, чужие ходы, изменение профиля, перезапуск и отсутствие модельных обращений в ожидании. Проверить совместимость и отказ старого клиента от неподдерживаемого нового состояния.
-7. После этого — два настоящих письма в отдельной новой тестовой сессии Codex, затем точное продолжение сохранённой сессии. Не использовать рабочие и GUI-чаты.
-8. Следующий функциональный этап — независимые владельцы и маршрутизация Claude ↔ Codex с пределом автоматических ответов, затем подключение из окна.
+1. Persist the creation intent before starting the process: a random setup ID, a reserved alias, the canonical managed profile, the verified CLI/workspace, and a configuration fingerprint. Separate creating the owner from a message attempt.
+2. Write the shared reservation before launching the CLI. Check the actual configuration before creating the conversation; separately work out authentication for the managed profile without publishing or logging credentials.
+3. Match the RPC of the creation response. Atomically persist the issued ID and the owner before the first message. A lost confirmation, a write error or a restart leaves an uncertain result; `thread/start` is not retried automatically.
+4. Bind the confirmed turn ID to a specific attempt in SQLite. Buffer events that arrive before the RPC response, within a bounded buffer; tools are unavailable until identity is confirmed. Record the send intent before writing to stdin.
+5. Connect `CodexTurnGuard` to the existing read/receipt/reply checks in the database. Success is only an exact `turn/completed` with status `completed` plus a persisted linked reply. EOF, timeout and stop do not release the owner and do not trigger a retry.
+6. Test with a fake CLI: two consecutive processings, failures at every boundary, repeated RPC/call IDs, foreign turns, profile changes, restart, and no model calls while waiting. Check compatibility and that an old client refuses unsupported new state.
+7. After that, two real messages in a separate new Codex test session, then an exact resume of the persisted session. Do not use working chats or GUI chats.
+8. The next functional stage is independent owners and Claude ↔ Codex routing with a limit on automatic replies, then connection from the window.
 
-## Ограничения, которые нельзя ослаблять
+## Constraints that must not be relaxed
 
-Не удалять `active-runs.json`, не обнулять его и не снимать резерв по таймеру, одному PID или пустой группе процессов. Не обходить общий реестр ради запуска из другой базы. Сигнал процессу не доказывает завершение всех потомков. При неопределённости не повторять действия автоматически.
+Do not delete `active-runs.json`, do not empty it, and do not release a reservation based on a timer, a single PID, or an empty process group. Do not bypass the shared registry to launch from a different database. A signal to a process does not prove that all its descendants have exited. When the result is uncertain, do not repeat actions automatically.
 
-Никаких session ID пользователя, токенов, auth-файлов, приватных дампов SQLite и полных журналов в GitHub. Репозиторий публичный. Не запускать Cursor CLI: пользователь ранее просил оставить его выключенным. Не перезапускать Mac автоматически. Рабочие чаты не использовать как тестовые.
+No user session IDs, tokens, auth files, private SQLite dumps or full logs in GitHub. The repository is public. Do not run Cursor CLI: the user previously asked to keep it disabled. Do not restart the Mac automatically. Do not use working chats as test chats.
 
-## Начало работы и проверка
+## Getting started and verification
 
-Работай в обычном клоне [репозитория](https://github.com/kolotiloff/agent-messenger) от актуального `main`, в отдельной ветке. Локальная копия исходников предыдущего исполнителя могла быть зеркалом без `.git`; не считай её автоматически полноценным checkout.
+Work in a regular clone of the [repository](https://github.com/kolotiloff/agent-messenger) from the current `main`, in a separate branch. The previous developer's local copy of the sources may have been a mirror without `.git`; do not automatically treat it as a full checkout.
 
 ```sh
 bash scripts/check.sh
 ```
 
-Нужен Go не ниже 1.22.2. При необходимости укажи путь к установленному Go через `GO_BIN`. Скрипт сам выбирает внешний линкер для race-тестов на Mac. Дополнительная проверка установленного Codex без модели описана в отчёте; по умолчанию она пропускается. Настоящие модели в обычных тестах не запускаются.
+Go 1.22.2 or later is required. If needed, point to the installed Go with `GO_BIN`. The script itself selects the external linker for race tests on Mac. An additional model-free check of the installed Codex is described in the report; it is skipped by default. Real models are not run in the regular tests.
 
-Результат ближайшего этапа: PR с реализацией, тестами отказов и обновлённой документацией; отдельно перечислить фактически пройденное и оставшееся. На аудит передавать ссылку на PR и точный SHA. Новый пакет приложения публиковать после завершения функционального шага и проверки, а не ради промежуточной библиотеки.
+Deliverable of the next stage: a PR with the implementation, failure tests and updated documentation; list separately what actually passed and what remains. For audit, hand over the PR link and the exact SHA. Publish a new application package after the functional step is finished and verified, not for the sake of an intermediate library.

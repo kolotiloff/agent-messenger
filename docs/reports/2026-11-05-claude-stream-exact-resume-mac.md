@@ -1,36 +1,36 @@
-# Точный resume Claude в постоянном клиенте на Mac
+# Exact Claude resume in the persistent client on Mac
 
-Проверен продуктовый коммит `026131ce8392e377c3dc4ed059724c7c6330f3cf`, Claude Code `2.1.318`, macOS arm64. Бинарник собран Go 1.22.2 с внешним линковщиком и локальной ad-hoc подписью. Эта проверка использовала настоящую модель.
+Verified: product commit `026131ce8392e377c3dc4ed059724c7c6330f3cf`, Claude Code `2.1.318`, macOS arm64. The binary was built with Go 1.22.2 with the external linker and a local ad-hoc signature. This check used a real model.
 
-## Изоляция
+## Isolation
 
-Выбрана отдельная сохранённая CLI-сессия от прежнего теста resume. Она отсутствовала в реестре защищённых запусков; активных команд с её точным ID перед пробой не было. Её сохранённый файл и прежняя рабочая папка найдены по приватным тестовым артефактам. GUI-чат и рабочий разговор не использовались.
+A separate saved CLI session from the earlier resume test was chosen. It was absent from the registry of guarded runs; there were no active commands with its exact ID before the test. Its saved file and earlier working folder were located via private test artifacts. No GUI chat or working conversation was used.
 
-Использован прежний каталог тестовой очереди, поскольку смена каталога не должна обходить общие резервы. Перед пробой единственное старое письмо в очереди принадлежало занятой сессии. Сначала запущен клиент без разрешения моделей, очередь поставлена на паузу, отдельная сессия зарегистрирована с режимом `resume`.
+The earlier test queue directory was used, because changing the directory must not bypass the shared reservations. Before the test, the only old message in the queue belonged to a busy session. First the client was started without model authorization, the queue was paused, and the separate session was registered in `resume` mode.
 
-## Результат одного письма
+## Result of one message
 
-- Разрешено одно пользовательское письмо. Создана одна попытка, автоматических повторов не было.
-- В аргументах живого процесса подтверждён `--resume` точного зарегистрированного ID; `--session-id` отсутствовал.
-- Claude вернул маркер из прежнего тестового разговора. Маркер не был включён в новое письмо. Это дополнительно подтверждает сохранение контекста.
-- Ответ связан с контрольным письмом, адресован тестовому координатору; `provider_ok=1`. Постоянный канал перешёл в `idle`.
-- После проверки очередь снова поставлена на паузу, `shutdown` завершил Messenger. Запуск без разрешения моделей позволил проверить сохранённое состояние без повторной отправки.
-- Старые письма, ответы и попытки не изменились; прежнее контрольное письмо осталось в очереди.
-- Новый запуск получил заранее записанные `stream_run_id` и корректный `recovery_epoch`.
-- Реальный `recover-stream` в той же загрузке ОС отказал с причиной `same boot`. Файл резерва при этом остался побайтно неизменным.
+- One user message was authorized. One attempt was created; there were no automatic retries.
+- The live process's arguments confirmed `--resume` with the exact registered ID; `--session-id` was absent.
+- Claude returned a marker from the earlier test conversation. The marker was not included in the new message. This further confirms that context was preserved.
+- The reply is linked to the control message, addressed to the test coordinator; `provider_ok=1`. The persistent channel moved to `idle`.
+- After the check the queue was paused again, and `shutdown` stopped Messenger. Starting without model authorization made it possible to check the persisted state without resending.
+- Old messages, replies and attempts did not change; the earlier control message remained in the queue.
+- The new run received the pre-recorded `stream_run_id` and a correct `recovery_epoch`.
+- A real `recover-stream` within the same OS boot refused with the reason `same boot`. The reservation file stayed byte-for-byte unchanged.
 
-После остановки активных команд с тестовым ID не обнаружено. В базе выход процесса не успел зафиксироваться: `exit_observed=0`, `exit_code=null`. Нулевой код завершения не утверждается; резерв сохранён.
+After the stop, no active commands with the test ID were found. The process exit was not recorded in the database in time: `exit_observed=0`, `exit_code=null`. A zero exit code is not claimed; the reservation is kept.
 
-## Уточнение тестового скрипта
+## Test script correction
 
-Первый итоговый отчёт скрипта остановился на слишком строгом сравнении JSON-объектов старых резервов. Сериализация новой структурой добавила четырём прежним записям пустое поле `recovery_epoch` (`version=0`, пустые `host` и `boot`). Ни одно прежнее значение не изменилось; эти записи по-прежнему не проходят проверку восстановления.
+The script's first summary report stopped on an overly strict comparison of the JSON objects of the old reservations. Serialization with the new structure added an empty `recovery_epoch` field (`version=0`, empty `host` and `boot`) to four earlier records. None of the earlier values changed; these records still fail the recovery check.
 
-Отдельная проверка подтвердила неизменность всех старых полей и только это добавление. Затем выполнена отрицательная проверка `recover-stream`. Модель повторно не вызывалась. Общий результат одноразовой пробы принят.
+A separate check confirmed that all old fields were unchanged and that this addition was the only difference. Then a negative `recover-stream` check was performed. The model was not called again. The overall result of the one-shot test was accepted.
 
-## Сохранность и пределы
+## Preservation and limits
 
-Приватная резервная копия тестовой базы сделана под блокировками supervisor/startup после остановки, без незавершённого WAL. Она нужна, поскольку исходный тестовый каталог временный и может исчезнуть при перезагрузке. Приватные ID, маркер, журналы CLI, база, резервные копии и значения идентификаторов компьютера в Git не включены.
+A private backup of the test database was made under the supervisor/startup locks after the stop, with no unfinished WAL. It is needed because the original test directory is temporary and may disappear on reboot. Private IDs, the marker, CLI logs, the database, backups and the computer identifier values are not included in Git.
 
-На момент этой пробы настоящей перезагрузки и положительной приёмки `recover-stream` после неё ещё не было. Последующая проверка выполнена и описана в [отдельном отчёте](2026-11-05-claude-stream-reboot-mac.md). Проверенный реальный resume сам по себе такую приёмку не заменяет. Восстановление в той же загрузке ОС, рабочие чаты, другие провайдеры, Windows/Linux в работе и биллинг длительного ожидания этой пробой не проверялись.
+At the time of this test there had been no real reboot and no positive acceptance of `recover-stream` after one. The follow-up check was done and is described in a [separate report](2026-11-05-claude-stream-reboot-mac.md). The verified real resume by itself does not replace that acceptance. Recovery within the same OS boot, working chats, other providers, Windows/Linux in operation and billing during long waiting were not tested by this test.
 
-В PR также сохранены два дополнительных аудиторских теста `pr4_audit_test.go`: откат финальной транзакции SQLite после удаления файлового резерва и несколько поколений одной сессии с частичным ответом. Они вместе с полным набором прошли на Mac с race detector в ходе аудита `026131c`; продуктовый код этим отчётным изменением не меняется.
+The PR also keeps two additional audit tests in `pr4_audit_test.go`: rollback of the final SQLite transaction after the reservation file is deleted, and several generations of one session with a partial reply. Together with the full suite they passed on Mac with the race detector during the audit of `026131c`; this report change does not modify product code.

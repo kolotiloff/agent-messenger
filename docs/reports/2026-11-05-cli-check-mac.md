@@ -1,43 +1,43 @@
-# Проверка версий и входа CLI на Mac
+# CLI version and login check on Mac
 
-Изменение поверх `7db2ae55d01fa91b9170caba615d1c352163248c` (PR #6). Добавлена явная `check-cli` для выбранных абсолютных путей CLI и профиля. Пассивный `doctor` по-прежнему не исполняет найденные программы.
+A change on top of `7db2ae55d01fa91b9170caba615d1c352163248c` (PR #6). Added an explicit `check-cli` for chosen absolute CLI paths and a profile. The passive `doctor` still does not execute the programs it finds.
 
-## Проверено нативно
+## Verified natively
 
-На Mac получены следующие ответы штатных команд через новую реализацию Messenger:
+On the Mac, the following responses of the standard commands were obtained through the new Messenger implementation:
 
-| CLI | Версия | Статус входа |
+| CLI | Version | Login status |
 |---|---|---|
 | Claude Code | 2.1.318 | authenticated |
 | Codex CLI | 0.155.1 | authenticated |
 | Cursor Agent CLI | 2026.11.05-86047df | authenticated |
 
-Для каждого выполнены только `--version` и запрос статуса: Claude `auth status --json`, Codex `login status`, Cursor `status --format json`. Вход в браузере, logout, промпты и resume сессий не выполнялись. Модели не вызывались. Найденный вход означает ответ CLI, не проверку оплаты/квоты или сетевой доступности модели.
+For each, only `--version` and a status query were run: Claude `auth status --json`, Codex `login status`, Cursor `status --format json`. Browser login, logout, prompts and session resume were not performed. No models were called. A detected login means a CLI response, not a check of billing/quota or of the model's network reachability.
 
-В окружение каждой пробы намеренно передано неправильное переопределение каталога провайдера; явный выбор обычного профиля корректно убрал его. Все три команды увидели прежний вход. Заново авторизоваться не потребовалось.
+A wrong provider-directory override was deliberately passed into each probe's environment; explicitly selecting the regular profile correctly removed it. All three commands saw the existing login. Re-authentication was not required.
 
-Хеши базы Messenger, WAL/SHM при наличии и общего реестра резервов после каждой проверки совпали с исходными. Локальный клиент не запускался. Сырые stdout/stderr аккаунта не сохранялись; в отчётах нет email, userInfo, организации или ключей. `session` и совместимость с исполнением Messenger остались `not_checked`.
+The hashes of the Messenger database, the WAL/SHM if present, and the shared reservation registry matched the originals after each check. The local client was not started. Raw account stdout/stderr was not saved; the reports contain no email, userInfo, organization or keys. `session` and compatibility with Messenger execution remained `not_checked`.
 
-## Автоматические проверки
+## Automated checks
 
-На macOS arm64, Go 1.22.2, прошёл полный набор с race detector:
+On macOS arm64, Go 1.22.2, the full suite passed with the race detector:
 
 ```sh
 go test -race -tags streamprobe -ldflags=-linkmode=external -count=1 ./...
 ```
 
-Дополнительные проверки покрывают точные аргументы трёх подкоманд, канонический профиль и удаление чужого переопределения, временную рабочую папку вне проекта, остановку проверки до auth для неизвестной версии, отсутствие публикации сырого вывода, обязательные явные пути, неподдержанную ОС, замену исполняемого файла между шагами, положительные/отрицательные/неоднозначные ответы, лимит памяти вывода и таймаут настоящего фиктивного процесса.
+Additional checks cover the exact arguments of the three subcommands, the canonical profile and removal of a foreign override, a temporary working directory outside the project, stopping the check before auth for an unknown version, not publishing raw output, mandatory explicit paths, an unsupported OS, replacement of the executable between steps, positive/negative/ambiguous responses, the output memory limit and the timeout of a real fake process.
 
-После уточнения имени JSON-счётчика на `probe_command_attempts` и текста подсказки doctor профильный набор diagnostics повторён. Счётчик означает попытки исполнения диагностических команд, не доказанное число успешно стартовавших процессов. Продуктовые алгоритмы между полным и профильным прогонами не менялись.
+After renaming the JSON counter to `probe_command_attempts` and refining the doctor hint text, the diagnostics profile suite was rerun. The counter means attempts to execute diagnostic commands, not a proven number of successfully started processes. Product algorithms did not change between the full and profile runs.
 
-Сборки `CGO_ENABLED=0` для linux/amd64 и windows/amd64 прошли. Нативной приёмки CLI на этих ОС не было; check-cli там не запускает программы и возвращает неподтверждённую платформу.
+`CGO_ENABLED=0` builds for linux/amd64 and windows/amd64 passed. There was no native CLI acceptance on those OSes; there check-cli does not launch programs and returns an unconfirmed platform.
 
-## Ограничения и следующий шаг
+## Limitations and next step
 
-Проверены точные версии из таблицы. После обновления CLI запрос входа остановится на `version_not_qualified_for_auth_probe` до проверки нового контракта. Версия от исполняемого файла не является проверкой происхождения бинарника.
+The exact versions in the table were verified. After a CLI update, the login query will stop at `version_not_qualified_for_auth_probe` until the new contract is verified. The version reported by the executable is not a check of the binary's provenance.
 
-Код не снимает блокировки сессий, не заявляет остановку отделившихся потомков, не даёт готовность рабочим разговорам. Провайдер может обслуживать собственный кеш/учётные данные внутри штатной команды; неизменность файлов профиля провайдера не утверждается.
+The code does not release session locks, does not claim to stop detached descendants, and does not grant readiness for working conversations. The provider may maintain its own cache/credentials inside the standard command; unchanged provider profile files are not claimed.
 
-Следующий слой — привязанные к выбранному пути/профилю карточки состояния и журнал для будущего окна. Авторизация через браузер, установка, совместимость постоянных адаптеров и снятие резерва в той же загрузке остаются отдельными работами.
+The next layer is status cards bound to the chosen path/profile, and a log for the future window. Browser authorization, installation, compatibility of persistent adapters and releasing a reservation within the same boot remain separate work.
 
-Контракты, источники и команды: [CLI_CHECK.md](../CLI_CHECK.md).
+Contracts, sources and commands: [CLI_CHECK.md](../CLI_CHECK.md).

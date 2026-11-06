@@ -1,57 +1,58 @@
-# Проверка привязки ответов и владения сессией
 
-Экспериментальный стенд, а не устанавливаемый Messenger. Python 3.9+ и стандартная библиотека; дополнительных пакетов нет. Проверено на macOS с Python 3.9.6. Windows и Linux ещё не проверены.
+# Reply binding and session ownership check
 
-С 5 ноября 2026 года этот каталог остаётся исследовательским источником сценариев. Постоянный клиент и будущий брокер пишутся на Go, без планового переписывания отдельного Python-клиента. Продуктовая поставка не вызывает этот стенд и не требует установленного Python. Границы Go-клиента — в [docs/CLIENT.md](../../docs/CLIENT.md).
+An experimental test bench, not an installable Messenger. Python 3.9+ and the standard library; no extra packages. Verified on macOS with Python 3.9.6. Windows and Linux are not yet verified.
 
-Из корня скачанного репозитория:
+As of November 5, 2026 this directory remains a research source of scenarios. The persistent client and the future broker are written in Go, with no planned rewrite of a separate Python client. The product distribution does not call this bench and does not require Python to be installed. Go client boundaries are in [docs/CLIENT.md](../../docs/CLIENT.md).
+
+From the root of the downloaded repository:
 
 ```sh
 python3 -m unittest discover -s experiments/session_safety -v
 ```
 
-Если на Windows интерпретатор доступен через `py`, предполагаемая команда — `py -3 -m unittest discover -s experiments/session_safety -v`. Её работоспособность на Windows пока не подтверждена.
+If on Windows the interpreter is available as `py`, the expected command is `py -3 -m unittest discover -s experiments/session_safety -v`. It has not yet been confirmed to work on Windows.
 
-Ожидаемый итог: `Ran 19 tests ... OK`. Тесты используют временную папку, SQLite и обычные процессы Python, которые имитируют исполнителя. Реальные Claude/Codex/Cursor не запускаются; сеть, ключи и авторизация не нужны. Проверки специально завершают только созданные ими тестовые процессы. Автозапуск и фоновые службы не устанавливаются.
+Expected result: `Ran 19 tests ... OK`. The tests use a temporary folder, SQLite and ordinary Python processes that simulate the executor. Real Claude/Codex/Cursor are not launched; no network, keys or authorization are needed. The checks deliberately terminate only the test processes they created. No autostart or background services are installed.
 
-## Что изменилось после опыта с Claude
+## What changed after the Claude experiment
 
-В режиме ответа агент видит только `read_current()` и `reply(text)`. Контроллер заранее связывает MCP-процесс с конкретным исполнением и входящим письмом. Сервер сам определяет отправителя, адресата, `reply_to` и ключ устранения дублей. Попытки вызвать `send_message` или подставить ID/адрес отклоняются.
+In reply mode the agent sees only `read_current()` and `reply(text)`. The controller binds the MCP process to a specific execution and incoming message in advance. The server itself determines the sender, recipient, `reply_to` and the deduplication key. Attempts to call `send_message` or substitute an ID/address are rejected.
 
-Один запрос получает один неизменяемый ответ. Повтор с тем же текстом возвращает сохранённый ответ; другой текст с тем же контекстом отклоняется. Режим самостоятельной отправки новых поручений должен быть отдельным интерфейсом; в этом стенде его нет. Это ограничение относится к обработке конкретного входящего письма, а не ко всему будущему Messenger.
+One request gets one immutable reply. A repeat with the same text returns the stored reply; different text in the same context is rejected. A mode for independently sending new tasks must be a separate interface; this bench does not have one. This restriction applies to handling a specific incoming message, not to the whole future Messenger.
 
-## Как удерживается сессия
+## How the session is held
 
-`runtime.py` хранит очередь и состояние исполнения в одной локальной SQLite-базе. Ключ сессии строится из провайдера, канонического профиля и точного ID разговора. Папка проекта не создаёт второй замок для того же ID.
+`runtime.py` stores the queue and execution state in a single local SQLite database. The session key is built from the provider, the canonical profile and the exact conversation ID. The project folder does not create a second lock for the same ID.
 
-Резервирование фиксируется атомарно до создания дочернего процесса. Перед запуском записывается намерение запуска; PID записывается после создания процесса. Реальный адаптер включает режим `launching`: MCP недоступен до подтверждения точного ID по структурированному событию CLI. Синтетические процессы могут использовать прежний упрощённый режим. Успешное завершение фиксирует только доверенный управляющий код, после ожидания выхода своего дочернего процесса и проверки сохранённого ответа.
+The reservation is recorded atomically before the child process is created. A launch intent is written before launch; the PID is written after the process is created. The real adapter enables `launching` mode: MCP is unavailable until the exact ID is confirmed by a structured CLI event. Synthetic processes may use the earlier simplified mode. Successful completion is recorded only by trusted controller code, after waiting for its own child process to exit and checking the stored reply.
 
-Сохранённый ответ сам по себе не освобождает сессию. Сбой, отсутствие ответа или неопределённость не снимают блокировку. Нет срока аренды, после которого можно автоматически отдать сессию другому процессу. `quarantine` переводит исполнение в `uncertain`, блокирует дальнейшие записи из этого контекста и сохраняет занятость сессии.
+A stored reply by itself does not release the session. A failure, a missing reply or uncertainty does not lift the lock. There is no lease expiry after which the session can be automatically handed to another process. `quarantine` moves the execution to `uncertain`, blocks further writes from that context and keeps the session occupied.
 
-## Файлы
+## Files
 
-- `runtime.py`: очередь, резервирование, привязанный ответ, состояния.
-- `mcp_server.py`: минимальный stdio MCP для одного входящего письма.
-- `process_fixture.py`: искусственный исполнитель и точки остановки для тестов.
-- `test_safety.py`: 15 проверок, включая реальные конкурирующие процессы и аварийное завершение управляющего процесса.
-- `test_adapters.py`: 4 проверки служебных событий CLI, включая ошибочные ID, результаты и инструменты.
-- `resume_probe.py`: отдельный опыт с реальными Codex/Cursor; требует явного разрешения модельных вызовов.
+- `runtime.py`: queue, reservation, bound reply, states.
+- `mcp_server.py`: minimal stdio MCP for a single incoming message.
+- `process_fixture.py`: artificial executor and stop points for tests.
+- `test_safety.py`: 15 checks, including real competing processes and a crash of the controller process.
+- `test_adapters.py`: 4 checks of CLI service events, including wrong IDs, results and tools.
+- `resume_probe.py`: a separate experiment with real Codex/Cursor; requires explicit permission for model calls.
 
-## Границы гарантий
+## Guarantee boundaries
 
-Все участники должны использовать одну и ту же локальную базу и одинаковые канонические идентификаторы. Это не распределённая блокировка и не защита от ручного запуска CLI в обход клиента. Перемещение/копирование истории разговора между машинами и одновременный доступ из GUI не покрыты.
+All participants must use the same local database and the same canonical identifiers. This is not a distributed lock and does not protect against manually launching the CLI bypassing the client. Moving/copying conversation history between machines and simultaneous access from a GUI are not covered.
 
-Токен исполнения — локальная привязка, а не готовая система авторизации. База и параметры запуска считаются доступными только доверенному клиенту; сетевой доступ и права файлов ещё предстоит спроектировать. Публичные методы `Store`, в том числе завершение исполнения, не выставляются агенту через MCP.
+The execution token is a local binding, not a complete authorization system. The database and launch parameters are assumed to be accessible only to the trusted client; network access and file permissions are yet to be designed. Public `Store` methods, including completing an execution, are not exposed to the agent via MCP.
 
-Снятие `uncertain` и безопасное ручное восстановление пока не реализованы: при сомнении стенд блокирует новые запуски. Понижение доступности здесь намеренное. Не удаляйте базу, чтобы обойти блокировку реальной работающей сессии.
+Clearing `uncertain` and safe manual recovery are not implemented yet: when in doubt, the bench blocks new launches. The reduced availability here is intentional. Do not delete the database to bypass the lock of a real running session.
 
-Основной набор тестов использует синтетические процессы. Отдельно новый интерфейс проверен с реальным Claude на Mac: два задания, один ID сессии и блокировка конкурентного резервирования. Первый опыт остановлен из-за несовпадения формата контрольного текста; новый уточнённый опыт прошёл. Codex и Cursor также прошли по два задания с сохранением ID, связанными ответами и блокировкой конкурентного резервирования. Нет VPS, сетевого ACK, переподключений, менеджера процессов ОС, производственного адаптера CLI или часового теста ожидания.
+The main test suite uses synthetic processes. Separately, the new interface was verified with real Claude on a Mac: two tasks, one session ID and blocking of a competing reservation. The first experiment was stopped because of a mismatch in the control text format; a new refined experiment passed. Codex and Cursor also passed two tasks each, with the ID preserved, bound replies and blocking of a competing reservation. There is no VPS, network ACK, reconnection, OS process manager, production CLI adapter or hour-long wait test.
 
-[Отчёт запуска](../../docs/reports/2026-11-05-session-safety-mac.md).
+[Run report](../../docs/reports/2026-11-05-session-safety-mac.md).
 
-## Отдельный опыт с реальным Claude
+## Separate experiment with real Claude
 
-Не запускается обычной командой unittest. **Расходует токены** и использует имеющийся локальный вход Claude. Проверен только на macOS; обработка stdout и завершение группы процессов в этом прототипе рассчитаны на POSIX.
+It is not run by the regular unittest command. **It spends tokens** and uses the existing local Claude login. Verified only on macOS; stdout handling and process group termination in this prototype are designed for POSIX.
 
 ```sh
 python3 experiments/session_safety/claude_probe.py \
@@ -60,15 +61,15 @@ python3 experiments/session_safety/claude_probe.py \
   --allow-model-calls
 ```
 
-Укажите реальные абсолютные пути. Папка `--run-dir` должна быть новой: повторный запуск в ней отклоняется. Скрипт создаёт отдельную тестовую сессию, обрабатывает до двух писем и не повторяет неопределённую попытку. Не направляйте данные в Git/Plastic. Сохранённая тестовая история остаётся у Claude; фоновые службы не устанавливаются.
+Specify real absolute paths. The `--run-dir` folder must be new: a repeat run in it is rejected. The script creates a separate test session, processes up to two messages and does not retry an uncertain attempt. Do not send the data to Git/Plastic. The saved test history stays with Claude; no background services are installed.
 
-`summary.json` содержит обезличенный итог; остальные файлы могут содержать локальные идентификаторы и сведения CLI, их не следует публиковать автоматически. Успех подтверждает этот сценарий и не означает готовность восстановления дерева процессов или производственного клиента.
+`summary.json` contains an anonymized summary; the other files may contain local identifiers and CLI details and should not be published automatically. Success confirms this scenario and does not mean readiness of process tree recovery or of a production client.
 
-[Отчёт реального опыта](../../docs/reports/2026-11-05-guarded-claude-mac.md).
+[Real experiment report](../../docs/reports/2026-11-05-guarded-claude-mac.md).
 
-## Отдельные опыты с Codex и Cursor
+## Separate experiments with Codex and Cursor
 
-`resume_probe.py` использует **существующую, свободную тестовую CLI-сессию**, точный UUID и имеющуюся авторизацию. Не используйте рабочие разговоры и сессии, открытые в другом CLI/GUI. Обычный unittest эти опыты не запускает.
+`resume_probe.py` uses an **existing, free test CLI session**, its exact UUID and the existing authorization. Do not use work conversations or sessions open in another CLI/GUI. The regular unittest does not run these experiments.
 
 ```sh
 python3 experiments/session_safety/resume_probe.py \
@@ -79,8 +80,8 @@ python3 experiments/session_safety/resume_probe.py \
   --allow-model-calls
 ```
 
-Для Cursor замените провайдера на `cursor` и путь CLI на установленный `agent`. Укажите реальные пути и UUID. Проба создаёт отдельную рабочую папку и не перезаписывает пользовательские настройки. Для Cursor наличие глобальной MCP-конфигурации или `CURSOR_CONFIG_DIR` останавливает тест до запуска CLI: такой профиль сначала требуется проверить отдельно.
+For Cursor, replace the provider with `cursor` and the CLI path with the installed `agent`. Specify real paths and UUID. The probe creates a separate working folder and does not overwrite user settings. For Cursor, the presence of a global MCP configuration or `CURSOR_CONFIG_DIR` stops the test before the CLI is launched: such a profile must first be checked separately.
 
-В каждой пробе до двух реальных запусков, без автоматических повторов. Новая папка не снимает блокировку старой сессии: **нельзя запускать один ID одновременно через разные базы стенда**. Эти программы не заменяют единый реестр сессий будущего приложения. Прототип проверен только на Mac.
+Each probe makes up to two real launches, with no automatic retries. A new folder does not lift the lock on the old session: **never run the same ID simultaneously through different bench databases**. These programs do not replace the unified session registry of the future app. The prototype was verified only on a Mac.
 
-[Отчёт Codex/Cursor](../../docs/reports/2026-11-05-guarded-codex-cursor-mac.md).
+[Codex/Cursor report](../../docs/reports/2026-11-05-guarded-codex-cursor-mac.md).

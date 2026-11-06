@@ -1,129 +1,129 @@
-# Локальный клиент: решение и порядок работ
+# Local client: decision and work plan
 
-Исходное решение зафиксировано 5 ноября 2026 года. Актуальные запуск окна, установка и проверки описаны в [LOCAL_UI.md](LOCAL_UI.md), [INSTALL.md](INSTALL.md) и [CI.md](CI.md). Ниже также сохранена история первого одноразового клиента; старые ограничения не следует переносить на все последующие версии.
+The original decision was recorded on November 5, 2026. Current instructions for launching the window, installation and checks are in [LOCAL_UI.md](LOCAL_UI.md), [INSTALL.md](INSTALL.md) and [CI.md](CI.md). The history of the first one-shot client is also kept below; its old limitations should not be carried over to every later version.
 
-## Текущее дополнение: постоянный Claude
+## Current addendum: persistent Claude
 
-`serve --claude-stream` обслуживает письма Claude по очереди в одном процессе. Модель по-прежнему требует отдельного `--allow-model-calls`. Два письма, pause/resume и сохранение очереди после shutdown/restart проверены на Mac. Состояния хода и владельца процесса разделены; успешный ход не снимает резерв. [Инструкция и ограничения](CLAUDE_STREAM.md), [отчёт](reports/2026-11-05-claude-stream-product-mac.md).
+`serve --claude-stream` serves Claude messages one at a time in a single process. The model still requires a separate `--allow-model-calls`. Two messages, pause/resume and the queue surviving shutdown/restart were verified on a Mac. Turn state and process-owner state are separate; a successful turn does not release the reservation. [Instructions and limitations](CLAUDE_STREAM.md), [report](reports/2026-11-05-claude-stream-product-mac.md).
 
-Ниже сохранены исходное решение и история одноразового режима. Формулировки о том, что второе письмо не стартует, относятся к нему, а не к новому явно включаемому режиму.
+The original decision and the history of the one-shot mode are kept below. Statements that a second message does not start apply to that mode, not to the new explicitly enabled mode.
 
-## Решение
+## Decision
 
-Постоянный локальный клиент и будущий брокер пишутся на Go. Python остаётся исследовательским стендом `experiments/session_safety` и источником уже проверенных сценариев. Отдельного переписывания готового клиента с Python на Go не планируется: продуктовый код сразу на Go.
+The persistent local client and the future broker are written in Go. Python remains the research test bench `experiments/session_safety` and the source of already verified scenarios. No separate rewrite of a finished client from Python to Go is planned: the product code is in Go from the start.
 
-Незавершённый Python-клиент сохранён в `experiments/python_client_draft` как исследовательский черновик. Продуктовый клиент — Go. Стенд не удаляется и не объявляется устаревшим задним числом. Исторические отчёты в `docs/reports/` сохраняют формулировки своего дня, включая ранние «13 тестов» и «Codex/Cursor ещё не запускались». Более поздние результаты лежат в [VALIDATION.md](VALIDATION.md), [отчёте Claude](reports/2026-11-05-guarded-claude-mac.md) и [отчёте Codex/Cursor](reports/2026-11-05-guarded-codex-cursor-mac.md).
+The unfinished Python client is kept in `experiments/python_client_draft` as a research draft. The product client is Go. The test bench is not deleted and is not retroactively declared obsolete. Historical reports in `docs/reports/` keep the wording of their day, including the early "13 tests" and "Codex/Cursor have not been run yet". Later results are in [VALIDATION.md](VALIDATION.md), the [Claude report](reports/2026-11-05-guarded-claude-mac.md) and the [Codex/Cursor report](reports/2026-11-05-guarded-codex-cursor-mac.md).
 
-## История первого этапа (5 ноября)
+## History of the first stage (November 5)
 
-Один локальный клиент на пользователя, без окна. Будущий GUI только посылает ему команды и не запускает CLI сам. Нет сетевого брокера, установщика, автозапуска, LaunchAgent и мастера VPS. Запуск реальных Claude, Codex и Cursor этой поставкой не включается: проверка моделей остаётся отдельным шагом на Mac.
+One local client per user, with no window. A future GUI only sends it commands and does not launch CLIs itself. No network broker, installer, autostart, LaunchAgent or VPS wizard. This delivery does not enable launching real Claude, Codex and Cursor: model verification remains a separate step on a Mac.
 
-Общее ядро: очередь, реестр сессий, состояния попыток, дедупликация, журнал. Платформенные операции отдельно: один экземпляр управляющего процесса, локальные команды, процессы, права и каталог данных.
+Shared core: queue, session registry, attempt states, deduplication, log. Platform operations are separate: a single instance of the controller process, local commands, processes, permissions and the data directory.
 
-## Хранилище
+## Storage
 
-SQLite через [modernc.org/sqlite](https://gitlab.com/cznic/sqlite) v1.34.5 (пакет с лицензией BSD; сам SQLite — общественное достояние). Это перевод SQLite на Go, без cgo и без компилятора C.
+SQLite via [modernc.org/sqlite](https://gitlab.com/cznic/sqlite) v1.34.5 (a BSD-licensed package; SQLite itself is in the public domain). It is a translation of SQLite to Go, with no cgo and no C compiler.
 
-Почему не cgo-драйвер `mattn/go-sqlite3`, хотя cgo сам по себе не ошибка: для macOS, Windows и Linux cgo требует C-тулчейн на каждой цели, ломает обычную кросс-сборку и привязывает сборку к компилятору. Цена modernc — более тяжёлая сборка и крупнее бинарник. Для трёх ОС без обязательного C-компилятора это приемлемая цена. Драйвер не становится частью протокола сообщений.
+Why not the cgo driver `mattn/go-sqlite3`, even though cgo itself is not a mistake: on macOS, Windows and Linux, cgo requires a C toolchain for every target, breaks ordinary cross-compilation and ties the build to a compiler. The cost of modernc is a heavier build and a larger binary. For three OSes without a mandatory C compiler, that is an acceptable cost. The driver does not become part of the message protocol.
 
-Каталог данных создаётся с правами `0700`, база и сокет команд — `0600`. По умолчанию:
+The data directory is created with `0700` permissions, the database and the command socket with `0600`. Defaults:
 
-| ОС | Каталог |
+| OS | Directory |
 |---|---|
 | macOS | `~/Library/Application Support/AgentMessenger` |
-| Linux | `$XDG_DATA_HOME/agent-messenger` или `~/.local/share/agent-messenger` |
-| Windows | `%AppData%\AgentMessenger`, если каталог известен |
+| Linux | `$XDG_DATA_HOME/agent-messenger` or `~/.local/share/agent-messenger` |
+| Windows | `%AppData%\AgentMessenger`, if the directory is known |
 
-Тесты передают свой временный `--root` и не пишут в эти каталоги.
+Tests pass their own temporary `--root` and do not write to these directories.
 
-## Порядок работ
+## Work plan
 
-1. Зафиксировать это решение в документации.
-2. Перенести смысл проверок стенда в Go-ядро и покрыть команды, псевдонимы, отзыв MCP, перезапуск и границы запуска тестовыми процессами, без моделей.
-3. Собрать бинарник для linux, darwin и windows. Сборка, `go test` на конкретной ОС и реальный запуск CLI — три разных уровня. Неподтверждённый уровень так и называется.
-4. Платформенную операцию, для которой нет реализации, завершать явной ошибкой неподдержки, а не успешным ответом.
-5. Реальные CLI — только позже, на Mac, отдельными тестовыми сессиями.
+1. Record this decision in the documentation.
+2. Port the meaning of the test bench checks to the Go core and cover commands, aliases, MCP revocation, restart and launch boundaries with test processes, without models.
+3. Build the binary for linux, darwin and windows. A build, `go test` on a specific OS and a real CLI run are three different levels. An unconfirmed level is called exactly that.
+4. A platform operation that has no implementation must end with an explicit unsupported error, not a successful response.
+5. Real CLIs only later, on a Mac, in separate test sessions.
 
-## Гарантии, которые код обязан сохранять
+## Guarantees the code must preserve
 
-1. Одно хранилище на пользователя. Второй управляющий процесс не получает блокировку файла. `BEGIN IMMEDIATE` в SQLite дополнительно не даёт двум соединениям зарезервировать одну сессию.
-2. Ключ сессии: провайдер, канонический путь существующего каталога окружения CLI, точный ID разговора. Почтовый псевдоним — только имя этого ключа. Два псевдонима и два написания одного пути не открывают второй запуск.
-3. В аргументах адаптера только явный ID. Режима «последняя сессия» нет. MCP читает письмо и пишет ответ только после подтверждения ID.
-4. Маршрут ответа и ключ повтора задаёт код. Повтор того же текста возвращает сохранённый ответ. Другой текст с тем же контекстом отклоняется.
-5. Неизвестный исход остаётся `uncertain`. Нет автоповтора, аренды по таймеру и успеха только по коду выхода или только по тексту ответа.
-6. Новый запуск запрещён, пока старое исполнение не признано остановленным. Один PID и отмена `CommandContext` не считаются остановкой потомков.
-7. После остановки задания или перевода в `uncertain` старый MCP-контекст теряет чтение и запись.
-8. `fail` закрывает сессию для новых попыток и сохраняет историю. `retry` — отдельная попытка и только вместе с фразой `actions-may-repeat`, после доказательства остановки. Пока платформа не умеет доказать остановку всех потомков, `retry` и `accept` остаются заблокированы. Пустая группа процессов не завершает попытку и не снимает блокировку сессии.
-9. Три разные команды: пауза новых заданий, остановка активного задания, завершение клиента.
-10. Ожидание и опрос статуса не вызывают модель и не вызывают адаптер. Рабочие GUI-чаты не подключаются.
+1. One store per user. A second controller process does not get the file lock. `BEGIN IMMEDIATE` in SQLite additionally prevents two connections from reserving the same session.
+2. Session key: provider, canonical path of an existing CLI environment directory, exact conversation ID. A mail alias is only a name for this key. Two aliases or two spellings of the same path do not open a second launch.
+3. Adapter arguments contain only an explicit ID. There is no "last session" mode. MCP reads the message and writes the reply only after the ID is confirmed.
+4. The reply route and the retry key are set by code. Retrying the same text returns the stored reply. Different text with the same context is rejected.
+5. An unknown outcome stays `uncertain`. There is no automatic retry, no timer-based lease, and no success based only on the exit code or only on the reply text.
+6. A new launch is forbidden until the old execution is recognized as stopped. A single PID and cancelling `CommandContext` do not count as stopping descendants.
+7. After a job is stopped or moved to `uncertain`, the old MCP context loses read and write access.
+8. `fail` closes the session to new attempts and keeps the history. `retry` is a separate attempt and only together with the phrase `actions-may-repeat`, after proof of stopping. Until the platform can prove that all descendants have stopped, `retry` and `accept` remain blocked. An empty process group does not complete the attempt and does not release the session lock.
+9. Three different commands: pause new jobs, stop the active job, shut down the client.
+10. Waiting and status polling do not call the model and do not call the adapter. Working GUI chats are not connected.
 
-## Команды одноразового режима
+## One-shot mode commands
 
-Для постоянного процесса Claude семантика остановки и отзыва текущего MCP уточнена в [CLAUDE_STREAM.md](CLAUDE_STREAM.md).
+For the persistent Claude process, the semantics of stopping and revoking the current MCP are refined in [CLAUDE_STREAM.md](CLAUDE_STREAM.md).
 
-| Команда | Очередь | Активный процесс | MCP текущей попытки |
+| Command | Queue | Active process | MCP of the current attempt |
 |---|---|---|---|
-| `pause` | остаётся, новые запуски не резервируются | не сигнализируется и не помечается завершённым | остаётся действительным, пока попытка `running` |
-| `resume` | снова можно резервировать свободные сессии | не меняется | не меняется |
-| `stop-job` | остальные письма остаются | сигнал уходит только если pid, время старта, boot id и группа всё ещё тот же процесс; номер группы без этой проверки не используется | MCP отзывается до сигнала; состояние `uncertain`; слот занят |
-| `shutdown` | сохраняется на диске | не убивается и не помечается успешным | не отзывается этой командой |
-| `resolve fail` | новые письма в эту сессию отклоняются | не объявляется остановленным | отзывается, слот не отдаётся новой попытке |
-| `resolve accept` | не создаёт новую попытку | требуется отдельное доказательство остановки и проверка результата, а не сам текст ответа | в этой версии команда возвращает отказ: доказательство потомков не реализовано |
-| `resolve retry` | при успехе создала бы новое письмо со ссылкой на старое | то же доказательство остановки и явная фраза о возможном повторении действий | в этой версии команда возвращает отказ |
+| `pause` | stays; new launches are not reserved | is not signaled and is not marked finished | stays valid while the attempt is `running` |
+| `resume` | free sessions can be reserved again | unchanged | unchanged |
+| `stop-job` | other messages stay | the signal is sent only if pid, start time, boot id and group are still the same process; the group number is not used without this check | MCP is revoked before the signal; state is `uncertain`; the slot stays occupied |
+| `shutdown` | kept on disk | is not killed and is not marked successful | not revoked by this command |
+| `resolve fail` | new messages to this session are rejected | is not declared stopped | revoked; the slot is not given to a new attempt |
+| `resolve accept` | does not create a new attempt | requires separate proof of stopping and verification of the result, not the reply text itself | in this version the command returns a refusal: proof for descendants is not implemented |
+| `resolve retry` | on success would create a new message referencing the old one | the same proof of stopping and an explicit phrase about possible repetition of actions | in this version the command returns a refusal |
 
-`serve` держит одну блокировку на пользователя, а не на каталог `--root`. Второй `serve` с другим каталогом данных не стартует. Остальные команды идут в сокет этого процесса. `--root` задаётся перед командой: `messenger --root КАТАЛОГ serve`.
+`serve` holds one lock per user, not per `--root` directory. A second `serve` with a different data directory does not start. Other commands go to this process's socket. `--root` is given before the command: `messenger --root DIR serve`.
 
-`recover-failed --confirm actions-may-repeat` выполняется, когда `serve` не запущен. Команда не вызывает модель. Она снимает резерв только если у каждой записи есть полное наблюдение, записанный процесс уже не тот же, группа пуста и в базе нет ни ответа, ни `provider_ok=1`. Старая попытка остаётся `uncertain`. В том же каталоге появляется новое письмо со ссылкой `retry_of`. Журнал прямо говорит, что действия могут повториться и что потомки вне группы не доказаны. Неполная, живая, повреждённая запись и ошибка наблюдения не переписывают файл. Если база уже обновлена, а замена файла не удалась, повтор той же команды дописывает реестр и не создаёт второе письмо.
+`recover-failed --confirm actions-may-repeat` is run when `serve` is not running. The command does not call the model. It releases the reservation only if every record has a complete observation, the recorded process is no longer the same one, the group is empty, and the database has neither a reply nor `provider_ok=1`. The old attempt stays `uncertain`. A new message with a `retry_of` reference appears in the same directory. The log states explicitly that actions may repeat and that descendants outside the group are not proven. An incomplete, live or corrupted record and an observation error do not rewrite the file. If the database has already been updated but replacing the file failed, repeating the same command completes the registry and does not create a second message.
 
-После `shutdown` очередь остаётся. Следующий `serve` сразу отзывает MCP попыток, которые он сам не запускал, и не снимает их блокировку. Регистрация сессии — `register-session` у уже запущенного клиента: провайдер, каталог окружения, точный ID, псевдоним и путь CLI. После этого очередь может запустить именно этот исполняемый файл. Пустая группа процессов после его выхода попытку не завершает.
+After `shutdown`, the queue stays. The next `serve` immediately revokes MCP for attempts it did not launch itself and does not release their lock. Session registration is `register-session` on an already running client: provider, environment directory, exact ID, alias and CLI path. After that, the queue may launch exactly this executable. An empty process group after it exits does not complete the attempt.
 
-Незавершённый черновик на Python сохранён в [experiments/python_client_draft](../experiments/python_client_draft/README.md). Это не продукт и не шаг, который ещё предстоит переписать на Go. Исполняемые сценарии стенда по-прежнему в `experiments/session_safety`.
+The unfinished Python draft is kept in [experiments/python_client_draft](../experiments/python_client_draft/README.md). It is not a product and not a step that still has to be rewritten in Go. The test bench's executable scenarios are still in `experiments/session_safety`.
 
-## Уровни подтверждения первого этапа
+## Confirmation levels of the first stage
 
-Их нельзя смешивать:
+They must not be mixed:
 
-- сборка `GOOS=darwin` / `GOOS=windows` — компиляция, не проверка на этой ОС;
-- `go test` — только на той ОС, где команда реально выполнялась;
-- реальный CLI — отдельная проверка на Mac. На этом Go-клиенте зачтено одно письмо Claude; Codex и Cursor им не запускались.
+- a `GOOS=darwin` / `GOOS=windows` build is compilation, not verification on that OS;
+- `go test` counts only on the OS where the command actually ran;
+- a real CLI is a separate check on a Mac. On this Go client one Claude message was accepted; Codex and Cursor were not run with it.
 
-## Историческая проверка первого этапа
+## Historical verification of the first stage
 
-Сделано в `cmd/messenger` и `internal/`: ядро очереди и реестра, одна блокировка управляющего процесса на пользователя, локальные команды, `register-session`, ответный MCP и запуск привязанного CLI через адаптеры Claude, Codex и Cursor. Обычный выход процесса не снимает блокировку сессии. Старый MCP после нового `serve` права не сохраняет. `stop-job` сначала отзывает MCP и не шлёт сигнал чужой группе процессов. Отдельный каталог профиля передаётся как `CLAUDE_CONFIG_DIR`, `CODEX_HOME` или `CURSOR_CONFIG_DIR`. Стандартный `~/.claude`, `~/.codex` или `~/.cursor` эту переменную не получает и не наследует чужое значение, чтобы обычный вход остался видим. `shutdown` не ждёт зависший процесс и не держит блокировку. Ошибочный результат провайдера нельзя принять через `resolve accept`. Общий резерв исполнения записывается атомарно и сбрасывается на диск до запуска процесса. Пустой или повреждённый `active-runs.json` блокирует запуск и не считается пустым списком. Резерв не удаляется, если исходный PID исчез или наблюдение не удалось. Пока резерв есть, `serve` с другим `--root` отклоняется, в том числе когда жив только потомок. Неудачную попытку без ответа и без успешного результата провайдера снимает только `recover-failed --confirm actions-may-repeat`, и только если записанный процесс и его группа уже не работают. История остаётся, модель при этом не запускается. Успешный результат этой командой не принимается.
+Done in `cmd/messenger` and `internal/`: the queue and registry core, one controller-process lock per user, local commands, `register-session`, the reply MCP and launching the bound CLI through the Claude, Codex and Cursor adapters. A normal process exit does not release the session lock. The old MCP keeps no rights after a new `serve`. `stop-job` revokes MCP first and does not signal someone else's process group. A separate profile directory is passed as `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `CURSOR_CONFIG_DIR`. The standard `~/.claude`, `~/.codex` or `~/.cursor` does not get this variable and does not inherit someone else's value, so that the normal login stays visible. `shutdown` does not wait for a hung process and does not hold the lock. An erroneous provider result cannot be accepted through `resolve accept`. The shared execution reservation is written atomically and flushed to disk before the process is launched. An empty or corrupted `active-runs.json` blocks launching and is not treated as an empty list. The reservation is not removed if the original PID has disappeared or observation failed. While the reservation exists, `serve` with a different `--root` is rejected, including when only a descendant is alive. A failed attempt with no reply and no successful provider result is released only by `recover-failed --confirm actions-may-repeat`, and only if the recorded process and its group are no longer running. History is kept, and the model is not launched. A successful result is not accepted by this command.
 
-Проверено в этой Linux-среде, Go 1.22.2:
+Verified in this Linux environment, Go 1.22.2:
 
-- `go test -race -count=1 ./...` — пакеты `adapters`, `core`, `mcp`, `platform` и `supervisor` прошли;
-- повторный запуск `python3 -m unittest discover -s experiments/session_safety` — прежние 19 тестов стенда проходят. Это не заменяет отчёты, сделанные на Mac;
-- при `CGO_ENABLED=0` прошли сборка и компиляция тестов для `darwin/arm64`, `darwin/amd64` и `windows/amd64`. Сами тесты на этих ОС не запускались.
+- `go test -race -count=1 ./...` — the `adapters`, `core`, `mcp`, `platform` and `supervisor` packages passed;
+- a rerun of `python3 -m unittest discover -s experiments/session_safety` — the existing 19 test bench tests pass. This does not replace the reports made on a Mac;
+- with `CGO_ENABLED=0`, the build and test compilation passed for `darwin/arm64`, `darwin/amd64` and `windows/amd64`. The tests themselves were not run on those OSes.
 
-На Mac для коммита `47ad026` пользователь подтвердил `go test -race -count=1 ./...` и одно письмо Claude. `recover-failed --confirm actions-may-repeat` сохранил неудачную попытку `m1` и поставил ровно одно новое письмо. Claude ответил `ACK:PAYLOAD-one`; ответ связан с этим новым письмом. `provider_ok=1`, код завершения `0`. Новая попытка одна, автоматических повторов не было. После остановки Messenger и завершения тестового процесса Claude защитный резерв сохранён, попытка остаётся `uncertain`: пустая группа процессов по-прежнему не снимает блокировку и не запускает следующее письмо. Codex и Cursor этим клиентом не запускались. Идентификатор сессии и журналы CLI в репозиторий не вносились.
+On a Mac, for commit `47ad026`, the user confirmed `go test -race -count=1 ./...` and one Claude message. `recover-failed --confirm actions-may-repeat` kept the failed attempt `m1` and queued exactly one new message. Claude replied `ACK:PAYLOAD-one`; the reply is linked to this new message. `provider_ok=1`, exit code `0`. There is one new attempt, with no automatic retries. After Messenger was stopped and the test Claude process finished, the protective reservation was kept and the attempt stays `uncertain`: an empty process group still does not release the lock and does not launch the next message. Codex and Cursor were not run with this client. The session ID and CLI logs were not added to the repository.
 
-Не проверено и не считается готовым: `go test` на Windows, Codex и Cursor на этом Go-клиенте, второе письмо в той же сессии, окно, установщик, автозапуск, сетевой брокер.
+Not verified and not considered ready: `go test` on Windows, Codex and Cursor on this Go client, a second message in the same session, the window, the installer, autostart, the network broker.
 
-На Windows блокировка единственного экземпляра, снимок процессов, новая группа и сигнал группы возвращают явную ошибку неподдержки. На macOS код снимка через `ps` и `sysctl` компилируется, но здесь не выполнялся. Сравнение `Profile` и `profile` на регистронезависимом томе покрыто подстановкой в тесте; сам APFS в этой среде не монтировался. `resolve accept` и `resolve retry` остаются заблокированы, пока снимок не докажет остановку. Пустая группа таким доказательством не является. Смена boot id в чистой функции означает, что процессы прошлой загрузки исчезли; реальной перезагрузки в этой среде не было.
+On Windows, the single-instance lock, the process snapshot, the new group and the group signal return an explicit unsupported error. On macOS, the snapshot code via `ps` and `sysctl` compiles but was not executed here. Comparing `Profile` and `profile` on a case-insensitive volume is covered by a substitution in a test; APFS itself was not mounted in this environment. `resolve accept` and `resolve retry` stay blocked until the snapshot proves stopping. An empty group is not such proof. A boot id change in a pure function means that processes from the previous boot are gone; there was no real reboot in this environment.
 
-Управляющий цикл выполняет одну попытку за раз. Замок в базе при этом отдельный для каждой реальной сессии. Прямой запуск CLI в обход клиента по-прежнему вне гарантии.
+The control loop runs one attempt at a time. The database lock, however, is separate for each real session. Launching the CLI directly, bypassing the client, is still outside the guarantee.
 
-## Проверка на Mac без моделей
+## Verification on a Mac without models
 
-Используйте поддерживаемую стабильную версию Go. Реальные модели, рабочие чаты и GUI-сессии не использовать. Службу и автозапуск не ставить. Если клиент или защитный резерв уже существует, не создавайте другую базу ради обхода; используйте документированное восстановление.
+Use a supported stable Go version. Do not use real models, working chats or GUI sessions. Do not install a service or autostart. If a client or a protective reservation already exists, do not create another database to get around it; use the documented recovery.
 
 ```sh
 git clone https://github.com/kolotiloff/agent-messenger.git
-# Выберите проверенную ветку/ревизию: изменения preview пока находятся в draft PR.
+# Choose a verified branch/revision: the preview changes are still in a draft PR.
 cd agent-messenger
 bash scripts/check.sh
 go build -o /tmp/agent-messenger ./cmd/messenger
 ROOT="$(mktemp -d /tmp/agent-messenger-check.XXXXXX)"
-printf 'Каталог проверки: %s\n' "$ROOT"
+printf 'Check directory: %s\n' "$ROOT"
 /tmp/agent-messenger --root "$ROOT" serve
 ```
 
-Во втором терминале сначала задайте тот же путь: переменные первого терминала туда автоматически не передаются. `--root` стоит перед командой:
+In the second terminal, first set the same path: variables from the first terminal are not passed there automatically. `--root` goes before the command:
 
 ```sh
-ROOT="ПУТЬ_ИЗ_ПЕРВОГО_ТЕРМИНАЛА"
+ROOT="PATH_FROM_FIRST_TERMINAL"
 /tmp/agent-messenger --root "$ROOT" status
 /tmp/agent-messenger --root "$ROOT" pause
 /tmp/agent-messenger --root "$ROOT" status
@@ -131,27 +131,27 @@ ROOT="ПУТЬ_ИЗ_ПЕРВОГО_ТЕРМИНАЛА"
 /tmp/agent-messenger --root "$ROOT" shutdown
 ```
 
-Ожидание: тесты проходят; `status` показывает клиент без обращений к Claude, Codex и Cursor; пауза не удаляет очередь; `shutdown` завершает процесс `serve`, а каталог `ROOT` остаётся. Повторный `serve` в том же каталоге поднимает сохранённое состояние. Второй `serve` при живом первом завершается отказом блокировки.
+Expected: tests pass; `status` shows the client with no calls to Claude, Codex or Cursor; pause does not delete the queue; `shutdown` ends the `serve` process, and the `ROOT` directory stays. Running `serve` again in the same directory brings back the saved state. A second `serve` while the first is alive exits with a lock refusal.
 
-На исходном Go 1.22.2/macOS локально требовались `CGO_ENABLED=1`, `-ldflags=-linkmode=external` и локальная ad-hoc подпись собственного бинарника. Команда компиляции сама по себе не доказывает, что macOS запустит файл; проверяйте `version`. Для архива используйте [сборщик preview](INSTALL.md), который подписывает собственный результат и проверяет его запуск. Команды отключения Gatekeeper или снятия quarantine не требуются и здесь не предлагаются.
+On the original Go 1.22.2/macOS, local runs required `CGO_ENABLED=1`, `-ldflags=-linkmode=external` and a local ad-hoc signature of the self-built binary. The compile command by itself does not prove that macOS will run the file; check `version`. For an archive, use the [preview builder](INSTALL.md), which signs its own output and verifies that it launches. Commands to disable Gatekeeper or remove quarantine are not required and are not suggested here.
 
-Эта проверка не подтверждает resume реальных CLI. `status` при обычном `serve` показывает `cli_launch=not-authorized`: письма остаются в очереди, модель не вызывается.
+This check does not confirm resume of real CLIs. With a normal `serve`, `status` shows `cli_launch=not-authorized`: messages stay in the queue and the model is not called.
 
-## Одна тестовая сессия CLI на Mac
+## One test CLI session on a Mac
 
-Это отдельный уровень. Он тратит токены. Нужна уже существующая свободная тестовая сессия, не рабочий разговор и не чат GUI. Идентификатор, журналы и `summary` в git не класть. Каталог `--root` — новый, вне репозитория и рабочих каталогов.
+This is a separate level. It spends tokens. It needs an already existing free test session, not a working conversation and not a GUI chat. Do not put the ID, logs or `summary` into git. The `--root` directory must be new, outside the repository and working directories.
 
-Обычный `serve` модели не запускает. Для одной пробы к нему добавляется `--allow-model-calls`. После первого письма сессия остаётся занятой: пустая группа процессов не разрешает второе письмо само.
+A normal `serve` does not launch models. For a single probe, `--allow-model-calls` is added to it. After the first message the session stays occupied: an empty process group does not allow a second message by itself.
 
 ```sh
 ROOT="$(mktemp -d /tmp/agent-messenger-cli.XXXXXX)"
 /tmp/agent-messenger --root "$ROOT" serve --allow-model-calls
 ```
 
-Во втором терминале, подставив тот же ROOT, свои пути и тестовый UUID (рабочий каталог должен уже существовать):
+In the second terminal, substituting the same ROOT, your own paths and a test UUID (the working directory must already exist):
 
 ```sh
-ROOT="ПУТЬ_ИЗ_ПЕРВОГО_ТЕРМИНАЛА"
+ROOT="PATH_FROM_FIRST_TERMINAL"
 /tmp/agent-messenger --root "$ROOT" register-session \
   --provider claude \
   --environment "$HOME/.claude" \
@@ -164,14 +164,14 @@ ROOT="ПУТЬ_ИЗ_ПЕРВОГО_ТЕРМИНАЛА"
 /tmp/agent-messenger --root "$ROOT" status
 ```
 
-Для обычного Claude `--environment` остаётся `$HOME/.claude`, но процесс не получает `CLAUDE_CONFIG_DIR`: так сохраняется уже выполненный вход. Заново входить не нужно. Отдельный каталог, не равный стандартному профилю, по-прежнему передаётся переменной. Для Codex стандартный каталог — `$HOME/.codex`. Для Cursor укажите `--workspace` и не запускайте, если есть `~/.cursor/mcp.json` или в окружении задан чужой `CURSOR_CONFIG_DIR`. Успех этой пробы: один запуск, связанный ответ и `provider_ok` равный 1. Одного `held=1` недостаточно. Второе письмо в ту же сессию само не стартует. Потом `shutdown`. Codex и Cursor — отдельные пробы после успешного Claude.
+For regular Claude, `--environment` stays `$HOME/.claude`, but the process does not get `CLAUDE_CONFIG_DIR`: this preserves the existing login. There is no need to sign in again. A separate directory other than the standard profile is still passed via the variable. For Codex, the standard directory is `$HOME/.codex`. For Cursor, specify `--workspace` and do not run if `~/.cursor/mcp.json` exists or someone else's `CURSOR_CONFIG_DIR` is set in the environment. Success for this probe: one launch, a linked reply and `provider_ok` equal to 1. `held=1` alone is not enough. A second message to the same session does not start by itself. Then `shutdown`. Codex and Cursor are separate probes after a successful Claude run.
 
-Если предыдущая попытка осталась в общем резерве, новый `serve` с другим каталогом отказывается. Файл резерва вручную не удалять. Сначала, без запущенного `serve` и без модели:
+If a previous attempt remained in the shared reservation, a new `serve` with a different directory refuses to start. Do not delete the reservation file manually. First, with no `serve` running and no model:
 
 ```sh
 /tmp/agent-messenger recover-failed --confirm actions-may-repeat
 ```
 
-Команда печатает каталог старой попытки и id нового письма. `m1` остаётся неудачной попыткой. Повтор — это новое письмо в том же каталоге. Дальше запускать `serve --allow-model-calls` именно с напечатанным каталогом и не ставить письмо в очередь ещё раз: оно уже стоит. Новый `mktemp` после восстановления не отправляет этот повтор. Если команда отказала, резерв на месте; удаление файла обходит проверку живого процесса.
+The command prints the old attempt's directory and the id of the new message. `m1` stays a failed attempt. The retry is a new message in the same directory. Then run `serve --allow-model-calls` with exactly the printed directory and do not enqueue the message again: it is already queued. A new `mktemp` after recovery does not send this retry. If the command refused, the reservation is in place; deleting the file bypasses the live-process check.
 
-Эта проба на коммите `47ad026` зачтена: связанный ответ `ACK:PAYLOAD-one` на новое письмо, `provider_ok=1`, код завершения `0`, одна новая попытка. Успешный результат резерв не снимает. Следующее письмо той же сессии само не стартует.
+This probe was accepted on commit `47ad026`: a linked reply `ACK:PAYLOAD-one` to the new message, `provider_ok=1`, exit code `0`, one new attempt. A successful result does not release the reservation. The next message in the same session does not start by itself.

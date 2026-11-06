@@ -1,43 +1,43 @@
-# Восстановление Claude после настоящей перезагрузки Mac
+# Claude recovery after a real Mac reboot
 
-Проверен `a337acc20d9e4e8a6c29dfbc19092446ec035421` из PR #4; продуктовый Go-код соответствует `026131ce8392e377c3dc4ed059724c7c6330f3cf`. macOS arm64, Go 1.22.2, внешний линковщик и локальная ad-hoc подпись. Предшествующая проба использовала Claude Code 2.1.318. В этом этапе выполнена настоящая перезагрузка пользователем, штатная команда восстановления без модели и одно новое письмо настоящему Claude.
+Tested `a337acc20d9e4e8a6c29dfbc19092446ec035421` from PR #4; the product Go code matches `026131ce8392e377c3dc4ed059724c7c6330f3cf`. macOS arm64, Go 1.22.2, external linker and local ad-hoc signing. The preceding probe used Claude Code 2.1.318. This stage included a real reboot by the user, the standard recovery command without a model, and one new message to real Claude.
 
-## Подготовленное состояние и сохранность
+## Prepared state and preservation
 
-До перезагрузки отдельная тестовая CLI-сессия уже дала подтверждённый ответ при точном resume: [предыдущий отчёт](2026-11-05-claude-stream-exact-resume-mac.md). После остановки её канал оставался `uncertain`, а резерв содержал заранее записанные идентификаторы загрузки и запуска. Рабочие и GUI-чаты не использовались.
+Before the reboot, a separate test CLI session had already given a confirmed reply on exact resume: [previous report](2026-11-05-claude-stream-exact-resume-mac.md). After it was stopped, its channel remained `uncertain`, and the reservation contained pre-recorded boot and launch identifiers. Working and GUI chats were not used.
 
-После перезагрузки подтверждены тот же отпечаток компьютера и другая нативная `kern.bootsessionuuid`. Значения идентификаторов не публиковались. Общий реестр побайтно совпал с сохранённым контрольным хешем; блокировки supervisor/startup были свободны.
+After the reboot, the same computer fingerprint and a different native `kern.bootsessionuuid` were confirmed. The identifier values were not published. The shared registry matched the saved checksum byte for byte; the supervisor/startup locks were free.
 
-macOS очистила временный каталог тестовой базы и бинарник. Под обеими блокировками база восстановлена из заранее сохранённой приватной копии в точный прежний путь, исключительно при отсутствии каталога. Хеш копии и `PRAGMA integrity_check` проверены, существующие файлы не заменялись. Реестр не восстанавливался и не редактировался вручную. Бинарник пересобран из проверенного исходного кода. Это ручная подготовка теста, а не реализованная функция резервного копирования продукта.
+macOS cleared the temporary directory of the test database and the binary. Under both locks, the database was restored from a previously saved private copy to the exact original path, only because the directory was absent. The copy's hash and `PRAGMA integrity_check` were verified; no existing files were replaced. The registry was not restored or edited by hand. The binary was rebuilt from the verified source code. This is manual test preparation, not an implemented product backup feature.
 
-## Команда восстановления без модели
+## Recovery command without a model
 
-Выполнен `recover-stream` для точных псевдонима и ID прежнего stream-запуска с `--confirm preserve-uncertain`.
+`recover-stream` was run for the exact alias and ID of the previous stream launch with `--confirm preserve-uncertain`.
 
-- Код завершения 0; удалён только резерв выбранного запуска. Четыре прежних резерва остались неизменными.
-- Старый канал архивирован как `uncertain`; записи попыток, писем, ответов и проверок сохранились без изменений. Старый связанный ответ и `provider_ok=1` сохранены.
-- Владелец выбранной сессии освобождён, следующий запуск настроен на `resume`, очередь на паузе, восстановление имеет фазу `done`.
-- Новых писем и попыток команда не создала; модели не запускались.
-- Повтор той же команды и повторный запуск клиента без разрешения моделей не дублировали историю, не изменили реестр и оставили очередь на паузе.
+- Exit code 0; only the reservation of the selected launch was removed. Four earlier reservations remained unchanged.
+- The old channel was archived as `uncertain`; records of attempts, messages, replies and verifications were preserved unchanged. The old linked reply and `provider_ok=1` were preserved.
+- The owner of the selected session was released, the next launch was set to `resume`, the queue is paused, and recovery is in phase `done`.
+- The command created no new messages or attempts; no models were started.
+- Repeating the same command and restarting the client without model permission did not duplicate history, did not change the registry, and left the queue paused.
 
-## Одно новое письмо после восстановления
+## One new message after recovery
 
-В ту же отдельную сессию явно поставлено одно новое контрольное письмо. При паузе попытка не создавалась. После отдельного `resume` получен один связанный ответ с `provider_ok=1`; постоянный канал перешёл в `idle`.
+One new control message was explicitly enqueued to the same separate session. While paused, no attempt was created. After a separate `resume`, one linked reply with `provider_ok=1` was received; the persistent channel went to `idle`.
 
-В аргументах живого процесса подтверждён `--resume` точного прежнего ID, без `--session-id`. Ответ содержал `ACK:REBOOT-one|` и прежний приватный маркер, не включённый в новое письмо. Таким образом проверен сохранённый контекст после настоящего восстановления, а не только запись режима resume в базе.
+The live process arguments confirmed `--resume` with the exact previous ID, without `--session-id`. The reply contained `ACK:REBOOT-one|` and the earlier private marker, which was not included in the new message. This verifies the preserved context after a real recovery, not just that resume mode was recorded in the database.
 
-Созданы ровно одно новое письмо, одна попытка и один ответ. Все прежние письма, ответы, попытки и проверки остались неизменными; автоматических повторов не было. Создано новое поколение stream с новым резервом текущей загрузки.
+Exactly one new message, one attempt and one reply were created. All earlier messages, replies, attempts and verifications remained unchanged; there were no automatic retries. A new stream generation was created with a new reservation for the current boot.
 
-После паузы и `shutdown` клиент запущен без разрешения моделей для проверки сохранённого состояния и снова остановлен. Новый канал сохранил `uncertain`, `exit_observed=0`, `exit_code=null`; успешное завершение процесса не приписывается. Резерв и владелец сохранены.
+After pausing and `shutdown`, the client was started without model permission to check the saved state, and stopped again. The new channel kept `uncertain`, `exit_observed=0`, `exit_code=null`; successful process exit is not claimed. The reservation and the owner were preserved.
 
-Повтор команды восстановления **старого** поколения не затронул новый резерв. Восстановление **нового** поколения в той же загрузке отказало с `same boot`; реестр не изменился. Четыре прежних резерва также сохранены. Финальная приватная копия закрытой базы проверена и сохранена вне Git.
+Repeating the recovery command for the **old** generation did not affect the new reservation. Recovery of the **new** generation in the same boot was refused with `same boot`; the registry did not change. The four earlier reservations were also preserved. The final private copy of the closed database was verified and kept outside Git.
 
-## Итог и ограничения
+## Outcome and limitations
 
-На одном Mac принята цепочка: сохранённый тестовый Claude → настоящая перезагрузка → явное восстановление → точный resume → одно новое связанное письмо без повтора старых.
+On one Mac, the following chain was accepted: saved test Claude → real reboot → explicit recovery → exact resume → one new linked message without retrying old ones.
 
-Продуктовый код в этом этапе не менялся. Полный набор тестов с race detector был выполнен ранее для этого кода; здесь выполнена нативная интеграционная проверка, повтор полного набора не заявляется. Одно пользовательское письмо может включать несколько модельных и инструментальных ходов; это не утверждение об одном API-вызове или измерении биллинга ожидания.
+The product code was not changed in this stage. The full test suite with the race detector was run earlier for this code; here a native integration check was performed, and a repeat of the full suite is not claimed. One user message may include several model and tool turns; this is not a claim about a single API call or a measurement of idle billing.
 
-Это не проверка аварийного обрыва активного ответа: перед перезагрузкой Messenger был остановлен. Восстановление без перезагрузки, старые резервы без метаданных, Codex/Cursor в постоянном клиенте, Windows/Linux в работе, сеть, установщик и интерфейс остаются вне этой приёмки. Защитный резерв после новой остановки ожидаемо остаётся; повседневное безопасное закрытие и повторное открытие сессии без перезагрузки ещё не реализовано.
+This is not a test of a crash interrupting an active reply: Messenger was stopped before the reboot. Recovery without a reboot, old reservations without metadata, Codex/Cursor in the persistent client, Windows/Linux in operation, the network, the installer and the interface remain outside this acceptance. The protective reservation after the new stop remains, as expected; everyday safe closing and reopening of a session without a reboot is not yet implemented.
 
-Приватные ID сессии/запусков, маркер, пути профиля, журналы CLI, базы, резервные копии и идентификаторы компьютера не включены в репозиторий.
+Private session/launch IDs, the marker, profile paths, CLI logs, databases, backups and computer identifiers are not included in the repository.

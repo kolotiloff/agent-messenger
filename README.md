@@ -1,77 +1,77 @@
 # Agent Messenger
 
-Обмен сообщениями между Claude Code, Codex, Cursor Agent CLI и другими агентами. Цель проекта — работа на macOS, Windows и Linux с брокером на выбранном компьютере или VPS и возможностью передавать роль координатора.
+Messaging between Claude Code, Codex, Cursor Agent CLI and other agents. The project's goal is to run on macOS, Windows and Linux, with the broker on a computer or VPS of your choice and the ability to hand off the coordinator role.
 
-**Сейчас это технический preview локального клиента на Mac, а не готовый релиз для четырёх компьютеров.** Продукт написан на Go. Есть очередь SQLite, защищённое владение сессиями, браузерное окно, первая нативная оболочка Agent Messenger.app для Mac и проверенная локальная установка из архива. Исходники продукта находятся в `cmd/messenger` и `internal`, оболочка Mac — в `desktop/macos`. Папка `experiments` содержит только ранние исследовательские стенды.
+**Right now this is a technical preview of the local client on Mac, not a finished release for four computers.** The product is written in Go. It has a SQLite queue, protected session ownership, a browser window, a first native Agent Messenger.app shell for Mac and a verified local install from an archive. The product source lives in `cmd/messenger` and `internal`, the Mac shell in `desktop/macos`. The `experiments` folder contains only early research test rigs.
 
-## Скачать приложение
+## Download the app
 
-**[↓ Скачать для Mac · Apple Silicon](https://github.com/kolotiloff/agent-messenger/releases/download/v0.0.0-preview.19/4584caecdbb280d861d2d06c812c19c08cde385781b3d632ab7f863339242afa.zip)** · [Описание preview.19](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.19) · [Как установить](docs/MAC_APP.md)
+**[↓ Download for Mac · Apple Silicon](https://github.com/kolotiloff/agent-messenger/releases/download/v0.0.0-preview.19/4584caecdbb280d861d2d06c812c19c08cde385781b3d632ab7f863339242afa.zip)** · [preview.19 release notes](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.19) · [How to install](docs/MAC_APP.md)
 
-| Платформа | Доступность |
+| Platform | Availability |
 |---|---|
-| macOS 15+, Apple Silicon | preview.19 — приложение с окном и обновлениями из GitHub |
-| macOS, Intel | Отдельная сборка и проверка готовятся |
-| Windows | Установщик, окно и обновления готовятся; скачивания пока нет |
-| Linux | Пакет, окно и обновления готовятся; скачивания пока нет |
+| macOS 15+, Apple Silicon | preview.19 — app with a window and updates from GitHub |
+| macOS, Intel | A separate build and verification are in preparation |
+| Windows | Installer, window and updates are in preparation; no download yet |
+| Linux | Package, window and updates are in preparation; no download yet |
 
-Проверка подписи обновления уже есть. Apple Developer ID/notarization и первая установка на чистом чужом Mac ещё не приняты; macOS может блокировать скачанный preview. Это ограниченный технический выпуск, не готовность всех платформ. Для запуска готовой Mac-сборки не нужны Python, Node или Go.
+Update signature verification is already in place. Apple Developer ID/notarization and a first install on a clean, unfamiliar Mac have not been accepted yet; macOS may block the downloaded preview. This is a limited technical release, not readiness on all platforms. Running the prebuilt Mac build does not require Python, Node or Go.
 
-## Что уже проверено
+## What has been verified
 
-| Возможность | Текущее подтверждение |
+| Capability | Current evidence |
 |---|---|
-| Постоянный Claude на Mac | Два последовательных письма, связанные ответы, pause/resume, точное продолжение тестовой сессии и явное восстановление после настоящей перезагрузки Mac |
-| Фоновый клиент | Закрытие терминала не теряет очередь и живого владельца. Остановка клиента сама по себе не освобождает CLI-сессию |
-| Локальное окно | Карточки, история, связанные ответы, отправка, пауза и возобновление очереди; проверено на отдельной базе без моделей |
-| Запуск из окна | Создание новой тестовой сессии Claude, отдельное разрешение только для неё, два письма в одном процессе и автоматическое появление ответов; приёмка с имитатором CLI |
-| Восстановление отправок | После записи конверта клиентом полное закрытие окна и сбой клиента сохраняют адрес, текст и ID. Повтор транспорта не создаёт второе задание |
-| Установка и обновление | Нативный Mac arm64 preview-архив, проверка SHA-256, установка в пользовательский каталог и обновление остановленного клиента с сохранением очереди и старого бинарника |
-| Обновление приложения из окна | Подписанный канал Sparkle и получение пакетов из публичного GitHub Releases. Уже работающий фоновый клиент остаётся на своей версии; границы и приёмка описаны в docs/UPDATES.md |
-| Защита | Повреждённый/пустой/null-реестр и неоднозначный каталог не разрешают обход блокировки. Неизвестный результат не превращается в успех |
+| Persistent Claude on Mac | Two sequential messages, linked replies, pause/resume, exact continuation of a test session, and explicit recovery after a real Mac reboot |
+| Background client | Closing the terminal loses neither the queue nor the live owner. Stopping the client does not by itself release the CLI session |
+| Local window | Cards, history, linked replies, sending, pausing and resuming the queue; verified on a separate database without models |
+| Launching from the window | Creating a new Claude test session, a separate permission for that session only, two messages in one process, and replies appearing automatically; acceptance with a fake CLI |
+| Send recovery | Once the client has written the envelope, fully closing the window and a client crash preserve the address, text and ID. A transport retry does not create a second job |
+| Install and update | Native Mac arm64 preview archive, SHA-256 verification, install into a user directory, and updating a stopped client while preserving the queue and the old binary |
+| Updating the app from the window | Signed Sparkle channel and package downloads from public GitHub Releases. An already running background client stays on its version; limits and acceptance are described in docs/UPDATES.md |
+| Protection | A corrupted/empty/null registry or an ambiguous directory does not allow bypassing the lock. An unknown result is never turned into success |
 
-Постоянные адаптеры Codex/Cursor, полноценная работа на Windows/Linux, сетевой брокер, смена координатора, приёмка нативной оболочки на других Mac и подписанное распространение ещё не завершены. Ранние опыты отдельных CLI не заменяют их приёмку в текущем продукте. Открыт вопрос безопасного завершения владельца CLI в той же загрузке Mac; установка не обходит оставшиеся резервы.
+Persistent Codex/Cursor adapters, full Windows/Linux support, a network broker, coordinator handoff, acceptance of the native shell on other Macs and signed distribution are not finished yet. Early experiments with individual CLIs do not replace their acceptance in the current product. Safely terminating a CLI owner within the same Mac boot is still an open question; installing does not bypass remaining reservations.
 
-## Начало работы
+## Getting started
 
-Для запуска двойным щелчком используйте [Agent Messenger.app](docs/MAC_APP.md): собственное окно macOS и встроенный клиент, без отдельного браузера и терминала.
+To launch with a double click, use [Agent Messenger.app](docs/MAC_APP.md): its own macOS window and a built-in client, with no separate browser or terminal.
 
-В preview.19: **Агенты → Claude Code → Настроить → Создать тестовую сессию**, затем **Сессии → Запустить тестовую сессию**. После явного разрешения можно писать в переписке; ответы расходуют токены. Старые рабочие чаты автоматически не подключаются. Нужен фоновый клиент версии 19; [ограничения запуска и восстановления](docs/SCOPED_LAUNCH.md).
+In preview.19: **Агенты → Claude Code → Настроить → Создать тестовую сессию** ("Agents → Claude Code → Configure → Create test session"), then **Сессии → Запустить тестовую сессию** ("Sessions → Launch test session"). After you grant explicit permission, you can write in the conversation; replies consume tokens. Existing work chats are not connected automatically. A version 19 background client is required; see [launch and recovery limitations](docs/SCOPED_LAUNCH.md).
 
-[Установка технического preview на Mac](docs/INSTALL.md) описывает проверку архива, команду `version`, установку и ограничения обновления. В готовом бинарнике Python и Node не нужны. Публичный preview содержит нативное Mac-приложение. Приёмка Gatekeeper на чистом чужом Mac остаётся отдельным этапом; локальная ad-hoc подпись не заменяет Developer ID/notarization.
+[Installing the technical preview on Mac](docs/INSTALL.md) covers archive verification, the `version` command, installation and update limitations. The prebuilt binary does not need Python or Node. The public preview contains the native Mac app. Gatekeeper acceptance on a clean, unfamiliar Mac remains a separate stage; local ad-hoc signing does not replace Developer ID/notarization.
 
-Для сборки из исходников и проверок без моделей используйте [инструкцию локального клиента](docs/CLIENT.md) и [те же сценарии, что в CI](docs/CI.md). Для первого опыта нужны отдельные тестовые данные, не рабочие/GUI-чаты. Если клиент или защитный резерв уже существует, не удаляйте его ради проверки.
+To build from source and run checks without models, use the [local client guide](docs/CLIENT.md) and [the same scenarios as in CI](docs/CI.md). A first trial needs separate test data, not work/GUI chats. If a client or a protective reservation already exists, do not delete it for the sake of testing.
 
-Окно подключается к уже работающему клиенту с тем же каталогом данных:
+The window connects to an already running client that uses the same data directory:
 
 ```sh
-messenger --root КАТАЛОГ_ДАННЫХ ui
+messenger --root DATA_DIR ui
 ```
 
-Откройте выданную приватную ссылку на этом Mac. Запуск окна, просмотр и ожидание не вызывают модель. Новое содержательное письмо может вызвать её, только если клиенту явно разрешён запуск и обработка не на паузе. Подробнее — [локальный интерфейс](docs/LOCAL_UI.md).
+Open the private link it prints on this Mac. Opening the window, browsing and waiting do not call a model. A new substantive message can call one only if the client has been explicitly allowed to launch and processing is not paused. More in [local interface](docs/LOCAL_UI.md).
 
-## Документация
+## Documentation
 
-- [Актуальный план до релиза и условия готовности](docs/RELEASE_PLAN.md)
-- [Обновления из окна: возможности и ограничения](docs/UPDATES.md)
-- [Установка, обновление и сборка preview](docs/INSTALL.md)
-- [Автоматические проверки и их границы](docs/CI.md)
-- [Локальное окно, сообщения и восстановление отправок](docs/LOCAL_UI.md)
-- [Настройка CLI и создание тестовой сессии из окна](docs/SESSION_SETUP.md)
-- [Фоновый запуск и повторное подключение](docs/BACKGROUND.md)
-- [Пассивная диагностика](docs/DIAGNOSTICS.md) и [явная проверка CLI](docs/CLI_CHECK.md)
-- [Постоянный Claude: очередь и ограничения восстановления](docs/CLAUDE_STREAM.md)
-- [Архитектура и протокол](docs/PLAN.md), [MVP](docs/MVP.md), [проверяемые гипотезы](docs/VALIDATION.md)
-- [Требования к приложению](docs/APP.md), [сохранённое оформление v1](design/README.md), [размещение брокера](docs/DEPLOYMENT.md)
+- [Current plan to release and readiness criteria](docs/RELEASE_PLAN.md)
+- [Updates from the window: capabilities and limitations](docs/UPDATES.md)
+- [Installing, updating and building the preview](docs/INSTALL.md)
+- [Automated checks and their limits](docs/CI.md)
+- [Local window, messages and send recovery](docs/LOCAL_UI.md)
+- [CLI setup and creating a test session from the window](docs/SESSION_SETUP.md)
+- [Background launch and reconnecting](docs/BACKGROUND.md)
+- [Passive diagnostics](docs/DIAGNOSTICS.md) and [explicit CLI check](docs/CLI_CHECK.md)
+- [Persistent Claude: queue and recovery limitations](docs/CLAUDE_STREAM.md)
+- [Architecture and protocol](docs/PLAN.md), [MVP](docs/MVP.md), [testable hypotheses](docs/VALIDATION.md)
+- [App requirements](docs/APP.md), [saved v1 design](design/README.md), [broker hosting](docs/DEPLOYMENT.md)
 
-- [Agentgram: сравнение подходов и идеи, включённые в план](docs/AGENTGRAM_REVIEW.md)
+- [Agentgram: comparison of approaches and ideas adopted into the plan](docs/AGENTGRAM_REVIEW.md)
 
-## Границы проекта
+## Project scope
 
-Messenger доставляет сообщения и управляет их обработкой. Задачи и документацию проекта ведут сами агенты. Координатор не привязан к Claude или другому одному провайдеру; передача этой роли запланирована отдельно от роли брокера.
+Messenger delivers messages and manages their processing. The agents themselves maintain the project's tasks and documentation. The coordinator is not tied to Claude or any other single provider; handing off this role is planned separately from the broker role.
 
-Этот GitHub-репозиторий предназначен для Agent Messenger. Ключи, локальные профили, очереди, идентификаторы реальных CLI-сессий и их история сюда не загружаются.
+This GitHub repository is for Agent Messenger. Keys, local profiles, queues, real CLI session IDs and their history are never uploaded here.
 
-Исследовательский [стенд Python](experiments/session_safety/README.md) и [незавершённый черновик](experiments/python_client_draft/README.md) сохраняются как источники сценариев. Они не являются продуктом и не означают переписывание Go обратно на Python. Исторические результаты находятся в [отчётах](docs/reports/); их дата и проверенный коммит имеют значение.
+The research [Python test rig](experiments/session_safety/README.md) and the [unfinished draft](experiments/python_client_draft/README.md) are kept as sources of scenarios. They are not the product and do not mean rewriting Go back into Python. Historical results are in the [reports](docs/reports/); their date and verified commit matter.
 
-Telegram-зеркало, дополнительные адаптеры и удобства идут после основной доставки и защиты сессий. Следующие обязательные шаги перечислены в [плане выпуска](docs/RELEASE_PLAN.md); зелёная сборка сама по себе не подтверждает готовность релиза.
+A Telegram mirror, additional adapters and conveniences come after core delivery and session protection. The next mandatory steps are listed in the [release plan](docs/RELEASE_PLAN.md); a green build by itself does not confirm release readiness.

@@ -1,21 +1,21 @@
-# Базовая проверка продолжения Cursor CLI на Mac
+# Basic check of Cursor CLI resume on Mac
 
-Статус: сохранение и продолжение тестового разговора подтверждены.
+Status: saving and resuming a test conversation confirmed.
 
-Создан отдельный пустой CLI-разговор. Первый процесс получил случайный маркер и ответил READY. После завершения процесса второй запуск с тем же ID через `--resume` точно восстановил маркер, отсутствовавший во втором запросе.
+A separate empty CLI conversation was created. The first process received a random marker and replied READY. After the process exited, a second launch with the same ID via `--resume` exactly recovered the marker, which was absent from the second request.
 
-- Оба запуска завершились успешно.
-- Идентификатор разговора сохранился.
-- В потоке событий не было вызовов инструментов.
-- Использованы print/stream-json, режим ask и включённая изоляция выполнения.
-- Рабочие чаты и файлы проекта не использовались.
+- Both launches completed successfully.
+- The conversation ID was preserved.
+- There were no tool calls in the event stream.
+- print/stream-json, ask mode and enabled execution sandboxing were used.
+- Working chats and project files were not used.
 
-## Наблюдение при создании разговора
+## Observation when creating the conversation
 
-Первая попытка `create-chat` с захватом вывода не завершилась за 30 секунд и была остановлена по таймауту. Повторная попытка в терминальном режиме вернула ID и завершилась успешно. Оба последующих модельных запуска с захватом вывода прошли успешно. Причина первой задержки не установлена; делать вывод, что create-chat обязательно требует терминал, по этому опыту нельзя.
+The first `create-chat` attempt with output capture did not finish within 30 seconds and was stopped by timeout. A repeat attempt in terminal mode returned an ID and completed successfully. Both subsequent model launches with output capture succeeded. The cause of the first delay was not established; this experiment does not support concluding that create-chat necessarily requires a terminal.
 
-## Границы проверки
+## Check boundaries
 
-Это предварительная проверка механизма Cursor CLI на Mac. H2 для Windows остаётся непроверенной. Продолжение GUI-чата, MCP, одновременные запуски, неправильный ID, сбои, перезапуск будущего клиента Messenger и длительное ожидание ещё не проверялись. Экономия Messenger не измерялась.
+This is a preliminary check of the Cursor CLI mechanism on Mac. H2 for Windows remains unverified. Resuming a GUI chat, MCP, concurrent launches, a wrong ID, failures, restarting the future Messenger client and long waits have not been verified yet. Messenger's savings were not measured.
 
-Данные аккаунта, идентификатор разговора, контрольная фраза и показатели использования в отчёт не включены.
+Account data, the conversation ID, the control phrase and usage metrics are not included in the report.

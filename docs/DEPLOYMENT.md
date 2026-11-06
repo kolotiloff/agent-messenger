@@ -1,111 +1,111 @@
-# Размещение брокера: VPS или свой компьютер
+# Broker placement: VPS or your own computer
 
-Согласованный принцип, 5 ноября 2026 года: **один компонент брокера и один протокол независимо от места запуска**. VPS необязателен. Это требования к реализации; переключатель и сервер пока не реализованы.
+Agreed principle, November 5, 2026: **one broker component and one protocol regardless of where it runs**. A VPS is optional. These are implementation requirements; the switch and the server are not implemented yet.
 
-## Режимы приложения
+## Application modes
 
-| Выбор | Что происходит |
+| Choice | What happens |
 |---|---|
-| Подключиться к серверу | Пользователь задаёт адрес брокера и регистрирует устройство. Брокер может находиться на VPS или другом компьютере. |
-| Запустить сервер на этом компьютере | Приложение запускает локальный брокер как отдельную фоновую службу и подключает свой клиент к нему. На той же машине могут работать агенты. |
+| Connect to a server | The user enters the broker address and registers the device. The broker can be on a VPS or another computer. |
+| Run a server on this computer | The application starts a local broker as a separate background service and connects its own client to it. Agents can run on the same machine. |
 
-Для первого запуска на одном Mac используется локальный брокер, доступный только этой машине. Доступ другим устройствам включается явно. Клиентский режим не запускает запасной брокер при потере связи.
+For the first launch on a single Mac, a local broker reachable only from that machine is used. Access for other devices is enabled explicitly. Client mode does not start a fallback broker when the connection is lost.
 
-На VPS тот же брокер устанавливается отдельным серверным пакетом без GUI и без Claude/Codex/Cursor. Настройки, формат базы, API и проверки совместимости общие; различаются упаковка и интеграция со службами ОС.
+On a VPS the same broker is installed as a separate server package with no GUI and without Claude/Codex/Cursor. Settings, database format, API and compatibility checks are shared; packaging and OS service integration differ.
 
-## Настройки и первый запуск
+## Settings and first launch
 
-Для подключения: адрес сервера, имя устройства, одноразовое приглашение или процедура одобрения устройства, затем «Проверить соединение». После регистрации сохраняется отдельный отзываемый ключ устройства в локальном защищённом хранилище.
+To connect: server address, device name, a one-time invitation or a device approval procedure, then "Check connection". After registration, a separate revocable device key is stored in local secure storage.
 
-Это доступ к Messenger, а не пароль root/SSH от VPS. Обычному клиенту не нужны административные полномочия сервера. Учётные данные агентов не отправляются брокеру. Для установки на новый VPS предусмотрен отдельный мастер с временным SSH-доступом; после установки клиент использует ограниченный ключ Messenger.
+This is access to Messenger, not the root/SSH password of the VPS. A regular client does not need administrative privileges on the server. Agent credentials are not sent to the broker. Installing on a new VPS has a separate wizard with temporary SSH access; after installation the client uses a restricted Messenger key.
 
-Для размещения на компьютере: «Включить сервер», автозапуск по выбору, место хранения данных, адрес/порт и область доступа. По умолчанию доступ локальный; LAN/VPN/интернет включаются явно. После настройки приложение показывает адрес подключения и создаёт короткоживущие одноразовые приглашения. Приглашения и ключи не показываются в обычном журнале переписки.
+To host on your computer: "Enable server", optional autostart, data storage location, address/port and access scope. Access is local by default; LAN/VPN/internet are enabled explicitly. After setup, the application shows the connection address and creates short-lived one-time invitations. Invitations and keys are not shown in the regular message log.
 
-В интерфейсе отдельно видны:
-- работает ли локальная служба брокера;
-- к какому брокеру подключён клиент и доступен ли он;
-- адрес для других устройств и результат проверки сетевой доступности;
-- состояние локального клиента и агентов;
-- расположение базы, резервных копий и последние ошибки службы.
+The interface shows separately:
+- whether the local broker service is running;
+- which broker the client is connected to and whether it is reachable;
+- the address for other devices and the result of the network reachability check;
+- the state of the local client and agents;
+- the location of the database and backups, and the latest service errors.
 
-«Брокер запущен» не означает, что он доступен с другого компьютера. Для связи через интернет может потребоваться VPN или настройка сети/маршрутизатора. Программа не открывает порты и не обещает обойти NAT одним переключателем. Удалённые подключения проходят проверку TLS и авторизацию; режим размещения на домашнем ПК не отменяет эти требования.
+"Broker running" does not mean it is reachable from another computer. Connecting over the internet may require a VPN or network/router configuration. The program does not open ports and does not promise to get around NAT with a single switch. Remote connections go through TLS verification and authorization; hosting on a home PC does not waive these requirements.
 
-## Мастер «Настроить VPS» из приложения
+## VPS setup wizard in the app
 
-Дополнение от 5 ноября 2026 года: приложение должно уметь автоматически устанавливать брокер на поддерживаемый VPS по отдельному действию пользователя. Это будущая функция сетевого этапа, а не уже работающий установщик. Подключение к готовому брокеру остаётся отдельным простым сценарием.
+Addendum from November 5, 2026: the application must be able to automatically install the broker on a supported VPS as a separate user action. This is a future feature of the network stage, not an installer that already works. Connecting to an existing broker remains a separate simple scenario.
 
-### Сценарий пользователя
+### User flow
 
-1. Выбрать «VPS → Установить брокер».
-2. Указать IP/имя сервера, SSH-порт и пользователя. Выбрать существующий SSH-ключ/ssh-agent либо пароль, если сервер допускает этот способ. Для защищённого ключа используется штатный запрос кодовой фразы.
-3. Проверить идентичность сервера: при первом соединении показать отпечаток SSH-ключа и способ сверки через панель провайдера/другой доверенный канал. Не отключать проверку ключа; неожиданная смена ключа останавливает установку.
-4. Выполнить диагностику: поддерживаемые ОС/архитектура, свободное место, полномочия установки, доступные порты, прежняя установка и сетевой доступ. Показать конкретный перечень изменений и кнопку «Установить». Если нужны административные права, мастер объясняет, для чего, и использует предусмотренный механизм повышения прав.
-5. Передать проверенный пакет, создать отдельную служебную учётную запись и каталог данных, установить брокер и службу автозапуска, настроить выбранный защищённый адрес. Брокер работает без постоянных полномочий root.
-6. Проверить службу, HTTPS/доверие сертификату, доступность именно из приложения и регистрацию устройства. Выполнить техническое тестовое сообщение с подтверждением хранения без запуска моделей.
-7. Сохранить адрес, broker_id и ограниченный ключ устройства. Показать «Подключено» только после успешных проверок.
+1. Choose "VPS → Install broker".
+2. Enter the server IP/name, SSH port and user. Choose an existing SSH key/ssh-agent, or a password if the server allows that method. For a protected key, the standard passphrase prompt is used.
+3. Verify the server identity: on the first connection, show the SSH key fingerprint and how to check it via the provider's panel or another trusted channel. Do not disable key checking; an unexpected key change stops the installation.
+4. Run diagnostics: supported OS/architecture, free space, installation privileges, available ports, existing installation and network access. Show a concrete list of changes and an "Install" button. If administrative rights are needed, the wizard explains why and uses the provided privilege escalation mechanism.
+5. Transfer the verified package, create a dedicated service account and data directory, install the broker and the autostart service, configure the selected secure address. The broker runs without permanent root privileges.
+6. Check the service, HTTPS/certificate trust, reachability from the application specifically, and device registration. Send a technical test message with storage confirmation, without running models.
+7. Save the address, broker_id and the restricted device key. Show "Connected" only after the checks succeed.
 
-Для публичного адреса мастер предлагает домен и автоматическое обслуживание сертификата. Режим IP/VPN должен иметь отдельный проверенный способ TLS/доверия; простое отключение проверки сертификатов не допускается. Внешний firewall провайдера может требовать отдельного действия в его панели: мастер показывает это как незавершённый шаг, а не обещает исправить его по одному SSH-доступу.
+For a public address, the wizard offers a domain and automatic certificate management. IP/VPN mode must have a separate verified TLS/trust method; simply disabling certificate verification is not allowed. The provider's external firewall may require a separate action in its panel: the wizard shows this as an unfinished step instead of promising to fix it with SSH access alone.
 
-### Секреты и выполнение
+### Secrets and execution
 
-SSH-доступ используется локальным установщиком только для установки и выбранных административных операций. Приватный ключ не копируется на VPS; пароль и кодовая фраза по умолчанию не сохраняются. Сохранение для последующего обслуживания возможно только по выбору пользователя через защищённое хранилище ОС. Agent forwarding не требуется.
+SSH access is used by the local installer only for installation and selected administrative operations. The private key is not copied to the VPS; the password and passphrase are not saved by default. Saving them for later maintenance is possible only by user choice, via the OS secure storage. Agent forwarding is not required.
 
-Доступ к установленному Messenger использует отдельный отзываемый ключ устройства, без SSH/root-полномочий. Секреты не попадают в запросы к моделям, команды в журнале, телеметрию или репозиторий. Установка выполняется обычным кодом по версионированным сценариям, без участия модели.
+Access to the installed Messenger uses a separate revocable device key, without SSH/root privileges. Secrets do not end up in model requests, logged commands, telemetry or the repository. Installation is performed by ordinary code using versioned scripts, without a model involved.
 
-Пакет фиксированной версии проверяется на целостность и происхождение. Для закрытого GitHub-репозитория приложение может скачать пакет локально и передать по SSH: токен GitHub не требуется хранить на VPS.
+A fixed-version package is checked for integrity and provenance. For a private GitHub repository, the application can download the package locally and transfer it over SSH: a GitHub token does not need to be stored on the VPS.
 
-### Ошибки, повтор установки и поддерживаемый объём
+### Errors, re-running the installation, and supported scope
 
-Видимые состояния: «Проверка доступа», «Нужно действие», «Установка», «Настройка защищённого соединения», «Проверка брокера», «Подключено», «Ошибка». Отдельно видны доступность SSH и работоспособность Messenger.
+Visible states: "Checking access", "Action needed", "Installing", "Setting up secure connection", "Checking broker", "Connected", "Error". SSH reachability and Messenger health are shown separately.
 
-Каждый шаг сохраняет обезличенный результат. После разрыва мастер заново проверяет фактическое состояние сервера перед продолжением. Повтор не сбрасывает базу, ключи и broker_id и не запускает второй экземпляр. Обновление и удаление отделены от первой установки; удаление данных требует отдельного явного выбора.
+Each step saves an anonymized result. After a disconnect, the wizard re-checks the actual server state before continuing. A re-run does not reset the database, keys or broker_id and does not start a second instance. Update and removal are separate from the first installation; deleting data requires a separate explicit choice.
 
-Первая версия ограничена опубликованным списком поддерживаемых Linux-систем и архитектур, который будет выбран и проверен при реализации. Неподдерживаемая ОС, занятый порт или чужая конфигурация дают понятный отказ/ручной шаг; мастер не перезаписывает существующие сайты и службы и не меняет SSH-настройки сервера автоматически.
+The first version is limited to a published list of supported Linux systems and architectures, which will be chosen and verified during implementation. An unsupported OS, a busy port or someone else's configuration produce a clear refusal/manual step; the wizard does not overwrite existing sites and services and does not change the server's SSH settings automatically.
 
-Приёмка: чистая установка, повторный запуск мастера, потеря SSH на промежуточном шаге, неверные полномочия, смена SSH host key, занятый порт, недоступность с клиента, неверный TLS и сохранение существующей очереди. Автоматизация считается готовой только после этих опытов.
+Acceptance: clean installation, re-running the wizard, losing SSH at an intermediate step, wrong privileges, SSH host key change, busy port, unreachable from the client, invalid TLS, and preservation of the existing queue. The automation is considered ready only after these experiments.
 
-Основания для SSH-проверок и работы с ключами: [OpenSSH host key checking](https://man.openbsd.org/ssh_config#StrictHostKeyChecking), [ssh-agent](https://man.openbsd.org/ssh-agent).
+References for SSH checks and key handling: [OpenSSH host key checking](https://man.openbsd.org/ssh_config#StrictHostKeyChecking), [ssh-agent](https://man.openbsd.org/ssh-agent).
 
-## Архитектурный контракт
+## Architecture contract
 
-Брокер, локальный клиент и UI — отдельные компоненты. UI управляет службой через ограниченный локальный интерфейс. Агентские процессы запускает только локальный клиент. Закрытие окна не должно незаметно останавливать брокер и терять очередь; остановка службы и выход из приложения имеют явные состояния.
+The broker, the local client and the UI are separate components. The UI controls the service through a restricted local interface. Only the local client launches agent processes. Closing the window must not silently stop the broker or lose the queue; stopping the service and quitting the application have explicit states.
 
-Конфигурация различает:
-- настройку запуска локального брокера;
-- адрес подключения клиента;
-- устойчивый `broker_id`, проект/пространство сообщений и версию протокола;
-- идентификатор устройства и ссылку на его локальный ключ;
-- привязки локальных CLI-сессий.
+The configuration distinguishes:
+- the local broker launch settings;
+- the client connection address;
+- a stable `broker_id`, project/message space and protocol version;
+- the device ID and a reference to its local key;
+- bindings of local CLI sessions.
 
-Адрес можно изменить, но сам адрес не является идентичностью брокера. Очереди, курсоры доставки и ключи устранения дублей привязаны к `broker_id` и проекту. Подключение к другому брокеру не должно молча отправлять ему старую очередь. При несовпадении идентичности или версии клиент останавливает обработку и показывает причину.
+The address can change, but the address itself is not the broker's identity. Queues, delivery cursors and deduplication keys are bound to the `broker_id` and the project. Connecting to a different broker must not silently send it the old queue. On an identity or version mismatch, the client stops processing and shows the reason.
 
-Одинаковые тесты доставки, ACK, дублей, авторизации и восстановления выполняются для брокера на компьютере и VPS. Данные хранятся вне каталога приложения, репозитория исходного кода. Виртуальный сервер не требует GPU: брокер не выполняет модели.
+The same tests for delivery, ACK, duplicates, authorization and recovery are run for a broker on a computer and on a VPS. Data is stored outside the application directory and the source repository. The virtual server does not need a GPU: the broker does not run models.
 
-## Роли и доступность
+## Roles and availability
 
-Для одного пространства сообщений в MVP активен один брокер. Серверная роль компьютера не связана с ролью агента-координатора. Переназначить координатора можно без переноса базы брокера.
+In the MVP, one broker is active per message space. A computer's server role is unrelated to the coordinator agent role. The coordinator can be reassigned without moving the broker database.
 
-При выключении машины с брокером или потере сети доставка через него приостанавливается. Клиенты сохраняют свои очереди, показывают offline и не создают второго владельца CLI-сессии. Уже начатая обработка следует существующим правилам локального сохранения результата. Потеря диска требует восстановления резервной копии; локальные очереди не заменяют резервное копирование всей истории.
+When the broker machine is turned off or the network is lost, delivery through it pauses. Clients keep their queues, show offline and do not create a second owner of a CLI session. Processing that has already started follows the existing rules for saving the result locally. Disk loss requires restoring a backup; local queues do not replace backing up the full history.
 
-Самопроизвольное избрание другого компьютера брокером, автоматическая репликация и кластер не входят в первый MVP.
+Spontaneous election of another computer as broker, automatic replication and clustering are not part of the first MVP.
 
-## Перенос между своим компьютером и VPS
+## Moving between your own computer and a VPS
 
-Архитектура должна позволять перенос без смены протокола, но это управляемая процедура, а не переключение двух одновременно активных копий.
+The architecture must allow moving without changing the protocol, but this is a managed procedure, not switching between two simultaneously active copies.
 
-1. Приостановить выдачу новых заданий, сверить текущие исполнения и исходящие результаты.
-2. Остановить старый брокер и сделать согласованную резервную копию данных/метаданных.
-3. Восстановить на новом узле, проверить совместимость, целостность, идентичность и права; настроить защищённое соединение.
-4. Убедиться, что старая копия не возобновит обслуживание. Переключить адреса клиентов; при необходимости безопасно перевыпустить ключи.
-5. Сверить очередь, курсоры и устранение дублей, затем возобновить работу.
+1. Pause handing out new jobs, reconcile current executions and outgoing results.
+2. Stop the old broker and take a consistent backup of data/metadata.
+3. Restore on the new node, check compatibility, integrity, identity and permissions; configure the secure connection.
+4. Make sure the old copy will not resume serving. Switch client addresses; reissue keys safely if needed.
+5. Reconcile the queue, cursors and deduplication, then resume work.
 
-История CLI остаётся на компьютерах агентов. Детальная утилита переноса и её приёмка — отдельная задача; первая версия не обещает перенос без остановки.
+CLI history stays on the agent computers. A detailed migration utility and its acceptance are a separate task; the first version does not promise migration without downtime.
 
-## Этапы приёмки
+## Acceptance stages
 
-- Локальная версия на Mac: тот же брокер на локальном адресе и клиент, без внешнего VPS.
-- Сетевой этап: один компьютер в роли брокера, другой как клиент; проверка доступности, offline, повторов и отзыва устройства.
-- Дополнительная приёмка размещения: тот же серверный пакет на VPS, автоматическая установка через мастер по SSH и подключение по адресу без изменений адаптеров. Проверяется также ручная установка.
-- Проверка, что смена адреса на чужой брокер не переносит очередь, и что старый/новый узлы не обслуживают одну историю одновременно.
+- Local version on Mac: the same broker on a local address plus the client, without an external VPS.
+- Network stage: one computer as the broker, another as a client; checks for reachability, offline, retries and device revocation.
+- Additional hosting acceptance: the same server package on a VPS, automatic installation through the SSH wizard, and connecting by address without changing the adapters. Manual installation is also checked.
+- Check that changing the address to someone else's broker does not move the queue, and that the old and new nodes do not serve the same history at the same time.
 
-Ближайшая работа остаётся прежней: единый локальный клиент и восстановление. При этом сразу отделяем брокер от клиента и не зашиваем обязательность VPS в конфигурацию или UI.
+The immediate work stays the same: a single local client and recovery. At the same time, we separate the broker from the client right away and do not hard-code a VPS requirement into the configuration or UI.

@@ -1,30 +1,30 @@
-# Постоянный Claude: ограниченная проба на Go
+# Persistent Claude: a limited Go probe
 
-Стенд проверяет два последовательных письма в одном процессе Claude. Он не меняет `messenger serve` и исключён из обычной сборки тегом `streamprobe`.
+This test rig verifies two sequential messages in a single Claude process. It does not change `messenger serve` and is excluded from the regular build by the `streamprobe` tag.
 
-Основа — `09d2e3d`. Проверяется новая отдельная тестовая сессия, не продолжение рабочего или GUI-чата. UUID создаётся самим стендом; передать существующий ID нельзя. В обычном профиле Claude сохраняется существующая авторизация.
+Base: `09d2e3d`. It verifies a new, separate test session, not a continuation of a work or GUI chat. The UUID is created by the rig itself; passing an existing ID is not possible. The existing authorization in the regular Claude profile is kept.
 
-## Что проверяется
+## What is verified
 
-- Один запуск CLI с `--input-format stream-json`, два входных сообщения, один и тот же PID, время старта, boot ID и ID сессии.
-- На каждое письмо: `read_current`, затем `reply`; один успешный provider result и соответствующий ответ.
-- Второе письмо отправляется только после проверки первого ответа и 20 секунд ожидания. После второго ответа — ещё 20 секунд ожидания.
-- В ожидании стенд ничего не пишет в stdin CLI и проверяет отсутствие новых событий модели. Это ограниченное наблюдение протокола, не измерение биллинга или универсальная гарантия отсутствия фоновых запросов провайдера.
-- Claude в проверенной версии присылает `system/init` перед каждым ходом. Повторный init разрешён только для прежнего ID и после проверки того же процесса.
-- Закрытие stdin завершает пробу. Выход процесса не снимает защитный резерв и не считается доказательством остановки всех его потомков.
+- One CLI launch with `--input-format stream-json`, two input messages, the same PID, start time, boot ID and session ID.
+- For each message: `read_current`, then `reply`; one successful provider result and the corresponding reply.
+- The second message is sent only after the first reply has been checked and a 20-second wait. After the second reply there is another 20-second wait.
+- While waiting, the rig writes nothing to the CLI's stdin and checks that there are no new model events. This is a limited protocol observation, not a billing measurement or a universal guarantee that the provider makes no background requests.
+- In the verified version, Claude sends `system/init` before every turn. A repeated init is allowed only for the same ID and after checking that it is the same process.
+- Closing stdin ends the probe. Process exit does not release the protective reservation and is not taken as proof that all its descendants have stopped.
 
-## Запуск
+## Running
 
-Тесты не вызывают модели:
+The tests do not call models:
 
 ```sh
 go test -race -tags streamprobe -count=1 ./...
 go build -tags streamprobe -o /tmp/agent-messenger-stream-probe ./experiments/claude_stream
 ```
 
-На проверенном Mac с временным Go 1.22.2 требовались `-ldflags=-linkmode=external` и локальная ad-hoc подпись собранного файла. Это особенность использованной среды сборки, не изменение системных настроек безопасности.
+On the verified Mac with a temporary Go 1.22.2, `-ldflags=-linkmode=external` and a local ad-hoc signature of the built file were required. This is a quirk of the build environment used, not a change to system security settings.
 
-Реальная проба требует явного разрешения и может потратить токены на два письма:
+A real probe requires explicit permission and may spend tokens on two messages:
 
 ```sh
 /tmp/agent-messenger-stream-probe \
@@ -34,29 +34,29 @@ go build -tags streamprobe -o /tmp/agent-messenger-stream-probe ./experiments/cl
   --allow-model-calls
 ```
 
-`serve` должен быть остановлен. Если есть старый глобальный резерв, используется тот же каталог данных. Стенд не удаляет старые резервы и берёт общую блокировку пользователя. Новая сессия также получает durable-резерв до запуска CLI и блокировку владельца в продуктовой SQLite. Обычный `serve` не получает путь CLI для этой экспериментальной сессии. Прямые запуски CLI в обход клиента остаются вне гарантии.
+`serve` must be stopped. If there is an old global reservation, the same data directory is used. The rig does not delete old reservations and takes the shared per-user lock. The new session also gets a durable reservation before the CLI is launched, and an owner lock in the product SQLite. The regular `serve` does not get the CLI path for this experimental session. Direct CLI launches that bypass the client remain outside the guarantee.
 
-## Данные и ограничения
+## Data and limitations
 
-В приватном каталоге сохраняются `binding.json`, наблюдение процесса, `turns.json`, события провайдера, stdout/stderr и итоговый `result.json`. Эти файлы содержат ID сессии и квитанции доступа; их нельзя коммитить. В GitHub попадают только исходники и обезличенный отчёт.
+The private directory stores `binding.json`, the process observation, `turns.json`, provider events, stdout/stderr and the final `result.json`. These files contain the session ID and access receipts; they must not be committed. Only the source code and an anonymized report go to GitHub.
 
-`turns.json` — отдельный экспериментальный журнал двух писем. В продуктовой очереди остаётся одна запись владельца пробы. Поэтому успешная проба **не означает**, что обычный `messenger serve` уже умеет обслуживать два письма одной сессии.
+`turns.json` is a separate experimental log of the two messages. The product queue keeps a single owner record for the probe. Therefore a successful probe **does not mean** that the regular `messenger serve` can already serve two messages in one session.
 
-MCP работает только на случайном loopback-порту с bearer capability. До подтверждения ID инструменты закрыты. `read_current` выдаёт случайную квитанцию текущего письма. `reply` принимает только текст и эту квитанцию; адрес и `reply_to` назначает код. Старая квитанция не подходит следующему письму. Между ходами и после остановки инструменты закрыты. Любая принятая реплика также оставляет отметку в продуктовой записи владельца, чтобы `recover-failed` не принял пробу за исполнение без ответов.
+MCP runs only on a random loopback port with a bearer capability. The tools are closed until the ID is confirmed. `read_current` issues a random receipt for the current message. `reply` accepts only the text and this receipt; the address and `reply_to` are assigned by code. An old receipt does not work for the next message. Between turns and after stopping, the tools are closed. Every accepted reply also leaves a mark in the product owner record so that `recover-failed` does not mistake the probe for a run without replies.
 
-Таймаут, ошибка результата или несовпадение ID останавливают пробу без автоматического повтора. При завершении закрывается stdin; после ожидания сигнал можно послать только процессу с совпадающим наблюдением. Резерв и история остаются даже после exit 0. Квитанции отделяют ответы, но не доказывают, что произвольный CLI или его потомки прекратили файловые операции.
+A timeout, a result error or an ID mismatch stops the probe without an automatic retry. On shutdown stdin is closed; after waiting, a signal may be sent only to a process with a matching observation. The reservation and history remain even after exit 0. Receipts separate replies, but do not prove that an arbitrary CLI or its descendants have stopped file operations.
 
-## Следующая интеграция в продукт
+## Next step: integration into the product
 
-1. Разделить владельца процесса (`run`) и обработку письма (`turn`). Успешный turn не освобождает run.
-2. Хранить отдельные состояния письма и процесса. `provider_ok` хода не подменяет `exit_observed` процесса.
-3. Записывать намерение отправки до записи в stdin. После сбоя не переотправлять незавершённый ход автоматически.
-4. Перенести квитанции, привязку ответов и закрытие MCP между ходами в продуктовую SQLite, с проверками старых capabilities после stop/restart.
-5. На pause прекратить новые ходы, на stop/shutdown отозвать доступ; не запускать второй CLI этой сессии, пока остановка прежнего не доказана.
-6. Проверить два письма, pause/resume, остановку во время ответа, падение клиента и повторный запуск уже через обычный `serve`. Затем отдельно исследовать постоянные каналы Codex и Cursor: результаты Claude к ним не относятся.
+1. Separate the process owner (`run`) from message processing (`turn`). A successful turn does not release the run.
+2. Store separate states for the message and the process. A turn's `provider_ok` does not stand in for the process's `exit_observed`.
+3. Record the intent to send before writing to stdin. After a crash, do not resend an unfinished turn automatically.
+4. Move receipts, reply binding and closing MCP between turns into the product SQLite, with checks of old capabilities after stop/restart.
+5. On pause, stop new turns; on stop/shutdown, revoke access; do not launch a second CLI for this session until the previous one is proven stopped.
+6. Verify two messages, pause/resume, stopping during a reply, a client crash and relaunch, this time through the regular `serve`. Then separately investigate persistent channels for Codex and Cursor: the Claude results do not apply to them.
 
-## Почему не снимаем блокировку по пустой группе
+## Why we do not release the lock on an empty group
 
-Пустая process group не исключает отделившегося потомка. В [заголовке ядра Apple](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/event.h) прямо указано, что `NOTE_TRACK`, `NOTE_TRACKERR` и `NOTE_CHILD` не поддерживаются с macOS 10.5. Нельзя переносить гарантию отслеживания fork из FreeBSD на macOS.
+An empty process group does not rule out a detached descendant. The [Apple kernel header](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/event.h) states explicitly that `NOTE_TRACK`, `NOTE_TRACKERR` and `NOTE_CHILD` have not been supported since macOS 10.5. The fork-tracking guarantee from FreeBSD cannot be carried over to macOS.
 
-[Документация Anthropic](https://code.claude.com/docs/en/agent-sdk/streaming-vs-single-mode) описывает постоянный процесс со входящими сообщениями и последовательными ходами. [Официальный транспорт SDK](https://github.com/anthropics/claude-agent-sdk-python/blob/main/src/claude_agent_sdk/_internal/transport/subprocess_cli.py) и локальная справка установленного CLI подтверждают streaming input. Здесь используется CLI напрямую из Go; SDK не устанавливается.
+[Anthropic's documentation](https://code.claude.com/docs/en/agent-sdk/streaming-vs-single-mode) describes a persistent process with incoming messages and sequential turns. The [official SDK transport](https://github.com/anthropics/claude-agent-sdk-python/blob/main/src/claude_agent_sdk/_internal/transport/subprocess_cli.py) and the local help of the installed CLI confirm streaming input. Here the CLI is used directly from Go; the SDK is not installed.

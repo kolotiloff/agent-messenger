@@ -1,50 +1,50 @@
-# Фоновый клиент и повторное подключение
+# Background client and reconnecting
 
-`start` запускает обычный локальный Messenger в фоне. Команда завершается; терминал можно закрыть. Последующие `status`, `inspect`, `pause`, `resume` и `enqueue` подключаются к тому же процессу через локальный сокет. Установка службы, автозапуск после входа или перезагрузки и автоматический перезапуск не выполняются.
+`start` launches the regular local Messenger in the background. The command exits; you can close the terminal. Subsequent `status`, `inspect`, `pause`, `resume` and `enqueue` connect to the same process through a local socket. No service is installed, and there is no autostart after login or reboot and no automatic restart.
 
-На macOS поведение проверено с настоящим Claude. Для Linux реализация собрана, но в этой проверке не запускалась. На Windows команда явно сообщает о неподдержке: платформенная блокировка и управление процессами ещё не реализованы.
+On macOS the behavior was verified with real Claude. On Linux the implementation builds but was not run in this verification. On Windows the command explicitly reports that it is unsupported: platform locking and process management are not implemented yet.
 
-## Запуск без моделей
+## Running without models
 
 ```sh
 messenger --root /absolute/data/path start --claude-stream
 messenger --root /absolute/data/path status
 ```
 
-Каталог данных должен быть постоянным; для обычного использования не размещайте его в `/tmp`. Без `--root` используется пользовательский каталог AgentMessenger. Если прежняя проба уже создала защитные резервы, необходимо использовать её прежний root: новый каталог не обходит блокировки.
+The data directory must be persistent; for regular use, do not put it in `/tmp`. Without `--root`, the user's AgentMessenger directory is used. If an earlier trial already created protective reservations, you must use its previous root: a new directory does not bypass the locks.
 
-Без `--allow-model-calls` CLI не запускаются, даже после `resume`. Команда печатает PID фонового клиента и путь отдельного журнала с правами `0600`. Модельное разрешение действует только на этот запуск процесса, не запоминается в настройках и не наследуется новым `start`.
+Without `--allow-model-calls`, no CLIs are launched, even after `resume`. The command prints the background client's PID and the path of a separate log with `0600` permissions. Model permission applies only to this process launch; it is not saved in settings and is not inherited by a new `start`.
 
-## Запуск с разрешением сообщений
+## Running with message delivery allowed
 
-Только для отдельной зарегистрированной тестовой CLI-сессии:
+Only for a separate, registered test CLI session:
 
 ```sh
 messenger --root /absolute/data/path start --claude-stream --allow-model-calls
 messenger --root /absolute/data/path status
-# Проверить нужную очередь и сессии перед разрешением доставки:
+# Check the relevant queue and sessions before allowing delivery:
 messenger --root /absolute/data/path resume
 ```
 
-**Каждый успешный `start` ставит очередь на паузу**, в том числе при явном разрешении моделей. Это предотвращает обработку сохранённых писем до проверки пользователем. После `resume` работает обычный механизм очереди; между письмами Messenger не посылает модели запросы ожидания.
+**Every successful `start` pauses the queue**, including when models are explicitly allowed. This prevents stored messages from being processed before the user has checked them. After `resume`, the normal queue mechanism runs; between messages Messenger sends no keep-alive requests to the model.
 
-`start` не переключает режим уже работающего клиента. Второй экземпляр завершается ошибкой, не меняет паузу/разрешения существующего процесса и не запускает второй CLI. Сначала используйте `status`. Для изменения разрешения требуется завершение и новый запуск клиента, с прежними ограничениями восстановления сессий.
+`start` does not switch the mode of an already running client. A second instance exits with an error, does not change the pause/permissions of the existing process and does not launch a second CLI. Use `status` first. Changing the permission requires shutting down and relaunching the client, with the same session recovery limitations as before.
 
-## Закрытие терминала и остановка клиента
+## Closing the terminal and stopping the client
 
-- Закрыть терминал: фоновый клиент и принадлежащий ему Claude продолжают жить. Можно открыть другой терминал и вызвать `status`; нового CLI не создаётся.
-- `pause`: следующие письма остаются в очереди, текущий ответ может завершиться. Процесс и блокировка сохраняются.
-- `shutdown`: завершает сам Messenger. Сохраняет защитные резервы; следующий `start` не освобождает остановленную CLI-сессию. Это отдельная операция от закрытия терминала.
-- Восстановление после подтверждённой перезагрузки Mac остаётся явным `recover-stream`. Фоновый режим не меняет условия этой команды.
+- Closing the terminal: the background client and the Claude it owns keep running. You can open another terminal and run `status`; no new CLI is created.
+- `pause`: subsequent messages stay in the queue; the current reply may finish. The process and the lock are kept.
+- `shutdown`: terminates Messenger itself. It keeps the protective reservations; the next `start` does not release the stopped CLI session. This is a separate operation from closing the terminal.
+- Recovery after a confirmed Mac reboot is still the explicit `recover-stream`. Background mode does not change that command's conditions.
 
-Таким образом закрытие пользовательского подключения не требует перезагрузки. **Полное завершение CLI и безопасное снятие её резерва в той же загрузке ОС этим изменением не реализованы.** Интерфейса окна пока нет; будущий интерфейс должен подключаться к этому же клиенту, не вызывать `shutdown` при каждом закрытии окна.
+So closing the user's connection does not require a reboot. **Fully terminating the CLI and safely releasing its reservation within the same OS boot are not implemented by this change.** There is no window interface yet; a future interface must connect to this same client and must not call `shutdown` every time the window is closed.
 
-## Подтверждение запуска
+## Launch confirmation
 
-Родитель и новый процесс используют отдельный унаследованный канал, не общий файл PID. Сначала новый процесс получает глобальную блокировку, проверяет резервы и незавершённое восстановление, открывает базу, ставит её на паузу и создаёт управляющий сокет. Только затем подтверждает готовность. Родитель сверяет PID именно своего дочернего процесса и подтверждает запуск; цикл доставки начинается после этого обмена.
+The parent and the new process use a separate inherited channel, not a shared PID file. First the new process acquires the global lock, checks reservations and any unfinished recovery, opens the database, pauses it and creates the control socket. Only then does it confirm readiness. The parent verifies the PID of its own child process specifically and confirms the launch; the delivery loop starts after this exchange.
 
-Потеря родителя до подтверждения прекращает запуск до цикла доставки. По таймауту блокировка сессии не снимается. Устаревший управляющий сокет или уже работающий другой экземпляр не считаются подтверждением запуска. Внутренняя команда `_background-serve` требует унаследованный канал и не предназначена для ручного использования.
+If the parent is lost before confirmation, the launch stops before the delivery loop. A timeout does not release the session lock. A stale control socket or another instance that is already running does not count as launch confirmation. The internal `_background-serve` command requires the inherited channel and is not intended for manual use.
 
-Журналы разных запусков не перезаписываются. Их очистка и ротация пока ручные; автоматического удаления истории нет.
+Logs from different launches are not overwritten. Cleaning and rotating them is still manual; history is never deleted automatically.
 
-Нативная проверка и границы: [отчёт Mac](reports/2026-11-05-background-client-mac.md).
+Native verification and limits: [Mac report](reports/2026-11-05-background-client-mac.md).

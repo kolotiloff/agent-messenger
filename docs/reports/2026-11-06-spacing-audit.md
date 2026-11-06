@@ -1,16 +1,16 @@
-# Проверка общей сетки интерфейса
+# Interface spacing grid audit
 
-6 ноября 2026. Продуктовые HTML/CSS/JS, демонстрационный сервер без записи в клиент и без моделей.
+November 6, 2026. Product HTML/CSS/JS, a demo server with no writes to the client and no models.
 
-Проверены обе темы, переписка с открытой/закрытой очередью, карточки трёх провайдеров, сервер, окно 14 сессий с собственной прокруткой, меню выбора. В окнах 900×650 и 1280×800 измерены поля ввода: слева и справа ровно 16 px относительно панели переписки. Полоса прокрутки совпадает с её правым краем, в открытом состоянии — с границей очереди. Поле выбора и ввод имеют общую правую границу.
+Checked: both themes, the conversation with the queue open/closed, the three provider cards, the server, a window of 14 sessions with its own scrolling, select menus. In 900×650 and 1280×800 windows the input padding was measured: exactly 16 px on the left and right relative to the conversation panel. The scrollbar coincides with its right edge, and when open, with the queue's border. The select field and the input share a right edge.
 
-Проверено увеличение ввода до 140 px: последнее сообщение остаётся выше неподвижного блока ввода, нижняя позиция истории сохраняется. Кнопка нулевой группы сессий отключена. В нижнем блоке показаны демонстрационные установленная/доступная версии: общая ширина кнопки, выбор темы и версия разделены интервалом 8 px. Демонстрационная доступность обновления не является реальным выпуском.
+Growing the input to 140 px was checked: the last message stays above the fixed input block, and the history's bottom position is preserved. The empty session group's button is disabled. The bottom block shows demo installed/available versions: the full-width button, theme selection and version are separated by an 8 px gap. The demo update availability is not a real release.
 
-В минимальном окне 780×570 содержимое не выходит за границы, ввод и нижние настройки доступны, поля остаются равными.
+In the minimum 780×570 window, content does not overflow, the input and bottom settings are accessible, and padding stays equal.
 
-UI-тесты Go с проверкой гонок прошли. Это проверка браузерного оформления на Mac; она не заменяет приёмку нативных пакетов Windows/Linux.
+Go UI tests with race detection passed. This is a check of browser styling on Mac; it does not replace acceptance of native Windows/Linux packages.
 
 
-После изменения скролла измерены фактическая ширина 6 px и поля по 16 px у переписки, карточек и окна сессий. Правило наведения меняет только цвет, ширина постоянна. Для минимального окна отдельно подтверждены отсутствие горизонтального выхода и доступность ввода.
+After the scrollbar change, the actual 6 px width and 16 px padding at the conversation, cards and sessions window were measured. The hover rule changes only the color; the width is constant. For the minimum window, no horizontal overflow and an accessible input were confirmed separately.
 
-Первый CI обнаружил гонку тестового стенда `TestAdapterLauncherResumesExactID`: файл аргументов читался после первого фрагмента printf, до окончания записи. Исправлены явный маркер окончания записи обоих файлов и ожидание завершения supervisor при любом выходе из теста. Это изменение теста, не ослабление продуктовых проверок resume.
+The first CI run found a race in the test bench `TestAdapterLauncherResumesExactID`: the arguments file was read after the first printf fragment, before writing finished. Fixed with an explicit end-of-write marker for both files and waiting for the supervisor to finish on any test exit. This is a test change, not a weakening of the product resume checks.

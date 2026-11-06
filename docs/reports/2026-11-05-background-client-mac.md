@@ -1,52 +1,52 @@
-# Фоновый клиент: проверка на Mac
+# Background client: verification on Mac
 
-Изменение подготовлено поверх `7a560fd2a4c2e371789dcd23dd61727d11e4de52` (PR #4). macOS arm64, Go 1.22.2 с внешним линковщиком и локальной ad-hoc подписью, Claude Code 2.1.318. Подготовлена команда `start`: отдельный фоновый процесс, приватное подтверждение готовности и обязательная пауза при старте. Службы и автозапуск не устанавливались.
+The change was prepared on top of `7a560fd2a4c2e371789dcd23dd61727d11e4de52` (PR #4). macOS arm64, Go 1.22.2 with the external linker and local ad-hoc signing, Claude Code 2.1.318. A `start` command was prepared: a separate background process, a private readiness confirmation and a mandatory pause at startup. No services or autostart were installed.
 
-## Почему не добавлено снятие резерва по завершению родителя
+## Why releasing the reservation when the parent exits was not added
 
-На Mac изучено непрерывное отслеживание дочерних процессов через kqueue. В исходном коде [Apple XNU, `filt_procattach`](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/kern_event.c) комбинации с `NOTE_TRACK`, `NOTE_TRACKERR`, `NOTE_CHILD` отклоняются с `ENOTSUP`. Нативная попытка зарегистрировать `NOTE_TRACK` для своего процесса на проверенном Mac дала errno 45 (`ENOTSUP`), без запуска модели. Поэтому перенос рецепта отслеживания потомков из других BSD здесь не даёт нужного доказательства.
+On Mac, continuous tracking of child processes via kqueue was investigated. In the source of [Apple XNU, `filt_procattach`](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/kern_event.c), combinations with `NOTE_TRACK`, `NOTE_TRACKERR`, `NOTE_CHILD` are rejected with `ENOTSUP`. A native attempt to register `NOTE_TRACK` for its own process on the tested Mac returned errno 45 (`ENOTSUP`), without running a model. Therefore, porting the descendant-tracking recipe from other BSDs does not provide the required proof here.
 
-[Endpoint Security](https://developer.apple.com/documentation/endpointsecurity) предоставляет события процессов, но требует отдельной интеграции с разрешением Endpoint Security. Такая интеграция в этом этапе не реализована и не считается готовым решением. Обычный список процессов, завершение главного PID и пустая группа по-прежнему не доказывают остановку отделившихся потомков.
+[Endpoint Security](https://developer.apple.com/documentation/endpointsecurity) provides process events but requires a separate integration with the Endpoint Security entitlement. Such an integration is not implemented at this stage and is not considered a finished solution. An ordinary process list, the exit of the main PID and an empty group still do not prove that detached descendants have stopped.
 
-Решение этого этапа: сохранить живого владельца сессии при закрытии пользовательского терминала. Правила освобождения остановленного CLI не ослаблялись. Это обеспечивает повторное подключение к работающему клиенту, а не безопасный перезапуск завершённого CLI в той же загрузке.
+The decision for this stage: keep the live session owner when the user's terminal is closed. The rules for releasing a stopped CLI were not relaxed. This enables reconnecting to a running client, not safely restarting an exited CLI within the same boot.
 
-## Автоматические проверки без моделей
+## Automated checks without models
 
-Полный набор прошёл на Mac:
+The full suite passed on Mac:
 
 ```sh
 go test -race -tags streamprobe -ldflags=-linkmode=external -count=1 ./...
 ```
 
-Новые проверки охватывают:
+The new checks cover:
 
-- Фоновый старт без разрешения моделей, сохранённое письмо после `resume`, отсутствие попытки запуска CLI.
-- Новый старт с разрешением моделей поверх непустой ранее возобновлённой очереди: очередь снова на паузе, попытка не создаётся.
-- Второй старт с другими разрешениями и с другим root: отказ, PID/пауза/разрешения первого клиента не изменяются.
-- Потеря родительского канала после сообщения готовности, но до подтверждения: процесс завершается, блокировка доступна следующему старту.
-- Повреждённая база и неизвестные флаги: старт не объявляется успешным.
-- Завершение отдельной команды `start`: её каналы вывода закрываются, клиент остаётся доступен при последующих подключениях.
+- Background start without model permission, a saved message after `resume`, no attempt to launch the CLI.
+- A new start with model permission on top of a non-empty previously resumed queue: the queue is paused again, no attempt is created.
+- A second start with different permissions and with a different root: refused; the first client's PID/pause/permissions are not changed.
+- Loss of the parent channel after the readiness message but before confirmation: the process exits, the lock is available to the next start.
+- A corrupted database and unknown flags: the start is not reported as successful.
+- Exit of a separate `start` command: its output channels are closed, and the client stays available for subsequent connections.
 
-Сборки `CGO_ENABLED=0` для linux/amd64 и windows/amd64 прошли. На этих ОС тесты и реальные CLI не запускались; Windows-фоновый запуск явно не поддержан. Предупреждения старого Mac-линковщика о LC_DYSYMTAB присутствовали, ошибок сборки или тестов не было.
+`CGO_ENABLED=0` builds for linux/amd64 and windows/amd64 succeeded. Tests and real CLIs were not run on those OSes; background launch on Windows is explicitly unsupported. Warnings from the old Mac linker about LC_DYSYMTAB were present; there were no build or test errors.
 
-## Настоящий Claude после закрытия терминала
+## Real Claude after closing the terminal
 
-Создана новая отдельная тестовая CLI-сессия через `create-claude-session`. Прежние сессии и их резервы не освобождались. Использована прежняя тестовая база, поскольку другой root не должен обходить общую защиту. Перед доставкой проверено, что старые ожидающие письма принадлежат занятым сессиям.
+A new separate test CLI session was created via `create-claude-session`. Previous sessions and their reservations were not released. The existing test database was used, since a different root must not bypass the shared protection. Before delivery, it was verified that the old pending messages belong to occupied sessions.
 
-`start --claude-stream --allow-model-calls` запущен из настоящего тестового PTY. Команда завершилась с кодом 0, PTY закрыт. Фоновый клиент остался доступен и находился на паузе.
+`start --claude-stream --allow-model-calls` was launched from a real test PTY. The command exited with code 0 and the PTY was closed. The background client stayed available and was paused.
 
-Первое новое письмо передало приватный маркер и получило `ACK:BACKGROUND-one`, связанный с ним и с `provider_ok=1`. Затем очередь поставлена на паузу. Восемь секунд без открытого управляющего соединения не создали новых попыток, ответов или изменений канала. Это короткая проверка состояния, не измерение биллинга провайдера.
+The first new message carried a private marker and received `ACK:BACKGROUND-one`, linked to it and with `provider_ok=1`. The queue was then paused. Eight seconds without an open control connection created no new attempts, replies or channel changes. This is a short state check, not a measurement of provider billing.
 
-Повторный `start` отклонён; действующий клиент не изменился. Из нового подключения отправлено второе письмо с просьбой вспомнить маркер. Ответ `ACK:BACKGROUND-two|` с правильным прежним маркером связан со вторым письмом, `provider_ok=1`.
+A repeated `start` was refused; the active client did not change. From a new connection, a second message was sent asking to recall the marker. The reply `ACK:BACKGROUND-two|` with the correct earlier marker is linked to the second message, `provider_ok=1`.
 
-У обоих писем совпали PID Claude, PID фонового клиента и ID stream-запуска. Всего созданы два пользовательских письма, две попытки и два ответа; автоматических повторов не было. Каждое письмо может включать несколько модельных/инструментальных ходов, а не один API-вызов.
+Both messages had the same Claude PID, background client PID and stream run ID. In total, two user messages, two attempts and two replies were created; there were no automatic retries. Each message may involve several model/tool turns, not a single API call.
 
-Прежняя история и все прежние резервы остались без изменений. После проверки выполнены пауза и `shutdown`, затем проверка через запуск без разрешения моделей и повторный `shutdown`. Новый канал остался `uncertain`, `exit_observed=0`, `exit_code=null`; резерв сохранён. Завершение процесса с кодом 0 не утверждается.
+The previous history and all previous reservations remained unchanged. After the check, a pause and `shutdown` were performed, followed by a check via a launch without model permission and another `shutdown`. The new channel remained `uncertain`, `exit_observed=0`, `exit_code=null`; the reservation was kept. A process exit with code 0 is not claimed.
 
-## Границы
+## Scope
 
-Принято: закрытие терминала и повторное подключение к тому же живому локальному клиенту на Mac, с последовательной доставкой двум сообщениям одной тестовой сессии Claude.
+Accepted: closing the terminal and reconnecting to the same live local client on Mac, with sequential delivery of two messages to one Claude test session.
 
-Не принято: снятие резерва после полного завершения CLI без перезагрузки, восстановление после аварийного падения фонового клиента, работа постоянных Codex/Cursor, Windows/Linux в работе, сетевой брокер, интерфейс, служба, установщик и автоматический перезапуск. Фоновый клиент не обязан переживать выход пользователя из macOS или перезагрузку.
+Not accepted: releasing the reservation after the CLI has fully exited without a reboot, recovery after a background client crash, persistent Codex/Cursor operation, Windows/Linux in operation, a network broker, the interface, a service, an installer and automatic restart. The background client is not required to survive the user logging out of macOS or a reboot.
 
-Приватные ID, маркер, профили, база, резервные копии и журналы CLI не включены в Git. Проверочные процессы остановлены; автозапуск не установлен.
+Private IDs, the marker, profiles, the database, backups and CLI logs are not included in Git. The test processes were stopped; autostart is not installed.

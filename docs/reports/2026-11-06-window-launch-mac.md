@@ -1,34 +1,34 @@
-# Запуск тестовой сессии из окна на Mac
+# Launching a test session from the window on Mac
 
-6 ноября 2026. Проверка preview.19, macOS arm64, Go 1.27.3. Сначала использован локальный имитатор протокола CLI/MCP с отдельными HOME, реестром процессов и базой. Затем выполнена проверка настоящего Claude из установленного окна; её результат приведён ниже. Codex/Cursor модельные задания не получали.
+November 6, 2026. Check of preview.19, macOS arm64, Go 1.27.3. First, a local fake of the CLI/MCP protocol was used with separate HOME, process registry and database. Then a check with real Claude from the installed window was performed; its result is given below. Codex/Cursor did not receive model tasks.
 
-- Через окно создана новая сессия Claude, затем отдельно нажата кнопка её запуска.
-- Два последовательных письма получили связанные ответы `ACK:WINDOW-ONE` и `ACK:WINDOW-TWO`, оба хода подтверждены. В базе две попытки с одним PID, один постоянный процесс.
-- Более старое письмо другой сессии осталось в очереди, без попытки запуска.
-- Оба ответа появились без ручного обновления. Локальное чтение состояния не вызывает модель.
-- При первом прогоне обнаружена зависимость наблюдения процессов от PATH терминала: в окружении окна не находился `sysctl`. Исправлены абсолютные системные пути на Mac; отдельный тест проверяет наблюдение своего процесса с пустым пользовательским PATH. Неудачная попытка осталась в отдельном тестовом каталоге; её резерв не удалялся для обхода защиты. Повторный прогон выполнен в новом изолированном окружении.
-- Полный `scripts/check.sh` на Mac прошёл: форматирование, зависимости, vet и race-тесты. JavaScript разбирается без синтаксических ошибок.
-- Отдельно весь локальный набор прошёл на Go 1.22.2. Все четыре задания GitHub для `90ce8b109342f40409efd97bdb9af8cd050126fe` прошли в [запуске 42196900929](https://github.com/kolotiloff/agent-messenger/actions/runs/42196900929): Mac/Linux, Go 1.22.2/stable.
-- Автоматические тесты проверяют восемь одновременных повторов разрешения (одно событие), отказ без подтверждения и для старой сессии, отсутствие расширения разрешения, сохранение паузы при повторе ACK и сброс разрешения после перезапуска. HTTP-тесты проверяют Origin, поля и точную управляющую команду.
+- A new Claude session was created through the window, then its launch button was pressed separately.
+- Two consecutive messages got bound replies `ACK:WINDOW-ONE` and `ACK:WINDOW-TWO`, both turns confirmed. The database has two attempts with one PID, one persistent process.
+- An older message for another session stayed in the queue, with no launch attempt.
+- Both replies appeared without a manual refresh. Reading state locally does not call the model.
+- The first run revealed that process observation depended on the terminal's PATH: `sysctl` could not be found in the window's environment. Absolute system paths on Mac were fixed; a separate test checks observing its own process with an empty user PATH. The failed attempt remained in a separate test directory; its reservation was not deleted to bypass the protection. The rerun was done in a new isolated environment.
+- The full `scripts/check.sh` passed on Mac: formatting, dependencies, vet and race tests. The JavaScript parses without syntax errors.
+- Separately, the whole local suite passed on Go 1.22.2. All four GitHub jobs for `90ce8b109342f40409efd97bdb9af8cd050126fe` passed in [run 42196900929](https://github.com/kolotiloff/agent-messenger/actions/runs/42196900929): Mac/Linux, Go 1.22.2/stable.
+- Automated tests cover eight concurrent repeats of the permission grant (one event), refusal without confirmation and for an old session, no widening of the permission, the pause being kept on a repeated ACK, and the permission reset after restart. HTTP tests check the Origin, the fields and the exact control command.
 
-Ограничения: Windows/Linux runtime, постоянные Codex/Cursor, сетевой брокер и освобождение защитного резерва в той же загрузке ОС этим отчётом не приняты. Автоматическая доставка новой версии фонового клиента пока отдельно от обновления оболочки. Секреты, реальные ID сессий и журналы пользователя в отчёт не включены.
+Limitations: Windows/Linux runtime, persistent Codex/Cursor, the network broker and releasing the protective reservation within the same OS boot are not accepted by this report. Automatic delivery of a new background client version is still separate from the shell update. Secrets, real session IDs and user logs are not included in the report.
 
-## Публикация и фоновый клиент
+## Publication and the background client
 
-[Preview.19 опубликован](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.19). Архив Mac arm64 собран Go 1.27.3 из указанного SHA; SHA-256 `4584caecdbb280d861d2d06c812c19c08cde385781b3d632ab7f863339242afa`. Подписи пакета и метаданных созданы штатным ключом канала. Все продуктовые исходники сверены с деревом коммита; ранние Python-эксперименты не входят в Mac-сборку.
+[Preview.19 published](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.19). The Mac arm64 archive was built with Go 1.27.3 from the stated SHA; SHA-256 `4584caecdbb280d861d2d06c812c19c08cde385781b3d632ab7f863339242afa`. The package and metadata signatures were created with the channel's standard key. All product sources were checked against the commit tree; the early Python experiments are not part of the Mac build.
 
-На пользовательском Mac отдельно выполнена контролируемая замена остановленного фонового клиента на preview.19. До остановки подтверждены пауза и отсутствие разрешения модели. Сделана локальная резервная копия базы и реестра. После запуска сравнены все сессии, письма, попытки, ответы и данные постоянных процессов — без изменений; реестр защитных резервов побайтно прежний. Клиент остаётся на паузе, запуск моделей не разрешён, три старых письма остаются в очереди, шесть резервов сохранены.
+On the user's Mac, a controlled replacement of the stopped background client with preview.19 was performed separately. Before stopping, the pause and the absence of model permission were confirmed. A local backup of the database and registry was made. After launch, all sessions, messages, attempts, replies and persistent process data were compared — no changes; the protective reservation registry is byte-for-byte the same. The client stays paused, model launches are not permitted, three old messages remain in the queue, six reservations are preserved.
 
-При первой проверке Mac был заблокирован, оболочка оставалась preview.18. После разблокировки обновление через нативный обновлятор завершено: установленная оболочка показывает preview.19, её ревизия соответствует `90ce8b109342f40409efd97bdb9af8cd050126fe`.
+At the first check the Mac was locked and the shell remained at preview.18. After unlocking, the update via the native updater completed: the installed shell shows preview.19, and its revision matches `90ce8b109342f40409efd97bdb9af8cd050126fe`.
 
-## Настоящий Claude из установленного окна
+## Real Claude from the installed window
 
-В preview.19 через «Агенты» выполнены обнаружение Claude Code 2.1.318 и проверка существующего входа. Через настройки создана отдельная новая тестовая сессия, затем явно разрешён запуск только этой сессии. Рабочие и GUI-разговоры не использовались.
+In preview.19, via «Агенты» ("Agents"), Claude Code 2.1.318 was discovered and the existing login was checked. A separate new test session was created through the settings, then launch was explicitly permitted for this session only. Work and GUI conversations were not used.
 
-- Два последовательных сообщения отправлены из поля ввода нативного окна.
-- Получены связанные ответы `ACK:WINDOW-ONE` и `ACK:WINDOW-TWO`; обе попытки имеют состояние `turn_completed` и один PID/PGID. Это два хода одного постоянного процесса, а не два запуска CLI.
-- Ответы появились автоматически, с подтверждением завершённого хода. Ручное обновление не требовалось.
-- Три старых сообщения остались в очереди. Сравнение со снимком до обновления подтвердило сохранение всех прежних писем и ответов.
-- После проверки очередь поставлена на паузу из окна. Владелец тестовой сессии остаётся живым; принудительное завершение или снятие защитного резерва не выполнялось. Разрешение по-прежнему ограничено новой тестовой сессией.
+- Two consecutive messages were sent from the native window's input field.
+- Bound replies `ACK:WINDOW-ONE` and `ACK:WINDOW-TWO` were received; both attempts have state `turn_completed` and one PID/PGID. These are two turns of one persistent process, not two CLI launches.
+- The replies appeared automatically, with confirmation of the completed turn. No manual refresh was needed.
+- Three old messages stayed in the queue. Comparison with the pre-update snapshot confirmed that all earlier messages and replies were preserved.
+- After the check, the queue was paused from the window. The test session's owner remains alive; no forced termination or removal of the protective reservation was performed. The permission is still limited to the new test session.
 
-Снимок базы и изображение окна сохранены локально. В публичный репозиторий они не включены: содержат идентификаторы и старые тестовые адреса. Эта приёмка подтверждает два реальных сообщения через окно, но не освобождение владельца после полного выхода и не обмен Claude ↔ Codex.
+The database snapshot and the window screenshot are saved locally. They are not included in the public repository: they contain identifiers and old test addresses. This acceptance confirms two real messages through the window, but not the owner's release after a full exit, nor a Claude ↔ Codex exchange.

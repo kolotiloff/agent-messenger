@@ -1,15 +1,15 @@
-# Базовая проверка продолжения Codex CLI на Mac
+# Basic Codex CLI resume check on Mac
 
-Статус: успешно.
+Status: success.
 
-Первый CLI-процесс создал отдельный тестовый разговор и получил случайный маркер. После его завершения второй процесс продолжил разговор по точному ID через `codex exec resume`. Во втором запросе маркер не передавался.
+The first CLI process created a separate test conversation and received a random marker. After it exited, a second process resumed the conversation by exact ID via `codex exec resume`. The marker was not passed in the second request.
 
-- Идентификатор разговора сохранился.
-- Контрольная информация восстановлена точно.
-- Оба процесса завершились успешно.
-- В событиях обоих запусков отсутствовали вызовы инструментов.
-- Рабочие разговоры не использовались; тестовая папка не требовала Git-репозитория.
+- The conversation ID was preserved.
+- The control information was recovered exactly.
+- Both processes exited successfully.
+- There were no tool calls in the events of either run.
+- No working conversations were used; the test folder did not require a Git repository.
 
-Это подтверждает базовую часть H3 на Mac. MCP, параллельные запуски, ошибочный ID, сбои и длительное ожидание ещё не проверены. Клиент Messenger пока не реализован. Экономия Messenger этим опытом не измерялась.
+This confirms the basic part of H3 on Mac. MCP, parallel runs, a wrong ID, failures and long waits have not been verified yet. The Messenger client is not implemented yet. Messenger savings were not measured by this experiment.
 
-Данные аккаунта, идентификатор разговора, контрольная фраза и показатели использования в публичный отчёт не включены.
+Account data, the conversation ID, the control phrase and usage metrics are not included in the public report.

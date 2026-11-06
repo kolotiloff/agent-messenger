@@ -1,19 +1,19 @@
-# Codex ↔ Claude: MCP и продолжение обеих сессий на Mac
+# Codex ↔ Claude: MCP and continuation of both sessions on a Mac
 
-Дата: 2026-11-05. **Обмен и продолжение обеих сессий — PASS. Полный сценарий — PARTIAL:** последнее подтверждение доставлено как новое письмо, без связи с предыдущим ответом.
+Date: 2026-11-05. **Exchange and continuation of both sessions — PASS. Full scenario — PARTIAL:** the last confirmation was delivered as a new message, not linked to the previous reply.
 
-## Проверенный сценарий
+## Verified scenario
 
-CLI: Codex 0.155.1, Claude Code 2.1.318. Использован локальный экспериментальный MCP-сервер с общей SQLite-базой, отдельными входящими ящиками и фиксированной идентичностью каждого процесса.
+CLI: Codex 0.155.1, Claude Code 2.1.318. A local experimental MCP server was used, with a shared SQLite database, separate inboxes and a fixed identity for each process.
 
-1. Codex отправил Claude случайную контрольную строку через `send_message` и завершился.
-2. Claude получил только указание проверить входящие — без контрольной строки в запросе. Прочитал письмо через `read_messages` и отправил `ACK:` с полученной строкой через `reply`. Связь с исходным сообщением сохранена.
-3. Codex продолжил исходную сессию по точному ID, прочитал ответ и отправил подтверждение `RECEIVED:` с его текстом.
-4. Claude продолжил свою исходную сессию по точному ID, прочитал подтверждение и вернул его точный текст.
+1. Codex sent Claude a random control string via `send_message` and exited.
+2. Claude received only an instruction to check its inbox — without the control string in the prompt. It read the message via `read_messages` and sent `ACK:` with the received string via `reply`. The link to the original message was preserved.
+3. Codex continued the original session by exact ID, read the reply and sent a `RECEIVED:` confirmation with its text.
+4. Claude continued its original session by exact ID, read the confirmation and returned its exact text.
 
-Все четыре CLI-процесса завершились с кодом 0 и успешными результатами провайдеров. Для обоих агентов совпали ID до и после продолжения. В базе три письма; содержимое и адресаты верны. Вручную содержимое писем между запросами не переносилось.
+All four CLI processes exited with code 0 and successful provider results. For both agents, the IDs before and after continuation matched. The database has three messages; contents and recipients are correct. Message contents were not carried between prompts by hand.
 
-Фактический журнал MCP:
+Actual MCP log:
 
 ```text
 codex  send_message
@@ -24,30 +24,30 @@ codex  send_message
 claude read_messages
 ```
 
-Журнал сервера, база и события вызовов инструментов обоих CLI согласуются. Claude не получил отказов разрешений в этом сценарии.
+The server log, the database and the tool call events of both CLIs agree. Claude received no permission denials in this scenario.
 
-## Обнаруженная проблема связи ответов
+## Reply-linking problem found
 
-На третьем шаге запрос просил ответить на полученное письмо, но не задавал точное имя инструмента и аргумент `message_id`. Codex выбрал `send_message` вместо `reply`. Подтверждение дошло до Claude, но его `reply_to` пуст.
+At the third step, the prompt asked to reply to the received message but did not specify the exact tool name or the `message_id` argument. Codex chose `send_message` instead of `reply`. The confirmation reached Claude, but its `reply_to` is empty.
 
-Строгая проверка связи сообщений остановила тестовый контроллер после третьего шага. Письмо уже было сохранено, поэтому повторный запуск отправки не выполнялся. После чтения журнала продолжена только независимая проверка возобновления Claude. Первоначальный сбой проверки сохранён в результатах; последующая проверка отдельно различает успешную доставку и отсутствие связи.
+The strict message-link check stopped the test controller after the third step. The message had already been stored, so the send was not run again. After reading the log, only the independent check of Claude resuming was continued. The initial check failure is kept in the results; the later check separately distinguishes successful delivery from a missing link.
 
-Это наблюдение одного запуска, подтверждённое журналами, а не доказательство постоянного поведения Codex. Даже более точная инструкция сама по себе не заменяет проверку протокола.
+This is an observation from one run, confirmed by logs, not proof of consistent Codex behavior. Even a more precise instruction does not by itself replace a protocol check.
 
-**Требование к будущему клиенту:** для обработки письма, требующей ответа, задавать контекст исходного сообщения программно и проверять связь результата до отметки «выполнено». Новое самостоятельное письмо и ответ должны различаться. Несоответствие не должно вызывать слепую повторную отправку или второй запуск модели. Это требование пока не реализовано в производственном клиенте.
+**Requirement for the future client:** when processing a message that requires a reply, set the original message context programmatically and verify the result's link before marking it "done". A new standalone message and a reply must be distinguished. A mismatch must not trigger a blind resend or a second model launch. This requirement is not yet implemented in the production client.
 
-## Настройки и пределы проверки
+## Settings and limits of the check
 
-Claude запускался в отдельной папке с `--strict-mcp-config`, явным тестовым сервером, отключёнными встроенными инструментами, hooks и slash commands. Разрешены без запроса только `read_messages` и `reply`; режим `dontAsk`. В каталоге Claude были видны все три инструмента сервера, включая `send_message`, не включённый в список разрешённых. Отказ при попытке его вызова отдельно не проверялся. Полный обход разрешений не использовался.
+Claude was launched in a separate folder with `--strict-mcp-config`, an explicit test server, and built-in tools, hooks and slash commands disabled. Only `read_messages` and `reply` were allowed without prompting; `dontAsk` mode. All three server tools were visible in Claude's catalog, including `send_message`, which was not in the allowed list. Refusal when trying to call it was not checked separately. Full permission bypass was not used.
 
-Codex использовал отдельную конфигурацию с тестовым MCP и отключёнными shell, приложениями, плагинами, hooks и субагентами. Настройки авторизации не копировались. Сырые журналы, ID разговоров, контрольные строки и данные аккаунтов остаются вне репозитория.
+Codex used a separate configuration with the test MCP and with shell, apps, plugins, hooks and subagents disabled. Authorization settings were not copied. Raw logs, conversation IDs, control strings and account data stay outside the repository.
 
-Подтверждена ещё одна часть H5 и продолжение Claude с MCP после завершения предыдущего процесса. Вместе с предыдущим опытом проверены пары Codex–Cursor и Codex–Claude. Прямой обмен Claude–Cursor и одновременная работа всех троих не проверялись.
+One more part of H5 was confirmed, as well as Claude continuing with MCP after the previous process exited. Together with previous experience, the Codex–Cursor and Codex–Claude pairs have been verified. A direct Claude–Cursor exchange and all three working simultaneously were not verified.
 
-Это локальный стенд на Mac: нет VPS, сетевого брокера, фонового клиента, производственной авторизации или защиты от двух владельцев сессии. Запуски последовательные. H6/H7/H8/H9 и Windows/Linux остаются открытыми. Экономия токенов не измерялась; опрос модели во время ожидания не использовался. Дополнительное подтверждение было частью теста, а не предложением поручать модели технические ACK в рабочей системе.
+This is a local test bench on a Mac: no VPS, network broker, background client, production authorization or protection against two session owners. Runs were sequential. H6/H7/H8/H9 and Windows/Linux remain open. Token savings were not measured; model polling while waiting was not used. The extra confirmation was part of the test, not a proposal to have the model do technical ACKs in a production system.
 
-## Дальнейшая работа
+## Next steps
 
-Закрепить связь ответов на уровне протокола клиента. Затем проверить владение сессией, второй конкурентный запуск и неопределённый результат после сбоя. Эти проверки можно в основном выполнять без моделей, используя управляемые тестовые процессы.
+Pin down reply linking at the client protocol level. Then verify session ownership, a second concurrent launch and an uncertain result after a failure. These checks can mostly be done without models, using controlled test processes.
 
-Источники параметров: [Claude CLI](https://code.claude.com/docs/en/cli-reference), [разрешения Claude](https://code.claude.com/docs/en/permissions).
+Parameter sources: [Claude CLI](https://code.claude.com/docs/en/cli-reference), [Claude permissions](https://code.claude.com/docs/en/permissions).

@@ -1,11 +1,11 @@
-# Базовая проверка продолжения Claude CLI на Mac
+# Basic check of Claude CLI resume on Mac
 
-Статус: успешно.
+Status: success.
 
-Два последовательных CLI-процесса продолжили один тестовый разговор по точному ID. Второй процесс восстановил контрольную информацию из первого запроса без её повторной передачи.
+Two sequential CLI processes continued one test conversation by exact ID. The second process recovered the control information from the first request without it being sent again.
 
-Это подтверждает базовый механизм сохранения и продолжения истории. Рабочие разговоры не использовались.
+This confirms the basic mechanism for saving and continuing history. Working conversations were not used.
 
-Остаются непроверенными MCP, параллельные запуски, ошибочный ID, восстановление после сбоев и ожидание. Клиент Messenger ещё не реализован; его перезапуск этим опытом не проверялся. Экономия Messenger не измерялась.
+MCP, parallel launches, a wrong ID, recovery after failures and waiting remain unverified. The Messenger client is not yet implemented; its restart was not tested by this experiment. Messenger savings were not measured.
 
-Данные аккаунта, идентификатор разговора, контрольная фраза и показатели использования в публичный отчёт не включены.
+Account data, the conversation ID, the control phrase and usage metrics are not included in the public report.

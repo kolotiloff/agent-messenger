@@ -1,49 +1,49 @@
-# Автоматические проверки перед выпуском
+# Automated pre-release checks
 
-Workflow `.github/workflows/checks.yml` запускается на pull request, изменениях main/master и вручную. Работающие CLI и аккаунты провайдеров ему не нужны. Это проверка кода на подставных процессах, не приёмка настоящих Claude/Codex/Cursor.
+The `.github/workflows/checks.yml` workflow runs on pull requests, on changes to main/master and manually. It needs no working CLIs or provider accounts. It checks the code with stand-in processes; it is not acceptance of real Claude/Codex/Cursor.
 
-## Матрица
+## Matrix
 
-| Задание | Что проверяется |
+| Job | What is checked |
 |---|---|
-| Ubuntu 24.04, Go 1.22.2 | Форматирование, целостность модулей, vet, весь набор с race; компиляция продукта и тестовых бинарников для macOS arm64/amd64, Linux amd64 и Windows amd64 |
-| macOS 15, Go 1.22.2 | Нативные проверки совместимости с исходной версией Go |
-| macOS 15, актуальный stable Go | Нативные проверки; два preview-архива, SHA-256, чистая установка, отказ обновления живого клиента, обновление остановленного клиента с непустой очередью и исходящими prepared/queued; отсутствие автоматической отправки и дубля после обновления |
-| Ubuntu 24.04, актуальный stable Go | Совместимость кода и тестов с текущей стабильной версией Go; фактическая версия записана в логе |
+| Ubuntu 24.04, Go 1.22.2 | Formatting, module integrity, vet, the full suite with race; compiling the product and test binaries for macOS arm64/amd64, Linux amd64 and Windows amd64 |
+| macOS 15, Go 1.22.2 | Native checks of compatibility with the baseline Go version |
+| macOS 15, current stable Go | Native checks; two preview archives, SHA-256, clean install, refusal to update a live client, update of a stopped client with a non-empty queue and outgoing prepared/queued messages; no automatic sending and no duplicate after the update |
+| Ubuntu 24.04, current stable Go | Compatibility of code and tests with the current stable Go version; the actual version is recorded in the log |
 
-Сборка Windows не выдаётся за запуск на Windows. Проверки GitHub на Mac/Linux также не заменяют опыт четырёх пользовательских компьютеров, доступность их CLI, входы, сон/пробуждение и работу сетевого брокера. Подтверждение готовности конкретного SHA требует успешного завершения всех заданий именно для него.
+A Windows build is not presented as running on Windows. GitHub checks on Mac/Linux also do not replace experience on the four user computers, the availability of their CLIs, logins, sleep/wake and the operation of a network broker. Confirming that a specific SHA is ready requires all jobs to succeed for exactly that SHA.
 
-## Ограничения доступа и стоимости
+## Access and cost limits
 
-Права workflow — только чтение содержимого репозитория. Actions закреплены точными SHA, checkout не сохраняет учётные данные в git. Не используются pull_request_target, пользовательские секреты, входы агентов, автоматическое слияние или публикация release. Сборщик создаёт только технические архивы с ad-hoc подписью; Developer ID/notarization отсутствуют.
+Workflow permissions are read-only access to repository contents. Actions are pinned to exact SHAs, and checkout does not persist credentials in git. Not used: pull_request_target, user secrets, agent logins, auto-merge or release publication. The build job creates only technical archives with an ad-hoc signature; there is no Developer ID/notarization.
 
-Четыре задания ограничены 20 минутами каждое. Новый запуск для того же PR отменяет предыдущий. Расписания и ночного опроса нет. Артефакты хранятся 7 дней. В частном репозитории GitHub использует доступные минуты Actions аккаунта; настройки оплаты и лимитов workflow не меняет. [Типы и условия GitHub runners](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+Each of the four jobs is limited to 20 minutes. A new run for the same PR cancels the previous one. There is no schedule or nightly polling. Artifacts are kept for 7 days. In a private repository GitHub uses the account's available Actions minutes; the workflow does not change billing or limit settings. [GitHub runner types and terms](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
 
-Исходники pull request выполняются в обычном ограниченном контексте PR, без переноса в привилегированный workflow. [События GitHub Actions](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows).
+Pull request sources run in the ordinary restricted PR context, without being moved into a privileged workflow. [GitHub Actions events](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows).
 
-## Те же проверки локально
+## The same checks locally
 
-Из корня репозитория:
+From the repository root:
 
 ```sh
 bash scripts/check.sh
 bash scripts/check-builds.sh
 ```
 
-Можно задать `GO_BIN=/абсолютный/путь/к/go`. Первый скрипт форматирование не меняет, а сообщает об отличиях; проверяет зависимости и запускает native race. На Mac он использует внешний линкер для совместимости с уже проверенным Go 1.22.2. Короткий временный каталог нужен из-за длины Unix-сокетов; удаляется только каталог, созданный самим скриптом.
+You can set `GO_BIN=/absolute/path/to/go`. The first script does not change formatting but reports differences; it checks dependencies and runs native race tests. On Mac it uses the external linker for compatibility with the already verified Go 1.22.2. A short temporary directory is needed because of Unix socket path length limits; only the directory the script itself created is deleted.
 
-Второй скрипт компилирует каждый пакет тестов, но не исполняет его под чужой ОС. Он не подставляет фиктивный успешный результат выполнения.
+The second script compiles every test package but does not run it under a foreign OS. It does not substitute a fake successful run result.
 
-Проверка двух Mac-архивов:
+Checking two Mac archives:
 
 ```sh
-python3 scripts/check-package.py /каталог/архивов ВЕРСИЯ_1 ВЕРСИЯ_2
+python3 scripts/check-package.py /archives/dir VERSION_1 VERSION_2
 ```
 
-Это инструмент разработчика/CI на стандартной библиотеке Python. Установленному продукту Python не нужен. Проверка создаёт отдельные HOME, каталог программы и очередь, не меняет рабочую установку и не вызывает настоящие модели.
+This is a developer/CI tool using the Python standard library. The installed product does not need Python. The check creates separate HOME, program directory and queue, does not change the working installation and does not call real models.
 
-После успешного Mac-задания архивы доступны в Artifacts соответствующего запуска. Они содержат revision проверенного checkout. Для PR это может быть временный merge-коммит GitHub; он не равен автоматически head ветки. Архивы Actions остаются preview, даже если все проверки зелёные.
+After a successful Mac job, the archives are available in that run's Artifacts. They contain the revision of the checked-out code. For a PR this may be GitHub's temporary merge commit; it is not automatically equal to the branch head. Actions archives remain preview even if all checks are green.
 
-## Версия сборщика
+## Builder version
 
-Архивы CI собираются актуальным stable Go на Mac; Go 1.22.2 оставлен только для совместимости исходников. Фактическая версия есть в журнале и в `messenger version`. Для принятого выпуска версия Go должна быть зафиксирована вместе с исходным SHA и контрольными суммами. Старый минимальный `go` в go.mod не является рекомендацией выпускать бинарники старым runtime. [Политика поддержки Go](https://go.dev/doc/devel/release#policy): поддерживаются две последние основные версии.
+CI archives are built with the current stable Go on Mac; Go 1.22.2 is kept only for source compatibility. The actual version is in the log and in `messenger version`. For an accepted release, the Go version must be recorded together with the source SHA and checksums. The old minimum `go` in go.mod is not a recommendation to ship binaries with an old runtime. [Go release policy](https://go.dev/doc/devel/release#policy): the two most recent major versions are supported.

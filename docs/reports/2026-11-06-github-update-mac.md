@@ -1,21 +1,21 @@
-# Публичное обновление Mac: preview.12 → preview.13
+# Public Mac update: preview.12 → preview.13
 
-Проверено 6 ноября 2026 на пользовательском Mac, Apple Silicon. Выпущенный код: `0f3790c3f650aa568cc883c62923a8c849dbf658`.
+Checked on November 6, 2026 on the user's Mac, Apple Silicon. Released code: `0f3790c3f650aa568cc883c62923a8c849dbf658`.
 
-## Фактический результат
+## Actual result
 
-- [Preview.13](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.13) опубликован с тремя assets: подписанные метаданные, их подпись и архив.
-- До проверки приложения основной локальный канал содержал build 12. Build 13 готовился в отдельном staging-каталоге и локально в этот канал не копировался.
-- Проверка запущена из установленного приложения. Затем наблюдались новый процесс окна и установленная версия `0.0.0-preview.13` с точной ревизией выпуска; основной канал получил build 13 из GitHub. Контрольная сумма скачанного архива совпала с подписанными метаданными и GitHub asset digest.
-- До и после перехода совпали все 13 запросов, 10 попыток и 9 ответов. Работающий фоновый клиент сохранил тот же PID. Новых попыток модели нет, разрешение запуска моделей осталось выключено.
-- В установленной версии проверены светлая/тёмная темы, видимые без наведения кнопки, значки провайдеров, отсутствие повторной шапки и размещение управления очередью внутри её вкладки. Окно скрывает кнопку обновления, когда новой версии нет.
+- [Preview.13](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.13) was published with three assets: signed metadata, its signature and the archive.
+- Before the app check, the main local channel contained build 12. Build 13 was prepared in a separate staging directory and was not copied locally into this channel.
+- The check was started from the installed app. A new window process and the installed version `0.0.0-preview.13` with the exact release revision were then observed; the main channel received build 13 from GitHub. The checksum of the downloaded archive matched the signed metadata and the GitHub asset digest.
+- All 13 requests, 10 attempts and 9 replies matched before and after the transition. The running background client kept the same PID. There were no new model attempts; model run permission remained off.
+- In the installed version, the following were checked: light/dark themes, buttons visible without hovering, provider icons, absence of a duplicate header, and placement of the queue controls inside its tab. The window hides the update button when there is no new version.
 
-## Проверки кода
+## Code checks
 
-[CI точного исходного коммита](https://github.com/kolotiloff/agent-messenger/actions/runs/42178423429): все четыре задания успешны — macOS/Linux, Go 1.22.2 и stable. Включены race-проверки, компиляция целевых платформ и тесты Mac-пакетов по матрице CI. JavaScript прошёл проверку синтаксиса, Swift — проверку типов и сборку. Транспорт отдельно проверяет повреждения, подписи, ограничения размера/адресов, блокировки и сохранность прежнего канала.
+[CI for the exact source commit](https://github.com/kolotiloff/agent-messenger/actions/runs/42178423429): all four jobs succeeded — macOS/Linux, Go 1.22.2 and stable. This includes race checks, compilation for target platforms and Mac package tests per the CI matrix. JavaScript passed a syntax check; Swift passed type checking and the build. The transport separately tests corruption, signatures, size/address limits, locks and preservation of the previous channel.
 
-## Границы
+## Boundaries
 
-Проверен реальный переход через публичный GitHub с последующей установкой. Часовой таймер отдельно полным часовым ожиданием здесь не проверялся. Точные нажатия пользователя внутри окна установщика не протоколировались; результат принят по версии установленного приложения и сохранности состояния.
+A real transition through public GitHub followed by installation was verified. The hourly timer was not separately verified here with a full one-hour wait. The user's exact clicks inside the installer window were not logged; the result was accepted based on the installed app's version and the preservation of state.
 
-Фоновый клиент остался на прежней версии. Его обновление, миграции и полный откат ещё не приняты. Windows/Linux GUI, Intel Mac и чистая установка через Gatekeeper на другом Mac не проверены. Новая раскладка сообщений справа/слева и общая повторная проверка палитры запрошены после сборки 13 и в этот выпуск не включены. Приватные идентификаторы, базы, ключи и журналы сессий не публикуются.
+The background client stayed on the previous version. Its update, migrations and full rollback have not yet been accepted. Windows/Linux GUI, Intel Mac and a clean installation through Gatekeeper on another Mac were not verified. The new right/left message layout and a general re-check of the palette were requested after build 13 and are not included in this release. Private identifiers, databases, keys and session logs are not published.
