@@ -6,7 +6,7 @@ This file is the shared memory between tools (Claude Code, Cursor, Codex). Whoev
 
 Updated 2026-11-06 by Claude Code.
 
-- **Merged to `main` (PR_LINK):** T-001, creating a Codex session before its first message.
+- **Merged to `main` ([PR #28](https://github.com/kolotiloff/agent-messenger/pull/28)):** T-001, creating a Codex session before its first message.
   - `messenger create-codex-session` launches a managed app-server, checks its config, and creates a thread with the Messenger tools. It stores the thread ID; the live process stays the owner. No model is called.
   - Details: [CODEX_ADAPTER_NEXT.md](CODEX_ADAPTER_NEXT.md) ("Session setup"), [report](reports/2026-11-06-codex-setup-linux.md).
 - **Not done yet:**

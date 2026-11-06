@@ -45,7 +45,7 @@ How to use it:
 
 | ID | Task | PR |
 |---|---|---|
-| T-001 | Create and persist a Codex session before the first message (`create-codex-session`); verified on Linux with a fake app-server and real Codex 0.155.1, no model. | PR_LINK |
+| T-001 | Create and persist a Codex session before the first message (`create-codex-session`); verified on Linux with a fake app-server and real Codex 0.155.1, no model. | [PR #28](https://github.com/kolotiloff/agent-messenger/pull/28) |
 | T-100 | Translate documentation to English; shared agent rules in `AGENTS.md`; close stale draft PRs #2–#18. | [#26](https://github.com/kolotiloff/agent-messenger/pull/26) |
 | T-101 | Fail-closed Codex app-server preflight and turn guards (components only, not wired into `serve`). | [#25](https://github.com/kolotiloff/agent-messenger/pull/25) |
 | T-102 | preview.19: create and explicitly launch a separate test Claude session from the window; accepted on Mac. | see [report](reports/2026-11-06-window-launch-mac.md) |
