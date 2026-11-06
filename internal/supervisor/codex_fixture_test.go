@@ -72,6 +72,7 @@ func fakeCodexServer() int {
 		return resp.Result, true
 	}
 	turns := 0
+	configReads := 0
 	runTurn := func(reqID int) bool {
 		turns++
 		turnMode := mode
@@ -163,10 +164,23 @@ func fakeCodexServer() int {
 				send(map[string]any{"id": 99, "method": "item/tool/call", "params": map[string]any{}})
 				continue
 			}
-			send(map[string]any{"id": *req.ID, "result": map[string]any{"config": map[string]any{
-				"sandbox_mode": "read-only", "approval_policy": "never", "web_search": "disabled",
-				"features": features, "mcp_servers": servers,
-			}}})
+			configReads++
+			// Like the real app-server, key order changes between calls.
+			parts := []string{`"sandbox_mode":"read-only"`, `"approval_policy":"never"`, `"web_search":"disabled"`}
+			featuresJSON, _ := json.Marshal(features)
+			serversJSON, _ := json.Marshal(servers)
+			parts = append(parts, `"features":`+string(featuresJSON), `"mcp_servers":`+string(serversJSON))
+			if configReads%2 == 0 {
+				for i, j := 0, len(parts)-1; i < j; i, j = i+1, j-1 {
+					parts[i], parts[j] = parts[j], parts[i]
+				}
+			}
+			if mode == "config-change" && configReads > 1 {
+				parts = append(parts, `"model":"changed-after-setup"`)
+			}
+			raw := `{"id":` + fmt.Sprint(*req.ID) + `,"result":{"config":{` + strings.Join(parts, ",") + `}}}`
+			out.WriteString(raw + "\n")
+			out.Flush()
 		case "thread/start":
 			var params struct {
 				Cwd string `json:"cwd"`

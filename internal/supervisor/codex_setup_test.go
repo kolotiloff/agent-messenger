@@ -724,3 +724,23 @@ func TestClaudeAndCodexExchangeUntilAutoReplyLimit(t *testing.T) {
 		}
 	}
 }
+
+func TestCodexOwnerRechecksConfigBeforeEachTurn(t *testing.T) {
+	h := newCodexHarness(t, "config-change", AdapterLauncher{AllowModels: true})
+	if r := h.create("codex-test"); !r.OK {
+		t.Fatalf("create failed: %+v", r)
+	}
+	setup := h.waitSetup(func(s map[string]any) bool { return s["state"] == "created" })
+	h.send("m1", "one")
+	s := h.waitSnap("config change detected", func(s codexSnap) bool {
+		return s.CodexSetups[0]["state"] == "uncertain" && s.CodexSetups[0]["exit_observed"] == float64(1)
+	})
+	if requestState(s, "m1") != "queued" {
+		t.Fatalf("unsent message not returned to the queue: %+v", s.Requests)
+	}
+	if h.count("turn/start") != 0 || h.count("config/read") != 2 {
+		t.Fatalf("log %v", h.log())
+	}
+	h.stop()
+	waitGone(t, pidOf(setup))
+}

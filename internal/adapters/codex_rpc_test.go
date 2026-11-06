@@ -322,3 +322,22 @@ func TestCodexRunTurnRefusesOtherServerRequests(t *testing.T) {
 		t.Fatalf("approval not refused: %q", lines)
 	}
 }
+
+func TestCodexConfigFingerprintIgnoresKeyOrderOnly(t *testing.T) {
+	a, err := CodexConfigFingerprint(json.RawMessage(`{"b":1,"a":{"y":true,"x":[1,2]},"n":1.50}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := CodexConfigFingerprint(json.RawMessage(`{"a":{"x":[1,2],"y":true},"n":1.50,"b":1}`))
+	if a != b {
+		t.Fatal("key order changed the fingerprint")
+	}
+	for _, other := range []string{`{"b":1,"a":{"y":true,"x":[2,1]},"n":1.50}`, `{"b":1,"a":{"y":true,"x":[1,2]},"n":1.5}`, `{"b":1,"a":{"y":true,"x":[1,2]},"n":1.50,"c":null}`} {
+		if c, _ := CodexConfigFingerprint(json.RawMessage(other)); c == a {
+			t.Fatalf("different config %s has the same fingerprint", other)
+		}
+	}
+	if _, err := CodexConfigFingerprint(json.RawMessage(`{`)); err == nil {
+		t.Fatal("invalid config accepted")
+	}
+}

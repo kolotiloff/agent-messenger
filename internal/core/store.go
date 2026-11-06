@@ -129,6 +129,10 @@ func Open(path string) (*Store, error) {
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 	store := &Store{db: db}
+	if err := checkSchemaVersion(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if _, err := db.Exec(schema + streamSchema + streamRecoverySchema + uiOutboxSchema + codexSetupSchema); err != nil {
 		db.Close()
 		return nil, err
@@ -163,6 +167,10 @@ func Open(path string) (*Store, error) {
 			db.Close()
 			return nil, err
 		}
+	}
+	if err := recordSchemaVersion(db); err != nil {
+		db.Close()
+		return nil, err
 	}
 	_ = os.Chmod(path, 0o600)
 	return store, nil

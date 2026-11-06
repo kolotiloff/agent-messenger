@@ -170,3 +170,77 @@ func TestCodexProbeRejectsAmbiguousProtocolAndModelMethods(t *testing.T) {
 		t.Fatal("model method escaped probe allowlist")
 	}
 }
+
+// Opt-in: repeated config/read on an installed app-server must give the same
+// canonical fingerprint, or every turn would be refused as a config change.
+func TestInstalledCodexConfigFingerprintIsStable(t *testing.T) {
+	cli := os.Getenv("MESSENGER_CODEX_PROBE")
+	if cli == "" {
+		t.Skip("set MESSENGER_CODEX_PROBE to an absolute Codex executable for model-free checks")
+	}
+	root := t.TempDir()
+	home := filepath.Join(root, "home")
+	profile := filepath.Join(home, ".codex")
+	workspace := filepath.Join(root, "workspace")
+	for _, dir := range []string{profile, workspace} {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	args, err := CodexAppServerArgs(cli)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+	cmd.Dir = workspace
+	cmd.Env = []string{"HOME=" + home, "CODEX_HOME=" + profile, "TMPDIR=" + root, "PATH=/usr/bin:/bin:/usr/sbin:/sbin"}
+	cmd.Stderr = io.Discard
+	input, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { cancel(); _ = cmd.Wait() }()
+	scanner := bufio.NewScanner(output)
+	scanner.Buffer(make([]byte, 4096), 4<<20)
+	if _, err = probeRPC(input, scanner, 1, "initialize", map[string]any{
+		"clientInfo":   map[string]any{"name": "messenger_go_preflight", "version": "0.1"},
+		"capabilities": map[string]any{"experimentalApi": true},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = io.WriteString(input, "{\"method\":\"initialized\"}\n"); err != nil {
+		t.Fatal(err)
+	}
+	var first string
+	for id := 2; id <= 4; id++ {
+		result, err := probeRPC(input, scanner, id, "config/read", map[string]any{"includeLayers": false, "cwd": workspace})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var report struct {
+			Config json.RawMessage `json:"config"`
+		}
+		if err := json.Unmarshal(result, &report); err != nil {
+			t.Fatal(err)
+		}
+		fingerprint, err := CodexConfigFingerprint(report.Config)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if first == "" {
+			first = fingerprint
+		} else if fingerprint != first {
+			t.Fatal("fingerprint changed between config/read calls")
+		}
+	}
+	_ = input.Close()
+}

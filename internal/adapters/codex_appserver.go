@@ -1,6 +1,9 @@
 package adapters
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -78,4 +81,23 @@ func ValidateCodexAppServerConfig(raw json.RawMessage) error {
 		}
 	}
 	return nil
+}
+
+// CodexConfigFingerprint hashes the effective config in a canonical form.
+// app-server does not keep key order stable between config/read calls (seen
+// with Codex 0.155.1), so the raw bytes cannot be compared. Objects are
+// re-encoded with sorted keys and numbers kept as written.
+func CodexConfigFingerprint(raw json.RawMessage) (string, error) {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return "", errors.New("invalid Codex configuration report")
+	}
+	canonical, err := json.Marshal(value)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(canonical)
+	return hex.EncodeToString(sum[:]), nil
 }
