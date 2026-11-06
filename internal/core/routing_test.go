@@ -5,6 +5,8 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+
+	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
 
 func routingStore(t *testing.T) (*Store, string) {
@@ -34,6 +36,19 @@ func replyFromA(t *testing.T, st *Store, env, sender string, hops int) {
 	}
 	token := claimBeginConfirm(t, st, env, "a", "conv-a")
 	if _, err := st.Reply(token, "ACK"); err != nil {
+		t.Fatal(err)
+	}
+	verifyAndAccept(t, st, token, "a")
+}
+
+// verifyAndAccept records a clean exit and accepts the attempt with a proof,
+// which is when a one-shot reply is published (T-022).
+func verifyAndAccept(t *testing.T, st *Store, token, alias string) {
+	t.Helper()
+	if _, err := st.FinishObserved(token, 0, true, true, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Accept(alias, platform.Proof{Proven: true, Detail: "test proof"}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -151,6 +166,25 @@ func TestAgentSendIsBoundedAndRouted(t *testing.T) {
 	if sent != MaxSendsPerTurn {
 		t.Fatalf("sent %d: %+v", sent, snap.Requests)
 	}
+	// T-022: the sends wait for the turn to be verified.
+	held := func() (n int) {
+		for _, r := range mustSnap(t, st).Requests {
+			if r["in_reply_to"] == "m1" && r["state"] == "held" {
+				n++
+			}
+		}
+		return n
+	}
+	if held() != MaxSendsPerTurn {
+		t.Fatal("send queued before the turn was verified")
+	}
+	if _, err := st.Reply(token, "done"); err != nil {
+		t.Fatal(err)
+	}
+	verifyAndAccept(t, st, token, "a")
+	if held() != 0 {
+		t.Fatal("sends not released after verification")
+	}
 }
 
 func TestAgentSendRespectsChainLimit(t *testing.T) {
@@ -164,5 +198,72 @@ func TestAgentSendRespectsChainLimit(t *testing.T) {
 	token := claimBeginConfirm(t, st, env, "a", "conv-a")
 	if _, err := sendFromA(t, st, token, "b", "more"); !errors.Is(err, ErrRejected) {
 		t.Fatalf("send past the chain limit: %v", err)
+	}
+}
+
+func replyHeld(t *testing.T, st *Store) bool {
+	t.Helper()
+	snap := mustSnap(t, st)
+	if len(snap.Replies) != 1 {
+		t.Fatalf("replies %+v", snap.Replies)
+	}
+	return snap.Replies[0]["held"] == int64(1)
+}
+
+// T-022: a stored reply reaches another agent only in the transaction that
+// marks its attempt complete after verification.
+func TestReplyIsHeldUntilTheRunIsVerified(t *testing.T) {
+	st, env := routingStore(t)
+	if _, err := st.Enqueue("m1", "a", "b", "hello"); err != nil {
+		t.Fatal(err)
+	}
+	token := claimBeginConfirm(t, st, env, "a", "conv-a")
+	if _, err := st.Reply(token, "ACK"); err != nil {
+		t.Fatal(err)
+	}
+	if len(findRequest(mustSnap(t, st), "m1")) != 0 || !replyHeld(t, st) {
+		t.Fatal("reply routed before verification")
+	}
+	if _, err := st.FinishObserved(token, 0, true, true, ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(findRequest(mustSnap(t, st), "m1")) != 0 || !replyHeld(t, st) {
+		t.Fatal("reply routed before the attempt was accepted")
+	}
+	if err := st.Accept("a", platform.Proof{Proven: true, Detail: "test proof"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(findRequest(mustSnap(t, st), "m1")) != 1 || replyHeld(t, st) {
+		t.Fatal("verified reply not published")
+	}
+}
+
+func TestReplyOfAFailedRunIsNeverPublished(t *testing.T) {
+	for name, finish := range map[string]func(*Store, string) error{
+		"exit 1": func(st *Store, token string) error { _, err := st.FinishObserved(token, 1, true, true, ""); return err },
+		"provider bad": func(st *Store, token string) error {
+			_, err := st.FinishObserved(token, 0, true, false, "")
+			return err
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			st, env := routingStore(t)
+			if _, err := st.Enqueue("m1", "a", "b", "hello"); err != nil {
+				t.Fatal(err)
+			}
+			token := claimBeginConfirm(t, st, env, "a", "conv-a")
+			if _, err := st.Reply(token, "ACK"); err != nil {
+				t.Fatal(err)
+			}
+			if err := finish(st, token); err != nil {
+				t.Fatal(err)
+			}
+			if err := st.Accept("a", platform.Proof{Proven: true, Detail: "test proof"}); err == nil {
+				t.Fatal("failed run accepted")
+			}
+			if len(findRequest(mustSnap(t, st), "m1")) != 0 || !replyHeld(t, st) {
+				t.Fatal("reply of a failed run was published")
+			}
+		})
 	}
 }

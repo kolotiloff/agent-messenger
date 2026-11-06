@@ -193,8 +193,22 @@ func TestCodexTurnFailureLocksSession(t *testing.T) {
 	if err := f.st.PrepareCodexTurnSend(token); err != nil {
 		t.Fatal(err)
 	}
+	if err := f.st.BindCodexTurn(token, "turn-1"); err != nil {
+		t.Fatal(err)
+	}
+	_, receipt, err := f.st.CodexRead(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.CodexReply(token, receipt, "partial"); err != nil {
+		t.Fatal(err)
+	}
 	if err := f.st.FailCodexTurn(token, "EOF"); err != nil {
 		t.Fatal(err)
+	}
+	// T-022: the reply of a failed turn stays held.
+	if snap, _ := f.st.Snapshot(); len(snap.Replies) != 1 || snap.Replies[0]["held"] != int64(1) {
+		t.Fatalf("replies %+v", snap.Replies)
 	}
 	if f.state(t) != "uncertain" {
 		t.Fatal("owner not uncertain")
