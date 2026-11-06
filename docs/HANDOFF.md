@@ -14,7 +14,7 @@ Updated 2026-11-06 by Claude Code.
 - **`main` ([PR #30](https://github.com/kolotiloff/agent-messenger/pull/30)):** T-003 is done. The Codex config is checked again before every turn, and the database has a schema version.
 - **`main` ([PR #31](https://github.com/kolotiloff/agent-messenger/pull/31)):** T-008 is done. Up to 4 persistent Claude sessions run side by side.
 - **Releases:** Mac previews are now built, signed and published by the Release Mac preview workflow, using the `SPARKLE_ED_PRIVATE_KEY` secret ([UPDATES.md](UPDATES.md)). preview.20 was the first one released this way.
-- **`main` (PR6_LINK):** T-006 is done. The window creates a Codex session and allows model calls only for it ([SESSION_SETUP.md](SESSION_SETUP.md)).
+- **`main` ([PR #32](https://github.com/kolotiloff/agent-messenger/pull/32)):** T-006 is done. The window creates a Codex session and allows model calls only for it ([SESSION_SETUP.md](SESSION_SETUP.md)).
 - **Next:** release preview.21, then T-004 on the Mac. The owner needs a logged-in Codex profile ([ACCEPTANCE_CODEX_MAC.md](ACCEPTANCE_CODEX_MAC.md)).
 - **Mac status:** after the freeze and reboot, preview.19 would not open. All reservations pointed to a test directory in `/private/tmp` that macOS had deleted. The owner moved `active-runs.json` aside after checking the evidence, and the window now works with the default data directory and empty history ([report](reports/2026-11-06-reboot-temp-root-mac.md)). The old Claude test session no longer exists. Fixes (`recover-missing-root`, refusing temporary data directories) are in PR #31 and ship with the next build.
 

@@ -5,7 +5,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 ## 2026-11-06 — Claude Code (releases from CI, T-006)
 
 - The owner added the `SPARKLE_ED_PRIVATE_KEY` secret. Merged [PR #31](https://github.com/kolotiloff/agent-messenger/pull/31) and started the first CI release, preview.20.
-- T-006: a Codex session can be created from the window in one confirmed step. PR6_LINK.
+- T-006: a Codex session can be created from the window in one confirmed step. [PR #32](https://github.com/kolotiloff/agent-messenger/pull/32).
 
 ## 2026-11-06 — Claude Code (incident: app would not open after reboot)
 
