@@ -8,6 +8,27 @@ Research and first Go components as of November 6, 2026, with Codex CLI 0.155.1 
 
 `internal/adapters/codex_turn.go` checks dynamic tool calls for a single already confirmed thread/turn. Only `messenger_bound.read_current` and `reply` are allowed, in that order. The reply uses the issued receipt and a write handler bound by the controller to a specific attempt. A recipient from the model is not accepted. A write error, someone else's ID, a stale receipt, a repeated call or `failed`/`interrupted` do not become success. After stopping, the tools are closed. The controller must separately match the RPC ID, write the result to SQLite and keep the process reservation in case of uncertainty.
 
+### Session setup (T-001)
+
+`messenger --root DIR create-codex-session --environment MANAGED_PROFILE --alias NAME --cli FILE` creates a new Codex session before its first message. The client must run with `--allow-model-calls`; with `--only-session`, the alias must match. The default `~/.codex` profile is refused.
+
+1. **Intent.** A `codex_setups` row records the intent, alias, profile, CLI and a private workspace (`workspaces/<id>`). This happens before anything is launched. The alias is reserved from this moment: `register-session`, Claude setup and other Codex setups cannot take it.
+2. **Launch.** The state becomes `launching`. A reservation with `codex_setup_id` is written to `active-runs.json`. Only then does exec happen. The process gets an explicit environment (`HOME` and `TMPDIR` private to the setup, `CODEX_HOME` set to the managed profile, `PATH`) and the flags from `CodexAppServerArgs`.
+3. **Config check.** After `initialize`/`initialized`, `config/read` is checked with `ValidateCodexAppServerConfig`. Only a SHA-256 of the checked config is stored.
+4. **Thread request.** `thread_requested` is committed **before** `thread/start` is written. The request asks for a non-ephemeral thread with a read-only sandbox, approval policy `never`, and the `messenger_bound` dynamic tools (`read_current`, `reply`). Tools can only be declared at thread start.
+5. **Thread ID.** The result must be an idle, empty, non-ephemeral thread in the same workspace with the same sandbox and policy. Its ID is stored (`created`) and added to the reservation. The live app-server stays the owner: an empty thread is not written to disk, so no other process could resume it.
+
+Failure rules:
+
+- Every failure after step 2 makes the setup `uncertain`: protocol error, timeout, EOF, rejected config, unexpected server request, process exit or client restart. The alias and the reservation stay. Nothing is retried, and `thread/start` is never sent twice.
+- Only a definite OS exec refusal leads to `not_started` and releases the alias.
+- `recover-failed` refuses a reservation held by a Codex setup.
+- An explicit resolution for uncertain setups is not implemented yet (T-007).
+
+No `sessions` row is created yet, so messages cannot be queued for the alias and the generic loop cannot launch a second process for the thread. The setup RPC client allows only `initialize`, `config/read` and `thread/start`; `turn/start` is not reachable. Delivery of messages to the owner is T-002. [Verification report](reports/2026-11-06-codex-setup-linux.md).
+
+Compatibility: an older client ignores `codex_setups`. It would not see the alias reservation, and it would treat the new registry entry as an ordinary blocking reservation. Do not run an older client on a data directory after creating a Codex session.
+
 On a Mac, three cases were verified with the real installed app-server and empty profiles, without a model: a clean profile was accepted, an inherited MCP was rejected, an explicitly disabled MCP was accepted. [Checks and limitations](reports/2026-11-06-codex-preflight-mac.md).
 
 The components are not yet called from `serve` or the window. Still needed: a persistent transport that handles event ordering, atomic registration of the ID issued by Codex, binding to SQLite/reservations, a managed profile with an existing login, and a test with two real messages. The existence of these Go files does not mean the Codex launch button is ready.

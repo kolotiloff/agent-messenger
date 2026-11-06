@@ -6,20 +6,17 @@ This file is the shared memory between tools (Claude Code, Cursor, Codex). Whoev
 
 Updated 2026-11-06 by Claude Code.
 
-- **In progress:** T-001 on branch `claude/quirky-cannon-u0n3qm` (WIP commit, not merged).
-- **Done in the WIP:**
-  - `internal/adapters/codex_rpc.go`: setup-only JSON-RPC client.
-  - `internal/core/codex_setup.go`: the `codex_setups` state machine.
-  - `internal/supervisor/codex_setup.go`: `CreateCodexSession` and the `create-codex-session` command.
-  - Tests for all three, including a fake app-server.
-- **Verified so far (Linux):**
-  - The adapters and core tests pass.
-  - The Codex supervisor tests pass when run alone.
-  - The opt-in `MESSENGER_CODEX_PROBE` test passed against real Codex 0.155.1 (linux-x64, empty profile, no login, no model): `thread/start` with dynamic tools works, and an empty thread leaves no rollout after exit.
-- **Open problems before a PR:**
-  1. `scripts/check-builds.sh` fails on windows: `fakeCodexServer` sits in a unix-only test file but is referenced from `TestMain`. Move it to an untagged file.
-  2. In the full `go test ./internal/supervisor` run, the `server-request`, `silent-thread` and `exit-on-thread` subtests failed with "command socket was not created". `start()` in the test now reports the Run error; find the cause.
-- **Next after that:** update `CODEX_ADAPTER_NEXT.md` and open the PR. Then T-002.
+- **Merged to `main` (PR_LINK):** T-001, creating a Codex session before its first message.
+  - `messenger create-codex-session` launches a managed app-server, checks its config, and creates a thread with the Messenger tools. It stores the thread ID; the live process stays the owner. No model is called.
+  - Details: [CODEX_ADAPTER_NEXT.md](CODEX_ADAPTER_NEXT.md) ("Session setup"), [report](reports/2026-11-06-codex-setup-linux.md).
+- **Not done yet:**
+  - Messages cannot be sent to a created Codex session (T-002).
+  - Uncertain setups cannot be resolved (T-007).
+  - The setup has not been run on the Mac.
+- **No work in progress on any branch.**
+- **Next task:** T-002, delivering messages to the Codex owner. Steps 4–5 of the plan below.
+
+Codex CLI for model-free checks in a cloud session: `npm install @openai/codex@0.155.1` in a scratch directory. Then use the native binary under `node_modules/@openai/codex-linux-x64/vendor/*/bin/codex` with `MESSENGER_CODEX_PROBE=...`.
 
 The sections below are the original handoff from Codex (2026-11-06, base `fcec2d88cc000ca9afad5427e46bcf5701c7fb15`). They still describe the product state and the plan for the Codex adapter.
 
