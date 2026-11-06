@@ -29,6 +29,13 @@ func main() {
 		usage()
 		os.Exit(2)
 	}
+	if args[0] == "task-mcp" {
+		if err := mcp.TaskMain(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	if args[0] == "mcp" {
 		if err := mcp.Main(args[1:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -67,6 +74,9 @@ func main() {
 }
 
 func run(root string, args []string) error {
+	if handled, err := runTaskCommand(root, args); handled {
+		return err
+	}
 	switch args[0] {
 	case "version":
 		if len(args) != 1 {
@@ -363,6 +373,10 @@ func serveOptions(args []string) (supervisor.AdapterLauncher, error) {
 			options.AllowModels = true
 			continue
 		}
+		if arg == "--allow-tasks" {
+			options.AllowTasks = true
+			continue
+		}
 		if arg == "--only-session" || strings.HasPrefix(arg, "--only-session=") {
 			value := strings.TrimPrefix(arg, "--only-session=")
 			if arg == "--only-session" {
@@ -409,14 +423,22 @@ func usage() {
   messenger version
   messenger [--root КАТАЛОГ] desktop  (внутренний запуск окна; stdin — канал времени жизни)
   messenger install [--prefix АБСОЛЮТНЫЙ_КАТАЛОГ]
-  messenger --root КАТАЛОГ serve [--allow-model-calls] [--claude-stream]
-  messenger --root КАТАЛОГ start [--allow-model-calls] [--claude-stream]
+  messenger --root КАТАЛОГ serve [--allow-model-calls] [--claude-stream] [--allow-tasks]
+  messenger --root КАТАЛОГ start [--allow-model-calls] [--claude-stream] [--allow-tasks]
   messenger --root КАТАЛОГ doctor [--json]
   messenger check-cli --provider claude|codex|cursor --cli ФАЙЛ --environment ПРОФИЛЬ [--json]
   messenger --root КАТАЛОГ create-claude-session --environment КАТАЛОГ --alias ИМЯ --cli ФАЙЛ --workspace КАТАЛОГ
   messenger --root КАТАЛОГ create-codex-session --environment УПРАВЛЯЕМЫЙ_ПРОФИЛЬ --alias ИМЯ --cli ФАЙЛ
   messenger recover-failed --confirm actions-may-repeat
   messenger --root КАТАЛОГ recover-stream --alias ИМЯ --run ID_ЗАПУСКА --confirm preserve-uncertain
+  messenger --root КАТАЛОГ project-add --name ИМЯ --folder ПАПКА
+  messenger --root КАТАЛОГ project-folder --name ИМЯ --folder ПАПКА
+  messenger --root КАТАЛОГ projects
+  messenger --root КАТАЛОГ agent-set --provider claude|codex --cli ФАЙЛ [--environment ПРОФИЛЬ] [--profile worker|messenger-only]
+  messenger --root КАТАЛОГ tasks [--project ИМЯ]
+  messenger --root КАТАЛОГ task-answer --task ID --question ID --op ID --text ТЕКСТ
+  messenger --root КАТАЛОГ task-cancel --task ID
+  messenger --root КАТАЛОГ coordinator --project ИМЯ
   messenger --root КАТАЛОГ recover-codex --alias ИМЯ --confirm preserve-uncertain
   messenger recover-missing-root --confirm preserve-uncertain
   messenger --root КАТАЛОГ register-session --provider claude|codex|cursor --environment КАТАЛОГ --conversation-id ID --alias ИМЯ --cli ФАЙЛ [--workspace КАТАЛОГ]
@@ -443,6 +465,7 @@ recover-failed снимает только неудачную попытку п�
 Пустая группа процессов не снимает блокировку. В обычном режиме второе письмо той же сессии не стартует.
 --claude-stream: один постоянный Claude, письма по очереди в том же процессе; другие провайдеры остаются в очереди.
 --only-session ИМЯ: в режиме --claude-stream обрабатывается только эта сессия. Остальные очереди не выбираются. Сам флаг вызовы модели не разрешает.
+--allow-tasks: клиент запускает исполнителей задач (модель задачи, D-021). Без флага и на паузе задачи только записываются, ничего не запускается.
 create-claude-session создаёт новый точный ID без модели, для последующего запуска с --claude-stream.
 Постоянный процесс сохраняет блокировку после stop/shutdown/restart. Незавершённый ход не повторяется автоматически.
 inspect показывает StreamRuns и Verifications: успешный ход не является выходом процесса.

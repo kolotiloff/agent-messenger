@@ -133,7 +133,7 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	if _, err := db.Exec(schema + streamSchema + streamRecoverySchema + uiOutboxSchema + codexSetupSchema); err != nil {
+	if _, err := db.Exec(schema + streamSchema + streamRecoverySchema + uiOutboxSchema + codexSetupSchema + taskSchema); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -642,6 +642,9 @@ func (s *Store) RevokeInherited() (int, error) {
 			return err
 		}
 		if err := stopInheritedCodexSetups(tx); err != nil {
+			return err
+		}
+		if err := interruptInheritedTaskRuns(tx); err != nil {
 			return err
 		}
 		rows, err := tx.Query(`SELECT active_token FROM sessions WHERE active_token IS NOT NULL AND key NOT IN (SELECT session_key FROM stream_runs)`)

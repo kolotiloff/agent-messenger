@@ -80,6 +80,7 @@ type Supervisor struct {
 	stopping     atomic.Bool
 	starting     atomic.Bool
 	codex        codexOwners
+	tasks        taskRuns
 }
 
 type activeJob struct {
@@ -186,6 +187,7 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 	cancel()
 	wg.Wait()
 	sup.streams.Wait()
+	sup.tasks.wg.Wait()
 	if ctx.Err() != nil {
 		return nil
 	}
@@ -201,6 +203,7 @@ func (s *Supervisor) loop(ctx context.Context) {
 			return
 		case <-ticker.C:
 		}
+		s.dispatchTasks(ctx)
 		launcher := s.currentLauncher()
 		if s.stopping.Load() || s.starting.Load() || !launcher.Enabled() {
 			continue
