@@ -37,3 +37,5 @@ Sparkle загружается из официального выпуска с �
 Локальные переходы между preview-сборками через Sparkle проверены на пользовательском Mac. Публичный переход preview.12 → preview.13 на Mac принят: [фактический отчёт](reports/2026-11-06-github-update-mac.md). До полного этапа остаются обновление фонового клиента, резервное копирование и откат, Gatekeeper/notarization на чистом Mac и runtime-приёмка Windows/Linux.
 
 API-контракты: [GitHub Releases](https://docs.github.com/en/rest/releases/releases), [скачивание assets](https://docs.github.com/en/rest/releases/assets). Подготовка будущего публичного выпуска не означает готовность всех функций Messenger.
+
+Переход preview.13 → preview.14 также [проверен на Mac](reports/2026-11-06-github-update14-mac.md), с сохранением очереди и прежнего фонового клиента.
