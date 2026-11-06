@@ -13,17 +13,18 @@ How to use it:
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
-| T-001 | Create and persist a Codex session before the first message: persist the setup intent before launching the process, write the shared reservation before launching the CLI, check the effective config before `thread/start`, then atomically store the server-issued thread ID and owner. Lost confirmation or restart leaves an uncertain state; no automatic `thread/start` retry. See [HANDOFF.md](HANDOFF.md) steps 1–3. | agent | not started |
+| — | Nothing in progress. Next: T-002. | | |
 
 ## Next
 
 | ID | Task | Owner | Notes |
 |---|---|---|---|
-| T-002 | Persistent Codex transport: bind the confirmed turn ID to an attempt in SQLite, buffer early events within a bound, write send intent before stdin, connect `CodexTurnGuard` to the existing read/receipt/reply checks. HANDOFF steps 4–5. | agent | after T-001 |
+| T-002 | Persistent Codex transport, starting from the owner created by T-001: create the `sessions` row and owner binding, bind the confirmed turn ID to an attempt in SQLite, buffer early events within a bound, write send intent before stdin, connect `CodexTurnGuard` to the existing read/receipt/reply checks. HANDOFF steps 4–5. | agent | after T-001 |
 | T-003 | Codex failure tests on a fake app-server: two sequential turns, failures at every boundary, repeated RPC/call IDs, foreign turns, profile change, restart, no model calls while idle, old client refusing newer state. HANDOFF step 6. | agent | with T-002 |
 | T-004 | Codex acceptance on Mac: two real messages in a new separate test Codex session, then exact resume of the saved session. HANDOFF step 7. | owner + agent | needs the Mac; blocked: Q-005, Q-007 |
 | T-005 | Several independent owners and Claude ↔ Codex routing with a limit on automatic replies. `Supervisor.current` and `runStream` assume one owner today. HANDOFF step 8. | agent | after T-004 |
 | T-006 | Launch Codex sessions from the window. | agent | after T-005 |
+| T-007 | Explicit resolution of an uncertain Codex setup: prove the owner and its group stopped (or a reboot), then retire the reservation and release the alias; no retry. | agent | needed before regular use |
 
 ## Backlog
 
@@ -44,6 +45,7 @@ How to use it:
 
 | ID | Task | PR |
 |---|---|---|
+| T-001 | Create and persist a Codex session before the first message (`create-codex-session`); verified on Linux with a fake app-server and real Codex 0.155.1, no model. | [PR #28](https://github.com/kolotiloff/agent-messenger/pull/28) |
 | T-100 | Translate documentation to English; shared agent rules in `AGENTS.md`; close stale draft PRs #2–#18. | [#26](https://github.com/kolotiloff/agent-messenger/pull/26) |
 | T-101 | Fail-closed Codex app-server preflight and turn guards (components only, not wired into `serve`). | [#25](https://github.com/kolotiloff/agent-messenger/pull/25) |
 | T-102 | preview.19: create and explicitly launch a separate test Claude session from the window; accepted on Mac. | see [report](reports/2026-11-06-window-launch-mac.md) |

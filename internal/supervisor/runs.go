@@ -28,6 +28,7 @@ var groupEmpty = platform.GroupEmpty
 
 type recordedRun struct {
 	StreamRunID    string                 `json:"stream_run_id,omitempty"`
+	CodexSetupID   string                 `json:"codex_setup_id,omitempty"`
 	Epoch          platform.RecoveryEpoch `json:"recovery_epoch,omitempty"`
 	ID             string                 `json:"id"`
 	Root           string                 `json:"root"`

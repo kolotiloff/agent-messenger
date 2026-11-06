@@ -116,6 +116,7 @@ type Snapshot struct {
 	Paused             bool
 	StreamRuns         []Row
 	Verifications      []Row
+	CodexSetups        []Row
 	ArchivedStreamRuns []Row
 	StreamRecoveries   []Row
 }
@@ -128,7 +129,7 @@ func Open(path string) (*Store, error) {
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 	store := &Store{db: db}
-	if _, err := db.Exec(schema + streamSchema + streamRecoverySchema + uiOutboxSchema); err != nil {
+	if _, err := db.Exec(schema + streamSchema + streamRecoverySchema + uiOutboxSchema + codexSetupSchema); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -213,6 +214,18 @@ func (s *Store) Register(provider, environment, conversationID, alias string) (s
 			return fmt.Errorf("%w: alias is bound to another session", ErrRejected)
 		}
 		if err != nil && err != sql.ErrNoRows {
+			return err
+		}
+		if reserved, err := aliasReservedBySetup(tx, alias); err != nil || reserved {
+			if err == nil {
+				err = fmt.Errorf("%w: alias is reserved by a Codex session setup", ErrRejected)
+			}
+			return err
+		}
+		if owned, err := threadOwnedBySetup(tx, provider, environment, conversationID); err != nil || owned {
+			if err == nil {
+				err = fmt.Errorf("%w: thread is owned by a Codex session setup", ErrRejected)
+			}
 			return err
 		}
 		if _, err := tx.Exec(`INSERT OR IGNORE INTO sessions(key, provider, environment, conversation_id) VALUES (?,?,?,?)`,
@@ -554,6 +567,9 @@ func (s *Store) RevokeInherited() (int, error) {
 	var n int
 	err := s.tx(func(tx *sql.Tx) error {
 		if err := stopInheritedStreams(tx); err != nil {
+			return err
+		}
+		if err := stopInheritedCodexSetups(tx); err != nil {
 			return err
 		}
 		rows, err := tx.Query(`SELECT active_token FROM sessions WHERE active_token IS NOT NULL AND key NOT IN (SELECT session_key FROM stream_runs)`)
@@ -985,6 +1001,10 @@ func (s *Store) Snapshot() (Snapshot, error) {
 			return err
 		}
 		snap.Verifications, err = readRows(tx, `SELECT attempt_token,identity_confirmed,reply_id,exit_observed,exit_code,group_empty,provider_ok,detail FROM verifications ORDER BY rowid`)
+		if err != nil {
+			return err
+		}
+		snap.CodexSetups, err = readRows(tx, `SELECT id,alias,state,thread_id,pid,exit_observed,exit_code,detail FROM codex_setups ORDER BY rowid`)
 		if err != nil {
 			return err
 		}

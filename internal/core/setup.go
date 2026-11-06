@@ -60,6 +60,12 @@ func (s *Store) SetupNewClaude(environment, id, alias, cli, workspace string) er
 		if err != sql.ErrNoRows {
 			return err
 		}
+		if reserved, err := aliasReservedBySetup(tx, alias); err != nil || reserved {
+			if err == nil {
+				err = ErrRejected
+			}
+			return err
+		}
 		var existing int
 		if err := tx.QueryRow(`SELECT COUNT(*) FROM sessions WHERE key=?`, key).Scan(&existing); err != nil {
 			return err

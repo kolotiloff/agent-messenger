@@ -248,7 +248,7 @@ func run(root string, args []string) error {
 			return fmt.Errorf("операция этой ОС не поддерживается и не выполнена: %w", err)
 		}
 		return err
-	case "status", "pause", "resume", "stop-job", "shutdown", "enqueue", "inspect", "resolve", "register-session", "create-claude-session":
+	case "status", "pause", "resume", "stop-job", "shutdown", "enqueue", "inspect", "resolve", "register-session", "create-claude-session", "create-codex-session":
 		response, err := control.Call(root, request(args))
 		if err != nil {
 			return err
@@ -380,6 +380,7 @@ func usage() {
   messenger --root КАТАЛОГ doctor [--json]
   messenger check-cli --provider claude|codex|cursor --cli ФАЙЛ --environment ПРОФИЛЬ [--json]
   messenger --root КАТАЛОГ create-claude-session --environment КАТАЛОГ --alias ИМЯ --cli ФАЙЛ --workspace КАТАЛОГ
+  messenger --root КАТАЛОГ create-codex-session --environment УПРАВЛЯЕМЫЙ_ПРОФИЛЬ --alias ИМЯ --cli ФАЙЛ
   messenger recover-failed --confirm actions-may-repeat
   messenger --root КАТАЛОГ recover-stream --alias ИМЯ --run ID_ЗАПУСКА --confirm preserve-uncertain
   messenger --root КАТАЛОГ register-session --provider claude|codex|cursor --environment КАТАЛОГ --conversation-id ID --alias ИМЯ --cli ФАЙЛ [--workspace КАТАЛОГ]

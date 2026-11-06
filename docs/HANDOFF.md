@@ -6,10 +6,17 @@ This file is the shared memory between tools (Claude Code, Cursor, Codex). Whoev
 
 Updated 2026-11-06 by Claude Code.
 
-- `main` is at the merge of [PR #26](https://github.com/kolotiloff/agent-messenger/pull/26): documentation in English, shared rules in [AGENTS.md](../AGENTS.md). No code changed since [PR #25](https://github.com/kolotiloff/agent-messenger/pull/25).
-- Working documents added: [README.md](README.md) (map), [TASKS.md](TASKS.md), [DECISIONS.md](DECISIONS.md), [QUESTIONS.md](QUESTIONS.md), [LOG.md](LOG.md); this file was renamed from `HANDOFF_CLAUDE.md`.
-- No work in progress on any branch. Old draft PRs #2–#18 are closed; their content is in `main`.
-- Next task: T-001 in [TASKS.md](TASKS.md), creating and persisting a Codex session before the first message.
+- **Merged to `main` ([PR #28](https://github.com/kolotiloff/agent-messenger/pull/28)):** T-001, creating a Codex session before its first message.
+  - `messenger create-codex-session` launches a managed app-server, checks its config, and creates a thread with the Messenger tools. It stores the thread ID; the live process stays the owner. No model is called.
+  - Details: [CODEX_ADAPTER_NEXT.md](CODEX_ADAPTER_NEXT.md) ("Session setup"), [report](reports/2026-11-06-codex-setup-linux.md).
+- **Not done yet:**
+  - Messages cannot be sent to a created Codex session (T-002).
+  - Uncertain setups cannot be resolved (T-007).
+  - The setup has not been run on the Mac.
+- **No work in progress on any branch.**
+- **Next task:** T-002, delivering messages to the Codex owner. Steps 4–5 of the plan below.
+
+Codex CLI for model-free checks in a cloud session: `npm install @openai/codex@0.155.1` in a scratch directory. Then use the native binary under `node_modules/@openai/codex-linux-x64/vendor/*/bin/codex` with `MESSENGER_CODEX_PROBE=...`.
 
 The sections below are the original handoff from Codex (2026-11-06, base `fcec2d88cc000ca9afad5427e46bcf5701c7fb15`). They still describe the product state and the plan for the Codex adapter.
 

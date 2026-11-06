@@ -20,6 +20,9 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if len(os.Args) > 1 && os.Args[1] == "app-server" {
+		os.Exit(fakeCodexServer())
+	}
 	if root := os.Getenv("MESSENGER_STREAM_SERVE_ROOT"); root != "" {
 		os.Unsetenv("MESSENGER_STREAM_SERVE_ROOT")
 		if err := Run(context.Background(), root, AdapterLauncher{AllowModels: true, ClaudeStream: true}); err != nil {
