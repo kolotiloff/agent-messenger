@@ -13,7 +13,7 @@ How to use it:
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
-| — | Nothing in progress. Next: T-009 (resume a Codex thread with a new owner). | | |
+| T-021 | Review the [RETHINK.md](RETHINK.md) proposal (Codex), then the owner decides Q-008. T-009 waits for it. | agent + owner | `claude/vigilant-darwin-34d88b` |
 
 ## Next
 
@@ -24,7 +24,7 @@ How to use it:
 
 | ID | Task | Owner | Notes |
 |---|---|---|---|
-| T-009 | Resume a saved Codex thread with a new owner after a client or app-server restart (`thread/resume`), with the same safety rules; then an acceptance run on the Mac. | agent + owner | |
+| T-009 | (waits for Q-008) Resume a saved Codex thread with a new owner after a client or app-server restart (`thread/resume`), with the same safety rules; then an acceptance run on the Mac. | agent + owner | |
 | T-010 | Safely terminate a CLI and release its session within the same Mac boot. This is an open research problem: release by timer, empty process group or one exited PID is not allowed. | agent | see [RELEASE_PLAN.md](RELEASE_PLAN.md) |
 | T-011 | Switch the version of a running background client, plus full rollback. | agent | see [UPDATES.md](UPDATES.md) |
 | T-012 | Persistent Cursor adapter. | agent | blocked: Q-004 |

@@ -27,6 +27,9 @@ Cloud sessions run on Linux. **Options:** the owner runs the steps from an agent
 ### Q-007: How does the managed Codex profile sign in?
 Copying the owner's credentials into the managed profile is not implemented and must not be logged or published. A likely option is a standard login into the managed profile done by the owner. **Blocks:** T-004.
 
+### Q-008: Switch to one-shot runs that resume a saved conversation?
+Proposal in [RETHINK.md](RETHINK.md): run an agent once per message by exact resume, free the conversation after the process has exited and its group is empty, never retry automatically, and give workers real tools. It would relax D-004 in part and replace D-005 and D-016. Codex reviews it first. **Options:** accept; accept with changes; keep persistent processes. Also to decide if accepted: which permission mode `worker` agents run with. **Blocks:** T-009 and the stages after it.
+
 ## Answered
 
 None yet.
