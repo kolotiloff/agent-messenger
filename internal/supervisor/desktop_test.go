@@ -4,13 +4,39 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
 
+// allowTemporaryRoots lets tests keep their data in t.TempDir().
+func allowTemporaryRoots(t *testing.T) {
+	old := isTemporaryRoot
+	isTemporaryRoot = func(string) bool { return false }
+	t.Cleanup(func() { isTemporaryRoot = old })
+}
+
+func TestDesktopRootRefusesTemporaryDirectory(t *testing.T) {
+	isolateUser(t)
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, dbName), []byte("test"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveRuns([]recordedRun{{Root: root}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DesktopRoot(); err == nil {
+		t.Fatal("window adopted a temporary data directory")
+	}
+	if runtime.GOOS != "windows" && !isTemporaryRoot("/private/tmp/am-claude-test") || !isTemporaryRoot("/tmp/x") || isTemporaryRoot("/Users/someone/Library/Application Support/AgentMessenger") {
+		t.Fatal("temporary directory detection is wrong")
+	}
+}
+
 func TestDesktopRootPreservesReservations(t *testing.T) {
 	isolateUser(t)
+	allowTemporaryRoots(t)
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, dbName), []byte("test"), 0600); err != nil {
 		t.Fatal(err)
@@ -38,6 +64,7 @@ func TestDesktopRootPreservesReservations(t *testing.T) {
 	}
 }
 func TestDesktopRootRejectsMissingOrAmbiguousData(t *testing.T) {
+	allowTemporaryRoots(t)
 	for _, mode := range []string{"missing", "multiple", "corrupt"} {
 		t.Run(mode, func(t *testing.T) {
 			isolateUser(t)

@@ -14,7 +14,7 @@ Updated 2026-11-06 by Claude Code.
 - **`main` ([PR #30](https://github.com/kolotiloff/agent-messenger/pull/30)):** T-003 is done. The Codex config is checked again before every turn, and the database has a schema version.
 - **`main` ([PR #31](https://github.com/kolotiloff/agent-messenger/pull/31)):** T-008 is done. Up to 4 persistent Claude sessions run side by side.
 - **Next:** T-004, the first real run on the Mac, needs the owner (Q-005, Q-007). Without the Mac: T-006, Codex in the window. That work ends in a new app build.
-- **Mac status:** the Mac froze and rebooted on 2026-11-06 after preview.19. The live Claude test owner from that acceptance is gone. Its reservation is kept until `recover-stream` is run on the Mac; this is not needed for current work.
+- **Mac status:** after the freeze and reboot, preview.19 would not open. All reservations pointed to a test directory in `/private/tmp` that macOS had deleted. The owner moved `active-runs.json` aside after checking the evidence, and the window now works with the default data directory and empty history ([report](reports/2026-11-06-reboot-temp-root-mac.md)). The old Claude test session no longer exists. Fixes (`recover-missing-root`, refusing temporary data directories) are in PR #31 and ship with the next build.
 
 Codex CLI for model-free checks in a cloud session: `npm install @openai/codex@0.155.1` in a scratch directory. Then use the native binary under `node_modules/@openai/codex-linux-x64/vendor/*/bin/codex` with `MESSENGER_CODEX_PROBE=...`.
 
