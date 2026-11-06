@@ -4,7 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-06 — Claude Code (T-002)
 
-- Codex message delivery: owner controller, `codex_turns`, `RunTurn` with an early-event buffer and server-request handling, bound tools through SQLite. Tests with a fake app-server cover two turns, pause, and six failure modes. No model was called. PR_LINK.
+- Codex message delivery: owner controller, `codex_turns`, `RunTurn` with an early-event buffer and server-request handling, bound tools through SQLite. Tests with a fake app-server cover two turns, pause, and six failure modes. No model was called. [PR #29](https://github.com/kolotiloff/agent-messenger/pull/29).
 - Codex sessions are stored without a CLI path, so older clients cannot launch them.
 - The owner reported a Mac freeze and reboot; no Mac action is needed for this work.
 

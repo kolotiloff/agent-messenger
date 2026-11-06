@@ -6,7 +6,7 @@ This file is the shared memory between tools (Claude Code, Cursor, Codex). Whoev
 
 Updated 2026-11-06 by Claude Code.
 
-- **`main` (PR_LINK):** T-001 and T-002 are done. `create-codex-session` creates a Codex thread owned by a live app-server, and queued messages to its alias are delivered one turn at a time in that same process. The turns use the bound `read_current`/`reply` tools. Details: [CODEX_ADAPTER_NEXT.md](CODEX_ADAPTER_NEXT.md), [setup report](reports/2026-11-06-codex-setup-linux.md), [delivery report](reports/2026-11-06-codex-delivery-linux.md).
+- **`main` ([PR #29](https://github.com/kolotiloff/agent-messenger/pull/29)):** T-001 and T-002 are done. `create-codex-session` creates a Codex thread owned by a live app-server, and queued messages to its alias are delivered one turn at a time in that same process. The turns use the bound `read_current`/`reply` tools. Details: [CODEX_ADAPTER_NEXT.md](CODEX_ADAPTER_NEXT.md), [setup report](reports/2026-11-06-codex-setup-linux.md), [delivery report](reports/2026-11-06-codex-delivery-linux.md).
 - **Verified:** only on Linux, with a fake app-server. No real Codex model turn has run yet.
 - **No work in progress on any branch.**
 - **Next:** T-004, the first real run on the Mac, needs the owner (Q-005, Q-007). Meanwhile T-007 (resolving uncertain Codex owners) or T-005 (several owners, Claude ↔ Codex) can go ahead without the Mac.
