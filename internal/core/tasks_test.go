@@ -16,6 +16,17 @@ type taskFixture struct {
 	folder string
 }
 
+// realDir resolves symlinks, as the store does: on macOS the temporary
+// directory lives behind /tmp or /var, which are links to /private.
+func realDir(t *testing.T, path string) string {
+	t.Helper()
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resolved
+}
+
 func allowTempFolders(t *testing.T) {
 	t.Helper()
 	old := TemporaryFolder
@@ -33,7 +44,7 @@ func newTaskFixture(t *testing.T) taskFixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	folder := mkdir(t, filepath.Join(root, "game"))
+	folder := realDir(t, mkdir(t, filepath.Join(root, "game")))
 	if err := st.CreateProject("Game", folder); err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +146,7 @@ func TestProjectNeedsAValidNameAndARealFolder(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer st.Close()
-	folder := mkdir(t, filepath.Join(root, "game"))
+	folder := realDir(t, mkdir(t, filepath.Join(root, "game")))
 	// t.TempDir is a temporary folder, which is refused by default.
 	if err := st.CreateProject("Game", folder); !errors.Is(err, ErrRejected) {
 		t.Fatalf("temporary folder accepted: %v", err)

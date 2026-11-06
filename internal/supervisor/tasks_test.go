@@ -48,6 +48,11 @@ func newTaskHarness(t *testing.T, mode string, launcher Launcher) *taskHarness {
 	t.Cleanup(func() { os.RemoveAll(root) })
 	h := &taskHarness{t: t, root: root, logDir: mkdir(t, filepath.Join(t.TempDir(), "log"))}
 	h.folder = mkdir(t, filepath.Join(t.TempDir(), "game"))
+	// The store keeps the folder with symlinks resolved (/tmp is a link on
+	// macOS), and the worker runs there.
+	if h.folder, err = filepath.EvalSymlinks(h.folder); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("MESSENGER_TASK_FIXTURE", mode)
 	t.Setenv("MESSENGER_TASK_LOG", filepath.Join(h.logDir, "runs.jsonl"))
 	t.Setenv("MESSENGER_TASK_DIR", h.logDir)
