@@ -123,3 +123,8 @@ Built the product from the first Go client to preview.19 in about 50 commits:
 - Codex app-server preflight and turn guards.
 
 Reports for each step are in [reports/](reports/). The handoff is in [HANDOFF.md](HANDOFF.md).
+
+## 2026-11-06 — clickable window mockup
+
+- Published a clickable mockup of the D-024 window (computers, task list with agent filter, task feed, answer field for an owner question). The owner approved it.
+- Owner's note: the mockup is a layout reference only. T-029 builds on the program's existing styles and code, not on the mockup's code. Recorded in T-029 and D-024.
