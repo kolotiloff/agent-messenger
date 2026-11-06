@@ -496,6 +496,49 @@ func (s *Store) CompleteCodexTurn(token string) error {
 	})
 }
 
+// CodexConfigFingerprint returns the hash of the config checked at setup.
+func (s *Store) CodexConfigFingerprint(id string) (string, error) {
+	var fingerprint sql.NullString
+	err := s.db.QueryRow(`SELECT config_fingerprint FROM codex_setups WHERE id=?`, id).Scan(&fingerprint)
+	if err == nil && !fingerprint.Valid {
+		err = fmt.Errorf("%w: no checked config", ErrRejected)
+	}
+	return fingerprint.String, err
+}
+
+// AbortCodexTurnUnsent is for a claimed turn whose turn/start was never
+// written (send intent not recorded). The message goes back to the queue; the
+// owner becomes uncertain with the given reason, so nothing else is claimed.
+func (s *Store) AbortCodexTurnUnsent(token, reason string) error {
+	return s.tx(func(tx *sql.Tx) error {
+		row, err := owned(tx, token, "launching")
+		if err != nil {
+			return err
+		}
+		var setup string
+		var sent int
+		if err := tx.QueryRow(`SELECT setup_id,sent_intent FROM codex_turns WHERE attempt_token=?`, token).Scan(&setup, &sent); err != nil {
+			return err
+		}
+		if sent != 0 {
+			return fmt.Errorf("%w: turn may have been sent", ErrRejected)
+		}
+		if _, err := tx.Exec(`UPDATE attempts SET state='not_started',mcp_revoked=1 WHERE token=?`, token); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE requests SET state='queued' WHERE id=?`, row.requestID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE sessions SET active_token=NULL WHERE key=? AND active_token=?`, row.sessionKey, token); err != nil {
+			return err
+		}
+		if err := insertEvent(tx, "codex_turn_not_sent", row.sessionKey, token, reason+"; message returned to the queue"); err != nil {
+			return err
+		}
+		return codexStep(tx, setup, "uncertain", reason, "busy")
+	})
+}
+
 // FailCodexTurn makes the attempt and its owner uncertain. The session stays
 // locked by the attempt, the reservation stays, and nothing is retried.
 func (s *Store) FailCodexTurn(token, reason string) error {

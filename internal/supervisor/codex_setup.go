@@ -2,8 +2,6 @@ package supervisor
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -167,9 +165,10 @@ func (l AdapterLauncher) StartCodexServer(ctx context.Context, spec CodexServerS
 
 // codexOwner is a live app-server that owns a created thread.
 type codexOwner struct {
-	setupID string
-	proc    CodexProcess
-	rpc     *adapters.CodexRPC
+	setupID     string
+	fingerprint string
+	proc        CodexProcess
+	rpc         *adapters.CodexRPC
 }
 
 type codexOwners struct {
@@ -362,8 +361,11 @@ func (s *Supervisor) CreateCodexSession(environment, alias, cli string) (string,
 	if err := adapters.ValidateCodexAppServerConfig(report.Config); err != nil {
 		return fail("effective config rejected", err)
 	}
-	sum := sha256.Sum256(report.Config)
-	if err := s.codex.write(func() error { return s.store.ConfirmCodexSetupConfig(id, hex.EncodeToString(sum[:])) }); err != nil {
+	fingerprint, err := adapters.CodexConfigFingerprint(report.Config)
+	if err != nil {
+		return fail("config report invalid", err)
+	}
+	if err := s.codex.write(func() error { return s.store.ConfirmCodexSetupConfig(id, fingerprint) }); err != nil {
 		return fail("config check not recorded", err)
 	}
 	if err := s.codex.write(func() error { return s.store.PrepareCodexThreadStart(id) }); err != nil {
@@ -405,6 +407,20 @@ func (s *Supervisor) CreateCodexSession(environment, alias, cli string) (string,
 // attempt and reservation are kept, stdin is closed, and nothing is retried.
 func (s *Supervisor) serveCodex(owner *codexOwner, alias, thread string) {
 	ctx := s.ctx
+	var workspace, fingerprint string
+	if err := s.codex.write(func() error {
+		setup, err := s.store.CodexSetup(owner.setupID)
+		if err != nil {
+			return err
+		}
+		workspace = setup.Workspace
+		fingerprint, err = s.store.CodexConfigFingerprint(owner.setupID)
+		return err
+	}); err != nil {
+		_ = owner.proc.Input.Close()
+		return
+	}
+	owner.fingerprint = fingerprint
 	fail := func(token, reason string) {
 		_ = s.codex.write(func() error {
 			if token != "" {
@@ -432,6 +448,15 @@ func (s *Supervisor) serveCodex(owner *codexOwner, alias, thread string) {
 			if ctx.Err() == nil {
 				fail("", "app-server stopped or sent a request while idle")
 			}
+			return
+		}
+		// The managed profile must still have the checked config. config/read
+		// does not call the model. On any doubt the turn is not sent.
+		if err := s.recheckCodexConfig(owner, workspace); err != nil {
+			_ = s.codex.write(func() error {
+				return s.store.AbortCodexTurnUnsent(token, "Codex config not confirmed before the turn: "+err.Error())
+			})
+			_ = owner.proc.Input.Close()
 			return
 		}
 		turnCtx, cancel := context.WithTimeout(ctx, codexTurnTimeout)
@@ -466,4 +491,32 @@ func (s *Supervisor) serveCodex(owner *codexOwner, alias, thread string) {
 			return
 		}
 	}
+}
+
+// recheckCodexConfig reads the effective config again and requires the same
+// validated content that was checked at setup.
+func (s *Supervisor) recheckCodexConfig(owner *codexOwner, workspace string) error {
+	ctx, cancel := context.WithTimeout(s.ctx, codexSetupTimeout)
+	defer cancel()
+	result, err := owner.rpc.Call(ctx, "config/read", map[string]any{"includeLayers": false, "cwd": workspace})
+	if err != nil {
+		return err
+	}
+	var report struct {
+		Config json.RawMessage `json:"config"`
+	}
+	if err := json.Unmarshal(result, &report); err != nil {
+		return err
+	}
+	if err := adapters.ValidateCodexAppServerConfig(report.Config); err != nil {
+		return err
+	}
+	fingerprint, err := adapters.CodexConfigFingerprint(report.Config)
+	if err != nil {
+		return err
+	}
+	if fingerprint != owner.fingerprint {
+		return errors.New("effective config changed since setup")
+	}
+	return nil
 }

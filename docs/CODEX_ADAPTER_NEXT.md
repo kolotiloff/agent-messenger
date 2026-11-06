@@ -27,7 +27,13 @@ Failure rules:
 
 The setup RPC client allows only `initialize`, `config/read` and `thread/start`. On success the session is registered under the alias as `codex_owned`, with no CLI path. Only its live owner serves it: generic claims, `register-session` and `ConfigureLaunch` refuse it, and `resolve` is blocked. An older client cannot launch it, because it only launches sessions that have a CLI path. [Verification report](reports/2026-11-06-codex-setup-linux.md).
 
-Compatibility: an older client ignores `codex_setups`. It would not see the alias reservation, and it would treat the new registry entry as an ordinary blocking reservation. Do not run an older client on a data directory after creating a Codex session.
+Compatibility:
+
+- **Clients from before schema version 1.** An older client (preview.19 and earlier) ignores `codex_setups`.
+  - It cannot launch a Codex-owned session, because that session has no CLI path.
+  - It does not see the alias reservation.
+  - It treats the new registry entry as an ordinary blocking reservation.
+- **Schema version 1 and later.** The database now records `schema_version`, and a client refuses to open a database written by a newer schema. This protects future versions; older clients cannot be changed retroactively.
 
 ### Message delivery (T-002)
 
@@ -35,6 +41,9 @@ Each owner has one controller goroutine (`serveCodex`) and a state in `codex_set
 
 1. **Idle.** While idle, the controller reads the server output. Notifications are dropped. A server request or EOF makes the owner uncertain. Every 30 ms it checks the queue, which never calls the model. It claims a message only while model calls are allowed for the alias (`--allow-model-calls`, `--only-session`) and the queue is not paused.
 2. **Claim.** `ClaimCodexTurn` reserves the attempt and a one-time receipt (`codex_turns`), and the owner becomes `busy`.
+   - **Config re-check.** Before anything is sent, `config/read` is called again. It must validate and have the same fingerprint as at setup.
+   - **Canonical fingerprint.** The hash is taken over canonical JSON with sorted keys, because app-server changes key order between calls. This was seen on Codex 0.155.1.
+   - **On a mismatch** the turn is not sent. `AbortCodexTurnUnsent` returns the message to the queue and makes the owner uncertain.
 3. **Send intent.** `PrepareCodexTurnSend` commits `sent_intent` **before** `turn/start` is written. That request is never sent again.
 4. **Turn start.** The only model input is `CodexTurnPrompt`. The message text is read through the bound tool.
 5. **Bind.** The turn ID from the `turn/start` response is bound to the attempt (`BindCodexTurn`); only then do the tools open. Frames that arrive before that response are buffered, at most 256, and handled after binding.

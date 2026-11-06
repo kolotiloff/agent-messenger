@@ -42,6 +42,7 @@ These change all the time. Every tool reads them at the start and updates them a
 | [LOCAL_UI.md](LOCAL_UI.md) | The local browser UI: messages and queue |
 | [SESSION_SETUP.md](SESSION_SETUP.md) | Setting up an agent from the window |
 | [SCOPED_LAUNCH.md](SCOPED_LAUNCH.md) | Launching only the selected session |
+| [ROUTING.md](ROUTING.md) | Replies between agents and the automatic reply limit |
 
 ## Install, release and checks
 

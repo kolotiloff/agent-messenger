@@ -129,6 +129,10 @@ func Open(path string) (*Store, error) {
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 	store := &Store{db: db}
+	if err := checkSchemaVersion(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if _, err := db.Exec(schema + streamSchema + streamRecoverySchema + uiOutboxSchema + codexSetupSchema); err != nil {
 		db.Close()
 		return nil, err
@@ -145,6 +149,15 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	for _, c := range [][3]string{
+		{"requests", "in_reply_to", "TEXT"},
+		{"requests", "hops", "INTEGER NOT NULL DEFAULT 0"},
+	} {
+		if err := ensureColumn(db, c[0], c[1], c[2]); err != nil {
+			db.Close()
+			return nil, err
+		}
+	}
 	for column, decl := range map[string]string{
 		"session_key":          "TEXT REFERENCES sessions(key)",
 		"recovery_fingerprint": "TEXT",
@@ -154,6 +167,10 @@ func Open(path string) (*Store, error) {
 			db.Close()
 			return nil, err
 		}
+	}
+	if err := recordSchemaVersion(db); err != nil {
+		db.Close()
+		return nil, err
 	}
 	_ = os.Chmod(path, 0o600)
 	return store, nil
@@ -536,7 +553,10 @@ func replyTx(tx *sql.Tx, row attemptRow, token, text string) (Reply, error) {
 	if err != nil {
 		return Reply{}, err
 	}
-	return reply, insertEvent(tx, "reply", row.sessionKey, token, reply.ID)
+	if err := insertEvent(tx, "reply", row.sessionKey, token, reply.ID); err != nil {
+		return Reply{}, err
+	}
+	return reply, routeReply(tx, row, reply)
 }
 
 // FinishObserved records the supervisor's own wait and always leaves the session locked.
@@ -999,7 +1019,7 @@ func (s *Store) Snapshot() (Snapshot, error) {
 		if err != nil {
 			return err
 		}
-		snap.Requests, err = readRows(tx, `SELECT id, session_key, sender, text, state, retry_of FROM requests ORDER BY rowid`)
+		snap.Requests, err = readRows(tx, `SELECT id, session_key, sender, text, state, retry_of, in_reply_to, hops FROM requests ORDER BY rowid`)
 		if err != nil {
 			return err
 		}
