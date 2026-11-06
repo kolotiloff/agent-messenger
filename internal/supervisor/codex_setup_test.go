@@ -770,11 +770,125 @@ func TestWindowCodexSetupGrantsOnlyThisSession(t *testing.T) {
 		t.Fatalf("setup failed: %+v", r)
 	}
 	s := h.waitSetup(func(s map[string]any) bool { return s["state"] == "created" })
-	if r := setup("codex-other", h.profile, "allow-model-calls"); r.OK {
-		t.Fatal("a second session got model permission in the same run")
+	// A second session (for example the other side of a Claude ↔ Codex pair)
+	// can be added in the same run.
+	if r := setup("codex-other", h.profile, "allow-model-calls"); !r.OK {
+		t.Fatalf("second session refused: %+v", r)
 	}
+	h.waitSnap("second owner", func(s codexSnap) bool {
+		return len(s.CodexSetups) == 2 && s.CodexSetups[1]["state"] == "created"
+	})
 	h.send("m1", "one")
 	h.waitSnap("reply", func(s codexSnap) bool { return requestState(s, "m1") == "completed" })
+	if r, err := control.Call(h.root, control.Request{Cmd: "enqueue", Alias: "codex-other", MessageID: "m2", Sender: "user", Text: "two"}); err != nil || !r.OK {
+		t.Fatalf("enqueue: %+v %v", r, err)
+	}
+	last := h.waitSnap("reply from the second session", func(s codexSnap) bool { return requestState(s, "m2") == "completed" })
+	status, _ := control.Call(h.root, control.Request{Cmd: "status"})
+	if status.Status == nil || len(status.Status.LaunchSessions) != 2 {
+		t.Fatalf("status %+v", status.Status)
+	}
 	h.stop()
 	waitGone(t, pidOf(s))
+	waitGone(t, pidOf(last.CodexSetups[1]))
+}
+
+func TestWindowGrantsAreBoundedAndRevocable(t *testing.T) {
+	s := &Supervisor{launcher: AdapterLauncher{ClaudeStream: true}}
+	for i, alias := range []string{"a", "b", "c", "d"} {
+		launcher := s.currentLauncher().(AdapterLauncher)
+		granted, err := s.grantWindowAliasLocked(launcher, alias)
+		if err != nil || !granted {
+			t.Fatalf("grant %d: %v %v", i, granted, err)
+		}
+	}
+	if _, err := s.grantWindowAliasLocked(s.currentLauncher().(AdapterLauncher), "e"); err == nil {
+		t.Fatal("fifth session granted")
+	}
+	launcher := s.currentLauncher().(AdapterLauncher)
+	if !launcher.Allows("c") || launcher.Allows("e") || len(launcher.SessionAliases()) != 4 {
+		t.Fatalf("scope %+v", launcher)
+	}
+	s.revokeWindowAlias("a")
+	s.revokeWindowAlias("c")
+	launcher = s.currentLauncher().(AdapterLauncher)
+	if launcher.Allows("a") || launcher.Allows("c") || !launcher.Allows("b") || !launcher.Allows("d") {
+		t.Fatalf("after revoke %+v", launcher)
+	}
+	s.revokeWindowAlias("b")
+	s.revokeWindowAlias("d")
+	if launcher = s.currentLauncher().(AdapterLauncher); launcher.AllowModels {
+		t.Fatal("permission kept after every grant was withdrawn")
+	}
+}
+
+// Claude, as coordinator, writes to Codex with the send tool; Codex's answer
+// comes back to Claude, and the chain stops at the automatic-step limit.
+func TestClaudeAsksCodexWithSendTool(t *testing.T) {
+	t.Setenv("MESSENGER_STREAM_FIXTURE", "send")
+	launcher := AdapterLauncher{AllowModels: true, ClaudeStream: true}
+	h := newCodexHarnessWith(t, "ok", launcher, func(root string) {
+		st := mustStore(t, root)
+		defer st.Close()
+		env := mkdir(t, filepath.Join(root, "claude-profile"))
+		if _, err := st.Register("claude", env, "test-stream", "worker"); err != nil {
+			t.Fatal(err)
+		}
+		exe, err := os.Executable()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.ConfigureLaunch("worker", exe, root); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if r := h.create("codex-test"); !r.OK {
+		t.Fatalf("create failed: %+v", r)
+	}
+	setup := h.waitSetup(func(s map[string]any) bool { return s["state"] == "created" })
+	if r, err := control.Call(h.root, control.Request{Cmd: "enqueue", Alias: "worker", MessageID: "m1", Sender: "user", Text: "ask:hi"}); err != nil || !r.OK {
+		t.Fatalf("enqueue: %+v %v", r, err)
+	}
+	s := h.waitSnap("exchange to the limit", func(s codexSnap) bool {
+		for _, e := range s.Events {
+			if e["kind"] == "auto_reply_limit" {
+				return true
+			}
+		}
+		return false
+	})
+	time.Sleep(300 * time.Millisecond)
+	s = h.snap()
+	var sent map[string]any
+	for _, r := range s.Requests {
+		if id, _ := r["id"].(string); strings.HasPrefix(id, "send-") {
+			sent = r
+		}
+		if r["state"] != "completed" {
+			t.Fatalf("request %+v", r)
+		}
+	}
+	if sent == nil || sent["sender"] != "worker" || sent["in_reply_to"] != "m1" || sent["hops"] != float64(1) || sent["text"] != "question from worker" {
+		t.Fatalf("send-initiated message %+v", sent)
+	}
+	if len(s.Requests) != 4 || len(s.Replies) != 4 || replyTo(s, "m1") != "ACK:ask:hi" {
+		t.Fatalf("requests %d replies %d: %+v", len(s.Requests), len(s.Replies), s.Replies)
+	}
+	if h.count("turn/start") != 2 {
+		t.Fatalf("Codex turns %d", h.count("turn/start"))
+	}
+	h.stop()
+	waitGone(t, pidOf(setup))
+	st := mustStore(t, h.root)
+	defer st.Close()
+	snap, _ := st.Snapshot()
+	for _, run := range snap.StreamRuns {
+		if obs, err := st.Observation(text(run["id"])); err == nil {
+			if owns, _ := platform.OwnsObservation(obs); owns {
+				p, _ := os.FindProcess(obs.PID)
+				_ = p.Kill()
+				waitGone(t, obs.PID)
+			}
+		}
+	}
 }

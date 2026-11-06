@@ -59,7 +59,7 @@ type CodexSetupLauncher interface {
 
 // CodexSetupEnabled requires the same explicit authorization as any CLI launch.
 func (l AdapterLauncher) CodexSetupEnabled(alias string) bool {
-	return l.AllowModels && (l.OnlySession == "" || l.OnlySession == alias)
+	return l.Allows(alias)
 }
 
 // codexEnv is an explicit environment: the managed profile, a private HOME and
@@ -522,6 +522,63 @@ func (s *Supervisor) recheckCodexConfig(owner *codexOwner, workspace string) err
 	return nil
 }
 
+// maxWindowSessions bounds how many sessions the window may authorize in one
+// client run, for example one Claude and one Codex session that talk.
+const maxWindowSessions = 4
+
+// grantWindowAliasLocked adds alias to the window's model-call scope. The
+// caller holds s.dispatch. It returns false when the alias was already allowed.
+// The first grant needs an idle client; later grants only extend the list.
+func (s *Supervisor) grantWindowAliasLocked(launcher AdapterLauncher, alias string) (bool, error) {
+	if launcher.AllowModels && launcher.OnlySession == "" {
+		return false, nil // unscoped serve: everything is already allowed
+	}
+	if launcher.Allows(alias) {
+		return false, nil
+	}
+	if !launcher.AllowModels {
+		if len(s.jobList()) != 0 || s.starting.Load() {
+			return false, core.ErrBusy
+		}
+		launcher.AllowModels, launcher.OnlySession, launcher.AlsoAllowed = true, alias, nil
+	} else {
+		if len(launcher.SessionAliases()) >= maxWindowSessions {
+			return false, errors.New("too many sessions allowed in this client run")
+		}
+		launcher.AlsoAllowed = append(append([]string(nil), launcher.AlsoAllowed...), alias)
+	}
+	s.launcherMu.Lock()
+	s.launcher = launcher
+	s.launcherMu.Unlock()
+	return true, nil
+}
+
+// revokeWindowAlias withdraws a grant that turned out not to be used.
+func (s *Supervisor) revokeWindowAlias(alias string) {
+	s.launcherMu.Lock()
+	defer s.launcherMu.Unlock()
+	launcher, ok := s.launcher.(AdapterLauncher)
+	if !ok {
+		return
+	}
+	if launcher.OnlySession == alias {
+		if len(launcher.AlsoAllowed) == 0 {
+			launcher.AllowModels, launcher.OnlySession = false, ""
+		} else {
+			launcher.OnlySession, launcher.AlsoAllowed = launcher.AlsoAllowed[0], launcher.AlsoAllowed[1:]
+		}
+	} else {
+		var kept []string
+		for _, a := range launcher.AlsoAllowed {
+			if a != alias {
+				kept = append(kept, a)
+			}
+		}
+		launcher.AlsoAllowed = kept
+	}
+	s.launcher = launcher
+}
+
 // SetupCodexFromWindow is the window's one-step "create a Codex session and
 // allow model calls for it". The client started by the window runs without
 // model permission; this grants it for exactly this new alias, like
@@ -542,23 +599,10 @@ func (s *Supervisor) SetupCodexFromWindow(environment, alias, cli, confirmation 
 		s.dispatch.Unlock()
 		return "", core.ErrRejected
 	}
-	previous := launcher
-	granted := false
-	if launcher.AllowModels {
-		if launcher.OnlySession != alias {
-			s.dispatch.Unlock()
-			return "", errors.New("model calls are already allowed for another session in this client run")
-		}
-	} else {
-		if len(s.jobList()) != 0 || s.starting.Load() {
-			s.dispatch.Unlock()
-			return "", core.ErrBusy
-		}
-		launcher.AllowModels, launcher.OnlySession = true, alias
-		s.launcherMu.Lock()
-		s.launcher = launcher
-		s.launcherMu.Unlock()
-		granted = true
+	granted, grantErr := s.grantWindowAliasLocked(launcher, alias)
+	if grantErr != nil {
+		s.dispatch.Unlock()
+		return "", grantErr
 	}
 	s.dispatch.Unlock()
 	detail, err := s.CreateCodexSession(environment, alias, cli)
@@ -572,9 +616,7 @@ func (s *Supervisor) SetupCodexFromWindow(environment, alias, cli, confirmation 
 	if err != nil && granted {
 		setup, lookupErr := s.store.CodexSetupByAlias(alias)
 		if errors.Is(lookupErr, sql.ErrNoRows) || (lookupErr == nil && setup.State == "not_started") {
-			s.launcherMu.Lock()
-			s.launcher = previous
-			s.launcherMu.Unlock()
+			s.revokeWindowAlias(alias)
 		}
 	}
 	return detail, err

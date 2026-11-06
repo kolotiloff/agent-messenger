@@ -211,8 +211,8 @@ func (s *Supervisor) loop(ctx context.Context) {
 			}
 			var token string
 			var err error
-			if scoped, ok := launcher.(interface{ SessionAlias() string }); ok && scoped.SessionAlias() != "" {
-				token, err = s.store.ClaimProvider(scoped.SessionAlias(), "claude")
+			if aliases := scopedAliases(launcher); aliases != nil {
+				token, err = claimFirst(aliases, func(alias string) (string, error) { return s.store.ClaimProvider(alias, "claude") })
 			} else {
 				token, err = s.store.ClaimNextProvider("claude")
 			}
@@ -232,8 +232,8 @@ func (s *Supervisor) loop(ctx context.Context) {
 		}
 		var token string
 		var err error
-		if scoped, ok := launcher.(interface{ SessionAlias() string }); ok && scoped.SessionAlias() != "" {
-			token, err = s.store.Claim(scoped.SessionAlias())
+		if aliases := scopedAliases(launcher); aliases != nil {
+			token, err = claimFirst(aliases, s.store.Claim)
 		} else {
 			token, err = s.store.ClaimNext()
 		}
@@ -422,8 +422,9 @@ func (s *Supervisor) Status() (control.Status, error) {
 		Broker:     "not_configured",
 		Supervisor: os.Getpid(),
 	}
-	if scoped, ok := launcher.(interface{ SessionAlias() string }); ok {
-		status.LaunchSession = scoped.SessionAlias()
+	if aliases := scopedAliases(launcher); len(aliases) != 0 {
+		status.LaunchSession = aliases[0]
+		status.LaunchSessions = aliases
 	}
 	if stream, ok := launcher.(StreamLauncher); ok {
 		status.SessionSetup = stream.StreamingEnabled()
@@ -771,4 +772,29 @@ func (s *Supervisor) stopStreamJob(job *activeJob) (string, error) {
 		return "error", err
 	}
 	return "sent", nil
+}
+
+// scopedAliases returns the sessions a scoped launcher may run, or nil when it
+// is not scoped.
+func scopedAliases(launcher Launcher) []string {
+	if scoped, ok := launcher.(interface{ SessionAliases() []string }); ok {
+		return scoped.SessionAliases()
+	}
+	if scoped, ok := launcher.(interface{ SessionAlias() string }); ok && scoped.SessionAlias() != "" {
+		return []string{scoped.SessionAlias()}
+	}
+	return nil
+}
+
+// claimFirst claims the next message of the first scoped session that has one.
+func claimFirst(aliases []string, claim func(string) (string, error)) (string, error) {
+	var last error = core.ErrEmpty
+	for _, alias := range aliases {
+		token, err := claim(alias)
+		if err == nil {
+			return token, nil
+		}
+		last = err
+	}
+	return "", last
 }

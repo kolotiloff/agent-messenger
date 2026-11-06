@@ -34,17 +34,18 @@ type Request struct {
 }
 
 type Status struct {
-	SessionLaunch bool   `json:"session_launch,omitempty"`
-	LaunchSession string `json:"launch_session,omitempty"`
-	SessionSetup  bool   `json:"session_setup,omitempty"`
-	StreamState   string `json:"stream_state,omitempty"`
-	Paused        bool   `json:"paused"`
-	CLILaunch     string `json:"cli_launch"`
-	Broker        string `json:"broker"`
-	Held          int    `json:"held_sessions"`
-	Queued        int    `json:"queued"`
-	Supervisor    int    `json:"supervisor_pid"`
-	Detail        string `json:"detail,omitempty"`
+	SessionLaunch  bool     `json:"session_launch,omitempty"`
+	LaunchSession  string   `json:"launch_session,omitempty"`
+	LaunchSessions []string `json:"launch_sessions,omitempty"`
+	SessionSetup   bool     `json:"session_setup,omitempty"`
+	StreamState    string   `json:"stream_state,omitempty"`
+	Paused         bool     `json:"paused"`
+	CLILaunch      string   `json:"cli_launch"`
+	Broker         string   `json:"broker"`
+	Held           int      `json:"held_sessions"`
+	Queued         int      `json:"queued"`
+	Supervisor     int      `json:"supervisor_pid"`
+	Detail         string   `json:"detail,omitempty"`
 }
 
 type StopResult struct {

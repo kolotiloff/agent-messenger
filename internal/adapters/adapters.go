@@ -208,6 +208,45 @@ func ValidateClaude(events []map[string]any, conversationID string) error {
 	return nil
 }
 
+// ValidateClaudeStream is ValidateClaude for a persistent turn, which may also
+// call send (at most 3 times) between read_current and reply.
+func ValidateClaudeStream(events []map[string]any, conversationID string) error {
+	var kept []map[string]any
+	sends := 0
+	for _, event := range events {
+		if event["type"] != "assistant" {
+			kept = append(kept, event)
+			continue
+		}
+		message, _ := event["message"].(map[string]any)
+		content, _ := message["content"].([]any)
+		var filtered []any
+		for _, item := range content {
+			block, _ := item.(map[string]any)
+			if block["type"] == "tool_use" && block["name"] == "mcp__messenger_bound__send" {
+				sends++
+				continue
+			}
+			filtered = append(filtered, item)
+		}
+		copied := map[string]any{}
+		for k, v := range event {
+			copied[k] = v
+		}
+		copiedMessage := map[string]any{}
+		for k, v := range message {
+			copiedMessage[k] = v
+		}
+		copiedMessage["content"] = filtered
+		copied["message"] = copiedMessage
+		kept = append(kept, copied)
+	}
+	if sends > 3 {
+		return errors.New("too many send calls in one turn")
+	}
+	return ValidateClaude(kept, conversationID)
+}
+
 func ValidateCodex(events []map[string]any, conversationID string) error {
 	var started []string
 	var calls []string

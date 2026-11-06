@@ -8,8 +8,10 @@ func (s *Supervisor) currentLauncher() Launcher {
 	return s.launcher
 }
 
-// AuthorizeSetup grants this process permission for one newly created test
-// session. It cannot replace a grant, attach a working chat, or survive restart.
+// AuthorizeSetup grants this process permission for a newly created test
+// session. Several sessions can be granted in one run (up to maxWindowSessions),
+// so a Claude and a Codex test session can talk. A grant cannot attach a
+// working chat or survive a restart.
 func (s *Supervisor) AuthorizeSetup(alias string) error {
 	s.dispatch.Lock()
 	defer s.dispatch.Unlock()
@@ -20,22 +22,21 @@ func (s *Supervisor) AuthorizeSetup(alias string) error {
 	if !ok || !launcher.ClaudeStream {
 		return core.ErrRejected
 	}
-	if launcher.AllowModels {
-		if launcher.OnlySession == alias && alias != "" {
-			return nil
-		}
+	if launcher.AllowModels && launcher.OnlySession == "" {
 		return core.ErrRejected
 	}
-	busy := len(s.jobList()) != 0
-	if busy || s.starting.Load() {
-		return core.ErrBusy
+	if launcher.Allows(alias) {
+		return nil
 	}
-	if err := s.store.AuthorizeSetup(alias); err != nil {
+	granted, err := s.grantWindowAliasLocked(launcher, alias)
+	if err != nil {
 		return err
 	}
-	launcher.AllowModels, launcher.OnlySession = true, alias
-	s.launcherMu.Lock()
-	s.launcher = launcher
-	s.launcherMu.Unlock()
+	if err := s.store.AuthorizeSetup(alias); err != nil {
+		if granted {
+			s.revokeWindowAlias(alias)
+		}
+		return err
+	}
 	return nil
 }

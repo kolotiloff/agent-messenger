@@ -155,8 +155,10 @@ func (s *Store) ConfirmStreamIdentity(run, conversationID string) error {
 }
 
 type StreamMessage struct {
-	Text    string `json:"text"`
-	Receipt string `json:"receipt"`
+	Text    string   `json:"text"`
+	Receipt string   `json:"receipt"`
+	From    string   `json:"from"`
+	Agents  []string `json:"agents,omitempty"`
 }
 
 func (s *Store) StreamRead(run string) (StreamMessage, error) {
@@ -172,7 +174,10 @@ func (s *Store) StreamRead(run string) (StreamMessage, error) {
 		if err := tx.QueryRow(`SELECT receipt FROM stream_turns WHERE attempt_token=? AND sent_intent=1`, row.token).Scan(&msg.Receipt); err != nil {
 			return err
 		}
-		msg.Text = row.text
+		msg.Text, msg.From = row.text, row.sender
+		if msg.Agents, err = otherAgents(tx, row.sessionKey); err != nil {
+			return err
+		}
 		_, err = tx.Exec(`UPDATE stream_turns SET read_seen=1 WHERE attempt_token=?`, row.token)
 		return err
 	})

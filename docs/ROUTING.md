@@ -35,5 +35,21 @@ A delivered message is an ordinary queued message, so the usual rules apply:
 ## Limits of this version
 
 - **Concurrent owners.** Up to 4 persistent Claude sessions and any number of Codex owners run side by side.
-- **No direct sending by agents.** Agents cannot start a new conversation themselves. Only `read_current` and `reply` exist while a message is processed. A separate coordinator mode for sending new messages is not implemented.
+- **Sending is Claude-only for now.** Codex threads declare their tools when they are created, so existing Codex sessions only have `read_current` and `reply`.
 - **Local only.** Routing works between sessions of one client. Network delivery between computers is a later stage.
+
+## Agents starting a message (`send`)
+
+A persistent Claude session has a third tool, `send(to, text, receipt)`. It lets a coordinator hand a task to another agent.
+
+- **Who it can write to.** `read_current` also returns `from` and `agents`, the aliases of the other open local sessions.
+- **Receipt.** `send` requires the turn's current receipt, like `reply`. The turn still has to end with `reply`.
+- **The new message.** It is queued for the recipient with the ID `send-<id>`, from the sending alias. It has `in_reply_to` set to the current message, and `hops` is one more than the current message's.
+  - It counts toward the same chain limit, so a send past `MaxAutoReplyHops` is refused.
+  - At most `MaxSendsPerTurn` = 3 sends are allowed per turn.
+  - The recipient must be another open session, never the sender itself.
+- **The answer.** It comes back to the sender through ordinary reply routing.
+- **Checking the turn.** The Claude turn check (`ValidateClaudeStream`) accepts `read_current`, then up to 3 `send` calls, then `reply`.
+
+The window can authorize up to 4 test sessions in one client run, for example one Claude and one Codex session that talk to each other.
+

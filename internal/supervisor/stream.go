@@ -273,7 +273,7 @@ func (s *Supervisor) readStreamTurn(ctx context.Context, events <-chan streamEve
 				return errors.New("too many events in bounded turn")
 			}
 			if e["type"] == "result" {
-				if err := adapters.ValidateClaude(collected, spec.ConversationID); err != nil {
+				if err := adapters.ValidateClaudeStream(collected, spec.ConversationID); err != nil {
 					return fmt.Errorf("stream result rejected: %w", err)
 				}
 				return s.store.CompleteStreamTurn(run, true)
