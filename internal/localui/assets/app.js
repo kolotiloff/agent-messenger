@@ -74,6 +74,7 @@
   // a project, changing the project folder, connecting an agent program and
   // answering a worker's question to the owner.
   const names={claude:'Claude Code',codex:'Codex'};
+  const shortNames={claude:'Claude',codex:'Codex'};
   function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
   function providerIcon(provider){
     const wrap=el('span',undefined,'am-provider-icon');wrap.setAttribute('aria-hidden','true');
@@ -118,7 +119,7 @@
   function taskStatus(t){
     const end=t.finished_at||t.updated_at;
     switch(t.state){
-      case 'running':return ['Работает '+minutes(t.created_at),'am-status-run'];
+      case 'running':return t.pending_launch?['Ждёт запуска','am-status-wait']:['Работает '+minutes(t.created_at),'am-status-run'];
       case 'waiting_owner':return ['Ждёт вашего ответа','am-status-wait'];
       case 'waiting_coordinator':return ['Ждёт ответа координатора','am-status-run'];
       case 'done':return ['Завершил за '+minutes(t.created_at,end),'am-muted'];
@@ -155,16 +156,25 @@
     const head=el('div',undefined,'am-machine-name');head.append(el('span',view?.computer_name||'Этот компьютер'));
     const dot=el('span',undefined,'am-dot'+(online?' online':''));dot.title=online?'На связи':'Нет связи';head.append(dot);machine.append(head);
     const lines=el('div',undefined,'am-machine-agents');
-    if(view?.coordinator?.connected){
-      const [provider,label]=coordinatorName();
-      const line=el('div',undefined,'am-agent-line');const d=el('span',undefined,'am-dot am-dot-'+(online?'run':'offline'));
-      line.title=online?'Координатор подключён к проекту':'Нет связи';line.append(d,el('span',label),el('span','координатор','am-muted am-small'));
-      if(provider)line.dataset.provider=provider;lines.append(line);
+    // One line per program. The coordinator is a mark on its program's line,
+    // not a separate line (approved mockup).
+    const [coordProvider,coordLabel]=view?.coordinator?.connected?coordinatorName():['',''];
+    const providers=(view?.agents||[]).map(a=>a.agent);
+    if(coordProvider&&!providers.includes(coordProvider))providers.unshift(coordProvider);
+    for(const provider of providers){
+      const a=(view?.agents||[]).find(x=>x.agent===provider);
+      const coordinator=provider===coordProvider;
+      let [state,text]=a?agentState(a):[online?'run':'offline',online?'Подключён':'Нет связи'];
+      const notes=[];
+      if(coordinator){notes.push(online?'координатор подключён к проекту':'координатор');if(state==='idle'){state='run';text='Свободен';}}
+      const line=el('div',undefined,'am-agent-line');line.dataset.provider=provider;
+      line.title=(names[provider]||provider)+': '+(a?text:'')+(notes.length?(a?', ':'')+notes.join(', '):'');
+      line.append(el('span',undefined,'am-dot am-dot-'+state),el('span',shortNames[provider]||provider));
+      if(coordinator)line.append(el('span','координатор','am-muted am-small'));
+      lines.append(line);
     }
-    for(const a of view?.agents||[]){
-      const [state,text]=agentState(a);
-      const line=el('div',undefined,'am-agent-line');line.title=(names[a.agent]||a.agent)+': '+text;
-      line.append(el('span',undefined,'am-dot am-dot-'+state),el('span',names[a.agent]||a.agent));lines.append(line);
+    if(view?.coordinator?.connected&&!coordProvider){
+      const line=el('div',undefined,'am-agent-line');line.append(el('span',undefined,'am-dot am-dot-'+(online?'run':'offline')),el('span',coordLabel),el('span','координатор','am-muted am-small'));lines.append(line);
     }
     if(!lines.children.length)lines.append(el('p',online?'Агенты не подключены':'Нет связи','am-small am-muted'));
     machine.append(lines);box.append(machine);

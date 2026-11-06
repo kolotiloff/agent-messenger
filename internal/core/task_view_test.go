@@ -12,10 +12,16 @@ func TestWindowViewAndTaskFeed(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := f.start(t, "op", "claude", "Fix the menu\nDetails follow")
-	if v, _ = f.st.WindowView("Game", "2000-01-01T00:00:00Z"); v.Pending != 1 || !v.Coordinator.Connected || v.Coordinator.Client != "claude-ai" {
+	if v, _ = f.st.WindowView("Game", "2000-01-01T00:00:00Z"); v.Pending != 1 || !v.Coordinator.Connected || v.Coordinator.Client != "claude-ai" || len(v.Tasks) != 1 || !v.Tasks[0].PendingLaunch {
 		t.Fatalf("pending %+v", v)
 	}
+	if feed, err := f.st.TaskFeed(id); err != nil || !feed.Task.PendingLaunch {
+		t.Fatalf("feed of an unlaunched task %+v %v", feed.Task, err)
+	}
 	r := f.launch(t, id, f.sessionOf(t, id))
+	if v, _ = f.st.WindowView("Game", "2000-01-01T00:00:00Z"); v.Tasks[0].PendingLaunch {
+		t.Fatalf("launched task still pending %+v", v.Tasks[0])
+	}
 	if err := f.st.AppendTaskRunItem(r.ID, "text", "", "Looking at the menu"); err != nil {
 		t.Fatal(err)
 	}

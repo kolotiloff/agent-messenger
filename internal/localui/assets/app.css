@@ -287,14 +287,14 @@ body.am-native #am-concept .am-panel-toggle { margin-left:auto; }
 #am-concept .am-task-list-head { display:flex; align-items:center; justify-content:space-between; gap:var(--am-space-2); }
 #am-concept .am-task-filter .am-select-trigger { font-size:12px; padding:5px 9px; }
 #am-concept .am-task-section { margin:var(--am-space-3) 0 var(--am-space-1); padding-inline:var(--am-space-3); }
-#am-concept .am-task-list { display:flex; flex-direction:column; gap:var(--am-space-1); }
-#am-concept .am-task-list .am-row.am-task { width:100%; display:flex; flex-direction:column; align-items:stretch; gap:2px; padding:var(--am-space-2) var(--am-space-3); border:0; border-radius:8px; background:transparent; text-align:left; font-size:12px; }
+#am-concept .am-task-list { display:flex; flex-direction:column; gap:var(--am-space-1); min-width:0; overflow-x:hidden; }
+#am-concept .am-task-list .am-row.am-task { width:100%; display:flex; flex-direction:column; align-items:stretch; gap:2px; padding:var(--am-space-2) var(--am-space-3); border:0; border-radius:8px; background:transparent; text-align:left; font-size:12px; min-width:0; max-width:100%; overflow:hidden; }
 #am-concept .am-task-list .am-row.am-task:is(:hover,:focus-visible) { background:var(--am-soft); }
 #am-concept .am-task-list .am-row.am-task[aria-pressed=true] { background:var(--am-selected); }
 #am-concept .am-task-agent { display:flex; align-items:center; gap:6px; color:var(--am-muted); font-size:11px; }
 #am-concept .am-task-agent .am-provider-icon { width:14px; height:14px; }
 #am-concept .am-task-agent .am-provider-icon svg { width:12px; height:12px; }
-#am-concept .am-task-title { font-size:13px; color:var(--am-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#am-concept .am-task-title { display:block; min-width:0; max-width:100%; font-size:13px; color:var(--am-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #am-concept .am-task-status { display:flex; align-items:center; gap:6px; }
 #am-concept .am-task-head { display:flex; flex-direction:column; gap:2px; min-width:0; }
 #am-concept .am-task-head h3 { font-size:15px; overflow-wrap:anywhere; }
