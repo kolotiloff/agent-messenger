@@ -57,6 +57,9 @@ func RecoverFailed(confirm string) (string, error) {
 }
 
 func inspectFailedAttempt(run recordedRun) error {
+	if run.CodexSetupID != "" {
+		return fmt.Errorf("%w: a Codex session setup holds this reservation; its resolution is not implemented", core.ErrRecoveryBlocked)
+	}
 	return withRunStore(run, func(store *core.Store) error {
 		return store.FailedAttemptRecoverable(run.Provider, run.Environment, run.ConversationID)
 	})

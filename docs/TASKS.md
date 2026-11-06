@@ -13,7 +13,7 @@ How to use it:
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
-| T-001 | Create and persist a Codex session before the first message: persist the setup intent before launching the process, write the shared reservation before launching the CLI, check the effective config before `thread/start`, then atomically store the server-issued thread ID and owner. Lost confirmation or restart leaves an uncertain state; no automatic `thread/start` retry. See [HANDOFF.md](HANDOFF.md) steps 1–3. | agent | not started |
+| T-001 | Create and persist a Codex session before the first message: persist the setup intent before launching the process, write the shared reservation before launching the CLI, check the effective config before `thread/start`, then atomically store the server-issued thread ID and owner. Lost confirmation or restart leaves an uncertain state; no automatic `thread/start` retry. See [HANDOFF.md](HANDOFF.md) steps 1–3. | agent | WIP on `claude/quirky-cannon-u0n3qm`; see HANDOFF |
 
 ## Next
 
