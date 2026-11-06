@@ -474,7 +474,8 @@
   $('agent-filter').addEventListener('change',renderTaskList);
   $('answer-text').addEventListener('input',()=>{const f=$('answer-text');f.style.height='auto';f.style.height=Math.min(140,Math.max(44,f.scrollHeight))+'px';answerControls();});
   $('answer-send').addEventListener('click',sendAnswer);
-  $('answer-text').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();sendAnswer();}});
+  // Enter sends; Shift+Enter adds a line. An IME composition keeps its Enter.
+  $('answer-text').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();sendAnswer();}});
   $('project-dialog-close').addEventListener('click',()=>$('project-dialog').close());
   $('project-save').addEventListener('click',saveProject);
   $('project-pick').addEventListener('click',()=>window.webkit?.messageHandlers?.folder?.postMessage('pick'));
