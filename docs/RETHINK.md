@@ -146,3 +146,8 @@ T-009 waits for Q-008.
 4. Which of the plan approval options in 3.3 fits the clients best, given that MCP tool approval prompts differ between Claude and Codex?
 5. What in the current schema and code can be reused for `tasks`, and what is the minimal first slice that proves the model end to end?
 6. Anything in the review (R1–R6) that this version still gets wrong.
+7. **Overall opinion**, compared with today's persistent model and with the owner's current manual setup (Claude Code sessions over Remote Control):
+   - **convenience** for the owner: giving tasks, following progress, answering questions;
+   - **token cost**: waiting, wake-ups of the coordinator, a fresh context per task versus long-lived workers; where the model saves or wastes tokens, with rough estimates where possible;
+   - **effectiveness**: how well the coordinator and workers get the job done, speed, risk of conflicts and of lost or duplicated work.
+   Is this the right direction, and what would you change?
