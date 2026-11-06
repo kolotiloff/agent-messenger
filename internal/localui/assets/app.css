@@ -330,3 +330,12 @@ body.am-native #am-concept .am-panel-toggle { margin-left:auto; }
 #am-concept .am-cards { align-items:stretch; }
 #am-concept .am-agent-line .am-dot { margin-left:0; }
 #am-concept #list-toggle { margin-left:auto; }
+
+#am-concept .am-task-head-row { display:flex; align-items:flex-start; justify-content:space-between; gap:var(--am-space-3); min-width:0; }
+#am-concept .am-task-head-row .am-task-head { flex:1; }
+#am-concept .am-stop-btn { position:relative; width:34px; height:34px; flex-shrink:0; margin-bottom:5px; padding:0; display:inline-flex; align-items:center; justify-content:center; border-radius:10px; background:var(--am-soft); }
+#am-concept .am-stop-square { width:12px; height:12px; border-radius:3px; background:var(--am-text); }
+#am-concept .am-tip { position:absolute; top:50%; right:calc(100% + 8px); transform:translateY(-50%); display:none; align-items:center; gap:8px; padding:5px 10px; border-radius:8px; background:var(--am-composer); border:1px solid var(--am-line); color:var(--am-text); font-size:13px; white-space:nowrap; box-shadow:0 3px 14px light-dark(#0000001a,#00000040); pointer-events:none; }
+#am-concept .am-tip kbd { font:inherit; color:var(--am-muted); }
+#am-concept .am-stop-btn:hover .am-tip, #am-concept .am-stop-btn:focus-visible .am-tip { display:inline-flex; }
+#am-concept .am-compose textarea:disabled { cursor:default; }

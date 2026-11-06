@@ -45,6 +45,9 @@ func TestTaskWindowRoutes(t *testing.T) {
 	if code != 200 || last.Cmd != "task-owner-answer" || last.MessageID != "task-1" || last.ConversationID != "q-1" || last.Confirmation != "op-1" || last.Text != "yes" {
 		t.Fatalf("answer %d %+v", code, last)
 	}
+	if code, _ := do("POST", "/api/task-cancel", `{"task":"task-1"}`); code != 200 || got[len(got)-1].Cmd != "task-cancel" || got[len(got)-1].MessageID != "task-1" {
+		t.Fatalf("cancel %d %+v", code, got[len(got)-1])
+	}
 	before := len(got)
 	for _, bad := range []struct{ path, body string }{
 		{"/api/task-answer", `{"task":"task-1","question":"q-1","text":"yes"}`},
@@ -52,6 +55,7 @@ func TestTaskWindowRoutes(t *testing.T) {
 		{"/api/project-create", `{"name":"a/b","folder":"/x"}`},
 		{"/api/project-create", `{"name":"Game","folder":"relative"}`},
 		{"/api/agent-set", `{"provider":"cursor","cli":"/bin/x"}`},
+		{"/api/task-cancel", `{"task":""}`},
 	} {
 		if code, _ := do("POST", bad.path, bad.body); code != 400 {
 			t.Fatalf("%s %s accepted: %d", bad.path, bad.body, code)

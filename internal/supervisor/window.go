@@ -74,3 +74,10 @@ func (s *Supervisor) OwnerAnswer(task, question, op, text string) error {
 func (s *Supervisor) SetAgent(provider, cli, environment string) error {
 	return s.store.SetComputerAgent(provider, cli, environment, "worker")
 }
+
+// CancelTask stops a task from the window's stop button. The running worker
+// is signalled by the client's cancel watcher and verified like any run.
+func (s *Supervisor) CancelTask(id string) error {
+	_, err := s.store.CancelTask(id)
+	return err
+}

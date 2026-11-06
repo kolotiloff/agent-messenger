@@ -439,7 +439,7 @@ func writeJSON(w http.ResponseWriter, value any) {
 
 func taskMutation(path string) bool {
 	switch path {
-	case "/api/project-create", "/api/project-folder", "/api/task-answer", "/api/agent-set":
+	case "/api/project-create", "/api/project-folder", "/api/task-answer", "/api/agent-set", "/api/task-cancel":
 		return true
 	}
 	return false
@@ -470,6 +470,14 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 			return control.Request{}, false
 		}
 		return control.Request{Cmd: "task-owner-answer", MessageID: in.Task, ConversationID: in.Question, Confirmation: in.OpID, Text: in.Text}, true
+	case "/api/task-cancel":
+		var in struct {
+			Task string `json:"task"`
+		}
+		if decoder.Decode(&in) != nil || in.Task == "" || len(in.Task) > 128 {
+			return control.Request{}, false
+		}
+		return control.Request{Cmd: "task-cancel", MessageID: in.Task}, true
 	case "/api/agent-set":
 		var in struct {
 			Provider    string `json:"provider"`

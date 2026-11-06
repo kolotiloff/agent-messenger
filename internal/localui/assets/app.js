@@ -278,16 +278,26 @@
     d.append(s);if(it.text&&(it.text!==first||first.length>90))d.append(el('pre',it.text));else if(it.text)d.classList.add('am-tool-flat');
     return d;
   }
+  // Stop, like in a chat: a square button in the input field, or Esc.
+  let stopping=false;
+  async function stopTask(){
+    const t=feed?.task;if(!t||stopping||!activeStates.includes(t.state))return;
+    stopping=true;$('task-stop').disabled=true;$('answer-status').textContent='Останавливаем задачу…';
+    try{await postAPI('/api/task-cancel',{task:t.id});$('answer-status').textContent='';feedSignature='';await refresh();}
+    catch(e){$('answer-status').textContent=e.message;}
+    finally{stopping=false;$('task-stop').disabled=false;}
+  }
   function renderFeed(){
     const t=feed.task,thread=$('thread'),head=$('task-head');
     const signature=JSON.stringify(feed);if(signature===feedSignature)return;
     const atBottom=thread.scrollHeight-thread.clientHeight-thread.scrollTop<40||!feedSignature;feedSignature=signature;
     const title=el('div',undefined,'am-task-head');title.append(el('h3',t.title));
-    title.append(el('p',(names[t.agent]||t.agent)+' на '+(view.computer_name||'этом компьютере')+', папка '+t.folder,'am-small am-muted'));
+    title.append(el('p',(names[t.agent]||t.agent)+(t.model?' ('+t.model+')':'')+' на '+(view.computer_name||'этом компьютере')+', папка '+t.folder,'am-small am-muted'));
     const [statusText,statusCls]=taskStatus(t);
     const when=t.finished_at?'Начата в '+clock(t.created_at)+', закончена в '+clock(t.finished_at):'Начата в '+clock(t.created_at);
     const line=el('p',undefined,'am-small');line.append(el('span',statusText,statusCls),el('span',', '+when.charAt(0).toLowerCase()+when.slice(1),'am-muted'));title.append(line);
-    head.replaceChildren(title);
+    const headRow=el('div',undefined,'am-task-head-row');headRow.append(title);
+    head.replaceChildren(headRow);
     const [coordProvider,coordLabel]=coordinatorName();
     const out=[];let group=null;
     const outgoing=(author,provider,role,text,at)=>{
@@ -326,7 +336,10 @@
     }
     thread.replaceChildren(...out);
     const q=t.owner_question;
-    $('compose').hidden=!q;
+    const active=activeStates.includes(t.state),box=$('answer-text');
+    $('compose').hidden=!q&&!active;
+    box.disabled=!q;box.placeholder=q?'Ответить исполнителю…':t.pending_launch?'Задача ждёт запуска…':'Исполнитель работает…';
+    $('answer-send').hidden=!q;$('answer-hint').hidden=!q;$('task-stop').hidden=!active;
     if(q&&$('compose').dataset.question!==q.id){$('compose').dataset.question=q.id;$('answer-text').value='';$('answer-status').textContent='';}
     answerControls();
     if(atBottom)thread.scrollTop=thread.scrollHeight;
@@ -525,6 +538,8 @@
   $('answer-text').addEventListener('input',()=>{const f=$('answer-text');f.style.height='auto';f.style.height=Math.min(140,Math.max(44,f.scrollHeight))+'px';answerControls();});
   $('answer-send').addEventListener('click',sendAnswer);
   // Enter sends; Shift+Enter adds a line. An IME composition keeps its Enter.
+  $('task-stop').addEventListener('click',stopTask);
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.isComposing&&!$('task-stop').hidden&&!$('compose').hidden&&!document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true]')){e.preventDefault();stopTask();}});
   $('answer-text').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();sendAnswer();}});
   $('project-dialog-close').addEventListener('click',()=>$('project-dialog').close());
   $('project-save').addEventListener('click',saveProject);

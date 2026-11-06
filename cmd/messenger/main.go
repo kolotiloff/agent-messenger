@@ -406,6 +406,11 @@ func splitArgs(args []string) (string, []string) {
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--root" && i+1 < len(args) {
 			root = args[i+1]
+			// A relative root would point elsewhere once a child process or the
+			// coordinator runs from another folder.
+			if abs, err := filepath.Abs(root); err == nil && root != "" {
+				root = abs
+			}
 			i++
 			continue
 		}

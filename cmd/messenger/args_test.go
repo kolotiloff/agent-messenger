@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -48,6 +50,14 @@ func TestRootFlagWorksBeforeOrAfterCommand(t *testing.T) {
 	root, args = splitArgs([]string{"status", "--root", "/tmp/other"})
 	if root != "/tmp/other" || args[0] != "status" {
 		t.Fatalf("status = %q %q", root, args)
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, _ = splitArgs([]string{"--root", "data", "status"})
+	if root != filepath.Join(cwd, "data") {
+		t.Fatalf("relative root = %q", root)
 	}
 }
 
