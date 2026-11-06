@@ -357,13 +357,15 @@
   window.messengerUpdateStatus = status => {
     if(!window.webkit?.messageHandlers?.updates)return;
     const version=typeof status?.version==='string'?status.version:'';
-    $('app-update-button').hidden=false;
     const detail=typeof status?.detail==='string'?status.detail:'';
-    $('app-update-button').textContent=status?.checking?'Проверяем GitHub…':version?'↓ Доступно обновление':detail||'Проверить обновления';
+    const failed=detail.includes('недоступен')||detail.includes('не запустилась');
+    $('app-update-button').hidden=!version&&!failed;
+    $('app-update-button').textContent=version?'↑ Обновить':'↻';
+    $('app-update-button').title=version?'Доступно обновление '+version:detail;
+    $('app-update-button').setAttribute('aria-label',version?'Установить обновление '+version:'Не удалось проверить обновления. Повторить');
     $('app-update-button').disabled=status?.checking===true;
     $('app-update-button').classList.toggle('am-update-available',!!version);
-    $('app-update-version').hidden=!version;
-    $('app-update-version').textContent=version;
+    $('app-update-version').hidden=true;
   };
   $('session-dialog-close').addEventListener('click',()=>$('session-dialog').close());
   $('app-update-button').addEventListener('click',()=>window.webkit?.messageHandlers?.updates?.postMessage('check'));

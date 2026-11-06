@@ -92,7 +92,13 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverD
             alert.informativeText = "Сначала подключите окно к локальному клиенту. Ни очередь, ни сессии не изменены."
             alert.runModal(); return
         }
-        fetchRemote(manual: true)
+        // A gentle background reminder keeps the Sparkle session open. Bring
+        // that verified update forward instead of blocking on sessionInProgress.
+        if availableVersion != nil, controller.updater.canCheckForUpdates {
+            controller.checkForUpdates(nil)
+        } else {
+            fetchRemote(manual: true)
+        }
     }
     func fetchRemote(manual: Bool) {
         guard !fetching, endpoint != nil, !controller.updater.sessionInProgress,

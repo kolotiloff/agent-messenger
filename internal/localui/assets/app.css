@@ -95,3 +95,4 @@ body{background:light-dark(#ffffff,#191919)}
 #am-concept button:not(.am-tab,.am-machine,.am-select-trigger,.am-refresh-icon,.am-send-icon,.am-primary){background:var(--am-button)}
 #am-concept button:not(.am-tab,.am-machine,.am-select-trigger,.am-refresh-icon,.am-send-icon,.am-primary):is(:hover,:focus-visible):not(:disabled){background:var(--am-button-hover)}
 #am-concept button:not(.am-tab,.am-machine,.am-select-trigger,.am-refresh-icon,.am-send-icon):disabled{background:var(--am-button-disabled);color:var(--am-muted);opacity:1}
+#am-concept #app-update-button{width:auto;max-width:100%;margin-bottom:4px;font-size:12px;padding:6px 10px}
