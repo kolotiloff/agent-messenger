@@ -27,6 +27,12 @@ type codexHarness struct {
 
 func newCodexHarness(t *testing.T, mode string, launcher Launcher) *codexHarness {
 	t.Helper()
+	return newCodexHarnessWith(t, mode, launcher, nil)
+}
+
+// newCodexHarnessWith runs prepare on the data directory before the client starts.
+func newCodexHarnessWith(t *testing.T, mode string, launcher Launcher, prepare func(root string)) *codexHarness {
+	t.Helper()
 	isolateUser(t)
 	self, err := os.Executable()
 	if err != nil {
@@ -43,6 +49,9 @@ func newCodexHarness(t *testing.T, mode string, launcher Launcher) *codexHarness
 	h.profile = mkdir(t, filepath.Join(t.TempDir(), "managed-codex"))
 	if err := os.WriteFile(filepath.Join(h.profile, "fixture-mode"), []byte(mode), 0o600); err != nil {
 		t.Fatal(err)
+	}
+	if prepare != nil {
+		prepare(root)
 	}
 	h.start(launcher)
 	return h
@@ -332,6 +341,8 @@ func (h *codexHarness) send(id, text string) {
 }
 
 type codexSnap struct {
+	Events        []map[string]any
+	StreamRuns    []map[string]any
 	CodexSetups   []map[string]any
 	Requests      []map[string]any
 	Replies       []map[string]any
@@ -633,4 +644,83 @@ func TestRecoverCodexPendingIsResumable(t *testing.T) {
 		t.Fatalf("state %+v", s.CodexSetups)
 	}
 	h.stop()
+}
+
+func TestClaudeAndCodexExchangeUntilAutoReplyLimit(t *testing.T) {
+	t.Setenv("MESSENGER_STREAM_FIXTURE", "normal")
+	launcher := AdapterLauncher{AllowModels: true, ClaudeStream: true}
+	h := newCodexHarnessWith(t, "ok", launcher, func(root string) {
+		st := mustStore(t, root)
+		defer st.Close()
+		env := mkdir(t, filepath.Join(root, "claude-profile"))
+		if _, err := st.Register("claude", env, "test-stream", "worker"); err != nil {
+			t.Fatal(err)
+		}
+		exe, err := os.Executable()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.ConfigureLaunch("worker", exe, root); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if r := h.create("codex-test"); !r.OK {
+		t.Fatalf("create failed: %+v", r)
+	}
+	setup := h.waitSetup(func(s map[string]any) bool { return s["state"] == "created" })
+	// Claude ("worker") asks Codex; every reply goes back to the other agent.
+	if r, err := control.Call(h.root, control.Request{Cmd: "enqueue", Alias: "codex-test", MessageID: "m1", Sender: "worker", Text: "hi"}); err != nil || !r.OK {
+		t.Fatalf("enqueue: %+v %v", r, err)
+	}
+	s := h.waitSnap("exchange to the limit", func(s codexSnap) bool {
+		limited := false
+		for _, e := range s.Events {
+			limited = limited || e["kind"] == "auto_reply_limit"
+		}
+		return limited && len(s.Replies) == 4
+	})
+	time.Sleep(300 * time.Millisecond)
+	s = h.snap()
+	if len(s.Requests) != 1+core.MaxAutoReplyHops || len(s.Replies) != 1+core.MaxAutoReplyHops {
+		t.Fatalf("requests %d replies %d", len(s.Requests), len(s.Replies))
+	}
+	for _, r := range s.Requests {
+		if r["state"] != "completed" {
+			t.Fatalf("request %+v", r)
+		}
+	}
+	want := map[string]string{"codex-test": "worker", "worker": "codex-test"}
+	texts := map[string]bool{}
+	for _, r := range s.Replies {
+		if want[r["sender"].(string)] != r["recipient"] {
+			t.Fatalf("reply route %+v", r)
+		}
+		texts[r["text"].(string)] = true
+	}
+	for _, text := range []string{"ACK:hi", "ACK:ACK:hi", "ACK:ACK:ACK:hi", "ACK:ACK:ACK:ACK:hi"} {
+		if !texts[text] {
+			t.Fatalf("missing reply %q in %+v", text, s.Replies)
+		}
+	}
+	if h.count("turn/start") != 2 {
+		t.Fatalf("Codex turns %d", h.count("turn/start"))
+	}
+	// Both owners stay alive and idle: one Claude stream, one Codex app-server.
+	if len(s.StreamRuns) != 1 || s.StreamRuns[0]["state"] != "idle" || s.CodexSetups[0]["state"] != "created" {
+		t.Fatalf("owners %+v %+v", s.StreamRuns, s.CodexSetups)
+	}
+	h.stop()
+	waitGone(t, pidOf(setup))
+	st := mustStore(t, h.root)
+	defer st.Close()
+	snap, _ := st.Snapshot()
+	for _, run := range snap.StreamRuns {
+		if obs, err := st.Observation(text(run["id"])); err == nil {
+			if owns, _ := platform.OwnsObservation(obs); owns {
+				p, _ := os.FindProcess(obs.PID)
+				_ = p.Kill()
+				waitGone(t, obs.PID)
+			}
+		}
+	}
 }
