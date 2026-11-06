@@ -53,6 +53,7 @@ These change all the time. Every tool reads them at the start and updates them a
 | [UPDATES.md](UPDATES.md) | Mac app updates through Sparkle and GitHub Releases |
 | [CI.md](CI.md) | Automated checks in GitHub Actions |
 | [ACCEPTANCE_CODEX_MAC.md](ACCEPTANCE_CODEX_MAC.md) | Runbook for the first real Codex run on the Mac (T-004) |
+| [ACCEPTANCE_CODEX_RESUME_MAC.md](ACCEPTANCE_CODEX_RESUME_MAC.md) | Runbook for resuming the Codex test thread on the Mac (T-009) |
 
 ## Reports
 

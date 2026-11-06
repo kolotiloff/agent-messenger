@@ -16,13 +16,18 @@ import (
 // launched, recorded in the reservation at launch. A missing PID, an empty
 // process group or a timeout is never enough. The client must be stopped.
 //
-// The session is closed without retry. Attempts, replies and uncertain
-// messages are kept; nothing is resent and no model is started. The thread is
-// not resumed: an empty thread is not saved, and a resumed thread would need a
-// new owner, which is not implemented.
-func RecoverCodex(root, alias, confirmation string) (string, error) {
+// In close mode the session is closed without retry. In resume mode the
+// session stays open and its setup becomes resumable, so resume-codex-session
+// can start a new owner for the same saved thread; this needs at least one
+// verified turn, because Codex does not save an empty thread. Either way
+// attempts, replies and uncertain messages are kept; nothing is resent and no
+// model is started.
+func RecoverCodex(root, alias, confirmation, mode string) (string, error) {
 	if confirmation != core.StreamRecoveryConfirmation {
 		return "", core.ErrBadConfirmation
+	}
+	if mode != core.CodexRecoveryClose && mode != core.CodexRecoveryResume {
+		return "", fmt.Errorf("%w: unknown recovery mode", core.ErrRejected)
 	}
 	if alias == "" {
 		return "", fmt.Errorf("%w: exact alias required", core.ErrRejected)
@@ -97,7 +102,7 @@ func RecoverCodex(root, alias, confirmation string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("%w: %v", core.ErrRecoveryBlocked, err)
 	}
-	if err := store.PrepareCodexRecovery(setup.ID, fingerprint, string(raw), proof.Detail); err != nil {
+	if err := store.PrepareCodexRecovery(setup.ID, fingerprint, string(raw), proof.Detail, mode); err != nil {
 		return "", err
 	}
 	if index >= 0 {
@@ -108,6 +113,9 @@ func RecoverCodex(root, alias, confirmation string) (string, error) {
 	}
 	if err := store.FinishCodexRecovery(setup.ID, fingerprint); err != nil {
 		return "", fmt.Errorf("recovery pending; rerun the same command: %w", err)
+	}
+	if mode == core.CodexRecoveryResume {
+		return "резерв сессии Codex снят после доказанной перезагрузки; сессия оставлена открытой для resume-codex-session; неясные сообщения не повторяются; очередь на паузе; модель не запускалась", nil
 	}
 	return "резерв сессии Codex снят после доказанной перезагрузки; сессия закрыта без повтора; история сохранена; модель не запускалась", nil
 }

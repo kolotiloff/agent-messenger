@@ -244,13 +244,18 @@ func run(root string, args []string) error {
 		fs := flag.NewFlagSet("recover-codex", flag.ContinueOnError)
 		alias := fs.String("alias", "", "exact session alias")
 		confirm := fs.String("confirm", "", "preserve-uncertain")
+		resume := fs.Bool("resume", false, "keep the session open for resume-codex-session")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
 		if fs.NArg() != 0 {
 			return errors.New("лишние аргументы recover-codex")
 		}
-		message, err := supervisor.RecoverCodex(root, *alias, *confirm)
+		mode := core.CodexRecoveryClose
+		if *resume {
+			mode = core.CodexRecoveryResume
+		}
+		message, err := supervisor.RecoverCodex(root, *alias, *confirm, mode)
 		if err != nil {
 			return fmt.Errorf("восстановление сессии Codex не завершено: %w", err)
 		}
@@ -282,7 +287,7 @@ func run(root string, args []string) error {
 			return fmt.Errorf("операция этой ОС не поддерживается и не выполнена: %w", err)
 		}
 		return err
-	case "status", "pause", "resume", "stop-job", "shutdown", "enqueue", "inspect", "resolve", "register-session", "create-claude-session", "create-codex-session":
+	case "status", "pause", "resume", "stop-job", "shutdown", "enqueue", "inspect", "resolve", "register-session", "create-claude-session", "create-codex-session", "resume-codex-session":
 		response, err := control.Call(root, request(args))
 		if err != nil {
 			return err
@@ -417,7 +422,8 @@ func usage() {
   messenger --root КАТАЛОГ create-codex-session --environment УПРАВЛЯЕМЫЙ_ПРОФИЛЬ --alias ИМЯ --cli ФАЙЛ
   messenger recover-failed --confirm actions-may-repeat
   messenger --root КАТАЛОГ recover-stream --alias ИМЯ --run ID_ЗАПУСКА --confirm preserve-uncertain
-  messenger --root КАТАЛОГ recover-codex --alias ИМЯ --confirm preserve-uncertain
+  messenger --root КАТАЛОГ recover-codex --alias ИМЯ --confirm preserve-uncertain [--resume]
+  messenger --root КАТАЛОГ resume-codex-session --alias ИМЯ [--cli ФАЙЛ]
   messenger recover-missing-root --confirm preserve-uncertain
   messenger --root КАТАЛОГ register-session --provider claude|codex|cursor --environment КАТАЛОГ --conversation-id ID --alias ИМЯ --cli ФАЙЛ [--workspace КАТАЛОГ]
   messenger --root КАТАЛОГ status

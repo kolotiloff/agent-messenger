@@ -84,10 +84,39 @@ If the command is interrupted, the client refuses to start until the same comman
 - The session is closed with `closed_without_retry`, so new messages to the alias are refused.
 - Attempts, replies and uncertain messages are kept, and nothing is resent.
 - No model is started.
-- The thread is not resumed: that would need a new owner, which is not implemented.
+- The thread is not resumed. To keep the session and resume its thread, use `--resume` instead (T-009, below).
 - The alias stays bound to the closed session, so its history remains readable. A setup that failed before a thread existed releases its alias.
 
 On Linux and Windows the boot identity source is not implemented. There the command always refuses.
+
+### Resuming a saved thread (T-009)
+
+```sh
+messenger --root DIR recover-codex --alias NAME --confirm preserve-uncertain --resume
+messenger --root DIR resume-codex-session --alias NAME [--cli FILE]
+```
+
+**Recovery with `--resume`.** The proof is the same as above: a stopped client, a matching registry entry and a proven reboot since launch. Three things differ:
+
+- The thread must have at least one verified turn. Codex writes a thread to disk only after its first turn, so an empty thread cannot be resumed; the command refuses and says to recover without `--resume`.
+- The setup becomes `resumable` instead of `retired`. The session stays open and the alias stays reserved, so new messages to it wait in the queue.
+- A message the old owner held stays `uncertain` and is never resent, but it no longer locks the session. The queue is paused.
+
+The mode is stored with the pending recovery (`recovery_mode`), so a rerun of a half-done recovery cannot switch between close and resume.
+
+**New owner.** `resume-codex-session` needs a client with `--allow-model-calls` for the alias. It reuses the same `codex_setups` row, so the thread keeps one setup and one alias:
+
+1. It refuses if the shared registry already holds anything for this setup or thread.
+2. `resumable` → `launching` is committed, and the old process observation is dropped. Then the reservation is written, already naming the thread, and only then does exec happen. The CLI is the stored one, or `--cli` if Codex has moved, for example after an update.
+3. The process is recorded, and `initialize` and `config/read` run as at setup. The config must pass `ValidateCodexAppServerConfig`; its fingerprint is stored again and checked before every turn.
+4. `resume_requested` is committed **before** `thread/resume` is written. The request is sent once, by `CodexRPC.ResumeThread`, the only way to send that method. It names the stored thread and sets the workspace, read-only sandbox and approval policy `never` again. `excludeTurns` keeps the response small.
+5. The response must be exactly the stored thread: persistent, idle, the same workspace, read-only, no approvals. Then the setup is `created` again and the controller serves the queue as before.
+
+Resuming starts no turn and calls no model. The queue stays paused until it is resumed. Every failure after step 2 is uncertain, with the alias and reservation kept and nothing retried. Such failures include an unknown thread ("no rollout found"), a different or active thread, a timeout and a rejected config. A missing thread is never replaced with a new one. Only a definite exec refusal returns the setup to `resumable`.
+
+**Dynamic tools after a resume.** `thread/resume` cannot declare dynamic tools. On Codex 0.155.1, a thread resumed in a new process still offered `messenger_bound.read_current` and `reply` to the model, together with the earlier history. This was checked with a local fake model that records each request; no real model was called. If a future Codex dropped the tools, the turn could not reply, and it would end uncertain rather than as a success. [Verification report](reports/2026-11-06-codex-resume-linux.md).
+
+**Compatibility.** The schema version is now 2. A client at schema version 1 (preview.21 and earlier) refuses a data directory that a newer client has opened, because it does not know the resumable states.
 
 On a Mac, three cases were verified with the real installed app-server and empty profiles, without a model: a clean profile was accepted, an inherited MCP was rejected, an explicitly disabled MCP was accepted. [Checks and limitations](reports/2026-11-06-codex-preflight-mac.md).
 
@@ -114,7 +143,7 @@ The [reproducible probe](../experiments/codex_app_server/README.md) was run on a
 
 This is consistent with the per-key layering of settings described in the [official documentation](https://learn.chatgpt.com/docs/config-file/config-advanced). An empty table must not be treated as proof of isolation, and the model must not be launched right after building argv. The future adapter must check the actual configuration before creating a conversation, refuse on an unknown/enabled MCP, and not write the contents of the user configuration to the log. A read check by itself does not yet address the configuration changing between the check and the launch: the product mode requires either an immutable managed configuration, or a repeated check at the launch boundary plus confirmed loader behavior. Transferring user credentials into such a profile is not implemented by this research.
 
-System layers, other Codex features, actual tool startup, persistence of dynamic tools and exact resume are not yet accepted. Persistent Codex is not yet enabled in the window.
+System layers, other Codex features, actual tool startup, persistence of dynamic tools and exact resume were not accepted by this research. Later steps covered some of this: real tool calls on the Mac (T-004), and on Linux with a fake model, tool persistence and exact resume (T-009). Exact resume with a real model on the Mac is still pending.
 
 ## Protocol and design decision
 

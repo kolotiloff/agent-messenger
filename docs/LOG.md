@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-06 — Claude Code (T-009)
+
+- Probed real Codex 0.155.1 with a local fake model: dynamic tools survive `thread/resume` in a new process, resume calls no model, an unknown thread gives -32600, and a turn cut off by a kill comes back `interrupted`.
+- Implemented `recover-codex --resume` and `resume-codex-session`, schema version 2. Added tests with the fake app-server and an opt-in test that drives the whole path against the installed Codex with the fake model. `check.sh` and `check-builds.sh` pass. Mac acceptance with a real model is next ([runbook](ACCEPTANCE_CODEX_RESUME_MAC.md)); the window has no resume action yet (T-021).
+
 ## 2026-11-06 — Claude Code (T-004 on the Mac)
 
 - Released preview.21 from CI. The owner updated, logged in to a separate Codex profile and created a Codex session from the window. Real Codex answered both messages, with both turns verified.

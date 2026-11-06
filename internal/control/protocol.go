@@ -313,6 +313,18 @@ func dispatch(handler Handler, request Request) Response {
 			return Response{OK: false, Error: err.Error()}
 		}
 		return Response{OK: true, Status: &Status{Detail: detail}}
+	case "resume-codex-session":
+		resumer, ok := handler.(interface {
+			ResumeCodexSession(string, string) (string, error)
+		})
+		if !ok {
+			return Response{OK: false, Error: "unsupported; update the background client"}
+		}
+		detail, err := resumer.ResumeCodexSession(request.Alias, request.CLI)
+		if err != nil {
+			return Response{OK: false, Error: err.Error()}
+		}
+		return Response{OK: true, Status: &Status{Detail: detail}}
 	case "register-session":
 		key, err := handler.RegisterSession(request.Provider, request.Environment, request.ConversationID, request.Alias, request.CLI, request.Workspace)
 		if err != nil {

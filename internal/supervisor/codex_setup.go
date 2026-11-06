@@ -40,6 +40,7 @@ type CodexServerSpec struct {
 	Home        string // private HOME for the process
 	Workspace   string
 	DataRoot    string
+	ThreadID    string // set when resuming a saved thread
 }
 
 // CodexProcess is a started app-server with its reservation already recorded.
@@ -120,7 +121,7 @@ func (l AdapterLauncher) StartCodexServer(ctx context.Context, spec CodexServerS
 	if err != nil {
 		return CodexProcess{}, err
 	}
-	run := recordedRun{ID: id, Root: spec.DataRoot, Provider: "codex", Environment: spec.Environment, CodexSetupID: spec.SetupID}
+	run := recordedRun{ID: id, Root: spec.DataRoot, Provider: "codex", Environment: spec.Environment, CodexSetupID: spec.SetupID, ConversationID: spec.ThreadID}
 	// Failure to read the epoch does not relax the reservation; such a setup
 	// can then never be recovered by recover-codex.
 	run.Epoch, _ = recoveryEpoch()
@@ -323,56 +324,15 @@ func (s *Supervisor) CreateCodexSession(environment, alias, cli string) (string,
 		return "", fmt.Errorf("Codex app-server start uncertain; reservation kept: %w", err)
 	}
 	rpc := adapters.NewCodexRPC(proc.Input, proc.Output)
-	fail := func(reason string, cause error) (string, error) {
-		_ = s.codex.write(func() error { return s.store.MarkCodexSetupUncertain(id, reason) })
-		// Closing stdin asks the server to exit. Its exit is recorded, but the
-		// reservation stays: an exit does not prove descendants stopped.
-		_ = proc.Input.Close()
-		go func() { _ = rpc.Drain(nil) }()
-		go func() {
-			code, _ := proc.Wait()
-			s.codex.whileOpen(func() { _ = s.store.RecordCodexSetupExit(id, code) })
-		}()
-		return "", fmt.Errorf("Codex setup uncertain (%s); alias and reservation kept; no retry: %w", reason, cause)
-	}
-	if err := s.codex.write(func() error { return s.store.RecordCodexSetupProcess(id, proc.Observation) }); err != nil {
-		return fail("process not recorded", err)
-	}
-	call := func(method string, params any) (json.RawMessage, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), codexSetupTimeout)
-		defer cancel()
-		return rpc.Call(ctx, method, params)
-	}
-	if _, err := call("initialize", adapters.CodexInitializeParams(buildinfo.Version)); err != nil {
-		return fail("initialize failed", err)
-	}
-	if err := rpc.Notify("initialized"); err != nil {
-		return fail("initialized not sent", err)
-	}
-	result, err := call("config/read", map[string]any{"includeLayers": false, "cwd": setup.Workspace})
+	fail := s.codexSetupFailure(id, proc, rpc)
+	call, reason, err := s.codexHandshake(id, setup.Workspace, proc, rpc)
 	if err != nil {
-		return fail("config/read failed", err)
-	}
-	var report struct {
-		Config json.RawMessage `json:"config"`
-	}
-	if err := json.Unmarshal(result, &report); err != nil {
-		return fail("config report invalid", err)
-	}
-	if err := adapters.ValidateCodexAppServerConfig(report.Config); err != nil {
-		return fail("effective config rejected", err)
-	}
-	fingerprint, err := adapters.CodexConfigFingerprint(report.Config)
-	if err != nil {
-		return fail("config report invalid", err)
-	}
-	if err := s.codex.write(func() error { return s.store.ConfirmCodexSetupConfig(id, fingerprint) }); err != nil {
-		return fail("config check not recorded", err)
+		return fail(reason, err)
 	}
 	if err := s.codex.write(func() error { return s.store.PrepareCodexThreadStart(id) }); err != nil {
 		return fail("thread intent not recorded", err)
 	}
-	result, err = call("thread/start", adapters.CodexThreadStartParams(setup.Workspace))
+	result, err := call("thread/start", adapters.CodexThreadStartParams(setup.Workspace))
 	if err != nil {
 		return fail("thread/start outcome unknown", err)
 	}
@@ -383,6 +343,75 @@ func (s *Supervisor) CreateCodexSession(environment, alias, cli string) (string,
 	if err := s.codex.write(func() error { return s.store.CompleteCodexSetup(id, thread) }); err != nil {
 		return fail("thread id not recorded", err)
 	}
+	detail := "Codex session created; model not called; queued messages are delivered while model calls are allowed"
+	if s.adoptCodexOwner(id, alias, thread, proc, rpc) != nil {
+		detail += "; warning: reservation kept without thread id"
+	}
+	return detail, nil
+}
+
+// codexSetupFailure returns the failure path shared by setup and resume: the
+// setup becomes uncertain, stdin is closed and the exit is recorded, but the
+// reservation stays, because an exit does not prove descendants stopped.
+func (s *Supervisor) codexSetupFailure(id string, proc CodexProcess, rpc *adapters.CodexRPC) func(string, error) (string, error) {
+	return func(reason string, cause error) (string, error) {
+		_ = s.codex.write(func() error { return s.store.MarkCodexSetupUncertain(id, reason) })
+		_ = proc.Input.Close()
+		go func() { _ = rpc.Drain(nil) }()
+		go func() {
+			code, _ := proc.Wait()
+			s.codex.whileOpen(func() { _ = s.store.RecordCodexSetupExit(id, code) })
+		}()
+		return "", fmt.Errorf("Codex setup uncertain (%s); alias and reservation kept; no retry: %w", reason, cause)
+	}
+}
+
+// codexHandshake records the started process, runs initialize/initialized and
+// checks the effective config, storing only its fingerprint. It neither creates
+// nor resumes a thread. On error it returns the reason for the uncertain state.
+func (s *Supervisor) codexHandshake(id, workspace string, proc CodexProcess, rpc *adapters.CodexRPC) (func(string, any) (json.RawMessage, error), string, error) {
+	call := func(method string, params any) (json.RawMessage, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), codexSetupTimeout)
+		defer cancel()
+		return rpc.Call(ctx, method, params)
+	}
+	if err := s.codex.write(func() error { return s.store.RecordCodexSetupProcess(id, proc.Observation) }); err != nil {
+		return nil, "process not recorded", err
+	}
+	if _, err := call("initialize", adapters.CodexInitializeParams(buildinfo.Version)); err != nil {
+		return nil, "initialize failed", err
+	}
+	if err := rpc.Notify("initialized"); err != nil {
+		return nil, "initialized not sent", err
+	}
+	result, err := call("config/read", map[string]any{"includeLayers": false, "cwd": workspace})
+	if err != nil {
+		return nil, "config/read failed", err
+	}
+	var report struct {
+		Config json.RawMessage `json:"config"`
+	}
+	if err := json.Unmarshal(result, &report); err != nil {
+		return nil, "config report invalid", err
+	}
+	if err := adapters.ValidateCodexAppServerConfig(report.Config); err != nil {
+		return nil, "effective config rejected", err
+	}
+	fingerprint, err := adapters.CodexConfigFingerprint(report.Config)
+	if err != nil {
+		return nil, "config report invalid", err
+	}
+	if err := s.codex.write(func() error { return s.store.ConfirmCodexSetupConfig(id, fingerprint) }); err != nil {
+		return nil, "config check not recorded", err
+	}
+	return call, "", nil
+}
+
+// adoptCodexOwner makes the live process the owner of thread: the reservation
+// gets the thread ID, the controller starts serving the queue, and the exit of
+// the process is recorded. It returns the registry error, if any; the
+// reservation is kept either way.
+func (s *Supervisor) adoptCodexOwner(id, alias, thread string, proc CodexProcess, rpc *adapters.CodexRPC) error {
 	run := proc.run
 	run.ConversationID = thread
 	registryErr := rememberRun(run)
@@ -394,9 +423,91 @@ func (s *Supervisor) CreateCodexSession(environment, alias, cli string) (string,
 		s.codex.whileOpen(func() { _ = s.store.RecordCodexSetupExit(id, code) })
 		s.codex.remove(id)
 	}()
-	detail := "Codex session created; model not called; queued messages are delivered while model calls are allowed"
-	if registryErr != nil {
-		detail += "; warning: reservation kept without thread id"
+	return registryErr
+}
+
+// ResumeCodexSession starts a new owner for the saved thread of a resumable
+// Codex session (after recover-codex --resume). It launches a managed
+// app-server with the reservation recorded first, checks the effective config,
+// commits the resume intent, sends thread/resume once, and accepts only the
+// exact stored thread, idle, in the same workspace and with the same sandbox
+// and approval policy. No turn is started and the model is not called.
+//
+// cli may replace the stored CLI path. Every failure after launching began
+// leaves the setup uncertain with its alias and reservation kept; nothing is
+// retried, and a missing thread is never replaced with a new one.
+func (s *Supervisor) ResumeCodexSession(alias, cli string) (string, error) {
+	s.dispatch.Lock()
+	launcher, ok := s.currentLauncher().(CodexSetupLauncher)
+	if !ok || !launcher.CodexSetupEnabled(alias) {
+		s.dispatch.Unlock()
+		return "", errors.New("Codex session resume requires serve --allow-model-calls for this alias")
+	}
+	if s.stopping.Load() {
+		s.dispatch.Unlock()
+		return "", errors.New("client is shutting down")
+	}
+	previous, err := s.store.CodexSetupByAlias(alias)
+	if err != nil || previous.State != "resumable" {
+		s.dispatch.Unlock()
+		return "", fmt.Errorf("%w: no resumable Codex session has this alias; run recover-codex --resume first", core.ErrRejected)
+	}
+	// The shared registry must not hold anything for this setup or thread.
+	runs, err := loadRuns()
+	if err != nil {
+		s.dispatch.Unlock()
+		return "", err
+	}
+	for _, r := range runs {
+		if r.CodexSetupID == previous.ID || (r.Provider == "codex" && r.ConversationID == previous.ThreadID) {
+			s.dispatch.Unlock()
+			return "", fmt.Errorf("%w: a reservation for this Codex thread already exists", core.ErrRecoveryBlocked)
+		}
+	}
+	home := filepath.Join(s.root, "codex-home", previous.ID)
+	for _, dir := range []string{previous.Workspace, home, filepath.Join(home, "tmp")} {
+		if err := privateDir(dir); err != nil {
+			s.dispatch.Unlock()
+			return "", err
+		}
+	}
+	setup, err := s.store.BeginCodexResume(alias, cli)
+	if err != nil {
+		s.dispatch.Unlock()
+		return "", err
+	}
+	id, thread := setup.ID, setup.ThreadID
+	spec := CodexServerSpec{SetupID: id, Alias: alias, CLI: setup.CLI, Environment: setup.Environment, Home: home, Workspace: setup.Workspace, DataRoot: s.root, ThreadID: thread}
+	proc, err := launcher.StartCodexServer(context.Background(), spec)
+	s.dispatch.Unlock()
+	if err != nil {
+		if errors.Is(err, errNotStarted) {
+			_ = s.store.CodexResumeNotStarted(id, "executable did not start")
+			return "", fmt.Errorf("Codex app-server did not start; session is still resumable: %w", err)
+		}
+		_ = s.store.MarkCodexSetupUncertain(id, "start outcome unknown")
+		return "", fmt.Errorf("Codex app-server start uncertain; reservation kept: %w", err)
+	}
+	rpc := adapters.NewCodexRPC(proc.Input, proc.Output)
+	fail := s.codexSetupFailure(id, proc, rpc)
+	if _, reason, err := s.codexHandshake(id, setup.Workspace, proc, rpc); err != nil {
+		return fail(reason, err)
+	}
+	if err := s.codex.write(func() error { return s.store.PrepareCodexThreadResume(id) }); err != nil {
+		return fail("resume intent not recorded", err)
+	}
+	resumeCtx, cancel := context.WithTimeout(context.Background(), codexSetupTimeout)
+	err = rpc.ResumeThread(resumeCtx, thread, setup.Workspace)
+	cancel()
+	if err != nil {
+		return fail("thread/resume not confirmed", err)
+	}
+	if err := s.codex.write(func() error { return s.store.CompleteCodexResume(id, thread) }); err != nil {
+		return fail("resume not recorded", err)
+	}
+	detail := "Codex session resumed with a new owner; same thread; model not called; queued messages are delivered while model calls are allowed and the queue is not paused"
+	if s.adoptCodexOwner(id, alias, thread, proc, rpc) != nil {
+		detail += "; warning: reservation update failed; it is kept"
 	}
 	return detail, nil
 }

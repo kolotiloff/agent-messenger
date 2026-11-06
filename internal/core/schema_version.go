@@ -10,7 +10,10 @@ import (
 // SchemaVersion is the newest database layout this client understands.
 // Version 1 is the first recorded one: Codex setups and turns, and routed
 // replies. Databases from before it have no version and count as 0.
-const SchemaVersion = 1
+// Version 2 adds resumable Codex setups (recover-codex --resume and
+// resume-codex-session). A version-1 client would not know those states, so
+// it must not open such a database.
+const SchemaVersion = 2
 
 // ErrNewerSchema means the database was written by a newer client. This
 // client stops before changing anything in it.

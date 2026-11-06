@@ -218,6 +218,77 @@ func TestParseCodexThreadStart(t *testing.T) {
 	}
 }
 
+func TestParseCodexThreadResume(t *testing.T) {
+	const id = "01a1b0a0-1ef6-7861-8fd1-f7fb5912e2f9"
+	// A resumed thread has saved turns; excludeTurns only omits them.
+	withTurns := func(r map[string]any) { r["thread"].(map[string]any)["turns"] = []any{map[string]any{"id": "t"}} }
+	if err := ParseCodexThreadResume(threadStartResult(withTurns), id, "/work"); err != nil {
+		t.Fatal(err)
+	}
+	thread := func(key string, value any) func(map[string]any) {
+		return func(r map[string]any) {
+			if value == nil {
+				delete(r["thread"].(map[string]any), key)
+				return
+			}
+			r["thread"].(map[string]any)[key] = value
+		}
+	}
+	for name, mutate := range map[string]func(map[string]any){
+		"other thread":    thread("id", "01a1b0a0-1ef6-7861-8fd1-000000000000"),
+		"no id":           thread("id", nil),
+		"ephemeral":       thread("ephemeral", true),
+		"no ephemeral":    thread("ephemeral", nil),
+		"other cwd":       thread("cwd", "/elsewhere"),
+		"active":          thread("status", map[string]any{"type": "active"}),
+		"not loaded":      thread("status", map[string]any{"type": "notLoaded"}),
+		"writable":        func(r map[string]any) { r["sandbox"] = map[string]any{"type": "workspaceWrite"} },
+		"approvals":       func(r map[string]any) { r["approvalPolicy"] = "on-request" },
+		"granular policy": func(r map[string]any) { r["approvalPolicy"] = map[string]any{"granular": map[string]any{}} },
+		"no thread":       func(r map[string]any) { delete(r, "thread") },
+	} {
+		if err := ParseCodexThreadResume(threadStartResult(mutate), id, "/work"); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+	if err := ParseCodexThreadResume(threadStartResult(nil), "", "/work"); err == nil {
+		t.Error("empty expected id accepted")
+	}
+	params := CodexThreadResumeParams(id, "/work")
+	if params["threadId"] != id || params["sandbox"] != "read-only" || params["approvalPolicy"] != "never" || params["cwd"] != "/work" {
+		t.Fatalf("params %+v", params)
+	}
+	if _, ok := params["dynamicTools"]; ok {
+		t.Fatal("thread/resume cannot declare tools")
+	}
+}
+
+func TestCodexRPCResumeThreadSendsOnlyTheStoredThread(t *testing.T) {
+	const id = "01a1b0a0-1ef6-7861-8fd1-f7fb5912e2f9"
+	out := &lockedBuffer{}
+	rpc := NewCodexRPC(out, strings.NewReader(""))
+	if err := rpc.ResumeThread(context.Background(), "../x", "/work"); err == nil || len(out.lines()) != 0 {
+		t.Fatal("invalid thread id written")
+	}
+	result := threadStartResult(nil)
+	server := `{"id":1,"result":` + string(result) + "}\n"
+	out = &lockedBuffer{}
+	rpc = NewCodexRPC(out, strings.NewReader(server))
+	if err := rpc.ResumeThread(context.Background(), id, "/work"); err != nil {
+		t.Fatal(err)
+	}
+	lines := out.lines()
+	if len(lines) != 1 || !strings.Contains(lines[0], `"method":"thread/resume"`) || !strings.Contains(lines[0], id) {
+		t.Fatalf("written %v", lines)
+	}
+	// A different thread in the response is not a continuation.
+	other := strings.Replace(server, id, "01a1b0a0-1ef6-7861-8fd1-000000000000", 1)
+	rpc = NewCodexRPC(&lockedBuffer{}, strings.NewReader(other))
+	if err := rpc.ResumeThread(context.Background(), id, "/work"); err == nil {
+		t.Fatal("other thread accepted")
+	}
+}
+
 func turnHooks(prepareErr error) (CodexTurnHooks, *[]string) {
 	var calls []string
 	return CodexTurnHooks{

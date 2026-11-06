@@ -212,6 +212,40 @@ func fakeCodexServer() int {
 			if mode == "idle-request" {
 				send(map[string]any{"id": 77, "method": "item/tool/call", "params": map[string]any{}})
 			}
+		case "thread/resume":
+			var params struct {
+				ThreadID     string `json:"threadId"`
+				Cwd          string `json:"cwd"`
+				ExcludeTurns bool   `json:"excludeTurns"`
+				DynamicTools any    `json:"dynamicTools"`
+			}
+			_ = json.Unmarshal(req.Params, &params)
+			if params.DynamicTools != nil || !params.ExcludeTurns {
+				return 5
+			}
+			threadID, status := params.ThreadID, "idle"
+			switch mode {
+			case "resume-missing":
+				send(map[string]any{"id": *req.ID, "error": map[string]any{"code": -32600, "message": "no rollout found for thread id"}})
+				continue
+			case "resume-silent":
+				continue
+			case "resume-other":
+				threadID = "01a1b0a0-1ef6-7861-8fd1-999999999999"
+			case "resume-active":
+				status = "active"
+			}
+			// Turn IDs must stay unique across processes: each resume gets
+			// its own range.
+			counter := filepath.Join(home, "fixture-resumes")
+			previous, _ := os.ReadFile(counter)
+			_ = os.WriteFile(counter, append(previous, 'x'), 0o600)
+			currentThread = threadID
+			threadIndex = 100 + len(previous)
+			thread := map[string]any{"id": threadID, "cwd": params.Cwd, "ephemeral": false, "status": map[string]any{"type": status}, "turns": []any{}}
+			send(map[string]any{"id": *req.ID, "result": map[string]any{
+				"approvalPolicy": "never", "sandbox": map[string]any{"type": "readOnly"}, "cwd": params.Cwd, "thread": thread,
+			}})
 		case "turn/start":
 			if !runTurn(*req.ID) {
 				return 0

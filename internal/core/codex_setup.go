@@ -31,6 +31,18 @@ import (
 // uncertain (alias and process reservation kept), and retired (recover-codex
 // proved a reboot since launch; reservation removed, session closed, history
 // kept). retiring is the pending step of that recovery.
+//
+// Resuming a saved thread (recover-codex --resume) reuses the same row, so the
+// thread keeps one setup and one alias:
+//
+//	resumable        reservation removed after a proven reboot; no process;
+//	                 the session stays open; the alias stays reserved
+//	launching ... configured   as above, for a new app-server process
+//	resume_requested committed before thread/resume is written; never re-sent
+//	created          the new process owns the same thread ID
+//
+// recovery_mode records which of the two recoveries was prepared, so a rerun of
+// a half-done recovery cannot switch between them.
 const codexSetupSchema = `
 CREATE TABLE IF NOT EXISTS codex_setups (
  id TEXT PRIMARY KEY,
@@ -190,11 +202,16 @@ func (s *Store) MarkCodexSetupLaunching(id string) error {
 func (s *Store) CodexSetupNotStarted(id, reason string) error {
 	return s.tx(func(tx *sql.Tx) error {
 		var pid sql.NullInt64
-		if err := tx.QueryRow(`SELECT pid FROM codex_setups WHERE id=?`, id).Scan(&pid); err != nil {
+		var thread sql.NullString
+		if err := tx.QueryRow(`SELECT pid,thread_id FROM codex_setups WHERE id=?`, id).Scan(&pid, &thread); err != nil {
 			return err
 		}
 		if pid.Valid {
 			return fmt.Errorf("%w: a process was recorded", ErrRejected)
+		}
+		if thread.Valid {
+			// A resumed setup keeps its thread and alias; see CodexResumeNotStarted.
+			return fmt.Errorf("%w: setup already has a thread", ErrRejected)
 		}
 		return codexStep(tx, id, "not_started", reason, "intent", "launching")
 	})
@@ -565,7 +582,7 @@ func (s *Store) FailCodexTurn(token, reason string) error {
 // used for every failure after launching began.
 func (s *Store) MarkCodexSetupUncertain(id, reason string) error {
 	return s.tx(func(tx *sql.Tx) error {
-		return codexStep(tx, id, "uncertain", reason, "launching", "started", "configured", "thread_requested", "created", "busy", "uncertain")
+		return codexStep(tx, id, "uncertain", reason, "launching", "started", "configured", "thread_requested", "resume_requested", "created", "busy", "uncertain")
 	})
 }
 
@@ -573,7 +590,7 @@ func (s *Store) MarkCodexSetupUncertain(id, reason string) error {
 // its descendants stopped, so the setup becomes uncertain and keeps its alias.
 func (s *Store) RecordCodexSetupExit(id string, code int) error {
 	return s.tx(func(tx *sql.Tx) error {
-		if err := codexStep(tx, id, "uncertain", "app-server exit observed; descendants not proven stopped", "launching", "started", "configured", "thread_requested", "created", "busy", "uncertain"); err != nil {
+		if err := codexStep(tx, id, "uncertain", "app-server exit observed; descendants not proven stopped", "launching", "started", "configured", "thread_requested", "resume_requested", "created", "busy", "uncertain"); err != nil {
 			return err
 		}
 		_, err := tx.Exec(`UPDATE codex_setups SET exit_observed=1,exit_code=? WHERE id=?`, code, id)
@@ -615,39 +632,91 @@ func (s *Store) codexSetupWhere(where string, arg string) (CodexSetup, error) {
 	return c, err
 }
 
+// Codex recovery modes. close retires the setup and closes the session; resume
+// keeps the session open so a new owner can resume the saved thread.
+const (
+	CodexRecoveryClose  = "close"
+	CodexRecoveryResume = "resume"
+)
+
+// verifiedCodexTurns counts turns of this setup that completed with a stored,
+// linked reply. Codex saves a thread to disk only once it has a turn, so a
+// thread without one cannot be resumed.
+func verifiedCodexTurns(tx *sql.Tx, id string) (int, error) {
+	var n int
+	err := tx.QueryRow(`SELECT COUNT(*) FROM codex_turns ct JOIN attempts a ON a.token=ct.attempt_token JOIN verifications v ON v.attempt_token=a.token JOIN replies r ON r.id=v.reply_id AND r.attempt_token=a.token AND r.reply_to=a.request_id WHERE ct.setup_id=? AND ct.turn_id IS NOT NULL AND a.state='turn_completed' AND v.identity_confirmed=1 AND v.provider_ok=1`, id).Scan(&n)
+	return n, err
+}
+
 // PrepareCodexRecovery records the pending recovery before the registry entry
-// is removed. Repeating it with the same reservation is a no-op.
-func (s *Store) PrepareCodexRecovery(id, fingerprint, reservation, proof string) error {
+// is removed. Repeating it with the same reservation and mode is a no-op.
+func (s *Store) PrepareCodexRecovery(id, fingerprint, reservation, proof, mode string) error {
+	if mode != CodexRecoveryClose && mode != CodexRecoveryResume {
+		return fmt.Errorf("%w: unknown recovery mode", ErrRejected)
+	}
 	return s.tx(func(tx *sql.Tx) error {
 		var state string
-		var old sql.NullString
-		if err := tx.QueryRow(`SELECT state,recovery_fingerprint FROM codex_setups WHERE id=?`, id).Scan(&state, &old); err != nil {
+		var old, oldMode, thread, key sql.NullString
+		if err := tx.QueryRow(`SELECT state,recovery_fingerprint,recovery_mode,thread_id,session_key FROM codex_setups WHERE id=?`, id).Scan(&state, &old, &oldMode, &thread, &key); err != nil {
 			return err
 		}
 		if state == "retiring" {
 			if old.String != fingerprint {
 				return fmt.Errorf("%w: pending recovery reservation changed", ErrRecoveryBlocked)
 			}
+			// A recovery prepared by an older client has no mode; it closes.
+			pending := oldMode.String
+			if pending == "" {
+				pending = CodexRecoveryClose
+			}
+			if pending != mode {
+				return fmt.Errorf("%w: a recovery in %s mode is pending; rerun it the same way", ErrRecoveryBlocked, pending)
+			}
 			return nil
 		}
-		if err := codexStep(tx, id, "retiring", proof, "uncertain"); err != nil {
+		if mode == CodexRecoveryResume {
+			if !thread.Valid || !key.Valid {
+				return fmt.Errorf("%w: no thread was created; nothing to resume", ErrRecoveryBlocked)
+			}
+			var decision sql.NullString
+			if err := tx.QueryRow(`SELECT decision FROM sessions WHERE key=?`, key.String).Scan(&decision); err != nil {
+				return err
+			}
+			if decision.Valid {
+				return fmt.Errorf("%w: session is closed", ErrRecoveryBlocked)
+			}
+			n, err := verifiedCodexTurns(tx, id)
+			if err != nil {
+				return err
+			}
+			if n < 1 {
+				return fmt.Errorf("%w: the thread has no verified turn, so Codex has not saved it; recover without --resume", ErrRecoveryBlocked)
+			}
+		}
+		if err := codexStep(tx, id, "retiring", proof+"; mode "+mode, "uncertain"); err != nil {
 			return err
 		}
-		_, err := tx.Exec(`UPDATE codex_setups SET recovery_fingerprint=?,recovery_reservation=? WHERE id=?`, fingerprint, reservation, id)
+		_, err := tx.Exec(`UPDATE codex_setups SET recovery_fingerprint=?,recovery_reservation=?,recovery_mode=? WHERE id=?`, fingerprint, reservation, mode, id)
 		return err
 	})
 }
 
-// FinishCodexRecovery closes the session without retry. Attempts, replies and
-// uncertain messages stay as they are; nothing is resent.
+// FinishCodexRecovery runs after the registry entry is removed. In close mode
+// it closes the session without retry. In resume mode the setup becomes
+// resumable: the session stays open, any attempt the old owner held stays
+// uncertain but no longer locks the session, and the queue is paused. Either
+// way attempts, replies and uncertain messages are kept and nothing is resent.
 func (s *Store) FinishCodexRecovery(id, fingerprint string) error {
 	return s.tx(func(tx *sql.Tx) error {
-		var old, key sql.NullString
-		if err := tx.QueryRow(`SELECT recovery_fingerprint,session_key FROM codex_setups WHERE id=?`, id).Scan(&old, &key); err != nil {
+		var old, key, mode sql.NullString
+		if err := tx.QueryRow(`SELECT recovery_fingerprint,session_key,recovery_mode FROM codex_setups WHERE id=?`, id).Scan(&old, &key, &mode); err != nil {
 			return err
 		}
 		if old.String != fingerprint {
 			return fmt.Errorf("%w: pending recovery reservation changed", ErrRecoveryBlocked)
+		}
+		if mode.String == CodexRecoveryResume {
+			return finishCodexResumeRecovery(tx, id, key.String)
 		}
 		if err := codexStep(tx, id, "retired", "reservation removed after a proven reboot; session closed without retry", "retiring"); err != nil {
 			return err
@@ -658,6 +727,160 @@ func (s *Store) FinishCodexRecovery(id, fingerprint string) error {
 			}
 		}
 		return nil
+	})
+}
+
+func finishCodexResumeRecovery(tx *sql.Tx, id, key string) error {
+	rows, err := tx.Query(`SELECT ct.attempt_token FROM codex_turns ct JOIN sessions s ON s.active_token=ct.attempt_token WHERE ct.setup_id=? AND s.key=?`, id, key)
+	if err != nil {
+		return err
+	}
+	var held []string
+	for rows.Next() {
+		var token string
+		if err := rows.Scan(&token); err != nil {
+			rows.Close()
+			return err
+		}
+		held = append(held, token)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	const reason = "owner lost; recovered after a proven reboot; never resent"
+	for _, token := range held {
+		row, err := owned(tx, token, "reserved", "launching", "running", "uncertain")
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO verifications(attempt_token,identity_confirmed,reply_id,exit_observed,exit_code,group_empty,provider_ok,detail) VALUES (?,?,(SELECT id FROM replies WHERE attempt_token=?),0,NULL,0,0,?)`, token, boolInt(row.state == "running"), token, reason); err != nil {
+			return err
+		}
+		if row.state != "uncertain" || !row.mcpRevoked {
+			if err := revoke(tx, row, "uncertain", reason); err != nil {
+				return err
+			}
+		}
+	}
+	// Only the old owner's attempt is released; any other lock stays.
+	if _, err := tx.Exec(`UPDATE sessions SET active_token=NULL WHERE key=? AND active_token IN (SELECT attempt_token FROM codex_turns WHERE setup_id=?)`, key, id); err != nil {
+		return err
+	}
+	if err := codexStep(tx, id, "resumable", "reservation removed after a proven reboot; session kept open; resume-codex-session starts a new owner", "retiring"); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE control SET paused=1 WHERE id=1`); err != nil {
+		return err
+	}
+	return insertEvent(tx, "codex_resumable", key, "", "uncertain messages kept; nothing resent; queue paused; no model call")
+}
+
+// BeginCodexResume starts a new owner for the saved thread of a resumable
+// setup. It is committed before the reservation and exec, like
+// MarkCodexSetupLaunching. cli replaces the stored CLI when it is not empty,
+// for example after a Codex update moved the executable. The old process
+// observation is dropped: a reboot since its launch was proven.
+func (s *Store) BeginCodexResume(alias, cli string) (CodexSetup, error) {
+	if cli != "" {
+		var err error
+		if cli, err = canonicalCLI(cli); err != nil {
+			return CodexSetup{}, err
+		}
+	}
+	var id string
+	err := s.tx(func(tx *sql.Tx) error {
+		var thread, key, stored sql.NullString
+		err := tx.QueryRow(`SELECT id,thread_id,session_key,cli_path FROM codex_setups WHERE alias=? AND state='resumable'`, alias).Scan(&id, &thread, &key, &stored)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%w: no resumable Codex session has this alias; run recover-codex --resume first", ErrRejected)
+		}
+		if err != nil {
+			return err
+		}
+		if !thread.Valid || !key.Valid {
+			return fmt.Errorf("%w: resumable setup has no thread", ErrRejected)
+		}
+		var decision sql.NullString
+		var active sql.NullString
+		var mode string
+		if err := tx.QueryRow(`SELECT decision,active_token,start_mode FROM sessions WHERE key=?`, key.String).Scan(&decision, &active, &mode); err != nil {
+			return err
+		}
+		if decision.Valid || active.Valid || mode != "codex_owned" {
+			return fmt.Errorf("%w: session is closed or locked", ErrRejected)
+		}
+		if cli == "" {
+			if cli, err = canonicalCLI(stored.String); err != nil {
+				return fmt.Errorf("%w: stored Codex CLI is no longer an executable; pass --cli", ErrRejected)
+			}
+		}
+		if err := codexStep(tx, id, "launching", "resume of thread "+thread.String+"; process may start", "resumable"); err != nil {
+			return err
+		}
+		_, err = tx.Exec(`UPDATE codex_setups SET cli_path=?,pid=NULL,pgid=NULL,start_token=NULL,boot_id=NULL,exit_observed=0,exit_code=NULL,config_fingerprint=NULL WHERE id=?`, cli, id)
+		return err
+	})
+	if err != nil {
+		return CodexSetup{}, err
+	}
+	return s.CodexSetup(id)
+}
+
+// CodexResumeNotStarted returns a resume to resumable after a definite OS
+// refusal before the executable ran. The alias and session are kept.
+func (s *Store) CodexResumeNotStarted(id, reason string) error {
+	return s.tx(func(tx *sql.Tx) error {
+		var pid sql.NullInt64
+		var thread sql.NullString
+		if err := tx.QueryRow(`SELECT pid,thread_id FROM codex_setups WHERE id=?`, id).Scan(&pid, &thread); err != nil {
+			return err
+		}
+		if pid.Valid || !thread.Valid {
+			return fmt.Errorf("%w: not a resume that never started", ErrRejected)
+		}
+		return codexStep(tx, id, "resumable", reason, "launching")
+	})
+}
+
+// PrepareCodexThreadResume is committed BEFORE thread/resume is written. From
+// here a lost response or a crash is uncertain; thread/resume is never re-sent.
+func (s *Store) PrepareCodexThreadResume(id string) error {
+	return s.tx(func(tx *sql.Tx) error {
+		var thread sql.NullString
+		if err := tx.QueryRow(`SELECT thread_id FROM codex_setups WHERE id=?`, id).Scan(&thread); err != nil {
+			return err
+		}
+		if !thread.Valid {
+			return fmt.Errorf("%w: no thread to resume", ErrRejected)
+		}
+		return codexStep(tx, id, "resume_requested", "thread/resume sent once; no automatic retry", "configured")
+	})
+}
+
+// CompleteCodexResume records that the new process resumed exactly the stored
+// thread. The owner is idle and serves the session like a new one.
+func (s *Store) CompleteCodexResume(id, threadID string) error {
+	return s.tx(func(tx *sql.Tx) error {
+		var thread, key sql.NullString
+		if err := tx.QueryRow(`SELECT thread_id,session_key FROM codex_setups WHERE id=?`, id).Scan(&thread, &key); err != nil {
+			return err
+		}
+		if !thread.Valid || !key.Valid || thread.String != threadID {
+			return fmt.Errorf("%w: resumed thread differs from the stored one", ErrRejected)
+		}
+		var decision sql.NullString
+		var mode string
+		if err := tx.QueryRow(`SELECT decision,start_mode FROM sessions WHERE key=?`, key.String).Scan(&decision, &mode); err != nil {
+			return err
+		}
+		if decision.Valid || mode != "codex_owned" {
+			return fmt.Errorf("%w: session is closed", ErrRejected)
+		}
+		if err := codexStep(tx, id, "created", "thread resumed; owned by live process", "resume_requested"); err != nil {
+			return err
+		}
+		return insertEvent(tx, "codex_thread_resumed", key.String, "", "same thread id; model not called")
 	})
 }
 
@@ -680,7 +903,7 @@ func stopInheritedCodexSetups(tx *sql.Tx) error {
 	if _, err := tx.Exec(`UPDATE codex_setups SET state='not_started',detail='supervisor restarted before launch',updated_at=? WHERE state='intent'`, now()); err != nil {
 		return err
 	}
-	r, err := tx.Exec(`UPDATE codex_setups SET state='uncertain',detail='supervisor restarted; owner process lost; no retry',updated_at=? WHERE state IN ('launching','started','configured','thread_requested','created','busy')`, now())
+	r, err := tx.Exec(`UPDATE codex_setups SET state='uncertain',detail='supervisor restarted; owner process lost; no retry',updated_at=? WHERE state IN ('launching','started','configured','thread_requested','resume_requested','created','busy')`, now())
 	if err != nil {
 		return err
 	}

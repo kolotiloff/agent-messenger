@@ -162,6 +162,7 @@ func Open(path string) (*Store, error) {
 		"session_key":          "TEXT REFERENCES sessions(key)",
 		"recovery_fingerprint": "TEXT",
 		"recovery_reservation": "TEXT",
+		"recovery_mode":        "TEXT",
 	} {
 		if err := ensureColumn(db, "codex_setups", column, decl); err != nil {
 			db.Close()

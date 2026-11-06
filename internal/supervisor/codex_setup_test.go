@@ -571,11 +571,11 @@ func uncertainCodexOwner(t *testing.T) *codexHarness {
 
 func TestRecoverCodexRequiresProvenReboot(t *testing.T) {
 	h := uncertainCodexOwner(t)
-	if _, err := RecoverCodex(h.root, "codex-test", "wrong"); !errors.Is(err, core.ErrBadConfirmation) {
+	if _, err := RecoverCodex(h.root, "codex-test", "wrong", core.CodexRecoveryClose); !errors.Is(err, core.ErrBadConfirmation) {
 		t.Fatalf("bad confirmation: %v", err)
 	}
 	// Same boot: the old process is gone, but that is not proof.
-	if _, err := RecoverCodex(h.root, "codex-test", core.StreamRecoveryConfirmation); !errors.Is(err, core.ErrRecoveryBlocked) {
+	if _, err := RecoverCodex(h.root, "codex-test", core.StreamRecoveryConfirmation, core.CodexRecoveryClose); !errors.Is(err, core.ErrRecoveryBlocked) {
 		t.Fatalf("same boot accepted: %v", err)
 	}
 	if len(codexReservations(t)) != 1 {
@@ -584,14 +584,14 @@ func TestRecoverCodexRequiresProvenReboot(t *testing.T) {
 	// While the client runs, recovery is refused.
 	h.start(AdapterLauncher{})
 	recoveryEpoch = fakeEpoch(bootTwo)
-	if _, err := RecoverCodex(h.root, "codex-test", core.StreamRecoveryConfirmation); err == nil {
+	if _, err := RecoverCodex(h.root, "codex-test", core.StreamRecoveryConfirmation, core.CodexRecoveryClose); err == nil {
 		t.Fatal("recovery ran next to a live client")
 	}
 	h.stop()
-	if _, err := RecoverCodex(h.root, "unknown", core.StreamRecoveryConfirmation); err == nil {
+	if _, err := RecoverCodex(h.root, "unknown", core.StreamRecoveryConfirmation, core.CodexRecoveryClose); err == nil {
 		t.Fatal("unknown alias accepted")
 	}
-	if _, err := RecoverCodex(h.root, "codex-test", core.StreamRecoveryConfirmation); err != nil {
+	if _, err := RecoverCodex(h.root, "codex-test", core.StreamRecoveryConfirmation, core.CodexRecoveryClose); err != nil {
 		t.Fatal(err)
 	}
 	if len(codexReservations(t)) != 0 {
@@ -608,7 +608,7 @@ func TestRecoverCodexRequiresProvenReboot(t *testing.T) {
 	if r, _ := control.Call(h.root, control.Request{Cmd: "enqueue", Alias: "codex-test", MessageID: "m2", Sender: "user", Text: "x"}); r.OK {
 		t.Fatal("closed session accepted a message")
 	}
-	if _, err := RecoverCodex(h.root, "codex-test", core.StreamRecoveryConfirmation); err == nil {
+	if _, err := RecoverCodex(h.root, "codex-test", core.StreamRecoveryConfirmation, core.CodexRecoveryClose); err == nil {
 		t.Fatal("second recovery accepted")
 	}
 	h.stop()
@@ -621,7 +621,7 @@ func TestRecoverCodexPendingIsResumable(t *testing.T) {
 	h := uncertainCodexOwner(t)
 	recoveryEpoch = fakeEpoch(bootTwo)
 	beforeRenameHook = func() error { return errors.New("disk full") }
-	_, err := RecoverCodex(h.root, "codex-test", core.StreamRecoveryConfirmation)
+	_, err := RecoverCodex(h.root, "codex-test", core.StreamRecoveryConfirmation, core.CodexRecoveryClose)
 	beforeRenameHook = nil
 	if err == nil {
 		t.Fatal("failed registry write reported success")
@@ -633,7 +633,7 @@ func TestRecoverCodexPendingIsResumable(t *testing.T) {
 	if err := Run(context.Background(), h.root, AdapterLauncher{}); !errors.Is(err, core.ErrRecoveryBlocked) {
 		t.Fatalf("startup with pending recovery: %v", err)
 	}
-	if _, err := RecoverCodex(h.root, "codex-test", core.StreamRecoveryConfirmation); err != nil {
+	if _, err := RecoverCodex(h.root, "codex-test", core.StreamRecoveryConfirmation, core.CodexRecoveryClose); err != nil {
 		t.Fatal(err)
 	}
 	if len(codexReservations(t)) != 0 {

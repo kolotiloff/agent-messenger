@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 )
 
@@ -14,7 +15,7 @@ func TestSchemaVersionIsRecordedAndNewerIsRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 	var v string
-	if err := st.db.QueryRow(`SELECT value FROM meta WHERE key='schema_version'`).Scan(&v); err != nil || v != "1" {
+	if err := st.db.QueryRow(`SELECT value FROM meta WHERE key='schema_version'`).Scan(&v); err != nil || v != strconv.Itoa(SchemaVersion) {
 		t.Fatalf("version %q %v", v, err)
 	}
 	if _, err := st.db.Exec(`UPDATE meta SET value='99' WHERE key='schema_version'`); err != nil {
@@ -43,5 +44,28 @@ func TestSchemaVersionDamagedIsRefused(t *testing.T) {
 	st.Close()
 	if _, err := Open(path); !errors.Is(err, ErrRejected) {
 		t.Fatalf("damaged version accepted: %v", err)
+	}
+}
+
+// A version-1 database (preview.21 and earlier) is upgraded in place; from then
+// on a version-1 client refuses it, because it does not know resumable setups.
+func TestSchemaVersionOneIsUpgraded(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "queue.sqlite")
+	st, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.Exec(`UPDATE meta SET value='1' WHERE key='schema_version'`); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+	st, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	var v string
+	if err := st.db.QueryRow(`SELECT value FROM meta WHERE key='schema_version'`).Scan(&v); err != nil || v != "2" {
+		t.Fatalf("version %q %v", v, err)
 	}
 }

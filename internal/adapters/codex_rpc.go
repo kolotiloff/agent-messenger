@@ -16,6 +16,7 @@ import (
 
 // Setup-phase methods. None of them starts a model turn. turn/start is not
 // reachable through this client.
+// thread/resume is not here: only ResumeThread sends it, with fixed params.
 var codexSetupMethods = map[string]bool{"initialize": true, "config/read": true, "thread/start": true}
 
 // Notifications the client may send during setup.
@@ -132,6 +133,24 @@ func (c *CodexRPC) Call(ctx context.Context, method string, params any) (json.Ra
 	if !codexSetupMethods[method] {
 		return nil, fmt.Errorf("%w: method %q not allowed during setup", ErrCodexProtocol, method)
 	}
+	return c.call(ctx, method, params)
+}
+
+// ResumeThread sends thread/resume once for exactly this thread, with
+// CodexThreadResumeParams, and checks the result with ParseCodexThreadResume.
+// Resuming starts no turn. A lost response is an error, never a retry.
+func (c *CodexRPC) ResumeThread(ctx context.Context, threadID, workspace string) error {
+	if !codexThreadIDPattern.MatchString(threadID) {
+		return fmt.Errorf("%w: invalid thread id", ErrCodexProtocol)
+	}
+	result, err := c.call(ctx, "thread/resume", CodexThreadResumeParams(threadID, workspace))
+	if err != nil {
+		return err
+	}
+	return ParseCodexThreadResume(result, threadID, workspace)
+}
+
+func (c *CodexRPC) call(ctx context.Context, method string, params any) (json.RawMessage, error) {
 	c.next++
 	id := c.next
 	if err := c.write(map[string]any{"id": id, "method": method, "params": params}); err != nil {
@@ -287,6 +306,66 @@ func ParseCodexThreadStart(raw json.RawMessage, workspace string) (string, error
 		return "", fmt.Errorf("%w: sandbox is not read-only", ErrCodexProtocol)
 	}
 	return t.ID, nil
+}
+
+// CodexThreadResumeParams resumes exactly the stored thread from the managed
+// profile's saved rollout. The thread keeps the dynamic tools declared at
+// thread/start: thread/resume cannot declare them, and Codex 0.155.1 was seen
+// to send them to the model again after a resume. The sandbox, approval policy
+// and workspace are set again explicitly. Turns are not returned, to keep the
+// response small; resuming does not start a turn or call the model.
+func CodexThreadResumeParams(threadID, workspace string) map[string]any {
+	return map[string]any{
+		"threadId":       threadID,
+		"cwd":            workspace,
+		"sandbox":        "read-only",
+		"approvalPolicy": "never",
+		"excludeTurns":   true,
+	}
+}
+
+// ParseCodexThreadResume checks a thread/resume result: the exact stored
+// thread, persistent and idle, in the same workspace, with a read-only sandbox
+// and no approvals. Any other thread is never accepted as a continuation.
+func ParseCodexThreadResume(raw json.RawMessage, threadID, workspace string) error {
+	var result struct {
+		ApprovalPolicy json.RawMessage `json:"approvalPolicy"`
+		Sandbox        struct {
+			Type string `json:"type"`
+		} `json:"sandbox"`
+		Thread struct {
+			ID        string `json:"id"`
+			Cwd       string `json:"cwd"`
+			Ephemeral *bool  `json:"ephemeral"`
+			Status    struct {
+				Type string `json:"type"`
+			} `json:"status"`
+		} `json:"thread"`
+	}
+	if json.Unmarshal(raw, &result) != nil {
+		return fmt.Errorf("%w: invalid thread/resume result", ErrCodexProtocol)
+	}
+	t := result.Thread
+	if threadID == "" || t.ID != threadID {
+		return fmt.Errorf("%w: resumed thread id differs", ErrCodexProtocol)
+	}
+	if t.Ephemeral == nil || *t.Ephemeral {
+		return fmt.Errorf("%w: thread is not persistent", ErrCodexProtocol)
+	}
+	if t.Status.Type != "idle" {
+		return fmt.Errorf("%w: resumed thread is not idle", ErrCodexProtocol)
+	}
+	if !samePath(t.Cwd, workspace) {
+		return fmt.Errorf("%w: thread workspace differs", ErrCodexProtocol)
+	}
+	var policy string
+	if json.Unmarshal(result.ApprovalPolicy, &policy) != nil || policy != "never" {
+		return fmt.Errorf("%w: approval policy is not never", ErrCodexProtocol)
+	}
+	if result.Sandbox.Type != "readOnly" {
+		return fmt.Errorf("%w: sandbox is not read-only", ErrCodexProtocol)
+	}
+	return nil
 }
 
 func samePath(a, b string) bool {
