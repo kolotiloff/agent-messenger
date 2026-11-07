@@ -4,8 +4,10 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-07 — Claude Code (restart the background client from the window)
 
-- Owner: after an update the window said «В фоне старая версия клиента, перезапустите его» and asked for a terminal. Now the client reports its version, and the window shows a banner with «Перезапустить» (D-037). It asks first if tasks are running.
-- Checked: Go tests with fake clients (order of stop and start, kept pause, refused or lingering shutdown, lock wait, no downgrade, confirmation, one restart at a time). On Linux: an old client built from `main` was replaced from a preview.27 window by the button in headless Chromium; the PID changed and the client was not paused. The confirmation step was checked by tests only, not in a browser. Not checked on the Mac.
+- Owner: after an update the window said «В фоне старая версия клиента, перезапустите его» and asked for a terminal. Now the client reports its version. While it is older than the window, a modal dialog blocks the window with «Перезапустить» or «Выйти» (the owner asked for a blocking dialog instead of a banner, since the window cannot work with an old client). It asks first if tasks are running (D-037).
+- Checked: Go tests with fake clients (order of stop and start, kept pause, refused or lingering shutdown, lock wait, no downgrade, confirmation, one restart at a time). On Linux: an old client built from `main` was replaced from a preview.27 window by the button in headless Chromium; the PID changed and the client was not paused. In the browser the dialog stays open on Esc and covers the tabs, the confirmation step shows (with a stubbed answer), «Выйти» sends the quit message to the app and leaves the client running. Not checked on the Mac (the Swift quit handler is new).
+- Owner: keep to the Claude app style, the buttons became too big. Controls are back to 32 px (compact 28), the dialog follows Claude's alerts (16 px padding, leaving choice on the left, main action on the right), and a destructive button has red text on a soft red fill. Measured in the browser: only 32 and 28 px controls.
+- Owner: the text in buttons sat high. Measured by pixels: 9 px above the capitals, 13 below. Buttons, tabs, select fields and inputs now get a 4 px top padding (`--am-text-nudge`), which gives 11 and 11. Checked with the Linux font (Inter); the Mac font (SF) has the same kind of offset in the owner's screenshot, but it was not measured on the Mac.
 
 ## 2026-11-07 — Claude Code (window style rules)
 

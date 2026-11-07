@@ -16,7 +16,7 @@ Updated 2026-11-07 (third night) by Claude Code.
 - **Audit:** two independent reviews (security/protocol and window logic); every finding is fixed (list in [BROKER.md](BROKER.md) and [PR #41](https://github.com/kolotiloff/agent-messenger/pull/41)). One older issue outside this work went to the backlog as T-030.
 - **Release:** PR #41 merged into `main` and released as preview.26 (see LOG for the outcome).
 - **Verified here (Linux):** `check.sh`, `check-builds.sh`; tests in `internal/broker`, `internal/supervisor` (the client joins its own broker through the control command, revoke, check), `internal/localui`; the tab in headless Chromium in both themes, at 1100 and 600 px, against a real client.
-- **Open PR #42** (`claude/t029-style-system`, not released): one set of style rules (D-036), the server note in a side column, «Запустить/Остановить сервер», Claude-style dropdowns, and a «Перезапустить» banner for an older background client (D-037). Per AGENTS.md it ships with the next functional release.
+- **Open PR #42** (`claude/t029-style-system`, not released): one set of style rules (D-036), the server note in a side column, «Запустить/Остановить сервер», Claude-style dropdowns, and a blocking «Перезапустить / Выйти» dialog for an older background client (D-037). Per AGENTS.md it ships with the next functional release.
 - **Not verified:** two real computers, a local network, the Mac app.
 - **Next:**
   1. Owner: update, open «Сервер», turn the server on, invite a second computer when one is available.

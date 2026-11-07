@@ -100,7 +100,7 @@
   function shutdownCommand(){return view?.messenger&&view?.data_root?'"'+view.messenger+'" --root "'+view.data_root+'" shutdown':'';}
   function outdatedMessage(){
     if(Date.now()-clientInfoAt>3000)loadClientInfo();
-    if(clientInfo?.restart)return Error('В фоне старая версия Messenger. Перезапустите её кнопкой вверху.');
+    if(clientInfo?.restart)return Error('В фоне старая версия Messenger.');
     const e=Error('В фоне старая версия клиента, перезапустите его');
     e.hint='Закройте Messenger, выполните скопированную команду в Терминале и откройте Messenger снова.';
     e.command=shutdownCommand();
@@ -444,42 +444,42 @@
   // The desktop window offers to restart it; a browser window shows how.
   async function loadClientInfo(){
     clientInfoAt=Date.now();
-    try{const info=await api('/api/client-info');const was=JSON.stringify(clientInfo);clientInfo=info;if(!info.outdated)restart.ask=null;if(JSON.stringify(info)!==was)renderNotice();}catch(_){}
+    try{const info=await api('/api/client-info');clientInfo=info;if(!info.outdated)restart.ask=null;renderRestart();}catch(_){}
   }
   async function restartClient(confirm){
-    restart={busy:true,ask:restart.ask,error:''};renderNotice();
+    restart={busy:true,ask:restart.ask,error:''};renderRestart();
     let response,result={};
     try{response=await fetch('/api/restart-client',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({project,confirm}),cache:'no-store',signal:AbortSignal.timeout(50000)});result=await response.json().catch(()=>({}));}
-    catch(_){restart={busy:false,ask:null,error:'Ответ не получен, результат неизвестен. Подождите немного: окно проверит клиент само.'};renderNotice();loadClientInfo();return;}
+    catch(_){restart={busy:false,ask:null,error:'Ответ не получен, результат неизвестен. Подождите немного: окно проверит клиент само.'};renderRestart();loadClientInfo();return;}
     if(response.ok&&result.ok){restart={busy:false,ask:null,error:''};showError(null);await loadClientInfo();viewSignature='';refresh();return;}
-    if(result.state==='confirm'){restart={busy:false,ask:{running:result.running||0,known:result.known!==false},error:''};renderNotice();return;}
-    restart={busy:false,ask:null,error:result.detail||'Перезапуск не подтверждён. Проверьте состояние.'};renderNotice();loadClientInfo();
+    if(result.state==='confirm'){restart={busy:false,ask:{running:result.running||0,known:result.known!==false},error:''};renderRestart();return;}
+    restart={busy:false,ask:null,error:result.detail||'Перезапуск не подтверждён. Проверьте состояние.'};renderRestart();loadClientInfo();
   }
-  function clientNotice(){
-    const box=el('div',undefined,'am-notice-client');
-    const text=el('div',undefined,'am-notice-text');
-    const ask=restart.ask;
-    text.append(el('strong',ask?'Перезапустить фоновый клиент сейчас?':'В фоне работает старая версия Messenger'));
-    let detail;
-    if(ask)detail=ask.known?'Сейчас выполняется задач: '+ask.running+'. Перезапуск прервёт их; сами они не повторятся и будут ждать вашего решения.':'Не удалось проверить, идут ли задачи. Если идут, перезапуск прервёт их; сами они не повторятся и будут ждать вашего решения.';
-    else if(restart.busy)detail='Останавливаем старый клиент и запускаем новый. Это займёт несколько секунд.';
-    else detail='Окно уже версии '+clientInfo.window_version+', а клиент в фоне — '+(clientInfo.client_version||'более ранней')+'. Перезапустите его, чтобы всё работало. Задачи, история и устройства сохранятся.';
-    text.append(el('span',detail,'am-small am-muted'));
-    if(restart.error)text.append(el('span',restart.error,'am-small am-bad-text'));
-    const actions=el('div',undefined,'am-actions');
-    if(clientInfo.restart){
-      const go=el('button',restart.busy?'Перезапускаем…':ask?'Перезапустить всё равно':'Перезапустить',ask?'am-danger':'am-primary');go.type='button';go.disabled=restart.busy;
-      go.addEventListener('click',()=>restartClient(!!ask));actions.append(go);
-      if(ask&&!restart.busy){const cancel=el('button','Отмена');cancel.type='button';cancel.addEventListener('click',()=>{restart.ask=null;renderNotice();});actions.append(cancel);}
-    }else{
-      const command=shutdownCommand();
-      if(command){const copy=el('button','Скопировать команду');copy.type='button';copy.title='Закройте окно, выполните команду в Терминале и откройте окно снова.';copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(command);copy.textContent='Скопировано';}catch(_){copy.textContent='Не удалось скопировать';}});actions.append(copy);}
-    }
-    box.append(text,actions);return box;
+  // A window newer than its client cannot work properly, so this dialog
+  // covers the whole window until the client is restarted or the app quits.
+  // Quitting closes only the window; the background client keeps running.
+  function renderRestart(){
+    const dialog=$('restart-dialog');
+    const show=!!clientInfo?.outdated||restart.busy||!!restart.error;
+    if(!show){if(dialog.open)dialog.close();return;}
+    const ask=restart.ask,canRestart=!!clientInfo?.restart,answering=clientInfo?.client==='running';
+    const canQuit=!!window.webkit?.messageHandlers?.app;
+    let title='Нужно перезапустить Messenger',text;
+    if(ask){title=ask.known?'Сейчас выполняются задачи':'Не удалось проверить задачи';text=(ask.known?'Задач в работе: '+ask.running+'. Перезапуск прервёт их.':'Если задачи сейчас идут, перезапуск прервёт их.')+' Сами они не повторятся и будут ждать вашего решения.';}
+    else if(restart.busy)text='Останавливаем старую версию и запускаем новую. Это займёт несколько секунд.';
+    else if(canRestart)text='Приложение обновилось до версии '+clientInfo.window_version+', а в фоне работает '+(clientInfo.client_version?'версия '+clientInfo.client_version:'более ранняя версия')+'. Пока она не перезапущена, Messenger не может работать. Задачи, история и устройства сохранятся.';
+    else text='В фоне работает более ранняя версия клиента. Закройте окно, выполните скопированную команду в Терминале и откройте окно снова.';
+    $('restart-title').textContent=title;$('restart-text').textContent=text;
+    $('restart-error').textContent=restart.error;$('restart-error').hidden=!restart.error;
+    const go=$('restart-go'),quit=$('restart-quit'),copy=$('restart-copy');
+    go.hidden=!canRestart||(!answering&&!restart.busy);go.disabled=restart.busy;
+    go.textContent=restart.busy?'Перезапускаем…':ask?'Перезапустить всё равно':'Перезапустить';
+    go.classList.toggle('am-primary',!ask);go.classList.toggle('am-danger',!!ask);
+    quit.hidden=!canQuit;quit.disabled=restart.busy;
+    copy.hidden=canRestart||!shutdownCommand();
+    if(!dialog.open){dialog.showModal();(go.hidden?quit.hidden?copy:quit:go).focus();}
   }
   function renderNotice(){
-    $('notice').classList.toggle('am-notice-wide',!!clientInfo?.outdated);
-    if(clientInfo?.outdated){notice(clientNotice());return;}
     if(!online){notice(el('p',offlineReason||'Клиент Messenger не запущен или не отвечает. Данные не обновляются.'));return;}
     if(view?.pending_launch>0&&!view.tasks_enabled){notice(el('p','Задачи записаны, но этот клиент не запускает исполнителей: он запущен без разрешения --allow-tasks.'));return;}
     if(view?.pending_launch>0&&view.paused){
@@ -751,6 +751,10 @@
   $('project-dialog-close').addEventListener('click',()=>$('project-dialog').close());
   $('project-save').addEventListener('click',saveProject);
   $('project-pick').addEventListener('click',()=>window.webkit?.messageHandlers?.folder?.postMessage('pick'));
+  $('restart-dialog').addEventListener('cancel',event=>event.preventDefault());
+  $('restart-go').addEventListener('click',()=>restartClient(!!restart.ask));
+  $('restart-quit').addEventListener('click',()=>window.webkit?.messageHandlers?.app?.postMessage('quit'));
+  $('restart-copy').addEventListener('click',async()=>{const b=$('restart-copy');try{await navigator.clipboard.writeText(shutdownCommand());b.textContent='Скопировано';}catch(_){b.textContent='Не удалось скопировать';}setTimeout(()=>b.textContent='Скопировать команду',2000);});
   $('agent-setup-close').addEventListener('click',()=>$('agent-setup').close());
   $('agent-check').addEventListener('click',checkAgent);
   $('agent-save').addEventListener('click',saveAgent);
