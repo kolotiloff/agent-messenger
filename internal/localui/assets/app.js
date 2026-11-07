@@ -106,9 +106,9 @@
   // A small chip above the input field, like a chat's status chips.
   function renderToasts(){
     const box=$('toasts');box.replaceChildren();box.hidden=!actionError;if(!actionError)return;
-    const chip=el('div',undefined,'am-toast am-toast-bad');chip.append(el('span',actionError.text,'am-toast-text'));if(actionError.hint)chip.title=actionError.hint;
+    const chip=el('div',undefined,'am-toast');chip.append(el('span',actionError.text,'am-toast-text'));if(actionError.hint)chip.title=actionError.hint;
     if(actionError.command){
-      const command=actionError.command,copy=el('button','Скопировать команду','am-toast-action');copy.type='button';copy.title=command;
+      const command=actionError.command,copy=el('button','Скопировать команду');copy.type='button';copy.title=command;
       copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(command);copy.textContent='Скопировано';}catch(_){copy.textContent='Не удалось скопировать';}setTimeout(()=>copy.textContent='Скопировать команду',2000);});
       chip.append(copy);
     }
@@ -185,7 +185,7 @@
   }
   function renderMachines(){
     const box=$('machines');box.replaceChildren();
-    const machine=el('div',undefined,'am-machine am-machine-card');machine.setAttribute('aria-current','true');
+    const machine=el('div',undefined,'am-machine-card');machine.setAttribute('aria-current','true');
     const head=el('div',undefined,'am-machine-name');head.append(el('span',view?.computer_name||'Этот компьютер'));
     const dot=el('span',undefined,'am-dot'+(online?' online':''));dot.title=online?'На связи':'Нет связи';head.append(dot);machine.append(head);
     const lines=el('div',undefined,'am-machine-agents');
@@ -226,7 +226,7 @@
       if(!items.length)return;
       box.append(el('div',label,'am-label am-task-section'));
       for(const t of items){
-        const row=el('button',undefined,'am-row am-task');row.type='button';row.setAttribute('aria-pressed',String(t.id===selectedTask));
+        const row=el('button',undefined,'am-task');row.type='button';row.setAttribute('aria-pressed',String(t.id===selectedTask));
         const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),el('span',names[t.agent]||t.agent));
         const [text,cls]=taskStatus(t);
         const status=el('span',undefined,'am-task-status '+cls);
@@ -396,7 +396,7 @@
       const a=(view?.agents||[]).find(x=>x.agent===provider);
       const found=discovery.find(d=>d.provider===provider);
       const coordinator=view?.coordinator?.connected&&coordinatorName()[0]===provider;
-      const card=el('article',undefined,'am-agent');
+      const card=el('article',undefined,'am-card');
       const heading=el('h3',undefined,'am-provider-heading');heading.append(providerIcon(provider),el('span',names[provider]));card.append(heading);
       card.append(el('p',coordinator&&a?'Координатор и исполнитель':coordinator?'Координатор':a?'Исполнитель':'Не подключён','am-muted'));
       const dl=el('dl');
@@ -423,15 +423,15 @@
       }
       card.append(dl);
       const running=a?.project_running||0,today=a?.project_today||0;
-      const tasks=el('button',running||today?'Задачи: '+running+' идёт, '+today+' сегодня':'Задач нет','am-agent-action');tasks.type='button';tasks.disabled=!running&&!today;
+      const tasks=el('button',running||today?'Задачи: '+running+' идёт, '+today+' сегодня':'Задач нет');tasks.type='button';tasks.disabled=!running&&!today;
       tasks.addEventListener('click',()=>{$('agent-filter').value=provider;syncSelects();show('tasks');renderTaskList();});
       const setup=el('button','Настроить');setup.type='button';setup.addEventListener('click',()=>openAgentSetup(provider));
-      card.append(tasks,setup);cards.append(card);
+      const actions=el('div',undefined,'am-actions-stack');actions.append(tasks,setup);card.append(actions);cards.append(card);
     }
     // Cursor is shown as in the approved mockup; Messenger does not run it.
-    const cursor=el('article',undefined,'am-agent');const ch=el('h3',undefined,'am-provider-heading');ch.append(providerIcon('cursor'),el('span','Cursor'));cursor.append(ch);
+    const cursor=el('article',undefined,'am-card');const ch=el('h3',undefined,'am-provider-heading');ch.append(providerIcon('cursor'),el('span','Cursor'));cursor.append(ch);
     cursor.append(el('p','Не подключён','am-muted'));const cdl=el('dl');const row=el('div');const dd=el('dd','Пока не поддерживается для задач','am-muted');row.append(el('dt','Программа'),dd);cdl.append(row);cursor.append(cdl);
-    const none=el('button','Задач нет','am-agent-action');none.type='button';none.disabled=true;cursor.append(none);cards.append(cursor);
+    const none=el('button','Задач нет');none.type='button';none.disabled=true;const noneActions=el('div',undefined,'am-actions-stack');noneActions.append(none);cursor.append(noneActions);cards.append(cursor);
   }
   function renderNotice(){
     if(!online){notice(el('p',offlineReason||'Клиент Messenger не запущен или не отвечает. Данные не обновляются.'));return;}
@@ -530,7 +530,7 @@
       main.append(el('span',d.name,'am-device-name'));
       main.append(el('span',d.last_seen?'Был на связи '+stamp(d.last_seen):'Подключено '+stamp(d.created_at),'am-small am-muted'));
       row.append(main);
-      const actions=el('div',undefined,'am-device-actions');
+      const actions=el('div',undefined,'am-actions');
       // Revoking cannot be undone (the device needs a new invitation), so it
       // takes a second click; the window has no confirm() dialog.
       if(revokeAsk===d.id){
@@ -679,7 +679,6 @@
     $('app-update-button').title=version?'Доступно обновление '+version:detail;
     $('app-update-button').setAttribute('aria-label',version?'Установить обновление '+version:checking?label:'Не удалось проверить обновления. Повторить');
     $('app-update-button').disabled=checking&&!version;
-    $('app-update-button').classList.toggle('am-update-available',!!version);
     $('app-update-version').hidden=true;
   };
   $('app-update-button').addEventListener('click',()=>window.webkit?.messageHandlers?.updates?.postMessage('check'));

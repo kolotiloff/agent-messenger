@@ -23,6 +23,7 @@ These change all the time. Every tool reads them at the start and updates them a
 | [PLAN.md](PLAN.md) | The original architecture and working plan v0.3 |
 | [APP.md](APP.md) | Requirements for the app, installation and window |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Where the broker runs: your own computer or a VPS |
+| [UI_STYLE.md](UI_STYLE.md) | Window style rules: spacing, radii, sizes, components |
 | [BROKER.md](BROKER.md) | What of the broker is built: hosting, invitations, joining |
 | [VALIDATION.md](VALIDATION.md) | Hypotheses H1–H14 and what has been confirmed |
 | [AGENTGRAM_REVIEW.md](AGENTGRAM_REVIEW.md) | Comparison with Agentgram and ideas taken from it |

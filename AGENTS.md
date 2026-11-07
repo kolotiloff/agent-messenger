@@ -43,6 +43,7 @@ Cloud sessions may run on Linux. Mac-only code (Swift shell, Sparkle, `*_darwin.
 - Code, docs, commit messages and PRs are in English. The app UI and CLI messages are still in Russian (the current user's language); changing that is a separate product decision.
 - Talk to the user in Russian, in plain language.
 - Work on a feature branch from current `main`; open a PR with the exact head SHA and a list of what was verified.
+- Window styles follow [docs/UI_STYLE.md](docs/UI_STYLE.md): tokens only, no raw spacing or radii.
 - Bundle UI tweaks into the next functional release instead of shipping a build per tweak. Keep the chosen light/dark themes and layout.
 
 ## Working documents and switching between tools

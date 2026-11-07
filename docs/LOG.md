@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-07 — Claude Code (window style rules)
+
+- Owner: gaps between buttons differ between the sidebar and the agent cards; the style is scattered. The stylesheet was rewritten on one set of tokens (D-036, [UI_STYLE.md](UI_STYLE.md)); dead rules from the old chat screen were removed; agent cards and server sections share `.am-card`.
+- Checked by screenshots of every tab, a dialog and a menu in both themes at 1100 and 600 px, and by measuring control heights (36 and 32 only). Not checked on the Mac.
+
 ## 2026-11-07 — Claude Code (third night: preview.25, server setup)
 
 - Released preview.25 (PR #40: error chip, outdated-client message, task list fix).
