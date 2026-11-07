@@ -12,9 +12,12 @@ import (
 
 func TestTaskWindowRoutes(t *testing.T) {
 	var got []control.Request
-	reject := false
+	reject, outdated := false, false
 	h := newHandler("127.0.0.1:1234", "secret", func(_ context.Context, r control.Request) (control.Response, error) {
 		got = append(got, r)
+		if outdated {
+			return control.Response{Error: "неизвестная команда"}, nil
+		}
 		if reject {
 			return control.Response{Error: "this question is no longer open"}, nil
 		}
@@ -45,6 +48,13 @@ func TestTaskWindowRoutes(t *testing.T) {
 	if code != 200 || last.Cmd != "task-owner-answer" || last.MessageID != "task-1" || last.ConversationID != "q-1" || last.Confirmation != "op-1" || last.Text != "yes" {
 		t.Fatalf("answer %d %+v", code, last)
 	}
+	// A client older than the window does not know the command: the window
+	// is told so instead of showing the client's raw error.
+	outdated = true
+	if code, body := do("POST", "/api/task-cancel", `{"task":"task-1"}`); code != 502 || !strings.Contains(body, `"client_outdated"`) || strings.Contains(body, "неизвестная") {
+		t.Fatalf("outdated client %d %s", code, body)
+	}
+	outdated = false
 	if code, _ := do("POST", "/api/task-cancel", `{"task":"task-1"}`); code != 200 || got[len(got)-1].Cmd != "task-cancel" || got[len(got)-1].MessageID != "task-1" {
 		t.Fatalf("cancel %d %+v", code, got[len(got)-1])
 	}

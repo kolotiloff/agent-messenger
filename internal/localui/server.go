@@ -218,6 +218,13 @@ func newHandlerWithChecks(host, token string, call caller, discover func(context
 					writeJSON(w, map[string]any{"ok": false, "state": "unconfirmed"})
 					return
 				}
+				if !response.OK && response.Error == "неизвестная команда" {
+					// The running client is older than this window.
+					w.Header().Set("Content-Type", "application/json; charset=utf-8")
+					w.WriteHeader(http.StatusBadGateway)
+					writeJSON(w, map[string]any{"ok": false, "state": "client_outdated"})
+					return
+				}
 				if !response.OK {
 					// Task errors are plain rule messages; they carry no secrets.
 					w.Header().Set("Content-Type", "application/json; charset=utf-8")

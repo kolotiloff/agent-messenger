@@ -288,7 +288,7 @@ body.am-native #am-concept .am-panel-toggle { margin-left:auto; }
 #am-concept .am-task-filter .am-select-trigger { font-size:12px; padding:5px 9px; }
 #am-concept .am-task-section { margin:var(--am-space-3) 0 var(--am-space-1); padding-inline:var(--am-space-3); }
 #am-concept .am-task-list { display:flex; flex-direction:column; gap:var(--am-space-1); min-width:0; overflow-x:hidden; }
-#am-concept .am-task-list .am-row.am-task { width:100%; display:flex; flex-direction:column; align-items:stretch; gap:2px; padding:var(--am-space-2) var(--am-space-3); border:0; border-radius:8px; background:transparent; text-align:left; font-size:12px; min-width:0; max-width:100%; overflow:hidden; }
+#am-concept .am-task-list .am-row.am-task { width:100%; display:flex; flex-direction:column; flex-wrap:nowrap; flex-shrink:0; align-items:stretch; gap:2px; padding:var(--am-space-2) var(--am-space-3); border:0; border-radius:8px; background:transparent; text-align:left; font-size:12px; min-width:0; max-width:100%; overflow:hidden; }
 #am-concept .am-task-list .am-row.am-task:is(:hover,:focus-visible) { background:var(--am-soft); }
 #am-concept .am-task-list .am-row.am-task[aria-pressed=true] { background:var(--am-selected); }
 #am-concept .am-task-agent { display:flex; align-items:center; gap:6px; color:var(--am-muted); font-size:11px; }
@@ -338,4 +338,14 @@ body.am-native #am-concept .am-panel-toggle { margin-left:auto; }
 #am-concept .am-tip { position:absolute; top:50%; right:calc(100% + 8px); transform:translateY(-50%); display:none; align-items:center; gap:8px; padding:5px 10px; border-radius:8px; background:var(--am-composer); border:1px solid var(--am-line); color:var(--am-text); font-size:13px; white-space:nowrap; box-shadow:0 3px 14px light-dark(#0000001a,#00000040); pointer-events:none; }
 #am-concept .am-tip kbd { font:inherit; color:var(--am-muted); }
 #am-concept .am-stop-btn:hover .am-tip, #am-concept .am-stop-btn:focus-visible .am-tip { display:inline-flex; }
+#am-concept .am-stop-btn.am-tip-off .am-tip, #am-concept .am-stop-btn:disabled .am-tip { display:none; }
+#am-concept #answer-status { margin:8px 16px 0; font-size:12px; line-height:1.45; }
+#am-concept #answer-status:empty { display:none; }
 #am-concept .am-compose textarea:disabled { cursor:default; }
+#am-concept .am-notice-row > button { flex:none; white-space:nowrap; }
+#am-concept .am-toasts { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; padding:var(--am-space-3) 0 0; }
+#am-concept .am-toast { display:inline-flex; align-items:center; gap:10px; max-width:min(560px,100%); padding:6px 6px 6px 14px; border:1px solid var(--am-line); border-radius:12px; background:var(--am-composer); color:var(--am-text); font-size:13px; line-height:1.35; box-shadow:0 3px 14px light-dark(#0000000f,#00000030); }
+#am-concept .am-toast-text { min-width:0; overflow-wrap:anywhere; }
+#am-concept .am-toast-action { flex:none; padding:4px 10px; font-size:12px; white-space:nowrap; }
+#am-concept .am-toast-close { flex:none; width:24px; height:24px; padding:0; border:0; border-radius:8px; background:transparent; color:var(--am-muted); font-size:16px; line-height:1; }
+#am-concept .am-toast-close:hover { background:var(--am-soft); color:var(--am-text); }

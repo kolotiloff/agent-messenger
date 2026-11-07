@@ -92,13 +92,37 @@
   let view=null,project=recall('messenger-project'),selectedTask='',feed=null,feedSignature='',viewSignature='';
   let online=false,offlineReason='',discovery=[],tab='tasks',refreshing=false,answering=false;
   const agentChecks=new Map();
+  // The window can be newer than the client still running in the background
+  // (after an update). Say how to restart it; nothing is restarted by itself.
+  function outdatedMessage(){
+    const e=Error('В фоне старая версия клиента, перезапустите его');
+    e.hint='Закройте Messenger, выполните скопированную команду в Терминале и откройте Messenger снова.';
+    if(view?.messenger&&view?.data_root)e.command='"'+view.messenger+'" --root "'+view.data_root+'" shutdown';
+    return e;
+  }
+  // An error of the owner's action stays at the top until it is closed or
+  // the next action succeeds; the 2 s refresh does not hide it.
+  let actionError=null;
+  function showError(error){actionError=error?{text:error.message,command:error.command||'',hint:error.hint||''}:null;renderToasts();}
+  // A small chip above the input field, like a chat's status chips.
+  function renderToasts(){
+    const box=$('toasts');box.replaceChildren();box.hidden=!actionError;if(!actionError)return;
+    const chip=el('div',undefined,'am-toast am-toast-bad');chip.append(el('span',actionError.text,'am-toast-text'));if(actionError.hint)chip.title=actionError.hint;
+    if(actionError.command){
+      const command=actionError.command,copy=el('button','Скопировать команду','am-toast-action');copy.type='button';copy.title=command;
+      copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(command);copy.textContent='Скопировано';}catch(_){copy.textContent='Не удалось скопировать';}setTimeout(()=>copy.textContent='Скопировать команду',2000);});
+      chip.append(copy);
+    }
+    const close=el('button','×','am-toast-close');close.type='button';close.setAttribute('aria-label','Закрыть');close.addEventListener('click',()=>showError(null));chip.append(close);
+    box.append(chip);
+  }
   async function api(path,timeout=4500){
     if(!token)throw Error('Откройте приватную ссылку, которую выдала команда ui.');
     const response=await fetch(path,{headers:{Authorization:'Bearer '+token},cache:'no-store',signal:AbortSignal.timeout(timeout)});
     if(!response.ok){
       if(response.status===401)throw Error('Ссылка доступа устарела. Откройте окно заново.');
       const body=await response.text().catch(()=>'');
-      if(body.startsWith('client_outdated'))throw Error('В фоне работает клиент старой версии. Закройте окно Messenger и остановите старый клиент командой shutdown.');
+      if(body.startsWith('client_outdated'))throw outdatedMessage();
       if(body.startsWith('client_rejected'))throw Error('Клиент Messenger отклонил запрос окна. Подробности: messenger doctor.');
       throw Error('Клиент Messenger не запущен или не отвечает. Данные не обновляются.');
     }
@@ -108,6 +132,7 @@
     const response=await fetch(path,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body),cache:'no-store',signal:AbortSignal.timeout(timeout)});
     let result={};try{result=await response.json();}catch(_){}
     if(response.ok&&result.ok===true)return result;
+    if(result.state==='client_outdated')throw outdatedMessage();
     if(response.status===409&&result.detail)throw Error(result.detail);
     if(response.status===400)throw Error('Проверьте введённые данные.');
     throw Error('Действие не подтверждено. Проверьте состояние и повторите.');
@@ -282,9 +307,9 @@
   let stopping=false;
   async function stopTask(){
     const t=feed?.task;if(!t||stopping||!activeStates.includes(t.state))return;
-    stopping=true;$('task-stop').disabled=true;$('answer-status').textContent='Останавливаем задачу…';
-    try{await postAPI('/api/task-cancel',{task:t.id});$('answer-status').textContent='';feedSignature='';await refresh();}
-    catch(e){$('answer-status').textContent=e.message;}
+    stopping=true;$('task-stop').disabled=true;$('task-stop').classList.add('am-tip-off');
+    try{await postAPI('/api/task-cancel',{task:t.id});showError(null);feedSignature='';await refresh();}
+    catch(e){showError(e);}
     finally{stopping=false;$('task-stop').disabled=false;}
   }
   function renderFeed(){
@@ -351,8 +376,8 @@
     let op=recall('messenger-answer-op:'+q.id);
     if(!op){op='window-'+q.id+'-'+crypto.randomUUID();remember('messenger-answer-op:'+q.id,op);}
     answering=true;answerControls();$('answer-status').textContent='Отправляем ответ…';
-    try{await postAPI('/api/task-answer',{task:feed.task.id,question:q.id,op_id:op,text});$('answer-status').textContent='Ответ записан. Исполнитель продолжит в той же сессии.';$('answer-text').value='';feedSignature='';await refresh();}
-    catch(error){$('answer-status').textContent=error.message+' Повтор с тем же текстом безопасен.';}
+    try{await postAPI('/api/task-answer',{task:feed.task.id,question:q.id,op_id:op,text});showError(null);$('answer-status').textContent='Ответ записан. Исполнитель продолжит в той же сессии.';$('answer-text').value='';feedSignature='';await refresh();}
+    catch(error){$('answer-status').textContent='';showError({message:error.message+' Повтор с тем же текстом безопасен.',command:error.command,hint:error.hint});}
     finally{answering=false;answerControls();}
   }
   const folderIcon='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
@@ -411,7 +436,7 @@
     if(view?.pending_launch>0&&!view.tasks_enabled){notice(el('p','Задачи записаны, но этот клиент не запускает исполнителей: он запущен без разрешения --allow-tasks.'));return;}
     if(view?.pending_launch>0&&view.paused){
       const box=el('div',undefined,'am-notice-row');box.append(el('p','Обработка на паузе: новые задачи не запускаются.'));
-      const go=el('button','Продолжить');go.type='button';go.addEventListener('click',async()=>{go.disabled=true;try{await postAPI('/api/resume',{});await refresh();}catch(e){go.disabled=false;}});
+      const go=el('button','Продолжить');go.type='button';go.addEventListener('click',async()=>{go.disabled=true;try{await postAPI('/api/resume',{});showError(null);await refresh();}catch(e){go.disabled=false;showError(e);}});
       box.append(go);notice(box);return;
     }
     notice(null);
@@ -539,6 +564,7 @@
   $('answer-send').addEventListener('click',sendAnswer);
   // Enter sends; Shift+Enter adds a line. An IME composition keeps its Enter.
   $('task-stop').addEventListener('click',stopTask);
+  $('task-stop').addEventListener('mouseleave',()=>$('task-stop').classList.remove('am-tip-off'));
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.isComposing&&!$('task-stop').hidden&&!$('compose').hidden&&!document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true]')){e.preventDefault();stopTask();}});
   $('answer-text').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();sendAnswer();}});
   $('project-dialog-close').addEventListener('click',()=>$('project-dialog').close());
