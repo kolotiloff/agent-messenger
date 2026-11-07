@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-07 — Claude Code (Zerus review)
+
+- Owner asked to study [ufna/zerus](https://github.com/ufna/zerus) and take only what saves tokens, simplifies work or adds reliability. Read its code and docs (not run). Written up in [ZERUS_REVIEW.md](ZERUS_REVIEW.md), D-038; new tasks T-031–T-034 in Next.
+- Measured our fixed prompt cost (~1.2k tokens for the coordinator, ~130 for a worker); the cost is in `wait`, `tasks` and resumed `read_task` answers. No code changed.
+
 ## 2026-11-07 — Claude Code (preview.27 released)
 
 - PR #42 merged into `main` (5881844) after green CI on Linux and macOS; released as preview.27 (run 42353801652). Assets: the app zip, `update-darwin-arm64.json` and its `.sig`.

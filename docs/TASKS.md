@@ -23,6 +23,10 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 | ID | Task | Owner | Notes |
 |---|---|---|---|
 | T-028 | Close or migrate existing persistent sessions and state, then retire the persistent Claude stream and Codex app-server owners. | agent | blocked: Q-012 |
+| T-031 | `wait` returns events only up to a size budget (about 24,000 chars, at least one event) and says `more: true`; the cursor is the last returned event. | agent | tokens and reliability; [ZERUS_REVIEW.md](ZERUS_REVIEW.md) |
+| T-032 | `tasks` returns open tasks by default (`state: "all"` for everything), with a limit and without the folder per row; `if_cursor` answers `unchanged` when no event happened since. | agent | tokens; [ZERUS_REVIEW.md](ZERUS_REVIEW.md) |
+| T-033 | A resumed run's `read_task` returns the question and answer without the task text; `include_task: true` returns it. | agent | tokens; [ZERUS_REVIEW.md](ZERUS_REVIEW.md) |
+| T-034 | A failed run records a reason class (usage limit, rate limit, overload, sign-in, other) and the reset time when the CLI reports it; shown in the window and in the coordinator's `failed` event. No automatic retry. | agent | reliability; [ZERUS_REVIEW.md](ZERUS_REVIEW.md) |
 
 ## Backlog
 
