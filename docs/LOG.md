@@ -2,6 +2,12 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-07 — Claude Code (third night: preview.25, server setup)
+
+- Released preview.25 (PR #40: error chip, outdated-client message, task list fix).
+- T-015 first part on `claude/t015-server-setup`: `internal/broker` (hosted broker, pinned TLS, one-time invitations, device keys, revoke), the control command `server`, `/api/server*`, the «Сервер» tab, `status` broker state. D-033–D-035, Q-013, [BROKER.md](BROKER.md).
+- Verified on Linux with tests and headless Chromium; not with two computers or on the Mac.
+
 ## 2026-11-07 — Claude Code (second night: preview.24)
 
 - From the owner's T-027 feedback: stop button like a chat (square, Esc, D-031), model choice by the coordinator with guidance in its instructions and skill (D-030), window fixes listed in HANDOFF; the window's client now allows tasks and resumes itself (D-029); Claude workers accept edits (D-028).
