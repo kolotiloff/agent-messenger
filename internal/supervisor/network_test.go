@@ -22,6 +22,7 @@ func netComputer(t *testing.T, ctx context.Context, name string) (*Supervisor, s
 	t.Cleanup(func() { core.TemporaryFolder = old })
 	root := t.TempDir()
 	st := mustStore(t, root)
+	t.Cleanup(func() { st.Close() })
 	folder, err := filepath.EvalSymlinks(mkdir(t, filepath.Join(root, "game")))
 	if err != nil {
 		t.Fatal(err)
