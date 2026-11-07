@@ -269,6 +269,26 @@ func dispatch(handler Handler, request Request) Response {
 			return Response{Error: err.Error()}
 		}
 		return Response{OK: true}
+	case "server":
+		h, ok := handler.(interface {
+			Server(context.Context, string, json.RawMessage) (any, error)
+		})
+		if !ok {
+			return Response{Error: "неизвестная команда"}
+		}
+		var payload json.RawMessage
+		if request.Text != "" {
+			payload = json.RawMessage(request.Text)
+		}
+		value, err := h.Server(context.Background(), request.Action, payload)
+		if err != nil {
+			return Response{Error: err.Error()}
+		}
+		raw, err := json.Marshal(value)
+		if err != nil {
+			return Response{Error: "server status unavailable"}
+		}
+		return Response{OK: true, Overview: raw}
 	case "overview":
 		reader, ok := handler.(interface{ Overview() (any, error) })
 		if !ok {

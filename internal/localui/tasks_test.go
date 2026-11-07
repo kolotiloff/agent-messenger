@@ -82,3 +82,35 @@ func TestTaskWindowRoutes(t *testing.T) {
 		t.Fatalf("rejected answer %d %s", code, body)
 	}
 }
+
+func TestServerRoutes(t *testing.T) {
+	var got []control.Request
+	h := newHandler("127.0.0.1:1234", "secret", func(_ context.Context, r control.Request) (control.Response, error) {
+		got = append(got, r)
+		return control.Response{OK: true, Overview: json.RawMessage(`{"host":{"running":true}}`)}, nil
+	}, func(context.Context) any { return nil })
+	do := func(method, path, body string) (int, string) {
+		r := httptest.NewRequest(method, "http://127.0.0.1:1234"+path, strings.NewReader(body))
+		r.Header.Set("Authorization", "Bearer secret")
+		if method == "POST" {
+			r.Header.Set("Origin", "http://127.0.0.1:1234")
+			r.Header.Set("Content-Type", "application/json")
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w.Code, w.Body.String()
+	}
+	if code, body := do("GET", "/api/server", ""); code != 200 || got[0].Cmd != "server" || got[0].Action != "status" || !strings.Contains(body, `"running":true`) {
+		t.Fatalf("status %d %s %+v", code, body, got)
+	}
+	code, body := do("POST", "/api/server-action", `{"action":"enable","scope":"lan","port":47100}`)
+	last := got[len(got)-1]
+	if code != 200 || last.Cmd != "server" || last.Action != "enable" || last.Text != `{"scope":"lan","port":47100}` || !strings.Contains(body, `"result"`) {
+		t.Fatalf("enable %d %s %+v", code, body, last)
+	}
+	for _, bad := range []string{`{"action":"delete-everything"}`, `{"action":"connect","code":"` + strings.Repeat("x", 3000) + `"}`, `{"action":"enable","extra":1}`, `{"action":"enable","port":70000}`} {
+		if code, _ := do("POST", "/api/server-action", bad); code != 400 {
+			t.Errorf("accepted %s: %d", bad[:min(len(bad), 60)], code)
+		}
+	}
+}

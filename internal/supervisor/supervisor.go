@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/kolotiloff/agent-messenger/internal/adapters"
+	"github.com/kolotiloff/agent-messenger/internal/broker"
 	"github.com/kolotiloff/agent-messenger/internal/control"
 	"github.com/kolotiloff/agent-messenger/internal/core"
 	"github.com/kolotiloff/agent-messenger/internal/platform"
@@ -86,6 +87,7 @@ type Supervisor struct {
 	starting      atomic.Bool
 	codex         codexOwners
 	tasks         taskRuns
+	server        *broker.Service
 }
 
 type activeJob struct {
@@ -168,6 +170,9 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 	defer cancel()
 	sup := &Supervisor{store: store, root: root, launcher: launcher, cancel: cancel, ctx: ctx}
 	defer sup.codex.closeAll()
+	server := broker.NewService(ctx, root)
+	sup.server = server
+	defer server.Close()
 	ln, err := control.Listen(socketRoot)
 	if err != nil {
 		return err
@@ -182,6 +187,9 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 		<-ctx.Done()
 		_ = ln.Close()
 	}()
+	// The hosted broker starts only if the owner turned it on; a failure is
+	// shown in the window and does not stop the client.
+	server.Start()
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -430,6 +438,9 @@ func (s *Supervisor) Status() (control.Status, error) {
 		CLILaunch:  "disabled",
 		Broker:     "not_configured",
 		Supervisor: os.Getpid(),
+	}
+	if s.server != nil {
+		status.Broker = s.server.Summary()
 	}
 	if aliases := scopedAliases(launcher); len(aliases) != 0 {
 		status.LaunchSession = aliases[0]

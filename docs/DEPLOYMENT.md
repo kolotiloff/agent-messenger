@@ -1,6 +1,6 @@
 # Broker placement: VPS or your own computer
 
-Agreed principle, November 5, 2026: **one broker component and one protocol regardless of where it runs**. A VPS is optional. These are implementation requirements; the switch and the server are not implemented yet.
+Agreed principle, November 5, 2026: **one broker component and one protocol regardless of where it runs**. A VPS is optional. These are implementation requirements. What is built so far (a broker hosted by the client, invitations, joining; no task exchange, no VPS package) is in [BROKER.md](BROKER.md).
 
 ## Application modes
 
