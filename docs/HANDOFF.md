@@ -8,6 +8,12 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-07 (evening, later) by Claude Code.
+
+- **T-039 / D-050 (branch `claude/t039-connect-coordinator`):** the window connects the coordinator chat to Claude by itself. It runs Claude's own `claude mcp add --scope local` in the project folder, right after the project is created and on «Подключить к Claude», and reads `~/.claude.json` to confirm. Worker runs are marked (`AGENT_MESSENGER_WORKER_RUN`), and the coordinator server gives them no tools.
+- **Verified here (Linux):** fake Claude CLI tests; a browser run of the built program (connected, error shown, button); the written entry starts the coordinator, which answers `list_agents`. **Not verified:** the real Claude Code (where it writes local-scope servers, especially on Windows), Mac, Windows.
+- **Next:** PR, CI, merge; ship in preview.34 together with the Cursor name fix (PR #58).
+
 Updated 2026-11-07 (evening, release) by Claude Code.
 
 - **preview.33 released** from `main` 3ae2058 (PR #54 with #55, and PR #56; run 42388079985). It is the latest release, with 21 assets: the Mac app zip and its update files; plain Windows and Linux programs (x64, ARM64) with a SHA-256 list; and signed update files for Windows and Linux (`update-<os>-<arch>.json`, `.sig`, `<sha256>.zip`).

@@ -244,6 +244,22 @@ func dispatch(handler Handler, request Request) Response {
 			return Response{Error: "view unavailable"}
 		}
 		return Response{OK: true, Overview: raw}
+	case "coordinator-connect":
+		h, ok := handler.(interface {
+			ConnectCoordinator(string) (any, error)
+		})
+		if !ok {
+			return Response{Error: "coordinator connection unsupported; update the background client"}
+		}
+		value, err := h.ConnectCoordinator(request.Alias)
+		if err != nil {
+			return Response{Error: err.Error()}
+		}
+		raw, err := json.Marshal(value)
+		if err != nil {
+			return Response{Error: "result unavailable"}
+		}
+		return Response{OK: true, Overview: raw}
 	case "project-create", "project-folder", "task-owner-answer", "agent-set", "task-cancel":
 		h, ok := handler.(interface {
 			CreateProject(string, string) error
