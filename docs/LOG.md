@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-07 — Claude Code (T-040 faster release)
+
+- The owner found a release too slow (about 15 minutes). The Mac checks ran only after the Windows and Linux job. Branch `claude/t040-faster-release`: a separate «Mac checks» job runs next to it, and «Build, sign and publish» waits for both. The checks themselves are kept. Expected: about 10 minutes. Not verified until the next release run.
+- PR #59 (T-039) merged; preview.34 released (run 42396560953, 21 assets). Checked here: the Linux x64 download, its SHA-256 and `version`.
+
 ## 2026-11-07 — Claude Code (T-039 coordinator without Terminal)
 
 - The owner asked not to type the `claude mcp add` command. Branch `claude/t039-connect-coordinator`: the window connects the coordinator by itself after a project is created and on «Подключить к Claude» (D-050). Every worker run is marked so the coordinator server gives it no tools.

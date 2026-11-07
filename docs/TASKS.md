@@ -13,8 +13,8 @@ How to use it:
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
-| T-039 | The window connects the coordinator chat to Claude by itself (D-050): no Terminal command. Left: the owner's test with the real Claude Code on Mac, Windows and Linux (that `claude mcp add` writes the entry where Messenger reads it, and a new chat sees the tools). | owner | `claude/t039-connect-coordinator` |
-| T-038 | Windows and Linux update themselves from the window, from signed releases (D-048); plain downloads behind README buttons (D-047). Left: the owner's test of a real update preview.33 → preview.34 on Windows and Linux. | owner | PR #54, preview.33 |
+| T-039 | The window connects the coordinator chat to Claude by itself (D-050): no Terminal command. Left: the owner's test with the real Claude Code on Mac, Windows and Linux (that `claude mcp add` writes the entry where Messenger reads it, and a new chat sees the tools). | owner | PR #59, preview.34 |
+| T-038 | Windows and Linux update themselves from the window, from signed releases (D-048); plain downloads behind README buttons (D-047). Left: the owner's test of a real update preview.33 → preview.34 on Windows and Linux (preview.34 is out). | owner | PR #54, preview.33 |
 | T-016 | Windows and Linux: job-object process groups on Windows (D-043), `.exe` agents only (D-044), the window in the browser (`messenger open`) and zip/tar.gz archives in every release (D-045), Windows CI. Left: the owner's test on real Windows and Linux computers; installer and code signing there (self-update: T-038). | owner | PR #52, preview.32 |
 | T-015 | Done: broker hosted by the client, invitations, joining, check, devices and revoke, the «Сервер» tab ([BROKER.md](BROKER.md), D-033–D-035), computers with agents in the sidebar (T-035), tasks between computers (T-037). Left: Keychain (Q-013). | agent + owner | — |
 
@@ -44,6 +44,7 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 
 | ID | Task | PR |
 |---|---|---|
+| T-040 | Faster release: the Mac checks run next to the Windows and Linux job instead of after it. To confirm on the next release run. | `claude/t040-faster-release` |
 | T-037 | Tasks between computers: a coordinator gives a task to an agent on another computer of the network through the broker mailbox; questions, answers, cancel and reports travel back (D-041, D-042). The other computer runs them only when its owner allows it (Q-014). Waits for the owner's test on two Macs. | PR #50, preview.31 |
 | T-035 | Computers of the network report their agents to the broker every 15 s; the sidebar shows every computer with its agents and statuses (D-039). | PR #49, preview.30 |
 | T-033 | A resumed run's `read_task` returns the question and answer without the task text (the conversation already has it) and a note; `include_task: true` returns the text. | branch `claude/t033-resume-brief` |

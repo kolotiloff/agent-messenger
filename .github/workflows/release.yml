@@ -67,9 +67,31 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
+  mac-checks:
+    name: Mac checks
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - name: Refuse anything but main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "Releases are built from main only." >&2
+          exit 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          cache: false
+      - name: Checks (no real models)
+        run: bash scripts/check.sh
+
   release:
     name: Build, sign and publish
-    needs: others
+    # The Mac checks run next to the Windows and Linux job instead of after
+    # it; publishing still waits for both.
+    needs: [others, mac-checks]
     runs-on: macos-15
     timeout-minutes: 40
     env:
@@ -96,8 +118,6 @@ jobs:
             echo "Release v$VERSION already exists" >&2; exit 1
           fi
           [[ -n "$NOTES" && ${#NOTES} -le 4000 ]] || { echo "Notes are required (at most 4000 characters)" >&2; exit 1; }
-      - name: Checks (no real models)
-        run: bash scripts/check.sh
       - name: Build the app
         run: |
           SPARKLE_DIR="$RUNNER_TEMP/sparkle" bash scripts/build-mac-app.sh "$RUNNER_TEMP/app" "$VERSION" "$GITHUB_SHA"

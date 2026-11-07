@@ -14,6 +14,14 @@ Updated 2026-11-07 (evening, later) by Claude Code.
 - **Verified here (Linux):** fake Claude CLI tests; a browser run of the built program (connected, error shown, button); the written entry starts the coordinator, which answers `list_agents`. **Not verified:** the real Claude Code (where it writes local-scope servers, especially on Windows), Mac, Windows.
 - **Next:** PR, CI, merge; ship in preview.34 together with the Cursor name fix (PR #58).
 
+Updated 2026-11-07 (evening, preview.34) by Claude Code.
+
+- **preview.34 released** from `main` 7617420 (PR #58 Cursor names, PR #59 T-039; run 42396560953), 21 assets. The window connects Claude to a project by itself (D-050).
+- **Checked here:** the Linux x64 program from `/releases/latest/download/` matches the SHA-256 list and reports preview.34 at 7617420.
+- **Not checked:** the real Claude Code connection (Mac, Windows, Linux); the Mac app; the in-window update preview.33 → preview.34 on Windows and Linux.
+- **Open:** PR #60 (T-040) runs the release's Mac checks next to the Windows and Linux job; timing to confirm on preview.35.
+- **Next:** the owner installs preview.34 (or updates from 33), creates a project, and checks that a new Claude chat in its folder sees the agents.
+
 Updated 2026-11-07 (evening, release) by Claude Code.
 
 - **preview.33 released** from `main` 3ae2058 (PR #54 with #55, and PR #56; run 42388079985). It is the latest release, with 21 assets: the Mac app zip and its update files; plain Windows and Linux programs (x64, ARM64) with a SHA-256 list; and signed update files for Windows and Linux (`update-<os>-<arch>.json`, `.sig`, `<sha256>.zip`).
