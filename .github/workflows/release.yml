@@ -1,6 +1,7 @@
-name: Release Mac preview
+name: Release preview
 
-# Builds, signs and publishes one Mac preview from main. Runs only when
+# Builds, signs and publishes one preview from main: the signed Mac app, and
+# the Windows and Linux archives (not signed; D-045). Runs only when
 # started by hand. The signing key comes from the SPARKLE_ED_PRIVATE_KEY
 # secret, lives in a 0600 temp file during signing, and is removed afterwards.
 # Every signature is checked against the app's public key before upload.
@@ -23,8 +24,48 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  others:
+    name: Windows and Linux archives
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      VERSION: ${{ inputs.version }}
+    steps:
+      - name: Refuse anything but main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "Releases are built from main only." >&2
+          exit 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          cache: false
+      - name: Validate version
+        run: |
+          [[ "$VERSION" =~ ^0\.0\.0-preview\.[1-9][0-9]{0,8}$ ]] || { echo "Version must look like 0.0.0-preview.N" >&2; exit 1; }
+      - name: Checks (no real models)
+        run: bash scripts/check.sh
+      - name: Build archives
+        run: bash scripts/package-others.sh "$VERSION" "$GITHUB_SHA" "$RUNNER_TEMP/others"
+      - name: Smoke test the Linux build
+        run: |
+          dir="$RUNNER_TEMP/smoke"
+          mkdir -p "$dir"
+          tar -C "$dir" -xzf "$RUNNER_TEMP/others/agent-messenger-$VERSION-linux-amd64.tar.gz"
+          "$dir/agent-messenger-$VERSION-linux-amd64/messenger" version | grep -F "\"version\":\"$VERSION\""
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: others-${{ github.sha }}
+          path: ${{ runner.temp }}/others/*
+          if-no-files-found: error
+          retention-days: 3
+
   release:
     name: Build, sign and publish
+    needs: others
     runs-on: macos-15
     timeout-minutes: 40
     env:
@@ -70,10 +111,18 @@ jobs:
           python3 scripts/publish-local-update.py "$RUNNER_TEMP/app" \
             --sparkle "$RUNNER_TEMP/sparkle" --notes "$RUNNER_TEMP/notes.txt" \
             --key-file "$key" --directory "$RUNNER_TEMP/channel"
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: others-${{ github.sha }}
+          path: ${{ runner.temp }}/others
       - name: Publish (draft first, then public)
         run: |
-          assets=("$RUNNER_TEMP"/app/release-assets/*)
-          [[ ${#assets[@]} == 3 ]] || { echo "Expected exactly 3 release assets" >&2; exit 1; }
+          mac=("$RUNNER_TEMP"/app/release-assets/*)
+          [[ ${#mac[@]} == 3 ]] || { echo "Expected exactly 3 Mac release assets" >&2; exit 1; }
+          others=("$RUNNER_TEMP"/others/*)
+          [[ ${#others[@]} == 5 ]] || { echo "Expected exactly 5 Windows and Linux release assets" >&2; exit 1; }
+          (cd "$RUNNER_TEMP/others" && shasum -a 256 -c "agent-messenger-$VERSION-windows-linux.sha256")
+          assets=("${mac[@]}" "${others[@]}")
           gh release create "v$VERSION" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --draft --prerelease \
             --target "$GITHUB_SHA" --title "Agent Messenger $VERSION" --notes-file "$RUNNER_TEMP/notes.txt"
           gh release edit "v$VERSION" --repo "$GITHUB_REPOSITORY" --draft=false

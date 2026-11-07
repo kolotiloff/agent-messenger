@@ -28,8 +28,8 @@ func ValidBuild(version, revision string) bool {
 // Install does not start a process, modify shell files, migrate SQLite or remove
 // previous binaries. The shared supervisor/startup leases protect activation.
 func Install(source, prefix string, info buildinfo.Info) (string, error) {
-	if runtime.GOOS != "darwin" {
-		return "", errors.New("installer is currently validated only on macOS")
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		return "", errors.New("installer is validated only on macOS and Linux; on Windows run messenger.exe from its folder")
 	}
 	if !ValidBuild(info.Version, info.Revision) {
 		return "", errors.New("install requires a versioned preview build with a full source revision")
