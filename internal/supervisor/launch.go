@@ -112,7 +112,7 @@ func (l AdapterLauncher) Start(spec Spec) (Started, error) {
 	if err := rememberRun(pending); err != nil {
 		return Started{}, err
 	}
-	if err := cmd.Start(); err != nil {
+	if err := platform.StartGroup(cmd); err != nil {
 		_ = forgetRunID(reservationID)
 		return Started{}, err
 	}

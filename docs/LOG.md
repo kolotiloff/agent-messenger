@@ -2,6 +2,12 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-07 — Claude Code (T-016 Windows and Linux)
+
+- Branch `claude/t016-windows-linux`, PR #52: Windows platform layer (job objects, LockFileEx, process snapshot, boot identity, background start), `.exe`-only agents, `messenger open` for a browser window, archives for Windows and Linux in CI and in the release. D-043 to D-046; Q-014 settled (off by default).
+- Windows CI found that a job's name disappears when its last handle closes; the client now keeps the handle for the run and treats an unreachable job as not proven. SQLite path on Windows fixed (drive letter).
+- No real model calls; Cursor not run; no real Windows desktop used.
+
 ## 2026-11-07 — Claude Code (T-037 tasks between computers)
 
 - PR #49 merged, preview.30 released (run 42370126728). PR #50 merged after green CI on Linux and macOS, preview.31 released from 019f30a (run 42371886488).

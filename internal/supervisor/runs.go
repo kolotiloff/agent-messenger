@@ -55,7 +55,7 @@ func loadRuns() ([]recordedRun, error) {
 	if err != nil {
 		return nil, err
 	}
-	raw, err := os.ReadFile(path)
+	raw, err := platform.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
@@ -144,19 +144,14 @@ func writeAtomic(path string, raw []byte) error {
 			return err
 		}
 	}
-	if err := os.Rename(tmpName, path); err != nil {
+	if err := platform.ReplaceFile(tmpName, path); err != nil {
 		return err
 	}
 	cleanup = false
 	if err := os.Chmod(path, 0o600); err != nil {
 		return err
 	}
-	dirFile, err := os.Open(dir)
-	if err != nil {
-		return err
-	}
-	defer dirFile.Close()
-	return dirFile.Sync()
+	return platform.SyncDir(dir)
 }
 
 func rememberRun(run recordedRun) error {

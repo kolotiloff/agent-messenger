@@ -11,7 +11,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/kolotiloff/agent-messenger/internal/adapters"
@@ -133,8 +132,8 @@ func (l AdapterLauncher) StartCodexServer(ctx context.Context, spec CodexServerS
 		}
 		return CodexProcess{}, errors.Join(errNotStarted, err)
 	}
-	if err := cmd.Start(); err != nil {
-		if cmd.Process == nil && (errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.ENOENT) || errors.Is(err, syscall.ENOEXEC) || errors.Is(err, syscall.ENOTDIR)) {
+	if err := platform.StartGroup(cmd); err != nil {
+		if platform.NeverRan(cmd, err) {
 			if cleanupErr := forgetRunID(id); cleanupErr != nil {
 				return CodexProcess{}, errors.Join(err, cleanupErr)
 			}

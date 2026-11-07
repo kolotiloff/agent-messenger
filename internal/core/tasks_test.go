@@ -49,7 +49,7 @@ func newTaskFixture(t *testing.T) taskFixture {
 	if err := st.CreateProject("Game", folder); err != nil {
 		t.Fatal(err)
 	}
-	cli := filepath.Join(root, "agent")
+	cli := filepath.Join(root, exeName("agent"))
 	if err := os.WriteFile(cli, []byte("#!/bin/sh\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -649,7 +649,7 @@ func TestPresenceListsAgentsAndCoordinator(t *testing.T) {
 	if err != nil || len(agents) != 0 || coordinator != "" {
 		t.Fatalf("empty presence %v %q %v", agents, coordinator, err)
 	}
-	cli := filepath.Join(root, "agent")
+	cli := filepath.Join(root, exeName("agent"))
 	if err := os.WriteFile(cli, []byte("#!/bin/sh\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}

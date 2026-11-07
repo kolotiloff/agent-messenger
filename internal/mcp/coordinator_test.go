@@ -34,7 +34,7 @@ func newCoordinatorStore(t *testing.T) *core.Store {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	cli := filepath.Join(root, "agent")
+	cli := filepath.Join(root, exeName("agent"))
 	if err := os.WriteFile(cli, []byte("#!/bin/sh\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}

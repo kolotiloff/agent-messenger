@@ -124,7 +124,7 @@ func newHandlerWithChecks(host, token string, call caller, discover func(context
 			http.Error(w, "invalid origin", http.StatusForbidden)
 			return
 		}
-		if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
+		if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" && !startPageNavigation(r) {
 			http.Error(w, "cross-site request refused", http.StatusForbidden)
 			return
 		}
@@ -544,4 +544,14 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 		return control.Request{Cmd: "agent-set", Provider: in.Provider, CLI: in.CLI, Environment: in.Environment}, true
 	}
 	return control.Request{}, false
+}
+
+// startPageNavigation is the browser opening the start page from the
+// forwarding file of "messenger open" (a file:// page, so the browser calls
+// it cross-site). The start page holds no data and the key stays in the
+// address fragment, which is never sent; every API call still needs the same
+// origin and the key.
+func startPageNavigation(r *http.Request) bool {
+	return r.Method == http.MethodGet && r.URL.Path == "/" && r.URL.RawQuery == "" &&
+		r.Header.Get("Sec-Fetch-Mode") == "navigate" && r.Header.Get("Sec-Fetch-Dest") == "document"
 }

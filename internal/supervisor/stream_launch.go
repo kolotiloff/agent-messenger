@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"syscall"
 
 	"github.com/kolotiloff/agent-messenger/internal/adapters"
 	"github.com/kolotiloff/agent-messenger/internal/platform"
@@ -85,10 +84,10 @@ func (l AdapterLauncher) StartStream(ctx context.Context, spec Spec, url, secret
 	if err := ctx.Err(); err != nil {
 		return StreamProcess{}, errors.Join(err, forgetRunID(id))
 	}
-	if err := cmd.Start(); err != nil {
+	if err := platform.StartGroup(cmd); err != nil {
 		// Only these definite OS refusals establish that the target executable
 		// never ran. Unknown failures keep their incomplete reservation.
-		if cmd.Process == nil && (errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.ENOENT) || errors.Is(err, syscall.ENOEXEC) || errors.Is(err, syscall.ENOTDIR)) {
+		if platform.NeverRan(cmd, err) {
 			if cleanupErr := forgetRunID(id); cleanupErr != nil {
 				return StreamProcess{}, errors.Join(err, cleanupErr)
 			}

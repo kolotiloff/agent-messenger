@@ -22,7 +22,7 @@ Stage 2 requires all three CLIs. Until then Cursor stays off (D-011). **Blocks:*
 Cloud sessions run on Linux. **Options:** the owner runs the steps from an agent's instructions and sends back the output; or the owner connects the Mac to the cloud session through Remote Control; or the owner works from a local tool (Cursor, Claude Code on the Mac). **Blocks:** T-004 and every later Mac acceptance.
 
 ### Q-006: Which Windows and Linux machines are available for stages 5–6, and when?
-**Blocks:** T-015, T-016.
+**Blocks:** acceptance of T-016 on real machines. The owner will test the preview.32 archives on Windows and Linux computers (2026-11-07); CI covers what it can (see [WINDOWS_LINUX.md](WINDOWS_LINUX.md#what-is-verified)).
 
 ### Q-007: How does the managed Codex profile sign in?
 Copying the owner's credentials into the managed profile is not implemented and must not be logged or published. A likely option is a standard login into the managed profile done by the owner. **Blocks:** T-004.
@@ -36,10 +36,10 @@ The owner asked to clean the program of old code. The old "message a live sessio
 ### Q-013: Where should a computer keep its broker device key?
 DEPLOYMENT.md asks for the OS secure storage (Keychain on the Mac). Today the key is in `server-connection.json` in the data directory with mode 0600, readable by the owner's account only; the window and `status` never show it. **Options:** Keychain on the Mac and the Windows credential store, with the file keeping only a reference; or keep the 0600 file. **Chosen for now:** the 0600 file, because nothing crosses computers yet and the Keychain needs Mac-side work that cannot be tested here. **Blocks:** the rest of T-015 (before tasks travel between computers).
 
-### Q-014: Should a computer run tasks of other computers by default?
-With T-037 a coordinator on one computer can start a worker on another computer of the network. **Chosen (cautious):** off until the owner turns on «Задачи других компьютеров» on the «Сервер» tab of the computer that would run them; a refused task fails with the reason. **Alternative:** on by default for every computer the owner invited. Please confirm or change.
-
 ## Answered
+
+### Q-014: Should a computer run tasks of other computers by default?
+With T-037 a coordinator on one computer can start a worker on another computer of the network. **Chosen (cautious):** off until the owner turns on «Задачи других компьютеров» on the «Сервер» tab of the computer that would run them; a refused task fails with the reason. **Alternative:** on by default for every computer the owner invited. **Settled (D-046):** the owner asked the agent to decide open questions on its own; the cautious choice stays. The owner can still change it.
 
 ### Q-009: How does the window allow task launches?
 The client launches task workers only with `serve --allow-tasks` (cautious default, T-024). The client the window starts today runs without model permission, so tasks stay recorded but are not launched until the client is started with the flag. **Options:** a confirmed "allow tasks" switch in the window, remembered per data directory; or start the window's client with `--allow-tasks` always; or keep the explicit command. **Chosen for now:** nothing is launched without the explicit flag; the window shows that tasks are waiting for permission. **Blocks:** nothing in code; affects T-027. **Answer (2026-11-07):** the window's client always allows tasks and is resumed when the window starts it (D-029).

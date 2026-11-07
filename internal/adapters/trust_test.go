@@ -1,6 +1,7 @@
 package adapters
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -21,11 +22,11 @@ func TestFolderTrust(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write(filepath.Join(home, ".claude.json"), `{"projects":{"`+filepath.Join(home, "Projects")+`":{"hasTrustDialogAccepted":true}}}`)
+	write(filepath.Join(home, ".claude.json"), `{"projects":{`+jsonKey(filepath.ToSlash(filepath.Join(home, "Projects")))+`:{"hasTrustDialogAccepted":true}}}`)
 	if got := CheckFolderTrust("claude", folder, "", home).State; got != TrustYes {
 		t.Fatalf("trusted parent: %s", got)
 	}
-	write(filepath.Join(home, ".claude.json"), `{"projects":{"`+folder+`":{"hasTrustDialogAccepted":false}}}`)
+	write(filepath.Join(home, ".claude.json"), `{"projects":{`+jsonKey(folder)+`:{"hasTrustDialogAccepted":false}}}`)
 	if got := CheckFolderTrust("claude", folder, "", home).State; got != TrustNo {
 		t.Fatalf("declined: %s", got)
 	}
@@ -47,4 +48,9 @@ func TestFolderTrust(t *testing.T) {
 	if h := CheckFolderTrust("codex", folder, "", home).Hint; h == "" {
 		t.Fatal("no hint")
 	}
+}
+
+func jsonKey(s string) string {
+	raw, _ := json.Marshal(s)
+	return string(raw)
 }

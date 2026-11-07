@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -16,6 +17,9 @@ import (
 const diagnosticBody = `{"provider":"claude","cli":"/trusted/claude","environment":"/profiles/test"}`
 
 func TestCLICheckRequiresExplicitTrustedEnvelope(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fixture uses POSIX program paths")
+	}
 	var starts atomic.Int32
 	h := newHandlerWithChecks(actionHost, "secret", func(context.Context, control.Request) (control.Response, error) {
 		t.Error("diagnostic reached supervisor")
@@ -67,6 +71,9 @@ func TestCLICheckRequiresExplicitTrustedEnvelope(t *testing.T) {
 }
 
 func TestCLICheckSerializesAndRedactsFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fixture uses POSIX program paths")
+	}
 	entered, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	h := newHandlerWithChecks(actionHost, "secret", nil, nil, nil, func(context.Context, string, string, string) (diagnostics.CLICheck, error) {
 		close(entered)

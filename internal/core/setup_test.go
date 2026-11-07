@@ -10,7 +10,7 @@ import (
 
 func TestNewSetupIsAtomicIdempotentAndNeverRebinds(t *testing.T) {
 	s, env := openTest(t)
-	cli := filepath.Join(t.TempDir(), "claude")
+	cli := filepath.Join(t.TempDir(), exeName("claude"))
 	if err := os.WriteFile(cli, []byte("never execute this test file"), 0700); err != nil {
 		t.Fatal(err)
 	}

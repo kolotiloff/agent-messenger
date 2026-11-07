@@ -70,8 +70,11 @@ func claudeTrust(path, folder string) string {
 	}
 	// Claude also trusts a folder when one of its parents was trusted.
 	for dir := filepath.Clean(folder); ; dir = filepath.Dir(dir) {
-		if p, ok := config.Projects[dir]; ok && p.HasTrustDialogAccepted != nil && *p.HasTrustDialogAccepted {
-			return TrustYes
+		// On Windows the key may be written with forward slashes.
+		for _, key := range []string{dir, filepath.ToSlash(dir)} {
+			if p, ok := config.Projects[key]; ok && p.HasTrustDialogAccepted != nil && *p.HasTrustDialogAccepted {
+				return TrustYes
+			}
 		}
 		if dir == filepath.Dir(dir) {
 			break
@@ -95,6 +98,8 @@ func codexTrust(path, folder string) string {
 	headers := map[string]bool{
 		`[projects."` + folder + `"]`: true,
 		`[projects.'` + folder + `']`: true,
+		// A basic TOML string escapes the backslashes of a Windows path.
+		`[projects."` + strings.ReplaceAll(folder, `\`, `\\`) + `"]`: true,
 	}
 	inTable := false
 	scanner := bufio.NewScanner(f)

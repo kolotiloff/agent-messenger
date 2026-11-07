@@ -3,6 +3,7 @@ package core
 import (
 	"database/sql"
 	"fmt"
+	"github.com/kolotiloff/agent-messenger/internal/platform"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -36,7 +37,7 @@ func (s *Store) SetupNewClaude(environment, id, alias, cli, workspace string) er
 		return ErrRejected
 	}
 	info, err := os.Stat(cli)
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
+	if err != nil || !platform.IsExecutable(cli, info) {
 		return ErrRejected
 	}
 	key, err := SessionKey("claude", environment, id)

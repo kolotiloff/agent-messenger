@@ -64,6 +64,7 @@ func TestMain(m *testing.M) {
 	os.Setenv("HOME", home)
 	os.Setenv("XDG_DATA_HOME", filepath.Join(home, "xdg"))
 	os.Setenv("AppData", filepath.Join(home, "appdata"))
+	os.Setenv("LocalAppData", filepath.Join(home, "localappdata"))
 	os.Exit(m.Run())
 }
 
@@ -73,6 +74,7 @@ func isolateUser(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "xdg"))
 	t.Setenv("AppData", filepath.Join(home, "appdata"))
+	t.Setenv("LocalAppData", filepath.Join(home, "localappdata"))
 }
 
 func TestIdleAndPauseDoNotLaunch(t *testing.T) {

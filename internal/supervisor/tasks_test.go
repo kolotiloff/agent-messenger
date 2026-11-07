@@ -1,5 +1,3 @@
-//go:build darwin || linux
-
 package supervisor
 
 import (
@@ -9,15 +7,16 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
 	"github.com/kolotiloff/agent-messenger/internal/control"
 	"github.com/kolotiloff/agent-messenger/internal/core"
 	"github.com/kolotiloff/agent-messenger/internal/mcp"
+	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
 
 type taskHarness struct {
@@ -384,11 +383,22 @@ func TestTaskWithLeftoverProcessIsBlocked(t *testing.T) {
 	t.Cleanup(func() {
 		if raw, err := os.ReadFile(filepath.Join(h.logDir, "child.pid")); err == nil {
 			if pid, err := strconv.Atoi(string(raw)); err == nil {
-				_ = syscall.Kill(pid, syscall.SIGKILL)
+				if p, err := os.FindProcess(pid); err == nil {
+					_ = p.Kill()
+				}
 			}
 		}
 	})
 	id := h.startTask("op-1", "claude", "x")
+	if runtime.GOOS == "windows" {
+		// D-043: the job's stop is a hard stop, so the child that ignored
+		// the polite stop on Unix is ended too and the job is empty: the run
+		// is verified. Nothing of the run is left behind.
+		h.waitState(id, "done")
+		waitNoTaskReservations(t)
+		h.stop()
+		return
+	}
 	h.waitState(id, "blocked")
 	for _, e := range coordinatorEvents(t, h.st) {
 		if e.Kind == "report" {
@@ -459,7 +469,7 @@ func TestRestartInterruptsARunningTask(t *testing.T) {
 	if len(reservations) != 1 {
 		t.Fatalf("reservation of an interrupted run removed: %+v", reservations)
 	}
-	_ = syscall.Kill(-reservations[0].PGID, syscall.SIGKILL)
+	_ = platform.SignalGroup(reservations[0].PGID)
 	_ = task
 	h.stop()
 }

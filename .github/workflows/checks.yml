@@ -75,3 +75,83 @@ jobs:
             ${{ runner.temp }}/mac-desktop/Agent-Messenger-mac.zip*
           if-no-files-found: error
           retention-days: 7
+
+  windows:
+    name: Tests / windows-2025 / Go stable
+    runs-on: windows-2025
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          cache: false
+      - name: Windows runtime checks (lock, job objects, background client, task runs)
+        run: bash scripts/check-windows.sh
+      - name: Whole suite on Windows (information only; many tests use POSIX shell fake CLIs)
+        continue-on-error: true
+        run: go test -count=1 -timeout=15m ./... 2>&1 | tail -n 200
+
+
+  packages:
+    name: Windows and Linux archives
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          cache: false
+      - name: Build archives (the release builds them the same way)
+        run: bash scripts/package-others.sh 0.0.0-preview.ci "$GITHUB_SHA" "$RUNNER_TEMP/others"
+      - name: Linux archive installs and starts the client
+        run: |
+          dir="$RUNNER_TEMP/smoke"
+          mkdir -p "$dir"
+          tar -C "$dir" -xzf "$RUNNER_TEMP/others/agent-messenger-0.0.0-preview.ci-linux-amd64.tar.gz"
+          export HOME="$RUNNER_TEMP/home"
+          exe="$dir/agent-messenger-0.0.0-preview.ci-linux-amd64/messenger"
+          "$exe" install --prefix "$HOME/.local"
+          "$HOME/.local/bin/messenger" version
+          "$HOME/.local/bin/messenger" --root "$HOME/data" start --allow-tasks
+          "$HOME/.local/bin/messenger" --root "$HOME/data" status
+          "$HOME/.local/bin/messenger" --root "$HOME/data" shutdown
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: others-ci-${{ github.sha }}
+          path: ${{ runner.temp }}/others/*
+          if-no-files-found: error
+          retention-days: 3
+
+  windows-package:
+    name: Windows archive on Windows
+    needs: packages
+    runs-on: windows-2025
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: others-ci-${{ github.sha }}
+          path: ${{ runner.temp }}/others
+      - name: Unpack and run the client from the archive
+        run: |
+          cd "$RUNNER_TEMP/others"
+          sha256sum -c agent-messenger-0.0.0-preview.ci-windows-linux.sha256
+          unzip -q agent-messenger-0.0.0-preview.ci-windows-amd64.zip
+          exe="$PWD/agent-messenger-0.0.0-preview.ci-windows-amd64/messenger.exe"
+          export LOCALAPPDATA="$RUNNER_TEMP/local"
+          "$exe" version
+          "$exe" --root "$RUNNER_TEMP/data" start --allow-tasks
+          "$exe" --root "$RUNNER_TEMP/data" status
+          "$exe" --root "$RUNNER_TEMP/data" shutdown

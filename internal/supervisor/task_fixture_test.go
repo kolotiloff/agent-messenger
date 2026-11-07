@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -184,9 +185,18 @@ func taskWorkerFixture(mode string) int {
 		}
 	case "slow":
 		time.Sleep(30 * time.Second)
+	case "sleep":
+		// A leftover child of "leave-child" on Windows.
+		time.Sleep(30 * time.Second)
+		return 0
 	case "leave-child":
 		tool("report", map[string]any{"text": "done, but a child stays"})
 		child := exec.Command("/bin/sh", "-c", `trap "" TERM; sleep 30`)
+		if runtime.GOOS == "windows" {
+			self, _ := os.Executable()
+			child = exec.Command(self)
+			child.Env = append(os.Environ(), "MESSENGER_TASK_FIXTURE=sleep")
+		}
 		if err := child.Start(); err != nil {
 			return 6
 		}

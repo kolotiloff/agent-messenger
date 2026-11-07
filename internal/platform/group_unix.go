@@ -3,6 +3,7 @@
 package platform
 
 import (
+	"errors"
 	"os/exec"
 	"syscall"
 )
@@ -15,4 +16,19 @@ func SetNewGroup(cmd *exec.Cmd) error {
 	}
 	cmd.SysProcAttr.Setpgid = true
 	return nil
+}
+
+// StartGroup starts a command prepared by SetNewGroup. On Unix the group
+// exists from the first instruction, so this is a plain start.
+func StartGroup(cmd *exec.Cmd) error { return cmd.Start() }
+
+// NeverRan reports whether a failed start proves the executable never ran:
+// the OS refused to create the process, or StartGroup stopped it before its
+// first instruction.
+func NeverRan(cmd *exec.Cmd, err error) bool {
+	if errors.Is(err, ErrNotStarted) {
+		return true
+	}
+	return cmd.Process == nil && (errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.ENOENT) ||
+		errors.Is(err, syscall.ENOEXEC) || errors.Is(err, syscall.ENOTDIR) || errors.Is(err, exec.ErrNotFound))
 }

@@ -57,6 +57,35 @@ func TestUIRejectsUntrustedAccessAndMutations(t *testing.T) {
 	}
 }
 
+func TestUIAllowsOnlyCrossSiteStartPageNavigation(t *testing.T) {
+	h := newHandler("127.0.0.1:1234", "secret", func(context.Context, control.Request) (control.Response, error) {
+		t.Fatal("control API reached")
+		return control.Response{}, nil
+	}, func(context.Context) any { return nil })
+	for _, test := range []struct {
+		method, path, mode, dest string
+		code                     int
+	}{
+		{"GET", "/", "navigate", "document", 200},
+		{"GET", "/", "navigate", "iframe", 403},
+		{"GET", "/", "no-cors", "script", 403},
+		{"GET", "/?x=1", "navigate", "document", 403},
+		{"GET", "/app.js", "navigate", "document", 403},
+		{"GET", "/api/overview", "navigate", "document", 403},
+	} {
+		r := httptest.NewRequest(test.method, "http://127.0.0.1:1234"+test.path, nil)
+		r.Header.Set("Sec-Fetch-Site", "cross-site")
+		r.Header.Set("Sec-Fetch-Mode", test.mode)
+		r.Header.Set("Sec-Fetch-Dest", test.dest)
+		r.Header.Set("Authorization", "Bearer secret")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != test.code {
+			t.Fatalf("%s %s %s/%s: %d", test.method, test.path, test.mode, test.dest, w.Code)
+		}
+	}
+}
+
 func TestUIOnlyForwardsReadCommandsAndRedactsStatus(t *testing.T) {
 	var got control.Request
 	h := newHandler("127.0.0.1:1234", "secret", func(ctx context.Context, r control.Request) (control.Response, error) {

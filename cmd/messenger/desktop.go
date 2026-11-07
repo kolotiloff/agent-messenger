@@ -36,6 +36,26 @@ func runDesktop(root string, args []string) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 	go func() { _, _ = io.Copy(io.Discard, os.Stdin); cancel() }()
+	if err := ensureDesktopClient(ctx, root); err != nil {
+		return err
+	}
+	home, err := platform.DefaultRoot()
+	if err != nil {
+		return err
+	}
+	channel := &updatefeed.Channel{Directory: filepath.Join(home, "updates"), PublicKey: buildinfo.UpdatePublicKey}
+	return localui.RunDesktop(ctx, root, 0, os.Stdout, channel, desktopRestart(root))
+}
+
+func desktopRestart(root string) localui.Restarter {
+	return func(ctx context.Context) error {
+		return restartClient(ctx, root, func() error { return startDesktopClient(root) }, time.Second)
+	}
+}
+
+// ensureDesktopClient starts the background client if none answers, as the
+// window always did.
+func ensureDesktopClient(ctx context.Context, root string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -58,15 +78,7 @@ func runDesktop(root string, args []string) error {
 		_, _ = control.CallContext(resumeCtx, root, control.Request{Cmd: "resume"})
 		stopResume()
 	}
-	home, err := platform.DefaultRoot()
-	if err != nil {
-		return err
-	}
-	channel := &updatefeed.Channel{Directory: filepath.Join(home, "updates"), PublicKey: buildinfo.UpdatePublicKey}
-	restart := func(ctx context.Context) error {
-		return restartClient(ctx, root, func() error { return startDesktopClient(root) }, time.Second)
-	}
-	return localui.RunDesktop(ctx, root, 0, os.Stdout, channel, restart)
+	return nil
 }
 
 // startDesktopClient starts the background client the way the window does.

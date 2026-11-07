@@ -10,4 +10,7 @@ var (
 	ErrAlreadyRunning = errors.New("client is already running")
 	ErrNotProven      = errors.New("process stop is not proven")
 	ErrStillRunning   = errors.New("process still running")
+	// ErrNotStarted means a process was created but stopped before it ran
+	// any of its own code (Windows: still suspended when it was ended).
+	ErrNotStarted = errors.New("process was stopped before it ran")
 )

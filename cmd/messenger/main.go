@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -25,6 +26,17 @@ import (
 
 func main() {
 	root, args := splitArgs(os.Args[1:])
+	if len(args) == 0 && runtime.GOOS == "windows" && len(os.Args) == 1 {
+		// Started with a double click: open the window and keep any error
+		// on screen until the owner has read it.
+		if err := runOpen(root, nil, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			fmt.Fprintln(os.Stderr, "Нажмите Enter, чтобы закрыть это окно.")
+			_, _ = fmt.Scanln()
+			os.Exit(1)
+		}
+		return
+	}
 	if len(args) == 0 {
 		usage()
 		os.Exit(2)
@@ -45,6 +57,12 @@ func main() {
 	}
 	if args[0] == "update-fetch" {
 		if err := runUpdateFetch(root, args[1:]); err != nil {
+			fail(err)
+		}
+		return
+	}
+	if args[0] == "open" {
+		if err := runOpen(root, args[1:], os.Stdout); err != nil {
 			fail(err)
 		}
 		return
@@ -426,6 +444,7 @@ func usage() {
 даже с другим каталогом данных. Реальный CLI запускается только после register-session.
 
   messenger version
+  messenger [--root КАТАЛОГ] open     (окно в браузере: Linux и Windows; на Windows — двойной щелчок)
   messenger [--root КАТАЛОГ] desktop  (внутренний запуск окна; stdin — канал времени жизни)
   messenger install [--prefix АБСОЛЮТНЫЙ_КАТАЛОГ]
   messenger --root КАТАЛОГ serve [--allow-model-calls] [--claude-stream] [--allow-tasks]

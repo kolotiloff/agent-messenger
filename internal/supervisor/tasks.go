@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/kolotiloff/agent-messenger/internal/adapters"
@@ -88,10 +87,6 @@ func (s *Supervisor) dispatchTasks(ctx context.Context) {
 	}
 }
 
-func definiteNotStarted(err error) bool {
-	return errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.ENOENT) || errors.Is(err, syscall.ENOEXEC) || errors.Is(err, syscall.ENOTDIR) || errors.Is(err, exec.ErrNotFound)
-}
-
 // runTask runs one worker run: launch intent, reservation, exec, identity
 // binding, then the verification in FinishTaskRun. Nothing is retried. The
 // reservation is retired only when the exit and an empty process group (after
@@ -138,8 +133,8 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 		_ = s.store.TaskRunNotStarted(runID, "reservation not written: "+err.Error())
 		return
 	}
-	if err := cmd.Start(); err != nil {
-		if cmd.Process == nil && definiteNotStarted(err) {
+	if err := platform.StartGroup(cmd); err != nil {
+		if platform.NeverRan(cmd, err) {
 			_ = forgetRunID(reservation)
 			_ = s.store.TaskRunNotStarted(runID, err.Error())
 			return

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -186,6 +187,9 @@ func threadStartResult(mutate func(map[string]any)) json.RawMessage {
 }
 
 func TestParseCodexThreadStart(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fixture uses the POSIX folder /work")
+	}
 	id, err := ParseCodexThreadStart(threadStartResult(nil), "/work")
 	if err != nil || id != "01a1b0a0-1ef6-7861-8fd1-f7fb5912e2f9" {
 		t.Fatalf("id %q err %v", id, err)

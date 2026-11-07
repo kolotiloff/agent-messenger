@@ -194,6 +194,11 @@ func (s *Store) Close() error {
 }
 
 func dsn(path string) string {
+	// SQLite reads file:///C:/dir/db on Windows; a drive letter must not
+	// become the URL's host.
+	if filepath.VolumeName(path) != "" {
+		path = "/" + filepath.ToSlash(path)
+	}
 	u := url.URL{Scheme: "file", Path: path}
 	q := url.Values{}
 	q.Add("_pragma", "busy_timeout(5000)")

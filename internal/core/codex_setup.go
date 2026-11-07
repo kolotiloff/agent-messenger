@@ -87,7 +87,7 @@ func canonicalCLI(cli string) (string, error) {
 		return "", ErrRejected
 	}
 	info, err := os.Stat(resolved)
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
+	if err != nil || !platform.IsExecutable(resolved, info) {
 		return "", ErrRejected
 	}
 	return resolved, nil
