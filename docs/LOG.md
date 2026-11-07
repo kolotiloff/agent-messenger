@@ -4,7 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-07 — Claude Code (owner's Mac results)
 
-- The owner's Mac: the Claude coordinator (connected by hand with `claude mcp add`) gave «Посчитать 5 + 5» to the real Cursor CLI; Cursor read the task, reported «5 + 5 = 10» and its model, and the session closed. Earlier Codex and Claude Code tasks in the same project also finished. The window's automatic connection (T-039) is still not checked: the coordinator was connected before preview.34.
+- The owner's Mac: the Claude coordinator, connected by the window itself in preview.34 (T-039, no Terminal), gave «Посчитать 5 + 5» to the real Cursor CLI; Cursor read the task, reported «5 + 5 = 10» and its model, and the session closed. Earlier Codex and Claude Code tasks in the same project also finished. This is the first check of T-039 with the real Claude Code.
 - Noticed: Cursor's progress lines in English («I'll start by reading…») are shown in the report. Possible follow-up: show only the final report.
 
 ## 2026-11-07 — Claude Code (T-040 faster release)
