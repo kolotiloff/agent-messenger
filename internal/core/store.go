@@ -133,7 +133,7 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	if _, err := db.Exec(schema + streamSchema + streamRecoverySchema + uiOutboxSchema + codexSetupSchema + taskSchema + taskRunItemsSchema); err != nil {
+	if _, err := db.Exec(schema + streamSchema + streamRecoverySchema + uiOutboxSchema + codexSetupSchema + taskSchema + taskRunItemsSchema + networkSchema); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -158,6 +158,8 @@ func Open(path string) (*Store, error) {
 		{"tasks", "failure_reset", "TEXT"},
 		{"requests", "in_reply_to", "TEXT"},
 		{"requests", "hops", "INTEGER NOT NULL DEFAULT 0"},
+		networkTaskColumns[0], networkTaskColumns[1], networkTaskColumns[2],
+		networkTaskColumns[3], networkTaskColumns[4], networkTaskColumns[5],
 	} {
 		if err := ensureColumn(db, c[0], c[1], c[2]); err != nil {
 			db.Close()

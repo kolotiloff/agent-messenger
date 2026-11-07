@@ -13,7 +13,9 @@ import (
 // Version 2 adds the task model (projects, tasks, task runs, questions and
 // events) and held replies. A version-1 client would ignore running tasks
 // after a restart, so it must not open such a database.
-const SchemaVersion = 2
+// Version 3 adds tasks between computers (T-037): a version-2 client would
+// cancel a remote task here without telling the computer that runs it.
+const SchemaVersion = 3
 
 // ErrNewerSchema means the database was written by a newer client. This
 // client stops before changing anything in it.
