@@ -13,7 +13,8 @@ How to use it:
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
-| T-016 | Windows and Linux: job-object process groups on Windows (D-043), `.exe` agents only (D-044), the window in the browser (`messenger open`) and zip/tar.gz archives in every release (D-045), Windows CI. Left: the owner's test on real Windows and Linux computers; self-update, installer and signing there. | owner | PR #52, preview.32 |
+| T-038 | Windows and Linux update themselves from the window, from signed releases (D-048); plain downloads behind README buttons (D-047). Left: the owner's test of a real update preview.33 → preview.34 on Windows and Linux. | owner | `claude/t016-download-buttons` |
+| T-016 | Windows and Linux: job-object process groups on Windows (D-043), `.exe` agents only (D-044), the window in the browser (`messenger open`) and zip/tar.gz archives in every release (D-045), Windows CI. Left: the owner's test on real Windows and Linux computers; installer and code signing there (self-update: T-038). | owner | PR #52, preview.32 |
 | T-015 | Done: broker hosted by the client, invitations, joining, check, devices and revoke, the «Сервер» tab ([BROKER.md](BROKER.md), D-033–D-035), computers with agents in the sidebar (T-035), tasks between computers (T-037). Left: Keychain (Q-013). | agent + owner | — |
 
 ## Next

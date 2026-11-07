@@ -10,6 +10,7 @@ The buttons in the [README](../README.md) always download the newest release. Ev
 | `AgentMessenger-Linux-x64` | Linux on Intel or AMD |
 | `AgentMessenger-Linux-ARM64` | Linux on ARM |
 | `AgentMessenger-Windows-Linux-SHA256.txt` | SHA-256 of the four Windows and Linux files |
+| `update-<os>-<arch>.json`, `.sig`, `<sha256>.zip` | Signed updates the programs download by themselves; not for manual download |
 
 Only the Mac app comes in a zip: a Mac app is a folder, and a browser cannot download a folder. Safari unpacks the zip by itself. The same zip is also published under its checksum as a name; the app's own updater uses that one.
 
@@ -26,7 +27,7 @@ Only the Mac app comes in a zip: a Mac app is a folder, and a browser cannot dow
 3. A console window opens and the browser shows Agent Messenger. The page works while the console is open; closing the console closes only the page, and the background client keeps running. To come back to the window, start the program again.
 4. To stop the background client: in a console in that folder, `AgentMessenger-Windows-x64.exe shutdown`.
 
-Data: `%LOCALAPPDATA%\AgentMessenger`. Updates do not arrive by themselves yet: stop the client, then replace the file with the new download.
+Data: `%LOCALAPPDATA%\AgentMessenger`. Later versions arrive in the window («Доступно обновление» → «Обновиться»); the program replaces its own file and opens the window again ([updates](UPDATES.md#windows-and-linux)). Keep the program in a folder you can write to, not in `Program Files`.
 
 ## Linux
 
@@ -40,7 +41,7 @@ chmod +x AgentMessenger-Linux-x64
 
 A browser download does not keep the "may run" mark of a file, hence `chmod +x` once. `./AgentMessenger-Linux-x64 install` optionally puts the program in `~/.local/bin` as `messenger`. If no browser opens (no `xdg-open`), the program prints the path of a file to open in a browser.
 
-Data: `$XDG_DATA_HOME/agent-messenger` or `~/.local/share/agent-messenger`. To stop the background client: `./AgentMessenger-Linux-x64 shutdown`.
+Data: `$XDG_DATA_HOME/agent-messenger` or `~/.local/share/agent-messenger`. To stop the background client: `./AgentMessenger-Linux-x64 shutdown`. Later versions arrive in the window («Доступно обновление» → «Обновиться»), as on Windows; a program installed with `install` is updated there as well ([updates](UPDATES.md#windows-and-linux)).
 
 ## Agents
 

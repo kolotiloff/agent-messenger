@@ -111,7 +111,43 @@ jobs:
           go-version: stable
           cache: false
       - name: Build the downloads (the release builds them the same way)
-        run: bash scripts/package-others.sh 0.0.0-preview.ci "$GITHUB_SHA" "$RUNNER_TEMP/others"
+        run: bash scripts/package-others.sh 0.0.0-preview.ci "$GITHUB_SHA" "$RUNNER_TEMP/others" "$RUNNER_TEMP/updates"
+      - name: The update archives are signed and checked (throwaway key)
+        run: |
+          # The release signs with the real key on the macOS job; here a
+          # throwaway key checks the script and the archives it accepts.
+          mkdir -p "$RUNNER_TEMP/signer"
+          cat > "$RUNNER_TEMP/signer/main.go" <<'GO'
+          package main
+
+          import (
+          	"crypto/ed25519"
+          	"encoding/base64"
+          	"fmt"
+          	"os"
+          )
+
+          var key = ed25519.NewKeyFromSeed(make([]byte, 32))
+
+          func main() {
+          	if os.Args[1] == "public" {
+          		fmt.Println(base64.StdEncoding.EncodeToString(key.Public().(ed25519.PublicKey)))
+          		return
+          	}
+          	data, err := os.ReadFile(os.Args[len(os.Args)-1])
+          	if err != nil {
+          		os.Exit(1)
+          	}
+          	fmt.Println(base64.StdEncoding.EncodeToString(ed25519.Sign(key, data)))
+          }
+          GO
+          go build -o "$RUNNER_TEMP/test-signer" "$RUNNER_TEMP/signer/main.go"
+          echo "test notes" > "$RUNNER_TEMP/notes.txt"
+          python3 scripts/sign-other-updates.py "$RUNNER_TEMP/updates" --version 0.0.0-preview.1 --revision "$GITHUB_SHA" \
+            --notes "$RUNNER_TEMP/notes.txt" --sign "$RUNNER_TEMP/test-signer -p" \
+            --public-key "$("$RUNNER_TEMP/test-signer" public)" --out "$RUNNER_TEMP/signed"
+          ls "$RUNNER_TEMP/signed"
+          [[ $(ls "$RUNNER_TEMP/signed" | wc -l) == 12 ]]
       - name: The Linux download installs and starts the client
         run: |
           dir="$RUNNER_TEMP/smoke"

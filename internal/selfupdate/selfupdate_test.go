@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kolotiloff/agent-messenger/internal/buildinfo"
 	"github.com/kolotiloff/agent-messenger/internal/updatefeed"
@@ -26,7 +27,12 @@ const revision = "0123456789abcdef0123456789abcdef01234567"
 
 // The test binary plays the new program: `version` prints what the test
 // put in SELFUPDATE_FAKE_VERSION.
+// With SELFUPDATE_SLEEP it stands for a program that is still running.
 func TestMain(m *testing.M) {
+	if os.Getenv("SELFUPDATE_SLEEP") != "" {
+		time.Sleep(60 * time.Second)
+		os.Exit(0)
+	}
 	if v := os.Getenv("SELFUPDATE_FAKE_VERSION"); v != "" && len(os.Args) > 1 && os.Args[1] == "version" {
 		fmt.Println(v)
 		os.Exit(0)

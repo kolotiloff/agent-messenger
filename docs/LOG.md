@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-07 — Claude Code (D-047 downloads, T-038 updates on Windows and Linux)
+
+- Branch `claude/t016-download-buttons`: plain downloads behind README buttons (D-047), and signed in-window updates on Windows and Linux (D-048): `internal/selfupdate`, `/api/self-update`, the window's button, relaunch, signing in the release (`scripts/sign-other-updates.py`).
+- Verified on Linux here with a test key (preview.900 → preview.901 through the window); Windows-only replace tests run on the Windows CI runner. No real model calls; Cursor not run.
+
 ## 2026-11-07 — Claude Code (T-016 Windows and Linux)
 
 - Branch `claude/t016-windows-linux`, PR #52: Windows platform layer (job objects, LockFileEx, process snapshot, boot identity, background start), `.exe`-only agents, `messenger open` for a browser window, archives for Windows and Linux in CI and in the release. D-043 to D-046; Q-014 settled (off by default).

@@ -3,6 +3,7 @@
 package selfupdate
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,10 +14,20 @@ import (
 
 // replace puts the new program in place of the running one. Windows lets a
 // running program be renamed but not overwritten, so the old file moves
-// aside first and is removed at the next start (RemoveLeftover).
+// aside first and is removed at the next start (RemoveLeftover). A background
+// client started from an earlier version may still run from an older
+// leftover, which then cannot be removed; another name is used.
 func replace(executable, staged string) error {
-	old := executable + ".old"
-	_ = os.Remove(old)
+	old := ""
+	for i := 0; i < 10 && old == ""; i++ {
+		name := leftover(executable, i)
+		if err := os.Remove(name); err == nil || errors.Is(err, os.ErrNotExist) {
+			old = name
+		}
+	}
+	if old == "" {
+		return errors.New("старые версии программы ещё запущены; перезапустите фоновый клиент и повторите")
+	}
 	if err := os.Rename(executable, old); err != nil {
 		return fmt.Errorf("не удалось отодвинуть старую версию: %w", err)
 	}
@@ -29,8 +40,20 @@ func replace(executable, staged string) error {
 	return nil
 }
 
-// RemoveLeftover removes the previous program left by an update.
-func RemoveLeftover(executable string) { _ = os.Remove(executable + ".old") }
+func leftover(executable string, i int) string {
+	if i == 0 {
+		return executable + ".old"
+	}
+	return fmt.Sprintf("%s.old-%d", executable, i)
+}
+
+// RemoveLeftover removes earlier programs left by updates. One that still
+// runs (an old background client) stays until a later start.
+func RemoveLeftover(executable string) {
+	for i := 0; i < 10; i++ {
+		_ = os.Remove(leftover(executable, i))
+	}
+}
 
 func hideWindow(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NO_WINDOW}

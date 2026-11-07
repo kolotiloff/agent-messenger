@@ -8,6 +8,14 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-07 (evening) by Claude Code.
+
+- **Owner's requests:** plain «Download» buttons for Mac, Windows and Linux instead of archives, one heading above them; signed updates from the app on Windows and Linux.
+- **D-047 (branch `claude/t016-download-buttons`):** each release publishes plain programs under fixed names and is marked latest; README buttons link to `/releases/latest/download/<name>`; [DOWNLOAD.md](DOWNLOAD.md) explains starting them.
+- **T-038 / D-048 (same branch):** `internal/selfupdate` verifies and installs a signed update; the browser window checks every 5 minutes and shows «Доступно обновление» / «Обновиться»; after the install the window reopens from the new program. The release signs `update-<os>-<arch>` archives for Windows and Linux on the macOS job.
+- **Verified here (Linux):** `check.sh`; the update package tests; an update preview.900 → preview.901 with a test key through the real window (the program replaced, the window reopened, the old client offered for restart); the signing script with a throwaway key. Windows CI runs the update package tests (including replacing a running program). **Not verified:** a real update from GitHub (only possible from preview.33 to preview.34), a real Windows desktop, the release signing step itself (it runs only in a release).
+- **Next:** PR for this branch, green CI, merge, release preview.33; then the owner tests downloads on all three systems, and an update after preview.34.
+
 Updated 2026-11-07 (afternoon) by Claude Code.
 
 - **Owner's instruction:** "довести до релиза сейчас программу, все везде сбилдить, выложить на GitHub" — the owner tests on Windows, Linux and Mac later; decisions that need them are taken cautiously or postponed.

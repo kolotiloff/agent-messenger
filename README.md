@@ -16,7 +16,7 @@ Messaging between Claude Code, Codex, Cursor Agent CLI and other agents. The pro
   <sub>ARM: <a href="https://github.com/kolotiloff/agent-messenger/releases/latest/download/AgentMessenger-Windows-ARM64.exe">Windows</a> · <a href="https://github.com/kolotiloff/agent-messenger/releases/latest/download/AgentMessenger-Linux-ARM64">Linux</a> · <a href="docs/DOWNLOAD.md">How to start</a> · <a href="https://github.com/kolotiloff/agent-messenger/releases">All releases</a></sub>
 </p>
 
-Windows and Linux builds are new and not yet accepted on real computers: see [Windows and Linux](docs/WINDOWS_LINUX.md) for what is verified and what is missing (no self-update, no installer, not signed). Apple Developer ID/notarization is not done either; macOS may block the downloaded preview the first time. Running a prebuilt build does not require Python, Node or Go.
+Windows and Linux builds are new and not yet accepted on real computers: see [Windows and Linux](docs/WINDOWS_LINUX.md) for what is verified and what is missing (no installer, not code-signed; they update themselves from the window). Apple Developer ID/notarization is not done either; macOS may block the downloaded preview the first time. Running a prebuilt build does not require Python, Node or Go.
 
 ## What has been verified
 
