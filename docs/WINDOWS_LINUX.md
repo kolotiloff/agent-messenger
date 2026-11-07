@@ -45,7 +45,7 @@ Task runs follow D-021 on every system: a run is finished only after an observed
 
 A worker that leaves a child behind is therefore *blocked* on macOS and Linux (the child may have left the group) and *done* on Windows (the job's stop ended the child and the job is empty).
 
-The single-instance lock uses `LockFileEx`; the background client starts with private pipes for its readiness handshake; `active-runs.json` is replaced with a write-through rename because Windows cannot flush a folder. The data folder is in `LocalAppData`, not the roaming profile, so the database is never synced to another computer.
+The single-instance lock uses `LockFileEx`; the background client starts with private pipes for its readiness handshake; `active-runs.json` is replaced with a write-through rename because Windows cannot flush a folder; while another reader has the file open, Windows refuses the rename for a moment, so the replace and the read try again for up to 2 seconds (the refused rename leaves the file unchanged). The data folder is in `LocalAppData`, not the roaming profile, so the database is never synced to another computer.
 
 ## What is verified
 
