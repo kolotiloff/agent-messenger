@@ -36,7 +36,7 @@ Two tests were added: before the ID is confirmed, MCP does not read the message 
 
 ## Reproduction and scope
 
-[Instructions and code](../../experiments/session_safety/README.md). The real experiment is run separately via `claude_probe.py` and requires an explicit `--allow-model-calls`; the regular unittest does not call models. Existing Claude authorization and a new folder outside the repository for data are required.
+[Instructions and code](https://github.com/kolotiloff/agent-messenger/tree/41e0e6e7e3f20275d480f6b064a881e7b5f4cf9e/experiments/session_safety/README.md). The real experiment is run separately via `claude_probe.py` and requires an explicit `--allow-model-calls`; the regular unittest does not call models. Existing Claude authorization and a new folder outside the repository for data are required.
 
 The test does not change global CLI settings and does not attach the coordinator's working conversation. Raw logs, conversation IDs and the database stay local and are not published.
 

@@ -12,7 +12,8 @@ How work is planned and split is decided with the owner under this project's own
 ## Tools
 
 - `list_agents` shows the computers, the project folder on each, and their agents with running and waiting task counts. A computer without the project's folder refuses the project's tasks.
-- `start_task(op_id, agent, text, title?)` starts a task in a new worker session. Make `op_id` unique per task. Reuse it only to retry the same call after a lost response; Messenger then returns the same task instead of starting a second one. Write the task so a fresh session can do it: the goal, the files or documents to read, and what to report.
+- `start_task(op_id, agent, text, title?, model?)` starts a task in a new worker session. Make `op_id` unique per task. Reuse it only to retry the same call after a lost response; Messenger then returns the same task instead of starting a second one. Write the task so a fresh session can do it: the goal, the files or documents to read, and what to report.
+- `start_task` also takes an optional `model`. Leave it out to use the agent's default model; see "Choosing a model" below.
 - `wait(after, timeout_seconds?)` blocks until something happens in this project: a report, a question for you, a failure, an interruption, a block or a cancellation. Always pass `after` = the `cursor` from the previous `wait` (0 the first time).
   - When it returns events, act on them, then call `wait` again with the new cursor.
   - When it times out with no events, call `wait` again without comment.
@@ -20,6 +21,16 @@ How work is planned and split is decided with the owner under this project's own
 - `tasks` lists the project's tasks, their states and any open question for you, plus the current cursor.
 - `answer(task_id, question_id, op_id, text)` answers a worker's question. The worker continues in the same session.
 - `cancel(task_id)` cancels a task.
+
+## Choosing a model
+
+Most tasks need no `model`: the agent's default is set by the owner in that CLI. Name a model only when the task clearly calls for it, or when the owner asked for one.
+
+- Claude Code: `opus` for hard work (design, tricky bugs, large refactors, careful review), `sonnet` for ordinary coding, `haiku` for small mechanical work (renames, formatting, simple lookups). A full model id such as `claude-sonnet-5-5` also works.
+- Codex: pass the exact model name the owner uses in Codex (for example a `-codex` model for coding). If you do not know which names this computer's Codex accepts, leave `model` out.
+- Do not guess model names. A name the CLI does not know makes the run fail; Messenger then reports `failed` and does not retry.
+- The model stays the same for the whole task, including runs that continue after an answer.
+- Tell the owner which model you chose when it is not the default, and why, in one line.
 
 ## Rules
 

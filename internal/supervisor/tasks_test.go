@@ -267,6 +267,36 @@ func TestTaskQuestionResumesTheSameConversation(t *testing.T) {
 	}
 }
 
+// The coordinator's model choice reaches the CLI on the first run and on
+// the resumed run, so an answer never switches the worker to the default.
+func TestTaskModelReachesEveryRun(t *testing.T) {
+	for _, c := range []struct {
+		provider, model string
+		flag            []string
+	}{
+		{"claude", "opus", []string{"--model", "opus"}},
+		{"codex", "gpt-5.1-codex", []string{"-c", `model="gpt-5.1-codex"`}},
+	} {
+		t.Run(c.provider, func(t *testing.T) {
+			h := newTaskHarness(t, "ask-then-report", AdapterLauncher{AllowTasks: true})
+			id, _, err := h.st.StartTask(core.StartTaskRequest{Project: "Game", OpID: "op-m", Provider: c.provider, Text: "Build level", Model: c.model})
+			if err != nil {
+				t.Fatal(err)
+			}
+			task := h.waitState(id, "waiting_coordinator")
+			if err := h.st.AnswerTask(id, task.OpenQuestion.ID, "ans-1", "Level 2", core.AudienceCoordinator); err != nil {
+				t.Fatal(err)
+			}
+			h.waitState(id, "done")
+			runs := h.runs()
+			if len(runs) != 2 || !hasArgs(runs[0].Args, c.flag...) || !hasArgs(runs[1].Args, c.flag...) {
+				t.Fatalf("model missing from runs %+v", runs)
+			}
+			h.stop()
+		})
+	}
+}
+
 func TestTaskOwnerQuestionWaitsForTheOwner(t *testing.T) {
 	h := newTaskHarness(t, "ask-owner", AdapterLauncher{AllowTasks: true})
 	id := h.startTask("op-1", "claude", "Clean up")

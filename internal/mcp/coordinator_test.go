@@ -239,6 +239,23 @@ func TestCoordinatorHandshakeAndTools(t *testing.T) {
 	}
 }
 
+func TestCoordinatorChoosesTheWorkerModel(t *testing.T) {
+	st := newCoordinatorStore(t)
+	c := startCoordinator(t, st, "Game")
+	var started struct {
+		TaskID string `json:"task_id"`
+	}
+	if _, ok := c.tool("start_task", map[string]any{"op_id": "op-m", "agent": "claude", "text": "Plan the release", "model": "opus"}, &started); !ok {
+		t.Fatal("start with a model refused")
+	}
+	if task, err := st.TaskByID(started.TaskID); err != nil || task.Model != "opus" {
+		t.Fatalf("model not recorded: %+v %v", task, err)
+	}
+	if _, ok := c.tool("start_task", map[string]any{"op_id": "op-x", "agent": "claude", "text": "x", "model": "--dangerously-skip-permissions"}, nil); ok {
+		t.Fatal("flag-like model accepted")
+	}
+}
+
 func TestCoordinatorStartIsIdempotentAndWaitReplays(t *testing.T) {
 	st := newCoordinatorStore(t)
 	c := startCoordinator(t, st, "Game")

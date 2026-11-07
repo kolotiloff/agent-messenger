@@ -8,7 +8,7 @@ trap 'rm -rf "$ci_tmp"' EXIT
 export TMPDIR="$ci_tmp"
 
 "$go_bin" version
-unformatted="$("$goroot/bin/gofmt" -l cmd internal experiments)"
+unformatted="$("$goroot/bin/gofmt" -l cmd internal)"
 if [[ -n "$unformatted" ]]; then
   printf 'Go files need formatting:\n%s\n' "$unformatted" >&2
   exit 1

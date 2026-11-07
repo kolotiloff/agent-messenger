@@ -77,7 +77,7 @@ For the persistent Claude process, the semantics of stopping and revoking the cu
 
 After `shutdown`, the queue stays. The next `serve` immediately revokes MCP for attempts it did not launch itself and does not release their lock. Session registration is `register-session` on an already running client: provider, environment directory, exact ID, alias and CLI path. After that, the queue may launch exactly this executable. An empty process group after it exits does not complete the attempt.
 
-The unfinished Python draft is kept in [experiments/python_client_draft](../experiments/python_client_draft/README.md). It is not a product and not a step that still has to be rewritten in Go. The test bench's executable scenarios are still in `experiments/session_safety`.
+The unfinished Python draft is kept in [experiments/python_client_draft](https://github.com/kolotiloff/agent-messenger/tree/41e0e6e7e3f20275d480f6b064a881e7b5f4cf9e/experiments/python_client_draft/README.md). It is not a product and not a step that still has to be rewritten in Go. The test bench's executable scenarios are still in `experiments/session_safety`.
 
 ## Confirmation levels of the first stage
 

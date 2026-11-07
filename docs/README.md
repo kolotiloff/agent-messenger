@@ -59,4 +59,4 @@ These change all the time. Every tool reads them at the start and updates them a
 
 [reports/](reports/) holds dated acceptance reports: what was run, where, with which versions, and what was and was not verified. Write a new report for every acceptance run on real hardware; do not edit old ones except to fix errors.
 
-The design is described in [design/README.md](../design/README.md). Early research stands are in [experiments/](../experiments/).
+The design is described in [design/README.md](../design/README.md). Early research stands were removed from the tree; they are kept in git history: [experiments/](https://github.com/kolotiloff/agent-messenger/tree/41e0e6e7e3f20275d480f6b064a881e7b5f4cf9e/experiments/).

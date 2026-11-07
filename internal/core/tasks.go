@@ -196,6 +196,7 @@ type Task struct {
 	ID, Project, Computer, Provider, Profile, Folder, Title, Text, State string
 	SessionID, Detail, CreatedAt, UpdatedAt, FinishedAt                  string
 	CLI, Environment                                                     string
+	Model                                                                string
 	CancelRequested                                                      bool
 	Version                                                              int
 	OpenQuestion                                                         *TaskQuestion
@@ -479,7 +480,17 @@ func taskTitle(title, text string) string {
 // new; the same OpID with different arguments is refused (D-022).
 type StartTaskRequest struct {
 	Project, OpID, Computer, Provider, Title, Text string
+	// Model is the worker's model; empty means the CLI's own default.
+	Model string
 }
+
+// taskModelPattern accepts model names such as "opus", "claude-sonnet-5-5",
+// "gpt-5.1-codex" or "sonnet[1m]". It never starts with "-", so a model can
+// not be read as a CLI flag, and has no quotes, spaces or "=".
+var taskModelPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/\[\]-]{0,79}$`)
+
+// ValidTaskModel reports whether name may be passed to a worker CLI.
+func ValidTaskModel(name string) bool { return name == "" || taskModelPattern.MatchString(name) }
 
 // StartTask records a task and its first run's launch intent in one
 // transaction, before anything is launched. The task runs in the project's
@@ -494,6 +505,10 @@ func (s *Store) StartTask(r StartTaskRequest) (string, bool, error) {
 	if !TaskProviders[r.Provider] {
 		return "", false, fmt.Errorf("%w: unsupported agent %q", ErrRejected, r.Provider)
 	}
+	r.Model = strings.TrimSpace(r.Model)
+	if !ValidTaskModel(r.Model) {
+		return "", false, fmt.Errorf("%w: model must be a plain model name such as opus or gpt-5.1-codex", ErrRejected)
+	}
 	var id string
 	var created bool
 	err := s.tx(func(tx *sql.Tx) error {
@@ -504,10 +519,10 @@ func (s *Store) StartTask(r StartTaskRequest) (string, bool, error) {
 		if r.Computer == "" {
 			r.Computer = computer
 		}
-		var old struct{ computer, provider, title, text string }
-		err = tx.QueryRow(`SELECT id,computer,provider,title,text FROM tasks WHERE project=? AND op_id=?`, r.Project, r.OpID).Scan(&id, &old.computer, &old.provider, &old.title, &old.text)
+		var old struct{ computer, provider, title, text, model string }
+		err = tx.QueryRow(`SELECT id,computer,provider,title,text,COALESCE(model,'') FROM tasks WHERE project=? AND op_id=?`, r.Project, r.OpID).Scan(&id, &old.computer, &old.provider, &old.title, &old.text, &old.model)
 		if err == nil {
-			if old.computer != r.Computer || old.provider != r.Provider || old.text != r.Text || old.title != taskTitle(r.Title, r.Text) {
+			if old.computer != r.Computer || old.provider != r.Provider || old.text != r.Text || old.title != taskTitle(r.Title, r.Text) || old.model != r.Model {
 				return fmt.Errorf("%w: this operation id was used for a different task", ErrRejected)
 			}
 			return nil
@@ -558,8 +573,8 @@ func (s *Store) StartTask(r StartTaskRequest) (string, bool, error) {
 			session = sql.NullString{String: uuid, Valid: true}
 		}
 		at := now()
-		if _, err := tx.Exec(`INSERT INTO tasks(id,project,op_id,computer,provider,cli_path,environment,profile,folder,title,text,state,session_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,'running',?,?,?)`,
-			id, r.Project, r.OpID, computer, r.Provider, agent.CLI, agent.Environment, agent.Profile, folder, taskTitle(r.Title, r.Text), r.Text, nullString(session), at, at); err != nil {
+		if _, err := tx.Exec(`INSERT INTO tasks(id,project,op_id,computer,provider,cli_path,environment,profile,folder,title,text,state,session_id,created_at,updated_at,model) VALUES (?,?,?,?,?,?,?,?,?,?,?,'running',?,?,?,?)`,
+			id, r.Project, r.OpID, computer, r.Provider, agent.CLI, agent.Environment, agent.Profile, folder, taskTitle(r.Title, r.Text), r.Text, nullString(session), at, at, r.Model); err != nil {
 			return err
 		}
 		if err := insertTaskRun(tx, id, 1, "start", r.Text); err != nil {
@@ -584,12 +599,12 @@ func insertTaskRun(tx *sql.Tx, task string, ordinal int, kind, input string) err
 	return err
 }
 
-const taskColumns = `id,project,computer,provider,profile,folder,title,text,state,COALESCE(session_id,''),detail,created_at,updated_at,COALESCE(finished_at,''),cli_path,environment,cancel_requested,version`
+const taskColumns = `id,project,computer,provider,profile,folder,title,text,state,COALESCE(session_id,''),detail,created_at,updated_at,COALESCE(finished_at,''),cli_path,environment,cancel_requested,version,COALESCE(model,'')`
 
 func scanTask(scan func(...any) error) (Task, error) {
 	var t Task
 	var cancel int
-	err := scan(&t.ID, &t.Project, &t.Computer, &t.Provider, &t.Profile, &t.Folder, &t.Title, &t.Text, &t.State, &t.SessionID, &t.Detail, &t.CreatedAt, &t.UpdatedAt, &t.FinishedAt, &t.CLI, &t.Environment, &cancel, &t.Version)
+	err := scan(&t.ID, &t.Project, &t.Computer, &t.Provider, &t.Profile, &t.Folder, &t.Title, &t.Text, &t.State, &t.SessionID, &t.Detail, &t.CreatedAt, &t.UpdatedAt, &t.FinishedAt, &t.CLI, &t.Environment, &cancel, &t.Version, &t.Model)
 	t.CancelRequested = cancel != 0
 	return t, err
 }
@@ -787,7 +802,7 @@ func (s *Store) BeginTaskRun(run, reservation string) (TaskRun, Task, error) {
 		if err := setRunState(tx, run, "launching", "process may start; never launched again", "intent"); err != nil {
 			return err
 		}
-		_, err = tx.Exec(`UPDATE task_runs SET reservation=? WHERE id=?`, reservation, run)
+		_, err = tx.Exec(`UPDATE task_runs SET reservation=?, launched_at=? WHERE id=?`, reservation, now(), run)
 		r.State, r.Reservation = "launching", reservation
 		return err
 	})

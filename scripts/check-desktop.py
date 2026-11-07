@@ -21,7 +21,9 @@ with tempfile.TemporaryDirectory(prefix='am-app-',dir='/tmp') as temp:
  processes=[]
  try:
   first,status=launch();processes.append(first)
-  assert status['paused'] and status['cli_launch']=='not-authorized',status
+  # D-029: a client the window starts runs task workers at once, without
+  # authorizing any session's model calls.
+  assert not status['paused'] and status['cli_launch']=='not-authorized' and status.get('tasks_enabled'),status
   original=call('status').stdout
   profile=home/'profile';profile.mkdir();workspace=home/'workspace';workspace.mkdir()
   call('register-session','--provider','claude','--environment',str(profile),'--conversation-id','synthetic-desktop-test','--alias','test','--cli','/usr/bin/false','--workspace',str(workspace))
@@ -37,7 +39,7 @@ with tempfile.TemporaryDirectory(prefix='am-app-',dir='/tmp') as temp:
   assert json.loads(call('inspect').stdout)==before
   close(third);processes.remove(third)
   assert not before['Attempts']
-  print(json.dumps(dict(start_paused_without_models=True,reuse_client=True,ui_eof_keeps_client=True,reopen_keeps_queue=True,attempts=0)))
+  print(json.dumps(dict(start_without_models=True,tasks_enabled=True,reuse_client=True,ui_eof_keeps_client=True,reopen_keeps_queue=True,attempts=0)))
  finally:
   for p in processes:
    if p.poll() is None:close(p)

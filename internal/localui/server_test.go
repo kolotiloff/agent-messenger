@@ -117,3 +117,25 @@ func TestUIAssetsEmbeddedWithoutPrivateCapability(t *testing.T) {
 		}
 	}
 }
+
+func TestUIReadFailureNamesItsKind(t *testing.T) {
+	for _, c := range []struct {
+		response control.Response
+		err      error
+		code     int
+		kind     string
+	}{
+		{err: errors.New("private-path"), code: 503, kind: "client_unavailable"},
+		{response: control.Response{OK: false, Error: "неизвестная команда"}, code: 502, kind: "client_outdated"},
+		{response: control.Response{OK: false, Error: "private-path"}, code: 502, kind: "client_rejected"},
+	} {
+		h := newHandler("127.0.0.1:1234", "secret", func(context.Context, control.Request) (control.Response, error) { return c.response, c.err }, nil)
+		r := httptest.NewRequest("GET", "http://127.0.0.1:1234/api/window?project=Game", nil)
+		r.Header.Set("Authorization", "Bearer secret")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != c.code || !strings.Contains(w.Body.String(), c.kind) || strings.Contains(w.Body.String(), "private-path") {
+			t.Fatalf("%+v: %d %s", c, w.Code, w.Body.String())
+		}
+	}
+}

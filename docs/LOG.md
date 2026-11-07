@@ -2,6 +2,19 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-07 — Claude Code (second night: preview.24)
+
+- From the owner's T-027 feedback: stop button like a chat (square, Esc, D-031), model choice by the coordinator with guidance in its instructions and skill (D-030), window fixes listed in HANDOFF; the window's client now allows tasks and resumes itself (D-029); Claude workers accept edits (D-028).
+- Found while testing: a relative `--root` failed with a SQLite error in the coordinator; it is now made absolute.
+- Cleanup (D-032): removed code nothing calls (one was an unused helper that released a reservation by PID) and the `experiments/` folder; links now point to commit `41e0e6e`. Persistent paths kept: Q-012 asks the owner about T-028.
+- Verified on Linux with fake CLIs and headless Chromium; CI on Linux and macOS. Not verified on the Mac or with real models.
+
+## 2026-11-07 — Claude Code with the owner (first T-027 run, preview.23)
+
+- After the update, the old client from preview.22 was gone and no client ran in the default data directory; `start --claude-stream --allow-tasks` and the window's "Продолжить" fixed it. The app lives in `~/Applications`, not `/Applications`.
+- With real models on the Mac: the Claude-app coordinator started a Codex task; Codex created the file, the run was verified, and the coordinator got the report through `wait`. A Claude worker found the Messenger tools through ToolSearch (Q-010 answered: no change needed), asked the owner twice, and the same session resumed after each answer from the window and reported.
+- Found: a Claude worker cannot edit without an allow rule (Q-011); the window showed "Работает" for an unlaunched task, two Claude lines in the computer card, a long title overflowing the task list, and answers needed Cmd+Enter. Fixed on `claude/t027-window-fixes`. Still open: code blocks in worker text are shown raw; "Команда" rows need their command in the title; duration should count from launch; the window says "client unavailable" for any error.
+
 ## 2026-11-07 — Claude Code (release for T-027)
 
 - The owner asked for a build to test and chose to merge into `main` and release preview.23, so the installed app can update itself.

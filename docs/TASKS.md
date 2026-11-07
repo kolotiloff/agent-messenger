@@ -13,7 +13,7 @@ How to use it:
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
-| T-027 | Next: Mac acceptance with real models (owner). Code for T-022–T-029 is on `claude/task-core-night`, PR #36 into `claude/vigilant-darwin-34d88b`. | agent + owner | |
+| T-027 | First run on preview.23 done with the owner (Codex and Claude tasks, owner questions, reports through `wait`). Fixes and additions from it (D-028–D-032: edits, tasks allowed by the window, stop button, model choice, cleanup) are in preview.24. Left: on the Mac, a Claude task that edits a file, a stop of a running worker, a task with a chosen model. | agent + owner | `claude/t027-window-fixes` |
 
 ## Next
 
@@ -22,7 +22,7 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 | ID | Task | Owner | Notes |
 |---|---|---|---|
 | T-027 | Mac acceptance with real models in `~/AgentMessengerTest/`: a Claude-app coordinator, one Claude and one Codex worker, a clarification round, two full tasks. | agent + owner | after T-024–T-026 |
-| T-028 | Close or migrate existing persistent sessions and state, then retire the persistent Claude stream and Codex app-server owners. | agent | after T-027 |
+| T-028 | Close or migrate existing persistent sessions and state, then retire the persistent Claude stream and Codex app-server owners. | agent | after T-027; blocked: Q-012 |
 
 ## Backlog
 
@@ -48,7 +48,7 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 | T-025 | Coordinator MCP with `wait` (`messenger coordinator --project`), skill. | [PR #36](https://github.com/kolotiloff/agent-messenger/pull/36) |
 | T-024 | Task core on one computer: projects and folders, tasks, runs, worker tools, verification, events ([TASK_MODEL.md](TASK_MODEL.md)). | [PR #36](https://github.com/kolotiloff/agent-messenger/pull/36) |
 | T-022 | Publish a reply only after verification (held replies and sends). | [PR #36](https://github.com/kolotiloff/agent-messenger/pull/36) |
-| T-023 | Coordinator wait pilot ([experiments/wait_probe](../experiments/wait_probe/README.md)): passed in the Claude app on the Mac ([report](reports/2026-11-06-wait-pilot-claude-mac.md)). Codex as coordinator deferred by the owner. | branch `claude/vigilant-darwin-34d88b` |
+| T-023 | Coordinator wait pilot ([experiments/wait_probe](https://github.com/kolotiloff/agent-messenger/tree/41e0e6e7e3f20275d480f6b064a881e7b5f4cf9e/experiments/wait_probe/README.md)): passed in the Claude app on the Mac ([report](reports/2026-11-06-wait-pilot-claude-mac.md)). Codex as coordinator deferred by the owner. | branch `claude/vigilant-darwin-34d88b` |
 | T-021 | Rethink the product: [RETHINK.md](RETHINK.md) v1–v3, two Codex reviews, owner decision Q-008 → D-021–D-023. | branch `claude/vigilant-darwin-34d88b` |
 | T-009 | Superseded by D-021: persistent Codex threads are no longer resumed for new work. | — |
 | T-004 | First real Codex run on the Mac from the window: two messages answered and verified in one app-server ([report](reports/2026-11-06-codex-window-mac.md)). Exact resume moved to T-009. | [PR #33](https://github.com/kolotiloff/agent-messenger/pull/33) |

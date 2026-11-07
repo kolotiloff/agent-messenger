@@ -241,12 +241,13 @@ func dispatch(handler Handler, request Request) Response {
 			return Response{Error: "view unavailable"}
 		}
 		return Response{OK: true, Overview: raw}
-	case "project-create", "project-folder", "task-owner-answer", "agent-set":
+	case "project-create", "project-folder", "task-owner-answer", "agent-set", "task-cancel":
 		h, ok := handler.(interface {
 			CreateProject(string, string) error
 			SetProjectFolder(string, string) error
 			OwnerAnswer(string, string, string, string) error
 			SetAgent(string, string, string) error
+			CancelTask(string) error
 		})
 		if !ok {
 			return Response{Error: "tasks unsupported; update the background client"}
@@ -261,6 +262,8 @@ func dispatch(handler Handler, request Request) Response {
 			err = h.OwnerAnswer(request.MessageID, request.ConversationID, request.Confirmation, request.Text)
 		case "agent-set":
 			err = h.SetAgent(request.Provider, request.CLI, request.Environment)
+		case "task-cancel":
+			err = h.CancelTask(request.MessageID)
 		}
 		if err != nil {
 			return Response{Error: err.Error()}

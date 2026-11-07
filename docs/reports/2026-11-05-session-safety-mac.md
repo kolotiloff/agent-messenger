@@ -2,7 +2,7 @@
 
 Date: 2026-11-05. **PASS: 13 tests on macOS / Python 3.9.6**, final run — 1.291 seconds. Synthetic Python processes were used; there were no model calls and no agent CLI launches.
 
-[Code and instructions](../../experiments/session_safety/README.md).
+[Code and instructions](https://github.com/kolotiloff/agent-messenger/tree/41e0e6e7e3f20275d480f6b064a881e7b5f4cf9e/experiments/session_safety/README.md).
 
 ## Confirmed in the test bench
 

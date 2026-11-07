@@ -74,11 +74,32 @@ type WindowTask struct {
 	Agent      string `json:"agent"`
 	State      string `json:"state"`
 	Folder     string `json:"folder"`
+	Model      string `json:"model,omitempty"`
 	CreatedAt  string `json:"created_at"`
 	UpdatedAt  string `json:"updated_at"`
 	FinishedAt string `json:"finished_at,omitempty"`
 	// OwnerQuestion is set while the worker waits for the owner.
 	OwnerQuestion *TaskQuestion `json:"owner_question,omitempty"`
+	// PendingLaunch is set while the task's latest run is recorded but not
+	// launched (paused queue or tasks not allowed).
+	PendingLaunch bool `json:"pending_launch,omitempty"`
+	// StartedAt is when the first run was launched; durations count from it.
+	StartedAt string `json:"started_at,omitempty"`
+}
+
+func (s *Store) startedAt(task string) (string, error) {
+	var at sql.NullString
+	err := s.db.QueryRow(`SELECT MIN(launched_at) FROM task_runs WHERE task_id=?`, task).Scan(&at)
+	return at.String, err
+}
+
+func (s *Store) pendingLaunch(task string) (bool, error) {
+	var state string
+	err := s.db.QueryRow(`SELECT state FROM task_runs WHERE task_id=? ORDER BY ordinal DESC LIMIT 1`, task).Scan(&state)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return state == "intent", err
 }
 
 // WindowAgent is one agent program of this computer, with its state across
@@ -187,9 +208,17 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 		return v, err
 	}
 	for _, t := range tasks {
-		w := WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt}
+		w := WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt}
 		if t.OpenQuestion != nil && t.OpenQuestion.Audience == AudienceOwner {
 			w.OwnerQuestion = t.OpenQuestion
+		}
+		if t.State == "running" {
+			if w.PendingLaunch, err = s.pendingLaunch(t.ID); err != nil {
+				return v, err
+			}
+		}
+		if w.StartedAt, err = s.startedAt(t.ID); err != nil {
+			return v, err
 		}
 		v.Tasks = append(v.Tasks, w)
 	}
@@ -228,9 +257,17 @@ func (s *Store) TaskFeed(id string) (TaskFeed, error) {
 	if err != nil {
 		return f, err
 	}
-	f.Task = WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt}
+	f.Task = WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt}
 	if t.OpenQuestion != nil && t.OpenQuestion.Audience == AudienceOwner {
 		f.Task.OwnerQuestion = t.OpenQuestion
+	}
+	if t.State == "running" {
+		if f.Task.PendingLaunch, err = s.pendingLaunch(t.ID); err != nil {
+			return f, err
+		}
+	}
+	if f.Task.StartedAt, err = s.startedAt(t.ID); err != nil {
+		return f, err
 	}
 	f.Items = []FeedItem{{Kind: "task", Author: AudienceCoordinator, Text: t.Text, At: t.CreatedAt, Verified: true}}
 	err = s.tx(func(tx *sql.Tx) error {

@@ -2,7 +2,7 @@
 
 Messaging between Claude Code, Codex, Cursor Agent CLI and other agents. The project's goal is to run on macOS, Windows and Linux, with the broker on a computer or VPS of your choice and the ability to hand off the coordinator role.
 
-**Right now this is a technical preview of the local client on Mac, not a finished release for four computers.** The product is written in Go. It has a SQLite queue, protected session ownership, a browser window, a first native Agent Messenger.app shell for Mac and a verified local install from an archive. The product source lives in `cmd/messenger` and `internal`, the Mac shell in `desktop/macos`. The `experiments` folder contains only early research test rigs.
+**Right now this is a technical preview of the local client on Mac, not a finished release for four computers.** The product is written in Go. It has a SQLite queue, protected session ownership, a browser window, a first native Agent Messenger.app shell for Mac and a verified local install from an archive. The product source lives in `cmd/messenger` and `internal`, the Mac shell in `desktop/macos`. Early research test rigs were removed from the tree and stay in git history.
 
 ## Download the app
 
@@ -72,6 +72,6 @@ Messenger delivers messages and manages their processing. The agents themselves 
 
 This GitHub repository is for Agent Messenger. Keys, local profiles, queues, real CLI session IDs and their history are never uploaded here.
 
-The research [Python test rig](experiments/session_safety/README.md) and the [unfinished draft](experiments/python_client_draft/README.md) are kept as sources of scenarios. They are not the product and do not mean rewriting Go back into Python. Historical results are in the [reports](docs/reports/); their date and verified commit matter.
+The research [Python test rig](https://github.com/kolotiloff/agent-messenger/tree/41e0e6e7e3f20275d480f6b064a881e7b5f4cf9e/experiments/session_safety/README.md) and the [unfinished draft](https://github.com/kolotiloff/agent-messenger/tree/41e0e6e7e3f20275d480f6b064a881e7b5f4cf9e/experiments/python_client_draft/README.md) are kept as sources of scenarios. They are not the product and do not mean rewriting Go back into Python. Historical results are in the [reports](docs/reports/); their date and verified commit matter.
 
 A Telegram mirror, additional adapters and conveniences come after core delivery and session protection. The next mandatory steps are listed in the [release plan](docs/RELEASE_PLAN.md); a green build by itself does not confirm release readiness.
