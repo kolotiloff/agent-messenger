@@ -1389,6 +1389,17 @@ func (s *Store) TaskEvents(project, audience string, after int64, limit int) ([]
 	return out, cursor, err
 }
 
+// TaskListVersion changes whenever a project's task list or its events may
+// have changed: a new event, a new task, or any task state change (every such
+// update bumps tasks.version). It lets the coordinator skip an unchanged list
+// (T-032).
+func (s *Store) TaskListVersion(project string) (string, error) {
+	var seq sql.NullInt64
+	var count, sum int64
+	err := s.db.QueryRow(`SELECT (SELECT MAX(seq) FROM task_events WHERE project=?), COUNT(*), COALESCE(SUM(version),0) FROM tasks WHERE project=?`, project, project).Scan(&seq, &count, &sum)
+	return fmt.Sprintf("%d.%d.%d", seq.Int64, count, sum), err
+}
+
 // LatestTaskEvent returns the newest event sequence number of a project.
 func (s *Store) LatestTaskEvent(project string) (int64, error) {
 	var seq sql.NullInt64

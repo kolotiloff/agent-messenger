@@ -205,6 +205,7 @@ type waitResult struct {
 	Events   []core.TaskEvent `json:"events"`
 	Cursor   int64            `json:"cursor"`
 	TimedOut bool             `json:"timed_out"`
+	More     bool             `json:"more"`
 }
 
 func TestCoordinatorHandshakeAndTools(t *testing.T) {
@@ -310,7 +311,7 @@ func TestCoordinatorStartIsIdempotentAndWaitReplays(t *testing.T) {
 		Tasks  []coordinatorTask `json:"tasks"`
 		Cursor int64             `json:"cursor"`
 	}
-	if _, ok := c.tool("tasks", map[string]any{}, &list); !ok || len(list.Tasks) != 1 || list.Tasks[0].State != "done" || list.Cursor < woke.Cursor {
+	if _, ok := c.tool("tasks", map[string]any{"state": "all"}, &list); !ok || len(list.Tasks) != 1 || list.Tasks[0].State != "done" || list.Cursor < woke.Cursor {
 		t.Fatalf("tasks %+v", list)
 	}
 }
@@ -400,5 +401,133 @@ func TestCoordinatorUnknownProject(t *testing.T) {
 	c := startCoordinator(t, st, "Missing")
 	if text, ok := c.tool("list_agents", map[string]any{}, nil); ok || !strings.Contains(text, "Новый проект") {
 		t.Fatalf("unknown project: %s", text)
+	}
+}
+
+func startTasks(t *testing.T, c *coordClient, n int, prefix string) []string {
+	t.Helper()
+	var ids []string
+	for i := 0; i < n; i++ {
+		var started struct {
+			TaskID string `json:"task_id"`
+		}
+		if _, ok := c.tool("start_task", map[string]any{"op_id": fmt.Sprintf("%s-%d", prefix, i), "agent": "codex", "text": "work"}, &started); !ok {
+			t.Fatal("start failed")
+		}
+		ids = append(ids, started.TaskID)
+	}
+	return ids
+}
+
+func TestCoordinatorWaitIsBounded(t *testing.T) {
+	st := newCoordinatorStore(t)
+	c := startCoordinator(t, st, "Game")
+	// Three large reports: one per wait, each with more: true until the last.
+	big := strings.Repeat("ж", 15000)
+	for _, id := range startTasks(t, c, 3, "big") {
+		finishRun(t, st, id, core.DispositionReport, big)
+	}
+	cursor := int64(0)
+	var seen []int64
+	for i := 0; i < 3; i++ {
+		var w waitResult
+		if _, ok := c.tool("wait", map[string]any{"after": cursor, "timeout_seconds": 1}, &w); !ok || len(w.Events) != 1 || w.Events[0].Text != big {
+			t.Fatalf("wait %d: %d events", i, len(w.Events))
+		}
+		if w.More != (i < 2) || w.Cursor != w.Events[0].Seq {
+			t.Fatalf("wait %d: more %t cursor %d seq %d", i, w.More, w.Cursor, w.Events[0].Seq)
+		}
+		seen = append(seen, w.Cursor)
+		cursor = w.Cursor
+	}
+	if seen[0] >= seen[1] || seen[1] >= seen[2] {
+		t.Fatalf("cursors %v", seen)
+	}
+	// Many small events: the count limit, then the rest, nothing skipped.
+	for _, id := range startTasks(t, c, coordinatorMaxReturned+5, "small") {
+		finishRun(t, st, id, core.DispositionReport, "ok")
+	}
+	var w waitResult
+	if c.tool("wait", map[string]any{"after": cursor, "timeout_seconds": 1}, &w); len(w.Events) != coordinatorMaxReturned || !w.More {
+		t.Fatalf("first batch %d more %t", len(w.Events), w.More)
+	}
+	var rest waitResult
+	if c.tool("wait", map[string]any{"after": w.Cursor, "timeout_seconds": 1}, &rest); len(rest.Events) != 5 || rest.More {
+		t.Fatalf("second batch %d more %t", len(rest.Events), rest.More)
+	}
+	var last waitResult
+	if c.tool("wait", map[string]any{"after": rest.Cursor, "timeout_seconds": 1}, &last); len(last.Events) != 0 || !last.TimedOut || last.Cursor != rest.Cursor {
+		t.Fatalf("after the last %+v", last)
+	}
+}
+
+func TestCoordinatorTasksListIsLean(t *testing.T) {
+	st := newCoordinatorStore(t)
+	c := startCoordinator(t, st, "Game")
+	ids := startTasks(t, c, 3, "op")
+	finishRun(t, st, ids[0], core.DispositionReport, "done")
+	finishRun(t, st, ids[1], core.DispositionAsk, "Which level?")
+	type list struct {
+		Tasks     []map[string]any `json:"tasks"`
+		Cursor    int64            `json:"cursor"`
+		Version   string           `json:"version"`
+		More      bool             `json:"more"`
+		Unchanged bool             `json:"unchanged"`
+	}
+	var open list
+	if _, ok := c.tool("tasks", map[string]any{}, &open); !ok || len(open.Tasks) != 2 || open.Version == "" {
+		t.Fatalf("open %+v", open)
+	}
+	for _, task := range open.Tasks {
+		if task["state"] == "done" {
+			t.Fatal("a done task in the default list")
+		}
+		if _, has := task["folder"]; has {
+			t.Fatal("folder per row")
+		}
+		if task["task_id"] == ids[1] && task["question"] == nil {
+			t.Fatal("open question missing")
+		}
+	}
+	var all list
+	if c.tool("tasks", map[string]any{"state": "all"}, &all); len(all.Tasks) != 3 {
+		t.Fatalf("all %+v", all)
+	}
+	for _, task := range all.Tasks {
+		if task["state"] == "done" && task["detail"] != nil {
+			t.Fatalf("verification detail repeated %+v", task)
+		}
+	}
+	var one list
+	if c.tool("tasks", map[string]any{"state": "all", "limit": 1}, &one); len(one.Tasks) != 1 || !one.More {
+		t.Fatalf("limit %+v", one)
+	}
+	var done list
+	if c.tool("tasks", map[string]any{"state": "done"}, &done); len(done.Tasks) != 1 || done.Tasks[0]["task_id"] != ids[0] {
+		t.Fatalf("done %+v", done)
+	}
+	// Nothing changed: no list.
+	var same list
+	if c.tool("tasks", map[string]any{"if_version": open.Version}, &same); !same.Unchanged || same.Tasks != nil || same.Version != open.Version || same.Cursor != open.Cursor {
+		t.Fatalf("unchanged %+v", same)
+	}
+	// A new task changes the version even without an event.
+	startTasks(t, c, 1, "later")
+	var changed list
+	if c.tool("tasks", map[string]any{"if_version": open.Version}, &changed); changed.Unchanged || len(changed.Tasks) != 3 {
+		t.Fatalf("after start %+v", changed)
+	}
+	// A cancel changes it too.
+	if _, ok := c.tool("cancel", map[string]any{"task_id": ids[2]}, nil); !ok {
+		t.Fatal("cancel failed")
+	}
+	var afterCancel list
+	if c.tool("tasks", map[string]any{"if_version": changed.Version}, &afterCancel); afterCancel.Unchanged {
+		t.Fatalf("after cancel %+v", afterCancel)
+	}
+	// A larger limit is clamped to the maximum.
+	var clamped list
+	if _, ok := c.tool("tasks", map[string]any{"state": "all", "limit": 500}, &clamped); !ok || len(clamped.Tasks) != 4 {
+		t.Fatalf("clamped %+v", clamped)
 	}
 }

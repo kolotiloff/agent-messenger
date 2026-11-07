@@ -87,8 +87,8 @@ claude mcp add --scope local messenger -- "/Applications/Agent Messenger.app/Con
 |---|---|
 | `list_agents` | This computer: its project folder and its agents, with running and waiting task counts (across all projects). |
 | `start_task(op_id, agent, text, title?, computer?, model?)` | `StartTask`; idempotent by `op_id`. `model` is optional (D-030); the server instructions and the skill say when to choose one and not to guess names. |
-| `wait(after, timeout_seconds?)` | Returns coordinator events of this project after the cursor, at most 20 per call, or `timed_out` after the timeout (default 600 s, maximum 3600 s). |
-| `tasks(state?)` | This project's tasks, open questions for the coordinator, and the current cursor. |
+| `wait(after, timeout_seconds?)` | Returns coordinator events of this project after the cursor, at most 20 and about 24,000 characters of text per call (always at least one event), or `timed_out` after the timeout (default 600 s, maximum 3600 s). The returned `cursor` is the last returned event; `more: true` says further events are ready (T-031). |
+| `tasks(state?, limit?, if_version?)` | Open tasks by default (not `done`, `failed`, `cancelled`); `state: "all"` or one state name. Default 50, at most 200, with `more: true` when cut. No folder per row; a `done` task has no `detail`. Returns the cursor and a `version` that changes with any new event, new task or task update; `if_version` equal to it returns only `unchanged: true` (T-032). Failed tasks carry `failure_reason` / `failure_reset` (T-034). |
 | `answer(task_id, question_id, op_id, text)` | `AnswerTask` as the coordinator. |
 | `cancel(task_id)` | `CancelTask`. |
 
