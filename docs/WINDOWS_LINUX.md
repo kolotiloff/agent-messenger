@@ -49,9 +49,10 @@ The single-instance lock uses `LockFileEx`; the background client starts with pr
 
 ## What is verified
 
-- **Linux:** the whole test suite (CI and here); `messenger open` with headless Chromium through the forwarding file; install and start from the Linux archive (CI and here).
-- **Windows (CI runner, Windows Server 2025):** the lock, job objects holding a child after the first process exits and the job's stop ending it, a refused job name, the boot identity, the background client start and shutdown, task runs with the fake worker (report, question and answer, cancel, restart, failures, a leftover child), and the client started from the Windows zip. (Updated after the CI run on the final commit; see the PR.)
-- **Not verified:** a real Windows 10/11 desktop, SmartScreen, a browser opening on Windows, real Claude Code or Codex on Windows or Linux, ARM builds (compiled only), Windows and Linux joining a network with a Mac (the network code is the same as on the Mac).
+- **Linux:** the whole test suite (CI on Ubuntu 24.04 with Go 1.22.2 and the newest Go, and here); `messenger open` with headless Chromium through the forwarding file; install and start from the Linux archive (CI and here).
+- **Windows (CI runner, Windows Server 2025, `scripts/check-windows.sh`, required):** `go vet`; all tests of `platform`, `control`, `core`, `broker`, `localui`, `mcp`, `adapters`, `diagnostics` (tests whose fixtures use POSIX paths skip on Windows); in `supervisor` the task-run tests with the fake worker (report, question and answer, cancel, restart, failures, a leftover child ended by the job, tasks between computers through a real broker); in `cmd/messenger` the background client start and shutdown and the window file. Job objects: a live job is not empty, a child keeps the job alive after the first process exits, the job's stop ends it, a reused job name is refused, an unreachable job is not proven. The client also starts, answers `status` and shuts down from the Windows zip.
+- **Windows, information only:** the whole suite also runs there and about 30 tests fail. They use POSIX fixtures (`/bin/sleep`, shell scripts as fake CLIs, roots like `/tmp/x` or `/old-data`) or the persistent Claude stream path, which the window does not use for tasks. With a POSIX root, `active-runs.json` reads as damaged and the client refuses to start runs, which is the safe direction.
+- **Not verified:** a real Windows 10/11 desktop, SmartScreen, a browser opening on Windows, real Claude Code or Codex on Windows or Linux, the persistent Claude stream on Windows, ARM builds (compiled only), Windows and Linux joining a network with a Mac (the network code is the same as on the Mac).
 
 ## Not there yet
 
