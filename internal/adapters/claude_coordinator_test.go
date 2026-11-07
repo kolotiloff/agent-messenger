@@ -22,7 +22,7 @@ func TestClaudeAddCoordinatorArgs(t *testing.T) {
 }
 
 func TestClaudeUserConfig(t *testing.T) {
-	home := filepath.Join(string(filepath.Separator)+"home", "a")
+	home := t.TempDir()
 	if got := ClaudeUserConfig(home, nil); got != filepath.Join(home, ".claude.json") {
 		t.Fatal(got)
 	}
