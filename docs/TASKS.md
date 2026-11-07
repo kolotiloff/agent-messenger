@@ -39,6 +39,7 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 | T-017 | Coordinator role handover. Stage 6. | agent | |
 | T-018 | Delete old remote branches whose content is already in `main`. | agent | blocked: Q-002 |
 | T-019 | Decide and implement the UI language. | owner → agent | blocked: Q-001 |
+| T-030 | `/api/setup-codex` allows 100 s, but the window HTTP server cuts every reply at 25 s (`WriteTimeout`), so a slow successful setup shows as an error. Set a per-request write deadline for it. Persistent Codex path: moot if T-028 removes it. | agent | found in the T-015 audit |
 
 ## Done
 

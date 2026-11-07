@@ -13,7 +13,9 @@ Updated 2026-11-07 (third night) by Claude Code.
 - **Owner's instruction:** "доведи программу до релиза и сделай там настройку сервера", then an audit of the new work with all findings fixed.
 - **preview.25 released** from `main` (PR #40): action errors as a chip above the input, a clear "old client in the background" message with the restart command, a fix for the task list status column.
 - **T-015, first part** (branch `claude/t015-server-setup`): the background client can host a broker and a computer can join one by invitation. The window's «Сервер» tab enables it (local only by default, LAN on request), creates one-time invitations, lists and revokes devices, joins a broker, checks and drops the connection. `messenger status` shows the state. **Tasks do not travel between computers yet**; the tab says so. Details and file layout: [BROKER.md](BROKER.md); decisions D-033–D-035; Q-013 (device key in a 0600 file for now, not the Keychain).
-- **Verified here (Linux):** tests in `internal/broker`, `internal/supervisor` (the client joins its own broker through the control command, revoke, check), `internal/localui`; the tab in headless Chromium in both themes against a real client.
+- **Audit:** two independent reviews (security/protocol and window logic); every finding is fixed (list in [BROKER.md](BROKER.md) and [PR #41](https://github.com/kolotiloff/agent-messenger/pull/41)). One older issue outside this work went to the backlog as T-030.
+- **Release:** PR #41 merged into `main` and released as preview.26 (see LOG for the outcome).
+- **Verified here (Linux):** `check.sh`, `check-builds.sh`; tests in `internal/broker`, `internal/supervisor` (the client joins its own broker through the control command, revoke, check), `internal/localui`; the tab in headless Chromium in both themes, at 1100 and 600 px, against a real client.
 - **Not verified:** two real computers, a local network, the Mac app.
 - **Next:**
   1. Owner: update, open «Сервер», turn the server on, invite a second computer when one is available.
