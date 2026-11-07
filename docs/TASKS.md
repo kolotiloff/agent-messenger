@@ -43,7 +43,7 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 
 | ID | Task | PR |
 |---|---|---|
-| T-037 | Tasks between computers: a coordinator gives a task to an agent on another computer of the network through the broker mailbox; questions, answers, cancel and reports travel back (D-041, D-042). The other computer runs them only when its owner allows it (Q-014). Waits for the owner's test on two Macs. | branch `claude/t037-network-tasks` |
+| T-037 | Tasks between computers: a coordinator gives a task to an agent on another computer of the network through the broker mailbox; questions, answers, cancel and reports travel back (D-041, D-042). The other computer runs them only when its owner allows it (Q-014). Waits for the owner's test on two Macs. | PR #50, preview.31 |
 | T-035 | Computers of the network report their agents to the broker every 15 s; the sidebar shows every computer with its agents and statuses (D-039). | PR #49, preview.30 |
 | T-033 | A resumed run's `read_task` returns the question and answer without the task text (the conversation already has it) and a note; `include_task: true` returns the text. | branch `claude/t033-resume-brief` |
 | T-034 | Failure reasons (usage limit with reset time, rate limit, overload, sign-in, other) on the task, in the window and the coordinator's `failed` event; nothing is retried. Limit formats from the CLIs' docs, tested with fake CLIs only. | [PR #45](https://github.com/kolotiloff/agent-messenger/pull/45) |

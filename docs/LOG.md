@@ -4,7 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-07 — Claude Code (T-037 tasks between computers)
 
-- PR #49 merged, preview.30 released (run 42370126728).
+- PR #49 merged, preview.30 released (run 42370126728). PR #50 merged after green CI on Linux and macOS, preview.31 released from 019f30a (run 42371886488).
 - Branch `claude/t037-network-tasks`: broker mailbox, remote and mirror tasks in the store (schema 3), the client's 3-second exchange, `list_agents`/`start_task` across computers, the accept switch on «Сервер» (off by default, Q-014). D-041, D-042.
 - No real model calls; Cursor not run; Mac app not run. Two clients on one Linux machine exchanged a task through the window API and the coordinator.
 

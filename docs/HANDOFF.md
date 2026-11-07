@@ -11,9 +11,10 @@ The owner asked the agent to finish the program without them ("доделай б
 Updated 2026-11-07 (night) by Claude Code.
 
 - **preview.30 released** from `main` 598437c (PR #49, T-035: computers and their agents in the sidebar).
-- **T-037 (branch `claude/t037-network-tasks`):** tasks between computers. The broker carries messages (`/v1/send`, `/v1/inbox`); a coordinator's `start_task` with another computer's ID records a remote task here and the other computer runs it as its own task, sending questions, the report and the outcome back. Answers and cancel go the other way. A computer runs other computers' tasks only when «Задачи других компьютеров» is on («Сервер» tab; off by default, Q-014). Schema version 3. Design: [TASK_MODEL.md](TASK_MODEL.md#tasks-between-computers-t-037), D-041, D-042.
+- **preview.31 released** from `main` 019f30a (PR #50, T-037; run 42371886488).
+- **T-037 (PR #50, merged):** tasks between computers. The broker carries messages (`/v1/send`, `/v1/inbox`); a coordinator's `start_task` with another computer's ID records a remote task here and the other computer runs it as its own task, sending questions, the report and the outcome back. Answers and cancel go the other way. A computer runs other computers' tasks only when «Задачи других компьютеров» is on («Сервер» tab; off by default, Q-014). Schema version 3. Design: [TASK_MODEL.md](TASK_MODEL.md#tasks-between-computers-t-037), D-041, D-042.
 - **Verified here (Linux):** `check.sh`; store tests for the whole exchange (refusal, question → owner answer → report, cancel both ways, a duplicate message, an undeliverable start or cancel); a supervisor test through a real broker over TLS; two separate clients on one machine joined by the window API: start from the coordinator, acceptance with the folder, cancel, refusal while not accepting; window screenshots in headless Chromium. **Not verified:** two real Macs, a real worker run started from another computer (the run itself is the same code as a local task), WebKit.
-- **Next:** the owner tests preview.31 (after this PR) on two Macs: join, turn on «Задачи других компьютеров» on the second, ask the coordinator on the first to give a task to the second. Q-014 to confirm. Cursor (T-012) waits for Q-004.
+- **Next:** the owner tests preview.31 on two Macs: join, turn on «Задачи других компьютеров» on the second, ask the coordinator on the first to give a task to the second. Q-014 to confirm. Cursor (T-012) waits for Q-004.
 
 Updated 2026-11-07 (late evening) by Claude Code.
 
