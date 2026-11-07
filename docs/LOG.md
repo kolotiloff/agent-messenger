@@ -9,6 +9,10 @@ One entry per work session, newest first. Write what was done, which tool did it
 - Audit by two independent reviewers; all findings fixed (connection cap, LAN peers, restart/lock race, shutdown order, settings rollback, joins, durable writes, rate limit, names, timeouts, and window state issues). T-030 recorded for an older timeout issue. PR #41, release preview.26.
 - Verified on Linux with tests and headless Chromium; not with two computers, a real LAN or on the Mac.
 
+## 2026-11-07 — Claude Code with the owner (T-027 closed)
+
+- The owner tested preview.24 on the Mac and said everything works. T-027 moved to Done on that report. Next: Q-012, then T-028.
+
 ## 2026-11-07 — Claude Code (second night: preview.24)
 
 - From the owner's T-027 feedback: stop button like a chat (square, Esc, D-031), model choice by the coordinator with guidance in its instructions and skill (D-030), window fixes listed in HANDOFF; the window's client now allows tasks and resumes itself (D-029); Claude workers accept edits (D-028).

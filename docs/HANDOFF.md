@@ -20,7 +20,7 @@ Updated 2026-11-07 (third night) by Claude Code.
 - **Next:**
   1. Owner: update, open «Сервер», turn the server on, invite a second computer when one is available.
   2. T-015 continued: tasks between computers through the broker, the VPS package and wizard, Keychain (Q-013).
-  3. T-027 leftovers on the Mac; Q-012, then T-028.
+  3. Q-012, then T-028 (T-027 is closed: the owner reported preview.24 works).
 
 Previous update 2026-11-07 (second night) by Claude Code.
 
@@ -34,11 +34,8 @@ Previous update 2026-11-07 (second night) by Claude Code.
   - a relative `--root` now works;
   - cleanup: unused code and `experiments/` removed (D-032).
 - **Verified here (Linux):** `check.sh`, `check-builds.sh`, all tests with fake CLIs (including the model reaching both the first and the resumed run), the window in headless Chromium (stop by click and by Esc, light and dark), `check-desktop.py`. CI on Linux and macOS (includes the Mac app build).
-- **Not verified:** the new build on the owner's Mac and with real models (stop of a running worker, model choice, Claude editing files).
-- **Next:**
-  1. The owner updates to preview.24 ("Проверить обновления"). If the window still shows the old behaviour, the old client is still running: quit the app, run `"$HOME/Applications/Agent Messenger.app/Contents/Resources/messenger" --root "$HOME/Library/Application Support/AgentMessenger" shutdown`, and open the app again.
-  2. Finish T-027: one more Claude task that edits a file, one stop of a running worker, one task with a chosen model.
-  3. Q-012, then T-028.
+- **Owner's Mac (2026-11-07 morning):** the owner tested preview.24 and reported that everything works. T-027 is closed on that report; the individual cases were not written up separately.
+- **Next:** Q-012 (may the persistent Claude stream and Codex app-server be removed?), then T-028.
 
 Previous update 2026-11-07 (first night) by Claude Code.
 

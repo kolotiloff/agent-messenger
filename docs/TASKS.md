@@ -13,7 +13,6 @@ How to use it:
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
-| T-027 | First run on preview.23 done with the owner (Codex and Claude tasks, owner questions, reports through `wait`). Fixes and additions from it (D-028–D-032: edits, tasks allowed by the window, stop button, model choice, cleanup) are in preview.24. Left: on the Mac, a Claude task that edits a file, a stop of a running worker, a task with a chosen model. | agent + owner | `claude/t027-window-fixes` |
 
 | T-015 | First part done on `claude/t015-server-setup`: broker hosted by the client, invitations, joining, check, devices and revoke, the «Сервер» tab ([BROKER.md](BROKER.md), D-033–D-035). Left: tasks between computers, VPS package and wizard, Keychain (Q-013), Windows (Q-006). | agent + owner | `claude/t015-server-setup` |
 
@@ -23,8 +22,7 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 
 | ID | Task | Owner | Notes |
 |---|---|---|---|
-| T-027 | Mac acceptance with real models in `~/AgentMessengerTest/`: a Claude-app coordinator, one Claude and one Codex worker, a clarification round, two full tasks. | agent + owner | after T-024–T-026 |
-| T-028 | Close or migrate existing persistent sessions and state, then retire the persistent Claude stream and Codex app-server owners. | agent | after T-027; blocked: Q-012 |
+| T-028 | Close or migrate existing persistent sessions and state, then retire the persistent Claude stream and Codex app-server owners. | agent | blocked: Q-012 |
 
 ## Backlog
 
@@ -45,6 +43,7 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 
 | ID | Task | PR |
 |---|---|---|
+| T-027 | Mac acceptance with real models. preview.23: Codex and Claude tasks, owner questions, reports through `wait` (with the owner). preview.24 with the fixes (D-028–D-032): owner tested it on the Mac and reported that everything works (2026-11-07); no separate written report of each case. | [PR #37](https://github.com/kolotiloff/agent-messenger/pull/37), [PR #38](https://github.com/kolotiloff/agent-messenger/pull/38) |
 | T-029 | Task window: project switcher, computers with agents, three-line task list, task feed, owner answers, agent cards with trust. Mac app not yet checked. | [PR #36](https://github.com/kolotiloff/agent-messenger/pull/36) |
 | T-026 | Worker profile, trust check, runs on real CLIs with fake models ([report](reports/2026-11-06-task-workers-linux.md)). | [PR #36](https://github.com/kolotiloff/agent-messenger/pull/36) |
 | T-025 | Coordinator MCP with `wait` (`messenger coordinator --project`), skill. | [PR #36](https://github.com/kolotiloff/agent-messenger/pull/36) |
