@@ -108,6 +108,10 @@ func TestServerRoutes(t *testing.T) {
 	if code != 200 || last.Cmd != "server" || last.Action != "enable" || last.Text != `{"scope":"lan","port":47100}` || !strings.Contains(body, `"result"`) {
 		t.Fatalf("enable %d %s %+v", code, body, last)
 	}
+	code, _ = do("POST", "/api/server-action", `{"action":"accept","on":true}`)
+	if last := got[len(got)-1]; code != 200 || last.Action != "accept" || last.Text != `{"on":true}` {
+		t.Fatalf("accept %d %+v", code, last)
+	}
 	for _, bad := range []string{`{"action":"delete-everything"}`, `{"action":"connect","code":"` + strings.Repeat("x", 3000) + `"}`, `{"action":"enable","extra":1}`, `{"action":"enable","port":70000}`} {
 		if code, _ := do("POST", "/api/server-action", bad); code != 400 {
 			t.Errorf("accepted %s: %d", bad[:min(len(bad), 60)], code)

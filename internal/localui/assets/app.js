@@ -331,7 +331,8 @@
       box.append(el('div',label,'am-label am-task-section'));
       for(const t of items){
         const row=el('button',undefined,'am-task');row.type='button';row.setAttribute('aria-pressed',String(t.id===selectedTask));
-        const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),el('span',names[t.agent]||t.agent));
+        const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),el('span',(names[t.agent]||t.agent)+(t.remote&&!t.remote.from?' · '+t.remote.name:'')));
+        if(t.remote)agent.title=t.remote.from?'Задачу дал компьютер «'+t.remote.name+'»':'Выполняется на компьютере «'+t.remote.name+'»';
         const [text,cls]=taskStatus(t);
         const status=el('span',undefined,'am-task-status '+cls);
         if(t.state==='waiting_owner')status.append(el('span',undefined,'am-dot am-dot-wait'));
@@ -423,7 +424,8 @@
     const signature=JSON.stringify(feed);if(signature===feedSignature)return;
     const atBottom=thread.scrollHeight-thread.clientHeight-thread.scrollTop<40||!feedSignature;feedSignature=signature;
     const title=el('div',undefined,'am-task-head');title.append(el('h3',t.title));
-    title.append(el('p',(names[t.agent]||t.agent)+(t.model?' ('+t.model+')':'')+' на '+(view.computer_name||'этом компьютере')+', папка '+t.folder,'am-small am-muted'));
+    const where=t.remote&&!t.remote.from?' на компьютере «'+t.remote.name+'»':' на '+(view.computer_name||'этом компьютере')+(t.remote?.from?', по заданию компьютера «'+t.remote.name+'»':'');
+    title.append(el('p',(names[t.agent]||t.agent)+(t.model?' ('+t.model+')':'')+where+', папка '+(t.folder||'ещё не известна'),'am-small am-muted'));
     const [statusText,statusCls]=taskStatus(t);
     const when=t.finished_at?'Начата в '+clock(t.created_at)+', закончена в '+clock(t.finished_at):'Начата в '+clock(t.created_at);
     const line=el('p',undefined,'am-small');line.append(el('span',statusText,statusCls),el('span',', '+when.charAt(0).toLowerCase()+when.slice(1),'am-muted'));title.append(line);
@@ -460,24 +462,25 @@
         group=null;continue;
       }
       if(it.kind==='outcome'){
-        group=null;const text={failed:'Запуск не прошёл проверку',blocked:'Задача заблокирована: процесс не завершился полностью',interrupted:'Клиент перезапустился во время работы; результат неизвестен',cancelled:'Задача отменена'}[it.state]||it.state;
+        group=null;const text={failed:t.remote&&!t.remote.from?'Задача не выполнена':'Запуск не прошёл проверку',blocked:t.remote&&!t.remote.from?'Задача заблокирована: результат на другом компьютере неизвестен':'Задача заблокирована: процесс не завершился полностью',interrupted:'Клиент перезапустился во время работы; результат неизвестен',cancelled:'Задача отменена'}[it.state]||it.state;
         const note=el('div',undefined,'am-outcome '+(it.state==='cancelled'?'am-muted':'am-status-bad'));note.append(el('p',text));if(it.text)note.append(el('p',it.text,'am-small am-muted'));
         const g=el('article',undefined,'am-message-group');g.append(note);out.push(g);
       }
     }
     thread.replaceChildren(...out);
-    const q=t.owner_question;
+    // A task another computer started is answered there.
+    const q=t.remote?.from?null:t.owner_question;
     const active=activeStates.includes(t.state),box=$('answer-text');
     $('compose').hidden=!q&&!active;
-    box.disabled=!q;box.placeholder=q?'Ответить исполнителю…':t.pending_launch?'Задача ждёт запуска…':'Исполнитель работает…';
+    box.disabled=!q;box.placeholder=q?'Ответить исполнителю…':t.remote?.from&&t.owner_question?'Отвечают на компьютере «'+t.remote.name+'»':t.pending_launch?'Задача ждёт запуска…':'Исполнитель работает…';
     $('answer-send').hidden=!q;$('answer-hint').hidden=!q;$('task-stop').hidden=!active;
     if(q&&$('compose').dataset.question!==q.id){$('compose').dataset.question=q.id;$('answer-text').value='';$('answer-status').textContent='';}
     answerControls();
     if(atBottom)thread.scrollTop=thread.scrollHeight;
   }
-  function answerControls(){$('answer-send').disabled=answering||!$('answer-text').value.trim()||!feed?.task?.owner_question;}
+  function answerControls(){$('answer-send').disabled=answering||!$('answer-text').value.trim()||!feed?.task?.owner_question||!!feed?.task?.remote?.from;}
   async function sendAnswer(){
-    const q=feed?.task?.owner_question;if(!q||answering)return;
+    const q=feed?.task?.owner_question;if(!q||answering||feed.task.remote?.from)return;
     const text=$('answer-text').value.trim();if(!text)return;
     let op=recall('messenger-answer-op:'+q.id);
     if(!op){op='window-'+q.id+'-'+crypto.randomUUID();remember('messenger-answer-op:'+q.id,op);}
@@ -621,7 +624,7 @@
   // Server tab: the broker hosted by this client and this computer's
   // connection to a broker. Messages stay next to the section they belong to.
   let server=null,serverBusy=false,serverGen=0,serverPolling=false,serverEdited=false,nameFilled=false,invitation=null,inviteTimer=0,revokeAsk='',revokeTimer=0;
-  const notes={host:null,member:null},noteTimers={};
+  const notes={host:null,member:null,accept:null},noteTimers={};
   function stamp(at){const d=new Date(at);return isNaN(d.getTime())?'':d.toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});}
   function capital(text){return text?text[0].toUpperCase()+text.slice(1):'';}
   // A status reads like the agents' status: a dot and plain text. state is
@@ -629,11 +632,14 @@
   function badge(node,text,state){node.textContent=text;node.classList.toggle('am-good',state==='good');node.classList.toggle('am-bad',state==='bad');}
   // One button starts or stops the server; its settings are locked while it
   // runs. Both buttons share one grid cell, so the row never changes width.
+  function swap(on,off,state){for(const [b,shown] of [[on,state],[off,!state]]){b.setAttribute('aria-hidden',String(!shown));b.tabIndex=shown?0:-1;}}
   function renderHostToggle(){
     if(!server)return;const running=server.host.running;
-    const on=$('host-disable'),off=$('host-enable');
-    for(const [b,shown] of [[on,running],[off,!running]]){b.setAttribute('aria-hidden',String(!shown));b.tabIndex=shown?0:-1;}
+    swap($('host-disable'),$('host-enable'),running);
     $('host-scope').disabled=running;$('host-port').disabled=running;
+    const accept=!!server.accept;swap($('accept-off'),$('accept-on'),accept);
+    badge($('accept-badge'),accept?'Принимаются':'Не принимаются',accept?'good':'');
+    $('accept-badge').title=accept?'Задачи других компьютеров выполняются здесь, если есть проект с тем же именем и папкой.':'Задачи других компьютеров сети отклоняются; координатор получает причину.';
   }
   async function loadServer(){
     if(serverBusy||serverPolling)return;
@@ -652,8 +658,9 @@
     renderNotes();
   }
   function renderNotes(){
-    for(const section of ['host','member']){
-      const n=$(section+'-status'),own=notes[section],part=server?.[section];
+    if(server)server.accept_part={error:server.network_error||''};
+    for(const section of ['host','member','accept']){
+      const n=$(section+'-status'),own=notes[section],part=section==='accept'?server?.accept_part:server?.[section];
       if(own&&own.bad&&part&&JSON.stringify(part)!==own.state&&!serverBusy)notes[section]=null;
       const shown=notes[section]||(part?.error?{text:capital(part.error),bad:true}:null);
       n.textContent=shown?.text||'';n.classList.toggle('am-bad',!!shown?.bad);
@@ -867,6 +874,8 @@
     b.title=label;b.setAttribute('aria-label',state?label:'Скопировать код');}
   $('invite-copy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('invite-code').textContent);copyState('done');}catch(_){copyState('failed');}});
   $('member-connect').addEventListener('click',connectServer);
+  $('accept-on').addEventListener('click',()=>serverAction({action:'accept',on:true},'accept',''));
+  $('accept-off').addEventListener('click',()=>serverAction({action:'accept',on:false},'accept','Новые задачи других компьютеров будут отклоняться. Уже принятые продолжат работу.'));
   $('member-check').addEventListener('click',()=>serverAction({action:'check'},'member',''));
   $('member-disconnect').addEventListener('click',()=>serverAction({action:'disconnect'},'member','Отключено. Устройство остаётся в списке сервера, пока его там не отзовут.'));
   let serverPolls=0;
