@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // Worker profiles (D-023). "worker" runs like a session the owner opened in
@@ -183,7 +184,14 @@ type TaskEventResult struct {
 	// Completed means the provider reported a successful end of the run.
 	Completed bool
 	Failure   string
+	// Reason is the failure class (Reason* constants) and ResetAt the time
+	// the provider said its limit resets; both only explain the failure.
+	Reason  string
+	ResetAt time.Time
 }
+
+// taskNow is the clock used to read "try again at 6:12 PM"; tests replace it.
+var taskNow = time.Now
 
 // ParseTaskEvent folds one JSON event line of a worker run into r. Claude
 // reports its session ID in every event and ends with a "result" event; Codex
@@ -209,7 +217,8 @@ func ParseTaskEvent(provider string, line []byte, r *TaskEventResult) {
 	case "claude":
 		id, _ := e["session_id"].(string)
 		note(id)
-		if kind == "result" {
+		switch kind {
+		case "result":
 			subtype, _ := e["subtype"].(string)
 			isErr, _ := e["is_error"].(bool)
 			if subtype == "success" && !isErr {
@@ -217,6 +226,38 @@ func ParseTaskEvent(provider string, line []byte, r *TaskEventResult) {
 			} else {
 				r.Completed = false
 				r.Failure = "Claude result " + subtype
+				r.noteFailure(errorText(e), taskNow())
+			}
+		case "rate_limit_event":
+			// Claude reports its plan limits; only a rejected request is a
+			// limit that stopped this run.
+			info, _ := e["rate_limit_info"].(map[string]any)
+			if status, _ := info["status"].(string); status == "rejected" {
+				r.Reason = stronger(r.Reason, ReasonUsageLimit)
+				if at := unixReset(info["resetsAt"]); !at.IsZero() && r.ResetAt.IsZero() {
+					r.ResetAt = at
+				}
+			}
+		case "assistant":
+			// An API error is reported as an assistant message with an error
+			// code; the run then ends with a failed result.
+			if code, _ := e["error"].(string); code != "" {
+				text := errorText(e)
+				reason := classifyFailure(text)
+				switch code {
+				case "authentication_failed":
+					reason = ReasonSignIn
+				case "billing_error":
+					reason = ReasonUsageLimit
+				case "rate_limit":
+					if reason != ReasonUsageLimit {
+						reason = ReasonRateLimit
+					}
+				}
+				r.Reason = stronger(r.Reason, reason)
+				if at := resetFromText(text, taskNow()); !at.IsZero() && r.ResetAt.IsZero() {
+					r.ResetAt = at
+				}
 			}
 		}
 	case "codex":
@@ -231,6 +272,7 @@ func ParseTaskEvent(provider string, line []byte, r *TaskEventResult) {
 		case "turn.failed", "error":
 			r.Completed = false
 			r.Failure = "Codex " + kind
+			r.noteFailure(errorText(e), taskNow())
 		}
 	}
 }

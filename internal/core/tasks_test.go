@@ -1,6 +1,7 @@
 package core
 
 import (
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
@@ -567,5 +568,65 @@ func TestTaskEventsReplayByCursorAndProject(t *testing.T) {
 	latest, err := f.st.LatestTaskEvent("Game")
 	if err != nil || latest != rest[0].Seq {
 		t.Fatalf("latest %d %v", latest, err)
+	}
+}
+
+func TestTaskFailureReason(t *testing.T) {
+	failedWith := func(t *testing.T, ev RunEvidence) (taskFixture, Task, []TaskEvent) {
+		f := newTaskFixture(t)
+		id := f.start(t, "op", "claude", "x")
+		r := f.launch(t, id, f.sessionOf(t, id))
+		if final, err := f.st.FinishTaskRun(r.ID, ev); err != nil || final != "failed" {
+			t.Fatalf("final %s %v", final, err)
+		}
+		task, _ := f.st.TaskByID(id)
+		return f, task, f.events(t, AudienceCoordinator, 0)
+	}
+	failed := RunEvidence{ExitObserved: true, ExitCode: 1, GroupEmpty: true, Detail: "Claude result success"}
+
+	ev := failed
+	ev.Reason, ev.ResetAt = "usage_limit", "2026-11-07T18:00:00Z"
+	f, task, events := failedWith(t, ev)
+	if task.FailureReason != "usage_limit" || task.FailureReset != "2026-11-07T18:00:00Z" {
+		t.Fatalf("task %+v", task)
+	}
+	if !strings.Contains(events[0].Text, "Reason: usage limit; it resets at 2026-11-07T18:00:00Z. Tell the owner the reset time; do not start this task again before it.") {
+		t.Fatalf("event %q", events[0].Text)
+	}
+	view, err := f.st.WindowView("Game", "2026-11-07")
+	if err != nil || len(view.Tasks) != 1 || view.Tasks[0].FailureReason != "usage_limit" || view.Tasks[0].FailureReset != "2026-11-07T18:00:00Z" {
+		t.Fatalf("window %+v %v", view.Tasks, err)
+	}
+	// Any later state clears the explanation.
+	if err := f.st.tx(func(tx *sql.Tx) error { return setTaskState(tx, task.ID, "blocked", "x") }); err != nil {
+		t.Fatal(err)
+	}
+	if task, _ = f.st.TaskByID(task.ID); task.FailureReason != "" || task.FailureReset != "" {
+		t.Fatalf("not cleared %+v", task)
+	}
+	// Nothing is relaunched because of a limit.
+	if runs, _ := f.st.NextTaskRunIntents(10); len(runs) != 0 {
+		t.Fatalf("relaunch intent %v", runs)
+	}
+
+	// A reset time is kept only for a usage limit, and only in RFC 3339.
+	ev = failed
+	ev.Reason, ev.ResetAt = "rate_limit", "2026-11-07T18:00:00Z"
+	if _, task, events = failedWith(t, ev); task.FailureReason != "rate_limit" || task.FailureReset != "" || !strings.Contains(events[0].Text, "Reason: rate limit.") {
+		t.Fatalf("rate limit %+v %q", task, events[0].Text)
+	}
+	ev = failed
+	ev.Reason, ev.ResetAt = "usage_limit", "tomorrow"
+	if _, task, events = failedWith(t, ev); task.FailureReset != "" || !strings.Contains(events[0].Text, "no reset time was reported") {
+		t.Fatalf("bad reset %+v %q", task, events[0].Text)
+	}
+	// Unknown or unclassified reasons add nothing.
+	for _, reason := range []string{"", "other", "something"} {
+		ev = failed
+		ev.Reason = reason
+		_, task, events = failedWith(t, ev)
+		if (reason == "other") != (task.FailureReason == "other") || strings.Contains(events[0].Text, "Reason:") {
+			t.Fatalf("%q: %+v %q", reason, task, events[0].Text)
+		}
 	}
 }

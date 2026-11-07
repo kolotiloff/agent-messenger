@@ -235,6 +235,13 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	if result.Failure != "" {
 		ev.Detail = result.Failure
 	}
+	// T-034: the failure class and reset time only explain the failure.
+	if result.Reason != "" {
+		ev.Reason = result.Reason
+		if !result.ResetAt.IsZero() {
+			ev.ResetAt = result.ResetAt.UTC().Format(time.RFC3339)
+		}
+	}
 	if result.Conflicting {
 		ev.Detail = "the CLI reported two conversation ids"
 	}

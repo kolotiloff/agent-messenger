@@ -156,6 +156,23 @@
   }
   function clock(at){const d=new Date(at);return isNaN(d.getTime())?'':d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});}
   const activeStates=['running','waiting_owner','waiting_coordinator'];
+  // T-034: why a run failed, as the provider reported it. Nothing is retried.
+  function resetText(at){
+    const d=new Date(at);if(isNaN(d.getTime()))return '';
+    const day=x=>x.getFullYear()+'-'+x.getMonth()+'-'+x.getDate(),today=new Date(),tomorrow=new Date();tomorrow.setDate(today.getDate()+1);
+    if(day(d)===day(today))return 'в '+clock(at);
+    if(day(d)===day(tomorrow))return 'завтра в '+clock(at);
+    return d.toLocaleDateString([], {day:'numeric',month:'long'})+' в '+clock(at);
+  }
+  function failureStatus(t){
+    switch(t.failure_reason){
+      case 'usage_limit':{const r=t.failure_reset?resetText(t.failure_reset):'';return [r?'Лимит, сброс '+r:'Лимит исчерпан','am-status-bad'];}
+      case 'rate_limit':return ['Слишком много запросов','am-status-bad'];
+      case 'overload':return ['Сервис перегружен','am-status-bad'];
+      case 'sign_in':return ['Нужен вход в аккаунт','am-status-bad'];
+    }
+    return null;
+  }
   function taskStatus(t){
     const end=t.finished_at||t.updated_at,from=t.started_at||t.created_at;
     switch(t.state){
@@ -163,7 +180,7 @@
       case 'waiting_owner':return ['Ждёт вашего ответа','am-status-wait'];
       case 'waiting_coordinator':return ['Ждёт ответа координатора','am-status-run'];
       case 'done':return ['Завершил за '+minutes(from,end),'am-muted'];
-      case 'failed':return ['Не прошёл проверку через '+minutes(from,end),'am-status-bad'];
+      case 'failed':return failureStatus(t)||['Не прошёл проверку через '+minutes(from,end),'am-status-bad'];
       case 'interrupted':return ['Прервался через '+minutes(from,end),'am-status-bad'];
       case 'blocked':return ['Заблокирован через '+minutes(from,end),'am-status-bad'];
       case 'cancelled':return ['Отменён','am-muted'];
