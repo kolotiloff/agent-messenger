@@ -92,13 +92,19 @@
   let view=null,project=recall('messenger-project'),selectedTask='',feed=null,feedSignature='',viewSignature='';
   let online=false,offlineReason='',discovery=[],tab='tasks',refreshing=false,answering=false;
   const agentChecks=new Map();
+  // The window can be newer than the client still running in the background
+  // (after an update). Say how to restart it; nothing is restarted by itself.
+  function outdatedMessage(){
+    const how=view?.messenger&&view?.data_root?' Закройте Messenger, выполните в Терминале: "'+view.messenger+'" --root "'+view.data_root+'" shutdown — и откройте Messenger снова.':' Закройте Messenger, остановите старый клиент командой shutdown и откройте Messenger снова.';
+    return 'В фоне ещё работает клиент старой версии, он не знает этой команды.'+how;
+  }
   async function api(path,timeout=4500){
     if(!token)throw Error('Откройте приватную ссылку, которую выдала команда ui.');
     const response=await fetch(path,{headers:{Authorization:'Bearer '+token},cache:'no-store',signal:AbortSignal.timeout(timeout)});
     if(!response.ok){
       if(response.status===401)throw Error('Ссылка доступа устарела. Откройте окно заново.');
       const body=await response.text().catch(()=>'');
-      if(body.startsWith('client_outdated'))throw Error('В фоне работает клиент старой версии. Закройте окно Messenger и остановите старый клиент командой shutdown.');
+      if(body.startsWith('client_outdated'))throw Error(outdatedMessage());
       if(body.startsWith('client_rejected'))throw Error('Клиент Messenger отклонил запрос окна. Подробности: messenger doctor.');
       throw Error('Клиент Messenger не запущен или не отвечает. Данные не обновляются.');
     }
@@ -108,6 +114,7 @@
     const response=await fetch(path,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body),cache:'no-store',signal:AbortSignal.timeout(timeout)});
     let result={};try{result=await response.json();}catch(_){}
     if(response.ok&&result.ok===true)return result;
+    if(result.state==='client_outdated')throw Error(outdatedMessage());
     if(response.status===409&&result.detail)throw Error(result.detail);
     if(response.status===400)throw Error('Проверьте введённые данные.');
     throw Error('Действие не подтверждено. Проверьте состояние и повторите.');
@@ -282,9 +289,10 @@
   let stopping=false;
   async function stopTask(){
     const t=feed?.task;if(!t||stopping||!activeStates.includes(t.state))return;
-    stopping=true;$('task-stop').disabled=true;$('answer-status').textContent='Останавливаем задачу…';
-    try{await postAPI('/api/task-cancel',{task:t.id});$('answer-status').textContent='';feedSignature='';await refresh();}
-    catch(e){$('answer-status').textContent=e.message;}
+    const status=$('answer-status');
+    stopping=true;$('task-stop').disabled=true;$('task-stop').classList.add('am-tip-off');status.classList.remove('am-status-bad');status.textContent='Останавливаем задачу…';
+    try{await postAPI('/api/task-cancel',{task:t.id});status.textContent='';feedSignature='';await refresh();}
+    catch(e){status.classList.add('am-status-bad');status.textContent=e.message;}
     finally{stopping=false;$('task-stop').disabled=false;}
   }
   function renderFeed(){
@@ -539,6 +547,7 @@
   $('answer-send').addEventListener('click',sendAnswer);
   // Enter sends; Shift+Enter adds a line. An IME composition keeps its Enter.
   $('task-stop').addEventListener('click',stopTask);
+  $('task-stop').addEventListener('mouseleave',()=>$('task-stop').classList.remove('am-tip-off'));
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.isComposing&&!$('task-stop').hidden&&!$('compose').hidden&&!document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true]')){e.preventDefault();stopTask();}});
   $('answer-text').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();sendAnswer();}});
   $('project-dialog-close').addEventListener('click',()=>$('project-dialog').close());
