@@ -25,8 +25,10 @@ func taskTools() []map[string]any {
 			"properties": map[string]any{"text": map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxDispositionText, "description": desc}}}
 	}
 	return []map[string]any{
-		{"name": "read_task", "description": "Read your task: its text, project and folder. On a resumed run it also returns your question and its answer.",
-			"inputSchema": map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false}},
+		{"name": "read_task", "description": "Read your task: its text, project and folder. On a resumed run it returns your question and its answer instead of the task text, which this conversation already has; pass include_task: true to get the text again.",
+			"inputSchema": map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{
+				"include_task": map[string]any{"type": "boolean", "description": "also return the task text on a resumed run"},
+			}}},
 		{"name": "report", "description": "Finish the task: what you did, what you verified and what remains. Ends this run; the task is done.",
 			"inputSchema": text("the report")},
 		{"name": "ask", "description": "Ask the coordinator a question you cannot resolve yourself. Ends this run; the task resumes with the answer.",
@@ -97,11 +99,12 @@ func callTaskTool(store *core.Store, run, receipt string, params map[string]any)
 	var err error
 	switch name {
 	case "read_task":
-		if len(args) != 0 {
-			err = errors.New("read_task takes no arguments")
+		include, isBool := args["include_task"].(bool)
+		if len(args) > 1 || (len(args) == 1 && !isBool) {
+			err = errors.New("read_task takes only include_task")
 			break
 		}
-		value, err = store.ReadTask(run, receipt)
+		value, err = store.ReadTask(run, receipt, include)
 	case core.DispositionReport, core.DispositionAsk, core.DispositionAskOwner:
 		text, ok := args["text"].(string)
 		if !ok || len(args) != 1 {

@@ -952,14 +952,22 @@ type TaskBrief struct {
 	Project  string `json:"project"`
 	Folder   string `json:"folder"`
 	Title    string `json:"title"`
-	Task     string `json:"task"`
+	Task     string `json:"task,omitempty"`
 	Answer   string `json:"answer,omitempty"`
 	Question string `json:"question,omitempty"`
 	Run      int    `json:"run"`
+	// Note is set on a resumed run whose task text was left out (T-033).
+	Note string `json:"note,omitempty"`
 }
 
+// resumedTaskNote tells a resumed worker where its task text is.
+const resumedTaskNote = "This run continues the same conversation, which already has the task from your first read_task. " +
+	"Call read_task with include_task: true only if you no longer have it."
+
 // ReadTask returns the task and, for a resumed run, the question and answer.
-func (s *Store) ReadTask(run, receipt string) (TaskBrief, error) {
+// A resumed run continues the same conversation, so the task text is left
+// out unless includeTask asks for it (T-033).
+func (s *Store) ReadTask(run, receipt string, includeTask bool) (TaskBrief, error) {
 	var b TaskBrief
 	err := s.tx(func(tx *sql.Tx) error {
 		r, t, err := taskRunForReceipt(tx, run, receipt)
@@ -968,6 +976,9 @@ func (s *Store) ReadTask(run, receipt string) (TaskBrief, error) {
 		}
 		b = TaskBrief{TaskID: t.ID, Project: t.Project, Folder: t.Folder, Title: t.Title, Task: t.Text, Run: r.Ordinal}
 		if r.Kind == "answer" {
+			if !includeTask {
+				b.Task, b.Note = "", resumedTaskNote
+			}
 			b.Answer = r.Input
 			_ = tx.QueryRow(`SELECT text FROM task_questions WHERE task_id=? AND state='answered' ORDER BY rowid DESC LIMIT 1`, t.ID).Scan(&b.Question)
 		}

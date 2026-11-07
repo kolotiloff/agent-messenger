@@ -147,6 +147,14 @@ func taskWorkerFixture(mode string) int {
 		if brief.Answer == "" {
 			tool("ask", map[string]any{"text": "Which level?"})
 		} else {
+			// T-033: a resumed run gets no task text unless it asks.
+			var again struct{ Task string }
+			full, _ := tool("read_task", map[string]any{"include_task": true})
+			_ = json.Unmarshal([]byte(full), &again)
+			if brief.Task != "" || again.Task == "" {
+				tool("report", map[string]any{"text": "task text: first " + brief.Task + ", again " + again.Task})
+				break
+			}
 			tool("report", map[string]any{"text": "done with " + brief.Answer + " for " + brief.Question})
 		}
 	case "ask-owner":

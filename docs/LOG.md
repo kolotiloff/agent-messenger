@@ -2,6 +2,12 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-07 — Claude Code (T-031–T-034)
+
+- PR #45 merged: T-034 failure reasons and reset time, T-031 bounded `wait`, T-032 lean `tasks` (`if_version` instead of `if_cursor`, because starting or cancelling a task changes the list without an event), window tweaks.
+- T-033 on `claude/t033-resume-brief`: resumed `read_task` without the task text. Fake-CLI resume test checks both the short and the `include_task` answer.
+- No real model calls; Mac app not run.
+
 ## 2026-11-07 — Claude Code (no references to other products)
 
 - At the owner's request the docs no longer name or link other products: the earlier comparison document was removed, its accepted directions moved to RELEASE_PLAN.md "Planned directions" without sources. Keep it that way: no product names, links or comparisons in code, docs, commits or PRs.
