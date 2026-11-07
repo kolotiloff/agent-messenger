@@ -47,6 +47,8 @@ type Status struct {
 	Supervisor     int      `json:"supervisor_pid"`
 	Detail         string   `json:"detail,omitempty"`
 	TasksEnabled   bool     `json:"tasks_enabled,omitempty"`
+	// Version is the client build; clients before preview.27 leave it empty.
+	Version string `json:"version,omitempty"`
 }
 
 type StopResult struct {

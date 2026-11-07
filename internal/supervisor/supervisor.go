@@ -19,6 +19,7 @@ import (
 
 	"github.com/kolotiloff/agent-messenger/internal/adapters"
 	"github.com/kolotiloff/agent-messenger/internal/broker"
+	"github.com/kolotiloff/agent-messenger/internal/buildinfo"
 	"github.com/kolotiloff/agent-messenger/internal/control"
 	"github.com/kolotiloff/agent-messenger/internal/core"
 	"github.com/kolotiloff/agent-messenger/internal/platform"
@@ -438,6 +439,7 @@ func (s *Supervisor) Status() (control.Status, error) {
 		CLILaunch:  "disabled",
 		Broker:     "not_configured",
 		Supervisor: os.Getpid(),
+		Version:    buildinfo.Version,
 	}
 	if s.server != nil {
 		status.Broker = s.server.Summary()

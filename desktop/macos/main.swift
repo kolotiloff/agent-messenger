@@ -35,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         config.userContentController.add(self, name: "updates")
         config.userContentController.add(self, name: "appearance")
         config.userContentController.add(self, name: "folder")
+        config.userContentController.add(self, name: "app")
         let savedTheme = UserDefaults.standard.string(forKey: "appearance") ?? "system"
         let safeTheme = ["system", "light", "dark"].contains(savedTheme) ? savedTheme : "system"
         config.userContentController.addUserScript(WKUserScript(source: "window.messengerInitialTheme = '\(safeTheme)'", injectionTime: .atDocumentStart, forMainFrameOnly: true))
@@ -214,6 +215,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
               page.scheme == origin.scheme, page.host == origin.host, page.port == origin.port, page.path == "/" else { return }
         if message.name == "updates", message.body as? String == "check" { updates.check() }
         if message.name == "folder", message.body as? String == "pick" { pickProjectFolder() }
+        // Quits only the app; the background client and its reservations stay.
+        if message.name == "app", message.body as? String == "quit" { NSApp.terminate(nil) }
         if message.name == "appearance", let theme = message.body as? String, ["system", "light", "dark"].contains(theme) {
             UserDefaults.standard.set(theme, forKey: "appearance"); applyTheme(theme)
             // A reconnect creates a new document in the same WebView.

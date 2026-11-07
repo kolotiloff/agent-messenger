@@ -37,11 +37,12 @@ type caller func(context.Context, control.Request) (control.Response, error)
 // Run binds only IPv4 loopback, with a fresh capability for each invocation.
 // The URL is private. The caller must not publish or log it to a shared service.
 func Run(ctx context.Context, root string, port int, out io.Writer) error {
-	return RunWithUpdates(ctx, root, port, out, nil)
+	return RunDesktop(ctx, root, port, out, nil, nil)
 }
 
-// Updates is enabled only by the native desktop bridge, never by a browser UI.
-func RunWithUpdates(ctx context.Context, root string, port int, out io.Writer, channel *updatefeed.Channel) error {
+// RunDesktop serves the native desktop window. Updates and the client
+// restart are enabled only by the desktop launcher, never by a browser UI.
+func RunDesktop(ctx context.Context, root string, port int, out io.Writer, channel *updatefeed.Channel, restart Restarter) error {
 	if port < 0 || port > 65535 {
 		return errors.New("ui port must be 0..65535")
 	}
@@ -59,7 +60,7 @@ func RunWithUpdates(ctx context.Context, root string, port int, out io.Writer, c
 	call := func(ctx context.Context, r control.Request) (control.Response, error) {
 		return control.CallContext(ctx, root, r)
 	}
-	h := newHandlerWithUpdates(host, token, call, func(ctx context.Context) any {
+	h := newHandlerWithChecks(host, token, call, func(ctx context.Context) any {
 		r := diagnostics.CollectDesktop(ctx, root)
 		// Only selected installation/profile paths reach this authenticated local
 		// setup UI; never credentials, session IDs or the database inspection.
@@ -84,7 +85,7 @@ func RunWithUpdates(ctx context.Context, root string, port int, out io.Writer, c
 			CheckedAt string      `json:"checked_at"`
 			Agents    []candidate `json:"agents"`
 		}{r.OS, r.CheckedAt, list}
-	}, channel)
+	}, channel, diagnostics.CheckCLI, restart)
 	srv := &http.Server{Handler: h, ReadHeaderTimeout: 3 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 25 * time.Second, IdleTimeout: 20 * time.Second, MaxHeaderBytes: 8192, ErrorLog: log.New(io.Discard, "", 0)}
 	stop := context.AfterFunc(ctx, func() { _ = srv.Close() })
 	defer stop()
@@ -103,11 +104,12 @@ func newHandler(host, token string, call caller, discover func(context.Context) 
 }
 
 func newHandlerWithUpdates(host, token string, call caller, discover func(context.Context) any, channel *updatefeed.Channel) http.Handler {
-	return newHandlerWithChecks(host, token, call, discover, channel, diagnostics.CheckCLI)
+	return newHandlerWithChecks(host, token, call, discover, channel, diagnostics.CheckCLI, nil)
 }
 
-func newHandlerWithChecks(host, token string, call caller, discover func(context.Context) any, channel *updatefeed.Channel, checker cliChecker) http.Handler {
+func newHandlerWithChecks(host, token string, call caller, discover func(context.Context) any, channel *updatefeed.Channel, checker cliChecker, restart Restarter) http.Handler {
 	busy := make(chan struct{}, 1)
+	restarting := make(chan struct{}, 1)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -126,7 +128,7 @@ func newHandlerWithChecks(host, token string, call caller, discover func(context
 			http.Error(w, "cross-site request refused", http.StatusForbidden)
 			return
 		}
-		mutation := r.URL.Path == "/api/enqueue" || r.URL.Path == "/api/pause" || r.URL.Path == "/api/resume" || r.URL.Path == "/api/outbox/ack" || r.URL.Path == "/api/check-cli" || r.URL.Path == "/api/setup-claude" || r.URL.Path == "/api/setup-codex" || r.URL.Path == "/api/authorize-setup" || taskMutation(r.URL.Path)
+		mutation := r.URL.Path == "/api/enqueue" || r.URL.Path == "/api/pause" || r.URL.Path == "/api/resume" || r.URL.Path == "/api/outbox/ack" || r.URL.Path == "/api/check-cli" || r.URL.Path == "/api/setup-claude" || r.URL.Path == "/api/setup-codex" || r.URL.Path == "/api/authorize-setup" || r.URL.Path == "/api/restart-client" || taskMutation(r.URL.Path)
 		method := http.MethodGet
 		if mutation {
 			method = http.MethodPost
@@ -183,6 +185,12 @@ func newHandlerWithChecks(host, token string, call caller, discover func(context
 			// Starting app-server and creating a thread takes a few RPC rounds.
 			deadline = 100 * time.Second
 		}
+		if r.URL.Path == "/api/restart-client" {
+			// Waits for the old client to exit and the new one to confirm.
+			deadline = 45 * time.Second
+		}
+		// A long route must still be able to write its answer.
+		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(deadline + 3*time.Second))
 		ctx, cancel := context.WithTimeout(r.Context(), deadline)
 		defer cancel()
 		if mutation {
@@ -202,6 +210,10 @@ func newHandlerWithChecks(host, token string, call caller, discover func(context
 			decoder.DisallowUnknownFields()
 			if r.URL.Path == "/api/check-cli" {
 				serveCLICheck(w, r.WithContext(ctx), decoder, checker, busy)
+				return
+			}
+			if r.URL.Path == "/api/restart-client" {
+				serveRestart(w, r.WithContext(ctx), decoder, call, restart, restarting)
 				return
 			}
 			var req control.Request
@@ -355,6 +367,10 @@ func newHandlerWithChecks(host, token string, call caller, discover func(context
 		}
 		if r.URL.Path == "/api/discovery" {
 			writeJSON(w, discover(ctx))
+			return
+		}
+		if r.URL.Path == "/api/client-info" {
+			writeJSON(w, clientInfo(ctx, call, restart))
 			return
 		}
 		req := control.Request{}

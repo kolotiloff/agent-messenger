@@ -160,7 +160,7 @@ func unwrapNet(err error) error {
 	var timeout interface{ Timeout() bool }
 	switch {
 	case errors.Is(err, syscall.ECONNREFUSED):
-		return errors.New("соединение отклонено: сервер выключен или порт закрыт")
+		return errors.New("соединение отклонено: сервер не запущен или порт закрыт")
 	case errors.As(err, &dns):
 		return errors.New("такого имени компьютера нет в сети")
 	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &timeout) && timeout.Timeout():
