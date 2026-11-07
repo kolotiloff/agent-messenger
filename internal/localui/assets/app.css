@@ -340,9 +340,13 @@ body.am-native #am-concept .am-panel-toggle { margin-left:auto; }
 #am-concept .am-stop-btn:hover .am-tip, #am-concept .am-stop-btn:focus-visible .am-tip { display:inline-flex; }
 #am-concept .am-stop-btn.am-tip-off .am-tip, #am-concept .am-stop-btn:disabled .am-tip { display:none; }
 #am-concept #answer-status { margin:8px 16px 0; font-size:12px; line-height:1.45; }
-#am-concept .am-notice.am-notice-error { max-height:none; box-shadow:inset 3px 0 0 var(--am-bad); }
-#am-concept .am-notice-text { display:flex; flex-direction:column; gap:6px; min-width:0; }
-#am-concept .am-notice-command { display:block; padding:6px 8px; border-radius:6px; white-space:pre-wrap; overflow-wrap:anywhere; user-select:all; font-size:12px; }
 #am-concept #answer-status:empty { display:none; }
 #am-concept .am-compose textarea:disabled { cursor:default; }
 #am-concept .am-notice-row > button { flex:none; white-space:nowrap; }
+#am-concept .am-toasts { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; padding:var(--am-space-3) 0 0; }
+#am-concept .am-toast { display:inline-flex; align-items:center; gap:10px; max-width:min(560px,100%); padding:7px 8px 7px 14px; border:1px solid var(--am-line); border-radius:18px; background:var(--am-composer); color:var(--am-text); font-size:13px; line-height:1.35; box-shadow:0 3px 14px light-dark(#0000000f,#00000030); }
+#am-concept .am-toast-dot { flex:none; width:7px; height:7px; border-radius:50%; background:var(--am-bad); }
+#am-concept .am-toast-text { min-width:0; overflow-wrap:anywhere; }
+#am-concept .am-toast-action { flex:none; padding:4px 10px; border-radius:12px; font-size:12px; white-space:nowrap; }
+#am-concept .am-toast-close { flex:none; width:24px; height:24px; padding:0; border:0; border-radius:12px; background:transparent; color:var(--am-muted); font-size:16px; line-height:1; }
+#am-concept .am-toast-close:hover { background:var(--am-soft); color:var(--am-text); }

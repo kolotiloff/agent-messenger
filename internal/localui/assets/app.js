@@ -95,15 +95,27 @@
   // The window can be newer than the client still running in the background
   // (after an update). Say how to restart it; nothing is restarted by itself.
   function outdatedMessage(){
-    const how=view?.messenger&&view?.data_root?' Закройте Messenger, выполните в Терминале команду ниже и откройте Messenger снова.':' Закройте Messenger, остановите старый клиент командой shutdown и откройте Messenger снова.';
-    const e=Error('В фоне ещё работает клиент старой версии, он не знает этой команды.'+how);
+    const e=Error('В фоне старая версия клиента, перезапустите его');
+    e.hint='Закройте Messenger, выполните скопированную команду в Терминале и откройте Messenger снова.';
     if(view?.messenger&&view?.data_root)e.command='"'+view.messenger+'" --root "'+view.data_root+'" shutdown';
     return e;
   }
   // An error of the owner's action stays at the top until it is closed or
   // the next action succeeds; the 2 s refresh does not hide it.
   let actionError=null;
-  function showError(error){actionError=error?{text:error.message,command:error.command||''}:null;renderNotice();}
+  function showError(error){actionError=error?{text:error.message,command:error.command||'',hint:error.hint||''}:null;renderToasts();}
+  // A small chip above the input field, like a chat's status chips.
+  function renderToasts(){
+    const box=$('toasts');box.replaceChildren();box.hidden=!actionError;if(!actionError)return;
+    const chip=el('div',undefined,'am-toast am-toast-bad');chip.append(el('span',undefined,'am-toast-dot'),el('span',actionError.text,'am-toast-text'));if(actionError.hint)chip.title=actionError.hint;
+    if(actionError.command){
+      const command=actionError.command,copy=el('button','Скопировать команду','am-toast-action');copy.type='button';copy.title=command;
+      copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(command);copy.textContent='Скопировано';}catch(_){copy.textContent='Не удалось скопировать';}setTimeout(()=>copy.textContent='Скопировать команду',2000);});
+      chip.append(copy);
+    }
+    const close=el('button','×','am-toast-close');close.type='button';close.setAttribute('aria-label','Закрыть');close.addEventListener('click',()=>showError(null));chip.append(close);
+    box.append(chip);
+  }
   async function api(path,timeout=4500){
     if(!token)throw Error('Откройте приватную ссылку, которую выдала команда ui.');
     const response=await fetch(path,{headers:{Authorization:'Bearer '+token},cache:'no-store',signal:AbortSignal.timeout(timeout)});
@@ -365,7 +377,7 @@
     if(!op){op='window-'+q.id+'-'+crypto.randomUUID();remember('messenger-answer-op:'+q.id,op);}
     answering=true;answerControls();$('answer-status').textContent='Отправляем ответ…';
     try{await postAPI('/api/task-answer',{task:feed.task.id,question:q.id,op_id:op,text});showError(null);$('answer-status').textContent='Ответ записан. Исполнитель продолжит в той же сессии.';$('answer-text').value='';feedSignature='';await refresh();}
-    catch(error){$('answer-status').textContent='';showError({message:error.message+' Повтор с тем же текстом безопасен.',command:error.command});}
+    catch(error){$('answer-status').textContent='';showError({message:error.message+' Повтор с тем же текстом безопасен.',command:error.command,hint:error.hint});}
     finally{answering=false;answerControls();}
   }
   const folderIcon='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
@@ -420,13 +432,6 @@
     const none=el('button','Задач нет','am-agent-action');none.type='button';none.disabled=true;cursor.append(none);cards.append(cursor);
   }
   function renderNotice(){
-    if(actionError){
-      const box=el('div',undefined,'am-notice-row');const text=el('div',undefined,'am-notice-text');text.append(el('p',actionError.text));
-      if(actionError.command)text.append(el('code',actionError.command,'am-code am-notice-command'));
-      const close=el('button','Закрыть');close.type='button';close.addEventListener('click',()=>showError(null));
-      box.append(text,close);notice(box);$('notice').classList.add('am-notice-error');return;
-    }
-    $('notice').classList.remove('am-notice-error');
     if(!online){notice(el('p',offlineReason||'Клиент Messenger не запущен или не отвечает. Данные не обновляются.'));return;}
     if(view?.pending_launch>0&&!view.tasks_enabled){notice(el('p','Задачи записаны, но этот клиент не запускает исполнителей: он запущен без разрешения --allow-tasks.'));return;}
     if(view?.pending_launch>0&&view.paused){
