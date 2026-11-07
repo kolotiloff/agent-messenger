@@ -544,7 +544,17 @@
   const notes={host:null,member:null},noteTimers={};
   function stamp(at){const d=new Date(at);return isNaN(d.getTime())?'':d.toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});}
   function capital(text){return text?text[0].toUpperCase()+text.slice(1):'';}
-  function badge(node,text,good){node.textContent=text;node.classList.toggle('am-good',!!good);}
+  // A status reads like the agents' status: a dot and plain text. state is
+  // 'good' (green), 'bad' (red) or '' (a hollow grey dot).
+  function badge(node,text,state){node.textContent=text;node.classList.toggle('am-good',state==='good');node.classList.toggle('am-bad',state==='bad');}
+  // One button starts or stops the server; its settings are locked while it
+  // runs. Both buttons share one grid cell, so the row never changes width.
+  function renderHostToggle(){
+    if(!server)return;const running=server.host.running;
+    const on=$('host-disable'),off=$('host-enable');
+    for(const [b,shown] of [[on,running],[off,!running]]){b.setAttribute('aria-hidden',String(!shown));b.tabIndex=shown?0:-1;}
+    $('host-scope').disabled=running;$('host-port').disabled=running;
+  }
   async function loadServer(){
     if(serverBusy||serverPolling)return;
     serverPolling=true;const gen=serverGen;
@@ -573,10 +583,9 @@
   function renderServer(){
     if(!server)return;const h=server.host,m=server.member;
     const focused=document.activeElement?.dataset?.key||'';
-    badge($('host-badge'),h.running?'Работает':h.enabled?'Не запущен':'Остановлен',h.running);
+    badge($('host-badge'),h.running?'Работает':h.enabled?'Не запустился':'Остановлен',h.running?'good':h.enabled?'bad':'');
     $('host-state').textContent=!h.running?'Другие устройства смогут подключаться к этому компьютеру по одноразовому приглашению.':!h.addresses.length?'Сервер работает, но у компьютера нет адреса в локальной сети. Подключитесь к сети или выберите «Только этот компьютер».':'Принимает устройства: '+(h.scope==='lan'?'в локальной сети':'только с этого компьютера')+', порт '+h.port+'.';
     if(!serverEdited){$('host-scope').value=h.scope||'local';$('host-port').value=h.port||47100;}
-    $('host-enable').textContent=h.running?'Применить':'Запустить сервер';$('host-disable').hidden=!h.enabled&&!h.running;
     $('host-running').hidden=!h.running;
     const select=$('host-address'),current=select.value;
     if(Array.from(select.options).map(o=>o.value).join()!==h.addresses.join()){
@@ -610,8 +619,9 @@
       row.append(actions);list.append(row);
     });
     if(revoked)list.append(el('p','Отозвано устройств: '+revoked+'.','am-small am-muted'));
-    $('host-fingerprint').textContent=h.fingerprint?'Отпечаток сертификата: '+h.fingerprint.replace(/(.{4})/g,'$1 ').trim():'';
-    badge($('member-badge'),m.connected?(m.reachable?'На связи':m.checked_at?'Нет связи':'Подключено'):'Не подключено',m.connected&&m.reachable);
+    // The certificate fingerprint travels inside the invitation code and the
+    // joining computer checks it itself, so the window does not show it.
+    badge($('member-badge'),m.connected?(m.reachable?'На связи':m.checked_at?'Нет связи':'Подключено'):'Не подключено',m.connected?(m.reachable?'good':m.checked_at?'bad':''):'');
     $('member-join').hidden=m.connected;$('member-joined').hidden=!m.connected;
     $('member-state').textContent=m.connected?'Этот компьютер входит в сервер '+m.address+'.':'Вставьте код приглашения, который выдал сервер на другом компьютере.';
     if(!nameFilled&&view?.computer_name){nameFilled=true;if(!$('member-name').value)$('member-name').value=view.computer_name;}
@@ -620,14 +630,17 @@
     if(m.connected)rows.forEach(([k,v])=>{if(v){dl.append(el('dt',k),el('dd',v));}});
     const buttons=root.querySelectorAll('[data-screen=server] button');buttons.forEach(b=>b.disabled=serverBusy);
     if(!serverBusy)$('host-invite').disabled=!h.addresses.length;
+    renderHostToggle();
     syncSelects();renderNotes();
     if(focused&&document.activeElement===document.body)root.querySelector('[data-key="'+focused+'"]')?.focus();
   }
   async function serverAction(body,section,done){
     if(serverBusy)return null;
     serverBusy=true;serverGen++;
-    const focused=document.activeElement;
-    note(section,body.action==='connect'||body.action==='check'?'Связываемся с сервером…':'Выполняем…');
+    let focused=document.activeElement;
+    // Starting and stopping show their result in the status dot only, so the
+    // card does not grow and shrink around a passing message.
+    note(section,body.action==='connect'||body.action==='check'?'Связываемся с сервером…':'');
     renderServer();
     let result=null;
     try{
@@ -639,7 +652,9 @@
     }catch(error){note(section,error.message,true);}
     finally{
       serverBusy=false;serverGen++;renderServer();
-      if(focused?.isConnected&&!focused.hidden&&focused.offsetParent)focused.focus();
+      // Start and stop swap places: keep focus on the one now shown.
+      if(focused?.getAttribute('aria-hidden')==='true')focused=focused.parentElement.querySelector('[aria-hidden=false]')||focused;
+      if(focused?.isConnected&&!focused.hidden&&focused.offsetParent&&focused.getAttribute('aria-hidden')!=='true')focused.focus();
       else $(section+'-title')?.focus();
     }
     return result;
@@ -648,7 +663,7 @@
     const port=Number($('host-port').value);
     if(!Number.isInteger(port)||port<1024||port>65535){note('host','Порт должен быть от 1024 до 65535.',true);return;}
     const scope=$('host-scope').value;
-    if(await serverAction({action:'enable',scope,port},'host','Сервер запущен.')){
+    if(await serverAction({action:'enable',scope,port},'host','')){
       serverEdited=false;hideInvitation();
       if(scope==='lan')note('host',server.host.addresses.length?'Сервер запущен и слушает локальную сеть. Доступ с другого компьютера зависит от брандмауэра.':'Сервер запущен, но адреса в локальной сети у компьютера нет.',false,true);
       renderServer();
@@ -734,16 +749,17 @@
     $('app-installed-version').textContent=preview?'Предварительная версия '+preview[1]:installed?'Версия '+installed:'';
     $('app-installed-version').title=installed?'Точная версия: '+installed:'';
     const detail=typeof status?.detail==='string'?status.detail:'';
-    const failed=detail.includes('недоступен')||detail.includes('не запустилась')||detail.includes('повторить');
-    const checking=status?.checking===true;
     const waiting=detail==='Обновление загружается в фоне';
-    $('app-update-button').hidden=!version&&!failed&&!checking;
-    const label=version?'Доступно обновление':waiting?'Загружается обновление…':checking?'Проверяем обновления…':'Повторить проверку';
-    $('app-update-button').textContent=label;
-    $('app-update-button').title=version?'Доступно обновление '+version:detail;
-    $('app-update-button').setAttribute('aria-label',version?'Установить обновление '+version:checking?label:'Не удалось проверить обновления. Повторить');
-    $('app-update-button').disabled=checking&&!version;
-    $('app-update-version').hidden=true;
+    // Only an available update is shown: a short line and «Обновиться».
+    // Background checks and their failures stay quiet; the app checks again
+    // by itself.
+    const shown=!!version||waiting;
+    $('app-update-version').hidden=!shown;$('app-update-button').hidden=!shown;
+    $('app-update-version').textContent='Доступно обновление';
+    $('app-update-version').title=version?'Версия '+version:'';
+    $('app-update-button').textContent=waiting?'Загружается…':'Обновиться';
+    $('app-update-button').setAttribute('aria-label',version?'Установить обновление '+version:'Обновление загружается');
+    $('app-update-button').disabled=waiting;
   };
   $('app-update-button').addEventListener('click',()=>window.webkit?.messageHandlers?.updates?.postMessage('check'));
   root.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>show(b.dataset.tab)));
@@ -782,7 +798,7 @@
   $('host-scope').addEventListener('change',()=>{serverEdited=true;});
   $('host-port').addEventListener('input',()=>{serverEdited=true;});
   $('host-enable').addEventListener('click',enableServer);
-  $('host-disable').addEventListener('click',()=>serverAction({action:'disable'},'host','Сервер остановлен. Устройства сохранены.').then(r=>{if(r){serverEdited=false;hideInvitation();renderServer();}}));
+  $('host-disable').addEventListener('click',()=>serverAction({action:'disable'},'host','').then(r=>{if(r){serverEdited=false;hideInvitation();renderServer();}}));
   $('host-invite').addEventListener('click',invite);
   $('invite-copy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('invite-code').textContent);$('invite-copy').textContent='Скопировано';}catch(_){$('invite-copy').textContent='Выделите код и скопируйте вручную';}});
   $('member-connect').addEventListener('click',connectServer);

@@ -8,6 +8,12 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-07 (evening) by Claude Code.
+
+- **WIP, waiting for the owner's approval (branch `claude/t015-status-style`, not merged, no PR yet):** «Сервер» tab polish — every status is a dot and plain text; Доступ, Порт and one start/stop button in one row, fields locked while the server runs, «Применить» removed; no «Выполняем…» / «Сервер запущен» lines; address and «Пригласить устройство» in one row; certificate fingerprint removed from the card (it is inside the invitation code); the sidebar shows only «Доступно обновление» and «Обновиться» when an update exists. The owner reviews a static copy of the window before it goes into the next release.
+- **Verified here (Linux):** `check.sh`, headless Chromium (start/stop, locked fields, focus, all buttons 32 px). **Not verified:** the Mac window (WebKit), where the owner saw a taller «Скопировать код».
+- **Open idea:** when a member presses «Отключить», the server is not told, so the device stays listed until revoked. Ask the owner whether to notify the server.
+
 Updated 2026-11-07 (day) by Claude Code.
 
 - **Done and merged (PR #45):** T-034 failure reasons with the limit's reset time; T-031 bounded `wait`; T-032 lean `tasks` with `if_version`; window tweaks (menus stand apart from cards, green «Работает», the invitation in its own dialog).

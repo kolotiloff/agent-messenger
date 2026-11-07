@@ -328,9 +328,13 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-card dt { font-size:var(--am-text-xs); color:var(--am-muted); }
 #am-concept .am-card dd { display:flex; align-items:center; gap:var(--am-gap-control); margin:0; overflow-wrap:anywhere; }
 #am-concept .am-badge { flex:none; padding:var(--am-gap-line) var(--am-space-2); border-radius:var(--am-radius-s); background:var(--am-soft); color:var(--am-muted); font-size:var(--am-text-s); white-space:nowrap; }
-/* A running state reads like the agents' status: a green dot and green text. */
-#am-concept .am-badge.am-good { display:inline-flex; align-items:center; gap:var(--am-space-2); padding-inline:0; background:transparent; color:var(--am-good); }
-#am-concept .am-badge.am-good::before { content:""; width:7px; height:7px; border-radius:50%; background:currentColor; }
+/* A status reads like the agents' status: a dot and plain text. Neutral is a
+   hollow grey dot, like a free agent. */
+#am-concept .am-state { flex:none; display:inline-flex; align-items:center; gap:var(--am-space-2); color:var(--am-muted); font-size:var(--am-text-s); white-space:nowrap; }
+#am-concept .am-state::before { content:""; box-sizing:border-box; width:7px; height:7px; border-radius:50%; border:1.5px solid currentColor; }
+#am-concept .am-state.am-good { color:var(--am-good); }
+#am-concept .am-state.am-bad { color:var(--am-bad); }
+#am-concept .am-state:is(.am-good,.am-bad)::before { border:0; background:currentColor; }
 #am-concept .am-invite-dialog { width:min(560px,calc(100vw - 48px)); }
 #am-concept .am-q { width:20px; height:20px; min-height:20px; padding:0; border-radius:50%; font-size:var(--am-text-xs); }
 #am-concept .am-hint { display:flex; flex-direction:column; gap:var(--am-gap-control); padding:var(--am-pad-compact); border-radius:var(--am-radius-s); background:var(--am-soft); font-size:var(--am-text-s); }
@@ -347,7 +351,12 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-server-aside { grid-area:aside; position:sticky; top:0; display:flex; flex-direction:column; gap:var(--am-gap-content); }
 #am-concept .am-panel-note { padding:var(--am-space-3) var(--am-space-4); border-radius:var(--am-radius-m); background:var(--am-soft); }
 #am-concept .am-sub { display:flex; flex-direction:column; gap:var(--am-gap-content); min-width:0; }
-#am-concept .am-server-grid { display:grid; grid-template-columns:minmax(0,1fr) 120px; align-items:end; gap:var(--am-gap-content); }
+#am-concept .am-server-grid { display:grid; grid-template-columns:minmax(0,1fr) 120px auto; align-items:end; gap:var(--am-gap-content); }
+#am-concept .am-invite-row { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:end; gap:var(--am-gap-content); }
+/* Both buttons sit in one cell; the hidden one still sizes it. */
+#am-concept .am-swap { display:grid; }
+#am-concept .am-swap > button { grid-area:1/1; }
+#am-concept .am-swap > [aria-hidden=true] { visibility:hidden; }
 #am-concept .am-server .am-label { margin:var(--am-space-2) 0 0; }
 #am-concept .am-form-status { overflow-wrap:anywhere; }
 #am-concept .am-form-status:empty { display:none; }
@@ -360,7 +369,6 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-device-main { display:flex; flex-direction:column; min-width:0; }
 #am-concept .am-device-name { overflow-wrap:anywhere; }
 #am-concept .am-device .am-actions { flex:none; flex-wrap:nowrap; }
-#am-concept .am-fingerprint { font-family:var(--am-mono); overflow-wrap:anywhere; }
 #am-concept .am-server .am-check-result { grid-template-columns:max-content minmax(0,1fr); column-gap:var(--am-gap-section); row-gap:var(--am-gap-control); }
 #am-concept .am-card-head h3:focus { outline:none; }
 
@@ -411,7 +419,7 @@ body.am-native #am-concept .am-titlebar { display:none; }
   #am-concept .am-server-layout { grid-template-columns:minmax(0,570px); grid-template-areas:"aside" "main"; }
   #am-concept .am-server-aside { position:static; }
 }
-@media (max-width:520px) { #am-concept .am-server-grid { grid-template-columns:1fr; } }
+@media (max-width:520px) { #am-concept :is(.am-server-grid,.am-invite-row) { grid-template-columns:1fr; } }
 @media (max-height:700px) { #am-concept .am-main { padding-block:var(--am-space-3); } #am-concept .am-compose { padding-top:var(--am-space-2); } }
 @media (pointer:coarse) { #am-concept button { min-height:44px; } }
 @media (prefers-reduced-motion:no-preference) { #am-concept button { transition:background-color .12s ease; } }

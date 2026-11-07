@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-07 — Claude Code (T-015 «Сервер» tab polish, WIP)
+
+- Branch `claude/t015-status-style`: one status style, one-row server controls with locked fields, compact invite row, fingerprint removed, quiet update block. Waiting for the owner's look at a static preview; then PR and the next release.
+- No real model calls; Mac app not run.
+
 ## 2026-11-07 — Claude Code (T-031–T-034)
 
 - PR #45 merged: T-034 failure reasons and reset time, T-031 bounded `wait`, T-032 lean `tasks` (`if_version` instead of `if_cursor`, because starting or cancelling a task changes the list without an event), window tweaks.
