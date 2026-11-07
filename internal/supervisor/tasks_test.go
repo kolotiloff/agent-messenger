@@ -131,8 +131,9 @@ func (h *taskHarness) waitState(id string, states ...string) core.Task {
 }
 
 type loggedRun struct {
-	Args []string `json:"args"`
-	Cwd  string   `json:"cwd"`
+	Args      []string `json:"args"`
+	Cwd       string   `json:"cwd"`
+	WorkerRun string   `json:"worker_run"`
 }
 
 func (h *taskHarness) runs() []loggedRun {
@@ -211,6 +212,10 @@ func TestTaskWorkerReportsAndIsVerified(t *testing.T) {
 			runs := h.runs()
 			if len(runs) != 1 || runs[0].Cwd != h.folder {
 				t.Fatalf("runs %+v", runs)
+			}
+			// D-050: the coordinator server lists no tools inside a worker run.
+			if runs[0].WorkerRun == "" {
+				t.Fatal("the worker run is not marked")
 			}
 			if provider == "claude" && !hasArgs(runs[0].Args, "--session-id", task.SessionID) {
 				t.Fatalf("Claude did not get its recorded id: %v", runs[0].Args)

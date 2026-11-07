@@ -13,6 +13,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/kolotiloff/agent-messenger/internal/adapters"
 	"github.com/kolotiloff/agent-messenger/internal/core"
 )
 
@@ -507,10 +508,19 @@ func CoordinatorMain(dbPath string, args []string) error {
 	if !core.ValidProjectName(project) {
 		return errors.New("coordinator requires --project NAME")
 	}
+	return runCoordinator(dbPath, project, os.Getenv(adapters.WorkerRunVariable), os.Stdin, os.Stdout)
+}
+
+func runCoordinator(dbPath, project, workerRun string, in io.Reader, out io.Writer) error {
+	if workerRun != "" {
+		// Started by a worker that loaded the owner's coordinator connection
+		// from the project folder: no tools, no database, no "connected" mark.
+		return serveTask(nil, "", "", in, out)
+	}
 	store, err := core.Open(dbPath)
 	if err != nil {
 		return err
 	}
 	defer store.Close()
-	return ServeCoordinator(store, project, os.Stdin, os.Stdout)
+	return ServeCoordinator(store, project, in, out)
 }

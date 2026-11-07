@@ -74,7 +74,7 @@ Replies of the persistent Claude, Codex and one-shot paths are published only af
 
 ## Coordinator (T-025)
 
-The coordinator is the owner's chat with Messenger connected as an MCP server for one project (D-026):
+The coordinator is the owner's chat with Messenger connected as an MCP server for one project (D-026). The window connects it by itself (D-050, T-039): right after a project is created, or on «Подключить к Claude», the client runs the command below in the project folder with the registered Claude Code program, and checks `~/.claude.json` for the result. The owner then opens a new chat in that folder. The same command, for doing it by hand:
 
 ```sh
 cd ~/Projects/Game
@@ -120,7 +120,7 @@ The window observes tasks; the owner talks to the coordinator in the Claude app 
   - **Task feed.** The coordinator's text and answers, and the owner's answers, are shown as outgoing bubbles. The worker's text, its tool actions (collapsible lines from the CLI event stream, stored in `task_run_items`, at most 400 per run), its report or question with a delivery note, and the outcome of a failed, blocked, interrupted or cancelled run are shown in order.
   - **Header.** Title, then the agent with its model when one was chosen, the computer and the folder, then the status line.
   - **Input field and stop button.** While a task is active the field is shown with a square stop button, like a chat ("Остановить", Esc). Stop cancels the task at once (no second confirmation), through the same `CancelTask` path as the coordinator. The field accepts text only while the worker waits for the owner; otherwise it reads "Исполнитель работает…" or "Задача ждёт запуска…". Enter sends, Shift+Enter makes a new line. An answer uses a stable `op_id` stored per question, so a retry cannot answer twice.
-  - **First steps.** Without a project, the window offers to create one. Without a connected coordinator and with no tasks, it shows the `claude mcp add …` command with a copy button.
+  - **First steps.** Without a project, the window offers to create one. Without a connected coordinator and with no tasks, it shows whether Claude has the project (connected, not yet, Claude Code not set up under «Агенты», another `messenger` entry, or the last attempt's error) with a «Подключить к Claude» button; the `claude mcp add …` command stays available under «Подключить вручную через Терминал».
   - **Notices.** One says that tasks are recorded but the client runs without `--allow-tasks`; the client the window starts always allows tasks (D-029), so this shows only for a client started by hand. Another says that the queue is paused, with "Продолжить".
 - **"Агенты" tab.**
   - The project folder bar: icon, label, path and "Изменить".

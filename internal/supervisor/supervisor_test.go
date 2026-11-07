@@ -29,6 +29,9 @@ func TestMain(m *testing.M) {
 		}
 		os.Exit(0)
 	}
+	if mode := os.Getenv("MESSENGER_CLAUDE_MCP_FIXTURE"); mode != "" {
+		os.Exit(fakeClaudeMCP(mode))
+	}
 	if mode := os.Getenv("MESSENGER_TASK_FIXTURE"); mode != "" {
 		os.Exit(taskWorkerFixture(mode))
 	}

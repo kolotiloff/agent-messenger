@@ -22,6 +22,12 @@ import (
 // TaskEnvVariable names the variable that carries a Cursor run to its tools.
 const TaskEnvVariable = "AGENT_MESSENGER_TASK"
 
+// WorkerRunVariable marks every worker run's environment (D-050). A worker
+// opened in the project folder may load the owner's coordinator connection;
+// the coordinator server lists no tools when it sees this variable, so a
+// worker can never start or answer tasks.
+const WorkerRunVariable = "AGENT_MESSENGER_WORKER_RUN"
+
 // TaskEnv returns the extra environment of a worker run: only a Cursor run
 // needs one.
 func TaskEnv(s TaskRunSpec) []string {

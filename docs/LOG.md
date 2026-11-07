@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-07 — Claude Code (T-039 coordinator without Terminal)
+
+- The owner asked not to type the `claude mcp add` command. Branch `claude/t039-connect-coordinator`: the window connects the coordinator by itself after a project is created and on «Подключить к Claude» (D-050). Every worker run is marked so the coordinator server gives it no tools.
+- Verified on Linux with a fake Claude CLI: unit tests (connect, already connected, another entry kept, failure shown once and not retried, no Claude agent), and an end-to-end run of the built program in a browser: a new project was connected, the entry in `~/.claude.json` started the coordinator, which answered `list_agents`; an error from Claude was shown with its message. Not verified: the real Claude Code, Windows, Mac.
+
 ## 2026-11-07 — Claude Code (T-012 Cursor names)
 
 - The owner saw «cursor» in lower case under a computer in the sidebar. Fixed: the sidebar's short names, the task list's agent filter (it had no Cursor, so the Cursor card's «Задачи» link selected nothing), the `agent-set` help, and the `check-cli` line, which now prints «Claude Code», «Codex», «Cursor». A new test requires a proper name for every task agent in each of the window's name lists and in the filter.
