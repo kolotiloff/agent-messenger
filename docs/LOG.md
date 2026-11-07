@@ -5,7 +5,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 ## 2026-11-07 — Claude Code (T-040 faster release)
 
 - The owner found a release too slow (about 15 minutes). The Mac checks ran only after the Windows and Linux job. Branch `claude/t040-faster-release`: a separate «Mac checks» job runs next to it, and «Build, sign and publish» waits for both. The checks themselves are kept. Expected: about 10 minutes. Not verified until the next release run.
-- PR #59 (T-039) merged; preview.34 release started (run 42396560953).
+- PR #59 (T-039) merged; preview.34 released (run 42396560953, 21 assets). Checked here: the Linux x64 download, its SHA-256 and `version`.
 
 ## 2026-11-07 — Claude Code (T-039 coordinator without Terminal)
 
