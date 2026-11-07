@@ -13,7 +13,7 @@ How to use it:
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
-| T-039 | The window connects the coordinator chat to Claude by itself (D-050): no Terminal command. Left: the owner's test with the real Claude Code on Mac, Windows and Linux (that `claude mcp add` writes the entry where Messenger reads it, and a new chat sees the tools). | owner | PR #59, preview.34 |
+| T-039 | The window connects the coordinator chat to Claude by itself (D-050): no Terminal command. Done on Mac with the real Claude Code in preview.34 (2026-11-07): the window connected it, and the coordinator gave tasks to Cursor. Left: Windows and Linux. | owner | PR #59, preview.34 |
 | T-038 | Windows and Linux update themselves from the window, from signed releases (D-048); plain downloads behind README buttons (D-047). Left: the owner's test of a real update preview.33 → preview.34 on Windows and Linux (preview.34 is out). | owner | PR #54, preview.33 |
 | T-016 | Windows and Linux: job-object process groups on Windows (D-043), `.exe` agents only (D-044), the window in the browser (`messenger open`) and zip/tar.gz archives in every release (D-045), Windows CI. Left: the owner's test on real Windows and Linux computers; installer and code signing there (self-update: T-038). | owner | PR #52, preview.32 |
 | T-015 | Done: broker hosted by the client, invitations, joining, check, devices and revoke, the «Сервер» tab ([BROKER.md](BROKER.md), D-033–D-035), computers with agents in the sidebar (T-035), tasks between computers (T-037). Left: Keychain (Q-013). | agent + owner | — |
@@ -32,7 +32,7 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 |---|---|---|---|
 | T-010 | Safely terminate a CLI and release its session within the same Mac boot. This is an open research problem: release by timer, empty process group or one exited PID is not allowed. | agent | see [RELEASE_PLAN.md](RELEASE_PLAN.md) |
 | T-011 | Switch the version of a running background client, plus full rollback. | agent | see [UPDATES.md](UPDATES.md) |
-| T-012 | Cursor as a task worker (D-049): runs, questions and answers, models, the «Агенты» card. Persistent Cursor adapter is not needed (D-021). Left: the owner's test with the real Cursor CLI on Mac or Linux; Windows (`.cmd`). | owner | PR #55 (in #54), preview.33 |
+| T-012 | Cursor as a task worker (D-049): runs, questions and answers, models, the «Агенты» card. Persistent Cursor adapter is not needed (D-021). Done on Mac: the owner's real Cursor ran a task from the Claude coordinator and reported back (2026-11-07). Left: Linux; Windows (`.cmd`). | owner | PR #55 (in #54), preview.33 |
 | T-013 | Developer ID signing and notarization of the Mac app. | owner | blocked: Q-003 |
 | T-014 | Intel Mac build and acceptance. | agent + owner | |
 | T-017 | Coordinator role handover. Stage 6. | agent | |
