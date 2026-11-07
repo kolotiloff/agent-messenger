@@ -554,3 +554,72 @@ func (s *Service) ReportPresence(ctx context.Context) {
 	}
 	s.peers, s.peersAt = peers, time.Now()
 }
+
+// Network is the network this computer exchanges tasks in: the broker it
+// hosts, or else the broker it joined. Self is this computer's ID there.
+type Network struct {
+	BrokerID string
+	Self     string
+}
+
+// ErrNetworkChanged means the network changed while a message was on its
+// way; nothing was sent or read.
+var ErrNetworkChanged = errors.New("сеть изменилась")
+
+// Network returns the current network, if any.
+func (s *Service) Network() (Network, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.networkLocked()
+}
+
+func (s *Service) networkLocked() (Network, bool) {
+	if s.broker != nil {
+		return Network{BrokerID: s.broker.ID(), Self: HostPeer}, true
+	}
+	if s.member != nil {
+		return Network{BrokerID: s.member.BrokerID, Self: s.member.DeviceID}, true
+	}
+	return Network{}, false
+}
+
+// Send sends a message to another computer of the network n.
+func (s *Service) Send(ctx context.Context, n Network, to, opID string, body []byte) error {
+	s.mu.Lock()
+	current, ok := s.networkLocked()
+	if !ok || current != n {
+		s.mu.Unlock()
+		return ErrNetworkChanged
+	}
+	if s.broker != nil {
+		b := s.broker
+		s.mu.Unlock()
+		return b.Send(HostPeer, to, opID, body)
+	}
+	c := *s.member
+	s.mu.Unlock()
+	call, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	return SendMessage(call, c, to, opID, body)
+}
+
+// Inbox acknowledges this computer's messages up to after and returns the
+// next ones from the network n.
+func (s *Service) Inbox(ctx context.Context, n Network, after int64) ([]Message, error) {
+	s.mu.Lock()
+	current, ok := s.networkLocked()
+	if !ok || current != n {
+		s.mu.Unlock()
+		return nil, ErrNetworkChanged
+	}
+	if s.broker != nil {
+		b := s.broker
+		s.mu.Unlock()
+		return b.Inbox(HostPeer, after)
+	}
+	c := *s.member
+	s.mu.Unlock()
+	call, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	return ReadInbox(call, c, after)
+}

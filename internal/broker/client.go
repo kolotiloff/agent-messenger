@@ -147,11 +147,22 @@ func call(ctx context.Context, client *http.Client, method, address, path, key s
 	}
 	defer resp.Body.Close()
 	if out != nil && resp.StatusCode == http.StatusOK {
-		if err := json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(out); err != nil {
+		if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponse)).Decode(out); err != nil {
 			return resp.StatusCode, errors.New("сервер ответил непонятно")
 		}
 	}
+	if fail, ok := out.(*apiError); ok && resp.StatusCode != http.StatusOK {
+		_ = json.NewDecoder(io.LimitReader(resp.Body, 4<<10)).Decode(fail)
+	}
 	return resp.StatusCode, nil
+}
+
+// maxResponse bounds an answer: a full inbox batch of the largest messages.
+const maxResponse = InboxBatch*MaxMessageBody + 64<<10
+
+// apiError is the broker's {"error": ...} answer.
+type apiError struct {
+	Error string `json:"error"`
 }
 
 // unwrapNet says in plain words why a server could not be reached.
@@ -264,4 +275,49 @@ func Report(ctx context.Context, c Connection, p Presence) ([]Peer, error) {
 		out.Peers = []Peer{}
 	}
 	return out.Peers, nil
+}
+
+// SendMessage stores a message for another computer of the broker. It is
+// safe to send the same opID again after a lost answer.
+func SendMessage(ctx context.Context, c Connection, to, opID string, body []byte) error {
+	var fail apiError
+	code, err := call(ctx, pinnedClient(c.Fingerprint), http.MethodPost, c.Address, "/v1/send", c.DeviceKey, sendRequest{To: to, OpID: opID, Body: json.RawMessage(body)}, &fail)
+	if err != nil {
+		return err
+	}
+	switch {
+	case code == http.StatusOK:
+		return nil
+	case code == http.StatusUnauthorized:
+		return ErrRevoked
+	case code == http.StatusNotFound && fail.Error == "recipient":
+		return ErrRecipient
+	case code == http.StatusNotFound:
+		return ErrNoMailbox
+	case code == http.StatusTooManyRequests:
+		return ErrMailboxFull
+	}
+	return fmt.Errorf("сервер не принял сообщение (код %d)", code)
+}
+
+// ReadInbox acknowledges this device's messages up to after and returns the
+// next ones.
+func ReadInbox(ctx context.Context, c Connection, after int64) ([]Message, error) {
+	var out inboxResponse
+	code, err := call(ctx, pinnedClient(c.Fingerprint), http.MethodPost, c.Address, "/v1/inbox", c.DeviceKey, inboxRequest{After: after}, &out)
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case code == http.StatusUnauthorized:
+		return nil, ErrRevoked
+	case code == http.StatusNotFound:
+		return nil, ErrNoMailbox
+	case code != http.StatusOK || out.BrokerID != c.BrokerID || out.DeviceID != c.DeviceID:
+		return nil, fmt.Errorf("сервер не выдал сообщения (код %d)", code)
+	}
+	if out.Messages == nil {
+		out.Messages = []Message{}
+	}
+	return out.Messages, nil
 }
