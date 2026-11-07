@@ -1,0 +1,230 @@
+package broker
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"regexp"
+	"strings"
+	"time"
+)
+
+// InvitePrefix starts every invitation code.
+const InvitePrefix = "am1:"
+
+var (
+	hexKey     = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	brokerID   = regexp.MustCompile(`^brk-[0-9a-f]{16}$`)
+	deviceID   = regexp.MustCompile(`^dev-[0-9a-f]{16}$`)
+	errAddress = errors.New("адрес сервера должен быть вида хост:порт")
+)
+
+// Invitation is what a device needs to join a broker. It is shown to the
+// owner once and is valid for InviteTTL.
+type Invitation struct {
+	Address     string `json:"a"`
+	BrokerID    string `json:"b"`
+	Fingerprint string `json:"f"`
+	Secret      string `json:"s"`
+}
+
+func (i Invitation) String() string {
+	raw, _ := json.Marshal(i)
+	return InvitePrefix + base64.RawURLEncoding.EncodeToString(raw)
+}
+
+// ParseInvitation reads an invitation code.
+func ParseInvitation(code string) (Invitation, error) {
+	var i Invitation
+	bad := errors.New("это не приглашение Messenger: скопируйте код целиком")
+	rest, ok := strings.CutPrefix(strings.TrimSpace(code), InvitePrefix)
+	if !ok || rest == "" || len(rest) > 1024 {
+		return i, bad
+	}
+	raw, err := base64.RawURLEncoding.Strict().DecodeString(rest)
+	if err != nil {
+		return i, bad
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&i) != nil || decoder.Decode(new(any)) != io.EOF || !brokerID.MatchString(i.BrokerID) || !hexKey.MatchString(i.Fingerprint) || !hexKey.MatchString(i.Secret) {
+		return Invitation{}, bad
+	}
+	if err := validAddress(i.Address); err != nil {
+		return Invitation{}, err
+	}
+	return i, nil
+}
+
+func validAddress(address string) error {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil || host == "" || port == "" || len(address) > 255 || strings.ContainsAny(address, "/?#@ ") {
+		return errAddress
+	}
+	return nil
+}
+
+// Connection is this device's membership in a broker. DeviceKey is a secret.
+type Connection struct {
+	Address     string `json:"address"`
+	BrokerID    string `json:"broker_id"`
+	Fingerprint string `json:"fingerprint"`
+	DeviceID    string `json:"device_id"`
+	DeviceKey   string `json:"device_key"`
+	DeviceName  string `json:"device_name"`
+	ConnectedAt string `json:"connected_at"`
+}
+
+// Valid reports whether a stored connection is well formed.
+func (c Connection) Valid() bool {
+	return validAddress(c.Address) == nil && brokerID.MatchString(c.BrokerID) && hexKey.MatchString(c.Fingerprint) && deviceID.MatchString(c.DeviceID) && hexKey.MatchString(c.DeviceKey)
+}
+
+// pinnedClient trusts exactly one certificate: the one whose SHA-256 is
+// fingerprint. Host names are not used for trust; the pin replaces them.
+func pinnedClient(fingerprint string) *http.Client {
+	verify := func(raw [][]byte, _ [][]*x509.Certificate) error {
+		if len(raw) == 0 {
+			return ErrUntrusted
+		}
+		sum := sha256.Sum256(raw[0])
+		if hex.EncodeToString(sum[:]) != fingerprint {
+			return ErrUntrusted
+		}
+		return nil
+	}
+	transport := &http.Transport{
+		Proxy:                 nil,
+		DialContext:           (&net.Dialer{Timeout: 8 * time.Second}).DialContext,
+		TLSHandshakeTimeout:   8 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Second,
+		DisableKeepAlives:     true,
+		// InsecureSkipVerify only turns off the CA and host name check; the
+		// certificate is still verified against the pinned fingerprint.
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true, VerifyPeerCertificate: verify, MinVersion: tls.VersionTLS13},
+	}
+	return &http.Client{Transport: transport, Timeout: 20 * time.Second}
+}
+
+// call makes one request. A pin mismatch is ErrUntrusted; an unreachable
+// server is a plain error that says so.
+func call(ctx context.Context, client *http.Client, method, address, path, key string, body any, out any) (int, error) {
+	var reader io.Reader
+	if body != nil {
+		raw, err := json.Marshal(body)
+		if err != nil {
+			return 0, err
+		}
+		reader = bytes.NewReader(raw)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, "https://"+address+path, reader)
+	if err != nil {
+		return 0, errAddress
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if key != "" {
+		req.Header.Set("Authorization", "Bearer "+key)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		if errors.Is(err, ErrUntrusted) {
+			return 0, ErrUntrusted
+		}
+		return 0, fmt.Errorf("сервер %s недоступен: %w", address, unwrapNet(err))
+	}
+	defer resp.Body.Close()
+	if out != nil && resp.StatusCode == http.StatusOK {
+		if err := json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(out); err != nil {
+			return resp.StatusCode, errors.New("сервер ответил непонятно")
+		}
+	}
+	return resp.StatusCode, nil
+}
+
+func unwrapNet(err error) error {
+	var op *net.OpError
+	if errors.As(err, &op) && op.Err != nil {
+		return op.Err
+	}
+	return err
+}
+
+// identify checks that the server is the expected broker and speaks this
+// protocol, before anything secret is sent.
+func identify(ctx context.Context, client *http.Client, address, expected string) error {
+	var h hello
+	code, err := call(ctx, client, http.MethodGet, address, "/v1/hello", "", nil, &h)
+	if err != nil {
+		return err
+	}
+	if code != http.StatusOK {
+		return errors.New("по этому адресу отвечает не сервер Messenger")
+	}
+	if h.BrokerID != expected {
+		return ErrIdentity
+	}
+	if h.Protocol != Protocol {
+		return fmt.Errorf("версия сервера (%d) не совпадает с этой программой (%d): обновите обе стороны", h.Protocol, Protocol)
+	}
+	return nil
+}
+
+// Register joins the broker named by the invitation. The certificate and
+// the broker identity are checked before the invitation secret is sent.
+func Register(ctx context.Context, inv Invitation, name string) (Connection, error) {
+	client := pinnedClient(inv.Fingerprint)
+	if err := identify(ctx, client, inv.Address, inv.BrokerID); err != nil {
+		return Connection{}, err
+	}
+	var out registerResponse
+	code, err := call(ctx, client, http.MethodPost, inv.Address, "/v1/register", "", registerRequest{Secret: inv.Secret, Name: strings.TrimSpace(name)}, &out)
+	if err != nil {
+		return Connection{}, err
+	}
+	switch code {
+	case http.StatusOK:
+	case http.StatusForbidden:
+		return Connection{}, ErrInvitation
+	case http.StatusBadRequest:
+		return Connection{}, fmt.Errorf("имя устройства: 1..%d символов в одну строку", MaxDeviceName)
+	default:
+		return Connection{}, fmt.Errorf("сервер не смог зарегистрировать устройство (код %d)", code)
+	}
+	c := Connection{Address: inv.Address, BrokerID: inv.BrokerID, Fingerprint: inv.Fingerprint, DeviceID: out.DeviceID, DeviceKey: out.DeviceKey, DeviceName: strings.TrimSpace(name), ConnectedAt: time.Now().UTC().Format(time.RFC3339)}
+	if out.BrokerID != inv.BrokerID || !c.Valid() {
+		return Connection{}, errors.New("сервер ответил непонятно")
+	}
+	return c, nil
+}
+
+// Check asks the broker whether this device is still a member.
+func Check(ctx context.Context, c Connection) (PingResult, error) {
+	client := pinnedClient(c.Fingerprint)
+	if err := identify(ctx, client, c.Address, c.BrokerID); err != nil {
+		return PingResult{}, err
+	}
+	var out PingResult
+	code, err := call(ctx, client, http.MethodGet, c.Address, "/v1/ping", c.DeviceKey, nil, &out)
+	if err != nil {
+		return PingResult{}, err
+	}
+	if code == http.StatusUnauthorized {
+		return PingResult{}, ErrRevoked
+	}
+	if code != http.StatusOK || out.BrokerID != c.BrokerID {
+		return PingResult{}, fmt.Errorf("сервер не подтвердил устройство (код %d)", code)
+	}
+	return out, nil
+}

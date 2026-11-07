@@ -175,6 +175,10 @@ func newHandlerWithChecks(host, token string, call caller, discover func(context
 		if r.URL.Path == "/api/check-cli" {
 			deadline = 20 * time.Second
 		}
+		if r.URL.Path == "/api/server-action" {
+			// Joining or checking a server goes over the network.
+			deadline = 30 * time.Second
+		}
 		if r.URL.Path == "/api/setup-codex" {
 			// Starting app-server and creating a thread takes a few RPC rounds.
 			deadline = 100 * time.Second
@@ -230,6 +234,10 @@ func newHandlerWithChecks(host, token string, call caller, discover func(context
 					w.Header().Set("Content-Type", "application/json; charset=utf-8")
 					w.WriteHeader(http.StatusConflict)
 					writeJSON(w, map[string]any{"ok": false, "state": "rejected", "detail": response.Error})
+					return
+				}
+				if len(response.Overview) > 0 {
+					writeJSON(w, map[string]any{"ok": true, "action": req.Cmd, "result": response.Overview})
 					return
 				}
 				writeJSON(w, map[string]any{"ok": true, "action": req.Cmd})
@@ -357,6 +365,8 @@ func newHandlerWithChecks(host, token string, call caller, discover func(context
 			req.Cmd = "status"
 		case "/api/overview":
 			req.Cmd = "overview"
+		case "/api/server":
+			req.Cmd, req.Action = "server", "status"
 		case "/api/window":
 			req.Cmd = "window-view"
 			req.Alias = r.URL.Query().Get("project")
@@ -418,7 +428,7 @@ func newHandlerWithChecks(host, token string, call caller, discover func(context
 			status := *response.Status
 			status.Detail = ""
 			writeJSON(w, status)
-		case "overview", "window-view", "task-feed":
+		case "overview", "window-view", "task-feed", "server":
 			writeRaw(w, response.Overview)
 		case "timeline":
 			writeRaw(w, response.Timeline)
@@ -444,9 +454,12 @@ func writeJSON(w http.ResponseWriter, value any) {
 	writeRaw(w, raw)
 }
 
+// serverActions are the window's server settings actions.
+var serverActions = map[string]bool{"enable": true, "disable": true, "invite": true, "revoke": true, "connect": true, "check": true, "disconnect": true}
+
 func taskMutation(path string) bool {
 	switch path {
-	case "/api/project-create", "/api/project-folder", "/api/task-answer", "/api/agent-set", "/api/task-cancel":
+	case "/api/project-create", "/api/project-folder", "/api/task-answer", "/api/agent-set", "/api/task-cancel", "/api/server-action":
 		return true
 	}
 	return false
@@ -477,6 +490,23 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 			return control.Request{}, false
 		}
 		return control.Request{Cmd: "task-owner-answer", MessageID: in.Task, ConversationID: in.Question, Confirmation: in.OpID, Text: in.Text}, true
+	case "/api/server-action":
+		var in struct {
+			Action  string `json:"action,omitempty"`
+			Scope   string `json:"scope,omitempty"`
+			Port    int    `json:"port,omitempty"`
+			Address string `json:"address,omitempty"`
+			Device  string `json:"device,omitempty"`
+			Code    string `json:"code,omitempty"`
+			Name    string `json:"name,omitempty"`
+		}
+		if decoder.Decode(&in) != nil || !serverActions[in.Action] || len(in.Scope) > 16 || in.Port < 0 || in.Port > 65535 || len(in.Address) > 255 || len(in.Device) > 64 || len(in.Code) > 2048 || len(in.Name) > 256 {
+			return control.Request{}, false
+		}
+		action := in.Action
+		in.Action = ""
+		payload, _ := json.Marshal(in)
+		return control.Request{Cmd: "server", Action: action, Text: string(payload)}, true
 	case "/api/task-cancel":
 		var in struct {
 			Task string `json:"task"`
