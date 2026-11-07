@@ -107,7 +107,7 @@
   // A small chip above the input field, like a chat's status chips.
   function renderToasts(){
     const box=$('toasts');box.replaceChildren();box.hidden=!actionError;if(!actionError)return;
-    const chip=el('div',undefined,'am-toast am-toast-bad');chip.append(el('span',undefined,'am-toast-dot'),el('span',actionError.text,'am-toast-text'));if(actionError.hint)chip.title=actionError.hint;
+    const chip=el('div',undefined,'am-toast am-toast-bad');chip.append(el('span',actionError.text,'am-toast-text'));if(actionError.hint)chip.title=actionError.hint;
     if(actionError.command){
       const command=actionError.command,copy=el('button','Скопировать команду','am-toast-action');copy.type='button';copy.title=command;
       copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(command);copy.textContent='Скопировано';}catch(_){copy.textContent='Не удалось скопировать';}setTimeout(()=>copy.textContent='Скопировать команду',2000);});
