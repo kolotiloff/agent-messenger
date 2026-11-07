@@ -2,17 +2,31 @@
 
 This file is the shared memory between tools (Claude Code, Cursor, Codex). Whoever stops working updates the **Current state** section; whoever starts reads it first. Tasks live in [TASKS.md](TASKS.md), decisions in [DECISIONS.md](DECISIONS.md), open questions in [QUESTIONS.md](QUESTIONS.md), the work history in [LOG.md](LOG.md).
 
-## Owner's standing instruction for the night of 2026-11-06 → 07
+## Owner's standing instruction for the night of 2026-11-07
 
-The owner is asleep and asked the agent to work **fully autonomously until morning** on branch `claude/task-core-night` (PR #36 into `claude/vigilant-darwin-34d88b`), in this order: T-022, T-024, T-025, T-026, T-029.
-- Do not stop to ask. Make decisions, choose the most cautious option, and record questions in `QUESTIONS.md` and in the PR.
-- Tests that need the owner (Mac, real models) come after the whole program is built. Build everything first; automated tests use fake CLIs only.
-- After each task: `scripts/check.sh`, push, update the PR description.
-- In the morning: update this section, `TASKS.md` and `LOG.md`, and write the owner a plain Russian summary.
+The owner asked the agent to finish the program without them ("доделай бе меня полностью"), update the documentation on GitHub and clean out old code. Same rules as before: fake CLIs only, no real models, no Cursor, `active-runs.json` untouched, nothing retried on an unclear result, questions go to `QUESTIONS.md` with the most cautious option chosen. Removing the persistent paths (T-028) still needs the owner's explicit consent (Q-012).
 
 ## Current state
 
-Updated 2026-11-07 (night) by Claude Code.
+Updated 2026-11-07 (second night) by Claude Code.
+
+- **T-027 first run done with the owner on preview.23** (real models on the Mac): a Codex task and a Claude task with two owner questions, both verified and reported to the Claude-app coordinator through `wait`. Q-010 answered (ToolSearch works), Q-011 and Q-009 answered (D-028, D-029).
+- **preview.24** (branch `claude/t027-window-fixes`, merged into `main`) contains everything found in that run:
+  - Claude workers may edit files (`acceptEdits`, D-028);
+  - the window's client allows tasks and resumes itself (D-029), so no terminal commands are needed;
+  - a chat-like stop button (square button in the input field, Esc; D-031);
+  - the coordinator may choose the worker's model (D-030), shown in the task header;
+  - window fixes: Enter sends, no horizontal scroll, one line per program in the computer card, "Ждёт запуска" for unlaunched runs, duration from launch, code blocks and tool lines in worker text, specific error texts instead of "client unavailable";
+  - a relative `--root` now works;
+  - cleanup: unused code and `experiments/` removed (D-032).
+- **Verified here (Linux):** `check.sh`, `check-builds.sh`, all tests with fake CLIs (including the model reaching both the first and the resumed run), the window in headless Chromium (stop by click and by Esc, light and dark), `check-desktop.py`. CI on Linux and macOS (includes the Mac app build).
+- **Not verified:** the new build on the owner's Mac and with real models (stop of a running worker, model choice, Claude editing files).
+- **Next:**
+  1. The owner updates to preview.24 ("Проверить обновления"). If the window still shows the old behaviour, the old client is still running: quit the app, run `"$HOME/Applications/Agent Messenger.app/Contents/Resources/messenger" --root "$HOME/Library/Application Support/AgentMessenger" shutdown`, and open the app again.
+  2. Finish T-027: one more Claude task that edits a file, one stop of a running worker, one task with a chosen model.
+  3. Q-012, then T-028.
+
+Previous update 2026-11-07 (first night) by Claude Code.
 
 - **Built overnight** on `claude/task-core-night` ([PR #36](https://github.com/kolotiloff/agent-messenger/pull/36), into `claude/vigilant-darwin-34d88b`): T-022, T-024, T-025, T-026 and T-029. The task model now works end to end on one computer. Details are in [TASK_MODEL.md](TASK_MODEL.md).
   - projects and folders;

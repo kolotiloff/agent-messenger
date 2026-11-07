@@ -194,27 +194,6 @@ func forgetRunID(id string) error {
 	return saveRuns(kept)
 }
 
-func forgetRun(pid int) error {
-	runs, err := loadRuns()
-	if err != nil {
-		return err
-	}
-	kept := runs[:0]
-	for _, run := range runs {
-		if run.PID != pid {
-			kept = append(kept, run)
-		}
-	}
-	return saveRuns(kept)
-}
-
-func rootRun(root string, spec Spec, obs platform.Observation) recordedRun {
-	return recordedRun{
-		Root: root, PID: obs.PID, PGID: obs.PGID, StartToken: obs.StartToken, BootID: obs.BootID,
-		Provider: spec.Provider, Environment: spec.Environment, ConversationID: spec.ConversationID,
-	}
-}
-
 // runBlocks reports whether a reservation must keep other data directories from starting.
 // A missing PID, an observation error, or a dead parent with a live process group all block.
 // An empty process group is still not proof that a detached descendant has stopped.

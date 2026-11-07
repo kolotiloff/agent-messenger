@@ -230,12 +230,6 @@ func (o *codexOwners) closeAll() {
 	}
 }
 
-func (o *codexOwners) count() int {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	return len(o.owners)
-}
-
 func newSetupID() (string, error) {
 	id, err := newRunID()
 	if err != nil {

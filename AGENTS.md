@@ -14,7 +14,7 @@ Agent Messenger lets coding agents (Claude Code, Codex, Cursor Agent CLI) exchan
   - `internal/platform` — OS-specific process, lock and boot-identity code.
 - `desktop/macos` — native Swift/AppKit shell with Sparkle updates.
 - `design/v1` — frozen, user-approved design with checksums. Do not edit it.
-- `experiments/` — early research stands (Python and Go). Not the product.
+- Early research stands (Python and Go) were removed from the tree; they stay in git history and are linked from [docs/README.md](docs/README.md).
 - `docs/` — design, contracts and plans; `docs/reports/` — dated acceptance reports.
 
 ## Checks

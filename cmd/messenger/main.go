@@ -482,12 +482,3 @@ func fail(err error) {
 	fmt.Fprintln(os.Stderr, err)
 	os.Exit(1)
 }
-
-func hasFlag(args []string, flag string) bool {
-	for _, arg := range args {
-		if arg == flag {
-			return true
-		}
-	}
-	return false
-}

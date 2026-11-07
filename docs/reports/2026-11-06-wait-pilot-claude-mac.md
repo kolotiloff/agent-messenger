@@ -1,6 +1,6 @@
 # T-023 wait pilot: Claude app on the Mac
 
-Date: 2026-11-06. Branch `claude/vigilant-darwin-34d88b`, pilot at `0ae9182` ([experiments/wait_probe](../../experiments/wait_probe/README.md)). Run by the owner on a MacBook Pro (arm64), guided from a cloud session. Go 1.27.3 was downloaded into `~/AgentMessengerTest/go-sdk` only to build the probe.
+Date: 2026-11-06. Branch `claude/vigilant-darwin-34d88b`, pilot at `0ae9182` ([experiments/wait_probe](https://github.com/kolotiloff/agent-messenger/tree/41e0e6e7e3f20275d480f6b064a881e7b5f4cf9e/experiments/wait_probe/README.md)). Run by the owner on a MacBook Pro (arm64), guided from a cloud session. Go 1.27.3 was downloaded into `~/AgentMessengerTest/go-sdk` only to build the probe.
 
 Question: can a coordinator chat in the Claude desktop app wait for worker reports through a blocking MCP tool, wake by itself when a report arrives, and keep going? ([RETHINK.md](../RETHINK.md) version 3, [review](../RETHINK_REVIEW_V3.md) section 5, first slice.)
 

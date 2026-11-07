@@ -27,9 +27,11 @@ messenger --root DIR serve --allow-tasks
 1. **Start.** `StartTask` records the task and the launch intent of its first run in one transaction. Nothing is launched at this point.
    - **Idempotent.** It is keyed by `(project, op_id)`: a repeated call returns the same task, and the same `op_id` with different arguments is refused.
    - **Session ID.** A Claude task gets a new session UUID here. A Codex task gets its thread ID from the first run's events.
+   - **Model (D-030).** An optional model name chosen by the coordinator is stored on the task (`tasks.model`) and is part of the idempotency key. Every run of the task gets it: Claude `--model NAME`, Codex `-c model="NAME"`. A name must match `^[A-Za-z0-9][A-Za-z0-9._:/\[\]-]{0,79}$`, so it can never be read as a flag. No model means the CLI's default. An unknown name fails the run like any other failure; it is not retried.
 2. **Launch.** The client launches recorded runs only with `serve --allow-tasks` and only while the queue is not paused. There is no limit on parallel workers (D-022).
    - `launching` is committed before the reservation in `active-runs.json` is written, and the reservation before exec.
    - The worker runs with the task's folder as its working directory.
+   - Worker permissions: Claude runs with `--permission-mode acceptEdits` (D-028), Codex with `--sandbox workspace-write` (D-023).
 3. **Identity.** The run's first conversation ID from the event stream is bound:
    - a Claude ID must equal the recorded UUID;
    - a new Codex task binds the first thread ID once, and the ID may not belong to another task;
@@ -51,7 +53,7 @@ messenger --root DIR serve --allow-tasks
    - `AnswerTask(task, question, op_id, text, by)` accepts only the newest open question, only from its addressee.
    - It is idempotent by `op_id`, and a late or second answer is refused.
    - It records the next run, which resumes the same conversation by exact ID: `claude --resume ID` or `codex exec … resume ID`.
-7. **Cancel.** A task that is waiting, or whose run is only recorded, is cancelled at once. A running worker's process group is signalled. The task is then `cancelled` when the exit and an empty group are observed, otherwise `blocked`.
+7. **Cancel** (coordinator `cancel`, the window's stop button, or `messenger task-cancel --task ID`; all use `CancelTask`). A task that is waiting, or whose run is only recorded, is cancelled at once. A running worker's process group is signalled. The task is then `cancelled` when the exit and an empty group are observed, otherwise `blocked`.
 8. **Restart.** A run that was `launching` or `running` when the client stopped becomes `interrupted`, and so does its task. Its reservation stays, and it is never relaunched. A recorded intent that never launched is launched after the restart.
 
 Nothing is retried automatically. Starting again means a new task.
@@ -84,7 +86,7 @@ claude mcp add --scope local messenger -- "/Applications/Agent Messenger.app/Con
 | Tool | Effect |
 |---|---|
 | `list_agents` | This computer: its project folder and its agents, with running and waiting task counts (across all projects). |
-| `start_task(op_id, agent, text, title?, computer?)` | `StartTask`; idempotent by `op_id`. |
+| `start_task(op_id, agent, text, title?, computer?, model?)` | `StartTask`; idempotent by `op_id`. `model` is optional (D-030); the server instructions and the skill say when to choose one and not to guess names. |
 | `wait(after, timeout_seconds?)` | Returns coordinator events of this project after the cursor, at most 20 per call, or `timed_out` after the timeout (default 600 s, maximum 3600 s). |
 | `tasks(state?)` | This project's tasks, open questions for the coordinator, and the current cursor. |
 | `answer(task_id, question_id, op_id, text)` | `AnswerTask` as the coordinator. |
@@ -116,9 +118,10 @@ The window observes tasks; the owner talks to the coordinator in the Claude app 
 - **"Задачи" tab.**
   - **Task list** on the right: active tasks first, then finished ones, with an agent filter. Each row has three lines: the agent, the title and a coloured status ("Работает N мин", "Ждёт вашего ответа", "Завершил за N мин", "Прервался через N мин", …).
   - **Task feed.** The coordinator's text and answers, and the owner's answers, are shown as outgoing bubbles. The worker's text, its tool actions (collapsible lines from the CLI event stream, stored in `task_run_items`, at most 400 per run), its report or question with a delivery note, and the outcome of a failed, blocked, interrupted or cancelled run are shown in order.
-  - **Answer field.** It appears only while the worker waits for the owner. An answer uses a stable `op_id` stored per question, so a retry cannot answer twice.
+  - **Header.** Title, then the agent with its model when one was chosen, the computer and the folder, then the status line.
+  - **Input field and stop button.** While a task is active the field is shown with a square stop button, like a chat ("Остановить", Esc). Stop cancels the task at once (no second confirmation), through the same `CancelTask` path as the coordinator. The field accepts text only while the worker waits for the owner; otherwise it reads "Исполнитель работает…" or "Задача ждёт запуска…". Enter sends, Shift+Enter makes a new line. An answer uses a stable `op_id` stored per question, so a retry cannot answer twice.
   - **First steps.** Without a project, the window offers to create one. Without a connected coordinator and with no tasks, it shows the `claude mcp add …` command with a copy button.
-  - **Notices.** One says that tasks are recorded but the client runs without `--allow-tasks` (Q-009). Another says that the queue is paused, with "Продолжить".
+  - **Notices.** One says that tasks are recorded but the client runs without `--allow-tasks`; the client the window starts always allows tasks (D-029), so this shows only for a client started by hand. Another says that the queue is paused, with "Продолжить".
 - **"Агенты" tab.**
   - The project folder bar: icon, label, path and "Изменить".
   - One card per agent. The role is a muted line ("Координатор", "Исполнитель", "Не подключён"). The rows Программа, Вход в аккаунт and Рабочая папка are coloured green, yellow, red or grey.
@@ -129,7 +132,7 @@ The window observes tasks; the owner talks to the coordinator in the Claude app 
 
 API (authenticated as before):
 - reads: `GET /api/window?project=`, `GET /api/task?id=`;
-- actions: `POST /api/project-create`, `/api/project-folder`, `/api/task-answer`, `/api/agent-set`.
+- actions: `POST /api/project-create`, `/api/project-folder`, `/api/task-answer`, `/api/task-cancel`, `/api/agent-set`.
 
 The client re-checks every rule. The old session and timeline endpoints stay until T-028.
 

@@ -30,6 +30,9 @@ Copying the owner's credentials into the managed profile is not implemented and 
 ### Q-010: Should workers load Messenger tools without Claude's ToolSearch?
 Claude Code 2.1.319 defers MCP tools behind `ToolSearch` by default. A real model should find `messenger_task` through it, but this was not verified ([report](reports/2026-11-06-task-workers-linux.md)). `ENABLE_TOOL_SEARCH=false` for workers makes them visible at once but changes the owner's normal session behaviour (D-023). **Chosen for now:** Claude's default; check in T-027.
 
+### Q-012: Remove the persistent Claude stream and Codex app-server now (T-028)?
+The owner asked to clean the program of old code. The old "message a live session" paths (persistent Claude stream, Codex app-server owners, their window pages and commands) are the biggest part of it. Tasks and the coordinator do not use them. But sessions registered on the owner's Mac through them keep their reservations in `active-runs.json`, which are never released automatically. **Options:** remove them in a separate release after the owner closes the old sessions (the client then refuses old commands); or remove them now and leave old reservations to manual closing; or keep them. **Chosen for now:** keep them; only unused code and `experiments/` were removed (D-032). **Blocks:** T-028.
+
 ## Answered
 
 ### Q-009: How does the window allow task launches?

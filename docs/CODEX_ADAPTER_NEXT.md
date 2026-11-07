@@ -106,7 +106,7 @@ The IDs and full responses stayed local and were not included in the repository.
 
 `codex app-server --ignore-user-config --help` in the installed version 0.155.1 returns an unknown-argument error. Flags of the one-shot `exec` must not be automatically carried over to app-server.
 
-The [reproducible probe](../experiments/codex_app_server/README.md) was run on a Mac without creating conversations or calling the model. Via `config/read` in three separate temporary profiles, the following was confirmed:
+The [reproducible probe](https://github.com/kolotiloff/agent-messenger/tree/41e0e6e7e3f20275d480f6b064a881e7b5f4cf9e/experiments/codex_app_server/README.md) was run on a Mac without creating conversations or calling the model. Via `config/read` in three separate temporary profiles, the following was confirmed:
 
 - `-c 'mcp_servers={}'` **does not remove** an MCP server from the configuration file: it stays enabled.
 - `-c 'mcp_servers.fixture.enabled=false'` disables the specified server.

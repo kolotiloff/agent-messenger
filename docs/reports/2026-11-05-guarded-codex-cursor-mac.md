@@ -39,6 +39,6 @@ Together with the [Claude experiment](2026-11-05-guarded-claude-mac.md), basic i
 
 Each run of the test rig has its own database. Different databases do not coordinate the same ID: these probes must not be run simultaneously on one CLI session in different folders. The future client must have a single registry and database per machine.
 
-Raw logs, login data, real IDs and control strings are not published. [Code and instructions](../../experiments/session_safety/README.md). The next stage is safe recovery and a single local client/API for the interface.
+Raw logs, login data, real IDs and control strings are not published. [Code and instructions](https://github.com/kolotiloff/agent-messenger/tree/41e0e6e7e3f20275d480f6b064a881e7b5f4cf9e/experiments/session_safety/README.md). The next stage is safe recovery and a single local client/API for the interface.
 
 Sources for parameters and formats: [Codex non-interactive](https://learn.chatgpt.com/docs/non-interactive-mode), [Cursor CLI parameters](https://cursor.com/docs/cli/reference/parameters), [Cursor permissions](https://cursor.com/docs/cli/reference/permissions).
