@@ -94,12 +94,16 @@
   let view=null,project=recall('messenger-project'),selectedTask='',feed=null,feedSignature='',viewSignature='';
   let online=false,offlineReason='',discovery=[],tab='tasks',refreshing=false,answering=false;
   const agentChecks=new Map();
+  let clientInfo=null,clientInfoAt=0,restart={busy:false,ask:null,error:''};
   // The window can be newer than the client still running in the background
   // (after an update). Say how to restart it; nothing is restarted by itself.
+  function shutdownCommand(){return view?.messenger&&view?.data_root?'"'+view.messenger+'" --root "'+view.data_root+'" shutdown':'';}
   function outdatedMessage(){
+    if(Date.now()-clientInfoAt>3000)loadClientInfo();
+    if(clientInfo?.restart)return Error('В фоне старая версия Messenger. Перезапустите её кнопкой вверху.');
     const e=Error('В фоне старая версия клиента, перезапустите его');
     e.hint='Закройте Messenger, выполните скопированную команду в Терминале и откройте Messenger снова.';
-    if(view?.messenger&&view?.data_root)e.command='"'+view.messenger+'" --root "'+view.data_root+'" shutdown';
+    e.command=shutdownCommand();
     return e;
   }
   // An error of the owner's action stays at the top until it is closed or
@@ -436,7 +440,46 @@
     cursor.append(el('p','Не подключён','am-muted'));const cdl=el('dl');const row=el('div');const dd=el('dd','Пока не поддерживается для задач','am-muted');row.append(el('dt','Программа'),dd);cdl.append(row);cursor.append(cdl);
     const none=el('button','Задач нет');none.type='button';none.disabled=true;const noneActions=el('div',undefined,'am-actions-stack');noneActions.append(none);cursor.append(noneActions);cards.append(cursor);
   }
+  // The background client can be older than this window after an update.
+  // The desktop window offers to restart it; a browser window shows how.
+  async function loadClientInfo(){
+    clientInfoAt=Date.now();
+    try{const info=await api('/api/client-info');const was=JSON.stringify(clientInfo);clientInfo=info;if(!info.outdated)restart.ask=null;if(JSON.stringify(info)!==was)renderNotice();}catch(_){}
+  }
+  async function restartClient(confirm){
+    restart={busy:true,ask:restart.ask,error:''};renderNotice();
+    let response,result={};
+    try{response=await fetch('/api/restart-client',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({project,confirm}),cache:'no-store',signal:AbortSignal.timeout(50000)});result=await response.json().catch(()=>({}));}
+    catch(_){restart={busy:false,ask:null,error:'Ответ не получен, результат неизвестен. Подождите немного: окно проверит клиент само.'};renderNotice();loadClientInfo();return;}
+    if(response.ok&&result.ok){restart={busy:false,ask:null,error:''};showError(null);await loadClientInfo();viewSignature='';refresh();return;}
+    if(result.state==='confirm'){restart={busy:false,ask:{running:result.running||0,known:result.known!==false},error:''};renderNotice();return;}
+    restart={busy:false,ask:null,error:result.detail||'Перезапуск не подтверждён. Проверьте состояние.'};renderNotice();loadClientInfo();
+  }
+  function clientNotice(){
+    const box=el('div',undefined,'am-notice-client');
+    const text=el('div',undefined,'am-notice-text');
+    const ask=restart.ask;
+    text.append(el('strong',ask?'Перезапустить фоновый клиент сейчас?':'В фоне работает старая версия Messenger'));
+    let detail;
+    if(ask)detail=ask.known?'Сейчас выполняется задач: '+ask.running+'. Перезапуск прервёт их; сами они не повторятся и будут ждать вашего решения.':'Не удалось проверить, идут ли задачи. Если идут, перезапуск прервёт их; сами они не повторятся и будут ждать вашего решения.';
+    else if(restart.busy)detail='Останавливаем старый клиент и запускаем новый. Это займёт несколько секунд.';
+    else detail='Окно уже версии '+clientInfo.window_version+', а клиент в фоне — '+(clientInfo.client_version||'более ранней')+'. Перезапустите его, чтобы всё работало. Задачи, история и устройства сохранятся.';
+    text.append(el('span',detail,'am-small am-muted'));
+    if(restart.error)text.append(el('span',restart.error,'am-small am-bad-text'));
+    const actions=el('div',undefined,'am-actions');
+    if(clientInfo.restart){
+      const go=el('button',restart.busy?'Перезапускаем…':ask?'Перезапустить всё равно':'Перезапустить',ask?'am-danger':'am-primary');go.type='button';go.disabled=restart.busy;
+      go.addEventListener('click',()=>restartClient(!!ask));actions.append(go);
+      if(ask&&!restart.busy){const cancel=el('button','Отмена');cancel.type='button';cancel.addEventListener('click',()=>{restart.ask=null;renderNotice();});actions.append(cancel);}
+    }else{
+      const command=shutdownCommand();
+      if(command){const copy=el('button','Скопировать команду');copy.type='button';copy.title='Закройте окно, выполните команду в Терминале и откройте окно снова.';copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(command);copy.textContent='Скопировано';}catch(_){copy.textContent='Не удалось скопировать';}});actions.append(copy);}
+    }
+    box.append(text,actions);return box;
+  }
   function renderNotice(){
+    $('notice').classList.toggle('am-notice-wide',!!clientInfo?.outdated);
+    if(clientInfo?.outdated){notice(clientNotice());return;}
     if(!online){notice(el('p',offlineReason||'Клиент Messenger не запущен или не отвечает. Данные не обновляются.'));return;}
     if(view?.pending_launch>0&&!view.tasks_enabled){notice(el('p','Задачи записаны, но этот клиент не запускает исполнителей: он запущен без разрешения --allow-tasks.'));return;}
     if(view?.pending_launch>0&&view.paused){
@@ -461,8 +504,8 @@
     try{
       let v;
       try{v=await api('/api/window?project='+encodeURIComponent(project));}
-      catch(error){online=false;offlineReason=error.name==='TimeoutError'||error.name==='TypeError'?'Окно потеряло связь с программой Messenger. Закройте окно и откройте снова.':error.message;renderMachines();renderNotice();return;}
-      online=true;offlineReason='';
+      catch(error){if(Date.now()-clientInfoAt>5000)loadClientInfo();online=false;offlineReason=error.name==='TimeoutError'||error.name==='TypeError'?'Окно потеряло связь с программой Messenger. Закройте окно и откройте снова.':error.message;renderMachines();renderNotice();return;}
+      online=true;offlineReason='';if(Date.now()-clientInfoAt>10000)loadClientInfo();
       if(!v.projects.some(p=>p.name===project))project=v.project||'';
       const signature=JSON.stringify(v);
       if(signature!==viewSignature){viewSignature=signature;view=v;if(selectedTask&&!v.tasks.some(t=>t.id===selectedTask)){selectedTask='';feed=null;feedSignature='';}render();}

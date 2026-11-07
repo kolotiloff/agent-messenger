@@ -216,6 +216,13 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-notice { margin-inline:var(--am-pane-inset); max-height:60px; padding:var(--am-space-3) var(--am-space-4); border-radius:var(--am-radius-m); background:var(--am-soft); overflow:auto; overflow-wrap:anywhere; flex-shrink:0; }
 #am-concept .am-notice-row { display:flex; align-items:center; justify-content:space-between; gap:var(--am-gap-content); }
 #am-concept .am-notice-row > button { flex:none; white-space:nowrap; }
+#am-concept .am-notice.am-notice-wide { max-height:none; }
+#am-concept .am-notice-client { display:flex; align-items:center; justify-content:space-between; gap:var(--am-gap-region); }
+#am-concept .am-notice-text { display:flex; flex-direction:column; gap:var(--am-gap-line); min-width:0; }
+#am-concept .am-notice-text strong { font-weight:600; }
+#am-concept .am-notice-client .am-actions { flex:none; flex-wrap:nowrap; }
+#am-concept .am-notice-client button { white-space:nowrap; }
+#am-concept .am-bad-text { color:var(--am-bad); }
 #am-concept .am-screen { flex:1; min-width:0; min-height:0; overflow:auto; scrollbar-gutter:stable; padding-inline:var(--am-pane-inset) calc(var(--am-pane-inset) - var(--am-gutter, 0px)); }
 #am-concept .am-empty { margin:var(--am-space-6) 0; text-align:center; }
 #am-concept .am-connect { margin:var(--am-space-6) auto 0; }
@@ -393,6 +400,7 @@ body.am-native #am-concept .am-titlebar { display:none; }
   #am-concept .am-server-aside { position:static; }
 }
 @media (max-width:520px) { #am-concept .am-server-grid { grid-template-columns:1fr; } }
+@media (max-width:700px) { #am-concept .am-notice-client { flex-direction:column; align-items:stretch; gap:var(--am-gap-content); } }
 @media (max-height:700px) { #am-concept .am-main { padding-block:var(--am-space-3); } #am-concept .am-compose { padding-top:var(--am-space-2); } }
 @media (pointer:coarse) { #am-concept button { min-height:44px; } }
 @media (prefers-reduced-motion:no-preference) { #am-concept button { transition:background-color .12s ease; } }

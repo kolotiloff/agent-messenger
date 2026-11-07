@@ -30,7 +30,7 @@ func TestCLICheckRequiresExplicitTrustedEnvelope(t *testing.T) {
 				t.Fatal("unbounded diagnostic")
 			}
 			return diagnostics.CLICheck{Provider: provider, Version: diagnostics.CheckState{State: "unknown"}}, nil
-		})
+		}, nil)
 	for _, tc := range []struct {
 		method, origin, token, body string
 		code                        int
@@ -72,7 +72,7 @@ func TestCLICheckSerializesAndRedactsFailure(t *testing.T) {
 		close(entered)
 		<-release
 		return diagnostics.CLICheck{}, errors.New("PRIVATE_TOKEN")
-	})
+	}, nil)
 	go func() {
 		defer close(done)
 		w := postAction(h, "check-cli", diagnosticBody)
