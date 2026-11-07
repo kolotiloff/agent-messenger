@@ -162,12 +162,13 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-select-trigger:disabled { background:var(--am-disabled); color:var(--am-disabled-text); }
 #am-concept .am-select-value { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #am-concept .am-select-chevron { width:7px; height:7px; margin:0 var(--am-space-1); border-right:1.5px solid currentColor; border-bottom:1.5px solid currentColor; transform:rotate(45deg) translateY(-2px); flex-shrink:0; color:var(--am-muted); }
-#am-concept .am-select-menu { position:fixed; inset:auto; margin:0; padding:var(--am-space-2); border:1px solid var(--am-line); border-radius:var(--am-radius-m); background:var(--am-menu); color:var(--am-text); box-shadow:var(--am-shadow-l); overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable both-edges; font:inherit; }
+#am-concept .am-select-menu { position:fixed; inset:auto; margin:0; padding:var(--am-space-1); border:1px solid var(--am-line); border-radius:var(--am-radius-m); background:var(--am-menu); color:var(--am-text); box-shadow:var(--am-shadow-l); overflow:auto; overscroll-behavior:contain; font:inherit; outline:none; }
 #am-concept .am-select-menu::backdrop { background:transparent; }
-#am-concept .am-select-option { display:flex; align-items:center; justify-content:space-between; gap:var(--am-gap-content); min-height:var(--am-control); padding:var(--am-pad-compact); border-radius:var(--am-radius-s); cursor:pointer; outline:none; overflow-wrap:anywhere; }
-#am-concept .am-select-option:is([aria-selected=true],:focus,:hover) { background:var(--am-menu-hover); }
+#am-concept .am-select-option { display:flex; align-items:center; justify-content:space-between; gap:var(--am-gap-content); min-height:var(--am-control-compact); padding:var(--am-space-1) var(--am-space-3); border-radius:var(--am-radius-s); cursor:pointer; outline:none; overflow-wrap:anywhere; }
+#am-concept .am-select-option:focus { background:var(--am-menu-hover); }
 #am-concept .am-select-option[aria-disabled=true] { color:var(--am-disabled-text); cursor:default; background:transparent; }
-#am-concept .am-select-check { width:18px; margin-left:auto; flex-shrink:0; color:var(--am-check); font-size:var(--am-text-xl); line-height:1; }
+#am-concept .am-select-check { display:flex; width:16px; height:16px; margin-left:auto; flex-shrink:0; color:var(--am-check); }
+#am-concept .am-select-check svg { width:100%; height:100%; }
 
 /* Status dots and provider icons */
 #am-concept .am-dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--am-muted); flex-shrink:0; }

@@ -6,6 +6,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 - Owner: gaps between buttons differ between the sidebar and the agent cards; the style is scattered. The stylesheet was rewritten on one set of tokens (D-036, [UI_STYLE.md](UI_STYLE.md)); dead rules from the old chat screen were removed; agent cards and server sections share `.am-card`.
 - Checked by screenshots of every tab, a dialog and a menu in both themes at 1100 and 600 px, and by measuring control heights (36 and 32 only). Not checked on the Mac.
+- Owner follow-ups: the server note moved to a right column; the server is «Запустить»/«Остановить» (not «Включить»/«Выключить») in the window and in error texts; dropdown menus now look like the Claude app (4 px inset, 32 px options, background only on hover or keyboard focus, thin accent check on the chosen option). Checked in headless Chromium, both themes, mouse and keyboard.
 
 ## 2026-11-07 — Claude Code (third night: preview.25, server setup)
 

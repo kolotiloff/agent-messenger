@@ -14,7 +14,7 @@ Scale: 4, 8, 12, 16, 24 (`--am-space-1/2/3/4/6`). Pick the gap by meaning:
 | `--am-gap-region` | 24 | between large regions (sidebar groups, message groups) |
 | `--am-gap-line` | 2 | only between lines of text in one item |
 
-Compact boxes and rows (list rows, menu options, hints, code blocks) use `--am-pad-compact` (8 12). Panes are inset by `--am-pane-inset` (16, or 12 in a narrow window).
+Compact boxes and rows (list rows, hints, code blocks) use `--am-pad-compact` (8 12). Dropdown menus follow the Claude app: a 4 px inset, 32 px options with 4 12 padding, only the hovered or keyboard-focused option gets a background, and the chosen option is marked by a thin accent check on the right. Panes are inset by `--am-pane-inset` (16, or 12 in a narrow window).
 
 Buttons that belong together go in one container: `.am-actions` (a row) or `.am-actions-stack` (a column). Do not space them with margins.
 

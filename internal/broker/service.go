@@ -108,7 +108,7 @@ func NewService(ctx context.Context, root string) *Service {
 		if json.Unmarshal(raw, &saved) == nil && validScope(saved.Scope) && validPort(saved.Port) {
 			s.settings = saved
 		} else {
-			s.hostErr = "файл настроек сервера повреждён, сервер выключен: " + s.settingsPath()
+			s.hostErr = "файл настроек сервера повреждён, сервер остановлен: " + s.settingsPath()
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		s.hostErr = "не удалось прочитать настройки сервера: " + err.Error()
@@ -303,7 +303,7 @@ func (s *Service) Invite(address string) (InviteCode, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.broker == nil {
-		return InviteCode{}, errors.New("сначала включите сервер")
+		return InviteCode{}, errors.New("сначала запустите сервер")
 	}
 	allowed := false
 	for _, a := range s.addressesLocked() {
@@ -320,7 +320,7 @@ func (s *Service) Revoke(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.broker == nil {
-		return errors.New("сначала включите сервер")
+		return errors.New("сначала запустите сервер")
 	}
 	return s.broker.Revoke(id)
 }

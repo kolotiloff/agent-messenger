@@ -13,7 +13,7 @@
     trigger.setAttribute('aria-label',label);trigger.setAttribute('aria-haspopup','listbox');trigger.setAttribute('aria-expanded','false');
     const value=document.createElement('span');value.className='am-select-value';
     const chevron=document.createElement('span');chevron.className='am-select-chevron';chevron.setAttribute('aria-hidden','true');trigger.append(value,chevron);
-    const menu=document.createElement('div');menu.id=select.id+'-menu';menu.className='am-select-menu';menu.setAttribute('popover','auto');menu.setAttribute('role','listbox');menu.setAttribute('aria-label',label);
+    const menu=document.createElement('div');menu.id=select.id+'-menu';menu.className='am-select-menu';menu.setAttribute('popover','auto');menu.setAttribute('role','listbox');menu.setAttribute('aria-label',label);menu.tabIndex=-1;
     trigger.setAttribute('aria-controls',menu.id);select.after(trigger);root.append(menu);select.hidden=true;
     select.labels[0]?.addEventListener('click',event=>{event.preventDefault();trigger.focus();});
     let options=[];
@@ -21,13 +21,14 @@
     function close(restore=false){if(isOpen())menu.hidePopover();if(restore)trigger.focus();}
     function sync(){value.textContent=select.selectedOptions[0]?.textContent||'Нет данных';trigger.disabled=select.disabled;if(select.disabled)close();}
     function choose(index){if(select.disabled||select.options[index]?.disabled)return;select.selectedIndex=index;sync();close(true);select.dispatchEvent(new Event('change',{bubbles:true}));}
-    function open(){
+    function open(keyboard){
       if(select.disabled)return;menu.replaceChildren();options=[];
       Array.from(select.options).forEach((option,index)=>{
         const row=document.createElement('div');row.className='am-select-option';row.setAttribute('role','option');row.setAttribute('aria-selected',String(option.selected));row.tabIndex=-1;
         const text=document.createElement('span');text.textContent=option.textContent;
         if(option.dataset.provider)row.append(providerIcon(option.dataset.provider));
-        const check=document.createElement('span');check.className='am-select-check';check.textContent=option.selected?'✓':'';check.setAttribute('aria-hidden','true');row.append(text,check);
+        const check=document.createElement('span');check.className='am-select-check';check.setAttribute('aria-hidden','true');if(option.selected)check.innerHTML='<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3.2L13 4.5"/></svg>';row.append(text,check);
+        row.addEventListener('pointermove',()=>{if(document.activeElement!==row)row.focus({preventScroll:true});});
         if(option.disabled)row.setAttribute('aria-disabled','true');
         row.addEventListener('click',()=>choose(index));menu.append(row);options.push(row);
       });
@@ -39,17 +40,19 @@
       menu.style.width=Math.min(innerWidth-2*margin,Math.max(rect.width,220))+'px';menu.style.maxHeight=height+'px';
       menu.style.left=Math.max(margin,Math.min(rect.left,innerWidth-menu.getBoundingClientRect().width-margin))+'px';
       menu.style.top=(upwards?rect.top-gap-Math.min(menu.scrollHeight+2,height):rect.bottom+gap)+'px';
-      const row=options[select.selectedIndex]||options[0];row?.focus({preventScroll:true});row?.scrollIntoView({block:'nearest'});
+      const row=options[select.selectedIndex]||options[0];row?.scrollIntoView({block:'nearest'});
+      if(keyboard)row?.focus({preventScroll:true});else menu.focus({preventScroll:true});
     }
     trigger.addEventListener('click',()=>isOpen()?close():open());
-    trigger.addEventListener('keydown',event=>{if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)){event.preventDefault();open();if(event.key==='Home')options[0]?.focus();if(event.key==='End')options.at(-1)?.focus();}});
+    trigger.addEventListener('keydown',event=>{if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)){event.preventDefault();open(true);if(event.key==='Home')options[0]?.focus();if(event.key==='End')options.at(-1)?.focus();}});
     menu.addEventListener('keydown',event=>{
       const index=options.indexOf(document.activeElement);let next=index;
-      if(event.key==='ArrowDown')next=Math.min(options.length-1,index+1);
+      if(index<0&&(event.key==='ArrowDown'||event.key==='ArrowUp'))next=Math.max(0,select.selectedIndex);
+      else if(event.key==='ArrowDown')next=Math.min(options.length-1,index+1);
       else if(event.key==='ArrowUp')next=Math.max(0,index-1);
       else if(event.key==='Home')next=0;
       else if(event.key==='End')next=options.length-1;
-      else if(event.key==='Enter'||event.key===' '){event.preventDefault();choose(index);return;}
+      else if(event.key==='Enter'||event.key===' '){event.preventDefault();if(index>=0)choose(index);return;}
       else if(event.key==='Escape'){event.preventDefault();close(true);return;}
       else if(event.key==='Tab'){close(true);return;}else return;
       event.preventDefault();options[next]?.focus();
@@ -510,10 +513,10 @@
   function renderServer(){
     if(!server)return;const h=server.host,m=server.member;
     const focused=document.activeElement?.dataset?.key||'';
-    badge($('host-badge'),h.running?'Работает':h.enabled?'Не запущен':'Выключен',h.running);
+    badge($('host-badge'),h.running?'Работает':h.enabled?'Не запущен':'Остановлен',h.running);
     $('host-state').textContent=!h.running?'Другие устройства смогут подключаться к этому компьютеру по одноразовому приглашению.':!h.addresses.length?'Сервер работает, но у компьютера нет адреса в локальной сети. Подключитесь к сети или выберите «Только этот компьютер».':'Принимает устройства: '+(h.scope==='lan'?'в локальной сети':'только с этого компьютера')+', порт '+h.port+'.';
     if(!serverEdited){$('host-scope').value=h.scope||'local';$('host-port').value=h.port||47100;}
-    $('host-enable').textContent=h.running?'Применить':'Включить сервер';$('host-disable').hidden=!h.enabled&&!h.running;
+    $('host-enable').textContent=h.running?'Применить':'Запустить сервер';$('host-disable').hidden=!h.enabled&&!h.running;
     $('host-running').hidden=!h.running;
     const select=$('host-address'),current=select.value;
     if(Array.from(select.options).map(o=>o.value).join()!==h.addresses.join()){
@@ -585,9 +588,9 @@
     const port=Number($('host-port').value);
     if(!Number.isInteger(port)||port<1024||port>65535){note('host','Порт должен быть от 1024 до 65535.',true);return;}
     const scope=$('host-scope').value;
-    if(await serverAction({action:'enable',scope,port},'host','Сервер включён.')){
+    if(await serverAction({action:'enable',scope,port},'host','Сервер запущен.')){
       serverEdited=false;hideInvitation();
-      if(scope==='lan')note('host',server.host.addresses.length?'Сервер включён и слушает локальную сеть. Доступ с другого компьютера зависит от брандмауэра.':'Сервер включён, но адреса в локальной сети у компьютера нет.',false,true);
+      if(scope==='lan')note('host',server.host.addresses.length?'Сервер запущен и слушает локальную сеть. Доступ с другого компьютера зависит от брандмауэра.':'Сервер запущен, но адреса в локальной сети у компьютера нет.',false,true);
       renderServer();
     }
   }
@@ -711,7 +714,7 @@
   $('host-scope').addEventListener('change',()=>{serverEdited=true;});
   $('host-port').addEventListener('input',()=>{serverEdited=true;});
   $('host-enable').addEventListener('click',enableServer);
-  $('host-disable').addEventListener('click',()=>serverAction({action:'disable'},'host','Сервер выключен. Устройства сохранены.').then(r=>{if(r){serverEdited=false;hideInvitation();renderServer();}}));
+  $('host-disable').addEventListener('click',()=>serverAction({action:'disable'},'host','Сервер остановлен. Устройства сохранены.').then(r=>{if(r){serverEdited=false;hideInvitation();renderServer();}}));
   $('host-invite').addEventListener('click',invite);
   $('invite-copy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('invite-code').textContent);$('invite-copy').textContent='Скопировано';}catch(_){$('invite-copy').textContent='Выделите код и скопируйте вручную';}});
   $('member-connect').addEventListener('click',connectServer);
