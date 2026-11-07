@@ -68,7 +68,7 @@ func TestTaskWindowRoutes(t *testing.T) {
 		{"/api/task-answer", `{"task":"task-1","question":"q-1","op_id":"o","text":"yes","extra":1}`},
 		{"/api/project-create", `{"name":"a/b","folder":"/x"}`},
 		{"/api/project-create", `{"name":"Game","folder":"relative"}`},
-		{"/api/agent-set", `{"provider":"cursor","cli":"/bin/x"}`},
+		{"/api/agent-set", `{"provider":"gemini","cli":"/bin/x"}`},
 		{"/api/task-cancel", `{"task":""}`},
 	} {
 		if code, _ := do("POST", bad.path, bad.body); code != 400 {

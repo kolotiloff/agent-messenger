@@ -4,9 +4,16 @@ This file is the shared memory between tools (Claude Code, Cursor, Codex). Whoev
 
 ## Owner's standing instruction for the night of 2026-11-07
 
-The owner asked the agent to finish the program without them ("доделай бе меня полностью"), update the documentation on GitHub and clean out old code. Same rules as before: fake CLIs only, no real models, no Cursor, `active-runs.json` untouched, nothing retried on an unclear result, questions go to `QUESTIONS.md` with the most cautious option chosen. Removing the persistent paths (T-028) still needs the owner's explicit consent (Q-012).
+The owner asked the agent to finish the program without them ("доделай бе меня полностью"), update the documentation on GitHub and clean out old code. Same rules as before: fake CLIs only, no real models, `active-runs.json` untouched, nothing retried on an unclear result, questions go to `QUESTIONS.md` with the most cautious option chosen. Removing the persistent paths (T-028) still needs the owner's explicit consent (Q-012).
 
 ## Current state
+
+Updated 2026-11-07 (evening, later) by Claude Code.
+
+- **The owner:** there is no rule against Cursor; set it up. The AGENTS.md line was removed, D-011 superseded, Q-004 answered.
+- **T-012 (branch `claude/t012-cursor-tasks`, stacked on `claude/t016-download-buttons`):** Cursor runs tasks like Claude and Codex (D-049). Messenger keeps one `messenger_task` entry in `~/.cursor/mcp.json`; the run reaches its tools through `AGENT_MESSENGER_TASK` and `${env:...}`. The «Агенты» card and setup dialog work for Cursor; the coordinator can pick `cursor`.
+- **Verified here (Linux):** a fake Cursor CLI that reads `~/.cursor/mcp.json` and fills `${env:...}` like Cursor: report, question and resumed run with `--resume=<chat>`, model, usage limit; a broken `mcp.json` is left alone and the run does not start; the window card and dialog in headless Chromium. **Not verified:** the real Cursor CLI (that `${env:...}` reaches the server, the current event format), Cursor on Windows (not supported: `.cmd`).
+- **Next:** the owner's test with the real `cursor-agent` on Mac or Linux: connect Cursor in «Агенты», ask the coordinator to give Cursor a small task.
 
 Updated 2026-11-07 (evening) by Claude Code.
 
@@ -199,7 +206,7 @@ Proposed implementation sequence, which may be refined with justification after 
 
 Do not delete `active-runs.json`, do not empty it, and do not release a reservation based on a timer, a single PID, or an empty process group. Do not bypass the shared registry to launch from a different database. A signal to a process does not prove that all its descendants have exited. When the result is uncertain, do not repeat actions automatically.
 
-No user session IDs, tokens, auth files, private SQLite dumps or full logs in GitHub. The repository is public. Do not run Cursor CLI: the user previously asked to keep it disabled. Do not restart the Mac automatically. Do not use working chats as test chats.
+No user session IDs, tokens, auth files, private SQLite dumps or full logs in GitHub. The repository is public. Do not restart the Mac automatically. Do not use working chats as test chats.
 
 ## Getting started and verification
 

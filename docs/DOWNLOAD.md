@@ -47,7 +47,7 @@ Data: `$XDG_DATA_HOME/agent-messenger` or `~/.local/share/agent-messenger`. To s
 
 - **Claude Code**: the usual installation (`claude.exe` on Windows, usually in `%USERPROFILE%\.local\bin`; `claude` on Linux and Mac).
 - **Codex**: on Windows the npm installation works; the program finds the `codex.exe` inside the npm package. `.cmd` and `.bat` files are not started (D-044).
-- **Cursor** is not supported yet.
+- **Cursor**: `cursor-agent` on Mac and Linux (usually in `~/.local/bin`). Before the first Cursor task Messenger adds one entry, `messenger_task`, to `~/.cursor/mcp.json`; other entries stay as they are (D-049). Not on Windows yet.
 
 ## Check a download (optional)
 

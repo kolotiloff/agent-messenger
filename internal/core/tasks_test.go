@@ -184,8 +184,8 @@ func TestStartTaskNeedsProjectFolderAndAgent(t *testing.T) {
 	if _, _, err := f.st.StartTask(StartTaskRequest{Project: "Nope", OpID: "o1", Provider: "claude", Text: "x"}); !errors.Is(err, ErrRejected) {
 		t.Fatalf("unknown project: %v", err)
 	}
-	if _, _, err := f.st.StartTask(StartTaskRequest{Project: "Game", OpID: "o1", Provider: "cursor", Text: "x"}); !errors.Is(err, ErrRejected) {
-		t.Fatalf("cursor accepted: %v", err)
+	if _, _, err := f.st.StartTask(StartTaskRequest{Project: "Game", OpID: "o1", Provider: "gemini", Text: "x"}); !errors.Is(err, ErrRejected) {
+		t.Fatalf("unknown agent accepted: %v", err)
 	}
 	if _, _, err := f.st.StartTask(StartTaskRequest{Project: "Game", OpID: "o1", Provider: "claude", Text: "x", Computer: "computer-elsewhere"}); !errors.Is(err, ErrRejected) {
 		t.Fatalf("other computer accepted: %v", err)

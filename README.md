@@ -31,7 +31,7 @@ Windows and Linux builds are new and not yet accepted on real computers: see [Wi
 | Updating the app from the window | Signed Sparkle channel and package downloads from public GitHub Releases. An already running background client stays on its version; limits and acceptance are described in docs/UPDATES.md |
 | Protection | A corrupted/empty/null registry or an ambiguous directory does not allow bypassing the lock. An unknown result is never turned into success |
 
-Persistent Codex/Cursor adapters, full Windows/Linux support, a network broker, coordinator handoff, acceptance of the native shell on other Macs and signed distribution are not finished yet. Early experiments with individual CLIs do not replace their acceptance in the current product. Safely terminating a CLI owner within the same Mac boot is still an open question; installing does not bypass remaining reservations.
+Cursor as a task worker is new and not yet tested with the real CLI (D-049). Persistent Codex/Cursor adapters, full Windows/Linux support, a network broker, coordinator handoff, acceptance of the native shell on other Macs and signed distribution are not finished yet. Early experiments with individual CLIs do not replace their acceptance in the current product. Safely terminating a CLI owner within the same Mac boot is still an open question; installing does not bypass remaining reservations.
 
 ## Getting started
 

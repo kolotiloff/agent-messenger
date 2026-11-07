@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -128,4 +129,26 @@ func rpc(id int, method string, params any) string {
 	}
 	raw, _ := json.Marshal(body)
 	return string(raw)
+}
+
+// Outside a Messenger run (an ordinary Cursor session), the worker tool
+// server from mcp.json lists nothing and calls nothing.
+func TestTaskServerFromEnvOutsideARun(t *testing.T) {
+	for _, value := range []string{"", "${env:AGENT_MESSENGER_TASK}", `{"db":"x"}`} {
+		if _, _, _, ok := TaskFromEnv(value); ok {
+			t.Fatalf("%q taken as a run", value)
+		}
+	}
+	if db, run, receipt, ok := TaskFromEnv(`{"db":"/d","run":"r","receipt":"x"}`); !ok || db != "/d" || run != "r" || receipt != "x" {
+		t.Fatal("a run was not read")
+	}
+	in := strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}` + "\n" + `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"report","arguments":{"text":"x"}}}` + "\n")
+	var out bytes.Buffer
+	if err := serveTask(nil, "", "", in, &out); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if len(lines) != 2 || !strings.Contains(lines[0], `"tools":[]`) || !strings.Contains(lines[1], `"isError":true`) {
+		t.Fatalf("%s", out.String())
+	}
 }

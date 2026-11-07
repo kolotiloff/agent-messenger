@@ -35,7 +35,7 @@ Cloud sessions may run on Linux. Mac-only code (Swift shell, Sparkle, `*_darwin.
 - Never commit session IDs, tokens, auth files, SQLite dumps or full logs. The repository is public.
 - Do not name, link or compare other products (apps we looked at) in code, docs, commit messages, branch names or PRs.
 - Real model calls happen only in explicit acceptance runs with a separate new test session, never in normal tests. Never use the user's working or GUI chats as test sessions.
-- Do not run Cursor CLI (the user asked to keep it off). Do not reboot the Mac.
+- Do not reboot the Mac.
 - Never put an acceptance run's data directory in a temporary folder (`/tmp`, `/private/tmp`, `/var/folders`). macOS empties them on reboot, which strands the reservation and loses the history. Use a directory under `~/AgentMessengerTest/`.
 - Do not present a preparatory component as a finished window feature. When a stage is done, update code, docs and verification results together; record what was actually verified and what remains.
 
