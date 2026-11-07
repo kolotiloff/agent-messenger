@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/kolotiloff/agent-messenger/internal/core"
 )
@@ -27,6 +28,13 @@ const (
 	coordinatorDefaultWait = 600
 	coordinatorMaxWait     = 3600
 	coordinatorMaxReturned = 20
+	// coordinatorWaitBudget bounds the text one wait returns (T-031), in
+	// characters. One event is always returned, whatever its size.
+	coordinatorWaitBudget = 24000
+	// coordinatorTaskLimit is the default and coordinatorTaskMax the largest
+	// number of tasks one tasks call lists (T-032).
+	coordinatorTaskLimit = 50
+	coordinatorTaskMax   = 200
 )
 
 // coordinatorPoll and coordinatorProgress are variables so tests can shorten them.
@@ -38,10 +46,11 @@ var (
 const coordinatorInstructions = `Agent Messenger: start tasks for worker agents in this project and wait for their reports.
 - list_agents shows this project's computers, their project folder and agents.
 - start_task starts one task in a new worker session. Give every task a unique op_id and reuse it only to retry the same call after a lost response.
-- wait blocks until something happens in this project's tasks: a report, a question for you, a failure, an interruption, a block or a cancellation. Always pass after = the cursor from the previous wait. When it returns events, act on them (answer questions with answer, tell the owner about reports), then call wait again with the new cursor. When it times out with no events, call wait again without comment.
+- wait blocks until something happens in this project's tasks: a report, a question for you, a failure, an interruption, a block or a cancellation. Always pass after = the cursor from the previous wait. When it returns events, act on them (answer questions with answer, tell the owner about reports), then call wait again with the new cursor. When it times out with no events, call wait again without comment. If it says more: true, more events are ready: call wait again at once with the new cursor.
 - start_task takes an optional model. Leave it out for the agent's default. For Claude use opus for hard work (design, tricky bugs, large refactors), sonnet for ordinary coding, haiku for small mechanical work. For Codex name a model only if the owner told you which names it accepts. Never guess a name: an unknown model fails the run. Tell the owner when you chose a non-default model and why.
 - answer answers a worker's question (pass question_id and a unique op_id); the worker continues in the same session.
 - Never start a task again by yourself after it failed, was interrupted or blocked; tell the owner and let them decide.
+- A failure caused by a usage or rate limit says so and gives the reset time when the agent reported one. Tell the owner that time; do not start the task again before it.
 How work is planned and split is decided with the owner under this project's own rules.`
 
 type coordinator struct {
@@ -167,13 +176,17 @@ func coordinatorTools() []map[string]any {
 				"computer": str("computer id from list_agents; default this computer"),
 				"model":    map[string]any{"type": "string", "maxLength": 80, "description": "optional model for the worker, such as opus, sonnet or haiku for claude, or a Codex model name; leave it out to use the agent's default. Never guess a name: an unknown model fails the run."},
 			}, "op_id", "agent", "text")},
-		{"name": "wait", "description": "Block until a new event of this project's tasks arrives after the cursor, or until timeout_seconds. Costs no tokens while blocked. Always pass after.",
+		{"name": "wait", "description": "Block until a new event of this project's tasks arrives after the cursor, or until timeout_seconds. Costs no tokens while blocked. Always pass after. Returns a bounded batch; more: true means further events are ready, so call wait again at once with the new cursor.",
 			"inputSchema": obj(map[string]any{
 				"after":           map[string]any{"type": "integer", "minimum": 0, "description": "cursor from the previous wait"},
 				"timeout_seconds": map[string]any{"type": "integer", "minimum": 1, "maximum": coordinatorMaxWait},
 			})},
-		{"name": "tasks", "description": "List this project's tasks with their state and any open question for you, and the current event cursor.",
-			"inputSchema": obj(map[string]any{"state": str("optional state filter")})},
+		{"name": "tasks", "description": "List this project's open tasks (not done, failed or cancelled), newest first, with any open question for you, the event cursor and a list version. state: \"all\" lists every task, or name one state. Pass if_version from the previous call to get unchanged: true instead of the same list again.",
+			"inputSchema": obj(map[string]any{
+				"state":      str("optional: \"all\", or one state such as running, waiting_coordinator, blocked, failed, done"),
+				"limit":      map[string]any{"type": "integer", "minimum": 1, "maximum": coordinatorTaskMax, "description": fmt.Sprintf("most tasks to list; default %d", coordinatorTaskLimit)},
+				"if_version": str("version from the previous tasks call"),
+			})},
 		{"name": "answer", "description": "Answer a worker's question. The worker continues in the same session. Repeating with the same op_id is safe.",
 			"inputSchema": obj(map[string]any{
 				"task_id":     str("task id"),
@@ -251,12 +264,14 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 		return c.wait(ctx, after, time.Duration(timeout)*time.Second, p.Meta.ProgressToken)
 	case "tasks":
 		var a struct {
-			State string `json:"state"`
+			State     string `json:"state"`
+			Limit     int    `json:"limit"`
+			IfVersion string `json:"if_version"`
 		}
 		if err := strict(&a); err != nil {
 			return nil, err
 		}
-		return c.tasks(a.State)
+		return c.tasks(a.State, a.Limit, a.IfVersion)
 	case "answer":
 		var a struct {
 			TaskID     string `json:"task_id"`
@@ -319,39 +334,93 @@ func (c *coordinator) ownTask(id string) error {
 }
 
 type coordinatorTask struct {
-	ID         string             `json:"task_id"`
-	Title      string             `json:"title"`
-	Agent      string             `json:"agent"`
-	Computer   string             `json:"computer"`
-	Folder     string             `json:"folder"`
-	State      string             `json:"state"`
-	Detail     string             `json:"detail,omitempty"`
-	Question   *core.TaskQuestion `json:"question,omitempty"`
-	CreatedAt  string             `json:"created_at"`
-	FinishedAt string             `json:"finished_at,omitempty"`
+	ID       string             `json:"task_id"`
+	Title    string             `json:"title"`
+	Agent    string             `json:"agent"`
+	Computer string             `json:"computer"`
+	State    string             `json:"state"`
+	Detail   string             `json:"detail,omitempty"`
+	Question *core.TaskQuestion `json:"question,omitempty"`
+	// T-034: why a failed task failed, and when a usage limit resets.
+	FailureReason string `json:"failure_reason,omitempty"`
+	FailureReset  string `json:"failure_reset,omitempty"`
+	CreatedAt     string `json:"created_at"`
+	FinishedAt    string `json:"finished_at,omitempty"`
 }
 
-func (c *coordinator) tasks(state string) (any, error) {
-	tasks, err := c.store.Tasks(c.project, 200)
+// closedTaskStates are left out of the default tasks list (T-032).
+var closedTaskStates = map[string]bool{"done": true, "failed": true, "cancelled": true}
+
+func (c *coordinator) tasks(state string, limit int, ifVersion string) (any, error) {
+	if limit <= 0 {
+		limit = coordinatorTaskLimit
+	}
+	if limit > coordinatorTaskMax {
+		limit = coordinatorTaskMax
+	}
+	// Read the version first: a change after it shows up on the next call.
+	version, err := c.store.TaskListVersion(c.project)
 	if err != nil {
 		return nil, err
-	}
-	out := []coordinatorTask{}
-	for _, t := range tasks {
-		if state != "" && t.State != state {
-			continue
-		}
-		item := coordinatorTask{ID: t.ID, Title: t.Title, Agent: t.Provider, Computer: t.Computer, Folder: t.Folder, State: t.State, Detail: t.Detail, CreatedAt: t.CreatedAt, FinishedAt: t.FinishedAt}
-		if t.OpenQuestion != nil && t.OpenQuestion.Audience == core.AudienceCoordinator {
-			item.Question = t.OpenQuestion
-		}
-		out = append(out, item)
 	}
 	cursor, err := c.store.LatestTaskEvent(c.project)
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"tasks": out, "cursor": cursor}, nil
+	if ifVersion != "" && ifVersion == version {
+		return map[string]any{"unchanged": true, "version": version, "cursor": cursor}, nil
+	}
+	tasks, err := c.store.Tasks(c.project, coordinatorTaskMax)
+	if err != nil {
+		return nil, err
+	}
+	out := []coordinatorTask{}
+	more := false
+	for _, t := range tasks {
+		switch state {
+		case "":
+			if closedTaskStates[t.State] {
+				continue
+			}
+		case "all":
+		default:
+			if t.State != state {
+				continue
+			}
+		}
+		if len(out) == limit {
+			more = true
+			break
+		}
+		item := coordinatorTask{ID: t.ID, Title: t.Title, Agent: t.Provider, Computer: t.Computer, State: t.State, CreatedAt: t.CreatedAt, FinishedAt: t.FinishedAt, FailureReason: t.FailureReason, FailureReset: t.FailureReset}
+		// A verified task's detail is the same verification line every
+		// time; only unfinished or unsuccessful ones explain something.
+		if t.State != "done" {
+			item.Detail = t.Detail
+		}
+		if t.OpenQuestion != nil && t.OpenQuestion.Audience == core.AudienceCoordinator {
+			item.Question = t.OpenQuestion
+		}
+		out = append(out, item)
+	}
+	result := map[string]any{"tasks": out, "cursor": cursor, "version": version}
+	if more {
+		result["more"] = true
+	}
+	return result, nil
+}
+
+// boundEvents keeps events in order up to coordinatorWaitBudget characters of
+// text, and always at least one (T-031). It reports whether any were left.
+func boundEvents(events []core.TaskEvent) ([]core.TaskEvent, bool) {
+	used := 0
+	for i, e := range events {
+		used += utf8.RuneCountInString(e.Text) + 200
+		if i > 0 && used > coordinatorWaitBudget {
+			return events[:i], true
+		}
+	}
+	return events, false
 }
 
 func (c *coordinator) wait(ctx context.Context, after int64, timeout time.Duration, progressToken json.RawMessage) (any, error) {
@@ -363,13 +432,27 @@ func (c *coordinator) wait(ctx context.Context, after int64, timeout time.Durati
 	tick := time.NewTicker(coordinatorPoll)
 	defer tick.Stop()
 	for {
-		events, cursor, err := c.store.TaskEvents(c.project, core.AudienceCoordinator, after, coordinatorMaxReturned)
+		events, _, err := c.store.TaskEvents(c.project, core.AudienceCoordinator, after, coordinatorMaxReturned+1)
 		if err != nil {
 			return nil, err
 		}
 		if len(events) > 0 {
-			return map[string]any{"events": events, "cursor": cursor, "timed_out": false,
-				"next": fmt.Sprintf("Act on these events, then call wait with after=%d.", cursor)}, nil
+			more := len(events) > coordinatorMaxReturned
+			if more {
+				events = events[:coordinatorMaxReturned]
+			}
+			var trimmed bool
+			events, trimmed = boundEvents(events)
+			more = more || trimmed
+			// The cursor is the last returned event, so nothing is skipped.
+			cursor := events[len(events)-1].Seq
+			result := map[string]any{"events": events, "cursor": cursor, "timed_out": false,
+				"next": fmt.Sprintf("Act on these events, then call wait with after=%d.", cursor)}
+			if more {
+				result["more"] = true
+				result["next"] = fmt.Sprintf("More events are ready. Act on these, then call wait with after=%d at once.", cursor)
+			}
+			return result, nil
 		}
 		select {
 		case <-ctx.Done():

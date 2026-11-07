@@ -338,6 +338,44 @@ func TestTaskFailuresAreNotRetried(t *testing.T) {
 	}
 }
 
+func TestTaskUsageLimitIsExplainedNotRetried(t *testing.T) {
+	for _, provider := range []string{"claude", "codex"} {
+		t.Run(provider, func(t *testing.T) {
+			h := newTaskHarness(t, "usage-limit", AdapterLauncher{AllowTasks: true})
+			id := h.startTask("op-1", provider, "x")
+			h.waitState(id, "failed")
+			time.Sleep(300 * time.Millisecond)
+			if n := len(h.runs()); n != 1 {
+				t.Fatalf("%d runs; a limit is never retried", n)
+			}
+			task, err := h.st.TaskByID(id)
+			if err != nil || task.FailureReason != "usage_limit" {
+				t.Fatalf("task %+v %v", task, err)
+			}
+			if provider == "claude" && task.FailureReset != "2025-11-07T18:00:00Z" {
+				t.Fatalf("claude reset %q", task.FailureReset)
+			}
+			if provider == "codex" {
+				at, err := time.Parse(time.RFC3339, task.FailureReset)
+				if err != nil || at.Local().Hour() != 18 || at.Local().Minute() != 12 {
+					t.Fatalf("codex reset %q %v", task.FailureReset, err)
+				}
+			}
+			found := false
+			for _, e := range coordinatorEvents(t, h.st) {
+				if e.Kind == "failed" && strings.Contains(e.Text, "Reason: usage limit; it resets at "+task.FailureReset) {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatal("the failed event does not explain the limit")
+			}
+			waitNoTaskReservations(t)
+			h.stop()
+		})
+	}
+}
+
 func TestTaskWithLeftoverProcessIsBlocked(t *testing.T) {
 	old := taskGroupWait
 	taskGroupWait = 500 * time.Millisecond

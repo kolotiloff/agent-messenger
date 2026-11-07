@@ -159,6 +159,15 @@ func taskWorkerFixture(mode string) int {
 		tool("report", map[string]any{"text": "claims done"})
 		finish()
 		return 1
+	case "usage-limit":
+		// The provider's limit, in the documented event shapes (T-034).
+		if codex {
+			emit(map[string]any{"type": "turn.failed", "error": map[string]any{"message": "You've hit your usage limit. Try again at 18:12."}})
+		} else {
+			emit(map[string]any{"type": "rate_limit_event", "session_id": session, "rate_limit_info": map[string]any{"status": "rejected", "resetsAt": 1762538400, "rateLimitType": "five_hour"}})
+			emit(map[string]any{"type": "result", "subtype": "success", "is_error": true, "session_id": session, "result": "Claude AI usage limit reached|1762538400"})
+		}
+		return 1
 	case "no-disposition":
 	case "two-dispositions":
 		tool("report", map[string]any{"text": "first"})

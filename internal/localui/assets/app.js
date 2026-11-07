@@ -156,6 +156,23 @@
   }
   function clock(at){const d=new Date(at);return isNaN(d.getTime())?'':d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});}
   const activeStates=['running','waiting_owner','waiting_coordinator'];
+  // T-034: why a run failed, as the provider reported it. Nothing is retried.
+  function resetText(at){
+    const d=new Date(at);if(isNaN(d.getTime()))return '';
+    const day=x=>x.getFullYear()+'-'+x.getMonth()+'-'+x.getDate(),today=new Date(),tomorrow=new Date();tomorrow.setDate(today.getDate()+1);
+    if(day(d)===day(today))return 'в '+clock(at);
+    if(day(d)===day(tomorrow))return 'завтра в '+clock(at);
+    return d.toLocaleDateString([], {day:'numeric',month:'long'})+' в '+clock(at);
+  }
+  function failureStatus(t){
+    switch(t.failure_reason){
+      case 'usage_limit':{const r=t.failure_reset?resetText(t.failure_reset):'';return [r?'Лимит, сброс '+r:'Лимит исчерпан','am-status-bad'];}
+      case 'rate_limit':return ['Слишком много запросов','am-status-bad'];
+      case 'overload':return ['Сервис перегружен','am-status-bad'];
+      case 'sign_in':return ['Нужен вход в аккаунт','am-status-bad'];
+    }
+    return null;
+  }
   function taskStatus(t){
     const end=t.finished_at||t.updated_at,from=t.started_at||t.created_at;
     switch(t.state){
@@ -163,7 +180,7 @@
       case 'waiting_owner':return ['Ждёт вашего ответа','am-status-wait'];
       case 'waiting_coordinator':return ['Ждёт ответа координатора','am-status-run'];
       case 'done':return ['Завершил за '+minutes(from,end),'am-muted'];
-      case 'failed':return ['Не прошёл проверку через '+minutes(from,end),'am-status-bad'];
+      case 'failed':return failureStatus(t)||['Не прошёл проверку через '+minutes(from,end),'am-status-bad'];
       case 'interrupted':return ['Прервался через '+minutes(from,end),'am-status-bad'];
       case 'blocked':return ['Заблокирован через '+minutes(from,end),'am-status-bad'];
       case 'cancelled':return ['Отменён','am-muted'];
@@ -552,7 +569,7 @@
       n.textContent=shown?.text||'';n.classList.toggle('am-bad',!!shown?.bad);
     }
   }
-  function hideInvitation(){invitation=null;clearInterval(inviteTimer);$('invite-box').hidden=true;}
+  function hideInvitation(){invitation=null;clearInterval(inviteTimer);const d=$('invite-dialog');if(d.open)d.close();}
   function renderServer(){
     if(!server)return;const h=server.host,m=server.member;
     const focused=document.activeElement?.dataset?.key||'';
@@ -641,10 +658,11 @@
     const code=await serverAction({action:'invite',address:$('host-address').value},'host','');
     if(!code)return;
     note('host','');invitation=code;
-    $('invite-code').textContent=code.code;$('invite-box').hidden=false;$('invite-copy').textContent='Скопировать код';
+    $('invite-code').textContent=code.code;$('invite-copy').textContent='Скопировать код';
     clearInterval(inviteTimer);
     const tick=()=>{const left=Math.ceil((new Date(code.expires_at)-Date.now())/60000);if(left<=0){hideInvitation();return;}$('invite-expiry').textContent='Действует ещё '+left+' мин., один раз.';};
     tick();inviteTimer=setInterval(tick,15000);
+    $('invite-dialog').showModal();$('invite-copy').focus();
     // The invitation is not in the status yet; show it until the next poll.
     server.host.open_invitations=[...(server.host.open_invitations||[]),code.id];
   }
@@ -749,6 +767,9 @@
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.isComposing&&!$('task-stop').hidden&&!$('compose').hidden&&!document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true]')){e.preventDefault();stopTask();}});
   $('answer-text').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();sendAnswer();}});
   $('project-dialog-close').addEventListener('click',()=>$('project-dialog').close());
+  $('invite-close').addEventListener('click',()=>$('invite-dialog').close());
+  // A closed invitation is not shown again; a new one can be made at any time.
+  $('invite-dialog').addEventListener('close',()=>{invitation=null;clearInterval(inviteTimer);});
   $('project-save').addEventListener('click',saveProject);
   $('project-pick').addEventListener('click',()=>window.webkit?.messageHandlers?.folder?.postMessage('pick'));
   $('restart-dialog').addEventListener('cancel',event=>event.preventDefault());

@@ -13,6 +13,9 @@ How to use it:
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
+| T-031 | `wait` returns at most 20 events and about 24,000 characters of text (always at least one event); `more: true` says more are ready; the cursor is the last returned event, so nothing is skipped. | agent | `claude/t031-t034-coordinator-tokens` |
+| T-032 | `tasks` lists open tasks by default (`state: "all"` or one state), default 50 and at most 200 with `more: true`, no folder per row, no verification line on done tasks. It returns a `version` that changes with any new event, new task or task update; `if_version` equal to it returns only `unchanged: true`. A version rather than the event cursor, because starting or cancelling a task changes the list without an event. | agent | `claude/t031-t034-coordinator-tokens` |
+| T-034 | Failure reasons: a failed run records usage limit, rate limit, overload, sign-in or other, plus the limit's reset time when the CLI reports it; the window shows «Лимит, сброс в 18:00», the coordinator's `failed` event and `tasks` carry it. Nothing is retried. Claude and Codex error formats are taken from their docs and tested with fake CLIs only, not checked against live limits. | agent | `claude/t031-t034-coordinator-tokens` |
 
 | T-015 | First part done on `claude/t015-server-setup`: broker hosted by the client, invitations, joining, check, devices and revoke, the «Сервер» tab ([BROKER.md](BROKER.md), D-033–D-035). Left: tasks between computers, VPS package and wizard, Keychain (Q-013), Windows (Q-006). | agent + owner | `claude/t015-server-setup` |
 
@@ -23,6 +26,7 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 | ID | Task | Owner | Notes |
 |---|---|---|---|
 | T-028 | Close or migrate existing persistent sessions and state, then retire the persistent Claude stream and Codex app-server owners. | agent | blocked: Q-012 |
+| T-033 | A resumed run's `read_task` returns the question and answer without the task text; `include_task: true` returns it. | agent | tokens; [TOKEN_REVIEW.md](TOKEN_REVIEW.md) |
 
 ## Backlog
 

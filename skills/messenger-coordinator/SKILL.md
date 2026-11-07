@@ -16,9 +16,10 @@ How work is planned and split is decided with the owner under this project's own
 - `start_task` also takes an optional `model`. Leave it out to use the agent's default model; see "Choosing a model" below.
 - `wait(after, timeout_seconds?)` blocks until something happens in this project: a report, a question for you, a failure, an interruption, a block or a cancellation. Always pass `after` = the `cursor` from the previous `wait` (0 the first time).
   - When it returns events, act on them, then call `wait` again with the new cursor.
+  - When it returns `more: true`, further events are ready: act on these, then call `wait` again at once with the new cursor. One call returns a bounded batch.
   - When it times out with no events, call `wait` again without comment.
   - Waiting costs no tokens.
-- `tasks` lists the project's tasks, their states and any open question for you, plus the current cursor.
+- `tasks(state?, limit?, if_version?)` lists the project's open tasks (not done, failed or cancelled), newest first, with any open question for you, the current cursor and a `version`. `state: "all"` lists every task; a state name lists only that state. Pass `if_version` from the previous call to get `unchanged: true` instead of the same list. You rarely need `tasks`: `wait` already tells you what happened.
 - `answer(task_id, question_id, op_id, text)` answers a worker's question. The worker continues in the same session.
 - `cancel(task_id)` cancels a task.
 
@@ -36,5 +37,6 @@ Most tasks need no `model`: the agent's default is set by the owner in that CLI.
 
 - A report reaches you only after Messenger verified the run: the right session, a normal end and exit, and exactly one report.
 - After `failed`, `interrupted` or `blocked`, do not start the task again by yourself. Tell the owner what happened and let them decide.
+- A failure caused by a usage or rate limit says so (`Reason: usage limit; it resets at …`). Tell the owner the reset time; do not start the task again before it.
 - Questions a worker asks the owner go to the Messenger window, not to you.
 - To talk to the owner while waiting, the owner can interrupt the wait; call `wait` again afterwards with the same cursor. Nothing is lost.

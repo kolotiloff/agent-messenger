@@ -40,8 +40,11 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-active:light-dark(#303030,#ddd);
   --am-active-hover:light-dark(#484848,#eee);
   --am-onactive:light-dark(#fff,#202020);
-  --am-menu:light-dark(#fff,#303030);
+  /* A menu is the top layer: lighter than any card under it, with its own
+     visible edge, so it never merges with what it covers. */
+  --am-menu:light-dark(#fff,#383838);
   --am-menu-hover:light-dark(#eee,#4b4b4b);
+  --am-menu-line:light-dark(#dcdcdc,#4d4d4d);
   --am-composer:light-dark(#fff,#303030);
   --am-bubble:light-dark(#f3f3f3,#252525);
   --am-check:light-dark(#287bd7,#67aaf9);
@@ -55,6 +58,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-scroll-thumb-hover:light-dark(#aaa,#777);
   --am-shadow-s:0 3px 14px light-dark(#0000000f,#00000030);
   --am-shadow-l:0 12px 32px light-dark(#00000018,#00000040);
+  --am-shadow-menu:0 2px 6px light-dark(#0000000f,#00000040), 0 14px 36px light-dark(#00000024,#00000099);
   --am-backdrop:#0005;
 
   /* Spacing */
@@ -166,7 +170,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-select-trigger:disabled { background:var(--am-disabled); color:var(--am-disabled-text); }
 #am-concept .am-select-value { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #am-concept .am-select-chevron { width:7px; height:7px; margin:calc(-1 * var(--am-text-nudge)) var(--am-space-1) 0; border-right:1.5px solid currentColor; border-bottom:1.5px solid currentColor; transform:rotate(45deg) translateY(-2px); flex-shrink:0; color:var(--am-muted); }
-#am-concept .am-select-menu { position:fixed; inset:auto; margin:0; padding:var(--am-space-1); border:1px solid var(--am-line); border-radius:var(--am-radius-m); background:var(--am-menu); color:var(--am-text); box-shadow:var(--am-shadow-l); overflow:auto; overscroll-behavior:contain; font:inherit; outline:none; }
+#am-concept .am-select-menu { position:fixed; inset:auto; margin:0; padding:var(--am-space-1); border:1px solid var(--am-menu-line); border-radius:var(--am-radius-m); background:var(--am-menu); color:var(--am-text); box-shadow:var(--am-shadow-menu); overflow:auto; overscroll-behavior:contain; font:inherit; outline:none; }
 #am-concept .am-select-menu::backdrop { background:transparent; }
 #am-concept .am-select-option { display:flex; align-items:center; justify-content:space-between; gap:var(--am-gap-content); min-height:var(--am-control-compact); padding:var(--am-space-1) var(--am-space-3); border-radius:var(--am-radius-s); cursor:pointer; outline:none; overflow-wrap:anywhere; }
 #am-concept .am-select-option:focus { background:var(--am-menu-hover); }
@@ -198,7 +202,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-project .am-select-trigger { width:100%; }
 #am-concept .am-computers { display:flex; flex-direction:column; min-height:0; }
 #am-concept .am-machines { display:flex; flex-direction:column; gap:var(--am-space-1); min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; margin-right:calc(-1 * var(--am-space-3)); padding-right:calc(var(--am-space-3) - var(--am-gutter, 0px)); }
-#am-concept .am-machine-card { display:flex; flex-direction:column; align-items:stretch; gap:var(--am-gap-control); padding:var(--am-pad-compact); border-radius:var(--am-radius-s); background:var(--am-selected); }
+#am-concept .am-machine-card { display:flex; flex-direction:column; align-items:stretch; gap:var(--am-gap-control); padding:var(--am-pad-compact); border:1px solid var(--am-line); border-radius:var(--am-radius-s); background:var(--am-soft); }
 #am-concept .am-machine-name { display:flex; align-items:center; gap:var(--am-gap-control); font-weight:500; }
 #am-concept .am-machine-name .am-dot { margin-left:auto; }
 #am-concept .am-machine-agents { display:flex; flex-direction:column; gap:var(--am-space-1); }
@@ -324,7 +328,10 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-card dt { font-size:var(--am-text-xs); color:var(--am-muted); }
 #am-concept .am-card dd { display:flex; align-items:center; gap:var(--am-gap-control); margin:0; overflow-wrap:anywhere; }
 #am-concept .am-badge { flex:none; padding:var(--am-gap-line) var(--am-space-2); border-radius:var(--am-radius-s); background:var(--am-soft); color:var(--am-muted); font-size:var(--am-text-s); white-space:nowrap; }
-#am-concept .am-badge.am-good { background:var(--am-selected); color:var(--am-text); }
+/* A running state reads like the agents' status: a green dot and green text. */
+#am-concept .am-badge.am-good { display:inline-flex; align-items:center; gap:var(--am-space-2); padding-inline:0; background:transparent; color:var(--am-good); }
+#am-concept .am-badge.am-good::before { content:""; width:7px; height:7px; border-radius:50%; background:currentColor; }
+#am-concept .am-invite-dialog { width:min(560px,calc(100vw - 48px)); }
 #am-concept .am-q { width:20px; height:20px; min-height:20px; padding:0; border-radius:50%; font-size:var(--am-text-xs); }
 #am-concept .am-hint { display:flex; flex-direction:column; gap:var(--am-gap-control); padding:var(--am-pad-compact); border-radius:var(--am-radius-s); background:var(--am-soft); font-size:var(--am-text-s); }
 #am-concept .am-folder { display:flex; align-items:center; gap:var(--am-gap-control); margin-bottom:var(--am-gap-content); padding:var(--am-space-2) var(--am-space-2) var(--am-space-2) var(--am-space-3); border:1px solid var(--am-line); border-radius:var(--am-radius-m); }
@@ -345,7 +352,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-form-status { overflow-wrap:anywhere; }
 #am-concept .am-form-status:empty { display:none; }
 #am-concept .am-form-status.am-bad { color:var(--am-bad); }
-#am-concept .am-invite { display:flex; flex-direction:column; gap:var(--am-gap-control); }
+#am-concept .am-invite { display:flex; flex-direction:column; gap:var(--am-gap-content); }
 #am-concept .am-invite .am-code-block { margin:0; user-select:all; }
 #am-concept .am-devices { display:flex; flex-direction:column; }
 #am-concept .am-device { display:flex; align-items:center; justify-content:space-between; gap:var(--am-gap-content); padding:var(--am-space-2) 0; border-top:1px solid var(--am-line); }

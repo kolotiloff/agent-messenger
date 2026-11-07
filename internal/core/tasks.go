@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/kolotiloff/agent-messenger/internal/platform"
@@ -197,9 +198,13 @@ type Task struct {
 	SessionID, Detail, CreatedAt, UpdatedAt, FinishedAt                  string
 	CLI, Environment                                                     string
 	Model                                                                string
-	CancelRequested                                                      bool
-	Version                                                              int
-	OpenQuestion                                                         *TaskQuestion
+	// FailureReason and FailureReset explain a failed task (T-034): the
+	// failure class the provider reported and its limit reset time (RFC 3339).
+	// They never cause a retry.
+	FailureReason, FailureReset string
+	CancelRequested             bool
+	Version                     int
+	OpenQuestion                *TaskQuestion
 }
 
 // TaskQuestion is a question that a verified run asked.
@@ -599,12 +604,12 @@ func insertTaskRun(tx *sql.Tx, task string, ordinal int, kind, input string) err
 	return err
 }
 
-const taskColumns = `id,project,computer,provider,profile,folder,title,text,state,COALESCE(session_id,''),detail,created_at,updated_at,COALESCE(finished_at,''),cli_path,environment,cancel_requested,version,COALESCE(model,'')`
+const taskColumns = `id,project,computer,provider,profile,folder,title,text,state,COALESCE(session_id,''),detail,created_at,updated_at,COALESCE(finished_at,''),cli_path,environment,cancel_requested,version,COALESCE(model,''),COALESCE(failure_reason,''),COALESCE(failure_reset,'')`
 
 func scanTask(scan func(...any) error) (Task, error) {
 	var t Task
 	var cancel int
-	err := scan(&t.ID, &t.Project, &t.Computer, &t.Provider, &t.Profile, &t.Folder, &t.Title, &t.Text, &t.State, &t.SessionID, &t.Detail, &t.CreatedAt, &t.UpdatedAt, &t.FinishedAt, &t.CLI, &t.Environment, &cancel, &t.Version, &t.Model)
+	err := scan(&t.ID, &t.Project, &t.Computer, &t.Provider, &t.Profile, &t.Folder, &t.Title, &t.Text, &t.State, &t.SessionID, &t.Detail, &t.CreatedAt, &t.UpdatedAt, &t.FinishedAt, &t.CLI, &t.Environment, &cancel, &t.Version, &t.Model, &t.FailureReason, &t.FailureReset)
 	t.CancelRequested = cancel != 0
 	return t, err
 }
@@ -763,8 +768,31 @@ func setTaskState(tx *sql.Tx, task, state, detail string) error {
 	if state == "done" || state == "failed" || state == "cancelled" {
 		finished = sql.NullString{String: now(), Valid: true}
 	}
-	_, err := tx.Exec(`UPDATE tasks SET state=?,detail=?,updated_at=?,version=version+1,finished_at=COALESCE(?,finished_at) WHERE id=?`, state, detail, now(), nullString(finished), task)
+	_, err := tx.Exec(`UPDATE tasks SET state=?,detail=?,updated_at=?,version=version+1,finished_at=COALESCE(?,finished_at),failure_reason=NULL,failure_reset=NULL WHERE id=?`, state, detail, now(), nullString(finished), task)
 	return err
+}
+
+// Failure reasons a run can report (T-034). They match the adapters'
+// classes; anything else is stored as "other".
+var failureReasons = map[string]bool{"usage_limit": true, "rate_limit": true, "overload": true, "sign_in": true, "other": true}
+
+// failureNote is the coordinator line that explains a failure reason. It
+// says what to tell the owner; nothing is ever started again by itself.
+func failureNote(reason, reset string) string {
+	switch reason {
+	case "usage_limit":
+		if reset != "" {
+			return "Reason: usage limit; it resets at " + reset + ". Tell the owner the reset time; do not start this task again before it."
+		}
+		return "Reason: usage limit; no reset time was reported. Tell the owner; do not start this task again until they decide."
+	case "rate_limit":
+		return "Reason: rate limit. Tell the owner; do not start this task again by yourself."
+	case "overload":
+		return "Reason: the provider is overloaded. Tell the owner; do not start this task again by yourself."
+	case "sign_in":
+		return "Reason: the agent CLI is not signed in on this computer. Ask the owner to sign in."
+	}
+	return ""
 }
 
 // BeginTaskRun is committed BEFORE the reservation and exec. From here a
@@ -992,6 +1020,9 @@ type RunEvidence struct {
 	GroupEmpty bool
 	ProviderOK bool
 	Detail     string
+	// Reason is the failure class the provider reported (T-034) and ResetAt
+	// its limit reset time in RFC 3339; both are only explanations.
+	Reason, ResetAt string
 	// Cancelled: the run was stopped on request.
 	Cancelled bool
 }
@@ -1055,7 +1086,22 @@ func (s *Store) FinishTaskRun(run string, ev RunEvidence) (string, error) {
 			if err := setTaskState(tx, t.ID, "failed", detail); err != nil {
 				return err
 			}
+			reason, reset := ev.Reason, ev.ResetAt
+			if !failureReasons[reason] {
+				reason = ""
+			}
+			if _, err := time.Parse(time.RFC3339, reset); err != nil || reason != "usage_limit" {
+				reset = ""
+			}
+			if reason != "" {
+				if _, err := tx.Exec(`UPDATE tasks SET failure_reason=?,failure_reset=? WHERE id=?`, reason, nullString(sql.NullString{String: reset, Valid: reset != ""}), t.ID); err != nil {
+					return err
+				}
+			}
 			text := "the run was not verified: " + detail
+			if note := failureNote(reason, reset); note != "" {
+				text += "\n" + note
+			}
 			if r.DispositionText != "" {
 				text += "\nUnverified text from the worker:\n" + r.DispositionText
 			}
@@ -1341,6 +1387,17 @@ func (s *Store) TaskEvents(project, audience string, after int64, limit int) ([]
 		return rows.Err()
 	})
 	return out, cursor, err
+}
+
+// TaskListVersion changes whenever a project's task list or its events may
+// have changed: a new event, a new task, or any task state change (every such
+// update bumps tasks.version). It lets the coordinator skip an unchanged list
+// (T-032).
+func (s *Store) TaskListVersion(project string) (string, error) {
+	var seq sql.NullInt64
+	var count, sum int64
+	err := s.db.QueryRow(`SELECT (SELECT MAX(seq) FROM task_events WHERE project=?), COUNT(*), COALESCE(SUM(version),0) FROM tasks WHERE project=?`, project, project).Scan(&seq, &count, &sum)
+	return fmt.Sprintf("%d.%d.%d", seq.Int64, count, sum), err
 }
 
 // LatestTaskEvent returns the newest event sequence number of a project.
