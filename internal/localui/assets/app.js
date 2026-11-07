@@ -207,11 +207,11 @@
     }
     return [t.state,'am-muted'];
   }
-  function coordinatorName(){
-    const c=(view?.coordinator?.client||'').toLowerCase();
+  function coordinatorName(client=view?.coordinator?.client){
+    const c=(client||'').toLowerCase();
     if(c.includes('codex'))return ['codex','Codex'];
-    if(c.includes('claude')||!c)return ['claude','Claude'];
-    return ['',view.coordinator.client];
+    if(c.includes('claude')||!c||c==='coordinator')return ['claude','Claude'];
+    return ['',client];
   }
   function agentState(a){
     if(!online)return ['offline','Нет связи'];
@@ -246,52 +246,72 @@
     item.addEventListener('click',pick);item.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();pick();}});
     menu.replaceChildren(item);menu.style.left=x+'px';menu.style.top=y+'px';menu.showPopover();item.focus();
   }
-  function renderMachines(){
-    const box=$('machines');box.replaceChildren();
-    const machine=el('div',undefined,'am-machine-card');machine.setAttribute('aria-current','true');
-    const head=el('div',undefined,'am-machine-name');head.append(el('span',view?.computer_name||'Этот компьютер'));
-    const dot=el('span',undefined,'am-dot'+(online?' online':''));dot.title=online?'На связи':'Нет связи';head.append(dot);machine.append(head);
+  // One line per agent program, with its state. The coordinator is a mark on
+  // its program's line, not a separate line (approved mockup). live is false
+  // when the computer cannot be reached.
+  function agentLines(agents,coordinatorClient,live){
     const lines=el('div',undefined,'am-machine-agents');
-    // One line per program. The coordinator is a mark on its program's line,
-    // not a separate line (approved mockup).
-    const [coordProvider,coordLabel]=view?.coordinator?.connected?coordinatorName():['',''];
-    const providers=(view?.agents||[]).map(a=>a.agent);
+    const [coordProvider,coordLabel]=coordinatorClient!==null?coordinatorName(coordinatorClient):['',''];
+    const providers=agents.map(a=>a.agent);
     if(coordProvider&&!providers.includes(coordProvider))providers.unshift(coordProvider);
     for(const provider of providers){
-      const a=(view?.agents||[]).find(x=>x.agent===provider);
+      const a=agents.find(x=>x.agent===provider);
       const coordinator=provider===coordProvider;
-      let [state,text]=a?agentState(a):[online?'run':'offline',online?'Подключён':'Нет связи'];
+      let [state,text]=!live?['offline','Нет связи']:a?agentState(a):['run','Подключён'];
       const notes=[];
-      if(coordinator){notes.push(online?'координатор подключён к проекту':'координатор');if(state==='idle'){state='run';text='Свободен';}}
+      if(coordinator){notes.push(live?'координатор подключён к проекту':'координатор');if(state==='idle'){state='run';text='Свободен';}}
       const line=el('div',undefined,'am-agent-line');line.dataset.provider=provider;
       line.title=(names[provider]||provider)+': '+(a?text:'')+(notes.length?(a?', ':'')+notes.join(', '):'');
       line.append(el('span',undefined,'am-dot am-dot-'+state),el('span',shortNames[provider]||provider));
       if(coordinator)line.append(el('span','координатор','am-muted am-small'));
       lines.append(line);
     }
-    if(view?.coordinator?.connected&&!coordProvider){
-      const line=el('div',undefined,'am-agent-line');line.append(el('span',undefined,'am-dot am-dot-'+(online?'run':'offline')),el('span',coordLabel),el('span','координатор','am-muted am-small'));lines.append(line);
+    if(coordinatorClient!==null&&!coordProvider){
+      const line=el('div',undefined,'am-agent-line');line.append(el('span',undefined,'am-dot am-dot-'+(live?'run':'offline')),el('span',coordLabel),el('span','координатор','am-muted am-small'));lines.append(line);
     }
+    return lines;
+  }
+  // A computer of the network counts as reachable while its reports arrive:
+  // it reports every 15 s, so three missed reports mean it is not.
+  const peerFresh=peer=>peer.age>=0&&peer.age<=45;
+  function renderMachines(){
+    const box=$('machines');box.replaceChildren();
+    const machine=el('div',undefined,'am-machine-card');machine.setAttribute('aria-current','true');
+    const head=el('div',undefined,'am-machine-name');head.append(el('span',view?.computer_name||'Этот компьютер'));
+    const dot=el('span',undefined,'am-dot'+(online?' online':''));dot.title=online?'На связи':'Нет связи';head.append(dot);machine.append(head);
+    const lines=agentLines(view?.agents||[],view?.coordinator?.connected?(view.coordinator.client||''):null,online);
     if(!lines.children.length)lines.append(el('p',online?'Агенты не подключены':'Нет связи','am-small am-muted'));
     machine.append(lines);box.append(machine);
-    // Computers that joined this computer's server. Tasks do not reach them
-    // yet, so a card shows only when the device was last seen.
-    for(const d of (server?.host?.devices||[]).filter(d=>!d.revoked_at)){
-      const card=el('div',undefined,'am-machine-card am-device-card');
-      const name=el('div',undefined,'am-machine-name');name.append(el('span',d.name),el('span',undefined,'am-dot'));card.append(name);
-      if(revokeAsk===d.id){
+    // The other computers of this computer's network, with their agents.
+    // Only the computer that runs the server can revoke one, from the
+    // right-click menu.
+    const hosted=new Set((server?.host?.devices||[]).filter(d=>!d.revoked_at).map(d=>d.id));
+    for(const peer of server?.peers||[]){
+      const fresh=peerFresh(peer);
+      const card=el('div',undefined,'am-machine-card am-peer-card');card.dataset.peer=peer.id;
+      const name=el('div',undefined,'am-machine-name');
+      const pdot=el('span',undefined,'am-dot'+(fresh?' online':''));pdot.title=fresh?'На связи':'Нет связи';
+      name.append(el('span',peer.name),pdot);card.append(name);
+      if(revokeAsk===peer.id&&hosted.has(peer.id)){
         card.append(el('p','Отозвать устройство? Вернуть его можно только новым приглашением.','am-small am-muted'));
         const actions=el('div',undefined,'am-actions am-device-confirm');
-        const yes=el('button','Отозвать','am-danger');yes.type='button';yes.dataset.key='revoke-yes-'+d.id;
-        yes.addEventListener('click',()=>{revokeAsk='';serverAction({action:'revoke',device:d.id},'host','');});
+        const yes=el('button','Отозвать','am-danger');yes.type='button';yes.dataset.key='revoke-yes-'+peer.id;
+        yes.addEventListener('click',()=>{revokeAsk='';serverAction({action:'revoke',device:peer.id},'host','');});
         const no=el('button','Отмена');no.type='button';
-        no.addEventListener('click',()=>{revokeAsk='';renderMachines();$('machines').querySelector('[data-key="revoke-'+d.id+'"]')?.focus();});
-        actions.append(no,yes);card.append(actions);
+        no.addEventListener('click',()=>{revokeAsk='';renderMachines();$('machines').querySelector('[data-key="revoke-'+peer.id+'"]')?.focus();});
+        actions.append(no,yes);card.append(actions);box.append(card);continue;
+      }
+      if(fresh){
+        const plines=agentLines(peer.agents||[],peer.coordinator?peer.coordinator:null,true);
+        if(!plines.children.length)plines.append(el('p','Агенты не подключены','am-small am-muted'));
+        card.append(plines);
       }else{
-        card.append(el('p',d.last_seen?'Был на связи '+stamp(d.last_seen):'Подключён '+stamp(d.created_at),'am-small am-muted'));
-        card.tabIndex=0;card.dataset.key='revoke-'+d.id;card.title='Правая кнопка мыши — действия';
-        card.addEventListener('contextmenu',event=>{event.preventDefault();deviceMenu(d,event.clientX,event.clientY);});
-        card.addEventListener('keydown',event=>{if(event.key==='ContextMenu'||(event.shiftKey&&event.key==='F10')){event.preventDefault();const r=card.getBoundingClientRect();deviceMenu(d,r.left+16,r.top+24);}});
+        card.append(el('p',peer.last_seen?'Был на связи '+stamp(peer.last_seen):'Ещё не выходил на связь','am-small am-muted'));
+      }
+      if(hosted.has(peer.id)){
+        card.classList.add('am-device-card');card.tabIndex=0;card.dataset.key='revoke-'+peer.id;card.title='Правая кнопка мыши — действия';
+        card.addEventListener('contextmenu',event=>{event.preventDefault();deviceMenu(peer,event.clientX,event.clientY);});
+        card.addEventListener('keydown',event=>{if(event.key==='ContextMenu'||(event.shiftKey&&event.key==='F10')){event.preventDefault();const r=card.getBoundingClientRect();deviceMenu(peer,r.left+16,r.top+24);}});
       }
       box.append(card);
     }
@@ -851,8 +871,8 @@
   $('member-disconnect').addEventListener('click',()=>serverAction({action:'disconnect'},'member','Отключено. Устройство остаётся в списке сервера, пока его там не отзовут.'));
   let serverPolls=0;
   // The sidebar lists devices from the server state, so it is read on every
-  // tab, just less often outside «Сервер».
-  setInterval(()=>{serverPolls++;if(tab==='server'||serverPolls%6===0)loadServer();},5000);
+  // tab, every 15 s outside «Сервер» (as often as computers report).
+  setInterval(()=>{serverPolls++;if(tab==='server'||serverPolls%3===0)loadServer();},5000);
   loadServer();
   let initialTheme=window.messengerInitialTheme;
   if(!initialTheme)try{initialTheme=localStorage.getItem('messenger-theme');}catch(_){}

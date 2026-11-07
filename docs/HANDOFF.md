@@ -8,6 +8,12 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-07 (late evening) by Claude Code.
+
+- **T-035 (branch `claude/t035-network-roster`):** every computer reports its agents to the broker every 15 s; the sidebar shows all computers of the network with their agents and statuses, «Был на связи …» after 45 s without a report (D-039). VPS made optional (D-040, T-036 in the backlog).
+- **Verified here (Linux):** `check.sh`; broker tests; headless Chromium with a helper program joining as a second computer. **Not verified:** two real Macs.
+- **Next:** T-037 tasks between computers — design first in TASK_MODEL.md, with the cautious defaults recorded in QUESTIONS.md.
+
 Updated 2026-11-07 (evening) by Claude Code.
 
 - **«Сервер» tab and sidebar polish (T-015), approved by the owner on a live preview, going into preview.29:** statuses are a dot and plain text; Доступ, Порт and one start/stop button in one row, fields locked while the server runs, «Применить» removed; explanations moved into status tooltips so cards keep their height; computers that joined this server show in the sidebar «Компьютеры» (name, dot, last seen) with «Отозвать» in a right-click menu; invitation dialog copies with an icon; the sidebar shows only «Доступно обновление» and «Обновиться»; control text is centred by measuring the font at start.

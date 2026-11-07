@@ -6,7 +6,9 @@
 // (broker_id) and the SHA-256 fingerprint of its self-signed certificate, so
 // the device pins the certificate instead of trusting any TLS server. After
 // registration the device holds a revocable key; the broker stores only its
-// hash. Exchanging tasks between computers is not part of this package yet.
+// hash. Computers report their agents (presence.go) so every computer can
+// list the others. Exchanging tasks between computers is not part of this
+// package yet.
 package broker
 
 import (
@@ -126,6 +128,9 @@ func (b *Broker) init() error {
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS devices(id TEXT PRIMARY KEY, name TEXT NOT NULL, key_hash TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL, last_seen TEXT, revoked_at TEXT);
 CREATE TABLE IF NOT EXISTS invitations(secret_hash TEXT PRIMARY KEY, created_at TEXT NOT NULL, expires_at TEXT NOT NULL, used_at TEXT, device_id TEXT);`); err != nil {
+		return err
+	}
+	if err := b.initPresence(); err != nil {
 		return err
 	}
 	err := b.db.QueryRow(`SELECT value FROM meta WHERE key='broker_id'`).Scan(&b.id)
@@ -595,22 +600,13 @@ func (b *Broker) Handler() http.Handler {
 			http.Error(w, "method", http.StatusMethodNotAllowed)
 			return
 		}
-		key, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if !ok || len(key) != 64 {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "device"})
-			return
-		}
-		d, err := b.device(key)
-		if errors.Is(err, ErrRevoked) {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "device"})
-			return
-		}
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "unavailable"})
+		d, ok := b.authorized(w, r)
+		if !ok {
 			return
 		}
 		writeJSON(w, http.StatusOK, PingResult{BrokerID: b.id, DeviceID: d.ID, Name: d.Name, Time: d.LastSeen})
 	})
+	mux.HandleFunc("/v1/presence", b.handlePresence)
 	return mux
 }
 

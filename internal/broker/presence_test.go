@@ -1,0 +1,118 @@
+package broker
+
+import (
+	"net/http"
+	"strings"
+	"testing"
+)
+
+func TestPresenceRoster(t *testing.T) {
+	host := newService(t, t.TempDir())
+	if err := host.Enable(ScopeLocal, freePort(t)); err != nil {
+		t.Fatal(err)
+	}
+	code, err := host.Invite(host.Status().Host.Addresses[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	member := newService(t, t.TempDir())
+	if err := member.Connect(ctx(t), code.Code, "Ноутбук"); err != nil {
+		t.Fatal(err)
+	}
+	host.SetPresence(func() (Presence, error) {
+		return Presence{Name: "Mac Studio", Agents: []PresenceAgent{{Agent: "claude", Running: 1}, {Agent: "codex"}}, Coordinator: "claude-code"}, nil
+	})
+	member.SetPresence(func() (Presence, error) {
+		// A device cannot rename itself through its report.
+		return Presence{Name: "Чужое имя", Agents: []PresenceAgent{{Agent: "codex", Waiting: 2}}}, nil
+	})
+	host.ReportPresence(ctx(t))
+	member.ReportPresence(ctx(t))
+
+	peers := member.Status().Peers
+	if len(peers) != 1 || !peers[0].Host || peers[0].Name != "Mac Studio" || peers[0].Coordinator != "claude-code" || peers[0].Age < 0 || peers[0].Age > 5 {
+		t.Fatalf("member sees %+v", peers)
+	}
+	if len(peers[0].Agents) != 2 || peers[0].Agents[0] != (PresenceAgent{Agent: "claude", Running: 1}) {
+		t.Fatalf("host agents %+v", peers[0].Agents)
+	}
+	if ms := member.Status().Member; !ms.Reachable || ms.CheckedAt == "" {
+		t.Fatalf("a report is a successful check: %+v", ms)
+	}
+	peers = host.Status().Peers
+	if len(peers) != 1 || peers[0].Host || peers[0].Name != "Ноутбук" || len(peers[0].Agents) != 1 || peers[0].Agents[0].Waiting != 2 {
+		t.Fatalf("host sees %+v", peers)
+	}
+
+	// A malformed report is refused and changes nothing.
+	c := *member.member
+	for _, body := range []any{
+		map[string]any{"agents": []map[string]any{{"agent": "Not A Name"}}},
+		map[string]any{"agents": []map[string]any{{"agent": "codex", "running": -1}}},
+		map[string]any{"agents": []map[string]any{{"agent": "codex"}, {"agent": "codex"}}},
+		map[string]any{"agents": []any{}, "extra": true},
+	} {
+		code, err := call(ctx(t), pinnedClient(c.Fingerprint), http.MethodPost, c.Address, "/v1/presence", c.DeviceKey, body, nil)
+		if err != nil || code != http.StatusBadRequest {
+			t.Fatalf("bad report %v: %d %v", body, code, err)
+		}
+	}
+	if code, _ := call(ctx(t), pinnedClient(c.Fingerprint), http.MethodPost, c.Address, "/v1/presence", strings.Repeat("0", 64), Presence{}, nil); code != http.StatusUnauthorized {
+		t.Fatalf("unknown key: %d", code)
+	}
+	if got := host.Status().Peers[0].Agents[0].Waiting; got != 2 {
+		t.Fatalf("refused report changed the roster: %d", got)
+	}
+
+	// A revoked device is told so and leaves the roster.
+	if err := host.Revoke(c.DeviceID); err != nil {
+		t.Fatal(err)
+	}
+	if len(host.Status().Peers) != 0 {
+		t.Fatal("revoked device still listed")
+	}
+	member.ReportPresence(ctx(t))
+	if ms := member.Status().Member; ms.Reachable || ms.Error != ErrRevoked.Error() {
+		t.Fatalf("revoked member %+v", ms)
+	}
+	if err := member.Disconnect(); err != nil {
+		t.Fatal(err)
+	}
+	if len(member.Status().Peers) != 0 {
+		t.Fatal("peers kept after disconnect")
+	}
+}
+
+func TestPresenceOfUnreachableBrokerAges(t *testing.T) {
+	host := newService(t, t.TempDir())
+	if err := host.Enable(ScopeLocal, freePort(t)); err != nil {
+		t.Fatal(err)
+	}
+	code, _ := host.Invite(host.Status().Host.Addresses[0])
+	member := newService(t, t.TempDir())
+	if err := member.Connect(ctx(t), code.Code, "Ноутбук"); err != nil {
+		t.Fatal(err)
+	}
+	host.SetPresence(func() (Presence, error) { return Presence{Name: "Mac", Agents: []PresenceAgent{}}, nil })
+	member.SetPresence(func() (Presence, error) { return Presence{Agents: []PresenceAgent{}}, nil })
+	host.ReportPresence(ctx(t))
+	member.ReportPresence(ctx(t))
+	if len(member.Status().Peers) != 1 {
+		t.Fatal("no roster")
+	}
+	if err := host.Disable(); err != nil {
+		t.Fatal(err)
+	}
+	member.ReportPresence(ctx(t))
+	st := member.Status()
+	if st.Member.Reachable || st.Member.Error == "" {
+		t.Fatalf("unreachable broker not shown: %+v", st.Member)
+	}
+	// The last list is kept and keeps ageing; it is not refreshed.
+	member.mu.Lock()
+	member.peersAt = member.peersAt.Add(-PresenceInterval * 10)
+	member.mu.Unlock()
+	if p := member.Status().Peers; len(p) != 1 || p[0].Age < 150 {
+		t.Fatalf("stale roster %+v", p)
+	}
+}

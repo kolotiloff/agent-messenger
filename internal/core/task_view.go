@@ -347,3 +347,58 @@ func (s *Store) WindowAnswer(task, question, opID, text string) error {
 	}
 	return s.AnswerTask(task, question, opID, text, AudienceOwner)
 }
+
+// AgentPresence is one agent program of this computer as other computers
+// see it: how many of its tasks run and how many wait for the owner.
+type AgentPresence struct {
+	Agent   string
+	Running int
+	Waiting int
+}
+
+// Presence summarizes this computer's agents for the server's list of
+// computers. Coordinator is the program of the most recently seen
+// coordinator connection, if any.
+func (s *Store) Presence() (agents []AgentPresence, coordinator string, err error) {
+	agents = []AgentPresence{}
+	err = s.tx(func(tx *sql.Tx) error {
+		computer, err := localComputer(tx)
+		if err != nil {
+			return err
+		}
+		rows, err := tx.Query(`SELECT a.provider,
+ (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='running'),
+ (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='waiting_owner')
+ FROM computer_agents a WHERE a.computer=? ORDER BY a.provider`, computer)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			var a AgentPresence
+			if err := rows.Scan(&a.Agent, &a.Running, &a.Waiting); err != nil {
+				rows.Close()
+				return err
+			}
+			agents = append(agents, a)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		var client sql.NullString
+		err = tx.QueryRow(`SELECT client FROM coordinator_connections ORDER BY last_seen DESC LIMIT 1`).Scan(&client)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		// A connection whose program is not known yet is still a coordinator.
+		coordinator = client.String
+		if coordinator == "" {
+			coordinator = "coordinator"
+		}
+		return nil
+	})
+	return agents, coordinator, err
+}

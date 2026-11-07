@@ -637,3 +637,38 @@ func TestTaskFailureReason(t *testing.T) {
 		}
 	}
 }
+
+func TestPresenceListsAgentsAndCoordinator(t *testing.T) {
+	root := t.TempDir()
+	st, err := Open(filepath.Join(root, "queue.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	agents, coordinator, err := st.Presence()
+	if err != nil || len(agents) != 0 || coordinator != "" {
+		t.Fatalf("empty presence %v %q %v", agents, coordinator, err)
+	}
+	cli := filepath.Join(root, "agent")
+	if err := os.WriteFile(cli, []byte("#!/bin/sh\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{"codex", "claude"} {
+		if err := st.SetComputerAgent(p, cli, "", "messenger-only"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := st.TouchCoordinator("game"); err != nil {
+		t.Fatal(err)
+	}
+	agents, coordinator, err = st.Presence()
+	if err != nil || len(agents) != 2 || agents[0].Agent != "claude" || agents[1].Agent != "codex" || coordinator != "coordinator" {
+		t.Fatalf("presence %v %q %v", agents, coordinator, err)
+	}
+	if err := st.TouchCoordinatorClient("game", "claude-code"); err != nil {
+		t.Fatal(err)
+	}
+	if _, coordinator, _ = st.Presence(); coordinator != "claude-code" {
+		t.Fatalf("coordinator %q", coordinator)
+	}
+}
