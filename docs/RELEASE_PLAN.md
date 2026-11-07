@@ -82,6 +82,17 @@ With each completed step, the sources and up-to-date README/instructions move to
 By default the message queue is shown to the right of the conversation; an icon at the top hides and restores the panel. There is no separate queue tab. Currently the panel shows the number of pending messages and sessions requiring attention, based on client data. The queue panel, the message history and the list of computers scroll independently; the theme, current version and update are pinned at the bottom left.
 
 
-## Takeaways from Agentgram
+## Planned directions
 
-The [comparison, sources and priorities](AGENTGRAM_REVIEW.md) fix the accepted directions without expanding the current updates stage. Stages 2–3 include observing available agent events, restoring the view without resending, and a connection wizard. Before network stage 5, we separate the logical address from the CLI binding, keeping the ban on silently changing the recipient of an accepted message. Before automatic chains, we need a context delta, limits and token measurement. A REST/A2A adapter comes after core delivery; enterprise integrations are not required for the first release.
+These directions are accepted without expanding the current stage:
+
+| Priority and stage | Direction | Readiness condition |
+|---|---|---|
+| Stage 3: connection | A step-by-step setup: choice of agent, connection and checks. | CLI installation, login, compatibility and session readiness are shown separately. A status check does not call the model. No false "connected". |
+| Stages 2–3: observation | A live stream of available events: reply, tool start/result, waiting, error. Reconnecting the interface restores the view from an event cursor. | A window drop and reconnection do not create a new message or a model run. We do not promise hidden reasoning that the provider does not expose. |
+| Stage 5: network | Separation of transport and execution, logical addresses, binding version, idempotent IDs and acknowledgement after write. The ban on silently changing the recipient of an accepted message stays. | Disconnecting/reconnecting a device does not lose a message and does not repeat a model run already started. Changing the binding does not change the recipient of an accepted message. |
+| Before automatic group chains | Pass only new relevant context; limit size, number of hops and budget. | Context is tracked by confirmed IDs/cursors; truncation is explicit. Input/output tokens and the number of calls are measured. A loop stops at the limit without losing history. |
+| Stage 5: permissions | Restricted MCP tools and allowed recipients, a log of control actions. | An agent does not get the right to change settings/keys merely because it can send a message. The log contains no secrets. |
+| After basic exchange between four devices | A separate REST adapter for an API agent, if a real scenario appears. | One API agent passes the same contract for IDs, delivery, errors and limits, without bypassing the CLI guarantees. |
+
+Routing, acknowledgement, waiting, window refresh and connectivity checks are done by ordinary code, not by a model. Corporate SSO/RBAC, Slack, public links and a marketplace are not tasks for the first release.
