@@ -14,7 +14,8 @@ Updated 2026-11-07 (day) by Claude Code.
 - **T-033** (branch `claude/t033-resume-brief`): a resumed run's `read_task` leaves out the task text unless `include_task: true`.
 - **Other products are not named anywhere** (owner's request): the comparison document was removed, the rule is in AGENTS.md. The owner deleted old merged branches (T-018).
 - **Verified here (Linux):** `check.sh`, new tests with fake Claude and Codex CLIs, window screenshots in headless Chromium. **Not verified:** real usage limits (formats come from the CLIs' docs), the Mac app.
-- **Next:** release the next preview with all of this; then T-015 continued and Q-012 / T-028.
+- **preview.28 released** from `main` at 98d346e (PR #45 and PR #46; run 42360015163): the app zip, `update-darwin-arm64.json` and its `.sig`. Not yet installed on the Mac.
+- **Next:** owner updates to preview.28; then T-015 continued and Q-012 / T-028.
 
 Updated 2026-11-07 (third night) by Claude Code.
 
