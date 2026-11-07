@@ -7,6 +7,10 @@ One entry per work session, newest first. Write what was done, which tool did it
 - Branch `claude/t015-status-style`: one status style, one-row server controls with locked fields, tooltips instead of hint lines, joined devices in the sidebar with a right-click «Отозвать», icon copy in the invitation, quiet update block, font-measured text centring. The owner approved it on a live preview; released as preview.29.
 - No real model calls; Mac app not run.
 
+## 2026-11-07 — Claude Code (preview.28 released)
+
+- PR #46 (T-033) merged after green CI on Linux and macOS; released as preview.28 from 98d346e (run 42360015163). Assets: the app zip, `update-darwin-arm64.json` and its `.sig`. Not yet checked on the Mac.
+
 ## 2026-11-07 — Claude Code (T-031–T-034)
 
 - PR #45 merged: T-034 failure reasons and reset time, T-031 bounded `wait`, T-032 lean `tasks` (`if_version` instead of `if_cursor`, because starting or cancelling a task changes the list without an event), window tweaks.
