@@ -382,11 +382,7 @@ func cancelRemoteTask(tx *sql.Tx, t Task, remote netLink) (string, error) {
 // ---- executing side ----
 
 // forwardTaskEvent queues an event of a task that another computer started.
-func forwardTaskEvent(tx *sql.Tx, task, audience, kind, text, question string) error {
-	link, err := taskLink(tx, task)
-	if err != nil || link.origin == nil {
-		return err
-	}
+func forwardTaskEvent(tx *sql.Tx, o netLink, task, audience, kind, text, question string) error {
 	var state, detail string
 	var reason, reset sql.NullString
 	if err := tx.QueryRow(`SELECT state,detail,failure_reason,failure_reset FROM tasks WHERE id=?`, task).Scan(&state, &detail, &reason, &reset); err != nil {
@@ -396,7 +392,6 @@ func forwardTaskEvent(tx *sql.Tx, task, audience, kind, text, question string) e
 	if err != nil {
 		return err
 	}
-	o := link.origin
 	return enqueueNet(tx, o.broker, o.peer, "event."+id, task, netBody{Kind: "event", Task: o.task, State: state, Detail: clip(detail, 2000), Audience: audience, Event: kind, Text: text, Question: question, Failure: reason.String, Reset: reset.String})
 }
 

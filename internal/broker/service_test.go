@@ -35,7 +35,7 @@ func TestHostedBrokerAndMembership(t *testing.T) {
 		t.Fatal(err)
 	}
 	st := host.Status()
-	if !st.Host.Running || len(st.Host.Addresses) != 1 || st.Host.BrokerID == "" || st.Exchange {
+	if !st.Host.Running || len(st.Host.Addresses) != 1 || st.Host.BrokerID == "" {
 		t.Fatalf("host %+v", st)
 	}
 	if _, err := host.Invite("10.0.0.1:1"); err == nil {

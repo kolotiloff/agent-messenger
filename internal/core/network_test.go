@@ -170,8 +170,12 @@ func TestRemoteTaskQuestionAnswerReport(t *testing.T) {
 		t.Fatal(err)
 	}
 	m, _ = p.b.st.TaskByID(m.ID)
-	if m.OpenQuestion == nil {
-		t.Fatal("no question on b")
+	if m.OpenQuestion == nil || !m.FromNetwork {
+		t.Fatalf("question on b %+v", m)
+	}
+	// b's own coordinator and owner are not asked: the task is a's.
+	if got := kinds(p.b.events(t, AudienceCoordinator, 0)) + kinds(p.b.events(t, AudienceOwner, 0)); got != "" {
+		t.Fatalf("b's audiences got %s", got)
 	}
 	// Nobody answers it on b: the computer that started it does.
 	if err := p.b.st.AnswerTask(m.ID, m.OpenQuestion.ID, "b1", "here", AudienceOwner); !errors.Is(err, ErrRejected) {

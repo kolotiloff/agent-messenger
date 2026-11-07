@@ -327,7 +327,7 @@ func (c *coordinator) ownTask(id string) error {
 	if err != nil {
 		return err
 	}
-	if t.Project != c.project {
+	if t.Project != c.project || t.FromNetwork {
 		return errors.New("unknown task in this project")
 	}
 	return nil
@@ -377,6 +377,10 @@ func (c *coordinator) tasks(state string, limit int, ifVersion string) (any, err
 	out := []coordinatorTask{}
 	more := false
 	for _, t := range tasks {
+		// Another computer's coordinator manages the tasks it sent here.
+		if t.FromNetwork {
+			continue
+		}
 		switch state {
 		case "":
 			if closedTaskStates[t.State] {

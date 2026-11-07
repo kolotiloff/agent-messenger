@@ -203,8 +203,11 @@ type Task struct {
 	// They never cause a retry.
 	FailureReason, FailureReset string
 	CancelRequested             bool
-	Version                     int
-	OpenQuestion                *TaskQuestion
+	// FromNetwork marks a task another computer started (T-037). This
+	// computer runs it; only the other computer's coordinator manages it.
+	FromNetwork  bool
+	Version      int
+	OpenQuestion *TaskQuestion
 }
 
 // TaskQuestion is a question that a verified run asked.
@@ -463,6 +466,17 @@ func (s *Store) ComputerAgents() ([]ComputerAgent, error) {
 }
 
 func insertTaskEvent(tx *sql.Tx, project, task, audience, kind, text, question string) error {
+	link, err := taskLink(tx, task)
+	if err != nil {
+		return err
+	}
+	// The event of a task another computer started is history here: this
+	// computer's coordinator neither started nor manages it. The other
+	// computer gets it with its real audience.
+	sent := audience
+	if link.origin != nil {
+		audience = AudienceLog
+	}
 	if _, err := tx.Exec(`INSERT INTO task_events(project,task_id,audience,kind,text,question_id,created_at) VALUES (?,?,?,?,?,?,?)`,
 		project, task, audience, kind, text, nullString(sql.NullString{String: question, Valid: question != ""}), now()); err != nil {
 		return err
@@ -470,10 +484,10 @@ func insertTaskEvent(tx *sql.Tx, project, task, audience, kind, text, question s
 	// An event of a task another computer started also goes back to it,
 	// in the same transaction (T-037). History events and answers stay
 	// here: the other computer records its own.
-	if audience == AudienceLog || kind == "answered" {
+	if link.origin == nil || sent == AudienceLog || kind == "answered" {
 		return nil
 	}
-	return forwardTaskEvent(tx, task, audience, kind, text, question)
+	return forwardTaskEvent(tx, *link.origin, task, sent, kind, text, question)
 }
 
 func taskTitle(title, text string) string {
@@ -626,13 +640,13 @@ func insertTaskRun(tx *sql.Tx, task string, ordinal int, kind, input string) err
 	return err
 }
 
-const taskColumns = `id,project,computer,provider,profile,folder,title,text,state,COALESCE(session_id,''),detail,created_at,updated_at,COALESCE(finished_at,''),cli_path,environment,cancel_requested,version,COALESCE(model,''),COALESCE(failure_reason,''),COALESCE(failure_reset,'')`
+const taskColumns = `id,project,computer,provider,profile,folder,title,text,state,COALESCE(session_id,''),detail,created_at,updated_at,COALESCE(finished_at,''),cli_path,environment,cancel_requested,version,COALESCE(model,''),COALESCE(failure_reason,''),COALESCE(failure_reset,''),origin_peer IS NOT NULL`
 
 func scanTask(scan func(...any) error) (Task, error) {
 	var t Task
-	var cancel int
-	err := scan(&t.ID, &t.Project, &t.Computer, &t.Provider, &t.Profile, &t.Folder, &t.Title, &t.Text, &t.State, &t.SessionID, &t.Detail, &t.CreatedAt, &t.UpdatedAt, &t.FinishedAt, &t.CLI, &t.Environment, &cancel, &t.Version, &t.Model, &t.FailureReason, &t.FailureReset)
-	t.CancelRequested = cancel != 0
+	var cancel, origin int
+	err := scan(&t.ID, &t.Project, &t.Computer, &t.Provider, &t.Profile, &t.Folder, &t.Title, &t.Text, &t.State, &t.SessionID, &t.Detail, &t.CreatedAt, &t.UpdatedAt, &t.FinishedAt, &t.CLI, &t.Environment, &cancel, &t.Version, &t.Model, &t.FailureReason, &t.FailureReset, &origin)
+	t.CancelRequested, t.FromNetwork = cancel != 0, origin != 0
 	return t, err
 }
 

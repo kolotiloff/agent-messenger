@@ -1,6 +1,6 @@
 # Broker: what is built (T-015, first part)
 
-Status on 2026-11-07: the background client can host a broker, a computer can join a broker by invitation, and every computer sees the others with their agents. **Tasks do not travel between computers yet**: workers still run only on the computer where the task was created. The window says so on the «Сервер» tab. The placement principles are in [DEPLOYMENT.md](DEPLOYMENT.md).
+Status on 2026-11-07: the background client can host a broker, a computer can join a broker by invitation, every computer sees the others with their agents, and a coordinator can give a task to another computer (T-037, see [TASK_MODEL.md](TASK_MODEL.md#tasks-between-computers-t-037)). The placement principles are in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## What works
 
@@ -12,6 +12,7 @@ Status on 2026-11-07: the background client can host a broker, a computer can jo
 - **Checking.** "Проверить связь" repeats the identity check and calls `GET /v1/ping` with the device key. A revoked or unknown key is reported as such; an unreachable server or a different certificate are reported separately.
 - **Devices.** The host lists devices with their last contact and can revoke one. Revocation takes effect on the next request. Revoked devices are counted, not listed.
 - **Computers and agents** (D-039). Every 15 s the client reports its agents to the broker (`POST /v1/presence` with the device key; the hosting computer writes its own report directly): each agent program with its running and waiting-for-owner task counts, and the coordinator program. The answer is the list of computers: the hosting computer (under `host`) and every device that is not revoked, each with its last report and how many seconds ago it came by the broker's clock (clocks of computers may differ). The window's sidebar shows the other computers like this one; a computer that has not reported for 45 s shows «Был на связи …». A device keeps the name it joined with; a report with an unknown field, a bad agent name, a negative count or duplicates is refused. A successful report also counts as a connection check; a failed one is shown and the next round, 15 s later, tries again. A computer that joined its own server does not list itself.
+- **Mailbox** (T-037, D-041). `POST /v1/send {to, op_id, body}` stores a message for another computer of the broker (`host` or a device ID); `POST /v1/inbox {after}` deletes the caller's messages up to `after`, which it has applied, and returns the next ones in order (at most 16). The broker never reads a body (a JSON object up to 256 KB). The same `(sender, op_id)` is stored once while it waits; an unknown or revoked recipient is refused (404 `recipient`), a recipient with 500 unread messages too (429). Revoking a device drops the mail to and from it. The hosting computer uses the same mailbox directly, under `host`. An older broker without the mailbox answers 404 without `recipient`; the window then says the server must be updated.
 - **Disconnect** forgets the connection on this computer. The device stays listed on the broker until it is revoked there.
 
 ## Files
@@ -21,7 +22,7 @@ In the client's data directory:
 | Path | What |
 |---|---|
 | `broker/settings.json` | hosted broker: on/off, scope, port |
-| `broker/broker.sqlite` | `broker_id`, devices (key hashes), invitations (secret hashes), the latest presence of each computer |
+| `broker/broker.sqlite` | `broker_id`, devices (key hashes), invitations (secret hashes), the latest presence of each computer, messages waiting for their recipient |
 | `broker/tls-cert.pem`, `broker/tls-key.pem` | the broker's certificate and private key (0600) |
 | `broker/serve.lock` | one running broker per data directory |
 | `server-connection.json` | this computer's membership, including the device key (0600; Q-013) |
@@ -30,18 +31,17 @@ Files are written to a fresh temporary file, flushed to disk and renamed. A dama
 
 ## Interfaces
 
-- Control command `server` with actions `status`, `enable`, `disable`, `invite`, `revoke`, `connect`, `check`, `disconnect`. The status never contains the device key.
+- Control command `server` with actions `status`, `enable`, `disable`, `invite`, `revoke`, `connect`, `check`, `disconnect`, `accept` (`{"on": true|false}`: run tasks of other computers, Q-014). The status never contains the device key; it carries `accept` and the last task-exchange problem (`network_error`).
 - Window API: `GET /api/server`, `POST /api/server-action` (same rules as other window actions: token, Origin, JSON, bounded fields).
 - Timeouts: each broker request 15 s, a window server action 18 s in the client, 22 s at the window route, 28 s in the page. If the page gets no answer it says the result is unknown and asks to check the state before repeating.
 - `messenger status` shows `broker=not_configured|hosting|connected|hosting+connected`.
 
 ## Not built yet
 
-- Carrying tasks, questions and reports between computers (the rest of T-015).
 - A standalone broker for a VPS and the VPS setup wizard (D-035). Optional: one local network needs no VPS (D-040).
 - Keeping the device key in the OS secure storage (Q-013).
 - A reachability check from another computer. "Работает" means the broker listens; it does not prove that another computer can reach it (firewall, VPN, router).
 
 ## Verified
 
-On Linux with tests (`internal/broker`, `internal/supervisor/server_test.go`, `internal/localui`) and in headless Chromium against a real client: enable, invite, join (the client joins its own broker, as a second computer would), check, revoke (two clicks) and the check after it, a wrong code, a wrong port, disable, "local network" on a machine without a private address. An audit of the code found and fixed: no connection limit, LAN scope reachable from public addresses, a restart racing its own lock, shutdown closing the database under running requests, settings not saved while the server ran, parallel joins leaving a stray device, files not flushed, device names with control characters, misaligned timeouts, and window issues (the access picker not showing the saved scope, a used invitation still shown, lost keyboard focus, status texts cleared by an older timer, a slow poll overwriting a newer state, revoke in one click). Presence (D-039): broker tests for the roster in both directions, refused reports, revoke, an unreachable broker; headless Chromium with a helper that joins as a second computer and reports two agents: its card with Claude (coordinator) and Codex, «Был на связи» after it stops, revoke from the right-click menu. Not verified: two real computers, the Mac app, a local network.
+On Linux with tests (`internal/broker`, `internal/supervisor/server_test.go`, `internal/localui`) and in headless Chromium against a real client: enable, invite, join (the client joins its own broker, as a second computer would), check, revoke (two clicks) and the check after it, a wrong code, a wrong port, disable, "local network" on a machine without a private address. An audit of the code found and fixed: no connection limit, LAN scope reachable from public addresses, a restart racing its own lock, shutdown closing the database under running requests, settings not saved while the server ran, parallel joins leaving a stray device, files not flushed, device names with control characters, misaligned timeouts, and window issues (the access picker not showing the saved scope, a used invitation still shown, lost keyboard focus, status texts cleared by an older timer, a slow poll overwriting a newer state, revoke in one click). Presence (D-039): broker tests for the roster in both directions, refused reports, revoke, an unreachable broker; headless Chromium with a helper that joins as a second computer and reports two agents: its card with Claude (coordinator) and Codex, «Был на связи» after it stops, revoke from the right-click menu. Mailbox (T-037): broker tests for order, acknowledgement, a repeated operation, refusals, a full mailbox, revoke; a supervisor test where two stores exchange a task through a real broker over TLS; and two separate clients on one Linux machine (the second with its own home directory), joined through the window API: a coordinator on one started a task for the other, it was accepted with its folder, cancelled from the first, and a second task was refused while the other computer did not accept tasks. Not verified: two real computers, the Mac app, a local network.
