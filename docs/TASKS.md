@@ -13,6 +13,7 @@ How to use it:
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
+| T-034 | Failure reasons: a failed run records usage limit, rate limit, overload, sign-in or other, plus the limit's reset time when the CLI reports it; the window shows «Лимит, сброс в 18:00», the coordinator's `failed` event and `tasks` carry it. Nothing is retried. Claude and Codex error formats are taken from their docs and tested with fake CLIs only, not checked against live limits. | agent | `claude/t031-t034-coordinator-tokens` |
 
 | T-015 | First part done on `claude/t015-server-setup`: broker hosted by the client, invitations, joining, check, devices and revoke, the «Сервер» tab ([BROKER.md](BROKER.md), D-033–D-035). Left: tasks between computers, VPS package and wizard, Keychain (Q-013), Windows (Q-006). | agent + owner | `claude/t015-server-setup` |
 
@@ -26,7 +27,6 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 | T-031 | `wait` returns events only up to a size budget (about 24,000 chars, at least one event) and says `more: true`; the cursor is the last returned event. | agent | tokens and reliability; [TOKEN_REVIEW.md](TOKEN_REVIEW.md) |
 | T-032 | `tasks` returns open tasks by default (`state: "all"` for everything), with a limit and without the folder per row; answers `unchanged` when nothing changed since the last list. | agent | tokens; [TOKEN_REVIEW.md](TOKEN_REVIEW.md) |
 | T-033 | A resumed run's `read_task` returns the question and answer without the task text; `include_task: true` returns it. | agent | tokens; [TOKEN_REVIEW.md](TOKEN_REVIEW.md) |
-| T-034 | A failed run records a reason class (usage limit, rate limit, overload, sign-in, other) and the reset time when the CLI reports it; shown in the window and in the coordinator's `failed` event. No automatic retry. | agent | reliability; [TOKEN_REVIEW.md](TOKEN_REVIEW.md) |
 
 ## Backlog
 

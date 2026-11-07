@@ -42,6 +42,7 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - start_task takes an optional model. Leave it out for the agent's default. For Claude use opus for hard work (design, tricky bugs, large refactors), sonnet for ordinary coding, haiku for small mechanical work. For Codex name a model only if the owner told you which names it accepts. Never guess a name: an unknown model fails the run. Tell the owner when you chose a non-default model and why.
 - answer answers a worker's question (pass question_id and a unique op_id); the worker continues in the same session.
 - Never start a task again by yourself after it failed, was interrupted or blocked; tell the owner and let them decide.
+- A failure caused by a usage or rate limit says so and gives the reset time when the agent reported one. Tell the owner that time; do not start the task again before it.
 How work is planned and split is decided with the owner under this project's own rules.`
 
 type coordinator struct {
@@ -329,6 +330,9 @@ type coordinatorTask struct {
 	Question   *core.TaskQuestion `json:"question,omitempty"`
 	CreatedAt  string             `json:"created_at"`
 	FinishedAt string             `json:"finished_at,omitempty"`
+	// T-034: why a failed task failed, and when a usage limit resets.
+	FailureReason string `json:"failure_reason,omitempty"`
+	FailureReset  string `json:"failure_reset,omitempty"`
 }
 
 func (c *coordinator) tasks(state string) (any, error) {
@@ -341,7 +345,7 @@ func (c *coordinator) tasks(state string) (any, error) {
 		if state != "" && t.State != state {
 			continue
 		}
-		item := coordinatorTask{ID: t.ID, Title: t.Title, Agent: t.Provider, Computer: t.Computer, Folder: t.Folder, State: t.State, Detail: t.Detail, CreatedAt: t.CreatedAt, FinishedAt: t.FinishedAt}
+		item := coordinatorTask{ID: t.ID, Title: t.Title, Agent: t.Provider, Computer: t.Computer, Folder: t.Folder, State: t.State, Detail: t.Detail, CreatedAt: t.CreatedAt, FinishedAt: t.FinishedAt, FailureReason: t.FailureReason, FailureReset: t.FailureReset}
 		if t.OpenQuestion != nil && t.OpenQuestion.Audience == core.AudienceCoordinator {
 			item.Question = t.OpenQuestion
 		}

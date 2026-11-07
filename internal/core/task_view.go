@@ -85,6 +85,9 @@ type WindowTask struct {
 	PendingLaunch bool `json:"pending_launch,omitempty"`
 	// StartedAt is when the first run was launched; durations count from it.
 	StartedAt string `json:"started_at,omitempty"`
+	// FailureReason and FailureReset explain a failed task (T-034).
+	FailureReason string `json:"failure_reason,omitempty"`
+	FailureReset  string `json:"failure_reset,omitempty"`
 }
 
 func (s *Store) startedAt(task string) (string, error) {
@@ -208,7 +211,7 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 		return v, err
 	}
 	for _, t := range tasks {
-		w := WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt}
+		w := WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt, FailureReason: t.FailureReason, FailureReset: t.FailureReset}
 		if t.OpenQuestion != nil && t.OpenQuestion.Audience == AudienceOwner {
 			w.OwnerQuestion = t.OpenQuestion
 		}
