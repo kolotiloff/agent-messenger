@@ -99,7 +99,7 @@ jobs:
 
 
   packages:
-    name: Windows and Linux archives
+    name: Windows and Linux downloads
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -110,15 +110,17 @@ jobs:
         with:
           go-version: stable
           cache: false
-      - name: Build archives (the release builds them the same way)
+      - name: Build the downloads (the release builds them the same way)
         run: bash scripts/package-others.sh 0.0.0-preview.ci "$GITHUB_SHA" "$RUNNER_TEMP/others"
-      - name: Linux archive installs and starts the client
+      - name: The Linux download installs and starts the client
         run: |
           dir="$RUNNER_TEMP/smoke"
           mkdir -p "$dir"
-          tar -C "$dir" -xzf "$RUNNER_TEMP/others/agent-messenger-0.0.0-preview.ci-linux-amd64.tar.gz"
+          # A browser download loses the executable bit; the guide says chmod +x.
+          install -m 0644 "$RUNNER_TEMP/others/AgentMessenger-Linux-x64" "$dir/AgentMessenger-Linux-x64"
+          chmod +x "$dir/AgentMessenger-Linux-x64"
           export HOME="$RUNNER_TEMP/home"
-          exe="$dir/agent-messenger-0.0.0-preview.ci-linux-amd64/messenger"
+          exe="$dir/AgentMessenger-Linux-x64"
           "$exe" install --prefix "$HOME/.local"
           "$HOME/.local/bin/messenger" version
           "$HOME/.local/bin/messenger" --root "$HOME/data" start --allow-tasks
@@ -132,7 +134,7 @@ jobs:
           retention-days: 3
 
   windows-package:
-    name: Windows archive on Windows
+    name: Windows download on Windows
     needs: packages
     runs-on: windows-2025
     timeout-minutes: 15
@@ -144,12 +146,11 @@ jobs:
         with:
           name: others-ci-${{ github.sha }}
           path: ${{ runner.temp }}/others
-      - name: Unpack and run the client from the archive
+      - name: Run the client from the downloaded program
         run: |
           cd "$RUNNER_TEMP/others"
-          sha256sum -c agent-messenger-0.0.0-preview.ci-windows-linux.sha256
-          unzip -q agent-messenger-0.0.0-preview.ci-windows-amd64.zip
-          exe="$PWD/agent-messenger-0.0.0-preview.ci-windows-amd64/messenger.exe"
+          sha256sum -c AgentMessenger-Windows-Linux-SHA256.txt
+          exe="$PWD/AgentMessenger-Windows-x64.exe"
           export LOCALAPPDATA="$RUNNER_TEMP/local"
           "$exe" version
           "$exe" --root "$RUNNER_TEMP/data" start --allow-tasks

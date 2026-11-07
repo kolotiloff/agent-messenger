@@ -4,18 +4,19 @@ Messaging between Claude Code, Codex, Cursor Agent CLI and other agents. The pro
 
 **Right now this is a technical preview: accepted on Mac, with first Windows and Linux builds to test; not a finished release.** The product is written in Go. It has a SQLite queue, protected session ownership, a browser window, a first native Agent Messenger.app shell for Mac and a verified local install from an archive. The product source lives in `cmd/messenger` and `internal`, the Mac shell in `desktop/macos`. Early research test rigs were removed from the tree and stay in git history.
 
-## Download the app
+<h3 align="center">Download</h3>
 
-All downloads are on the **[releases page](https://github.com/kolotiloff/agent-messenger/releases)**; take the newest preview.
+<p align="center">
+  <a href="https://github.com/kolotiloff/agent-messenger/releases/latest/download/AgentMessenger-Mac.zip"><img src="docs/assets/download-mac.svg" alt="macOS (Apple Silicon)" height="56"></a>&nbsp;
+  <a href="https://github.com/kolotiloff/agent-messenger/releases/latest/download/AgentMessenger-Windows-x64.exe"><img src="docs/assets/download-windows.svg" alt="Windows 10/11 x64" height="56"></a>&nbsp;
+  <a href="https://github.com/kolotiloff/agent-messenger/releases/latest/download/AgentMessenger-Linux-x64"><img src="docs/assets/download-linux.svg" alt="Linux x64" height="56"></a>
+</p>
 
-| Platform | What to download | How to start |
-|---|---|---|
-| macOS 15+, Apple Silicon | the `.zip` of the app (named by its checksum) | [Agent Messenger.app](docs/MAC_APP.md); updates arrive in the app |
-| Windows 10/11 | `agent-messenger-…-windows-amd64.zip` (`arm64` for ARM) | unpack, double-click `messenger.exe`; the window opens in the browser |
-| Linux | `agent-messenger-…-linux-amd64.tar.gz` (`arm64` for ARM) | unpack, run `./messenger open`; the window opens in the browser |
-| macOS, Intel | not built yet | — |
+<p align="center">
+  <sub>ARM: <a href="https://github.com/kolotiloff/agent-messenger/releases/latest/download/AgentMessenger-Windows-ARM64.exe">Windows</a> · <a href="https://github.com/kolotiloff/agent-messenger/releases/latest/download/AgentMessenger-Linux-ARM64">Linux</a> · <a href="docs/DOWNLOAD.md">How to start</a> · <a href="https://github.com/kolotiloff/agent-messenger/releases">All releases</a></sub>
+</p>
 
-Windows and Linux builds are new in preview.32 and not yet accepted on real computers: see [Windows and Linux](docs/WINDOWS_LINUX.md) for what is verified and what is missing (no self-update, no installer, not signed). Apple Developer ID/notarization is not done either; macOS may block the downloaded preview the first time. Running a prebuilt build does not require Python, Node or Go.
+Windows and Linux builds are new and not yet accepted on real computers: see [Windows and Linux](docs/WINDOWS_LINUX.md) for what is verified and what is missing (no self-update, no installer, not signed). Apple Developer ID/notarization is not done either; macOS may block the downloaded preview the first time. Running a prebuilt build does not require Python, Node or Go.
 
 ## What has been verified
 
