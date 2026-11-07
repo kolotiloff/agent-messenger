@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-07 — Claude Code (preview.27 released)
+
+- PR #42 merged into `main` (5881844) after green CI on Linux and macOS; released as preview.27 (run 42353801652). Assets: the app zip, `update-darwin-arm64.json` and its `.sig`.
+- This update itself may still need the old background client restarted by hand (the copy-command button in the error chip): the blocking restart dialog arrives with this version and works from the next update on. Not yet checked on the Mac.
+
 ## 2026-11-07 — Claude Code (restart the background client from the window)
 
 - Owner: after an update the window said «В фоне старая версия клиента, перезапустите его» and asked for a terminal. Now the client reports its version. While it is older than the window, a modal dialog blocks the window with «Перезапустить» or «Выйти» (the owner asked for a blocking dialog instead of a banner, since the window cannot work with an old client). It asks first if tasks are running (D-037).
