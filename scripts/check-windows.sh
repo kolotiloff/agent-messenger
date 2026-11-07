@@ -12,6 +12,6 @@ go_bin="${GO_BIN:-go}"
   ./internal/platform ./internal/control ./internal/core ./internal/broker \
   ./internal/localui ./internal/mcp ./internal/adapters ./internal/diagnostics ./internal/selfupdate
 "$go_bin" test -count=1 -timeout=10m ./internal/supervisor \
-  -run 'TestTask|TestCancelStopsARunningTask|TestRestartInterruptsARunningTask|TestCoordinatorStartsATask|TestTasksNeed'
+  -run 'TestTask|TestCancelStopsARunningTask|TestRestartInterruptsARunningTask|TestCoordinatorStartsATask|TestTasksNeed|TestConnectCoordinator'
 "$go_bin" test -count=1 -timeout=5m ./cmd/messenger \
   -run 'TestWindows|TestWindowFile|TestWindowOpener|TestOpen|TestInstallPrefix'
