@@ -95,16 +95,22 @@
   // The window can be newer than the client still running in the background
   // (after an update). Say how to restart it; nothing is restarted by itself.
   function outdatedMessage(){
-    const how=view?.messenger&&view?.data_root?' Закройте Messenger, выполните в Терминале: "'+view.messenger+'" --root "'+view.data_root+'" shutdown — и откройте Messenger снова.':' Закройте Messenger, остановите старый клиент командой shutdown и откройте Messenger снова.';
-    return 'В фоне ещё работает клиент старой версии, он не знает этой команды.'+how;
+    const how=view?.messenger&&view?.data_root?' Закройте Messenger, выполните в Терминале команду ниже и откройте Messenger снова.':' Закройте Messenger, остановите старый клиент командой shutdown и откройте Messenger снова.';
+    const e=Error('В фоне ещё работает клиент старой версии, он не знает этой команды.'+how);
+    if(view?.messenger&&view?.data_root)e.command='"'+view.messenger+'" --root "'+view.data_root+'" shutdown';
+    return e;
   }
+  // An error of the owner's action stays at the top until it is closed or
+  // the next action succeeds; the 2 s refresh does not hide it.
+  let actionError=null;
+  function showError(error){actionError=error?{text:error.message,command:error.command||''}:null;renderNotice();}
   async function api(path,timeout=4500){
     if(!token)throw Error('Откройте приватную ссылку, которую выдала команда ui.');
     const response=await fetch(path,{headers:{Authorization:'Bearer '+token},cache:'no-store',signal:AbortSignal.timeout(timeout)});
     if(!response.ok){
       if(response.status===401)throw Error('Ссылка доступа устарела. Откройте окно заново.');
       const body=await response.text().catch(()=>'');
-      if(body.startsWith('client_outdated'))throw Error(outdatedMessage());
+      if(body.startsWith('client_outdated'))throw outdatedMessage();
       if(body.startsWith('client_rejected'))throw Error('Клиент Messenger отклонил запрос окна. Подробности: messenger doctor.');
       throw Error('Клиент Messenger не запущен или не отвечает. Данные не обновляются.');
     }
@@ -114,7 +120,7 @@
     const response=await fetch(path,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body),cache:'no-store',signal:AbortSignal.timeout(timeout)});
     let result={};try{result=await response.json();}catch(_){}
     if(response.ok&&result.ok===true)return result;
-    if(result.state==='client_outdated')throw Error(outdatedMessage());
+    if(result.state==='client_outdated')throw outdatedMessage();
     if(response.status===409&&result.detail)throw Error(result.detail);
     if(response.status===400)throw Error('Проверьте введённые данные.');
     throw Error('Действие не подтверждено. Проверьте состояние и повторите.');
@@ -289,10 +295,9 @@
   let stopping=false;
   async function stopTask(){
     const t=feed?.task;if(!t||stopping||!activeStates.includes(t.state))return;
-    const status=$('answer-status');
-    stopping=true;$('task-stop').disabled=true;$('task-stop').classList.add('am-tip-off');status.classList.remove('am-status-bad');status.textContent='Останавливаем задачу…';
-    try{await postAPI('/api/task-cancel',{task:t.id});status.textContent='';feedSignature='';await refresh();}
-    catch(e){status.classList.add('am-status-bad');status.textContent=e.message;}
+    stopping=true;$('task-stop').disabled=true;$('task-stop').classList.add('am-tip-off');
+    try{await postAPI('/api/task-cancel',{task:t.id});showError(null);feedSignature='';await refresh();}
+    catch(e){showError(e);}
     finally{stopping=false;$('task-stop').disabled=false;}
   }
   function renderFeed(){
@@ -359,8 +364,8 @@
     let op=recall('messenger-answer-op:'+q.id);
     if(!op){op='window-'+q.id+'-'+crypto.randomUUID();remember('messenger-answer-op:'+q.id,op);}
     answering=true;answerControls();$('answer-status').textContent='Отправляем ответ…';
-    try{await postAPI('/api/task-answer',{task:feed.task.id,question:q.id,op_id:op,text});$('answer-status').textContent='Ответ записан. Исполнитель продолжит в той же сессии.';$('answer-text').value='';feedSignature='';await refresh();}
-    catch(error){$('answer-status').textContent=error.message+' Повтор с тем же текстом безопасен.';}
+    try{await postAPI('/api/task-answer',{task:feed.task.id,question:q.id,op_id:op,text});showError(null);$('answer-status').textContent='Ответ записан. Исполнитель продолжит в той же сессии.';$('answer-text').value='';feedSignature='';await refresh();}
+    catch(error){$('answer-status').textContent='';showError({message:error.message+' Повтор с тем же текстом безопасен.',command:error.command});}
     finally{answering=false;answerControls();}
   }
   const folderIcon='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
@@ -415,11 +420,18 @@
     const none=el('button','Задач нет','am-agent-action');none.type='button';none.disabled=true;cursor.append(none);cards.append(cursor);
   }
   function renderNotice(){
+    if(actionError){
+      const box=el('div',undefined,'am-notice-row');const text=el('div',undefined,'am-notice-text');text.append(el('p',actionError.text));
+      if(actionError.command)text.append(el('code',actionError.command,'am-code am-notice-command'));
+      const close=el('button','Закрыть');close.type='button';close.addEventListener('click',()=>showError(null));
+      box.append(text,close);notice(box);$('notice').classList.add('am-notice-error');return;
+    }
+    $('notice').classList.remove('am-notice-error');
     if(!online){notice(el('p',offlineReason||'Клиент Messenger не запущен или не отвечает. Данные не обновляются.'));return;}
     if(view?.pending_launch>0&&!view.tasks_enabled){notice(el('p','Задачи записаны, но этот клиент не запускает исполнителей: он запущен без разрешения --allow-tasks.'));return;}
     if(view?.pending_launch>0&&view.paused){
       const box=el('div',undefined,'am-notice-row');box.append(el('p','Обработка на паузе: новые задачи не запускаются.'));
-      const go=el('button','Продолжить');go.type='button';go.addEventListener('click',async()=>{go.disabled=true;try{await postAPI('/api/resume',{});await refresh();}catch(e){go.disabled=false;}});
+      const go=el('button','Продолжить');go.type='button';go.addEventListener('click',async()=>{go.disabled=true;try{await postAPI('/api/resume',{});showError(null);await refresh();}catch(e){go.disabled=false;showError(e);}});
       box.append(go);notice(box);return;
     }
     notice(null);
