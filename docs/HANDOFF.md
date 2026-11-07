@@ -10,9 +10,9 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Updated 2026-11-07 (evening) by Claude Code.
 
-- **WIP, waiting for the owner's approval (branch `claude/t015-status-style`, not merged, no PR yet):** «Сервер» tab polish — every status is a dot and plain text; Доступ, Порт and one start/stop button in one row, fields locked while the server runs, «Применить» removed; no «Выполняем…» / «Сервер запущен» lines; address and «Пригласить устройство» in one row; certificate fingerprint removed from the card (it is inside the invitation code); the sidebar shows only «Доступно обновление» and «Обновиться» when an update exists. The owner reviews a static copy of the window before it goes into the next release.
-- **Verified here (Linux):** `check.sh`, headless Chromium (start/stop, locked fields, focus, all buttons 32 px). **Not verified:** the Mac window (WebKit), where the owner saw a taller «Скопировать код».
-- **Open idea:** when a member presses «Отключить», the server is not told, so the device stays listed until revoked. Ask the owner whether to notify the server.
+- **«Сервер» tab and sidebar polish (T-015), approved by the owner on a live preview, going into preview.29:** statuses are a dot and plain text; Доступ, Порт and one start/stop button in one row, fields locked while the server runs, «Применить» removed; explanations moved into status tooltips so cards keep their height; computers that joined this server show in the sidebar «Компьютеры» (name, dot, last seen) with «Отозвать» in a right-click menu; invitation dialog copies with an icon; the sidebar shows only «Доступно обновление» and «Обновиться»; control text is centred by measuring the font at start.
+- **Verified here (Linux):** `check.sh`; headless Chromium: start/stop, locked fields, focus, join a device to its own server, sidebar card, right-click menu, revoke. **Not verified:** the Mac window (WebKit, SF font centring), two real computers — the owner tests preview.29 on two Macs.
+- **Next:** devices send their agents and statuses to the server so the sidebar cards show them (T-015 continued); Cursor adapter (T-012) waits for the owner to allow running Cursor CLI (Q-004).
 
 Updated 2026-11-07 (day) by Claude Code.
 

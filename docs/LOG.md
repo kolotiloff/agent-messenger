@@ -2,9 +2,9 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
-## 2026-11-07 — Claude Code (T-015 «Сервер» tab polish, WIP)
+## 2026-11-07 — Claude Code (T-015 «Сервер» tab polish)
 
-- Branch `claude/t015-status-style`: one status style, one-row server controls with locked fields, compact invite row, fingerprint removed, quiet update block. Waiting for the owner's look at a static preview; then PR and the next release.
+- Branch `claude/t015-status-style`: one status style, one-row server controls with locked fields, tooltips instead of hint lines, joined devices in the sidebar with a right-click «Отозвать», icon copy in the invitation, quiet update block, font-measured text centring. The owner approved it on a live preview; released as preview.29.
 - No real model calls; Mac app not run.
 
 ## 2026-11-07 — Claude Code (T-031–T-034)
