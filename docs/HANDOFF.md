@@ -8,6 +8,14 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-07 (evening, release) by Claude Code.
+
+- **preview.33 released** from `main` 3ae2058 (PR #54 with #55, and PR #56; run 42388079985). It is the latest release, with 21 assets: the Mac app zip and its update files; plain Windows and Linux programs (x64, ARM64) with a SHA-256 list; and signed update files for Windows and Linux (`update-<os>-<arch>.json`, `.sig`, `<sha256>.zip`).
+- **PR #56:** the first release run stopped on a failing test. A refused window grant opened model calls for a moment before the store refused it. Now the store is checked first.
+- **Checked here:** the README links (`/releases/latest/download/...`) download the Linux x64 and Windows x64 programs, and their SHA-256 values match the list. `version` of the Linux x64 program reports preview.33 at 3ae2058. The Linux amd64 update manifest and its archive are signed by the app's update key, and that key is built into the program.
+- **Not checked:** the Mac app from this release; real Windows and Linux desktops; the real Cursor CLI; a real update from GitHub, possible only from preview.33 to preview.34.
+- **Next:** the owner tests preview.33 on Mac, Windows and Linux, and Cursor with the real CLI. Then preview.34 tests the in-window update on Windows and Linux. Still waiting for the owner: Q-012/T-028, Q-013.
+
 Updated 2026-11-07 (evening, later) by Claude Code.
 
 - **The owner:** there is no rule against Cursor; set it up. The AGENTS.md line was removed, D-011 superseded, Q-004 answered.
