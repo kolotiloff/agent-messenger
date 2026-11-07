@@ -8,6 +8,12 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-07 (evening) by Claude Code.
+
+- **«Сервер» tab and sidebar polish (T-015), approved by the owner on a live preview, going into preview.29:** statuses are a dot and plain text; Доступ, Порт and one start/stop button in one row, fields locked while the server runs, «Применить» removed; explanations moved into status tooltips so cards keep their height; computers that joined this server show in the sidebar «Компьютеры» (name, dot, last seen) with «Отозвать» in a right-click menu; invitation dialog copies with an icon; the sidebar shows only «Доступно обновление» and «Обновиться»; control text is centred by measuring the font at start.
+- **Verified here (Linux):** `check.sh`; headless Chromium: start/stop, locked fields, focus, join a device to its own server, sidebar card, right-click menu, revoke. **Not verified:** the Mac window (WebKit, SF font centring), two real computers — the owner tests preview.29 on two Macs.
+- **Next:** devices send their agents and statuses to the server so the sidebar cards show them (T-015 continued); Cursor adapter (T-012) waits for the owner to allow running Cursor CLI (Q-004).
+
 Updated 2026-11-07 (day) by Claude Code.
 
 - **Done and merged (PR #45):** T-034 failure reasons with the limit's reset time; T-031 bounded `wait`; T-032 lean `tasks` with `if_version`; window tweaks (menus stand apart from cards, green «Работает», the invitation in its own dialog).
