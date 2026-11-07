@@ -95,7 +95,7 @@
   // talks to the coordinator in the Claude app. Its only actions are creating
   // a project, changing the project folder, connecting an agent program and
   // answering a worker's question to the owner.
-  const names={claude:'Claude Code',codex:'Codex'};
+  const names={claude:'Claude Code',codex:'Codex',cursor:'Cursor'};
   const shortNames={claude:'Claude',codex:'Codex'};
   function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
   function providerIcon(provider){
@@ -499,7 +499,7 @@
       bar.querySelector('.am-folder-path').title=view.folder||'';
     }
     const cards=$('agents');cards.replaceChildren();
-    for(const provider of ['claude','codex']){
+    for(const provider of ['claude','codex','cursor']){
       const a=(view?.agents||[]).find(x=>x.agent===provider);
       const found=discovery.find(d=>d.provider===provider);
       const coordinator=view?.coordinator?.connected&&coordinatorName()[0]===provider;
@@ -535,10 +535,6 @@
       const setup=el('button','Настроить');setup.type='button';setup.addEventListener('click',()=>openAgentSetup(provider));
       const actions=el('div',undefined,'am-actions-stack');actions.append(tasks,setup);card.append(actions);cards.append(card);
     }
-    // Cursor is shown as in the approved mockup; Messenger does not run it.
-    const cursor=el('article',undefined,'am-card');const ch=el('h3',undefined,'am-provider-heading');ch.append(providerIcon('cursor'),el('span','Cursor'));cursor.append(ch);
-    cursor.append(el('p','Не подключён','am-muted'));const cdl=el('dl');const row=el('div');const dd=el('dd','Пока не поддерживается для задач','am-muted');row.append(el('dt','Программа'),dd);cdl.append(row);cursor.append(cdl);
-    const none=el('button','Задач нет');none.type='button';none.disabled=true;const noneActions=el('div',undefined,'am-actions-stack');noneActions.append(none);cursor.append(noneActions);cards.append(cursor);
   }
   // The background client can be older than this window after an update.
   // The desktop window offers to restart it; a browser window shows how.
@@ -779,6 +775,7 @@
   function openAgentSetup(provider){
     setupProvider=provider;const a=(view?.agents||[]).find(x=>x.agent===provider),found=discovery.find(d=>d.provider===provider);
     $('agent-setup-title').textContent='Настройка: '+names[provider];
+    $('agent-setup-note').hidden=provider!=='cursor';
     $('agent-cli').value=a?.cli||found?.cli||'';$('agent-profile').value=a?.environment||found?.environment||'';
     $('agent-check-status').textContent='';$('agent-save-status').textContent='';$('agent-check-result').hidden=true;
     $('agent-setup').showModal();

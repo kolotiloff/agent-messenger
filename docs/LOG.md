@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-07 — Claude Code (T-012 Cursor tasks)
+
+- The owner said there is no rule against Cursor. Branch `claude/t012-cursor-tasks`: Cursor as a task worker (D-049), tested with a fake Cursor CLI only; no real Cursor or model calls.
+
 ## 2026-11-07 — Claude Code (D-047 downloads, T-038 updates on Windows and Linux)
 
 - Branch `claude/t016-download-buttons`: plain downloads behind README buttons (D-047), and signed in-window updates on Windows and Linux (D-048): `internal/selfupdate`, `/api/self-update`, the window's button, relaunch, signing in the release (`scripts/sign-other-updates.py`).

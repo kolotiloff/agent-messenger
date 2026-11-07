@@ -166,8 +166,8 @@ const (
 	AudienceLog         = "log"
 )
 
-// TaskProviders are the agents a task can run. Cursor stays off (D-011).
-var TaskProviders = map[string]bool{"claude": true, "codex": true}
+// TaskProviders are the agents a task can run.
+var TaskProviders = map[string]bool{"claude": true, "codex": true, "cursor": true}
 
 var projectNamePattern = regexp.MustCompile(`^[\p{L}\p{N}][\p{L}\p{N} ._-]*$`)
 
@@ -603,8 +603,8 @@ func startLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, origin *net
 	id = "task-" + id[:16]
 	var session sql.NullString
 	if r.Provider == "claude" {
-		// Claude takes a caller-chosen ID, recorded before launch. Codex
-		// issues its own; it is bound once from the first run's events.
+		// Claude takes a caller-chosen ID, recorded before launch. Codex and
+		// Cursor issue their own; it is bound once from the first run's events.
 		uuid, err := NewSessionUUID()
 		if err != nil {
 			return "", err
@@ -940,7 +940,7 @@ func (s *Store) BindTaskSession(run, session string) error {
 			return fmt.Errorf("%w: a second conversation id was reported", ErrIdentity)
 		}
 		if t.SessionID == "" {
-			if t.Provider != "codex" || r.Ordinal != 1 {
+			if (t.Provider != "codex" && t.Provider != "cursor") || r.Ordinal != 1 {
 				return fmt.Errorf("%w: no recorded conversation to resume", ErrIdentity)
 			}
 			var other int

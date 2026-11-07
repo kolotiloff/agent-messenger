@@ -48,6 +48,10 @@ func CheckFolderTrust(provider, folder, environment, home string) FolderTrust {
 		}
 		state := codexTrust(filepath.Join(dir, "config.toml"), folder)
 		return FolderTrust{State: state, Hint: "Откройте эту папку в Codex (codex в Терминале из этой папки) и отметьте её как доверенную; без этого Codex не читает настройки проекта."}
+	case "cursor":
+		// A Cursor worker is started with --trust: the folder is trusted for
+		// that run, and the project's .cursor rules apply.
+		return FolderTrust{State: TrustYes}
 	}
 	return FolderTrust{State: TrustUnknown}
 }

@@ -69,8 +69,8 @@ func TestCodexTaskArgs(t *testing.T) {
 	if _, err := TaskArgs(taskSpec("codex", ProfileWorker, "019a0000-0000-7000-8000-000000000001", false)); err == nil {
 		t.Fatal("new run naming a thread")
 	}
-	if _, err := TaskArgs(taskSpec("cursor", ProfileWorker, "", false)); err == nil {
-		t.Fatal("cursor accepted")
+	if _, err := TaskArgs(taskSpec("gemini", ProfileWorker, "", false)); err == nil {
+		t.Fatal("unknown agent accepted")
 	}
 	if _, err := TaskArgs(taskSpec("codex", "full", "", false)); err == nil {
 		t.Fatal("unknown profile accepted")

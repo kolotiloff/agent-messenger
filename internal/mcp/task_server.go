@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/kolotiloff/agent-messenger/internal/adapters"
 	"github.com/kolotiloff/agent-messenger/internal/core"
 )
 
@@ -45,6 +46,12 @@ func ServeTask(dbPath, run, receipt string, in io.Reader, out io.Writer) error {
 		return err
 	}
 	defer store.Close()
+	return serveTask(store, run, receipt, in, out)
+}
+
+// serveTask answers MCP requests. Without a store it is the idle server of a
+// Cursor session that Messenger did not start: it lists no tools.
+func serveTask(store *core.Store, run, receipt string, in io.Reader, out io.Writer) error {
 	scanner := bufio.NewScanner(in)
 	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
 	for scanner.Scan() {
@@ -69,8 +76,16 @@ func ServeTask(dbPath, run, receipt string, in io.Reader, out io.Writer) error {
 		case "ping":
 			result = map[string]any{}
 		case "tools/list":
-			result = map[string]any{"tools": taskTools()}
+			if store == nil {
+				result = map[string]any{"tools": []any{}}
+			} else {
+				result = map[string]any{"tools": taskTools()}
+			}
 		case "tools/call":
+			if store == nil {
+				result = map[string]any{"content": []map[string]any{{"type": "text", "text": "not a Messenger task run"}}, "isError": true}
+				break
+			}
 			result = callTaskTool(store, run, receipt, request.Params)
 		default:
 			rpcErr = map[string]any{"code": -32601, "message": "Method not found"}
@@ -124,8 +139,35 @@ func callTaskTool(store *core.Store, run, receipt string, params map[string]any)
 	return map[string]any{"content": []map[string]any{{"type": "text", "text": string(encoded)}}, "isError": false}
 }
 
-// TaskMain is the entry for `messenger task-mcp --db DB --run RUN --receipt R`.
+// TaskEnvVariable carries a Cursor run's database, run and receipt to its
+// worker tools (D-049). Cursor reads MCP servers only from its own mcp.json,
+// so Messenger keeps one stable entry there that names this variable.
+const TaskEnvVariable = adapters.TaskEnvVariable
+
+// TaskFromEnv reads the run from the environment value. Anything else, an
+// unset variable or a placeholder Cursor did not fill in, is not a run.
+func TaskFromEnv(value string) (db, run, receipt string, ok bool) {
+	var v struct {
+		DB      string `json:"db"`
+		Run     string `json:"run"`
+		Receipt string `json:"receipt"`
+	}
+	if json.Unmarshal([]byte(value), &v) != nil || v.DB == "" || v.Run == "" || v.Receipt == "" {
+		return "", "", "", false
+	}
+	return v.DB, v.Run, v.Receipt, true
+}
+
+// TaskMain is the entry for `messenger task-mcp --db DB --run RUN --receipt R`
+// and for `messenger task-mcp --from-env` (Cursor, D-049).
 func TaskMain(args []string) error {
+	if len(args) == 1 && args[0] == "--from-env" {
+		db, run, receipt, ok := TaskFromEnv(os.Getenv(TaskEnvVariable))
+		if !ok {
+			return serveTask(nil, "", "", os.Stdin, os.Stdout)
+		}
+		return ServeTask(db, run, receipt, os.Stdin, os.Stdout)
+	}
 	values := map[string]string{}
 	for i := 0; i+1 < len(args); i += 2 {
 		values[args[i]] = args[i+1]

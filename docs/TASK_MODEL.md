@@ -26,19 +26,19 @@ messenger --root DIR serve --allow-tasks
 
 1. **Start.** `StartTask` records the task and the launch intent of its first run in one transaction. Nothing is launched at this point.
    - **Idempotent.** It is keyed by `(project, op_id)`: a repeated call returns the same task, and the same `op_id` with different arguments is refused.
-   - **Session ID.** A Claude task gets a new session UUID here. A Codex task gets its thread ID from the first run's events.
-   - **Model (D-030).** An optional model name chosen by the coordinator is stored on the task (`tasks.model`) and is part of the idempotency key. Every run of the task gets it: Claude `--model NAME`, Codex `-c model="NAME"`. A name must match `^[A-Za-z0-9][A-Za-z0-9._:/\[\]-]{0,79}$`, so it can never be read as a flag. No model means the CLI's default. An unknown name fails the run like any other failure; it is not retried.
+   - **Session ID.** A Claude task gets a new session UUID here. A Codex task gets its thread ID, and a Cursor task its chat ID, from the first run's events.
+   - **Model (D-030).** An optional model name chosen by the coordinator is stored on the task (`tasks.model`) and is part of the idempotency key. Every run of the task gets it: Claude `--model NAME`, Codex `-c model="NAME"`, Cursor `--model NAME`. A name must match `^[A-Za-z0-9][A-Za-z0-9._:/\[\]-]{0,79}$`, so it can never be read as a flag. No model means the CLI's default. An unknown name fails the run like any other failure; it is not retried.
 2. **Launch.** The client launches recorded runs only with `serve --allow-tasks` and only while the queue is not paused. There is no limit on parallel workers (D-022).
    - `launching` is committed before the reservation in `active-runs.json` is written, and the reservation before exec.
    - The worker runs with the task's folder as its working directory.
-   - Worker permissions: Claude runs with `--permission-mode acceptEdits` (D-028), Codex with `--sandbox workspace-write` (D-023).
+   - Worker permissions: Claude runs with `--permission-mode acceptEdits` (D-028), Codex with `--sandbox workspace-write` (D-023), Cursor with `--force --trust --approve-mcps` (D-049).
 3. **Identity.** The run's first conversation ID from the event stream is bound:
    - a Claude ID must equal the recorded UUID;
-   - a new Codex task binds the first thread ID once, and the ID may not belong to another task;
+   - a new Codex or Cursor task binds the first thread or chat ID once, and the ID may not belong to another task;
    - a resumed run must report the recorded ID.
 
    The worker tools stay closed until the ID is bound.
-4. **Worker tools** (`messenger task-mcp`, bound to the run and its receipt): `read_task`, then exactly one of `report`, `ask` or `ask_owner`. On a resumed run `read_task` returns the question and the answer without the task text, which the resumed conversation already has; `include_task: true` returns it (T-033). The disposition is stored provisionally.
+4. **Worker tools** (`messenger task-mcp`, bound to the run and its receipt; for Cursor through `~/.cursor/mcp.json` and the `AGENT_MESSENGER_TASK` variable, D-049): `read_task`, then exactly one of `report`, `ask` or `ask_owner`. On a resumed run `read_task` returns the question and the answer without the task text, which the resumed conversation already has; `include_task: true` returns it (T-033). The disposition is stored provisionally.
 5. **Verification** (`FinishTaskRun`, one transaction). After the exit, the client signals the process group and waits up to 3 s for it to be empty. Then:
 
 | Evidence | Run | Task | Published |

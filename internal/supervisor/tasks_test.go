@@ -64,7 +64,7 @@ func newTaskHarness(t *testing.T, mode string, launcher Launcher) *taskHarness {
 	if err := st.CreateProject("Game", h.folder); err != nil {
 		t.Fatal(err)
 	}
-	for _, p := range []string{"claude", "codex"} {
+	for _, p := range []string{"claude", "codex", "cursor"} {
 		if err := st.SetComputerAgent(p, self, "", "messenger-only"); err != nil {
 			t.Fatal(err)
 		}
@@ -198,7 +198,7 @@ func hasArgs(args []string, want ...string) bool {
 }
 
 func TestTaskWorkerReportsAndIsVerified(t *testing.T) {
-	for _, provider := range []string{"claude", "codex"} {
+	for _, provider := range []string{"claude", "codex", "cursor"} {
 		t.Run(provider, func(t *testing.T) {
 			h := newTaskHarness(t, "report", AdapterLauncher{AllowTasks: true})
 			id := h.startTask("op-1", provider, "Fix the menu")
@@ -215,8 +215,8 @@ func TestTaskWorkerReportsAndIsVerified(t *testing.T) {
 			if provider == "claude" && !hasArgs(runs[0].Args, "--session-id", task.SessionID) {
 				t.Fatalf("Claude did not get its recorded id: %v", runs[0].Args)
 			}
-			if provider == "codex" && (task.SessionID == "" || hasArgs(runs[0].Args, "resume")) {
-				t.Fatalf("Codex identity %q args %v", task.SessionID, runs[0].Args)
+			if provider != "claude" && (task.SessionID == "" || hasArgs(runs[0].Args, "resume") || strings.Contains(strings.Join(runs[0].Args, " "), "--resume")) {
+				t.Fatalf("%s identity %q args %v", provider, task.SessionID, runs[0].Args)
 			}
 			// Exit and an empty group were observed: the reservation is retired.
 			waitNoTaskReservations(t)
@@ -226,7 +226,7 @@ func TestTaskWorkerReportsAndIsVerified(t *testing.T) {
 }
 
 func TestTaskQuestionResumesTheSameConversation(t *testing.T) {
-	for _, provider := range []string{"claude", "codex"} {
+	for _, provider := range []string{"claude", "codex", "cursor"} {
 		t.Run(provider, func(t *testing.T) {
 			h := newTaskHarness(t, "ask-then-report", AdapterLauncher{AllowTasks: true})
 			id := h.startTask("op-1", provider, "Build level")
@@ -255,8 +255,11 @@ func TestTaskQuestionResumesTheSameConversation(t *testing.T) {
 				t.Fatalf("runs %d", len(runs))
 			}
 			resumeFlag := []string{"--resume", done.SessionID}
-			if provider == "codex" {
+			switch provider {
+			case "codex":
 				resumeFlag = []string{"resume", done.SessionID}
+			case "cursor":
+				resumeFlag = []string{"--resume=" + done.SessionID}
 			}
 			if !hasArgs(runs[1].Args, resumeFlag...) {
 				t.Fatalf("second run did not resume the same conversation: %v", runs[1].Args)
@@ -275,6 +278,7 @@ func TestTaskModelReachesEveryRun(t *testing.T) {
 	}{
 		{"claude", "opus", []string{"--model", "opus"}},
 		{"codex", "gpt-5.1-codex", []string{"-c", `model="gpt-5.1-codex"`}},
+		{"cursor", "gpt-5", []string{"--model", "gpt-5"}},
 	} {
 		t.Run(c.provider, func(t *testing.T) {
 			h := newTaskHarness(t, "ask-then-report", AdapterLauncher{AllowTasks: true})
@@ -338,7 +342,7 @@ func TestTaskFailuresAreNotRetried(t *testing.T) {
 }
 
 func TestTaskUsageLimitIsExplainedNotRetried(t *testing.T) {
-	for _, provider := range []string{"claude", "codex"} {
+	for _, provider := range []string{"claude", "codex", "cursor"} {
 		t.Run(provider, func(t *testing.T) {
 			h := newTaskHarness(t, "usage-limit", AdapterLauncher{AllowTasks: true})
 			id := h.startTask("op-1", provider, "x")
@@ -354,10 +358,10 @@ func TestTaskUsageLimitIsExplainedNotRetried(t *testing.T) {
 			if provider == "claude" && task.FailureReset != "2025-11-07T18:00:00Z" {
 				t.Fatalf("claude reset %q", task.FailureReset)
 			}
-			if provider == "codex" {
+			if provider != "claude" {
 				at, err := time.Parse(time.RFC3339, task.FailureReset)
 				if err != nil || at.Local().Hour() != 18 || at.Local().Minute() != 12 {
-					t.Fatalf("codex reset %q %v", task.FailureReset, err)
+					t.Fatalf("%s reset %q %v", provider, task.FailureReset, err)
 				}
 			}
 			found := false
@@ -527,6 +531,27 @@ func TestCoordinatorStartsATaskAndWaitsForItsReport(t *testing.T) {
 	report := w["events"].([]any)[0].(map[string]any)
 	if report["kind"] != "report" || report["text"] != "done with Level 3 for Which level?" {
 		t.Fatalf("report %+v", report)
+	}
+	h.stop()
+}
+
+// D-049: a Cursor mcp.json Messenger cannot read is left alone and the run
+// does not start.
+func TestCursorTaskDoesNotStartOverABrokenMCPConfig(t *testing.T) {
+	h := newTaskHarness(t, "report", AdapterLauncher{AllowTasks: true})
+	home, _ := os.UserHomeDir()
+	path := filepath.Join(home, ".cursor", "mcp.json")
+	mkdir(t, filepath.Dir(path))
+	if err := os.WriteFile(path, []byte("{broken"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	id := h.startTask("op-1", "cursor", "Fix the menu")
+	h.waitState(id, "failed", "blocked")
+	if raw, _ := os.ReadFile(path); string(raw) != "{broken" {
+		t.Fatal("the owner's mcp.json was changed")
+	}
+	if len(h.runs()) != 0 {
+		t.Fatal("Cursor started")
 	}
 	h.stop()
 }
