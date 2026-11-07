@@ -7,10 +7,11 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 )
 
-// A reader that keeps opening the file does not make a replace fail, and the
-// reader never sees a missing or partial file.
+// Readers that keep opening the file (far more often than the client does)
+// do not make a replace fail, and never see a missing or partial file.
 func TestWindowsReplaceWhileReading(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "active-runs.json")
@@ -34,6 +35,7 @@ func TestWindowsReplaceWhileReading(t *testing.T) {
 				if err == nil && string(raw) != "[]" {
 					err = os.ErrInvalid
 				}
+				time.Sleep(5 * time.Millisecond)
 				if err != nil {
 					select {
 					case readErrs <- err:

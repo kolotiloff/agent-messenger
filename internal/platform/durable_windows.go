@@ -4,7 +4,6 @@ package platform
 
 import (
 	"errors"
-	"io"
 	"os"
 	"time"
 
@@ -45,33 +44,15 @@ func ReplaceFile(tmp, path string) error {
 }
 
 // ReadFile reads a file that ReplaceFile may be replacing at the same time.
-// It opens the file with delete sharing, so an open reader does not block a
-// rename over the file; it sees either the old or the new contents.
 func ReadFile(path string) ([]byte, error) {
 	deadline := time.Now().Add(busyWait)
 	for {
-		raw, err := readShared(path)
+		raw, err := os.ReadFile(path)
 		if err == nil || !busy(err) || time.Now().After(deadline) {
 			return raw, err
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-}
-
-func readShared(path string) ([]byte, error) {
-	name, err := windows.UTF16PtrFromString(path)
-	if err != nil {
-		return nil, err
-	}
-	h, err := windows.CreateFile(name, windows.GENERIC_READ,
-		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
-		nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL, 0)
-	if err != nil {
-		return nil, &os.PathError{Op: "open", Path: path, Err: err}
-	}
-	f := os.NewFile(uintptr(h), path)
-	defer f.Close()
-	return io.ReadAll(f)
 }
 
 // SyncDir has nothing to do on Windows: a folder cannot be flushed, and
