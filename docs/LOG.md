@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-07 — Claude Code (T-012 Cursor names)
+
+- The owner saw «cursor» in lower case under a computer in the sidebar. Fixed: the sidebar's short names, the task list's agent filter (it had no Cursor, so the Cursor card's «Задачи» link selected nothing), the `agent-set` help, and the `check-cli` line, which now prints «Claude Code», «Codex», «Cursor». A new test requires a proper name for every task agent in each of the window's name lists and in the filter.
+
 ## 2026-11-07 — Claude Code (release preview.33, window grant fix)
 
 - PR #55 (Cursor) merged into PR #54; PR #54 squash-merged to `main` (56ee506); PR #53 closed (its commit was already in #54).

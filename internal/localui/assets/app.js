@@ -96,7 +96,7 @@
   // a project, changing the project folder, connecting an agent program and
   // answering a worker's question to the owner.
   const names={claude:'Claude Code',codex:'Codex',cursor:'Cursor'};
-  const shortNames={claude:'Claude',codex:'Codex'};
+  const shortNames={claude:'Claude',codex:'Codex',cursor:'Cursor'};
   function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
   function providerIcon(provider){
     const wrap=el('span',undefined,'am-provider-icon');wrap.setAttribute('aria-hidden','true');
