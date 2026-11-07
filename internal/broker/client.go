@@ -244,3 +244,24 @@ func Check(ctx context.Context, c Connection) (PingResult, error) {
 	}
 	return out, nil
 }
+
+// Report sends this device's presence and returns the broker's list of
+// computers. The pinned certificate and the broker ID in the answer identify
+// the broker, so no separate hello is needed every time.
+func Report(ctx context.Context, c Connection, p Presence) ([]Peer, error) {
+	var out rosterResponse
+	code, err := call(ctx, pinnedClient(c.Fingerprint), http.MethodPost, c.Address, "/v1/presence", c.DeviceKey, p, &out)
+	if err != nil {
+		return nil, err
+	}
+	if code == http.StatusUnauthorized {
+		return nil, ErrRevoked
+	}
+	if code != http.StatusOK || out.BrokerID != c.BrokerID || out.DeviceID != c.DeviceID {
+		return nil, fmt.Errorf("сервер не принял сведения об агентах (код %d)", code)
+	}
+	if out.Peers == nil {
+		out.Peers = []Peer{}
+	}
+	return out.Peers, nil
+}

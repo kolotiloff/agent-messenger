@@ -14,7 +14,8 @@ How to use it:
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
 
-| T-015 | First part done on `claude/t015-server-setup`: broker hosted by the client, invitations, joining, check, devices and revoke, the «Сервер» tab ([BROKER.md](BROKER.md), D-033–D-035). Left: tasks between computers, VPS package and wizard, Keychain (Q-013), Windows (Q-006). | agent + owner | `claude/t015-server-setup` |
+| T-015 | Done: broker hosted by the client, invitations, joining, check, devices and revoke, the «Сервер» tab ([BROKER.md](BROKER.md), D-033–D-035), computers with agents in the sidebar (T-035). Left: tasks between computers (T-037), Keychain (Q-013), Windows (Q-006). | agent + owner | — |
+| T-037 | Tasks between computers: a coordinator on one computer gives a task to an agent on another; questions and reports come back. Design first ([TASK_MODEL.md](TASK_MODEL.md)), cautious defaults in QUESTIONS.md. | agent | next |
 
 ## Next
 
@@ -36,12 +37,14 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 | T-016 | Windows and Linux runtime acceptance and packages. Stage 6. | agent + owner | Q-006 |
 | T-017 | Coordinator role handover. Stage 6. | agent | |
 | T-019 | Decide and implement the UI language. | owner → agent | blocked: Q-001 |
+| T-036 | Standalone broker for a VPS and its setup wizard. Optional (D-040): only for computers in different networks. | agent + owner | was part of T-015 |
 | T-030 | `/api/setup-codex` allows 100 s, but the window HTTP server cuts every reply at 25 s (`WriteTimeout`), so a slow successful setup shows as an error. Set a per-request write deadline for it. Persistent Codex path: moot if T-028 removes it. | agent | found in the T-015 audit |
 
 ## Done
 
 | ID | Task | PR |
 |---|---|---|
+| T-035 | Computers of the network report their agents to the broker every 15 s; the sidebar shows every computer with its agents and statuses (D-039). | branch `claude/t035-network-roster` |
 | T-033 | A resumed run's `read_task` returns the question and answer without the task text (the conversation already has it) and a note; `include_task: true` returns the text. | branch `claude/t033-resume-brief` |
 | T-034 | Failure reasons (usage limit with reset time, rate limit, overload, sign-in, other) on the task, in the window and the coordinator's `failed` event; nothing is retried. Limit formats from the CLIs' docs, tested with fake CLIs only. | [PR #45](https://github.com/kolotiloff/agent-messenger/pull/45) |
 | T-032 | `tasks`: open tasks by default, limit, no folder per row, `version` / `if_version` → `unchanged`. | [PR #45](https://github.com/kolotiloff/agent-messenger/pull/45) |

@@ -1,6 +1,6 @@
 # Broker: what is built (T-015, first part)
 
-Status on 2026-11-07: the background client can host a broker and a computer can join a broker by invitation. **Tasks do not travel between computers yet**: workers still run only on the computer where the task was created. The window says so on the «Сервер» tab. The placement principles are in [DEPLOYMENT.md](DEPLOYMENT.md).
+Status on 2026-11-07: the background client can host a broker, a computer can join a broker by invitation, and every computer sees the others with their agents. **Tasks do not travel between computers yet**: workers still run only on the computer where the task was created. The window says so on the «Сервер» tab. The placement principles are in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## What works
 
@@ -11,6 +11,7 @@ Status on 2026-11-07: the background client can host a broker and a computer can
 - **Joining** (D-034). The other computer pastes the code and a device name. It first connects with the pinned fingerprint, checks `broker_id` and protocol version (`GET /v1/hello`), and only then sends the secret (`POST /v1/register`). It receives a device ID and a 256-bit device key; the broker stores only a hash of the key. A computer belongs to one broker: joining another one requires "Отключить" first, so nothing is ever sent to a new broker silently.
 - **Checking.** "Проверить связь" repeats the identity check and calls `GET /v1/ping` with the device key. A revoked or unknown key is reported as such; an unreachable server or a different certificate are reported separately.
 - **Devices.** The host lists devices with their last contact and can revoke one. Revocation takes effect on the next request. Revoked devices are counted, not listed.
+- **Computers and agents** (D-039). Every 15 s the client reports its agents to the broker (`POST /v1/presence` with the device key; the hosting computer writes its own report directly): each agent program with its running and waiting-for-owner task counts, and the coordinator program. The answer is the list of computers: the hosting computer (under `host`) and every device that is not revoked, each with its last report and how many seconds ago it came by the broker's clock (clocks of computers may differ). The window's sidebar shows the other computers like this one; a computer that has not reported for 45 s shows «Был на связи …». A device keeps the name it joined with; a report with an unknown field, a bad agent name, a negative count or duplicates is refused. A successful report also counts as a connection check; a failed one is shown and the next round, 15 s later, tries again. A computer that joined its own server does not list itself.
 - **Disconnect** forgets the connection on this computer. The device stays listed on the broker until it is revoked there.
 
 ## Files
@@ -20,7 +21,7 @@ In the client's data directory:
 | Path | What |
 |---|---|
 | `broker/settings.json` | hosted broker: on/off, scope, port |
-| `broker/broker.sqlite` | `broker_id`, devices (key hashes), invitations (secret hashes) |
+| `broker/broker.sqlite` | `broker_id`, devices (key hashes), invitations (secret hashes), the latest presence of each computer |
 | `broker/tls-cert.pem`, `broker/tls-key.pem` | the broker's certificate and private key (0600) |
 | `broker/serve.lock` | one running broker per data directory |
 | `server-connection.json` | this computer's membership, including the device key (0600; Q-013) |
@@ -37,10 +38,10 @@ Files are written to a fresh temporary file, flushed to disk and renamed. A dama
 ## Not built yet
 
 - Carrying tasks, questions and reports between computers (the rest of T-015).
-- A standalone broker for a VPS and the VPS setup wizard (D-035).
+- A standalone broker for a VPS and the VPS setup wizard (D-035). Optional: one local network needs no VPS (D-040).
 - Keeping the device key in the OS secure storage (Q-013).
 - A reachability check from another computer. "Работает" means the broker listens; it does not prove that another computer can reach it (firewall, VPN, router).
 
 ## Verified
 
-On Linux with tests (`internal/broker`, `internal/supervisor/server_test.go`, `internal/localui`) and in headless Chromium against a real client: enable, invite, join (the client joins its own broker, as a second computer would), check, revoke (two clicks) and the check after it, a wrong code, a wrong port, disable, "local network" on a machine without a private address. An audit of the code found and fixed: no connection limit, LAN scope reachable from public addresses, a restart racing its own lock, shutdown closing the database under running requests, settings not saved while the server ran, parallel joins leaving a stray device, files not flushed, device names with control characters, misaligned timeouts, and window issues (the access picker not showing the saved scope, a used invitation still shown, lost keyboard focus, status texts cleared by an older timer, a slow poll overwriting a newer state, revoke in one click). Not verified: two real computers, the Mac app, a local network.
+On Linux with tests (`internal/broker`, `internal/supervisor/server_test.go`, `internal/localui`) and in headless Chromium against a real client: enable, invite, join (the client joins its own broker, as a second computer would), check, revoke (two clicks) and the check after it, a wrong code, a wrong port, disable, "local network" on a machine without a private address. An audit of the code found and fixed: no connection limit, LAN scope reachable from public addresses, a restart racing its own lock, shutdown closing the database under running requests, settings not saved while the server ran, parallel joins leaving a stray device, files not flushed, device names with control characters, misaligned timeouts, and window issues (the access picker not showing the saved scope, a used invitation still shown, lost keyboard focus, status texts cleared by an older timer, a slow poll overwriting a newer state, revoke in one click). Presence (D-039): broker tests for the roster in both directions, refused reports, revoke, an unreachable broker; headless Chromium with a helper that joins as a second computer and reports two agents: its card with Claude (coordinator) and Codex, «Был на связи» after it stops, revoke from the right-click menu. Not verified: two real computers, the Mac app, a local network.

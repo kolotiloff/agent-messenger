@@ -191,7 +191,13 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 	// The hosted broker starts only if the owner turned it on; a failure is
 	// shown in the window and does not stop the client.
 	server.Start()
+	server.SetPresence(sup.presence)
 	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		server.RunPresence(ctx)
+	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

@@ -7,6 +7,11 @@ One entry per work session, newest first. Write what was done, which tool did it
 - Branch `claude/t015-status-style`: one status style, one-row server controls with locked fields, tooltips instead of hint lines, joined devices in the sidebar with a right-click «Отозвать», icon copy in the invitation, quiet update block, font-measured text centring. The owner approved it on a live preview; released as preview.29.
 - No real model calls; Mac app not run.
 
+## 2026-11-07 — Claude Code (T-035 computers and agents in the sidebar)
+
+- preview.29 released from df7ade8 (PR #48). Owner asked to continue without them.
+- T-035: presence reports (`POST /v1/presence`), the roster in the server status, sidebar cards for other computers. VPS optional (D-040). No real model calls; a helper program played the second computer.
+
 ## 2026-11-07 — Claude Code (preview.28 released)
 
 - PR #46 (T-033) merged after green CI on Linux and macOS; released as preview.28 from 98d346e (run 42360015163). Assets: the app zip, `update-darwin-arm64.json` and its `.sig`. Not yet checked on the Mac.

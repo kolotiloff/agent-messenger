@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"time"
+
+	"github.com/kolotiloff/agent-messenger/internal/broker"
 )
 
 // serverNetworkTimeout bounds a connection attempt or check from the window.
@@ -65,4 +68,30 @@ func (s *Supervisor) Server(_ context.Context, action string, payload json.RawMe
 		return nil, errors.New("неизвестное действие сервера")
 	}
 	return s.server.Status(), nil
+}
+
+// presence describes this computer's agents for its network: the agent
+// programs with their running and waiting tasks, and the coordinator.
+func (s *Supervisor) presence() (broker.Presence, error) {
+	agents, coordinator, err := s.store.Presence()
+	if err != nil {
+		return broker.Presence{}, err
+	}
+	p := broker.Presence{Agents: []broker.PresenceAgent{}, Coordinator: clipName(coordinator)}
+	for _, a := range agents {
+		p.Agents = append(p.Agents, broker.PresenceAgent{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting})
+	}
+	if name, err := os.Hostname(); err == nil {
+		p.Name = clipName(name)
+	}
+	return p, nil
+}
+
+// clipName keeps a name within the broker's limit for device names.
+func clipName(name string) string {
+	runes := []rune(name)
+	if len(runes) > broker.MaxDeviceName {
+		runes = runes[:broker.MaxDeviceName]
+	}
+	return string(runes)
 }

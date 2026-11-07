@@ -64,6 +64,10 @@ type MemberStatus struct {
 type Status struct {
 	Host   HostStatus   `json:"host"`
 	Member MemberStatus `json:"member"`
+	// Peers are the other computers of this computer's network: the devices
+	// of the hosted broker, or the computers of the broker this computer
+	// joined. This computer is not among them.
+	Peers []Peer `json:"peers"`
 	// Exchange is false until tasks travel between computers.
 	Exchange bool `json:"exchange"`
 }
@@ -92,6 +96,12 @@ type Service struct {
 	memberErr  string
 	damaged    bool // the connection file exists but cannot be read
 	connecting bool
+
+	// presence reports this computer's agents; peers is the member's last
+	// list of computers from its broker.
+	presence func() (Presence, error)
+	peers    []Peer
+	peersAt  time.Time
 
 	// interfaces lists this computer's addresses; replaced in tests.
 	interfaces func() ([]net.Addr, error)
@@ -398,7 +408,7 @@ func (s *Service) Disconnect() error {
 	if err := os.Remove(s.connectionPath()); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	s.member, s.checkedAt, s.reachable, s.memberErr, s.damaged = nil, "", false, "", false
+	s.member, s.checkedAt, s.reachable, s.memberErr, s.damaged, s.peers = nil, "", false, "", false, nil
 	return nil
 }
 
@@ -426,7 +436,30 @@ func (s *Service) Status() Status {
 	if s.member != nil {
 		m.Connected, m.Address, m.BrokerID, m.DeviceID, m.DeviceName, m.ConnectedAt = true, s.member.Address, s.member.BrokerID, s.member.DeviceID, s.member.DeviceName, s.member.ConnectedAt
 	}
-	return Status{Host: h, Member: m}
+	peers := []Peer{}
+	if s.broker != nil {
+		if roster, err := s.broker.Roster(); err == nil {
+			for _, p := range roster {
+				// A computer that joined its own server is not its own peer.
+				if p.ID != HostPeer && (s.member == nil || p.ID != s.member.DeviceID) {
+					peers = append(peers, p)
+				}
+			}
+		}
+	} else if s.member != nil {
+		// Ages grow while no new list arrives, so a lost connection shows
+		// every computer as not reporting.
+		late := int(time.Since(s.peersAt) / time.Second)
+		for _, p := range s.peers {
+			if p.ID != s.member.DeviceID {
+				if p.Age >= 0 {
+					p.Age += late
+				}
+				peers = append(peers, p)
+			}
+		}
+	}
+	return Status{Host: h, Member: m, Peers: peers}
 }
 
 // Summary is the one-word server state for the status command:
@@ -443,4 +476,81 @@ func (s *Service) Summary() string {
 		return "connected"
 	}
 	return "not_configured"
+}
+
+// SetPresence sets how this computer describes its agents to its network.
+func (s *Service) SetPresence(fn func() (Presence, error)) {
+	s.mu.Lock()
+	s.presence = fn
+	s.mu.Unlock()
+}
+
+// RunPresence reports this computer's agents every PresenceInterval until
+// ctx ends: to the hosted broker directly, and to the broker this computer
+// joined. Reporting is a status update that the next round replaces, so a
+// failed round is shown and simply not repeated early.
+func (s *Service) RunPresence(ctx context.Context) {
+	ticker := time.NewTicker(PresenceInterval)
+	defer ticker.Stop()
+	for {
+		s.ReportPresence(ctx)
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+// ReportPresence makes one round of reports.
+func (s *Service) ReportPresence(ctx context.Context) {
+	s.mu.Lock()
+	fn := s.presence
+	s.mu.Unlock()
+	if fn == nil {
+		return
+	}
+	p, err := fn()
+	if err != nil {
+		return
+	}
+	// A host name or coordinator label that is not one plain line is left
+	// out rather than holding back the whole report.
+	if p.Name != "" && !validDeviceName(p.Name) {
+		p.Name = ""
+	}
+	if p.Coordinator != "" && !validDeviceName(p.Coordinator) {
+		p.Coordinator = "coordinator"
+	}
+	if !p.valid() {
+		return
+	}
+	s.mu.Lock()
+	if s.broker != nil {
+		_ = s.broker.Report(HostPeer, p)
+	}
+	var c *Connection
+	if s.member != nil {
+		copied := *s.member
+		c = &copied
+	}
+	s.mu.Unlock()
+	if c == nil {
+		return
+	}
+	p.Name = ""
+	call, cancel := context.WithTimeout(ctx, 12*time.Second)
+	defer cancel()
+	peers, err := Report(call, *c, p)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.member == nil || s.member.DeviceID != c.DeviceID {
+		return
+	}
+	s.checkedAt, s.reachable, s.memberErr = time.Now().UTC().Format(time.RFC3339), err == nil, ""
+	if err != nil {
+		s.memberErr = err.Error()
+		return
+	}
+	s.peers, s.peersAt = peers, time.Now()
 }
