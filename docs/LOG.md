@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-07 — Claude Code (no references to other products)
+
+- At the owner's request the docs no longer name or link other products: the earlier comparison document was removed, its accepted directions moved to RELEASE_PLAN.md "Planned directions" without sources. Keep it that way: no product names, links or comparisons in code, docs, commits or PRs.
+
 ## 2026-11-07 — Claude Code (token and reliability review)
 
 - Owner asked to change only what saves tokens, simplifies work or adds reliability. Written up in [TOKEN_REVIEW.md](TOKEN_REVIEW.md), D-038; new tasks T-031–T-034 in Next.

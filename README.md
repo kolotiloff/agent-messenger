@@ -64,8 +64,6 @@ Open the private link it prints on this Mac. Opening the window, browsing and wa
 - [Architecture and protocol](docs/PLAN.md), [MVP](docs/MVP.md), [testable hypotheses](docs/VALIDATION.md)
 - [App requirements](docs/APP.md), [saved v1 design](design/README.md), [broker hosting](docs/DEPLOYMENT.md)
 
-- [Agentgram: comparison of approaches and ideas adopted into the plan](docs/AGENTGRAM_REVIEW.md)
-
 ## Project scope
 
 Messenger delivers messages and manages their processing. The agents themselves maintain the project's tasks and documentation. The coordinator is not tied to Claude or any other single provider; handing off this role is planned separately from the broker role.
