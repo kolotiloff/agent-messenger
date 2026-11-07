@@ -6,6 +6,8 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 - Branch `claude/t016-windows-linux`, PR #52: Windows platform layer (job objects, LockFileEx, process snapshot, boot identity, background start), `.exe`-only agents, `messenger open` for a browser window, archives for Windows and Linux in CI and in the release. D-043 to D-046; Q-014 settled (off by default).
 - Windows CI found that a job's name disappears when its last handle closes; the client now keeps the handle for the run and treats an unreachable job as not proven. SQLite path on Windows fixed (drive letter).
+- Windows CI also found that a rename over `active-runs.json` fails while a reader has it open; the replace and the read now retry for up to 2 s (a refused rename changes nothing).
+- PR #52 merged (squash, 11d938c) after two green CI runs on 1ce5622; preview.32 released (run 42380342750).
 - No real model calls; Cursor not run; no real Windows desktop used.
 
 ## 2026-11-07 — Claude Code (T-037 tasks between computers)
