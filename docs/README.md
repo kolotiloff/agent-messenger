@@ -27,6 +27,7 @@ These change all the time. Every tool reads them at the start and updates them a
 | [BROKER.md](BROKER.md) | What of the broker is built: hosting, invitations, joining |
 | [VALIDATION.md](VALIDATION.md) | Hypotheses H1–H14 and what has been confirmed |
 | [AGENTGRAM_REVIEW.md](AGENTGRAM_REVIEW.md) | Comparison with Agentgram and ideas taken from it |
+| [TOKEN_REVIEW.md](TOKEN_REVIEW.md) | Where tokens go and what to change for tokens and reliability, and what not |
 | [RETHINK.md](RETHINK.md) | Proposal under review: one task, one worker session; the coordinator in the owner's app |
 | [GUI_COORDINATOR.md](GUI_COORDINATOR.md) | Optional scenario: a coordinator in the graphical Claude app |
 

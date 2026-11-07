@@ -8,6 +8,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+- **2026-11-07, token and reliability review** (Claude Code): what to change is in [TOKEN_REVIEW.md](TOKEN_REVIEW.md) and D-038; tasks T-031–T-034 are in Next (token budget of `wait`, lean `tasks`, no repeated task text on resume, failure reasons with reset time). Docs only; no code changed. The rest of this section is older; see [LOG.md](LOG.md) for later work.
+
 Updated 2026-11-07 (third night) by Claude Code.
 
 - **Owner's instruction:** "доведи программу до релиза и сделай там настройку сервера", then an audit of the new work with all findings fixed.
