@@ -89,7 +89,7 @@ func Collect(ctx context.Context, root string) Report {
 		agent := Agent{Provider: p.id, Name: p.name, Authentication: "not_checked", Session: "not_checked",
 			CLI: CLI{State: "not_found", Source: "PATH", Identity: "not_checked", Version: "not_checked"}}
 		for _, command := range p.commands {
-			path, err := exec.LookPath(command)
+			path, err := exec.LookPath(command + exeSuffix())
 			if err != nil {
 				if errors.Is(err, exec.ErrDot) {
 					agent.CLI.State = "unsafe_relative_path"

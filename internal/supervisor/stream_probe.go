@@ -339,7 +339,7 @@ func RunClaudeStreamProbe(ctx context.Context, root, cli, private string) (resul
 		return result, err
 	}
 	result.ReservationRetained = true
-	if err := cmd.Start(); err != nil {
+	if err := platform.StartGroup(cmd); err != nil {
 		return result, err
 	}
 	result.Launches = 1

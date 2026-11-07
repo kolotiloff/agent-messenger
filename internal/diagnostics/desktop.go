@@ -5,21 +5,42 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
+
+	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
 
-// CollectDesktop also checks explicit installation directories because apps
-// opened through LaunchServices do not inherit the user's interactive PATH.
-// Candidates are never executed by discovery.
+// exeSuffix is the file extension of a program started directly. On Windows
+// PATH lookup would otherwise also find .cmd scripts, which Messenger does
+// not start (D-044).
+func exeSuffix() string {
+	if runtime.GOOS == "windows" {
+		return ".exe"
+	}
+	return ""
+}
+
+// CollectDesktop also checks explicit installation directories because a
+// window opened from the desktop does not inherit the user's interactive
+// PATH. Candidates are never executed by discovery.
 func CollectDesktop(ctx context.Context, root string) Report {
 	r := Collect(ctx, root)
-	if runtime.GOOS != "darwin" {
-		return r
-	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return r
 	}
-	return desktopCandidates(r, []string{filepath.Join(home, ".local", "bin"), "/opt/homebrew/bin", "/usr/local/bin"})
+	switch runtime.GOOS {
+	case "darwin":
+		return desktopCandidates(r, []string{filepath.Join(home, ".local", "bin"), "/opt/homebrew/bin", "/usr/local/bin"})
+	case "linux":
+		return desktopCandidates(r, []string{filepath.Join(home, ".local", "bin"), "/usr/local/bin", "/usr/bin"})
+	case "windows":
+		r = desktopCandidates(r, []string{filepath.Join(home, ".local", "bin")})
+		if appData := os.Getenv("AppData"); filepath.IsAbs(appData) {
+			r = npmCodexCandidate(r, filepath.Join(appData, "npm"))
+		}
+	}
+	return r
 }
 
 func desktopCandidates(r Report, directories []string) Report {
@@ -37,15 +58,44 @@ func desktopCandidates(r Report, directories []string) Report {
 					continue
 				}
 				for _, command := range p.commands {
-					path := filepath.Join(dir, command)
+					path := filepath.Join(dir, command+exeSuffix())
 					info, err := os.Stat(path)
-					if err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0111 != 0 {
+					if err == nil && platform.IsExecutable(path, info) {
 						a.CLI.State, a.CLI.Path, a.CLI.Command, a.CLI.Source = "candidate_found", path, command, "installation_directory"
 						break
 					}
 				}
 			}
 			if a.CLI.State == "candidate_found" {
+				break
+			}
+		}
+	}
+	return r
+}
+
+// npmCodexCandidate finds the Codex program an npm installation keeps inside
+// its package on Windows. The npm command itself is a .cmd script, which
+// Messenger does not start; the program it runs is a plain .exe.
+func npmCodexCandidate(r Report, npm string) Report {
+	for i := range r.Agents {
+		a := &r.Agents[i]
+		if a.Provider != "codex" || a.CLI.State == "candidate_found" {
+			continue
+		}
+		modules := filepath.Join(npm, "node_modules", "@openai")
+		var found []string
+		for _, pattern := range []string{
+			filepath.Join(modules, "codex*", "vendor", "*", "codex", "codex.exe"),
+			filepath.Join(modules, "codex", "node_modules", "@openai", "codex*", "vendor", "*", "codex", "codex.exe"),
+		} {
+			matches, _ := filepath.Glob(pattern)
+			found = append(found, matches...)
+		}
+		sort.Strings(found)
+		for _, path := range found {
+			if info, err := os.Stat(path); err == nil && platform.IsExecutable(path, info) {
+				a.CLI.State, a.CLI.Path, a.CLI.Command, a.CLI.Source = "candidate_found", path, "codex", "installation_directory"
 				break
 			}
 		}

@@ -12,6 +12,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
 const SocketName = "control.sock"
@@ -430,9 +431,13 @@ func Listen(root string) (net.Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := os.Chmod(path, 0o600); err != nil {
-		ln.Close()
-		return nil, err
+	// On Windows the socket file takes the data directory's access list (the
+	// user's own folder); file modes do not apply there.
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(path, 0o600); err != nil {
+			ln.Close()
+			return nil, err
+		}
 	}
 	return ln, nil
 }

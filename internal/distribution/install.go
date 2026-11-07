@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/kolotiloff/agent-messenger/internal/platform"
 	"io"
 	"os"
 	"path/filepath"
@@ -195,11 +196,4 @@ func fileDigest(path string) (string, error) {
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
-func syncDir(path string) error {
-	d, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer d.Close()
-	return d.Sync()
-}
+func syncDir(path string) error { return platform.SyncDir(path) }

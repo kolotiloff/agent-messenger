@@ -4,9 +4,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"github.com/kolotiloff/agent-messenger/internal/platform"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
 // CacheRuntime pins each desktop-started daemon to immutable bytes outside the
@@ -43,13 +45,17 @@ func CacheRuntime(source, directory string) (string, error) {
 			return "", errors.New("runtime cache must be a directory")
 		}
 	}
-	dest := filepath.Join(versionDir, "messenger")
+	name := "messenger"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	dest := filepath.Join(versionDir, name)
 	validate := func() error {
 		st, err := os.Lstat(dest)
 		if err != nil {
 			return err
 		}
-		if !st.Mode().IsRegular() || st.Mode().Perm()&0o111 == 0 {
+		if !platform.IsExecutable(dest, st) {
 			return errors.New("invalid cached runtime")
 		}
 		got, err := fileDigest(dest)

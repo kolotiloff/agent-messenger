@@ -41,9 +41,11 @@ func DefaultRoot() (string, error) {
 		}
 		return filepath.Join(home, ".local", "share", "agent-messenger"), nil
 	case "windows":
-		dir := os.Getenv("AppData")
+		// Local, not roaming: the database and the socket must not be synced
+		// to other computers by a roaming profile.
+		dir := os.Getenv("LocalAppData")
 		if dir == "" {
-			return "", fmt.Errorf("%w: AppData is not set", ErrUnsupported)
+			return "", fmt.Errorf("%w: LocalAppData is not set", ErrUnsupported)
 		}
 		return filepath.Join(dir, "AgentMessenger"), nil
 	default:
