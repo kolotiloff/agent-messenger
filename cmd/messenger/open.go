@@ -44,17 +44,25 @@ func runOpen(root string, args []string, out io.Writer) error {
 		return err
 	}
 	removeOldWindowFiles(root)
-	var channel *updatefeed.Channel
+	home, err := platform.DefaultRoot()
+	if err != nil {
+		return err
+	}
+	desktop := localui.Desktop{Restart: desktopRestart(root)}
+	var next relaunch
 	if runtime.GOOS == "darwin" {
-		home, err := platform.DefaultRoot()
-		if err != nil {
-			return err
-		}
-		channel = &updatefeed.Channel{Directory: filepath.Join(home, "updates"), PublicKey: buildinfo.UpdatePublicKey}
+		desktop.Channel = &updatefeed.Channel{Directory: filepath.Join(home, "updates"), PublicKey: buildinfo.UpdatePublicKey}
+	} else {
+		desktop.SelfUpdate = windowSelfUpdate(ctx, home, cancel, &next)
 	}
 	opener := &windowOpener{root: root, out: out}
-	defer opener.cleanup()
-	return localui.RunDesktop(ctx, root, 0, opener, channel, desktopRestart(root))
+	err = localui.RunWindow(ctx, root, 0, opener, desktop)
+	opener.cleanup()
+	if program := next.get(); program != "" && err == nil {
+		fmt.Fprintln(out, "Программа обновлена. Окно открывается заново.")
+		return startAgain(program)
+	}
+	return err
 }
 
 // windowOpener receives the page address from the server and opens it once.

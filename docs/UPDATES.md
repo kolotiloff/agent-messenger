@@ -16,6 +16,20 @@ The JSON signature is verified before the archive is downloaded; then the OS, ar
 
 A local HTTP bridge with a separate window Bearer key hands the verified package to Sparkle. Sparkle additionally verifies the archive's EdDSA before unpacking. The dynamic XML is generated locally and is not a remote trusted feed. Checking, downloading, waiting and installing do not call models.
 
+## Windows and Linux
+
+The programs for Windows and Linux use the same channel and the same public key, built into the program (D-048). Each release has `update-windows-amd64.json`, `update-windows-arm64.json`, `update-linux-amd64.json`, `update-linux-arm64.json`, their `.sig` files, and a `<sha256>.zip` for each with only `messenger.exe` or `messenger` inside. `scripts/package-others.sh` builds the archives; the release job signs them on macOS with the same key and Sparkle's `sign_update` (`scripts/sign-other-updates.py`) and checks each signature against the public key before uploading.
+
+The window (`messenger open`) checks when it opens and then every 5 minutes, in the background, without the Mac's `update-fetch` helper. «Обновиться» in the window:
+
+1. checks the downloaded archive's size, SHA-256 and Ed25519 signature again;
+2. unpacks the one program file and writes it next to the running one (`.<name>.update`);
+3. runs it with `version` and requires the exact version, revision, system and architecture from the signed metadata;
+4. replaces the program: on Linux one rename; on Windows the running file is renamed to `<name>.old` (or `.old-1`… if an older one is still running) and the new one takes its name; the leftovers are removed at a later start. A program installed with `messenger install` is installed as a new version with the same installer instead;
+5. closes the page and starts the new program with the same arguments, which opens the window again.
+
+Any failure before step 4 leaves the program untouched and removes the staged file. The background client and its tasks are not touched; the window then offers «Перезапустить», as on the Mac. The program must sit in a folder the user can write to.
+
 ## Releasing from GitHub Actions
 
 The **Release Mac preview** workflow (`.github/workflows/release.yml`) builds, signs and publishes a preview from `main`. Run it by hand under Actions → Release Mac preview → Run workflow, with a version such as `0.0.0-preview.20` and release notes.
@@ -26,7 +40,8 @@ The **Release Mac preview** workflow (`.github/workflows/release.yml`) builds, s
    - The key comes from the repository secret `SPARKLE_ED_PRIVATE_KEY`.
    - The key is written to a `0600` temporary file and removed after signing.
    - Each signature (archive and manifest) is verified against `SUPublicEDKey` from the built app by `scripts/verify-update-signature` before anything is kept.
-4. **Publishing.** It uploads the three assets to a draft release, then publishes it.
+4. **Windows and Linux.** It signs the four update archives built on the Linux job (`scripts/sign-other-updates.py`, same key file, each signature checked).
+5. **Publishing.** It uploads the Mac assets, the downloads and the signed Windows and Linux updates to a draft release, then publishes it.
 
 The secret holds the Sparkle EdDSA key exported once from the developer's Keychain:
 

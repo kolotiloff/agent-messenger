@@ -57,6 +57,7 @@ type TaskRunSpec struct {
 	// Session is the recorded conversation ID. For Claude it is always set (a
 	// new run uses it with --session-id). For Codex it is empty on the first
 	// run and set when resuming.
+	// For Codex and Cursor it is empty on the first run and set when resuming.
 	Session string
 	Resume  bool
 	Profile string
@@ -91,6 +92,8 @@ func TaskArgs(s TaskRunSpec) ([]string, error) {
 		return claudeTaskArgs(s)
 	case "codex":
 		return codexTaskArgs(s)
+	case "cursor":
+		return cursorTaskArgs(s)
 	}
 	return nil, fmt.Errorf("unsupported task agent %q", s.Provider)
 }
@@ -274,6 +277,8 @@ func ParseTaskEvent(provider string, line []byte, r *TaskEventResult) {
 			r.Failure = "Codex " + kind
 			r.noteFailure(errorText(e), taskNow())
 		}
+	case "cursor":
+		parseCursorEvent(e, kind, r, note)
 	}
 }
 
@@ -308,6 +313,8 @@ func TaskFeedEntries(provider string, line []byte) []FeedEntry {
 	}
 	var out []FeedEntry
 	switch provider {
+	case "cursor":
+		return cursorFeedEntries(e)
 	case "claude":
 		if e["type"] != "assistant" {
 			return nil

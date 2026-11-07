@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="170" height="56" viewBox="0 0 170 56" role="img" aria-label="Linux, x64">
+  <title>Linux · x64</title>
+  <style>
+    .bg{fill:#f6f8fa;stroke:#d0d7de}.ic{stroke:#1f6feb}.t1{fill:#1f2328}.t2{fill:#59636e}
+    @media (prefers-color-scheme:dark){.bg{fill:#151b23;stroke:#3d444d}.ic{stroke:#4493f8}.t1{fill:#f0f6fc}.t2{fill:#9198a1}}
+  </style>
+  <rect x="0.5" y="0.5" width="169" height="55" rx="12" class="bg"/>
+  <path d="M26 17v14m0 0-6-6m6 6 6-6M18 38h16" fill="none" class="ic" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="48" y="26" class="t1" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="17" font-weight="600">Linux</text>
+  <text x="48" y="43" class="t2" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12">x64</text>
+</svg>

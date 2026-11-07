@@ -17,6 +17,7 @@ Without one, macOS can block the downloaded preview on another Mac. **Blocks:** 
 
 ### Q-004: When can Cursor CLI be turned on?
 Stage 2 requires all three CLIs. Until then Cursor stays off (D-011). **Blocks:** T-012.
+**Answer (2026-11-07):** there is no such rule; the earlier request was a one-off. Cursor is set up as a task worker like Claude and Codex (T-012, D-049). Real model calls still happen only in the owner's acceptance runs.
 
 ### Q-005: How are acceptance runs on the Mac done?
 Cloud sessions run on Linux. **Options:** the owner runs the steps from an agent's instructions and sends back the output; or the owner connects the Mac to the cloud session through Remote Control; or the owner works from a local tool (Cursor, Claude Code on the Mac). **Blocks:** T-004 and every later Mac acceptance.

@@ -95,7 +95,7 @@
   // talks to the coordinator in the Claude app. Its only actions are creating
   // a project, changing the project folder, connecting an agent program and
   // answering a worker's question to the owner.
-  const names={claude:'Claude Code',codex:'Codex'};
+  const names={claude:'Claude Code',codex:'Codex',cursor:'Cursor'};
   const shortNames={claude:'Claude',codex:'Codex'};
   function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
   function providerIcon(provider){
@@ -499,7 +499,7 @@
       bar.querySelector('.am-folder-path').title=view.folder||'';
     }
     const cards=$('agents');cards.replaceChildren();
-    for(const provider of ['claude','codex']){
+    for(const provider of ['claude','codex','cursor']){
       const a=(view?.agents||[]).find(x=>x.agent===provider);
       const found=discovery.find(d=>d.provider===provider);
       const coordinator=view?.coordinator?.connected&&coordinatorName()[0]===provider;
@@ -535,10 +535,6 @@
       const setup=el('button','Настроить');setup.type='button';setup.addEventListener('click',()=>openAgentSetup(provider));
       const actions=el('div',undefined,'am-actions-stack');actions.append(tasks,setup);card.append(actions);cards.append(card);
     }
-    // Cursor is shown as in the approved mockup; Messenger does not run it.
-    const cursor=el('article',undefined,'am-card');const ch=el('h3',undefined,'am-provider-heading');ch.append(providerIcon('cursor'),el('span','Cursor'));cursor.append(ch);
-    cursor.append(el('p','Не подключён','am-muted'));const cdl=el('dl');const row=el('div');const dd=el('dd','Пока не поддерживается для задач','am-muted');row.append(el('dt','Программа'),dd);cdl.append(row);cursor.append(cdl);
-    const none=el('button','Задач нет');none.type='button';none.disabled=true;const noneActions=el('div',undefined,'am-actions-stack');noneActions.append(none);cursor.append(noneActions);cards.append(cursor);
   }
   // The background client can be older than this window after an update.
   // The desktop window offers to restart it; a browser window shows how.
@@ -779,6 +775,7 @@
   function openAgentSetup(provider){
     setupProvider=provider;const a=(view?.agents||[]).find(x=>x.agent===provider),found=discovery.find(d=>d.provider===provider);
     $('agent-setup-title').textContent='Настройка: '+names[provider];
+    $('agent-setup-note').hidden=provider!=='cursor';
     $('agent-cli').value=a?.cli||found?.cli||'';$('agent-profile').value=a?.environment||found?.environment||'';
     $('agent-check-status').textContent='';$('agent-save-status').textContent='';$('agent-check-result').hidden=true;
     $('agent-setup').showModal();
@@ -829,7 +826,43 @@
     $('app-update-button').setAttribute('aria-label',version?'Установить обновление '+version:'Обновление загружается');
     $('app-update-button').disabled=waiting;
   };
-  $('app-update-button').addEventListener('click',()=>window.webkit?.messageHandlers?.updates?.postMessage('check'));
+  // Windows and Linux: the program updates itself from the window (D-048).
+  // The update is downloaded and verified in the background; only an update
+  // ready to install is shown.
+  let selfUpdate=null,selfUpdateBusy=false,selfUpdateTimer=0;
+  function renderSelfUpdate(){
+    const s=selfUpdate;if(!s)return;
+    const installed=typeof s.installed_version==='string'?s.installed_version:'';
+    const preview=installed.match(/^0\.0\.0-preview\.(\d+)$/);
+    $('app-installed-version').hidden=!installed;
+    $('app-installed-version').textContent=preview?'Предварительная версия '+preview[1]:installed?'Версия '+installed:'';
+    $('app-installed-version').title=installed?'Точная версия: '+installed:'';
+    const version=typeof s.version==='string'?s.version:'';
+    const done=s.state==='installed',shown=(s.state==='available'&&!!version)||selfUpdateBusy||done||!!s.message;
+    $('app-update-version').hidden=!shown;$('app-update-button').hidden=!shown||done;
+    $('app-update-version').textContent=s.message||(done?'Обновлено. Окно откроется заново.':'Доступно обновление');
+    $('app-update-version').title=version?'Версия '+version:'';
+    $('app-update-button').textContent=selfUpdateBusy?'Устанавливается…':'Обновиться';
+    $('app-update-button').setAttribute('aria-label',version?'Установить обновление '+version:'Установить обновление');
+    $('app-update-button').disabled=selfUpdateBusy;
+  }
+  async function loadSelfUpdate(){
+    if(window.webkit?.messageHandlers?.updates||selfUpdateBusy)return;
+    try{const s=await api('/api/self-update');selfUpdate={...s,message:selfUpdate?.message||''};renderSelfUpdate();}
+    catch(_){if(!selfUpdate&&selfUpdateTimer){clearInterval(selfUpdateTimer);selfUpdateTimer=0;}}
+  }
+  async function installSelfUpdate(){
+    if(selfUpdateBusy)return;
+    selfUpdateBusy=true;if(selfUpdate)selfUpdate.message='';renderSelfUpdate();
+    try{const r=await postAPI('/api/self-update',{action:'install'},65000);selfUpdate={...selfUpdate,state:r.state,version:r.version,message:''};}
+    catch(error){if(selfUpdate)selfUpdate.message=error.message;}
+    finally{selfUpdateBusy=false;renderSelfUpdate();}
+  }
+  $('app-update-button').addEventListener('click',()=>{
+    if(window.webkit?.messageHandlers?.updates)window.webkit.messageHandlers.updates.postMessage('check');
+    else installSelfUpdate();
+  });
+  if(!window.webkit?.messageHandlers?.updates){selfUpdateTimer=setInterval(loadSelfUpdate,60000);loadSelfUpdate();}
   root.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>show(b.dataset.tab)));
   $('list-toggle').addEventListener('click',()=>{
     const expanded=$('list-toggle').getAttribute('aria-expanded')!=='true';

@@ -1,7 +1,8 @@
 name: Release preview
 
-# Builds, signs and publishes one preview from main: the signed Mac app, and
-# the Windows and Linux archives (not signed; D-045). Runs only when
+# Builds, signs and publishes one preview from main: the signed Mac app, the
+# Windows and Linux programs (not code-signed; D-045, D-047) and their signed
+# update archives for the window's own update (D-048). Runs only when
 # started by hand. The signing key comes from the SPARKLE_ED_PRIVATE_KEY
 # secret, lives in a 0600 temp file during signing, and is removed afterwards.
 # Every signature is checked against the app's public key before upload.
@@ -25,7 +26,7 @@ concurrency:
 
 jobs:
   others:
-    name: Windows and Linux archives
+    name: Windows and Linux programs
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
@@ -48,18 +49,21 @@ jobs:
           [[ "$VERSION" =~ ^0\.0\.0-preview\.[1-9][0-9]{0,8}$ ]] || { echo "Version must look like 0.0.0-preview.N" >&2; exit 1; }
       - name: Checks (no real models)
         run: bash scripts/check.sh
-      - name: Build archives
-        run: bash scripts/package-others.sh "$VERSION" "$GITHUB_SHA" "$RUNNER_TEMP/others"
+      - name: Build programs and update archives
+        run: bash scripts/package-others.sh "$VERSION" "$GITHUB_SHA" "$RUNNER_TEMP/others" "$RUNNER_TEMP/others-updates"
       - name: Smoke test the Linux build
         run: |
-          dir="$RUNNER_TEMP/smoke"
-          mkdir -p "$dir"
-          tar -C "$dir" -xzf "$RUNNER_TEMP/others/agent-messenger-$VERSION-linux-amd64.tar.gz"
-          "$dir/agent-messenger-$VERSION-linux-amd64/messenger" version | grep -F "\"version\":\"$VERSION\""
+          "$RUNNER_TEMP/others/AgentMessenger-Linux-x64" version | grep -F "\"version\":\"$VERSION\""
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: others-${{ github.sha }}
           path: ${{ runner.temp }}/others/*
+          if-no-files-found: error
+          retention-days: 3
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: others-updates-${{ github.sha }}
+          path: ${{ runner.temp }}/others-updates/*
           if-no-files-found: error
           retention-days: 3
 
@@ -115,17 +119,54 @@ jobs:
         with:
           name: others-${{ github.sha }}
           path: ${{ runner.temp }}/others
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: others-updates-${{ github.sha }}
+          path: ${{ runner.temp }}/others-updates
+      - name: Sign the Windows and Linux updates
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          umask 077
+          key="$RUNNER_TEMP/sparkle-key"
+          trap 'rm -f "$key"' EXIT
+          printf '%s' "$SPARKLE_ED_PRIVATE_KEY" > "$key"
+          python3 scripts/sign-other-updates.py "$RUNNER_TEMP/others-updates" --version "$VERSION" --revision "$GITHUB_SHA" \
+            --notes "$RUNNER_TEMP/notes.txt" --sign "$RUNNER_TEMP/sparkle/bin/sign_update --ed-key-file $key -p" \
+            --public-key "$(cat desktop/macos/update-public-key.txt)" --out "$RUNNER_TEMP/others-signed"
       - name: Publish (draft first, then public)
         run: |
           mac=("$RUNNER_TEMP"/app/release-assets/*)
           [[ ${#mac[@]} == 3 ]] || { echo "Expected exactly 3 Mac release assets" >&2; exit 1; }
+          # The signed app zip is named by its checksum for the in-app updater.
+          # A copy under a fixed name is what the download button links to (D-047).
+          app=("$RUNNER_TEMP"/app/release-assets/*.zip)
+          [[ ${#app[@]} == 1 ]] || { echo "Expected exactly one Mac app zip" >&2; exit 1; }
+          mkdir -p "$RUNNER_TEMP/download"
+          cp "${app[0]}" "$RUNNER_TEMP/download/AgentMessenger-Mac.zip"
+          cmp "${app[0]}" "$RUNNER_TEMP/download/AgentMessenger-Mac.zip"
           others=("$RUNNER_TEMP"/others/*)
           [[ ${#others[@]} == 5 ]] || { echo "Expected exactly 5 Windows and Linux release assets" >&2; exit 1; }
-          (cd "$RUNNER_TEMP/others" && shasum -a 256 -c "agent-messenger-$VERSION-windows-linux.sha256")
-          assets=("${mac[@]}" "${others[@]}")
-          gh release create "v$VERSION" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --draft --prerelease \
-            --target "$GITHUB_SHA" --title "Agent Messenger $VERSION" --notes-file "$RUNNER_TEMP/notes.txt"
-          gh release edit "v$VERSION" --repo "$GITHUB_REPOSITORY" --draft=false
+          (cd "$RUNNER_TEMP/others" && shasum -a 256 -c AgentMessenger-Windows-Linux-SHA256.txt)
+          updates=("$RUNNER_TEMP"/others-signed/*)
+          [[ ${#updates[@]} == 12 ]] || { echo "Expected exactly 12 signed Windows and Linux update assets" >&2; exit 1; }
+          assets=("${mac[@]}" "$RUNNER_TEMP/download/AgentMessenger-Mac.zip" "${others[@]}" "${updates[@]}")
+          # The page gets the notes and the download links; the app shows only
+          # the notes (they are signed into the update above).
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION"
+          {
+            cat "$RUNNER_TEMP/notes.txt"
+            printf '\n### Скачать\n\n'
+            printf -- '- **Mac** (Apple Silicon): [AgentMessenger-Mac.zip](%s/AgentMessenger-Mac.zip)\n' "$base"
+            printf -- '- **Windows**: [AgentMessenger-Windows-x64.exe](%s/AgentMessenger-Windows-x64.exe) · ARM: [AgentMessenger-Windows-ARM64.exe](%s/AgentMessenger-Windows-ARM64.exe)\n' "$base" "$base"
+            printf -- '- **Linux**: [AgentMessenger-Linux-x64](%s/AgentMessenger-Linux-x64) · ARM: [AgentMessenger-Linux-ARM64](%s/AgentMessenger-Linux-ARM64)\n' "$base" "$base"
+            printf '\nКак запустить: https://github.com/%s/blob/main/docs/DOWNLOAD.md\n' "$GITHUB_REPOSITORY"
+          } > "$RUNNER_TEMP/page.md"
+          # Not a pre-release, so /releases/latest/download/<name> always
+          # points to this build. The in-app updater reads every release.
+          gh release create "v$VERSION" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --draft --latest \
+            --target "$GITHUB_SHA" --title "Agent Messenger $VERSION" --notes-file "$RUNNER_TEMP/page.md"
+          gh release edit "v$VERSION" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease=false --latest
           gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" --json url,assets --jq '.url, (.assets[].name)'
       - name: Remove signing material
         if: always()

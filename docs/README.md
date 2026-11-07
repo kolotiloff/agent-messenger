@@ -53,6 +53,7 @@ These change all the time. Every tool reads them at the start and updates them a
 |---|---|
 | [MAC_APP.md](MAC_APP.md) | Agent Messenger.app: download and install |
 | [INSTALL.md](INSTALL.md) | Installing the client from an archive |
+| [DOWNLOAD.md](DOWNLOAD.md) | Download buttons and how to start the app on Mac, Windows and Linux |
 | [WINDOWS_LINUX.md](WINDOWS_LINUX.md) | Windows and Linux: download, the browser window, job objects, what is verified |
 | [UPDATES.md](UPDATES.md) | Mac app updates through Sparkle and GitHub Releases |
 | [CI.md](CI.md) | Automated checks in GitHub Actions |

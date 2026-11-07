@@ -114,8 +114,14 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 		_ = s.store.TaskRunNotStarted(runID, err.Error())
 		return
 	}
+	if task.Provider == "cursor" {
+		if err := ensureCursorTaskServer(exe, task.Environment); err != nil {
+			_ = s.store.TaskRunNotStarted(runID, "Cursor MCP settings: "+err.Error())
+			return
+		}
+	}
 	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Env = ProfileEnvironment(os.Environ(), task.Provider, task.Environment)
+	cmd.Env = append(ProfileEnvironment(os.Environ(), task.Provider, task.Environment), adapters.TaskEnv(spec)...)
 	cmd.Dir = task.Folder
 	cmd.Stderr = io.Discard
 	if err := platform.SetNewGroup(cmd); err != nil {
@@ -263,4 +269,19 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 			_ = s.store.TaskRunReservationRetired(runID)
 		}
 	}
+}
+
+// ensureCursorTaskServer keeps Messenger's worker tools in the Cursor
+// mcp.json files a run reads (D-049). Only Messenger's own entry is written.
+func ensureCursorTaskServer(messenger, profile string) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	for _, path := range adapters.CursorConfigFiles(home, profile) {
+		if err := adapters.EnsureCursorTaskServer(path, messenger); err != nil {
+			return err
+		}
+	}
+	return nil
 }

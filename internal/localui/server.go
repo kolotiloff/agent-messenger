@@ -43,6 +43,11 @@ func Run(ctx context.Context, root string, port int, out io.Writer) error {
 // RunDesktop serves the native desktop window. Updates and the client
 // restart are enabled only by the desktop launcher, never by a browser UI.
 func RunDesktop(ctx context.Context, root string, port int, out io.Writer, channel *updatefeed.Channel, restart Restarter) error {
+	return RunWindow(ctx, root, port, out, Desktop{Channel: channel, Restart: restart})
+}
+
+// RunWindow serves the window with what its launcher enables.
+func RunWindow(ctx context.Context, root string, port int, out io.Writer, desktop Desktop) error {
 	if port < 0 || port > 65535 {
 		return errors.New("ui port must be 0..65535")
 	}
@@ -60,7 +65,7 @@ func RunDesktop(ctx context.Context, root string, port int, out io.Writer, chann
 	call := func(ctx context.Context, r control.Request) (control.Response, error) {
 		return control.CallContext(ctx, root, r)
 	}
-	h := newHandlerWithChecks(host, token, call, func(ctx context.Context) any {
+	h := newDesktopHandler(host, token, call, func(ctx context.Context) any {
 		r := diagnostics.CollectDesktop(ctx, root)
 		// Only selected installation/profile paths reach this authenticated local
 		// setup UI; never credentials, session IDs or the database inspection.
@@ -85,7 +90,7 @@ func RunDesktop(ctx context.Context, root string, port int, out io.Writer, chann
 			CheckedAt string      `json:"checked_at"`
 			Agents    []candidate `json:"agents"`
 		}{r.OS, r.CheckedAt, list}
-	}, channel, diagnostics.CheckCLI, restart)
+	}, diagnostics.CheckCLI, desktop)
 	srv := &http.Server{Handler: h, ReadHeaderTimeout: 3 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 25 * time.Second, IdleTimeout: 20 * time.Second, MaxHeaderBytes: 8192, ErrorLog: log.New(io.Discard, "", 0)}
 	stop := context.AfterFunc(ctx, func() { _ = srv.Close() })
 	defer stop()
@@ -108,6 +113,11 @@ func newHandlerWithUpdates(host, token string, call caller, discover func(contex
 }
 
 func newHandlerWithChecks(host, token string, call caller, discover func(context.Context) any, channel *updatefeed.Channel, checker cliChecker, restart Restarter) http.Handler {
+	return newDesktopHandler(host, token, call, discover, checker, Desktop{Channel: channel, Restart: restart})
+}
+
+func newDesktopHandler(host, token string, call caller, discover func(context.Context) any, checker cliChecker, desktop Desktop) http.Handler {
+	channel, restart, self := desktop.Channel, desktop.Restart, desktop.SelfUpdate
 	busy := make(chan struct{}, 1)
 	restarting := make(chan struct{}, 1)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -128,7 +138,8 @@ func newHandlerWithChecks(host, token string, call caller, discover func(context
 			http.Error(w, "cross-site request refused", http.StatusForbidden)
 			return
 		}
-		mutation := r.URL.Path == "/api/enqueue" || r.URL.Path == "/api/pause" || r.URL.Path == "/api/resume" || r.URL.Path == "/api/outbox/ack" || r.URL.Path == "/api/check-cli" || r.URL.Path == "/api/setup-claude" || r.URL.Path == "/api/setup-codex" || r.URL.Path == "/api/authorize-setup" || r.URL.Path == "/api/restart-client" || taskMutation(r.URL.Path)
+		mutation := r.URL.Path == "/api/enqueue" || r.URL.Path == "/api/pause" || r.URL.Path == "/api/resume" || r.URL.Path == "/api/outbox/ack" || r.URL.Path == "/api/check-cli" || r.URL.Path == "/api/setup-claude" || r.URL.Path == "/api/setup-codex" || r.URL.Path == "/api/authorize-setup" || r.URL.Path == "/api/restart-client" || taskMutation(r.URL.Path) ||
+			(r.URL.Path == "/api/self-update" && r.Method != http.MethodGet)
 		method := http.MethodGet
 		if mutation {
 			method = http.MethodPost
@@ -185,6 +196,17 @@ func newHandlerWithChecks(host, token string, call caller, discover func(context
 			// Starting app-server and creating a thread takes a few RPC rounds.
 			deadline = 100 * time.Second
 		}
+		if r.URL.Path == "/api/self-update" {
+			if r.Method == http.MethodGet {
+				if self == nil || self.Updater == nil {
+					http.NotFound(w, r)
+					return
+				}
+				writeJSON(w, selfUpdateStatus(self))
+				return
+			}
+			deadline = selfUpdateDeadline
+		}
 		if r.URL.Path == "/api/restart-client" {
 			// Waits for the old client to exit and the new one to confirm.
 			deadline = 45 * time.Second
@@ -210,6 +232,10 @@ func newHandlerWithChecks(host, token string, call caller, discover func(context
 			decoder.DisallowUnknownFields()
 			if r.URL.Path == "/api/check-cli" {
 				serveCLICheck(w, r.WithContext(ctx), decoder, checker, busy)
+				return
+			}
+			if r.URL.Path == "/api/self-update" {
+				serveSelfUpdate(w, r.WithContext(ctx), decoder, self)
 				return
 			}
 			if r.URL.Path == "/api/restart-client" {

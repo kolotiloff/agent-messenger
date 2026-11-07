@@ -4,16 +4,32 @@ This file is the shared memory between tools (Claude Code, Cursor, Codex). Whoev
 
 ## Owner's standing instruction for the night of 2026-11-07
 
-The owner asked the agent to finish the program without them ("доделай бе меня полностью"), update the documentation on GitHub and clean out old code. Same rules as before: fake CLIs only, no real models, no Cursor, `active-runs.json` untouched, nothing retried on an unclear result, questions go to `QUESTIONS.md` with the most cautious option chosen. Removing the persistent paths (T-028) still needs the owner's explicit consent (Q-012).
+The owner asked the agent to finish the program without them ("доделай бе меня полностью"), update the documentation on GitHub and clean out old code. Same rules as before: fake CLIs only, no real models, `active-runs.json` untouched, nothing retried on an unclear result, questions go to `QUESTIONS.md` with the most cautious option chosen. Removing the persistent paths (T-028) still needs the owner's explicit consent (Q-012).
 
 ## Current state
+
+Updated 2026-11-07 (evening, later) by Claude Code.
+
+- **The owner:** there is no rule against Cursor; set it up. The AGENTS.md line was removed, D-011 superseded, Q-004 answered.
+- **T-012 (branch `claude/t012-cursor-tasks`, stacked on `claude/t016-download-buttons`):** Cursor runs tasks like Claude and Codex (D-049). Messenger keeps one `messenger_task` entry in `~/.cursor/mcp.json`; the run reaches its tools through `AGENT_MESSENGER_TASK` and `${env:...}`. The «Агенты» card and setup dialog work for Cursor; the coordinator can pick `cursor`.
+- **Verified here (Linux):** a fake Cursor CLI that reads `~/.cursor/mcp.json` and fills `${env:...}` like Cursor: report, question and resumed run with `--resume=<chat>`, model, usage limit; a broken `mcp.json` is left alone and the run does not start; the window card and dialog in headless Chromium. **Not verified:** the real Cursor CLI (that `${env:...}` reaches the server, the current event format), Cursor on Windows (not supported: `.cmd`).
+- **Next:** the owner's test with the real `cursor-agent` on Mac or Linux: connect Cursor in «Агенты», ask the coordinator to give Cursor a small task.
+
+Updated 2026-11-07 (evening) by Claude Code.
+
+- **Owner's requests:** plain «Download» buttons for Mac, Windows and Linux instead of archives, one heading above them; signed updates from the app on Windows and Linux.
+- **D-047 (branch `claude/t016-download-buttons`):** each release publishes plain programs under fixed names and is marked latest; README buttons link to `/releases/latest/download/<name>`; [DOWNLOAD.md](DOWNLOAD.md) explains starting them.
+- **T-038 / D-048 (same branch):** `internal/selfupdate` verifies and installs a signed update; the browser window checks every 5 minutes and shows «Доступно обновление» / «Обновиться»; after the install the window reopens from the new program. The release signs `update-<os>-<arch>` archives for Windows and Linux on the macOS job.
+- **Verified here (Linux):** `check.sh`; the update package tests; an update preview.900 → preview.901 with a test key through the real window (the program replaced, the window reopened, the old client offered for restart); the signing script with a throwaway key. Windows CI runs the update package tests (including replacing a running program). **Not verified:** a real update from GitHub (only possible from preview.33 to preview.34), a real Windows desktop, the release signing step itself (it runs only in a release).
+- **Next:** PR for this branch, green CI, merge, release preview.33; then the owner tests downloads on all three systems, and an update after preview.34.
 
 Updated 2026-11-07 (afternoon) by Claude Code.
 
 - **Owner's instruction:** "довести до релиза сейчас программу, все везде сбилдить, выложить на GitHub" — the owner tests on Windows, Linux and Mac later; decisions that need them are taken cautiously or postponed.
 - **T-016 (PR #52, `claude/t016-windows-linux`):** Windows and Linux builds. Windows job objects as process groups (D-043; the client keeps each job's handle for the whole run, a job it cannot reach is not proven), `.exe` agents only (D-044), the window in the browser via `messenger open` (D-045), zip/tar.gz archives in every release, a Windows CI job. Guide: [WINDOWS_LINUX.md](WINDOWS_LINUX.md).
 - **Verified:** see "What is verified" in WINDOWS_LINUX.md and the PR. **Not verified:** a real Windows 10/11 desktop, a browser opening on Windows, real Claude Code or Codex on Windows or Linux, ARM builds (compiled only).
-- **Next:** release preview.32 with the Windows and Linux archives; the owner tests on real computers. Still waiting for the owner: Q-004 (Cursor), Q-012/T-028, Q-013.
+- **preview.32 released** from `main` 11d938c (PR #52; run 42380342750): the Mac app zip, `update-darwin-arm64.json` and its `.sig`, and zip/tar.gz archives for Windows and Linux (amd64, arm64) with a SHA-256 list. Checked here: the checksums of the Linux amd64 and Windows amd64 archives, and `messenger version` from the Linux archive.
+- **Next:** the owner tests preview.32 on Mac, Windows and Linux: start, the window in the browser, a task with a real agent, a task between two computers. Still waiting for the owner: Q-004 (Cursor), Q-012/T-028, Q-013.
 
 Updated 2026-11-07 (night) by Claude Code.
 
@@ -190,7 +206,7 @@ Proposed implementation sequence, which may be refined with justification after 
 
 Do not delete `active-runs.json`, do not empty it, and do not release a reservation based on a timer, a single PID, or an empty process group. Do not bypass the shared registry to launch from a different database. A signal to a process does not prove that all its descendants have exited. When the result is uncertain, do not repeat actions automatically.
 
-No user session IDs, tokens, auth files, private SQLite dumps or full logs in GitHub. The repository is public. Do not run Cursor CLI: the user previously asked to keep it disabled. Do not restart the Mac automatically. Do not use working chats as test chats.
+No user session IDs, tokens, auth files, private SQLite dumps or full logs in GitHub. The repository is public. Do not restart the Mac automatically. Do not use working chats as test chats.
 
 ## Getting started and verification
 

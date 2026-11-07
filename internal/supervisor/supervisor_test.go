@@ -72,6 +72,7 @@ func isolateUser(t *testing.T) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "xdg"))
 	t.Setenv("AppData", filepath.Join(home, "appdata"))
 	t.Setenv("LocalAppData", filepath.Join(home, "localappdata"))

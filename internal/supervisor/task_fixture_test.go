@@ -20,6 +20,10 @@ import (
 func taskWorkerFixture(mode string) int {
 	args := os.Args[1:]
 	codex := len(args) > 0 && args[0] == "exec"
+	cursor := false
+	for _, a := range args {
+		cursor = cursor || a == "--approve-mcps"
+	}
 	wd, _ := os.Getwd()
 	if logPath := os.Getenv("MESSENGER_TASK_LOG"); logPath != "" {
 		line, _ := json.Marshal(map[string]any{"args": args, "cwd": wd})
@@ -37,6 +41,8 @@ func taskWorkerFixture(mode string) int {
 			session = args[i+1]
 		case args[i] == "--resume" && i+1 < len(args):
 			session, resume = args[i+1], true
+		case strings.HasPrefix(args[i], "--resume="):
+			session, resume = strings.TrimPrefix(args[i], "--resume="), true
 		case codex && args[i] == "resume" && i+1 < len(args):
 			session, resume = args[i+1], true
 		case args[i] == "--mcp-config" && i+1 < len(args):
@@ -59,6 +65,42 @@ func taskWorkerFixture(mode string) int {
 			}
 		}
 	}
+	var serverEnv []string
+	if cursor {
+		// Like Cursor: the server comes from mcp.json, and its environment
+		// is a short default list plus the entry's env, where ${env:NAME}
+		// takes this process's value.
+		dir := os.Getenv("CURSOR_CONFIG_DIR")
+		if dir == "" {
+			home, _ := os.UserHomeDir()
+			dir = filepath.Join(home, ".cursor")
+		}
+		raw, _ := os.ReadFile(filepath.Join(dir, "mcp.json"))
+		var cfg struct {
+			MCPServers map[string]struct {
+				Command string            `json:"command"`
+				Args    []string          `json:"args"`
+				Env     map[string]string `json:"env"`
+			} `json:"mcpServers"`
+		}
+		_ = json.Unmarshal(raw, &cfg)
+		entry := cfg.MCPServers["messenger_task"]
+		command, mcpArgs = entry.Command, entry.Args
+		for _, name := range []string{"HOME", "PATH", "USERPROFILE", "SYSTEMROOT", "TEMP", "TMP", "LOCALAPPDATA"} {
+			if v, ok := os.LookupEnv(name); ok {
+				serverEnv = append(serverEnv, name+"="+v)
+			}
+		}
+		for name, value := range entry.Env {
+			if strings.HasPrefix(value, "${env:") && strings.HasSuffix(value, "}") {
+				value = os.Getenv(strings.TrimSuffix(strings.TrimPrefix(value, "${env:"), "}"))
+			}
+			serverEnv = append(serverEnv, name+"="+value)
+		}
+		if session == "" {
+			session = fmt.Sprintf("cursor-chat-%d", time.Now().UnixNano())
+		}
+	}
 	if codex && session == "" {
 		session = "019a0000-0000-7000-8000-" + fmt.Sprintf("%012d", time.Now().UnixNano()%1e12)
 	}
@@ -77,6 +119,9 @@ func taskWorkerFixture(mode string) int {
 	_ = resume
 
 	server := exec.Command(command, mcpArgs...)
+	if cursor {
+		server.Env = serverEnv
+	}
 	in, _ := server.StdinPipe()
 	outPipe, _ := server.StdoutPipe()
 	if err := server.Start(); err != nil {
@@ -172,6 +217,8 @@ func taskWorkerFixture(mode string) int {
 		// The provider's limit, in the documented event shapes (T-034).
 		if codex {
 			emit(map[string]any{"type": "turn.failed", "error": map[string]any{"message": "You've hit your usage limit. Try again at 18:12."}})
+		} else if cursor {
+			emit(map[string]any{"type": "result", "subtype": "error", "is_error": true, "session_id": session, "result": "You've hit your usage limit. Try again at 18:12."})
 		} else {
 			emit(map[string]any{"type": "rate_limit_event", "session_id": session, "rate_limit_info": map[string]any{"status": "rejected", "resetsAt": 1762538400, "rateLimitType": "five_hour"}})
 			emit(map[string]any{"type": "result", "subtype": "success", "is_error": true, "session_id": session, "result": "Claude AI usage limit reached|1762538400"})

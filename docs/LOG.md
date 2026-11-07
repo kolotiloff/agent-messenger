@@ -2,10 +2,21 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-07 — Claude Code (T-012 Cursor tasks)
+
+- The owner said there is no rule against Cursor. Branch `claude/t012-cursor-tasks`: Cursor as a task worker (D-049), tested with a fake Cursor CLI only; no real Cursor or model calls.
+
+## 2026-11-07 — Claude Code (D-047 downloads, T-038 updates on Windows and Linux)
+
+- Branch `claude/t016-download-buttons`: plain downloads behind README buttons (D-047), and signed in-window updates on Windows and Linux (D-048): `internal/selfupdate`, `/api/self-update`, the window's button, relaunch, signing in the release (`scripts/sign-other-updates.py`).
+- Verified on Linux here with a test key (preview.900 → preview.901 through the window); Windows-only replace tests run on the Windows CI runner. No real model calls; Cursor not run.
+
 ## 2026-11-07 — Claude Code (T-016 Windows and Linux)
 
 - Branch `claude/t016-windows-linux`, PR #52: Windows platform layer (job objects, LockFileEx, process snapshot, boot identity, background start), `.exe`-only agents, `messenger open` for a browser window, archives for Windows and Linux in CI and in the release. D-043 to D-046; Q-014 settled (off by default).
 - Windows CI found that a job's name disappears when its last handle closes; the client now keeps the handle for the run and treats an unreachable job as not proven. SQLite path on Windows fixed (drive letter).
+- Windows CI also found that a rename over `active-runs.json` fails while a reader has it open; the replace and the read now retry for up to 2 s (a refused rename changes nothing).
+- PR #52 merged (squash, 11d938c) after two green CI runs on 1ce5622; preview.32 released (run 42380342750).
 - No real model calls; Cursor not run; no real Windows desktop used.
 
 ## 2026-11-07 — Claude Code (T-037 tasks between computers)
