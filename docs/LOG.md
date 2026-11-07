@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-07 — Claude Code (release preview.33, window grant fix)
+
+- PR #55 (Cursor) merged into PR #54; PR #54 squash-merged to `main` (56ee506); PR #53 closed (its commit was already in #54).
+- The first preview.33 release run (42386214790) stopped in `check.sh`: `TestWindowAuthorizationIsScopedIdempotentAndNotRestored` saw a model start for a refused session. Cause: the window's grant (Claude test session and Codex setup) opened model calls before the store refused the alias, and withdrew them after; the 30 ms loop could claim the refused session's queued message in between. Now the store is checked first (`CheckAuthorizeSetup`, `AliasInUse`) and only then the grant is made. A new test repeats refused grants with the loop running and failed every time before the fix.
+
 ## 2026-11-07 — Claude Code (T-012 Cursor tasks)
 
 - The owner said there is no rule against Cursor. Branch `claude/t012-cursor-tasks`: Cursor as a task worker (D-049), tested with a fake Cursor CLI only; no real Cursor or model calls.
