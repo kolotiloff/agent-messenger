@@ -71,6 +71,9 @@ func TestServerCommandRunsTheHostedBroker(t *testing.T) {
 	if !response.OK || !st.Member.Connected || !st.Member.Reachable || len(st.Host.Devices) != 1 {
 		t.Fatalf("connect %+v %+v", response, st)
 	}
+	if status, err := control.Call(root, control.Request{Cmd: "status"}); err != nil || status.Status == nil || status.Status.Broker != "hosting+connected" {
+		t.Fatalf("status %+v %v", status, err)
+	}
 	if strings.Contains(string(response.Overview), "device_key") {
 		t.Fatal("device key in status")
 	}

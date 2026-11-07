@@ -389,3 +389,19 @@ func (s *Service) Status() Status {
 	}
 	return Status{Host: h, Member: m}
 }
+
+// Summary is the one-word server state for the status command:
+// not_configured, hosting, connected or hosting+connected.
+func (s *Service) Summary() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	switch {
+	case s.broker != nil && s.member != nil:
+		return "hosting+connected"
+	case s.broker != nil:
+		return "hosting"
+	case s.member != nil:
+		return "connected"
+	}
+	return "not_configured"
+}

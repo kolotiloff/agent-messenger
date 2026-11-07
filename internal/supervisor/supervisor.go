@@ -439,6 +439,9 @@ func (s *Supervisor) Status() (control.Status, error) {
 		Broker:     "not_configured",
 		Supervisor: os.Getpid(),
 	}
+	if s.server != nil {
+		status.Broker = s.server.Summary()
+	}
 	if aliases := scopedAliases(launcher); len(aliases) != 0 {
 		status.LaunchSession = aliases[0]
 		status.LaunchSessions = aliases

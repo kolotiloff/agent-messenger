@@ -33,6 +33,9 @@ Claude Code 2.1.319 defers MCP tools behind `ToolSearch` by default. A real mode
 ### Q-012: Remove the persistent Claude stream and Codex app-server now (T-028)?
 The owner asked to clean the program of old code. The old "message a live session" paths (persistent Claude stream, Codex app-server owners, their window pages and commands) are the biggest part of it. Tasks and the coordinator do not use them. But sessions registered on the owner's Mac through them keep their reservations in `active-runs.json`, which are never released automatically. **Options:** remove them in a separate release after the owner closes the old sessions (the client then refuses old commands); or remove them now and leave old reservations to manual closing; or keep them. **Chosen for now:** keep them; only unused code and `experiments/` were removed (D-032). **Blocks:** T-028.
 
+### Q-013: Where should a computer keep its broker device key?
+DEPLOYMENT.md asks for the OS secure storage (Keychain on the Mac). Today the key is in `server-connection.json` in the data directory with mode 0600, readable by the owner's account only; the window and `status` never show it. **Options:** Keychain on the Mac and the Windows credential store, with the file keeping only a reference; or keep the 0600 file. **Chosen for now:** the 0600 file, because nothing crosses computers yet and the Keychain needs Mac-side work that cannot be tested here. **Blocks:** the rest of T-015 (before tasks travel between computers).
+
 ## Answered
 
 ### Q-009: How does the window allow task launches?

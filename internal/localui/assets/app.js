@@ -470,7 +470,95 @@
   function show(next){
     tab=next;root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab);
     root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
-    $('list-toggle').hidden=tab!=='tasks';$('screen-title').textContent={tasks:'Задачи',agents:'Агенты',server:'Сервер'}[tab];
+    $('list-toggle').hidden=tab!=='tasks';if(tab==='server')loadServer();$('screen-title').textContent={tasks:'Задачи',agents:'Агенты',server:'Сервер'}[tab];
+  }
+
+  // Server tab: the broker hosted by this client and this computer's
+  // connection to a broker. Errors stay next to the button that caused them.
+  let server=null,serverBusy=false,serverEdited=false,inviteTimer=0,invitedAt=-1;
+  function stamp(at){const d=new Date(at);return isNaN(d.getTime())?'':d.toLocaleString([], {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});}
+  function badge(node,text,good){node.textContent=text;node.classList.toggle('am-good',!!good);}
+  async function loadServer(){
+    if(serverBusy)return;
+    try{server=await api('/api/server');renderServer();}
+    catch(error){$('host-state').textContent=error.message;$('member-state').textContent='';}
+  }
+  function renderServer(){
+    if(!server)return;const h=server.host,m=server.member;
+    badge($('host-badge'),h.running?'Работает':h.enabled?'Не запущен':'Выключен',h.running);
+    $('host-state').textContent=h.running?'Принимает устройства: '+(h.scope==='lan'?'в локальной сети':'только с этого компьютера')+', порт '+h.port+'.':'Другие устройства смогут подключаться к этому компьютеру по одноразовому приглашению.';
+    if(h.error&&!$('host-status').dataset.own){$('host-status').textContent=h.error[0].toUpperCase()+h.error.slice(1);$('host-status').classList.add('am-bad');}
+    if(!serverEdited){$('host-scope').value=h.scope||'local';$('host-port').value=h.port||47100;}
+    $('host-enable').textContent=h.running?'Применить':'Включить сервер';$('host-disable').hidden=!h.enabled&&!h.running;
+    $('host-running').hidden=!h.running;
+    const select=$('host-address'),current=select.value;
+    if(Array.from(select.options).map(o=>o.value).join()!==h.addresses.join()){
+      select.replaceChildren(...h.addresses.map(a=>{const o=el('option',a);o.value=a;return o;}));
+      if(h.addresses.includes(current))select.value=current;
+    }
+    $('host-invite').disabled=!h.addresses.length;
+    if(h.running&&!h.addresses.length)$('host-state').textContent='Сервер работает, но у компьютера нет адреса в локальной сети. Подключитесь к сети или выберите «Только этот компьютер».';
+    const list=$('host-devices');list.replaceChildren();
+    const all=h.devices||[],devices=all.filter(d=>!d.revoked_at),revoked=all.length-devices.length;
+    // A used invitation is spent: hide it once a new device has joined.
+    if(invitedAt>=0&&devices.length>invitedAt){invitedAt=-1;clearInterval(inviteTimer);$('invite-box').hidden=true;}
+    if(!devices.length)list.append(el('p','Пока ни одного устройства.','am-small am-muted'));
+    if(revoked)list.append(el('p','Отозвано устройств: '+revoked+'.','am-small am-muted am-devices-revoked'));
+    devices.forEach(d=>{
+      const row=el('div',undefined,'am-device'),main=el('div',undefined,'am-device-main');
+      main.append(el('span',d.name,'am-device-name'));
+      main.append(el('span',d.last_seen?'Был на связи '+stamp(d.last_seen):'Подключено '+stamp(d.created_at),'am-small am-muted'));
+      row.append(main);
+      const b=el('button','Отозвать');b.type='button';b.addEventListener('click',()=>serverAction({action:'revoke',device:d.id},'host-status','Устройство «'+d.name+'» отозвано.'));row.append(b);
+      list.insertBefore(row,list.querySelector('.am-devices-revoked'));
+    });
+    $('host-fingerprint').textContent=h.fingerprint?'Отпечаток сертификата: '+h.fingerprint.replace(/(.{4})/g,'$1 ').trim():'';
+    badge($('member-badge'),m.connected?(m.reachable?'На связи':m.checked_at?'Нет связи':'Подключено'):'Не подключено',m.connected&&m.reachable);
+    $('member-join').hidden=m.connected;$('member-joined').hidden=!m.connected;
+    $('member-state').textContent=m.connected?'Этот компьютер входит в сервер '+m.address+'.':'Вставьте код приглашения, который выдал сервер на другом компьютере.';
+    if(!$('member-name').value)$('member-name').value=view?.computer_name||'';
+    const dl=$('member-details');dl.replaceChildren();
+    const rows=[['Сервер',m.address],['Имя на сервере',m.device_name],['Подключено',stamp(m.connected_at)],['Последняя проверка',m.checked_at?stamp(m.checked_at)+(m.reachable?' — на связи':' — нет связи'):'ещё не проверяли']];
+    if(m.connected)rows.forEach(([k,v])=>{if(v){dl.append(el('dt',k),el('dd',v));}});
+    if(m.error&&!$('member-status').dataset.own){$('member-status').textContent=m.error[0].toUpperCase()+m.error.slice(1);$('member-status').classList.add('am-bad');}
+    else if(!m.error&&!$('member-status').dataset.own){$('member-status').textContent='';$('member-status').classList.remove('am-bad');}
+    if(!h.error&&!$('host-status').dataset.own){$('host-status').textContent='';$('host-status').classList.remove('am-bad');}
+  }
+  function say(id,text,bad){text=text?text[0].toUpperCase()+text.slice(1):'';const n=$(id);n.textContent=text;n.classList.toggle('am-bad',!!bad);if(text)n.dataset.own='1';else delete n.dataset.own;}
+  async function serverAction(body,statusId,done,button){
+    if(serverBusy)return null;serverBusy=true;
+    const buttons=root.querySelectorAll('[data-screen=server] button');buttons.forEach(b=>b.disabled=true);
+    say(statusId,body.action==='connect'||body.action==='check'?'Связываемся с сервером…':'Выполняем…');
+    try{
+      const result=await postAPI('/api/server-action',body,30000);
+      if(body.action==='invite')return result.result;
+      server=result.result;
+      if(body.action==='check'){const m=server.member;say(statusId,m.reachable?'Связь есть, устройство на сервере.':(m.error||'Связи нет.'),!m.reachable);}
+      else say(statusId,done);
+      return result.result;
+    }catch(error){say(statusId,error.message,true);return null;}
+    finally{serverBusy=false;buttons.forEach(b=>b.disabled=false);renderServer();setTimeout(()=>{const n=$(statusId);if(n.dataset.own&&!n.classList.contains('am-bad')){say(statusId,'');renderServer();}},6000);}
+  }
+  async function enableServer(){
+    const port=Number($('host-port').value);
+    if(!Number.isInteger(port)||port<1024||port>65535){say('host-status','Порт должен быть от 1024 до 65535.',true);return;}
+    const scope=$('host-scope').value;
+    if(await serverAction({action:'enable',scope,port},'host-status',scope==='lan'?'Сервер включён и доступен в локальной сети.':'Сервер включён.'))serverEdited=false;
+  }
+  async function invite(){
+    const code=await serverAction({action:'invite',address:$('host-address').value},'host-status','');
+    if(!code)return;say('host-status','');
+    $('invite-code').textContent=code.code;$('invite-box').hidden=false;$('invite-copy').textContent='Скопировать код';
+    clearInterval(inviteTimer);
+    const tick=()=>{const left=Math.round((new Date(code.expires_at)-Date.now())/60000);if(left<=0){$('invite-box').hidden=true;clearInterval(inviteTimer);return;}$('invite-expiry').textContent='Действует ещё '+left+' мин., один раз.';};
+    invitedAt=(server?.host?.devices||[]).filter(d=>!d.revoked_at).length;
+    tick();inviteTimer=setInterval(tick,15000);
+  }
+  async function connectServer(){
+    const code=$('member-code').value.trim(),name=$('member-name').value.trim();
+    if(!code){say('member-status','Вставьте код приглашения.',true);return;}
+    if(!name){say('member-status','Укажите имя этого компьютера.',true);return;}
+    if(await serverAction({action:'connect',code,name},'member-status','Подключено.'))$('member-code').value='';
   }
   let editingFolder=false;
   function openProjectDialog(edit){
@@ -573,9 +661,19 @@
   $('agent-setup-close').addEventListener('click',()=>$('agent-setup').close());
   $('agent-check').addEventListener('click',checkAgent);
   $('agent-save').addEventListener('click',saveAgent);
+  $('host-scope').addEventListener('change',()=>{serverEdited=true;});
+  $('host-port').addEventListener('input',()=>{serverEdited=true;});
+  $('host-enable').addEventListener('click',enableServer);
+  $('host-disable').addEventListener('click',()=>serverAction({action:'disable'},'host-status','Сервер выключен. Устройства и приглашения сохранены.').then(r=>{if(r){serverEdited=false;$('invite-box').hidden=true;}}));
+  $('host-invite').addEventListener('click',invite);
+  $('invite-copy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('invite-code').textContent);$('invite-copy').textContent='Скопировано';}catch(_){$('invite-copy').textContent='Выделите код и скопируйте вручную';}});
+  $('member-connect').addEventListener('click',connectServer);
+  $('member-check').addEventListener('click',()=>serverAction({action:'check'},'member-status',''));
+  $('member-disconnect').addEventListener('click',()=>serverAction({action:'disconnect'},'member-status','Отключено. Устройство остаётся в списке сервера, пока его там не отзовут.'));
+  setInterval(()=>{if(tab==='server')loadServer();},5000);
   let initialTheme=window.messengerInitialTheme;
   if(!initialTheme)try{initialTheme=localStorage.getItem('messenger-theme');}catch(_){}
-  enhanceSelect($('theme-select'));enhanceSelect($('project-select'));enhanceSelect($('agent-filter'));
+  enhanceSelect($('theme-select'));enhanceSelect($('project-select'));enhanceSelect($('agent-filter'));enhanceSelect($('host-scope'));enhanceSelect($('host-address'));
   applyTheme(initialTheme||'system');
   $('theme-select').addEventListener('change',()=>applyTheme($('theme-select').value,true));
   const gutterObserver=new ResizeObserver(entries=>{

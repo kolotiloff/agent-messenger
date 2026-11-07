@@ -15,6 +15,8 @@ How to use it:
 |---|---|---|---|
 | T-027 | First run on preview.23 done with the owner (Codex and Claude tasks, owner questions, reports through `wait`). Fixes and additions from it (D-028–D-032: edits, tasks allowed by the window, stop button, model choice, cleanup) are in preview.24. Left: on the Mac, a Claude task that edits a file, a stop of a running worker, a task with a chosen model. | agent + owner | `claude/t027-window-fixes` |
 
+| T-015 | First part done on `claude/t015-server-setup`: broker hosted by the client, invitations, joining, check, devices and revoke, the «Сервер» tab ([BROKER.md](BROKER.md), D-033–D-035). Left: tasks between computers, VPS package and wizard, Keychain (Q-013), Windows (Q-006). | agent + owner | `claude/t015-server-setup` |
+
 ## Next
 
 Order of the task model (D-021), following the review's first slice ([RETHINK_REVIEW_V3.md](RETHINK_REVIEW_V3.md) section 5).
@@ -33,7 +35,6 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 | T-012 | Persistent Cursor adapter. | agent | blocked: Q-004 |
 | T-013 | Developer ID signing and notarization of the Mac app. | owner | blocked: Q-003 |
 | T-014 | Intel Mac build and acceptance. | agent + owner | |
-| T-015 | Network broker, device registration, Mac ↔ Windows exchange. Stage 5. | agent + owner | needs a Windows PC; Q-006 |
 | T-016 | Windows and Linux runtime acceptance and packages. Stage 6. | agent + owner | Q-006 |
 | T-017 | Coordinator role handover. Stage 6. | agent | |
 | T-018 | Delete old remote branches whose content is already in `main`. | agent | blocked: Q-002 |
