@@ -2,20 +2,20 @@
 
 Messaging between Claude Code, Codex, Cursor Agent CLI and other agents. The project's goal is to run on macOS, Windows and Linux, with the broker on a computer or VPS of your choice and the ability to hand off the coordinator role.
 
-**Right now this is a technical preview of the local client on Mac, not a finished release for four computers.** The product is written in Go. It has a SQLite queue, protected session ownership, a browser window, a first native Agent Messenger.app shell for Mac and a verified local install from an archive. The product source lives in `cmd/messenger` and `internal`, the Mac shell in `desktop/macos`. Early research test rigs were removed from the tree and stay in git history.
+**Right now this is a technical preview: accepted on Mac, with first Windows and Linux builds to test; not a finished release.** The product is written in Go. It has a SQLite queue, protected session ownership, a browser window, a first native Agent Messenger.app shell for Mac and a verified local install from an archive. The product source lives in `cmd/messenger` and `internal`, the Mac shell in `desktop/macos`. Early research test rigs were removed from the tree and stay in git history.
 
 ## Download the app
 
-**[↓ Download for Mac · Apple Silicon](https://github.com/kolotiloff/agent-messenger/releases/download/v0.0.0-preview.19/4584caecdbb280d861d2d06c812c19c08cde385781b3d632ab7f863339242afa.zip)** · [preview.19 release notes](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.19) · [How to install](docs/MAC_APP.md)
+All downloads are on the **[releases page](https://github.com/kolotiloff/agent-messenger/releases)**; take the newest preview.
 
-| Platform | Availability |
-|---|---|
-| macOS 15+, Apple Silicon | preview.19 — app with a window and updates from GitHub |
-| macOS, Intel | A separate build and verification are in preparation |
-| Windows | Installer, window and updates are in preparation; no download yet |
-| Linux | Package, window and updates are in preparation; no download yet |
+| Platform | What to download | How to start |
+|---|---|---|
+| macOS 15+, Apple Silicon | the `.zip` of the app (named by its checksum) | [Agent Messenger.app](docs/MAC_APP.md); updates arrive in the app |
+| Windows 10/11 | `agent-messenger-…-windows-amd64.zip` (`arm64` for ARM) | unpack, double-click `messenger.exe`; the window opens in the browser |
+| Linux | `agent-messenger-…-linux-amd64.tar.gz` (`arm64` for ARM) | unpack, run `./messenger open`; the window opens in the browser |
+| macOS, Intel | not built yet | — |
 
-Update signature verification is already in place. Apple Developer ID/notarization and a first install on a clean, unfamiliar Mac have not been accepted yet; macOS may block the downloaded preview. This is a limited technical release, not readiness on all platforms. Running the prebuilt Mac build does not require Python, Node or Go.
+Windows and Linux builds are new in preview.32 and not yet accepted on real computers: see [Windows and Linux](docs/WINDOWS_LINUX.md) for what is verified and what is missing (no self-update, no installer, not signed). Apple Developer ID/notarization is not done either; macOS may block the downloaded preview the first time. Running a prebuilt build does not require Python, Node or Go.
 
 ## What has been verified
 
@@ -55,6 +55,7 @@ Open the private link it prints on this Mac. Opening the window, browsing and wa
 - [Current plan to release and readiness criteria](docs/RELEASE_PLAN.md)
 - [Updates from the window: capabilities and limitations](docs/UPDATES.md)
 - [Installing, updating and building the preview](docs/INSTALL.md)
+- [Windows and Linux: download, window, process control, what is verified](docs/WINDOWS_LINUX.md)
 - [Automated checks and their limits](docs/CI.md)
 - [Local window, messages and send recovery](docs/LOCAL_UI.md)
 - [CLI setup and creating a test session from the window](docs/SESSION_SETUP.md)
