@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-07 — Claude Code (owner's Mac results)
+
+- The owner's Mac: the Claude coordinator (connected by hand with `claude mcp add`) gave «Посчитать 5 + 5» to the real Cursor CLI; Cursor read the task, reported «5 + 5 = 10» and its model, and the session closed. Earlier Codex and Claude Code tasks in the same project also finished. The window's automatic connection (T-039) is still not checked: the coordinator was connected before preview.34.
+- Noticed: Cursor's progress lines in English («I'll start by reading…») are shown in the report. Possible follow-up: show only the final report.
+
 ## 2026-11-07 — Claude Code (T-040 faster release)
 
 - The owner found a release too slow (about 15 minutes). The Mac checks ran only after the Windows and Linux job. Branch `claude/t040-faster-release`: a separate «Mac checks» job runs next to it, and «Build, sign and publish» waits for both. The checks themselves are kept. Expected: about 10 minutes. Not verified until the next release run.

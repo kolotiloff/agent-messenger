@@ -32,7 +32,7 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 |---|---|---|---|
 | T-010 | Safely terminate a CLI and release its session within the same Mac boot. This is an open research problem: release by timer, empty process group or one exited PID is not allowed. | agent | see [RELEASE_PLAN.md](RELEASE_PLAN.md) |
 | T-011 | Switch the version of a running background client, plus full rollback. | agent | see [UPDATES.md](UPDATES.md) |
-| T-012 | Cursor as a task worker (D-049): runs, questions and answers, models, the «Агенты» card. Persistent Cursor adapter is not needed (D-021). Left: the owner's test with the real Cursor CLI on Mac or Linux; Windows (`.cmd`). | owner | PR #55 (in #54), preview.33 |
+| T-012 | Cursor as a task worker (D-049): runs, questions and answers, models, the «Агенты» card. Persistent Cursor adapter is not needed (D-021). Done on Mac: the owner's real Cursor ran a task from the Claude coordinator and reported back (2026-11-07). Left: Linux; Windows (`.cmd`). | owner | PR #55 (in #54), preview.33 |
 | T-013 | Developer ID signing and notarization of the Mac app. | owner | blocked: Q-003 |
 | T-014 | Intel Mac build and acceptance. | agent + owner | |
 | T-017 | Coordinator role handover. Stage 6. | agent | |
