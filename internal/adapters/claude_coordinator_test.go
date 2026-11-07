@@ -36,7 +36,12 @@ func TestClaudeUserConfig(t *testing.T) {
 }
 
 func TestCoordinatorLink(t *testing.T) {
-	dir := t.TempDir()
+	// Claude writes the real path of the folder it runs in; on macOS the
+	// temporary folder itself sits behind a symlink.
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	folder := filepath.Join(dir, "game")
 	if err := os.Mkdir(folder, 0o700); err != nil {
 		t.Fatal(err)

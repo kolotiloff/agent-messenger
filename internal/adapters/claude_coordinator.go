@@ -97,8 +97,9 @@ func CoordinatorLink(config, folder, messenger, root, project string) (string, e
 }
 
 // sameFolder compares a folder key of Claude's settings with a project
-// folder. Claude writes the folder it was started in; symlinks are resolved,
-// and on Windows the key may use forward slashes and another letter case.
+// folder. Claude writes the folder it was started in; symlinks on either side
+// are resolved, and on Windows the key may use forward slashes and another
+// letter case.
 func sameFolder(key, folder string) bool {
 	norm := func(p string) string {
 		p = filepath.Clean(filepath.FromSlash(p))
@@ -111,8 +112,13 @@ func sameFolder(key, folder string) bool {
 	if k == norm(folder) {
 		return true
 	}
-	if real, err := filepath.EvalSymlinks(folder); err == nil && k == norm(real) {
+	real, err := filepath.EvalSymlinks(folder)
+	if err != nil {
+		return false
+	}
+	if k == norm(real) {
 		return true
 	}
-	return false
+	realKey, err := filepath.EvalSymlinks(key)
+	return err == nil && norm(realKey) == norm(real)
 }
