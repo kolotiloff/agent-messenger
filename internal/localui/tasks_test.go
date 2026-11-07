@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -11,6 +12,9 @@ import (
 )
 
 func TestTaskWindowRoutes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fixture uses POSIX folder and program paths")
+	}
 	var got []control.Request
 	reject, outdated := false, false
 	h := newHandler("127.0.0.1:1234", "secret", func(_ context.Context, r control.Request) (control.Response, error) {

@@ -3,6 +3,7 @@ package localui
 import (
 	"context"
 	"net/http"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -10,6 +11,9 @@ import (
 )
 
 func TestSetupOnlyForwardsFixedNewSessionCommand(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fixture uses POSIX folder and program paths")
+	}
 	const body = `{"id":"a78f1366-38e7-4cec-b0b2-98670cfd79b6","alias":"test","cli":"/trusted/claude","environment":"/profiles/test"}`
 	var got []control.Request
 	h := newHandler(actionHost, "secret", func(_ context.Context, r control.Request) (control.Response, error) {
@@ -31,6 +35,9 @@ func TestSetupOnlyForwardsFixedNewSessionCommand(t *testing.T) {
 }
 
 func TestCodexSetupForwardsOnlyConfirmedFixedCommand(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fixture uses POSIX folder and program paths")
+	}
 	const body = `{"alias":"codex-test","cli":"/trusted/codex","environment":"/profiles/codex","confirmation":"allow-model-calls"}`
 	var got []control.Request
 	reply := control.Response{OK: true}

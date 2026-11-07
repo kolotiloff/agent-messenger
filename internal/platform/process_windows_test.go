@@ -118,9 +118,9 @@ func TestWindowsJobHoldsDescendantsUntilStopped(t *testing.T) {
 		empty, err := GroupEmpty(obs.PGID)
 		return err == nil && empty
 	})
-	if alive(childPID) {
-		t.Fatal("the child survived the job's stop")
-	}
+	// The job counts a process out when it exits; its process object is
+	// signalled a moment later. It runs no code in between.
+	waitFor(t, "the child's end", func() bool { return !alive(childPID) })
 	// An empty job is not a proof by itself.
 	if proof, err := CurrentProof(obs); proof.Proven || !errors.Is(err, ErrNotProven) {
 		t.Fatalf("absence was treated as proof: %+v %v", proof, err)

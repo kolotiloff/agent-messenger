@@ -8,6 +8,13 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-07 (afternoon) by Claude Code.
+
+- **Owner's instruction:** "довести до релиза сейчас программу, все везде сбилдить, выложить на GitHub" — the owner tests on Windows, Linux and Mac later; decisions that need them are taken cautiously or postponed.
+- **T-016 (PR #52, `claude/t016-windows-linux`):** Windows and Linux builds. Windows job objects as process groups (D-043; the client keeps each job's handle for the whole run, a job it cannot reach is not proven), `.exe` agents only (D-044), the window in the browser via `messenger open` (D-045), zip/tar.gz archives in every release, a Windows CI job. Guide: [WINDOWS_LINUX.md](WINDOWS_LINUX.md).
+- **Verified:** see "What is verified" in WINDOWS_LINUX.md and the PR. **Not verified:** a real Windows 10/11 desktop, a browser opening on Windows, real Claude Code or Codex on Windows or Linux, ARM builds (compiled only).
+- **Next:** release preview.32 with the Windows and Linux archives; the owner tests on real computers. Still waiting for the owner: Q-004 (Cursor), Q-012/T-028, Q-013.
+
 Updated 2026-11-07 (night) by Claude Code.
 
 - **preview.30 released** from `main` 598437c (PR #49, T-035: computers and their agents in the sidebar).
