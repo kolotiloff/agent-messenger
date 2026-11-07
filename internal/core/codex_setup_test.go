@@ -28,7 +28,7 @@ func newCodexFixture(t *testing.T) codexFixture {
 			t.Fatal(err)
 		}
 	}
-	f.cli = filepath.Join(root, "codex")
+	f.cli = filepath.Join(root, exeName("codex"))
 	if err := os.WriteFile(f.cli, []byte("#!/bin/sh\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}

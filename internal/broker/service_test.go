@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -61,7 +62,7 @@ func TestHostedBrokerAndMembership(t *testing.T) {
 	}
 	// The connection file is private and the status never shows the key.
 	info, err := os.Stat(filepath.Join(memberRoot, "server-connection.json"))
-	if err != nil || info.Mode().Perm() != 0o600 {
+	if err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0o600) {
 		t.Fatalf("connection file %v %v", info, err)
 	}
 	if raw, _ := os.ReadFile(filepath.Join(memberRoot, "server-connection.json")); !strings.Contains(string(raw), "device_key") {

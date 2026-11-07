@@ -3,10 +3,14 @@ package diagnostics
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
 func TestDesktopCandidatesArePassiveAndPreservePATHChoice(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fixture uses POSIX program names and paths")
+	}
 	dir := t.TempDir()
 	for _, name := range []string{"claude", "codex", "agent"} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte("this file must never be executed"), 0700); err != nil {

@@ -38,7 +38,7 @@ Task runs follow D-021 on every system: a run is finished only after an observed
 
 - the worker starts suspended, is put in a new job named `Local\AgentMessenger-run-<pid>`, and only then runs; if anything fails before it runs, it is ended and the run counts as not started;
 - every process it starts belongs to the job and cannot break away (the job does not allow it);
-- the group is empty when the job has no active process or no longer exists;
+- the group is empty only when the client sees the job with no active process. Windows removes a job's name as soon as the last handle to it closes, even while its processes run, so the client keeps each job's handle open for the whole run. A job it cannot reach (for example after the client restarted while a run was going) is never taken as empty: that run stays *not proven*, and the task is interrupted or blocked, not done;
 - "signalling the group" ends every process of the job (`TerminateJobObject`). Windows has no polite stop for a program without a console window, so a cancel is a hard stop;
 - a job name that still exists from an earlier run is never reused; that start is refused and the task does not run;
 - the start token of a process is its creation time; the boot identity is the registry `BootId` counter (or the time of the last orderly shutdown), never the clock.
@@ -50,7 +50,7 @@ The single-instance lock uses `LockFileEx`; the background client starts with pr
 ## What is verified
 
 - **Linux:** the whole test suite (CI and here); `messenger open` with headless Chromium through the forwarding file; install and start from the Linux archive (CI and here).
-- **Windows (CI runner, Windows Server 2025):** the lock, job objects holding a child after the first process exits and the job's stop ending it, a refused job name, the boot identity, the background client start and shutdown, task runs with the fake worker (report, question and answer, cancel, restart, failures, a leftover child), and the client started from the Windows zip.
+- **Windows (CI runner, Windows Server 2025):** the lock, job objects holding a child after the first process exits and the job's stop ending it, a refused job name, the boot identity, the background client start and shutdown, task runs with the fake worker (report, question and answer, cancel, restart, failures, a leftover child), and the client started from the Windows zip. (Updated after the CI run on the final commit; see the PR.)
 - **Not verified:** a real Windows 10/11 desktop, SmartScreen, a browser opening on Windows, real Claude Code or Codex on Windows or Linux, ARM builds (compiled only), Windows and Linux joining a network with a Mac (the network code is the same as on the Mac).
 
 ## Not there yet

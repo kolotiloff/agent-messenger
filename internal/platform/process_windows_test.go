@@ -125,7 +125,7 @@ func TestWindowsJobHoldsDescendantsUntilStopped(t *testing.T) {
 	if proof, err := CurrentProof(obs); proof.Proven || !errors.Is(err, ErrNotProven) {
 		t.Fatalf("absence was treated as proof: %+v %v", proof, err)
 	}
-	// A job that is gone has nothing to stop.
+	// A job this client saw empty has nothing to stop.
 	if err := SignalGroup(obs.PGID); err != nil {
 		t.Fatal(err)
 	}
@@ -139,12 +139,22 @@ func TestWindowsJobNameOfAnEarlierRunIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer windows.CloseHandle(held)
 	if err := joinJob(pid); err == nil {
+		windows.CloseHandle(held)
 		t.Fatal("an existing job was reused")
 	}
 	if empty, err := GroupEmpty(pid); err != nil || !empty {
+		windows.CloseHandle(held)
 		t.Fatalf("a job without processes empty=%t %v", empty, err)
+	}
+	// Once no handle is open the name is gone. A job this client does not
+	// hold and cannot open is never taken as empty.
+	windows.CloseHandle(held)
+	if empty, err := GroupEmpty(pid); empty || !errors.Is(err, ErrNotProven) {
+		t.Fatalf("an unreachable job empty=%t %v", empty, err)
+	}
+	if err := SignalGroup(pid); !errors.Is(err, ErrNotProven) {
+		t.Fatalf("an unreachable job was taken as stopped: %v", err)
 	}
 }
 

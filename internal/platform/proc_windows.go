@@ -94,25 +94,52 @@ func bootID() (string, error) {
 	return "", fmt.Errorf("%w: no boot identity in the registry", ErrNotProven)
 }
 
-// GroupEmpty reports whether the run's job has no process left. A missing job
-// means every process of it ended.
+// GroupEmpty reports whether the run's job has no process left. Only a job
+// this client created and holds, or one it can still open by name, can be
+// proven empty. A job that cannot be reached is not proven, never empty:
+// Windows drops a job's name when its last handle closes even while its
+// processes run.
 func GroupEmpty(pgid int) (bool, error) {
 	if pgid <= 0 {
 		return false, fmt.Errorf("%w: process group was not recorded", ErrNotProven)
 	}
-	job, err := openJob(pgid, jobQuery)
-	if err != nil {
-		if errors.Is(err, windows.ERROR_FILE_NOT_FOUND) {
+	jobs.Lock()
+	defer jobs.Unlock()
+	if job, ok := jobs.open[pgid]; ok {
+		active, err := jobActive(job)
+		if err != nil {
+			return false, err
+		}
+		if active == 0 {
+			// No process can join an empty job: none is left to start one.
+			windows.CloseHandle(job)
+			delete(jobs.open, pgid)
+			jobs.emptied[pgid] = true
 			return true, nil
 		}
-		return false, fmt.Errorf("%w: open job: %v", ErrNotProven, err)
+		return false, nil
+	}
+	if jobs.emptied[pgid] {
+		return true, nil
+	}
+	job, err := openJob(pgid, jobQuery)
+	if err != nil {
+		return false, fmt.Errorf("%w: job is not held by this client and cannot be opened: %v", ErrNotProven, err)
 	}
 	defer windows.CloseHandle(job)
+	active, err := jobActive(job)
+	if err != nil {
+		return false, err
+	}
+	return active == 0, nil
+}
+
+func jobActive(job windows.Handle) (uint32, error) {
 	var info jobAccounting
 	if err := windows.QueryInformationJobObject(job, windows.JobObjectBasicAccountingInformation, uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info)), nil); err != nil {
-		return false, fmt.Errorf("%w: query job: %v", ErrNotProven, err)
+		return 0, fmt.Errorf("%w: query job: %v", ErrNotProven, err)
 	}
-	return info.ActiveProcesses == 0, nil
+	return info.ActiveProcesses, nil
 }
 
 // jobAccounting is JOBOBJECT_BASIC_ACCOUNTING_INFORMATION.
@@ -128,18 +155,24 @@ type jobAccounting struct {
 }
 
 // SignalGroup ends every process of the run's job. Windows has no polite
-// stop for a program without a console window, so this is the hard stop; a
-// job that no longer exists has nothing to stop.
+// stop for a program without a console window, so this is the hard stop. A
+// job this client saw empty has nothing to stop; a job it cannot reach is an
+// error, because its processes may still run.
 func SignalGroup(pgid int) error {
 	if pgid <= 0 {
 		return fmt.Errorf("%w: process group was not recorded", ErrNotProven)
 	}
+	jobs.Lock()
+	defer jobs.Unlock()
+	if job, ok := jobs.open[pgid]; ok {
+		return windows.TerminateJobObject(job, 1)
+	}
+	if jobs.emptied[pgid] {
+		return nil
+	}
 	job, err := openJob(pgid, jobTerminate)
 	if err != nil {
-		if errors.Is(err, windows.ERROR_FILE_NOT_FOUND) {
-			return nil
-		}
-		return err
+		return fmt.Errorf("%w: job is not held by this client and cannot be opened: %v", ErrNotProven, err)
 	}
 	defer windows.CloseHandle(job)
 	return windows.TerminateJobObject(job, 1)

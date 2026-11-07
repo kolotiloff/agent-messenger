@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -441,6 +442,9 @@ func TestRestartRevokesPreviousMCP(t *testing.T) {
 }
 
 func TestCaseFoldSharesOneSessionKey(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the test folds a case-sensitive POSIX folder")
+	}
 	root := t.TempDir()
 	real := filepath.Join(root, "profile")
 	if err := os.Mkdir(real, 0o700); err != nil {
