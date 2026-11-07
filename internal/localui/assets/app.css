@@ -85,8 +85,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-control:32px;
   --am-control-compact:28px;
   --am-control-chip:24px;
-  /* System fonts leave more room below the text than above it, so text in a
-     control sits 2 px high. A top padding of 4 moves it to the middle. */
+  /* Top padding that puts the capitals of control text in the middle. Fonts
+     differ, so app.js measures the real font at start and replaces this. */
   --am-text-nudge:var(--am-space-1);
   --am-text-xs:11px;
   --am-text-s:12px;
@@ -336,6 +336,15 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-state.am-bad { color:var(--am-bad); }
 #am-concept .am-state:is(.am-good,.am-bad)::before { border:0; background:currentColor; }
 #am-concept .am-invite-dialog { width:min(560px,calc(100vw - 48px)); }
+#am-concept .am-code-wrap { position:relative; margin-top:var(--am-space-2); }
+#am-concept .am-code-wrap .am-code-block { display:block; margin:0; padding-right:calc(var(--am-control-compact) + var(--am-space-3)); user-select:all; }
+#am-concept .am-copy-btn { position:absolute; top:var(--am-space-1); right:var(--am-space-1); color:var(--am-muted); }
+#am-concept .am-copy-btn svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
+#am-concept .am-copy-btn .am-done-icon, #am-concept .am-copy-btn[data-copied] .am-copy-icon { display:none; }
+#am-concept .am-copy-btn[data-copied] .am-done-icon { display:block; }
+#am-concept .am-copy-btn[data-copied] { color:var(--am-good); }
+#am-concept .am-invite-dialog .am-alert-actions { flex-wrap:nowrap; }
+#am-concept .am-invite-dialog .am-alert-actions > button { flex:none; margin-left:auto; }
 #am-concept .am-q { width:20px; height:20px; min-height:20px; padding:0; border-radius:50%; font-size:var(--am-text-xs); }
 #am-concept .am-hint { display:flex; flex-direction:column; gap:var(--am-gap-control); padding:var(--am-pad-compact); border-radius:var(--am-radius-s); background:var(--am-soft); font-size:var(--am-text-s); }
 #am-concept .am-folder { display:flex; align-items:center; gap:var(--am-gap-control); margin-bottom:var(--am-gap-content); padding:var(--am-space-2) var(--am-space-2) var(--am-space-2) var(--am-space-3); border:1px solid var(--am-line); border-radius:var(--am-radius-m); }
@@ -361,14 +370,11 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-form-status { overflow-wrap:anywhere; }
 #am-concept .am-form-status:empty { display:none; }
 #am-concept .am-form-status.am-bad { color:var(--am-bad); }
-#am-concept .am-invite { display:flex; flex-direction:column; gap:var(--am-gap-content); }
-#am-concept .am-invite .am-code-block { margin:0; user-select:all; }
-#am-concept .am-devices { display:flex; flex-direction:column; }
-#am-concept .am-device { display:flex; align-items:center; justify-content:space-between; gap:var(--am-gap-content); padding:var(--am-space-2) 0; border-top:1px solid var(--am-line); }
-#am-concept .am-device:first-child { border-top:0; }
-#am-concept .am-device-main { display:flex; flex-direction:column; min-width:0; }
-#am-concept .am-device-name { overflow-wrap:anywhere; }
-#am-concept .am-device .am-actions { flex:none; flex-wrap:nowrap; }
+#am-concept .am-device-confirm { flex-wrap:nowrap; }
+#am-concept .am-device-confirm > button { flex:1; padding-inline:var(--am-space-2); }
+#am-concept .am-device-card { outline:none; }
+#am-concept .am-device-card:focus-visible { border-color:var(--am-muted); }
+#am-concept .am-context-menu { min-width:180px; }
 #am-concept .am-server .am-check-result { grid-template-columns:max-content minmax(0,1fr); column-gap:var(--am-gap-section); row-gap:var(--am-gap-control); }
 #am-concept .am-card-head h3:focus { outline:none; }
 
