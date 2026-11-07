@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kolotiloff/agent-messenger/internal/adapters"
 	"github.com/kolotiloff/agent-messenger/internal/buildinfo"
 	"github.com/kolotiloff/agent-messenger/internal/control"
 	"github.com/kolotiloff/agent-messenger/internal/core"
@@ -200,7 +201,7 @@ func run(root string, args []string) error {
 			encoder.SetIndent("", "  ")
 			return encoder.Encode(report)
 		}
-		fmt.Printf("%s: версия=%s (%s), вход=%s (%s).\n", report.Provider, report.Version.Value, report.Version.State, report.Authentication.State, report.Authentication.Reason)
+		fmt.Printf("%s: версия=%s (%s), вход=%s (%s).\n", adapters.ProviderTitle(report.Provider), report.Version.Value, report.Version.State, report.Authentication.State, report.Authentication.Reason)
 		fmt.Println("Это статус выбранного CLI и профиля с текущим окружением. Готовность сессии и доступность модели не проверялись. Вход и выход из аккаунта не выполнялись.")
 		return nil
 	case "doctor":
@@ -458,7 +459,7 @@ func usage() {
   messenger --root КАТАЛОГ project-add --name ИМЯ --folder ПАПКА
   messenger --root КАТАЛОГ project-folder --name ИМЯ --folder ПАПКА
   messenger --root КАТАЛОГ projects
-  messenger --root КАТАЛОГ agent-set --provider claude|codex --cli ФАЙЛ [--environment ПРОФИЛЬ] [--profile worker|messenger-only]
+  messenger --root КАТАЛОГ agent-set --provider claude|codex|cursor --cli ФАЙЛ [--environment ПРОФИЛЬ] [--profile worker|messenger-only]
   messenger --root КАТАЛОГ tasks [--project ИМЯ]
   messenger --root КАТАЛОГ task-answer --task ID --question ID --op ID --text ТЕКСТ
   messenger --root КАТАЛОГ task-cancel --task ID

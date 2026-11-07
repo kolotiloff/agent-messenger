@@ -68,7 +68,7 @@ func runTaskCommand(root string, args []string) (bool, error) {
 		return true, err
 	case "agent-set":
 		fs := flag.NewFlagSet("agent-set", flag.ContinueOnError)
-		provider := fs.String("provider", "", "claude|codex")
+		provider := fs.String("provider", "", "claude|codex|cursor")
 		cli := fs.String("cli", "", "absolute path of the agent program")
 		environment := fs.String("environment", "", "profile directory; empty means the standard one")
 		profile := fs.String("profile", "worker", "worker|messenger-only")
