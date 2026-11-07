@@ -89,6 +89,7 @@ type Supervisor struct {
 	codex         codexOwners
 	tasks         taskRuns
 	server        *broker.Service
+	net           netState
 }
 
 type activeJob struct {
@@ -197,6 +198,11 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 	go func() {
 		defer wg.Done()
 		server.RunPresence(ctx)
+	}()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		sup.runNetwork(ctx)
 	}()
 	wg.Add(1)
 	go func() {

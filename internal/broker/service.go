@@ -68,8 +68,12 @@ type Status struct {
 	// of the hosted broker, or the computers of the broker this computer
 	// joined. This computer is not among them.
 	Peers []Peer `json:"peers"`
-	// Exchange is false until tasks travel between computers.
-	Exchange bool `json:"exchange"`
+	// Accept is whether this computer runs tasks that other computers of
+	// its network start (T-037); the client fills it in.
+	Accept bool `json:"accept"`
+	// Network is the last problem with sending or reading task messages,
+	// if any; the client fills it in.
+	Network string `json:"network_error,omitempty"`
 }
 
 // Service runs the broker hosted by the background client and keeps this
