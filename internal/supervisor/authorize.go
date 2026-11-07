@@ -28,6 +28,11 @@ func (s *Supervisor) AuthorizeSetup(alias string) error {
 	if launcher.Allows(alias) {
 		return nil
 	}
+	// Check before granting: the loop claims work every 30 ms, so a grant
+	// that is withdrawn afterwards could start a refused session.
+	if err := s.store.CheckAuthorizeSetup(alias); err != nil {
+		return err
+	}
 	granted, err := s.grantWindowAliasLocked(launcher, alias)
 	if err != nil {
 		return err

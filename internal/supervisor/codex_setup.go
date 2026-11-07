@@ -592,6 +592,18 @@ func (s *Supervisor) SetupCodexFromWindow(environment, alias, cli, confirmation 
 		s.dispatch.Unlock()
 		return "", core.ErrRejected
 	}
+	// An existing session's name is refused before any grant: a grant that
+	// is withdrawn afterwards could start that session's queued work.
+	if !launcher.Allows(alias) {
+		inUse, err := s.store.AliasInUse(alias)
+		if err == nil && inUse {
+			err = fmt.Errorf("%w: alias already in use", core.ErrRejected)
+		}
+		if err != nil {
+			s.dispatch.Unlock()
+			return "", err
+		}
+	}
 	granted, grantErr := s.grantWindowAliasLocked(launcher, alias)
 	if grantErr != nil {
 		s.dispatch.Unlock()
