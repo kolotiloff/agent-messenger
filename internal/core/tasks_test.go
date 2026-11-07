@@ -113,7 +113,7 @@ func (f taskFixture) sessionOf(t *testing.T, task string) string {
 
 func (f taskFixture) dispose(t *testing.T, r TaskRun, kind, text string) {
 	t.Helper()
-	if _, err := f.st.ReadTask(r.ID, r.Receipt); err != nil {
+	if _, err := f.st.ReadTask(r.ID, r.Receipt, false); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.st.RecordDisposition(r.ID, r.Receipt, kind, text); err != nil {
@@ -260,7 +260,7 @@ func TestTaskReportIsPublishedOnlyAfterVerification(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Tools stay closed until the conversation is bound.
-	if _, err := f.st.ReadTask(r.ID, r.Receipt); !errors.Is(err, ErrRejected) {
+	if _, err := f.st.ReadTask(r.ID, r.Receipt, false); !errors.Is(err, ErrRejected) {
 		t.Fatalf("read before identity: %v", err)
 	}
 	if err := f.st.BindTaskSession(r.ID, "00000000-0000-4000-8000-000000000000"); !errors.Is(err, ErrIdentity) {
@@ -272,10 +272,10 @@ func TestTaskReportIsPublishedOnlyAfterVerification(t *testing.T) {
 	if err := f.st.RecordDisposition(r.ID, r.Receipt, DispositionReport, "done"); !errors.Is(err, ErrRejected) {
 		t.Fatalf("report before read_task: %v", err)
 	}
-	if _, err := f.st.ReadTask(r.ID, "wrong"); !errors.Is(err, ErrRejected) {
+	if _, err := f.st.ReadTask(r.ID, "wrong", false); !errors.Is(err, ErrRejected) {
 		t.Fatalf("wrong receipt: %v", err)
 	}
-	brief, err := f.st.ReadTask(r.ID, r.Receipt)
+	brief, err := f.st.ReadTask(r.ID, r.Receipt, false)
 	if err != nil || brief.Task != "Do it" || brief.Folder != f.folder || brief.Project != "Game" {
 		t.Fatalf("brief %+v %v", brief, err)
 	}
@@ -301,7 +301,7 @@ func TestTaskReportIsPublishedOnlyAfterVerification(t *testing.T) {
 		t.Fatalf("task %+v", task)
 	}
 	// The receipt is revoked with the run.
-	if _, err := f.st.ReadTask(r.ID, r.Receipt); !errors.Is(err, ErrRejected) {
+	if _, err := f.st.ReadTask(r.ID, r.Receipt, false); !errors.Is(err, ErrRejected) {
 		t.Fatalf("read after finish: %v", err)
 	}
 	if _, err := f.st.FinishTaskRun(r.ID, cleanExit); err == nil {
@@ -406,9 +406,16 @@ func TestTaskQuestionAnswerResumesSameConversation(t *testing.T) {
 	if err := f.st.BindTaskSession(r2.ID, "019a0000-0000-7000-8000-000000000001"); err != nil {
 		t.Fatal(err)
 	}
-	brief, err := f.st.ReadTask(r2.ID, r2.Receipt)
+	brief, err := f.st.ReadTask(r2.ID, r2.Receipt, false)
 	if err != nil || brief.Answer != "Level 2" || brief.Question != "Which level?" || brief.Run != 2 {
 		t.Fatalf("brief %+v %v", brief, err)
+	}
+	// T-033: the resumed conversation already has the task text.
+	if brief.Task != "" || brief.Note == "" {
+		t.Fatalf("resumed brief repeats the task %+v", brief)
+	}
+	if full, err := f.st.ReadTask(r2.ID, r2.Receipt, true); err != nil || full.Task == "" || full.Note != "" || full.Answer != "Level 2" {
+		t.Fatalf("include_task %+v %v", full, err)
 	}
 	if err := f.st.RecordDisposition(r2.ID, r2.Receipt, DispositionReport, "Done on level 2"); err != nil {
 		t.Fatal(err)

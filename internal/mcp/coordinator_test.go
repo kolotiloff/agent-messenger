@@ -187,7 +187,7 @@ func finishRun(t *testing.T, st *core.Store, task, kind, text string) {
 		if err := st.BindTaskSession(id, session); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := st.ReadTask(id, r.Receipt); err != nil {
+		if _, err := st.ReadTask(id, r.Receipt, false); err != nil {
 			t.Fatal(err)
 		}
 		if err := st.RecordDisposition(id, r.Receipt, kind, text); err != nil {

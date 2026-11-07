@@ -38,7 +38,7 @@ messenger --root DIR serve --allow-tasks
    - a resumed run must report the recorded ID.
 
    The worker tools stay closed until the ID is bound.
-4. **Worker tools** (`messenger task-mcp`, bound to the run and its receipt): `read_task`, then exactly one of `report`, `ask` or `ask_owner`. The disposition is stored provisionally.
+4. **Worker tools** (`messenger task-mcp`, bound to the run and its receipt): `read_task`, then exactly one of `report`, `ask` or `ask_owner`. On a resumed run `read_task` returns the question and the answer without the task text, which the resumed conversation already has; `include_task: true` returns it (T-033). The disposition is stored provisionally.
 5. **Verification** (`FinishTaskRun`, one transaction). After the exit, the client signals the process group and waits up to 3 s for it to be empty. Then:
 
 | Evidence | Run | Task | Published |

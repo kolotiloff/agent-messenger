@@ -13,9 +13,6 @@ How to use it:
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
-| T-031 | `wait` returns at most 20 events and about 24,000 characters of text (always at least one event); `more: true` says more are ready; the cursor is the last returned event, so nothing is skipped. | agent | `claude/t031-t034-coordinator-tokens` |
-| T-032 | `tasks` lists open tasks by default (`state: "all"` or one state), default 50 and at most 200 with `more: true`, no folder per row, no verification line on done tasks. It returns a `version` that changes with any new event, new task or task update; `if_version` equal to it returns only `unchanged: true`. A version rather than the event cursor, because starting or cancelling a task changes the list without an event. | agent | `claude/t031-t034-coordinator-tokens` |
-| T-034 | Failure reasons: a failed run records usage limit, rate limit, overload, sign-in or other, plus the limit's reset time when the CLI reports it; the window shows «Лимит, сброс в 18:00», the coordinator's `failed` event and `tasks` carry it. Nothing is retried. Claude and Codex error formats are taken from their docs and tested with fake CLIs only, not checked against live limits. | agent | `claude/t031-t034-coordinator-tokens` |
 
 | T-015 | First part done on `claude/t015-server-setup`: broker hosted by the client, invitations, joining, check, devices and revoke, the «Сервер» tab ([BROKER.md](BROKER.md), D-033–D-035). Left: tasks between computers, VPS package and wizard, Keychain (Q-013), Windows (Q-006). | agent + owner | `claude/t015-server-setup` |
 
@@ -26,7 +23,6 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 | ID | Task | Owner | Notes |
 |---|---|---|---|
 | T-028 | Close or migrate existing persistent sessions and state, then retire the persistent Claude stream and Codex app-server owners. | agent | blocked: Q-012 |
-| T-033 | A resumed run's `read_task` returns the question and answer without the task text; `include_task: true` returns it. | agent | tokens; [TOKEN_REVIEW.md](TOKEN_REVIEW.md) |
 
 ## Backlog
 
@@ -39,7 +35,6 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 | T-014 | Intel Mac build and acceptance. | agent + owner | |
 | T-016 | Windows and Linux runtime acceptance and packages. Stage 6. | agent + owner | Q-006 |
 | T-017 | Coordinator role handover. Stage 6. | agent | |
-| T-018 | Delete old remote branches whose content is already in `main`. | agent | blocked: Q-002 |
 | T-019 | Decide and implement the UI language. | owner → agent | blocked: Q-001 |
 | T-030 | `/api/setup-codex` allows 100 s, but the window HTTP server cuts every reply at 25 s (`WriteTimeout`), so a slow successful setup shows as an error. Set a per-request write deadline for it. Persistent Codex path: moot if T-028 removes it. | agent | found in the T-015 audit |
 
@@ -47,6 +42,11 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 
 | ID | Task | PR |
 |---|---|---|
+| T-033 | A resumed run's `read_task` returns the question and answer without the task text (the conversation already has it) and a note; `include_task: true` returns the text. | branch `claude/t033-resume-brief` |
+| T-034 | Failure reasons (usage limit with reset time, rate limit, overload, sign-in, other) on the task, in the window and the coordinator's `failed` event; nothing is retried. Limit formats from the CLIs' docs, tested with fake CLIs only. | [PR #45](https://github.com/kolotiloff/agent-messenger/pull/45) |
+| T-032 | `tasks`: open tasks by default, limit, no folder per row, `version` / `if_version` → `unchanged`. | [PR #45](https://github.com/kolotiloff/agent-messenger/pull/45) |
+| T-031 | `wait`: at most 20 events and about 24,000 characters, `more: true`, cursor at the last returned event. | [PR #45](https://github.com/kolotiloff/agent-messenger/pull/45) |
+| T-018 | Old branches already merged into `main` deleted by the owner on GitHub (2026-11-07). Branches with unmerged work were kept. | — |
 | T-027 | Mac acceptance with real models. preview.23: Codex and Claude tasks, owner questions, reports through `wait` (with the owner). preview.24 with the fixes (D-028–D-032): owner tested it on the Mac and reported that everything works (2026-11-07); no separate written report of each case. | [PR #37](https://github.com/kolotiloff/agent-messenger/pull/37), [PR #38](https://github.com/kolotiloff/agent-messenger/pull/38) |
 | T-029 | Task window: project switcher, computers with agents, three-line task list, task feed, owner answers, agent cards with trust. Mac app not yet checked. | [PR #36](https://github.com/kolotiloff/agent-messenger/pull/36) |
 | T-026 | Worker profile, trust check, runs on real CLIs with fake models ([report](reports/2026-11-06-task-workers-linux.md)). | [PR #36](https://github.com/kolotiloff/agent-messenger/pull/36) |

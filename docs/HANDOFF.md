@@ -8,7 +8,13 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
-- **2026-11-07, token and reliability review** (Claude Code): what to change is in [TOKEN_REVIEW.md](TOKEN_REVIEW.md) and D-038; tasks T-031–T-034 are in Next (token budget of `wait`, lean `tasks`, no repeated task text on resume, failure reasons with reset time). Docs only; no code changed. The rest of this section is older; see [LOG.md](LOG.md) for later work.
+Updated 2026-11-07 (day) by Claude Code.
+
+- **Done and merged (PR #45):** T-034 failure reasons with the limit's reset time; T-031 bounded `wait`; T-032 lean `tasks` with `if_version`; window tweaks (menus stand apart from cards, green «Работает», the invitation in its own dialog).
+- **T-033** (branch `claude/t033-resume-brief`): a resumed run's `read_task` leaves out the task text unless `include_task: true`.
+- **Other products are not named anywhere** (owner's request): the comparison document was removed, the rule is in AGENTS.md. The owner deleted old merged branches (T-018).
+- **Verified here (Linux):** `check.sh`, new tests with fake Claude and Codex CLIs, window screenshots in headless Chromium. **Not verified:** real usage limits (formats come from the CLIs' docs), the Mac app.
+- **Next:** release the next preview with all of this; then T-015 continued and Q-012 / T-028.
 
 Updated 2026-11-07 (third night) by Claude Code.
 
