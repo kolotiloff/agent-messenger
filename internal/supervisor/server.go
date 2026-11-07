@@ -8,7 +8,9 @@ import (
 )
 
 // serverNetworkTimeout bounds a connection attempt or check from the window.
-const serverNetworkTimeout = 25 * time.Second
+// It stays below the window route deadline (22 s) and the HTTP server write
+// timeout (25 s), so the window always gets an answer.
+const serverNetworkTimeout = 18 * time.Second
 
 // Server handles the window's server settings: the broker hosted by this
 // client and this computer's connection to a broker.

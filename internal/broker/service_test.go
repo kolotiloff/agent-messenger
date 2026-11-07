@@ -45,9 +45,15 @@ func TestHostedBrokerAndMembership(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if open := host.Status().Host.OpenInvitations; len(open) != 1 || open[0] != code.ID {
+		t.Fatalf("open invitations %v, code %s", open, code.ID)
+	}
 	member := newService(t, memberRoot)
 	if err := member.Connect(ctx(t), code.Code, "Ноутбук"); err != nil {
 		t.Fatal(err)
+	}
+	if open := host.Status().Host.OpenInvitations; len(open) != 0 {
+		t.Fatalf("used invitation still open %v", open)
 	}
 	ms := member.Status().Member
 	if !ms.Connected || !ms.Reachable || ms.BrokerID != st.Host.BrokerID || ms.DeviceName != "Ноутбук" {
@@ -172,5 +178,47 @@ func TestDamagedFilesDoNotStopTheClient(t *testing.T) {
 	// The damaged connection is kept for the owner to look at.
 	if _, err := os.Stat(filepath.Join(root, "server-connection.json")); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestDamagedConnectionBlocksConnectUntilDisconnect(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "server-connection.json"), []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := newService(t, root)
+	if err := s.Connect(ctx(t), Invitation{Address: "127.0.0.1:1", BrokerID: "brk-0000000000000000", Fingerprint: strings.Repeat("a", 64), Secret: strings.Repeat("b", 64)}.String(), "x"); err == nil || !strings.Contains(err.Error(), "повреждён") {
+		t.Fatalf("damaged file overwritten: %v", err)
+	}
+	if raw, _ := os.ReadFile(filepath.Join(root, "server-connection.json")); string(raw) != "{" {
+		t.Fatal("damaged file changed")
+	}
+	if err := s.Disconnect(); err != nil || s.Status().Member.Error != "" {
+		t.Fatalf("disconnect %v %+v", err, s.Status().Member)
+	}
+}
+
+func TestStopReleasesTheLockBeforeRestart(t *testing.T) {
+	s := newService(t, t.TempDir())
+	port := freePort(t)
+	for i := 0; i < 5; i++ {
+		if err := s.Enable(ScopeLocal, port); err != nil {
+			t.Fatalf("enable %d: %v", i, err)
+		}
+		if err := s.Disable(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A broker whose base context ends releases its data before it is
+	// marked stopped, so Close does not race it.
+	base, cancel := context.WithCancel(context.Background())
+	s2 := NewService(base, t.TempDir())
+	if err := s2.Enable(ScopeLocal, freePort(t)); err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	s2.Close()
+	if s2.Status().Host.Running {
+		t.Fatal("still running after close")
 	}
 }

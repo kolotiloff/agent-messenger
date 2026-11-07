@@ -177,7 +177,7 @@ func newHandlerWithChecks(host, token string, call caller, discover func(context
 		}
 		if r.URL.Path == "/api/server-action" {
 			// Joining or checking a server goes over the network.
-			deadline = 30 * time.Second
+			deadline = 22 * time.Second
 		}
 		if r.URL.Path == "/api/setup-codex" {
 			// Starting app-server and creating a thread takes a few RPC rounds.

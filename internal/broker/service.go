@@ -40,7 +40,10 @@ type HostStatus struct {
 	BrokerID    string   `json:"broker_id,omitempty"`
 	Fingerprint string   `json:"fingerprint,omitempty"`
 	Devices     []Device `json:"devices"`
-	Error       string   `json:"error,omitempty"`
+	// OpenInvitations are the IDs of invitations not used yet and not
+	// expired, so the window can hide a code once it is spent.
+	OpenInvitations []string `json:"open_invitations"`
+	Error           string   `json:"error,omitempty"`
 }
 
 // MemberStatus is what the window shows about this device's connection. It
@@ -83,10 +86,12 @@ type Service struct {
 	done     chan struct{}
 	hostErr  string
 
-	member    *Connection
-	checkedAt string
-	reachable bool
-	memberErr string
+	member     *Connection
+	checkedAt  string
+	reachable  bool
+	memberErr  string
+	damaged    bool // the connection file exists but cannot be read
+	connecting bool
 
 	// interfaces lists this computer's addresses; replaced in tests.
 	interfaces func() ([]net.Addr, error)
@@ -113,12 +118,14 @@ func NewService(ctx context.Context, root string) *Service {
 		var c Connection
 		if json.Unmarshal(raw, &c) != nil || !c.Valid() {
 			// Kept as it is; the client still starts and the window says so.
-			s.memberErr = "файл подключения к серверу повреждён: " + s.connectionPath()
+			s.memberErr = "файл подключения к серверу повреждён: " + s.connectionPath() + ". Нажмите «Отключить», чтобы удалить его, или исправьте файл"
+			s.damaged = true
 		} else {
 			s.member = &c
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		s.memberErr = "не удалось прочитать подключение к серверу: " + err.Error()
+		s.damaged = true
 	}
 	return s
 }
@@ -168,23 +175,30 @@ func (s *Service) startLocked() error {
 	done := make(chan struct{})
 	s.broker, s.stop, s.done, s.hostErr = b, cancel, done, ""
 	go func() {
+		// Serve returns after every request has ended; only then are the
+		// database and the lock released, and only then is the broker
+		// marked stopped, so a restart never meets its own lock.
 		err := b.Serve(ctx, ln)
+		failed := err != nil && ctx.Err() == nil
+		cancel()
+		b.Close()
 		s.mu.Lock()
-		if err != nil && ctx.Err() == nil {
+		if failed {
 			s.hostErr = "сервер остановился: " + err.Error()
 		}
 		if s.broker == b {
-			s.broker, s.stop = nil, nil
+			s.broker, s.stop, s.done = nil, nil, nil
 		}
 		s.mu.Unlock()
-		b.Close()
 		close(done)
 	}()
 	return nil
 }
 
+// stopLocked stops the hosted broker and waits until it has released its
+// data. It drops mu while waiting.
 func (s *Service) stopLocked() {
-	if s.stop == nil {
+	if s.done == nil {
 		return
 	}
 	stop, done := s.stop, s.done
@@ -223,7 +237,15 @@ func (s *Service) Enable(scope string, port int) error {
 		return err
 	}
 	if err := s.saveSettingsLocked(); err != nil {
-		return err
+		// Not remembered means not on: go back to what was saved.
+		s.stopLocked()
+		s.settings = previous
+		if previous.Enabled {
+			if again := s.startLocked(); again != nil {
+				s.hostErr = again.Error()
+			}
+		}
+		return fmt.Errorf("не удалось сохранить настройки сервера: %w", err)
 	}
 	return nil
 }
@@ -268,7 +290,7 @@ func (s *Service) addressesLocked() []string {
 	addrs, _ := s.interfaces()
 	for _, a := range addrs {
 		ipnet, ok := a.(*net.IPNet)
-		if !ok || ipnet.IP.To4() == nil || ipnet.IP.IsLoopback() || ipnet.IP.IsLinkLocalUnicast() {
+		if !ok || ipnet.IP.To4() == nil || !ipnet.IP.IsPrivate() {
 			continue
 		}
 		out = append(out, net.JoinHostPort(ipnet.IP.String(), port))
@@ -312,11 +334,26 @@ func (s *Service) Connect(ctx context.Context, code, name string) error {
 		return err
 	}
 	s.mu.Lock()
-	if s.member != nil {
+	switch {
+	case s.member != nil:
 		s.mu.Unlock()
 		return errors.New("этот компьютер уже подключён к серверу; сначала отключите его")
+	case s.damaged:
+		s.mu.Unlock()
+		return errors.New("файл подключения к серверу повреждён; сначала нажмите «Отключить»")
+	case s.connecting:
+		s.mu.Unlock()
+		return errors.New("подключение уже выполняется")
 	}
+	// Only one registration at a time, so no second device is left on a
+	// broker with a key nobody keeps.
+	s.connecting = true
 	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		s.connecting = false
+		s.mu.Unlock()
+	}()
 	c, err := Register(ctx, inv, name)
 	if err != nil {
 		return err
@@ -324,9 +361,6 @@ func (s *Service) Connect(ctx context.Context, code, name string) error {
 	raw, _ := json.Marshal(c)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.member != nil {
-		return errors.New("этот компьютер уже подключён к серверу; сначала отключите его")
-	}
 	if err := writeFile(s.connectionPath(), raw); err != nil {
 		return err
 	}
@@ -364,7 +398,7 @@ func (s *Service) Disconnect() error {
 	if err := os.Remove(s.connectionPath()); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	s.member, s.checkedAt, s.reachable, s.memberErr = nil, "", false, ""
+	s.member, s.checkedAt, s.reachable, s.memberErr, s.damaged = nil, "", false, "", false
 	return nil
 }
 
@@ -372,12 +406,17 @@ func (s *Service) Disconnect() error {
 func (s *Service) Status() Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	h := HostStatus{Enabled: s.settings.Enabled, Running: s.broker != nil, Scope: s.settings.Scope, Port: s.settings.Port, Devices: []Device{}, Error: s.hostErr}
+	h := HostStatus{Enabled: s.settings.Enabled, Running: s.broker != nil, Scope: s.settings.Scope, Port: s.settings.Port, Devices: []Device{}, OpenInvitations: []string{}, Error: s.hostErr}
 	if s.broker != nil {
 		h.Addresses = s.addressesLocked()
 		h.BrokerID, h.Fingerprint = s.broker.ID(), s.broker.Fingerprint()
 		if devices, err := s.broker.Devices(); err == nil {
 			h.Devices = devices
+		} else if h.Error == "" {
+			h.Error = "список устройств не читается: " + err.Error()
+		}
+		if open, err := s.broker.OpenInvitations(); err == nil {
+			h.OpenInvitations = open
 		}
 	}
 	if h.Addresses == nil {

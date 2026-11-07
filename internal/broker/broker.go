@@ -33,7 +33,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/kolotiloff/agent-messenger/internal/platform"
@@ -48,6 +50,15 @@ const InviteTTL = 15 * time.Minute
 
 // MaxDeviceName limits a device name.
 const MaxDeviceName = 64
+
+// maxConnections bounds open connections to the broker. The broker shares the
+// background client's process, so a flood of connections must not use up the
+// client's file descriptors.
+const maxConnections = 64
+
+// maxFailedRegistrations bounds wrong registration attempts per minute; past
+// it the broker answers 429 without touching the database.
+const maxFailedRegistrations = 20
 
 var (
 	// ErrInvitation means the invitation is unknown, used or expired.
@@ -72,6 +83,9 @@ type Broker struct {
 	fingerprint string
 	now         func() time.Time
 	lock        *platform.Lock
+
+	limit    sync.Mutex
+	failedAt []time.Time
 }
 
 // Device is a registered device.
@@ -182,12 +196,78 @@ func writeCertificate(certPath, keyPath, id string) error {
 	return writeFile(certPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
 }
 
+// writeFile replaces path atomically and durably with a file only the owner
+// can read: a fresh temporary file (never a stale one with other rights),
+// flushed to disk before the rename, then the folder flushed.
 func writeFile(path string, data []byte) error {
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	if err := os.Remove(tmp); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	return os.Rename(tmp, path)
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	// Flushing a folder is not supported everywhere (Windows); the file
+	// itself is already on disk.
+	if dir, err := os.Open(filepath.Dir(path)); err == nil {
+		_ = dir.Sync()
+		dir.Close()
+	}
+	return nil
+}
+
+// validDeviceName allows one line of printable text: no control or format
+// characters (such as right-to-left overrides that disguise a name).
+func validDeviceName(name string) bool {
+	if name == "" || !utf8.ValidString(name) || utf8.RuneCountInString(name) > MaxDeviceName {
+		return false
+	}
+	for _, r := range name {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || r == utf8.RuneError {
+			return false
+		}
+	}
+	return true
+}
+
+// allowRegistration reports whether a registration attempt may run now.
+func (b *Broker) allowRegistration() bool {
+	b.limit.Lock()
+	defer b.limit.Unlock()
+	cutoff := time.Now().Add(-time.Minute)
+	kept := b.failedAt[:0]
+	for _, at := range b.failedAt {
+		if at.After(cutoff) {
+			kept = append(kept, at)
+		}
+	}
+	b.failedAt = kept
+	return len(b.failedAt) < maxFailedRegistrations
+}
+
+func (b *Broker) registrationFailed() {
+	b.limit.Lock()
+	b.failedAt = append(b.failedAt, time.Now())
+	b.limit.Unlock()
 }
 
 // ID is the broker's stable identity.
@@ -207,6 +287,8 @@ func (b *Broker) Close() error {
 
 // InviteCode is a new invitation and when it expires.
 type InviteCode struct {
+	// ID names the invitation in the host status without revealing it.
+	ID        string `json:"id"`
 	Code      string `json:"code"`
 	Address   string `json:"address"`
 	ExpiresAt string `json:"expires_at"`
@@ -228,13 +310,13 @@ func (b *Broker) Invite(address string) (InviteCode, error) {
 		return InviteCode{}, err
 	}
 	inv := Invitation{Address: address, BrokerID: b.id, Fingerprint: b.fingerprint, Secret: secret}
-	return InviteCode{Code: inv.String(), Address: address, ExpiresAt: expires}, nil
+	return InviteCode{ID: hash(secret)[:16], Code: inv.String(), Address: address, ExpiresAt: expires}, nil
 }
 
 // register uses an invitation once and creates a device.
 func (b *Broker) register(secret, name string) (string, string, error) {
 	name = strings.TrimSpace(name)
-	if name == "" || utf8.RuneCountInString(name) > MaxDeviceName || strings.ContainsAny(name, "\r\n\t") {
+	if !validDeviceName(name) {
 		return "", "", fmt.Errorf("имя устройства: 1..%d символов в одну строку", MaxDeviceName)
 	}
 	idHex, err := randomHex(8)
@@ -247,6 +329,14 @@ func (b *Broker) register(secret, name string) (string, string, error) {
 	}
 	id := "dev-" + idHex
 	now := b.now().UTC().Format(time.RFC3339)
+	// A read first, so a wrong secret never takes the database's write lock.
+	var usable int
+	if err := b.db.QueryRow(`SELECT COUNT(*) FROM invitations WHERE secret_hash=? AND used_at IS NULL AND expires_at>?`, hash(secret), now).Scan(&usable); err != nil {
+		return "", "", err
+	}
+	if usable != 1 {
+		return "", "", ErrInvitation
+	}
 	tx, err := b.db.Begin()
 	if err != nil {
 		return "", "", err
@@ -283,6 +373,24 @@ func (b *Broker) device(key string) (Device, error) {
 	d.LastSeen = b.now().UTC().Format(time.RFC3339)
 	_, err = b.db.Exec(`UPDATE devices SET last_seen=? WHERE id=?`, d.LastSeen, d.ID)
 	return d, err
+}
+
+// OpenInvitations lists the IDs of invitations that can still be used.
+func (b *Broker) OpenInvitations() ([]string, error) {
+	rows, err := b.db.Query(`SELECT substr(secret_hash,1,16) FROM invitations WHERE used_at IS NULL AND expires_at>?`, b.now().UTC().Format(time.RFC3339))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
 }
 
 // Devices lists registered devices, newest first.
@@ -333,24 +441,85 @@ func (b *Broker) Listen(addr string) (net.Listener, error) {
 	if err != nil {
 		return nil, err
 	}
+	ln = &guardedListener{Listener: ln, slots: make(chan struct{}, maxConnections)}
 	return tls.NewListener(ln, &tls.Config{Certificates: []tls.Certificate{b.cert}, MinVersion: tls.VersionTLS13}), nil
 }
 
-// Serve answers the broker API on ln until ctx ends.
+// guardedListener accepts only peers on this computer or a private network
+// and bounds open connections. "Local network" listens on every interface,
+// so a peer from a public address (a public IPv6 address, for example) is
+// dropped before TLS.
+type guardedListener struct {
+	net.Listener
+	slots chan struct{}
+}
+
+func (l *guardedListener) Accept() (net.Conn, error) {
+	for {
+		l.slots <- struct{}{}
+		conn, err := l.Listener.Accept()
+		if err != nil {
+			<-l.slots
+			return nil, err
+		}
+		if !localPeer(conn.RemoteAddr()) {
+			conn.Close()
+			<-l.slots
+			continue
+		}
+		return &slotConn{Conn: conn, release: func() { <-l.slots }}, nil
+	}
+}
+
+// localPeer reports whether addr is this computer or a private network.
+func localPeer(addr net.Addr) bool {
+	tcp, ok := addr.(*net.TCPAddr)
+	if !ok {
+		return false
+	}
+	ip := tcp.IP
+	if v4 := ip.To4(); v4 != nil {
+		ip = v4
+	}
+	return ip.IsLoopback() || ip.IsPrivate()
+}
+
+type slotConn struct {
+	net.Conn
+	once    sync.Once
+	release func()
+}
+
+func (c *slotConn) Close() error {
+	err := c.Conn.Close()
+	c.once.Do(c.release)
+	return err
+}
+
+// Serve answers the broker API on ln until ctx ends. It returns only after
+// every request has finished or been cut off, so the caller may close the
+// database right after.
 func (b *Broker) Serve(ctx context.Context, ln net.Listener) error {
-	server := &http.Server{Handler: b.Handler(), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 20 * time.Second, WriteTimeout: 20 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10, ErrorLog: log.New(io.Discard, "", 0)}
-	done := make(chan struct{})
+	server := &http.Server{Handler: b.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: 5 * time.Second, MaxHeaderBytes: 16 << 10, ErrorLog: log.New(io.Discard, "", 0)}
+	server.SetKeepAlivesEnabled(false)
+	stopped := make(chan struct{})
+	served := make(chan struct{})
 	go func() {
+		defer close(stopped)
 		select {
 		case <-ctx.Done():
 			shutdown, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-			_ = server.Shutdown(shutdown)
+			if server.Shutdown(shutdown) != nil {
+				_ = server.Close()
+			}
 			cancel()
-		case <-done:
+		case <-served:
+			_ = server.Close()
 		}
 	}()
 	err := server.Serve(ln)
-	close(done)
+	close(served)
+	<-stopped
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil
 	}
@@ -396,16 +565,22 @@ func (b *Broker) Handler() http.Handler {
 			http.Error(w, "method", http.StatusMethodNotAllowed)
 			return
 		}
+		if !b.allowRegistration() {
+			writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many attempts"})
+			return
+		}
 		var in registerRequest
 		decoder := json.NewDecoder(io.LimitReader(r.Body, 4096))
 		decoder.DisallowUnknownFields()
 		if decoder.Decode(&in) != nil || len(in.Secret) != 64 {
+			b.registrationFailed()
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
 			return
 		}
 		id, key, err := b.register(in.Secret, in.Name)
 		switch {
 		case errors.Is(err, ErrInvitation):
+			b.registrationFailed()
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "invitation"})
 		case err != nil && strings.HasPrefix(err.Error(), "имя устройства"):
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})

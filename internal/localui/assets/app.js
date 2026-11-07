@@ -5,12 +5,11 @@
   const $ = id => root.querySelector('#' + id);
   const selectViews = new Map();
   function syncSelects(){selectViews.forEach(view=>view.sync());}
-  function syncSelects(){selectViews.forEach(view=>view.sync());}
   // Keep the existing select as the source of truth for delivery guards. The
   // visible list is a top-layer popover, so neither pane clips it or grows.
   function enhanceSelect(select) {
     const trigger=document.createElement('button');trigger.type='button';trigger.className='am-select-trigger';
-    const label=select.labels[0]?.textContent||'Выбор';
+    const label=select.labels[0]?.textContent||select.getAttribute('aria-label')||'Выбор';
     trigger.setAttribute('aria-label',label);trigger.setAttribute('aria-haspopup','listbox');trigger.setAttribute('aria-expanded','false');
     const value=document.createElement('span');value.className='am-select-value';
     const chevron=document.createElement('span');chevron.className='am-select-chevron';chevron.setAttribute('aria-hidden','true');trigger.append(value,chevron);
@@ -129,7 +128,10 @@
     return response.json();
   }
   async function postAPI(path,body,timeout=6000){
-    const response=await fetch(path,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body),cache:'no-store',signal:AbortSignal.timeout(timeout)});
+    let response;
+    // No answer means the result is unknown, not that nothing happened.
+    try{response=await fetch(path,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body),cache:'no-store',signal:AbortSignal.timeout(timeout)});}
+    catch(_){throw Error('Ответ не получен, результат неизвестен. Проверьте состояние, прежде чем повторять.');}
     let result={};try{result=await response.json();}catch(_){}
     if(response.ok&&result.ok===true)return result;
     if(result.state==='client_outdated')throw outdatedMessage();
@@ -474,20 +476,42 @@
   }
 
   // Server tab: the broker hosted by this client and this computer's
-  // connection to a broker. Errors stay next to the button that caused them.
-  let server=null,serverBusy=false,serverEdited=false,inviteTimer=0,invitedAt=-1;
-  function stamp(at){const d=new Date(at);return isNaN(d.getTime())?'':d.toLocaleString([], {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});}
+  // connection to a broker. Messages stay next to the section they belong to.
+  let server=null,serverBusy=false,serverGen=0,serverPolling=false,serverEdited=false,nameFilled=false,invitation=null,inviteTimer=0,revokeAsk='',revokeTimer=0;
+  const notes={host:null,member:null},noteTimers={};
+  function stamp(at){const d=new Date(at);return isNaN(d.getTime())?'':d.toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});}
+  function capital(text){return text?text[0].toUpperCase()+text.slice(1):'';}
   function badge(node,text,good){node.textContent=text;node.classList.toggle('am-good',!!good);}
   async function loadServer(){
-    if(serverBusy)return;
-    try{server=await api('/api/server');renderServer();}
-    catch(error){$('host-state').textContent=error.message;$('member-state').textContent='';}
+    if(serverBusy||serverPolling)return;
+    serverPolling=true;const gen=serverGen;
+    try{const next=await api('/api/server');if(gen===serverGen&&!serverBusy){server=next;renderServer();}}
+    catch(error){if(gen===serverGen&&!serverBusy){$('host-state').textContent=error.message;$('member-state').textContent='';}}
+    finally{serverPolling=false;}
   }
+  // A note is the owner's last action result in a section. A success fades;
+  // an error stays until the section's state changes or the next action.
+  function note(section,text,bad,fade){
+    clearTimeout(noteTimers[section]);
+    const part=server?.[section];
+    notes[section]=text?{text:capital(text),bad:!!bad,state:JSON.stringify(part)}:null;
+    if(text&&fade)noteTimers[section]=setTimeout(()=>{notes[section]=null;renderServer();},6000);
+    renderNotes();
+  }
+  function renderNotes(){
+    for(const section of ['host','member']){
+      const n=$(section+'-status'),own=notes[section],part=server?.[section];
+      if(own&&own.bad&&part&&JSON.stringify(part)!==own.state&&!serverBusy)notes[section]=null;
+      const shown=notes[section]||(part?.error?{text:capital(part.error),bad:true}:null);
+      n.textContent=shown?.text||'';n.classList.toggle('am-bad',!!shown?.bad);
+    }
+  }
+  function hideInvitation(){invitation=null;clearInterval(inviteTimer);$('invite-box').hidden=true;}
   function renderServer(){
     if(!server)return;const h=server.host,m=server.member;
+    const focused=document.activeElement?.dataset?.key||'';
     badge($('host-badge'),h.running?'Работает':h.enabled?'Не запущен':'Выключен',h.running);
-    $('host-state').textContent=h.running?'Принимает устройства: '+(h.scope==='lan'?'в локальной сети':'только с этого компьютера')+', порт '+h.port+'.':'Другие устройства смогут подключаться к этому компьютеру по одноразовому приглашению.';
-    if(h.error&&!$('host-status').dataset.own){$('host-status').textContent=h.error[0].toUpperCase()+h.error.slice(1);$('host-status').classList.add('am-bad');}
+    $('host-state').textContent=!h.running?'Другие устройства смогут подключаться к этому компьютеру по одноразовому приглашению.':!h.addresses.length?'Сервер работает, но у компьютера нет адреса в локальной сети. Подключитесь к сети или выберите «Только этот компьютер».':'Принимает устройства: '+(h.scope==='lan'?'в локальной сети':'только с этого компьютера')+', порт '+h.port+'.';
     if(!serverEdited){$('host-scope').value=h.scope||'local';$('host-port').value=h.port||47100;}
     $('host-enable').textContent=h.running?'Применить':'Включить сервер';$('host-disable').hidden=!h.enabled&&!h.running;
     $('host-running').hidden=!h.running;
@@ -496,69 +520,93 @@
       select.replaceChildren(...h.addresses.map(a=>{const o=el('option',a);o.value=a;return o;}));
       if(h.addresses.includes(current))select.value=current;
     }
-    $('host-invite').disabled=!h.addresses.length;
-    if(h.running&&!h.addresses.length)$('host-state').textContent='Сервер работает, но у компьютера нет адреса в локальной сети. Подключитесь к сети или выберите «Только этот компьютер».';
+    // A used or expired invitation is spent: the server no longer lists it.
+    if(invitation&&(!h.running||!(h.open_invitations||[]).includes(invitation.id)))hideInvitation();
     const list=$('host-devices');list.replaceChildren();
     const all=h.devices||[],devices=all.filter(d=>!d.revoked_at),revoked=all.length-devices.length;
-    // A used invitation is spent: hide it once a new device has joined.
-    if(invitedAt>=0&&devices.length>invitedAt){invitedAt=-1;clearInterval(inviteTimer);$('invite-box').hidden=true;}
     if(!devices.length)list.append(el('p','Пока ни одного устройства.','am-small am-muted'));
-    if(revoked)list.append(el('p','Отозвано устройств: '+revoked+'.','am-small am-muted am-devices-revoked'));
     devices.forEach(d=>{
       const row=el('div',undefined,'am-device'),main=el('div',undefined,'am-device-main');
       main.append(el('span',d.name,'am-device-name'));
       main.append(el('span',d.last_seen?'Был на связи '+stamp(d.last_seen):'Подключено '+stamp(d.created_at),'am-small am-muted'));
       row.append(main);
-      const b=el('button','Отозвать');b.type='button';b.addEventListener('click',()=>serverAction({action:'revoke',device:d.id},'host-status','Устройство «'+d.name+'» отозвано.'));row.append(b);
-      list.insertBefore(row,list.querySelector('.am-devices-revoked'));
+      const actions=el('div',undefined,'am-device-actions');
+      // Revoking cannot be undone (the device needs a new invitation), so it
+      // takes a second click; the window has no confirm() dialog.
+      if(revokeAsk===d.id){
+        const yes=el('button','Да, отозвать','am-danger');yes.type='button';yes.dataset.key='revoke-yes-'+d.id;
+        yes.addEventListener('click',()=>{revokeAsk='';serverAction({action:'revoke',device:d.id},'host','Устройство «'+d.name+'» отозвано.');});
+        const no=el('button','Отмена');no.type='button';no.dataset.key='revoke-no-'+d.id;
+        no.addEventListener('click',()=>{revokeAsk='';renderServer();$('host-devices').querySelector('[data-key="revoke-'+d.id+'"]')?.focus();});
+        actions.append(yes,no);
+      }else{
+        const b=el('button','Отозвать');b.type='button';b.dataset.key='revoke-'+d.id;
+        b.addEventListener('click',()=>{revokeAsk=d.id;clearTimeout(revokeTimer);revokeTimer=setTimeout(()=>{revokeAsk='';renderServer();},8000);renderServer();$('host-devices').querySelector('[data-key="revoke-yes-'+d.id+'"]')?.focus();});
+        actions.append(b);
+      }
+      row.append(actions);list.append(row);
     });
+    if(revoked)list.append(el('p','Отозвано устройств: '+revoked+'.','am-small am-muted'));
     $('host-fingerprint').textContent=h.fingerprint?'Отпечаток сертификата: '+h.fingerprint.replace(/(.{4})/g,'$1 ').trim():'';
     badge($('member-badge'),m.connected?(m.reachable?'На связи':m.checked_at?'Нет связи':'Подключено'):'Не подключено',m.connected&&m.reachable);
     $('member-join').hidden=m.connected;$('member-joined').hidden=!m.connected;
     $('member-state').textContent=m.connected?'Этот компьютер входит в сервер '+m.address+'.':'Вставьте код приглашения, который выдал сервер на другом компьютере.';
-    if(!$('member-name').value)$('member-name').value=view?.computer_name||'';
+    if(!nameFilled&&view?.computer_name){nameFilled=true;if(!$('member-name').value)$('member-name').value=view.computer_name;}
     const dl=$('member-details');dl.replaceChildren();
     const rows=[['Сервер',m.address],['Имя на сервере',m.device_name],['Подключено',stamp(m.connected_at)],['Последняя проверка',m.checked_at?stamp(m.checked_at)+(m.reachable?' — на связи':' — нет связи'):'ещё не проверяли']];
     if(m.connected)rows.forEach(([k,v])=>{if(v){dl.append(el('dt',k),el('dd',v));}});
-    if(m.error&&!$('member-status').dataset.own){$('member-status').textContent=m.error[0].toUpperCase()+m.error.slice(1);$('member-status').classList.add('am-bad');}
-    else if(!m.error&&!$('member-status').dataset.own){$('member-status').textContent='';$('member-status').classList.remove('am-bad');}
-    if(!h.error&&!$('host-status').dataset.own){$('host-status').textContent='';$('host-status').classList.remove('am-bad');}
+    const buttons=root.querySelectorAll('[data-screen=server] button');buttons.forEach(b=>b.disabled=serverBusy);
+    if(!serverBusy)$('host-invite').disabled=!h.addresses.length;
+    syncSelects();renderNotes();
+    if(focused&&document.activeElement===document.body)root.querySelector('[data-key="'+focused+'"]')?.focus();
   }
-  function say(id,text,bad){text=text?text[0].toUpperCase()+text.slice(1):'';const n=$(id);n.textContent=text;n.classList.toggle('am-bad',!!bad);if(text)n.dataset.own='1';else delete n.dataset.own;}
-  async function serverAction(body,statusId,done,button){
-    if(serverBusy)return null;serverBusy=true;
-    const buttons=root.querySelectorAll('[data-screen=server] button');buttons.forEach(b=>b.disabled=true);
-    say(statusId,body.action==='connect'||body.action==='check'?'Связываемся с сервером…':'Выполняем…');
+  async function serverAction(body,section,done){
+    if(serverBusy)return null;
+    serverBusy=true;serverGen++;
+    const focused=document.activeElement;
+    note(section,body.action==='connect'||body.action==='check'?'Связываемся с сервером…':'Выполняем…');
+    renderServer();
+    let result=null;
     try{
-      const result=await postAPI('/api/server-action',body,30000);
-      if(body.action==='invite')return result.result;
-      server=result.result;
-      if(body.action==='check'){const m=server.member;say(statusId,m.reachable?'Связь есть, устройство на сервере.':(m.error||'Связи нет.'),!m.reachable);}
-      else say(statusId,done);
-      return result.result;
-    }catch(error){say(statusId,error.message,true);return null;}
-    finally{serverBusy=false;buttons.forEach(b=>b.disabled=false);renderServer();setTimeout(()=>{const n=$(statusId);if(n.dataset.own&&!n.classList.contains('am-bad')){say(statusId,'');renderServer();}},6000);}
+      const answer=await postAPI('/api/server-action',body,28000);
+      result=answer.result;
+      if(body.action!=='invite')server=result;
+      if(body.action==='check'){const m=server.member;note(section,m.reachable?'Связь есть, устройство на сервере.':(m.error||'Связи нет.'),!m.reachable,m.reachable);}
+      else note(section,done,false,true);
+    }catch(error){note(section,error.message,true);}
+    finally{
+      serverBusy=false;serverGen++;renderServer();
+      if(focused?.isConnected&&!focused.hidden&&focused.offsetParent)focused.focus();
+      else $(section+'-title')?.focus();
+    }
+    return result;
   }
   async function enableServer(){
     const port=Number($('host-port').value);
-    if(!Number.isInteger(port)||port<1024||port>65535){say('host-status','Порт должен быть от 1024 до 65535.',true);return;}
+    if(!Number.isInteger(port)||port<1024||port>65535){note('host','Порт должен быть от 1024 до 65535.',true);return;}
     const scope=$('host-scope').value;
-    if(await serverAction({action:'enable',scope,port},'host-status',scope==='lan'?'Сервер включён и доступен в локальной сети.':'Сервер включён.'))serverEdited=false;
+    if(await serverAction({action:'enable',scope,port},'host','Сервер включён.')){
+      serverEdited=false;hideInvitation();
+      if(scope==='lan')note('host',server.host.addresses.length?'Сервер включён и слушает локальную сеть. Доступ с другого компьютера зависит от брандмауэра.':'Сервер включён, но адреса в локальной сети у компьютера нет.',false,true);
+      renderServer();
+    }
   }
   async function invite(){
-    const code=await serverAction({action:'invite',address:$('host-address').value},'host-status','');
-    if(!code)return;say('host-status','');
+    const code=await serverAction({action:'invite',address:$('host-address').value},'host','');
+    if(!code)return;
+    note('host','');invitation=code;
     $('invite-code').textContent=code.code;$('invite-box').hidden=false;$('invite-copy').textContent='Скопировать код';
     clearInterval(inviteTimer);
-    const tick=()=>{const left=Math.round((new Date(code.expires_at)-Date.now())/60000);if(left<=0){$('invite-box').hidden=true;clearInterval(inviteTimer);return;}$('invite-expiry').textContent='Действует ещё '+left+' мин., один раз.';};
-    invitedAt=(server?.host?.devices||[]).filter(d=>!d.revoked_at).length;
+    const tick=()=>{const left=Math.ceil((new Date(code.expires_at)-Date.now())/60000);if(left<=0){hideInvitation();return;}$('invite-expiry').textContent='Действует ещё '+left+' мин., один раз.';};
     tick();inviteTimer=setInterval(tick,15000);
+    // The invitation is not in the status yet; show it until the next poll.
+    server.host.open_invitations=[...(server.host.open_invitations||[]),code.id];
   }
   async function connectServer(){
     const code=$('member-code').value.trim(),name=$('member-name').value.trim();
-    if(!code){say('member-status','Вставьте код приглашения.',true);return;}
-    if(!name){say('member-status','Укажите имя этого компьютера.',true);return;}
-    if(await serverAction({action:'connect',code,name},'member-status','Подключено.'))$('member-code').value='';
+    if(!code){note('member','Вставьте код приглашения.',true);return;}
+    if(!name){note('member','Укажите имя этого компьютера.',true);return;}
+    if(await serverAction({action:'connect',code,name},'member','Подключено.'))$('member-code').value='';
   }
   let editingFolder=false;
   function openProjectDialog(edit){
@@ -664,12 +712,12 @@
   $('host-scope').addEventListener('change',()=>{serverEdited=true;});
   $('host-port').addEventListener('input',()=>{serverEdited=true;});
   $('host-enable').addEventListener('click',enableServer);
-  $('host-disable').addEventListener('click',()=>serverAction({action:'disable'},'host-status','Сервер выключен. Устройства и приглашения сохранены.').then(r=>{if(r){serverEdited=false;$('invite-box').hidden=true;}}));
+  $('host-disable').addEventListener('click',()=>serverAction({action:'disable'},'host','Сервер выключен. Устройства сохранены.').then(r=>{if(r){serverEdited=false;hideInvitation();renderServer();}}));
   $('host-invite').addEventListener('click',invite);
   $('invite-copy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('invite-code').textContent);$('invite-copy').textContent='Скопировано';}catch(_){$('invite-copy').textContent='Выделите код и скопируйте вручную';}});
   $('member-connect').addEventListener('click',connectServer);
-  $('member-check').addEventListener('click',()=>serverAction({action:'check'},'member-status',''));
-  $('member-disconnect').addEventListener('click',()=>serverAction({action:'disconnect'},'member-status','Отключено. Устройство остаётся в списке сервера, пока его там не отзовут.'));
+  $('member-check').addEventListener('click',()=>serverAction({action:'check'},'member',''));
+  $('member-disconnect').addEventListener('click',()=>serverAction({action:'disconnect'},'member','Отключено. Устройство остаётся в списке сервера, пока его там не отзовут.'));
   setInterval(()=>{if(tab==='server')loadServer();},5000);
   let initialTheme=window.messengerInitialTheme;
   if(!initialTheme)try{initialTheme=localStorage.getItem('messenger-theme');}catch(_){}

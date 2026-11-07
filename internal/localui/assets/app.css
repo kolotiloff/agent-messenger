@@ -382,3 +382,6 @@ body.am-native #am-concept .am-panel-toggle { margin-left:auto; }
 #am-concept .am-server .am-check-result { grid-template-columns:max-content minmax(0,1fr); column-gap:var(--am-space-4); row-gap:var(--am-space-2); }
 @media (max-width:520px) { #am-concept .am-server-grid { grid-template-columns:1fr; } }
 #am-concept .am-server-grid input { padding:8px 10px; }
+#am-concept .am-device-actions { display:flex; flex:none; gap:var(--am-space-2); }
+#am-concept .am-device-actions .am-danger { color:var(--am-bad); }
+#am-concept .am-server-head h3:focus { outline:none; }

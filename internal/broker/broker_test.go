@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -197,5 +198,105 @@ func TestInvitationFormat(t *testing.T) {
 	}
 	if _, _, err := net.SplitHostPort(inv.Address); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestDeviceNamesAreOnePrintableLine(t *testing.T) {
+	for _, name := range []string{"Mac\n", "a\tb", "x\x00y", "Mac‮gnp", "​", strings.Repeat("я", MaxDeviceName+1), ""} {
+		if validDeviceName(name) {
+			t.Fatalf("accepted %q", name)
+		}
+	}
+	for _, name := range []string{"Mac Studio", "Ноутбук Алексея", strings.Repeat("я", MaxDeviceName)} {
+		if !validDeviceName(name) {
+			t.Fatalf("refused %q", name)
+		}
+	}
+}
+
+func TestWrongRegistrationsAreRateLimited(t *testing.T) {
+	r := serve(t, filepath.Join(t.TempDir(), "broker"))
+	code, err := r.b.Invite(r.addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inv, _ := ParseInvitation(code.Code)
+	wrong := inv
+	wrong.Secret = strings.Repeat("0", 64)
+	for i := 0; i < maxFailedRegistrations; i++ {
+		if _, err := Register(ctx(t), wrong, "x"); !errors.Is(err, ErrInvitation) {
+			t.Fatalf("attempt %d: %v", i, err)
+		}
+	}
+	if _, err := Register(ctx(t), inv, "x"); err == nil || !strings.Contains(err.Error(), "слишком много") {
+		t.Fatalf("flood not limited: %v", err)
+	}
+	// The real invitation was not spent by the refusal.
+	var unused int
+	if err := r.b.db.QueryRow(`SELECT COUNT(*) FROM invitations WHERE used_at IS NULL`).Scan(&unused); err != nil || unused != 1 {
+		t.Fatalf("invitation %d %v", unused, err)
+	}
+}
+
+func TestOnlyLocalPeersAreAccepted(t *testing.T) {
+	for addr, want := range map[string]bool{"127.0.0.1": true, "::1": true, "192.168.1.5": true, "10.1.2.3": true, "172.16.0.9": true, "fd00::1": true, "::ffff:192.168.0.2": true, "8.8.8.8": false, "2001:db8::1": false, "100.64.0.1": false} {
+		if got := localPeer(&net.TCPAddr{IP: net.ParseIP(addr), Port: 1}); got != want {
+			t.Fatalf("%s: %v", addr, got)
+		}
+	}
+}
+
+func TestConnectionsAreBounded(t *testing.T) {
+	r := serve(t, filepath.Join(t.TempDir(), "broker"))
+	var conns []net.Conn
+	defer func() {
+		for _, c := range conns {
+			c.Close()
+		}
+	}()
+	// Idle connections that never finish TLS hold every slot.
+	for i := 0; i < maxConnections; i++ {
+		c, err := net.Dial("tcp", r.addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		conns = append(conns, c)
+	}
+	short, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+	inv := Invitation{Address: r.addr, BrokerID: r.b.ID(), Fingerprint: r.b.Fingerprint()}
+	if err := identify(short, pinnedClient(inv.Fingerprint), inv.Address, inv.BrokerID); err == nil {
+		t.Fatal("a connection past the limit was served")
+	}
+	for _, c := range conns {
+		c.Close()
+	}
+	conns = nil
+	// Freed slots are served again (the handshake timeout drops idle ones too).
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		if err := identify(ctx(t), pinnedClient(inv.Fingerprint), inv.Address, inv.BrokerID); err == nil {
+			break
+		} else if time.Now().After(deadline) {
+			t.Fatalf("slots not released: %v", err)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func TestWriteFileIgnoresAStaleTemporaryFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "secret.json")
+	if err := os.WriteFile(path+".tmp", []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeFile(path, []byte("new")); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("mode %v %v", info, err)
+	}
+	if raw, _ := os.ReadFile(path); string(raw) != "new" {
+		t.Fatalf("content %q", raw)
 	}
 }

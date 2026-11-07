@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -107,13 +108,13 @@ func pinnedClient(fingerprint string) *http.Client {
 		Proxy:                 nil,
 		DialContext:           (&net.Dialer{Timeout: 8 * time.Second}).DialContext,
 		TLSHandshakeTimeout:   8 * time.Second,
-		ResponseHeaderTimeout: 10 * time.Second,
+		ResponseHeaderTimeout: 8 * time.Second,
 		DisableKeepAlives:     true,
 		// InsecureSkipVerify only turns off the CA and host name check; the
 		// certificate is still verified against the pinned fingerprint.
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true, VerifyPeerCertificate: verify, MinVersion: tls.VersionTLS13},
 	}
-	return &http.Client{Transport: transport, Timeout: 20 * time.Second}
+	return &http.Client{Transport: transport, Timeout: 15 * time.Second}
 }
 
 // call makes one request. A pin mismatch is ErrUntrusted; an unreachable
@@ -153,7 +154,20 @@ func call(ctx context.Context, client *http.Client, method, address, path, key s
 	return resp.StatusCode, nil
 }
 
+// unwrapNet says in plain words why a server could not be reached.
 func unwrapNet(err error) error {
+	var dns *net.DNSError
+	var timeout interface{ Timeout() bool }
+	switch {
+	case errors.Is(err, syscall.ECONNREFUSED):
+		return errors.New("соединение отклонено: сервер выключен или порт закрыт")
+	case errors.As(err, &dns):
+		return errors.New("такого имени компьютера нет в сети")
+	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &timeout) && timeout.Timeout():
+		return errors.New("сервер не ответил вовремя: проверьте сеть, брандмауэр и адрес")
+	case errors.Is(err, syscall.EHOSTUNREACH), errors.Is(err, syscall.ENETUNREACH):
+		return errors.New("до этого адреса нет сети")
+	}
 	var op *net.OpError
 	if errors.As(err, &op) && op.Err != nil {
 		return op.Err
@@ -197,6 +211,8 @@ func Register(ctx context.Context, inv Invitation, name string) (Connection, err
 	case http.StatusOK:
 	case http.StatusForbidden:
 		return Connection{}, ErrInvitation
+	case http.StatusTooManyRequests:
+		return Connection{}, errors.New("сервер получил слишком много неверных приглашений; подождите минуту и повторите")
 	case http.StatusBadRequest:
 		return Connection{}, fmt.Errorf("имя устройства: 1..%d символов в одну строку", MaxDeviceName)
 	default:
