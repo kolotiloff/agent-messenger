@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/kolotiloff/agent-messenger/internal/broker"
@@ -29,6 +30,9 @@ func netComputer(t *testing.T, ctx context.Context, name string) (*Supervisor, s
 		t.Fatal(err)
 	}
 	cli := filepath.Join(root, "codex")
+	if runtime.GOOS == "windows" {
+		cli += ".exe"
+	}
 	if err := os.WriteFile(cli, []byte("#!/bin/sh\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
