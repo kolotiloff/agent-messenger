@@ -471,7 +471,7 @@ func writeJSON(w http.ResponseWriter, value any) {
 }
 
 // serverActions are the window's server settings actions.
-var serverActions = map[string]bool{"enable": true, "disable": true, "invite": true, "revoke": true, "connect": true, "check": true, "disconnect": true}
+var serverActions = map[string]bool{"enable": true, "disable": true, "invite": true, "revoke": true, "connect": true, "check": true, "disconnect": true, "accept": true}
 
 func taskMutation(path string) bool {
 	switch path {
@@ -515,6 +515,7 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 			Device  string `json:"device,omitempty"`
 			Code    string `json:"code,omitempty"`
 			Name    string `json:"name,omitempty"`
+			On      bool   `json:"on,omitempty"`
 		}
 		if decoder.Decode(&in) != nil || !serverActions[in.Action] || len(in.Scope) > 16 || in.Port < 0 || in.Port > 65535 || len(in.Address) > 255 || len(in.Device) > 64 || len(in.Code) > 2048 || len(in.Name) > 256 {
 			return control.Request{}, false

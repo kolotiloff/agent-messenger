@@ -203,8 +203,11 @@ type Task struct {
 	// They never cause a retry.
 	FailureReason, FailureReset string
 	CancelRequested             bool
-	Version                     int
-	OpenQuestion                *TaskQuestion
+	// FromNetwork marks a task another computer started (T-037). This
+	// computer runs it; only the other computer's coordinator manages it.
+	FromNetwork  bool
+	Version      int
+	OpenQuestion *TaskQuestion
 }
 
 // TaskQuestion is a question that a verified run asked.
@@ -463,9 +466,28 @@ func (s *Store) ComputerAgents() ([]ComputerAgent, error) {
 }
 
 func insertTaskEvent(tx *sql.Tx, project, task, audience, kind, text, question string) error {
-	_, err := tx.Exec(`INSERT INTO task_events(project,task_id,audience,kind,text,question_id,created_at) VALUES (?,?,?,?,?,?,?)`,
-		project, task, audience, kind, text, nullString(sql.NullString{String: question, Valid: question != ""}), now())
-	return err
+	link, err := taskLink(tx, task)
+	if err != nil {
+		return err
+	}
+	// The event of a task another computer started is history here: this
+	// computer's coordinator neither started nor manages it. The other
+	// computer gets it with its real audience.
+	sent := audience
+	if link.origin != nil {
+		audience = AudienceLog
+	}
+	if _, err := tx.Exec(`INSERT INTO task_events(project,task_id,audience,kind,text,question_id,created_at) VALUES (?,?,?,?,?,?,?)`,
+		project, task, audience, kind, text, nullString(sql.NullString{String: question, Valid: question != ""}), now()); err != nil {
+		return err
+	}
+	// An event of a task another computer started also goes back to it,
+	// in the same transaction (T-037). History events and answers stay
+	// here: the other computer records its own.
+	if link.origin == nil || sent == AudienceLog || kind == "answered" {
+		return nil
+	}
+	return forwardTaskEvent(tx, *link.origin, task, sent, kind, text, question)
 }
 
 func taskTitle(title, text string) string {
@@ -500,8 +522,9 @@ func ValidTaskModel(name string) bool { return name == "" || taskModelPattern.Ma
 // StartTask records a task and its first run's launch intent in one
 // transaction, before anything is launched. The task runs in the project's
 // folder on the chosen computer; a computer without a folder for the project,
-// or without the agent, refuses it. Only this computer is supported until the
-// broker exists. It returns the task ID and whether it was newly created.
+// or without the agent, refuses it. A task for another computer of the
+// network is sent to it (network.go). It returns the task ID and whether it
+// was newly created.
 func (s *Store) StartTask(r StartTaskRequest) (string, bool, error) {
 	r.Text = strings.TrimSpace(r.Text)
 	if r.OpID == "" || len(r.OpID) > 128 || r.Text == "" || utf8.RuneCountInString(r.Text) > MaxTaskText {
@@ -543,52 +566,65 @@ func (s *Store) StartTask(r StartTaskRequest) (string, bool, error) {
 			return fmt.Errorf("%w: unknown project", ErrRejected)
 		}
 		if r.Computer != computer {
-			return fmt.Errorf("%w: only this computer can run tasks until the network broker exists", ErrRejected)
+			id, err = startRemoteTask(tx, r)
+		} else {
+			id, err = startLocalTask(tx, r, computer, nil)
 		}
-		var folder string
-		if err := tx.QueryRow(`SELECT folder FROM project_folders WHERE project=? AND computer=?`, r.Project, computer).Scan(&folder); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return fmt.Errorf("%w: this computer has no folder for the project; the owner chooses it in the window", ErrRejected)
-			}
-			return err
-		}
-		if info, err := os.Stat(folder); err != nil || !info.IsDir() {
-			return fmt.Errorf("%w: the project folder is missing on this computer", ErrRejected)
-		}
-		var agent ComputerAgent
-		if err := tx.QueryRow(`SELECT cli_path,environment,profile FROM computer_agents WHERE computer=? AND provider=?`, computer, r.Provider).Scan(&agent.CLI, &agent.Environment, &agent.Profile); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return fmt.Errorf("%w: agent %s is not set up on this computer", ErrRejected, r.Provider)
-			}
-			return err
-		}
-		id, err = randomID()
-		if err != nil {
-			return err
-		}
-		id = "task-" + id[:16]
-		var session sql.NullString
-		if r.Provider == "claude" {
-			// Claude takes a caller-chosen ID, recorded before launch. Codex
-			// issues its own; it is bound once from the first run's events.
-			uuid, err := NewSessionUUID()
-			if err != nil {
-				return err
-			}
-			session = sql.NullString{String: uuid, Valid: true}
-		}
-		at := now()
-		if _, err := tx.Exec(`INSERT INTO tasks(id,project,op_id,computer,provider,cli_path,environment,profile,folder,title,text,state,session_id,created_at,updated_at,model) VALUES (?,?,?,?,?,?,?,?,?,?,?,'running',?,?,?,?)`,
-			id, r.Project, r.OpID, computer, r.Provider, agent.CLI, agent.Environment, agent.Profile, folder, taskTitle(r.Title, r.Text), r.Text, nullString(session), at, at, r.Model); err != nil {
-			return err
-		}
-		if err := insertTaskRun(tx, id, 1, "start", r.Text); err != nil {
-			return err
-		}
-		created = true
-		return insertTaskEvent(tx, r.Project, id, AudienceLog, "started", taskTitle(r.Title, r.Text), "")
+		created = err == nil
+		return err
 	})
 	return id, created, err
+}
+
+// startLocalTask records a task of this computer and its first run's launch
+// intent. origin is set for a task another computer started (T-037).
+func startLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, origin *netLink) (string, error) {
+	var folder string
+	if err := tx.QueryRow(`SELECT folder FROM project_folders WHERE project=? AND computer=?`, r.Project, computer).Scan(&folder); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", fmt.Errorf("%w: this computer has no folder for the project; the owner chooses it in the window", ErrRejected)
+		}
+		return "", err
+	}
+	if info, err := os.Stat(folder); err != nil || !info.IsDir() {
+		return "", fmt.Errorf("%w: the project folder is missing on this computer", ErrRejected)
+	}
+	var agent ComputerAgent
+	if err := tx.QueryRow(`SELECT cli_path,environment,profile FROM computer_agents WHERE computer=? AND provider=?`, computer, r.Provider).Scan(&agent.CLI, &agent.Environment, &agent.Profile); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", fmt.Errorf("%w: agent %s is not set up on this computer", ErrRejected, r.Provider)
+		}
+		return "", err
+	}
+	id, err := randomID()
+	if err != nil {
+		return "", err
+	}
+	id = "task-" + id[:16]
+	var session sql.NullString
+	if r.Provider == "claude" {
+		// Claude takes a caller-chosen ID, recorded before launch. Codex
+		// issues its own; it is bound once from the first run's events.
+		uuid, err := NewSessionUUID()
+		if err != nil {
+			return "", err
+		}
+		session = sql.NullString{String: uuid, Valid: true}
+	}
+	at := now()
+	if _, err := tx.Exec(`INSERT INTO tasks(id,project,op_id,computer,provider,cli_path,environment,profile,folder,title,text,state,session_id,created_at,updated_at,model) VALUES (?,?,?,?,?,?,?,?,?,?,?,'running',?,?,?,?)`,
+		id, r.Project, r.OpID, computer, r.Provider, agent.CLI, agent.Environment, agent.Profile, folder, taskTitle(r.Title, r.Text), r.Text, nullString(session), at, at, r.Model); err != nil {
+		return "", err
+	}
+	if origin != nil {
+		if _, err := tx.Exec(`UPDATE tasks SET origin_broker=?,origin_peer=?,origin_task=? WHERE id=?`, origin.broker, origin.peer, origin.task, id); err != nil {
+			return "", err
+		}
+	}
+	if err := insertTaskRun(tx, id, 1, "start", r.Text); err != nil {
+		return "", err
+	}
+	return id, insertTaskEvent(tx, r.Project, id, AudienceLog, "started", taskTitle(r.Title, r.Text), "")
 }
 
 func insertTaskRun(tx *sql.Tx, task string, ordinal int, kind, input string) error {
@@ -604,13 +640,13 @@ func insertTaskRun(tx *sql.Tx, task string, ordinal int, kind, input string) err
 	return err
 }
 
-const taskColumns = `id,project,computer,provider,profile,folder,title,text,state,COALESCE(session_id,''),detail,created_at,updated_at,COALESCE(finished_at,''),cli_path,environment,cancel_requested,version,COALESCE(model,''),COALESCE(failure_reason,''),COALESCE(failure_reset,'')`
+const taskColumns = `id,project,computer,provider,profile,folder,title,text,state,COALESCE(session_id,''),detail,created_at,updated_at,COALESCE(finished_at,''),cli_path,environment,cancel_requested,version,COALESCE(model,''),COALESCE(failure_reason,''),COALESCE(failure_reset,''),origin_peer IS NOT NULL`
 
 func scanTask(scan func(...any) error) (Task, error) {
 	var t Task
-	var cancel int
-	err := scan(&t.ID, &t.Project, &t.Computer, &t.Provider, &t.Profile, &t.Folder, &t.Title, &t.Text, &t.State, &t.SessionID, &t.Detail, &t.CreatedAt, &t.UpdatedAt, &t.FinishedAt, &t.CLI, &t.Environment, &cancel, &t.Version, &t.Model, &t.FailureReason, &t.FailureReset)
-	t.CancelRequested = cancel != 0
+	var cancel, origin int
+	err := scan(&t.ID, &t.Project, &t.Computer, &t.Provider, &t.Profile, &t.Folder, &t.Title, &t.Text, &t.State, &t.SessionID, &t.Detail, &t.CreatedAt, &t.UpdatedAt, &t.FinishedAt, &t.CLI, &t.Environment, &cancel, &t.Version, &t.Model, &t.FailureReason, &t.FailureReset, &origin)
+	t.CancelRequested, t.FromNetwork = cancel != 0, origin != 0
 	return t, err
 }
 
@@ -1171,6 +1207,12 @@ func publishDisposition(tx *sql.Tx, t Task, r TaskRun) error {
 // question must be the newest open one and addressed to by (coordinator or
 // owner); a late or stale answer is refused.
 func (s *Store) AnswerTask(task, question, opID, text, by string) error {
+	return s.tx(func(tx *sql.Tx) error { return answerTask(tx, task, question, opID, text, by, false) })
+}
+
+// answerTask answers in tx. fromNetwork is set when the computer that
+// started the task sends the answer; nobody else answers such a task.
+func answerTask(tx *sql.Tx, task, question, opID, text, by string, fromNetwork bool) error {
 	text = strings.TrimSpace(text)
 	if opID == "" || len(opID) > 128 || text == "" || utf8.RuneCountInString(text) > MaxTaskText {
 		return fmt.Errorf("%w: answer needs an operation id and 1..%d characters", ErrRejected, MaxTaskText)
@@ -1178,7 +1220,7 @@ func (s *Store) AnswerTask(task, question, opID, text, by string) error {
 	if by != AudienceCoordinator && by != AudienceOwner {
 		return fmt.Errorf("%w: unknown answerer", ErrRejected)
 	}
-	return s.tx(func(tx *sql.Tx) error {
+	{
 		var qTask, audience, state string
 		var oldOp, oldAnswer sql.NullString
 		err := tx.QueryRow(`SELECT task_id,audience,state,answer_op,answer FROM task_questions WHERE id=?`, question).Scan(&qTask, &audience, &state, &oldOp, &oldAnswer)
@@ -1211,8 +1253,12 @@ func (s *Store) AnswerTask(task, question, opID, text, by string) error {
 		if t.State != want || t.CancelRequested {
 			return fmt.Errorf("%w: task is %s", ErrRejected, t.State)
 		}
-		if t.SessionID == "" {
-			return fmt.Errorf("%w: no recorded conversation to resume", ErrRejected)
+		link, err := taskLink(tx, task)
+		if err != nil {
+			return err
+		}
+		if link.origin != nil && !fromNetwork {
+			return fmt.Errorf("%w: another computer started this task; it is answered there", ErrRejected)
 		}
 		var used int
 		if err := tx.QueryRow(`SELECT COUNT(*) FROM task_questions WHERE answer_op=?`, opID).Scan(&used); err != nil {
@@ -1220,6 +1266,12 @@ func (s *Store) AnswerTask(task, question, opID, text, by string) error {
 		}
 		if used != 0 {
 			return fmt.Errorf("%w: this operation id was used for another answer", ErrRejected)
+		}
+		if link.remote != nil {
+			return answerRemoteTask(tx, t, *link.remote, question, opID, text, by)
+		}
+		if t.SessionID == "" {
+			return fmt.Errorf("%w: no recorded conversation to resume", ErrRejected)
 		}
 		var ordinal int
 		if err := tx.QueryRow(`SELECT MAX(ordinal) FROM task_runs WHERE task_id=?`, task).Scan(&ordinal); err != nil {
@@ -1239,7 +1291,7 @@ func (s *Store) AnswerTask(task, question, opID, text, by string) error {
 			answeredFor = AudienceOwner
 		}
 		return insertTaskEvent(tx, t.Project, task, answeredFor, "answered", text, question)
-	})
+	}
 }
 
 // CancelTask cancels a task. A task that is waiting, or whose run is only
@@ -1250,6 +1302,17 @@ func (s *Store) AnswerTask(task, question, opID, text, by string) error {
 func (s *Store) CancelTask(task string) (string, error) {
 	var state string
 	err := s.tx(func(tx *sql.Tx) error {
+		var err error
+		state, err = cancelTask(tx, task)
+		return err
+	})
+	return state, err
+}
+
+// cancelTask cancels in tx and returns the resulting state.
+func cancelTask(tx *sql.Tx, task string) (string, error) {
+	var state string
+	err := func() error {
 		t, err := scanTask(tx.QueryRow(`SELECT `+taskColumns+` FROM tasks WHERE id=?`, task).Scan)
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("%w: unknown task", ErrRejected)
@@ -1258,6 +1321,12 @@ func (s *Store) CancelTask(task string) (string, error) {
 			return err
 		}
 		state = t.State
+		if link, err := taskLink(tx, task); err != nil {
+			return err
+		} else if link.remote != nil && t.State != "cancelled" {
+			state, err = cancelRemoteTask(tx, t, *link.remote)
+			return err
+		}
 		switch t.State {
 		case "cancelled":
 			return nil
@@ -1293,7 +1362,7 @@ func (s *Store) CancelTask(task string) (string, error) {
 		default:
 			return fmt.Errorf("%w: task is %s", ErrRejected, t.State)
 		}
-	})
+	}()
 	return state, err
 }
 
@@ -1473,9 +1542,10 @@ type ComputerSummary struct {
 	Note     string         `json:"note,omitempty"`
 }
 
-// ProjectAgents lists the computers for a project: today only this one. A
-// computer without the project's folder is listed with a note; it refuses
-// the project's tasks (D-025).
+// ProjectAgents lists the computers for a project: this one, then the other
+// computers of its network with the agents they reported. A computer without
+// the project's folder refuses the project's tasks (D-025); for another
+// computer that is only known when it answers.
 func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 	var c ComputerSummary
 	err := s.tx(func(tx *sql.Tx) error {
@@ -1511,5 +1581,18 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"project": project, "computers": []ComputerSummary{c}}, nil
+	list := []ComputerSummary{c}
+	peers, err := s.NetPeers()
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range peers {
+		o := ComputerSummary{Computer: p.ID, Name: p.Name, Online: p.Age >= 0 && p.Age <= PeerFresh, Agents: []AgentSummary{},
+			Note: "another computer of the network: it runs the task only if its owner allows tasks from other computers and it has this project's folder; otherwise the task fails with its reason"}
+		for _, a := range p.Agents {
+			o.Agents = append(o.Agents, AgentSummary{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting})
+		}
+		list = append(list, o)
+	}
+	return map[string]any{"project": project, "computers": list}, nil
 }

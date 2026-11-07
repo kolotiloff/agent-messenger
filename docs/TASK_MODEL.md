@@ -9,7 +9,7 @@ A **project** has a name and, on each computer, at most one folder (`project_fol
 - not a temporary folder;
 - not the disk root.
 
-A task records the folder it was started with, so changing the folder affects only new tasks. A computer without a folder for the project refuses the project's tasks. Until the network broker exists, only this computer runs tasks; it has a stable random ID (`meta.computer_id`).
+A task records the folder it was started with, so changing the folder affects only new tasks. A computer without a folder for the project refuses the project's tasks. Each computer has a stable random ID (`meta.computer_id`); another computer of the network is addressed by its broker ID (below).
 
 **Agents** are registered per computer (`computer_agents`): provider (`claude` or `codex`; Cursor stays off), the CLI path, an optional profile directory, and the worker profile:
 - `worker`: normal tools and the project's settings (D-023);
@@ -143,3 +143,15 @@ Verified in headless Chromium (Linux) on a test data directory, in light and dar
 - the Agents tab.
 
 The page logged no errors. Not verified: the Mac app (WKWebView, the folder panel bridge); that needs the next build.
+
+## Tasks between computers (T-037)
+
+A coordinator on computer A can give a task to an agent on computer B of the same network (D-041). `list_agents` lists B with the agents it reported and whether it is online; `start_task` takes B's ID (`host` or `dev-…`) as `computer`.
+
+- **On A** the task is a *remote task*: it has no runs and launches nothing. It records `remote_broker` and `remote_peer`. Its state, questions, report and outcome are what B reports. Its feed is built from those events; the worker's own text and tool lines stay on B.
+- **On B** the task is an ordinary task (a *mirror*, with `origin_broker`, `origin_peer`, `origin_task`) that runs in B's folder of the project with the same name. It is verified exactly like a local task. Only A answers its questions: B's window shows the question but does not offer to answer it, and B's own coordinator does not see the task (its events are history on B). B's owner may still stop it.
+- **B accepts** a task only if its owner turned on «Задачи других компьютеров» on the «Сервер» tab (off by default, Q-014), a project with that name has a folder on B, and the agent is set up there. Otherwise A's task fails with B's reason.
+- **Messages** (`net_outbox`, written in the same transaction as the change they report): A→B `start`, `answer`, `cancel`; B→A `accepted` (with B's folder), `refused`, `event` (an event for the coordinator or the owner with the state after it), `answer_refused`. The client sends the outbox in order and reads its inbox every 3 s. Every message is applied once (`net_applied`) together with the read cursor.
+- **Delivery retries** (D-042). A message the broker did not confirm is sent again in the next round with the same operation ID. This repeats a delivery, never an action: the broker stores an operation once and the receiver applies it once. When the broker refuses a message because the other computer left the network, a `start` fails its task (it never reached B) and an `answer` or `cancel` blocks it (what happens on B is unknown). Nothing is retried after that.
+- **Cancel.** A start that has not left A yet is withdrawn and the task is cancelled at once. Otherwise A asks B and shows the task as running until B reports the outcome.
+- **Not covered.** A remote task whose network changed or whose computer is unreachable keeps its last state; there is no timeout. A computer that joined its own server receives tasks only under `host`.

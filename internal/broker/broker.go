@@ -7,8 +7,8 @@
 // the device pins the certificate instead of trusting any TLS server. After
 // registration the device holds a revocable key; the broker stores only its
 // hash. Computers report their agents (presence.go) so every computer can
-// list the others. Exchanging tasks between computers is not part of this
-// package yet.
+// list the others, and carries messages between them (mailbox.go), which is
+// how tasks travel from one computer to another (T-037).
 package broker
 
 import (
@@ -131,6 +131,9 @@ CREATE TABLE IF NOT EXISTS invitations(secret_hash TEXT PRIMARY KEY, created_at 
 		return err
 	}
 	if err := b.initPresence(); err != nil {
+		return err
+	}
+	if err := b.initMailbox(); err != nil {
 		return err
 	}
 	err := b.db.QueryRow(`SELECT value FROM meta WHERE key='broker_id'`).Scan(&b.id)
@@ -426,7 +429,7 @@ func (b *Broker) Revoke(id string) error {
 	if n, _ := res.RowsAffected(); n != 1 {
 		return errors.New("такого действующего устройства нет")
 	}
-	return nil
+	return b.forget(id)
 }
 
 // Listen takes the broker's serving lock and opens a TLS listener. Only one
@@ -607,6 +610,8 @@ func (b *Broker) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, PingResult{BrokerID: b.id, DeviceID: d.ID, Name: d.Name, Time: d.LastSeen})
 	})
 	mux.HandleFunc("/v1/presence", b.handlePresence)
+	mux.HandleFunc("/v1/send", b.handleSend)
+	mux.HandleFunc("/v1/inbox", b.handleInbox)
 	return mux
 }
 

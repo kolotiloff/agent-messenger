@@ -88,6 +88,34 @@ type WindowTask struct {
 	// FailureReason and FailureReset explain a failed task (T-034).
 	FailureReason string `json:"failure_reason,omitempty"`
 	FailureReset  string `json:"failure_reset,omitempty"`
+	// Remote names the other computer of a task between computers: the one
+	// that runs it, or (From) the one that started it.
+	Remote *RemoteComputer `json:"remote,omitempty"`
+}
+
+// RemoteComputer is the other computer of a task (T-037).
+type RemoteComputer struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	From bool   `json:"from,omitempty"`
+}
+
+func (s *Store) remoteOf(task string) (*RemoteComputer, error) {
+	var out *RemoteComputer
+	err := s.tx(func(tx *sql.Tx) error {
+		link, err := taskLink(tx, task)
+		if err != nil {
+			return err
+		}
+		switch {
+		case link.remote != nil:
+			out = &RemoteComputer{ID: link.remote.peer, Name: peerName(tx, link.remote.peer)}
+		case link.origin != nil:
+			out = &RemoteComputer{ID: link.origin.peer, Name: peerName(tx, link.origin.peer), From: true}
+		}
+		return nil
+	})
+	return out, err
 }
 
 func (s *Store) startedAt(task string) (string, error) {
@@ -223,6 +251,9 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 		if w.StartedAt, err = s.startedAt(t.ID); err != nil {
 			return v, err
 		}
+		if w.Remote, err = s.remoteOf(t.ID); err != nil {
+			return v, err
+		}
 		v.Tasks = append(v.Tasks, w)
 	}
 	return v, nil
@@ -272,7 +303,14 @@ func (s *Store) TaskFeed(id string) (TaskFeed, error) {
 	if f.Task.StartedAt, err = s.startedAt(t.ID); err != nil {
 		return f, err
 	}
+	if f.Task.Remote, err = s.remoteOf(t.ID); err != nil {
+		return f, err
+	}
 	f.Items = []FeedItem{{Kind: "task", Author: AudienceCoordinator, Text: t.Text, At: t.CreatedAt, Verified: true}}
+	if f.Task.Remote != nil && !f.Task.Remote.From {
+		err = s.remoteFeed(&f)
+		return f, err
+	}
 	err = s.tx(func(tx *sql.Tx) error {
 		runs, err := tx.Query(`SELECT r.id,r.ordinal,r.kind,r.input,r.state,COALESCE(r.disposition,''),COALESCE(r.disposition_text,''),r.created_at,COALESCE(r.finished_at,''),r.detail,
  COALESCE((SELECT answered_by FROM task_questions q WHERE q.task_id=r.task_id AND q.answer=r.input AND q.state='answered' ORDER BY q.rowid DESC LIMIT 1),'coordinator')
@@ -337,6 +375,39 @@ func (s *Store) TaskFeed(id string) (TaskFeed, error) {
 		return nil
 	})
 	return f, err
+}
+
+// remoteFeed builds the feed of a task that runs on another computer from
+// the events it reported: its questions, the answers sent from here, its
+// report and outcome. The worker's own text and tool actions stay on the
+// computer that ran it.
+func (s *Store) remoteFeed(f *TaskFeed) error {
+	rows, err := s.db.Query(`SELECT audience,kind,text,created_at FROM task_events WHERE task_id=? ORDER BY seq`, f.Task.ID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var audience, kind, text, at string
+		if err := rows.Scan(&audience, &kind, &text, &at); err != nil {
+			return err
+		}
+		switch kind {
+		case "question":
+			f.Items = append(f.Items, FeedItem{Kind: "question", Author: "worker", Text: text, At: at, Verified: true, Audience: audience, State: "finished"})
+		case "answered":
+			by := AudienceCoordinator
+			if audience == AudienceOwner {
+				by = AudienceOwner
+			}
+			f.Items = append(f.Items, FeedItem{Kind: "answer", Author: by, Text: text, At: at, Verified: true})
+		case "report":
+			f.Items = append(f.Items, FeedItem{Kind: "report", Author: "worker", Text: text, At: at, Verified: true, State: "finished"})
+		case "failed", "blocked", "interrupted", "cancelled":
+			f.Items = append(f.Items, FeedItem{Kind: "outcome", Author: "messenger", Text: text, At: at, State: kind, Verified: true})
+		}
+	}
+	return rows.Err()
 }
 
 // WindowAnswer is the owner's answer from the window: only to an open owner

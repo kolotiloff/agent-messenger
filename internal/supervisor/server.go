@@ -28,6 +28,7 @@ func (s *Supervisor) Server(_ context.Context, action string, payload json.RawMe
 		Device  string `json:"device"`
 		Code    string `json:"code"`
 		Name    string `json:"name"`
+		On      bool   `json:"on"`
 	}
 	if len(payload) > 0 {
 		if err := json.Unmarshal(payload, &in); err != nil {
@@ -64,10 +65,20 @@ func (s *Supervisor) Server(_ context.Context, action string, payload json.RawMe
 		if err := s.server.Disconnect(); err != nil {
 			return nil, err
 		}
+	case "accept":
+		if err := s.store.SetNetAccept(in.On); err != nil {
+			return nil, err
+		}
 	default:
 		return nil, errors.New("неизвестное действие сервера")
 	}
-	return s.server.Status(), nil
+	st := s.server.Status()
+	accept, err := s.store.NetAccept()
+	if err != nil {
+		return nil, err
+	}
+	st.Accept, st.Network = accept, s.networkProblem()
+	return st, nil
 }
 
 // presence describes this computer's agents for its network: the agent

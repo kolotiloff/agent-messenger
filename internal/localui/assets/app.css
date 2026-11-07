@@ -363,6 +363,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-server-grid { display:grid; grid-template-columns:minmax(0,1fr) 120px auto; align-items:end; gap:var(--am-gap-content); }
 #am-concept .am-invite-row { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:end; gap:var(--am-gap-content); }
 /* Both buttons sit in one cell; the hidden one still sizes it. */
+#am-concept .am-accept-row { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:var(--am-gap-content); }
+#am-concept .am-accept-row > p { margin:0; }
 #am-concept .am-swap { display:grid; }
 #am-concept .am-swap > button { grid-area:1/1; }
 #am-concept .am-swap > [aria-hidden=true] { visibility:hidden; }
@@ -425,7 +427,7 @@ body.am-native #am-concept .am-titlebar { display:none; }
   #am-concept .am-server-layout { grid-template-columns:minmax(0,570px); grid-template-areas:"aside" "main"; }
   #am-concept .am-server-aside { position:static; }
 }
-@media (max-width:520px) { #am-concept :is(.am-server-grid,.am-invite-row) { grid-template-columns:1fr; } }
+@media (max-width:520px) { #am-concept :is(.am-server-grid,.am-invite-row,.am-accept-row) { grid-template-columns:1fr; } }
 @media (max-height:700px) { #am-concept .am-main { padding-block:var(--am-space-3); } #am-concept .am-compose { padding-top:var(--am-space-2); } }
 @media (pointer:coarse) { #am-concept button { min-height:44px; } }
 @media (prefers-reduced-motion:no-preference) { #am-concept button { transition:background-color .12s ease; } }

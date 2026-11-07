@@ -2,6 +2,12 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-07 — Claude Code (T-037 tasks between computers)
+
+- PR #49 merged, preview.30 released (run 42370126728).
+- Branch `claude/t037-network-tasks`: broker mailbox, remote and mirror tasks in the store (schema 3), the client's 3-second exchange, `list_agents`/`start_task` across computers, the accept switch on «Сервер» (off by default, Q-014). D-041, D-042.
+- No real model calls; Cursor not run; Mac app not run. Two clients on one Linux machine exchanged a task through the window API and the coordinator.
+
 ## 2026-11-07 — Claude Code (T-015 «Сервер» tab polish)
 
 - Branch `claude/t015-status-style`: one status style, one-row server controls with locked fields, tooltips instead of hint lines, joined devices in the sidebar with a right-click «Отозвать», icon copy in the invitation, quiet update block, font-measured text centring. The owner approved it on a live preview; released as preview.29.

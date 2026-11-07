@@ -36,6 +36,9 @@ The owner asked to clean the program of old code. The old "message a live sessio
 ### Q-013: Where should a computer keep its broker device key?
 DEPLOYMENT.md asks for the OS secure storage (Keychain on the Mac). Today the key is in `server-connection.json` in the data directory with mode 0600, readable by the owner's account only; the window and `status` never show it. **Options:** Keychain on the Mac and the Windows credential store, with the file keeping only a reference; or keep the 0600 file. **Chosen for now:** the 0600 file, because nothing crosses computers yet and the Keychain needs Mac-side work that cannot be tested here. **Blocks:** the rest of T-015 (before tasks travel between computers).
 
+### Q-014: Should a computer run tasks of other computers by default?
+With T-037 a coordinator on one computer can start a worker on another computer of the network. **Chosen (cautious):** off until the owner turns on «Задачи других компьютеров» on the «Сервер» tab of the computer that would run them; a refused task fails with the reason. **Alternative:** on by default for every computer the owner invited. Please confirm or change.
+
 ## Answered
 
 ### Q-009: How does the window allow task launches?
