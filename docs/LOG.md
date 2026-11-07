@@ -6,6 +6,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 - PR #55 (Cursor) merged into PR #54; PR #54 squash-merged to `main` (56ee506); PR #53 closed (its commit was already in #54).
 - The first preview.33 release run (42386214790) stopped in `check.sh`: `TestWindowAuthorizationIsScopedIdempotentAndNotRestored` saw a model start for a refused session. Cause: the window's grant (Claude test session and Codex setup) opened model calls before the store refused the alias, and withdrew them after; the 30 ms loop could claim the refused session's queued message in between. Now the store is checked first (`CheckAuthorizeSetup`, `AliasInUse`) and only then the grant is made. A new test repeats refused grants with the loop running and failed every time before the fix.
+- PR #56 merged (3ae2058); preview.33 released (run 42388079985, 21 assets). Checked here: downloads via the README links, SHA-256, `version`, and the Linux amd64 update signatures against the app's key.
 
 ## 2026-11-07 — Claude Code (T-012 Cursor tasks)
 
