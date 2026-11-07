@@ -228,6 +228,13 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-screen { flex:1; min-width:0; min-height:0; overflow:auto; scrollbar-gutter:stable; padding-inline:var(--am-pane-inset) calc(var(--am-pane-inset) - var(--am-gutter, 0px)); }
 #am-concept .am-empty { margin:var(--am-space-6) 0; text-align:center; }
 #am-concept .am-connect { margin:var(--am-space-6) auto 0; }
+#am-concept .am-connect > button { align-self:flex-start; }
+#am-concept .am-message-group.am-connect { margin:0; }
+#am-concept .am-connect .am-message-content { display:flex; flex-direction:column; align-items:flex-start; gap:var(--am-space-2); }
+#am-concept .am-connect .am-message-content p { margin:0; }
+#am-concept .am-connect-title { font-weight:600; }
+#am-concept .am-connect .am-message-content details { align-self:stretch; }
+#am-concept .am-connect details button { margin-top:var(--am-space-2); }
 
 /* Tasks screen: the task feed and the task list beside it. */
 #am-concept .am-chat-layout { display:grid; grid-template-columns:minmax(0,1fr) 240px; height:100%; min-height:0; position:relative; }

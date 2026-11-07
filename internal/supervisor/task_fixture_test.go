@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"github.com/kolotiloff/agent-messenger/internal/adapters"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,7 +27,7 @@ func taskWorkerFixture(mode string) int {
 	}
 	wd, _ := os.Getwd()
 	if logPath := os.Getenv("MESSENGER_TASK_LOG"); logPath != "" {
-		line, _ := json.Marshal(map[string]any{"args": args, "cwd": wd})
+		line, _ := json.Marshal(map[string]any{"args": args, "cwd": wd, "worker_run": os.Getenv(adapters.WorkerRunVariable)})
 		if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
 			f.Write(append(line, '\n'))
 			f.Close()

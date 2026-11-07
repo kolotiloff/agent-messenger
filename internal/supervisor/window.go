@@ -24,6 +24,9 @@ type windowView struct {
 	// Messenger and DataRoot build the coordinator connection command.
 	Messenger string `json:"messenger"`
 	DataRoot  string `json:"data_root"`
+	// CoordinatorLink says whether Claude has the coordinator for the
+	// project folder; filled only while no coordinator chat is connected.
+	CoordinatorLink *CoordinatorLinkView `json:"coordinator_link,omitempty"`
 }
 
 // WindowView returns the selected project's view with folder trust per agent.
@@ -49,6 +52,10 @@ func (s *Supervisor) WindowView(project string) (any, error) {
 	out.Paused, _ = s.store.Paused()
 	out.Messenger, _ = os.Executable()
 	out.DataRoot = s.root
+	if v.Project != "" && !v.Coordinator.Connected {
+		link := s.CoordinatorLinkState(v.Project)
+		out.CoordinatorLink = &link
+	}
 	return out, nil
 }
 

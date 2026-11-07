@@ -207,6 +207,10 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			}
 			deadline = selfUpdateDeadline
 		}
+		if r.URL.Path == "/api/coordinator-connect" {
+			// One `claude mcp add` run, bounded at 30 s by the client.
+			deadline = 45 * time.Second
+		}
 		if r.URL.Path == "/api/restart-client" {
 			// Waits for the old client to exit and the new one to confirm.
 			deadline = 45 * time.Second
@@ -501,7 +505,7 @@ var serverActions = map[string]bool{"enable": true, "disable": true, "invite": t
 
 func taskMutation(path string) bool {
 	switch path {
-	case "/api/project-create", "/api/project-folder", "/api/task-answer", "/api/agent-set", "/api/task-cancel", "/api/server-action":
+	case "/api/project-create", "/api/project-folder", "/api/task-answer", "/api/agent-set", "/api/task-cancel", "/api/server-action", "/api/coordinator-connect":
 		return true
 	}
 	return false
@@ -521,6 +525,14 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 		}
 		cmd := strings.TrimPrefix(path, "/api/")
 		return control.Request{Cmd: cmd, Alias: in.Name, Workspace: in.Folder}, true
+	case "/api/coordinator-connect":
+		var in struct {
+			Project string `json:"project"`
+		}
+		if decoder.Decode(&in) != nil || !core.ValidProjectName(in.Project) {
+			return control.Request{}, false
+		}
+		return control.Request{Cmd: "coordinator-connect", Alias: in.Project}, true
 	case "/api/task-answer":
 		var in struct {
 			Task     string `json:"task"`

@@ -122,6 +122,7 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	}
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Env = append(ProfileEnvironment(os.Environ(), task.Provider, task.Environment), adapters.TaskEnv(spec)...)
+	cmd.Env = append(cmd.Env, adapters.WorkerRunVariable+"="+spec.RunID)
 	cmd.Dir = task.Folder
 	cmd.Stderr = io.Discard
 	if err := platform.SetNewGroup(cmd); err != nil {

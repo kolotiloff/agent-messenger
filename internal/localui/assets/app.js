@@ -345,16 +345,49 @@
     section('Активные',active);section('Завершённые',done);
     if(!box.children.length)box.append(el('p',view?.project?'Задач пока нет':'','am-small am-muted'));
   }
+  // Coordinator connection (T-039): the client runs Claude's own
+  // `claude mcp add` in the project folder; the owner never opens a terminal.
+  let linkBusy='',linkFailure=null;
+  async function connectCoordinator(name){
+    if(linkBusy)return;
+    linkBusy=name;linkFailure=null;if(view?.project===name)renderThread();
+    try{
+      const r=await postAPI('/api/coordinator-connect',{project:name},40000);
+      if(r.result?.state==='failed')linkFailure={project:name,detail:r.result.detail||''};
+    }catch(error){linkFailure={project:name,detail:error.message};}
+    finally{linkBusy='';viewSignature='';await refresh();}
+  }
+  // Shown as the first message of the project's conversation, from
+  // Messenger, until the coordinator chat connects.
   function connectHelp(){
-    const box=el('div',undefined,'am-settings am-connect');
-    box.append(el('h3','Подключите координатора'));
-    box.append(el('p','Задачи проекта даёт ваш чат в приложении Claude. Откройте папку проекта в Claude (вкладка Code, этот компьютер) и выполните в Терминале команду ниже. Затем напишите в чате, что нужно сделать.'));
+    const g=el('article',undefined,'am-message-group am-connect'),row=el('div',undefined,'am-message');
+    const avatar=el('div',undefined,'am-avatar');const mark=el('span','M','am-provider-icon');mark.setAttribute('aria-hidden','true');avatar.append(mark);
+    const body=el('div',undefined,'am-message-body'),meta=el('div',undefined,'am-meta');meta.append(el('strong','Messenger'));
+    const box=el('div',undefined,'am-message-content');body.append(meta,box);row.append(avatar,body);g.append(row);
+    const link=view.coordinator_link||{state:'unknown'},failure=linkFailure?.project===view.project?linkFailure:null;
+    const connect=label=>{const b=el('button',label);b.type='button';b.addEventListener('click',()=>connectCoordinator(view.project));return b;};
+    if(linkBusy===view.project){
+      box.append(el('p','Подключаем Claude к проекту…','am-connect-title'),el('p','Messenger добавляет этот проект в настройки Claude. Это займёт несколько секунд.'));
+    }else if(link.state==='connected'){
+      box.append(el('p','Claude подключён к проекту','am-connect-title'));
+      box.append(el('p','Откройте папку проекта в Claude (вкладка Code, этот компьютер) и начните новый чат. Напишите в нём, что нужно сделать. Чтобы проверить подключение, спросите: «Каких агентов ты видишь?»'));
+      box.append(el('p','Чат, открытый до подключения, проект не увидит: нужен новый.','am-small am-muted'));
+    }else{
+      box.append(el('p','Подключите Claude к проекту','am-connect-title'));
+      if(failure){box.append(el('p','Не получилось подключить: '+failure.detail),connect('Попробовать ещё раз'));}
+      else if(link.state==='no_claude'){box.append(el('p','Сначала подключите Claude Code во вкладке «Агенты», затем нажмите кнопку ниже.'),connect('Подключить к Claude'));}
+      else if(link.state==='other'){box.append(el('p','В настройках Claude для этой папки уже есть другое подключение с именем «messenger». Messenger его не меняет. Если оно больше не нужно, удалите его командой «claude mcp remove messenger» в этой папке и нажмите кнопку ниже.'),connect('Подключить к Claude'));}
+      else if(link.state==='unknown'){box.append(el('p','Не удалось прочитать настройки Claude'+(link.detail?': '+link.detail:'.')),connect('Подключить к Claude'));}
+      else if(link.state==='no_folder'){box.append(el('p','У проекта нет папки на этом компьютере. Укажите её в настройках проекта.'));}
+      else{box.append(el('p','Задачи проекта даёт ваш чат в Claude. Messenger сам добавит этот проект в настройки Claude.'),connect('Подключить к Claude'));}
+    }
+    const manual=el('details',undefined,'am-tool');manual.append(el('summary','Подключить вручную через Терминал'));
     const command='cd "'+view.folder+'" && claude mcp add --scope local messenger -- "'+view.messenger+'" --root "'+view.data_root+'" coordinator --project "'+view.project+'"';
-    const pre=el('pre',command,'am-command');box.append(pre);
     const copy=el('button','Скопировать команду');copy.type='button';
     copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(command);copy.textContent='Скопировано';}catch(_){copy.textContent='Скопируйте вручную';}setTimeout(()=>copy.textContent='Скопировать команду',2000);});
-    box.append(copy,el('p','Чат-координатор видит только задачи этого проекта.','am-small am-muted'));
-    return box;
+    manual.append(el('pre',command,'am-command'),copy);
+    box.append(manual,el('p','Чат-координатор видит только задачи этого проекта.','am-small am-muted'));
+    return g;
   }
   function renderThread(){
     const thread=$('thread'),head=$('task-head');
@@ -768,6 +801,8 @@
       await postAPI(editingFolder?'/api/project-folder':'/api/project-create',{name,folder});
       if(!editingFolder){project=name;remember('messenger-project',name);}
       $('project-dialog').close();viewSignature='';await refresh();
+      // Connect the coordinator right away; the result is shown, not retried.
+      if(view?.project===name&&!view.coordinator?.connected&&view.coordinator_link?.state!=='connected')connectCoordinator(name);
     }catch(error){$('project-status').textContent=error.message;}
     finally{$('project-save').disabled=false;}
   }

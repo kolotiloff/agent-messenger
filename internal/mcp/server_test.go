@@ -152,3 +152,23 @@ func TestTaskServerFromEnvOutsideARun(t *testing.T) {
 		t.Fatalf("%s", out.String())
 	}
 }
+
+// A worker run that loads the owner's coordinator connection from the project
+// folder gets no coordinator tools and does not open the database (D-050).
+func TestCoordinatorInsideAWorkerRunHasNoTools(t *testing.T) {
+	db := filepath.Join(t.TempDir(), "never-created.sqlite")
+	in := strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"claude-code"}}}` + "\n" +
+		`{"jsonrpc":"2.0","id":2,"method":"tools/list"}` + "\n" +
+		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"start_task","arguments":{}}}` + "\n")
+	var out bytes.Buffer
+	if err := runCoordinator(db, "Game", "run-1", in, &out); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if len(lines) != 3 || !strings.Contains(lines[1], `"tools":[]`) || !strings.Contains(lines[2], `"isError":true`) || strings.Contains(out.String(), "start_task") {
+		t.Fatalf("%s", out.String())
+	}
+	if _, err := os.Stat(db); !os.IsNotExist(err) {
+		t.Fatal("the database was opened inside a worker run")
+	}
+}

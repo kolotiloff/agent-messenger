@@ -49,6 +49,14 @@ Data: `$XDG_DATA_HOME/agent-messenger` or `~/.local/share/agent-messenger`. To s
 - **Codex**: on Windows the npm installation works; the program finds the `codex.exe` inside the npm package. `.cmd` and `.bat` files are not started (D-044).
 - **Cursor**: `cursor-agent` on Mac and Linux (usually in `~/.local/bin`). Before the first Cursor task Messenger adds one entry, `messenger_task`, to `~/.cursor/mcp.json`; other entries stay as they are (D-049). Not on Windows yet.
 
+## First steps
+
+1. **Агенты:** connect Claude Code (and Codex or Cursor if you use them).
+2. **Новый проект…:** a name and the project folder. Messenger then adds the project to Claude's settings by itself; no Terminal is needed (D-050). The window says «Claude подключён к проекту».
+3. Open the project folder in Claude Code (the Claude app, Code tab, this computer; or `claude` in that folder) and start a **new** chat. Ask «Каких агентов ты видишь?», then give it work.
+
+A web chat on claude.ai or the Chat tab does not see Messenger: the coordinator runs only in Claude Code on the computer where Messenger runs.
+
 ## Check a download (optional)
 
 ```bash
