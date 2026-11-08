@@ -162,7 +162,9 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-access-bar { display:flex; align-items:center; gap:var(--am-gap-section); margin-bottom:var(--am-gap-content); padding:var(--am-gap-section); border:1px solid var(--am-line); border-radius:var(--am-radius-m); background:var(--am-panel); }
 #am-concept .am-access-text { flex:1; min-width:0; display:grid; gap:var(--am-space-1); }
 #am-concept .am-access-text p { margin:0; }
-#am-concept .am-access-title { font-weight:600; }
+#am-concept .am-access-title { font-weight:500; }
+/* A setting's explanation reads as text, not as a hint: normal size, muted */
+#am-concept .am-access-note { font-size:var(--am-text-m); line-height:1.45; color:var(--am-muted); }
 /* A small on/off switch, one style for every switch of the window. */
 #am-concept button.am-switch { position:relative; flex-shrink:0; width:var(--am-switch-width); min-height:0; height:var(--am-switch-height); padding:0; border-radius:calc(var(--am-switch-height) / 2); background:color-mix(in srgb, var(--am-muted) 45%, transparent); }
 #am-concept button.am-switch::after { content:""; position:absolute; top:var(--am-switch-inset); left:var(--am-switch-inset); width:var(--am-switch-knob); height:var(--am-switch-knob); border-radius:50%; background:#fff; box-shadow:var(--am-shadow-s); transition:transform .15s ease; }

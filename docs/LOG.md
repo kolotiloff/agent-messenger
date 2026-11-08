@@ -379,3 +379,7 @@ Reports for each step are in [reports/](reports/). The handoff is in [HANDOFF.md
 - The «Проект» tab saves by itself and shows only errors; «Удалить проект» stands on the right; the folder label is «Папка проекта».
 - A project can be renamed on the tab. Only the shown name changes (D-072); Q-019 asks whether a rename should reach other computers and the coordinator. Core and route tests added; the page checked in Chromium with a stubbed API, not against a live client.
 - Owner idea recorded as T-066: the update offer as a blue button at the top right.
+
+## 2026-11-08 — «Любые команды» text
+
+- The explanation under «Любые команды» on the Agents tab is normal-size muted text, not a small hint (owner). Checked in Chromium.
