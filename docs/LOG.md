@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (sidebar without «координатор»; T-052, T-053 planned)
+
+- PRs #66 and #67 merged. The sidebar no longer marks agents as «координатор» (D-064). The owner asked for a 6-digit invitation (T-052, Q-017) and a normal Windows installation with removal from Settings (T-053); both planned on `claude/t052-t053-plan`.
+- Verified here: JS syntax, `check.sh`. Not verified: the sidebar on Mac and Windows.
+
 ## 2026-11-08 — Claude Code (T-051 continue a task; agent card lines)
 
 - `continue_task` resumes a finished task's conversation with a follow-up (D-063), kept simple: no recovery after a restart; unclear or remote tasks refused. Agent cards: «Выполняет задачи» removed, each state is one short line in one font (owner's feedback on preview.37).
