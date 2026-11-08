@@ -95,3 +95,25 @@ func TestCLICheckSerializesAndRedactsFailure(t *testing.T) {
 		t.Fatal("parallel probe accepted", w.Code)
 	}
 }
+
+// An agent connected with the standard profile has no profile path; the check
+// then uses the agent's standard profile folder (T-056).
+func TestCLICheckStandardProfile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fixture uses POSIX program paths")
+	}
+	old := defaultProfileFunc
+	defaultProfileFunc = func(provider string) (string, error) { return "/home/me/." + provider, nil }
+	t.Cleanup(func() { defaultProfileFunc = old })
+	var got string
+	h := newHandlerWithChecks(actionHost, "secret", func(context.Context, control.Request) (control.Response, error) {
+		return control.Response{}, nil
+	}, func(context.Context) any { return struct{}{} }, nil,
+		func(ctx context.Context, provider, cli, profile string) (diagnostics.CLICheck, error) {
+			got = profile
+			return diagnostics.CLICheck{Provider: provider}, nil
+		}, nil)
+	if w := postAction(h, "check-cli", `{"provider":"cursor","cli":"/trusted/cursor","environment":""}`); w.Code != 200 || got != "/home/me/.cursor" {
+		t.Fatal(w.Code, w.Body.String(), got)
+	}
+}

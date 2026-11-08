@@ -216,6 +216,10 @@ func isDefaultProfile(provider, environment string) bool {
 	return filepath.Clean(environment) == filepath.Clean(def)
 }
 
+// DefaultProfileDir is the agent's standard profile folder in the home
+// folder, whether or not it exists.
+func DefaultProfileDir(provider string) (string, error) { return defaultProfileDir(provider) }
+
 func defaultProfileDir(provider string) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {

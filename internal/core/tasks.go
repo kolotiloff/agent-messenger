@@ -512,8 +512,14 @@ func (s *Store) SetComputerAgent(provider, cli, environment, profile string) err
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(`INSERT INTO computer_agents(computer,provider,cli_path,environment,profile,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(computer,provider) DO UPDATE SET cli_path=excluded.cli_path,environment=excluded.environment,profile=excluded.profile,updated_at=excluded.updated_at`,
-			computer, provider, cli, environment, profile, now())
+		// A newly connected worker agent may run any command (owner, D-067);
+		// saving it again keeps the owner's later choice.
+		full := 0
+		if profile == "worker" {
+			full = 1
+		}
+		_, err = tx.Exec(`INSERT INTO computer_agents(computer,provider,cli_path,environment,profile,updated_at,full_access) VALUES (?,?,?,?,?,?,?) ON CONFLICT(computer,provider) DO UPDATE SET cli_path=excluded.cli_path,environment=excluded.environment,profile=excluded.profile,updated_at=excluded.updated_at`,
+			computer, provider, cli, environment, profile, now(), full)
 		return err
 	})
 }
@@ -964,6 +970,23 @@ func (s *Store) BeginTaskRun(run, reservation string) (TaskRun, Task, error) {
 			}
 			return ErrCancelled
 		}
+		// A follow-up or an answer is a new run the owner or coordinator
+		// asked for now: it takes the agent's current «Любые команды», so
+		// turning it on helps a task started before (T-056). Without the
+		// agent row the task keeps what it had.
+		if r.Kind == "answer" || r.Kind == "continue" {
+			var full int
+			err := tx.QueryRow(`SELECT full_access FROM computer_agents WHERE computer=? AND provider=?`, t.Computer, t.Provider).Scan(&full)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
+			if err == nil && (full != 0) != t.FullAccess {
+				if _, err := tx.Exec(`UPDATE tasks SET full_access=? WHERE id=?`, full, t.ID); err != nil {
+					return err
+				}
+				t.FullAccess = full != 0
+			}
+		}
 		if err := setRunState(tx, run, "launching", "process may start; never launched again", "intent"); err != nil {
 			return err
 		}
@@ -1191,6 +1214,9 @@ type RunEvidence struct {
 	Reason, ResetAt string
 	// Cancelled: the run was stopped on request.
 	Cancelled bool
+	// LastText is the worker's last message; it is shown only when the run
+	// failed without a report (T-056).
+	LastText string
 }
 
 // FinishTaskRun verifies a run in one transaction: it revokes the receipt,
@@ -1236,6 +1262,9 @@ func (s *Store) FinishTaskRun(run string, ev RunEvidence) (string, error) {
 		}
 		if ev.Detail != "" {
 			detail += "; " + ev.Detail
+		}
+		if final == "failed" && r.Disposition == "" && ev.LastText != "" {
+			detail += "; no report; last worker message: " + ev.LastText
 		}
 		if err := setRunState(tx, run, final, detail, "running", "launching"); err != nil {
 			return err
@@ -1826,6 +1855,30 @@ func (s *Store) SetAgentFullAccess(provider string, on bool) error {
 		}
 		if n, _ := res.RowsAffected(); n == 0 {
 			return fmt.Errorf("%w: agent %s is not set up on this computer", ErrRejected, provider)
+		}
+		return nil
+	})
+}
+
+// SetAllAgentsFullAccess turns «Любые команды» on or off for every agent set
+// up on this computer at once (T-056). Other computers keep their own setting:
+// each computer decides for itself.
+func (s *Store) SetAllAgentsFullAccess(on bool) error {
+	v := 0
+	if on {
+		v = 1
+	}
+	return s.tx(func(tx *sql.Tx) error {
+		computer, err := localComputer(tx)
+		if err != nil {
+			return err
+		}
+		res, err := tx.Exec(`UPDATE computer_agents SET full_access=?,updated_at=? WHERE computer=?`, v, now(), computer)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return fmt.Errorf("%w: no agents are set up on this computer", ErrRejected)
 		}
 		return nil
 	})

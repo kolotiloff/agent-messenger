@@ -145,7 +145,7 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			http.Error(w, "cross-site request refused", http.StatusForbidden)
 			return
 		}
-		mutation := r.URL.Path == "/api/enqueue" || r.URL.Path == "/api/pause" || r.URL.Path == "/api/resume" || r.URL.Path == "/api/outbox/ack" || r.URL.Path == "/api/check-cli" || r.URL.Path == "/api/setup-claude" || r.URL.Path == "/api/setup-codex" || r.URL.Path == "/api/authorize-setup" || r.URL.Path == "/api/restart-client" || r.URL.Path == "/api/pick" || r.URL.Path == "/api/agent-login" || r.URL.Path == "/api/agent-install" || taskMutation(r.URL.Path) ||
+		mutation := r.URL.Path == "/api/enqueue" || r.URL.Path == "/api/pause" || r.URL.Path == "/api/resume" || r.URL.Path == "/api/outbox/ack" || r.URL.Path == "/api/check-cli" || r.URL.Path == "/api/setup-claude" || r.URL.Path == "/api/setup-codex" || r.URL.Path == "/api/authorize-setup" || r.URL.Path == "/api/restart-client" || r.URL.Path == "/api/pick" || r.URL.Path == "/api/agent-login" || r.URL.Path == "/api/agent-logout" || r.URL.Path == "/api/agent-install" || taskMutation(r.URL.Path) ||
 			(r.URL.Path == "/api/self-update" && r.Method != http.MethodGet)
 		method := http.MethodGet
 		if mutation {
@@ -259,8 +259,8 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 				servePick(w, r.WithContext(ctx), decoder, pickFunc)
 				return
 			}
-			if r.URL.Path == "/api/agent-login" {
-				serveAgentLogin(w, decoder)
+			if r.URL.Path == "/api/agent-login" || r.URL.Path == "/api/agent-logout" {
+				serveAgentLogin(w, decoder, r.URL.Path == "/api/agent-logout")
 				return
 			}
 			if r.URL.Path == "/api/agent-install" {
@@ -635,7 +635,8 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 			Provider string `json:"provider"`
 			On       *bool  `json:"on"`
 		}
-		if decoder.Decode(&in) != nil || !core.TaskProviders[in.Provider] || in.On == nil {
+		// "all" is the one switch for every agent of this computer (T-056).
+		if decoder.Decode(&in) != nil || (!core.TaskProviders[in.Provider] && in.Provider != "all") || in.On == nil {
 			return control.Request{}, false
 		}
 		text := "0"

@@ -266,7 +266,7 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	}
 	_ = stdout.Close()
 	result, readErr := read.result, read.err
-	ev := core.RunEvidence{ExitObserved: waitErr == nil, ExitCode: exitCode, Cancelled: cancelled}
+	ev := core.RunEvidence{ExitObserved: waitErr == nil, ExitCode: exitCode, Cancelled: cancelled, LastText: result.LastText}
 	ev.ProviderOK = result.Completed && !result.Conflicting && readErr == nil && result.Failure == ""
 	if result.Failure != "" {
 		ev.Detail = result.Failure

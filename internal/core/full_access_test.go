@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -70,5 +71,103 @@ func TestAgentFullAccess(t *testing.T) {
 	id3, _, _ := f.st.StartTask(StartTaskRequest{Project: "Game", OpID: "op-3", Provider: "codex", Text: "Again"})
 	if task, _ := f.st.TaskByID(id3); task.FullAccess {
 		t.Fatal("switched off but task has full access")
+	}
+}
+
+// A follow-up or an answer runs with the agent's current setting, so turning
+// «Любые команды» on helps a task that was started before (T-056).
+func TestFollowUpTakesCurrentFullAccess(t *testing.T) {
+	f := newTaskFixture(t)
+	id := f.start(t, "op", "codex", "Fix the menu")
+	r := f.launch(t, id, "019a0000-0000-7000-8000-000000000001")
+	f.dispose(t, r, DispositionReport, "Menu fixed")
+	if _, err := f.st.FinishTaskRun(r.ID, cleanExit); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.SetAllAgentsFullAccess(true); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.ContinueTask(id, "c1", "Commit it", AudienceCoordinator); err != nil {
+		t.Fatal(err)
+	}
+	runs, _ := f.st.NextTaskRunIntents(10)
+	if len(runs) != 1 {
+		t.Fatalf("runs %v", runs)
+	}
+	_, task, err := f.st.BeginTaskRun(runs[0], "res2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !task.FullAccess {
+		t.Fatal("follow-up kept the old setting")
+	}
+	if stored, _ := f.st.TaskByID(id); !stored.FullAccess {
+		t.Fatal("task row not updated")
+	}
+	// The switch for all agents covers every agent set up on this computer.
+	for _, p := range []string{"claude", "codex"} {
+		id, _, err := f.st.StartTask(StartTaskRequest{Project: "Game", OpID: "all-" + p, Provider: p, Text: "x"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if task, _ := f.st.TaskByID(id); !task.FullAccess {
+			t.Fatalf("%s without full access", p)
+		}
+	}
+	if err := f.st.SetAllAgentsFullAccess(false); err != nil {
+		t.Fatal(err)
+	}
+	id4, _, _ := f.st.StartTask(StartTaskRequest{Project: "Game", OpID: "off", Provider: "claude", Text: "x"})
+	if task, _ := f.st.TaskByID(id4); task.FullAccess {
+		t.Fatal("switched off for all but task has full access")
+	}
+}
+
+// A run that ended without a report says what the worker said last (T-056).
+func TestNoReportKeepsLastText(t *testing.T) {
+	f := newTaskFixture(t)
+	id := f.start(t, "op", "codex", "Fix the menu")
+	r := f.launch(t, id, "019a0000-0000-7000-8000-000000000001")
+	ev := cleanExit
+	ev.LastText = "I can not find the tools"
+	if _, err := f.st.FinishTaskRun(r.ID, ev); err != nil {
+		t.Fatal(err)
+	}
+	task, _ := f.st.TaskByID(id)
+	if task.State != "failed" || !strings.Contains(task.Detail, "no report; last worker message: I can not find the tools") {
+		t.Fatalf("task %+v", task)
+	}
+}
+
+// A newly connected worker agent has «Любые команды» on (owner, D-067);
+// saving it again keeps whatever the owner chose since.
+func TestNewWorkerAgentFullAccessOn(t *testing.T) {
+	f := newTaskFixture(t)
+	agents, _ := f.st.ComputerAgents()
+	cli := agents[0].CLI
+	if err := f.st.SetComputerAgent("cursor", cli, "", "worker"); err != nil {
+		t.Fatal(err)
+	}
+	full := func() bool {
+		view, _ := f.st.WindowView("Game", "2000-01-01")
+		for _, a := range view.Agents {
+			if a.Agent == "cursor" {
+				return a.FullAccess
+			}
+		}
+		t.Fatal("cursor missing")
+		return false
+	}
+	if !full() {
+		t.Fatal("new worker agent without full access")
+	}
+	if err := f.st.SetAgentFullAccess("cursor", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.SetComputerAgent("cursor", cli, "", "worker"); err != nil {
+		t.Fatal(err)
+	}
+	if full() {
+		t.Fatal("saving again turned it back on")
 	}
 }
