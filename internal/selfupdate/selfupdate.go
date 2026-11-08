@@ -58,6 +58,10 @@ type Updater struct {
 	installed string // path of the new program after Apply
 }
 
+// Replace puts staged in place of executable, which may be running; the
+// Windows installer uses it too (T-053).
+func Replace(executable, staged string) error { return replace(executable, staged) }
+
 // Build returns the build number of a version like 0.0.0-preview.33.
 func Build(version string) int {
 	i := strings.LastIndex(version, ".")

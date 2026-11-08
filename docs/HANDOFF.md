@@ -8,7 +8,7 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
-Updated 2026-11-08 (night, T-052) by Claude Code. The owner is asleep and asked to keep working alone, deciding by simplicity.
+Updated 2026-11-08 (night, T-053) by Claude Code. The owner is asleep and asked to keep working alone, deciding by simplicity.
 
 - **PR #73** (`claude/t061-agent-cards`): T-061 agent cards with the on/off switch, T-062 Windows window without the title bar; goes out as preview.43.
 - **T-068** token statistics on `claude/t068-token-stats` (D-077, PR #74), goes out as preview.44.
@@ -16,7 +16,8 @@ Updated 2026-11-08 (night, T-052) by Claude Code. The owner is asleep and asked 
 - **T-059** window language on `claude/t059-language` (D-079, built on T-069), goes out as preview.46.
 - **T-047** shared task list on `claude/t047-shared-tasks` (D-080, built on T-059), goes out as preview.47. Owner's test: two computers in one network, tasks of the same project on both; each shows the other's under «На компьютере «…»» within about 15 seconds.
 - **T-052** short invitation on `claude/t052-short-invite` (D-081, built on T-047), goes out as preview.48. Owner's test: invite on one computer, type the 6 digits on another in the same network. Windows may ask to allow Messenger in the firewall (UDP 47100); if the host is not found, the long code still works.
-- **Next, in the owner's order:** T-053 Windows installation, T-057, T-049.
+- **T-053** Windows installation on `claude/t053-windows-install` (D-082, built on T-052), goes out as preview.49. Owner's test on Windows: double-click the download; Agent Messenger appears in the Start menu and in «Приложения»; «Удалить» removes it and keeps `%LOCALAPPDATA%\AgentMessenger`.
+- **Next, in the owner's order:** T-057 remote log, T-049.
 
 Updated 2026-11-08 (before preview.42) by Claude Code.
 
