@@ -13,7 +13,7 @@ How to use it:
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
-| T-041 | Agents on Windows: «Проверить версию и вход» works there (D-051); Codex (newer npm layout) and Cursor (D-052) are found and started on Windows. Left: the owner's test on Windows. | agent + owner | `claude/t041-windows-agents` |
+| T-041 | Agents on Windows: «Проверить версию и вход» works there (D-051); Codex (newer npm layout) and Cursor (D-052) are found and started on Windows; «Выбрать…» buttons for paths (D-053). Left: the owner's test on Windows. | agent + owner | `claude/t041-windows-agents` |
 | T-039 | The window connects the coordinator chat to Claude by itself (D-050): no Terminal command. Done on Mac with the real Claude Code in preview.34 (2026-11-07): the window connected it, and the coordinator gave tasks to Cursor. Left: Windows and Linux. | owner | PR #59, preview.34 |
 | T-038 | Windows and Linux update themselves from the window, from signed releases (D-048); plain downloads behind README buttons (D-047). Left: the owner's test of a real update preview.33 → preview.34 on Windows and Linux (preview.34 is out). | owner | PR #54, preview.33 |
 | T-016 | Windows and Linux: job-object process groups on Windows (D-043), `.exe` agents only (D-044), the window in the browser (`messenger open`) and zip/tar.gz archives in every release (D-045), Windows CI. Left: the owner's test on real Windows and Linux computers; installer and code signing there (self-update: T-038). | owner | PR #52, preview.32 |

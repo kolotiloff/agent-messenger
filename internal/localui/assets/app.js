@@ -790,7 +790,6 @@
     $('project-dialog-title').textContent=edit?'Папка проекта «'+view.project+'»':'Новый проект';
     $('project-name-field').hidden=edit;$('project-name').value='';$('project-folder').value=edit?view.folder:'';
     $('project-save').textContent=edit?'Сохранить папку':'Создать проект';$('project-status').textContent='';
-    $('project-pick').hidden=!window.webkit?.messageHandlers?.folder;
     $('project-dialog').showModal();
   }
   async function saveProject(){
@@ -839,6 +838,18 @@
     finally{$('agent-save').disabled=false;}
   }
   window.messengerRefresh=()=>{viewSignature='';refresh();};
+  // «Выбрать…»: the local server opens the system's own dialog (D-053); the
+  // Mac app keeps its native folder dialog for the project folder.
+  async function pick(field,kind,status){
+    const input=$(field);$(status).textContent='Выберите в открывшемся окне…';
+    try{
+      const response=await fetch('/api/pick',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({kind,current:input.value.trim()}),cache:'no-store',signal:AbortSignal.timeout(610000)});
+      let result={};try{result=await response.json();}catch(_){}
+      if(!response.ok||result.ok!==true)throw Error(result.detail||'Окно выбора не открылось. Вставьте путь вручную.');
+      if(result.path)input.value=result.path;
+      $(status).textContent='';
+    }catch(error){$(status).textContent=error.name==='TimeoutError'?'Окно выбора не ответило. Вставьте путь вручную.':error.message;}
+  }
   window.messengerFolderPicked=path=>{if(typeof path==='string'&&path)$('project-folder').value=path;};
   window.messengerUpdateStatus = status => {
     if(!window.webkit?.messageHandlers?.updates)return;
@@ -923,7 +934,9 @@
   // A closed invitation is not shown again; a new one can be made at any time.
   $('invite-dialog').addEventListener('close',()=>{invitation=null;clearInterval(inviteTimer);});
   $('project-save').addEventListener('click',saveProject);
-  $('project-pick').addEventListener('click',()=>window.webkit?.messageHandlers?.folder?.postMessage('pick'));
+  $('project-pick').addEventListener('click',()=>{if(window.webkit?.messageHandlers?.folder)window.webkit.messageHandlers.folder.postMessage('pick');else pick('project-folder','folder','project-status');});
+  $('agent-cli-pick').addEventListener('click',()=>pick('agent-cli','file','agent-check-status'));
+  $('agent-profile-pick').addEventListener('click',()=>pick('agent-profile','folder','agent-check-status'));
   $('restart-dialog').addEventListener('cancel',event=>event.preventDefault());
   $('restart-go').addEventListener('click',()=>restartClient(!!restart.ask));
   $('restart-quit').addEventListener('click',()=>window.webkit?.messageHandlers?.app?.postMessage('quit'));
