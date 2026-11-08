@@ -6,7 +6,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 - The task list shows each task's cost (Claude's own estimate) or tokens (Codex, Cursor); the task header shows input, cached and output tokens (D-068). Remote tasks report their total back.
 - Verified: adapter and core tests, `check.sh`, mocked screenshot. Not verified: real CLI output (no real models), Cursor's usage format, anything on the owner's computers.
-- Statuses shortened («Готово · 3 мин · $0,42»). T-060: Claude on Ноут-Linux was blue because a chat had once used Messenger's tools there and that connection never expires; blue now means a running task only (D-069). T-059 (Russian/English window) recorded.
+- Statuses shortened, with commas («Готово за 3 мин, $0.42»; the owner does not want dots between words). T-060: Claude on Ноут-Linux was blue because a chat had once used Messenger's tools there and that connection never expires; blue now means a running task only (D-069). T-059 (Russian/English window) recorded.
 
 ## 2026-11-08 — Claude Code (T-056 one switch for commands, login and logout on cards)
 
