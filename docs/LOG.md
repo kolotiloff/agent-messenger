@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (T-069 Linux window)
+
+- Linux window with the system's WebKitGTK through `purego` (D-078), on top of T-068. Browser path kept as fallback.
+- Verified in this container under Xvfb: page shown, Ctrl+C closes, no display falls back. Not verified on a real Linux desktop.
+
 ## 2026-11-08 — Claude Code (T-068 token statistics)
 
 - «Статистика» tab (D-077): today / 7 days / 30 days, total, bar per day with a tooltip, by agent, by computer, ten most expensive tasks (click opens the task). Backend: `Store.UsageStats`, control `usage-stats`, `GET /api/usage-stats?period=`.

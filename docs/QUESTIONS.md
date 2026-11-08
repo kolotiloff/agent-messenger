@@ -57,7 +57,7 @@ The owner wants a 6-digit code to type from memory instead of the long one. The 
 
 ### Q-016: A real program window on Linux without Chrome?
 
-Asked 2026-11-08 (T-046). On Linux the window is a Chrome, Chromium, Edge or Brave window in app mode (D-054). With none of them installed (Ubuntu ships Firefox, which has no app mode) the page opens in the default browser, as the owner saw. A built-in window needs the system's WebKitGTK through cgo, so every Linux build (x64 and ARM) would be built with GTK libraries and would not start on a system without them. **Cautious choice:** keep D-054; tell the owner to install Chromium (`sudo snap install chromium` on Ubuntu) for the own window. **Owner:** keep this, or build Linux with WebKitGTK?
+Asked 2026-11-08 (T-046). On Linux the window is a Chrome, Chromium, Edge or Brave window in app mode (D-054). With none of them installed (Ubuntu ships Firefox, which has no app mode) the page opens in the default browser, as the owner saw. A built-in window needs the system's WebKitGTK through cgo, so every Linux build (x64 and ARM) would be built with GTK libraries and would not start on a system without them. **Cautious choice:** keep D-054; tell the owner to install Chromium (`sudo snap install chromium` on Ubuntu) for the own window. **Owner:** keep this, or build Linux with WebKitGTK? **Answer (2026-11-08):** the owner asked for a real window; built as D-078 without cgo, the browser stays the fallback.
 
 ### Q-015: Which limit fields do the real CLIs print?
 
