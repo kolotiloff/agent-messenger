@@ -384,7 +384,7 @@ func (s *Store) TaskFeed(id string) (TaskFeed, error) {
 			return err
 		}
 		for _, r := range list {
-			if r.kind == "answer" {
+			if r.kind == "answer" || r.kind == "continue" {
 				f.Items = append(f.Items, FeedItem{Kind: "answer", Author: r.by, Text: r.input, At: r.created, Run: r.ordinal, Verified: true})
 			}
 			items, err := tx.Query(`SELECT kind,title,text,created_at FROM task_run_items WHERE run_id=? ORDER BY seq`, r.id)

@@ -111,7 +111,7 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	}
 	spec := adapters.TaskRunSpec{
 		Provider: task.Provider, CLI: task.CLI, Messenger: exe, DB: filepath.Join(s.root, dbName),
-		RunID: run.ID, Receipt: run.Receipt, Session: task.SessionID, Resume: run.Kind == "answer", Profile: task.Profile, Model: task.Model,
+		RunID: run.ID, Receipt: run.Receipt, Session: task.SessionID, Resume: run.Kind == "answer" || run.Kind == "continue", Profile: task.Profile, Model: task.Model,
 	}
 	args, err := adapters.TaskArgs(spec)
 	if err != nil {

@@ -1049,7 +1049,13 @@ type TaskBrief struct {
 	// Rules are the owner's standing rules for this project's workers
 	// (T-050), given on every run.
 	Rules string `json:"rules,omitempty"`
+	// FollowUp is the coordinator's new request on a run that continues a
+	// finished task (T-051).
+	FollowUp string `json:"follow_up,omitempty"`
 }
+
+// continuedTaskNote tells a continued worker what this run is.
+const continuedTaskNote = "This run continues the same conversation after you finished the task. Do what follow_up asks; the task text is the one from your first read_task."
 
 // resumedTaskNote tells a resumed worker where its task text is.
 const resumedTaskNote = "This run continues the same conversation, which already has the task from your first read_task. " +
@@ -1075,6 +1081,12 @@ func (s *Store) ReadTask(run, receipt string, includeTask bool) (TaskBrief, erro
 			}
 			b.Answer = r.Input
 			_ = tx.QueryRow(`SELECT text FROM task_questions WHERE task_id=? AND state='answered' ORDER BY rowid DESC LIMIT 1`, t.ID).Scan(&b.Question)
+		}
+		if r.Kind == "continue" {
+			if !includeTask {
+				b.Task = ""
+			}
+			b.Note, b.FollowUp = continuedTaskNote, r.Input
 		}
 		_, err = tx.Exec(`UPDATE task_runs SET read_seen=1 WHERE id=?`, run)
 		return err
@@ -1350,6 +1362,78 @@ func answerTask(tx *sql.Tx, task, question, opID, text, by string, fromNetwork b
 		}
 		return insertTaskEvent(tx, t.Project, task, answeredFor, "answered", text, question)
 	}
+}
+
+// ContinueTask gives a finished task a follow-up: the next run resumes the
+// same conversation with it (T-051). Only a done or failed task of this
+// computer whose conversation was recorded is continued; a cancelled or
+// blocked one is not, and nothing tries to recover a conversation the agent
+// no longer has: such a run fails like any other. opID makes it idempotent.
+func (s *Store) ContinueTask(task, opID, text, by string) error {
+	text = strings.TrimSpace(text)
+	if opID == "" || len(opID) > 128 || text == "" || utf8.RuneCountInString(text) > MaxTaskText {
+		return fmt.Errorf("%w: continue needs an operation id and 1..%d characters", ErrRejected, MaxTaskText)
+	}
+	if by != AudienceCoordinator {
+		return fmt.Errorf("%w: only the coordinator continues a task", ErrRejected)
+	}
+	return s.tx(func(tx *sql.Tx) error {
+		var oldTask, oldInput string
+		err := tx.QueryRow(`SELECT task_id,input FROM task_runs WHERE op_id=?`, opID).Scan(&oldTask, &oldInput)
+		if err == nil {
+			if oldTask == task && oldInput == text {
+				return nil
+			}
+			return fmt.Errorf("%w: this operation id was used for another follow-up", ErrRejected)
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		t, err := scanTask(tx.QueryRow(`SELECT `+taskColumns+` FROM tasks WHERE id=?`, task).Scan)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%w: unknown task", ErrRejected)
+		}
+		if err != nil {
+			return err
+		}
+		if t.State != "done" && t.State != "failed" {
+			return fmt.Errorf("%w: only a finished task (done or failed) can be continued; this one is %s", ErrRejected, t.State)
+		}
+		link, err := taskLink(tx, task)
+		if err != nil {
+			return err
+		}
+		if link.origin != nil || link.remote != nil {
+			return fmt.Errorf("%w: a task of another computer cannot be continued yet; start a new task", ErrRejected)
+		}
+		if t.SessionID == "" {
+			return fmt.Errorf("%w: no recorded conversation to continue; start a new task", ErrRejected)
+		}
+		var open int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM task_runs WHERE task_id=? AND state IN ('intent','launching','running','blocked','interrupted')`, task).Scan(&open); err != nil {
+			return err
+		}
+		if open != 0 {
+			return fmt.Errorf("%w: a run of this task is not finished or its outcome is unclear", ErrRejected)
+		}
+		var ordinal int
+		if err := tx.QueryRow(`SELECT MAX(ordinal) FROM task_runs WHERE task_id=?`, task).Scan(&ordinal); err != nil {
+			return err
+		}
+		if err := insertTaskRun(tx, task, ordinal+1, "continue", text); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE task_runs SET op_id=? WHERE task_id=? AND ordinal=?`, opID, task, ordinal+1); err != nil {
+			return err
+		}
+		if err := setTaskState(tx, task, "running", "continued; the same conversation resumes"); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE tasks SET finished_at=NULL WHERE id=?`, task); err != nil {
+			return err
+		}
+		return insertTaskEvent(tx, t.Project, task, AudienceLog, "continued", text, "")
+	})
 }
 
 // CancelTask cancels a task. A task that is waiting, or whose run is only
