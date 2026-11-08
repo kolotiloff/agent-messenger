@@ -382,6 +382,39 @@ func (s *Store) SetProjectFolder(name, folder string) error {
 	})
 }
 
+// MaxWorkerRules bounds the owner's rules for a project's workers: they are
+// read on every run, so they stay short.
+const MaxWorkerRules = 2000
+
+// SetProjectWorkerRules stores the owner's rules for the project's workers
+// (T-050). Tasks started afterwards carry them; an empty text removes them.
+func (s *Store) SetProjectWorkerRules(name, rules string) error {
+	rules = strings.TrimSpace(rules)
+	if utf8.RuneCountInString(rules) > MaxWorkerRules || strings.ContainsRune(rules, 0) || !utf8.ValidString(rules) {
+		return fmt.Errorf("%w: указания исполнителям — до %d символов", ErrRejected, MaxWorkerRules)
+	}
+	return s.tx(func(tx *sql.Tx) error {
+		res, err := tx.Exec(`UPDATE projects SET worker_rules=? WHERE name=?`, rules, name)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return fmt.Errorf("%w: unknown project", ErrRejected)
+		}
+		return nil
+	})
+}
+
+// ProjectWorkerRules returns the project's worker rules.
+func (s *Store) ProjectWorkerRules(name string) (string, error) {
+	var rules string
+	err := s.db.QueryRow(`SELECT worker_rules FROM projects WHERE name=?`, name).Scan(&rules)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("%w: unknown project", ErrRejected)
+	}
+	return rules, err
+}
+
 // Project is a project with its folder on this computer.
 type Project struct {
 	Name   string `json:"name"`
@@ -513,6 +546,9 @@ type StartTaskRequest struct {
 	Project, OpID, Computer, Provider, Title, Text string
 	// Model is the worker's model; empty means the CLI's own default.
 	Model string
+	// Rules are the project's worker rules of the computer that started the
+	// task (T-050). StartTask fills them; they travel with a remote task.
+	Rules string
 }
 
 // taskModelPattern accepts model names such as "opus", "claude-sonnet-5-5",
@@ -569,6 +605,9 @@ func (s *Store) StartTask(r StartTaskRequest) (string, bool, error) {
 		if projects == 0 {
 			return fmt.Errorf("%w: unknown project", ErrRejected)
 		}
+		if err := tx.QueryRow(`SELECT worker_rules FROM projects WHERE name=?`, r.Project).Scan(&r.Rules); err != nil {
+			return err
+		}
 		if r.Computer != computer {
 			id, err = startRemoteTask(tx, r)
 		} else {
@@ -623,6 +662,11 @@ func startLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, origin *net
 	if _, err := tx.Exec(`INSERT INTO tasks(id,project,op_id,computer,provider,cli_path,environment,profile,folder,title,text,state,session_id,created_at,updated_at,model) VALUES (?,?,?,?,?,?,?,?,?,?,?,'running',?,?,?,?)`,
 		id, r.Project, r.OpID, computer, r.Provider, agent.CLI, agent.Environment, agent.Profile, folder, taskTitle(r.Title, r.Text), r.Text, nullString(session), at, at, r.Model); err != nil {
 		return "", err
+	}
+	if r.Rules != "" {
+		if _, err := tx.Exec(`UPDATE tasks SET rules=? WHERE id=?`, r.Rules, id); err != nil {
+			return "", err
+		}
 	}
 	if origin != nil {
 		if _, err := tx.Exec(`UPDATE tasks SET origin_broker=?,origin_peer=?,origin_task=? WHERE id=?`, origin.broker, origin.peer, origin.task, id); err != nil {
@@ -1002,6 +1046,9 @@ type TaskBrief struct {
 	Run      int    `json:"run"`
 	// Note is set on a resumed run whose task text was left out (T-033).
 	Note string `json:"note,omitempty"`
+	// Rules are the owner's standing rules for this project's workers
+	// (T-050), given on every run.
+	Rules string `json:"rules,omitempty"`
 }
 
 // resumedTaskNote tells a resumed worker where its task text is.
@@ -1019,6 +1066,9 @@ func (s *Store) ReadTask(run, receipt string, includeTask bool) (TaskBrief, erro
 			return err
 		}
 		b = TaskBrief{TaskID: t.ID, Project: t.Project, Folder: t.Folder, Title: t.Title, Task: t.Text, Run: r.Ordinal}
+		if err := tx.QueryRow(`SELECT rules FROM tasks WHERE id=?`, t.ID).Scan(&b.Rules); err != nil {
+			return err
+		}
 		if r.Kind == "answer" {
 			if !includeTask {
 				b.Task, b.Note = "", resumedTaskNote

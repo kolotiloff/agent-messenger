@@ -837,9 +837,10 @@
   let editingFolder=false;
   function openProjectDialog(edit){
     editingFolder=edit;
-    $('project-dialog-title').textContent=edit?'Папка проекта «'+view.project+'»':'Новый проект';
+    $('project-dialog-title').textContent=edit?'Проект «'+view.project+'»':'Новый проект';
     $('project-name-field').hidden=edit;$('project-name').value='';$('project-folder').value=edit?view.folder:'';
-    $('project-save').textContent=edit?'Сохранить папку':'Создать проект';$('project-status').textContent='';
+    $('project-rules').value=edit?(view.worker_rules||''):'';
+    $('project-save').textContent=edit?'Сохранить':'Создать проект';$('project-status').textContent='';
     $('project-dialog').showModal();
   }
   async function saveProject(){
@@ -847,7 +848,9 @@
     if(!name||!folder){$('project-status').textContent='Укажите имя и папку.';return;}
     $('project-save').disabled=true;$('project-status').textContent='Сохраняем…';
     try{
-      await postAPI(editingFolder?'/api/project-folder':'/api/project-create',{name,folder});
+      if(!editingFolder||folder!==view.folder)await postAPI(editingFolder?'/api/project-folder':'/api/project-create',{name,folder});
+      const rules=$('project-rules').value.trim();
+      if(rules!==(editingFolder?(view.worker_rules||''):''))await postAPI('/api/project-rules',{name,rules});
       if(!editingFolder){project=name;remember('messenger-project',name);}
       $('project-dialog').close();viewSignature='';await refresh();
       // Connect the coordinator right away; the result is shown, not retried.

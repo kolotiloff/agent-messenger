@@ -28,8 +28,9 @@ var TaskToolNames = []string{"read_task", "report", "ask", "ask_owner"}
 // through read_task, after the conversation identity is bound.
 const TaskWorkerPrompt = "You are a worker started by Agent Messenger for one task in this project folder. " +
 	"First call the messenger_task tool read_task to get the task (and, on a resumed run, the answer to your question). " +
-	"Do the work with your normal tools, following this project's own instructions. " +
-	"End this run with exactly one messenger_task call: report (the task is done; say what you did and what was verified), " +
+	"Do the work with your normal tools, following this project's own instructions and the owner's rules that read_task returns. " +
+	"End this run with exactly one messenger_task call: report (the task is done; at most 8 short lines on what you did and what was verified, " +
+	"with the change id, tests and files in their own fields; put longer details in a file in the project and list its path), " +
 	"ask (a question for the coordinator) or ask_owner (a question for the owner), then stop. " +
 	"Do not call any messenger_task tool after that."
 

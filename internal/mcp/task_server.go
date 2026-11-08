@@ -30,8 +30,14 @@ func taskTools() []map[string]any {
 			"inputSchema": map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{
 				"include_task": map[string]any{"type": "boolean", "description": "also return the task text on a resumed run"},
 			}}},
-		{"name": "report", "description": "Finish the task: what you did, what you verified and what remains. Ends this run; the task is done.",
-			"inputSchema": text("the report")},
+		{"name": "report", "description": "Finish the task: what you did, what you verified and what remains, in at most 8 short lines. Put longer details in a file in the project and list its path in files. Ends this run; the task is done.",
+			"inputSchema": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"text"},
+				"properties": map[string]any{
+					"text":    map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxDispositionText, "description": "the report, at most 8 short lines"},
+					"changes": map[string]any{"type": "string", "maxLength": 500, "description": "the change you made: commit, changeset or branch; leave out when nothing changed"},
+					"tests":   map[string]any{"type": "string", "maxLength": 500, "description": "the tests or checks you ran and their result, one line"},
+					"files":   map[string]any{"type": "array", "maxItems": core.MaxReportFiles, "items": map[string]any{"type": "string", "maxLength": 300}, "description": "paths of files the coordinator should read, such as a detailed report"},
+				}}},
 		{"name": "ask", "description": "Ask the coordinator a question you cannot resolve yourself. Ends this run; the task resumes with the answer.",
 			"inputSchema": text("the question")},
 		{"name": "ask_owner", "description": "Ask the owner directly, when this project's rules allow it. Ends this run; the task resumes with the answer.",
@@ -120,7 +126,16 @@ func callTaskTool(store *core.Store, run, receipt string, params map[string]any)
 			break
 		}
 		value, err = store.ReadTask(run, receipt, include)
-	case core.DispositionReport, core.DispositionAsk, core.DispositionAskOwner:
+	case core.DispositionReport:
+		var parts core.ReportParts
+		var text string
+		if text, err = reportText(args, &parts); err != nil {
+			break
+		}
+		if err = store.RecordDisposition(run, receipt, name, text); err == nil {
+			value = map[string]any{"recorded": name, "next": "Stop now. Messenger publishes this after it verifies the run."}
+		}
+	case core.DispositionAsk, core.DispositionAskOwner:
 		text, ok := args["text"].(string)
 		if !ok || len(args) != 1 {
 			err = fmt.Errorf("%s takes only text", name)
@@ -137,6 +152,36 @@ func callTaskTool(store *core.Store, run, receipt string, params map[string]any)
 	}
 	encoded, _ := json.Marshal(value)
 	return map[string]any{"content": []map[string]any{{"type": "text", "text": string(encoded)}}, "isError": false}
+}
+
+// reportText reads the report's arguments into one text (T-050).
+func reportText(args map[string]any, parts *core.ReportParts) (string, error) {
+	for key, v := range args {
+		var ok bool
+		switch key {
+		case "text":
+			parts.Text, ok = v.(string)
+		case "changes":
+			parts.Changes, ok = v.(string)
+		case "tests":
+			parts.Tests, ok = v.(string)
+		case "files":
+			list, isList := v.([]any)
+			ok = isList
+			for _, item := range list {
+				path, isString := item.(string)
+				if !isString {
+					ok = false
+					break
+				}
+				parts.Files = append(parts.Files, path)
+			}
+		}
+		if !ok {
+			return "", errors.New("report takes text and optional changes, tests (strings) and files (a list of paths)")
+		}
+	}
+	return parts.Compose()
 }
 
 // TaskEnvVariable carries a Cursor run's database, run and receipt to its
