@@ -87,6 +87,11 @@ func (s *Supervisor) SetAgentModels(provider string, models []string) error {
 	return s.store.SetAgentModels(provider, models)
 }
 
+// RemoveAgent disconnects an agent from the window (T-046).
+func (s *Supervisor) RemoveAgent(provider string) error {
+	return s.store.RemoveComputerAgent(provider)
+}
+
 // CancelTask stops a task from the window's stop button. The running worker
 // is signalled by the client's cancel watcher and verified like any run.
 func (s *Supervisor) CancelTask(id string) error {

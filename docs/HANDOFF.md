@@ -14,7 +14,8 @@ Updated 2026-11-08 (T-043) by Claude Code.
 - **T-043 on `claude/t043-agent-models`:** model names per agent, owner-listed, for the coordinator (D-058). Verified with tests only.
 - **T-044 on `claude/t044-agent-limits` (on top of T-043):** each agent's last reported limit as a `limit` field (D-059). Real CLI fields not checked (Q-015).
 - **T-045 on `claude/t045-linux-icon` (on top of T-044):** icons on Windows and Linux; the Windows window closes and reopens after «Обновиться».
-- **Next:** merge T-043, T-044 and T-045, release preview.37; the owner tests models and limits with real agents.
+- **T-046 on `claude/t046-ui-feedback` (on top of T-045):** agent cards check by themselves, simpler buttons, dialog actions on the right (D-060); Q-016 about the Linux window.
+- **Next:** merge T-043 to T-046, release preview.37; the owner tests models and limits with real agents.
 
 Updated 2026-11-08 (T-042) by Claude Code.
 

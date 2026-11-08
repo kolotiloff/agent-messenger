@@ -39,6 +39,10 @@ DEPLOYMENT.md asks for the OS secure storage (Keychain on the Mac). Today the ke
 
 ## Answered
 
+### Q-016: A real program window on Linux without Chrome?
+
+Asked 2026-11-08 (T-046). On Linux the window is a Chrome, Chromium, Edge or Brave window in app mode (D-054). With none of them installed (Ubuntu ships Firefox, which has no app mode) the page opens in the default browser, as the owner saw. A built-in window needs the system's WebKitGTK through cgo, so every Linux build (x64 and ARM) would be built with GTK libraries and would not start on a system without them. **Cautious choice:** keep D-054; tell the owner to install Chromium (`sudo snap install chromium` on Ubuntu) for the own window. **Owner:** keep this, or build Linux with WebKitGTK?
+
 ### Q-015: Which limit fields do the real CLIs print?
 
 Asked 2026-11-08 (T-044). Not checked on real agents. Claude's `rate_limit_event` is read for its status and reset time; a share used is not taken from it because its units are not known here. For Codex the `rate_limits` object (`used_percent`) is read wherever an event carries it; whether `codex exec --json` prints it is not known. Cursor prints no limit that Messenger knows. **Cautious choice:** show only what was read, mark it as the state at the end of the last task, never act on it automatically. **Owner:** after a real task of each agent, tell whether the card shows «Лимит».

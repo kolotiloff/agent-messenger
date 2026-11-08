@@ -102,3 +102,28 @@ func TestProjectAgentsUsesTheComputerName(t *testing.T) {
 		t.Fatalf("name %q", got)
 	}
 }
+
+// T-046: the owner disconnects an agent; one with an unfinished task stays.
+func TestRemoveComputerAgent(t *testing.T) {
+	f := newTaskFixture(t)
+	id := f.start(t, "op-1", "codex", "Fix")
+	if err := f.st.RemoveComputerAgent("codex"); !errors.Is(err, ErrRejected) {
+		t.Fatalf("agent with a running task removed: %v", err)
+	}
+	if err := f.st.RemoveComputerAgent("claude"); err != nil {
+		t.Fatal(err)
+	}
+	agents, _ := f.st.ComputerAgents()
+	if len(agents) != 1 || agents[0].Provider != "codex" {
+		t.Fatalf("agents %+v", agents)
+	}
+	if err := f.st.RemoveComputerAgent("claude"); !errors.Is(err, ErrRejected) {
+		t.Fatalf("second removal: %v", err)
+	}
+	if task, err := f.st.TaskByID(id); err != nil || task.CLI == "" {
+		t.Fatalf("task %+v %v", task, err)
+	}
+	if _, _, err := f.st.StartTask(StartTaskRequest{Project: "Game", OpID: "op-2", Provider: "claude", Text: "x"}); !errors.Is(err, ErrRejected) {
+		t.Fatalf("task for a removed agent: %v", err)
+	}
+}

@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (T-046 owner's UI feedback)
+
+- After updating to preview.36 the owner found: the restart button on the left and «Перезапускаем…» written in it; agent statuses empty until the setup dialog's check; stretched dialog buttons; «Подключить исполнителем» unclear; on Linux the page opened in the browser (no Chromium-based browser installed, Q-016). Changed as in D-060.
+- Verified here: core test of disconnecting, window route test, `check.sh`, headless Chromium screenshots of the restart dialog, the cards (three automatic checks) and the setup dialog. Not verified: a real Windows, Mac or Linux window.
+
 ## 2026-11-08 — Claude Code (T-045 icons, Windows update restart)
 
 - The owner's Linux agent said there is no menu entry: our doc was stale (the first `messenger open` adds one since preview.35), but the entry had no icon. Now Linux gets the icon (SVG in the user's icon folder) and the page has a favicon. Windows had no icon at all: `scripts/gen-icon` draws the Mac icon with the standard library and writes `cmd/messenger/rsrc_windows_{amd64,arm64}.syso` (a hand-written COFF resource; an external resource tool was not allowed to run here); the window loads it.

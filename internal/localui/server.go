@@ -530,7 +530,7 @@ var serverActions = map[string]bool{"enable": true, "disable": true, "invite": t
 
 func taskMutation(path string) bool {
 	switch path {
-	case "/api/project-create", "/api/project-folder", "/api/task-answer", "/api/agent-set", "/api/agent-models", "/api/task-cancel", "/api/server-action", "/api/coordinator-connect":
+	case "/api/project-create", "/api/project-folder", "/api/task-answer", "/api/agent-set", "/api/agent-models", "/api/agent-remove", "/api/task-cancel", "/api/server-action", "/api/coordinator-connect":
 		return true
 	}
 	return false
@@ -605,6 +605,14 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 			return control.Request{}, false
 		}
 		return control.Request{Cmd: "agent-set", Provider: in.Provider, CLI: in.CLI, Environment: in.Environment}, true
+	case "/api/agent-remove":
+		var in struct {
+			Provider string `json:"provider"`
+		}
+		if decoder.Decode(&in) != nil || !core.TaskProviders[in.Provider] {
+			return control.Request{}, false
+		}
+		return control.Request{Cmd: "agent-remove", Provider: in.Provider}, true
 	case "/api/agent-models":
 		var in struct {
 			Provider string   `json:"provider"`
