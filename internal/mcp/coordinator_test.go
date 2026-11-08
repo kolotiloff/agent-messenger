@@ -597,3 +597,28 @@ func TestCoordinatorGetLog(t *testing.T) {
 		t.Fatal("unknown request must fail")
 	}
 }
+
+func TestCoordinatorTasksShowActivity(t *testing.T) {
+	st := newCoordinatorStore(t)
+	c := startCoordinator(t, st, "Game")
+	ids := startTasks(t, c, 1, "act")
+	runs, err := st.NextTaskRunIntents(10)
+	if err != nil || len(runs) != 1 {
+		t.Fatalf("runs %v %v", runs, err)
+	}
+	if err := st.AppendTaskRunItem(runs[0], "tool", "Bash", "go test ./..."); err != nil {
+		t.Fatal(err)
+	}
+	var list struct {
+		Tasks []map[string]any `json:"tasks"`
+	}
+	if _, ok := c.tool("tasks", map[string]any{}, &list); !ok || len(list.Tasks) != 1 || list.Tasks[0]["task_id"] != ids[0] {
+		t.Fatalf("list %+v", list)
+	}
+	if list.Tasks[0]["last_activity"] != "Bash: go test ./..." || list.Tasks[0]["last_activity_at"] == nil {
+		t.Fatalf("activity %+v", list.Tasks[0])
+	}
+	if _, has := list.Tasks[0]["tokens"]; has {
+		t.Fatal("zero tokens shown")
+	}
+}

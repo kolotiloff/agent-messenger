@@ -6,6 +6,9 @@ Format: ID, question, why it matters, options, which tasks it blocks.
 
 ## Open
 
+### Q-024: What is «one list with remote-control sessions» (T-049 item 6)?
+Asked 2026-11-08. The coordinator's wishlist asks for one list with the owner's remote-control sessions. Messenger's task list already shows every task of the network (T-047); sessions the owner opens by remote control are not Messenger tasks and Messenger cannot see them. **Cautious choice:** nothing built until the owner says which sessions and where they should show.
+
 ### Q-001: Which language should the app UI use?
 The window and CLI messages are in Russian; code and docs are now in English. **Options:** keep Russian; switch to English; support both with a language setting. **Blocks:** T-019.
 

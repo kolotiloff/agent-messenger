@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (T-071 task activity, T-049 split)
+
+- T-049 split into T-070…T-073 and Q-024. T-071: the coordinator's `tasks` shows an open task's last worker action with its time and every task's tokens (D-084).
+- Verified: core and MCP tests, `check.sh`. Not verified with a real coordinator.
+
 ## 2026-11-08 — Claude Code (T-057 remote log)
 
 - Coordinator tool `get_log(computer, lines)`: request and reply go through the mailbox; the other computer answers only with «Отдавать журнал по сети» on (off by default) and removes ids, codes and keys (D-083). Screenshot: docs/mockups/log-share-built.png (stubbed).
