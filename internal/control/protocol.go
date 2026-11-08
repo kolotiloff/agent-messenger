@@ -245,6 +245,22 @@ func dispatch(handler Handler, request Request) Response {
 			return Response{Error: "view unavailable"}
 		}
 		return Response{OK: true, Overview: raw}
+	case "usage-stats":
+		h, ok := handler.(interface {
+			UsageStats(string) (any, error)
+		})
+		if !ok {
+			return Response{Error: "statistics unsupported; update the background client"}
+		}
+		value, err := h.UsageStats(request.Alias)
+		if err != nil {
+			return Response{Error: err.Error()}
+		}
+		raw, err := json.Marshal(value)
+		if err != nil {
+			return Response{Error: "statistics unavailable"}
+		}
+		return Response{OK: true, Overview: raw}
 	case "coordinator-connect":
 		h, ok := handler.(interface {
 			ConnectCoordinator(string) (any, error)

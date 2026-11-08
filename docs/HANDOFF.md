@@ -8,6 +8,12 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-08 (night, T-068) by Claude Code. The owner is asleep and asked to keep working alone, deciding by simplicity.
+
+- **PR #73** (`claude/t061-agent-cards`): T-061 agent cards with the on/off switch, T-062 Windows window without the title bar; goes out as preview.43.
+- **T-068** token statistics on `claude/t068-token-stats` (D-077), goes out as preview.44.
+- **Next, in the owner's order:** T-069 Linux window (WebKitGTK), T-059 language, T-047 shared task list, T-052, T-053, T-057, T-049.
+
 Updated 2026-11-08 (before preview.42) by Claude Code.
 
 - **PR #72** (`claude/t058-task-cost`) goes out as **preview.42** (owner asked to release everything done today): T-058 usage in statuses, T-060 blue dot only while running, T-063 resizable panes and empty-click, T-064 «Проект» tab with auto-save, T-065 project rename (shown name only, D-072, Q-019), T-066 update icon and «v0.41» (D-073, Q-020), T-067 Server tab variant Б, «Любые команды» text. All window changes were checked in Chromium with stubbed APIs only, not in the native windows.

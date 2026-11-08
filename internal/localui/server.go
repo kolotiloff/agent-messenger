@@ -445,6 +445,13 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 				http.Error(w, "invalid project", 400)
 				return
 			}
+		case "/api/usage-stats":
+			req.Cmd = "usage-stats"
+			req.Alias = r.URL.Query().Get("period")
+			if req.Alias != "day" && req.Alias != "week" && req.Alias != "month" {
+				http.Error(w, "invalid period", 400)
+				return
+			}
 		case "/api/task":
 			req.Cmd = "task-feed"
 			req.MessageID = r.URL.Query().Get("id")
@@ -499,7 +506,7 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			status := *response.Status
 			status.Detail = ""
 			writeJSON(w, status)
-		case "overview", "window-view", "task-feed", "server":
+		case "overview", "window-view", "task-feed", "server", "usage-stats":
 			writeRaw(w, response.Overview)
 		case "timeline":
 			writeRaw(w, response.Timeline)

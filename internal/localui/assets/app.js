@@ -820,8 +820,82 @@
   function show(next){
     tab=next;root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab);
     root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
-    $('list-toggle').hidden=tab!=='tasks';if(tab==='server')loadServer();$('screen-title').textContent={tasks:'Задачи',agents:'Агенты',project:'Проект',server:'Сервер'}[tab];
+    $('list-toggle').hidden=tab!=='tasks';if(tab==='server')loadServer();if(tab==='stats')loadStats();$('screen-title').textContent={tasks:'Задачи',agents:'Агенты',project:'Проект',server:'Сервер',stats:'Статистика'}[tab];
   }
+
+
+  // T-068: tokens spent by the tasks of this computer over a period. Only
+  // tokens, no dollars (D-074). One hue for every bar: the bars show size,
+  // not identity, and the names stand next to them.
+  let statsPeriod=['day','week','month'].includes(recall('messenger-stats-period'))?recall('messenger-stats-period'):'week',stats=null,statsGen=0;
+  const periodWords={day:'сегодня',week:'за 7 дней',month:'за 30 дней'};
+  function tasksWord(n){const a=n%10,b=n%100;return n+' '+(a===1&&b!==11?'задача':a>=2&&a<=4&&(b<12||b>14)?'задачи':'задач');}
+  function tokensWord(n){const a=n%10,b=n%100;return a===1&&b!==11?'токен':a>=2&&a<=4&&(b<12||b>14)?'токена':'токенов';}
+  function tokensFull(n){return n.toLocaleString('ru-RU')+' '+tokensWord(n);}
+  async function loadStats(){
+    const gen=++statsGen;
+    try{const s=await api('/api/usage-stats?period='+statsPeriod,8000);if(gen===statsGen){stats=s;renderStats();}}
+    catch(error){if(gen===statsGen){$('stats-total-title').textContent='Статистика недоступна';$('stats-total-note').textContent=error.message;}}
+  }
+  function statsBars(box,groups,total,agents){
+    box.replaceChildren();
+    if(!groups.length){box.append(el('p','Пока пусто','am-small am-muted'));return;}
+    for(const g of groups){
+      const row=el('div',undefined,'am-stats-row');
+      const name=el('span',agents?(names[g.key]||g.key):(g.name||'Без имени'),'am-stats-name');
+      if(g.this)name.append(el('span',' (этот)','am-muted'));
+      const bar=el('span',undefined,'am-stats-bar');const fill=el('span');fill.style.width=(total?Math.max(2,100*g.tokens/total):0)+'%';bar.append(fill);
+      row.append(name,el('span',tokensText(g.tokens),'am-stats-value'),bar,el('span',tasksWord(g.tasks),'am-small am-muted am-stats-tasks'));
+      row.title=usageLong(g);box.append(row);
+    }
+  }
+  function statsDay(day){const d=new Date(day+'T12:00:00');return isNaN(d.getTime())?day:d.toLocaleDateString('ru-RU',{day:'numeric',month:'short'});}
+  function statsDays(box,days){
+    box.replaceChildren();box.hidden=days.length<2;if(box.hidden)return;
+    const max=Math.max(1,...days.map(d=>d.tokens));
+    const plot=el('div',undefined,'am-stats-plot');plot.setAttribute('role','img');
+    plot.setAttribute('aria-label','Токены по дням, наибольшее за день '+tokensText(max));
+    const tip=el('div','','am-stats-tip');tip.hidden=true;
+    for(const d of days){
+      const col=el('button',undefined,'am-stats-col');col.type='button';
+      const text=statsDay(d.day)+': '+(d.tokens?tokensFull(d.tokens)+', '+tasksWord(d.tasks):'нет задач');
+      col.setAttribute('aria-label',text);
+      const bar=el('span');bar.style.height=(d.tokens?Math.max(2,100*d.tokens/max):0)+'%';col.append(bar);
+      const showTip=()=>{tip.textContent=text;tip.hidden=false;const c=col.offsetLeft+col.offsetWidth/2,w=tip.offsetWidth;tip.style.left=Math.min(Math.max(0,c-w/2),plot.clientWidth-w)+'px';};
+      col.addEventListener('mouseenter',showTip);col.addEventListener('focus',showTip);
+      col.addEventListener('mouseleave',()=>tip.hidden=true);col.addEventListener('blur',()=>tip.hidden=true);
+      plot.append(col);
+    }
+    plot.append(tip);
+    const axis=el('div',undefined,'am-stats-axis am-small am-muted');
+    axis.append(el('span',statsDay(days[0].day)),el('span','до '+tokensText(max)+' в день'),el('span',statsDay(days[days.length-1].day)));
+    box.append(plot,axis);
+  }
+  function renderStats(){
+    root.querySelectorAll('[data-period]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.period===statsPeriod)));
+    if(!stats)return;
+    const t=stats.total;
+    $('stats-total-title').textContent=t.tasks?tokensFull(t.tokens)+' '+periodWords[statsPeriod]:'Нет задач с расходом '+periodWords[statsPeriod];
+    $('stats-total-note').textContent=t.tasks?tasksWord(t.tasks)+', на входе '+t.input_tokens.toLocaleString('ru-RU')+(t.cached_tokens?' (из кэша '+t.cached_tokens.toLocaleString('ru-RU')+')':'')+', на выходе '+t.output_tokens.toLocaleString('ru-RU'):'Агент сообщает расход, когда задача заканчивается.';
+    statsDays($('stats-days'),statsPeriod==='day'?[]:stats.days);
+    statsBars($('stats-agents'),stats.agents,t.tokens,true);
+    statsBars($('stats-computers'),stats.computers,t.tokens);
+    const top=$('stats-top');top.replaceChildren();
+    if(!stats.top.length)top.append(el('p','Пока пусто','am-small am-muted'));
+    for(const task of stats.top){
+      const row=el('button',undefined,'am-stats-task');row.type='button';
+      const words=el('span',undefined,'am-stats-task-text');
+      words.append(el('span',task.title||'Без названия','am-stats-task-title'),el('span',[task.project,shortNames[task.agent]||task.agent,task.computer].filter(Boolean).join(', '),'am-small am-muted'));
+      row.append(words,el('span',tokensText(task.tokens),'am-stats-value'));
+      row.title='Открыть задачу';
+      row.addEventListener('click',()=>{
+        if(task.project&&task.project!==project){project=task.project;remember('messenger-project',project);viewSignature='';}
+        selectedTask=task.id;feed=null;feedSignature='';show('tasks');refresh();
+      });
+      top.append(row);
+    }
+  }
+  root.querySelectorAll('[data-period]').forEach(b=>b.addEventListener('click',()=>{statsPeriod=b.dataset.period;remember('messenger-stats-period',statsPeriod);stats=null;renderStats();loadStats();}));
 
   // Server tab: the broker hosted by this client and this computer's
   // connection to a broker. Messages stay next to the section they belong to.
@@ -1368,5 +1442,5 @@
   const chatBody=root.querySelector('.am-chat-body'),chatFooter=root.querySelector('.am-chat-footer');
   new ResizeObserver(()=>chatBody.style.setProperty('--am-footer-height',chatFooter.getBoundingClientRect().height+'px')).observe(chatFooter);
   show('tasks');refresh();loadDiscovery();
-  setInterval(refresh,2000);setInterval(loadDiscovery,60000);
+  setInterval(refresh,2000);setInterval(loadDiscovery,60000);setInterval(()=>{if(tab==='stats')loadStats();},15000);
 })();

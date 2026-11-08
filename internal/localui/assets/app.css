@@ -85,6 +85,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-control:32px;
   --am-control-compact:28px;
   --am-control-chip:24px;
+  --am-chart-height:120px;
+  --am-bar-thin:6px;
   --am-switch-width:36px;
   --am-switch-height:20px;
   --am-switch-knob:16px;
@@ -554,3 +556,31 @@ body.am-native #am-concept .am-panel-toggle { margin-left:auto; }
 #am-concept button.am-window-btn.am-window-close:is(:hover,:focus-visible) { background:#c42b1c; color:#fff; }
 body.am-frameless #am-concept .am-tabs { padding-right:calc(3 * 46px); }
 body.am-frameless #am-concept .am-tabs, body.am-frameless #am-concept .am-sidebar { user-select:none; }
+
+/* T-068 statistics: one neutral ink for every bar, so no bar reads as a
+   status; names and numbers sit beside the bars in text colors. */
+#am-concept .am-stats { max-width:720px; }
+#am-concept .am-stats-periods { display:flex; gap:var(--am-space-1); }
+#am-concept .am-stats-hero { font-size:var(--am-text-xl); margin:0; }
+#am-concept .am-stats-hero:focus { outline:none; }
+#am-concept .am-stats-pair { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:var(--am-gap-section); }
+#am-concept .am-stats-pair h3, #am-concept .am-stats h3 { margin:0; }
+#am-concept .am-stats-days { display:flex; flex-direction:column; gap:var(--am-gap-control); }
+#am-concept .am-stats-plot { position:relative; display:flex; align-items:flex-end; gap:var(--am-gap-line); height:var(--am-chart-height); border-bottom:1px solid var(--am-line); }
+#am-concept .am-stats-col { flex:1; min-width:0; height:100%; min-height:0; padding:0; border:0; border-radius:0; background:transparent; display:flex; align-items:flex-end; justify-content:center; cursor:default; }
+#am-concept .am-stats-col > span { display:block; width:100%; max-width:var(--am-control); border-radius:var(--am-radius-xs) var(--am-radius-xs) 0 0; background:var(--am-muted); }
+#am-concept .am-stats-col:is(:hover,:focus-visible) > span { background:var(--am-text); }
+#am-concept .am-stats-tip { position:absolute; top:0; padding:var(--am-space-1) var(--am-space-2); border:1px solid var(--am-menu-line); border-radius:var(--am-radius-s); background:var(--am-menu); box-shadow:var(--am-shadow-s); font-size:var(--am-text-s); white-space:nowrap; pointer-events:none; }
+#am-concept .am-stats-axis { display:flex; justify-content:space-between; gap:var(--am-gap-control); }
+#am-concept .am-stats-bars { display:flex; flex-direction:column; gap:var(--am-gap-content); }
+#am-concept .am-stats-row { display:grid; grid-template-columns:1fr auto; column-gap:var(--am-gap-control); row-gap:var(--am-space-1); align-items:center; }
+#am-concept .am-stats-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#am-concept .am-stats-value { font-variant-numeric:tabular-nums; white-space:nowrap; }
+#am-concept .am-stats-bar { height:var(--am-bar-thin); border-radius:var(--am-radius-xs); background:var(--am-soft); overflow:hidden; }
+#am-concept .am-stats-bar > span { display:block; height:100%; border-radius:var(--am-radius-xs); background:var(--am-muted); }
+#am-concept .am-stats-tasks { text-align:right; }
+#am-concept .am-stats-top { display:flex; flex-direction:column; margin:0 calc(-1 * var(--am-space-3)); }
+#am-concept .am-stats-task { display:flex; align-items:center; justify-content:space-between; gap:var(--am-gap-content); min-height:var(--am-control); padding:var(--am-pad-compact); border:0; border-radius:var(--am-radius-s); background:transparent; text-align:left; font-weight:inherit; }
+#am-concept .am-stats-task:is(:hover,:focus-visible) { background:var(--am-soft); }
+#am-concept .am-stats-task-text { display:flex; flex-direction:column; gap:var(--am-gap-line); min-width:0; }
+#am-concept .am-stats-task-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
