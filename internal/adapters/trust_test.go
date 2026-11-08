@@ -105,3 +105,21 @@ func TestCodexTrustForms(t *testing.T) {
 		}
 	}
 }
+
+// A path written without escaping ("C:\Users\...") keeps its backslashes;
+// real escapes are still read.
+func TestTomlKeyBackslashes(t *testing.T) {
+	for in, want := range map[string]string{
+		`"C:\Users\Owner\Game"`:    `C:\Users\Owner\Game`,
+		`"C:\\Users\\Owner\\Game"`: `C:\Users\Owner\Game`,
+		`"D:\Projects\Игра"`:       `D:\Projects\Игра`,
+		`"caf\u00e9"`:              "café",
+		`'C:\Users\Owner'`:         `C:\Users\Owner`,
+		`"say \"hi\""`:             `say "hi"`,
+	} {
+		got, _, ok := tomlKey(in)
+		if !ok || got != want {
+			t.Fatalf("%s: %q %v", in, got, ok)
+		}
+	}
+}
