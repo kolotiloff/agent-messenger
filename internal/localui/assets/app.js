@@ -1,7 +1,8 @@
 'use strict';
 (() => {
   const root = document.getElementById('am-concept');
-  if(window.webkit?.messageHandlers?.updates)document.body.classList.add('am-native');
+  // The Mac app and the Windows window draw their own frame and title (D-054).
+  if(window.webkit?.messageHandlers?.updates||window.amDesktop)document.body.classList.add('am-native');
   const $ = id => root.querySelector('#' + id);
   const selectViews = new Map();
   function syncSelects(){selectViews.forEach(view=>view.sync());}
@@ -86,6 +87,8 @@
   function applyTheme(theme, persist=false) {
     if(!['system','light','dark'].includes(theme))theme='system';
     document.documentElement.dataset.theme=theme;$('theme-select').value=theme;syncSelects();
+    // The Windows window colours its title bar like the page.
+    if(window.amTitleBar){const dark=theme==='dark'||(theme==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);try{window.amTitleBar(dark);}catch(_){}}
     if(persist) {
       if(window.webkit?.messageHandlers?.appearance)window.webkit.messageHandlers.appearance.postMessage(theme);
       else try {localStorage.setItem('messenger-theme',theme);} catch(_) {}
@@ -1026,6 +1029,7 @@
   enhanceSelect($('theme-select'));enhanceSelect($('project-select'));enhanceSelect($('agent-filter'));enhanceSelect($('host-scope'));enhanceSelect($('host-address'));
   centreControlText();
   applyTheme(initialTheme||'system');
+  matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{if(document.documentElement.dataset.theme==='system')applyTheme('system');});
   $('theme-select').addEventListener('change',()=>applyTheme($('theme-select').value,true));
   const gutterObserver=new ResizeObserver(entries=>{
     for(const {target} of entries){
