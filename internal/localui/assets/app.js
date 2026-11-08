@@ -1113,24 +1113,34 @@
   // The Mac shell's folder picker answers here, into the field that asked.
   let folderTarget='project-folder';
   window.messengerFolderPicked=path=>{if(typeof path==='string'&&path){$(folderTarget).value=path;$(folderTarget).dispatchEvent(new Event('input'));}};
+  // The window names a preview build shortly, «Версия 41 альфа» (owner); the
+  // release tag 0.0.0-preview.N stays as it is because updates compare it.
+  function versionName(version){
+    const preview=version.match(/^0\.0\.0-preview\.(\d+)$/);
+    return preview?'версия '+preview[1]+' альфа':version?'версия '+version:'';
+  }
+  function versionText(installed){const n=versionName(installed);return n?n[0].toUpperCase()+n.slice(1):'';}
+  // The update icon says in its tooltip which version came out (T-066).
+  function updateTip(version,busy){
+    const name=versionName(version);
+    const text=busy?'Обновление загружается':name?'Вышла '+name+'. Нажмите, чтобы обновить':'Обновить';
+    $('app-update-button').title=text;$('app-update-button').setAttribute('aria-label',text);
+  }
   window.messengerUpdateStatus = status => {
     if(!window.webkit?.messageHandlers?.updates)return;
     const version=typeof status?.version==='string'?status.version:'';
     const installed=typeof status?.installedVersion==='string'?status.installedVersion:'';
     $('app-installed-version').hidden=!installed;
-    const preview=installed.match(/^0\.0\.0-preview\.(\d+)$/);
-    $('app-installed-version').textContent=preview?'Предварительная версия '+preview[1]:installed?'Версия '+installed:'';
     $('app-installed-version').title=installed?'Точная версия: '+installed:'';
     const detail=typeof status?.detail==='string'?status.detail:'';
     const waiting=detail==='Обновление загружается в фоне';
-    // Only an available update is shown, as the one button «Обновить».
+    // Only an available update is shown, as the blue icon next to the version.
     // Background checks and their failures stay quiet; the app checks again
     // by itself.
     const shown=!!version||waiting;
     $('app-update-version').hidden=true;$('app-update-button').hidden=!shown;
-    $('app-update-button').title=version?'Версия '+version:'';
-    $('app-update-button').textContent=waiting?'Загружается…':'Обновить';
-    $('app-update-button').setAttribute('aria-label',version?'Установить обновление '+version:'Обновление загружается');
+    $('app-installed-version').textContent=versionText(installed);
+    updateTip(version,waiting);
     $('app-update-button').disabled=waiting;
   };
   // Windows and Linux: the program updates itself from the window (D-048).
@@ -1140,19 +1150,16 @@
   function renderSelfUpdate(){
     const s=selfUpdate;if(!s)return;
     const installed=typeof s.installed_version==='string'?s.installed_version:'';
-    const preview=installed.match(/^0\.0\.0-preview\.(\d+)$/);
     $('app-installed-version').hidden=!installed;
-    $('app-installed-version').textContent=preview?'Предварительная версия '+preview[1]:installed?'Версия '+installed:'';
     $('app-installed-version').title=installed?'Точная версия: '+installed:'';
     const version=typeof s.version==='string'?s.version:'';
     const done=s.state==='installed',shown=(s.state==='available'&&!!version)||selfUpdateBusy||done||!!s.message;
-    // Only the button «Обновить» while an update waits (owner, T-056); a line
+    // Only the update icon while an update waits (owner, T-056, T-066); a line
     // appears only for an error or after the update.
     $('app-update-version').hidden=!s.message&&!done;$('app-update-button').hidden=!shown||done;
+    $('app-installed-version').textContent=versionText(installed);
     $('app-update-version').textContent=s.message||(done?'Обновлено. Окно откроется заново.':'');
-    $('app-update-button').title=version?'Версия '+version:'';
-    $('app-update-button').textContent=selfUpdateBusy?'Обновляется…':'Обновить';
-    $('app-update-button').setAttribute('aria-label',version?'Установить обновление '+version:'Установить обновление');
+    updateTip(version,selfUpdateBusy);
     $('app-update-button').disabled=selfUpdateBusy;
   }
   async function loadSelfUpdate(){

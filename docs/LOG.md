@@ -387,3 +387,7 @@ Reports for each step are in [reports/](reports/). The handoff is in [HANDOFF.md
 ## 2026-11-08 — T-067 Server tab, variant Б
 
 - The owner chose variant Б: three cards in one column, the accept switch inside «Этот компьютер», the name saves by itself, no «Сохранить», «Проверить связь» or side note, one computer name. The owner also approved the agent cards with the per-card switch and the settings dialog (T-061, not built yet). Checked in Chromium with a stubbed API only.
+
+## 2026-11-08 — T-066 update icon, version name
+
+- An available update is a blue round arrow next to the version at the bottom of the sidebar (owner's variant А); tooltip names the version. The window shows «Версия 41 альфа»; tags stay 0.0.0-preview.N (D-073, Q-020). Checked in Chromium with a stubbed status only.

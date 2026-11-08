@@ -245,6 +245,14 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-theme-setting { display:flex; align-items:center; gap:var(--am-gap-content); }
 #am-concept .am-theme-setting .am-select-trigger { flex:1; }
 #am-concept .am-version { font-size:var(--am-text-xs); color:var(--am-muted); line-height:1.4; }
+/* An available update is a small blue round arrow next to the version (owner, T-066) */
+#am-concept .am-version-row { display:flex; align-items:center; justify-content:space-between; gap:var(--am-gap-control); min-width:0; }
+#am-concept .am-version-row .am-version { margin:0; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#am-concept button.am-update-icon { flex-shrink:0; width:22px; height:22px; min-height:0; padding:0; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background:color-mix(in srgb,var(--am-run) 22%,transparent); color:var(--am-run); }
+#am-concept button.am-update-icon:hover:not(:disabled) { background:color-mix(in srgb,var(--am-run) 34%,transparent); }
+#am-concept button.am-update-icon:disabled { opacity:.6; cursor:default; }
+#am-concept button.am-update-icon[hidden] { display:none; }
+#am-concept .am-update-icon svg { width:13px; height:13px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
 
 /* Main pane and tabs */
 #am-concept .am-main { display:flex; flex-direction:column; gap:var(--am-gap-content); min-width:0; min-height:0; padding:var(--am-pane-inset) 0; overflow:hidden; }
