@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (T-050 worker rules, short reports)
+
+- preview.37 release started from `main` da18160 (PR #65). The owner's coordinator proposed ways to save tokens; points 1 and 2 are done (D-062): per-project worker rules copied into each task (also remote), a built-in short-report rule, and `report` fields `changes` / `tests` / `files` stored as labelled lines. Continuing a finished task is T-051, kept simple at the owner's request.
+- Verified here: core tests (rules stored, copied, kept, sent to the other computer, its own rules not used), report composition, MCP argument test, window route test, `check.sh`. Not verified: real CLIs filling the new fields; the dialog in a browser.
+
 ## 2026-11-08 — Claude Code (T-048 computer names)
 
 - The owner's Linux laptop joined as «Ноут-Linux», but its own window showed the system name, and a rename in «Имя в сети» never reached the others (D-039 kept the joining name). Now each report carries the window's name and the broker renames the device (D-061); a computer that joined earlier takes its joining name. The coordinator's wishlist from the owner's project is recorded as T-049; the shared task list is T-047.

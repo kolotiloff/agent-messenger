@@ -159,6 +159,8 @@ func Open(path string) (*Store, error) {
 		{"tasks", "failure_reason", "TEXT"},
 		{"tasks", "failure_reset", "TEXT"},
 		{"requests", "in_reply_to", "TEXT"},
+		{"projects", "worker_rules", "TEXT NOT NULL DEFAULT ''"},
+		{"tasks", "rules", "TEXT NOT NULL DEFAULT ''"},
 		{"requests", "hops", "INTEGER NOT NULL DEFAULT 0"},
 		networkTaskColumns[0], networkTaskColumns[1], networkTaskColumns[2],
 		networkTaskColumns[3], networkTaskColumns[4], networkTaskColumns[5],

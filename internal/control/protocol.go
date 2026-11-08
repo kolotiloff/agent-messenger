@@ -298,6 +298,17 @@ func dispatch(handler Handler, request Request) Response {
 			return Response{Error: err.Error()}
 		}
 		return Response{OK: true}
+	case "project-rules":
+		h, ok := handler.(interface {
+			SetProjectWorkerRules(string, string) error
+		})
+		if !ok {
+			return Response{Error: "worker rules unsupported; update the background client"}
+		}
+		if err := h.SetProjectWorkerRules(request.Alias, request.Text); err != nil {
+			return Response{Error: err.Error()}
+		}
+		return Response{OK: true}
 	case "agent-models":
 		h, ok := handler.(interface {
 			SetAgentModels(string, []string) error

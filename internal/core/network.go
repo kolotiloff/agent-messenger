@@ -155,6 +155,9 @@ type netBody struct {
 	By       string `json:"by,omitempty"`
 	Failure  string `json:"failure_reason,omitempty"`
 	Reset    string `json:"failure_reset,omitempty"`
+	// Rules are the starting computer's worker rules (T-050). A computer
+	// before preview.38 ignores them.
+	Rules string `json:"rules,omitempty"`
 }
 
 func enqueueNet(tx *sql.Tx, broker, to, opID, task string, b netBody) error {
@@ -334,7 +337,7 @@ func startRemoteTask(tx *sql.Tx, r StartTaskRequest) (string, error) {
 	if err := insertTaskEvent(tx, r.Project, id, AudienceLog, "started", title, ""); err != nil {
 		return "", err
 	}
-	return id, enqueueNet(tx, broker, r.Computer, "start."+id, id, netBody{Kind: "start", Task: id, Project: r.Project, Agent: r.Provider, Title: title, Text: r.Text, Model: r.Model})
+	return id, enqueueNet(tx, broker, r.Computer, "start."+id, id, netBody{Kind: "start", Task: id, Project: r.Project, Agent: r.Provider, Title: title, Text: r.Text, Model: r.Model, Rules: r.Rules})
 }
 
 // answerRemoteTask sends an answer to the computer that runs the task.
@@ -576,7 +579,7 @@ func applyStart(tx *sql.Tx, from netLink, b netBody) error {
 	if accept == "0" {
 		return reply("refused", netBody{Reason: "this computer does not run tasks of other computers; its owner can turn this on in the Server tab"})
 	}
-	r := StartTaskRequest{Project: b.Project, OpID: mirrorOp(from), Provider: b.Agent, Title: b.Title, Text: strings.TrimSpace(b.Text), Model: strings.TrimSpace(b.Model)}
+	r := StartTaskRequest{Project: b.Project, OpID: mirrorOp(from), Provider: b.Agent, Title: b.Title, Text: strings.TrimSpace(b.Text), Model: strings.TrimSpace(b.Model), Rules: strings.TrimSpace(b.Rules)}
 	var id string
 	err = savepoint(tx, func() error {
 		switch {
@@ -586,6 +589,8 @@ func applyStart(tx *sql.Tx, from netLink, b netBody) error {
 			return fmt.Errorf("%w: the task text is empty or too long", ErrRejected)
 		case !ValidTaskModel(r.Model):
 			return fmt.Errorf("%w: invalid model name", ErrRejected)
+		case utf8.RuneCountInString(r.Rules) > MaxWorkerRules || strings.ContainsRune(r.Rules, 0):
+			return fmt.Errorf("%w: the worker rules are too long", ErrRejected)
 		}
 		var projects int
 		if err := tx.QueryRow(`SELECT COUNT(*) FROM projects WHERE name=?`, r.Project).Scan(&projects); err != nil {
