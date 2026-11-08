@@ -5,6 +5,8 @@ One entry per work session, newest first. Write what was done, which tool did it
 ## 2026-11-08 — Claude Code (T-041 agents on Windows)
 
 - The owner ran preview.34 on Windows: the window opened in the browser (as designed, D-045). Claude Code was found but «Проверить версию и вход» showed nothing: the check ran only on macOS and asked for login only for one exact version. Fixed (D-051). Codex was not found: newer npm packages keep `codex.exe` in `vendor/<target>/bin`, not `vendor/<target>/codex`; both are searched now. Cursor is `%LOCALAPPDATA%\cursor-agent\agent.cmd`, a script that runs `versions\<newest>\node.exe index.js` through PowerShell; Messenger now starts that pair directly (D-052). Verified with tests on Linux; not on a real Windows computer.
+- The owner did not want the browser tab and console on Windows: the window is now the program's own (WebView2) on Windows and an app-mode window on Linux (D-054). Linux was run here with a fake browser (window file, page answered, cleanup on close); WebView2 is compiled only, not run.
+- The owner asked for a button to choose paths instead of typing them: «Выбрать…» opens the system's dialog (D-053). Tested with a fake dialog; the real dialogs (Windows, macOS, Linux) are not checked here.
 
 ## 2026-11-07 — Claude Code (owner's Mac results)
 

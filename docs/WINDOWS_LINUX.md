@@ -1,6 +1,6 @@
 # Windows and Linux (T-016)
 
-Agent Messenger runs on Windows and Linux as one program, `messenger` (`messenger.exe` on Windows). There is no native window there yet. The window is the same page the Mac app shows, opened in the default browser (D-045).
+Agent Messenger runs on Windows and Linux as one program, `messenger` (`messenger.exe` on Windows). The window is the same page the Mac app shows. On Windows it is the program's own window through WebView2; on Linux a Chromium-based browser in app mode (D-054); without those, the default browser (D-045).
 
 ## Download and start
 

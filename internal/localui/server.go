@@ -138,7 +138,7 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			http.Error(w, "cross-site request refused", http.StatusForbidden)
 			return
 		}
-		mutation := r.URL.Path == "/api/enqueue" || r.URL.Path == "/api/pause" || r.URL.Path == "/api/resume" || r.URL.Path == "/api/outbox/ack" || r.URL.Path == "/api/check-cli" || r.URL.Path == "/api/setup-claude" || r.URL.Path == "/api/setup-codex" || r.URL.Path == "/api/authorize-setup" || r.URL.Path == "/api/restart-client" || taskMutation(r.URL.Path) ||
+		mutation := r.URL.Path == "/api/enqueue" || r.URL.Path == "/api/pause" || r.URL.Path == "/api/resume" || r.URL.Path == "/api/outbox/ack" || r.URL.Path == "/api/check-cli" || r.URL.Path == "/api/setup-claude" || r.URL.Path == "/api/setup-codex" || r.URL.Path == "/api/authorize-setup" || r.URL.Path == "/api/restart-client" || r.URL.Path == "/api/pick" || taskMutation(r.URL.Path) ||
 			(r.URL.Path == "/api/self-update" && r.Method != http.MethodGet)
 		method := http.MethodGet
 		if mutation {
@@ -215,6 +215,10 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			// Waits for the old client to exit and the new one to confirm.
 			deadline = 45 * time.Second
 		}
+		if r.URL.Path == "/api/pick" {
+			// The owner chooses in the system's own dialog.
+			deadline = pickerDeadline
+		}
 		// A long route must still be able to write its answer.
 		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(deadline + 3*time.Second))
 		ctx, cancel := context.WithTimeout(r.Context(), deadline)
@@ -240,6 +244,10 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			}
 			if r.URL.Path == "/api/self-update" {
 				serveSelfUpdate(w, r.WithContext(ctx), decoder, self)
+				return
+			}
+			if r.URL.Path == "/api/pick" {
+				servePick(w, r.WithContext(ctx), decoder, pickFunc)
 				return
 			}
 			if r.URL.Path == "/api/restart-client" {
