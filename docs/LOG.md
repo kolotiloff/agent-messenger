@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (T-057 remote log)
+
+- Coordinator tool `get_log(computer, lines)`: request and reply go through the mailbox; the other computer answers only with «Отдавать журнал по сети» on (off by default) and removes ids, codes and keys (D-083). Screenshot: docs/mockups/log-share-built.png (stubbed).
+- Verified: core, supervisor (two computers, real broker), MCP tests, `check.sh`. Not verified between real computers.
+
 ## 2026-11-08 — Claude Code (T-052 short invitation)
 
 - 6-digit code next to the long one (D-081): found on the local network over UDP 47100, proved with SPAKE2, 3 tries, 10 minutes. New dependency `filippo.io/edwards25519` v1.1.0. Screenshot: docs/mockups/short-invite-built.png (stubbed).

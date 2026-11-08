@@ -8,6 +8,12 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-08 (night, T-057) by Claude Code.
+
+- preview.48 is out (T-052 short invitation). **T-053** Windows installation is PR #79; its first CI run found that the program folder was not removed on «Удалить» (cmd.exe quoting), fixed; goes out as preview.49 once the Windows step passes.
+- **T-057** log of another computer on `claude/t057-remote-log` (D-083): coordinator tool `get_log`, switch «Отдавать журнал по сети» on «Сервер», off by default. Owner's test: turn it on on one computer, ask the coordinator on another to read that computer's log.
+- **Next:** T-049 coordinator wishlist (split into tasks first).
+
 Updated 2026-11-08 (night, T-052) by Claude Code. The owner is asleep and asked to keep working alone, deciding by simplicity.
 
 - **PR #73** (`claude/t061-agent-cards`): T-061 agent cards with the on/off switch, T-062 Windows window without the title bar; goes out as preview.43.

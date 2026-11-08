@@ -933,6 +933,7 @@
     swap($('host-disable'),$('host-enable'),running);
     $('host-scope').disabled=running;$('host-port').disabled=running;
     const accept=!!server.accept;$('accept-toggle').setAttribute('aria-checked',String(accept));
+    $('log-share-toggle').setAttribute('aria-checked',String(!!server.log_share));
   }
   async function loadServer(){
     if(serverBusy||serverPolling)return;
@@ -1441,6 +1442,7 @@
   async function renameComputer(){const cn=$('computer-name'),name=cn.value.trim();if(!name||name===view?.computer_name||!cn.dataset.edited)return;if(await serverAction({action:'rename',name},'computer','')){delete cn.dataset.edited;await refresh();renderServer();}}
   $('computer-name').addEventListener('change',renameComputer);
   $('computer-name').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();renameComputer();}});
+  $('log-share-toggle').addEventListener('click',()=>{if(!server)return;const on=!server.log_share;serverAction({action:'log_share',on},'accept',on?tr('Координаторы других компьютеров смогут прочитать журнал.'):'');});
   $('accept-toggle').addEventListener('click',()=>{if(!server)return;const on=!server.accept;serverAction({action:'accept',on},'accept',on?'':tr('Новые задачи других компьютеров будут отклоняться. Уже принятые продолжат работу.'));});
   $('member-disconnect').addEventListener('click',()=>serverAction({action:'disconnect'},'member',tr('Отключено. Устройство остаётся в списке сервера, пока его там не отзовут.')));
   let serverPolls=0;

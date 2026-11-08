@@ -533,7 +533,7 @@ func writeJSON(w http.ResponseWriter, value any) {
 }
 
 // serverActions are the window's server settings actions.
-var serverActions = map[string]bool{"enable": true, "disable": true, "invite": true, "revoke": true, "connect": true, "check": true, "disconnect": true, "accept": true, "rename": true}
+var serverActions = map[string]bool{"enable": true, "disable": true, "invite": true, "revoke": true, "connect": true, "check": true, "disconnect": true, "accept": true, "log_share": true, "rename": true}
 
 func taskMutation(path string) bool {
 	switch path {

@@ -98,6 +98,9 @@ func (s *Supervisor) networkRound(ctx context.Context) {
 	if p := s.readInbox(ctx, n); problem == "" {
 		problem = p
 	}
+	if p := s.answerLogRequests(n.BrokerID); problem == "" {
+		problem = p
+	}
 	if problem == "" {
 		problem = s.sendOutbox(ctx, n)
 	}

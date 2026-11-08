@@ -72,6 +72,9 @@ type Status struct {
 	// Accept is whether this computer runs tasks that other computers of
 	// its network start (T-037); the client fills it in.
 	Accept bool `json:"accept"`
+	// LogShare is whether this computer gives the end of its log to the
+	// coordinators of the other computers (T-057); the client fills it in.
+	LogShare bool `json:"log_share"`
 	// Network is the last problem with sending or reading task messages,
 	// if any; the client fills it in.
 	Network string `json:"network_error,omitempty"`

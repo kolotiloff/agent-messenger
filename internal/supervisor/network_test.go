@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/kolotiloff/agent-messenger/internal/broker"
@@ -219,4 +220,59 @@ func (s *Supervisor) round(t *testing.T, n int) {
 	s.net.mu.Lock()
 	s.net.round = n
 	s.net.mu.Unlock()
+}
+
+func TestLogOfAnotherComputer(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	a, _ := netComputer(t, ctx, "a")
+	b, _ := netComputer(t, ctx, "b")
+	if err := a.server.Enable(broker.ScopeLocal, freeLocalPort(t)); err != nil {
+		t.Fatal(err)
+	}
+	code, err := a.server.Invite(a.server.Status().Host.Addresses[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := b.server.Connect(ctx, code.Code, "Ноутбук"); err != nil {
+		t.Fatal(err)
+	}
+	b.server.ReportPresence(ctx)
+	a.server.ReportPresence(ctx)
+	a.networkRound(ctx)
+	peers, _ := a.store.NetPeers()
+	if len(peers) != 1 {
+		t.Fatalf("a's peers %+v", peers)
+	}
+	if err := os.WriteFile(filepath.Join(b.root, "background-1.log"), []byte("start\nsession 0f8fad5b-d9cb-469f-a165-70867728950e\nlast\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ask := func() core.NetLog {
+		id, err := a.store.RequestNetLog(peers[0].ID, 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		a.networkRound(ctx) // sends the request
+		b.networkRound(ctx) // reads it and answers
+		a.networkRound(ctx) // reads the answer
+		if p := a.networkProblem() + b.networkProblem(); p != "" {
+			t.Fatalf("network problem %q", p)
+		}
+		l, err := a.store.NetLog(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return l
+	}
+	// Off by default: the other computer refuses.
+	if l := ask(); l.State != "refused" || !strings.Contains(l.Text, "Отдавать журнал по сети") {
+		t.Fatalf("default %+v", l)
+	}
+	if err := b.store.SetNetLogShare(true); err != nil {
+		t.Fatal(err)
+	}
+	l := ask()
+	if l.State != "done" || !strings.Contains(l.Text, "start\n") || !strings.HasSuffix(l.Text, "last\n") || strings.Contains(l.Text, "0f8fad5b") {
+		t.Fatalf("shared %+v", l)
+	}
 }

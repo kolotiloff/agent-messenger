@@ -42,6 +42,8 @@ const (
 var (
 	coordinatorPoll     = 300 * time.Millisecond
 	coordinatorProgress = 60 * time.Second
+	// coordinatorLogWait is how long get_log waits for the other computer.
+	coordinatorLogWait = 20 * time.Second
 )
 
 const coordinatorInstructions = `Agent Messenger: start tasks for worker agents in this project and wait for their reports.
@@ -54,6 +56,7 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - list_agents shows each agent's limit when it reported one: state ok, warning (close to the limit) or exhausted, used_percent when the agent gave it, resets_at and observed_at. It is what the agent said at the end of its last run, not a live reading. Prefer an agent whose limit is not exhausted, and tell the owner when one is close to or at its limit.
 - To follow up on a finished task in the same worker conversation (it keeps its context), use continue_task instead of a new start_task. It works for tasks of this computer; for another computer's task start a new one.
 - Messenger already tells every worker to keep its report to a few lines, to put long details in a file and to follow the owner's rules for this project. A report ends with labelled lines when the worker gave them: «Изменения:» (commit or changeset), «Тесты:» and «Файлы:» (paths to read when needed). Do not ask workers for a «taken» line or a limit line: the task's state shows when it was accepted, and limits come from list_agents.
+- get_log reads the end of another computer's Messenger log, for debugging Messenger itself (a task that never arrived, a refusal you cannot explain). That computer answers only if its owner turned on «Отдавать журнал по сети»; otherwise the reply says so. Session ids, codes and keys are removed. If no answer came in time, call get_log again with request_id. Do not use it to watch workers: wait does that.
 - A failure caused by a usage or rate limit says so and gives the reset time when the agent reported one. Tell the owner that time; do not start the task again before it.
 How work is planned and split is decided with the owner under this project's own rules.`
 
@@ -206,6 +209,12 @@ func coordinatorTools() []map[string]any {
 			}, "task_id", "op_id", "text")},
 		{"name": "cancel", "description": "Cancel a task: a waiting task at once, a running worker is stopped.",
 			"inputSchema": obj(map[string]any{"task_id": str("task id")}, "task_id")},
+		{"name": "get_log", "description": "Ask another computer of the network for the last lines of its Messenger log, to debug Messenger itself. It answers only if its owner allowed it. Waits up to 20 seconds; if the answer has not come, call again with request_id.",
+			"inputSchema": obj(map[string]any{
+				"computer":   str("id of another computer from list_agents"),
+				"lines":      map[string]any{"type": "integer", "minimum": 1, "maximum": core.MaxLogLines, "description": fmt.Sprintf("how many last lines; default %d", core.DefaultLogLines)},
+				"request_id": str("request_id from an earlier get_log that had no answer yet"),
+			})},
 	}
 }
 
@@ -330,8 +339,50 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 			return nil, err
 		}
 		return map[string]any{"state": state}, nil
+	case "get_log":
+		var a struct {
+			Computer  string `json:"computer"`
+			Lines     int    `json:"lines"`
+			RequestID string `json:"request_id"`
+		}
+		if err := strict(&a); err != nil {
+			return nil, err
+		}
+		return c.getLog(ctx, a.Computer, a.Lines, a.RequestID)
 	}
 	return nil, fmt.Errorf("unknown tool %q", p.Name)
+}
+
+// getLog asks another computer for its log, or looks up an earlier request,
+// and waits a little for the answer.
+func (c *coordinator) getLog(ctx context.Context, computer string, lines int, id string) (any, error) {
+	if id == "" {
+		if computer == "" {
+			return nil, fmt.Errorf("%w: pass computer, or request_id from an earlier get_log", core.ErrRejected)
+		}
+		var err error
+		if id, err = c.store.RequestNetLog(computer, lines); err != nil {
+			return nil, err
+		}
+	}
+	deadline := time.Now().Add(coordinatorLogWait)
+	for {
+		l, err := c.store.NetLog(id)
+		if err != nil {
+			return nil, err
+		}
+		if l.State != "waiting" || !time.Now().Before(deadline) {
+			if l.State == "waiting" {
+				return map[string]any{"request_id": l.ID, "computer": l.Computer, "state": l.State, "next": "No answer yet: that computer may be off or offline, or run a Messenger version without logs over the network. Call get_log again with request_id later."}, nil
+			}
+			return l, nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(coordinatorPoll):
+		}
+	}
 }
 
 func (c *coordinator) projectExists() error {
