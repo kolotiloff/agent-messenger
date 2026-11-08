@@ -203,7 +203,7 @@
       case 'waiting_owner':return ['Ждёт вашего ответа','am-status-wait'];
       case 'waiting_coordinator':return ['Ждёт ответа координатора','am-status-run'];
       case 'done':return ['Завершил за '+minutes(from,end),'am-muted'];
-      case 'failed':return failureStatus(t)||['Не прошёл проверку через '+minutes(from,end),'am-status-bad'];
+      case 'failed':return failureStatus(t)||['Ошибка через '+minutes(from,end),'am-status-bad'];
       case 'interrupted':return ['Прервался через '+minutes(from,end),'am-status-bad'];
       case 'blocked':return ['Заблокирован через '+minutes(from,end),'am-status-bad'];
       case 'cancelled':return ['Отменён','am-muted'];
@@ -514,7 +514,7 @@
         group=null;continue;
       }
       if(it.kind==='outcome'){
-        group=null;const text={failed:t.remote&&!t.remote.from?'Задача не выполнена':'Запуск не прошёл проверку',blocked:t.remote&&!t.remote.from?'Задача заблокирована: результат на другом компьютере неизвестен':'Задача заблокирована: процесс не завершился полностью',interrupted:'Клиент перезапустился во время работы; результат неизвестен',cancelled:'Задача отменена'}[it.state]||it.state;
+        group=null;const text={failed:t.remote&&!t.remote.from?'Задача не выполнена':'Запуск завершился с ошибкой',blocked:t.remote&&!t.remote.from?'Задача заблокирована: результат на другом компьютере неизвестен':'Задача заблокирована: процесс не завершился полностью',interrupted:'Клиент перезапустился во время работы; результат неизвестен',cancelled:'Задача отменена'}[it.state]||it.state;
         const note=el('div',undefined,'am-outcome '+(it.state==='cancelled'?'am-muted':'am-status-bad'));note.append(el('p',text));
         const why=t.remote&&!t.remote.from?refusalText(it.text,t.remote.name):'';if(why)note.append(el('p',why));
         if(it.text)note.append(el('p',it.text,'am-small am-muted'));
