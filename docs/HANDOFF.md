@@ -15,7 +15,8 @@ Updated 2026-11-08 (night, T-057) by Claude Code.
 - **T-049** split into T-070 (readiness in `list_agents`), T-071 (last action and tokens in `tasks`, done on `claude/t071-task-activity`, D-084), T-072 (resource locks), T-073 (results off the worker's computer) and Q-024 (item 6, unclear).
 - **T-070** on `claude/t070-readiness` (D-085): `list_agents` shows `accepts_tasks` and `has_project` for another computer.
 - **T-072** on `claude/t072-resource-locks` (D-086): `start_task` takes `lock`; the later task waits to start.
-- **Next:** T-073 (results off the worker's computer) needs weighing; Q-024 waits for the owner.
+- **T-073** decided without code (D-087): reports already come back whole, files go through the project's version control.
+- **Waiting on the owner:** Q-024 (T-049 item 6), Q-023, Q-018 default.
 
 Updated 2026-11-08 (night, T-053) by Claude Code. The owner is asleep and asked to keep working alone, deciding by simplicity.
 

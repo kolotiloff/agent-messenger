@@ -142,3 +142,9 @@ Every presence report (every 15 seconds) now carries `ready`: whether the comput
 2026-11-08, Claude Code (owner asleep, asked to decide alone and keep it simple).
 
 `start_task` takes an optional `lock`, a short name such as `unity-editor`, compared without case and extra spaces. On one computer, a task with a lock does not launch while an earlier task with the same lock is open there (not done, failed or cancelled); the earliest open one goes first, so two waiting tasks never hold each other. Nothing is refused and nothing is retried: the later task's launch intent simply is not picked until the lock is free. A blocked task keeps its lock, because whether its worker still uses the resource is unknown; the owner resolves it. The lock travels with a task sent to another computer and is applied there; a computer before this version ignores it. The coordinator sees `waiting_for_lock` with the task it waits for, the window «Ждёт ресурс «…»». Locks are per computer only; there is no network-wide lock.
+
+## D-087 — A task's result travels as its report and through version control (T-073, T-049)
+
+2026-11-08, Claude Code (owner asleep, asked to decide alone and keep it simple).
+
+No new channel for result files. A worker's report (up to 20 000 characters) already comes back whole from another computer in the task's events, and the coordinator reads it through `wait`. Files, diffs and builds stay where the project keeps them: the worker commits or checks them in to the project's version control, or writes them to a folder the owner shares, and names them in the report's «Изменения:» and «Файлы:» lines. Copying files between computers through the broker would need size limits, storage and the owner's consent for each project, and would duplicate what version control already does.
