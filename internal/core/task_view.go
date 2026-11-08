@@ -122,6 +122,8 @@ type WindowTask struct {
 	// Remote names the other computer of a task between computers: the one
 	// that runs it, or (From) the one that started it.
 	Remote *RemoteComputer `json:"remote,omitempty"`
+	// Usage is what the task's runs spent so far (T-058).
+	Usage *TaskUsage `json:"usage,omitempty"`
 }
 
 // RemoteComputer is the other computer of a task (T-037).
@@ -304,6 +306,9 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 		if w.Remote, err = s.remoteOf(t.ID); err != nil {
 			return v, err
 		}
+		if w.Usage, err = s.taskUsage(t.ID); err != nil {
+			return v, err
+		}
 		v.Tasks = append(v.Tasks, w)
 	}
 	return v, nil
@@ -354,6 +359,9 @@ func (s *Store) TaskFeed(id string) (TaskFeed, error) {
 		return f, err
 	}
 	if f.Task.Remote, err = s.remoteOf(t.ID); err != nil {
+		return f, err
+	}
+	if f.Task.Usage, err = s.taskUsage(t.ID); err != nil {
 		return f, err
 	}
 	f.Items = []FeedItem{{Kind: "task", Author: AudienceCoordinator, Text: t.Text, At: t.CreatedAt, Verified: true}}

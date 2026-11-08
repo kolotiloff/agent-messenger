@@ -208,6 +208,8 @@ type TaskEventResult struct {
 	// LastText is the worker's last message, shortened. It only explains a
 	// run that ended without a report (T-056).
 	LastText string
+	// Usage is what the run spent, when the provider reported it (T-058).
+	Usage *Usage
 }
 
 // lastTextLimit bounds LastText in characters.
@@ -256,6 +258,7 @@ func ParseTaskEvent(provider string, line []byte, r *TaskEventResult) {
 			if text, _ := e["result"].(string); text != "" {
 				r.noteText(text)
 			}
+			claudeUsage(e, r)
 			subtype, _ := e["subtype"].(string)
 			isErr, _ := e["is_error"].(bool)
 			if subtype == "success" && !isErr {
@@ -314,6 +317,7 @@ func ParseTaskEvent(provider string, line []byte, r *TaskEventResult) {
 				r.noteText(text)
 			}
 		case "turn.completed":
+			codexUsage(e, r)
 			if r.Failure == "" {
 				r.Completed = true
 			}

@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (T-058 what a task spent)
+
+- The task list shows each task's cost (Claude's own estimate) or tokens (Codex, Cursor); the task header shows input, cached and output tokens (D-068). Remote tasks report their total back.
+- Verified: adapter and core tests, `check.sh`, mocked screenshot. Not verified: real CLI output (no real models), Cursor's usage format, anything on the owner's computers.
+
 ## 2026-11-08 — Claude Code (T-056 one switch for commands, login and logout on cards)
 
 - The owner turned «Любые команды» on everywhere but it did not help. Cause found in code: an answer or a follow-up ran with the setting its task started with. Now such runs take the agent's current setting. Logs on the owner's computers were not read: they are not reachable from this session.

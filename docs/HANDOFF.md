@@ -8,6 +8,11 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-08 (T-058) by Claude Code.
+
+- **T-058** on `claude/t058-task-cost`: each task in the list shows what it spent (D-068). preview.41 carries T-056.
+- Owner declined, no task: per-task worktrees, trigger automations, a file browser.
+
 Updated 2026-11-08 (T-056, after preview.40) by Claude Code.
 
 - Released today: preview.38 (#68), preview.39 (#69: T-054 full access, T-055 remove a project), preview.40 (#70: removal popup, «Настроить проект…», folder bar removed). T-050 and T-051 are on `main` (#66, #67).

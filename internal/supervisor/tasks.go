@@ -267,6 +267,13 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	_ = stdout.Close()
 	result, readErr := read.result, read.err
 	ev := core.RunEvidence{ExitObserved: waitErr == nil, ExitCode: exitCode, Cancelled: cancelled, LastText: result.LastText}
+	if u := result.Usage; u != nil {
+		ev.Usage = &core.TaskUsage{InputTokens: u.Input, CachedTokens: u.Cached, OutputTokens: u.Output}
+		if u.HasCost {
+			cost := u.Cost
+			ev.Usage.CostUSD = &cost
+		}
+	}
 	ev.ProviderOK = result.Completed && !result.Conflicting && readErr == nil && result.Failure == ""
 	if result.Failure != "" {
 		ev.Detail = result.Failure

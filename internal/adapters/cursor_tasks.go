@@ -198,6 +198,7 @@ func parseCursorEvent(e map[string]any, kind string, r *TaskEventResult, note fu
 		if text, _ := e["result"].(string); text != "" {
 			r.noteText(text)
 		}
+		cursorUsage(e, r)
 		subtype, _ := e["subtype"].(string)
 		isErr, _ := e["is_error"].(bool)
 		if subtype == "success" && !isErr {

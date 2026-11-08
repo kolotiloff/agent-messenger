@@ -1217,6 +1217,9 @@ type RunEvidence struct {
 	// LastText is the worker's last message; it is shown only when the run
 	// failed without a report (T-056).
 	LastText string
+	// Usage is what the run spent, when its provider reported it (T-058).
+	// It only informs the owner.
+	Usage *TaskUsage
 }
 
 // FinishTaskRun verifies a run in one transaction: it revokes the receipt,
@@ -1267,6 +1270,11 @@ func (s *Store) FinishTaskRun(run string, ev RunEvidence) (string, error) {
 			detail += "; no report; last worker message: " + ev.LastText
 		}
 		if err := setRunState(tx, run, final, detail, "running", "launching"); err != nil {
+			return err
+		}
+		// T-058: add what the run spent before any event goes out, so a
+		// task of another computer reports the new total with it.
+		if err := addTaskUsage(tx, t.ID, ev.Usage); err != nil {
 			return err
 		}
 		switch final {

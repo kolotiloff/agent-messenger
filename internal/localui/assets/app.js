@@ -173,9 +173,27 @@
     const a=Date.parse(from),b=to?Date.parse(to):Date.now();
     if(isNaN(a)||isNaN(b))return '';
     const m=Math.max(0,Math.round((b-a)/60000));
-    if(m<1)return 'меньше минуты';
+    if(m<1)return '<1 мин';
     if(m<60)return m+' мин';
     const h=Math.floor(m/60);return h+' ч'+(m%60?' '+m%60+' мин':'');
+  }
+  // T-058: what a task spent, as its agent reported it. Claude reports a
+  // price; Codex and Cursor only tokens.
+  function tokensText(n){
+    if(n>=1e6)return (n/1e6).toLocaleString('ru-RU',{maximumFractionDigits:1})+' млн';
+    if(n>=1e3)return Math.round(n/1e3).toLocaleString('ru-RU')+' тыс.';
+    return String(n);
+  }
+  function costText(c){return c>0&&c<0.01?'<$0,01':'$'+c.toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2});}
+  function usageShort(u){
+    if(!u)return '';
+    return u.cost_usd!=null?costText(u.cost_usd):tokensText(u.input_tokens+u.output_tokens)+' ток.';
+  }
+  function usageLong(u){
+    if(!u)return '';
+    let s='Потрачено '+(u.cost_usd!=null?costText(u.cost_usd)+' (по расчёту агента), ':'')+'токенов: '+u.input_tokens.toLocaleString('ru-RU')+' на входе';
+    if(u.cached_tokens)s+=' (из них '+u.cached_tokens.toLocaleString('ru-RU')+' из кэша)';
+    return s+', '+u.output_tokens.toLocaleString('ru-RU')+' на выходе';
   }
   function clock(at){const d=new Date(at);return isNaN(d.getTime())?'':d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});}
   const activeStates=['running','waiting_owner','waiting_coordinator'];
@@ -199,14 +217,14 @@
   function taskStatus(t){
     const end=t.finished_at||t.updated_at,from=t.started_at||t.created_at;
     switch(t.state){
-      case 'running':return t.pending_launch?['Ждёт запуска','am-status-wait']:['Работает '+minutes(from),'am-status-run'];
+      case 'running':return t.pending_launch?['Ждёт запуска','am-status-wait']:['Работает · '+minutes(from),'am-status-run'];
       case 'waiting_owner':return ['Ждёт вашего ответа','am-status-wait'];
       case 'waiting_coordinator':return ['Ждёт ответа координатора','am-status-run'];
-      case 'done':return ['Завершил за '+minutes(from,end),'am-muted'];
-      case 'failed':return failureStatus(t)||['Ошибка через '+minutes(from,end),'am-status-bad'];
-      case 'interrupted':return ['Прервался через '+minutes(from,end),'am-status-bad'];
-      case 'blocked':return ['Заблокирован через '+minutes(from,end),'am-status-bad'];
-      case 'cancelled':return ['Отменён','am-muted'];
+      case 'done':return ['Готово · '+minutes(from,end),'am-muted'];
+      case 'failed':return failureStatus(t)||['Ошибка · '+minutes(from,end),'am-status-bad'];
+      case 'interrupted':return ['Прервана · '+minutes(from,end),'am-status-bad'];
+      case 'blocked':return ['Заблокирована · '+minutes(from,end),'am-status-bad'];
+      case 'cancelled':return ['Отменена','am-muted'];
     }
     return [t.state,'am-muted'];
   }
@@ -356,6 +374,7 @@
         const status=el('span',undefined,'am-task-status '+cls);
         if(t.state==='waiting_owner')status.append(el('span',undefined,'am-dot am-dot-wait'));
         status.append(el('span',text));
+        if(t.usage){const used=el('span','· '+usageShort(t.usage),'am-task-usage');used.title=usageLong(t.usage);status.append(used);}
         row.append(agent,el('span',t.title,'am-task-title'),status);
         row.addEventListener('click',()=>{selectedTask=t.id;feedSignature='';renderTaskList();loadFeed();});
         box.append(row);
@@ -487,8 +506,10 @@
     const where=t.remote&&!t.remote.from?' на компьютере «'+t.remote.name+'»':' на '+(view.computer_name||'этом компьютере')+(t.remote?.from?', по заданию компьютера «'+t.remote.name+'»':'');
     title.append(el('p',(names[t.agent]||t.agent)+(t.model?' ('+t.model+')':'')+where+', папка '+(t.folder||'ещё не известна'),'am-small am-muted'));
     const [statusText,statusCls]=taskStatus(t);
-    const when=t.finished_at?'Начата в '+clock(t.created_at)+', закончена в '+clock(t.finished_at):'Начата в '+clock(t.created_at);
-    const line=el('p',undefined,'am-small');line.append(el('span',statusText,statusCls),el('span',', '+when.charAt(0).toLowerCase()+when.slice(1),'am-muted'));title.append(line);
+    const when=' · '+clock(t.created_at)+(t.finished_at?'–'+clock(t.finished_at):'');
+    const line=el('p',undefined,'am-small');line.append(el('span',statusText,statusCls),el('span',when,'am-muted'));
+    if(t.usage){const used=el('span',' · '+usageShort(t.usage),'am-muted');used.title=usageLong(t.usage);line.append(used);}
+    title.append(line);
     const headRow=el('div',undefined,'am-task-head-row');headRow.append(title);
     head.replaceChildren(headRow);
     const [coordProvider,coordLabel]=coordinatorName();
