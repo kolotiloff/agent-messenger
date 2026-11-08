@@ -226,7 +226,7 @@ func TestCoordinatorHandshakeAndTools(t *testing.T) {
 	for _, tool := range resp["result"].(map[string]any)["tools"].([]any) {
 		names = append(names, tool.(map[string]any)["name"].(string))
 	}
-	if strings.Join(names, ",") != "list_agents,start_task,wait,tasks,answer,cancel" {
+	if strings.Join(names, ",") != "list_agents,start_task,wait,tasks,answer,continue_task,cancel" {
 		t.Fatalf("tools %v", names)
 	}
 	var agents struct {
@@ -387,6 +387,9 @@ func TestCoordinatorSeesOnlyItsProject(t *testing.T) {
 	if _, ok := c.tool("cancel", map[string]any{"task_id": other}, nil); ok {
 		t.Fatal("cancelled another project's task")
 	}
+	if _, ok := c.tool("continue_task", map[string]any{"task_id": other, "op_id": "x", "text": "y"}, nil); ok {
+		t.Fatal("continued another project's task")
+	}
 	// An owner question of this project does not reach the coordinator.
 	mine, _, _ := st.StartTask(core.StartTaskRequest{Project: "Game", OpID: "m", Provider: "claude", Text: "mine"})
 	finishRun(t, st, mine, core.DispositionAskOwner, "for the owner")
@@ -529,5 +532,28 @@ func TestCoordinatorTasksListIsLean(t *testing.T) {
 	var clamped list
 	if _, ok := c.tool("tasks", map[string]any{"state": "all", "limit": 500}, &clamped); !ok || len(clamped.Tasks) != 4 {
 		t.Fatalf("clamped %+v", clamped)
+	}
+}
+
+// continue_task resumes a finished task of this project (T-051).
+func TestCoordinatorContinuesAFinishedTask(t *testing.T) {
+	st := newCoordinatorStore(t)
+	c := startCoordinator(t, st, "Game")
+	id, _, err := st.StartTask(core.StartTaskRequest{Project: "Game", OpID: "o1", Provider: "claude", Text: "Fix the menu"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := c.tool("continue_task", map[string]any{"task_id": id, "op_id": "c1", "text": "Also the map"}, nil); ok {
+		t.Fatal("a running task was continued")
+	}
+	finishRun(t, st, id, core.DispositionReport, "Menu fixed")
+	if text, ok := c.tool("continue_task", map[string]any{"task_id": id, "op_id": "c1", "text": "Also the map"}, nil); !ok {
+		t.Fatalf("continue refused: %s", text)
+	}
+	if tk, _ := st.TaskByID(id); tk.State != "running" {
+		t.Fatalf("task %+v", tk)
+	}
+	if text, ok := c.tool("continue_task", map[string]any{"task_id": id, "op_id": "c1", "text": "Also the map", "agent": "codex"}, nil); ok {
+		t.Fatalf("unknown argument accepted: %s", text)
 	}
 }

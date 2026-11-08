@@ -52,6 +52,7 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - answer answers a worker's question (pass question_id and a unique op_id); the worker continues in the same session.
 - Never start a task again by yourself after it failed, was interrupted or blocked; tell the owner and let them decide.
 - list_agents shows each agent's limit when it reported one: state ok, warning (close to the limit) or exhausted, used_percent when the agent gave it, resets_at and observed_at. It is what the agent said at the end of its last run, not a live reading. Prefer an agent whose limit is not exhausted, and tell the owner when one is close to or at its limit.
+- To follow up on a finished task in the same worker conversation (it keeps its context), use continue_task instead of a new start_task. It works for tasks of this computer; for another computer's task start a new one.
 - Messenger already tells every worker to keep its report to a few lines, to put long details in a file and to follow the owner's rules for this project. A report ends with labelled lines when the worker gave them: «Изменения:» (commit or changeset), «Тесты:» and «Файлы:» (paths to read when needed). Do not ask workers for a «taken» line or a limit line: the task's state shows when it was accepted, and limits come from list_agents.
 - A failure caused by a usage or rate limit says so and gives the reset time when the agent reported one. Tell the owner that time; do not start the task again before it.
 How work is planned and split is decided with the owner under this project's own rules.`
@@ -197,6 +198,12 @@ func coordinatorTools() []map[string]any {
 				"op_id":       str("unique id of this operation"),
 				"text":        map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxTaskText},
 			}, "task_id", "question_id", "op_id", "text")},
+		{"name": "continue_task", "description": "Give a finished task (done or failed) of this computer a follow-up: the same worker conversation resumes with your text, so it keeps its context and needs no new briefing. If the agent no longer has that conversation, the run fails; then start a new task. Repeating with the same op_id is safe.",
+			"inputSchema": obj(map[string]any{
+				"task_id": str("task id"),
+				"op_id":   str("unique id of this operation"),
+				"text":    map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxTaskText},
+			}, "task_id", "op_id", "text")},
 		{"name": "cancel", "description": "Cancel a task: a waiting task at once, a running worker is stopped.",
 			"inputSchema": obj(map[string]any{"task_id": str("task id")}, "task_id")},
 	}
@@ -292,6 +299,22 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 			return nil, err
 		}
 		return map[string]any{"answered": true, "next": "The worker continues; call wait for its next report or question."}, nil
+	case "continue_task":
+		var a struct {
+			TaskID string `json:"task_id"`
+			OpID   string `json:"op_id"`
+			Text   string `json:"text"`
+		}
+		if err := strict(&a); err != nil {
+			return nil, err
+		}
+		if err := c.ownTask(a.TaskID); err != nil {
+			return nil, err
+		}
+		if err := c.store.ContinueTask(a.TaskID, a.OpID, a.Text, core.AudienceCoordinator); err != nil {
+			return nil, err
+		}
+		return map[string]any{"continued": true, "next": "The worker resumes its conversation; call wait for its report or question."}, nil
 	case "cancel":
 		var a struct {
 			TaskID string `json:"task_id"`

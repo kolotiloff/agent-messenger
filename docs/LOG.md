@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (T-051 continue a task; agent card lines)
+
+- `continue_task` resumes a finished task's conversation with a follow-up (D-063), kept simple: no recovery after a restart; unclear or remote tasks refused. Agent cards: «Выполняет задачи» removed, each state is one short line in one font (owner's feedback on preview.37).
+- Verified here: core and coordinator tests, `check.sh`, a headless Chromium screenshot of the cards. Not verified: real CLIs resuming a finished conversation.
+
 ## 2026-11-08 — Claude Code (T-050 worker rules, short reports)
 
 - preview.37 release started from `main` da18160 (PR #65). The owner's coordinator proposed ways to save tokens; points 1 and 2 are done (D-062): per-project worker rules copied into each task (also remote), a built-in short-report rule, and `report` fields `changes` / `tests` / `files` stored as labelled lines. Continuing a finished task is T-051, kept simple at the owner's request.
