@@ -28,8 +28,12 @@ import (
 func main() {
 	root, args := splitArgs(os.Args[1:])
 	if len(args) == 0 && runtime.GOOS == "windows" && len(os.Args) == 1 {
-		// Started with a double click: open the window and keep any error
-		// on screen until the owner has read it.
+		// Started with a double click: install the program for this user
+		// if this is a download (T-053), open the window and keep any
+		// error on screen until the owner has read it.
+		if root == "" && selfInstall(os.Stdout) {
+			return
+		}
 		if err := runOpen(root, nil, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			fmt.Fprintln(os.Stderr, "Нажмите Enter, чтобы закрыть это окно.")
@@ -65,6 +69,27 @@ func main() {
 	if args[0] == "open" {
 		if err := runOpen(root, args[1:], os.Stdout); err != nil {
 			fail(err)
+		}
+		return
+	}
+	if args[0] == "uninstall" {
+		// «Удалить» in Windows «Приложения» (T-053).
+		if root == "" {
+			var err error
+			if root, err = supervisor.DesktopRoot(); err != nil {
+				fail(err)
+			}
+		}
+		err := runUninstall(root, os.Stdout)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+		}
+		if runtime.GOOS == "windows" {
+			fmt.Fprintln(os.Stderr, "Нажмите Enter, чтобы закрыть это окно.")
+			_, _ = fmt.Scanln()
+		}
+		if err != nil {
+			os.Exit(1)
 		}
 		return
 	}
@@ -108,6 +133,12 @@ func run(root string, args []string) error {
 		fmt.Println(string(raw))
 		return nil
 	case "install":
+		if runtime.GOOS == "windows" {
+			if len(args) != 1 {
+				return errors.New("install takes no arguments on Windows")
+			}
+			return runWinInstall(os.Stdout)
+		}
 		fs := flag.NewFlagSet("install", flag.ContinueOnError)
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -448,6 +479,7 @@ func usage() {
   messenger [--root КАТАЛОГ] open     (окно в браузере: Linux и Windows; на Windows — двойной щелчок)
   messenger [--root КАТАЛОГ] desktop  (внутренний запуск окна; stdin — канал времени жизни)
   messenger install [--prefix АБСОЛЮТНЫЙ_КАТАЛОГ]
+  messenger uninstall                    (Windows: удалить программу, данные остаются)
   messenger --root КАТАЛОГ serve [--allow-model-calls] [--claude-stream] [--allow-tasks]
   messenger --root КАТАЛОГ start [--allow-model-calls] [--claude-stream] [--allow-tasks]
   messenger --root КАТАЛОГ doctor [--json]

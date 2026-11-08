@@ -192,3 +192,26 @@ jobs:
           "$exe" --root "$RUNNER_TEMP/data" start --allow-tasks
           "$exe" --root "$RUNNER_TEMP/data" status
           "$exe" --root "$RUNNER_TEMP/data" shutdown
+      - name: Install for the user and remove, keeping the data (T-053)
+        run: |
+          export MSYS_NO_PATHCONV=1
+          cd "$RUNNER_TEMP/others"
+          exe="$PWD/AgentMessenger-Windows-x64.exe"
+          export LOCALAPPDATA="$RUNNER_TEMP/install-local" APPDATA="$RUNNER_TEMP/install-roaming"
+          key='HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\AgentMessenger'
+          "$exe" install
+          installed="$LOCALAPPDATA/Programs/Agent Messenger/AgentMessenger.exe"
+          shortcut="$APPDATA/Microsoft/Windows/Start Menu/Programs/Agent Messenger.lnk"
+          test -f "$installed"
+          "$installed" version
+          reg query "$key" /v UninstallString
+          reg query "$key" /v DisplayVersion
+          test -f "$shortcut"
+          mkdir -p "$LOCALAPPDATA/AgentMessenger"
+          echo keep > "$LOCALAPPDATA/AgentMessenger/keep.txt"
+          "$installed" uninstall < /dev/null
+          if reg query "$key" >/dev/null 2>&1; then echo "entry left in Apps"; exit 1; fi
+          test ! -e "$shortcut"
+          for i in $(seq 1 30); do [ -e "$LOCALAPPDATA/Programs/Agent Messenger" ] || break; sleep 1; done
+          test ! -e "$LOCALAPPDATA/Programs/Agent Messenger"
+          test -f "$LOCALAPPDATA/AgentMessenger/keep.txt"
