@@ -571,6 +571,23 @@ func (s *Store) ComputerName() (string, error) {
 	return name, err
 }
 
+// AdoptComputerName keeps name as this computer's name unless the owner
+// already chose one. A computer that joined a network before the window
+// remembered the joining name (D-061) still uses the name the others see.
+func (s *Store) AdoptComputerName(name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" || utf8.RuneCountInString(name) > MaxComputerName || strings.IndexFunc(name, unicode.IsControl) >= 0 {
+		return nil
+	}
+	return s.tx(func(tx *sql.Tx) error {
+		current, err := metaValue(tx, "computer_name")
+		if err != nil || current != "" {
+			return err
+		}
+		return setMeta(tx, "computer_name", name)
+	})
+}
+
 // SetComputerName names this computer for its network; an empty name goes
 // back to the system's name.
 func (s *Store) SetComputerName(name string) error {

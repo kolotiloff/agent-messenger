@@ -110,6 +110,13 @@ func (s *Supervisor) presence() (broker.Presence, error) {
 		}
 		p.Agents = append(p.Agents, pa)
 	}
+	// A computer that joined before its window kept the joining name takes
+	// it now, instead of reporting the system's name over it (D-061).
+	if s.server != nil {
+		if joined := s.server.MemberName(); joined != "" {
+			_ = s.store.AdoptComputerName(joined)
+		}
+	}
 	if name, err := s.store.ComputerName(); err == nil {
 		p.Name = clipName(name)
 	}

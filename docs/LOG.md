@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (T-048 computer names)
+
+- The owner's Linux laptop joined as «Ноут-Linux», but its own window showed the system name, and a rename in «Имя в сети» never reached the others (D-039 kept the joining name). Now each report carries the window's name and the broker renames the device (D-061); a computer that joined earlier takes its joining name. The coordinator's wishlist from the owner's project is recorded as T-049; the shared task list is T-047.
+- Verified here: broker test (rename reaches the host's roster and device list, the connection file keeps it), core test of taking the joining name, `check.sh`. Not verified on the owner's computers.
+
 ## 2026-11-08 — Claude Code (T-046 owner's UI feedback)
 
 - After updating to preview.36 the owner found: the restart button on the left and «Перезапускаем…» written in it; agent statuses empty until the setup dialog's check; stretched dialog buttons; «Подключить исполнителем» unclear; on Linux the page opened in the browser (no Chromium-based browser installed, Q-016). Changed as in D-060.

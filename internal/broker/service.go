@@ -416,6 +416,17 @@ func (s *Service) Disconnect() error {
 	return nil
 }
 
+// MemberName is the name this computer has on the server it joined; empty
+// when it joined none.
+func (s *Service) MemberName() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.member == nil {
+		return ""
+	}
+	return s.member.DeviceName
+}
+
 // Status reports the hosted broker and the connection.
 func (s *Service) Status() Status {
 	s.mu.Lock()
@@ -542,7 +553,6 @@ func (s *Service) ReportPresence(ctx context.Context) {
 	if c == nil {
 		return
 	}
-	p.Name = ""
 	call, cancel := context.WithTimeout(ctx, 12*time.Second)
 	defer cancel()
 	peers, err := Report(call, *c, p)
@@ -557,6 +567,14 @@ func (s *Service) ReportPresence(ctx context.Context) {
 		return
 	}
 	s.peers, s.peersAt = peers, time.Now()
+	// The broker now lists this computer under the reported name. A host
+	// before preview.37 ignores the name and keeps the one it joined with.
+	if p.Name != "" && s.member.DeviceName != p.Name {
+		s.member.DeviceName = p.Name
+		if raw, err := json.Marshal(s.member); err == nil {
+			_ = writeFile(s.connectionPath(), raw)
+		}
+	}
 }
 
 // Network is the network this computer exchanges tasks in: the broker it
