@@ -90,8 +90,16 @@ var iconSizes = []int{256, 128, 64, 48, 32, 24, 16}
 // number (window_windows.go).
 const IconID = 1
 
+// encodedPNG, when set, is used as the 256 px PNG. The PNG encoder's output
+// differs between Go versions, so the test checks the committed files with
+// their own PNG after comparing its pixels.
+var encodedPNG []byte
+
 func iconImage(size int) []byte {
 	img := draw(size)
+	if size == 256 && encodedPNG != nil {
+		return encodedPNG
+	}
 	if size == 256 {
 		var buf bytes.Buffer
 		_ = png.Encode(&buf, img)
