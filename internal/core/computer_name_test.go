@@ -35,3 +35,24 @@ func TestComputerName(t *testing.T) {
 		t.Fatalf("reset %q", name)
 	}
 }
+
+// A computer that joined a network before the window kept the joining name
+// takes that name, but never over one the owner chose (D-061).
+func TestAdoptComputerName(t *testing.T) {
+	f := newTaskFixture(t)
+	if err := f.st.AdoptComputerName("Ноут-Linux"); err != nil {
+		t.Fatal(err)
+	}
+	if name, _ := f.st.ComputerName(); name != "Ноут-Linux" {
+		t.Fatalf("adopted %q", name)
+	}
+	if err := f.st.SetComputerName("Ноутбук"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.AdoptComputerName("Ноут-Linux"); err != nil {
+		t.Fatal(err)
+	}
+	if name, _ := f.st.ComputerName(); name != "Ноутбук" {
+		t.Fatalf("owner's name replaced: %q", name)
+	}
+}
