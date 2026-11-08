@@ -22,7 +22,7 @@ On a Mac, specifically the diagnostic commands of the following versions were ve
 | Codex CLI | 0.155.1 | `login status` |
 | Cursor Agent CLI | 2026.11.05-86047df | `status --format json` |
 
-If the version has changed, its recognized number is shown, but the login request is not run until the new contract is verified. For an unknown version format the status is unknown. On Linux/Windows this first implementation returns `platform_not_qualified` without executing the CLI. This is a deliberately limited diagnostic matrix; it does not mean that all these CLIs are accepted for persistent Messenger message handling.
+The login request runs for any recognized version and on macOS, Windows and Linux (D-051); only the exact known answers count as logged in or not, anything else is unknown. For an unknown version format the login request is not run. On Windows the requests run without a console window. This is a deliberately limited diagnostic matrix; it does not mean that all these CLIs are accepted for persistent Messenger message handling.
 
 Command sources: [Claude CLI reference](https://code.claude.com/docs/en/cli-reference), [Codex developer commands](https://learn.chatgpt.com/docs/developer-commands?surface=cli), [Cursor authentication](https://cursor.com/docs/cli/reference/authentication). Cursor's JSON flag was additionally confirmed by the installed CLI's help. The commands are not replaced with prompt/print on an error or unknown version.
 

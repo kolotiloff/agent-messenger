@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (T-041 agents on Windows)
+
+- The owner ran preview.34 on Windows: the window opened in the browser (as designed, D-045). Claude Code was found but «Проверить версию и вход» showed nothing: the check ran only on macOS and asked for login only for one exact version. Fixed (D-051). Codex and Cursor programs were not found; waiting for the owner's install paths.
+
 ## 2026-11-07 — Claude Code (owner's Mac results)
 
 - The owner's Mac: the Claude coordinator, connected by the window itself in preview.34 (T-039, no Terminal), gave «Посчитать 5 + 5» to the real Cursor CLI; Cursor read the task, reported «5 + 5 = 10» and its model, and the session closed. Earlier Codex and Claude Code tasks in the same project also finished. This is the first check of T-039 with the real Claude Code.
