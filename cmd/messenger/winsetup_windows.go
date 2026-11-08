@@ -177,8 +177,8 @@ func runUninstall(root string, out io.Writer) error {
 	}
 	data, _ := platform.DefaultRoot()
 	if line, ok := winRemoveCommand(p.Dir); ok {
-		cmd := exec.Command("cmd.exe", "/c", line)
-		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NO_WINDOW | windows.DETACHED_PROCESS}
+		cmd := exec.Command("cmd.exe")
+		cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: line, HideWindow: true, CreationFlags: windows.CREATE_NO_WINDOW | windows.DETACHED_PROCESS}
 		cmd.Dir = os.TempDir()
 		if cmd.Start() == nil {
 			_ = cmd.Process.Release()

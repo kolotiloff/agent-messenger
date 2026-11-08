@@ -41,7 +41,7 @@ func TestWindowsInstallPlan(t *testing.T) {
 	if !strings.Contains(script, `'C:\O''Brien\AgentMessenger.exe'`) || strings.Count(script, "'")%2 != 0 {
 		t.Fatalf("script %s", script)
 	}
-	if line, ok := winRemoveCommand(p.Dir); !ok || !strings.Contains(line, `rmdir /s /q "`+p.Dir+`"`) {
+	if line, ok := winRemoveCommand(p.Dir); !ok || line != `cmd.exe /d /s /c "ping -n 4 127.0.0.1 >nul & rmdir /s /q "`+p.Dir+`""` {
 		t.Fatalf("remove %q %v", line, ok)
 	}
 	for _, bad := range []string{`C:\a&b\Agent Messenger`, `C:\%USERNAME%\Agent Messenger`, `C:\Users\x`, `relative\Agent Messenger`} {

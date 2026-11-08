@@ -66,15 +66,18 @@ func winShortcutScript(p winPaths) string {
 		"$s.IconLocation=" + psQuote(p.Exe+",0") + ";$s.Description=" + psQuote(winAppName) + ";$s.Save()"
 }
 
-// winRemoveCommand is the cmd.exe line that removes the program folder a
-// few seconds after the uninstaller exits (a running program cannot delete
-// its own file). Paths cmd.exe could misread are refused; the folder then
-// stays and the owner is told.
+// winRemoveCommand is the whole cmd.exe command line that removes the
+// program folder a few seconds after the uninstaller exits (a running
+// program cannot delete its own file). It is passed as is: Go's usual
+// argument quoting writes \" for inner quotes, which cmd.exe does not
+// understand. With /s, cmd.exe drops only the outer pair of quotes. Paths
+// cmd.exe could misread are refused; the folder then stays and the owner is
+// told.
 func winRemoveCommand(dir string) (string, bool) {
 	if !filepath.IsAbs(dir) || strings.ContainsAny(dir, "\"%^&|<>!\r\n") || filepath.Base(dir) != winAppName {
 		return "", false
 	}
-	return `ping -n 4 127.0.0.1 >nul & rmdir /s /q "` + dir + `"`, true
+	return `cmd.exe /d /s /c "ping -n 4 127.0.0.1 >nul & rmdir /s /q "` + dir + `""`, true
 }
 
 // winUninstallValues are the string values of the «Приложения» entry.
