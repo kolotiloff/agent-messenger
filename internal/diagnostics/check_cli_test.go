@@ -87,7 +87,6 @@ func TestCheckCLIExactCommandsAndProfile(t *testing.T) {
 func TestCheckCLIStopsBeforeAuthForUnknownVersionOrFailure(t *testing.T) {
 	cli, profile := checkFixture(t)
 	for _, version := range []probeOutput{
-		{stdout: []byte("2.1.999 (Claude Code)")},
 		{stdout: []byte("PRIVATE_TOKEN")},
 		{stdout: []byte("2.1.318 (Claude Code)"), exit: 1},
 		{stdout: []byte("2.1.318 (Claude Code)"), failure: "output_limit"},
@@ -116,9 +115,24 @@ func TestCheckCLIRejectsImplicitPathsAndUnsupportedPlatform(t *testing.T) {
 			t.Fatal("invalid binding accepted")
 		}
 	}
-	r, err := checkCLI(context.Background(), "claude", cli, profile, "windows", runner)
-	if err != nil || r.ProbeAttempts != 0 || r.Authentication.State != "not_checked" {
-		t.Fatal(r, err)
+}
+
+// Windows and Linux run the same two requests, and a newer version still gets
+// the login request (D-051).
+func TestCheckCLIOnEveryPlatformAndNewerVersion(t *testing.T) {
+	cli, profile := checkFixture(t)
+	for _, goos := range []string{"windows", "linux", "darwin"} {
+		var calls [][]string
+		r, err := checkCLI(context.Background(), "claude", cli, profile, goos, func(_ context.Context, _ string, _ string, _ []string, args []string) probeOutput {
+			calls = append(calls, args)
+			if args[0] == "--version" {
+				return probeOutput{stdout: []byte("2.1.999 (Claude Code)\n")}
+			}
+			return probeOutput{stdout: []byte(`{"loggedIn":true}`)}
+		})
+		if err != nil || len(calls) != 2 || r.Version.Value != "2.1.999" || r.Authentication.State != "authenticated" || r.OS != goos {
+			t.Fatal(goos, r, err, calls)
+		}
 	}
 }
 
