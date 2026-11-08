@@ -920,37 +920,40 @@
     }catch(error){$('project-status').textContent=error.message;}
     finally{$('project-save').disabled=false;}
   }
-  // The tab keeps what the owner typed until it is saved; a refresh of the
-  // view fills it again only for another project or when nothing was changed.
-  let projectPageFor='';
-  function projectPageChanged(){
-    return !!view?.project&&($('project-page-folder').value.trim()!==(view.folder||'')||$('project-page-rules').value.trim()!==(view.worker_rules||''));
-  }
+  // The tab saves by itself (owner): the instructions shortly after typing
+  // stops, the folder when the field is left, Enter is pressed or a folder is
+  // picked, so a half-typed path is not stored. Saves go one at a time; a
+  // failed or unanswered save is shown and not repeated (T-064).
+  let projectPageFor='',projectSaving=Promise.resolve(),rulesTimer=0;
   function renderProjectPage(){
     const name=view?.project||'';
     $('project-none').hidden=!!name;$('project-page').hidden=!name;
     if(!name){projectPageFor='';return;}
-    if(projectPageFor!==name||!projectPageChanged()){
-      if(projectPageFor!==name)$('project-page-status').textContent='';
-      projectPageFor=name;
-      if(document.activeElement!==$('project-page-folder'))$('project-page-folder').value=view.folder||'';
-      if(document.activeElement!==$('project-page-rules'))$('project-page-rules').value=view.worker_rules||'';
-    }
+    if(projectPageFor!==name){$('project-page-status').textContent='';clearTimeout(rulesTimer);}
+    const fresh=projectPageFor!==name;projectPageFor=name;
     $('project-page-name').textContent=name;
-    $('project-page-save').disabled=!projectPageChanged();
+    if(fresh||document.activeElement!==$('project-page-folder'))$('project-page-folder').value=view.folder||'';
+    if(fresh||(document.activeElement!==$('project-page-rules')&&!rulesTimer))$('project-page-rules').value=view.worker_rules||'';
   }
-  async function saveProjectPage(){
-    const name=view?.project,folder=$('project-page-folder').value.trim(),rules=$('project-page-rules').value.trim();
-    if(!name)return;
-    if(!folder){$('project-page-status').textContent='Укажите папку.';return;}
-    $('project-page-save').disabled=true;$('project-page-status').textContent='Сохраняем…';
-    try{
-      if(folder!==view.folder)await postAPI('/api/project-folder',{name,folder});
-      if(rules!==(view.worker_rules||''))await postAPI('/api/project-rules',{name,rules});
-      $('project-page-status').textContent='Сохранено';
-      viewSignature='';await refresh();
-      $('project-page-folder').value=view?.folder||folder;$('project-page-rules').value=view?.worker_rules??rules;renderProjectPage();
-    }catch(error){$('project-page-status').textContent=error.message;renderProjectPage();}
+  function saveProjectField(field){
+    const name=view?.project;if(!name)return;
+    const status=$('project-page-status');
+    projectSaving=projectSaving.then(async()=>{
+      if(view?.project!==name)return;
+      try{
+        if(field==='folder'){
+          const folder=$('project-page-folder').value.trim();
+          if(!folder){status.textContent='Укажите папку.';return;}
+          if(folder===(view.folder||''))return;
+          status.textContent='Сохраняем…';await postAPI('/api/project-folder',{name,folder});
+        }else{
+          const rules=$('project-page-rules').value.trim();
+          if(rules===(view.worker_rules||''))return;
+          status.textContent='Сохраняем…';await postAPI('/api/project-rules',{name,rules});
+        }
+        viewSignature='';await refresh();status.textContent='Сохранено';
+      }catch(error){status.textContent=error.message;}
+    });
   }
   // Removing a project asks in a popup first. Its tasks stay in the database;
   // creating the project again brings them back.
@@ -1218,9 +1221,11 @@
   // A closed invitation is not shown again; a new one can be made at any time.
   $('invite-dialog').addEventListener('close',()=>{invitation=null;clearInterval(inviteTimer);});
   $('project-save').addEventListener('click',createProject);
-  $('project-page-save').addEventListener('click',saveProjectPage);
+  $('project-page-rules').addEventListener('input',()=>{clearTimeout(rulesTimer);rulesTimer=setTimeout(()=>{rulesTimer=0;saveProjectField('rules');},800);});
+  $('project-page-rules').addEventListener('blur',()=>{if(rulesTimer){clearTimeout(rulesTimer);rulesTimer=0;saveProjectField('rules');}});
+  $('project-page-folder').addEventListener('change',()=>saveProjectField('folder'));
+  $('project-page-folder').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();saveProjectField('folder');}});
   $('project-page-remove').addEventListener('click',askRemoveProject);
-  for(const id of ['project-page-folder','project-page-rules'])for(const type of ['input','change'])$(id).addEventListener(type,()=>{$('project-page-status').textContent='';$('project-page-save').disabled=!projectPageChanged();});
   $('confirm-go').addEventListener('click',runConfirm);
   $('confirm-cancel').addEventListener('click',()=>$('confirm-dialog').close());
   $('access-toggle').addEventListener('click',toggleAllAccess);

@@ -157,7 +157,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-actions { display:flex; flex-wrap:wrap; align-items:center; gap:var(--am-gap-control); }
 /* The main action sits on the right (dialogs follow the Claude app). */
 #am-concept .am-end-actions { justify-content:flex-end; }
-#am-concept .am-end-actions > .am-danger { margin-right:auto; }
+#am-concept .am-end-actions > .am-danger:not(.am-alone) { margin-right:auto; }
 /* The one «Любые команды» switch above the agent cards (T-056). */
 #am-concept .am-access-bar { display:flex; align-items:center; gap:var(--am-gap-section); margin-bottom:var(--am-gap-content); padding:var(--am-gap-section); border:1px solid var(--am-line); border-radius:var(--am-radius-m); background:var(--am-panel); }
 #am-concept .am-access-text { flex:1; min-width:0; display:grid; gap:var(--am-space-1); }
@@ -434,7 +434,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-context-menu { min-width:180px; }
 #am-concept .am-server .am-check-result { grid-template-columns:max-content minmax(0,1fr); column-gap:var(--am-gap-section); row-gap:var(--am-gap-control); }
 #am-concept .am-card-head h3:focus { outline:none; }
-#am-concept .am-project-name { margin:0; overflow-wrap:anywhere; }
+#am-concept .am-project-name { display:flex; gap:var(--am-gap-content); margin:0; overflow-wrap:anywhere; }
+#am-concept .am-project-name #project-page-name { font-weight:600; }
 
 /* Dialogs */
 #am-concept .am-session-dialog { width:min(680px,calc(100vw - 48px)); max-height:80vh; padding:0; border:1px solid var(--am-line); border-radius:var(--am-radius-l); color:var(--am-text); background:var(--am-panel); box-shadow:var(--am-shadow-l); }
