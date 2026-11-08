@@ -2,6 +2,18 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (before preview.42: owner's answers)
+
+- Owner's answers: no dollars, tokens only (D-074); server status «Подключено / Нет связи / Не подключено» (Q-021); project rename stays local (Q-019); «v0.42» display with unchanged tags (Q-020).
+- Owner's order of work recorded in TASKS: design (T-061, T-062), then statistics (T-068), Linux window (T-069), language, shared list, short invitation, Windows installation, remote log, coordinator wishlist. Owner: release an update after each step.
+- Verified: `check.sh`; task rows in headless Chromium with stubs show tokens only.
+
+## 2026-11-08 — Claude Code (T-058 what a task spent)
+
+- The task list shows each task's cost (Claude's own estimate) or tokens (Codex, Cursor); the task header shows input, cached and output tokens (D-068). Remote tasks report their total back.
+- Verified: adapter and core tests, `check.sh`, mocked screenshot. Not verified: real CLI output (no real models), Cursor's usage format, anything on the owner's computers.
+- Statuses shortened, with commas («Готово за 3 мин, $0.42»; the owner does not want dots between words). T-060: Claude on Ноут-Linux was blue because a chat had once used Messenger's tools there and that connection never expires; blue now means a running task only (D-069). T-059 (Russian/English window) recorded.
+
 ## 2026-11-08 — Claude Code (T-056 one switch for commands, login and logout on cards)
 
 - The owner turned «Любые команды» on everywhere but it did not help. Cause found in code: an answer or a follow-up ran with the setting its task started with. Now such runs take the agent's current setting. Logs on the owner's computers were not read: they are not reachable from this session.
@@ -355,3 +367,33 @@ Reports for each step are in [reports/](reports/). The handoff is in [HANDOFF.md
 
 - The owner wants to be able to run two games at once with two coordinator chats. Recorded as D-026: projects exist from the start (name, coordinator connection, folder per computer, tasks); agents are shared. The idea T-030 is folded into T-024, T-025 and T-029.
 - The approved mockup now has a project switcher at the top of the sidebar ([docs/mockups/2026-11-06-task-window.html](mockups/2026-11-06-task-window.html)).
+
+## 2026-11-08 — design drafts saved
+
+- Saved the draft mockups that are still being agreed into `docs/mockups/` (settings dialog, per-card switch, Windows window without the system title bar) and wrote the points already agreed into T-061; added T-062 for the title bar. Nothing built; waiting for the owner's approval.
+
+## 2026-11-08 — T-063 widths and empty-click
+
+- The sidebar and the task list can be resized by dragging their edge (double click restores, width remembered). A click on empty sidebar space shows all computers' tasks again. Checked in headless Chromium against the page assets only; not in the native windows.
+
+## 2026-11-08 — T-064 tab «Проект»
+
+- The project's settings moved from the project list to a new tab «Проект» (D-071). The project list now holds only projects and «Новый проект». Ellipses dropped from all button labels. Checked in Chromium with a stubbed window API; not against a live client or in the native windows.
+
+## 2026-11-08 — T-064 auto-save, T-065 project rename
+
+- The «Проект» tab saves by itself and shows only errors; «Удалить проект» stands on the right; the folder label is «Папка проекта».
+- A project can be renamed on the tab. Only the shown name changes (D-072); Q-019 asks whether a rename should reach other computers and the coordinator. Core and route tests added; the page checked in Chromium with a stubbed API, not against a live client.
+- Owner idea recorded as T-066: the update offer as a blue button at the top right.
+
+## 2026-11-08 — «Любые команды» text
+
+- The explanation under «Любые команды» on the Agents tab is normal-size muted text, not a small hint (owner). Checked in Chromium.
+
+## 2026-11-08 — T-067 Server tab, variant Б
+
+- The owner chose variant Б: three cards in one column, the accept switch inside «Этот компьютер», the name saves by itself, no «Сохранить», «Проверить связь» or side note, one computer name. The owner also approved the agent cards with the per-card switch and the settings dialog (T-061, not built yet). Checked in Chromium with a stubbed API only.
+
+## 2026-11-08 — T-066 update icon, version name
+
+- An available update is a blue round arrow next to the version at the bottom of the sidebar (owner's variant А); tooltip names the version. The window shows «v0.41»; tags stay 0.0.0-preview.N (D-073, Q-020). Checked in Chromium with a stubbed status only.

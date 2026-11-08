@@ -87,6 +87,11 @@ func (s *Supervisor) SetProjectWorkerRules(name, rules string) error {
 	return s.store.SetProjectWorkerRules(name, rules)
 }
 
+// SetProjectTitle renames a project in the window only (T-065).
+func (s *Supervisor) SetProjectTitle(name, title string) error {
+	return s.store.SetProjectTitle(name, title)
+}
+
 // RemoveProject takes a project out of the window (T-055).
 func (s *Supervisor) RemoveProject(name string) error {
 	return s.store.RemoveProject(name)

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ru" data-theme="dark"><head><meta charset="utf-8"><link rel="stylesheet" href="../../internal/localui/assets/app.css">
+<style>
+#am-concept{color-scheme:dark}
+body{margin:0;background:var(--am-bg)}
+.page{padding:var(--am-space-6);display:flex;flex-direction:column;gap:var(--am-space-3);width:1180px}
+.tabs{display:flex;gap:var(--am-space-1);margin-bottom:var(--am-space-2)}
+.tabs span{padding:6px 12px;border-radius:var(--am-radius-s);font-size:14px;color:var(--am-muted)}
+.tabs span.on{background:var(--am-selected);color:var(--am-text)}
+.bar{display:flex;align-items:center;gap:var(--am-space-3);padding:var(--am-space-3) var(--am-space-4);border:1px solid var(--am-line);border-radius:var(--am-radius-m);background:var(--am-panel)}
+.bar div{flex:1}.bar b{font-size:13px}.bar p{margin:2px 0 0;font-size:12px;color:var(--am-muted)}
+.sw{width:36px;height:20px;border-radius:10px;background:var(--am-check);position:relative}.sw:after{content:"";position:absolute;right:2px;top:2px;width:16px;height:16px;border-radius:50%;background:#fff}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--am-space-3);align-items:stretch}
+.card{background:var(--am-panel);border:1px solid var(--am-line);border-radius:var(--am-radius-m);padding:var(--am-space-3) var(--am-space-4) var(--am-space-4);display:flex;flex-direction:column}
+.head{display:flex;align-items:center;gap:var(--am-space-2);margin-bottom:var(--am-space-1)}
+.head h3{margin:0;font-size:15px;flex:1;display:flex;align-items:center;gap:var(--am-space-2)}
+#am-concept .ib{width:var(--am-control);height:var(--am-control);padding:0;display:inline-flex;align-items:center;justify-content:center;background:transparent!important;color:var(--am-muted)}
+.ib:hover{background:var(--am-button)!important}
+#am-concept .ib svg{width:18px!important;height:18px!important;min-width:18px}
+.logo{width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center}
+.step{display:grid;grid-template-columns:22px 1fr auto;gap:var(--am-space-2);align-items:start;padding:var(--am-space-2) 0}
+.step+.step{border-top:1px solid var(--am-line)}
+.mark{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;align-self:start;margin-top:1px}
+.mark.ok{background:color-mix(in srgb,var(--am-good) 25%,transparent);color:var(--am-good)}
+.mark.no{background:color-mix(in srgb,var(--am-bad) 25%,transparent);color:var(--am-bad)}
+.mark.off{background:var(--am-soft);color:var(--am-muted)}
+.t{font-size:13px;min-width:0}.t small{display:flex;align-items:center;gap:4px;color:var(--am-muted);font-size:11px;margin-top:2px;white-space:nowrap}.t small span.cut{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.q{flex-shrink:0;width:15px;height:15px;vertical-align:1px;margin-left:2px;cursor:help;border-radius:50%;background:var(--am-button);color:var(--am-text);font-size:10px;display:inline-flex;align-items:center;justify-content:center}
+.step{min-height:40px}
+.t.bad{color:var(--am-text)}
+.meta{display:flex;justify-content:space-between;font-size:12px;color:var(--am-muted);margin:var(--am-space-2) 0 var(--am-space-3)}
+.meta .good{color:var(--am-good)}.meta .run{color:var(--am-run)}
+.ring{width:18px;height:18px;margin-top:1px}
+.foot{margin-top:auto}.foot button{width:100%}
+.cap{font-size:12px;color:var(--am-muted);margin:var(--am-space-4) 0 0;line-height:1.6}
+</style></head>
+<body><div id="am-concept"><div class="page">
+<div class="tabs"><span>Задачи</span><span class="on">Агенты</span><span>Сервер</span></div>
+<div class="bar"><div><b>Любые команды</b><p>Для всех агентов этого компьютера: без подтверждений и песочницы, с доступом к сети и файлам вне проекта.</p></div><span class="sw"></span></div>
+<div class="cards">
+
+<!-- Claude: всё хорошо -->
+<div class="card">
+<div class="head"><h3><span class="logo"><svg viewBox="0 0 24 24" width="20" height="20" fill="#d97757"><path d="M12 2l1.6 6.2L20 6l-4.6 4.6L22 12l-6.6 1.4L20 18l-6.4-2.2L12 22l-1.6-6.2L4 18l4.6-4.6L2 12l6.6-1.4L4 6l6.4 2.2z"/></svg></span>Claude Code</h3>
+<button class="ib" title="Проверить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
+<button class="ib" title="Настройки"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></div>
+<div class="step"><span class="mark ok">✓</span><span class="t">Claude Code CLI установлен<small>2.1.30</small></span><button>Удалить</button></div>
+<div class="step"><span class="mark ok">✓</span><span class="t">Вход выполнен<small>Подписка Claude Max</small></span><button>Выйти</button></div>
+<div class="step"><span class="mark ok">✓</span><span class="t">Работает с Messenger<small>Последняя задача 21:40</small></span><span></span></div>
+<div class="step"><svg class="ring" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="none" stroke="var(--am-line)" stroke-width="2.5"/><circle cx="9" cy="9" r="7" fill="none" stroke="var(--am-good)" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="43.98" stroke-dashoffset="33.87" transform="rotate(-90 9 9)"/></svg><span class="t">Лимит <span style="color:var(--am-good)">23%</span><small><span class="cut">Сброс в 18:00, сегодня 1,2 млн токенов</span></small></span><span></span></div>
+<div class="meta"></div>
+<div class="foot"><button><span>Задачи: <span style="color:var(--am-run)">1 идёт</span>, 4 сегодня</span></button></div>
+</div>
+
+<!-- Codex: установлен не полностью -->
+<div class="card">
+<div class="head"><h3><span class="logo"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z"/><path d="M12 8v8M8.5 10l7 4M15.5 10l-7 4"/></svg></span>Codex</h3>
+<button class="ib" title="Проверить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
+<button class="ib" title="Настройки"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></div>
+<div class="step"><span class="mark no">✕</span><span class="t bad">Codex CLI неисправен <span class="q" title="Codex CLI установлен не полностью. Последняя задача: нет файла ~/.local/bin/codex-code-mode-host. Без него Codex не может вызвать инструменты Messenger. Удалите Codex CLI и установите заново.">?</span><small>0.58.0</small></span><button>Удалить</button></div>
+<div class="step"><span class="mark ok">✓</span><span class="t">Вход выполнен<small>Аккаунт ChatGPT</small></span><button>Выйти</button></div>
+<div class="step"><span class="mark off">3</span><span class="t" style="color:var(--am-muted)">Работает с Messenger<small>Проверится после установки</small></span><span></span></div>
+<div class="step"><svg class="ring" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="none" stroke="var(--am-line)" stroke-width="2.5"/><circle cx="9" cy="9" r="7" fill="none" stroke="var(--am-wait)" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="43.98" stroke-dashoffset="9.68" transform="rotate(-90 9 9)"/></svg><span class="t">Лимит <span style="color:var(--am-wait)">78%</span><small><span class="cut">Сброс в 23:10, сегодня 340 тыс. токенов</span></small></span><span></span></div>
+<div class="meta"></div>
+<div class="foot"><button>Задачи: 2 сегодня</button></div>
+</div>
+
+<!-- Cursor: не установлен -->
+<div class="card">
+<div class="head"><h3><span class="logo"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 2l9 5v10l-9 5-9-5V7zm0 2.3L5 8.2l7 4 7-4zM4.5 9.6v6.5l6.8 3.8v-6.4z"/></svg></span>Cursor</h3>
+<button class="ib" title="Проверить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
+<button class="ib" title="Настройки"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></div>
+<div class="step"><span class="mark no">✕</span><span class="t bad">Cursor CLI не установлен<small>Не найден на этом компьютере</small></span><button>Установить</button></div>
+<div class="step"><span class="mark off">2</span><span class="t" style="color:var(--am-muted)">Вход в аккаунт<small>После установки</small></span><span></span></div>
+<div class="step"><span class="mark off">3</span><span class="t" style="color:var(--am-muted)">Работает с Messenger<small>Проверится на первой задаче</small></span><span></span></div>
+<div class="step"><svg class="ring" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="none" stroke="var(--am-line)" stroke-width="2.5"/><circle cx="9" cy="9" r="7" fill="none" stroke="var(--am-muted)" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="43.98" stroke-dashoffset="43.98" transform="rotate(-90 9 9)"/></svg><span class="t" style="color:var(--am-muted)">Лимит<small>Появится после первой задачи</small></span><span></span></div>
+<div class="meta"></div>
+<div class="foot"><button disabled>Задачи</button></div>
+</div>
+
+</div>
+</div></div></body></html>

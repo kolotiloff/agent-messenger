@@ -173,9 +173,28 @@
     const a=Date.parse(from),b=to?Date.parse(to):Date.now();
     if(isNaN(a)||isNaN(b))return '';
     const m=Math.max(0,Math.round((b-a)/60000));
-    if(m<1)return 'меньше минуты';
+    if(m<1)return '<1 мин';
     if(m<60)return m+' мин';
     const h=Math.floor(m/60);return h+' ч'+(m%60?' '+m%60+' мин':'');
+  }
+  // T-058: what a task spent, as its agent reported it. Claude reports a
+  // price; Codex and Cursor only tokens.
+  function tokensText(n){
+    if(n>=1e6)return (n/1e6).toLocaleString('ru-RU',{maximumFractionDigits:1})+' млн';
+    if(n>=1e3)return Math.round(n/1e3).toLocaleString('ru-RU')+' тыс.';
+    return String(n);
+  }
+  // Tokens only: the agents' price is their own estimate and the owner works
+  // on subscription limits, so no dollars are shown (D-074).
+  function usageShort(u){
+    if(!u)return '';
+    return tokensText(u.input_tokens+u.output_tokens)+' токенов';
+  }
+  function usageLong(u){
+    if(!u)return '';
+    let s='Потрачено токенов: '+u.input_tokens.toLocaleString('ru-RU')+' на входе';
+    if(u.cached_tokens)s+=' (из них '+u.cached_tokens.toLocaleString('ru-RU')+' из кэша)';
+    return s+', '+u.output_tokens.toLocaleString('ru-RU')+' на выходе';
   }
   function clock(at){const d=new Date(at);return isNaN(d.getTime())?'':d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});}
   const activeStates=['running','waiting_owner','waiting_coordinator'];
@@ -202,11 +221,11 @@
       case 'running':return t.pending_launch?['Ждёт запуска','am-status-wait']:['Работает '+minutes(from),'am-status-run'];
       case 'waiting_owner':return ['Ждёт вашего ответа','am-status-wait'];
       case 'waiting_coordinator':return ['Ждёт ответа координатора','am-status-run'];
-      case 'done':return ['Завершил за '+minutes(from,end),'am-muted'];
+      case 'done':return ['Готово за '+minutes(from,end),'am-muted'];
       case 'failed':return failureStatus(t)||['Ошибка через '+minutes(from,end),'am-status-bad'];
-      case 'interrupted':return ['Прервался через '+minutes(from,end),'am-status-bad'];
-      case 'blocked':return ['Заблокирован через '+minutes(from,end),'am-status-bad'];
-      case 'cancelled':return ['Отменён','am-muted'];
+      case 'interrupted':return ['Прервана через '+minutes(from,end),'am-status-bad'];
+      case 'blocked':return ['Заблокирована через '+minutes(from,end),'am-status-bad'];
+      case 'cancelled':return ['Отменена','am-muted'];
     }
     return [t.state,'am-muted'];
   }
@@ -224,9 +243,8 @@
   }
   function renderProjects(){
     const select=$('project-select');select.replaceChildren();
-    for(const p of view?.projects||[]){const o=el('option',p.name);o.value=p.name;select.append(o);}
-    if(view?.project){const edit=el('option','Настроить проект…');edit.value='__edit';select.append(edit);}
-    const add=el('option','Новый проект…');add.value='__new';select.append(add);
+    for(const p of view?.projects||[]){const o=el('option',p.title||p.name);o.value=p.name;select.append(o);}
+    const add=el('option','Новый проект');add.value='__new';select.append(add);
     select.value=view?.project||'__new';
     if(!view?.project&&select.options.length>1)select.selectedIndex=0;
     select.disabled=!view;syncSelects();
@@ -259,16 +277,17 @@
     if(coordProvider&&!providers.includes(coordProvider))providers.unshift(coordProvider);
     for(const provider of providers){
       const a=agents.find(x=>x.agent===provider);
-      const coordinator=provider===coordProvider;
-      let [state,text]=!live?['offline','Нет связи']:a?agentState(a):['run','Подключён'];
-      if(coordinator&&state==='idle'){state='run';text='Свободен';}
+      // Blue means a task is running (T-060). A chat that once used
+      // Messenger's tools is listed but not lit: nothing tells whether it is
+      // still open.
+      const [state,text]=!live?['offline','Нет связи']:a?agentState(a):['idle','Чат с инструментами Messenger'];
       const line=el('div',undefined,'am-agent-line');line.dataset.provider=provider;
       line.title=(names[provider]||provider)+(a?': '+text:'');
       line.append(el('span',undefined,'am-dot am-dot-'+state),el('span',shortNames[provider]||provider));
       lines.append(line);
     }
     if(coordinatorClient!==null&&!coordProvider){
-      const line=el('div',undefined,'am-agent-line');line.append(el('span',undefined,'am-dot am-dot-'+(live?'run':'offline')),el('span',coordLabel));lines.append(line);
+      const line=el('div',undefined,'am-agent-line');line.append(el('span',undefined,'am-dot am-dot-'+(live?'idle':'offline')),el('span',coordLabel));lines.append(line);
     }
     return lines;
   }
@@ -325,8 +344,8 @@
   }
   // The computer that runs a task: this one, or the other one it was sent to.
   function taskComputer(t){return t.remote&&!t.remote.from?t.remote.id:'local';}
-  // A click on a computer in the sidebar shows only its tasks; a second click
-  // or the chip's cross shows all again (T-056).
+  // A click on a computer in the sidebar shows only its tasks; a second click,
+  // the chip's cross or a click on empty sidebar space shows all again (T-056).
   let computerFilter='';
   function filterComputer(id){
     computerFilter=computerFilter===id?'':id;
@@ -350,12 +369,13 @@
       box.append(el('div',label,'am-label am-task-section'));
       for(const t of items){
         const row=el('button',undefined,'am-task');row.type='button';row.setAttribute('aria-pressed',String(t.id===selectedTask));
-        const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),el('span',(names[t.agent]||t.agent)+(t.remote&&!t.remote.from?' · '+t.remote.name:'')));
+        const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),el('span',(names[t.agent]||t.agent)+(t.remote&&!t.remote.from?' на '+t.remote.name:'')));
         if(t.remote)agent.title=t.remote.from?'Задачу дал компьютер «'+t.remote.name+'»':'Выполняется на компьютере «'+t.remote.name+'»';
         const [text,cls]=taskStatus(t);
         const status=el('span',undefined,'am-task-status '+cls);
         if(t.state==='waiting_owner')status.append(el('span',undefined,'am-dot am-dot-wait'));
-        status.append(el('span',text));
+        const words=el('span',text);status.append(words);
+        if(t.usage){const used=el('span',', '+usageShort(t.usage),'am-task-usage');used.title=usageLong(t.usage);words.append(used);}
         row.append(agent,el('span',t.title,'am-task-title'),status);
         row.addEventListener('click',()=>{selectedTask=t.id;feedSignature='';renderTaskList();loadFeed();});
         box.append(row);
@@ -415,7 +435,7 @@
     if(!view.project){
       head.replaceChildren();
       const box=el('div',undefined,'am-settings am-connect');box.append(el('h3','Создайте проект'),el('p','Проект связывает чат-координатора, папку проекта на этом компьютере и задачи.'));
-      const b=el('button','Новый проект…','am-primary');b.type='button';b.addEventListener('click',()=>openProjectDialog(false));box.append(b);
+      const b=el('button','Новый проект','am-primary');b.type='button';b.addEventListener('click',()=>openProjectDialog(false));box.append(b);
       thread.replaceChildren(box);return;
     }
     if(!view.coordinator.connected&&!view.tasks.length){head.replaceChildren();thread.replaceChildren(connectHelp());return;}
@@ -487,8 +507,10 @@
     const where=t.remote&&!t.remote.from?' на компьютере «'+t.remote.name+'»':' на '+(view.computer_name||'этом компьютере')+(t.remote?.from?', по заданию компьютера «'+t.remote.name+'»':'');
     title.append(el('p',(names[t.agent]||t.agent)+(t.model?' ('+t.model+')':'')+where+', папка '+(t.folder||'ещё не известна'),'am-small am-muted'));
     const [statusText,statusCls]=taskStatus(t);
-    const when=t.finished_at?'Начата в '+clock(t.created_at)+', закончена в '+clock(t.finished_at):'Начата в '+clock(t.created_at);
-    const line=el('p',undefined,'am-small');line.append(el('span',statusText,statusCls),el('span',', '+when.charAt(0).toLowerCase()+when.slice(1),'am-muted'));title.append(line);
+    const when=t.finished_at?', '+clock(t.created_at)+'–'+clock(t.finished_at):', начата в '+clock(t.created_at);
+    const line=el('p',undefined,'am-small');line.append(el('span',statusText,statusCls),el('span',when,'am-muted'));
+    if(t.usage){const used=el('span',', '+usageShort(t.usage),'am-muted');used.title=usageLong(t.usage);line.append(used);}
+    title.append(line);
     const headRow=el('div',undefined,'am-task-head-row');headRow.append(title);
     head.replaceChildren(headRow);
     const [coordProvider,coordLabel]=coordinatorName();
@@ -711,7 +733,7 @@
     notice(null);
   }
   function render(){
-    renderProjects();renderMachines();renderTaskList();renderThread();renderAgents();renderNotice();autoCheck();
+    renderProjects();renderMachines();renderTaskList();renderThread();renderAgents();renderProjectPage();renderNotice();autoCheck();
     $('connection').textContent=online?'Клиент доступен':'Клиент недоступен';
   }
   async function loadFeed(){
@@ -739,7 +761,7 @@
   function show(next){
     tab=next;root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab);
     root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
-    $('list-toggle').hidden=tab!=='tasks';if(tab==='server')loadServer();$('screen-title').textContent={tasks:'Задачи',agents:'Агенты',server:'Сервер'}[tab];
+    $('list-toggle').hidden=tab!=='tasks';if(tab==='server')loadServer();$('screen-title').textContent={tasks:'Задачи',agents:'Агенты',project:'Проект',server:'Сервер'}[tab];
   }
 
   // Server tab: the broker hosted by this client and this computer's
@@ -758,9 +780,7 @@
     if(!server)return;const running=server.host.running;
     swap($('host-disable'),$('host-enable'),running);
     $('host-scope').disabled=running;$('host-port').disabled=running;
-    const accept=!!server.accept;swap($('accept-off'),$('accept-on'),accept);
-    badge($('accept-badge'),accept?'Принимаются':'Не принимаются',accept?'good':'');
-    $('accept-badge').title=accept?'Задачи других компьютеров выполняются здесь, если есть проект с тем же именем и папкой.':'Задачи других компьютеров сети отклоняются; координатор получает причину. Включено по умолчанию: все компьютеры сети подключены по вашему приглашению.';
+    const accept=!!server.accept;$('accept-toggle').setAttribute('aria-checked',String(accept));
   }
   async function loadServer(){
     if(serverBusy||serverPolling)return;
@@ -809,15 +829,13 @@
     renderMachines();
     // The certificate fingerprint travels inside the invitation code and the
     // joining computer checks it itself, so the window does not show it.
-    badge($('member-badge'),m.connected?(m.reachable?'На связи':m.checked_at?'Нет связи':'Подключено'):'Не подключено',m.connected?(m.reachable?'good':m.checked_at?'bad':''):'');
+    badge($('member-badge'),m.connected?(m.reachable||!m.checked_at?'Подключено':'Нет связи'):'Не подключено',m.connected?(m.reachable?'good':m.checked_at?'bad':''):'');
     $('member-join').hidden=m.connected;$('member-joined').hidden=!m.connected;
     $('member-badge').title=m.connected?'Этот компьютер входит в сервер '+m.address+'.':'Вставьте код приглашения, который выдал сервер на другом компьютере.';
     $('member-state').textContent='';
-    if(!nameFilled&&view?.computer_name){nameFilled=true;if(!$('member-name').value)$('member-name').value=view.computer_name;}
     const cn=$('computer-name');if(view?.computer_name&&document.activeElement!==cn&&!cn.dataset.edited)cn.value=view.computer_name;
-    $('computer-rename').disabled=serverBusy||!cn.value.trim()||cn.value.trim()===view?.computer_name;
     const dl=$('member-details');dl.replaceChildren();
-    const rows=[['Сервер',m.address],['Имя на сервере',m.device_name],['Подключено',stamp(m.connected_at)],['Последняя проверка',m.checked_at?stamp(m.checked_at)+(m.reachable?' — на связи':' — нет связи'):'ещё не проверяли']];
+    const rows=[['Сервер',m.address],['Подключено',stamp(m.connected_at)]];
     if(m.connected)rows.forEach(([k,v])=>{if(v){dl.append(el('dt',k),el('dd',v));}});
     const buttons=root.querySelectorAll('[data-screen=server] button');buttons.forEach(b=>b.disabled=serverBusy);
     if(!serverBusy)$('host-invite').disabled=!h.addresses.length;
@@ -873,44 +891,86 @@
     server.host.open_invitations=[...(server.host.open_invitations||[]),code.id];
   }
   async function connectServer(){
-    const code=$('member-code').value.trim(),name=$('member-name').value.trim();
+    // The computer joins under its one name, «Имя в сети».
+    const code=$('member-code').value.trim(),name=$('computer-name').value.trim()||view?.computer_name||'';
     if(!code){note('member','Вставьте код приглашения.',true);return;}
-    if(!name){note('member','Укажите имя этого компьютера.',true);return;}
+    if(!name){note('member','Укажите имя в сети.',true);return;}
     if(await serverAction({action:'connect',code,name},'member','Подключено.'))$('member-code').value='';
   }
-  let editingFolder=false;
-  function openProjectDialog(edit){
-    editingFolder=edit;
-    $('project-dialog-title').textContent=edit?'Проект «'+view.project+'»':'Новый проект';
-    $('project-name-field').hidden=edit;$('project-name').value='';$('project-folder').value=edit?view.folder:'';
-    $('project-rules').value=edit?(view.worker_rules||''):'';
-    $('project-save').textContent=edit?'Сохранить':'Создать проект';$('project-status').textContent='';
-    $('project-remove').hidden=!edit;
+  // «Новый проект» opens a dialog; the current project is set up on its own
+  // tab «Проект» (T-064).
+  function openProjectDialog(){
+    $('project-name').value='';$('project-folder').value='';$('project-rules').value='';$('project-status').textContent='';
     $('project-dialog').showModal();
   }
-  // Removing a project asks in a popup first. Its tasks stay in the database;
-  // creating the project again brings them back.
-  function askRemoveProject(){
-    const name=view?.project;if(!name)return;
-    askConfirm('Удалить проект «'+name+'»?','Проект пропадёт из списка. История задач сохранится и вернётся, если создать проект с тем же именем.','Удалить',async()=>{
-      await postAPI('/api/project-remove',{name});$('project-dialog').close();
-      project='';remember('messenger-project','');selectedTask='';feed=null;feedSignature='';viewSignature='';await refresh();
-    });
-  }
-  async function saveProject(){
-    const name=editingFolder?view.project:$('project-name').value.trim(),folder=$('project-folder').value.trim();
-    if(!name||!folder){$('project-status').textContent='Укажите имя и папку.';return;}
+  async function createProject(){
+    const name=$('project-name').value.trim(),folder=$('project-folder').value.trim();
+    if(!name||!folder){$('project-status').textContent='Укажите название и папку.';return;}
     $('project-save').disabled=true;$('project-status').textContent='Сохраняем…';
     try{
-      if(!editingFolder||folder!==view.folder)await postAPI(editingFolder?'/api/project-folder':'/api/project-create',{name,folder});
+      await postAPI('/api/project-create',{name,folder});
       const rules=$('project-rules').value.trim();
-      if(rules!==(editingFolder?(view.worker_rules||''):''))await postAPI('/api/project-rules',{name,rules});
-      if(!editingFolder){project=name;remember('messenger-project',name);}
+      if(rules)await postAPI('/api/project-rules',{name,rules});
+      project=name;remember('messenger-project',name);
       $('project-dialog').close();viewSignature='';await refresh();
       // Connect the coordinator right away; the result is shown, not retried.
       if(view?.project===name&&!view.coordinator?.connected&&view.coordinator_link?.state!=='connected')connectCoordinator(name);
     }catch(error){$('project-status').textContent=error.message;}
     finally{$('project-save').disabled=false;}
+  }
+  // The tab saves by itself (owner): the instructions shortly after typing
+  // stops, the folder when the field is left, Enter is pressed or a folder is
+  // picked, so a half-typed path is not stored. Saves go one at a time; a
+  // failed or unanswered save is shown and not repeated; a good one shows
+  // nothing (T-064).
+  let projectPageFor='',projectSaving=Promise.resolve(),rulesTimer=0;
+  function renderProjectPage(){
+    const name=view?.project||'';
+    $('project-none').hidden=!!name;$('project-page').hidden=!name;
+    if(!name){projectPageFor='';return;}
+    if(projectPageFor!==name){$('project-page-status').textContent='';clearTimeout(rulesTimer);}
+    const fresh=projectPageFor!==name;projectPageFor=name;
+    if(fresh||document.activeElement!==$('project-page-name'))$('project-page-name').value=view.project_title||name;
+    // Other computers and the coordinator chat know the project by the name it
+    // was created with; a rename shows it so the owner can match them (T-065).
+    const renamed=!!view.project_title&&view.project_title!==name;$('project-page-key').hidden=!renamed;
+    $('project-page-key').textContent=renamed?'Для других компьютеров и координатора проект по-прежнему называется «'+name+'».':'';
+    if(fresh||document.activeElement!==$('project-page-folder'))$('project-page-folder').value=view.folder||'';
+    if(fresh||(document.activeElement!==$('project-page-rules')&&!rulesTimer))$('project-page-rules').value=view.worker_rules||'';
+  }
+  function saveProjectField(field){
+    const name=view?.project;if(!name)return;
+    const status=$('project-page-status');
+    projectSaving=projectSaving.then(async()=>{
+      if(view?.project!==name)return;
+      try{
+        if(field==='title'){
+          const title=$('project-page-name').value.trim();
+          if(!title){status.textContent='Укажите название.';return;}
+          if(title===(view.project_title||name))return;
+          status.textContent='';await postAPI('/api/project-title',{name,title});
+        }else if(field==='folder'){
+          const folder=$('project-page-folder').value.trim();
+          if(!folder){status.textContent='Укажите папку.';return;}
+          if(folder===(view.folder||''))return;
+          status.textContent='';await postAPI('/api/project-folder',{name,folder});
+        }else{
+          const rules=$('project-page-rules').value.trim();
+          if(rules===(view.worker_rules||''))return;
+          status.textContent='';await postAPI('/api/project-rules',{name,rules});
+        }
+        viewSignature='';await refresh();
+      }catch(error){status.textContent=error.message;}
+    });
+  }
+  // Removing a project asks in a popup first. Its tasks stay in the database;
+  // creating the project again brings them back.
+  function askRemoveProject(){
+    const name=view?.project;if(!name)return;
+    askConfirm('Удалить проект «'+(view.project_title||name)+'»?','Проект пропадёт из списка. История задач сохранится и вернётся, если создать проект с тем же именем.','Удалить',async()=>{
+      await postAPI('/api/project-remove',{name});
+      project='';remember('messenger-project','');selectedTask='';feed=null;feedSignature='';viewSignature='';projectPageFor='';await refresh();
+    });
   }
   // «Установить» opens the agent's official page; «Войти» opens a terminal
   // with the agent's own sign-in (D-057).
@@ -1039,7 +1099,7 @@
     finally{$('agent-remove').disabled=false;}
   }
   window.messengerRefresh=()=>{viewSignature='';refresh();};
-  // «Выбрать…»: the local server opens the system's own dialog (D-053); the
+  // «Выбрать»: the local server opens the system's own dialog (D-053); the
   // Mac app keeps its native folder dialog for the project folder.
   async function pick(field,kind,status){
     const input=$(field);$(status).textContent='';
@@ -1051,25 +1111,38 @@
       $(status).textContent='';
     }catch(error){$(status).textContent=error.name==='TimeoutError'?'Окно выбора не ответило. Вставьте путь вручную.':error.message;}
   }
-  window.messengerFolderPicked=path=>{if(typeof path==='string'&&path)$('project-folder').value=path;};
+  // The Mac shell's folder picker answers here, into the field that asked.
+  let folderTarget='project-folder';
+  window.messengerFolderPicked=path=>{if(typeof path==='string'&&path){$(folderTarget).value=path;$(folderTarget).dispatchEvent(new Event('input'));}};
+  // The window names a build the usual short way, «v0.41» for
+  // 0.0.0-preview.41 (owner); the release tag stays as it is because updates
+  // compare it. The tooltip says it is an alpha and gives the exact tag.
+  function versionName(version){
+    const preview=version.match(/^0\.0\.0-preview\.(\d+)$/);
+    return preview?'v0.'+preview[1]:version?'v'+version:'';
+  }
+  function versionText(installed){return versionName(installed);}
+  // The update icon says in its tooltip which version came out (T-066).
+  function updateTip(version,busy){
+    const name=versionName(version);
+    const text=busy?'Обновление загружается':name?'Вышла '+name+'. Нажмите, чтобы обновить':'Обновить';
+    $('app-update-button').title=text;$('app-update-button').setAttribute('aria-label',text);
+  }
   window.messengerUpdateStatus = status => {
     if(!window.webkit?.messageHandlers?.updates)return;
     const version=typeof status?.version==='string'?status.version:'';
     const installed=typeof status?.installedVersion==='string'?status.installedVersion:'';
     $('app-installed-version').hidden=!installed;
-    const preview=installed.match(/^0\.0\.0-preview\.(\d+)$/);
-    $('app-installed-version').textContent=preview?'Предварительная версия '+preview[1]:installed?'Версия '+installed:'';
-    $('app-installed-version').title=installed?'Точная версия: '+installed:'';
+    $('app-installed-version').title=installed?'Альфа-версия, точный номер '+installed:'';
     const detail=typeof status?.detail==='string'?status.detail:'';
     const waiting=detail==='Обновление загружается в фоне';
-    // Only an available update is shown, as the one button «Обновить».
+    // Only an available update is shown, as the blue icon next to the version.
     // Background checks and their failures stay quiet; the app checks again
     // by itself.
     const shown=!!version||waiting;
     $('app-update-version').hidden=true;$('app-update-button').hidden=!shown;
-    $('app-update-button').title=version?'Версия '+version:'';
-    $('app-update-button').textContent=waiting?'Загружается…':'Обновить';
-    $('app-update-button').setAttribute('aria-label',version?'Установить обновление '+version:'Обновление загружается');
+    $('app-installed-version').textContent=versionText(installed);
+    updateTip(version,waiting);
     $('app-update-button').disabled=waiting;
   };
   // Windows and Linux: the program updates itself from the window (D-048).
@@ -1079,19 +1152,16 @@
   function renderSelfUpdate(){
     const s=selfUpdate;if(!s)return;
     const installed=typeof s.installed_version==='string'?s.installed_version:'';
-    const preview=installed.match(/^0\.0\.0-preview\.(\d+)$/);
     $('app-installed-version').hidden=!installed;
-    $('app-installed-version').textContent=preview?'Предварительная версия '+preview[1]:installed?'Версия '+installed:'';
-    $('app-installed-version').title=installed?'Точная версия: '+installed:'';
+    $('app-installed-version').title=installed?'Альфа-версия, точный номер '+installed:'';
     const version=typeof s.version==='string'?s.version:'';
     const done=s.state==='installed',shown=(s.state==='available'&&!!version)||selfUpdateBusy||done||!!s.message;
-    // Only the button «Обновить» while an update waits (owner, T-056); a line
+    // Only the update icon while an update waits (owner, T-056, T-066); a line
     // appears only for an error or after the update.
     $('app-update-version').hidden=!s.message&&!done;$('app-update-button').hidden=!shown||done;
+    $('app-installed-version').textContent=versionText(installed);
     $('app-update-version').textContent=s.message||(done?'Обновлено. Окно откроется заново.':'');
-    $('app-update-button').title=version?'Версия '+version:'';
-    $('app-update-button').textContent=selfUpdateBusy?'Обновляется…':'Обновить';
-    $('app-update-button').setAttribute('aria-label',version?'Установить обновление '+version:'Установить обновление');
+    updateTip(version,selfUpdateBusy);
     $('app-update-button').disabled=selfUpdateBusy;
   }
   async function loadSelfUpdate(){
@@ -1120,11 +1190,41 @@
   });
   $('project-select').addEventListener('change',()=>{
     const value=$('project-select').value;
-    if(value==='__new'||value==='__edit'){$('project-select').value=view?.project||'__new';syncSelects();openProjectDialog(value==='__edit');return;}
+    if(value==='__new'){$('project-select').value=view?.project||'__new';syncSelects();openProjectDialog();return;}
     project=value;remember('messenger-project',value);selectedTask='';feed=null;feedSignature='';viewSignature='';refresh();
   });
   $('agent-filter').addEventListener('change',renderTaskList);
   $('computer-chip-clear').addEventListener('click',()=>{computerFilter='';renderMachines();renderTaskList();});
+  // The sidebar and the task list are as wide as the owner drags them (T-063).
+  // A double click or Home restores the usual width; the width is remembered.
+  function splitter(pane,name,variable,usual,min,max,side){
+    const handle=el('div',undefined,'am-splitter');
+    handle.setAttribute('role','separator');handle.setAttribute('aria-orientation','vertical');handle.tabIndex=0;
+    handle.title='Потяните, чтобы изменить ширину. Двойной щелчок: как было';
+    handle.setAttribute('aria-label',name);handle.setAttribute('aria-valuemin',String(min));handle.setAttribute('aria-valuemax',String(max));
+    const key='messenger-width-'+variable.slice(5);
+    const apply=(px,save)=>{px=Math.round(Math.min(max,Math.max(min,px)));root.style.setProperty(variable,px+'px');handle.setAttribute('aria-valuenow',String(px));if(save)remember(key,px===usual?'':String(px));};
+    const saved=Number(recall(key));apply(saved>0?saved:usual,false);
+    handle.addEventListener('pointerdown',event=>{
+      if(event.button!==0)return;event.preventDefault();handle.setPointerCapture(event.pointerId);
+      const startX=event.clientX,startW=pane.getBoundingClientRect().width;
+      handle.classList.add('am-dragging');document.body.classList.add('am-resizing');
+      const move=e=>apply(startW+side*(e.clientX-startX),false);
+      const up=e=>{handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',up);handle.removeEventListener('pointercancel',up);handle.classList.remove('am-dragging');document.body.classList.remove('am-resizing');apply(startW+side*(e.clientX-startX),true);};
+      handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',up);handle.addEventListener('pointercancel',up);
+    });
+    handle.addEventListener('dblclick',()=>apply(usual,true));
+    handle.addEventListener('keydown',event=>{
+      const now=pane.getBoundingClientRect().width,step=event.shiftKey?64:16;
+      if(event.key==='ArrowLeft')apply(now-side*step,true);else if(event.key==='ArrowRight')apply(now+side*step,true);else if(event.key==='Home')apply(usual,true);else return;
+      event.preventDefault();
+    });
+    pane.append(handle);
+  }
+  splitter(root.querySelector('.am-sidebar'),'Ширина левой панели','--am-nav',204,160,420,1);
+  splitter($('task-panel'),'Ширина списка задач','--am-queue',240,200,520,-1);
+  // A click on empty space in the sidebar shows all computers' tasks again.
+  root.querySelector('.am-sidebar').addEventListener('click',event=>{if(computerFilter&&!event.target.closest('.am-machine-card,.am-project,.am-side-bottom,.am-splitter,button,select,input,a,[popover]')){computerFilter='';renderMachines();renderTaskList();}});
   $('answer-text').addEventListener('input',()=>{const f=$('answer-text');f.style.height='auto';f.style.height=Math.min(140,Math.max(44,f.scrollHeight))+'px';answerControls();});
   $('answer-send').addEventListener('click',sendAnswer);
   // Enter sends; Shift+Enter adds a line. An IME composition keeps its Enter.
@@ -1136,12 +1236,19 @@
   $('invite-close').addEventListener('click',()=>$('invite-dialog').close());
   // A closed invitation is not shown again; a new one can be made at any time.
   $('invite-dialog').addEventListener('close',()=>{invitation=null;clearInterval(inviteTimer);});
-  $('project-save').addEventListener('click',saveProject);
-  $('project-remove').addEventListener('click',askRemoveProject);
+  $('project-save').addEventListener('click',createProject);
+  $('project-page-rules').addEventListener('input',()=>{clearTimeout(rulesTimer);rulesTimer=setTimeout(()=>{rulesTimer=0;saveProjectField('rules');},800);});
+  $('project-page-rules').addEventListener('blur',()=>{if(rulesTimer){clearTimeout(rulesTimer);rulesTimer=0;saveProjectField('rules');}});
+  $('project-page-name').addEventListener('change',()=>saveProjectField('title'));
+  $('project-page-name').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();saveProjectField('title');}});
+  $('project-page-folder').addEventListener('change',()=>saveProjectField('folder'));
+  $('project-page-folder').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();saveProjectField('folder');}});
+  $('project-page-remove').addEventListener('click',askRemoveProject);
   $('confirm-go').addEventListener('click',runConfirm);
   $('confirm-cancel').addEventListener('click',()=>$('confirm-dialog').close());
   $('access-toggle').addEventListener('click',toggleAllAccess);
-  $('project-pick').addEventListener('click',()=>{if(window.webkit?.messageHandlers?.folder)window.webkit.messageHandlers.folder.postMessage('pick');else pick('project-folder','folder','project-status');});
+  $('project-pick').addEventListener('click',()=>{folderTarget='project-folder';if(window.webkit?.messageHandlers?.folder)window.webkit.messageHandlers.folder.postMessage('pick');else pick('project-folder','folder','project-status');});
+  $('project-page-pick').addEventListener('click',()=>{folderTarget='project-page-folder';if(window.webkit?.messageHandlers?.folder)window.webkit.messageHandlers.folder.postMessage('pick');else pick('project-page-folder','folder','project-page-status');});
   $('agent-cli-pick').addEventListener('click',()=>pick('agent-cli','file','agent-check-status'));
   $('agent-profile-pick').addEventListener('click',()=>pick('agent-profile','folder','agent-check-status'));
   $('restart-dialog').addEventListener('cancel',event=>event.preventDefault());
@@ -1167,10 +1274,12 @@
   $('member-connect').addEventListener('click',connectServer);
   $('agent-login').addEventListener('click',()=>loginAgent(setupProvider,$('agent-cli').value.trim(),$('agent-profile').value.trim(),$('agent-login'),$('agent-check-status')));
   $('computer-name').addEventListener('input',e=>{e.target.dataset.edited='1';renderServer();});
-  $('computer-rename').addEventListener('click',async()=>{const name=$('computer-name').value.trim();if(!name)return;if(await serverAction({action:'rename',name},'computer','Имя сохранено. Другие компьютеры увидят его через несколько секунд.')){delete $('computer-name').dataset.edited;await refresh();renderServer();}});
-  $('accept-on').addEventListener('click',()=>serverAction({action:'accept',on:true},'accept',''));
-  $('accept-off').addEventListener('click',()=>serverAction({action:'accept',on:false},'accept','Новые задачи других компьютеров будут отклоняться. Уже принятые продолжат работу.'));
-  $('member-check').addEventListener('click',()=>serverAction({action:'check'},'member',''));
+  // «Имя в сети» saves by itself when the field is left or Enter is pressed;
+  // only an error is shown.
+  async function renameComputer(){const cn=$('computer-name'),name=cn.value.trim();if(!name||name===view?.computer_name||!cn.dataset.edited)return;if(await serverAction({action:'rename',name},'computer','')){delete cn.dataset.edited;await refresh();renderServer();}}
+  $('computer-name').addEventListener('change',renameComputer);
+  $('computer-name').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();renameComputer();}});
+  $('accept-toggle').addEventListener('click',()=>{if(!server)return;const on=!server.accept;serverAction({action:'accept',on},'accept',on?'':'Новые задачи других компьютеров будут отклоняться. Уже принятые продолжат работу.');});
   $('member-disconnect').addEventListener('click',()=>serverAction({action:'disconnect'},'member','Отключено. Устройство остаётся в списке сервера, пока его там не отзовут.'));
   let serverPolls=0;
   // The sidebar lists devices from the server state, so it is read on every

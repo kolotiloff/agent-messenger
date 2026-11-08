@@ -157,12 +157,16 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-actions { display:flex; flex-wrap:wrap; align-items:center; gap:var(--am-gap-control); }
 /* The main action sits on the right (dialogs follow the Claude app). */
 #am-concept .am-end-actions { justify-content:flex-end; }
-#am-concept .am-end-actions > .am-danger { margin-right:auto; }
+#am-concept .am-end-actions > .am-danger:not(.am-alone) { margin-right:auto; }
 /* The one «Любые команды» switch above the agent cards (T-056). */
 #am-concept .am-access-bar { display:flex; align-items:center; gap:var(--am-gap-section); margin-bottom:var(--am-gap-content); padding:var(--am-gap-section); border:1px solid var(--am-line); border-radius:var(--am-radius-m); background:var(--am-panel); }
 #am-concept .am-access-text { flex:1; min-width:0; display:grid; gap:var(--am-space-1); }
 #am-concept .am-access-text p { margin:0; }
-#am-concept .am-access-title { font-weight:600; }
+/* A switch with its title and explanation inside a card, under a divider */
+#am-concept .am-setting-row { display:flex; align-items:center; gap:var(--am-gap-section); padding-top:var(--am-gap-content); border-top:1px solid var(--am-line); }
+#am-concept .am-access-title { font-weight:500; }
+/* A setting's explanation reads as text, not as a hint: normal size, muted */
+#am-concept .am-access-note { font-size:var(--am-text-m); line-height:1.45; color:var(--am-muted); }
 /* A small on/off switch, one style for every switch of the window. */
 #am-concept button.am-switch { position:relative; flex-shrink:0; width:var(--am-switch-width); min-height:0; height:var(--am-switch-height); padding:0; border-radius:calc(var(--am-switch-height) / 2); background:color-mix(in srgb, var(--am-muted) 45%, transparent); }
 #am-concept button.am-switch::after { content:""; position:absolute; top:var(--am-switch-inset); left:var(--am-switch-inset); width:var(--am-switch-knob); height:var(--am-switch-knob); border-radius:50%; background:#fff; box-shadow:var(--am-shadow-s); transition:transform .15s ease; }
@@ -190,6 +194,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-field textarea { resize:vertical; font:var(--am-text-s)/1.5 var(--am-mono); }
 #am-concept .am-field { display:flex; flex-direction:column; gap:var(--am-gap-control); }
 #am-concept .am-folder-pick { display:flex; gap:var(--am-gap-control); }
+#am-concept .am-folder-pick button { flex-shrink:0; white-space:nowrap; }
 
 /* Select: a visible field at rest, and its menu. */
 #am-concept .am-select-trigger { justify-content:space-between; gap:var(--am-gap-control); min-width:0; padding:var(--am-text-nudge) var(--am-space-2) 0 var(--am-space-3); max-width:100%; text-align:left; background:var(--am-field); border:1px solid var(--am-line); }
@@ -225,7 +230,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-shell { display:grid; grid-template-columns:var(--am-nav) minmax(0,1fr); flex:1; min-height:0; }
 
 /* Sidebar */
-#am-concept .am-sidebar { display:flex; flex-direction:column; gap:var(--am-gap-region); min-height:0; padding:var(--am-space-4) var(--am-space-3) var(--am-space-3); background:var(--am-side); border-right:1px solid var(--am-line); overflow:hidden; }
+#am-concept .am-sidebar { position:relative; display:flex; flex-direction:column; gap:var(--am-gap-region); min-height:0; padding:var(--am-space-4) var(--am-space-3) var(--am-space-3); background:var(--am-side); border-right:1px solid var(--am-line); overflow:hidden; }
 #am-concept .am-project .am-select-trigger { width:100%; }
 #am-concept .am-computers { display:flex; flex-direction:column; min-height:0; }
 #am-concept .am-machines { display:flex; flex-direction:column; gap:var(--am-space-1); min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; margin-right:calc(-1 * var(--am-space-3)); padding-right:calc(var(--am-space-3) - var(--am-gutter, 0px)); }
@@ -240,6 +245,14 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-theme-setting { display:flex; align-items:center; gap:var(--am-gap-content); }
 #am-concept .am-theme-setting .am-select-trigger { flex:1; }
 #am-concept .am-version { font-size:var(--am-text-xs); color:var(--am-muted); line-height:1.4; }
+/* An available update is a small blue round arrow next to the version (owner, T-066) */
+#am-concept .am-version-row { display:flex; align-items:center; justify-content:space-between; gap:var(--am-gap-control); min-width:0; }
+#am-concept .am-version-row .am-version { margin:0; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#am-concept button.am-update-icon { flex-shrink:0; width:22px; height:22px; min-height:0; padding:0; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background:color-mix(in srgb,var(--am-run) 22%,transparent); color:var(--am-run); }
+#am-concept button.am-update-icon:hover:not(:disabled) { background:color-mix(in srgb,var(--am-run) 34%,transparent); }
+#am-concept button.am-update-icon:disabled { opacity:.6; cursor:default; }
+#am-concept button.am-update-icon[hidden] { display:none; }
+#am-concept .am-update-icon svg { width:13px; height:13px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
 
 /* Main pane and tabs */
 #am-concept .am-main { display:flex; flex-direction:column; gap:var(--am-gap-content); min-width:0; min-height:0; padding:var(--am-pane-inset) 0; overflow:hidden; }
@@ -264,7 +277,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-connect details button { margin-top:var(--am-space-2); }
 
 /* Tasks screen: the task feed and the task list beside it. */
-#am-concept .am-chat-layout { display:grid; grid-template-columns:minmax(0,1fr) 240px; height:100%; min-height:0; position:relative; }
+#am-concept .am-chat-layout { display:grid; grid-template-columns:minmax(0,1fr) min(var(--am-queue,240px),50%); height:100%; min-height:0; position:relative; }
 #am-concept .am-chat-layout.am-queue-collapsed { grid-template-columns:minmax(0,1fr); }
 #am-concept .am-chat { display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; }
 #am-concept .am-chat-head { display:flex; align-items:center; gap:var(--am-gap-content); padding:0 var(--am-pane-inset) var(--am-space-3); flex-shrink:0; }
@@ -342,7 +355,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept #answer-status:empty { display:none; }
 
 /* Task list panel */
-#am-concept .am-queue-panel { display:flex; flex-direction:column; gap:var(--am-gap-content); min-width:0; min-height:0; padding-inline:var(--am-pane-inset); border-left:1px solid var(--am-line); background:var(--am-bg); }
+#am-concept .am-queue-panel { position:relative; display:flex; flex-direction:column; gap:var(--am-gap-content); min-width:0; min-height:0; padding-inline:var(--am-pane-inset); border-left:1px solid var(--am-line); background:var(--am-bg); }
 #am-concept .am-queue-header { display:flex; flex-direction:column; gap:var(--am-gap-content); flex-shrink:0; font-size:var(--am-text-s); }
 #am-concept .am-queue-header h3 { display:flex; align-items:center; gap:var(--am-gap-control); font-size:var(--am-text-m); }
 #am-concept .am-queue-count { color:var(--am-muted); font-size:var(--am-text-s); font-weight:400; }
@@ -356,10 +369,13 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-task-list .am-task:is(:hover,:focus-visible) { background:var(--am-soft); }
 #am-concept .am-task-list .am-task[aria-pressed=true] { background:var(--am-selected); }
 #am-concept .am-task-agent { display:flex; align-items:center; gap:var(--am-space-1); color:var(--am-muted); font-size:var(--am-text-xs); }
+/* In a list the logo fits the row, so rows with and without a logo are the same height */
+#am-concept .am-select-option .am-provider-icon { width:20px; height:20px; }
 #am-concept .am-task-agent .am-provider-icon { width:14px; height:14px; }
 #am-concept .am-task-agent .am-provider-icon svg { width:12px; height:12px; }
 #am-concept .am-task-title { display:block; min-width:0; max-width:100%; font-size:var(--am-text-m); color:var(--am-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-#am-concept .am-task-status { display:flex; align-items:center; gap:var(--am-space-1); }
+#am-concept .am-task-status { display:flex; align-items:center; gap:var(--am-space-1); white-space:nowrap; }
+#am-concept .am-task-usage { flex-shrink:0; white-space:nowrap; color:var(--am-muted); font-size:var(--am-text-xs); font-variant-numeric:tabular-nums; }
 
 /* Cards: agent cards and the server sections share one look. */
 #am-concept .am-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:var(--am-gap-content); align-items:stretch; }
@@ -399,16 +415,11 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 /* Server screen */
 #am-concept .am-settings { display:flex; flex-direction:column; gap:var(--am-gap-section); max-width:570px; padding-bottom:var(--am-gap-section); }
 /* Cards on the left, notes about the screen in their own column. */
-#am-concept .am-server-layout { display:grid; grid-template-columns:minmax(0,570px) minmax(200px,280px); grid-template-areas:"main aside"; align-items:start; gap:var(--am-gap-section); }
-#am-concept .am-server-layout > .am-settings { grid-area:main; }
-#am-concept .am-server-aside { grid-area:aside; position:sticky; top:0; display:flex; flex-direction:column; gap:var(--am-gap-content); }
 #am-concept .am-panel-note { padding:var(--am-space-3) var(--am-space-4); border-radius:var(--am-radius-m); background:var(--am-soft); }
 #am-concept .am-sub { display:flex; flex-direction:column; gap:var(--am-gap-content); min-width:0; }
 #am-concept .am-server-grid { display:grid; grid-template-columns:minmax(0,1fr) 120px auto; align-items:end; gap:var(--am-gap-content); }
 #am-concept .am-invite-row { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:end; gap:var(--am-gap-content); }
 /* Both buttons sit in one cell; the hidden one still sizes it. */
-#am-concept .am-accept-row { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:var(--am-gap-content); }
-#am-concept .am-accept-row > p { margin:0; }
 #am-concept .am-swap { display:grid; }
 #am-concept .am-swap > button { grid-area:1/1; }
 #am-concept .am-swap > [aria-hidden=true] { visibility:hidden; }
@@ -454,15 +465,24 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept #agent-check-status:empty { display:none; }
 
 /* Mac app: the window frame belongs to macOS. */
+/* Drag handles on the sidebar's right edge and the task list's left edge (T-063) */
+#am-concept .am-splitter { position:absolute; top:0; bottom:0; z-index:2; width:var(--am-space-2); cursor:col-resize; touch-action:none; }
+#am-concept .am-sidebar > .am-splitter { right:0; }
+#am-concept .am-queue-panel > .am-splitter { left:0; }
+#am-concept .am-sidebar > .am-splitter:is(:hover,:focus-visible,.am-dragging) { box-shadow:inset -2px 0 var(--am-muted); outline:none; }
+#am-concept .am-queue-panel > .am-splitter:is(:hover,:focus-visible,.am-dragging) { box-shadow:inset 2px 0 var(--am-muted); outline:none; }
+body.am-resizing { cursor:col-resize; user-select:none; }
+
 body.am-native { padding:0; }
 body.am-native #am-concept { max-width:none; margin:0; }
 body.am-native #am-concept .am-window { border:0; border-radius:0; }
 body.am-native #am-concept .am-titlebar { display:none; }
 
 /* Narrow and short windows, touch and motion */
-@media (max-width:900px) { #am-concept .am-chat-layout { grid-template-columns:minmax(0,1fr) 220px; } }
+@media (max-width:900px) { #am-concept .am-chat-layout { grid-template-columns:minmax(0,1fr) min(var(--am-queue,220px),50%); } }
 @media (max-width:620px) {
   body { padding:0; }
+  #am-concept .am-splitter { display:none; }
   #am-concept .am-shell { grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); }
   #am-concept .am-sidebar { flex-direction:row; align-items:center; gap:var(--am-gap-content); padding:var(--am-pad-compact); border-right:0; border-bottom:1px solid var(--am-line); overflow:visible; }
   #am-concept .am-project .am-label, #am-concept .am-computers { display:none; }
@@ -476,11 +496,7 @@ body.am-native #am-concept .am-titlebar { display:none; }
   #am-concept .am-chat-layout { grid-template-columns:minmax(0,1fr); }
   #am-concept .am-queue-panel { position:absolute; top:0; right:0; bottom:0; z-index:5; width:min(300px,100%); padding:var(--am-space-3); border:1px solid var(--am-line); border-radius:var(--am-radius-m); box-shadow:var(--am-shadow-l); }
 }
-@media (max-width:1000px) {
-  #am-concept .am-server-layout { grid-template-columns:minmax(0,570px); grid-template-areas:"aside" "main"; }
-  #am-concept .am-server-aside { position:static; }
-}
-@media (max-width:520px) { #am-concept :is(.am-server-grid,.am-invite-row,.am-accept-row) { grid-template-columns:1fr; } }
+@media (max-width:520px) { #am-concept :is(.am-server-grid,.am-invite-row) { grid-template-columns:1fr; } }
 @media (max-height:700px) { #am-concept .am-main { padding-block:var(--am-space-3); } #am-concept .am-compose { padding-top:var(--am-space-2); } }
 @media (pointer:coarse) { #am-concept button { min-height:44px; } }
 @media (prefers-reduced-motion:no-preference) { #am-concept button { transition:background-color .12s ease; } }

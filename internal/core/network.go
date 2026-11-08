@@ -158,6 +158,9 @@ type netBody struct {
 	// Rules are the starting computer's worker rules (T-050). A computer
 	// before preview.38 ignores them.
 	Rules string `json:"rules,omitempty"`
+	// Usage is the running computer's total for the task (T-058). A
+	// computer before it ignores the field.
+	Usage *TaskUsage `json:"usage,omitempty"`
 }
 
 func enqueueNet(tx *sql.Tx, broker, to, opID, task string, b netBody) error {
@@ -399,7 +402,11 @@ func forwardTaskEvent(tx *sql.Tx, o netLink, task, audience, kind, text, questio
 	if err != nil {
 		return err
 	}
-	return enqueueNet(tx, o.broker, o.peer, "event."+id, task, netBody{Kind: "event", Task: o.task, State: state, Detail: clip(detail, 2000), Audience: audience, Event: kind, Text: text, Question: question, Failure: reason.String, Reset: reset.String})
+	usage, err := taskUsage(tx, task)
+	if err != nil {
+		return err
+	}
+	return enqueueNet(tx, o.broker, o.peer, "event."+id, task, netBody{Kind: "event", Task: o.task, State: state, Detail: clip(detail, 2000), Audience: audience, Event: kind, Text: text, Question: question, Failure: reason.String, Reset: reset.String, Usage: usage})
 }
 
 // ---- sending ----
@@ -755,6 +762,9 @@ func applyReport(tx *sql.Tx, from netLink, b netBody) error {
 		if _, err := tx.Exec(`UPDATE tasks SET failure_reason=?,failure_reset=? WHERE id=?`, b.Failure, nullString(reset), t.ID); err != nil {
 			return err
 		}
+	}
+	if err := setTaskUsage(tx, t.ID, b.Usage); err != nil {
+		return err
 	}
 	return insertTaskEvent(tx, t.Project, t.ID, b.Audience, b.Event, clip(b.Text, MaxDispositionText+1000), question)
 }

@@ -39,6 +39,16 @@ DEPLOYMENT.md asks for the OS secure storage (Keychain on the Mac). Today the ke
 
 ## Answered
 
+### Q-019: Should a project rename reach other computers and the coordinator chat?
+The owner asked to rename a project on the «Проект» tab. The project's name links it to other computers (a task for another computer finds the project there by that name) and to the coordinator chat (it connects with that name). The careful variant built now (T-065, D-072): a rename changes only the name this computer's window shows; the original name keeps working underneath, and the tab says which name other computers and the coordinator use. **Options:** keep it local; or rename everywhere, which needs the other computers to agree and the coordinator chat to reconnect. **Owner (2026-11-08):** keep it local, on this computer only.
+
+### Q-020: Should the release numbering itself change (for example 0.1.0-alpha.N)?
+The window now says «v0.41» (D-073), but releases are still tagged 0.0.0-preview.N, and the Mac updater and the Windows/Linux self-updater compare that. Renumbering needs a version that still sorts above every 0.0.0-preview.N already installed. The careful variant until answered: keep the tags, change only the shown name. **Owner (2026-11-08):** «v0.42» as agreed; tags stay.
+
+### Q-021: Wording of the server connection status
+Asked in chat 2026-11-08 (T-067). **Owner (2026-11-08):** «Подключено», «Нет связи», «Не подключено» are fine.
+
+
 ### Q-017: How short may the invitation be (T-052)?
 The owner wants a 6-digit code to type from memory instead of the long one. The long code carries the host's address, its certificate fingerprint and a 32-byte secret; six digits cannot carry them, so the joining computer has to find the host on the local network and both sides have to prove the code without sending it (a password-authenticated key exchange), or anyone on the network could try all million codes or pose as the host. **Options:** (a) 6 digits with discovery on the local network and the key exchange, 3 tries, 10 minutes; the long code stays for other networks; (b) 6 digits plus the host's address typed by hand; (c) keep only the long code. **Chosen until answered:** (a), the most careful one that still gives a short code. **Blocks:** T-052.
 

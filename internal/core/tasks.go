@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/kolotiloff/agent-messenger/internal/platform"
@@ -344,6 +345,14 @@ func (s *Store) CreateProject(name, folder string) error {
 		if err := tx.QueryRow(`SELECT COUNT(*) FROM projects WHERE name=? AND removed_at IS NULL`, name).Scan(&existing); err != nil {
 			return err
 		}
+		// A new project may not take a name another project shows (T-065).
+		var shown int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM projects WHERE name<>? AND removed_at IS NULL AND title<>'' AND lower(title)=lower(?)`, name, name).Scan(&shown); err != nil {
+			return err
+		}
+		if shown != 0 {
+			return fmt.Errorf("%w: проект с таким названием уже есть", ErrRejected)
+		}
 		if existing != 0 {
 			var old string
 			err := tx.QueryRow(`SELECT folder FROM project_folders WHERE project=? AND computer=?`, name, computer).Scan(&old)
@@ -425,6 +434,49 @@ func (s *Store) SetProjectFolder(name, folder string) error {
 	})
 }
 
+// SetProjectTitle renames a project in the window (T-065). Only the shown
+// name changes: tasks, the coordinator chat and other computers keep the name
+// the project was created with, so nothing linked to it breaks. A title may
+// not repeat another project's name or title; the project's own name clears
+// the rename.
+func (s *Store) SetProjectTitle(name, title string) error {
+	title = strings.TrimSpace(title)
+	if title == "" || utf8.RuneCountInString(title) > maxProjectName || !utf8.ValidString(title) || strings.IndexFunc(title, unicode.IsControl) >= 0 {
+		return fmt.Errorf("%w: название проекта — от 1 до %d символов, в одну строку", ErrRejected, maxProjectName)
+	}
+	return s.tx(func(tx *sql.Tx) error {
+		var n int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM projects WHERE name=? AND removed_at IS NULL`, name).Scan(&n); err != nil {
+			return err
+		}
+		if n == 0 {
+			return fmt.Errorf("%w: unknown project", ErrRejected)
+		}
+		rows, err := tx.Query(`SELECT name,title FROM projects WHERE name<>? AND removed_at IS NULL`, name)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var other, otherTitle string
+			if err := rows.Scan(&other, &otherTitle); err != nil {
+				return err
+			}
+			if strings.EqualFold(other, title) || strings.EqualFold(otherTitle, title) {
+				return fmt.Errorf("%w: проект с таким названием уже есть", ErrRejected)
+			}
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		if title == name {
+			title = ""
+		}
+		_, err = tx.Exec(`UPDATE projects SET title=? WHERE name=?`, title, name)
+		return err
+	})
+}
+
 // MaxWorkerRules bounds the owner's rules for a project's workers: they are
 // read on every run, so they stay short.
 const MaxWorkerRules = 2000
@@ -460,7 +512,9 @@ func (s *Store) ProjectWorkerRules(name string) (string, error) {
 
 // Project is a project with its folder on this computer.
 type Project struct {
-	Name   string `json:"name"`
+	Name string `json:"name"`
+	// Title is the name shown in the window: the owner's rename, or Name.
+	Title  string `json:"title"`
 	Folder string `json:"folder"`
 }
 
@@ -472,14 +526,14 @@ func (s *Store) Projects() ([]Project, error) {
 		if err != nil {
 			return err
 		}
-		rows, err := tx.Query(`SELECT p.name,COALESCE(f.folder,'') FROM projects p LEFT JOIN project_folders f ON f.project=p.name AND f.computer=? WHERE p.removed_at IS NULL ORDER BY p.created_at,p.name`, computer)
+		rows, err := tx.Query(`SELECT p.name,CASE WHEN p.title='' THEN p.name ELSE p.title END,COALESCE(f.folder,'') FROM projects p LEFT JOIN project_folders f ON f.project=p.name AND f.computer=? WHERE p.removed_at IS NULL ORDER BY p.created_at,p.name`, computer)
 		if err != nil {
 			return err
 		}
 		defer rows.Close()
 		for rows.Next() {
 			var p Project
-			if err := rows.Scan(&p.Name, &p.Folder); err != nil {
+			if err := rows.Scan(&p.Name, &p.Title, &p.Folder); err != nil {
 				return err
 			}
 			out = append(out, p)
@@ -1217,6 +1271,9 @@ type RunEvidence struct {
 	// LastText is the worker's last message; it is shown only when the run
 	// failed without a report (T-056).
 	LastText string
+	// Usage is what the run spent, when its provider reported it (T-058).
+	// It only informs the owner.
+	Usage *TaskUsage
 }
 
 // FinishTaskRun verifies a run in one transaction: it revokes the receipt,
@@ -1267,6 +1324,11 @@ func (s *Store) FinishTaskRun(run string, ev RunEvidence) (string, error) {
 			detail += "; no report; last worker message: " + ev.LastText
 		}
 		if err := setRunState(tx, run, final, detail, "running", "launching"); err != nil {
+			return err
+		}
+		// T-058: add what the run spent before any event goes out, so a
+		// task of another computer reports the new total with it.
+		if err := addTaskUsage(tx, t.ID, ev.Usage); err != nil {
 			return err
 		}
 		switch final {
