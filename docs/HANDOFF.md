@@ -8,6 +8,12 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-08 (before preview.42) by Claude Code.
+
+- **PR #72** (`claude/t058-task-cost`) goes out as **preview.42** (owner asked to release everything done today): T-058 usage in statuses, T-060 blue dot only while running, T-063 resizable panes and empty-click, T-064 «Проект» tab with auto-save, T-065 project rename (shown name only, D-072, Q-019), T-066 update icon and «v0.41» (D-073, Q-020), T-067 Server tab variant Б, «Любые команды» text. All window changes were checked in Chromium with stubbed APIs only, not in the native windows.
+- **Approved, not built yet:** T-061 agent cards (D-070), the settings dialog and the per-card switch; T-062 Windows window without the system title bar.
+- **Owner's next asks:** Linux as a real program window (Q-016, now requested: WebKitGTK through cgo); status words for the server connection («Подключено / Нет связи / Не подключено» proposed, not answered); dollars in task statuses (not answered).
+
 Updated 2026-11-08 (T-058) by Claude Code.
 
 - **T-058** on `claude/t058-task-cost`: each task in the list shows what it spent (D-068). preview.41 carries T-056.
