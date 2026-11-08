@@ -11,6 +11,10 @@ import (
 	"time"
 )
 
+// olderHost, when set by a test, makes the broker refuse reports the way a
+// host before a field existed does.
+var olderHost func(Presence) bool
+
 // HostPeer is the ID under which the computer that hosts the broker reports
 // its own agents. Devices have IDs of the form dev-….
 const HostPeer = "host"
@@ -21,6 +25,7 @@ const (
 	maxAgentCount     = 9999
 	maxPresenceBody   = 32 << 10
 	maxPresenceModels = 12
+	maxReadyProjects  = 64
 )
 
 // PresenceInterval is how often a computer reports its agents.
@@ -71,12 +76,36 @@ func (l *PresenceLimit) valid() bool {
 	return true
 }
 
+// PresenceReady says whether a computer runs tasks from other computers and
+// for which projects it has a folder (T-070). A host before it refuses a
+// report that carries it; the client then reports without it.
+type PresenceReady struct {
+	Accept   bool     `json:"accept"`
+	Projects []string `json:"projects"`
+}
+
+func (r *PresenceReady) valid() bool {
+	if r == nil {
+		return true
+	}
+	if len(r.Projects) > maxReadyProjects {
+		return false
+	}
+	for _, p := range r.Projects {
+		if !validDeviceName(p) {
+			return false
+		}
+	}
+	return true
+}
+
 // Presence is what a computer reports about itself. Name is the name the
 // owner gave the computer; a device's name replaces the one it joined with.
 type Presence struct {
 	Name        string          `json:"name,omitempty"`
 	Agents      []PresenceAgent `json:"agents"`
 	Coordinator string          `json:"coordinator,omitempty"`
+	Ready       *PresenceReady  `json:"ready,omitempty"`
 }
 
 // Peer is one computer of the broker as others see it.
@@ -92,6 +121,7 @@ type Peer struct {
 	Age         int             `json:"age"`
 	Agents      []PresenceAgent `json:"agents"`
 	Coordinator string          `json:"coordinator,omitempty"`
+	Ready       *PresenceReady  `json:"ready,omitempty"`
 }
 
 // rosterResponse answers a presence report.
@@ -102,7 +132,7 @@ type rosterResponse struct {
 }
 
 func (p Presence) valid() bool {
-	if len(p.Agents) > maxPresenceAgents || len(p.Coordinator) > 64 || (p.Name != "" && !validDeviceName(p.Name)) {
+	if len(p.Agents) > maxPresenceAgents || len(p.Coordinator) > 64 || (p.Name != "" && !validDeviceName(p.Name)) || !p.Ready.valid() {
 		return false
 	}
 	if p.Coordinator != "" && !validDeviceName(p.Coordinator) {
@@ -194,7 +224,7 @@ func fill(peer *Peer, report, at string, now time.Time) {
 	if p.Name != "" {
 		peer.Name = p.Name
 	}
-	peer.Coordinator = p.Coordinator
+	peer.Coordinator, peer.Ready = p.Coordinator, p.Ready
 	if p.Agents != nil {
 		peer.Agents = p.Agents
 	}
@@ -234,7 +264,7 @@ func (b *Broker) handlePresence(w http.ResponseWriter, r *http.Request) {
 	var in Presence
 	decoder := json.NewDecoder(io.LimitReader(r.Body, maxPresenceBody))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&in) != nil || !in.valid() {
+	if decoder.Decode(&in) != nil || !in.valid() || (olderHost != nil && olderHost(in)) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
 		return
 	}

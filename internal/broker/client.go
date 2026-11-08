@@ -259,6 +259,10 @@ func Check(ctx context.Context, c Connection) (PingResult, error) {
 // Report sends this device's presence and returns the broker's list of
 // computers. The pinned certificate and the broker ID in the answer identify
 // the broker, so no separate hello is needed every time.
+// errPresenceRefused means the broker found the report invalid, as an older
+// host does with a field it does not know.
+var errPresenceRefused = errors.New("сервер не принял сведения об агентах (код 400)")
+
 func Report(ctx context.Context, c Connection, p Presence) ([]Peer, error) {
 	var out rosterResponse
 	code, err := call(ctx, pinnedClient(c.Fingerprint), http.MethodPost, c.Address, "/v1/presence", c.DeviceKey, p, &out)
@@ -267,6 +271,9 @@ func Report(ctx context.Context, c Connection, p Presence) ([]Peer, error) {
 	}
 	if code == http.StatusUnauthorized {
 		return nil, ErrRevoked
+	}
+	if code == http.StatusBadRequest {
+		return nil, errPresenceRefused
 	}
 	if code != http.StatusOK || out.BrokerID != c.BrokerID || out.DeviceID != c.DeviceID {
 		return nil, fmt.Errorf("сервер не принял сведения об агентах (код %d)", code)

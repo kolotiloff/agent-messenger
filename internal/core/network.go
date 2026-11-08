@@ -89,6 +89,16 @@ type NetPeer struct {
 	Host   bool
 	Age    int // seconds since its last report; -1 if it never reported
 	Agents []NetAgent
+	// Ready is what the computer reported about taking tasks (T-070); nil
+	// when it did not (an older version).
+	Ready *NetReady
+}
+
+// NetReady says whether a computer runs tasks from other computers and for
+// which projects it has a folder.
+type NetReady struct {
+	Accept   bool     `json:"accept"`
+	Projects []string `json:"projects"`
 }
 
 // NetOutgoing is one message waiting to be sent.
@@ -221,7 +231,12 @@ func (s *Store) SetNetwork(broker, self string, peers []NetPeer) error {
 				p.Agents = []NetAgent{}
 			}
 			raw, _ := json.Marshal(p.Agents)
-			if _, err := tx.Exec(`INSERT INTO net_peers(peer,name,host,age,agents,updated_at) VALUES (?,?,?,?,?,?)`, p.ID, p.Name, boolInt(p.Host), p.Age, string(raw), at); err != nil {
+			ready := ""
+			if p.Ready != nil {
+				r, _ := json.Marshal(p.Ready)
+				ready = string(r)
+			}
+			if _, err := tx.Exec(`INSERT INTO net_peers(peer,name,host,age,agents,ready,updated_at) VALUES (?,?,?,?,?,?,?)`, p.ID, p.Name, boolInt(p.Host), p.Age, string(raw), ready, at); err != nil {
 				return err
 			}
 		}
@@ -242,7 +257,7 @@ func (s *Store) NetPeers() ([]NetPeer, error) {
 }
 
 func netPeers(tx *sql.Tx) ([]NetPeer, error) {
-	rows, err := tx.Query(`SELECT peer,name,host,age,agents,updated_at FROM net_peers ORDER BY host DESC, name, peer`)
+	rows, err := tx.Query(`SELECT peer,name,host,age,agents,ready,updated_at FROM net_peers ORDER BY host DESC, name, peer`)
 	if err != nil {
 		return nil, err
 	}
@@ -251,12 +266,18 @@ func netPeers(tx *sql.Tx) ([]NetPeer, error) {
 	for rows.Next() {
 		var p NetPeer
 		var host int
-		var agents, at string
-		if err := rows.Scan(&p.ID, &p.Name, &host, &p.Age, &agents, &at); err != nil {
+		var agents, ready, at string
+		if err := rows.Scan(&p.ID, &p.Name, &host, &p.Age, &agents, &ready, &at); err != nil {
 			return nil, err
 		}
 		p.Host = host != 0
 		_ = json.Unmarshal([]byte(agents), &p.Agents)
+		if ready != "" {
+			var r NetReady
+			if json.Unmarshal([]byte(ready), &r) == nil {
+				p.Ready = &r
+			}
+		}
 		if when, err := time.Parse(time.RFC3339Nano, at); err == nil && p.Age >= 0 {
 			p.Age += int(time.Since(when) / time.Second)
 		}
