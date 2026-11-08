@@ -2,6 +2,13 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (T-055 confirm popup; project settings in the selector)
+
+- Removing a project now asks in a popup «Удалить проект «X»?» with «Отмена» and «Удалить» instead of a second click on the same button (owner).
+- The project selector has «Настроить проект…»: it opens the project dialog with the folder and rules. The folder bar on the Agents tab is gone; the current folder is shown in that dialog.
+- «Любые команды» is a two-button switch «Не разрешены / Разрешены» instead of a checkbox.
+- Verified: `node --check`, `check.sh`, a static screenshot of both dialogs in headless Chromium (no running client). Not verified: the flow against a live client, on Mac, Windows or Linux.
+
 ## 2026-11-08 — Claude Code (T-054 full access for workers, T-055 remove a project)
 
 - preview.38 released from PR #68. The owner's coordinator found that only Cursor on PC-1 could commit: Claude workers wait for command approval, Codex's sandbox has no network. «Разрешить любые команды» per agent (D-065). The owner's missing task on the Mac was another project selected in the window, not a bug.
