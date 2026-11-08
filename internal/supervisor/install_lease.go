@@ -46,3 +46,10 @@ func WithInstallationLease(install func() error) error {
 	}
 	return install()
 }
+
+// ReservedRuns counts the CLI reservations in active-runs.json without
+// changing anything; the Windows uninstaller refuses while there are any.
+func ReservedRuns() (int, error) {
+	runs, err := loadRuns()
+	return len(runs), err
+}

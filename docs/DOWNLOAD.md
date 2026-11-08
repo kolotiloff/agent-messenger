@@ -22,12 +22,13 @@ Only the Mac app comes in a zip: a Mac app is a folder, and a browser cannot dow
 
 ## Windows
 
-1. Download `AgentMessenger-Windows-x64.exe` (or `-ARM64.exe` on ARM) and put it in any folder, for example `Documents\Agent Messenger`.
+1. Download `AgentMessenger-Windows-x64.exe` (or `-ARM64.exe` on ARM).
 2. Double-click it. The program is not signed, so SmartScreen may warn: «Подробнее» → «Выполнить в любом случае».
-3. Agent Messenger opens in a window of its own (Windows' built-in WebView2 engine, D-054); the console window that Windows opens for a double click closes. Closing the window closes only the window; the background client and its tasks keep running. To come back, start the program again. On a computer without WebView2 the page opens in the browser instead.
-4. To stop the background client: in a console in that folder, `AgentMessenger-Windows-x64.exe shutdown`.
+3. On the first start the program installs itself for the current user, without administrator rights (D-082): it copies itself to `%LOCALAPPDATA%\Programs\Agent Messenger`, adds «Agent Messenger» to the Start menu and to Settings → «Приложения». Then the installed copy opens. The downloaded file is no longer needed. Starting an older download opens the installed newer version instead.
+4. Agent Messenger opens in a window of its own (Windows' built-in WebView2 engine, D-054); the console window that Windows opens closes. Closing the window closes only the window; the background client and its tasks keep running. To come back, start it from the Start menu. On a computer without WebView2 the page opens in the browser instead.
+5. To remove it: Settings → «Приложения» → Agent Messenger → «Удалить». Removal is refused while tasks run. It stops the background client and removes the program, the shortcut and the entry. The data stays.
 
-Data: `%LOCALAPPDATA%\AgentMessenger`. Later versions arrive in the window («Доступно обновление» → «Обновиться»); the program replaces its own file and opens the window again ([updates](UPDATES.md#windows-and-linux)). Keep the program in a folder you can write to, not in `Program Files`.
+Data: `%LOCALAPPDATA%\AgentMessenger` (tasks, history, settings, `active-runs.json`); removing the program never deletes it. Later versions arrive in the window («Доступно обновление» → «Обновиться»); the program replaces its own file and opens the window again ([updates](UPDATES.md#windows-and-linux)).
 
 ## Linux
 

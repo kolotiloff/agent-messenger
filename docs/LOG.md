@@ -7,6 +7,11 @@ One entry per work session, newest first. Write what was done, which tool did it
 - Coordinator tool `get_log(computer, lines)`: request and reply go through the mailbox; the other computer answers only with «Отдавать журнал по сети» on (off by default) and removes ids, codes and keys (D-083). Screenshot: docs/mockups/log-share-built.png (stubbed).
 - Verified: core, supervisor (two computers, real broker), MCP tests, `check.sh`. Not verified between real computers.
 
+## 2026-11-08 — Claude Code (T-053 Windows installation)
+
+- A double click installs the program for the user (D-082): programs folder, Start menu, «Приложения» with «Удалить»; data always kept (Q-023). `install` and `uninstall` commands on Windows.
+- Verified: plan tests, `check.sh`, `check-builds.sh`, a new CI step that installs and removes on the Windows runner. Not verified by hand on Windows.
+
 ## 2026-11-08 — Claude Code (T-052 short invitation)
 
 - 6-digit code next to the long one (D-081): found on the local network over UDP 47100, proved with SPAKE2, 3 tries, 10 minutes. New dependency `filippo.io/edwards25519` v1.1.0. Screenshot: docs/mockups/short-invite-built.png (stubbed).

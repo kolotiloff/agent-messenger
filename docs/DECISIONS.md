@@ -113,6 +113,12 @@ Every computer posts the tasks it started in the last 7 days (at most 50, title 
 
 Every invitation also gets a 6-digit code that lives 10 minutes and allows 3 tries; the long code stays for other networks. The joining computer broadcasts a fixed question on UDP port 47100; a host answers with its port only while it has a usable short code. The answer is not trusted. Both sides then run SPAKE2 over edwards25519 (`filippo.io/edwards25519`, the curve library the Go standard library itself uses; M and N are derived from fixed strings) through `POST /v1/pair/start` and `/v1/pair/finish`. The transcript includes the certificate fingerprint the joining computer saw, so a computer in the middle cannot complete it. Every started exchange counts as a try. Only after both confirmations does the host send the long invitation's secret, encrypted with the agreed key (AES-GCM); then the usual registration follows and the certificate is pinned as before. A listener learns nothing to test codes against; an active attacker gets one guess per try, three in all. A wrong code is not retried on another host. If the discovery port is taken, only the long code works.
 
+## D-082 — Windows installs itself for the current user (T-053)
+
+2026-11-08, Claude Code (owner asleep, asked to decide alone and keep it simple).
+
+A versioned download started with a double click copies itself to `%LOCALAPPDATA%\Programs\Agent Messenger\AgentMessenger.exe`, adds a Start menu shortcut (written by PowerShell's WScript.Shell, no new dependency) and a per-user entry in «Приложения» (`HKCU\…\Uninstall\AgentMessenger`, no administrator rights), and opens the installed copy. An equal or newer installed version is opened instead of being replaced; an installed copy that is running is moved aside the way updates do. Any failure leaves the program working from where it is. `install` does the same without opening the window. «Удалить» runs `AgentMessenger.exe uninstall`: it refuses while `active-runs.json` holds any reservation, stops the background client, removes the entry and the shortcut under the installation lease, and removes the program folder a few seconds after it exits. The data folder is never deleted; the owner can delete it by hand (the cautious reading of "only if the owner explicitly asks", Q-023).
+
 ## D-083 — Another computer's log through the mailbox, off by default (T-057, Q-018)
 
 2026-11-08, Claude Code (owner asleep, asked to decide alone and keep it simple).
