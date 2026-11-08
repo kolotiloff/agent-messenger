@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kolotiloff/agent-messenger/internal/adapters"
 	"github.com/kolotiloff/agent-messenger/internal/core"
 	"github.com/kolotiloff/agent-messenger/internal/platform"
 	"github.com/kolotiloff/agent-messenger/internal/supervisor"
@@ -135,8 +136,15 @@ func checkCLI(ctx context.Context, provider, cli, environment, goos string, runn
 	}
 	defer os.RemoveAll(dir)
 	env := supervisor.ProfileEnvironment(os.Environ(), provider, canonical)
+	program := []string{resolved}
+	if provider == "cursor" {
+		program = adapters.CursorProgram(resolved) // node.exe and index.js on Windows (D-052)
+	}
+	probe := func(args ...string) probeOutput {
+		return runner(ctx, program[0], dir, env, append(append([]string(nil), program[1:]...), args...))
+	}
 	r.ProbeAttempts++
-	v := runner(ctx, resolved, dir, env, []string{"--version"})
+	v := probe("--version")
 	if v.failure != "" {
 		r.Version.Reason = v.failure
 		return r, nil
@@ -169,7 +177,7 @@ func checkCLI(ctx context.Context, provider, cli, environment, goos string, runn
 		return r, nil
 	}
 	r.ProbeAttempts++
-	r.Authentication = parseAuthentication(provider, runner(ctx, resolved, dir, env, args))
+	r.Authentication = parseAuthentication(provider, probe(args...))
 	return r, nil
 }
 

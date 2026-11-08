@@ -16,7 +16,7 @@ On Windows, starting the program without arguments (a double click) runs `messen
 
 - **Claude Code**: the installation that provides `claude.exe` on Windows (usually `%USERPROFILE%\.local\bin`), or `claude` in `PATH`, `~/.local/bin`, `/usr/local/bin` or `/usr/bin` on Linux.
 - **Codex**: on Windows the npm command is a `.cmd` script. Messenger does not start `.cmd` or `.bat` files (D-044); it finds the `codex.exe` inside the npm package (`%APPDATA%\npm\node_modules\@openai\codex…\vendor\<target>\codex\codex.exe`, or `…\bin\codex.exe` in newer packages). Any other `codex.exe` can be chosen by path.
-- **Cursor**: on Linux `cursor-agent` in `PATH` or `~/.local/bin` (D-049). On Windows not yet: its installation is a `.cmd` script, which Messenger does not start (D-044).
+- **Cursor**: on Linux `cursor-agent` in `PATH` or `~/.local/bin` (D-049). On Windows the command is a `.cmd` script (D-044), so Messenger finds `%LOCALAPPDATA%\cursor-agent\versions\<newest>\node.exe` and starts it with its `index.js` (D-052).
 
 ## Process control on Windows (D-043)
 

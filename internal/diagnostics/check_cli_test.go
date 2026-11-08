@@ -204,3 +204,31 @@ func TestProbeRunnerLimitsOutputAndTime(t *testing.T) {
 		t.Fatal(fmt.Sprint("output bound failed: ", len(out.stdout), out.failure))
 	}
 }
+
+// A Windows Cursor version folder is checked through its node.exe and
+// index.js (D-052).
+func TestCheckCLICursorNode(t *testing.T) {
+	_, profile := checkFixture(t)
+	dir := filepath.Join(t.TempDir(), "versions", "2026.11.05-86047df")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"node.exe", "index.js"} {
+		if err := os.WriteFile(filepath.Join(dir, f), []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	node, _ := filepath.EvalSymlinks(filepath.Join(dir, "node.exe"))
+	var seen [][]string
+	r, err := checkCLI(context.Background(), "cursor", node, profile, "windows", func(_ context.Context, cli, _ string, _ []string, args []string) probeOutput {
+		seen = append(seen, append([]string{cli}, args...))
+		if args[1] == "--version" {
+			return probeOutput{stdout: []byte("2026.11.05-86047df\n")}
+		}
+		return probeOutput{stdout: []byte(`{"isAuthenticated":true}`)}
+	})
+	index := filepath.Join(filepath.Dir(node), "index.js")
+	if err != nil || len(seen) != 2 || seen[0][0] != node || seen[0][1] != index || seen[1][2] != "status" || r.Authentication.State != "authenticated" {
+		t.Fatal(r, err, seen)
+	}
+}
