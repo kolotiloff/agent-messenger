@@ -154,6 +154,7 @@ func Open(path string) (*Store, error) {
 		{"coordinator_connections", "client", "TEXT"},
 		{"task_runs", "launched_at", "TEXT"},
 		{"tasks", "model", "TEXT"},
+		{"computer_agents", "models", "TEXT NOT NULL DEFAULT ''"},
 		{"tasks", "failure_reason", "TEXT"},
 		{"tasks", "failure_reset", "TEXT"},
 		{"requests", "in_reply_to", "TEXT"},

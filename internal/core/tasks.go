@@ -240,6 +240,8 @@ type TaskEvent struct {
 // ComputerAgent is an agent program registered on a computer.
 type ComputerAgent struct {
 	Computer, Provider, CLI, Environment, Profile string
+	// Models are the model names the owner listed for this agent (T-043).
+	Models []string
 }
 
 func randomID() (string, error) {
@@ -448,16 +450,18 @@ func (s *Store) ComputerAgents() ([]ComputerAgent, error) {
 		if err != nil {
 			return err
 		}
-		rows, err := tx.Query(`SELECT computer,provider,cli_path,environment,profile FROM computer_agents WHERE computer=? ORDER BY provider`, computer)
+		rows, err := tx.Query(`SELECT computer,provider,cli_path,environment,profile,models FROM computer_agents WHERE computer=? ORDER BY provider`, computer)
 		if err != nil {
 			return err
 		}
 		defer rows.Close()
 		for rows.Next() {
 			var a ComputerAgent
-			if err := rows.Scan(&a.Computer, &a.Provider, &a.CLI, &a.Environment, &a.Profile); err != nil {
+			var models string
+			if err := rows.Scan(&a.Computer, &a.Provider, &a.CLI, &a.Environment, &a.Profile, &models); err != nil {
 				return err
 			}
+			a.Models = splitModels(models)
 			out = append(out, a)
 		}
 		return rows.Err()
@@ -590,10 +594,14 @@ func startLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, origin *net
 		return "", fmt.Errorf("%w: the project folder is missing on this computer", ErrRejected)
 	}
 	var agent ComputerAgent
-	if err := tx.QueryRow(`SELECT cli_path,environment,profile FROM computer_agents WHERE computer=? AND provider=?`, computer, r.Provider).Scan(&agent.CLI, &agent.Environment, &agent.Profile); err != nil {
+	var models string
+	if err := tx.QueryRow(`SELECT cli_path,environment,profile,models FROM computer_agents WHERE computer=? AND provider=?`, computer, r.Provider).Scan(&agent.CLI, &agent.Environment, &agent.Profile, &models); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", fmt.Errorf("%w: agent %s is not set up on this computer", ErrRejected, r.Provider)
 		}
+		return "", err
+	}
+	if err := modelAllowed(r.Provider, r.Model, splitModels(models)); err != nil {
 		return "", err
 	}
 	id, err := randomID()
@@ -1529,6 +1537,9 @@ type AgentSummary struct {
 	Running int `json:"running"`
 	// Waiting counts this agent's tasks waiting for an answer, all projects.
 	Waiting int `json:"waiting"`
+	// Models are the names the owner listed; for Codex and Cursor only
+	// these may be passed to start_task (T-043).
+	Models []string `json:"models"`
 }
 
 // ComputerSummary is one computer as list_agents shows it for a project.
@@ -1553,7 +1564,10 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 		if err != nil {
 			return err
 		}
-		name, _ := os.Hostname()
+		name, err := computerName(tx)
+		if err != nil {
+			return err
+		}
 		c = ComputerSummary{Computer: computer, Name: name, This: true, Online: true, Agents: []AgentSummary{}}
 		err = tx.QueryRow(`SELECT folder FROM project_folders WHERE project=? AND computer=?`, project, computer).Scan(&c.Folder)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -1563,7 +1577,8 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 		}
 		rows, err := tx.Query(`SELECT a.provider,a.profile,
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='running'),
- (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state IN ('waiting_coordinator','waiting_owner'))
+ (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state IN ('waiting_coordinator','waiting_owner')),
+ a.models
  FROM computer_agents a WHERE a.computer=? ORDER BY a.provider`, computer)
 		if err != nil {
 			return err
@@ -1571,9 +1586,11 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 		defer rows.Close()
 		for rows.Next() {
 			var a AgentSummary
-			if err := rows.Scan(&a.Agent, &a.Profile, &a.Running, &a.Waiting); err != nil {
+			var models string
+			if err := rows.Scan(&a.Agent, &a.Profile, &a.Running, &a.Waiting, &models); err != nil {
 				return err
 			}
+			a.Models = splitModels(models)
 			c.Agents = append(c.Agents, a)
 		}
 		return rows.Err()
@@ -1590,9 +1607,80 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 		o := ComputerSummary{Computer: p.ID, Name: p.Name, Online: p.Age >= 0 && p.Age <= PeerFresh, Agents: []AgentSummary{},
 			Note: "another computer of the network: it runs the task only if its owner allows tasks from other computers and it has this project's folder; otherwise the task fails with its reason"}
 		for _, a := range p.Agents {
-			o.Agents = append(o.Agents, AgentSummary{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting})
+			models := a.Models
+			if models == nil {
+				models = []string{}
+			}
+			o.Agents = append(o.Agents, AgentSummary{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting, Models: models})
 		}
 		list = append(list, o)
 	}
 	return map[string]any{"project": project, "computers": list}, nil
+}
+
+// MaxAgentModels bounds the model names the owner lists for one agent.
+const MaxAgentModels = 12
+
+// SetAgentModels records the model names the owner listed for an agent of
+// this computer (T-043). Blank and repeated names are dropped; an empty list
+// clears it.
+func (s *Store) SetAgentModels(provider string, models []string) error {
+	clean := []string{}
+	seen := map[string]bool{}
+	for _, m := range models {
+		m = strings.TrimSpace(m)
+		if m == "" || seen[m] {
+			continue
+		}
+		if !ValidTaskModel(m) {
+			return fmt.Errorf("%w: %q is not a plain model name", ErrRejected, m)
+		}
+		seen[m] = true
+		clean = append(clean, m)
+	}
+	if len(clean) > MaxAgentModels {
+		return fmt.Errorf("%w: at most %d models per agent", ErrRejected, MaxAgentModels)
+	}
+	return s.tx(func(tx *sql.Tx) error {
+		computer, err := localComputer(tx)
+		if err != nil {
+			return err
+		}
+		res, err := tx.Exec(`UPDATE computer_agents SET models=?,updated_at=? WHERE computer=? AND provider=?`, strings.Join(clean, "\n"), now(), computer, provider)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return fmt.Errorf("%w: agent %s is not set up on this computer", ErrRejected, provider)
+		}
+		return nil
+	})
+}
+
+func splitModels(s string) []string {
+	out := []string{}
+	for _, m := range strings.Split(s, "\n") {
+		if m = strings.TrimSpace(m); m != "" {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// modelAllowed checks a start_task model against the owner's list. Claude
+// takes its own names (opus, sonnet, haiku) and full model names; Codex and
+// Cursor take only a listed name, because an unknown one fails the run.
+func modelAllowed(provider, model string, listed []string) error {
+	if model == "" || provider == "claude" {
+		return nil
+	}
+	for _, m := range listed {
+		if m == model {
+			return nil
+		}
+	}
+	if len(listed) == 0 {
+		return fmt.Errorf("%w: the owner listed no models for %s on this computer; leave model out to use its default", ErrRejected, provider)
+	}
+	return fmt.Errorf("%w: model %q is not in the owner's list for %s: %s; use one of these or leave model out", ErrRejected, model, provider, strings.Join(listed, ", "))
 }

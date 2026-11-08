@@ -79,7 +79,7 @@ func (s *Supervisor) networkRound(ctx context.Context) {
 		for _, p := range s.server.Status().Peers {
 			np := core.NetPeer{ID: p.ID, Name: p.Name, Host: p.Host, Age: p.Age}
 			for _, a := range p.Agents {
-				np.Agents = append(np.Agents, core.NetAgent{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting})
+				np.Agents = append(np.Agents, core.NetAgent{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting, Models: a.Models})
 			}
 			peers = append(peers, np)
 		}

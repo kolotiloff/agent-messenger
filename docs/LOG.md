@@ -2,6 +2,12 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (T-043 models per agent)
+
+- PR #63 merged (722c51f); preview.36 release started. The owner's coordinator asked for exact model names for Codex and Cursor: it may not guess them. Now the owner lists them on the agent card, `list_agents` returns them, and Codex and Cursor refuse an unlisted name (D-058). `list_agents` also uses the computer's own name now.
+- The owner also wants each agent's remaining limit known to the coordinator, as a separate field (T-044, not started).
+- Verified here: `check.sh`, Windows vet, new core, broker, window-route tests. Not verified: real CLIs with listed names; a mixed network of preview.36 and newer computers.
+
 ## 2026-11-08 — Claude Code (T-042 owner's two-computer test, follow-ups)
 
 - The owner's test passed: the Claude coordinator on the Mac gave Codex on Windows an audit and got the report. Follow-ups done: tool actions in the feed are grouped into one collapsible line; the computer has its own name on the «Сервер» tab, the host included; tasks of other computers are accepted by default (D-056); Codex trust is read from all `config.toml` forms; «Войти в аккаунт» and «Установить …» buttons (D-057); on Windows no inner frame and a title bar in the theme's colour.

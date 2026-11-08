@@ -48,7 +48,7 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - list_agents shows this project's computers, their project folder and agents: this computer and the other computers of its network. A task for another computer is sent to it and runs there; it fails with the reason if that computer does not take tasks from other computers or has no folder for the project. Questions, reports and outcomes come back through wait as usual.
 - start_task starts one task in a new worker session. Give every task a unique op_id and reuse it only to retry the same call after a lost response.
 - wait blocks until something happens in this project's tasks: a report, a question for you, a failure, an interruption, a block or a cancellation. Always pass after = the cursor from the previous wait. When it returns events, act on them (answer questions with answer, tell the owner about reports), then call wait again with the new cursor. When it times out with no events, call wait again without comment. If it says more: true, more events are ready: call wait again at once with the new cursor.
-- start_task takes an optional model. Leave it out for the agent's default. For Claude use opus for hard work (design, tricky bugs, large refactors), sonnet for ordinary coding, haiku for small mechanical work. For Codex and Cursor name a model only if the owner told you which names it accepts. Never guess a name: an unknown model fails the run. Tell the owner when you chose a non-default model and why.
+- start_task takes an optional model. Leave it out for the agent's default. For Claude use opus for hard work (design, tricky bugs, large refactors), sonnet for ordinary coding, haiku for small mechanical work. For Codex and Cursor pass only a name from that agent's models in list_agents (the owner lists them in the window); if the list is empty, leave model out. Never guess a name: an unknown model fails the run. Tell the owner when you chose a non-default model and why.
 - answer answers a worker's question (pass question_id and a unique op_id); the worker continues in the same session.
 - Never start a task again by yourself after it failed, was interrupted or blocked; tell the owner and let them decide.
 - A failure caused by a usage or rate limit says so and gives the reset time when the agent reported one. Tell the owner that time; do not start the task again before it.
@@ -166,7 +166,7 @@ func coordinatorTools() []map[string]any {
 	}
 	str := func(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
 	return []map[string]any{
-		{"name": "list_agents", "description": "List this project's computers (this one and the other computers of its network), the project folder on this one, and their agents with how many tasks they run.",
+		{"name": "list_agents", "description": "List this project's computers (this one and the other computers of its network), the project folder on this one, and their agents with how many tasks they run and the model names the owner listed for them.",
 			"inputSchema": obj(map[string]any{})},
 		{"name": "start_task", "description": "Start a task in a new worker session of the chosen agent, in this project's folder on the computer. Returns the task id. Repeating a call with the same op_id returns the same task.",
 			"inputSchema": obj(map[string]any{
@@ -175,7 +175,7 @@ func coordinatorTools() []map[string]any {
 				"text":     map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxTaskText, "description": "the task: what to do and what to report"},
 				"title":    map[string]any{"type": "string", "maxLength": core.MaxTaskTitle, "description": "short title shown in the window"},
 				"computer": str("computer id from list_agents: this computer (the default) or another computer of the network"),
-				"model":    map[string]any{"type": "string", "maxLength": 80, "description": "optional model for the worker, such as opus, sonnet or haiku for claude, or a Codex or Cursor model name; leave it out to use the agent's default. Never guess a name: an unknown model fails the run."},
+				"model":    map[string]any{"type": "string", "maxLength": 80, "description": "optional model for the worker, such as opus, sonnet or haiku for claude, or, for Codex and Cursor, a name from the agent's models in list_agents; leave it out to use the agent's default. Never guess a name: an unknown model fails the run."},
 			}, "op_id", "agent", "text")},
 		{"name": "wait", "description": "Block until a new event of this project's tasks arrives after the cursor, or until timeout_seconds. Costs no tokens while blocked. Always pass after. Returns a bounded batch; more: true means further events are ready, so call wait again at once with the new cursor.",
 			"inputSchema": obj(map[string]any{

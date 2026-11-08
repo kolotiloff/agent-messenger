@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
@@ -221,7 +222,28 @@ func tomlKey(s string) (string, string, bool) {
 					b.WriteByte('\n')
 				case 't':
 					b.WriteByte('\t')
+				case 'r':
+					b.WriteByte('\r')
+				case '"', '\\':
+					b.WriteByte(s[i])
+				case 'u', 'U':
+					// A Unicode escape; anything else (a raw Windows path
+					// such as "C:\Users") keeps its backslash.
+					n := 4
+					if s[i] == 'U' {
+						n = 8
+					}
+					if i+n < len(s) {
+						if r, err := strconv.ParseUint(s[i+1:i+1+n], 16, 32); err == nil {
+							b.WriteRune(rune(r))
+							i += n
+							continue
+						}
+					}
+					b.WriteByte('\\')
+					b.WriteByte(s[i])
 				default:
+					b.WriteByte('\\')
 					b.WriteByte(s[i])
 				}
 				continue
