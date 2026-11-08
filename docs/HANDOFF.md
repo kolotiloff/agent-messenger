@@ -10,6 +10,7 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Updated 2026-11-08 (night, T-057) by Claude Code.
 
+- **Released:** preview.50 (T-057 remote log), preview.51 (T-071 last action and tokens, #81), preview.52 (T-070 readiness, #82). T-072 resource locks goes out as preview.53.
 - preview.48 is out (T-052 short invitation). **T-053** Windows installation merged (#79) after its CI step found and we fixed a folder that stayed on «Удалить»; goes out as preview.49.
 - **T-057** log of another computer on `claude/t057-remote-log` (D-083): coordinator tool `get_log`, switch «Отдавать журнал по сети» on «Сервер», off by default. Owner's test: turn it on on one computer, ask the coordinator on another to read that computer's log.
 - **T-049** split into T-070 (readiness in `list_agents`), T-071 (last action and tokens in `tasks`, done on `claude/t071-task-activity`, D-084), T-072 (resource locks), T-073 (results off the worker's computer) and Q-024 (item 6, unclear).
