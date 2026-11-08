@@ -136,3 +136,9 @@ The coordinator's `get_log(computer, lines)` asks another computer of the networ
 2026-11-08, Claude Code (owner asleep, asked to decide alone and keep it simple).
 
 Every presence report (every 15 seconds) now carries `ready`: whether the computer takes tasks from other computers and the names of the projects that have a folder on it (at most 64). `list_agents` shows another computer's `accepts_tasks` and `has_project`, and the note says when a task there would fail; a computer that did not report them stays "unknown" as before. A host before this version refuses a report with an unknown field, so a refused report is sent once more without `ready`, and `ready` is left out for 10 minutes before it is tried again. A presence report is a status, not an action, so sending it again cannot start or repeat anything. Environment checks (tools such as Unity or Python) are left to the workers.
+
+## D-086 — Resource locks keep the later task waiting (T-072, T-049)
+
+2026-11-08, Claude Code (owner asleep, asked to decide alone and keep it simple).
+
+`start_task` takes an optional `lock`, a short name such as `unity-editor`, compared without case and extra spaces. On one computer, a task with a lock does not launch while an earlier task with the same lock is open there (not done, failed or cancelled); the earliest open one goes first, so two waiting tasks never hold each other. Nothing is refused and nothing is retried: the later task's launch intent simply is not picked until the lock is free. A blocked task keeps its lock, because whether its worker still uses the resource is unknown; the owner resolves it. The lock travels with a task sent to another computer and is applied there; a computer before this version ignores it. The coordinator sees `waiting_for_lock` with the task it waits for, the window «Ждёт ресурс «…»». Locks are per computer only; there is no network-wide lock.

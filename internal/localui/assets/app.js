@@ -218,7 +218,7 @@
   function taskStatus(t){
     const end=t.finished_at||t.updated_at,from=t.started_at||t.created_at;
     switch(t.state){
-      case 'running':return t.pending_launch?[tr('Ждёт запуска'),'am-status-wait']:[tr('Работает ')+minutes(from),'am-status-run'];
+      case 'running':return t.pending_launch?[t.waits_for_lock?tr('Ждёт ресурс «')+t.waits_for_lock+'»':tr('Ждёт запуска'),'am-status-wait']:[tr('Работает ')+minutes(from),'am-status-run'];
       case 'waiting_owner':return [tr('Ждёт вашего ответа'),'am-status-wait'];
       case 'waiting_coordinator':return [tr('Ждёт ответа координатора'),'am-status-run'];
       case 'done':return [tr('Готово за ')+minutes(from,end),'am-muted'];

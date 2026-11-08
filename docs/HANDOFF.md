@@ -14,7 +14,8 @@ Updated 2026-11-08 (night, T-057) by Claude Code.
 - **T-057** log of another computer on `claude/t057-remote-log` (D-083): coordinator tool `get_log`, switch «Отдавать журнал по сети» on «Сервер», off by default. Owner's test: turn it on on one computer, ask the coordinator on another to read that computer's log.
 - **T-049** split into T-070 (readiness in `list_agents`), T-071 (last action and tokens in `tasks`, done on `claude/t071-task-activity`, D-084), T-072 (resource locks), T-073 (results off the worker's computer) and Q-024 (item 6, unclear).
 - **T-070** on `claude/t070-readiness` (D-085): `list_agents` shows `accepts_tasks` and `has_project` for another computer.
-- **Next:** T-072 resource locks.
+- **T-072** on `claude/t072-resource-locks` (D-086): `start_task` takes `lock`; the later task waits to start.
+- **Next:** T-073 (results off the worker's computer) needs weighing; Q-024 waits for the owner.
 
 Updated 2026-11-08 (night, T-053) by Claude Code. The owner is asleep and asked to keep working alone, deciding by simplicity.
 

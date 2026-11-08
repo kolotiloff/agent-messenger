@@ -659,6 +659,10 @@ type StartTaskRequest struct {
 	// Rules are the project's worker rules of the computer that started the
 	// task (T-050). StartTask fills them; they travel with a remote task.
 	Rules string
+	// Lock names a resource such as «Unity editor» (T-072): a task with a
+	// lock does not launch while an earlier open task with the same lock
+	// runs on the same computer. Empty means no lock.
+	Lock string
 }
 
 // taskModelPattern accepts model names such as "opus", "claude-sonnet-5-5",
@@ -687,6 +691,11 @@ func (s *Store) StartTask(r StartTaskRequest) (string, bool, error) {
 	if !ValidTaskModel(r.Model) {
 		return "", false, fmt.Errorf("%w: model must be a plain model name such as opus or gpt-5.1-codex", ErrRejected)
 	}
+	lock, ok := normalizeLock(r.Lock)
+	if !ok {
+		return "", false, fmt.Errorf("%w: lock must be a short one-line name such as unity-editor (at most %d characters)", ErrRejected, MaxTaskLock)
+	}
+	r.Lock = lock
 	var id string
 	var created bool
 	err := s.tx(func(tx *sql.Tx) error {
@@ -697,10 +706,10 @@ func (s *Store) StartTask(r StartTaskRequest) (string, bool, error) {
 		if r.Computer == "" {
 			r.Computer = computer
 		}
-		var old struct{ computer, provider, title, text, model string }
-		err = tx.QueryRow(`SELECT id,computer,provider,title,text,COALESCE(model,'') FROM tasks WHERE project=? AND op_id=?`, r.Project, r.OpID).Scan(&id, &old.computer, &old.provider, &old.title, &old.text, &old.model)
+		var old struct{ computer, provider, title, text, model, lock string }
+		err = tx.QueryRow(`SELECT id,computer,provider,title,text,COALESCE(model,''),resource FROM tasks WHERE project=? AND op_id=?`, r.Project, r.OpID).Scan(&id, &old.computer, &old.provider, &old.title, &old.text, &old.model, &old.lock)
 		if err == nil {
-			if old.computer != r.Computer || old.provider != r.Provider || old.text != r.Text || old.title != taskTitle(r.Title, r.Text) || old.model != r.Model {
+			if old.computer != r.Computer || old.provider != r.Provider || old.text != r.Text || old.title != taskTitle(r.Title, r.Text) || old.model != r.Model || old.lock != r.Lock {
 				return fmt.Errorf("%w: this operation id was used for a different task", ErrRejected)
 			}
 			return nil
@@ -785,6 +794,11 @@ func startLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, origin *net
 	}
 	if r.Rules != "" {
 		if _, err := tx.Exec(`UPDATE tasks SET rules=? WHERE id=?`, r.Rules, id); err != nil {
+			return "", err
+		}
+	}
+	if r.Lock != "" {
+		if _, err := tx.Exec(`UPDATE tasks SET resource=? WHERE id=?`, r.Lock, id); err != nil {
 			return "", err
 		}
 	}
@@ -930,7 +944,11 @@ func (s *Store) TaskRun(id string) (TaskRun, error) {
 func (s *Store) NextTaskRunIntents(limit int) ([]string, error) {
 	var out []string
 	err := s.tx(func(tx *sql.Tx) error {
-		rows, err := tx.Query(`SELECT r.id FROM task_runs r JOIN tasks t ON t.id=r.task_id WHERE r.state='intent' AND t.state='running' ORDER BY r.created_at,r.rowid LIMIT ?`, limit)
+		// A task with a lock waits while an earlier open task with the same
+		// lock is on this computer (T-072).
+		rows, err := tx.Query(`SELECT r.id FROM task_runs r JOIN tasks t ON t.id=r.task_id WHERE r.state='intent' AND t.state='running'
+ AND NOT (t.resource<>'' AND EXISTS (`+lockHolderQuery+`))
+ ORDER BY r.created_at,r.rowid LIMIT ?`, limit)
 		if err != nil {
 			return err
 		}

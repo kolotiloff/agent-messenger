@@ -622,3 +622,28 @@ func TestCoordinatorTasksShowActivity(t *testing.T) {
 		t.Fatal("zero tokens shown")
 	}
 }
+
+func TestCoordinatorTaskLock(t *testing.T) {
+	st := newCoordinatorStore(t)
+	c := startCoordinator(t, st, "Game")
+	var first, second struct {
+		TaskID string `json:"task_id"`
+	}
+	if _, ok := c.tool("start_task", map[string]any{"op_id": "l1", "agent": "claude", "text": "Scene A", "lock": "unity-editor"}, &first); !ok {
+		t.Fatal("first")
+	}
+	if _, ok := c.tool("start_task", map[string]any{"op_id": "l2", "agent": "claude", "text": "Scene B", "lock": "Unity-Editor"}, &second); !ok {
+		t.Fatal("second")
+	}
+	var list struct {
+		Tasks []map[string]any `json:"tasks"`
+	}
+	c.tool("tasks", map[string]any{}, &list)
+	waits := map[any]any{}
+	for _, task := range list.Tasks {
+		waits[task["task_id"]] = task["waiting_for_lock"]
+	}
+	if waits[first.TaskID] != nil || waits[second.TaskID] != first.TaskID {
+		t.Fatalf("waits %v", waits)
+	}
+}
