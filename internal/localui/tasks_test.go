@@ -76,6 +76,9 @@ func TestTaskWindowRoutes(t *testing.T) {
 		{"/api/agent-access", `{"provider":"codex"}`},
 		{"/api/agent-access", `{"provider":"gemini","on":true}`},
 		{"/api/agent-access", `{"provider":"codex","on":"yes"}`},
+		{"/api/agent-pause", `{"provider":"codex"}`},
+		{"/api/agent-pause", `{"provider":"all","paused":true}`},
+		{"/api/agent-pause", `{"provider":"gemini","paused":true}`},
 		{"/api/project-rules", `{"name":"a/b","rules":"x"}`},
 		{"/api/project-title", `{"name":"a/b","title":"x"}`},
 		{"/api/project-title", `{"name":"Game","title":"x","extra":1}`},
@@ -106,6 +109,9 @@ func TestTaskWindowRoutes(t *testing.T) {
 	}
 	if code, _ := do("POST", "/api/agent-access", `{"provider":"all","on":false}`); code != 200 || got[len(got)-1].Provider != "all" || got[len(got)-1].Text != "0" {
 		t.Fatalf("all agents access: %d %+v", code, got)
+	}
+	if code, _ := do("POST", "/api/agent-pause", `{"provider":"cursor","paused":true}`); code != 200 || got[len(got)-1].Cmd != "agent-pause" || got[len(got)-1].Provider != "cursor" || got[len(got)-1].Text != "1" {
+		t.Fatalf("agent-pause not forwarded: %d %+v", code, got)
 	}
 	if code, _ := do("POST", "/api/agent-access", `{"provider":"codex","on":true}`); code != 200 || got[len(got)-1].Cmd != "agent-access" || got[len(got)-1].Provider != "codex" || got[len(got)-1].Text != "1" {
 		t.Fatalf("agent access %d %+v", code, got[len(got)-1])

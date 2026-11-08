@@ -593,66 +593,125 @@
     catch(error){$('answer-status').textContent='';showError({message:error.message+' Повтор с тем же текстом безопасен.',command:error.command,hint:error.hint});}
     finally{answering=false;answerControls();}
   }
+  // Agent cards (T-061, D-070): the agent's name with a check, settings and
+  // an on/off switch; four steps of the same height (program, sign-in, work
+  // with Messenger, limit) with a mark on the left and one action on the
+  // right; one «Задачи» button under them. Steps that cannot be checked yet
+  // are grey and numbered.
+  const checkPath=['M21 12a9 9 0 1 1-3-6.7L21 8','M21 3v5h-5'];
+  const gearPath=['M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z'];
+  function svgIcon(paths,circle){
+    const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');svg.setAttribute('focusable','false');
+    if(circle){const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx','12');c.setAttribute('cy','12');c.setAttribute('r','3');svg.append(c);}
+    for(const d of paths){const p=document.createElementNS('http://www.w3.org/2000/svg','path');p.setAttribute('d',d);svg.append(p);}return svg;
+  }
+  function iconButton(label,paths,circle,fn){const b=el('button',undefined,'am-icon-btn am-card-icon');b.type='button';b.title=label;b.setAttribute('aria-label',label);b.append(svgIcon(paths,circle));b.addEventListener('click',fn);return b;}
+  // The limit ring: green below 60%, yellow to 85%, red above (D-070).
+  function limitLevel(l){
+    if(!l)return '';
+    if(typeof l.used_percent==='number')return l.used_percent>85?'bad':l.used_percent>=60?'wait':'good';
+    return l.state==='exhausted'?'bad':l.state==='warning'?'wait':'good';
+  }
+  function limitRing(l){
+    const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 18 18');svg.setAttribute('class','am-ring');svg.setAttribute('aria-hidden','true');
+    const ring=(cls,share)=>{const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx','9');c.setAttribute('cy','9');c.setAttribute('r','7');c.setAttribute('class',cls);
+      if(share!==undefined){const len=2*Math.PI*7;c.setAttribute('stroke-dasharray',len.toFixed(2));c.setAttribute('stroke-dashoffset',(len*(1-share)).toFixed(2));c.setAttribute('transform','rotate(-90 9 9)');}svg.append(c);};
+    ring('am-ring-track');
+    if(l){const p=typeof l.used_percent==='number'?Math.min(100,Math.max(0,l.used_percent))/100:l.state==='exhausted'?1:0;if(p>0)ring('am-ring-value am-ring-'+limitLevel(l),p);}
+    return svg;
+  }
+  function dayClock(at){const d=new Date(at);if(isNaN(d.getTime()))return '';return d.toDateString()===new Date().toDateString()?clock(at):stamp(at);}
+  async function setAgentOn(provider,on){
+    const a=(view?.agents||[]).find(x=>x.agent===provider);
+    if(!a){if(on)await connectAgent(provider);return;}
+    try{await postAPI('/api/agent-pause',{provider,paused:!on});viewSignature='';await refresh();}
+    catch(error){showError(error);}
+  }
+  function uninstallAgent(provider){
+    askConfirm('Удалить '+names[provider]+' CLI?','Откроется официальная страница агента. Удалите его командой оттуда. Настройки Messenger сохранятся.','Открыть',async()=>{
+      await postAPI('/api/agent-install',{provider});
+    });
+  }
   function renderAgents(){
     const cards=$('agents');cards.replaceChildren();
     for(const provider of ['claude','codex','cursor']){
       const a=(view?.agents||[]).find(x=>x.agent===provider);
       const found=discovery.find(d=>d.provider===provider);
-      const coordinator=view?.coordinator?.connected&&coordinatorName()[0]===provider;
-      const card=el('article',undefined,'am-card');
-      const heading=el('h3',undefined,'am-provider-heading');heading.append(providerIcon(provider),el('span',names[provider]));card.append(heading);
-      // One line per state in one font: the label on the left, the coloured
-      // value on the right (owner, preview.37).
-      const dl=el('div',undefined,'am-status-lines');
-      const pair=(label,value,cls,extra)=>{const p=el('p');const v=el('span',undefined,'am-status-value '+cls);v.append(el('span',value));if(extra)v.append(...extra);p.append(el('span',label,'am-status-label'),v);dl.append(p);};
-      // An action the row needs sits in the row itself (owner, preview.37):
-      // «Подключить», «Установить», «Войти». While it runs the row says so.
-      const inline=(label,fn)=>{const b=el('button',label,'am-inline-action');b.type='button';b.addEventListener('click',fn);return b;};
       const cli=a?.cli||found?.cli||'',profile=a?.environment||found?.environment||'';
+      const missing=!a&&found?.state==='not_found';
+      const on=!!a&&!a.paused;
+      const card=el('article',undefined,'am-card am-agent-card'+(on||!cli?'':' am-agent-off'));
+      const head=el('div',undefined,'am-agent-head');
+      const heading=el('h3',undefined,'am-provider-heading');heading.append(providerIcon(provider),el('span',names[provider]));
+      const sw=el('button',undefined,'am-switch');sw.type='button';sw.setAttribute('role','switch');sw.setAttribute('aria-checked',String(on));
+      sw.setAttribute('aria-label',names[provider]+': Messenger даёт задачи');
+      sw.title=on?'Messenger даёт задачи '+names[provider]+' на этом компьютере':cli?'Включить: Messenger будет давать задачи '+names[provider]:'Сначала установите '+names[provider]+' CLI';
+      sw.disabled=!a&&!cli;
+      sw.addEventListener('click',async()=>{sw.disabled=true;try{await setAgentOn(provider,!on);}finally{sw.disabled=false;}});
+      head.append(heading,iconButton('Проверить снова',checkPath,false,()=>{if(cli)checkCard(provider);else loadDiscovery();}),iconButton('Настройки',gearPath,true,()=>openAgentSetup(provider)),sw);
+      card.append(head);
+      const steps=el('div',undefined,'am-steps');
+      // mark: 'ok', 'no', a step number, or a node (the limit ring).
+      const step=(mark,title,sub,action,tip)=>{
+        const row=el('div',undefined,'am-step');
+        if(mark instanceof Node){const m=el('span',undefined,'am-mark am-mark-ring');m.append(mark);row.append(m);}
+        else row.append(el('span',mark==='ok'?'✓':mark==='no'?'✕':String(mark),'am-mark '+(mark==='ok'?'am-mark-ok':mark==='no'?'am-mark-no':'am-mark-off')));
+        const text=el('div',undefined,'am-step-text'+(typeof mark==='number'?' am-step-later':''));
+        const line=el('p',undefined,'am-step-title');
+        if(title instanceof Node)line.append(title);else line.textContent=title;
+        if(tip){const q=el('span','?','am-q');q.title=tip;q.setAttribute('aria-label',tip);q.tabIndex=0;line.append(q);}
+        text.append(line);
+        if(sub){const s=el('p',sub,'am-step-sub');s.title=sub;text.append(s);}
+        row.append(text);
+        if(action){const b=el('button',action[0]);b.type='button';b.addEventListener('click',action[1]);row.append(b);}else row.append(el('span'));
+        steps.append(row);
+      };
+      const check=agentChecks.get(provider),auth=check?.authentication?.state;
+      const busy=checking.has(provider);
+      // 1. The program.
       const programNote=rowNote.get(provider+':program');
-      if(a)pair('Программа','Подключена','am-status-good');
-      else if(programNote)pair('Программа',programNote,'am-status-wait');
-      else if(found?.state==='candidate_found')pair('Программа','','',[inline('Подключить',()=>connectAgent(provider))]);
-      else if(found?.state==='not_found')pair('Программа','','',[inline('Установить',()=>installAgent(provider))]);
-      else pair('Программа','Не проверена','am-status-wait');
-      const check=agentChecks.get(provider);
-      const auth=check?.authentication?.state;
+      if(programNote)step(1,names[provider]+' CLI',programNote);
+      else if(missing)step('no',names[provider]+' CLI не установлен','Не найден на этом компьютере',['Установить',()=>installAgent(provider)]);
+      else if(cli)step('ok',names[provider]+' CLI установлен',busy?'Проверяем':check?.version?.value||'',['Удалить',()=>uninstallAgent(provider)]);
+      else step(1,names[provider]+' CLI','Проверяем');
+      // 2. The sign-in. No confirmed login offers «Войти» (T-056).
       const authNote=rowNote.get(provider+':auth');
-      // T-056: no confirmed login means «Войти», never «Не проверен»; a
-      // confirmed login offers «Выйти».
-      if(checking.has(provider))pair('Вход в аккаунт','Проверяем…','am-status-wait');
-      else if(authNote)pair('Вход в аккаунт',authNote,'am-status-wait');
-      else if(a&&auth==='authenticated')pair('Вход в аккаунт','Выполнен','am-status-good',[inline('Выйти',()=>logoutFromCard(provider,cli,profile))]);
-      else if(a&&cli)pair('Вход в аккаунт','','',[inline('Войти',()=>loginFromCard(provider,cli,profile))]);
-      else pair('Вход в аккаунт','—','am-muted');
-      if(a){
-        const trust=a.trust?.state;
-        if(trust==='trusted')pair('Рабочая папка','Доверяет','am-status-good');
-        else{
-          const help=el('button','?','am-q');help.type='button';help.setAttribute('aria-label','Как исправить');
-          const hint=el('div',undefined,'am-hint');hint.hidden=true;hint.append(el('p',a.trust?.hint||'Откройте папку проекта в этой программе и подтвердите доверие.'));
-          const again=el('button','Проверить снова');again.type='button';again.addEventListener('click',()=>refresh());hint.append(again);
-          help.addEventListener('click',()=>{hint.hidden=!hint.hidden;});
-          pair('Рабочая папка',trust==='not_trusted'?'Не доверяет':'Не определено',trust==='not_trusted'?'am-status-bad':'am-status-wait',[help]);
-          dl.append(hint);
-        }
-        // T-044: the limit the agent reported during its last run.
-        const l=a.limit;
-        if(l){
-          const r=l.resets_at?resetText(l.resets_at):'';
-          const used=typeof l.used_percent==='number'?Math.round(l.used_percent)+'%':'';
-          const text=l.state==='exhausted'?(r?'Исчерпан, сброс '+r:'Исчерпан'):l.state==='warning'?(used?used+', близко к пределу':'Близко к пределу')+(r?', сброс '+r:''):(used?'Использовано '+used:'В норме')+(r?', сброс '+r:'');
-          pair('Лимит',text,l.state==='exhausted'?'am-status-bad':l.state==='warning'?'am-status-wait':'am-status-good');
-          if(l.observed_at)dl.lastChild.title='По данным последней задачи, '+clock(l.observed_at);
-        }
+      if(!cli)step(2,'Вход в аккаунт','После установки');
+      else if(authNote)step(2,'Вход в аккаунт',authNote);
+      else if(busy)step(2,'Вход в аккаунт','Проверяем');
+      else if(auth==='authenticated'){
+        const method=check.authentication.value==='chatgpt'?'Аккаунт ChatGPT':check.authentication.value==='api_key'?'Ключ API':'';
+        step('ok','Вход выполнен',method,['Выйти',()=>logoutFromCard(provider,cli,profile)]);
       }
-      const running=a?.project_running||0,today=a?.project_today||0;
-      if(a)pair('Задачи',running||today?running+' идёт, '+today+' сегодня':'Нет',running?'am-status-wait':'am-muted');
-      card.append(dl);
-      const actions=el('div',undefined,'am-card-actions');
-      if(running||today){const tasks=el('button','Задачи');tasks.type='button';tasks.addEventListener('click',()=>{$('agent-filter').value=provider;syncSelects();show('tasks');renderTaskList();});actions.append(tasks);}
-      const setup=el('button','Настройки');setup.type='button';setup.addEventListener('click',()=>openAgentSetup(provider));
-      actions.append(setup);card.append(actions);cards.append(card);
+      else if(auth==='not_authenticated')step('no','Вход не выполнен','Войдите в аккаунт агента',['Войти',()=>loginFromCard(provider,cli,profile)]);
+      else step(2,'Вход в аккаунт',check?'Не удалось проверить':'Ещё не проверен',['Войти',()=>loginFromCard(provider,cli,profile)]);
+      // 3. Work with Messenger: set only by what a task showed (D-070).
+      const trust=a?.trust?.state;
+      if(a&&trust&&trust!=='trusted')step('no','Не доверяет папке проекта',trust==='not_trusted'?'Откройте папку в агенте и подтвердите доверие':'Не удалось определить',null,a.trust?.hint||'Откройте папку проекта в этой программе и подтвердите доверие.');
+      else if(a?.last_done)step('ok','Работает с Messenger','Последняя задача '+dayClock(a.last_done));
+      else step(3,'Работает с Messenger',missing?'Проверится после установки':'Проверится на первой задаче');
+      // 4. The limit the agent reported during its last task (T-044).
+      const l=a?.limit,level=limitLevel(l);
+      const today=a?.today_tokens?'сегодня '+tokensText(a.today_tokens)+' токенов':'';
+      if(l){
+        const title=el('span');title.append('Лимит ');
+        const used=typeof l.used_percent==='number'?Math.round(l.used_percent)+'%':l.state==='exhausted'?'исчерпан':l.state==='warning'?'близко к пределу':'в норме';
+        title.append(el('span',used,'am-status-'+level));
+        const r=l.resets_at?'Сброс '+resetText(l.resets_at):'';
+        step(limitRing(l),title,[r,today].filter(Boolean).join(', ')||(l.observed_at?'По данным задачи в '+clock(l.observed_at):''));
+      }else step(limitRing(null),'Лимит',today?today[0].toUpperCase()+today.slice(1):'Появится после первой задачи');
+      card.append(steps);
+      const running=a?.project_running||0,todayTasks=a?.project_today||0;
+      const tasks=el('button',undefined,'am-agent-tasks');tasks.type='button';
+      if(running||todayTasks){
+        const label=el('span');label.append('Задачи: ');
+        if(running)label.append(el('span',running+' идёт','am-status-run'));
+        if(running&&todayTasks)label.append(', ');
+        if(todayTasks)label.append(todayTasks+' сегодня');
+        tasks.append(label);
+        tasks.addEventListener('click',()=>{$('agent-filter').value=provider;syncSelects();show('tasks');renderTaskList();});
+      }else{tasks.textContent='Задачи';tasks.disabled=true;}
+      card.append(tasks);cards.append(card);
     }
     renderAccessBar();
   }
@@ -997,25 +1056,21 @@
   window.addEventListener('focus',()=>{
     for(const [provider,at] of authOpened){if(Date.now()-at<10*60*1000&&!checking.has(provider))checkCard(provider,true);else authOpened.delete(provider);}
   });
-  async function loginAgent(provider,cli,environment,button,status){
-    button.disabled=true;
-    try{
-      await postAPI('/api/agent-login',{provider,cli,environment});
-      const text='Окно входа открыто. Войдите и нажмите «Проверить».';
-      if(status)status.textContent=text;else button.textContent='Окно входа открыто';
-    }catch(error){if(status)status.textContent=error.message;else showError(error);}
-    finally{setTimeout(()=>{button.disabled=false;},3000);}
-  }
+
   let setupProvider='';
+  // The models Claude itself accepts by these names; Codex and Cursor names
+  // are not invented here (T-061).
+  const defaultModels={claude:['haiku','sonnet','opus']};
   function openAgentSetup(provider){
     setupProvider=provider;const a=(view?.agents||[]).find(x=>x.agent===provider),found=discovery.find(d=>d.provider===provider);
     $('agent-setup-title').textContent='Настройки: '+names[provider];
     $('agent-setup-note').hidden=provider!=='cursor';
     $('agent-cli').value=a?.cli||found?.cli||'';$('agent-profile').value=a?.environment||found?.environment||'';
-    $('agent-models').value=(a?.models||[]).join('\n');
-    $('agent-models-note').textContent=provider==='claude'?'Claude сам принимает opus, sonnet и haiku. Сюда можно добавить полные названия моделей Claude.':'Пишите названия точно так, как их принимает сам агент. Координатор сможет выбрать только модель из этого списка; если список пуст, задачи идут на модели по умолчанию.';
-    setStatus('agent-check-status','');setStatus('agent-save-status','');$('agent-login').hidden=true;
-    $('agent-remove').hidden=!a;
+    const models=a?.models?.length?a.models:defaultModels[provider]||[];
+    $('agent-models').value=models.join(', ');$('agent-models').disabled=!a;
+    $('agent-models').placeholder=a?'Пусто: задачи идут на модель по умолчанию':'Сначала включите агента на карточке';
+    $('agent-models-note').textContent='Через запятую, как их пишет сам '+shortNames[provider]+'.'+(defaultModels[provider]?' Уже вписаны по умолчанию.':'');
+    setStatus('agent-save-status','');
     $('agent-setup').showModal();
   }
   // One check at a time: the client refuses a second one while one runs.
@@ -1057,46 +1112,28 @@
   }
   // The dialog's statuses sit on the line of their button and replace each
   // other there, so the dialog never grows or jumps (owner, T-056).
-  function setStatus(id,text,cls){const n=$(id);n.textContent=text;n.title=text;n.className='am-check-status'+(cls?' '+cls:'');}
-  async function checkAgent(){
-    const selection={provider:setupProvider,cli:$('agent-cli').value.trim(),environment:$('agent-profile').value.trim()};
-    if(!selection.cli){setStatus('agent-check-status','Укажите программу.','am-status-bad');return;}
-    $('agent-check').disabled=true;$('agent-login').hidden=true;setStatus('agent-check-status','Проверяем…');
-    try{
-      const check=await runCheck(selection),auth=check.authentication?.state;
-      const version=check.version?.value?'версия '+check.version.value:'версия не определена';
-      setStatus('agent-check-status',(auth==='authenticated'?'Вход выполнен':'Вход не выполнен')+', '+version,auth==='authenticated'?'am-status-good':'am-status-bad');
-      $('agent-login').hidden=auth==='authenticated';renderAgents();
-    }catch(error){setStatus('agent-check-status',error.name==='TimeoutError'?'Проверка не завершилась вовремя.':error.message,'am-status-bad');}
-    finally{$('agent-check').disabled=false;}
-  }
-  // Every change saves by itself (owner, T-056): the program and profile when
-  // a field is left or a path is chosen, then a check; the models when their
-  // field is left. The result shows on the line at the bottom.
+  function setStatus(id,text){const n=$(id);n.textContent=text;n.title=text;}
+  // Every change saves by itself (owner, T-056, T-061): the program and
+  // profile when a field is left or a path is chosen, then the card checks
+  // it; the models when their field is left. Only errors are shown.
   async function saveAgentPaths(){
-    const cli=$('agent-cli').value.trim();if(!cli)return;
-    const found=discovery.find(d=>d.provider===setupProvider);
+    const provider=setupProvider,cli=$('agent-cli').value.trim();if(!cli)return;
+    const found=discovery.find(d=>d.provider===provider);
     let environment=$('agent-profile').value.trim();if(found&&environment===found.environment)environment='';
-    const a=(view?.agents||[]).find(x=>x.agent===setupProvider);
+    const a=(view?.agents||[]).find(x=>x.agent===provider);
     if(a&&a.cli===cli&&(a.environment||'')===environment)return;
-    setStatus('agent-save-status','Сохраняем…');
-    try{await postAPI('/api/agent-set',{provider:setupProvider,cli,environment});
-      setStatus('agent-save-status','Сохранено','am-status-good');$('agent-remove').hidden=false;viewSignature='';await refresh();checkAgent();}
-    catch(error){setStatus('agent-save-status',error.message,'am-status-bad');}
+    setStatus('agent-save-status','');
+    try{await postAPI('/api/agent-set',{provider,cli,environment});
+      viewSignature='';await refresh();if(setupProvider===provider)openAgentSetup(provider);checkCard(provider);}
+    catch(error){setStatus('agent-save-status',error.message);}
   }
   async function saveAgentModels(){
     const a=(view?.agents||[]).find(x=>x.agent===setupProvider);if(!a)return;
-    const models=$('agent-models').value.split('\n').map(m=>m.trim()).filter(Boolean);
+    const models=$('agent-models').value.split(/[,\n]/).map(m=>m.trim()).filter(Boolean);
     if(models.join('\n')===(a.models||[]).join('\n'))return;
-    setStatus('agent-save-status','Сохраняем…');
-    try{await postAPI('/api/agent-models',{provider:setupProvider,models});setStatus('agent-save-status','Сохранено','am-status-good');viewSignature='';await refresh();}
-    catch(error){setStatus('agent-save-status',error.message,'am-status-bad');}
-  }
-  async function removeAgent(){
-    $('agent-remove').disabled=true;setStatus('agent-save-status','');
-    try{await postAPI('/api/agent-remove',{provider:setupProvider});agentChecks.delete(setupProvider);viewSignature='';await refresh();$('agent-setup').close();}
-    catch(error){setStatus('agent-save-status',error.message,'am-status-bad');}
-    finally{$('agent-remove').disabled=false;}
+    setStatus('agent-save-status','');
+    try{await postAPI('/api/agent-models',{provider:setupProvider,models});viewSignature='';await refresh();}
+    catch(error){setStatus('agent-save-status',error.message);}
   }
   window.messengerRefresh=()=>{viewSignature='';refresh();};
   // «Выбрать»: the local server opens the system's own dialog (D-053); the
@@ -1249,18 +1286,17 @@
   $('access-toggle').addEventListener('click',toggleAllAccess);
   $('project-pick').addEventListener('click',()=>{folderTarget='project-folder';if(window.webkit?.messageHandlers?.folder)window.webkit.messageHandlers.folder.postMessage('pick');else pick('project-folder','folder','project-status');});
   $('project-page-pick').addEventListener('click',()=>{folderTarget='project-page-folder';if(window.webkit?.messageHandlers?.folder)window.webkit.messageHandlers.folder.postMessage('pick');else pick('project-page-folder','folder','project-page-status');});
-  $('agent-cli-pick').addEventListener('click',()=>pick('agent-cli','file','agent-check-status'));
-  $('agent-profile-pick').addEventListener('click',()=>pick('agent-profile','folder','agent-check-status'));
+  $('agent-cli-pick').addEventListener('click',()=>pick('agent-cli','file','agent-save-status'));
+  $('agent-profile-pick').addEventListener('click',()=>pick('agent-profile','folder','agent-save-status'));
   $('restart-dialog').addEventListener('cancel',event=>event.preventDefault());
   $('restart-go').addEventListener('click',()=>restartClient(!!restart.ask));
   $('restart-quit').addEventListener('click',()=>window.webkit?.messageHandlers?.app?.postMessage('quit'));
   $('restart-copy').addEventListener('click',async()=>{const b=$('restart-copy');try{await navigator.clipboard.writeText(shutdownCommand());b.textContent='Скопировано';}catch(_){b.textContent='Не удалось скопировать';}setTimeout(()=>b.textContent='Скопировать команду',2000);});
   $('agent-setup-close').addEventListener('click',()=>$('agent-setup').close());
-  $('agent-remove').addEventListener('click',removeAgent);
-  $('agent-check').addEventListener('click',checkAgent);
   $('agent-cli').addEventListener('change',saveAgentPaths);
   $('agent-profile').addEventListener('change',saveAgentPaths);
   $('agent-models').addEventListener('change',saveAgentModels);
+  $('agent-models').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();saveAgentModels();}});
   $('host-scope').addEventListener('change',()=>{serverEdited=true;});
   $('host-port').addEventListener('input',()=>{serverEdited=true;});
   $('host-enable').addEventListener('click',enableServer);
@@ -1272,7 +1308,6 @@
     b.title=label;b.setAttribute('aria-label',state?label:'Скопировать код');}
   $('invite-copy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('invite-code').textContent);copyState('done');}catch(_){copyState('failed');}});
   $('member-connect').addEventListener('click',connectServer);
-  $('agent-login').addEventListener('click',()=>loginAgent(setupProvider,$('agent-cli').value.trim(),$('agent-profile').value.trim(),$('agent-login'),$('agent-check-status')));
   $('computer-name').addEventListener('input',e=>{e.target.dataset.edited='1';renderServer();});
   // «Имя в сети» saves by itself when the field is left or Enter is pressed;
   // only an error is shown.

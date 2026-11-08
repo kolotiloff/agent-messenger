@@ -24,6 +24,9 @@ func TestAgentModels(t *testing.T) {
 		if a.Provider == "codex" {
 			want = []string{"gpt-5.5", "gpt-5.5-mini"}
 		}
+		if a.Provider == "claude" {
+			want = DefaultClaudeModels // listed from the start (T-061)
+		}
 		if !reflect.DeepEqual(a.Models, want) {
 			t.Fatalf("%s models %q", a.Provider, a.Models)
 		}

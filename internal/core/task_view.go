@@ -185,6 +185,13 @@ type WindowAgent struct {
 	FullAccess bool `json:"full_access"`
 	// Limit is the last usage-limit state the agent reported (T-044).
 	Limit *AgentLimit `json:"limit,omitempty"`
+	// Paused: the owner turned the agent off on its card (T-061).
+	Paused bool `json:"paused"`
+	// TodayTokens are the tokens of this agent's tasks on this computer
+	// started today, in every project; LastDone is when its last task here
+	// finished well, the proof that it works with Messenger (D-070).
+	TodayTokens int64  `json:"today_tokens"`
+	LastDone    string `json:"last_done,omitempty"`
 }
 
 // WindowView is what the window shows for one project.
@@ -250,15 +257,17 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='waiting_owner'),
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='running' AND t.project=?),
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.project=? AND t.created_at>=?),
- a.models, a.limit_state, a.full_access
- FROM computer_agents a WHERE a.computer=? ORDER BY a.provider`, project, project, today, computer)
+ a.models, a.limit_state, a.full_access, a.paused,
+ (SELECT COALESCE(SUM(t.usage_input+t.usage_output),0) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.created_at>=?),
+ (SELECT COALESCE(MAX(t.finished_at),'') FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='done')
+ FROM computer_agents a WHERE a.computer=? ORDER BY a.provider`, project, project, today, today, computer)
 		if err != nil {
 			return err
 		}
 		for rows.Next() {
 			var a WindowAgent
 			var models, limit string
-			if err := rows.Scan(&a.Agent, &a.CLI, &a.Profile, &a.Env, &a.Running, &a.Waiting, &a.ProjectRunning, &a.ProjectToday, &models, &limit, &a.FullAccess); err != nil {
+			if err := rows.Scan(&a.Agent, &a.CLI, &a.Profile, &a.Env, &a.Running, &a.Waiting, &a.ProjectRunning, &a.ProjectToday, &models, &limit, &a.FullAccess, &a.Paused, &a.TodayTokens, &a.LastDone); err != nil {
 				rows.Close()
 				return err
 			}
@@ -532,7 +541,7 @@ func (s *Store) Presence() (agents []AgentPresence, coordinator string, err erro
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='running'),
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='waiting_owner'),
  a.models, a.limit_state
- FROM computer_agents a WHERE a.computer=? ORDER BY a.provider`, computer)
+ FROM computer_agents a WHERE a.computer=? AND a.paused=0 ORDER BY a.provider`, computer)
 		if err != nil {
 			return err
 		}

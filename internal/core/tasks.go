@@ -572,8 +572,15 @@ func (s *Store) SetComputerAgent(provider, cli, environment, profile string) err
 		if profile == "worker" {
 			full = 1
 		}
-		_, err = tx.Exec(`INSERT INTO computer_agents(computer,provider,cli_path,environment,profile,updated_at,full_access) VALUES (?,?,?,?,?,?,?) ON CONFLICT(computer,provider) DO UPDATE SET cli_path=excluded.cli_path,environment=excluded.environment,profile=excluded.profile,updated_at=excluded.updated_at`,
-			computer, provider, cli, environment, profile, now(), full)
+		// Claude's own model names are listed from the start, so the
+		// coordinator sees them (T-061); Codex and Cursor names are not
+		// invented here.
+		models := ""
+		if provider == "claude" {
+			models = strings.Join(DefaultClaudeModels, "\n")
+		}
+		_, err = tx.Exec(`INSERT INTO computer_agents(computer,provider,cli_path,environment,profile,updated_at,full_access,models) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(computer,provider) DO UPDATE SET cli_path=excluded.cli_path,environment=excluded.environment,profile=excluded.profile,updated_at=excluded.updated_at`,
+			computer, provider, cli, environment, profile, now(), full, models)
 		return err
 	})
 }
@@ -738,11 +745,15 @@ func startLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, origin *net
 	var agent ComputerAgent
 	var models string
 	var fullAccess int
-	if err := tx.QueryRow(`SELECT cli_path,environment,profile,models,full_access FROM computer_agents WHERE computer=? AND provider=?`, computer, r.Provider).Scan(&agent.CLI, &agent.Environment, &agent.Profile, &models, &fullAccess); err != nil {
+	var paused int
+	if err := tx.QueryRow(`SELECT cli_path,environment,profile,models,full_access,paused FROM computer_agents WHERE computer=? AND provider=?`, computer, r.Provider).Scan(&agent.CLI, &agent.Environment, &agent.Profile, &models, &fullAccess, &paused); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", fmt.Errorf("%w: agent %s is not set up on this computer", ErrRejected, r.Provider)
 		}
 		return "", err
+	}
+	if paused != 0 {
+		return "", errAgentPaused(r.Provider)
 	}
 	if err := modelAllowed(r.Provider, r.Model, splitModels(models)); err != nil {
 		return "", err
@@ -1549,6 +1560,13 @@ func (s *Store) ContinueTask(task, opID, text, by string) error {
 		if t.SessionID == "" {
 			return fmt.Errorf("%w: no recorded conversation to continue; start a new task", ErrRejected)
 		}
+		var paused int
+		if err := tx.QueryRow(`SELECT paused FROM computer_agents WHERE computer=? AND provider=?`, t.Computer, t.Provider).Scan(&paused); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		if paused != 0 {
+			return errAgentPaused(t.Provider)
+		}
 		var open int
 		if err := tx.QueryRow(`SELECT COUNT(*) FROM task_runs WHERE task_id=? AND state IN ('intent','launching','running','blocked','interrupted')`, task).Scan(&open); err != nil {
 			return err
@@ -1858,7 +1876,7 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='running'),
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state IN ('waiting_coordinator','waiting_owner')),
  a.models, a.limit_state, a.full_access
- FROM computer_agents a WHERE a.computer=? ORDER BY a.provider`, computer)
+ FROM computer_agents a WHERE a.computer=? AND a.paused=0 ORDER BY a.provider`, computer)
 		if err != nil {
 			return err
 		}
@@ -1896,6 +1914,39 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 		list = append(list, o)
 	}
 	return map[string]any{"project": project, "computers": list}, nil
+}
+
+// DefaultClaudeModels are the short model names Claude Code itself accepts.
+var DefaultClaudeModels = []string{"haiku", "sonnet", "opus"}
+
+// errAgentPaused refuses work for an agent the owner turned off on its card.
+func errAgentPaused(provider string) error {
+	return fmt.Errorf("%w: agent %s is turned off on this computer by its owner", ErrRejected, provider)
+}
+
+// SetAgentPaused turns an agent of this computer off or on from its card
+// (T-061). A turned-off agent keeps its settings, takes no new tasks or
+// follow-ups and is hidden from the coordinator and the other computers;
+// tasks already running go on.
+func (s *Store) SetAgentPaused(provider string, paused bool) error {
+	v := 0
+	if paused {
+		v = 1
+	}
+	return s.tx(func(tx *sql.Tx) error {
+		computer, err := localComputer(tx)
+		if err != nil {
+			return err
+		}
+		res, err := tx.Exec(`UPDATE computer_agents SET paused=?,updated_at=? WHERE computer=? AND provider=?`, v, now(), computer, provider)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return fmt.Errorf("%w: agent %s is not set up on this computer", ErrRejected, provider)
+		}
+		return nil
+	})
 }
 
 // SetAgentFullAccess turns «Разрешить любые команды» on or off for an agent

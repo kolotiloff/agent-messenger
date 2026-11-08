@@ -2,6 +2,12 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (T-061 agent cards)
+
+- Agent cards and the settings dialog built as approved (D-070, D-075): check, gear and on/off switch per card; four steps; one «Задачи» button. The switch keeps the agent's settings and hides it from the coordinator and other computers. Claude lists `haiku, sonnet, opus` from the start; models are one comma-separated field. Screenshot: docs/mockups/agent-cards-built.png (stubbed data).
+- Cautious choices (Q-022): «Удалить» opens the official page; «CLI неисправен» not shown yet.
+- Verified: core, window route, protocol and diagnostics tests, `check.sh`, headless Chromium with stubs in both themes. Not verified: native windows, real agents.
+
 ## 2026-11-08 — Claude Code (before preview.42: owner's answers)
 
 - Owner's answers: no dollars, tokens only (D-074); server status «Подключено / Нет связи / Не подключено» (Q-021); project rename stays local (Q-019); «v0.42» display with unchanged tags (Q-020).

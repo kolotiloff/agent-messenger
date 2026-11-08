@@ -152,11 +152,22 @@ func TestAuthenticationRequiresPositiveEvidenceAndNeverLeaksSecrets(t *testing.T
 		{"codex", probeOutput{stderr: []byte("Logged in using an API key - PRIVATE_KEY")}, "authenticated"},
 		{"codex", probeOutput{stderr: []byte("Logged in using ChatGPT\nPRIVATE_WARNING")}, "unknown"},
 		{"codex", probeOutput{stderr: []byte("Not logged in"), exit: 1}, "not_authenticated"},
+		{"codex", probeOutput{stderr: []byte("Logged in using ChatGPT\n")}, "authenticated"},
 		{"codex", probeOutput{stderr: []byte("PRIVATE_NETWORK_ERROR"), exit: 1}, "unknown"},
 	} {
 		r := parseAuthentication(tc.provider, tc.output)
 		if r.State != tc.state {
 			t.Fatal(tc.provider, r, tc.state)
+		}
+		// The card names the sign-in method for Codex (T-061).
+		if tc.provider == "codex" && r.State == "authenticated" {
+			want := "api_key"
+			if strings.Contains(string(tc.output.stderr), "ChatGPT") {
+				want = "chatgpt"
+			}
+			if r.Value != want {
+				t.Fatal("codex method", r.Value)
+			}
 		}
 		encoded, _ := json.Marshal(r)
 		if strings.Contains(string(encoded), "PRIVATE") {
