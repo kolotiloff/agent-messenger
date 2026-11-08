@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -227,6 +228,16 @@ func TestTaskWorkerReportsAndIsVerified(t *testing.T) {
 			waitNoTaskReservations(t)
 			h.stop()
 		})
+	}
+}
+
+// The worker's last line is read even when it exits right after writing it.
+func TestTaskOutputIsReadToTheEnd(t *testing.T) {
+	for i := 0; i < 3; i++ {
+		h := newTaskHarness(t, "chatty", AdapterLauncher{AllowTasks: true})
+		id := h.startTask(fmt.Sprintf("op-%d", i), "codex", "Fix the menu")
+		h.waitState(id, "done")
+		h.stop()
 	}
 }
 

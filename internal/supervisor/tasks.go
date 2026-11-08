@@ -34,6 +34,10 @@ var taskGroupWait = 3 * time.Second
 // taskCancelPoll is how often a running worker checks for a cancel request.
 var taskCancelPoll = 200 * time.Millisecond
 
+// taskOutputGrace is how long the output may stay open after the worker
+// exits.
+var taskOutputGrace = 5 * time.Second
+
 type taskRuns struct {
 	mu      sync.Mutex
 	running map[string]bool
@@ -129,18 +133,29 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 		_ = s.store.TaskRunNotStarted(runID, err.Error())
 		return
 	}
-	stdout, err := cmd.StdoutPipe()
+	// A plain pipe, not StdoutPipe: Wait would close StdoutPipe's read end
+	// as soon as the process exits and could drop its last lines.
+	stdout, stdoutW, err := os.Pipe()
 	if err != nil {
 		_ = s.store.TaskRunNotStarted(runID, err.Error())
 		return
 	}
+	cmd.Stdout = stdoutW
+	started := false
+	defer func() {
+		if !started {
+			_ = stdout.Close()
+		}
+	}()
 	record := recordedRun{ID: reservation, Root: s.root, Provider: task.Provider, Environment: task.Environment, ConversationID: task.SessionID, TaskRunID: run.ID}
 	record.Epoch, _ = recoveryEpoch()
 	if err := rememberRun(record); err != nil {
 		_ = s.store.TaskRunNotStarted(runID, "reservation not written: "+err.Error())
 		return
 	}
-	if err := platform.StartGroup(cmd); err != nil {
+	err = platform.StartGroup(cmd)
+	_ = stdoutW.Close()
+	if err != nil {
 		if platform.NeverRan(cmd, err) {
 			_ = forgetRunID(reservation)
 			_ = s.store.TaskRunNotStarted(runID, err.Error())
@@ -166,10 +181,15 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 		_, _ = s.store.FinishTaskRun(runID, core.RunEvidence{Detail: "process not recorded: " + obsErr.Error()})
 		return
 	}
+	started = true
 
-	var result adapters.TaskEventResult
-	readDone := make(chan error, 1)
+	type readOutcome struct {
+		result adapters.TaskEventResult
+		err    error
+	}
+	readDone := make(chan readOutcome, 1)
 	go func() {
+		var result adapters.TaskEventResult
 		reader := bufio.NewReader(stdout)
 		bound := false
 		for {
@@ -192,7 +212,7 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 				if errors.Is(err, io.EOF) {
 					err = nil
 				}
-				readDone <- err
+				readDone <- readOutcome{result, err}
 				return
 			}
 		}
@@ -231,7 +251,21 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 		// marks the run interrupted and keeps its reservation.
 		return
 	}
-	readErr := <-readDone
+	// The output ends when every holder of the pipe exits. A process the
+	// worker left behind may keep it open: then the output is not trusted.
+	var read readOutcome
+	select {
+	case read = <-readDone:
+	case <-time.After(taskOutputGrace):
+		_ = stdout.Close()
+		select {
+		case read = <-readDone:
+		case <-time.After(taskOutputGrace):
+		}
+		read.err = errors.New("output still open after the worker exited")
+	}
+	_ = stdout.Close()
+	result, readErr := read.result, read.err
 	ev := core.RunEvidence{ExitObserved: waitErr == nil, ExitCode: exitCode, Cancelled: cancelled}
 	ev.ProviderOK = result.Completed && !result.Conflicting && readErr == nil && result.Failure == ""
 	if result.Failure != "" {
