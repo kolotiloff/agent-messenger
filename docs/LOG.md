@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (T-042 owner's two-computer test, follow-ups)
+
+- The owner's test passed: the Claude coordinator on the Mac gave Codex on Windows an audit and got the report. Follow-ups done: tool actions in the feed are grouped into one collapsible line; the computer has its own name on the «Сервер» tab, the host included; tasks of other computers are accepted by default (D-056); Codex trust is read from all `config.toml` forms; «Войти в аккаунт» and «Установить …» buttons (D-057); on Windows no inner frame and a title bar in the theme's colour.
+- Verified here: `check.sh`, `GOOS=windows go vet`, new tests (trust forms, names, login commands per OS, routes), headless Chromium screenshots of the grouping and of the Windows layout. Not verified: real Windows (title bar, terminal login, install page), the real Codex config, the Codex and Cursor install page addresses (not reachable from here).
+
 ## 2026-11-08 — Claude Code (T-042 progress between computers)
 
 - The owner ran preview.35 on a Mac and a Windows computer: Windows hosted the server, the Mac joined and gave Codex on Windows a task. It was first refused because «Задачи других компьютеров» was off (Q-014, by design); the refusal showed as an English note in the middle of the feed. After turning it on, Codex worked on Windows, but the Mac showed nothing until the end.
