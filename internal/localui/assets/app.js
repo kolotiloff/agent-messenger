@@ -184,14 +184,15 @@
     if(n>=1e3)return Math.round(n/1e3).toLocaleString('ru-RU')+' тыс.';
     return String(n);
   }
-  function costText(c){return c>0&&c<0.01?'<$0.01':'$'+c.toFixed(2);}
+  // Tokens only: the agents' price is their own estimate and the owner works
+  // on subscription limits, so no dollars are shown (D-074).
   function usageShort(u){
     if(!u)return '';
-    return u.cost_usd!=null?costText(u.cost_usd):tokensText(u.input_tokens+u.output_tokens)+' токенов';
+    return tokensText(u.input_tokens+u.output_tokens)+' токенов';
   }
   function usageLong(u){
     if(!u)return '';
-    let s='Потрачено '+(u.cost_usd!=null?costText(u.cost_usd)+' (по расчёту агента), ':'')+'токенов: '+u.input_tokens.toLocaleString('ru-RU')+' на входе';
+    let s='Потрачено токенов: '+u.input_tokens.toLocaleString('ru-RU')+' на входе';
     if(u.cached_tokens)s+=' (из них '+u.cached_tokens.toLocaleString('ru-RU')+' из кэша)';
     return s+', '+u.output_tokens.toLocaleString('ru-RU')+' на выходе';
   }
@@ -828,7 +829,7 @@
     renderMachines();
     // The certificate fingerprint travels inside the invitation code and the
     // joining computer checks it itself, so the window does not show it.
-    badge($('member-badge'),m.connected?(m.reachable?'На связи':m.checked_at?'Нет связи':'Подключено'):'Не подключено',m.connected?(m.reachable?'good':m.checked_at?'bad':''):'');
+    badge($('member-badge'),m.connected?(m.reachable||!m.checked_at?'Подключено':'Нет связи'):'Не подключено',m.connected?(m.reachable?'good':m.checked_at?'bad':''):'');
     $('member-join').hidden=m.connected;$('member-joined').hidden=!m.connected;
     $('member-badge').title=m.connected?'Этот компьютер входит в сервер '+m.address+'.':'Вставьте код приглашения, который выдал сервер на другом компьютере.';
     $('member-state').textContent='';

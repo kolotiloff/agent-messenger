@@ -2,6 +2,12 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (before preview.42: owner's answers)
+
+- Owner's answers: no dollars, tokens only (D-074); server status «Подключено / Нет связи / Не подключено» (Q-021); project rename stays local (Q-019); «v0.42» display with unchanged tags (Q-020).
+- Owner's order of work recorded in TASKS: design (T-061, T-062), then statistics (T-068), Linux window (T-069), language, shared list, short invitation, Windows installation, remote log, coordinator wishlist. Owner: release an update after each step.
+- Verified: `check.sh`; task rows in headless Chromium with stubs show tokens only.
+
 ## 2026-11-08 — Claude Code (T-058 what a task spent)
 
 - The task list shows each task's cost (Claude's own estimate) or tokens (Codex, Cursor); the task header shows input, cached and output tokens (D-068). Remote tasks report their total back.
