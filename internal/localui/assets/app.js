@@ -344,8 +344,8 @@
   }
   // The computer that runs a task: this one, or the other one it was sent to.
   function taskComputer(t){return t.remote&&!t.remote.from?t.remote.id:'local';}
-  // A click on a computer in the sidebar shows only its tasks; a second click
-  // or the chip's cross shows all again (T-056).
+  // A click on a computer in the sidebar shows only its tasks; a second click,
+  // the chip's cross or a click on empty sidebar space shows all again (T-056).
   let computerFilter='';
   function filterComputer(id){
     computerFilter=computerFilter===id?'':id;
@@ -1147,6 +1147,36 @@
   });
   $('agent-filter').addEventListener('change',renderTaskList);
   $('computer-chip-clear').addEventListener('click',()=>{computerFilter='';renderMachines();renderTaskList();});
+  // The sidebar and the task list are as wide as the owner drags them (T-063).
+  // A double click or Home restores the usual width; the width is remembered.
+  function splitter(pane,name,variable,usual,min,max,side){
+    const handle=el('div',undefined,'am-splitter');
+    handle.setAttribute('role','separator');handle.setAttribute('aria-orientation','vertical');handle.tabIndex=0;
+    handle.title='Потяните, чтобы изменить ширину. Двойной щелчок: как было';
+    handle.setAttribute('aria-label',name);handle.setAttribute('aria-valuemin',String(min));handle.setAttribute('aria-valuemax',String(max));
+    const key='messenger-width-'+variable.slice(5);
+    const apply=(px,save)=>{px=Math.round(Math.min(max,Math.max(min,px)));root.style.setProperty(variable,px+'px');handle.setAttribute('aria-valuenow',String(px));if(save)remember(key,px===usual?'':String(px));};
+    const saved=Number(recall(key));apply(saved>0?saved:usual,false);
+    handle.addEventListener('pointerdown',event=>{
+      if(event.button!==0)return;event.preventDefault();handle.setPointerCapture(event.pointerId);
+      const startX=event.clientX,startW=pane.getBoundingClientRect().width;
+      handle.classList.add('am-dragging');document.body.classList.add('am-resizing');
+      const move=e=>apply(startW+side*(e.clientX-startX),false);
+      const up=e=>{handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',up);handle.removeEventListener('pointercancel',up);handle.classList.remove('am-dragging');document.body.classList.remove('am-resizing');apply(startW+side*(e.clientX-startX),true);};
+      handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',up);handle.addEventListener('pointercancel',up);
+    });
+    handle.addEventListener('dblclick',()=>apply(usual,true));
+    handle.addEventListener('keydown',event=>{
+      const now=pane.getBoundingClientRect().width,step=event.shiftKey?64:16;
+      if(event.key==='ArrowLeft')apply(now-side*step,true);else if(event.key==='ArrowRight')apply(now+side*step,true);else if(event.key==='Home')apply(usual,true);else return;
+      event.preventDefault();
+    });
+    pane.append(handle);
+  }
+  splitter(root.querySelector('.am-sidebar'),'Ширина левой панели','--am-nav',204,160,420,1);
+  splitter($('task-panel'),'Ширина списка задач','--am-queue',240,200,520,-1);
+  // A click on empty space in the sidebar shows all computers' tasks again.
+  root.querySelector('.am-sidebar').addEventListener('click',event=>{if(computerFilter&&!event.target.closest('.am-machine-card,.am-project,.am-side-bottom,.am-splitter,button,select,input,a,[popover]')){computerFilter='';renderMachines();renderTaskList();}});
   $('answer-text').addEventListener('input',()=>{const f=$('answer-text');f.style.height='auto';f.style.height=Math.min(140,Math.max(44,f.scrollHeight))+'px';answerControls();});
   $('answer-send').addEventListener('click',sendAnswer);
   // Enter sends; Shift+Enter adds a line. An IME composition keeps its Enter.

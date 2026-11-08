@@ -225,7 +225,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-shell { display:grid; grid-template-columns:var(--am-nav) minmax(0,1fr); flex:1; min-height:0; }
 
 /* Sidebar */
-#am-concept .am-sidebar { display:flex; flex-direction:column; gap:var(--am-gap-region); min-height:0; padding:var(--am-space-4) var(--am-space-3) var(--am-space-3); background:var(--am-side); border-right:1px solid var(--am-line); overflow:hidden; }
+#am-concept .am-sidebar { position:relative; display:flex; flex-direction:column; gap:var(--am-gap-region); min-height:0; padding:var(--am-space-4) var(--am-space-3) var(--am-space-3); background:var(--am-side); border-right:1px solid var(--am-line); overflow:hidden; }
 #am-concept .am-project .am-select-trigger { width:100%; }
 #am-concept .am-computers { display:flex; flex-direction:column; min-height:0; }
 #am-concept .am-machines { display:flex; flex-direction:column; gap:var(--am-space-1); min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; margin-right:calc(-1 * var(--am-space-3)); padding-right:calc(var(--am-space-3) - var(--am-gutter, 0px)); }
@@ -264,7 +264,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-connect details button { margin-top:var(--am-space-2); }
 
 /* Tasks screen: the task feed and the task list beside it. */
-#am-concept .am-chat-layout { display:grid; grid-template-columns:minmax(0,1fr) 240px; height:100%; min-height:0; position:relative; }
+#am-concept .am-chat-layout { display:grid; grid-template-columns:minmax(0,1fr) min(var(--am-queue,240px),50%); height:100%; min-height:0; position:relative; }
 #am-concept .am-chat-layout.am-queue-collapsed { grid-template-columns:minmax(0,1fr); }
 #am-concept .am-chat { display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; }
 #am-concept .am-chat-head { display:flex; align-items:center; gap:var(--am-gap-content); padding:0 var(--am-pane-inset) var(--am-space-3); flex-shrink:0; }
@@ -342,7 +342,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept #answer-status:empty { display:none; }
 
 /* Task list panel */
-#am-concept .am-queue-panel { display:flex; flex-direction:column; gap:var(--am-gap-content); min-width:0; min-height:0; padding-inline:var(--am-pane-inset); border-left:1px solid var(--am-line); background:var(--am-bg); }
+#am-concept .am-queue-panel { position:relative; display:flex; flex-direction:column; gap:var(--am-gap-content); min-width:0; min-height:0; padding-inline:var(--am-pane-inset); border-left:1px solid var(--am-line); background:var(--am-bg); }
 #am-concept .am-queue-header { display:flex; flex-direction:column; gap:var(--am-gap-content); flex-shrink:0; font-size:var(--am-text-s); }
 #am-concept .am-queue-header h3 { display:flex; align-items:center; gap:var(--am-gap-control); font-size:var(--am-text-m); }
 #am-concept .am-queue-count { color:var(--am-muted); font-size:var(--am-text-s); font-weight:400; }
@@ -455,15 +455,24 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept #agent-check-status:empty { display:none; }
 
 /* Mac app: the window frame belongs to macOS. */
+/* Drag handles on the sidebar's right edge and the task list's left edge (T-063) */
+#am-concept .am-splitter { position:absolute; top:0; bottom:0; z-index:2; width:var(--am-space-2); cursor:col-resize; touch-action:none; }
+#am-concept .am-sidebar > .am-splitter { right:0; }
+#am-concept .am-queue-panel > .am-splitter { left:0; }
+#am-concept .am-sidebar > .am-splitter:is(:hover,:focus-visible,.am-dragging) { box-shadow:inset -2px 0 var(--am-muted); outline:none; }
+#am-concept .am-queue-panel > .am-splitter:is(:hover,:focus-visible,.am-dragging) { box-shadow:inset 2px 0 var(--am-muted); outline:none; }
+body.am-resizing { cursor:col-resize; user-select:none; }
+
 body.am-native { padding:0; }
 body.am-native #am-concept { max-width:none; margin:0; }
 body.am-native #am-concept .am-window { border:0; border-radius:0; }
 body.am-native #am-concept .am-titlebar { display:none; }
 
 /* Narrow and short windows, touch and motion */
-@media (max-width:900px) { #am-concept .am-chat-layout { grid-template-columns:minmax(0,1fr) 220px; } }
+@media (max-width:900px) { #am-concept .am-chat-layout { grid-template-columns:minmax(0,1fr) min(var(--am-queue,220px),50%); } }
 @media (max-width:620px) {
   body { padding:0; }
+  #am-concept .am-splitter { display:none; }
   #am-concept .am-shell { grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); }
   #am-concept .am-sidebar { flex-direction:row; align-items:center; gap:var(--am-gap-content); padding:var(--am-pad-compact); border-right:0; border-bottom:1px solid var(--am-line); overflow:visible; }
   #am-concept .am-project .am-label, #am-concept .am-computers { display:none; }

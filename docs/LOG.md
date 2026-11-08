@@ -365,3 +365,7 @@ Reports for each step are in [reports/](reports/). The handoff is in [HANDOFF.md
 ## 2026-11-08 — design drafts saved
 
 - Saved the draft mockups that are still being agreed into `docs/mockups/` (settings dialog, per-card switch, Windows window without the system title bar) and wrote the points already agreed into T-061; added T-062 for the title bar. Nothing built; waiting for the owner's approval.
+
+## 2026-11-08 — T-063 widths and empty-click
+
+- The sidebar and the task list can be resized by dragging their edge (double click restores, width remembered). A click on empty sidebar space shows all computers' tasks again. Checked in headless Chromium against the page assets only; not in the native windows.
