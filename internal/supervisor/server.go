@@ -80,6 +80,10 @@ func (s *Supervisor) Server(_ context.Context, action string, payload json.RawMe
 		if err := s.store.SetNetAccept(in.On); err != nil {
 			return nil, err
 		}
+	case "log_share":
+		if err := s.store.SetNetLogShare(in.On); err != nil {
+			return nil, err
+		}
 	default:
 		return nil, errors.New("неизвестное действие сервера")
 	}
@@ -88,7 +92,11 @@ func (s *Supervisor) Server(_ context.Context, action string, payload json.RawMe
 	if err != nil {
 		return nil, err
 	}
-	st.Accept, st.Network = accept, s.networkProblem()
+	share, err := s.store.NetLogShare()
+	if err != nil {
+		return nil, err
+	}
+	st.Accept, st.LogShare, st.Network = accept, share, s.networkProblem()
 	return st, nil
 }
 

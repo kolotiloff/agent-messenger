@@ -161,6 +161,8 @@ type netBody struct {
 	// Usage is the running computer's total for the task (T-058). A
 	// computer before it ignores the field.
 	Usage *TaskUsage `json:"usage,omitempty"`
+	// Lines is how many log lines a log request asks for (T-057).
+	Lines int `json:"lines,omitempty"`
 }
 
 func enqueueNet(tx *sql.Tx, broker, to, opID, task string, b netBody) error {
@@ -464,6 +466,9 @@ func (s *Store) NetUndeliverable(seq int64) error {
 		if _, err := tx.Exec(`DELETE FROM net_outbox WHERE seq=?`, seq); err != nil {
 			return err
 		}
+		if kind == "log_request" || kind == "log" {
+			return logUndeliverable(tx, kind, task)
+		}
 		var project, state string
 		if err := tx.QueryRow(`SELECT project,state FROM tasks WHERE id=?`, task).Scan(&project, &state); err != nil {
 			return err
@@ -538,6 +543,10 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 			return applyCancel(tx, from)
 		case "accepted", "refused", "event", "answer_refused", "progress":
 			return applyReport(tx, from, b)
+		case "log_request":
+			return applyLogRequest(tx, from, b)
+		case "log":
+			return applyLogReply(tx, from, b)
 		}
 		return nil
 	})

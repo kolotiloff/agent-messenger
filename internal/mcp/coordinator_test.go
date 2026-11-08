@@ -226,7 +226,7 @@ func TestCoordinatorHandshakeAndTools(t *testing.T) {
 	for _, tool := range resp["result"].(map[string]any)["tools"].([]any) {
 		names = append(names, tool.(map[string]any)["name"].(string))
 	}
-	if strings.Join(names, ",") != "list_agents,start_task,wait,tasks,answer,continue_task,cancel" {
+	if strings.Join(names, ",") != "list_agents,start_task,wait,tasks,answer,continue_task,cancel,get_log" {
 		t.Fatalf("tools %v", names)
 	}
 	var agents struct {
@@ -555,5 +555,45 @@ func TestCoordinatorContinuesAFinishedTask(t *testing.T) {
 	}
 	if text, ok := c.tool("continue_task", map[string]any{"task_id": id, "op_id": "c1", "text": "Also the map", "agent": "codex"}, nil); ok {
 		t.Fatalf("unknown argument accepted: %s", text)
+	}
+}
+
+func TestCoordinatorGetLog(t *testing.T) {
+	old := coordinatorLogWait
+	coordinatorLogWait = 400 * time.Millisecond
+	t.Cleanup(func() { coordinatorLogWait = old })
+	st := newCoordinatorStore(t)
+	if err := st.SetNetwork("brk-1", "host", []core.NetPeer{{ID: "dev-b", Name: "Ноутбук", Age: 1}}); err != nil {
+		t.Fatal(err)
+	}
+	c := startCoordinator(t, st, "Game")
+	if _, ok := c.tool("get_log", map[string]any{}, nil); ok {
+		t.Fatal("get_log without a computer must fail")
+	}
+	if _, ok := c.tool("get_log", map[string]any{"computer": "dev-x"}, nil); ok {
+		t.Fatal("unknown computer must fail")
+	}
+	var waiting struct {
+		RequestID string `json:"request_id"`
+		State     string `json:"state"`
+		Computer  string `json:"computer"`
+		Next      string `json:"next"`
+	}
+	if text, ok := c.tool("get_log", map[string]any{"computer": "dev-b", "lines": 30}, &waiting); !ok || waiting.State != "waiting" || waiting.RequestID == "" || waiting.Computer != "Ноутбук" || waiting.Next == "" {
+		t.Fatalf("waiting %q %+v", text, waiting)
+	}
+	body := `{"kind":"log","task":"` + waiting.RequestID + `","text":"line 1\nline 2\n"}`
+	if err := st.ApplyNet("brk-1", core.NetIncoming{Seq: 1, From: "dev-b", OpID: "log-reply." + waiting.RequestID, Body: []byte(body)}); err != nil {
+		t.Fatal(err)
+	}
+	var done struct {
+		State string `json:"state"`
+		Text  string `json:"text"`
+	}
+	if text, ok := c.tool("get_log", map[string]any{"request_id": waiting.RequestID}, &done); !ok || done.State != "done" || done.Text != "line 1\nline 2\n" {
+		t.Fatalf("done %q %+v", text, done)
+	}
+	if _, ok := c.tool("get_log", map[string]any{"request_id": "log-nope"}, nil); ok {
+		t.Fatal("unknown request must fail")
 	}
 }

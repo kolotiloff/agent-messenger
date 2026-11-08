@@ -87,6 +87,6 @@ Proposal version 3 in [RETHINK.md](RETHINK.md): the coordinator is the owner's o
 
 **Answer (2026-11-06):** accepted. The coordinator is Claude for now (Codex or Cursor later); planning and approval are agreed in chat under each project's own rules; workers run with normal tools and their project's settings; a clarification resumes the same task session, a new task gets a new session; leftover processes are cleaned up on a best-effort basis. Recorded as D-021, D-022, D-023.
 
-## Q-018 (2026-11-08) Logs of other computers
+### Q-018: Logs of other computers
 
-The owner suggested fetching any computer's Messenger log over the network for debugging. The careful variant until answered: only a computer's own owner-approved coordinator can ask; the log is shortened (last N lines), paths and task texts stay, session IDs and tokens are removed; nothing is sent without the computer's switch «Отдавать журнал по сети» on. Open: should the switch be on by default, and how many lines?
+The owner suggested fetching any computer's Messenger log over the network for debugging. The careful variant until answered: only a computer's own owner-approved coordinator can ask; the log is shortened (last N lines), paths and task texts stay, session IDs and tokens are removed; nothing is sent without the computer's switch «Отдавать журнал по сети» on. Open: should the switch be on by default, and how many lines? **Built (2026-11-08, D-083):** off by default; 200 lines unless the coordinator asks for more, at most 1000 and 64 KB. The owner can say if it should be on by default.
