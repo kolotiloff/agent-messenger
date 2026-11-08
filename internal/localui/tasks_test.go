@@ -73,6 +73,9 @@ func TestTaskWindowRoutes(t *testing.T) {
 		{"/api/agent-models", `{"provider":"codex","models":["a\nb"]}`},
 		{"/api/agent-models", `{"provider":"gemini","models":[]}`},
 		{"/api/agent-remove", `{"provider":"gemini"}`},
+		{"/api/agent-access", `{"provider":"codex"}`},
+		{"/api/agent-access", `{"provider":"gemini","on":true}`},
+		{"/api/agent-access", `{"provider":"codex","on":"yes"}`},
 		{"/api/project-rules", `{"name":"a/b","rules":"x"}`},
 		{"/api/project-rules", `{"name":"Game","rules":"x","extra":1}`},
 		{"/api/task-cancel", `{"task":""}`},
@@ -94,6 +97,9 @@ func TestTaskWindowRoutes(t *testing.T) {
 	}
 	if code, _ := do("POST", "/api/project-rules", `{"name":"Game","rules":"Отчёт до 8 строк."}`); code != 200 || got[len(got)-1].Cmd != "project-rules" || got[len(got)-1].Alias != "Game" || got[len(got)-1].Text != "Отчёт до 8 строк." {
 		t.Fatalf("project rules %d %+v", code, got[len(got)-1])
+	}
+	if code, _ := do("POST", "/api/agent-access", `{"provider":"codex","on":true}`); code != 200 || got[len(got)-1].Cmd != "agent-access" || got[len(got)-1].Provider != "codex" || got[len(got)-1].Text != "1" {
+		t.Fatalf("agent access %d %+v", code, got[len(got)-1])
 	}
 	if code, _ := do("POST", "/api/agent-remove", `{"provider":"cursor"}`); code != 200 || got[len(got)-1].Cmd != "agent-remove" || got[len(got)-1].Provider != "cursor" {
 		t.Fatalf("agent remove %d %+v", code, got[len(got)-1])

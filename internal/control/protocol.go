@@ -309,6 +309,20 @@ func dispatch(handler Handler, request Request) Response {
 			return Response{Error: err.Error()}
 		}
 		return Response{OK: true}
+	case "agent-access":
+		h, ok := handler.(interface {
+			SetAgentFullAccess(string, bool) error
+		})
+		if !ok {
+			return Response{Error: "full access unsupported; update the background client"}
+		}
+		if request.Text != "0" && request.Text != "1" {
+			return Response{Error: "agent-access needs 0 or 1"}
+		}
+		if err := h.SetAgentFullAccess(request.Provider, request.Text == "1"); err != nil {
+			return Response{Error: err.Error()}
+		}
+		return Response{OK: true}
 	case "agent-models":
 		h, ok := handler.(interface {
 			SetAgentModels(string, []string) error

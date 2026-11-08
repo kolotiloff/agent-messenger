@@ -64,6 +64,9 @@ type TaskRunSpec struct {
 	Profile string
 	// Model is the worker's model; empty keeps the CLI's own default.
 	Model string
+	// FullAccess lifts the agent's own permission checks and sandbox
+	// (T-054, D-065). Ignored in the messenger-only test profile.
+	FullAccess bool
 }
 
 // taskModelPattern matches core.ValidTaskModel: a model name never starts
@@ -120,7 +123,11 @@ func claudeTaskArgs(s TaskRunSpec) ([]string, error) {
 	// (D-028): a headless run cannot ask, and Codex workers may write to the
 	// project folder too. Shell commands still follow the project's rules.
 	if s.Profile == ProfileWorker {
-		args = append(args, "--permission-mode", "acceptEdits")
+		mode := "acceptEdits"
+		if s.FullAccess {
+			mode = "bypassPermissions"
+		}
+		args = append(args, "--permission-mode", mode)
 	}
 	if s.Model != "" {
 		args = append(args, "--model", s.Model)
@@ -156,7 +163,11 @@ func codexTaskArgs(s TaskRunSpec) ([]string, error) {
 	} else {
 		// D-023: normal tools in the project folder, which is writable. The
 		// project's own .codex/config.toml applies when the folder is trusted.
-		args = append(args, "--sandbox", "workspace-write")
+		if s.FullAccess {
+			args = append(args, "--dangerously-bypass-approvals-and-sandbox")
+		} else {
+			args = append(args, "--sandbox", "workspace-write")
+		}
 	}
 	server := map[string]any{
 		"command":                     s.Messenger,

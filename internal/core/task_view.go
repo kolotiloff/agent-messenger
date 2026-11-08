@@ -179,6 +179,8 @@ type WindowAgent struct {
 	ProjectToday   int `json:"project_today"`
 	// Models are the names the owner listed for the coordinator (T-043).
 	Models []string `json:"models"`
+	// FullAccess: «Разрешить любые команды» is on (T-054).
+	FullAccess bool `json:"full_access"`
 	// Limit is the last usage-limit state the agent reported (T-044).
 	Limit *AgentLimit `json:"limit,omitempty"`
 }
@@ -244,7 +246,7 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='waiting_owner'),
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='running' AND t.project=?),
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.project=? AND t.created_at>=?),
- a.models, a.limit_state
+ a.models, a.limit_state, a.full_access
  FROM computer_agents a WHERE a.computer=? ORDER BY a.provider`, project, project, today, computer)
 		if err != nil {
 			return err
@@ -252,7 +254,7 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 		for rows.Next() {
 			var a WindowAgent
 			var models, limit string
-			if err := rows.Scan(&a.Agent, &a.CLI, &a.Profile, &a.Env, &a.Running, &a.Waiting, &a.ProjectRunning, &a.ProjectToday, &models, &limit); err != nil {
+			if err := rows.Scan(&a.Agent, &a.CLI, &a.Profile, &a.Env, &a.Running, &a.Waiting, &a.ProjectRunning, &a.ProjectToday, &models, &limit, &a.FullAccess); err != nil {
 				rows.Close()
 				return err
 			}

@@ -203,7 +203,7 @@
       case 'waiting_owner':return ['Ждёт вашего ответа','am-status-wait'];
       case 'waiting_coordinator':return ['Ждёт ответа координатора','am-status-run'];
       case 'done':return ['Завершил за '+minutes(from,end),'am-muted'];
-      case 'failed':return failureStatus(t)||['Не прошёл проверку через '+minutes(from,end),'am-status-bad'];
+      case 'failed':return failureStatus(t)||['Ошибка через '+minutes(from,end),'am-status-bad'];
       case 'interrupted':return ['Прервался через '+minutes(from,end),'am-status-bad'];
       case 'blocked':return ['Заблокирован через '+minutes(from,end),'am-status-bad'];
       case 'cancelled':return ['Отменён','am-muted'];
@@ -514,7 +514,7 @@
         group=null;continue;
       }
       if(it.kind==='outcome'){
-        group=null;const text={failed:t.remote&&!t.remote.from?'Задача не выполнена':'Запуск не прошёл проверку',blocked:t.remote&&!t.remote.from?'Задача заблокирована: результат на другом компьютере неизвестен':'Задача заблокирована: процесс не завершился полностью',interrupted:'Клиент перезапустился во время работы; результат неизвестен',cancelled:'Задача отменена'}[it.state]||it.state;
+        group=null;const text={failed:t.remote&&!t.remote.from?'Задача не выполнена':'Запуск завершился с ошибкой',blocked:t.remote&&!t.remote.from?'Задача заблокирована: результат на другом компьютере неизвестен':'Задача заблокирована: процесс не завершился полностью',interrupted:'Клиент перезапустился во время работы; результат неизвестен',cancelled:'Задача отменена'}[it.state]||it.state;
         const note=el('div',undefined,'am-outcome '+(it.state==='cancelled'?'am-muted':'am-status-bad'));note.append(el('p',text));
         const why=t.remote&&!t.remote.from?refusalText(it.text,t.remote.name):'';if(why)note.append(el('p',why));
         if(it.text)note.append(el('p',it.text,'am-small am-muted'));
@@ -609,6 +609,7 @@
           pair('Лимит',text,l.state==='exhausted'?'am-status-bad':l.state==='warning'?'am-status-wait':'am-status-good');
           if(l.observed_at)dl.lastChild.title='По данным последней задачи, '+clock(l.observed_at);
         }
+        if(a.full_access)pair('Команды','Любые','am-status-wait');
       }
       card.append(dl);
       const running=a?.project_running||0,today=a?.project_today||0;
@@ -890,7 +891,7 @@
     $('agent-setup-title').textContent='Настройка: '+names[provider];
     $('agent-setup-note').hidden=provider!=='cursor';
     $('agent-cli').value=a?.cli||found?.cli||'';$('agent-profile').value=a?.environment||found?.environment||'';
-    $('agent-models').value=(a?.models||[]).join('\n');
+    $('agent-models').value=(a?.models||[]).join('\n');$('agent-full').checked=!!a?.full_access;
     $('agent-models-note').textContent=provider==='claude'?'Claude сам принимает opus, sonnet и haiku. Сюда можно добавить полные названия моделей Claude.':'Пишите названия точно так, как их принимает сам агент. Координатор сможет выбрать только модель из этого списка; если список пуст, задачи идут на модели по умолчанию.';
     $('agent-check-status').textContent='';$('agent-save-status').textContent='';$('agent-check-result').hidden=true;$('agent-login').hidden=true;
     $('agent-remove').hidden=!a;
@@ -950,6 +951,7 @@
     $('agent-save').disabled=true;$('agent-save-status').textContent='Сохраняем…';
     try{await postAPI('/api/agent-set',{provider:setupProvider,cli:$('agent-cli').value.trim(),environment});
       await postAPI('/api/agent-models',{provider:setupProvider,models:$('agent-models').value.split('\n').map(m=>m.trim()).filter(Boolean)});
+      if($('agent-full').checked!==!!view?.agents?.find(x=>x.agent===setupProvider)?.full_access)await postAPI('/api/agent-access',{provider:setupProvider,on:$('agent-full').checked});
       $('agent-save-status').textContent='Сохранено.';$('agent-remove').hidden=false;viewSignature='';await refresh();checkAgent();}
     catch(error){$('agent-save-status').textContent=error.message;}
     finally{$('agent-save').disabled=false;}

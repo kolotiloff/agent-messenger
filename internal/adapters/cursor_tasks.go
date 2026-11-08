@@ -159,6 +159,9 @@ func cursorTaskArgs(s TaskRunSpec) ([]string, error) {
 		// approved, as for the other workers. The project's own Cursor
 		// rules and the owner's sandbox setting still apply.
 		args = append(args, "--force")
+		if s.FullAccess {
+			args = append(args, "--sandbox", "disabled")
+		}
 	}
 	if s.Model != "" {
 		args = append(args, "--model", s.Model)

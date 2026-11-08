@@ -417,6 +417,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-dialog-header { display:flex; align-items:center; justify-content:space-between; gap:var(--am-gap-section); padding:var(--am-space-4); border-bottom:1px solid var(--am-line); flex-shrink:0; }
 #am-concept .am-dialog-body { min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; padding:0 calc(var(--am-space-4) - var(--am-gutter, 0px)) var(--am-space-4) var(--am-space-4); }
 #am-concept .am-setup-body { display:flex; flex-direction:column; gap:var(--am-gap-section); padding-top:var(--am-space-4); }
+#am-concept .am-check-row { display:flex; align-items:center; gap:var(--am-gap-control); cursor:pointer; }
+#am-concept .am-check-row input { margin:0; accent-color:var(--am-check); }
 #am-concept .am-check-result { display:grid; gap:var(--am-gap-content); margin:0; }
 #am-concept .am-check-result dt { color:var(--am-muted); font-size:var(--am-text-s); }
 #am-concept .am-check-result dd { margin:0; overflow-wrap:anywhere; }
