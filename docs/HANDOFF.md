@@ -8,6 +8,14 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-09 (end of night) by Claude Code.
+
+- **Released tonight:** preview.50 (T-057 log of another computer), preview.51 (T-071 last action and tokens per task, #81), preview.52 (T-070 readiness in `list_agents`, #82), preview.53 (T-072 resource locks, #83). T-073 decided without code (D-087). T-049 is finished except item 6 (Q-024).
+- Backlog tidied: T-030 was already fixed with T-029 (per-route write deadline); T-019 is done by T-059 (Q-001 answered).
+- **Owner's tests (not done here):** with two computers, ask the coordinator for `list_agents` (accepts tasks, project folder), start two tasks with the same `lock` on one computer and watch the second wait, and look at `tasks` for the last action and tokens. Everything was checked only with fake CLIs.
+- **Waiting on the owner:** Q-024 (T-049 item 6), Q-023, Q-022, Q-018 default, Q-012 (T-028).
+- **Next:** nothing in the owner's order is left. Open backlog items need the owner (T-013 signing, T-014 Intel Mac, T-028 consent) or are optional (T-017, T-036).
+
 Updated 2026-11-08 (night, T-057) by Claude Code.
 
 - **Released:** preview.50 (T-057 remote log), preview.51 (T-071 last action and tokens, #81), preview.52 (T-070 readiness, #82). T-072 resource locks goes out as preview.53.

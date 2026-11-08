@@ -11,6 +11,7 @@ Asked 2026-11-08. The coordinator's wishlist asks for one list with the owner's 
 
 ### Q-001: Which language should the app UI use?
 The window and CLI messages are in Russian; code and docs are now in English. **Options:** keep Russian; switch to English; support both with a language setting. **Blocks:** T-019.
+**Answer (2026-11-08, T-059):** both. The owner asked for «Язык» in the window: Russian by default, English as a choice.
 
 ### Q-002: May the old remote branches be deleted?
 There are about 26 `codex/*` and `cursor/*` branches. Their content is in `main`. Four of them have a separate history from before `main` was rebuilt, so they hold the original commit history. **Options:** delete all; delete only the branches already merged into `main` and keep the four; keep all. **Blocks:** T-018.
