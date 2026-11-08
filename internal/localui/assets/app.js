@@ -249,9 +249,8 @@
     item.addEventListener('click',pick);item.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();pick();}});
     menu.replaceChildren(item);menu.style.left=x+'px';menu.style.top=y+'px';menu.showPopover();item.focus();
   }
-  // One line per agent program, with its state. The coordinator is a mark on
-  // its program's line, not a separate line (approved mockup). live is false
-  // when the computer cannot be reached.
+  // One line per agent program, with its state (D-064: no coordinator mark).
+  // live is false when the computer cannot be reached.
   function agentLines(agents,coordinatorClient,live){
     const lines=el('div',undefined,'am-machine-agents');
     const [coordProvider,coordLabel]=coordinatorClient!==null?coordinatorName(coordinatorClient):['',''];
@@ -965,7 +964,7 @@
   // «Выбрать…»: the local server opens the system's own dialog (D-053); the
   // Mac app keeps its native folder dialog for the project folder.
   async function pick(field,kind,status){
-    const input=$(field);$(status).textContent='Выберите в открывшемся окне…';
+    const input=$(field);$(status).textContent='';
     try{
       const response=await fetch('/api/pick',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({kind,current:input.value.trim()}),cache:'no-store',signal:AbortSignal.timeout(610000)});
       let result={};try{result=await response.json();}catch(_){}
