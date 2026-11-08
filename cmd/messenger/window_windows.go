@@ -26,6 +26,8 @@ func showWindow(ctx context.Context, cancel context.CancelFunc, home string, pag
 		AutoFocus: true,
 		WindowOptions: webview2.WindowOptions{
 			Title: "Agent Messenger", Width: 1280, Height: 820, Center: true,
+			// The icon from rsrc_windows_*.syso (scripts/gen-icon, T-045).
+			IconId: 1,
 		},
 	})
 	if w == nil {
@@ -41,8 +43,11 @@ func showWindow(ctx context.Context, cancel context.CancelFunc, home string, pag
 	_ = w.Bind("amTitleBar", func(dark bool) { w.Dispatch(func() { colorTitleBar(hwnd, dark) }) })
 	colorTitleBar(hwnd, systemDark())
 	w.Navigate(page.address)
-	// An update or Ctrl+C closes the window too.
-	stop := context.AfterFunc(ctx, w.Terminate)
+	// An update or Ctrl+C closes the window too. Terminate posts WM_QUIT to
+	// the calling thread's queue, so it must run on the window's thread:
+	// called from another goroutine it was lost and the window stayed open
+	// after «Обновиться» (T-045).
+	stop := context.AfterFunc(ctx, func() { w.Dispatch(w.Terminate) })
 	defer stop()
 	w.Run()
 }

@@ -2,6 +2,12 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (T-045 icons, Windows update restart)
+
+- The owner's Linux agent said there is no menu entry: our doc was stale (the first `messenger open` adds one since preview.35), but the entry had no icon. Now Linux gets the icon (SVG in the user's icon folder) and the page has a favicon. Windows had no icon at all: `scripts/gen-icon` draws the Mac icon with the standard library and writes `cmd/messenger/rsrc_windows_{amd64,arm64}.syso` (a hand-written COFF resource; an external resource tool was not allowed to run here); the window loads it.
+- The owner pressed «Обновиться» on Windows: «Обновлено. Окно откроется заново.», then nothing. The window was closed by `Terminate` from another goroutine; it posts WM_QUIT to the calling thread, so it was lost. Now it runs on the window's thread.
+- Verified here: the PE files built for amd64 and arm64 contain the icon resources at relocated addresses (read back with `debug/pe`); tests of the generator and the Linux entry; `check.sh`. Not verified: the icon and the restart on a real Windows; the icon in a Linux desktop.
+
 ## 2026-11-08 — Claude Code (T-044 limits per agent)
 
 - Each agent's last reported usage limit is kept and given to the coordinator as a `limit` field of `list_agents`, shown on the agent card («Лимит») and sent to the other computers (D-059). The coordinator asked for a field, not text in the report.
