@@ -69,6 +69,9 @@ func TestTaskWindowRoutes(t *testing.T) {
 		{"/api/project-create", `{"name":"a/b","folder":"/x"}`},
 		{"/api/project-create", `{"name":"Game","folder":"relative"}`},
 		{"/api/agent-set", `{"provider":"gemini","cli":"/bin/x"}`},
+		{"/api/agent-models", `{"provider":"codex","models":["--yolo"]}`},
+		{"/api/agent-models", `{"provider":"codex","models":["a\nb"]}`},
+		{"/api/agent-models", `{"provider":"gemini","models":[]}`},
 		{"/api/task-cancel", `{"task":""}`},
 		{"/api/coordinator-connect", `{"project":"a/b"}`},
 		{"/api/coordinator-connect", `{"project":"Game","cli":"/bin/sh"}`},
@@ -82,6 +85,9 @@ func TestTaskWindowRoutes(t *testing.T) {
 	}
 	if code, _ := do("POST", "/api/project-create", `{"name":"Моя игра","folder":"/Users/me/Game"}`); code != 200 || got[len(got)-1].Cmd != "project-create" || got[len(got)-1].Workspace != "/Users/me/Game" {
 		t.Fatalf("create %d %+v", code, got[len(got)-1])
+	}
+	if code, _ := do("POST", "/api/agent-models", `{"provider":"codex","models":["gpt-5.5","gpt-5.5-mini"]}`); code != 200 || got[len(got)-1].Cmd != "agent-models" || got[len(got)-1].Provider != "codex" || got[len(got)-1].Text != "gpt-5.5\ngpt-5.5-mini" {
+		t.Fatalf("agent models %d %+v", code, got[len(got)-1])
 	}
 	if code, _ := do("POST", "/api/coordinator-connect", `{"project":"Моя игра"}`); code != 200 || got[len(got)-1].Cmd != "coordinator-connect" || got[len(got)-1].Alias != "Моя игра" {
 		t.Fatalf("coordinator connect %d %+v", code, got[len(got)-1])

@@ -19,11 +19,15 @@ const HostPeer = "host"
 const (
 	maxPresenceAgents = 16
 	maxAgentCount     = 9999
-	maxPresenceBody   = 8 << 10
+	maxPresenceBody   = 32 << 10
+	maxPresenceModels = 12
 )
 
 // PresenceInterval is how often a computer reports its agents.
 const PresenceInterval = 15 * time.Second
+
+// modelName matches core.ValidTaskModel's names.
+var modelName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/\[\]-]{0,79}$`)
 
 var agentName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 
@@ -32,6 +36,10 @@ type PresenceAgent struct {
 	Agent   string `json:"agent"`
 	Running int    `json:"running"`
 	Waiting int    `json:"waiting_owner"`
+	// Models are the model names the owner listed for the agent (T-043).
+	// Left out when empty, so a host before preview.37 still accepts the
+	// report of a computer without a list.
+	Models []string `json:"models,omitempty"`
 }
 
 // Presence is what a computer reports about itself. Name is used only for
@@ -77,6 +85,14 @@ func (p Presence) valid() bool {
 			return false
 		}
 		seen[a.Agent] = true
+		if len(a.Models) > maxPresenceModels {
+			return false
+		}
+		for _, m := range a.Models {
+			if !modelName.MatchString(m) {
+				return false
+			}
+		}
 	}
 	return true
 }

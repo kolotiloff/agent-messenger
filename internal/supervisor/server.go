@@ -101,7 +101,11 @@ func (s *Supervisor) presence() (broker.Presence, error) {
 	}
 	p := broker.Presence{Agents: []broker.PresenceAgent{}, Coordinator: clipName(coordinator)}
 	for _, a := range agents {
-		p.Agents = append(p.Agents, broker.PresenceAgent{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting})
+		pa := broker.PresenceAgent{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting}
+		if len(a.Models) > 0 {
+			pa.Models = a.Models
+		}
+		p.Agents = append(p.Agents, pa)
 	}
 	if name, err := s.store.ComputerName(); err == nil {
 		p.Name = clipName(name)

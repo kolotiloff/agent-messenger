@@ -867,6 +867,8 @@
     $('agent-setup-title').textContent='Настройка: '+names[provider];
     $('agent-setup-note').hidden=provider!=='cursor';
     $('agent-cli').value=a?.cli||found?.cli||'';$('agent-profile').value=a?.environment||found?.environment||'';
+    $('agent-models').value=(a?.models||[]).join('\n');
+    $('agent-models-note').textContent=provider==='claude'?'Claude сам принимает opus, sonnet и haiku. Сюда можно добавить полные названия моделей Claude.':'Пишите названия точно так, как их принимает сам агент. Координатор сможет выбрать только модель из этого списка; если список пуст, задачи идут на модели по умолчанию.';
     $('agent-check-status').textContent='';$('agent-save-status').textContent='';$('agent-check-result').hidden=true;$('agent-login').hidden=true;
     $('agent-setup').showModal();
   }
@@ -890,7 +892,9 @@
     const found=discovery.find(d=>d.provider===setupProvider);
     let environment=$('agent-profile').value.trim();if(found&&environment===found.environment)environment='';
     $('agent-save').disabled=true;$('agent-save-status').textContent='Сохраняем…';
-    try{await postAPI('/api/agent-set',{provider:setupProvider,cli:$('agent-cli').value.trim(),environment});$('agent-save-status').textContent='Агент подключён исполнителем.';viewSignature='';await refresh();}
+    try{await postAPI('/api/agent-set',{provider:setupProvider,cli:$('agent-cli').value.trim(),environment});
+      await postAPI('/api/agent-models',{provider:setupProvider,models:$('agent-models').value.split('\n').map(m=>m.trim()).filter(Boolean)});
+      $('agent-save-status').textContent='Агент подключён исполнителем.';viewSignature='';await refresh();}
     catch(error){$('agent-save-status').textContent=error.message;}
     finally{$('agent-save').disabled=false;}
   }

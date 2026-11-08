@@ -2,6 +2,7 @@ package broker
 
 import (
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -24,7 +25,7 @@ func TestPresenceRoster(t *testing.T) {
 	})
 	member.SetPresence(func() (Presence, error) {
 		// A device cannot rename itself through its report.
-		return Presence{Name: "Чужое имя", Agents: []PresenceAgent{{Agent: "codex", Waiting: 2}}}, nil
+		return Presence{Name: "Чужое имя", Agents: []PresenceAgent{{Agent: "codex", Waiting: 2, Models: []string{"gpt-5.5", "gpt-5.5-mini"}}}}, nil
 	})
 	host.ReportPresence(ctx(t))
 	member.ReportPresence(ctx(t))
@@ -33,14 +34,14 @@ func TestPresenceRoster(t *testing.T) {
 	if len(peers) != 1 || !peers[0].Host || peers[0].Name != "Mac Studio" || peers[0].Coordinator != "claude-code" || peers[0].Age < 0 || peers[0].Age > 5 {
 		t.Fatalf("member sees %+v", peers)
 	}
-	if len(peers[0].Agents) != 2 || peers[0].Agents[0] != (PresenceAgent{Agent: "claude", Running: 1}) {
+	if len(peers[0].Agents) != 2 || !reflect.DeepEqual(peers[0].Agents[0], PresenceAgent{Agent: "claude", Running: 1}) {
 		t.Fatalf("host agents %+v", peers[0].Agents)
 	}
 	if ms := member.Status().Member; !ms.Reachable || ms.CheckedAt == "" {
 		t.Fatalf("a report is a successful check: %+v", ms)
 	}
 	peers = host.Status().Peers
-	if len(peers) != 1 || peers[0].Host || peers[0].Name != "Ноутбук" || len(peers[0].Agents) != 1 || peers[0].Agents[0].Waiting != 2 {
+	if len(peers) != 1 || peers[0].Host || peers[0].Name != "Ноутбук" || len(peers[0].Agents) != 1 || peers[0].Agents[0].Waiting != 2 || !reflect.DeepEqual(peers[0].Agents[0].Models, []string{"gpt-5.5", "gpt-5.5-mini"}) {
 		t.Fatalf("host sees %+v", peers)
 	}
 
@@ -48,6 +49,7 @@ func TestPresenceRoster(t *testing.T) {
 	c := *member.member
 	for _, body := range []any{
 		map[string]any{"agents": []map[string]any{{"agent": "Not A Name"}}},
+		map[string]any{"agents": []map[string]any{{"agent": "codex", "models": []string{"--yolo"}}}},
 		map[string]any{"agents": []map[string]any{{"agent": "codex", "running": -1}}},
 		map[string]any{"agents": []map[string]any{{"agent": "codex"}, {"agent": "codex"}}},
 		map[string]any{"agents": []any{}, "extra": true},

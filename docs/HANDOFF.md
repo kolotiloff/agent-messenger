@@ -8,6 +8,12 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-08 (T-043) by Claude Code.
+
+- **preview.36** released from `main` 722c51f (PR #63, T-041/T-042); check the assets.
+- **T-043 on `claude/t043-agent-models`:** model names per agent, owner-listed, for the coordinator (D-058). Verified with tests only.
+- **Next:** T-044, usage limits per agent as a separate field the coordinator can read; then preview.37 with T-043 and T-044.
+
 Updated 2026-11-08 (T-042) by Claude Code.
 
 - **T-042 on `claude/t041-sparkle-retry` (PR #63):** after the owner's Mac → Windows test: progress and «Принято» on the starting computer (D-055), grouped tool actions, a computer name for every computer (host included), tasks of other computers accepted by default (D-056), Codex trust read from all `config.toml` forms, «Войти в аккаунт» / «Установить …» buttons, a frameless Windows window with a themed title bar (D-057).
