@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (T-062 Windows window without title bar)
+
+- Windows window without the system title bar (D-076): own minimise, maximise, close; drag by the tab row and the sidebar top; double click maximises. Built on `claude/t061-agent-cards`, released together with T-061.
+- Verified: Windows cross-build with vet (x64, ARM64), page controls in headless Chromium with a stubbed bridge. Not verified on a real Windows computer.
+
 ## 2026-11-08 — Claude Code (T-061 agent cards)
 
 - Agent cards and the settings dialog built as approved (D-070, D-075): check, gear and on/off switch per card; four steps; one «Задачи» button. The switch keeps the agent's settings and hides it from the coordinator and other computers. Claude lists `haiku, sonnet, opus` from the start; models are one comma-separated field. Screenshot: docs/mockups/agent-cards-built.png (stubbed data).

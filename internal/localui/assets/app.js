@@ -1135,6 +1135,32 @@
     try{await postAPI('/api/agent-models',{provider:setupProvider,models});viewSignature='';await refresh();}
     catch(error){setStatus('agent-save-status',error.message);}
   }
+  // Windows without the system title bar (T-062): the page draws minimise,
+  // maximise and close at the top right, and the empty top of the window
+  // (the tab row and the top of the sidebar) drags it; a double click there
+  // maximises or restores it.
+  function framelessWindow(){
+    if(window.amDesktop!=='windows'||!window.amFrameless||typeof window.amWindow!=='function')return;
+    document.body.classList.add('am-frameless');
+    const bar=el('div',undefined,'am-window-controls');
+    const make=(action,label,paths,cls)=>{const b=el('button',undefined,'am-window-btn'+(cls?' '+cls:''));b.type='button';b.title=label;b.setAttribute('aria-label',label);b.tabIndex=-1;b.append(svgIcon(paths));b.addEventListener('click',()=>window.amWindow(action));bar.append(b);};
+    make('minimize','Свернуть',['M5 12h14']);
+    make('maximize','Развернуть',['M6 6h12v12H6z']);
+    make('close','Закрыть',['M6 6l12 12M18 6L6 18'],'am-window-close');
+    root.append(bar);
+    const interactive='button,input,select,textarea,a,[role=switch],[popover],.am-machine-card,.am-project,.am-splitter,.am-window-controls';
+    const dragZone=e=>{
+      if(e.button!==0||e.target.closest(interactive))return false;
+      if(e.target.closest('.am-tabs'))return true;
+      const side=e.target.closest('.am-sidebar');
+      return !!side&&e.clientY<side.getBoundingClientRect().top+40;
+    };
+    document.addEventListener('mousedown',e=>{
+      if(!dragZone(e))return;
+      e.preventDefault();
+      window.amWindow(e.detail===2?'maximize':'drag');
+    });
+  }
   window.messengerRefresh=()=>{viewSignature='';refresh();};
   // «Выбрать»: the local server opens the system's own dialog (D-053); the
   // Mac app keeps its native folder dialog for the project folder.
@@ -1286,6 +1312,7 @@
   $('access-toggle').addEventListener('click',toggleAllAccess);
   $('project-pick').addEventListener('click',()=>{folderTarget='project-folder';if(window.webkit?.messageHandlers?.folder)window.webkit.messageHandlers.folder.postMessage('pick');else pick('project-folder','folder','project-status');});
   $('project-page-pick').addEventListener('click',()=>{folderTarget='project-page-folder';if(window.webkit?.messageHandlers?.folder)window.webkit.messageHandlers.folder.postMessage('pick');else pick('project-page-folder','folder','project-page-status');});
+  framelessWindow();
   $('agent-cli-pick').addEventListener('click',()=>pick('agent-cli','file','agent-save-status'));
   $('agent-profile-pick').addEventListener('click',()=>pick('agent-profile','folder','agent-save-status'));
   $('restart-dialog').addEventListener('cancel',event=>event.preventDefault());

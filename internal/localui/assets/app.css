@@ -544,3 +544,13 @@ body.am-native #am-concept .am-panel-toggle { margin-left:auto; }
 #am-concept .am-field-sep { padding-top:var(--am-space-4); border-top:1px solid var(--am-line); }
 #am-concept button.am-close-x { color:var(--am-muted); display:inline-flex; align-items:center; justify-content:center; }
 #am-concept button.am-close-x svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; }
+
+/* Windows without the system title bar (T-062): the window's own buttons at
+   the top right, sized like the system's. */
+#am-concept .am-window-controls { position:fixed; top:0; right:0; z-index:50; display:flex; }
+#am-concept button.am-window-btn { width:46px; height:32px; min-height:0; padding:0; border-radius:0; background:transparent; color:var(--am-text); display:inline-flex; align-items:center; justify-content:center; }
+#am-concept button.am-window-btn svg { width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:1.4; }
+#am-concept button.am-window-btn:is(:hover,:focus-visible) { background:var(--am-soft); }
+#am-concept button.am-window-btn.am-window-close:is(:hover,:focus-visible) { background:#c42b1c; color:#fff; }
+body.am-frameless #am-concept .am-tabs { padding-right:calc(3 * 46px); }
+body.am-frameless #am-concept .am-tabs, body.am-frameless #am-concept .am-sidebar { user-select:none; }
