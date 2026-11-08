@@ -55,8 +55,19 @@ func runOpen(root string, args []string, out io.Writer) error {
 	} else {
 		desktop.SelfUpdate = windowSelfUpdate(ctx, home, cancel, &next)
 	}
-	opener := &windowOpener{root: root, out: out}
-	err = localui.RunWindow(ctx, root, 0, opener, desktop)
+	opener := &windowOpener{root: root, out: out, ready: make(chan windowPage, 1)}
+	served := make(chan error, 1)
+	go func() { served <- localui.RunWindow(ctx, root, 0, opener, desktop) }()
+	select {
+	case page := <-opener.ready:
+		// The program's own window (D-054); the browser only when there is
+		// none. Closing the window closes the page; the client and its tasks
+		// keep running in the background.
+		showWindow(ctx, cancel, home, page, out)
+		cancel()
+		err = <-served
+	case err = <-served:
+	}
 	opener.cleanup()
 	if program := next.get(); program != "" && err == nil {
 		fmt.Fprintln(out, "Программа обновлена. Окно открывается заново.")
@@ -65,13 +76,18 @@ func runOpen(root string, args []string, out io.Writer) error {
 	return err
 }
 
-// windowOpener receives the page address from the server and opens it once.
+// windowPage is the page's address and the private file forwarding to it.
+type windowPage struct{ address, file string }
+
+// windowOpener receives the page address from the server once and hands it
+// to the window.
 type windowOpener struct {
-	root string
-	out  io.Writer
-	mu   sync.Mutex
-	file string
-	done bool
+	root  string
+	out   io.Writer
+	ready chan windowPage
+	mu    sync.Mutex
+	file  string
+	done  bool
 }
 
 func (o *windowOpener) Write(p []byte) (int, error) {
@@ -90,13 +106,22 @@ func (o *windowOpener) Write(p []byte) (int, error) {
 		return 0, err
 	}
 	o.file = file
-	opened := openInBrowser(file)
-	fmt.Fprintln(o.out, "Agent Messenger открыт в браузере.")
-	if opened != nil {
-		fmt.Fprintf(o.out, "Браузер не открылся сам. Откройте в браузере этот файл:\n%s\n", file)
+	if o.ready != nil {
+		o.ready <- windowPage{address, file}
 	}
-	fmt.Fprintln(o.out, "Страница работает, пока открыто это окно. Закройте его или нажмите Ctrl+C, чтобы закрыть страницу. Клиент и задачи продолжат работать в фоне.")
 	return len(p), nil
+}
+
+// showInBrowser is the window when the program cannot show its own: the
+// page in the default browser, kept until this program is closed.
+func showInBrowser(ctx context.Context, page windowPage, out io.Writer) {
+	opened := openInBrowser(page.file)
+	fmt.Fprintln(out, "Agent Messenger открыт в браузере.")
+	if opened != nil {
+		fmt.Fprintf(out, "Браузер не открылся сам. Откройте в браузере этот файл:\n%s\n", page.file)
+	}
+	fmt.Fprintln(out, "Страница работает, пока открыто это окно. Закройте его или нажмите Ctrl+C, чтобы закрыть страницу. Клиент и задачи продолжат работать в фоне.")
+	<-ctx.Done()
 }
 
 func (o *windowOpener) cleanup() {

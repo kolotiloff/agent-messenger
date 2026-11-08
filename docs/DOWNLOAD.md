@@ -24,7 +24,7 @@ Only the Mac app comes in a zip: a Mac app is a folder, and a browser cannot dow
 
 1. Download `AgentMessenger-Windows-x64.exe` (or `-ARM64.exe` on ARM) and put it in any folder, for example `Documents\Agent Messenger`.
 2. Double-click it. The program is not signed, so SmartScreen may warn: «Подробнее» → «Выполнить в любом случае».
-3. A console window opens and the browser shows Agent Messenger. The page works while the console is open; closing the console closes only the page, and the background client keeps running. To come back to the window, start the program again.
+3. Agent Messenger opens in a window of its own (Windows' built-in WebView2 engine, D-054); the console window that Windows opens for a double click closes. Closing the window closes only the window; the background client and its tasks keep running. To come back, start the program again. On a computer without WebView2 the page opens in the browser instead.
 4. To stop the background client: in a console in that folder, `AgentMessenger-Windows-x64.exe shutdown`.
 
 Data: `%LOCALAPPDATA%\AgentMessenger`. Later versions arrive in the window («Доступно обновление» → «Обновиться»); the program replaces its own file and opens the window again ([updates](UPDATES.md#windows-and-linux)). Keep the program in a folder you can write to, not in `Program Files`.
@@ -39,7 +39,7 @@ chmod +x AgentMessenger-Linux-x64
 ./AgentMessenger-Linux-x64 open
 ```
 
-A browser download does not keep the "may run" mark of a file, hence `chmod +x` once. `./AgentMessenger-Linux-x64 install` optionally puts the program in `~/.local/bin` as `messenger`. If no browser opens (no `xdg-open`), the program prints the path of a file to open in a browser.
+A browser download does not keep the "may run" mark of a file, hence `chmod +x` once. `./AgentMessenger-Linux-x64 install` optionally puts the program in `~/.local/bin` as `messenger`. The window opens on its own, without tabs or an address bar, through Chrome, Chromium, Edge or Brave when one is installed (D-054); after the first start Agent Messenger is in the application menu. Without them the page opens in the default browser, or the program prints the path of a file to open.
 
 Data: `$XDG_DATA_HOME/agent-messenger` or `~/.local/share/agent-messenger`. To stop the background client: `./AgentMessenger-Linux-x64 shutdown`. Later versions arrive in the window («Доступно обновление» → «Обновиться»), as on Windows; a program installed with `install` is updated there as well ([updates](UPDATES.md#windows-and-linux)).
 
