@@ -281,6 +281,11 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	if result.Conflicting {
 		ev.Detail = "the CLI reported two conversation ids"
 	}
+	// T-044: keep the agent's last reported limit for the coordinator. It
+	// only informs; it never changes the run's outcome.
+	if limit, ok := agentLimit(result); ok {
+		_ = s.store.RecordAgentLimit(task.Provider, limit)
+	}
 	// D-021: after the exit, signal the group and require it to be empty.
 	_ = platform.SignalGroup(obs.PGID)
 	deadline := time.Now().Add(taskGroupWait)
@@ -319,4 +324,32 @@ func ensureCursorTaskServer(messenger, profile string) error {
 		}
 	}
 	return nil
+}
+
+// agentLimit is the limit state a run showed: what the agent reported, or
+// "exhausted" when the run failed on its usage limit.
+func agentLimit(r adapters.TaskEventResult) (core.AgentLimit, bool) {
+	var l core.AgentLimit
+	switch {
+	case r.Limit != nil:
+		l.State, l.Window = r.Limit.State, r.Limit.Window
+		if r.Limit.HasPercent {
+			p := r.Limit.UsedPercent
+			l.UsedPercent = &p
+		}
+		if !r.Limit.ResetAt.IsZero() {
+			l.ResetsAt = r.Limit.ResetAt.UTC().Format(time.RFC3339)
+		}
+	case r.Reason == adapters.ReasonUsageLimit:
+		l.State = adapters.LimitExhausted
+	default:
+		return l, false
+	}
+	if r.Reason == adapters.ReasonUsageLimit {
+		l.State = adapters.LimitExhausted
+		if l.ResetsAt == "" && !r.ResetAt.IsZero() {
+			l.ResetsAt = r.ResetAt.UTC().Format(time.RFC3339)
+		}
+	}
+	return l, true
 }

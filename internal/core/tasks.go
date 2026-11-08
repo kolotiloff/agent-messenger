@@ -1540,6 +1540,8 @@ type AgentSummary struct {
 	// Models are the names the owner listed; for Codex and Cursor only
 	// these may be passed to start_task (T-043).
 	Models []string `json:"models"`
+	// Limit is the last usage-limit state the agent reported (T-044).
+	Limit *AgentLimit `json:"limit,omitempty"`
 }
 
 // ComputerSummary is one computer as list_agents shows it for a project.
@@ -1578,7 +1580,7 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 		rows, err := tx.Query(`SELECT a.provider,a.profile,
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='running'),
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state IN ('waiting_coordinator','waiting_owner')),
- a.models
+ a.models, a.limit_state
  FROM computer_agents a WHERE a.computer=? ORDER BY a.provider`, computer)
 		if err != nil {
 			return err
@@ -1586,11 +1588,12 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 		defer rows.Close()
 		for rows.Next() {
 			var a AgentSummary
-			var models string
-			if err := rows.Scan(&a.Agent, &a.Profile, &a.Running, &a.Waiting, &models); err != nil {
+			var models, limit string
+			if err := rows.Scan(&a.Agent, &a.Profile, &a.Running, &a.Waiting, &models, &limit); err != nil {
 				return err
 			}
 			a.Models = splitModels(models)
+			a.Limit = parseAgentLimit(limit)
 			c.Agents = append(c.Agents, a)
 		}
 		return rows.Err()
@@ -1611,7 +1614,7 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 			if models == nil {
 				models = []string{}
 			}
-			o.Agents = append(o.Agents, AgentSummary{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting, Models: models})
+			o.Agents = append(o.Agents, AgentSummary{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting, Models: models, Limit: a.Limit})
 		}
 		list = append(list, o)
 	}

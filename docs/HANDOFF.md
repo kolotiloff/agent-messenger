@@ -12,7 +12,8 @@ Updated 2026-11-08 (T-043) by Claude Code.
 
 - **preview.36** released from `main` 722c51f (PR #63, T-041/T-042); check the assets.
 - **T-043 on `claude/t043-agent-models`:** model names per agent, owner-listed, for the coordinator (D-058). Verified with tests only.
-- **Next:** T-044, usage limits per agent as a separate field the coordinator can read; then preview.37 with T-043 and T-044.
+- **T-044 on `claude/t044-agent-limits` (on top of T-043):** each agent's last reported limit as a `limit` field (D-059). Real CLI fields not checked (Q-015).
+- **Next:** merge T-043 and T-044, release preview.37; the owner tests models and limits with real agents.
 
 Updated 2026-11-08 (T-042) by Claude Code.
 

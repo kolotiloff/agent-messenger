@@ -40,6 +40,35 @@ type PresenceAgent struct {
 	// Left out when empty, so a host before preview.37 still accepts the
 	// report of a computer without a list.
 	Models []string `json:"models,omitempty"`
+	// Limit is the agent's last reported usage-limit state (T-044).
+	Limit *PresenceLimit `json:"limit,omitempty"`
+}
+
+// PresenceLimit mirrors core.AgentLimit.
+type PresenceLimit struct {
+	State       string   `json:"state"`
+	UsedPercent *float64 `json:"used_percent,omitempty"`
+	Window      string   `json:"window,omitempty"`
+	ResetsAt    string   `json:"resets_at,omitempty"`
+	ObservedAt  string   `json:"observed_at"`
+}
+
+func (l *PresenceLimit) valid() bool {
+	if l == nil {
+		return true
+	}
+	if l.State != "ok" && l.State != "warning" && l.State != "exhausted" || len(l.Window) > 32 || l.ObservedAt == "" {
+		return false
+	}
+	if l.UsedPercent != nil && (*l.UsedPercent < 0 || *l.UsedPercent > 1000) {
+		return false
+	}
+	for _, at := range []string{l.ResetsAt, l.ObservedAt} {
+		if _, err := time.Parse(time.RFC3339, at); at != "" && err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 // Presence is what a computer reports about itself. Name is used only for
@@ -85,7 +114,7 @@ func (p Presence) valid() bool {
 			return false
 		}
 		seen[a.Agent] = true
-		if len(a.Models) > maxPresenceModels {
+		if len(a.Models) > maxPresenceModels || !a.Limit.valid() {
 			return false
 		}
 		for _, m := range a.Models {

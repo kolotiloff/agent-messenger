@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (T-044 limits per agent)
+
+- Each agent's last reported usage limit is kept and given to the coordinator as a `limit` field of `list_agents`, shown on the agent card («Лимит») and sent to the other computers (D-059). The coordinator asked for a field, not text in the report.
+- Verified here: `check.sh`, Windows vet, parser tests (Claude and Codex shapes), core and a full supervisor run with a fake CLI that hits its limit. Not verified: what the real CLIs print (Q-015); a real network.
+
 ## 2026-11-08 — Claude Code (T-043 models per agent)
 
 - PR #63 merged (722c51f); preview.36 release started. The owner's coordinator asked for exact model names for Codex and Cursor: it may not guess them. Now the owner lists them on the agent card, `list_agents` returns them, and Codex and Cursor refuse an unlisted name (D-058). `list_agents` also uses the computer's own name now.
