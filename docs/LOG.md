@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (T-047 shared task list)
+
+- Each computer shares the tasks it started (7 days, up to 50, start of the report) through the broker's `POST /v1/tasks`; the task list shows the other computers' tasks of the project read-only (D-080). Screenshot: docs/mockups/shared-tasks-built.png (stubbed data).
+- Verified: broker test (limits, revoked, replacement), store test (what is shared, duplicates hidden, dropped on leaving), two-computer supervisor test, `check.sh`, headless Chromium. Not verified between real computers.
+
 ## 2026-11-08 — Claude Code (T-059 window language)
 
 - «Язык» in the sidebar: Russian (default) or English (D-079), on top of T-069. Client messages, CLI and Mac menus stay Russian.

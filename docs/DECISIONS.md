@@ -100,3 +100,9 @@ The «Статистика» tab sums `tasks.usage_*` on request; no new table, 
 2026-11-08, Claude Code (owner asleep, asked to decide alone and keep it simple).
 
 The Russian texts stay in the code as they are and are the dictionary's keys: app.js wraps each of its texts in `tr('…')`, `assets/i18n.js` maps them to English and translates the static texts of index.html once at load. A test fails when a text has no English entry. Text the owner, agents or the client write is never translated. The choice («Язык» in the sidebar) is kept in the window's local storage like the theme and applies by reloading the page. Numbers and dates follow the language. Messages produced by the Go client (errors, check details), the CLI and the Mac shell stay Russian for now.
+
+## D-080 — Shared task lists as one snapshot per computer (T-047)
+
+2026-11-08, Claude Code (owner asleep, asked to decide alone and keep it simple).
+
+Every computer posts the tasks it started in the last 7 days (at most 50, title up to 200 characters, the first 800 characters of the report, tokens) to the broker's new `POST /v1/tasks` about every 15 seconds and gets the latest lists of the other computers in the answer. The broker keeps only each computer's latest list, like presence, and drops revoked computers. The task mailbox is not used, so its limits stay free for real task messages. A separate endpoint keeps older brokers working: they answer 404 and the window simply shows no lists. A task that another computer started and that runs here is shared only by its origin, and the window hides another computer's task that already has a mirror here, so no task shows twice. The lists are read-only («На компьютере «…»» in the task list); answering or cancelling stays with the computer that runs the task. Leaving or changing the network drops the stored lists.

@@ -8,13 +8,14 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
-Updated 2026-11-08 (night, T-068) by Claude Code. The owner is asleep and asked to keep working alone, deciding by simplicity.
+Updated 2026-11-08 (night, T-047) by Claude Code. The owner is asleep and asked to keep working alone, deciding by simplicity.
 
 - **PR #73** (`claude/t061-agent-cards`): T-061 agent cards with the on/off switch, T-062 Windows window without the title bar; goes out as preview.43.
 - **T-068** token statistics on `claude/t068-token-stats` (D-077, PR #74), goes out as preview.44.
 - **T-069** Linux window on `claude/t069-linux-window` (D-078, built on T-068), goes out as preview.45. Owner's test on the Linux laptop: the window, its title bar in light and dark, the dock icon.
 - **T-059** window language on `claude/t059-language` (D-079, built on T-069), goes out as preview.46.
-- **Next, in the owner's order:** T-059 done; language, T-047 shared task list, T-052, T-053, T-057, T-049.
+- **T-047** shared task list on `claude/t047-shared-tasks` (D-080, built on T-059), goes out as preview.47. Owner's test: two computers in one network, tasks of the same project on both; each shows the other's under «На компьютере «…»» within about 15 seconds.
+- **Next, in the owner's order:** T-052 short invitation, T-053, T-057, T-049.
 
 Updated 2026-11-08 (before preview.42) by Claude Code.
 

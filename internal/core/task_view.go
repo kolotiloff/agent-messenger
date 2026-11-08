@@ -212,6 +212,8 @@ type WindowView struct {
 	} `json:"coordinator"`
 	Agents []WindowAgent `json:"agents"`
 	Tasks  []WindowTask  `json:"tasks"`
+	// Shared are the other computers' tasks of this project (T-047).
+	Shared []NetPeerTasks `json:"shared"`
 	// Pending counts this project's runs that are recorded but not launched.
 	Pending int `json:"pending_launch"`
 }
@@ -228,7 +230,7 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 	if v.Projects == nil {
 		v.Projects = []Project{}
 	}
-	v.Agents, v.Tasks = []WindowAgent{}, []WindowTask{}
+	v.Agents, v.Tasks, v.Shared = []WindowAgent{}, []WindowTask{}, []NetPeerTasks{}
 	if project == "" && len(projects) > 0 {
 		project = projects[0].Name
 	}
@@ -292,7 +294,8 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 		if err := tx.QueryRow(`SELECT COUNT(*) FROM task_runs r JOIN tasks t ON t.id=r.task_id WHERE t.project=? AND r.state='intent' AND t.state='running'`, project).Scan(&v.Pending); err != nil {
 			return err
 		}
-		return nil
+		v.Shared, err = projectNetTasks(tx, project)
+		return err
 	})
 	if err != nil || !found {
 		return v, err

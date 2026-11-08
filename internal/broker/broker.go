@@ -130,6 +130,9 @@ CREATE TABLE IF NOT EXISTS devices(id TEXT PRIMARY KEY, name TEXT NOT NULL, key_
 CREATE TABLE IF NOT EXISTS invitations(secret_hash TEXT PRIMARY KEY, created_at TEXT NOT NULL, expires_at TEXT NOT NULL, used_at TEXT, device_id TEXT);`); err != nil {
 		return err
 	}
+	if err := b.initSharedTasks(); err != nil {
+		return err
+	}
 	if err := b.initPresence(); err != nil {
 		return err
 	}
@@ -610,6 +613,7 @@ func (b *Broker) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, PingResult{BrokerID: b.id, DeviceID: d.ID, Name: d.Name, Time: d.LastSeen})
 	})
 	mux.HandleFunc("/v1/presence", b.handlePresence)
+	mux.HandleFunc("/v1/tasks", b.handleSharedTasks)
 	mux.HandleFunc("/v1/send", b.handleSend)
 	mux.HandleFunc("/v1/inbox", b.handleInbox)
 	return mux
