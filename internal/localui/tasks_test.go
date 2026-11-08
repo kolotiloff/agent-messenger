@@ -72,6 +72,7 @@ func TestTaskWindowRoutes(t *testing.T) {
 		{"/api/agent-models", `{"provider":"codex","models":["--yolo"]}`},
 		{"/api/agent-models", `{"provider":"codex","models":["a\nb"]}`},
 		{"/api/agent-models", `{"provider":"gemini","models":[]}`},
+		{"/api/agent-remove", `{"provider":"gemini"}`},
 		{"/api/task-cancel", `{"task":""}`},
 		{"/api/coordinator-connect", `{"project":"a/b"}`},
 		{"/api/coordinator-connect", `{"project":"Game","cli":"/bin/sh"}`},
@@ -88,6 +89,9 @@ func TestTaskWindowRoutes(t *testing.T) {
 	}
 	if code, _ := do("POST", "/api/agent-models", `{"provider":"codex","models":["gpt-5.5","gpt-5.5-mini"]}`); code != 200 || got[len(got)-1].Cmd != "agent-models" || got[len(got)-1].Provider != "codex" || got[len(got)-1].Text != "gpt-5.5\ngpt-5.5-mini" {
 		t.Fatalf("agent models %d %+v", code, got[len(got)-1])
+	}
+	if code, _ := do("POST", "/api/agent-remove", `{"provider":"cursor"}`); code != 200 || got[len(got)-1].Cmd != "agent-remove" || got[len(got)-1].Provider != "cursor" {
+		t.Fatalf("agent remove %d %+v", code, got[len(got)-1])
 	}
 	if code, _ := do("POST", "/api/coordinator-connect", `{"project":"Моя игра"}`); code != 200 || got[len(got)-1].Cmd != "coordinator-connect" || got[len(got)-1].Alias != "Моя игра" {
 		t.Fatalf("coordinator connect %d %+v", code, got[len(got)-1])

@@ -1687,3 +1687,30 @@ func modelAllowed(provider, model string, listed []string) error {
 	}
 	return fmt.Errorf("%w: model %q is not in the owner's list for %s: %s; use one of these or leave model out", ErrRejected, model, provider, strings.Join(listed, ", "))
 }
+
+// RemoveComputerAgent disconnects an agent of this computer from the window
+// (T-046). Its tasks keep their own copy of the program and profile; an
+// agent with a running or waiting task is not removed.
+func (s *Store) RemoveComputerAgent(provider string) error {
+	return s.tx(func(tx *sql.Tx) error {
+		computer, err := localComputer(tx)
+		if err != nil {
+			return err
+		}
+		var busy int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM tasks WHERE computer=? AND provider=? AND state IN ('running','waiting_coordinator','waiting_owner')`, computer, provider).Scan(&busy); err != nil {
+			return err
+		}
+		if busy > 0 {
+			return fmt.Errorf("%w: agent %s has %d unfinished tasks; stop or finish them first", ErrRejected, provider, busy)
+		}
+		res, err := tx.Exec(`DELETE FROM computer_agents WHERE computer=? AND provider=?`, computer, provider)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return fmt.Errorf("%w: agent %s is not set up on this computer", ErrRejected, provider)
+		}
+		return nil
+	})
+}

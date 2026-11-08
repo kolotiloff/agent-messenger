@@ -116,7 +116,7 @@
   function recall(key){try{return localStorage.getItem(key)||'';}catch(_){return '';}}
   let view=null,project=recall('messenger-project'),selectedTask='',feed=null,feedSignature='',viewSignature='';
   let online=false,offlineReason='',discovery=[],tab='tasks',refreshing=false,answering=false;
-  const agentChecks=new Map();
+  const agentChecks=new Map(),checking=new Set();let autoChecked=false,discoveryLoaded=false;
   let clientInfo=null,clientInfoAt=0,restart={busy:false,ask:null,error:''};
   // The window can be newer than the client still running in the background
   // (after an update). Say how to restart it; nothing is restarted by itself.
@@ -571,7 +571,7 @@
       const coordinator=view?.coordinator?.connected&&coordinatorName()[0]===provider;
       const card=el('article',undefined,'am-card');
       const heading=el('h3',undefined,'am-provider-heading');heading.append(providerIcon(provider),el('span',names[provider]));card.append(heading);
-      card.append(el('p',coordinator&&a?'Координатор и исполнитель':coordinator?'Координатор':a?'Исполнитель':'Не подключён','am-muted'));
+      card.append(el('p',coordinator&&a?'Координатор, выполняет задачи':coordinator?'Координатор':a?'Выполняет задачи':'Не подключён','am-muted'));
       const dl=el('dl');
       const pair=(label,value,cls,extra)=>{const p=el('div');const dd=el('dd',undefined,cls);dd.append(el('span',value));if(extra)dd.append(...extra);p.append(el('dt',label),dd);dl.append(p);};
       if(!a){
@@ -612,6 +612,8 @@
       const cli=a?.cli||found?.cli||'',profile=a?.environment||found?.environment||'';
       if(!a&&found?.state==='not_found'){const install=el('button','Установить '+names[provider],'am-primary');install.type='button';install.addEventListener('click',()=>installAgent(provider,install));actions.append(install);}
       if(auth==='not_authenticated'&&cli){const login=el('button','Войти в аккаунт','am-primary');login.type='button';login.addEventListener('click',()=>loginAgent(provider,cli,profile,login));actions.append(login);}
+      if(!a&&found?.state==='candidate_found'){const connect=el('button','Подключить','am-primary');connect.type='button';connect.addEventListener('click',()=>connectAgent(provider,connect));actions.append(connect);}
+      if(cli&&profile){const verify=el('button',checking.has(provider)?'Проверяем…':'Проверить');verify.type='button';verify.disabled=checking.has(provider);verify.addEventListener('click',()=>checkCard(provider));actions.append(verify);}
       actions.append(tasks,setup);card.append(actions);cards.append(card);
     }
   }
@@ -647,8 +649,8 @@
     $('restart-title').textContent=title;$('restart-text').textContent=text;
     $('restart-error').textContent=restart.error;$('restart-error').hidden=!restart.error;
     const go=$('restart-go'),quit=$('restart-quit'),copy=$('restart-copy');
-    go.hidden=!canRestart||(!answering&&!restart.busy);go.disabled=restart.busy;
-    go.textContent=restart.busy?'Перезапускаем…':ask?'Перезапустить всё равно':'Перезапустить';
+    go.hidden=!canRestart||!answering||restart.busy;
+    go.textContent=ask?'Перезапустить всё равно':'Перезапустить';
     go.classList.toggle('am-primary',!ask);go.classList.toggle('am-danger',!!ask);
     quit.hidden=!canQuit;quit.disabled=restart.busy;
     copy.hidden=canRestart||!shutdownCommand();
@@ -665,7 +667,7 @@
     notice(null);
   }
   function render(){
-    renderProjects();renderMachines();renderTaskList();renderThread();renderAgents();renderNotice();
+    renderProjects();renderMachines();renderTaskList();renderThread();renderAgents();renderNotice();autoCheck();
     $('connection').textContent=online?'Клиент доступен':'Клиент недоступен';
   }
   async function loadFeed(){
@@ -689,7 +691,7 @@
     }catch(error){notice(el('p','Окно не смогло показать данные: '+error.message));}
     finally{refreshing=false;}
   }
-  async function loadDiscovery(){try{const d=await api('/api/discovery',8000);discovery=d.agents||[];renderAgents();}catch(_){}}
+  async function loadDiscovery(){try{const d=await api('/api/discovery',8000);discovery=d.agents||[];discoveryLoaded=true;renderAgents();autoCheck();}catch(_){}}
   function show(next){
     tab=next;root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab);
     root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
@@ -879,17 +881,49 @@
     $('agent-models').value=(a?.models||[]).join('\n');
     $('agent-models-note').textContent=provider==='claude'?'Claude сам принимает opus, sonnet и haiku. Сюда можно добавить полные названия моделей Claude.':'Пишите названия точно так, как их принимает сам агент. Координатор сможет выбрать только модель из этого списка; если список пуст, задачи идут на модели по умолчанию.';
     $('agent-check-status').textContent='';$('agent-save-status').textContent='';$('agent-check-result').hidden=true;$('agent-login').hidden=true;
+    $('agent-remove').hidden=!a;
     $('agent-setup').showModal();
+  }
+  // One check at a time: the client refuses a second one while one runs.
+  let checkQueue=Promise.resolve();
+  function runCheck(selection){
+    const run=checkQueue.then(async()=>{
+      const response=await fetch('/api/check-cli',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(selection),cache:'no-store',signal:AbortSignal.timeout(22000)});
+      if(!response.ok)throw Error(response.status===409?'Проверка уже выполняется.':response.status===422?'Проверьте путь к программе и профилю.':'Проверка не выполнена.');
+      const result=await response.json();if(result.ok!==true)throw Error('Ответ проверки не подтверждён.');
+      agentChecks.set(selection.provider,result.check);return result.check;
+    });
+    checkQueue=run.catch(()=>{});return run;
+  }
+  function agentPaths(provider){
+    const a=(view?.agents||[]).find(x=>x.agent===provider),found=discovery.find(d=>d.provider===provider);
+    return {provider,cli:a?.cli||found?.cli||'',environment:a?.environment||found?.environment||''};
+  }
+  async function checkCard(provider){
+    const selection=agentPaths(provider);if(!selection.cli||!selection.environment)return;
+    checking.add(provider);renderAgents();
+    try{await runCheck(selection);}catch(error){showError(error);}
+    finally{checking.delete(provider);renderAgents();}
+  }
+  // The window checks the agents by itself once it knows them, so the cards
+  // show the version and login without a click.
+  function autoCheck(){
+    if(autoChecked||!view||!discoveryLoaded)return;autoChecked=true;
+    for(const provider of ['claude','codex','cursor']){const s=agentPaths(provider);if(s.cli&&s.environment&&!agentChecks.has(provider))checkCard(provider);}
+  }
+  // «Подключить» on a card: the found program and profile, then a check.
+  async function connectAgent(provider,button){
+    const found=discovery.find(d=>d.provider===provider);if(!found)return;
+    button.disabled=true;
+    try{await postAPI('/api/agent-set',{provider,cli:found.cli,environment:''});viewSignature='';await refresh();checkCard(provider);}
+    catch(error){button.disabled=false;showError(error);}
   }
   async function checkAgent(){
     const selection={provider:setupProvider,cli:$('agent-cli').value.trim(),environment:$('agent-profile').value.trim()};
     if(!selection.cli||!selection.environment){$('agent-check-status').textContent='Укажите программу и каталог профиля.';return;}
     $('agent-check').disabled=true;$('agent-check-status').textContent='Проверяем версию и вход…';
     try{
-      const response=await fetch('/api/check-cli',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(selection),cache:'no-store',signal:AbortSignal.timeout(22000)});
-      if(!response.ok)throw Error(response.status===409?'Проверка уже выполняется.':response.status===422?'Проверьте путь к программе и профилю.':'Проверка не выполнена.');
-      const result=await response.json();if(result.ok!==true)throw Error('Ответ проверки не подтверждён.');
-      agentChecks.set(setupProvider,result.check);
+      const result={check:await runCheck(selection)};
       const dl=$('agent-check-result');dl.replaceChildren();
       for(const [label,value] of [['Версия',result.check.version?.value||'Не определена'],['Вход в аккаунт',{authenticated:'Выполнен',not_authenticated:'Не выполнен'}[result.check.authentication?.state]||'Не удалось определить']]){const p=el('div');p.append(el('dt',label),el('dd',value));dl.append(p);}
       dl.hidden=false;$('agent-check-status').textContent='Проверка завершена.';renderAgents();
@@ -903,9 +937,15 @@
     $('agent-save').disabled=true;$('agent-save-status').textContent='Сохраняем…';
     try{await postAPI('/api/agent-set',{provider:setupProvider,cli:$('agent-cli').value.trim(),environment});
       await postAPI('/api/agent-models',{provider:setupProvider,models:$('agent-models').value.split('\n').map(m=>m.trim()).filter(Boolean)});
-      $('agent-save-status').textContent='Агент подключён исполнителем.';viewSignature='';await refresh();}
+      $('agent-save-status').textContent='Сохранено.';$('agent-remove').hidden=false;viewSignature='';await refresh();checkAgent();}
     catch(error){$('agent-save-status').textContent=error.message;}
     finally{$('agent-save').disabled=false;}
+  }
+  async function removeAgent(){
+    $('agent-remove').disabled=true;$('agent-save-status').textContent='';
+    try{await postAPI('/api/agent-remove',{provider:setupProvider});agentChecks.delete(setupProvider);viewSignature='';await refresh();$('agent-setup').close();}
+    catch(error){$('agent-save-status').textContent=error.message;}
+    finally{$('agent-remove').disabled=false;}
   }
   window.messengerRefresh=()=>{viewSignature='';refresh();};
   // «Выбрать…»: the local server opens the system's own dialog (D-053); the
@@ -1012,6 +1052,7 @@
   $('restart-quit').addEventListener('click',()=>window.webkit?.messageHandlers?.app?.postMessage('quit'));
   $('restart-copy').addEventListener('click',async()=>{const b=$('restart-copy');try{await navigator.clipboard.writeText(shutdownCommand());b.textContent='Скопировано';}catch(_){b.textContent='Не удалось скопировать';}setTimeout(()=>b.textContent='Скопировать команду',2000);});
   $('agent-setup-close').addEventListener('click',()=>$('agent-setup').close());
+  $('agent-remove').addEventListener('click',removeAgent);
   $('agent-check').addEventListener('click',checkAgent);
   $('agent-save').addEventListener('click',saveAgent);
   $('host-scope').addEventListener('change',()=>{serverEdited=true;});
