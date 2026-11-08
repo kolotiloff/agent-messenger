@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (T-059 window language)
+
+- «Язык» in the sidebar: Russian (default) or English (D-079), on top of T-069. Client messages, CLI and Mac menus stay Russian.
+- Verified: translation coverage test, `check.sh`, headless Chromium in English and Russian. Not verified: native windows.
+
 ## 2026-11-08 — Claude Code (T-069 Linux window)
 
 - Linux window with the system's WebKitGTK through `purego` (D-078), on top of T-068. Browser path kept as fallback.

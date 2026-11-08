@@ -138,7 +138,7 @@ func TestUIUnavailableIsNotEmptySuccess(t *testing.T) {
 
 func TestUIAssetsEmbeddedWithoutPrivateCapability(t *testing.T) {
 	h := newHandler("127.0.0.1:1234", "secret-token", nil, nil)
-	for _, path := range []string{"/", "/app.js", "/app.css", "/design-v1.css"} {
+	for _, path := range []string{"/", "/app.js", "/i18n.js", "/app.css", "/design-v1.css"} {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest("GET", "http://127.0.0.1:1234"+path, nil))
 		if w.Code != http.StatusOK || strings.Contains(w.Body.String(), "secret-token") {

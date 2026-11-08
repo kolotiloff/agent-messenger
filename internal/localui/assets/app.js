@@ -10,7 +10,7 @@
   // visible list is a top-layer popover, so neither pane clips it or grows.
   function enhanceSelect(select) {
     const trigger=document.createElement('button');trigger.type='button';trigger.className='am-select-trigger';
-    const label=select.labels[0]?.textContent||select.getAttribute('aria-label')||'Выбор';
+    const label=select.labels[0]?.textContent||select.getAttribute('aria-label')||tr('Выбор');
     trigger.setAttribute('aria-label',label);trigger.setAttribute('aria-haspopup','listbox');trigger.setAttribute('aria-expanded','false');
     const value=document.createElement('span');value.className='am-select-value';
     const chevron=document.createElement('span');chevron.className='am-select-chevron';chevron.setAttribute('aria-hidden','true');trigger.append(value,chevron);
@@ -20,7 +20,7 @@
     let options=[];
     const isOpen=()=>menu.matches(':popover-open');
     function close(restore=false){if(isOpen())menu.hidePopover();if(restore)trigger.focus();}
-    function sync(){value.textContent=select.selectedOptions[0]?.textContent||'Нет данных';trigger.disabled=select.disabled;if(select.disabled)close();}
+    function sync(){value.textContent=select.selectedOptions[0]?.textContent||tr('Нет данных');trigger.disabled=select.disabled;if(select.disabled)close();}
     function choose(index){if(select.disabled||select.options[index]?.disabled)return;select.selectedIndex=index;sync();close(true);select.dispatchEvent(new Event('change',{bubbles:true}));}
     function open(keyboard){
       if(select.disabled)return;menu.replaceChildren();options=[];
@@ -103,7 +103,7 @@
   function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
   function providerIcon(provider){
     const wrap=el('span',undefined,'am-provider-icon');wrap.setAttribute('aria-hidden','true');
-    if(!providerPaths[provider]){wrap.textContent=provider==='owner'?'Я':'→';return wrap;}
+    if(!providerPaths[provider]){wrap.textContent=provider==='owner'?tr('Я'):'→';return wrap;}
     wrap.dataset.provider=provider;
     const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('focusable','false');
     for(const d of providerPaths[provider]){const path=document.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d',d);svg.append(path);}wrap.append(svg);return wrap;
@@ -123,9 +123,9 @@
   function shutdownCommand(){return view?.messenger&&view?.data_root?'"'+view.messenger+'" --root "'+view.data_root+'" shutdown':'';}
   function outdatedMessage(){
     if(Date.now()-clientInfoAt>3000)loadClientInfo();
-    if(clientInfo?.restart)return Error('В фоне старая версия Messenger.');
-    const e=Error('В фоне старая версия клиента, перезапустите его');
-    e.hint='Закройте Messenger, выполните скопированную команду в Терминале и откройте Messenger снова.';
+    if(clientInfo?.restart)return Error(tr('В фоне старая версия Messenger.'));
+    const e=Error(tr('В фоне старая версия клиента, перезапустите его'));
+    e.hint=tr('Закройте Messenger, выполните скопированную команду в Терминале и откройте Messenger снова.');
     e.command=shutdownCommand();
     return e;
   }
@@ -138,22 +138,22 @@
     const box=$('toasts');box.replaceChildren();box.hidden=!actionError;if(!actionError)return;
     const chip=el('div',undefined,'am-toast');chip.append(el('span',actionError.text,'am-toast-text'));if(actionError.hint)chip.title=actionError.hint;
     if(actionError.command){
-      const command=actionError.command,copy=el('button','Скопировать команду');copy.type='button';copy.title=command;
-      copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(command);copy.textContent='Скопировано';}catch(_){copy.textContent='Не удалось скопировать';}setTimeout(()=>copy.textContent='Скопировать команду',2000);});
+      const command=actionError.command,copy=el('button',tr('Скопировать команду'));copy.type='button';copy.title=command;
+      copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(command);copy.textContent=tr('Скопировано');}catch(_){copy.textContent=tr('Не удалось скопировать');}setTimeout(()=>copy.textContent=tr('Скопировать команду'),2000);});
       chip.append(copy);
     }
-    const close=el('button','×','am-toast-close');close.type='button';close.setAttribute('aria-label','Закрыть');close.addEventListener('click',()=>showError(null));chip.append(close);
+    const close=el('button','×','am-toast-close');close.type='button';close.setAttribute('aria-label',tr('Закрыть'));close.addEventListener('click',()=>showError(null));chip.append(close);
     box.append(chip);
   }
   async function api(path,timeout=4500){
-    if(!token)throw Error('Откройте приватную ссылку, которую выдала команда ui.');
+    if(!token)throw Error(tr('Откройте приватную ссылку, которую выдала команда ui.'));
     const response=await fetch(path,{headers:{Authorization:'Bearer '+token},cache:'no-store',signal:AbortSignal.timeout(timeout)});
     if(!response.ok){
-      if(response.status===401)throw Error('Ссылка доступа устарела. Откройте окно заново.');
+      if(response.status===401)throw Error(tr('Ссылка доступа устарела. Откройте окно заново.'));
       const body=await response.text().catch(()=>'');
       if(body.startsWith('client_outdated'))throw outdatedMessage();
-      if(body.startsWith('client_rejected'))throw Error('Клиент Messenger отклонил запрос окна. Подробности: messenger doctor.');
-      throw Error('Клиент Messenger не запущен или не отвечает. Данные не обновляются.');
+      if(body.startsWith('client_rejected'))throw Error(tr('Клиент Messenger отклонил запрос окна. Подробности: messenger doctor.'));
+      throw Error(tr('Клиент Messenger не запущен или не отвечает. Данные не обновляются.'));
     }
     return response.json();
   }
@@ -161,40 +161,40 @@
     let response;
     // No answer means the result is unknown, not that nothing happened.
     try{response=await fetch(path,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body),cache:'no-store',signal:AbortSignal.timeout(timeout)});}
-    catch(_){throw Error('Ответ не получен, результат неизвестен. Проверьте состояние, прежде чем повторять.');}
+    catch(_){throw Error(tr('Ответ не получен, результат неизвестен. Проверьте состояние, прежде чем повторять.'));}
     let result={};try{result=await response.json();}catch(_){}
     if(response.ok&&result.ok===true)return result;
     if(result.state==='client_outdated')throw outdatedMessage();
     if(response.status===409&&result.detail)throw Error(result.detail);
-    if(response.status===400)throw Error('Проверьте введённые данные.');
-    throw Error('Действие не подтверждено. Проверьте состояние и повторите.');
+    if(response.status===400)throw Error(tr('Проверьте введённые данные.'));
+    throw Error(tr('Действие не подтверждено. Проверьте состояние и повторите.'));
   }
   function minutes(from,to){
     const a=Date.parse(from),b=to?Date.parse(to):Date.now();
     if(isNaN(a)||isNaN(b))return '';
     const m=Math.max(0,Math.round((b-a)/60000));
-    if(m<1)return '<1 мин';
-    if(m<60)return m+' мин';
-    const h=Math.floor(m/60);return h+' ч'+(m%60?' '+m%60+' мин':'');
+    if(m<1)return tr('<1 мин');
+    if(m<60)return m+tr(' мин');
+    const h=Math.floor(m/60);return h+tr(' ч')+(m%60?' '+m%60+tr(' мин'):'');
   }
   // T-058: what a task spent, as its agent reported it. Claude reports a
   // price; Codex and Cursor only tokens.
   function tokensText(n){
-    if(n>=1e6)return (n/1e6).toLocaleString('ru-RU',{maximumFractionDigits:1})+' млн';
-    if(n>=1e3)return Math.round(n/1e3).toLocaleString('ru-RU')+' тыс.';
+    if(n>=1e6)return (n/1e6).toLocaleString(amLocale,{maximumFractionDigits:1})+tr(' млн');
+    if(n>=1e3)return Math.round(n/1e3).toLocaleString(amLocale)+tr(' тыс.');
     return String(n);
   }
   // Tokens only: the agents' price is their own estimate and the owner works
   // on subscription limits, so no dollars are shown (D-074).
   function usageShort(u){
     if(!u)return '';
-    return tokensText(u.input_tokens+u.output_tokens)+' токенов';
+    return tokensText(u.input_tokens+u.output_tokens)+tr(' токенов');
   }
   function usageLong(u){
     if(!u)return '';
-    let s='Потрачено токенов: '+u.input_tokens.toLocaleString('ru-RU')+' на входе';
-    if(u.cached_tokens)s+=' (из них '+u.cached_tokens.toLocaleString('ru-RU')+' из кэша)';
-    return s+', '+u.output_tokens.toLocaleString('ru-RU')+' на выходе';
+    let s=tr('Потрачено токенов: ')+u.input_tokens.toLocaleString(amLocale)+tr(' на входе');
+    if(u.cached_tokens)s+=tr(' (из них ')+u.cached_tokens.toLocaleString(amLocale)+tr(' из кэша)');
+    return s+', '+u.output_tokens.toLocaleString(amLocale)+tr(' на выходе');
   }
   function clock(at){const d=new Date(at);return isNaN(d.getTime())?'':d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});}
   const activeStates=['running','waiting_owner','waiting_coordinator'];
@@ -202,30 +202,30 @@
   function resetText(at){
     const d=new Date(at);if(isNaN(d.getTime()))return '';
     const day=x=>x.getFullYear()+'-'+x.getMonth()+'-'+x.getDate(),today=new Date(),tomorrow=new Date();tomorrow.setDate(today.getDate()+1);
-    if(day(d)===day(today))return 'в '+clock(at);
-    if(day(d)===day(tomorrow))return 'завтра в '+clock(at);
-    return d.toLocaleDateString([], {day:'numeric',month:'long'})+' в '+clock(at);
+    if(day(d)===day(today))return tr('в ')+clock(at);
+    if(day(d)===day(tomorrow))return tr('завтра в ')+clock(at);
+    return d.toLocaleDateString([], {day:'numeric',month:'long'})+tr(' в ')+clock(at);
   }
   function failureStatus(t){
     switch(t.failure_reason){
-      case 'usage_limit':{const r=t.failure_reset?resetText(t.failure_reset):'';return [r?'Лимит, сброс '+r:'Лимит исчерпан','am-status-bad'];}
-      case 'rate_limit':return ['Слишком много запросов','am-status-bad'];
-      case 'overload':return ['Сервис перегружен','am-status-bad'];
-      case 'sign_in':return ['Нужен вход в аккаунт','am-status-bad'];
+      case 'usage_limit':{const r=t.failure_reset?resetText(t.failure_reset):'';return [r?tr('Лимит, сброс ')+r:tr('Лимит исчерпан'),'am-status-bad'];}
+      case 'rate_limit':return [tr('Слишком много запросов'),'am-status-bad'];
+      case 'overload':return [tr('Сервис перегружен'),'am-status-bad'];
+      case 'sign_in':return [tr('Нужен вход в аккаунт'),'am-status-bad'];
     }
     return null;
   }
   function taskStatus(t){
     const end=t.finished_at||t.updated_at,from=t.started_at||t.created_at;
     switch(t.state){
-      case 'running':return t.pending_launch?['Ждёт запуска','am-status-wait']:['Работает '+minutes(from),'am-status-run'];
-      case 'waiting_owner':return ['Ждёт вашего ответа','am-status-wait'];
-      case 'waiting_coordinator':return ['Ждёт ответа координатора','am-status-run'];
-      case 'done':return ['Готово за '+minutes(from,end),'am-muted'];
-      case 'failed':return failureStatus(t)||['Ошибка через '+minutes(from,end),'am-status-bad'];
-      case 'interrupted':return ['Прервана через '+minutes(from,end),'am-status-bad'];
-      case 'blocked':return ['Заблокирована через '+minutes(from,end),'am-status-bad'];
-      case 'cancelled':return ['Отменена','am-muted'];
+      case 'running':return t.pending_launch?[tr('Ждёт запуска'),'am-status-wait']:[tr('Работает ')+minutes(from),'am-status-run'];
+      case 'waiting_owner':return [tr('Ждёт вашего ответа'),'am-status-wait'];
+      case 'waiting_coordinator':return [tr('Ждёт ответа координатора'),'am-status-run'];
+      case 'done':return [tr('Готово за ')+minutes(from,end),'am-muted'];
+      case 'failed':return failureStatus(t)||[tr('Ошибка через ')+minutes(from,end),'am-status-bad'];
+      case 'interrupted':return [tr('Прервана через ')+minutes(from,end),'am-status-bad'];
+      case 'blocked':return [tr('Заблокирована через ')+minutes(from,end),'am-status-bad'];
+      case 'cancelled':return [tr('Отменена'),'am-muted'];
     }
     return [t.state,'am-muted'];
   }
@@ -236,15 +236,15 @@
     return ['',client];
   }
   function agentState(a){
-    if(!online)return ['offline','Нет связи'];
-    if(a.waiting_owner>0)return ['wait','Ждёт ответа'];
-    if(a.running>0)return ['run',a.running>1?'Работает ('+a.running+')':'Работает'];
-    return ['idle','Свободен'];
+    if(!online)return ['offline',tr('Нет связи')];
+    if(a.waiting_owner>0)return ['wait',tr('Ждёт ответа')];
+    if(a.running>0)return ['run',a.running>1?tr('Работает (')+a.running+')':tr('Работает')];
+    return ['idle',tr('Свободен')];
   }
   function renderProjects(){
     const select=$('project-select');select.replaceChildren();
     for(const p of view?.projects||[]){const o=el('option',p.title||p.name);o.value=p.name;select.append(o);}
-    const add=el('option','Новый проект');add.value='__new';select.append(add);
+    const add=el('option',tr('Новый проект'));add.value='__new';select.append(add);
     select.value=view?.project||'__new';
     if(!view?.project&&select.options.length>1)select.selectedIndex=0;
     select.disabled=!view;syncSelects();
@@ -263,7 +263,7 @@
       menu.addEventListener('focusout',e=>{if(!menu.contains(e.relatedTarget))close();});
       window.addEventListener('resize',close);
     }
-    const item=el('div','Отозвать устройство','am-select-option');item.setAttribute('role','menuitem');item.tabIndex=0;
+    const item=el('div',tr('Отозвать устройство'),'am-select-option');item.setAttribute('role','menuitem');item.tabIndex=0;
     const pick=()=>{menu.hidePopover();revokeAsk=d.id;clearTimeout(revokeTimer);revokeTimer=setTimeout(()=>{revokeAsk='';renderMachines();},8000);renderMachines();$('machines').querySelector('[data-key="revoke-yes-'+d.id+'"]')?.focus();};
     item.addEventListener('click',pick);item.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();pick();}});
     menu.replaceChildren(item);menu.style.left=x+'px';menu.style.top=y+'px';menu.showPopover();item.focus();
@@ -280,7 +280,7 @@
       // Blue means a task is running (T-060). A chat that once used
       // Messenger's tools is listed but not lit: nothing tells whether it is
       // still open.
-      const [state,text]=!live?['offline','Нет связи']:a?agentState(a):['idle','Чат с инструментами Messenger'];
+      const [state,text]=!live?['offline',tr('Нет связи')]:a?agentState(a):['idle',tr('Чат с инструментами Messenger')];
       const line=el('div',undefined,'am-agent-line');line.dataset.provider=provider;
       line.title=(names[provider]||provider)+(a?': '+text:'');
       line.append(el('span',undefined,'am-dot am-dot-'+state),el('span',shortNames[provider]||provider));
@@ -296,17 +296,17 @@
   const peerFresh=peer=>peer.age>=0&&peer.age<=45;
   function pickable(card,id){
     card.setAttribute('role','button');card.tabIndex=0;card.setAttribute('aria-pressed',String(computerFilter===id));
-    card.title=computerFilter===id?'Показать задачи всех компьютеров':'Показать задачи этого компьютера';
+    card.title=computerFilter===id?tr('Показать задачи всех компьютеров'):tr('Показать задачи этого компьютера');
     card.addEventListener('click',event=>{if(!event.target.closest('button'))filterComputer(id);});
     card.addEventListener('keydown',event=>{if(event.target===card&&(event.key==='Enter'||event.key===' ')){event.preventDefault();filterComputer(id);}});
   }
   function renderMachines(){
     const box=$('machines');box.replaceChildren();
     const machine=el('div',undefined,'am-machine-card');machine.setAttribute('aria-current','true');pickable(machine,'local');
-    const head=el('div',undefined,'am-machine-name');head.append(el('span',view?.computer_name||'Этот компьютер'));
-    const dot=el('span',undefined,'am-dot'+(online?' online':''));dot.title=online?'На связи':'Нет связи';head.append(dot);machine.append(head);
+    const head=el('div',undefined,'am-machine-name');head.append(el('span',view?.computer_name||tr('Этот компьютер')));
+    const dot=el('span',undefined,'am-dot'+(online?' online':''));dot.title=online?tr('На связи'):tr('Нет связи');head.append(dot);machine.append(head);
     const lines=agentLines(view?.agents||[],view?.coordinator?.connected?(view.coordinator.client||''):null,online);
-    if(!lines.children.length)lines.append(el('p',online?'Агенты не подключены':'Нет связи','am-small am-muted'));
+    if(!lines.children.length)lines.append(el('p',online?tr('Агенты не подключены'):tr('Нет связи'),'am-small am-muted'));
     machine.append(lines);box.append(machine);
     // The other computers of this computer's network, with their agents.
     // Only the computer that runs the server can revoke one, from the
@@ -316,26 +316,26 @@
       const fresh=peerFresh(peer);
       const card=el('div',undefined,'am-machine-card am-peer-card');card.dataset.peer=peer.id;pickable(card,peer.id);
       const name=el('div',undefined,'am-machine-name');
-      const pdot=el('span',undefined,'am-dot'+(fresh?' online':''));pdot.title=fresh?'На связи':'Нет связи';
+      const pdot=el('span',undefined,'am-dot'+(fresh?' online':''));pdot.title=fresh?tr('На связи'):tr('Нет связи');
       name.append(el('span',peer.name),pdot);card.append(name);
       if(revokeAsk===peer.id&&hosted.has(peer.id)){
-        card.append(el('p','Отозвать устройство? Вернуть его можно только новым приглашением.','am-small am-muted'));
+        card.append(el('p',tr('Отозвать устройство? Вернуть его можно только новым приглашением.'),'am-small am-muted'));
         const actions=el('div',undefined,'am-actions am-device-confirm');
-        const yes=el('button','Отозвать','am-danger');yes.type='button';yes.dataset.key='revoke-yes-'+peer.id;
+        const yes=el('button',tr('Отозвать'),'am-danger');yes.type='button';yes.dataset.key='revoke-yes-'+peer.id;
         yes.addEventListener('click',()=>{revokeAsk='';serverAction({action:'revoke',device:peer.id},'host','');});
-        const no=el('button','Отмена');no.type='button';
+        const no=el('button',tr('Отмена'));no.type='button';
         no.addEventListener('click',()=>{revokeAsk='';renderMachines();$('machines').querySelector('[data-key="revoke-'+peer.id+'"]')?.focus();});
         actions.append(no,yes);card.append(actions);box.append(card);continue;
       }
       if(fresh){
         const plines=agentLines(peer.agents||[],peer.coordinator?peer.coordinator:null,true);
-        if(!plines.children.length)plines.append(el('p','Агенты не подключены','am-small am-muted'));
+        if(!plines.children.length)plines.append(el('p',tr('Агенты не подключены'),'am-small am-muted'));
         card.append(plines);
       }else{
-        card.append(el('p',peer.last_seen?'Был на связи '+stamp(peer.last_seen):'Ещё не выходил на связь','am-small am-muted'));
+        card.append(el('p',peer.last_seen?tr('Был на связи ')+stamp(peer.last_seen):tr('Ещё не выходил на связь'),'am-small am-muted'));
       }
       if(hosted.has(peer.id)){
-        card.classList.add('am-device-card');card.tabIndex=0;card.dataset.key='revoke-'+peer.id;card.title='Правая кнопка мыши — действия';
+        card.classList.add('am-device-card');card.tabIndex=0;card.dataset.key='revoke-'+peer.id;card.title=tr('Правая кнопка мыши — действия');
         card.addEventListener('contextmenu',event=>{event.preventDefault();deviceMenu(peer,event.clientX,event.clientY);});
         card.addEventListener('keydown',event=>{if(event.key==='ContextMenu'||(event.shiftKey&&event.key==='F10')){event.preventDefault();const r=card.getBoundingClientRect();deviceMenu(peer,r.left+16,r.top+24);}});
       }
@@ -361,16 +361,16 @@
   function renderTaskList(){
     const box=$('task-list');box.replaceChildren();
     const [active,done]=visibleTasks();
-    const chipName=computerFilter==='local'?(view?.computer_name||'Этот компьютер'):(server?.peers||[]).find(p=>p.id===computerFilter)?.name||(view?.tasks||[]).find(t=>taskComputer(t)===computerFilter)?.remote?.name||'';
-    $('computer-chip').hidden=!computerFilter;$('computer-chip-text').textContent=computerFilter?'Компьютер: '+chipName:'';
+    const chipName=computerFilter==='local'?(view?.computer_name||tr('Этот компьютер')):(server?.peers||[]).find(p=>p.id===computerFilter)?.name||(view?.tasks||[]).find(t=>taskComputer(t)===computerFilter)?.remote?.name||'';
+    $('computer-chip').hidden=!computerFilter;$('computer-chip-text').textContent=computerFilter?tr('Компьютер: ')+chipName:'';
     $('task-count').textContent=view?.tasks?.length?String(view.tasks.length):'';
     const section=(label,items)=>{
       if(!items.length)return;
       box.append(el('div',label,'am-label am-task-section'));
       for(const t of items){
         const row=el('button',undefined,'am-task');row.type='button';row.setAttribute('aria-pressed',String(t.id===selectedTask));
-        const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),el('span',(names[t.agent]||t.agent)+(t.remote&&!t.remote.from?' на '+t.remote.name:'')));
-        if(t.remote)agent.title=t.remote.from?'Задачу дал компьютер «'+t.remote.name+'»':'Выполняется на компьютере «'+t.remote.name+'»';
+        const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),el('span',(names[t.agent]||t.agent)+(t.remote&&!t.remote.from?tr(' на ')+t.remote.name:'')));
+        if(t.remote)agent.title=t.remote.from?tr('Задачу дал компьютер «')+t.remote.name+'»':tr('Выполняется на компьютере «')+t.remote.name+'»';
         const [text,cls]=taskStatus(t);
         const status=el('span',undefined,'am-task-status '+cls);
         if(t.state==='waiting_owner')status.append(el('span',undefined,'am-dot am-dot-wait'));
@@ -381,8 +381,8 @@
         box.append(row);
       }
     };
-    section('Активные',active);section('Завершённые',done);
-    if(!box.children.length)box.append(el('p',view?.project?(computerFilter||$('agent-filter').value?'Здесь задач нет':'Задач пока нет'):'','am-small am-muted'));
+    section(tr('Активные'),active);section(tr('Завершённые'),done);
+    if(!box.children.length)box.append(el('p',view?.project?(computerFilter||$('agent-filter').value?tr('Здесь задач нет'):tr('Задач пока нет')):'','am-small am-muted'));
   }
   // Coordinator connection (T-039): the client runs Claude's own
   // `claude mcp add` in the project folder; the owner never opens a terminal.
@@ -406,26 +406,26 @@
     const link=view.coordinator_link||{state:'unknown'},failure=linkFailure?.project===view.project?linkFailure:null;
     const connect=label=>{const b=el('button',label);b.type='button';b.addEventListener('click',()=>connectCoordinator(view.project));return b;};
     if(linkBusy===view.project){
-      box.append(el('p','Подключаем Claude к проекту…','am-connect-title'),el('p','Messenger добавляет этот проект в настройки Claude. Это займёт несколько секунд.'));
+      box.append(el('p',tr('Подключаем Claude к проекту…'),'am-connect-title'),el('p',tr('Messenger добавляет этот проект в настройки Claude. Это займёт несколько секунд.')));
     }else if(link.state==='connected'){
-      box.append(el('p','Claude подключён к проекту','am-connect-title'));
-      box.append(el('p','Откройте папку проекта в Claude (вкладка Code, этот компьютер) и начните новый чат. Напишите в нём, что нужно сделать. Чтобы проверить подключение, спросите: «Каких агентов ты видишь?»'));
-      box.append(el('p','Чат, открытый до подключения, проект не увидит: нужен новый.','am-small am-muted'));
+      box.append(el('p',tr('Claude подключён к проекту'),'am-connect-title'));
+      box.append(el('p',tr('Откройте папку проекта в Claude (вкладка Code, этот компьютер) и начните новый чат. Напишите в нём, что нужно сделать. Чтобы проверить подключение, спросите: «Каких агентов ты видишь?»')));
+      box.append(el('p',tr('Чат, открытый до подключения, проект не увидит: нужен новый.'),'am-small am-muted'));
     }else{
-      box.append(el('p','Подключите Claude к проекту','am-connect-title'));
-      if(failure){box.append(el('p','Не получилось подключить: '+failure.detail),connect('Попробовать ещё раз'));}
-      else if(link.state==='no_claude'){box.append(el('p','Сначала подключите Claude Code во вкладке «Агенты», затем нажмите кнопку ниже.'),connect('Подключить к Claude'));}
-      else if(link.state==='other'){box.append(el('p','В настройках Claude для этой папки уже есть другое подключение с именем «messenger». Messenger его не меняет. Если оно больше не нужно, удалите его командой «claude mcp remove messenger» в этой папке и нажмите кнопку ниже.'),connect('Подключить к Claude'));}
-      else if(link.state==='unknown'){box.append(el('p','Не удалось прочитать настройки Claude'+(link.detail?': '+link.detail:'.')),connect('Подключить к Claude'));}
-      else if(link.state==='no_folder'){box.append(el('p','У проекта нет папки на этом компьютере. Укажите её в настройках проекта.'));}
-      else{box.append(el('p','Задачи проекта даёт ваш чат в Claude. Messenger сам добавит этот проект в настройки Claude.'),connect('Подключить к Claude'));}
+      box.append(el('p',tr('Подключите Claude к проекту'),'am-connect-title'));
+      if(failure){box.append(el('p',tr('Не получилось подключить: ')+failure.detail),connect(tr('Попробовать ещё раз')));}
+      else if(link.state==='no_claude'){box.append(el('p',tr('Сначала подключите Claude Code во вкладке «Агенты», затем нажмите кнопку ниже.')),connect(tr('Подключить к Claude')));}
+      else if(link.state==='other'){box.append(el('p',tr('В настройках Claude для этой папки уже есть другое подключение с именем «messenger». Messenger его не меняет. Если оно больше не нужно, удалите его командой «claude mcp remove messenger» в этой папке и нажмите кнопку ниже.')),connect(tr('Подключить к Claude')));}
+      else if(link.state==='unknown'){box.append(el('p',tr('Не удалось прочитать настройки Claude')+(link.detail?': '+link.detail:'.')),connect(tr('Подключить к Claude')));}
+      else if(link.state==='no_folder'){box.append(el('p',tr('У проекта нет папки на этом компьютере. Укажите её в настройках проекта.')));}
+      else{box.append(el('p',tr('Задачи проекта даёт ваш чат в Claude. Messenger сам добавит этот проект в настройки Claude.')),connect(tr('Подключить к Claude')));}
     }
-    const manual=el('details',undefined,'am-tool');manual.append(el('summary','Подключить вручную через Терминал'));
+    const manual=el('details',undefined,'am-tool');manual.append(el('summary',tr('Подключить вручную через Терминал')));
     const command='cd "'+view.folder+'" && claude mcp add --scope local messenger -- "'+view.messenger+'" --root "'+view.data_root+'" coordinator --project "'+view.project+'"';
-    const copy=el('button','Скопировать команду');copy.type='button';
-    copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(command);copy.textContent='Скопировано';}catch(_){copy.textContent='Скопируйте вручную';}setTimeout(()=>copy.textContent='Скопировать команду',2000);});
+    const copy=el('button',tr('Скопировать команду'));copy.type='button';
+    copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(command);copy.textContent=tr('Скопировано');}catch(_){copy.textContent=tr('Скопируйте вручную');}setTimeout(()=>copy.textContent=tr('Скопировать команду'),2000);});
     manual.append(el('pre',command,'am-command'),copy);
-    box.append(manual,el('p','Чат-координатор видит только задачи этого проекта.','am-small am-muted'));
+    box.append(manual,el('p',tr('Чат-координатор видит только задачи этого проекта.'),'am-small am-muted'));
     return g;
   }
   function renderThread(){
@@ -434,14 +434,14 @@
     if(!view){head.replaceChildren();return;}
     if(!view.project){
       head.replaceChildren();
-      const box=el('div',undefined,'am-settings am-connect');box.append(el('h3','Создайте проект'),el('p','Проект связывает чат-координатора, папку проекта на этом компьютере и задачи.'));
-      const b=el('button','Новый проект','am-primary');b.type='button';b.addEventListener('click',()=>openProjectDialog(false));box.append(b);
+      const box=el('div',undefined,'am-settings am-connect');box.append(el('h3',tr('Создайте проект')),el('p',tr('Проект связывает чат-координатора, папку проекта на этом компьютере и задачи.')));
+      const b=el('button',tr('Новый проект'),'am-primary');b.type='button';b.addEventListener('click',()=>openProjectDialog(false));box.append(b);
       thread.replaceChildren(box);return;
     }
     if(!view.coordinator.connected&&!view.tasks.length){head.replaceChildren();thread.replaceChildren(connectHelp());return;}
     if(!selectedTask||!feed||feed.task.id!==selectedTask){
       head.replaceChildren();
-      if(!selectedTask)thread.replaceChildren(el('p',view.tasks.length?'Выберите задачу в списке справа.':'Задач пока нет. Их создаёт чат-координатор.','am-muted am-empty'));
+      if(!selectedTask)thread.replaceChildren(el('p',view.tasks.length?tr('Выберите задачу в списке справа.'):tr('Задач пока нет. Их создаёт чат-координатор.'),'am-muted am-empty'));
       return;
     }
     renderFeed();
@@ -472,7 +472,7 @@
     return box;
   }
   // A tool action as one line: its kind and, shortened, what it acted on.
-  const toolNames={Bash:'Команда',Read:'Чтение',Edit:'Правка',MultiEdit:'Правка',Write:'Запись',Grep:'Поиск',Glob:'Поиск файлов',WebFetch:'Загрузка страницы',WebSearch:'Поиск в интернете',Task:'Подзадача',TodoWrite:'План'};
+  const toolNames={Bash:tr('Команда'),Read:tr('Чтение'),Edit:tr('Правка'),MultiEdit:tr('Правка'),Write:tr('Запись'),Grep:tr('Поиск'),Glob:tr('Поиск файлов'),WebFetch:tr('Загрузка страницы'),WebSearch:tr('Поиск в интернете'),Task:tr('Подзадача'),TodoWrite:tr('План')};
   // The command itself, without the shell that runs it.
   function commandText(line){
     const m=line.match(/^"?[^"]*(?:powershell|pwsh)(?:\.exe)?"?\s+-Command\s+([\s\S]*)$/i)||line.match(/^"?\S*\/(?:ba|z)?sh"?\s+-l?c\s+([\s\S]*)$/);
@@ -480,7 +480,7 @@
     const c=m[1].trim(),q=c[0];
     return (q==="'"||q==='"')&&c.endsWith(q)&&c.length>1?c.slice(1,-1):c;
   }
-  function toolName(it){return toolNames[it.title]||it.title||'Действие';}
+  function toolName(it){return toolNames[it.title]||it.title||tr('Действие');}
   function toolLine(it){
     const name=toolName(it);
     const first=commandText((it.text||'').split('\n')[0]);
@@ -504,10 +504,10 @@
     const signature=JSON.stringify(feed);if(signature===feedSignature)return;
     const atBottom=thread.scrollHeight-thread.clientHeight-thread.scrollTop<40||!feedSignature;feedSignature=signature;
     const title=el('div',undefined,'am-task-head');title.append(el('h3',t.title));
-    const where=t.remote&&!t.remote.from?' на компьютере «'+t.remote.name+'»':' на '+(view.computer_name||'этом компьютере')+(t.remote?.from?', по заданию компьютера «'+t.remote.name+'»':'');
-    title.append(el('p',(names[t.agent]||t.agent)+(t.model?' ('+t.model+')':'')+where+', папка '+(t.folder||'ещё не известна'),'am-small am-muted'));
+    const where=t.remote&&!t.remote.from?tr(' на компьютере «')+t.remote.name+'»':tr(' на ')+(view.computer_name||tr('этом компьютере'))+(t.remote?.from?tr(', по заданию компьютера «')+t.remote.name+'»':'');
+    title.append(el('p',(names[t.agent]||t.agent)+(t.model?' ('+t.model+')':'')+where+tr(', папка ')+(t.folder||tr('ещё не известна')),'am-small am-muted'));
     const [statusText,statusCls]=taskStatus(t);
-    const when=t.finished_at?', '+clock(t.created_at)+'–'+clock(t.finished_at):', начата в '+clock(t.created_at);
+    const when=t.finished_at?', '+clock(t.created_at)+'–'+clock(t.finished_at):tr(', начата в ')+clock(t.created_at);
     const line=el('p',undefined,'am-small');line.append(el('span',statusText,statusCls),el('span',when,'am-muted'));
     if(t.usage){const used=el('span',', '+usageShort(t.usage),'am-muted');used.title=usageLong(t.usage);line.append(used);}
     title.append(line);
@@ -522,7 +522,7 @@
       if(!tools||tools.host!==c||c.lastChild!==tools.node){c.append(line);tools={host:c,node:line,key,count:1,names:new Set([toolName(it)])};return;}
       if(!tools.box){const box=el('details',undefined,'am-tool-group');box.dataset.key='g'+tools.key;tools.sum=el('summary');box.append(tools.sum);tools.node.replaceWith(box);box.append(tools.node);tools.box=box;tools.node=box;}
       tools.box.append(line);tools.count++;tools.names.add(toolName(it));
-      tools.sum.textContent='Действий: '+tools.count+' — '+[...tools.names].join(', ');
+      tools.sum.textContent=tr('Действий: ')+tools.count+' — '+[...tools.names].join(', ');
     };
     const outgoing=(author,provider,role,text,at)=>{
       group=null;const g=el('article',undefined,'am-message-group');const row=el('div',undefined,'am-message am-outgoing');
@@ -535,27 +535,27 @@
       const g=el('article',undefined,'am-message-group');const row=el('div',undefined,'am-message');
       const avatar=el('div',undefined,'am-avatar');avatar.append(providerIcon(t.agent));
       const body=el('div',undefined,'am-message-body');const meta=el('div',undefined,'am-meta');
-      meta.append(el('strong',names[t.agent]||t.agent),roleTag('исполнитель'),el('time',clock(at)));
+      meta.append(el('strong',names[t.agent]||t.agent),roleTag(tr('исполнитель')),el('time',clock(at)));
       const content=el('div',undefined,'am-message-content');meta.prepend(avatar);body.append(meta,content);row.append(body);g.append(row);out.push(g);group=content;return content;
     };
     const delivery=(text,cls)=>el('div',text,'am-delivery '+cls);
     for(const [index,it] of feed.items.entries()){
       if(it.kind!=='tool')tools=null;
-      if(it.kind==='task'){outgoing(coordLabel,coordProvider,'координатор',it.text,it.at);continue;}
-      if(it.kind==='answer'){if(it.author==='owner')outgoing('Вы','owner','',it.text,it.at);else outgoing(coordLabel,coordProvider,'координатор',it.text,it.at);continue;}
-      if(it.kind==='accepted'){const c=out[out.length-1]?.querySelector('.am-message-content');if(c)c.append(delivery('Принято на компьютере «'+it.text+'»','am-status-good'));group=null;continue;}
+      if(it.kind==='task'){outgoing(coordLabel,coordProvider,tr('координатор'),it.text,it.at);continue;}
+      if(it.kind==='answer'){if(it.author==='owner')outgoing(tr('Вы'),'owner','',it.text,it.at);else outgoing(coordLabel,coordProvider,tr('координатор'),it.text,it.at);continue;}
+      if(it.kind==='accepted'){const c=out[out.length-1]?.querySelector('.am-message-content');if(c)c.append(delivery(tr('Принято на компьютере «')+it.text+'»','am-status-good'));group=null;continue;}
       if(it.kind==='text'){workerGroup(it.at).append(richText(it.text));continue;}
       if(it.kind==='tool'){addTool(workerGroup(it.at),it,index);continue;}
       if(it.kind==='report'||it.kind==='question'){
         const c=workerGroup(it.at);c.append(richText(it.text,'am-disposition'));
-        if(!it.verified)c.append(delivery('Не опубликовано: запуск не прошёл проверку','am-status-bad'));
-        else if(it.kind==='report')c.append(delivery('Отчёт отправлен координатору, сессия закрыта','am-status-good'));
-        else if(it.audience==='owner')c.append(delivery('Вопрос вам, координатор его не видит','am-status-wait'));
-        else c.append(delivery('Вопрос координатору','am-status-wait'));
+        if(!it.verified)c.append(delivery(tr('Не опубликовано: запуск не прошёл проверку'),'am-status-bad'));
+        else if(it.kind==='report')c.append(delivery(tr('Отчёт отправлен координатору, сессия закрыта'),'am-status-good'));
+        else if(it.audience==='owner')c.append(delivery(tr('Вопрос вам, координатор его не видит'),'am-status-wait'));
+        else c.append(delivery(tr('Вопрос координатору'),'am-status-wait'));
         group=null;continue;
       }
       if(it.kind==='outcome'){
-        group=null;const text={failed:t.remote&&!t.remote.from?'Задача не выполнена':'Запуск завершился с ошибкой',blocked:t.remote&&!t.remote.from?'Задача заблокирована: результат на другом компьютере неизвестен':'Задача заблокирована: процесс не завершился полностью',interrupted:'Клиент перезапустился во время работы; результат неизвестен',cancelled:'Задача отменена'}[it.state]||it.state;
+        group=null;const text={failed:t.remote&&!t.remote.from?tr('Задача не выполнена'):tr('Запуск завершился с ошибкой'),blocked:t.remote&&!t.remote.from?tr('Задача заблокирована: результат на другом компьютере неизвестен'):tr('Задача заблокирована: процесс не завершился полностью'),interrupted:tr('Клиент перезапустился во время работы; результат неизвестен'),cancelled:tr('Задача отменена')}[it.state]||it.state;
         const note=el('div',undefined,'am-outcome '+(it.state==='cancelled'?'am-muted':'am-status-bad'));note.append(el('p',text));
         const why=t.remote&&!t.remote.from?refusalText(it.text,t.remote.name):'';if(why)note.append(el('p',why));
         if(it.text)note.append(el('p',it.text,'am-small am-muted'));
@@ -568,7 +568,7 @@
     const q=t.remote?.from?null:t.owner_question;
     const active=activeStates.includes(t.state),box=$('answer-text');
     $('compose').hidden=!q&&!active;
-    box.disabled=!q;box.placeholder=q?'Ответить исполнителю…':t.remote?.from&&t.owner_question?'Отвечают на компьютере «'+t.remote.name+'»':t.pending_launch?'Задача ждёт запуска…':'Исполнитель работает…';
+    box.disabled=!q;box.placeholder=q?tr('Ответить исполнителю…'):t.remote?.from&&t.owner_question?tr('Отвечают на компьютере «')+t.remote.name+'»':t.pending_launch?tr('Задача ждёт запуска…'):tr('Исполнитель работает…');
     $('answer-send').hidden=!q;$('answer-hint').hidden=!q;$('task-stop').hidden=!active;
     if(q&&$('compose').dataset.question!==q.id){$('compose').dataset.question=q.id;$('answer-text').value='';$('answer-status').textContent='';}
     answerControls();
@@ -576,10 +576,10 @@
   }
   // Known refusals of another computer, explained in the window's language.
   function refusalText(text,name){
-    if(/does not run tasks of other computers/.test(text||''))return 'Компьютер «'+name+'» не принимает задачи других компьютеров. Включите на нём «Задачи других компьютеров» на вкладке «Сервер» и дайте задачу снова.';
-    if(/has no project/.test(text||''))return 'На компьютере «'+name+'» нет проекта с таким названием. Создайте его там и выберите папку.';
-    if(/has no folder for the project|project folder is missing/.test(text||''))return 'На компьютере «'+name+'» у проекта не выбрана папка или её нет. Выберите папку проекта там и дайте задачу снова.';
-    if(/is not set up on this computer/.test(text||''))return 'На компьютере «'+name+'» этот агент не настроен. Настройте его там на вкладке агентов.';
+    if(/does not run tasks of other computers/.test(text||''))return tr('Компьютер «')+name+tr('» не принимает задачи других компьютеров. Включите на нём «Задачи других компьютеров» на вкладке «Сервер» и дайте задачу снова.');
+    if(/has no project/.test(text||''))return tr('На компьютере «')+name+tr('» нет проекта с таким названием. Создайте его там и выберите папку.');
+    if(/has no folder for the project|project folder is missing/.test(text||''))return tr('На компьютере «')+name+tr('» у проекта не выбрана папка или её нет. Выберите папку проекта там и дайте задачу снова.');
+    if(/is not set up on this computer/.test(text||''))return tr('На компьютере «')+name+tr('» этот агент не настроен. Настройте его там на вкладке агентов.');
     return '';
   }
   function answerControls(){$('answer-send').disabled=answering||!$('answer-text').value.trim()||!feed?.task?.owner_question||!!feed?.task?.remote?.from;}
@@ -588,9 +588,9 @@
     const text=$('answer-text').value.trim();if(!text)return;
     let op=recall('messenger-answer-op:'+q.id);
     if(!op){op='window-'+q.id+'-'+crypto.randomUUID();remember('messenger-answer-op:'+q.id,op);}
-    answering=true;answerControls();$('answer-status').textContent='Отправляем ответ…';
-    try{await postAPI('/api/task-answer',{task:feed.task.id,question:q.id,op_id:op,text});showError(null);$('answer-status').textContent='Ответ записан. Исполнитель продолжит в той же сессии.';$('answer-text').value='';feedSignature='';await refresh();}
-    catch(error){$('answer-status').textContent='';showError({message:error.message+' Повтор с тем же текстом безопасен.',command:error.command,hint:error.hint});}
+    answering=true;answerControls();$('answer-status').textContent=tr('Отправляем ответ…');
+    try{await postAPI('/api/task-answer',{task:feed.task.id,question:q.id,op_id:op,text});showError(null);$('answer-status').textContent=tr('Ответ записан. Исполнитель продолжит в той же сессии.');$('answer-text').value='';feedSignature='';await refresh();}
+    catch(error){$('answer-status').textContent='';showError({message:error.message+tr(' Повтор с тем же текстом безопасен.'),command:error.command,hint:error.hint});}
     finally{answering=false;answerControls();}
   }
   // Agent cards (T-061, D-070): the agent's name with a check, settings and
@@ -628,7 +628,7 @@
     catch(error){showError(error);}
   }
   function uninstallAgent(provider){
-    askConfirm('Удалить '+names[provider]+' CLI?','Откроется официальная страница агента. Удалите его командой оттуда. Настройки Messenger сохранятся.','Открыть',async()=>{
+    askConfirm(tr('Удалить ')+names[provider]+' CLI?',tr('Откроется официальная страница агента. Удалите его командой оттуда. Настройки Messenger сохранятся.'),tr('Открыть'),async()=>{
       await postAPI('/api/agent-install',{provider});
     });
   }
@@ -644,11 +644,11 @@
       const head=el('div',undefined,'am-agent-head');
       const heading=el('h3',undefined,'am-provider-heading');heading.append(providerIcon(provider),el('span',names[provider]));
       const sw=el('button',undefined,'am-switch');sw.type='button';sw.setAttribute('role','switch');sw.setAttribute('aria-checked',String(on));
-      sw.setAttribute('aria-label',names[provider]+': Messenger даёт задачи');
-      sw.title=on?'Messenger даёт задачи '+names[provider]+' на этом компьютере':cli?'Включить: Messenger будет давать задачи '+names[provider]:'Сначала установите '+names[provider]+' CLI';
+      sw.setAttribute('aria-label',names[provider]+tr(': Messenger даёт задачи'));
+      sw.title=on?tr('Messenger даёт задачи ')+names[provider]+tr(' на этом компьютере'):cli?tr('Включить: Messenger будет давать задачи ')+names[provider]:tr('Сначала установите ')+names[provider]+' CLI';
       sw.disabled=!a&&!cli;
       sw.addEventListener('click',async()=>{sw.disabled=true;try{await setAgentOn(provider,!on);}finally{sw.disabled=false;}});
-      head.append(heading,iconButton('Проверить снова',checkPath,false,()=>{if(cli)checkCard(provider);else loadDiscovery();}),iconButton('Настройки',gearPath,true,()=>openAgentSetup(provider)),sw);
+      head.append(heading,iconButton(tr('Проверить снова'),checkPath,false,()=>{if(cli)checkCard(provider);else loadDiscovery();}),iconButton(tr('Настройки'),gearPath,true,()=>openAgentSetup(provider)),sw);
       card.append(head);
       const steps=el('div',undefined,'am-steps');
       // mark: 'ok', 'no', a step number, or a node (the limit ring).
@@ -671,46 +671,46 @@
       // 1. The program.
       const programNote=rowNote.get(provider+':program');
       if(programNote)step(1,names[provider]+' CLI',programNote);
-      else if(missing)step('no',names[provider]+' CLI не установлен','Не найден на этом компьютере',['Установить',()=>installAgent(provider)]);
-      else if(cli)step('ok',names[provider]+' CLI установлен',busy?'Проверяем':check?.version?.value||'',['Удалить',()=>uninstallAgent(provider)]);
-      else step(1,names[provider]+' CLI','Проверяем');
+      else if(missing)step('no',names[provider]+tr(' CLI не установлен'),tr('Не найден на этом компьютере'),[tr('Установить'),()=>installAgent(provider)]);
+      else if(cli)step('ok',names[provider]+tr(' CLI установлен'),busy?tr('Проверяем'):check?.version?.value||'',[tr('Удалить'),()=>uninstallAgent(provider)]);
+      else step(1,names[provider]+' CLI',tr('Проверяем'));
       // 2. The sign-in. No confirmed login offers «Войти» (T-056).
       const authNote=rowNote.get(provider+':auth');
-      if(!cli)step(2,'Вход в аккаунт','После установки');
-      else if(authNote)step(2,'Вход в аккаунт',authNote);
-      else if(busy)step(2,'Вход в аккаунт','Проверяем');
+      if(!cli)step(2,tr('Вход в аккаунт'),tr('После установки'));
+      else if(authNote)step(2,tr('Вход в аккаунт'),authNote);
+      else if(busy)step(2,tr('Вход в аккаунт'),tr('Проверяем'));
       else if(auth==='authenticated'){
-        const method=check.authentication.value==='chatgpt'?'Аккаунт ChatGPT':check.authentication.value==='api_key'?'Ключ API':'';
-        step('ok','Вход выполнен',method,['Выйти',()=>logoutFromCard(provider,cli,profile)]);
+        const method=check.authentication.value==='chatgpt'?tr('Аккаунт ChatGPT'):check.authentication.value==='api_key'?tr('Ключ API'):'';
+        step('ok',tr('Вход выполнен'),method,[tr('Выйти'),()=>logoutFromCard(provider,cli,profile)]);
       }
-      else if(auth==='not_authenticated')step('no','Вход не выполнен','Войдите в аккаунт агента',['Войти',()=>loginFromCard(provider,cli,profile)]);
-      else step(2,'Вход в аккаунт',check?'Не удалось проверить':'Ещё не проверен',['Войти',()=>loginFromCard(provider,cli,profile)]);
+      else if(auth==='not_authenticated')step('no',tr('Вход не выполнен'),tr('Войдите в аккаунт агента'),[tr('Войти'),()=>loginFromCard(provider,cli,profile)]);
+      else step(2,tr('Вход в аккаунт'),check?tr('Не удалось проверить'):tr('Ещё не проверен'),[tr('Войти'),()=>loginFromCard(provider,cli,profile)]);
       // 3. Work with Messenger: set only by what a task showed (D-070).
       const trust=a?.trust?.state;
-      if(a&&trust&&trust!=='trusted')step('no','Не доверяет папке проекта',trust==='not_trusted'?'Откройте папку в агенте и подтвердите доверие':'Не удалось определить',null,a.trust?.hint||'Откройте папку проекта в этой программе и подтвердите доверие.');
-      else if(a?.last_done)step('ok','Работает с Messenger','Последняя задача '+dayClock(a.last_done));
-      else step(3,'Работает с Messenger',missing?'Проверится после установки':'Проверится на первой задаче');
+      if(a&&trust&&trust!=='trusted')step('no',tr('Не доверяет папке проекта'),trust==='not_trusted'?tr('Откройте папку в агенте и подтвердите доверие'):tr('Не удалось определить'),null,a.trust?.hint||tr('Откройте папку проекта в этой программе и подтвердите доверие.'));
+      else if(a?.last_done)step('ok',tr('Работает с Messenger'),tr('Последняя задача ')+dayClock(a.last_done));
+      else step(3,tr('Работает с Messenger'),missing?tr('Проверится после установки'):tr('Проверится на первой задаче'));
       // 4. The limit the agent reported during its last task (T-044).
       const l=a?.limit,level=limitLevel(l);
-      const today=a?.today_tokens?'сегодня '+tokensText(a.today_tokens)+' токенов':'';
+      const today=a?.today_tokens?tr('сегодня ')+tokensText(a.today_tokens)+tr(' токенов'):'';
       if(l){
-        const title=el('span');title.append('Лимит ');
-        const used=typeof l.used_percent==='number'?Math.round(l.used_percent)+'%':l.state==='exhausted'?'исчерпан':l.state==='warning'?'близко к пределу':'в норме';
+        const title=el('span');title.append(tr('Лимит '));
+        const used=typeof l.used_percent==='number'?Math.round(l.used_percent)+'%':l.state==='exhausted'?tr('исчерпан'):l.state==='warning'?tr('близко к пределу'):tr('в норме');
         title.append(el('span',used,'am-status-'+level));
-        const r=l.resets_at?'Сброс '+resetText(l.resets_at):'';
-        step(limitRing(l),title,[r,today].filter(Boolean).join(', ')||(l.observed_at?'По данным задачи в '+clock(l.observed_at):''));
-      }else step(limitRing(null),'Лимит',today?today[0].toUpperCase()+today.slice(1):'Появится после первой задачи');
+        const r=l.resets_at?tr('Сброс ')+resetText(l.resets_at):'';
+        step(limitRing(l),title,[r,today].filter(Boolean).join(', ')||(l.observed_at?tr('По данным задачи в ')+clock(l.observed_at):''));
+      }else step(limitRing(null),tr('Лимит'),today?today[0].toUpperCase()+today.slice(1):tr('Появится после первой задачи'));
       card.append(steps);
       const running=a?.project_running||0,todayTasks=a?.project_today||0;
       const tasks=el('button',undefined,'am-agent-tasks');tasks.type='button';
       if(running||todayTasks){
-        const label=el('span');label.append('Задачи: ');
-        if(running)label.append(el('span',running+' идёт','am-status-run'));
+        const label=el('span');label.append(tr('Задачи: '));
+        if(running)label.append(el('span',running+tr(' идёт'),'am-status-run'));
         if(running&&todayTasks)label.append(', ');
-        if(todayTasks)label.append(todayTasks+' сегодня');
+        if(todayTasks)label.append(todayTasks+tr(' сегодня'));
         tasks.append(label);
         tasks.addEventListener('click',()=>{$('agent-filter').value=provider;syncSelects();show('tasks');renderTaskList();});
-      }else{tasks.textContent='Задачи';tasks.disabled=true;}
+      }else{tasks.textContent=tr('Задачи');tasks.disabled=true;}
       card.append(tasks);cards.append(card);
     }
     renderAccessBar();
@@ -720,7 +720,7 @@
     const agents=view?.agents||[],bar=$('access-bar');bar.hidden=!agents.length;
     const on=agents.filter(a=>a.full_access).length,all=!!agents.length&&on===agents.length;
     $('access-toggle').setAttribute('aria-checked',all?'true':on?'mixed':'false');
-    $('access-title').textContent=on&&!all?'Любые команды: разрешены не всем':'Любые команды';
+    $('access-title').textContent=on&&!all?tr('Любые команды: разрешены не всем'):tr('Любые команды');
   }
   async function toggleAllAccess(){
     const on=$('access-toggle').getAttribute('aria-checked')!=='true';
@@ -752,10 +752,10 @@
     restart={busy:true,ask:restart.ask,error:''};renderRestart();
     let response,result={};
     try{response=await fetch('/api/restart-client',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({project,confirm}),cache:'no-store',signal:AbortSignal.timeout(50000)});result=await response.json().catch(()=>({}));}
-    catch(_){restart={busy:false,ask:null,error:'Ответ не получен, результат неизвестен. Подождите немного: окно проверит клиент само.'};renderRestart();loadClientInfo();return;}
+    catch(_){restart={busy:false,ask:null,error:tr('Ответ не получен, результат неизвестен. Подождите немного: окно проверит клиент само.')};renderRestart();loadClientInfo();return;}
     if(response.ok&&result.ok){restart={busy:false,ask:null,error:''};showError(null);await loadClientInfo();viewSignature='';refresh();return;}
     if(result.state==='confirm'){restart={busy:false,ask:{running:result.running||0,known:result.known!==false},error:''};renderRestart();return;}
-    restart={busy:false,ask:null,error:result.detail||'Перезапуск не подтверждён. Проверьте состояние.'};renderRestart();loadClientInfo();
+    restart={busy:false,ask:null,error:result.detail||tr('Перезапуск не подтверждён. Проверьте состояние.')};renderRestart();loadClientInfo();
   }
   // A window newer than its client cannot work properly, so this dialog
   // covers the whole window until the client is restarted or the app quits.
@@ -766,34 +766,34 @@
     if(!show){if(dialog.open)dialog.close();return;}
     const ask=restart.ask,canRestart=!!clientInfo?.restart,answering=clientInfo?.client==='running';
     const canQuit=!!window.webkit?.messageHandlers?.app;
-    let title='Нужно перезапустить Messenger',text;
-    if(ask){title=ask.known?'Сейчас выполняются задачи':'Не удалось проверить задачи';text=(ask.known?'Задач в работе: '+ask.running+'. Перезапуск прервёт их.':'Если задачи сейчас идут, перезапуск прервёт их.')+' Сами они не повторятся и будут ждать вашего решения.';}
-    else if(restart.busy)text='Останавливаем старую версию и запускаем новую. Это займёт несколько секунд.';
-    else if(canRestart)text='Приложение обновилось до версии '+clientInfo.window_version+', а в фоне работает '+(clientInfo.client_version?'версия '+clientInfo.client_version:'более ранняя версия')+'. Пока она не перезапущена, Messenger не может работать. Задачи, история и устройства сохранятся.';
-    else text='В фоне работает более ранняя версия клиента. Закройте окно, выполните скопированную команду в Терминале и откройте окно снова.';
+    let title=tr('Нужно перезапустить Messenger'),text;
+    if(ask){title=ask.known?tr('Сейчас выполняются задачи'):tr('Не удалось проверить задачи');text=(ask.known?tr('Задач в работе: ')+ask.running+tr('. Перезапуск прервёт их.'):tr('Если задачи сейчас идут, перезапуск прервёт их.'))+tr(' Сами они не повторятся и будут ждать вашего решения.');}
+    else if(restart.busy)text=tr('Останавливаем старую версию и запускаем новую. Это займёт несколько секунд.');
+    else if(canRestart)text=tr('Приложение обновилось до версии ')+clientInfo.window_version+tr(', а в фоне работает ')+(clientInfo.client_version?tr('версия ')+clientInfo.client_version:tr('более ранняя версия'))+tr('. Пока она не перезапущена, Messenger не может работать. Задачи, история и устройства сохранятся.');
+    else text=tr('В фоне работает более ранняя версия клиента. Закройте окно, выполните скопированную команду в Терминале и откройте окно снова.');
     $('restart-title').textContent=title;$('restart-text').textContent=text;
     $('restart-error').textContent=restart.error;$('restart-error').hidden=!restart.error;
     const go=$('restart-go'),quit=$('restart-quit'),copy=$('restart-copy');
     go.hidden=!canRestart||!answering||restart.busy;
-    go.textContent=ask?'Перезапустить всё равно':'Перезапустить';
+    go.textContent=ask?tr('Перезапустить всё равно'):tr('Перезапустить');
     go.classList.toggle('am-primary',!ask);go.classList.toggle('am-danger',!!ask);
     quit.hidden=!canQuit;quit.disabled=restart.busy;
     copy.hidden=canRestart||!shutdownCommand();
     if(!dialog.open){dialog.showModal();(go.hidden?quit.hidden?copy:quit:go).focus();}
   }
   function renderNotice(){
-    if(!online){notice(el('p',offlineReason||'Клиент Messenger не запущен или не отвечает. Данные не обновляются.'));return;}
-    if(view?.pending_launch>0&&!view.tasks_enabled){notice(el('p','Задачи записаны, но этот клиент не запускает исполнителей: он запущен без разрешения --allow-tasks.'));return;}
+    if(!online){notice(el('p',offlineReason||tr('Клиент Messenger не запущен или не отвечает. Данные не обновляются.')));return;}
+    if(view?.pending_launch>0&&!view.tasks_enabled){notice(el('p',tr('Задачи записаны, но этот клиент не запускает исполнителей: он запущен без разрешения --allow-tasks.')));return;}
     if(view?.pending_launch>0&&view.paused){
-      const box=el('div',undefined,'am-notice-row');box.append(el('p','Обработка на паузе: новые задачи не запускаются.'));
-      const go=el('button','Продолжить');go.type='button';go.addEventListener('click',async()=>{go.disabled=true;try{await postAPI('/api/resume',{});showError(null);await refresh();}catch(e){go.disabled=false;showError(e);}});
+      const box=el('div',undefined,'am-notice-row');box.append(el('p',tr('Обработка на паузе: новые задачи не запускаются.')));
+      const go=el('button',tr('Продолжить'));go.type='button';go.addEventListener('click',async()=>{go.disabled=true;try{await postAPI('/api/resume',{});showError(null);await refresh();}catch(e){go.disabled=false;showError(e);}});
       box.append(go);notice(box);return;
     }
     notice(null);
   }
   function render(){
     renderProjects();renderMachines();renderTaskList();renderThread();renderAgents();renderProjectPage();renderNotice();autoCheck();
-    $('connection').textContent=online?'Клиент доступен':'Клиент недоступен';
+    $('connection').textContent=online?tr('Клиент доступен'):tr('Клиент недоступен');
   }
   async function loadFeed(){
     if(!selectedTask){feed=null;renderThread();return;}
@@ -806,21 +806,21 @@
     try{
       let v;
       try{v=await api('/api/window?project='+encodeURIComponent(project));}
-      catch(error){if(Date.now()-clientInfoAt>5000)loadClientInfo();online=false;offlineReason=error.name==='TimeoutError'||error.name==='TypeError'?'Окно потеряло связь с программой Messenger. Закройте окно и откройте снова.':error.message;renderMachines();renderNotice();return;}
+      catch(error){if(Date.now()-clientInfoAt>5000)loadClientInfo();online=false;offlineReason=error.name==='TimeoutError'||error.name==='TypeError'?tr('Окно потеряло связь с программой Messenger. Закройте окно и откройте снова.'):error.message;renderMachines();renderNotice();return;}
       online=true;offlineReason='';if(Date.now()-clientInfoAt>10000)loadClientInfo();
       if(!v.projects.some(p=>p.name===project))project=v.project||'';
       const signature=JSON.stringify(v);
       if(signature!==viewSignature){viewSignature=signature;view=v;if(selectedTask&&!v.tasks.some(t=>t.id===selectedTask)){selectedTask='';feed=null;feedSignature='';}render();}
       else{renderMachines();renderNotice();}
       if(selectedTask)await loadFeed();
-    }catch(error){notice(el('p','Окно не смогло показать данные: '+error.message));}
+    }catch(error){notice(el('p',tr('Окно не смогло показать данные: ')+error.message));}
     finally{refreshing=false;}
   }
   async function loadDiscovery(){try{const d=await api('/api/discovery',8000);discovery=d.agents||[];discoveryLoaded=true;renderAgents();autoCheck();}catch(_){}}
   function show(next){
     tab=next;root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab);
     root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
-    $('list-toggle').hidden=tab!=='tasks';if(tab==='server')loadServer();if(tab==='stats')loadStats();$('screen-title').textContent={tasks:'Задачи',agents:'Агенты',project:'Проект',server:'Сервер',stats:'Статистика'}[tab];
+    $('list-toggle').hidden=tab!=='tasks';if(tab==='server')loadServer();if(tab==='stats')loadStats();$('screen-title').textContent={tasks:tr('Задачи'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сервер'),stats:tr('Статистика')}[tab];
   }
 
 
@@ -828,37 +828,37 @@
   // tokens, no dollars (D-074). One hue for every bar: the bars show size,
   // not identity, and the names stand next to them.
   let statsPeriod=['day','week','month'].includes(recall('messenger-stats-period'))?recall('messenger-stats-period'):'week',stats=null,statsGen=0;
-  const periodWords={day:'сегодня',week:'за 7 дней',month:'за 30 дней'};
-  function tasksWord(n){const a=n%10,b=n%100;return n+' '+(a===1&&b!==11?'задача':a>=2&&a<=4&&(b<12||b>14)?'задачи':'задач');}
-  function tokensWord(n){const a=n%10,b=n%100;return a===1&&b!==11?'токен':a>=2&&a<=4&&(b<12||b>14)?'токена':'токенов';}
-  function tokensFull(n){return n.toLocaleString('ru-RU')+' '+tokensWord(n);}
+  const periodWords={day:tr('сегодня'),week:tr('за 7 дней'),month:tr('за 30 дней')};
+  function tasksWord(n){const a=n%10,b=n%100;if(amLang==='en')return n+(n===1?' task':' tasks');return n+' '+(a===1&&b!==11?'задача':a>=2&&a<=4&&(b<12||b>14)?'задачи':'задач');}
+  function tokensWord(n){const a=n%10,b=n%100;if(amLang==='en')return n===1?'token':'tokens';return a===1&&b!==11?'токен':a>=2&&a<=4&&(b<12||b>14)?'токена':'токенов';}
+  function tokensFull(n){return n.toLocaleString(amLocale)+' '+tokensWord(n);}
   async function loadStats(){
     const gen=++statsGen;
     try{const s=await api('/api/usage-stats?period='+statsPeriod,8000);if(gen===statsGen){stats=s;renderStats();}}
-    catch(error){if(gen===statsGen){$('stats-total-title').textContent='Статистика недоступна';$('stats-total-note').textContent=error.message;}}
+    catch(error){if(gen===statsGen){$('stats-total-title').textContent=tr('Статистика недоступна');$('stats-total-note').textContent=error.message;}}
   }
   function statsBars(box,groups,total,agents){
     box.replaceChildren();
-    if(!groups.length){box.append(el('p','Пока пусто','am-small am-muted'));return;}
+    if(!groups.length){box.append(el('p',tr('Пока пусто'),'am-small am-muted'));return;}
     for(const g of groups){
       const row=el('div',undefined,'am-stats-row');
-      const name=el('span',agents?(names[g.key]||g.key):(g.name||'Без имени'),'am-stats-name');
-      if(g.this)name.append(el('span',' (этот)','am-muted'));
+      const name=el('span',agents?(names[g.key]||g.key):(g.name||tr('Без имени')),'am-stats-name');
+      if(g.this)name.append(el('span',tr(' (этот)'),'am-muted'));
       const bar=el('span',undefined,'am-stats-bar');const fill=el('span');fill.style.width=(total?Math.max(2,100*g.tokens/total):0)+'%';bar.append(fill);
       row.append(name,el('span',tokensText(g.tokens),'am-stats-value'),bar,el('span',tasksWord(g.tasks),'am-small am-muted am-stats-tasks'));
       row.title=usageLong(g);box.append(row);
     }
   }
-  function statsDay(day){const d=new Date(day+'T12:00:00');return isNaN(d.getTime())?day:d.toLocaleDateString('ru-RU',{day:'numeric',month:'short'});}
+  function statsDay(day){const d=new Date(day+'T12:00:00');return isNaN(d.getTime())?day:d.toLocaleDateString(amLocale,{day:'numeric',month:'short'});}
   function statsDays(box,days){
     box.replaceChildren();box.hidden=days.length<2;if(box.hidden)return;
     const max=Math.max(1,...days.map(d=>d.tokens));
     const plot=el('div',undefined,'am-stats-plot');plot.setAttribute('role','img');
-    plot.setAttribute('aria-label','Токены по дням, наибольшее за день '+tokensText(max));
+    plot.setAttribute('aria-label',tr('Токены по дням, наибольшее за день ')+tokensText(max));
     const tip=el('div','','am-stats-tip');tip.hidden=true;
     for(const d of days){
       const col=el('button',undefined,'am-stats-col');col.type='button';
-      const text=statsDay(d.day)+': '+(d.tokens?tokensFull(d.tokens)+', '+tasksWord(d.tasks):'нет задач');
+      const text=statsDay(d.day)+': '+(d.tokens?tokensFull(d.tokens)+', '+tasksWord(d.tasks):tr('нет задач'));
       col.setAttribute('aria-label',text);
       const bar=el('span');bar.style.height=(d.tokens?Math.max(2,100*d.tokens/max):0)+'%';col.append(bar);
       const showTip=()=>{tip.textContent=text;tip.hidden=false;const c=col.offsetLeft+col.offsetWidth/2,w=tip.offsetWidth;tip.style.left=Math.min(Math.max(0,c-w/2),plot.clientWidth-w)+'px';};
@@ -868,26 +868,26 @@
     }
     plot.append(tip);
     const axis=el('div',undefined,'am-stats-axis am-small am-muted');
-    axis.append(el('span',statsDay(days[0].day)),el('span','до '+tokensText(max)+' в день'),el('span',statsDay(days[days.length-1].day)));
+    axis.append(el('span',statsDay(days[0].day)),el('span',tr('до ')+tokensText(max)+tr(' в день')),el('span',statsDay(days[days.length-1].day)));
     box.append(plot,axis);
   }
   function renderStats(){
     root.querySelectorAll('[data-period]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.period===statsPeriod)));
     if(!stats)return;
     const t=stats.total;
-    $('stats-total-title').textContent=t.tasks?tokensFull(t.tokens)+' '+periodWords[statsPeriod]:'Нет задач с расходом '+periodWords[statsPeriod];
-    $('stats-total-note').textContent=t.tasks?tasksWord(t.tasks)+', на входе '+t.input_tokens.toLocaleString('ru-RU')+(t.cached_tokens?' (из кэша '+t.cached_tokens.toLocaleString('ru-RU')+')':'')+', на выходе '+t.output_tokens.toLocaleString('ru-RU'):'Агент сообщает расход, когда задача заканчивается.';
+    $('stats-total-title').textContent=t.tasks?tokensFull(t.tokens)+' '+periodWords[statsPeriod]:tr('Нет задач с расходом ')+periodWords[statsPeriod];
+    $('stats-total-note').textContent=t.tasks?tasksWord(t.tasks)+tr(', на входе ')+t.input_tokens.toLocaleString(amLocale)+(t.cached_tokens?tr(' (из кэша ')+t.cached_tokens.toLocaleString(amLocale)+')':'')+tr(', на выходе ')+t.output_tokens.toLocaleString(amLocale):tr('Агент сообщает расход, когда задача заканчивается.');
     statsDays($('stats-days'),statsPeriod==='day'?[]:stats.days);
     statsBars($('stats-agents'),stats.agents,t.tokens,true);
     statsBars($('stats-computers'),stats.computers,t.tokens);
     const top=$('stats-top');top.replaceChildren();
-    if(!stats.top.length)top.append(el('p','Пока пусто','am-small am-muted'));
+    if(!stats.top.length)top.append(el('p',tr('Пока пусто'),'am-small am-muted'));
     for(const task of stats.top){
       const row=el('button',undefined,'am-stats-task');row.type='button';
       const words=el('span',undefined,'am-stats-task-text');
-      words.append(el('span',task.title||'Без названия','am-stats-task-title'),el('span',[task.project,shortNames[task.agent]||task.agent,task.computer].filter(Boolean).join(', '),'am-small am-muted'));
+      words.append(el('span',task.title||tr('Без названия'),'am-stats-task-title'),el('span',[task.project,shortNames[task.agent]||task.agent,task.computer].filter(Boolean).join(', '),'am-small am-muted'));
       row.append(words,el('span',tokensText(task.tokens),'am-stats-value'));
-      row.title='Открыть задачу';
+      row.title=tr('Открыть задачу');
       row.addEventListener('click',()=>{
         if(task.project&&task.project!==project){project=task.project;remember('messenger-project',project);viewSignature='';}
         selectedTask=task.id;feed=null;feedSignature='';show('tasks');refresh();
@@ -901,7 +901,7 @@
   // connection to a broker. Messages stay next to the section they belong to.
   let server=null,serverBusy=false,serverGen=0,serverPolling=false,serverEdited=false,nameFilled=false,invitation=null,inviteTimer=0,revokeAsk='',revokeTimer=0;
   const notes={host:null,member:null,accept:null},noteTimers={};
-  function stamp(at){const d=new Date(at);return isNaN(d.getTime())?'':d.toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});}
+  function stamp(at){const d=new Date(at);return isNaN(d.getTime())?'':d.toLocaleString(amLocale,{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});}
   function capital(text){return text?text[0].toUpperCase()+text.slice(1):'';}
   // A status reads like the agents' status: a dot and plain text. state is
   // 'good' (green), 'bad' (red) or '' (a hollow grey dot).
@@ -944,11 +944,11 @@
   function renderServer(){
     if(!server)return;const h=server.host,m=server.member;
     const focused=document.activeElement?.dataset?.key||'';
-    badge($('host-badge'),h.running?'Работает':h.enabled?'Не запустился':'Остановлен',h.running?'good':h.enabled?'bad':'');
+    badge($('host-badge'),h.running?tr('Работает'):h.enabled?tr('Не запустился'):tr('Остановлен'),h.running?'good':h.enabled?'bad':'');
     // Explanations live in the status tooltip so the card does not change
     // height; only a problem the owner must fix stays visible.
-    $('host-badge').title=!h.running?'Другие устройства смогут подключаться к этому компьютеру по одноразовому приглашению.':'Принимает устройства: '+(h.scope==='lan'?'в локальной сети':'только с этого компьютера')+', порт '+h.port+'.';
-    $('host-state').textContent=h.running&&!h.addresses.length?'У компьютера нет адреса в локальной сети. Подключитесь к сети или выберите «Только этот компьютер».':'';
+    $('host-badge').title=!h.running?tr('Другие устройства смогут подключаться к этому компьютеру по одноразовому приглашению.'):tr('Принимает устройства: ')+(h.scope==='lan'?tr('в локальной сети'):tr('только с этого компьютера'))+tr(', порт ')+h.port+'.';
+    $('host-state').textContent=h.running&&!h.addresses.length?tr('У компьютера нет адреса в локальной сети. Подключитесь к сети или выберите «Только этот компьютер».'):'';
     if(!serverEdited){$('host-scope').value=h.scope||'local';$('host-port').value=h.port||47100;}
     $('host-running').hidden=!h.running;
     const select=$('host-address'),current=select.value;
@@ -962,13 +962,13 @@
     renderMachines();
     // The certificate fingerprint travels inside the invitation code and the
     // joining computer checks it itself, so the window does not show it.
-    badge($('member-badge'),m.connected?(m.reachable||!m.checked_at?'Подключено':'Нет связи'):'Не подключено',m.connected?(m.reachable?'good':m.checked_at?'bad':''):'');
+    badge($('member-badge'),m.connected?(m.reachable||!m.checked_at?tr('Подключено'):tr('Нет связи')):tr('Не подключено'),m.connected?(m.reachable?'good':m.checked_at?'bad':''):'');
     $('member-join').hidden=m.connected;$('member-joined').hidden=!m.connected;
-    $('member-badge').title=m.connected?'Этот компьютер входит в сервер '+m.address+'.':'Вставьте код приглашения, который выдал сервер на другом компьютере.';
+    $('member-badge').title=m.connected?tr('Этот компьютер входит в сервер ')+m.address+'.':tr('Вставьте код приглашения, который выдал сервер на другом компьютере.');
     $('member-state').textContent='';
     const cn=$('computer-name');if(view?.computer_name&&document.activeElement!==cn&&!cn.dataset.edited)cn.value=view.computer_name;
     const dl=$('member-details');dl.replaceChildren();
-    const rows=[['Сервер',m.address],['Подключено',stamp(m.connected_at)]];
+    const rows=[[tr('Сервер'),m.address],[tr('Подключено'),stamp(m.connected_at)]];
     if(m.connected)rows.forEach(([k,v])=>{if(v){dl.append(el('dt',k),el('dd',v));}});
     const buttons=root.querySelectorAll('[data-screen=server] button');buttons.forEach(b=>b.disabled=serverBusy);
     if(!serverBusy)$('host-invite').disabled=!h.addresses.length;
@@ -982,14 +982,14 @@
     let focused=document.activeElement;
     // Starting and stopping show their result in the status dot only, so the
     // card does not grow and shrink around a passing message.
-    note(section,body.action==='connect'||body.action==='check'?'Связываемся с сервером…':'');
+    note(section,body.action==='connect'||body.action==='check'?tr('Связываемся с сервером…'):'');
     renderServer();
     let result=null;
     try{
       const answer=await postAPI('/api/server-action',body,28000);
       result=answer.result;
       if(body.action!=='invite')server=result;
-      if(body.action==='check'){const m=server.member;note(section,m.reachable?'Связь есть, устройство на сервере.':(m.error||'Связи нет.'),!m.reachable,m.reachable);}
+      if(body.action==='check'){const m=server.member;note(section,m.reachable?tr('Связь есть, устройство на сервере.'):(m.error||tr('Связи нет.')),!m.reachable,m.reachable);}
       else note(section,done,false,true);
     }catch(error){note(section,error.message,true);}
     finally{
@@ -1003,11 +1003,11 @@
   }
   async function enableServer(){
     const port=Number($('host-port').value);
-    if(!Number.isInteger(port)||port<1024||port>65535){note('host','Порт должен быть от 1024 до 65535.',true);return;}
+    if(!Number.isInteger(port)||port<1024||port>65535){note('host',tr('Порт должен быть от 1024 до 65535.'),true);return;}
     const scope=$('host-scope').value;
     if(await serverAction({action:'enable',scope,port},'host','')){
       serverEdited=false;hideInvitation();
-      if(scope==='lan')note('host',server.host.addresses.length?'Сервер запущен и слушает локальную сеть. Доступ с другого компьютера зависит от брандмауэра.':'Сервер запущен, но адреса в локальной сети у компьютера нет.',false,true);
+      if(scope==='lan')note('host',server.host.addresses.length?tr('Сервер запущен и слушает локальную сеть. Доступ с другого компьютера зависит от брандмауэра.'):tr('Сервер запущен, но адреса в локальной сети у компьютера нет.'),false,true);
       renderServer();
     }
   }
@@ -1017,7 +1017,7 @@
     note('host','');invitation=code;
     $('invite-code').textContent=code.code;copyState('');
     clearInterval(inviteTimer);
-    const tick=()=>{const left=Math.ceil((new Date(code.expires_at)-Date.now())/60000);if(left<=0){hideInvitation();return;}$('invite-expiry').textContent='Действует ещё '+left+' мин., один раз.';};
+    const tick=()=>{const left=Math.ceil((new Date(code.expires_at)-Date.now())/60000);if(left<=0){hideInvitation();return;}$('invite-expiry').textContent=tr('Действует ещё ')+left+tr(' мин., один раз.');};
     tick();inviteTimer=setInterval(tick,15000);
     $('invite-dialog').showModal();$('invite-copy').focus();
     // The invitation is not in the status yet; show it until the next poll.
@@ -1026,9 +1026,9 @@
   async function connectServer(){
     // The computer joins under its one name, «Имя в сети».
     const code=$('member-code').value.trim(),name=$('computer-name').value.trim()||view?.computer_name||'';
-    if(!code){note('member','Вставьте код приглашения.',true);return;}
-    if(!name){note('member','Укажите имя в сети.',true);return;}
-    if(await serverAction({action:'connect',code,name},'member','Подключено.'))$('member-code').value='';
+    if(!code){note('member',tr('Вставьте код приглашения.'),true);return;}
+    if(!name){note('member',tr('Укажите имя в сети.'),true);return;}
+    if(await serverAction({action:'connect',code,name},'member',tr('Подключено.')))$('member-code').value='';
   }
   // «Новый проект» opens a dialog; the current project is set up on its own
   // tab «Проект» (T-064).
@@ -1038,8 +1038,8 @@
   }
   async function createProject(){
     const name=$('project-name').value.trim(),folder=$('project-folder').value.trim();
-    if(!name||!folder){$('project-status').textContent='Укажите название и папку.';return;}
-    $('project-save').disabled=true;$('project-status').textContent='Сохраняем…';
+    if(!name||!folder){$('project-status').textContent=tr('Укажите название и папку.');return;}
+    $('project-save').disabled=true;$('project-status').textContent=tr('Сохраняем…');
     try{
       await postAPI('/api/project-create',{name,folder});
       const rules=$('project-rules').value.trim();
@@ -1067,7 +1067,7 @@
     // Other computers and the coordinator chat know the project by the name it
     // was created with; a rename shows it so the owner can match them (T-065).
     const renamed=!!view.project_title&&view.project_title!==name;$('project-page-key').hidden=!renamed;
-    $('project-page-key').textContent=renamed?'Для других компьютеров и координатора проект по-прежнему называется «'+name+'».':'';
+    $('project-page-key').textContent=renamed?tr('Для других компьютеров и координатора проект по-прежнему называется «')+name+'».':'';
     if(fresh||document.activeElement!==$('project-page-folder'))$('project-page-folder').value=view.folder||'';
     if(fresh||(document.activeElement!==$('project-page-rules')&&!rulesTimer))$('project-page-rules').value=view.worker_rules||'';
   }
@@ -1079,12 +1079,12 @@
       try{
         if(field==='title'){
           const title=$('project-page-name').value.trim();
-          if(!title){status.textContent='Укажите название.';return;}
+          if(!title){status.textContent=tr('Укажите название.');return;}
           if(title===(view.project_title||name))return;
           status.textContent='';await postAPI('/api/project-title',{name,title});
         }else if(field==='folder'){
           const folder=$('project-page-folder').value.trim();
-          if(!folder){status.textContent='Укажите папку.';return;}
+          if(!folder){status.textContent=tr('Укажите папку.');return;}
           if(folder===(view.folder||''))return;
           status.textContent='';await postAPI('/api/project-folder',{name,folder});
         }else{
@@ -1100,7 +1100,7 @@
   // creating the project again brings them back.
   function askRemoveProject(){
     const name=view?.project;if(!name)return;
-    askConfirm('Удалить проект «'+(view.project_title||name)+'»?','Проект пропадёт из списка. История задач сохранится и вернётся, если создать проект с тем же именем.','Удалить',async()=>{
+    askConfirm(tr('Удалить проект «')+(view.project_title||name)+'»?',tr('Проект пропадёт из списка. История задач сохранится и вернётся, если создать проект с тем же именем.'),tr('Удалить'),async()=>{
       await postAPI('/api/project-remove',{name});
       project='';remember('messenger-project','');selectedTask='';feed=null;feedSignature='';viewSignature='';projectPageFor='';await refresh();
     });
@@ -1110,21 +1110,21 @@
   // A row note shows for a while, then the row offers its action again.
   function noteRow(key,text,ms){rowNote.set(key,text);renderAgents();if(ms)setTimeout(()=>{if(rowNote.get(key)===text){rowNote.delete(key);renderAgents();}},ms);}
   async function installAgent(provider){
-    noteRow(provider+':program','Открываем страницу…');
-    try{await postAPI('/api/agent-install',{provider});noteRow(provider+':program','Страница установки открыта',8000);}
+    noteRow(provider+':program',tr('Открываем страницу…'));
+    try{await postAPI('/api/agent-install',{provider});noteRow(provider+':program',tr('Страница установки открыта'),8000);}
     catch(error){rowNote.delete(provider+':program');renderAgents();showError(error);}
   }
   // After «Войти» or «Выйти» the window checks the agent again when the owner
   // comes back to it, so the card shows the new state without a click.
   const authOpened=new Map();
   async function loginFromCard(provider,cli,environment){
-    noteRow(provider+':auth','Открываем вход…');
-    try{await postAPI('/api/agent-login',{provider,cli,environment});authOpened.set(provider,Date.now());noteRow(provider+':auth','Окно входа открыто',15000);}
+    noteRow(provider+':auth',tr('Открываем вход…'));
+    try{await postAPI('/api/agent-login',{provider,cli,environment});authOpened.set(provider,Date.now());noteRow(provider+':auth',tr('Окно входа открыто'),15000);}
     catch(error){rowNote.delete(provider+':auth');renderAgents();showError(error);}
   }
   function logoutFromCard(provider,cli,environment){
-    askConfirm('Выйти из '+names[provider]+'?','Агент на этом компьютере перестанет брать задачи, пока вы снова не войдёте.','Выйти',async()=>{
-      await postAPI('/api/agent-logout',{provider,cli,environment});authOpened.set(provider,Date.now());noteRow(provider+':auth','Окно выхода открыто',15000);
+    askConfirm(tr('Выйти из ')+names[provider]+'?',tr('Агент на этом компьютере перестанет брать задачи, пока вы снова не войдёте.'),tr('Выйти'),async()=>{
+      await postAPI('/api/agent-logout',{provider,cli,environment});authOpened.set(provider,Date.now());noteRow(provider+':auth',tr('Окно выхода открыто'),15000);
     });
   }
   window.addEventListener('focus',()=>{
@@ -1137,13 +1137,13 @@
   const defaultModels={claude:['haiku','sonnet','opus']};
   function openAgentSetup(provider){
     setupProvider=provider;const a=(view?.agents||[]).find(x=>x.agent===provider),found=discovery.find(d=>d.provider===provider);
-    $('agent-setup-title').textContent='Настройки: '+names[provider];
+    $('agent-setup-title').textContent=tr('Настройки: ')+names[provider];
     $('agent-setup-note').hidden=provider!=='cursor';
     $('agent-cli').value=a?.cli||found?.cli||'';$('agent-profile').value=a?.environment||found?.environment||'';
     const models=a?.models?.length?a.models:defaultModels[provider]||[];
     $('agent-models').value=models.join(', ');$('agent-models').disabled=!a;
-    $('agent-models').placeholder=a?'Пусто: задачи идут на модель по умолчанию':'Сначала включите агента на карточке';
-    $('agent-models-note').textContent='Через запятую, как их пишет сам '+shortNames[provider]+'.'+(defaultModels[provider]?' Уже вписаны по умолчанию.':'');
+    $('agent-models').placeholder=a?tr('Пусто: задачи идут на модель по умолчанию'):tr('Сначала включите агента на карточке');
+    $('agent-models-note').textContent=tr('Через запятую, как их пишет сам ')+shortNames[provider]+'.'+(defaultModels[provider]?tr(' Уже вписаны по умолчанию.'):'');
     setStatus('agent-save-status','');
     $('agent-setup').showModal();
   }
@@ -1152,8 +1152,8 @@
   function runCheck(selection){
     const run=checkQueue.then(async()=>{
       const response=await fetch('/api/check-cli',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(selection),cache:'no-store',signal:AbortSignal.timeout(22000)});
-      if(!response.ok)throw Error(response.status===409?'Проверка уже выполняется.':response.status===422?'Проверьте путь к программе и профилю.':'Проверка не выполнена.');
-      const result=await response.json();if(result.ok!==true)throw Error('Ответ проверки не подтверждён.');
+      if(!response.ok)throw Error(response.status===409?tr('Проверка уже выполняется.'):response.status===422?tr('Проверьте путь к программе и профилю.'):tr('Проверка не выполнена.'));
+      const result=await response.json();if(result.ok!==true)throw Error(tr('Ответ проверки не подтверждён.'));
       agentChecks.set(selection.provider,result.check);return result.check;
     });
     checkQueue=run.catch(()=>{});return run;
@@ -1179,7 +1179,7 @@
   // «Подключить» on a card: the found program and profile, then a check.
   async function connectAgent(provider){
     const found=discovery.find(d=>d.provider===provider);if(!found)return;
-    noteRow(provider+':program','Подключаем…');
+    noteRow(provider+':program',tr('Подключаем…'));
     try{await postAPI('/api/agent-set',{provider,cli:found.cli,environment:''});viewSignature='';await refresh();checkCard(provider);}
     catch(error){showError(error);}
     finally{rowNote.delete(provider+':program');renderAgents();}
@@ -1218,9 +1218,9 @@
     document.body.classList.add('am-frameless');
     const bar=el('div',undefined,'am-window-controls');
     const make=(action,label,paths,cls)=>{const b=el('button',undefined,'am-window-btn'+(cls?' '+cls:''));b.type='button';b.title=label;b.setAttribute('aria-label',label);b.tabIndex=-1;b.append(svgIcon(paths));b.addEventListener('click',()=>window.amWindow(action));bar.append(b);};
-    make('minimize','Свернуть',['M5 12h14']);
-    make('maximize','Развернуть',['M6 6h12v12H6z']);
-    make('close','Закрыть',['M6 6l12 12M18 6L6 18'],'am-window-close');
+    make('minimize',tr('Свернуть'),['M5 12h14']);
+    make('maximize',tr('Развернуть'),['M6 6h12v12H6z']);
+    make('close',tr('Закрыть'),['M6 6l12 12M18 6L6 18'],'am-window-close');
     root.append(bar);
     const interactive='button,input,select,textarea,a,[role=switch],[popover],.am-machine-card,.am-project,.am-splitter,.am-window-controls';
     const dragZone=e=>{
@@ -1243,10 +1243,10 @@
     try{
       const response=await fetch('/api/pick',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({kind,current:input.value.trim()}),cache:'no-store',signal:AbortSignal.timeout(610000)});
       let result={};try{result=await response.json();}catch(_){}
-      if(!response.ok||result.ok!==true)throw Error(result.detail||'Окно выбора не открылось. Вставьте путь вручную.');
+      if(!response.ok||result.ok!==true)throw Error(result.detail||tr('Окно выбора не открылось. Вставьте путь вручную.'));
       if(result.path&&result.path!==input.value){input.value=result.path;input.dispatchEvent(new Event('change'));}
       $(status).textContent='';
-    }catch(error){$(status).textContent=error.name==='TimeoutError'?'Окно выбора не ответило. Вставьте путь вручную.':error.message;}
+    }catch(error){$(status).textContent=error.name==='TimeoutError'?tr('Окно выбора не ответило. Вставьте путь вручную.'):error.message;}
   }
   // The Mac shell's folder picker answers here, into the field that asked.
   let folderTarget='project-folder';
@@ -1262,7 +1262,7 @@
   // The update icon says in its tooltip which version came out (T-066).
   function updateTip(version,busy){
     const name=versionName(version);
-    const text=busy?'Обновление загружается':name?'Вышла '+name+'. Нажмите, чтобы обновить':'Обновить';
+    const text=busy?tr('Обновление загружается'):name?tr('Вышла ')+name+tr('. Нажмите, чтобы обновить'):tr('Обновить');
     $('app-update-button').title=text;$('app-update-button').setAttribute('aria-label',text);
   }
   window.messengerUpdateStatus = status => {
@@ -1270,9 +1270,9 @@
     const version=typeof status?.version==='string'?status.version:'';
     const installed=typeof status?.installedVersion==='string'?status.installedVersion:'';
     $('app-installed-version').hidden=!installed;
-    $('app-installed-version').title=installed?'Альфа-версия, точный номер '+installed:'';
+    $('app-installed-version').title=installed?tr('Альфа-версия, точный номер ')+installed:'';
     const detail=typeof status?.detail==='string'?status.detail:'';
-    const waiting=detail==='Обновление загружается в фоне';
+    const waiting=detail===tr('Обновление загружается в фоне');
     // Only an available update is shown, as the blue icon next to the version.
     // Background checks and their failures stay quiet; the app checks again
     // by itself.
@@ -1290,14 +1290,14 @@
     const s=selfUpdate;if(!s)return;
     const installed=typeof s.installed_version==='string'?s.installed_version:'';
     $('app-installed-version').hidden=!installed;
-    $('app-installed-version').title=installed?'Альфа-версия, точный номер '+installed:'';
+    $('app-installed-version').title=installed?tr('Альфа-версия, точный номер ')+installed:'';
     const version=typeof s.version==='string'?s.version:'';
     const done=s.state==='installed',shown=(s.state==='available'&&!!version)||selfUpdateBusy||done||!!s.message;
     // Only the update icon while an update waits (owner, T-056, T-066); a line
     // appears only for an error or after the update.
     $('app-update-version').hidden=!s.message&&!done;$('app-update-button').hidden=!shown||done;
     $('app-installed-version').textContent=versionText(installed);
-    $('app-update-version').textContent=s.message||(done?'Обновлено. Окно откроется заново.':'');
+    $('app-update-version').textContent=s.message||(done?tr('Обновлено. Окно откроется заново.'):'');
     updateTip(version,selfUpdateBusy);
     $('app-update-button').disabled=selfUpdateBusy;
   }
@@ -1322,7 +1322,7 @@
   $('list-toggle').addEventListener('click',()=>{
     const expanded=$('list-toggle').getAttribute('aria-expanded')!=='true';
     $('list-toggle').setAttribute('aria-expanded',String(expanded));
-    const label=expanded?'Скрыть список задач':'Показать список задач';$('list-toggle').setAttribute('aria-label',label);$('list-toggle').title=label;
+    const label=expanded?tr('Скрыть список задач'):tr('Показать список задач');$('list-toggle').setAttribute('aria-label',label);$('list-toggle').title=label;
     $('task-panel').hidden=!expanded;$('task-layout').classList.toggle('am-queue-collapsed',!expanded);
   });
   $('project-select').addEventListener('change',()=>{
@@ -1337,7 +1337,7 @@
   function splitter(pane,name,variable,usual,min,max,side){
     const handle=el('div',undefined,'am-splitter');
     handle.setAttribute('role','separator');handle.setAttribute('aria-orientation','vertical');handle.tabIndex=0;
-    handle.title='Потяните, чтобы изменить ширину. Двойной щелчок: как было';
+    handle.title=tr('Потяните, чтобы изменить ширину. Двойной щелчок: как было');
     handle.setAttribute('aria-label',name);handle.setAttribute('aria-valuemin',String(min));handle.setAttribute('aria-valuemax',String(max));
     const key='messenger-width-'+variable.slice(5);
     const apply=(px,save)=>{px=Math.round(Math.min(max,Math.max(min,px)));root.style.setProperty(variable,px+'px');handle.setAttribute('aria-valuenow',String(px));if(save)remember(key,px===usual?'':String(px));};
@@ -1358,8 +1358,8 @@
     });
     pane.append(handle);
   }
-  splitter(root.querySelector('.am-sidebar'),'Ширина левой панели','--am-nav',204,160,420,1);
-  splitter($('task-panel'),'Ширина списка задач','--am-queue',240,200,520,-1);
+  splitter(root.querySelector('.am-sidebar'),tr('Ширина левой панели'),'--am-nav',204,160,420,1);
+  splitter($('task-panel'),tr('Ширина списка задач'),'--am-queue',240,200,520,-1);
   // A click on empty space in the sidebar shows all computers' tasks again.
   root.querySelector('.am-sidebar').addEventListener('click',event=>{if(computerFilter&&!event.target.closest('.am-machine-card,.am-project,.am-side-bottom,.am-splitter,button,select,input,a,[popover]')){computerFilter='';renderMachines();renderTaskList();}});
   $('answer-text').addEventListener('input',()=>{const f=$('answer-text');f.style.height='auto';f.style.height=Math.min(140,Math.max(44,f.scrollHeight))+'px';answerControls();});
@@ -1392,7 +1392,7 @@
   $('restart-dialog').addEventListener('cancel',event=>event.preventDefault());
   $('restart-go').addEventListener('click',()=>restartClient(!!restart.ask));
   $('restart-quit').addEventListener('click',()=>window.webkit?.messageHandlers?.app?.postMessage('quit'));
-  $('restart-copy').addEventListener('click',async()=>{const b=$('restart-copy');try{await navigator.clipboard.writeText(shutdownCommand());b.textContent='Скопировано';}catch(_){b.textContent='Не удалось скопировать';}setTimeout(()=>b.textContent='Скопировать команду',2000);});
+  $('restart-copy').addEventListener('click',async()=>{const b=$('restart-copy');try{await navigator.clipboard.writeText(shutdownCommand());b.textContent=tr('Скопировано');}catch(_){b.textContent=tr('Не удалось скопировать');}setTimeout(()=>b.textContent=tr('Скопировать команду'),2000);});
   $('agent-setup-close').addEventListener('click',()=>$('agent-setup').close());
   $('agent-cli').addEventListener('change',saveAgentPaths);
   $('agent-profile').addEventListener('change',saveAgentPaths);
@@ -1405,8 +1405,8 @@
   $('host-invite').addEventListener('click',invite);
   // The copy icon turns into a check mark once the code is on the clipboard.
   function copyState(state){const b=$('invite-copy');b.toggleAttribute('data-copied',state==='done');
-    const label=state==='done'?'Скопировано':state==='failed'?'Не удалось скопировать — выделите код вручную':'Скопировать';
-    b.title=label;b.setAttribute('aria-label',state?label:'Скопировать код');}
+    const label=state==='done'?tr('Скопировано'):state==='failed'?tr('Не удалось скопировать — выделите код вручную'):tr('Скопировать');
+    b.title=label;b.setAttribute('aria-label',state?label:tr('Скопировать код'));}
   $('invite-copy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('invite-code').textContent);copyState('done');}catch(_){copyState('failed');}});
   $('member-connect').addEventListener('click',connectServer);
   $('computer-name').addEventListener('input',e=>{e.target.dataset.edited='1';renderServer();});
@@ -1415,8 +1415,8 @@
   async function renameComputer(){const cn=$('computer-name'),name=cn.value.trim();if(!name||name===view?.computer_name||!cn.dataset.edited)return;if(await serverAction({action:'rename',name},'computer','')){delete cn.dataset.edited;await refresh();renderServer();}}
   $('computer-name').addEventListener('change',renameComputer);
   $('computer-name').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();renameComputer();}});
-  $('accept-toggle').addEventListener('click',()=>{if(!server)return;const on=!server.accept;serverAction({action:'accept',on},'accept',on?'':'Новые задачи других компьютеров будут отклоняться. Уже принятые продолжат работу.');});
-  $('member-disconnect').addEventListener('click',()=>serverAction({action:'disconnect'},'member','Отключено. Устройство остаётся в списке сервера, пока его там не отзовут.'));
+  $('accept-toggle').addEventListener('click',()=>{if(!server)return;const on=!server.accept;serverAction({action:'accept',on},'accept',on?'':tr('Новые задачи других компьютеров будут отклоняться. Уже принятые продолжат работу.'));});
+  $('member-disconnect').addEventListener('click',()=>serverAction({action:'disconnect'},'member',tr('Отключено. Устройство остаётся в списке сервера, пока его там не отзовут.')));
   let serverPolls=0;
   // The sidebar lists devices from the server state, so it is read on every
   // tab, every 15 s outside «Сервер» (as often as computers report).
@@ -1424,11 +1424,13 @@
   loadServer();
   let initialTheme=window.messengerInitialTheme;
   if(!initialTheme)try{initialTheme=localStorage.getItem('messenger-theme');}catch(_){}
-  enhanceSelect($('theme-select'));enhanceSelect($('project-select'));enhanceSelect($('agent-filter'));enhanceSelect($('host-scope'));enhanceSelect($('host-address'));
+  $('lang-select').value=amLang;enhanceSelect($('lang-select'));enhanceSelect($('theme-select'));enhanceSelect($('project-select'));enhanceSelect($('agent-filter'));enhanceSelect($('host-scope'));enhanceSelect($('host-address'));
   centreControlText();
   applyTheme(initialTheme||'system');
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{if(document.documentElement.dataset.theme==='system')applyTheme('system');});
   $('theme-select').addEventListener('change',()=>applyTheme($('theme-select').value,true));
+  // The language applies on reload: every text is drawn again in it (T-059).
+  $('lang-select').addEventListener('change',()=>{try{localStorage.setItem('messenger-lang',$('lang-select').value);}catch(_){}location.reload();});
   const gutterObserver=new ResizeObserver(entries=>{
     for(const {target} of entries){
       if(!target.getClientRects().length)continue;
