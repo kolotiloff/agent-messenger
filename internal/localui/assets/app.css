@@ -271,6 +271,11 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-tool summary { cursor:pointer; list-style:none; }
 #am-concept .am-tool summary::before { content:"▸ "; }
 #am-concept .am-tool[open] summary::before { content:"▾ "; }
+#am-concept .am-tool-group { margin:var(--am-space-1) 0; font-size:var(--am-text-s); color:var(--am-muted); }
+#am-concept .am-tool-group > summary { cursor:pointer; list-style:none; }
+#am-concept .am-tool-group > summary::before { content:"▸ "; }
+#am-concept .am-tool-group[open] > summary::before { content:"▾ "; }
+#am-concept .am-tool-group > .am-tool { margin-left:var(--am-space-3); }
 #am-concept .am-tool-flat summary { cursor:default; }
 #am-concept .am-tool-flat summary::before { content:"· "; }
 #am-concept .am-tool-name { color:var(--am-text); }

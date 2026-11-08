@@ -434,9 +434,17 @@
   }
   // A tool action as one line: its kind and, shortened, what it acted on.
   const toolNames={Bash:'Команда',Read:'Чтение',Edit:'Правка',MultiEdit:'Правка',Write:'Запись',Grep:'Поиск',Glob:'Поиск файлов',WebFetch:'Загрузка страницы',WebSearch:'Поиск в интернете',Task:'Подзадача',TodoWrite:'План'};
+  // The command itself, without the shell that runs it.
+  function commandText(line){
+    const m=line.match(/^"?[^"]*(?:powershell|pwsh)(?:\.exe)?"?\s+-Command\s+([\s\S]*)$/i)||line.match(/^"?\S*\/(?:ba|z)?sh"?\s+-l?c\s+([\s\S]*)$/);
+    if(!m)return line;
+    const c=m[1].trim(),q=c[0];
+    return (q==="'"||q==='"')&&c.endsWith(q)&&c.length>1?c.slice(1,-1):c;
+  }
+  function toolName(it){return toolNames[it.title]||it.title||'Действие';}
   function toolLine(it){
-    const name=toolNames[it.title]||it.title||'Действие';
-    const first=(it.text||'').split('\n')[0];
+    const name=toolName(it);
+    const first=commandText((it.text||'').split('\n')[0]);
     const short=first.length>90?first.slice(0,89)+'…':first;
     const d=el('details',undefined,'am-tool');const s=el('summary');s.append(el('span',name,'am-tool-name'));
     if(short)s.append(el('span',' '+short,'am-tool-arg'));
@@ -465,7 +473,16 @@
     const headRow=el('div',undefined,'am-task-head-row');headRow.append(title);
     head.replaceChildren(headRow);
     const [coordProvider,coordLabel]=coordinatorName();
-    const out=[];let group=null;
+    const opened=new Set([...thread.querySelectorAll('details[open][data-key]')].map(d=>d.dataset.key));
+    const out=[];let group=null,tools=null;
+    // Actions in a row fold into one line (D-055 follow-up).
+    const addTool=(c,it,key)=>{
+      const line=toolLine(it);line.dataset.key='t'+key;
+      if(!tools||tools.host!==c||c.lastChild!==tools.node){c.append(line);tools={host:c,node:line,key,count:1,names:new Set([toolName(it)])};return;}
+      if(!tools.box){const box=el('details',undefined,'am-tool-group');box.dataset.key='g'+tools.key;tools.sum=el('summary');box.append(tools.sum);tools.node.replaceWith(box);box.append(tools.node);tools.box=box;tools.node=box;}
+      tools.box.append(line);tools.count++;tools.names.add(toolName(it));
+      tools.sum.textContent='Действий: '+tools.count+' — '+[...tools.names].join(', ');
+    };
     const outgoing=(author,provider,role,text,at)=>{
       group=null;const g=el('article',undefined,'am-message-group');const row=el('div',undefined,'am-message am-outgoing');
       const body=el('div',undefined,'am-message-body');const meta=el('div',undefined,'am-meta');
@@ -481,12 +498,13 @@
       const content=el('div',undefined,'am-message-content');body.append(meta,content);row.append(avatar,body);g.append(row);out.push(g);group=content;return content;
     };
     const delivery=(text,cls)=>el('div',text,'am-delivery '+cls);
-    for(const it of feed.items){
+    for(const [index,it] of feed.items.entries()){
+      if(it.kind!=='tool')tools=null;
       if(it.kind==='task'){outgoing(coordLabel,coordProvider,'координатор',it.text,it.at);continue;}
       if(it.kind==='answer'){if(it.author==='owner')outgoing('Вы','owner','',it.text,it.at);else outgoing(coordLabel,coordProvider,'координатор',it.text,it.at);continue;}
       if(it.kind==='accepted'){const c=out[out.length-1]?.querySelector('.am-message-content');if(c)c.append(delivery('Принято на компьютере «'+it.text+'»','am-status-good'));group=null;continue;}
       if(it.kind==='text'){workerGroup(it.at).append(richText(it.text));continue;}
-      if(it.kind==='tool'){workerGroup(it.at).append(toolLine(it));continue;}
+      if(it.kind==='tool'){addTool(workerGroup(it.at),it,index);continue;}
       if(it.kind==='report'||it.kind==='question'){
         const c=workerGroup(it.at);c.append(richText(it.text,'am-disposition'));
         if(!it.verified)c.append(delivery('Не опубликовано: запуск не прошёл проверку','am-status-bad'));
@@ -504,6 +522,7 @@
       }
     }
     thread.replaceChildren(...out);
+    for(const d of thread.querySelectorAll('details[data-key]'))if(opened.has(d.dataset.key))d.open=true;
     // A task another computer started is answered there.
     const q=t.remote?.from?null:t.owner_question;
     const active=activeStates.includes(t.state),box=$('answer-text');
