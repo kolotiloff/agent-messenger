@@ -39,6 +39,10 @@ DEPLOYMENT.md asks for the OS secure storage (Keychain on the Mac). Today the ke
 
 ## Answered
 
+### Q-015: Which limit fields do the real CLIs print?
+
+Asked 2026-11-08 (T-044). Not checked on real agents. Claude's `rate_limit_event` is read for its status and reset time; a share used is not taken from it because its units are not known here. For Codex the `rate_limits` object (`used_percent`) is read wherever an event carries it; whether `codex exec --json` prints it is not known. Cursor prints no limit that Messenger knows. **Cautious choice:** show only what was read, mark it as the state at the end of the last task, never act on it automatically. **Owner:** after a real task of each agent, tell whether the card shows «Лимит».
+
 ### Q-014: Should a computer run tasks of other computers by default?
 With T-037 a coordinator on one computer can start a worker on another computer of the network. **Chosen (cautious):** off until the owner turns on «Задачи других компьютеров» on the «Сервер» tab of the computer that would run them; a refused task fails with the reason. **Alternative:** on by default for every computer the owner invited. **Settled (D-046):** the owner asked the agent to decide open questions on its own; the cautious choice stays. The owner can still change it. **Changed (D-056, 2026-11-08):** after testing two computers the owner found the default refusal confusing; tasks are now accepted by default and the switch turns them off.
 
