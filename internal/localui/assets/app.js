@@ -116,7 +116,7 @@
   function recall(key){try{return localStorage.getItem(key)||'';}catch(_){return '';}}
   let view=null,project=recall('messenger-project'),selectedTask='',feed=null,feedSignature='',viewSignature='';
   let online=false,offlineReason='',discovery=[],tab='tasks',refreshing=false,answering=false;
-  const agentChecks=new Map(),checking=new Set();let autoChecked=false,discoveryLoaded=false;
+  const agentChecks=new Map(),checking=new Set(),rowNote=new Map();let autoChecked=false,discoveryLoaded=false;
   let clientInfo=null,clientInfoAt=0,restart={busy:false,ask:null,error:''};
   // The window can be newer than the client still running in the background
   // (after an update). Say how to restart it; nothing is restarted by itself.
@@ -575,14 +575,23 @@
       // value on the right (owner, preview.37).
       const dl=el('div',undefined,'am-status-lines');
       const pair=(label,value,cls,extra)=>{const p=el('p');const v=el('span',undefined,'am-status-value '+cls);v.append(el('span',value));if(extra)v.append(...extra);p.append(el('span',label,'am-status-label'),v);dl.append(p);};
-      if(!a){
-        pair('Программа',found?.state==='candidate_found'?'Найдена, не подключена':found?.state==='not_found'?'Не найдена':'Не проверена',found?.state==='not_found'?'am-status-bad':'am-status-wait');
-      }else{
-        pair('Программа','Подключена','am-status-good');
-      }
+      // An action the row needs sits in the row itself (owner, preview.37):
+      // «Подключить», «Установить», «Войти». While it runs the row says so.
+      const inline=(label,fn)=>{const b=el('button',label,'am-inline-action');b.type='button';b.addEventListener('click',fn);return b;};
+      const cli=a?.cli||found?.cli||'',profile=a?.environment||found?.environment||'';
+      const programNote=rowNote.get(provider+':program');
+      if(a)pair('Программа','Подключена','am-status-good');
+      else if(programNote)pair('Программа',programNote,'am-status-wait');
+      else if(found?.state==='candidate_found')pair('Программа','','',[inline('Подключить',()=>connectAgent(provider))]);
+      else if(found?.state==='not_found')pair('Программа','','',[inline('Установить',()=>installAgent(provider))]);
+      else pair('Программа','Не проверена','am-status-wait');
       const check=agentChecks.get(provider);
       const auth=check?.authentication?.state;
-      pair('Вход в аккаунт',auth==='authenticated'?'Выполнен':auth==='not_authenticated'?'Не выполнен':'Не проверен',!a?'am-muted':auth==='authenticated'?'am-status-good':auth==='not_authenticated'?'am-status-bad':'am-status-wait');
+      const authNote=rowNote.get(provider+':auth');
+      if(checking.has(provider))pair('Вход в аккаунт','Проверяем…','am-status-wait');
+      else if(authNote)pair('Вход в аккаунт',authNote,'am-status-wait');
+      else if(auth==='not_authenticated'&&cli&&profile)pair('Вход в аккаунт','','',[inline('Войти',()=>loginFromCard(provider,cli,profile))]);
+      else pair('Вход в аккаунт',auth==='authenticated'?'Выполнен':auth==='not_authenticated'?'Не выполнен':'Не проверен',!a?'am-muted':auth==='authenticated'?'am-status-good':auth==='not_authenticated'?'am-status-bad':'am-status-wait');
       if(a){
         const trust=a.trust?.state;
         if(trust==='trusted')pair('Рабочая папка','Доверяет','am-status-good');
@@ -610,11 +619,7 @@
       tasks.addEventListener('click',()=>{$('agent-filter').value=provider;syncSelects();show('tasks');renderTaskList();});
       const setup=el('button','Настроить');setup.type='button';setup.addEventListener('click',()=>openAgentSetup(provider));
       const actions=el('div',undefined,'am-actions-stack');
-      const cli=a?.cli||found?.cli||'',profile=a?.environment||found?.environment||'';
-      if(!a&&found?.state==='not_found'){const install=el('button','Установить '+names[provider],'am-primary');install.type='button';install.addEventListener('click',()=>installAgent(provider,install));actions.append(install);}
-      if(auth==='not_authenticated'&&cli){const login=el('button','Войти в аккаунт','am-primary');login.type='button';login.addEventListener('click',()=>loginAgent(provider,cli,profile,login));actions.append(login);}
-      if(!a&&found?.state==='candidate_found'){const connect=el('button','Подключить','am-primary');connect.type='button';connect.addEventListener('click',()=>connectAgent(provider,connect));actions.append(connect);}
-      if(cli&&profile){const verify=el('button',checking.has(provider)?'Проверяем…':'Проверить');verify.type='button';verify.disabled=checking.has(provider);verify.addEventListener('click',()=>checkCard(provider));actions.append(verify);}
+      if(cli&&profile){const verify=el('button','Проверить');verify.type='button';verify.disabled=checking.has(provider);verify.addEventListener('click',()=>checkCard(provider));actions.append(verify);}
       actions.append(tasks,setup);card.append(actions);cards.append(card);
     }
   }
@@ -861,11 +866,17 @@
   }
   // «Установить» opens the agent's official page; «Войти» opens a terminal
   // with the agent's own sign-in (D-057).
-  async function installAgent(provider,button){
-    button.disabled=true;
-    try{await postAPI('/api/agent-install',{provider});button.textContent='Страница установки открыта';}
-    catch(error){button.textContent='Установить '+names[provider];showError(error);}
-    finally{setTimeout(()=>{button.disabled=false;},3000);}
+  // A row note shows for a while, then the row offers its action again.
+  function noteRow(key,text,ms){rowNote.set(key,text);renderAgents();if(ms)setTimeout(()=>{if(rowNote.get(key)===text){rowNote.delete(key);renderAgents();}},ms);}
+  async function installAgent(provider){
+    noteRow(provider+':program','Открываем страницу…');
+    try{await postAPI('/api/agent-install',{provider});noteRow(provider+':program','Страница установки открыта',8000);}
+    catch(error){rowNote.delete(provider+':program');renderAgents();showError(error);}
+  }
+  async function loginFromCard(provider,cli,environment){
+    noteRow(provider+':auth','Открываем вход…');
+    try{await postAPI('/api/agent-login',{provider,cli,environment});noteRow(provider+':auth','Окно входа открыто, затем «Проверить»',15000);}
+    catch(error){rowNote.delete(provider+':auth');renderAgents();showError(error);}
   }
   async function loginAgent(provider,cli,environment,button,status){
     button.disabled=true;
@@ -916,11 +927,12 @@
     for(const provider of ['claude','codex','cursor']){const s=agentPaths(provider);if(s.cli&&s.environment&&!agentChecks.has(provider))checkCard(provider);}
   }
   // «Подключить» on a card: the found program and profile, then a check.
-  async function connectAgent(provider,button){
+  async function connectAgent(provider){
     const found=discovery.find(d=>d.provider===provider);if(!found)return;
-    button.disabled=true;
+    noteRow(provider+':program','Подключаем…');
     try{await postAPI('/api/agent-set',{provider,cli:found.cli,environment:''});viewSignature='';await refresh();checkCard(provider);}
-    catch(error){button.disabled=false;showError(error);}
+    catch(error){showError(error);}
+    finally{rowNote.delete(provider+':program');renderAgents();}
   }
   async function checkAgent(){
     const selection={provider:setupProvider,cli:$('agent-cli').value.trim(),environment:$('agent-profile').value.trim()};
