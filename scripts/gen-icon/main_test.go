@@ -3,20 +3,46 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"image"
+	stddraw "image/draw"
+	"image/png"
 	"os"
 	"path/filepath"
 	"testing"
 )
 
-// The committed resource files are what this program writes now.
+// The committed resource files are what this program writes now. The PNG
+// encoder's bytes change between Go versions, so the embedded PNG is checked
+// by its pixels and the rest of the file byte for byte.
 func TestSysoUpToDate(t *testing.T) {
-	for name, data := range map[string][]byte{
-		"rsrc_windows_amd64.syso": syso(0x8664, 0x0003),
-		"rsrc_windows_arm64.syso": syso(0xAA64, 0x0002),
-	} {
-		committed, err := os.ReadFile(filepath.Join("..", "..", "cmd", "messenger", name))
-		if err != nil || !bytes.Equal(committed, data) {
-			t.Fatalf("%s is stale; run go run ./scripts/gen-icon cmd/messenger (%v)", name, err)
+	defer func() { encodedPNG = nil }()
+	for _, f := range []struct {
+		name               string
+		machine, relocType uint16
+	}{{"rsrc_windows_amd64.syso", 0x8664, 0x0003}, {"rsrc_windows_arm64.syso", 0xAA64, 0x0002}} {
+		committed, err := os.ReadFile(filepath.Join("..", "..", "cmd", "messenger", f.name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		start := bytes.Index(committed, []byte("\x89PNG\r\n\x1a\n"))
+		end := bytes.Index(committed, []byte("IEND"))
+		if start < 0 || end < start {
+			t.Fatalf("%s has no PNG", f.name)
+		}
+		embedded := committed[start : end+8]
+		decoded, err := png.Decode(bytes.NewReader(embedded))
+		if err != nil {
+			t.Fatalf("%s: %v", f.name, err)
+		}
+		want := draw(256)
+		got := image.NewNRGBA(want.Bounds())
+		stddraw.Draw(got, got.Bounds(), decoded, image.Point{}, stddraw.Src)
+		if !bytes.Equal(got.Pix, want.Pix) {
+			t.Fatalf("%s: the PNG is stale; run go run ./scripts/gen-icon cmd/messenger", f.name)
+		}
+		encodedPNG = embedded
+		if !bytes.Equal(committed, syso(f.machine, f.relocType)) {
+			t.Fatalf("%s is stale; run go run ./scripts/gen-icon cmd/messenger", f.name)
 		}
 	}
 }
