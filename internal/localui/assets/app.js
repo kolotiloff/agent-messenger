@@ -923,7 +923,8 @@
   // The tab saves by itself (owner): the instructions shortly after typing
   // stops, the folder when the field is left, Enter is pressed or a folder is
   // picked, so a half-typed path is not stored. Saves go one at a time; a
-  // failed or unanswered save is shown and not repeated (T-064).
+  // failed or unanswered save is shown and not repeated; a good one shows
+  // nothing (T-064).
   let projectPageFor='',projectSaving=Promise.resolve(),rulesTimer=0;
   function renderProjectPage(){
     const name=view?.project||'';
@@ -945,13 +946,13 @@
           const folder=$('project-page-folder').value.trim();
           if(!folder){status.textContent='Укажите папку.';return;}
           if(folder===(view.folder||''))return;
-          status.textContent='Сохраняем…';await postAPI('/api/project-folder',{name,folder});
+          status.textContent='';await postAPI('/api/project-folder',{name,folder});
         }else{
           const rules=$('project-page-rules').value.trim();
           if(rules===(view.worker_rules||''))return;
-          status.textContent='Сохраняем…';await postAPI('/api/project-rules',{name,rules});
+          status.textContent='';await postAPI('/api/project-rules',{name,rules});
         }
-        viewSignature='';await refresh();status.textContent='Сохранено';
+        viewSignature='';await refresh();
       }catch(error){status.textContent=error.message;}
     });
   }
