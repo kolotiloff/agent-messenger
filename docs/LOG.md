@@ -369,3 +369,7 @@ Reports for each step are in [reports/](reports/). The handoff is in [HANDOFF.md
 ## 2026-11-08 — T-063 widths and empty-click
 
 - The sidebar and the task list can be resized by dragging their edge (double click restores, width remembered). A click on empty sidebar space shows all computers' tasks again. Checked in headless Chromium against the page assets only; not in the native windows.
+
+## 2026-11-08 — T-064 tab «Проект»
+
+- The project's settings moved from the project list to a new tab «Проект» (D-071). The project list now holds only projects and «Новый проект». Ellipses dropped from all button labels. Checked in Chromium with a stubbed window API; not against a live client or in the native windows.

@@ -243,8 +243,7 @@
   function renderProjects(){
     const select=$('project-select');select.replaceChildren();
     for(const p of view?.projects||[]){const o=el('option',p.name);o.value=p.name;select.append(o);}
-    if(view?.project){const edit=el('option','Настроить проект…');edit.value='__edit';select.append(edit);}
-    const add=el('option','Новый проект…');add.value='__new';select.append(add);
+    const add=el('option','Новый проект');add.value='__new';select.append(add);
     select.value=view?.project||'__new';
     if(!view?.project&&select.options.length>1)select.selectedIndex=0;
     select.disabled=!view;syncSelects();
@@ -435,7 +434,7 @@
     if(!view.project){
       head.replaceChildren();
       const box=el('div',undefined,'am-settings am-connect');box.append(el('h3','Создайте проект'),el('p','Проект связывает чат-координатора, папку проекта на этом компьютере и задачи.'));
-      const b=el('button','Новый проект…','am-primary');b.type='button';b.addEventListener('click',()=>openProjectDialog(false));box.append(b);
+      const b=el('button','Новый проект','am-primary');b.type='button';b.addEventListener('click',()=>openProjectDialog(false));box.append(b);
       thread.replaceChildren(box);return;
     }
     if(!view.coordinator.connected&&!view.tasks.length){head.replaceChildren();thread.replaceChildren(connectHelp());return;}
@@ -733,7 +732,7 @@
     notice(null);
   }
   function render(){
-    renderProjects();renderMachines();renderTaskList();renderThread();renderAgents();renderNotice();autoCheck();
+    renderProjects();renderMachines();renderTaskList();renderThread();renderAgents();renderProjectPage();renderNotice();autoCheck();
     $('connection').textContent=online?'Клиент доступен':'Клиент недоступен';
   }
   async function loadFeed(){
@@ -761,7 +760,7 @@
   function show(next){
     tab=next;root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab);
     root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
-    $('list-toggle').hidden=tab!=='tasks';if(tab==='server')loadServer();$('screen-title').textContent={tasks:'Задачи',agents:'Агенты',server:'Сервер'}[tab];
+    $('list-toggle').hidden=tab!=='tasks';if(tab==='server')loadServer();$('screen-title').textContent={tasks:'Задачи',agents:'Агенты',project:'Проект',server:'Сервер'}[tab];
   }
 
   // Server tab: the broker hosted by this client and this computer's
@@ -900,39 +899,67 @@
     if(!name){note('member','Укажите имя этого компьютера.',true);return;}
     if(await serverAction({action:'connect',code,name},'member','Подключено.'))$('member-code').value='';
   }
-  let editingFolder=false;
-  function openProjectDialog(edit){
-    editingFolder=edit;
-    $('project-dialog-title').textContent=edit?'Проект «'+view.project+'»':'Новый проект';
-    $('project-name-field').hidden=edit;$('project-name').value='';$('project-folder').value=edit?view.folder:'';
-    $('project-rules').value=edit?(view.worker_rules||''):'';
-    $('project-save').textContent=edit?'Сохранить':'Создать проект';$('project-status').textContent='';
-    $('project-remove').hidden=!edit;
+  // «Новый проект» opens a dialog; the current project is set up on its own
+  // tab «Проект» (T-064).
+  function openProjectDialog(){
+    $('project-name').value='';$('project-folder').value='';$('project-rules').value='';$('project-status').textContent='';
     $('project-dialog').showModal();
+  }
+  async function createProject(){
+    const name=$('project-name').value.trim(),folder=$('project-folder').value.trim();
+    if(!name||!folder){$('project-status').textContent='Укажите имя и папку.';return;}
+    $('project-save').disabled=true;$('project-status').textContent='Сохраняем…';
+    try{
+      await postAPI('/api/project-create',{name,folder});
+      const rules=$('project-rules').value.trim();
+      if(rules)await postAPI('/api/project-rules',{name,rules});
+      project=name;remember('messenger-project',name);
+      $('project-dialog').close();viewSignature='';await refresh();
+      // Connect the coordinator right away; the result is shown, not retried.
+      if(view?.project===name&&!view.coordinator?.connected&&view.coordinator_link?.state!=='connected')connectCoordinator(name);
+    }catch(error){$('project-status').textContent=error.message;}
+    finally{$('project-save').disabled=false;}
+  }
+  // The tab keeps what the owner typed until it is saved; a refresh of the
+  // view fills it again only for another project or when nothing was changed.
+  let projectPageFor='';
+  function projectPageChanged(){
+    return !!view?.project&&($('project-page-folder').value.trim()!==(view.folder||'')||$('project-page-rules').value.trim()!==(view.worker_rules||''));
+  }
+  function renderProjectPage(){
+    const name=view?.project||'';
+    $('project-none').hidden=!!name;$('project-page').hidden=!name;
+    if(!name){projectPageFor='';return;}
+    if(projectPageFor!==name||!projectPageChanged()){
+      if(projectPageFor!==name)$('project-page-status').textContent='';
+      projectPageFor=name;
+      if(document.activeElement!==$('project-page-folder'))$('project-page-folder').value=view.folder||'';
+      if(document.activeElement!==$('project-page-rules'))$('project-page-rules').value=view.worker_rules||'';
+    }
+    $('project-page-name').textContent=name;
+    $('project-page-save').disabled=!projectPageChanged();
+  }
+  async function saveProjectPage(){
+    const name=view?.project,folder=$('project-page-folder').value.trim(),rules=$('project-page-rules').value.trim();
+    if(!name)return;
+    if(!folder){$('project-page-status').textContent='Укажите папку.';return;}
+    $('project-page-save').disabled=true;$('project-page-status').textContent='Сохраняем…';
+    try{
+      if(folder!==view.folder)await postAPI('/api/project-folder',{name,folder});
+      if(rules!==(view.worker_rules||''))await postAPI('/api/project-rules',{name,rules});
+      $('project-page-status').textContent='Сохранено';
+      viewSignature='';await refresh();
+      $('project-page-folder').value=view?.folder||folder;$('project-page-rules').value=view?.worker_rules??rules;renderProjectPage();
+    }catch(error){$('project-page-status').textContent=error.message;renderProjectPage();}
   }
   // Removing a project asks in a popup first. Its tasks stay in the database;
   // creating the project again brings them back.
   function askRemoveProject(){
     const name=view?.project;if(!name)return;
     askConfirm('Удалить проект «'+name+'»?','Проект пропадёт из списка. История задач сохранится и вернётся, если создать проект с тем же именем.','Удалить',async()=>{
-      await postAPI('/api/project-remove',{name});$('project-dialog').close();
-      project='';remember('messenger-project','');selectedTask='';feed=null;feedSignature='';viewSignature='';await refresh();
+      await postAPI('/api/project-remove',{name});
+      project='';remember('messenger-project','');selectedTask='';feed=null;feedSignature='';viewSignature='';projectPageFor='';await refresh();
     });
-  }
-  async function saveProject(){
-    const name=editingFolder?view.project:$('project-name').value.trim(),folder=$('project-folder').value.trim();
-    if(!name||!folder){$('project-status').textContent='Укажите имя и папку.';return;}
-    $('project-save').disabled=true;$('project-status').textContent='Сохраняем…';
-    try{
-      if(!editingFolder||folder!==view.folder)await postAPI(editingFolder?'/api/project-folder':'/api/project-create',{name,folder});
-      const rules=$('project-rules').value.trim();
-      if(rules!==(editingFolder?(view.worker_rules||''):''))await postAPI('/api/project-rules',{name,rules});
-      if(!editingFolder){project=name;remember('messenger-project',name);}
-      $('project-dialog').close();viewSignature='';await refresh();
-      // Connect the coordinator right away; the result is shown, not retried.
-      if(view?.project===name&&!view.coordinator?.connected&&view.coordinator_link?.state!=='connected')connectCoordinator(name);
-    }catch(error){$('project-status').textContent=error.message;}
-    finally{$('project-save').disabled=false;}
   }
   // «Установить» opens the agent's official page; «Войти» opens a terminal
   // with the agent's own sign-in (D-057).
@@ -1061,7 +1088,7 @@
     finally{$('agent-remove').disabled=false;}
   }
   window.messengerRefresh=()=>{viewSignature='';refresh();};
-  // «Выбрать…»: the local server opens the system's own dialog (D-053); the
+  // «Выбрать»: the local server opens the system's own dialog (D-053); the
   // Mac app keeps its native folder dialog for the project folder.
   async function pick(field,kind,status){
     const input=$(field);$(status).textContent='';
@@ -1073,7 +1100,9 @@
       $(status).textContent='';
     }catch(error){$(status).textContent=error.name==='TimeoutError'?'Окно выбора не ответило. Вставьте путь вручную.':error.message;}
   }
-  window.messengerFolderPicked=path=>{if(typeof path==='string'&&path)$('project-folder').value=path;};
+  // The Mac shell's folder picker answers here, into the field that asked.
+  let folderTarget='project-folder';
+  window.messengerFolderPicked=path=>{if(typeof path==='string'&&path){$(folderTarget).value=path;$(folderTarget).dispatchEvent(new Event('input'));}};
   window.messengerUpdateStatus = status => {
     if(!window.webkit?.messageHandlers?.updates)return;
     const version=typeof status?.version==='string'?status.version:'';
@@ -1142,7 +1171,7 @@
   });
   $('project-select').addEventListener('change',()=>{
     const value=$('project-select').value;
-    if(value==='__new'||value==='__edit'){$('project-select').value=view?.project||'__new';syncSelects();openProjectDialog(value==='__edit');return;}
+    if(value==='__new'){$('project-select').value=view?.project||'__new';syncSelects();openProjectDialog();return;}
     project=value;remember('messenger-project',value);selectedTask='';feed=null;feedSignature='';viewSignature='';refresh();
   });
   $('agent-filter').addEventListener('change',renderTaskList);
@@ -1188,12 +1217,15 @@
   $('invite-close').addEventListener('click',()=>$('invite-dialog').close());
   // A closed invitation is not shown again; a new one can be made at any time.
   $('invite-dialog').addEventListener('close',()=>{invitation=null;clearInterval(inviteTimer);});
-  $('project-save').addEventListener('click',saveProject);
-  $('project-remove').addEventListener('click',askRemoveProject);
+  $('project-save').addEventListener('click',createProject);
+  $('project-page-save').addEventListener('click',saveProjectPage);
+  $('project-page-remove').addEventListener('click',askRemoveProject);
+  for(const id of ['project-page-folder','project-page-rules'])for(const type of ['input','change'])$(id).addEventListener(type,()=>{$('project-page-status').textContent='';$('project-page-save').disabled=!projectPageChanged();});
   $('confirm-go').addEventListener('click',runConfirm);
   $('confirm-cancel').addEventListener('click',()=>$('confirm-dialog').close());
   $('access-toggle').addEventListener('click',toggleAllAccess);
-  $('project-pick').addEventListener('click',()=>{if(window.webkit?.messageHandlers?.folder)window.webkit.messageHandlers.folder.postMessage('pick');else pick('project-folder','folder','project-status');});
+  $('project-pick').addEventListener('click',()=>{folderTarget='project-folder';if(window.webkit?.messageHandlers?.folder)window.webkit.messageHandlers.folder.postMessage('pick');else pick('project-folder','folder','project-status');});
+  $('project-page-pick').addEventListener('click',()=>{folderTarget='project-page-folder';if(window.webkit?.messageHandlers?.folder)window.webkit.messageHandlers.folder.postMessage('pick');else pick('project-page-folder','folder','project-page-status');});
   $('agent-cli-pick').addEventListener('click',()=>pick('agent-cli','file','agent-check-status'));
   $('agent-profile-pick').addEventListener('click',()=>pick('agent-profile','folder','agent-check-status'));
   $('restart-dialog').addEventListener('cancel',event=>event.preventDefault());

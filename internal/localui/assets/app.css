@@ -190,6 +190,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-field textarea { resize:vertical; font:var(--am-text-s)/1.5 var(--am-mono); }
 #am-concept .am-field { display:flex; flex-direction:column; gap:var(--am-gap-control); }
 #am-concept .am-folder-pick { display:flex; gap:var(--am-gap-control); }
+#am-concept .am-folder-pick button { flex-shrink:0; white-space:nowrap; }
 
 /* Select: a visible field at rest, and its menu. */
 #am-concept .am-select-trigger { justify-content:space-between; gap:var(--am-gap-control); min-width:0; padding:var(--am-text-nudge) var(--am-space-2) 0 var(--am-space-3); max-width:100%; text-align:left; background:var(--am-field); border:1px solid var(--am-line); }
@@ -433,6 +434,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-context-menu { min-width:180px; }
 #am-concept .am-server .am-check-result { grid-template-columns:max-content minmax(0,1fr); column-gap:var(--am-gap-section); row-gap:var(--am-gap-control); }
 #am-concept .am-card-head h3:focus { outline:none; }
+#am-concept .am-project-name { margin:0; overflow-wrap:anywhere; }
 
 /* Dialogs */
 #am-concept .am-session-dialog { width:min(680px,calc(100vw - 48px)); max-height:80vh; padding:0; border:1px solid var(--am-line); border-radius:var(--am-radius-l); color:var(--am-text); background:var(--am-panel); box-shadow:var(--am-shadow-l); }
