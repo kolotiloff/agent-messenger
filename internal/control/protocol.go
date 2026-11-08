@@ -309,6 +309,17 @@ func dispatch(handler Handler, request Request) Response {
 			return Response{Error: err.Error()}
 		}
 		return Response{OK: true}
+	case "project-remove":
+		h, ok := handler.(interface {
+			RemoveProject(string) error
+		})
+		if !ok {
+			return Response{Error: "project removal unsupported; update the background client"}
+		}
+		if err := h.RemoveProject(request.Alias); err != nil {
+			return Response{Error: err.Error()}
+		}
+		return Response{OK: true}
 	case "agent-access":
 		h, ok := handler.(interface {
 			SetAgentFullAccess(string, bool) error
