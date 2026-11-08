@@ -85,6 +85,10 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-control:32px;
   --am-control-compact:28px;
   --am-control-chip:24px;
+  --am-switch-width:36px;
+  --am-switch-height:20px;
+  --am-switch-knob:16px;
+  --am-switch-inset:2px;
   /* Top padding that puts the capitals of control text in the middle. Fonts
      differ, so app.js measures the real font at start and replaces this. */
   --am-text-nudge:var(--am-space-1);
@@ -154,6 +158,26 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 /* The main action sits on the right (dialogs follow the Claude app). */
 #am-concept .am-end-actions { justify-content:flex-end; }
 #am-concept .am-end-actions > .am-danger { margin-right:auto; }
+/* The one «Любые команды» switch above the agent cards (T-056). */
+#am-concept .am-access-bar { display:flex; align-items:center; gap:var(--am-gap-section); margin-bottom:var(--am-gap-content); padding:var(--am-gap-section); border:1px solid var(--am-line); border-radius:var(--am-radius-m); background:var(--am-panel); }
+#am-concept .am-access-text { flex:1; min-width:0; display:grid; gap:var(--am-space-1); }
+#am-concept .am-access-text p { margin:0; }
+#am-concept .am-access-title { font-weight:600; }
+/* A small on/off switch, one style for every switch of the window. */
+#am-concept button.am-switch { position:relative; flex-shrink:0; width:var(--am-switch-width); min-height:0; height:var(--am-switch-height); padding:0; border-radius:calc(var(--am-switch-height) / 2); background:color-mix(in srgb, var(--am-muted) 45%, transparent); }
+#am-concept button.am-switch::after { content:""; position:absolute; top:var(--am-switch-inset); left:var(--am-switch-inset); width:var(--am-switch-knob); height:var(--am-switch-knob); border-radius:50%; background:#fff; box-shadow:var(--am-shadow-s); transition:transform .15s ease; }
+#am-concept button.am-switch[aria-checked=true] { background:var(--am-check); }
+#am-concept button.am-switch[aria-checked=true]::after { transform:translateX(calc(var(--am-switch-width) - var(--am-switch-knob) - 2 * var(--am-switch-inset))); }
+#am-concept button.am-switch[aria-checked=mixed]::after { transform:translateX(calc((var(--am-switch-width) - var(--am-switch-knob)) / 2 - var(--am-switch-inset))); }
+#am-concept button.am-switch:is(:hover,:focus-visible):not(:disabled) { filter:brightness(1.08); }
+/* Status next to its button, one line, so nothing in the dialog moves. */
+#am-concept .am-check-line, #am-concept .am-save-line { display:flex; flex-wrap:nowrap; align-items:center; gap:var(--am-gap-control); min-height:var(--am-control); }
+#am-concept .am-check-status { flex:1; min-width:0; font-size:var(--am-text-xs); color:var(--am-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#am-concept .am-check-status.am-status-good { color:var(--am-good); }
+#am-concept .am-check-status.am-status-bad { color:var(--am-bad); }
+#am-concept .am-check-line > button, #am-concept .am-save-line > button { flex:none; }
+#am-concept .am-card-actions { display:flex; gap:var(--am-gap-control); margin-top:auto; }
+#am-concept .am-card-actions > button { flex:1; }
 #am-concept .am-actions-stack { display:flex; flex-direction:column; align-items:stretch; gap:var(--am-gap-control); }
 
 /* Fields */
@@ -262,6 +286,10 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-role { padding:0 var(--am-space-1); border-radius:var(--am-radius-xs); background:var(--am-soft); color:var(--am-muted); font-size:var(--am-text-xs); font-weight:400; }
 #am-concept .am-message-content { line-height:1.65; }
 #am-concept .am-avatar { display:flex; align-items:center; justify-content:center; width:24px; height:28px; flex-shrink:0; }
+/* The agent's icon sits in the name line, so its text starts at the pane's
+   edge like the rest of the window, not one column further in (owner). */
+#am-concept .am-meta .am-avatar { width:auto; height:auto; }
+#am-concept .am-message-body { flex:1; }
 #am-concept .am-outgoing { align-self:flex-end; max-width:82%; }
 #am-concept .am-outgoing .am-avatar { display:none; }
 #am-concept .am-outgoing .am-meta { justify-content:flex-end; }
@@ -391,6 +419,13 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-device-confirm { flex-wrap:nowrap; }
 #am-concept .am-device-confirm > button { flex:1; padding-inline:var(--am-space-2); }
 #am-concept .am-device-card { outline:none; }
+/* A computer in the sidebar filters the task list (T-056). */
+#am-concept .am-machine-card[role=button] { cursor:pointer; }
+#am-concept .am-machine-card[role=button]:is(:hover,:focus-visible) { border-color:var(--am-muted); outline:none; }
+#am-concept .am-machine-card[aria-pressed=true] { background:var(--am-selected); border-color:var(--am-muted); }
+#am-concept .am-filter-chip { display:flex; align-items:center; gap:var(--am-gap-control); margin-top:var(--am-gap-control); padding:0 0 0 var(--am-space-3); border-radius:var(--am-radius-s); background:var(--am-selected); font-size:var(--am-text-s); }
+#am-concept .am-filter-chip > span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#am-concept .am-filter-chip svg { display:block; width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; }
 #am-concept .am-device-card:focus-visible { border-color:var(--am-muted); }
 #am-concept .am-context-menu { min-width:180px; }
 #am-concept .am-server .am-check-result { grid-template-columns:max-content minmax(0,1fr); column-gap:var(--am-gap-section); row-gap:var(--am-gap-control); }
@@ -413,11 +448,6 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-dialog-header { display:flex; align-items:center; justify-content:space-between; gap:var(--am-gap-section); padding:var(--am-space-4); border-bottom:1px solid var(--am-line); flex-shrink:0; }
 #am-concept .am-dialog-body { min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; padding:0 calc(var(--am-space-4) - var(--am-gutter, 0px)) var(--am-space-4) var(--am-space-4); }
 #am-concept .am-setup-body { display:flex; flex-direction:column; gap:var(--am-gap-section); padding-top:var(--am-space-4); }
-/* Two-way switch: two buttons in one soft track, the chosen one filled. */
-#am-concept .am-segment { display:inline-flex; align-self:flex-start; gap:var(--am-space-1); padding:var(--am-space-1); border-radius:var(--am-radius-m); background:var(--am-soft); }
-#am-concept .am-segment button { background:transparent; }
-#am-concept .am-segment button[aria-checked=true] { background:var(--am-selected); color:var(--am-text); }
-#am-concept .am-segment button#agent-full-on[aria-checked=true] { background:color-mix(in srgb, var(--am-bad) 14%, transparent); color:var(--am-bad); }
 #am-concept .am-check-result { display:grid; gap:var(--am-gap-content); margin:0; }
 #am-concept .am-check-result dt { color:var(--am-muted); font-size:var(--am-text-s); }
 #am-concept .am-check-result dd { margin:0; overflow-wrap:anywhere; }
@@ -455,3 +485,6 @@ body.am-native #am-concept .am-titlebar { display:none; }
 @media (pointer:coarse) { #am-concept button { min-height:44px; } }
 @media (prefers-reduced-motion:no-preference) { #am-concept button { transition:background-color .12s ease; } }
 body.am-native #am-concept .am-panel-toggle { margin-left:auto; }
+@media (max-width: 640px) {
+  #am-concept .am-access-bar { flex-direction:column; align-items:stretch; }
+}

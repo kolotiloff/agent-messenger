@@ -275,9 +275,15 @@
   // A computer of the network counts as reachable while its reports arrive:
   // it reports every 15 s, so three missed reports mean it is not.
   const peerFresh=peer=>peer.age>=0&&peer.age<=45;
+  function pickable(card,id){
+    card.setAttribute('role','button');card.tabIndex=0;card.setAttribute('aria-pressed',String(computerFilter===id));
+    card.title=computerFilter===id?'Показать задачи всех компьютеров':'Показать задачи этого компьютера';
+    card.addEventListener('click',event=>{if(!event.target.closest('button'))filterComputer(id);});
+    card.addEventListener('keydown',event=>{if(event.target===card&&(event.key==='Enter'||event.key===' ')){event.preventDefault();filterComputer(id);}});
+  }
   function renderMachines(){
     const box=$('machines');box.replaceChildren();
-    const machine=el('div',undefined,'am-machine-card');machine.setAttribute('aria-current','true');
+    const machine=el('div',undefined,'am-machine-card');machine.setAttribute('aria-current','true');pickable(machine,'local');
     const head=el('div',undefined,'am-machine-name');head.append(el('span',view?.computer_name||'Этот компьютер'));
     const dot=el('span',undefined,'am-dot'+(online?' online':''));dot.title=online?'На связи':'Нет связи';head.append(dot);machine.append(head);
     const lines=agentLines(view?.agents||[],view?.coordinator?.connected?(view.coordinator.client||''):null,online);
@@ -289,7 +295,7 @@
     const hosted=new Set((server?.host?.devices||[]).filter(d=>!d.revoked_at).map(d=>d.id));
     for(const peer of server?.peers||[]){
       const fresh=peerFresh(peer);
-      const card=el('div',undefined,'am-machine-card am-peer-card');card.dataset.peer=peer.id;
+      const card=el('div',undefined,'am-machine-card am-peer-card');card.dataset.peer=peer.id;pickable(card,peer.id);
       const name=el('div',undefined,'am-machine-name');
       const pdot=el('span',undefined,'am-dot'+(fresh?' online':''));pdot.title=fresh?'На связи':'Нет связи';
       name.append(el('span',peer.name),pdot);card.append(name);
@@ -317,15 +323,27 @@
       box.append(card);
     }
   }
+  // The computer that runs a task: this one, or the other one it was sent to.
+  function taskComputer(t){return t.remote&&!t.remote.from?t.remote.id:'local';}
+  // A click on a computer in the sidebar shows only its tasks; a second click
+  // or the chip's cross shows all again (T-056).
+  let computerFilter='';
+  function filterComputer(id){
+    computerFilter=computerFilter===id?'':id;
+    if(computerFilter)show('tasks');
+    renderMachines();renderTaskList();
+  }
   function visibleTasks(){
     const filter=$('agent-filter').value;
-    const list=(view?.tasks||[]).filter(t=>!filter||t.agent===filter);
+    const list=(view?.tasks||[]).filter(t=>(!filter||t.agent===filter)&&(!computerFilter||taskComputer(t)===computerFilter));
     const active=list.filter(t=>activeStates.includes(t.state)),done=list.filter(t=>!activeStates.includes(t.state));
     return [active,done];
   }
   function renderTaskList(){
     const box=$('task-list');box.replaceChildren();
     const [active,done]=visibleTasks();
+    const chipName=computerFilter==='local'?(view?.computer_name||'Этот компьютер'):(server?.peers||[]).find(p=>p.id===computerFilter)?.name||(view?.tasks||[]).find(t=>taskComputer(t)===computerFilter)?.remote?.name||'';
+    $('computer-chip').hidden=!computerFilter;$('computer-chip-text').textContent=computerFilter?'Компьютер: '+chipName:'';
     $('task-count').textContent=view?.tasks?.length?String(view.tasks.length):'';
     const section=(label,items)=>{
       if(!items.length)return;
@@ -344,7 +362,7 @@
       }
     };
     section('Активные',active);section('Завершённые',done);
-    if(!box.children.length)box.append(el('p',view?.project?'Задач пока нет':'','am-small am-muted'));
+    if(!box.children.length)box.append(el('p',view?.project?(computerFilter||$('agent-filter').value?'Здесь задач нет':'Задач пока нет'):'','am-small am-muted'));
   }
   // Coordinator connection (T-039): the client runs Claude's own
   // `claude mcp add` in the project folder; the owner never opens a terminal.
@@ -364,7 +382,7 @@
     const g=el('article',undefined,'am-message-group am-connect'),row=el('div',undefined,'am-message');
     const avatar=el('div',undefined,'am-avatar');const mark=el('span','M','am-provider-icon');mark.setAttribute('aria-hidden','true');avatar.append(mark);
     const body=el('div',undefined,'am-message-body'),meta=el('div',undefined,'am-meta');meta.append(el('strong','Messenger'));
-    const box=el('div',undefined,'am-message-content');body.append(meta,box);row.append(avatar,body);g.append(row);
+    const box=el('div',undefined,'am-message-content');meta.prepend(avatar);body.append(meta,box);row.append(body);g.append(row);
     const link=view.coordinator_link||{state:'unknown'},failure=linkFailure?.project===view.project?linkFailure:null;
     const connect=label=>{const b=el('button',label);b.type='button';b.addEventListener('click',()=>connectCoordinator(view.project));return b;};
     if(linkBusy===view.project){
@@ -496,7 +514,7 @@
       const avatar=el('div',undefined,'am-avatar');avatar.append(providerIcon(t.agent));
       const body=el('div',undefined,'am-message-body');const meta=el('div',undefined,'am-meta');
       meta.append(el('strong',names[t.agent]||t.agent),roleTag('исполнитель'),el('time',clock(at)));
-      const content=el('div',undefined,'am-message-content');body.append(meta,content);row.append(avatar,body);g.append(row);out.push(g);group=content;return content;
+      const content=el('div',undefined,'am-message-content');meta.prepend(avatar);body.append(meta,content);row.append(body);g.append(row);out.push(g);group=content;return content;
     };
     const delivery=(text,cls)=>el('div',text,'am-delivery '+cls);
     for(const [index,it] of feed.items.entries()){
@@ -578,10 +596,13 @@
       const check=agentChecks.get(provider);
       const auth=check?.authentication?.state;
       const authNote=rowNote.get(provider+':auth');
+      // T-056: no confirmed login means «Войти», never «Не проверен»; a
+      // confirmed login offers «Выйти».
       if(checking.has(provider))pair('Вход в аккаунт','Проверяем…','am-status-wait');
       else if(authNote)pair('Вход в аккаунт',authNote,'am-status-wait');
-      else if(auth==='not_authenticated'&&cli&&profile)pair('Вход в аккаунт','','',[inline('Войти',()=>loginFromCard(provider,cli,profile))]);
-      else pair('Вход в аккаунт',auth==='authenticated'?'Выполнен':auth==='not_authenticated'?'Не выполнен':'Не проверен',!a?'am-muted':auth==='authenticated'?'am-status-good':auth==='not_authenticated'?'am-status-bad':'am-status-wait');
+      else if(a&&auth==='authenticated')pair('Вход в аккаунт','Выполнен','am-status-good',[inline('Выйти',()=>logoutFromCard(provider,cli,profile))]);
+      else if(a&&cli)pair('Вход в аккаунт','','',[inline('Войти',()=>loginFromCard(provider,cli,profile))]);
+      else pair('Вход в аккаунт','—','am-muted');
       if(a){
         const trust=a.trust?.state;
         if(trust==='trusted')pair('Рабочая папка','Доверяет','am-status-good');
@@ -602,17 +623,43 @@
           pair('Лимит',text,l.state==='exhausted'?'am-status-bad':l.state==='warning'?'am-status-wait':'am-status-good');
           if(l.observed_at)dl.lastChild.title='По данным последней задачи, '+clock(l.observed_at);
         }
-        if(a.full_access)pair('Команды','Любые','am-status-wait');
       }
-      card.append(dl);
       const running=a?.project_running||0,today=a?.project_today||0;
-      const tasks=el('button',running||today?'Задачи: '+running+' идёт, '+today+' сегодня':'Задач нет');tasks.type='button';tasks.disabled=!running&&!today;
-      tasks.addEventListener('click',()=>{$('agent-filter').value=provider;syncSelects();show('tasks');renderTaskList();});
-      const setup=el('button','Настроить');setup.type='button';setup.addEventListener('click',()=>openAgentSetup(provider));
-      const actions=el('div',undefined,'am-actions-stack');
-      if(cli&&profile){const verify=el('button','Проверить');verify.type='button';verify.disabled=checking.has(provider);verify.addEventListener('click',()=>checkCard(provider));actions.append(verify);}
-      actions.append(tasks,setup);card.append(actions);cards.append(card);
+      if(a)pair('Задачи',running||today?running+' идёт, '+today+' сегодня':'Нет',running?'am-status-wait':'am-muted');
+      card.append(dl);
+      const actions=el('div',undefined,'am-card-actions');
+      if(running||today){const tasks=el('button','Задачи');tasks.type='button';tasks.addEventListener('click',()=>{$('agent-filter').value=provider;syncSelects();show('tasks');renderTaskList();});actions.append(tasks);}
+      const setup=el('button','Настройки');setup.type='button';setup.addEventListener('click',()=>openAgentSetup(provider));
+      actions.append(setup);card.append(actions);cards.append(card);
     }
+    renderAccessBar();
+  }
+  // T-056: one «Любые команды» switch for every agent of this computer.
+  function renderAccessBar(){
+    const agents=view?.agents||[],bar=$('access-bar');bar.hidden=!agents.length;
+    const on=agents.filter(a=>a.full_access).length,all=!!agents.length&&on===agents.length;
+    $('access-toggle').setAttribute('aria-checked',all?'true':on?'mixed':'false');
+    $('access-title').textContent=on&&!all?'Любые команды: разрешены не всем':'Любые команды';
+  }
+  async function toggleAllAccess(){
+    const on=$('access-toggle').getAttribute('aria-checked')!=='true';
+    $('access-toggle').disabled=true;$('access-toggle').setAttribute('aria-checked',String(on));
+    try{await postAPI('/api/agent-access',{provider:'all',on});viewSignature='';await refresh();}
+    catch(error){renderAccessBar();showError(error);}
+    finally{$('access-toggle').disabled=false;}
+  }
+  // A popup asks before something that is hard to undo: «Отмена» or the
+  // named action. The action's error stays in the popup.
+  let confirmAction=null;
+  function askConfirm(title,text,go,action){
+    confirmAction=action;$('confirm-title').textContent=title;$('confirm-text').textContent=text;$('confirm-go').textContent=go;
+    $('confirm-error').hidden=true;$('confirm-go').disabled=false;$('confirm-dialog').showModal();
+  }
+  async function runConfirm(){
+    if(!confirmAction)return;$('confirm-go').disabled=true;
+    try{await confirmAction();$('confirm-dialog').close();}
+    catch(error){$('confirm-error').textContent=error.message;$('confirm-error').hidden=false;}
+    finally{$('confirm-go').disabled=false;}
   }
   // The background client can be older than this window after an update.
   // The desktop window offers to restart it; a browser window shows how.
@@ -848,20 +895,10 @@
   // creating the project again brings them back.
   function askRemoveProject(){
     const name=view?.project;if(!name)return;
-    $('project-remove-title').textContent='Удалить проект «'+name+'»?';
-    $('project-remove-error').hidden=true;$('project-remove-error').textContent='';
-    $('project-remove-go').disabled=false;
-    $('project-remove-dialog').showModal();
-  }
-  async function removeProject(){
-    const name=view?.project;if(!name)return;
-    $('project-remove-go').disabled=true;
-    try{
-      await postAPI('/api/project-remove',{name});
-      $('project-remove-dialog').close();$('project-dialog').close();
+    askConfirm('Удалить проект «'+name+'»?','Проект пропадёт из списка. История задач сохранится и вернётся, если создать проект с тем же именем.','Удалить',async()=>{
+      await postAPI('/api/project-remove',{name});$('project-dialog').close();
       project='';remember('messenger-project','');selectedTask='';feed=null;feedSignature='';viewSignature='';await refresh();
-    }catch(error){$('project-remove-error').textContent=error.message;$('project-remove-error').hidden=false;}
-    finally{$('project-remove-go').disabled=false;}
+    });
   }
   async function saveProject(){
     const name=editingFolder?view.project:$('project-name').value.trim(),folder=$('project-folder').value.trim();
@@ -887,16 +924,27 @@
     try{await postAPI('/api/agent-install',{provider});noteRow(provider+':program','Страница установки открыта',8000);}
     catch(error){rowNote.delete(provider+':program');renderAgents();showError(error);}
   }
+  // After «Войти» or «Выйти» the window checks the agent again when the owner
+  // comes back to it, so the card shows the new state without a click.
+  const authOpened=new Map();
   async function loginFromCard(provider,cli,environment){
     noteRow(provider+':auth','Открываем вход…');
-    try{await postAPI('/api/agent-login',{provider,cli,environment});noteRow(provider+':auth','Окно входа открыто, затем «Проверить»',15000);}
+    try{await postAPI('/api/agent-login',{provider,cli,environment});authOpened.set(provider,Date.now());noteRow(provider+':auth','Окно входа открыто',15000);}
     catch(error){rowNote.delete(provider+':auth');renderAgents();showError(error);}
   }
+  function logoutFromCard(provider,cli,environment){
+    askConfirm('Выйти из '+names[provider]+'?','Агент на этом компьютере перестанет брать задачи, пока вы снова не войдёте.','Выйти',async()=>{
+      await postAPI('/api/agent-logout',{provider,cli,environment});authOpened.set(provider,Date.now());noteRow(provider+':auth','Окно выхода открыто',15000);
+    });
+  }
+  window.addEventListener('focus',()=>{
+    for(const [provider,at] of authOpened){if(Date.now()-at<10*60*1000&&!checking.has(provider))checkCard(provider,true);else authOpened.delete(provider);}
+  });
   async function loginAgent(provider,cli,environment,button,status){
     button.disabled=true;
     try{
       await postAPI('/api/agent-login',{provider,cli,environment});
-      const text='Открыто окно входа. Войдите в браузере, затем нажмите «Проверить версию и вход».';
+      const text='Окно входа открыто. Войдите и нажмите «Проверить».';
       if(status)status.textContent=text;else button.textContent='Окно входа открыто';
     }catch(error){if(status)status.textContent=error.message;else showError(error);}
     finally{setTimeout(()=>{button.disabled=false;},3000);}
@@ -904,12 +952,12 @@
   let setupProvider='';
   function openAgentSetup(provider){
     setupProvider=provider;const a=(view?.agents||[]).find(x=>x.agent===provider),found=discovery.find(d=>d.provider===provider);
-    $('agent-setup-title').textContent='Настройка: '+names[provider];
+    $('agent-setup-title').textContent='Настройки: '+names[provider];
     $('agent-setup-note').hidden=provider!=='cursor';
     $('agent-cli').value=a?.cli||found?.cli||'';$('agent-profile').value=a?.environment||found?.environment||'';
-    $('agent-models').value=(a?.models||[]).join('\n');setAgentFull(!!a?.full_access);
+    $('agent-models').value=(a?.models||[]).join('\n');
     $('agent-models-note').textContent=provider==='claude'?'Claude сам принимает opus, sonnet и haiku. Сюда можно добавить полные названия моделей Claude.':'Пишите названия точно так, как их принимает сам агент. Координатор сможет выбрать только модель из этого списка; если список пуст, задачи идут на модели по умолчанию.';
-    $('agent-check-status').textContent='';$('agent-save-status').textContent='';$('agent-check-result').hidden=true;$('agent-login').hidden=true;
+    setStatus('agent-check-status','');setStatus('agent-save-status','');$('agent-login').hidden=true;
     $('agent-remove').hidden=!a;
     $('agent-setup').showModal();
   }
@@ -928,17 +976,19 @@
     const a=(view?.agents||[]).find(x=>x.agent===provider),found=discovery.find(d=>d.provider===provider);
     return {provider,cli:a?.cli||found?.cli||'',environment:a?.environment||found?.environment||''};
   }
-  async function checkCard(provider){
-    const selection=agentPaths(provider);if(!selection.cli||!selection.environment)return;
+  // A card check needs only the program: an empty profile is the agent's
+  // standard one (T-056). A quiet check shows no error; the card offers «Войти».
+  async function checkCard(provider,quiet){
+    const selection=agentPaths(provider);if(!selection.cli)return;
     checking.add(provider);renderAgents();
-    try{await runCheck(selection);}catch(error){showError(error);}
+    try{rowNote.delete(provider+':auth');await runCheck(selection);}catch(error){agentChecks.delete(provider);if(!quiet)showError(error);}
     finally{checking.delete(provider);renderAgents();}
   }
   // The window checks the agents by itself once it knows them, so the cards
   // show the version and login without a click.
   function autoCheck(){
     if(autoChecked||!view||!discoveryLoaded)return;autoChecked=true;
-    for(const provider of ['claude','codex','cursor']){const s=agentPaths(provider);if(s.cli&&s.environment&&!agentChecks.has(provider))checkCard(provider);}
+    for(const provider of ['claude','codex','cursor']){const s=agentPaths(provider);if(s.cli&&!agentChecks.has(provider))checkCard(provider,true);}
   }
   // «Подключить» on a card: the found program and profile, then a check.
   async function connectAgent(provider){
@@ -948,34 +998,47 @@
     catch(error){showError(error);}
     finally{rowNote.delete(provider+':program');renderAgents();}
   }
+  // The dialog's statuses sit on the line of their button and replace each
+  // other there, so the dialog never grows or jumps (owner, T-056).
+  function setStatus(id,text,cls){const n=$(id);n.textContent=text;n.title=text;n.className='am-check-status'+(cls?' '+cls:'');}
   async function checkAgent(){
     const selection={provider:setupProvider,cli:$('agent-cli').value.trim(),environment:$('agent-profile').value.trim()};
-    if(!selection.cli||!selection.environment){$('agent-check-status').textContent='Укажите программу и каталог профиля.';return;}
-    $('agent-check').disabled=true;$('agent-check-status').textContent='Проверяем версию и вход…';
+    if(!selection.cli){setStatus('agent-check-status','Укажите программу.','am-status-bad');return;}
+    $('agent-check').disabled=true;$('agent-login').hidden=true;setStatus('agent-check-status','Проверяем…');
     try{
-      const result={check:await runCheck(selection)};
-      const dl=$('agent-check-result');dl.replaceChildren();
-      for(const [label,value] of [['Версия',result.check.version?.value||'Не определена'],['Вход в аккаунт',{authenticated:'Выполнен',not_authenticated:'Не выполнен'}[result.check.authentication?.state]||'Не удалось определить']]){const p=el('div');p.append(el('dt',label),el('dd',value));dl.append(p);}
-      dl.hidden=false;$('agent-check-status').textContent='Проверка завершена.';renderAgents();
-      $('agent-login').hidden=result.check.authentication?.state!=='not_authenticated';
-    }catch(error){$('agent-check-status').textContent=error.name==='TimeoutError'?'Проверка не завершилась вовремя.':error.message;}
+      const check=await runCheck(selection),auth=check.authentication?.state;
+      const version=check.version?.value?'версия '+check.version.value:'версия не определена';
+      setStatus('agent-check-status',(auth==='authenticated'?'Вход выполнен':'Вход не выполнен')+', '+version,auth==='authenticated'?'am-status-good':'am-status-bad');
+      $('agent-login').hidden=auth==='authenticated';renderAgents();
+    }catch(error){setStatus('agent-check-status',error.name==='TimeoutError'?'Проверка не завершилась вовремя.':error.message,'am-status-bad');}
     finally{$('agent-check').disabled=false;}
   }
-  async function saveAgent(){
+  // Every change saves by itself (owner, T-056): the program and profile when
+  // a field is left or a path is chosen, then a check; the models when their
+  // field is left. The result shows on the line at the bottom.
+  async function saveAgentPaths(){
+    const cli=$('agent-cli').value.trim();if(!cli)return;
     const found=discovery.find(d=>d.provider===setupProvider);
     let environment=$('agent-profile').value.trim();if(found&&environment===found.environment)environment='';
-    $('agent-save').disabled=true;$('agent-save-status').textContent='Сохраняем…';
-    try{await postAPI('/api/agent-set',{provider:setupProvider,cli:$('agent-cli').value.trim(),environment});
-      await postAPI('/api/agent-models',{provider:setupProvider,models:$('agent-models').value.split('\n').map(m=>m.trim()).filter(Boolean)});
-      if(agentFull!==!!view?.agents?.find(x=>x.agent===setupProvider)?.full_access)await postAPI('/api/agent-access',{provider:setupProvider,on:agentFull});
-      $('agent-save-status').textContent='Сохранено.';$('agent-remove').hidden=false;viewSignature='';await refresh();checkAgent();}
-    catch(error){$('agent-save-status').textContent=error.message;}
-    finally{$('agent-save').disabled=false;}
+    const a=(view?.agents||[]).find(x=>x.agent===setupProvider);
+    if(a&&a.cli===cli&&(a.environment||'')===environment)return;
+    setStatus('agent-save-status','Сохраняем…');
+    try{await postAPI('/api/agent-set',{provider:setupProvider,cli,environment});
+      setStatus('agent-save-status','Сохранено','am-status-good');$('agent-remove').hidden=false;viewSignature='';await refresh();checkAgent();}
+    catch(error){setStatus('agent-save-status',error.message,'am-status-bad');}
+  }
+  async function saveAgentModels(){
+    const a=(view?.agents||[]).find(x=>x.agent===setupProvider);if(!a)return;
+    const models=$('agent-models').value.split('\n').map(m=>m.trim()).filter(Boolean);
+    if(models.join('\n')===(a.models||[]).join('\n'))return;
+    setStatus('agent-save-status','Сохраняем…');
+    try{await postAPI('/api/agent-models',{provider:setupProvider,models});setStatus('agent-save-status','Сохранено','am-status-good');viewSignature='';await refresh();}
+    catch(error){setStatus('agent-save-status',error.message,'am-status-bad');}
   }
   async function removeAgent(){
-    $('agent-remove').disabled=true;$('agent-save-status').textContent='';
+    $('agent-remove').disabled=true;setStatus('agent-save-status','');
     try{await postAPI('/api/agent-remove',{provider:setupProvider});agentChecks.delete(setupProvider);viewSignature='';await refresh();$('agent-setup').close();}
-    catch(error){$('agent-save-status').textContent=error.message;}
+    catch(error){setStatus('agent-save-status',error.message,'am-status-bad');}
     finally{$('agent-remove').disabled=false;}
   }
   window.messengerRefresh=()=>{viewSignature='';refresh();};
@@ -987,7 +1050,7 @@
       const response=await fetch('/api/pick',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({kind,current:input.value.trim()}),cache:'no-store',signal:AbortSignal.timeout(610000)});
       let result={};try{result=await response.json();}catch(_){}
       if(!response.ok||result.ok!==true)throw Error(result.detail||'Окно выбора не открылось. Вставьте путь вручную.');
-      if(result.path)input.value=result.path;
+      if(result.path&&result.path!==input.value){input.value=result.path;input.dispatchEvent(new Event('change'));}
       $(status).textContent='';
     }catch(error){$(status).textContent=error.name==='TimeoutError'?'Окно выбора не ответило. Вставьте путь вручную.':error.message;}
   }
@@ -1002,14 +1065,13 @@
     $('app-installed-version').title=installed?'Точная версия: '+installed:'';
     const detail=typeof status?.detail==='string'?status.detail:'';
     const waiting=detail==='Обновление загружается в фоне';
-    // Only an available update is shown: a short line and «Обновиться».
+    // Only an available update is shown, as the one button «Обновить».
     // Background checks and their failures stay quiet; the app checks again
     // by itself.
     const shown=!!version||waiting;
-    $('app-update-version').hidden=!shown;$('app-update-button').hidden=!shown;
-    $('app-update-version').textContent='Доступно обновление';
-    $('app-update-version').title=version?'Версия '+version:'';
-    $('app-update-button').textContent=waiting?'Загружается…':'Обновиться';
+    $('app-update-version').hidden=true;$('app-update-button').hidden=!shown;
+    $('app-update-button').title=version?'Версия '+version:'';
+    $('app-update-button').textContent=waiting?'Загружается…':'Обновить';
     $('app-update-button').setAttribute('aria-label',version?'Установить обновление '+version:'Обновление загружается');
     $('app-update-button').disabled=waiting;
   };
@@ -1026,10 +1088,12 @@
     $('app-installed-version').title=installed?'Точная версия: '+installed:'';
     const version=typeof s.version==='string'?s.version:'';
     const done=s.state==='installed',shown=(s.state==='available'&&!!version)||selfUpdateBusy||done||!!s.message;
-    $('app-update-version').hidden=!shown;$('app-update-button').hidden=!shown||done;
-    $('app-update-version').textContent=s.message||(done?'Обновлено. Окно откроется заново.':'Доступно обновление');
-    $('app-update-version').title=version?'Версия '+version:'';
-    $('app-update-button').textContent=selfUpdateBusy?'Устанавливается…':'Обновиться';
+    // Only the button «Обновить» while an update waits (owner, T-056); a line
+    // appears only for an error or after the update.
+    $('app-update-version').hidden=!s.message&&!done;$('app-update-button').hidden=!shown||done;
+    $('app-update-version').textContent=s.message||(done?'Обновлено. Окно откроется заново.':'');
+    $('app-update-button').title=version?'Версия '+version:'';
+    $('app-update-button').textContent=selfUpdateBusy?'Обновляется…':'Обновить';
     $('app-update-button').setAttribute('aria-label',version?'Установить обновление '+version:'Установить обновление');
     $('app-update-button').disabled=selfUpdateBusy;
   }
@@ -1063,6 +1127,7 @@
     project=value;remember('messenger-project',value);selectedTask='';feed=null;feedSignature='';viewSignature='';refresh();
   });
   $('agent-filter').addEventListener('change',renderTaskList);
+  $('computer-chip-clear').addEventListener('click',()=>{computerFilter='';renderMachines();renderTaskList();});
   $('answer-text').addEventListener('input',()=>{const f=$('answer-text');f.style.height='auto';f.style.height=Math.min(140,Math.max(44,f.scrollHeight))+'px';answerControls();});
   $('answer-send').addEventListener('click',sendAnswer);
   // Enter sends; Shift+Enter adds a line. An IME composition keeps its Enter.
@@ -1076,10 +1141,9 @@
   $('invite-dialog').addEventListener('close',()=>{invitation=null;clearInterval(inviteTimer);});
   $('project-save').addEventListener('click',saveProject);
   $('project-remove').addEventListener('click',askRemoveProject);
-  $('agent-full-on').addEventListener('click',()=>setAgentFull(true));
-  $('agent-full-off').addEventListener('click',()=>setAgentFull(false));
-  $('project-remove-go').addEventListener('click',removeProject);
-  $('project-remove-cancel').addEventListener('click',()=>$('project-remove-dialog').close());
+  $('confirm-go').addEventListener('click',runConfirm);
+  $('confirm-cancel').addEventListener('click',()=>$('confirm-dialog').close());
+  $('access-toggle').addEventListener('click',toggleAllAccess);
   $('project-pick').addEventListener('click',()=>{if(window.webkit?.messageHandlers?.folder)window.webkit.messageHandlers.folder.postMessage('pick');else pick('project-folder','folder','project-status');});
   $('agent-cli-pick').addEventListener('click',()=>pick('agent-cli','file','agent-check-status'));
   $('agent-profile-pick').addEventListener('click',()=>pick('agent-profile','folder','agent-check-status'));
@@ -1090,7 +1154,9 @@
   $('agent-setup-close').addEventListener('click',()=>$('agent-setup').close());
   $('agent-remove').addEventListener('click',removeAgent);
   $('agent-check').addEventListener('click',checkAgent);
-  $('agent-save').addEventListener('click',saveAgent);
+  $('agent-cli').addEventListener('change',saveAgentPaths);
+  $('agent-profile').addEventListener('change',saveAgentPaths);
+  $('agent-models').addEventListener('change',saveAgentModels);
   $('host-scope').addEventListener('change',()=>{serverEdited=true;});
   $('host-port').addEventListener('input',()=>{serverEdited=true;});
   $('host-enable').addEventListener('click',enableServer);

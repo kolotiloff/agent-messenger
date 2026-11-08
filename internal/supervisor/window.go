@@ -93,7 +93,11 @@ func (s *Supervisor) RemoveProject(name string) error {
 }
 
 // SetAgentFullAccess turns «Разрешить любые команды» on or off (T-054).
+// The provider "all" sets every agent of this computer at once (T-056).
 func (s *Supervisor) SetAgentFullAccess(provider string, on bool) error {
+	if provider == "all" {
+		return s.store.SetAllAgentsFullAccess(on)
+	}
 	return s.store.SetAgentFullAccess(provider, on)
 }
 

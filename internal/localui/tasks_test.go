@@ -99,6 +99,9 @@ func TestTaskWindowRoutes(t *testing.T) {
 	if code, _ := do("POST", "/api/project-rules", `{"name":"Game","rules":"Отчёт до 8 строк."}`); code != 200 || got[len(got)-1].Cmd != "project-rules" || got[len(got)-1].Alias != "Game" || got[len(got)-1].Text != "Отчёт до 8 строк." {
 		t.Fatalf("project rules %d %+v", code, got[len(got)-1])
 	}
+	if code, _ := do("POST", "/api/agent-access", `{"provider":"all","on":false}`); code != 200 || got[len(got)-1].Provider != "all" || got[len(got)-1].Text != "0" {
+		t.Fatalf("all agents access: %d %+v", code, got)
+	}
 	if code, _ := do("POST", "/api/agent-access", `{"provider":"codex","on":true}`); code != 200 || got[len(got)-1].Cmd != "agent-access" || got[len(got)-1].Provider != "codex" || got[len(got)-1].Text != "1" {
 		t.Fatalf("agent access %d %+v", code, got[len(got)-1])
 	}

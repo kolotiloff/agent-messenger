@@ -127,7 +127,9 @@ func serveAgentInstall(w http.ResponseWriter, decoder *json.Decoder) {
 	writeJSON(w, map[string]any{"ok": true, "url": page})
 }
 
-func serveAgentLogin(w http.ResponseWriter, decoder *json.Decoder) {
+// serveAgentLogin opens the agent's sign-in, or with logout its sign-out
+// (T-056), in a terminal window the owner sees.
+func serveAgentLogin(w http.ResponseWriter, decoder *json.Decoder, logout bool) {
 	var in struct {
 		Provider    string `json:"provider"`
 		CLI         string `json:"cli"`
@@ -138,14 +140,18 @@ func serveAgentLogin(w http.ResponseWriter, decoder *json.Decoder) {
 		http.Error(w, "invalid request", 400)
 		return
 	}
-	argv, env, err := diagnostics.LoginCommand(in.Provider, in.CLI, in.Environment)
+	command := diagnostics.LoginCommand
+	if logout {
+		command = diagnostics.LogoutCommand
+	}
+	argv, env, err := command(in.Provider, in.CLI, in.Environment)
 	if err != nil {
 		http.Error(w, "invalid request", 400)
 		return
 	}
 	if err := startTerminalFunc(argv, env); err != nil {
 		w.WriteHeader(http.StatusNotImplemented)
-		writeJSON(w, map[string]any{"ok": false, "detail": "Окно терминала не открылось. Выполните вход вручную: " + shellLine(argv, env)})
+		writeJSON(w, map[string]any{"ok": false, "detail": "Окно терминала не открылось. Выполните вручную: " + shellLine(argv, env)})
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true})

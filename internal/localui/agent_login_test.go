@@ -87,7 +87,13 @@ func TestAgentLoginAndInstallRoutes(t *testing.T) {
 	if code, out := post("/api/agent-login", string(body)); code != 200 || len(started) != 1 || started[0] != cli+" login" {
 		t.Fatalf("login %d %s %v", code, out, started)
 	}
+	// «Выйти» runs the agent's own sign-out the same way (T-056).
+	if code, out := post("/api/agent-logout", string(body)); code != 200 || len(started) != 2 || started[1] != cli+" logout" {
+		t.Fatalf("logout %d %s %v", code, out, started)
+	}
+	started = started[:1]
 	for _, bad := range []struct{ path, body string }{
+		{"/api/agent-logout", `{"provider":"gemini","cli":"/bin/sh"}`},
 		{"/api/agent-install", `{"provider":"gemini"}`},
 		{"/api/agent-install", `{"provider":"codex","url":"https://example.com"}`},
 		{"/api/agent-login", `{"provider":"codex","cli":"codex"}`},

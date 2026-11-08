@@ -18,6 +18,18 @@ var loginArgs = map[string][]string{
 	"cursor": {"login"},
 }
 
+// DefaultProfile is the agent's standard profile folder (T-056).
+func DefaultProfile(provider string) (string, error) {
+	return supervisor.DefaultProfileDir(provider)
+}
+
+// logoutArgs is each agent's own sign-out command (T-056).
+var logoutArgs = map[string][]string{
+	"claude": {"auth", "logout"},
+	"codex":  {"logout"},
+	"cursor": {"logout"},
+}
+
 // InstallPages are the agents' official installation pages.
 var InstallPages = map[string]string{
 	"claude": "https://code.claude.com/docs/en/setup",
@@ -29,7 +41,17 @@ var InstallPages = map[string]string{
 // the program and its arguments, and the profile variable when the profile
 // is not the standard one. Nothing is run here.
 func LoginCommand(provider, cli, environment string) (argv []string, env []string, err error) {
-	args, ok := loginArgs[provider]
+	return agentCommand(loginArgs, provider, cli, environment)
+}
+
+// LogoutCommand is the agent's sign-out for the selected program and
+// profile, built like LoginCommand. Nothing is run here.
+func LogoutCommand(provider, cli, environment string) (argv []string, env []string, err error) {
+	return agentCommand(logoutArgs, provider, cli, environment)
+}
+
+func agentCommand(table map[string][]string, provider, cli, environment string) (argv []string, env []string, err error) {
+	args, ok := table[provider]
 	if !ok || !filepath.IsAbs(cli) {
 		return nil, nil, fmt.Errorf("unknown agent or relative program path")
 	}

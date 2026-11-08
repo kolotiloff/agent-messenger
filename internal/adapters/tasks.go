@@ -205,6 +205,23 @@ type TaskEventResult struct {
 	ResetAt time.Time
 	// Limit is the last usage-limit state the agent reported (T-044).
 	Limit *LimitState
+	// LastText is the worker's last message, shortened. It only explains a
+	// run that ended without a report (T-056).
+	LastText string
+}
+
+// lastTextLimit bounds LastText in characters.
+const lastTextLimit = 300
+
+func (r *TaskEventResult) noteText(text string) {
+	text = strings.Join(strings.Fields(text), " ")
+	if text == "" {
+		return
+	}
+	if runes := []rune(text); len(runes) > lastTextLimit {
+		text = string(runes[:lastTextLimit]) + "…"
+	}
+	r.LastText = text
 }
 
 // taskNow is the clock used to read "try again at 6:12 PM"; tests replace it.
@@ -236,6 +253,9 @@ func ParseTaskEvent(provider string, line []byte, r *TaskEventResult) {
 		note(id)
 		switch kind {
 		case "result":
+			if text, _ := e["result"].(string); text != "" {
+				r.noteText(text)
+			}
 			subtype, _ := e["subtype"].(string)
 			isErr, _ := e["is_error"].(bool)
 			if subtype == "success" && !isErr {
@@ -288,6 +308,11 @@ func ParseTaskEvent(provider string, line []byte, r *TaskEventResult) {
 		case "thread.started":
 			id, _ := e["thread_id"].(string)
 			note(id)
+		case "item.completed":
+			if item, _ := e["item"].(map[string]any); item["type"] == "agent_message" {
+				text, _ := item["text"].(string)
+				r.noteText(text)
+			}
 		case "turn.completed":
 			if r.Failure == "" {
 				r.Completed = true

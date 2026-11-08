@@ -8,6 +8,13 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-08 (T-056, after preview.40) by Claude Code.
+
+- Released today: preview.38 (#68), preview.39 (#69: T-054 full access, T-055 remove a project), preview.40 (#70: removal popup, «Настроить проект…», folder bar removed). T-050 and T-051 are on `main` (#66, #67).
+- **T-056** on `claude/t056-access-all`: one «Любые команды» switch per computer, answers and follow-ups use the current setting, «Войти»/«Выйти» on cards (D-067). Next: PR, CI, release preview.41.
+- **Waiting on the owner:** what the Linux update button does (it does not update); whether the coordinator should not block in `wait` for 10 minutes; Q-017 (invitation code).
+- **Next owner requests:** a native Linux window (Q-016, WebKitGTK needs cgo); T-052 6-digit invitation; T-053 Windows installer; T-047 shared task list; T-049 coordinator wishlist.
+
 Updated 2026-11-08 (T-048, before preview.37) by Claude Code.
 
 - **PR #65** (`claude/t044-agent-limits`, same commits as `claude/t046-ui-feedback`): T-044 limits, T-045 icons and the Windows restart fix, T-046 agent cards, T-048 computer rename (D-061). T-043 (models) is already on `main` (#64). Next: CI, merge, release **preview.37**; every computer must update, the Mac (server) first: an older server refuses reports with models or limits and ignores renames.
