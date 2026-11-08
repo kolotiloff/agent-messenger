@@ -382,6 +382,25 @@
       }
     };
     section(tr('Активные'),active);section(tr('Завершённые'),done);
+    // Other computers' tasks of the project, read-only (T-047).
+    const agentFilter=$('agent-filter').value;
+    for(const p of view?.shared||[]){
+      if(computerFilter&&computerFilter!==p.peer)continue;
+      const items=p.tasks.filter(t=>!agentFilter||t.agent===agentFilter);
+      if(!items.length)continue;
+      box.append(el('div',tr('На компьютере «')+p.name+'»','am-label am-task-section'));
+      for(const t of items){
+        const row=el('div',undefined,'am-task am-task-shared');row.title=tr('Задачу ведёт компьютер «')+p.name+tr('», здесь её можно только посмотреть');
+        const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),el('span',names[t.agent]||t.agent));
+        const [text,cls]=taskStatus(t);
+        const words=el('span',text);
+        if(t.tokens)words.append(el('span',', '+tokensText(t.tokens)+tr(' токенов'),'am-task-usage'));
+        const status=el('span',undefined,'am-task-status '+cls);status.append(words);
+        row.append(agent,el('span',t.title,'am-task-title'),status);
+        if(t.report)row.append(el('span',t.report,'am-task-report'));
+        box.append(row);
+      }
+    }
     if(!box.children.length)box.append(el('p',view?.project?(computerFilter||$('agent-filter').value?tr('Здесь задач нет'):tr('Задач пока нет')):'','am-small am-muted'));
   }
   // Coordinator connection (T-039): the client runs Claude's own

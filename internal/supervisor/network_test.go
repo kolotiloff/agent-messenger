@@ -158,3 +158,65 @@ func TestTaskTravelsBetweenComputers(t *testing.T) {
 		t.Fatal("revoked computer shows no problem")
 	}
 }
+
+// Shared task lists (T-047): after one round each computer shows the other's
+// tasks of the project; a task that already runs here is not shown twice.
+func TestSharedTaskListsBetweenComputers(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	a, _ := netComputer(t, ctx, "a")
+	b, _ := netComputer(t, ctx, "b")
+	if err := a.server.Enable(broker.ScopeLocal, freeLocalPort(t)); err != nil {
+		t.Fatal(err)
+	}
+	code, err := a.server.Invite(a.server.Status().Host.Addresses[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := b.server.Connect(ctx, code.Code, "Ноутбук"); err != nil {
+		t.Fatal(err)
+	}
+	b.server.ReportPresence(ctx)
+	a.server.ReportPresence(ctx)
+	peers := func() []core.NetPeer {
+		a.networkRound(ctx)
+		p, _ := a.store.NetPeers()
+		return p
+	}()
+	if len(peers) != 1 {
+		t.Fatalf("a's peers %+v", peers)
+	}
+	if err := b.store.SetNetAccept(true); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := a.store.StartTask(core.StartTaskRequest{Project: "Game", OpID: "op1", Provider: "codex", Text: "Menu"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := a.store.StartTask(core.StartTaskRequest{Project: "Game", OpID: "op2", Computer: peers[0].ID, Provider: "codex", Text: "Build on the laptop"}); err != nil {
+		t.Fatal(err)
+	}
+	a.round(t, 0)
+	a.networkRound(ctx) // sends the start, shares its list
+	b.networkRound(ctx) // accepts the task, shares its (empty) list, gets a's
+	if p := a.networkProblem() + b.networkProblem(); p != "" {
+		t.Fatalf("network problem %q", p)
+	}
+	v, err := b.store.WindowView("Game", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(v.Shared) != 1 || v.Shared[0].Peer != broker.HostPeer || len(v.Shared[0].Tasks) != 1 || v.Shared[0].Tasks[0].Title != "Menu" {
+		t.Fatalf("b shows %+v", v.Shared)
+	}
+	if len(v.Tasks) != 1 || v.Tasks[0].Title != "Build on the laptop" {
+		t.Fatalf("b's own tasks %+v", v.Tasks)
+	}
+}
+
+// round sets the supervisor's round counter, so the next round shares lists.
+func (s *Supervisor) round(t *testing.T, n int) {
+	t.Helper()
+	s.net.mu.Lock()
+	s.net.round = n
+	s.net.mu.Unlock()
+}

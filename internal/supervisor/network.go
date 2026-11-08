@@ -101,7 +101,48 @@ func (s *Supervisor) networkRound(ctx context.Context) {
 	if problem == "" {
 		problem = s.sendOutbox(ctx, n)
 	}
+	if refresh {
+		if p := s.shareTasks(ctx, n); problem == "" {
+			problem = p
+		}
+	}
 	s.setNetworkProblem(problem)
+}
+
+// sharedDays is how far back a computer shares the tasks it started.
+const sharedDays = 7
+
+// shareTasks sends the tasks this computer started and keeps the lists of
+// the other computers (T-047). A broker older than shared lists is not a
+// problem: the window then shows no lists.
+func (s *Supervisor) shareTasks(ctx context.Context, n broker.Network) string {
+	mine, err := s.store.SharedTasks(time.Now().AddDate(0, 0, -sharedDays))
+	if err != nil {
+		return "список задач не читается: " + err.Error()
+	}
+	list := make([]broker.SharedTask, 0, len(mine))
+	for _, t := range mine {
+		list = append(list, broker.SharedTask(t))
+	}
+	peers, err := s.server.ShareTasks(ctx, n, list)
+	switch {
+	case errors.Is(err, broker.ErrNoSharedTasks), errors.Is(err, broker.ErrNetworkChanged):
+		return ""
+	case err != nil:
+		return "общий список задач не получен: " + err.Error()
+	}
+	out := make([]core.NetPeerTasks, 0, len(peers))
+	for _, p := range peers {
+		pt := core.NetPeerTasks{Peer: p.Peer, Name: p.Name, Age: p.Age, Tasks: make([]core.NetTask, 0, len(p.Tasks))}
+		for _, t := range p.Tasks {
+			pt.Tasks = append(pt.Tasks, core.NetTask(t))
+		}
+		out = append(out, pt)
+	}
+	if err := s.store.SetNetTasks(out); err != nil {
+		return "общий список задач не записан: " + err.Error()
+	}
+	return ""
 }
 
 func (s *Supervisor) sendOutbox(ctx context.Context, n broker.Network) string {

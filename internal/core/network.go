@@ -194,6 +194,16 @@ func setMeta(tx *sql.Tx, key, value string) error {
 // empty broker means this computer is in no network.
 func (s *Store) SetNetwork(broker, self string, peers []NetPeer) error {
 	return s.tx(func(tx *sql.Tx) error {
+		// Shared task lists belong to one network (T-047).
+		var was string
+		if err := tx.QueryRow(`SELECT COALESCE((SELECT value FROM meta WHERE key='net_broker'),'')`).Scan(&was); err != nil {
+			return err
+		}
+		if was != broker || broker == "" {
+			if _, err := tx.Exec(`DELETE FROM net_tasks`); err != nil {
+				return err
+			}
+		}
 		if err := setMeta(tx, "net_broker", broker); err != nil {
 			return err
 		}
