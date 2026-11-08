@@ -36,12 +36,16 @@ func showWindow(ctx context.Context, cancel context.CancelFunc, home string, pag
 	}
 	defer w.Destroy()
 	hideOwnConsole()
-	// The page draws no frame of its own here, and colours the title bar
-	// like itself (D-054).
-	w.Init(`window.amDesktop = "windows";`)
+	// The page draws no frame of its own here and runs to the top edge: it
+	// draws the window's buttons itself and is dragged by its empty top
+	// (T-062). The system keeps the side and bottom borders, coloured like
+	// the page (D-054).
+	w.Init(`window.amDesktop = "windows"; window.amFrameless = true;`)
 	hwnd := windows.HWND(uintptr(w.Window()))
 	_ = w.Bind("amTitleBar", func(dark bool) { w.Dispatch(func() { colorTitleBar(hwnd, dark) }) })
+	_ = w.Bind("amWindow", func(action string) { w.Dispatch(func() { windowAction(hwnd, action) }) })
 	colorTitleBar(hwnd, systemDark())
+	makeFrameless(hwnd)
 	w.Navigate(page.address)
 	// An update or Ctrl+C closes the window too. Terminate posts WM_QUIT to
 	// the calling thread's queue, so it must run on the window's thread:

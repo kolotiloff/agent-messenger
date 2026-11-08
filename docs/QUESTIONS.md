@@ -37,6 +37,9 @@ The owner asked to clean the program of old code. The old "message a live sessio
 ### Q-013: Where should a computer keep its broker device key?
 DEPLOYMENT.md asks for the OS secure storage (Keychain on the Mac). Today the key is in `server-connection.json` in the data directory with mode 0600, readable by the owner's account only; the window and `status` never show it. **Options:** Keychain on the Mac and the Windows credential store, with the file keeping only a reference; or keep the 0600 file. **Chosen for now:** the 0600 file, because nothing crosses computers yet and the Keychain needs Mac-side work that cannot be tested here. **Blocks:** the rest of T-015 (before tasks travel between computers).
 
+### Q-022: How should «Удалить» and «CLI неисправен» on agent cards work?
+Asked 2026-11-08 (T-061). The approved cards run the agent's own removal command in a terminal after a confirmation, and show «CLI неисправен» when a task proved a file missing. Removal commands differ by how the agent was installed (installer script, npm, Homebrew), and guessing one could remove the wrong thing; tasks do not yet report a missing file in a form the window can read. **Cautious choice:** «Удалить» opens the agent's official page after a confirmation; «неисправен» is not shown. **Owner:** keep this, or name the commands you use for each agent? **Owner (2026-11-08):** the agents were installed by an agent (Cursor), not by the owner, so the install method is not known. Keep the cautious choice: open the official page.
+
 ## Answered
 
 ### Q-019: Should a project rename reach other computers and the coordinator chat?

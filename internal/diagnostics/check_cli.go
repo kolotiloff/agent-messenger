@@ -190,8 +190,11 @@ func parseAuthentication(provider string, out probeOutput) CheckState {
 		// Codex writes status to stderr. Never publish the rest of that stream:
 		// API-key mode may include a masked credential in its status line.
 		text := strings.TrimSpace(string(out.stdout) + string(out.stderr))
-		if out.exit == 0 && (text == "Logged in using ChatGPT" || strings.HasPrefix(text, "Logged in using an API key - ") && !strings.ContainsAny(text, "\r\n")) {
-			return CheckState{State: "authenticated", Reason: "cli_reports_credentials_present"}
+		if out.exit == 0 && text == "Logged in using ChatGPT" {
+			return CheckState{State: "authenticated", Reason: "cli_reports_credentials_present", Value: "chatgpt"}
+		}
+		if out.exit == 0 && strings.HasPrefix(text, "Logged in using an API key - ") && !strings.ContainsAny(text, "\r\n") {
+			return CheckState{State: "authenticated", Reason: "cli_reports_credentials_present", Value: "api_key"}
 		}
 		if out.exit == 1 && text == "Not logged in" {
 			return CheckState{State: "not_authenticated", Reason: "cli_reports_no_login"}

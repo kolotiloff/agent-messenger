@@ -504,3 +504,53 @@ body.am-native #am-concept .am-panel-toggle { margin-left:auto; }
 @media (max-width: 640px) {
   #am-concept .am-access-bar { flex-direction:column; align-items:stretch; }
 }
+
+/* Agent cards (T-061, D-070): a head with the name, check, settings and the
+   on/off switch; four steps of one height; one «Задачи» button. */
+#am-concept .am-cards:has(.am-agent-card) { grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); }
+#am-concept .am-agent-card { gap:0; padding:var(--am-space-3) var(--am-space-4) var(--am-space-4); }
+#am-concept .am-agent-head { display:flex; align-items:center; gap:var(--am-space-1); margin-bottom:var(--am-space-1); }
+#am-concept .am-agent-head .am-provider-heading { flex:1; min-width:0; margin:0; font-size:var(--am-text-l); white-space:nowrap; }
+#am-concept .am-agent-head .am-provider-heading > span:last-child { overflow:hidden; text-overflow:ellipsis; }
+#am-concept .am-agent-head .am-switch { margin-left:var(--am-space-1); }
+#am-concept button.am-card-icon { width:var(--am-control); height:var(--am-control); min-height:var(--am-control); color:var(--am-muted); display:inline-flex; align-items:center; justify-content:center; }
+#am-concept button.am-card-icon svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+#am-concept .am-steps { display:flex; flex-direction:column; }
+#am-concept .am-step { display:grid; grid-template-columns:22px minmax(0,1fr) auto; gap:var(--am-space-2); align-items:start; min-height:40px; padding:var(--am-space-2) 0; }
+#am-concept .am-step + .am-step { border-top:1px solid var(--am-line); }
+#am-concept .am-mark { width:18px; height:18px; margin-top:1px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:var(--am-text-xs); font-weight:700; }
+#am-concept .am-mark-ok { background:color-mix(in srgb,var(--am-good) 25%,transparent); color:var(--am-good); }
+#am-concept .am-mark-no { background:color-mix(in srgb,var(--am-bad) 25%,transparent); color:var(--am-bad); }
+#am-concept .am-mark-off { background:var(--am-soft); color:var(--am-muted); }
+#am-concept .am-mark-ring { background:transparent; }
+#am-concept .am-ring { width:18px; height:18px; }
+#am-concept .am-ring circle { fill:none; stroke-width:2.5; }
+#am-concept .am-ring-track { stroke:var(--am-line); }
+#am-concept .am-ring-value { stroke-linecap:round; }
+#am-concept .am-ring-good { stroke:var(--am-good); }
+#am-concept .am-ring-wait { stroke:var(--am-wait); }
+#am-concept .am-ring-bad { stroke:var(--am-bad); }
+#am-concept .am-step-text { min-width:0; }
+#am-concept .am-step-title { display:flex; align-items:center; gap:var(--am-space-1); margin:0; font-size:var(--am-text-m); }
+#am-concept .am-step-sub { margin:var(--am-gap-line) 0 0; font-size:var(--am-text-xs); color:var(--am-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#am-concept .am-step-later .am-step-title { color:var(--am-muted); }
+#am-concept .am-step > button { min-height:var(--am-control-compact); padding-inline:var(--am-space-3); white-space:nowrap; }
+#am-concept .am-step .am-q { flex-shrink:0; width:15px; height:15px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background:var(--am-button); color:var(--am-text); font-size:10px; cursor:help; }
+#am-concept button.am-agent-tasks { width:100%; margin-top:auto; }
+#am-concept .am-steps + button.am-agent-tasks { margin-top:var(--am-space-3); }
+#am-concept .am-agent-card { justify-content:flex-start; }
+#am-concept .am-agent-off .am-steps, #am-concept .am-agent-off .am-agent-tasks { opacity:.5; }
+#am-concept .am-agent-off .am-provider-heading { color:var(--am-muted); }
+#am-concept .am-field-sep { padding-top:var(--am-space-4); border-top:1px solid var(--am-line); }
+#am-concept button.am-close-x { color:var(--am-muted); display:inline-flex; align-items:center; justify-content:center; }
+#am-concept button.am-close-x svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; }
+
+/* Windows without the system title bar (T-062): the window's own buttons at
+   the top right, sized like the system's. */
+#am-concept .am-window-controls { position:fixed; top:0; right:0; z-index:50; display:flex; }
+#am-concept button.am-window-btn { width:46px; height:32px; min-height:0; padding:0; border-radius:0; background:transparent; color:var(--am-text); display:inline-flex; align-items:center; justify-content:center; }
+#am-concept button.am-window-btn svg { width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:1.4; }
+#am-concept button.am-window-btn:is(:hover,:focus-visible) { background:var(--am-soft); }
+#am-concept button.am-window-btn.am-window-close:is(:hover,:focus-visible) { background:#c42b1c; color:#fff; }
+body.am-frameless #am-concept .am-tabs { padding-right:calc(3 * 46px); }
+body.am-frameless #am-concept .am-tabs, body.am-frameless #am-concept .am-sidebar { user-select:none; }

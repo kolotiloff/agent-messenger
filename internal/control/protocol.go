@@ -331,6 +331,20 @@ func dispatch(handler Handler, request Request) Response {
 			return Response{Error: err.Error()}
 		}
 		return Response{OK: true}
+	case "agent-pause":
+		h, ok := handler.(interface {
+			SetAgentPaused(string, bool) error
+		})
+		if !ok {
+			return Response{Error: "agent switch unsupported; update the background client"}
+		}
+		if request.Text != "0" && request.Text != "1" {
+			return Response{Error: "agent-pause needs 0 or 1"}
+		}
+		if err := h.SetAgentPaused(request.Provider, request.Text == "1"); err != nil {
+			return Response{Error: err.Error()}
+		}
+		return Response{OK: true}
 	case "agent-access":
 		h, ok := handler.(interface {
 			SetAgentFullAccess(string, bool) error
