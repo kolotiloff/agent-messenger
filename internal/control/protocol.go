@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 const SocketName = "control.sock"
@@ -285,6 +286,21 @@ func dispatch(handler Handler, request Request) Response {
 			err = h.CancelTask(request.MessageID)
 		}
 		if err != nil {
+			return Response{Error: err.Error()}
+		}
+		return Response{OK: true}
+	case "agent-models":
+		h, ok := handler.(interface {
+			SetAgentModels(string, []string) error
+		})
+		if !ok {
+			return Response{Error: "model lists unsupported; update the background client"}
+		}
+		var models []string
+		if request.Text != "" {
+			models = strings.Split(request.Text, "\n")
+		}
+		if err := h.SetAgentModels(request.Provider, models); err != nil {
 			return Response{Error: err.Error()}
 		}
 		return Response{OK: true}

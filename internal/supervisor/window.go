@@ -82,6 +82,11 @@ func (s *Supervisor) SetAgent(provider, cli, environment string) error {
 	return s.store.SetComputerAgent(provider, cli, environment, "worker")
 }
 
+// SetAgentModels records the model names the owner listed for an agent (T-043).
+func (s *Supervisor) SetAgentModels(provider string, models []string) error {
+	return s.store.SetAgentModels(provider, models)
+}
+
 // CancelTask stops a task from the window's stop button. The running worker
 // is signalled by the client's cancel watcher and verified like any run.
 func (s *Supervisor) CancelTask(id string) error {

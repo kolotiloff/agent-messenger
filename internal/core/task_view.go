@@ -177,6 +177,8 @@ type WindowAgent struct {
 	// (local time of the client), for the agent card.
 	ProjectRunning int `json:"project_running"`
 	ProjectToday   int `json:"project_today"`
+	// Models are the names the owner listed for the coordinator (T-043).
+	Models []string `json:"models"`
 }
 
 // WindowView is what the window shows for one project.
@@ -232,17 +234,20 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='running'),
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='waiting_owner'),
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='running' AND t.project=?),
- (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.project=? AND t.created_at>=?)
+ (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.project=? AND t.created_at>=?),
+ a.models
  FROM computer_agents a WHERE a.computer=? ORDER BY a.provider`, project, project, today, computer)
 		if err != nil {
 			return err
 		}
 		for rows.Next() {
 			var a WindowAgent
-			if err := rows.Scan(&a.Agent, &a.CLI, &a.Profile, &a.Env, &a.Running, &a.Waiting, &a.ProjectRunning, &a.ProjectToday); err != nil {
+			var models string
+			if err := rows.Scan(&a.Agent, &a.CLI, &a.Profile, &a.Env, &a.Running, &a.Waiting, &a.ProjectRunning, &a.ProjectToday, &models); err != nil {
 				rows.Close()
 				return err
 			}
+			a.Models = splitModels(models)
 			v.Agents = append(v.Agents, a)
 		}
 		rows.Close()
@@ -487,6 +492,7 @@ type AgentPresence struct {
 	Agent   string
 	Running int
 	Waiting int
+	Models  []string
 }
 
 // Presence summarizes this computer's agents for the server's list of
@@ -501,17 +507,20 @@ func (s *Store) Presence() (agents []AgentPresence, coordinator string, err erro
 		}
 		rows, err := tx.Query(`SELECT a.provider,
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='running'),
- (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='waiting_owner')
+ (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='waiting_owner'),
+ a.models
  FROM computer_agents a WHERE a.computer=? ORDER BY a.provider`, computer)
 		if err != nil {
 			return err
 		}
 		for rows.Next() {
 			var a AgentPresence
-			if err := rows.Scan(&a.Agent, &a.Running, &a.Waiting); err != nil {
+			var models string
+			if err := rows.Scan(&a.Agent, &a.Running, &a.Waiting, &models); err != nil {
 				rows.Close()
 				return err
 			}
+			a.Models = splitModels(models)
 			agents = append(agents, a)
 		}
 		rows.Close()

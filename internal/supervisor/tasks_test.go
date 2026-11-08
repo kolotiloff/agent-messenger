@@ -298,6 +298,10 @@ func TestTaskModelReachesEveryRun(t *testing.T) {
 	} {
 		t.Run(c.provider, func(t *testing.T) {
 			h := newTaskHarness(t, "ask-then-report", AdapterLauncher{AllowTasks: true})
+			// Codex and Cursor take only a model the owner listed (T-043).
+			if err := h.st.SetAgentModels(c.provider, []string{c.model}); err != nil {
+				t.Fatal(err)
+			}
 			id, _, err := h.st.StartTask(core.StartTaskRequest{Project: "Game", OpID: "op-m", Provider: c.provider, Text: "Build level", Model: c.model})
 			if err != nil {
 				t.Fatal(err)
