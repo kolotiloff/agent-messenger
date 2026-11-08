@@ -571,26 +571,27 @@
       const coordinator=view?.coordinator?.connected&&coordinatorName()[0]===provider;
       const card=el('article',undefined,'am-card');
       const heading=el('h3',undefined,'am-provider-heading');heading.append(providerIcon(provider),el('span',names[provider]));card.append(heading);
-      // One short line per state, in one font (owner, preview.37).
+      // One line per state in one font: the label on the left, the coloured
+      // value on the right (owner, preview.37).
       const dl=el('div',undefined,'am-status-lines');
-      const pair=(value,cls,extra)=>{const p=el('p',undefined,cls);p.append(el('span',value));if(extra)p.append(...extra);dl.append(p);};
+      const pair=(label,value,cls,extra)=>{const p=el('p');const v=el('span',undefined,'am-status-value '+cls);v.append(el('span',value));if(extra)v.append(...extra);p.append(el('span',label,'am-status-label'),v);dl.append(p);};
       if(!a){
-        pair(found?.state==='candidate_found'?'Программа найдена, не подключена':found?.state==='not_found'?'Программа не найдена':'Программа не проверена',found?.state==='not_found'?'am-status-bad':'am-status-wait');
+        pair('Программа',found?.state==='candidate_found'?'Найдена, не подключена':found?.state==='not_found'?'Не найдена':'Не проверена',found?.state==='not_found'?'am-status-bad':'am-status-wait');
       }else{
-        pair('Программа подключена','am-status-good');
+        pair('Программа','Подключена','am-status-good');
       }
       const check=agentChecks.get(provider);
       const auth=check?.authentication?.state;
-      pair(auth==='authenticated'?'Вход выполнен':auth==='not_authenticated'?'Вход не выполнен':'Вход не проверен',!a?'am-muted':auth==='authenticated'?'am-status-good':auth==='not_authenticated'?'am-status-bad':'am-status-wait');
+      pair('Вход в аккаунт',auth==='authenticated'?'Выполнен':auth==='not_authenticated'?'Не выполнен':'Не проверен',!a?'am-muted':auth==='authenticated'?'am-status-good':auth==='not_authenticated'?'am-status-bad':'am-status-wait');
       if(a){
         const trust=a.trust?.state;
-        if(trust==='trusted')pair('Папке проекта доверяет','am-status-good');
+        if(trust==='trusted')pair('Рабочая папка','Доверяет','am-status-good');
         else{
           const help=el('button','?','am-q');help.type='button';help.setAttribute('aria-label','Как исправить');
           const hint=el('div',undefined,'am-hint');hint.hidden=true;hint.append(el('p',a.trust?.hint||'Откройте папку проекта в этой программе и подтвердите доверие.'));
           const again=el('button','Проверить снова');again.type='button';again.addEventListener('click',()=>refresh());hint.append(again);
           help.addEventListener('click',()=>{hint.hidden=!hint.hidden;});
-          pair(trust==='not_trusted'?'Папке проекта не доверяет':'Доверие к папке не проверено',trust==='not_trusted'?'am-status-bad':'am-status-wait',[help]);
+          pair('Рабочая папка',trust==='not_trusted'?'Не доверяет':'Не определено',trust==='not_trusted'?'am-status-bad':'am-status-wait',[help]);
           dl.append(hint);
         }
         // T-044: the limit the agent reported during its last run.
@@ -599,7 +600,7 @@
           const r=l.resets_at?resetText(l.resets_at):'';
           const used=typeof l.used_percent==='number'?Math.round(l.used_percent)+'%':'';
           const text=l.state==='exhausted'?(r?'Исчерпан, сброс '+r:'Исчерпан'):l.state==='warning'?(used?used+', близко к пределу':'Близко к пределу')+(r?', сброс '+r:''):(used?'Использовано '+used:'В норме')+(r?', сброс '+r:'');
-          pair('Лимит: '+text.charAt(0).toLowerCase()+text.slice(1),l.state==='exhausted'?'am-status-bad':l.state==='warning'?'am-status-wait':'am-status-good');
+          pair('Лимит',text,l.state==='exhausted'?'am-status-bad':l.state==='warning'?'am-status-wait':'am-status-good');
           if(l.observed_at)dl.lastChild.title='По данным последней задачи, '+clock(l.observed_at);
         }
       }
