@@ -195,6 +195,9 @@ func parseCursorEvent(e map[string]any, kind string, r *TaskEventResult, note fu
 	case "result":
 		id, _ := e["session_id"].(string)
 		note(id)
+		if text, _ := e["result"].(string); text != "" {
+			r.noteText(text)
+		}
 		subtype, _ := e["subtype"].(string)
 		isErr, _ := e["is_error"].(bool)
 		if subtype == "success" && !isErr {
