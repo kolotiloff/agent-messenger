@@ -383,3 +383,7 @@ Reports for each step are in [reports/](reports/). The handoff is in [HANDOFF.md
 ## 2026-11-08 — «Любые команды» text
 
 - The explanation under «Любые команды» on the Agents tab is normal-size muted text, not a small hint (owner). Checked in Chromium.
+
+## 2026-11-08 — T-067 Server tab, variant Б
+
+- The owner chose variant Б: three cards in one column, the accept switch inside «Этот компьютер», the name saves by itself, no «Сохранить», «Проверить связь» or side note, one computer name. The owner also approved the agent cards with the per-card switch and the settings dialog (T-061, not built yet). Checked in Chromium with a stubbed API only.

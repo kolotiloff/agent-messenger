@@ -162,6 +162,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-access-bar { display:flex; align-items:center; gap:var(--am-gap-section); margin-bottom:var(--am-gap-content); padding:var(--am-gap-section); border:1px solid var(--am-line); border-radius:var(--am-radius-m); background:var(--am-panel); }
 #am-concept .am-access-text { flex:1; min-width:0; display:grid; gap:var(--am-space-1); }
 #am-concept .am-access-text p { margin:0; }
+/* A switch with its title and explanation inside a card, under a divider */
+#am-concept .am-setting-row { display:flex; align-items:center; gap:var(--am-gap-section); padding-top:var(--am-gap-content); border-top:1px solid var(--am-line); }
 #am-concept .am-access-title { font-weight:500; }
 /* A setting's explanation reads as text, not as a hint: normal size, muted */
 #am-concept .am-access-note { font-size:var(--am-text-m); line-height:1.45; color:var(--am-muted); }
@@ -405,16 +407,11 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 /* Server screen */
 #am-concept .am-settings { display:flex; flex-direction:column; gap:var(--am-gap-section); max-width:570px; padding-bottom:var(--am-gap-section); }
 /* Cards on the left, notes about the screen in their own column. */
-#am-concept .am-server-layout { display:grid; grid-template-columns:minmax(0,570px) minmax(200px,280px); grid-template-areas:"main aside"; align-items:start; gap:var(--am-gap-section); }
-#am-concept .am-server-layout > .am-settings { grid-area:main; }
-#am-concept .am-server-aside { grid-area:aside; position:sticky; top:0; display:flex; flex-direction:column; gap:var(--am-gap-content); }
 #am-concept .am-panel-note { padding:var(--am-space-3) var(--am-space-4); border-radius:var(--am-radius-m); background:var(--am-soft); }
 #am-concept .am-sub { display:flex; flex-direction:column; gap:var(--am-gap-content); min-width:0; }
 #am-concept .am-server-grid { display:grid; grid-template-columns:minmax(0,1fr) 120px auto; align-items:end; gap:var(--am-gap-content); }
 #am-concept .am-invite-row { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:end; gap:var(--am-gap-content); }
 /* Both buttons sit in one cell; the hidden one still sizes it. */
-#am-concept .am-accept-row { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:var(--am-gap-content); }
-#am-concept .am-accept-row > p { margin:0; }
 #am-concept .am-swap { display:grid; }
 #am-concept .am-swap > button { grid-area:1/1; }
 #am-concept .am-swap > [aria-hidden=true] { visibility:hidden; }
@@ -491,11 +488,7 @@ body.am-native #am-concept .am-titlebar { display:none; }
   #am-concept .am-chat-layout { grid-template-columns:minmax(0,1fr); }
   #am-concept .am-queue-panel { position:absolute; top:0; right:0; bottom:0; z-index:5; width:min(300px,100%); padding:var(--am-space-3); border:1px solid var(--am-line); border-radius:var(--am-radius-m); box-shadow:var(--am-shadow-l); }
 }
-@media (max-width:1000px) {
-  #am-concept .am-server-layout { grid-template-columns:minmax(0,570px); grid-template-areas:"aside" "main"; }
-  #am-concept .am-server-aside { position:static; }
-}
-@media (max-width:520px) { #am-concept :is(.am-server-grid,.am-invite-row,.am-accept-row) { grid-template-columns:1fr; } }
+@media (max-width:520px) { #am-concept :is(.am-server-grid,.am-invite-row) { grid-template-columns:1fr; } }
 @media (max-height:700px) { #am-concept .am-main { padding-block:var(--am-space-3); } #am-concept .am-compose { padding-top:var(--am-space-2); } }
 @media (pointer:coarse) { #am-concept button { min-height:44px; } }
 @media (prefers-reduced-motion:no-preference) { #am-concept button { transition:background-color .12s ease; } }
