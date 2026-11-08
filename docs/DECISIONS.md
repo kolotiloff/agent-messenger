@@ -124,3 +124,9 @@ A versioned download started with a double click copies itself to `%LOCALAPPDATA
 2026-11-08, Claude Code (owner asleep, asked to decide alone and keep it simple).
 
 The coordinator's `get_log(computer, lines)` asks another computer of the network for the end of its Messenger log. The request (`log_request`) and the reply (`log`) travel through the task mailbox, so no new broker endpoint is needed and an older computer simply never answers (the tool then says so). The answering computer replies only when its owner turned on «Отдавать журнал по сети» on the «Сервер» tab, off by default; otherwise it replies with a refusal. It sends the last lines (200 by default, at most 1000) of its newest background log, at most 64 KB, with session ids (UUIDs), invitation codes, long hex strings, values after words such as token, password or authorization, and long letter-and-digit tokens replaced. Paths and task texts stay. Only the coordinator, which the owner connected to this computer, can ask; nothing is shown in the window. The tool waits up to 20 seconds and otherwise returns a request id to ask again with; answers are kept for a day.
+
+## D-084 — The coordinator sees a task's last action and tokens (T-071, T-049)
+
+2026-11-08, Claude Code (owner asleep, asked to decide alone and keep it simple).
+
+`tasks` adds, for an open task, the worker's last action (its last text, or «Tool: input» for a tool call, at most 300 characters) and when it happened, and, for every task, the tokens used so far. It reads only what the window already keeps: the worker's event items on this computer, or the progress lines the running computer forwards (D-055) for another computer's task. No new message and no new storage. The instructions tell the coordinator that a long quiet time is a reason to tell the owner, never to cancel or restart a task by itself.

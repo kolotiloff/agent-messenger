@@ -57,6 +57,7 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - To follow up on a finished task in the same worker conversation (it keeps its context), use continue_task instead of a new start_task. It works for tasks of this computer; for another computer's task start a new one.
 - Messenger already tells every worker to keep its report to a few lines, to put long details in a file and to follow the owner's rules for this project. A report ends with labelled lines when the worker gave them: «Изменения:» (commit or changeset), «Тесты:» and «Файлы:» (paths to read when needed). Do not ask workers for a «taken» line or a limit line: the task's state shows when it was accepted, and limits come from list_agents.
 - get_log reads the end of another computer's Messenger log, for debugging Messenger itself (a task that never arrived, a refusal you cannot explain). That computer answers only if its owner turned on «Отдавать журнал по сети»; otherwise the reply says so. Session ids, codes and keys are removed. If no answer came in time, call get_log again with request_id. Do not use it to watch workers: wait does that.
+- To tell a working task from a stuck one, call tasks: an open task shows the worker's last action and when it was (last_activity, last_activity_at; for another computer's task, the last progress line it forwarded). A long quiet time is a reason to tell the owner, not to cancel or start the task again by yourself. tokens is what the task used so far.
 - A failure caused by a usage or rate limit says so and gives the reset time when the agent reported one. Tell the owner that time; do not start the task again before it.
 How work is planned and split is decided with the owner under this project's own rules.`
 
@@ -188,7 +189,7 @@ func coordinatorTools() []map[string]any {
 				"after":           map[string]any{"type": "integer", "minimum": 0, "description": "cursor from the previous wait"},
 				"timeout_seconds": map[string]any{"type": "integer", "minimum": 1, "maximum": coordinatorMaxWait},
 			})},
-		{"name": "tasks", "description": "List this project's open tasks (not done, failed or cancelled), newest first, with any open question for you, the event cursor and a list version. state: \"all\" lists every task, or name one state. Pass if_version from the previous call to get unchanged: true instead of the same list again.",
+		{"name": "tasks", "description": "List this project's open tasks (not done, failed or cancelled), newest first, with any open question for you, the event cursor and a list version. state: \"all\" lists every task, or name one state. An open task shows the worker's last action and its time (last_activity, last_activity_at); every task shows the tokens it used so far. Pass if_version from the previous call to get unchanged: true instead of the same list again.",
 			"inputSchema": obj(map[string]any{
 				"state":      str("optional: \"all\", or one state such as running, waiting_coordinator, blocked, failed, done"),
 				"limit":      map[string]any{"type": "integer", "minimum": 1, "maximum": coordinatorTaskMax, "description": fmt.Sprintf("most tasks to list; default %d", coordinatorTaskLimit)},
@@ -423,6 +424,11 @@ type coordinatorTask struct {
 	FailureReset  string `json:"failure_reset,omitempty"`
 	CreatedAt     string `json:"created_at"`
 	FinishedAt    string `json:"finished_at,omitempty"`
+	// T-071: the worker's last action of an open task and when it was,
+	// and the tokens the task used so far.
+	LastActivity   string `json:"last_activity,omitempty"`
+	LastActivityAt string `json:"last_activity_at,omitempty"`
+	Tokens         int64  `json:"tokens,omitempty"`
 }
 
 // closedTaskStates are left out of the default tasks list (T-032).
@@ -481,6 +487,14 @@ func (c *coordinator) tasks(state string, limit int, ifVersion string) (any, err
 		}
 		if t.OpenQuestion != nil && t.OpenQuestion.Audience == core.AudienceCoordinator {
 			item.Question = t.OpenQuestion
+		}
+		a, err := c.store.TaskActivity(t.ID)
+		if err != nil {
+			return nil, err
+		}
+		item.Tokens = a.Tokens
+		if !closedTaskStates[t.State] {
+			item.LastActivity, item.LastActivityAt = a.Last, a.At
 		}
 		out = append(out, item)
 	}
