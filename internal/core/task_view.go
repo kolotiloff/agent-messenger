@@ -185,11 +185,13 @@ type WindowAgent struct {
 
 // WindowView is what the window shows for one project.
 type WindowView struct {
-	Projects    []Project `json:"projects"`
-	Project     string    `json:"project"`
-	Folder      string    `json:"folder"`
-	Computer    string    `json:"computer"`
-	Name        string    `json:"computer_name"`
+	Projects []Project `json:"projects"`
+	Project  string    `json:"project"`
+	Folder   string    `json:"folder"`
+	// WorkerRules are the owner's rules for this project's workers (T-050).
+	WorkerRules string `json:"worker_rules"`
+	Computer    string `json:"computer"`
+	Name        string `json:"computer_name"`
 	Coordinator struct {
 		Connected bool   `json:"connected"`
 		Client    string `json:"client,omitempty"`
@@ -229,6 +231,11 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 			return err
 		}
 		v.Computer = computer
+		if found {
+			if err := tx.QueryRow(`SELECT worker_rules FROM projects WHERE name=?`, v.Project).Scan(&v.WorkerRules); err != nil {
+				return err
+			}
+		}
 		if v.Name, err = computerName(tx); err != nil {
 			return err
 		}

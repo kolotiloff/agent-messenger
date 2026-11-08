@@ -82,6 +82,11 @@ func (s *Supervisor) SetAgent(provider, cli, environment string) error {
 	return s.store.SetComputerAgent(provider, cli, environment, "worker")
 }
 
+// SetProjectWorkerRules stores the owner's rules for a project's workers (T-050).
+func (s *Supervisor) SetProjectWorkerRules(name, rules string) error {
+	return s.store.SetProjectWorkerRules(name, rules)
+}
+
 // SetAgentModels records the model names the owner listed for an agent (T-043).
 func (s *Supervisor) SetAgentModels(provider string, models []string) error {
 	return s.store.SetAgentModels(provider, models)

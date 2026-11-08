@@ -52,6 +52,7 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - answer answers a worker's question (pass question_id and a unique op_id); the worker continues in the same session.
 - Never start a task again by yourself after it failed, was interrupted or blocked; tell the owner and let them decide.
 - list_agents shows each agent's limit when it reported one: state ok, warning (close to the limit) or exhausted, used_percent when the agent gave it, resets_at and observed_at. It is what the agent said at the end of its last run, not a live reading. Prefer an agent whose limit is not exhausted, and tell the owner when one is close to or at its limit.
+- Messenger already tells every worker to keep its report to a few lines, to put long details in a file and to follow the owner's rules for this project. A report ends with labelled lines when the worker gave them: «Изменения:» (commit or changeset), «Тесты:» and «Файлы:» (paths to read when needed). Do not ask workers for a «taken» line or a limit line: the task's state shows when it was accepted, and limits come from list_agents.
 - A failure caused by a usage or rate limit says so and gives the reset time when the agent reported one. Tell the owner that time; do not start the task again before it.
 How work is planned and split is decided with the owner under this project's own rules.`
 
