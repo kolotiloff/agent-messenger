@@ -138,7 +138,7 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			http.Error(w, "cross-site request refused", http.StatusForbidden)
 			return
 		}
-		mutation := r.URL.Path == "/api/enqueue" || r.URL.Path == "/api/pause" || r.URL.Path == "/api/resume" || r.URL.Path == "/api/outbox/ack" || r.URL.Path == "/api/check-cli" || r.URL.Path == "/api/setup-claude" || r.URL.Path == "/api/setup-codex" || r.URL.Path == "/api/authorize-setup" || r.URL.Path == "/api/restart-client" || r.URL.Path == "/api/pick" || taskMutation(r.URL.Path) ||
+		mutation := r.URL.Path == "/api/enqueue" || r.URL.Path == "/api/pause" || r.URL.Path == "/api/resume" || r.URL.Path == "/api/outbox/ack" || r.URL.Path == "/api/check-cli" || r.URL.Path == "/api/setup-claude" || r.URL.Path == "/api/setup-codex" || r.URL.Path == "/api/authorize-setup" || r.URL.Path == "/api/restart-client" || r.URL.Path == "/api/pick" || r.URL.Path == "/api/agent-login" || r.URL.Path == "/api/agent-install" || taskMutation(r.URL.Path) ||
 			(r.URL.Path == "/api/self-update" && r.Method != http.MethodGet)
 		method := http.MethodGet
 		if mutation {
@@ -248,6 +248,14 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			}
 			if r.URL.Path == "/api/pick" {
 				servePick(w, r.WithContext(ctx), decoder, pickFunc)
+				return
+			}
+			if r.URL.Path == "/api/agent-login" {
+				serveAgentLogin(w, decoder)
+				return
+			}
+			if r.URL.Path == "/api/agent-install" {
+				serveAgentInstall(w, decoder)
 				return
 			}
 			if r.URL.Path == "/api/restart-client" {

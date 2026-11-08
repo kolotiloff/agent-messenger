@@ -596,7 +596,11 @@
       const tasks=el('button',running||today?'Задачи: '+running+' идёт, '+today+' сегодня':'Задач нет');tasks.type='button';tasks.disabled=!running&&!today;
       tasks.addEventListener('click',()=>{$('agent-filter').value=provider;syncSelects();show('tasks');renderTaskList();});
       const setup=el('button','Настроить');setup.type='button';setup.addEventListener('click',()=>openAgentSetup(provider));
-      const actions=el('div',undefined,'am-actions-stack');actions.append(tasks,setup);card.append(actions);cards.append(card);
+      const actions=el('div',undefined,'am-actions-stack');
+      const cli=a?.cli||found?.cli||'',profile=a?.environment||found?.environment||'';
+      if(!a&&found?.state==='not_found'){const install=el('button','Установить '+names[provider],'am-primary');install.type='button';install.addEventListener('click',()=>installAgent(provider,install));actions.append(install);}
+      if(auth==='not_authenticated'&&cli){const login=el('button','Войти в аккаунт','am-primary');login.type='button';login.addEventListener('click',()=>loginAgent(provider,cli,profile,login));actions.append(login);}
+      actions.append(tasks,setup);card.append(actions);cards.append(card);
     }
   }
   // The background client can be older than this window after an update.
@@ -837,13 +841,30 @@
     }catch(error){$('project-status').textContent=error.message;}
     finally{$('project-save').disabled=false;}
   }
+  // «Установить» opens the agent's official page; «Войти» opens a terminal
+  // with the agent's own sign-in (D-057).
+  async function installAgent(provider,button){
+    button.disabled=true;
+    try{await postAPI('/api/agent-install',{provider});button.textContent='Страница установки открыта';}
+    catch(error){button.textContent='Установить '+names[provider];showError(error);}
+    finally{setTimeout(()=>{button.disabled=false;},3000);}
+  }
+  async function loginAgent(provider,cli,environment,button,status){
+    button.disabled=true;
+    try{
+      await postAPI('/api/agent-login',{provider,cli,environment});
+      const text='Открыто окно входа. Войдите в браузере, затем нажмите «Проверить версию и вход».';
+      if(status)status.textContent=text;else button.textContent='Окно входа открыто';
+    }catch(error){if(status)status.textContent=error.message;else showError(error);}
+    finally{setTimeout(()=>{button.disabled=false;},3000);}
+  }
   let setupProvider='';
   function openAgentSetup(provider){
     setupProvider=provider;const a=(view?.agents||[]).find(x=>x.agent===provider),found=discovery.find(d=>d.provider===provider);
     $('agent-setup-title').textContent='Настройка: '+names[provider];
     $('agent-setup-note').hidden=provider!=='cursor';
     $('agent-cli').value=a?.cli||found?.cli||'';$('agent-profile').value=a?.environment||found?.environment||'';
-    $('agent-check-status').textContent='';$('agent-save-status').textContent='';$('agent-check-result').hidden=true;
+    $('agent-check-status').textContent='';$('agent-save-status').textContent='';$('agent-check-result').hidden=true;$('agent-login').hidden=true;
     $('agent-setup').showModal();
   }
   async function checkAgent(){
@@ -858,6 +879,7 @@
       const dl=$('agent-check-result');dl.replaceChildren();
       for(const [label,value] of [['Версия',result.check.version?.value||'Не определена'],['Вход в аккаунт',{authenticated:'Выполнен',not_authenticated:'Не выполнен'}[result.check.authentication?.state]||'Не удалось определить']]){const p=el('div');p.append(el('dt',label),el('dd',value));dl.append(p);}
       dl.hidden=false;$('agent-check-status').textContent='Проверка завершена.';renderAgents();
+      $('agent-login').hidden=result.check.authentication?.state!=='not_authenticated';
     }catch(error){$('agent-check-status').textContent=error.name==='TimeoutError'?'Проверка не завершилась вовремя.':error.message;}
     finally{$('agent-check').disabled=false;}
   }
@@ -987,6 +1009,7 @@
     b.title=label;b.setAttribute('aria-label',state?label:'Скопировать код');}
   $('invite-copy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('invite-code').textContent);copyState('done');}catch(_){copyState('failed');}});
   $('member-connect').addEventListener('click',connectServer);
+  $('agent-login').addEventListener('click',()=>loginAgent(setupProvider,$('agent-cli').value.trim(),$('agent-profile').value.trim(),$('agent-login'),$('agent-check-status')));
   $('computer-name').addEventListener('input',e=>{e.target.dataset.edited='1';renderServer();});
   $('computer-rename').addEventListener('click',async()=>{const name=$('computer-name').value.trim();if(!name)return;if(await serverAction({action:'rename',name},'computer','Имя сохранено. Другие компьютеры увидят его через несколько секунд.')){delete $('computer-name').dataset.edited;await refresh();renderServer();}});
   $('accept-on').addEventListener('click',()=>serverAction({action:'accept',on:true},'accept',''));
