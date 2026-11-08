@@ -2,6 +2,18 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (T-056 one switch for commands, login and logout on cards)
+
+- The owner turned «Любые команды» on everywhere but it did not help. Cause found in code: an answer or a follow-up ran with the setting its task started with. Now such runs take the agent's current setting. Logs on the owner's computers were not read: they are not reachable from this session.
+- One «Любые команды» switch for every agent of the computer on the Agents tab (D-067); the per-agent switch is gone from the dialog.
+- Cards: «Войти» when no login is confirmed, «Выйти» (asks first) after a confirmed login; an agent with the standard profile is checked too, which used to leave «Не проверен» without a button. «Проверить» moved out of the card: the window checks on open and when the owner returns after signing in or out. Card actions are one row: «Задачи», «Настроить».
+- preview.40 was released earlier today (T-055).
+- Later the same day: «Настройки» on cards; dialog statuses stay on their button's line; click a computer in the sidebar to filter tasks; agent icon in the name line so chat text starts at the edge; a run without a report keeps the worker's last message.
+- Ноут-Linux Codex: the owner's screenshot shows the cause, `~/.local/bin/codex-code-mode-host` is missing (Codex installed incompletely), so the Messenger tools can not run. Not a Messenger fault. Advised to reinstall Codex.
+- Owner's idea of fetching logs from any computer recorded as T-057 / Q-018.
+- Then: a slider for «Любые команды», new worker agents start with it on, the agent dialog saves by itself, the update is one «Обновить» button. Not done yet: the Server tab's on/off buttons are not sliders yet.
+- Verified: tests, `check.sh`, mocked screenshots. Not verified: `claude auth logout` and the other sign-out commands on real CLIs, anything on the owner's computers.
+
 ## 2026-11-08 — Claude Code (T-055 confirm popup; project settings in the selector)
 
 - Removing a project now asks in a popup «Удалить проект «X»?» with «Отмена» and «Удалить» instead of a second click on the same button (owner).

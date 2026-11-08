@@ -48,3 +48,24 @@ func TestFullAccessTaskArgs(t *testing.T) {
 		}
 	}
 }
+
+// A run that ends without a report keeps the worker's last words, so the
+// owner and the coordinator can see why (T-056).
+func TestTaskLastText(t *testing.T) {
+	var r TaskEventResult
+	ParseTaskEvent("codex", []byte(`{"type":"item.completed","item":{"type":"agent_message","text":"First"}}`), &r)
+	ParseTaskEvent("codex", []byte(`{"type":"item.completed","item":{"type":"agent_message","text":"  I can not find the messenger_task tools.  "}}`), &r)
+	if r.LastText != "I can not find the messenger_task tools." {
+		t.Fatalf("codex %q", r.LastText)
+	}
+	var c TaskEventResult
+	ParseTaskEvent("claude", []byte(`{"type":"result","subtype":"success","is_error":false,"session_id":"s","result":"Done without tools"}`), &c)
+	if c.LastText != "Done without tools" {
+		t.Fatalf("claude %q", c.LastText)
+	}
+	var long TaskEventResult
+	ParseTaskEvent("codex", []byte(`{"type":"item.completed","item":{"type":"agent_message","text":"`+strings.Repeat("я", 500)+`"}}`), &long)
+	if n := len([]rune(long.LastText)); n > 301 {
+		t.Fatalf("not shortened: %d", n)
+	}
+}
