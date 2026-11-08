@@ -75,10 +75,11 @@ const PeerFresh = 45
 
 // NetAgent is one agent of another computer, as it reported it.
 type NetAgent struct {
-	Agent   string   `json:"agent"`
-	Running int      `json:"running"`
-	Waiting int      `json:"waiting_owner"`
-	Models  []string `json:"models,omitempty"`
+	Agent   string      `json:"agent"`
+	Running int         `json:"running"`
+	Waiting int         `json:"waiting_owner"`
+	Models  []string    `json:"models,omitempty"`
+	Limit   *AgentLimit `json:"limit,omitempty"`
 }
 
 // NetPeer is another computer of this computer's network.

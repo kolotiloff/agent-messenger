@@ -593,6 +593,15 @@
           pair('Рабочая папка',trust==='not_trusted'?'Не доверяет':'Не определено',trust==='not_trusted'?'am-status-bad':'am-status-wait',[help]);
           dl.append(hint);
         }
+        // T-044: the limit the agent reported during its last run.
+        const l=a.limit;
+        if(l){
+          const r=l.resets_at?resetText(l.resets_at):'';
+          const used=typeof l.used_percent==='number'?Math.round(l.used_percent)+'%':'';
+          const text=l.state==='exhausted'?(r?'Исчерпан, сброс '+r:'Исчерпан'):l.state==='warning'?(used?used+', близко к пределу':'Близко к пределу')+(r?', сброс '+r:''):(used?'Использовано '+used:'В норме')+(r?', сброс '+r:'');
+          pair('Лимит',text,l.state==='exhausted'?'am-status-bad':l.state==='warning'?'am-status-wait':'am-status-good');
+          if(l.observed_at)dl.lastChild.title='По данным последней задачи, '+clock(l.observed_at);
+        }
       }
       card.append(dl);
       const running=a?.project_running||0,today=a?.project_today||0;
