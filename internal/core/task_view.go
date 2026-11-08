@@ -179,6 +179,8 @@ type WindowAgent struct {
 	ProjectToday   int `json:"project_today"`
 	// Models are the names the owner listed for the coordinator (T-043).
 	Models []string `json:"models"`
+	// Limit is the last usage-limit state the agent reported (T-044).
+	Limit *AgentLimit `json:"limit,omitempty"`
 }
 
 // WindowView is what the window shows for one project.
@@ -235,19 +237,20 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='waiting_owner'),
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='running' AND t.project=?),
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.project=? AND t.created_at>=?),
- a.models
+ a.models, a.limit_state
  FROM computer_agents a WHERE a.computer=? ORDER BY a.provider`, project, project, today, computer)
 		if err != nil {
 			return err
 		}
 		for rows.Next() {
 			var a WindowAgent
-			var models string
-			if err := rows.Scan(&a.Agent, &a.CLI, &a.Profile, &a.Env, &a.Running, &a.Waiting, &a.ProjectRunning, &a.ProjectToday, &models); err != nil {
+			var models, limit string
+			if err := rows.Scan(&a.Agent, &a.CLI, &a.Profile, &a.Env, &a.Running, &a.Waiting, &a.ProjectRunning, &a.ProjectToday, &models, &limit); err != nil {
 				rows.Close()
 				return err
 			}
 			a.Models = splitModels(models)
+			a.Limit = parseAgentLimit(limit)
 			v.Agents = append(v.Agents, a)
 		}
 		rows.Close()
@@ -493,6 +496,7 @@ type AgentPresence struct {
 	Running int
 	Waiting int
 	Models  []string
+	Limit   *AgentLimit
 }
 
 // Presence summarizes this computer's agents for the server's list of
@@ -508,19 +512,20 @@ func (s *Store) Presence() (agents []AgentPresence, coordinator string, err erro
 		rows, err := tx.Query(`SELECT a.provider,
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='running'),
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='waiting_owner'),
- a.models
+ a.models, a.limit_state
  FROM computer_agents a WHERE a.computer=? ORDER BY a.provider`, computer)
 		if err != nil {
 			return err
 		}
 		for rows.Next() {
 			var a AgentPresence
-			var models string
-			if err := rows.Scan(&a.Agent, &a.Running, &a.Waiting, &models); err != nil {
+			var models, limit string
+			if err := rows.Scan(&a.Agent, &a.Running, &a.Waiting, &models, &limit); err != nil {
 				rows.Close()
 				return err
 			}
 			a.Models = splitModels(models)
+			a.Limit = parseAgentLimit(limit)
 			agents = append(agents, a)
 		}
 		rows.Close()
@@ -564,6 +569,23 @@ func (s *Store) ComputerName() (string, error) {
 	var name string
 	err := s.tx(func(tx *sql.Tx) (err error) { name, err = computerName(tx); return })
 	return name, err
+}
+
+// AdoptComputerName keeps name as this computer's name unless the owner
+// already chose one. A computer that joined a network before the window
+// remembered the joining name (D-061) still uses the name the others see.
+func (s *Store) AdoptComputerName(name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" || utf8.RuneCountInString(name) > MaxComputerName || strings.IndexFunc(name, unicode.IsControl) >= 0 {
+		return nil
+	}
+	return s.tx(func(tx *sql.Tx) error {
+		current, err := metaValue(tx, "computer_name")
+		if err != nil || current != "" {
+			return err
+		}
+		return setMeta(tx, "computer_name", name)
+	})
 }
 
 // SetComputerName names this computer for its network; an empty name goes

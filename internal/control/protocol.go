@@ -289,6 +289,15 @@ func dispatch(handler Handler, request Request) Response {
 			return Response{Error: err.Error()}
 		}
 		return Response{OK: true}
+	case "agent-remove":
+		h, ok := handler.(interface{ RemoveAgent(string) error })
+		if !ok {
+			return Response{Error: "disconnecting agents unsupported; update the background client"}
+		}
+		if err := h.RemoveAgent(request.Provider); err != nil {
+			return Response{Error: err.Error()}
+		}
+		return Response{OK: true}
 	case "agent-models":
 		h, ok := handler.(interface {
 			SetAgentModels(string, []string) error

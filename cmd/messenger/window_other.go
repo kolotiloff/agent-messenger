@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"github.com/kolotiloff/agent-messenger/internal/localui"
 	"io"
 	"net/url"
 	"os"
@@ -82,8 +83,19 @@ func installMenuEntry() {
 		}
 		dir = filepath.Join(home, ".local", "share")
 	}
+	// The icon goes into the user's icon theme folder; the entry names it by
+	// its full path, which every desktop reads without an icon cache.
+	icon := filepath.Join(dir, "icons", "hicolor", "scalable", "apps", "agent-messenger.svg")
+	iconLine := ""
+	if data := localui.AppIcon(); len(data) > 0 && !strings.ContainsAny(icon, "\n") {
+		if old, err := os.ReadFile(icon); err == nil && string(old) == string(data) {
+			iconLine = "Icon=" + icon + "\n"
+		} else if os.MkdirAll(filepath.Dir(icon), 0o755) == nil && os.WriteFile(icon, data, 0o644) == nil {
+			iconLine = "Icon=" + icon + "\n"
+		}
+	}
 	dir = filepath.Join(dir, "applications")
-	entry := "[Desktop Entry]\nType=Application\nName=Agent Messenger\nComment=Задачи для агентов\nExec=\"" + exe + "\" open\nTerminal=false\nCategories=Development;\nStartupWMClass=AgentMessenger\n"
+	entry := "[Desktop Entry]\nType=Application\nName=Agent Messenger\nComment=Задачи для агентов\nExec=\"" + exe + "\" open\n" + iconLine + "Terminal=false\nCategories=Development;\nStartupWMClass=AgentMessenger\n"
 	path := filepath.Join(dir, "agent-messenger.desktop")
 	if old, err := os.ReadFile(path); err == nil && string(old) == entry {
 		return

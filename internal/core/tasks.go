@@ -1540,6 +1540,8 @@ type AgentSummary struct {
 	// Models are the names the owner listed; for Codex and Cursor only
 	// these may be passed to start_task (T-043).
 	Models []string `json:"models"`
+	// Limit is the last usage-limit state the agent reported (T-044).
+	Limit *AgentLimit `json:"limit,omitempty"`
 }
 
 // ComputerSummary is one computer as list_agents shows it for a project.
@@ -1578,7 +1580,7 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 		rows, err := tx.Query(`SELECT a.provider,a.profile,
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='running'),
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state IN ('waiting_coordinator','waiting_owner')),
- a.models
+ a.models, a.limit_state
  FROM computer_agents a WHERE a.computer=? ORDER BY a.provider`, computer)
 		if err != nil {
 			return err
@@ -1586,11 +1588,12 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 		defer rows.Close()
 		for rows.Next() {
 			var a AgentSummary
-			var models string
-			if err := rows.Scan(&a.Agent, &a.Profile, &a.Running, &a.Waiting, &models); err != nil {
+			var models, limit string
+			if err := rows.Scan(&a.Agent, &a.Profile, &a.Running, &a.Waiting, &models, &limit); err != nil {
 				return err
 			}
 			a.Models = splitModels(models)
+			a.Limit = parseAgentLimit(limit)
 			c.Agents = append(c.Agents, a)
 		}
 		return rows.Err()
@@ -1611,7 +1614,7 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 			if models == nil {
 				models = []string{}
 			}
-			o.Agents = append(o.Agents, AgentSummary{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting, Models: models})
+			o.Agents = append(o.Agents, AgentSummary{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting, Models: models, Limit: a.Limit})
 		}
 		list = append(list, o)
 	}
@@ -1683,4 +1686,31 @@ func modelAllowed(provider, model string, listed []string) error {
 		return fmt.Errorf("%w: the owner listed no models for %s on this computer; leave model out to use its default", ErrRejected, provider)
 	}
 	return fmt.Errorf("%w: model %q is not in the owner's list for %s: %s; use one of these or leave model out", ErrRejected, model, provider, strings.Join(listed, ", "))
+}
+
+// RemoveComputerAgent disconnects an agent of this computer from the window
+// (T-046). Its tasks keep their own copy of the program and profile; an
+// agent with a running or waiting task is not removed.
+func (s *Store) RemoveComputerAgent(provider string) error {
+	return s.tx(func(tx *sql.Tx) error {
+		computer, err := localComputer(tx)
+		if err != nil {
+			return err
+		}
+		var busy int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM tasks WHERE computer=? AND provider=? AND state IN ('running','waiting_coordinator','waiting_owner')`, computer, provider).Scan(&busy); err != nil {
+			return err
+		}
+		if busy > 0 {
+			return fmt.Errorf("%w: agent %s has %d unfinished tasks; stop or finish them first", ErrRejected, provider, busy)
+		}
+		res, err := tx.Exec(`DELETE FROM computer_agents WHERE computer=? AND provider=?`, computer, provider)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return fmt.Errorf("%w: agent %s is not set up on this computer", ErrRejected, provider)
+		}
+		return nil
+	})
 }

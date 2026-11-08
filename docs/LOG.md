@@ -2,6 +2,27 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (T-048 computer names)
+
+- The owner's Linux laptop joined as «Ноут-Linux», but its own window showed the system name, and a rename in «Имя в сети» never reached the others (D-039 kept the joining name). Now each report carries the window's name and the broker renames the device (D-061); a computer that joined earlier takes its joining name. The coordinator's wishlist from the owner's project is recorded as T-049; the shared task list is T-047.
+- Verified here: broker test (rename reaches the host's roster and device list, the connection file keeps it), core test of taking the joining name, `check.sh`. Not verified on the owner's computers.
+
+## 2026-11-08 — Claude Code (T-046 owner's UI feedback)
+
+- After updating to preview.36 the owner found: the restart button on the left and «Перезапускаем…» written in it; agent statuses empty until the setup dialog's check; stretched dialog buttons; «Подключить исполнителем» unclear; on Linux the page opened in the browser (no Chromium-based browser installed, Q-016). Changed as in D-060.
+- Verified here: core test of disconnecting, window route test, `check.sh`, headless Chromium screenshots of the restart dialog, the cards (three automatic checks) and the setup dialog. Not verified: a real Windows, Mac or Linux window.
+
+## 2026-11-08 — Claude Code (T-045 icons, Windows update restart)
+
+- The owner's Linux agent said there is no menu entry: our doc was stale (the first `messenger open` adds one since preview.35), but the entry had no icon. Now Linux gets the icon (SVG in the user's icon folder) and the page has a favicon. Windows had no icon at all: `scripts/gen-icon` draws the Mac icon with the standard library and writes `cmd/messenger/rsrc_windows_{amd64,arm64}.syso` (a hand-written COFF resource; an external resource tool was not allowed to run here); the window loads it.
+- The owner pressed «Обновиться» on Windows: «Обновлено. Окно откроется заново.», then nothing. The window was closed by `Terminate` from another goroutine; it posts WM_QUIT to the calling thread, so it was lost. Now it runs on the window's thread.
+- Verified here: the PE files built for amd64 and arm64 contain the icon resources at relocated addresses (read back with `debug/pe`); tests of the generator and the Linux entry; `check.sh`. Not verified: the icon and the restart on a real Windows; the icon in a Linux desktop.
+
+## 2026-11-08 — Claude Code (T-044 limits per agent)
+
+- Each agent's last reported usage limit is kept and given to the coordinator as a `limit` field of `list_agents`, shown on the agent card («Лимит») and sent to the other computers (D-059). The coordinator asked for a field, not text in the report.
+- Verified here: `check.sh`, Windows vet, parser tests (Claude and Codex shapes), core and a full supervisor run with a fake CLI that hits its limit. Not verified: what the real CLIs print (Q-015); a real network.
+
 ## 2026-11-08 — Claude Code (T-043 models per agent)
 
 - PR #63 merged (722c51f); preview.36 release started. The owner's coordinator asked for exact model names for Codex and Cursor: it may not guess them. Now the owner lists them on the agent card, `list_agents` returns them, and Codex and Cursor refuse an unlisted name (D-058). `list_agents` also uses the computer's own name now.

@@ -151,6 +151,9 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-tab[aria-pressed=true] { background:var(--am-selected); color:var(--am-text); }
 #am-concept .am-tab[aria-pressed=true]:is(:hover,:focus-visible) { background:var(--am-button-hover); }
 #am-concept .am-actions { display:flex; flex-wrap:wrap; align-items:center; gap:var(--am-gap-control); }
+/* The main action sits on the right (dialogs follow the Claude app). */
+#am-concept .am-end-actions { justify-content:flex-end; }
+#am-concept .am-end-actions > .am-danger { margin-right:auto; }
 #am-concept .am-actions-stack { display:flex; flex-direction:column; align-items:stretch; gap:var(--am-gap-control); }
 
 /* Fields */
@@ -403,7 +406,9 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-alert h3 { margin:0; font-size:var(--am-text-l); font-weight:600; }
 #am-concept .am-alert p { margin:0; }
 #am-concept .am-alert-actions { justify-content:space-between; margin-top:var(--am-gap-section); }
-#am-concept .am-alert-actions > :only-child { margin-left:auto; }
+/* The main action is the last button: it stays on the right even when the
+   buttons before it are hidden. */
+#am-concept .am-alert-actions > :last-child { margin-left:auto; }
 #am-concept .am-dialog-header { display:flex; align-items:center; justify-content:space-between; gap:var(--am-gap-section); padding:var(--am-space-4); border-bottom:1px solid var(--am-line); flex-shrink:0; }
 #am-concept .am-dialog-body { min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; padding:0 calc(var(--am-space-4) - var(--am-gutter, 0px)) var(--am-space-4) var(--am-space-4); }
 #am-concept .am-setup-body { display:flex; flex-direction:column; gap:var(--am-gap-section); padding-top:var(--am-space-4); }

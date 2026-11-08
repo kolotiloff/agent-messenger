@@ -8,11 +8,21 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-08 (T-048, before preview.37) by Claude Code.
+
+- **PR #65** (`claude/t044-agent-limits`, same commits as `claude/t046-ui-feedback`): T-044 limits, T-045 icons and the Windows restart fix, T-046 agent cards, T-048 computer rename (D-061). T-043 (models) is already on `main` (#64). Next: CI, merge, release **preview.37**; every computer must update, the Mac (server) first: an older server refuses reports with models or limits and ignores renames.
+- **Owner's requests not done yet, in order:** T-047 shared task list across computers (7-day retention, read-only on other computers); T-049 the coordinator's wishlist (computer readiness in `list_agents`, progress and last output, result files, resource locks such as the Unity editor, tokens per task); Q-016 a Linux window without Chrome/Chromium (today the browser opens when neither is installed).
+- **Owner's Linux laptop:** a Codex worker failed because `~/.local/bin/codex-code-mode-host` is missing next to `codex`, i.e. Codex is installed incompletely; the owner was advised to reinstall Codex the official way. Not a Messenger fault; not verified here (no Codex in this container).
+- **Answered, no change:** switching between computers like tabs existed only in the approved mockup, never in the program.
+
 Updated 2026-11-08 (T-043) by Claude Code.
 
 - **preview.36** released from `main` 722c51f (PR #63, T-041/T-042); check the assets.
 - **T-043 on `claude/t043-agent-models`:** model names per agent, owner-listed, for the coordinator (D-058). Verified with tests only.
-- **Next:** T-044, usage limits per agent as a separate field the coordinator can read; then preview.37 with T-043 and T-044.
+- **T-044 on `claude/t044-agent-limits` (on top of T-043):** each agent's last reported limit as a `limit` field (D-059). Real CLI fields not checked (Q-015).
+- **T-045 on `claude/t045-linux-icon` (on top of T-044):** icons on Windows and Linux; the Windows window closes and reopens after «Обновиться».
+- **T-046 on `claude/t046-ui-feedback` (on top of T-045):** agent cards check by themselves, simpler buttons, dialog actions on the right (D-060); Q-016 about the Linux window.
+- **Next:** merge T-043 to T-046, release preview.37; the owner tests models and limits with real agents.
 
 Updated 2026-11-08 (T-042) by Claude Code.
 

@@ -24,8 +24,7 @@ func TestPresenceRoster(t *testing.T) {
 		return Presence{Name: "Mac Studio", Agents: []PresenceAgent{{Agent: "claude", Running: 1}, {Agent: "codex"}}, Coordinator: "claude-code"}, nil
 	})
 	member.SetPresence(func() (Presence, error) {
-		// A device cannot rename itself through its report.
-		return Presence{Name: "Чужое имя", Agents: []PresenceAgent{{Agent: "codex", Waiting: 2, Models: []string{"gpt-5.5", "gpt-5.5-mini"}}}}, nil
+		return Presence{Agents: []PresenceAgent{{Agent: "codex", Waiting: 2, Models: []string{"gpt-5.5", "gpt-5.5-mini"}}}}, nil
 	})
 	host.ReportPresence(ctx(t))
 	member.ReportPresence(ctx(t))
@@ -43,6 +42,25 @@ func TestPresenceRoster(t *testing.T) {
 	peers = host.Status().Peers
 	if len(peers) != 1 || peers[0].Host || peers[0].Name != "Ноутбук" || len(peers[0].Agents) != 1 || peers[0].Agents[0].Waiting != 2 || !reflect.DeepEqual(peers[0].Agents[0].Models, []string{"gpt-5.5", "gpt-5.5-mini"}) {
 		t.Fatalf("host sees %+v", peers)
+	}
+
+	// A device renames itself through its report, and every computer sees
+	// the new name (D-061).
+	member.SetPresence(func() (Presence, error) {
+		return Presence{Name: "Ноут-Linux", Agents: []PresenceAgent{{Agent: "codex", Waiting: 2}}}, nil
+	})
+	member.ReportPresence(ctx(t))
+	if peers = host.Status().Peers; len(peers) != 1 || peers[0].Name != "Ноут-Linux" {
+		t.Fatalf("renamed device: %+v", peers)
+	}
+	if devices := host.Status().Host.Devices; len(devices) != 1 || devices[0].Name != "Ноут-Linux" {
+		t.Fatalf("host's devices: %+v", devices)
+	}
+	if name := member.Status().Member.DeviceName; name != "Ноут-Linux" || member.MemberName() != name {
+		t.Fatalf("member's own name: %q", name)
+	}
+	if reopened := newService(t, member.root); reopened.MemberName() != "Ноут-Linux" {
+		t.Fatalf("the connection file keeps the name: %q", reopened.MemberName())
 	}
 
 	// A malformed report is refused and changes nothing.

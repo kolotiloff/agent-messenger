@@ -191,6 +191,8 @@ type TaskEventResult struct {
 	// the provider said its limit resets; both only explain the failure.
 	Reason  string
 	ResetAt time.Time
+	// Limit is the last usage-limit state the agent reported (T-044).
+	Limit *LimitState
 }
 
 // taskNow is the clock used to read "try again at 6:12 PM"; tests replace it.
@@ -235,6 +237,9 @@ func ParseTaskEvent(provider string, line []byte, r *TaskEventResult) {
 			// Claude reports its plan limits; only a rejected request is a
 			// limit that stopped this run.
 			info, _ := e["rate_limit_info"].(map[string]any)
+			if l, ok := claudeLimit(info); ok {
+				r.noteLimit(l)
+			}
 			if status, _ := info["status"].(string); status == "rejected" {
 				r.Reason = stronger(r.Reason, ReasonUsageLimit)
 				if at := unixReset(info["resetsAt"]); !at.IsZero() && r.ResetAt.IsZero() {
@@ -264,6 +269,9 @@ func ParseTaskEvent(provider string, line []byte, r *TaskEventResult) {
 			}
 		}
 	case "codex":
+		if l, ok := codexLimit(e); ok {
+			r.noteLimit(l)
+		}
 		switch kind {
 		case "thread.started":
 			id, _ := e["thread_id"].(string)

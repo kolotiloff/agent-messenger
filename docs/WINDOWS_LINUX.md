@@ -47,5 +47,5 @@ From preview.33 the window updates the program from the same signed channel as t
 
 ## Not there yet
 
-- No installer, Start menu entry or autostart on Windows; no desktop entry on Linux.
+- No installer, Start menu entry or autostart on Windows. On Linux the first `messenger open` adds Agent Messenger with its icon to the application menu (`~/.local/share/applications`); there is no package (deb, snap, flatpak).
 - The programs are not code-signed.

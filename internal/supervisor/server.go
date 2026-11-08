@@ -105,7 +105,17 @@ func (s *Supervisor) presence() (broker.Presence, error) {
 		if len(a.Models) > 0 {
 			pa.Models = a.Models
 		}
+		if l := a.Limit; l != nil {
+			pa.Limit = &broker.PresenceLimit{State: l.State, UsedPercent: l.UsedPercent, Window: l.Window, ResetsAt: l.ResetsAt, ObservedAt: l.ObservedAt}
+		}
 		p.Agents = append(p.Agents, pa)
+	}
+	// A computer that joined before its window kept the joining name takes
+	// it now, instead of reporting the system's name over it (D-061).
+	if s.server != nil {
+		if joined := s.server.MemberName(); joined != "" {
+			_ = s.store.AdoptComputerName(joined)
+		}
 	}
 	if name, err := s.store.ComputerName(); err == nil {
 		p.Name = clipName(name)

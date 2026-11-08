@@ -40,10 +40,39 @@ type PresenceAgent struct {
 	// Left out when empty, so a host before preview.37 still accepts the
 	// report of a computer without a list.
 	Models []string `json:"models,omitempty"`
+	// Limit is the agent's last reported usage-limit state (T-044).
+	Limit *PresenceLimit `json:"limit,omitempty"`
 }
 
-// Presence is what a computer reports about itself. Name is used only for
-// the hosting computer; a device keeps the name it joined with.
+// PresenceLimit mirrors core.AgentLimit.
+type PresenceLimit struct {
+	State       string   `json:"state"`
+	UsedPercent *float64 `json:"used_percent,omitempty"`
+	Window      string   `json:"window,omitempty"`
+	ResetsAt    string   `json:"resets_at,omitempty"`
+	ObservedAt  string   `json:"observed_at"`
+}
+
+func (l *PresenceLimit) valid() bool {
+	if l == nil {
+		return true
+	}
+	if l.State != "ok" && l.State != "warning" && l.State != "exhausted" || len(l.Window) > 32 || l.ObservedAt == "" {
+		return false
+	}
+	if l.UsedPercent != nil && (*l.UsedPercent < 0 || *l.UsedPercent > 1000) {
+		return false
+	}
+	for _, at := range []string{l.ResetsAt, l.ObservedAt} {
+		if _, err := time.Parse(time.RFC3339, at); at != "" && err != nil {
+			return false
+		}
+	}
+	return true
+}
+
+// Presence is what a computer reports about itself. Name is the name the
+// owner gave the computer; a device's name replaces the one it joined with.
 type Presence struct {
 	Name        string          `json:"name,omitempty"`
 	Agents      []PresenceAgent `json:"agents"`
@@ -85,7 +114,7 @@ func (p Presence) valid() bool {
 			return false
 		}
 		seen[a.Agent] = true
-		if len(a.Models) > maxPresenceModels {
+		if len(a.Models) > maxPresenceModels || !a.Limit.valid() {
 			return false
 		}
 		for _, m := range a.Models {
@@ -209,7 +238,15 @@ func (b *Broker) handlePresence(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
 		return
 	}
-	// A device keeps the name it joined with.
+	// A device may rename itself: the owner changes the name on that
+	// computer, and every computer of the network sees the new one (D-061).
+	if in.Name != "" && in.Name != d.Name {
+		if _, err := b.db.Exec(`UPDATE devices SET name=? WHERE id=? AND revoked_at IS NULL`, in.Name, d.ID); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "unavailable"})
+			return
+		}
+	}
+	// The stored report keeps no name: the device's name is in devices.
 	in.Name = ""
 	if err := b.Report(d.ID, in); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "unavailable"})

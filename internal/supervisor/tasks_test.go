@@ -393,6 +393,20 @@ func TestTaskUsageLimitIsExplainedNotRetried(t *testing.T) {
 			if !found {
 				t.Fatal("the failed event does not explain the limit")
 			}
+			// T-044: the coordinator sees the agent's limit in list_agents.
+			list, err := h.st.ProjectAgents("Game")
+			if err != nil {
+				t.Fatal(err)
+			}
+			var limit *core.AgentLimit
+			for _, a := range list["computers"].([]core.ComputerSummary)[0].Agents {
+				if a.Agent == provider {
+					limit = a.Limit
+				}
+			}
+			if limit == nil || limit.State != "exhausted" || limit.ResetsAt != task.FailureReset || limit.ObservedAt == "" {
+				t.Fatalf("%s limit %+v", provider, limit)
+			}
 			waitNoTaskReservations(t)
 			h.stop()
 		})

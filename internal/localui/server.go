@@ -32,6 +32,13 @@ import (
 //go:embed assets/*
 var assets embed.FS
 
+// AppIcon is the program's icon (the Mac app's drawing) as SVG, for the
+// Linux application menu.
+func AppIcon() []byte {
+	data, _ := assets.ReadFile("assets/icon.svg")
+	return data
+}
+
 type caller func(context.Context, control.Request) (control.Response, error)
 
 // Run binds only IPv4 loopback, with a fresh capability for each invocation.
@@ -150,7 +157,7 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			return
 		}
 		if !strings.HasPrefix(r.URL.Path, "/api/") {
-			files := map[string]string{"/": "index.html", "/app.js": "app.js", "/app.css": "app.css", "/design-v1.css": "design-v1.css"}
+			files := map[string]string{"/": "index.html", "/app.js": "app.js", "/app.css": "app.css", "/design-v1.css": "design-v1.css", "/icon.svg": "icon.svg"}
 			name, ok := files[r.URL.Path]
 			if !ok {
 				http.NotFound(w, r)
@@ -166,6 +173,8 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 				w.Header().Set("Content-Type", "text/css; charset=utf-8")
 			case strings.HasSuffix(name, ".js"):
 				w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+			case strings.HasSuffix(name, ".svg"):
+				w.Header().Set("Content-Type", "image/svg+xml")
 			default:
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			}
@@ -521,7 +530,7 @@ var serverActions = map[string]bool{"enable": true, "disable": true, "invite": t
 
 func taskMutation(path string) bool {
 	switch path {
-	case "/api/project-create", "/api/project-folder", "/api/task-answer", "/api/agent-set", "/api/agent-models", "/api/task-cancel", "/api/server-action", "/api/coordinator-connect":
+	case "/api/project-create", "/api/project-folder", "/api/task-answer", "/api/agent-set", "/api/agent-models", "/api/agent-remove", "/api/task-cancel", "/api/server-action", "/api/coordinator-connect":
 		return true
 	}
 	return false
@@ -596,6 +605,14 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 			return control.Request{}, false
 		}
 		return control.Request{Cmd: "agent-set", Provider: in.Provider, CLI: in.CLI, Environment: in.Environment}, true
+	case "/api/agent-remove":
+		var in struct {
+			Provider string `json:"provider"`
+		}
+		if decoder.Decode(&in) != nil || !core.TaskProviders[in.Provider] {
+			return control.Request{}, false
+		}
+		return control.Request{Cmd: "agent-remove", Provider: in.Provider}, true
 	case "/api/agent-models":
 		var in struct {
 			Provider string   `json:"provider"`
