@@ -85,10 +85,15 @@ func npmCodexCandidate(r Report, npm string) Report {
 		}
 		modules := filepath.Join(npm, "node_modules", "@openai")
 		var found []string
-		for _, pattern := range []string{
-			filepath.Join(modules, "codex*", "vendor", "*", "codex", "codex.exe"),
-			filepath.Join(modules, "codex", "node_modules", "@openai", "codex*", "vendor", "*", "codex", "codex.exe"),
-		} {
+		// Older packages keep the program in vendor/<target>/codex, newer
+		// ones in vendor/<target>/bin.
+		var patterns []string
+		for _, folder := range []string{"codex", "bin"} {
+			patterns = append(patterns,
+				filepath.Join(modules, "codex*", "vendor", "*", folder, "codex.exe"),
+				filepath.Join(modules, "codex", "node_modules", "@openai", "codex*", "vendor", "*", folder, "codex.exe"))
+		}
+		for _, pattern := range patterns {
 			matches, _ := filepath.Glob(pattern)
 			found = append(found, matches...)
 		}
