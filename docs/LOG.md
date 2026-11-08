@@ -361,3 +361,7 @@ Reports for each step are in [reports/](reports/). The handoff is in [HANDOFF.md
 
 - The owner wants to be able to run two games at once with two coordinator chats. Recorded as D-026: projects exist from the start (name, coordinator connection, folder per computer, tasks); agents are shared. The idea T-030 is folded into T-024, T-025 and T-029.
 - The approved mockup now has a project switcher at the top of the sidebar ([docs/mockups/2026-11-06-task-window.html](mockups/2026-11-06-task-window.html)).
+
+## 2026-11-08 — design drafts saved
+
+- Saved the draft mockups that are still being agreed into `docs/mockups/` (settings dialog, per-card switch, Windows window without the system title bar) and wrote the points already agreed into T-061; added T-062 for the title bar. Nothing built; waiting for the owner's approval.

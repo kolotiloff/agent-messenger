@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ru" data-theme="dark"><head><meta charset="utf-8"><link rel="stylesheet" href="/app.css">
+<style>
+#am-concept{color-scheme:dark}
+body{margin:0;background:var(--am-bg)}
+.page{padding:var(--am-space-6);width:1180px;display:flex;gap:var(--am-space-6);align-items:flex-start}
+.col{width:560px}
+.cap{font-size:13px;color:var(--am-muted);margin:0 0 var(--am-space-3)}
+.dlg{background:var(--am-panel);border:1px solid var(--am-line);border-radius:var(--am-radius-l);box-shadow:var(--am-shadow-l);overflow:hidden}
+.dh{display:flex;align-items:center;gap:var(--am-space-2);padding:var(--am-space-3) var(--am-space-4);border-bottom:1px solid var(--am-line)}
+.dh h3{margin:0;font-size:15px;flex:1}
+#am-concept .x{width:var(--am-control);height:var(--am-control);padding:0;background:transparent!important;color:var(--am-muted);font-size:18px}
+.db{padding:var(--am-space-4);display:flex;flex-direction:column;gap:var(--am-space-4)}
+.lbl{font-size:13px;margin:0 0 6px}
+.field{display:flex;gap:var(--am-space-2)}
+.field input{flex:1;min-width:0}
+.hint{font-size:11px;color:var(--am-muted);margin:6px 0 0}
+.models{display:grid;grid-template-columns:80px 1fr;gap:var(--am-space-2);align-items:center}
+.models.fx{grid-template-columns:80px 1fr 110px}
+.models span{font-size:13px;color:var(--am-muted)}
+.models input,.models select{min-width:0}
+.sep{border-top:1px solid var(--am-line)}
+.foot{display:flex;align-items:center;justify-content:space-between;gap:var(--am-space-2)}
+.foot p{margin:0;font-size:11px;color:var(--am-muted);flex:1}
+.top{font-size:12px;color:var(--am-muted);margin:0}
+</style></head>
+<body><div id="am-concept"><div class="page">
+
+<div class="col">
+<p class="cap">Claude Code</p>
+<div class="dlg"><div class="dh"><h3>Настройки: Claude Code</h3><button class="x" title="Закрыть">✕</button></div>
+<div class="db">
+<p class="top">Изменения сохраняются сами.</p>
+<div><p class="lbl">Программа CLI</p><div class="field"><input value="C:\Users\user\.local\bin\claude.exe"><button>Выбрать</button></div></div>
+<div><p class="lbl">Каталог профиля</p><div class="field"><input value="C:\Users\user\.claude"><button>Выбрать</button></div></div>
+<div class="sep"></div>
+<div><p class="lbl">Модели для координатора</p>
+<input style="width:100%;box-sizing:border-box" value="haiku, sonnet, opus">
+<p class="hint">Через запятую, как их пишет сам Claude. Уже вписаны по умолчанию.</p></div>
+<div class="sep"></div>
+<div class="foot"><p>Messenger перестанет давать задачи Claude Code на этом компьютере. Сам CLI останется.</p><button class="am-danger">Отключить</button></div>
+</div></div>
+</div>
+
+<div class="col">
+<p class="cap">Codex</p>
+<div class="dlg"><div class="dh"><h3>Настройки: Codex</h3><button class="x" title="Закрыть">✕</button></div>
+<div class="db">
+<p class="top">Изменения сохраняются сами.</p>
+<div><p class="lbl">Программа CLI</p><div class="field"><input value="~/.local/bin/codex"><button>Выбрать</button></div></div>
+<div><p class="lbl">Каталог профиля</p><div class="field"><input value="~/.codex"><button>Выбрать</button></div></div>
+<div class="sep"></div>
+<div><p class="lbl">Модели для координатора</p>
+<input style="width:100%;box-sizing:border-box" value="gpt-5-codex, gpt-5">
+<p class="hint">Через запятую, как их пишет сам Codex. Уже вписаны по умолчанию.</p></div>
+<div class="sep"></div>
+<div class="foot"><p>Messenger перестанет давать задачи Codex на этом компьютере. Сам CLI останется.</p><button class="am-danger">Отключить</button></div>
+</div></div>
+</div>
+
+</div></div></body></html>
