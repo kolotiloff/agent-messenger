@@ -11,6 +11,7 @@ import (
 
 	webview2 "github.com/jchv/go-webview2"
 	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 )
 
 // showWindow shows the page in the program's own window on Windows (D-054):
@@ -33,6 +34,12 @@ func showWindow(ctx context.Context, cancel context.CancelFunc, home string, pag
 	}
 	defer w.Destroy()
 	hideOwnConsole()
+	// The page draws no frame of its own here, and colours the title bar
+	// like itself (D-054).
+	w.Init(`window.amDesktop = "windows";`)
+	hwnd := windows.HWND(uintptr(w.Window()))
+	_ = w.Bind("amTitleBar", func(dark bool) { w.Dispatch(func() { colorTitleBar(hwnd, dark) }) })
+	colorTitleBar(hwnd, systemDark())
 	w.Navigate(page.address)
 	// An update or Ctrl+C closes the window too.
 	stop := context.AfterFunc(ctx, w.Terminate)
@@ -41,6 +48,8 @@ func showWindow(ctx context.Context, cancel context.CancelFunc, home string, pag
 }
 
 var (
+	dwmapi                = windows.NewLazySystemDLL("dwmapi.dll")
+	dwmSetWindowAttribute = dwmapi.NewProc("DwmSetWindowAttribute")
 	kernel32              = windows.NewLazySystemDLL("kernel32.dll")
 	getConsoleProcessList = kernel32.NewProc("GetConsoleProcessList")
 	freeConsole           = kernel32.NewProc("FreeConsole")
@@ -55,4 +64,39 @@ func hideOwnConsole() {
 	if n == 1 {
 		_, _, _ = freeConsole.Call()
 	}
+}
+
+// Window attributes of the title bar. Windows 10 knows only dark mode;
+// Windows 11 also takes the exact colours.
+const (
+	dwmUseDarkMode  = 20
+	dwmCaptionColor = 35
+	dwmTextColor    = 36
+)
+
+// colorTitleBar gives the title bar the page's background and text colours
+// (--am-bg and --am-text of the window's theme).
+func colorTitleBar(hwnd windows.HWND, dark bool) {
+	set := func(attr uint32, value uint32) {
+		_, _, _ = dwmSetWindowAttribute.Call(uintptr(hwnd), uintptr(attr), uintptr(unsafe.Pointer(&value)), 4)
+	}
+	// COLORREF is 0x00BBGGRR.
+	caption, text, mode := uint32(0x00FFFFFF), uint32(0x002B2420), uint32(0)
+	if dark {
+		caption, text, mode = 0x00191919, 0x00EFEAE8, 1
+	}
+	set(dwmUseDarkMode, mode)
+	set(dwmCaptionColor, caption)
+	set(dwmTextColor, text)
+}
+
+// systemDark reports whether Windows apps use the dark theme.
+func systemDark() bool {
+	k, err := registry.OpenKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`, registry.QUERY_VALUE)
+	if err != nil {
+		return false
+	}
+	defer k.Close()
+	v, _, err := k.GetIntegerValue("AppsUseLightTheme")
+	return err == nil && v == 0
 }

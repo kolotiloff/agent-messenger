@@ -8,6 +8,23 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-08 (T-042) by Claude Code.
+
+- **T-042 on `claude/t041-sparkle-retry` (PR #63):** after the owner's Mac → Windows test: progress and «Принято» on the starting computer (D-055), grouped tool actions, a computer name for every computer (host included), tasks of other computers accepted by default (D-056), Codex trust read from all `config.toml` forms, «Войти в аккаунт» / «Установить …» buttons, a frameless Windows window with a themed title bar (D-057).
+- **Verified here:** `check.sh`, Windows vet, tests with fakes, headless Chromium screenshots. **Not verified:** real Windows, the real two-computer relay, the Codex/Cursor install page addresses.
+- **Next:** CI, merge, preview.36; the owner tests it. Open idea from the owner: show every agent's usage limits (not started; see LOG).
+
+Previous state:
+
+Updated 2026-11-08 (preview.35) by Claude Code.
+
+- **preview.35 released** from `main` 48b883e (PR #62, T-041; run 42470255420, the Mac build re-run once after GitHub's download server returned 504), 21 assets. Own window on Windows (WebView2) and Linux (app-mode browser window), the agent check on every OS, Codex and Cursor found on Windows, «Выбрать…» buttons (D-051–D-054). Also fixed: a worker's last output lines could be lost when it exited, so a finished task was marked unverified.
+- **Checked here:** the Linux x64 program from the release matches the SHA-256 list and reports preview.35 at 48b883e.
+- **Not checked:** anything on a real Windows computer or a Linux desktop (window, console, dialogs, Codex/Cursor discovery, the check); the Mac app.
+- **Next:** the owner tests preview.35 on Windows. Branch `claude/t041-sparkle-retry` waits up to 15 min for the Sparkle download (GitHub 504s); merge it with this docs update. Open owner decisions: version 0.0.1 and Codex/Cursor as coordinator.
+
+Previous state (2026-11-07, evening, later):
+
 Updated 2026-11-07 (evening, later) by Claude Code.
 
 - **T-039 / D-050 (branch `claude/t039-connect-coordinator`):** the window connects the coordinator chat to Claude by itself. It runs Claude's own `claude mcp add --scope local` in the project folder, right after the project is created and on «Подключить к Claude», and reads `~/.claude.json` to confirm. Worker runs are marked (`AGENT_MESSENGER_WORKER_RUN`), and the coordinator server gives them no tools.

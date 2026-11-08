@@ -35,7 +35,7 @@ func TaskEnv(s TaskRunSpec) []string {
 		return nil
 	}
 	raw, _ := json.Marshal(map[string]string{"db": s.DB, "run": s.RunID, "receipt": s.Receipt})
-	return append(cursorProgramEnv(s.CLI), TaskEnvVariable+"="+string(raw))
+	return append(CursorProgramEnv(s.CLI), TaskEnvVariable+"="+string(raw))
 }
 
 func cursorTaskEntry(messenger string) map[string]any {

@@ -93,9 +93,9 @@ func CursorProgram(cli string) []string {
 	return []string{filepath.Join(dir, "node.exe"), filepath.Join(dir, "index.js")}
 }
 
-// cursorProgramEnv is what Cursor's own script sets before it starts
+// CursorProgramEnv is what Cursor's own script sets before it starts
 // node.exe.
-func cursorProgramEnv(cli string) []string {
+func CursorProgramEnv(cli string) []string {
 	if _, ok := cursorNodeVersion(cli); !ok {
 		return nil
 	}

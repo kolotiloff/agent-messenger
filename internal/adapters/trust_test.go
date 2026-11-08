@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -53,4 +55,71 @@ func TestFolderTrust(t *testing.T) {
 func jsonKey(s string) string {
 	raw, _ := json.Marshal(s)
 	return string(raw)
+}
+
+// Codex trusts a project by the folder or by the root of its git repository,
+// and its config may write the entry in any TOML form.
+func TestCodexTrustForms(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(home, "Game")
+	sub := filepath.Join(repo, "Client")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(sub, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	quoted, _ := json.Marshal(repo)
+	write := func(config string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Join(home, ".codex"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(home, ".codex", "config.toml"), []byte(config), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name, config := range map[string]string{
+		"table":        "model = \"x\"\n[projects." + string(quoted) + "]\ntrust_level = \"trusted\"\n",
+		"inline":       "[projects]\n" + string(quoted) + " = { trust_level = \"trusted\" }\n",
+		"dotted":       "projects." + string(quoted) + ".trust_level = \"trusted\"\n",
+		"inline-table": "[projects." + string(quoted) + "]\n# trusted in the app\ntrust_level = 'trusted'\n",
+	} {
+		write(config)
+		for _, folder := range []string{repo, sub} {
+			if got := CheckFolderTrust("codex", folder, "", home).State; got != TrustYes {
+				t.Fatalf("%s %s: %s", name, folder, got)
+			}
+		}
+	}
+	write("[projects." + string(quoted) + "]\ntrust_level = \"untrusted\"\n")
+	if got := CheckFolderTrust("codex", sub, "", home).State; got != TrustNo {
+		t.Fatalf("untrusted: %s", got)
+	}
+	// Another letter case of the same folder (macOS and Windows ignore case).
+	if runtime.GOOS != "linux" {
+		upper, _ := json.Marshal(strings.ToUpper(repo))
+		write("[projects." + string(upper) + "]\ntrust_level = \"trusted\"\n")
+		if got := CheckFolderTrust("codex", repo, "", home).State; got != TrustYes {
+			t.Fatalf("case: %s", got)
+		}
+	}
+}
+
+// A path written without escaping ("C:\Users\...") keeps its backslashes;
+// real escapes are still read.
+func TestTomlKeyBackslashes(t *testing.T) {
+	for in, want := range map[string]string{
+		`"C:\Users\Owner\Game"`:    `C:\Users\Owner\Game`,
+		`"C:\\Users\\Owner\\Game"`: `C:\Users\Owner\Game`,
+		`"D:\Projects\Игра"`:       `D:\Projects\Игра`,
+		`"caf\u00e9"`:              "café",
+		`'C:\Users\Owner'`:         `C:\Users\Owner`,
+		`"say \"hi\""`:             `say "hi"`,
+	} {
+		got, _, ok := tomlKey(in)
+		if !ok || got != want {
+			t.Fatalf("%s: %q %v", in, got, ok)
+		}
+	}
 }

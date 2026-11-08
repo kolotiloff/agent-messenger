@@ -59,7 +59,7 @@ func TestCursorProgramLeavesOtherPathsAlone(t *testing.T) {
 		if got := CursorProgram(cli); len(got) != 1 || got[0] != cli {
 			t.Fatal(got)
 		}
-		if env := cursorProgramEnv(cli); env != nil {
+		if env := CursorProgramEnv(cli); env != nil {
 			t.Fatal(env)
 		}
 	}
