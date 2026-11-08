@@ -571,9 +571,10 @@
       const coordinator=view?.coordinator?.connected&&coordinatorName()[0]===provider;
       const card=el('article',undefined,'am-card');
       const heading=el('h3',undefined,'am-provider-heading');heading.append(providerIcon(provider),el('span',names[provider]));card.append(heading);
-      card.append(el('p',coordinator&&a?'Координатор, выполняет задачи':coordinator?'Координатор':a?'Выполняет задачи':'Не подключён','am-muted'));
-      const dl=el('dl');
-      const pair=(label,value,cls,extra)=>{const p=el('div');const dd=el('dd',undefined,cls);dd.append(el('span',value));if(extra)dd.append(...extra);p.append(el('dt',label),dd);dl.append(p);};
+      // One line per state in one font: the label on the left, the coloured
+      // value on the right (owner, preview.37).
+      const dl=el('div',undefined,'am-status-lines');
+      const pair=(label,value,cls,extra)=>{const p=el('p');const v=el('span',undefined,'am-status-value '+cls);v.append(el('span',value));if(extra)v.append(...extra);p.append(el('span',label,'am-status-label'),v);dl.append(p);};
       if(!a){
         pair('Программа',found?.state==='candidate_found'?'Найдена, не подключена':found?.state==='not_found'?'Не найдена':'Не проверена',found?.state==='not_found'?'am-status-bad':'am-status-wait');
       }else{
