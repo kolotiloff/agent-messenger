@@ -1113,13 +1113,14 @@
   // The Mac shell's folder picker answers here, into the field that asked.
   let folderTarget='project-folder';
   window.messengerFolderPicked=path=>{if(typeof path==='string'&&path){$(folderTarget).value=path;$(folderTarget).dispatchEvent(new Event('input'));}};
-  // The window names a preview build shortly, «Версия 41 альфа» (owner); the
-  // release tag 0.0.0-preview.N stays as it is because updates compare it.
+  // The window names a build the usual short way, «v0.41» for
+  // 0.0.0-preview.41 (owner); the release tag stays as it is because updates
+  // compare it. The tooltip says it is an alpha and gives the exact tag.
   function versionName(version){
     const preview=version.match(/^0\.0\.0-preview\.(\d+)$/);
-    return preview?'версия '+preview[1]+' альфа':version?'версия '+version:'';
+    return preview?'v0.'+preview[1]:version?'v'+version:'';
   }
-  function versionText(installed){const n=versionName(installed);return n?n[0].toUpperCase()+n.slice(1):'';}
+  function versionText(installed){return versionName(installed);}
   // The update icon says in its tooltip which version came out (T-066).
   function updateTip(version,busy){
     const name=versionName(version);
@@ -1131,7 +1132,7 @@
     const version=typeof status?.version==='string'?status.version:'';
     const installed=typeof status?.installedVersion==='string'?status.installedVersion:'';
     $('app-installed-version').hidden=!installed;
-    $('app-installed-version').title=installed?'Точная версия: '+installed:'';
+    $('app-installed-version').title=installed?'Альфа-версия, точный номер '+installed:'';
     const detail=typeof status?.detail==='string'?status.detail:'';
     const waiting=detail==='Обновление загружается в фоне';
     // Only an available update is shown, as the blue icon next to the version.
@@ -1151,7 +1152,7 @@
     const s=selfUpdate;if(!s)return;
     const installed=typeof s.installed_version==='string'?s.installed_version:'';
     $('app-installed-version').hidden=!installed;
-    $('app-installed-version').title=installed?'Точная версия: '+installed:'';
+    $('app-installed-version').title=installed?'Альфа-версия, точный номер '+installed:'';
     const version=typeof s.version==='string'?s.version:'';
     const done=s.state==='installed',shown=(s.state==='available'&&!!version)||selfUpdateBusy||done||!!s.message;
     // Only the update icon while an update waits (owner, T-056, T-066); a line

@@ -41,7 +41,7 @@ DEPLOYMENT.md asks for the OS secure storage (Keychain on the Mac). Today the ke
 The owner asked to rename a project on the «Проект» tab. The project's name links it to other computers (a task for another computer finds the project there by that name) and to the coordinator chat (it connects with that name). The careful variant built now (T-065, D-072): a rename changes only the name this computer's window shows; the original name keeps working underneath, and the tab says which name other computers and the coordinator use. **Options:** keep it local; or rename everywhere, which needs the other computers to agree and the coordinator chat to reconnect.
 
 ### Q-020: Should the release numbering itself change (for example 0.1.0-alpha.N)?
-The window now says «Версия 41 альфа» (D-073), but releases are still tagged 0.0.0-preview.N, and the Mac updater and the Windows/Linux self-updater compare that. Renumbering needs a version that still sorts above every 0.0.0-preview.N already installed. The careful variant until answered: keep the tags, change only the shown name.
+The window now says «v0.41» (D-073), but releases are still tagged 0.0.0-preview.N, and the Mac updater and the Windows/Linux self-updater compare that. Renumbering needs a version that still sorts above every 0.0.0-preview.N already installed. The careful variant until answered: keep the tags, change only the shown name.
 
 ## Answered
 
