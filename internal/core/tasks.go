@@ -1848,6 +1848,10 @@ type ComputerSummary struct {
 	Folder   string         `json:"folder"`
 	Agents   []AgentSummary `json:"agents"`
 	Note     string         `json:"note,omitempty"`
+	// AcceptsTasks and HasProject are another computer's readiness as it
+	// reported it (T-070); left out when it did not report them.
+	AcceptsTasks *bool `json:"accepts_tasks,omitempty"`
+	HasProject   *bool `json:"has_project,omitempty"`
 }
 
 // ProjectAgents lists the computers for a project: this one, then the other
@@ -1904,6 +1908,22 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 	for _, p := range peers {
 		o := ComputerSummary{Computer: p.ID, Name: p.Name, Online: p.Age >= 0 && p.Age <= PeerFresh, Agents: []AgentSummary{},
 			Note: "another computer of the network: it runs the task only if its owner allows tasks from other computers and it has this project's folder; otherwise the task fails with its reason"}
+		if r := p.Ready; r != nil {
+			has := false
+			for _, name := range r.Projects {
+				has = has || name == project
+			}
+			accept := r.Accept
+			o.AcceptsTasks, o.HasProject = &accept, &has
+			switch {
+			case !accept:
+				o.Note = "its owner turned off tasks from other computers: a task started there fails"
+			case !has:
+				o.Note = "it has no folder for this project: a task started there fails"
+			default:
+				o.Note = ""
+			}
+		}
 		for _, a := range p.Agents {
 			models := a.Models
 			if models == nil {

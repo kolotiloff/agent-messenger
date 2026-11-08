@@ -78,6 +78,9 @@ func (s *Supervisor) networkRound(ctx context.Context) {
 		var peers []core.NetPeer
 		for _, p := range s.server.Status().Peers {
 			np := core.NetPeer{ID: p.ID, Name: p.Name, Host: p.Host, Age: p.Age}
+			if r := p.Ready; r != nil {
+				np.Ready = &core.NetReady{Accept: r.Accept, Projects: r.Projects}
+			}
 			for _, a := range p.Agents {
 				na := core.NetAgent{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting, Models: a.Models}
 				if l := a.Limit; l != nil {

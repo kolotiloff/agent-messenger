@@ -84,6 +84,10 @@ type Status struct {
 // device's connection to a broker. Its files live in the client's data
 // directory: broker/ for the hosted broker, server-connection.json for the
 // connection (private to the owner, holds the device key).
+// readyRetry is how long a computer reports without readiness after the
+// host refused it.
+const readyRetry = 10 * time.Minute
+
 type Service struct {
 	root string
 	base context.Context
@@ -93,10 +97,13 @@ type Service struct {
 	op       sync.Mutex
 	mu       sync.Mutex
 	settings Settings
-	broker   *Broker
-	stop     context.CancelFunc
-	done     chan struct{}
-	hostErr  string
+	// readySkip is until when reports leave out readiness, after the host
+	// refused it (an older host, T-070).
+	readySkip time.Time
+	broker    *Broker
+	stop      context.CancelFunc
+	done      chan struct{}
+	hostErr   string
 
 	member     *Connection
 	checkedAt  string
@@ -581,7 +588,22 @@ func (s *Service) ReportPresence(ctx context.Context) {
 	}
 	call, cancel := context.WithTimeout(ctx, 12*time.Second)
 	defer cancel()
+	s.mu.Lock()
+	skipReady := time.Now().Before(s.readySkip)
+	s.mu.Unlock()
+	if skipReady {
+		p.Ready = nil
+	}
 	peers, err := Report(call, *c, p)
+	if errors.Is(err, errPresenceRefused) && p.Ready != nil {
+		// A host older than readiness refuses the field; report without it
+		// and try it again later, after the host may have been updated.
+		s.mu.Lock()
+		s.readySkip = time.Now().Add(readyRetry)
+		s.mu.Unlock()
+		p.Ready = nil
+		peers, err = Report(call, *c, p)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.member == nil || s.member.DeviceID != c.DeviceID {

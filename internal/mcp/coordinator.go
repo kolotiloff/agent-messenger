@@ -47,7 +47,7 @@ var (
 )
 
 const coordinatorInstructions = `Agent Messenger: start tasks for worker agents in this project and wait for their reports.
-- list_agents shows this project's computers, their project folder and agents: this computer and the other computers of its network. A task for another computer is sent to it and runs there; it fails with the reason if that computer does not take tasks from other computers or has no folder for the project. Questions, reports and outcomes come back through wait as usual.
+- list_agents shows this project's computers, their project folder and agents: this computer and the other computers of its network. A task for another computer is sent to it and runs there; it fails with the reason if that computer does not take tasks from other computers or has no folder for the project. Another computer shows accepts_tasks and has_project when it reported them; do not send a task where either is false, and tell the owner instead. Questions, reports and outcomes come back through wait as usual.
 - start_task starts one task in a new worker session. Give every task a unique op_id and reuse it only to retry the same call after a lost response.
 - wait blocks until something happens in this project's tasks: a report, a question for you, a failure, an interruption, a block or a cancellation. Always pass after = the cursor from the previous wait. When it returns events, act on them (answer questions with answer, tell the owner about reports), then call wait again with the new cursor. When it times out with no events, call wait again without comment. If it says more: true, more events are ready: call wait again at once with the new cursor.
 - start_task takes an optional model. Leave it out for the agent's default. For Claude use opus for hard work (design, tricky bugs, large refactors), sonnet for ordinary coding, haiku for small mechanical work. For Codex and Cursor pass only a name from that agent's models in list_agents (the owner lists them in the window); if the list is empty, leave model out. Never guess a name: an unknown model fails the run. Tell the owner when you chose a non-default model and why.
@@ -173,7 +173,7 @@ func coordinatorTools() []map[string]any {
 	}
 	str := func(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
 	return []map[string]any{
-		{"name": "list_agents", "description": "List this project's computers (this one and the other computers of its network), the project folder on this one, and their agents with how many tasks they run, the model names the owner listed for them and their last reported usage limit.",
+		{"name": "list_agents", "description": "List this project's computers (this one and the other computers of its network), the project folder on this one, and their agents with how many tasks they run, the model names the owner listed for them and their last reported usage limit. Another computer also shows accepts_tasks and has_project (this project's folder) when it reported them.",
 			"inputSchema": obj(map[string]any{})},
 		{"name": "start_task", "description": "Start a task in a new worker session of the chosen agent, in this project's folder on the computer. Returns the task id. Repeating a call with the same op_id returns the same task.",
 			"inputSchema": obj(map[string]any{

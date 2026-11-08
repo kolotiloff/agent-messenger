@@ -130,3 +130,9 @@ The coordinator's `get_log(computer, lines)` asks another computer of the networ
 2026-11-08, Claude Code (owner asleep, asked to decide alone and keep it simple).
 
 `tasks` adds, for an open task, the worker's last action (its last text, or «Tool: input» for a tool call, at most 300 characters) and when it happened, and, for every task, the tokens used so far. It reads only what the window already keeps: the worker's event items on this computer, or the progress lines the running computer forwards (D-055) for another computer's task. No new message and no new storage. The instructions tell the coordinator that a long quiet time is a reason to tell the owner, never to cancel or restart a task by itself.
+
+## D-085 — Readiness travels with presence (T-070, T-049)
+
+2026-11-08, Claude Code (owner asleep, asked to decide alone and keep it simple).
+
+Every presence report (every 15 seconds) now carries `ready`: whether the computer takes tasks from other computers and the names of the projects that have a folder on it (at most 64). `list_agents` shows another computer's `accepts_tasks` and `has_project`, and the note says when a task there would fail; a computer that did not report them stays "unknown" as before. A host before this version refuses a report with an unknown field, so a refused report is sent once more without `ready`, and `ready` is left out for 10 minutes before it is tried again. A presence report is a status, not an action, so sending it again cannot start or repeat anything. Environment checks (tools such as Unity or Python) are left to the workers.

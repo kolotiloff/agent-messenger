@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (T-070 readiness)
+
+- Each computer's presence report says whether it takes other computers' tasks and which projects have a folder; `list_agents` shows `accepts_tasks` and `has_project` (D-085). An older host refuses the field; the report then goes without it for 10 minutes.
+- Verified: broker, core, supervisor tests, `check.sh`. Not verified between real computers.
+
 ## 2026-11-08 — Claude Code (T-071 task activity, T-049 split)
 
 - T-049 split into T-070…T-073 and Q-024. T-071: the coordinator's `tasks` shows an open task's last worker action with its time and every task's tokens (D-084).

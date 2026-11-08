@@ -276,3 +276,34 @@ func TestLogOfAnotherComputer(t *testing.T) {
 		t.Fatalf("shared %+v", l)
 	}
 }
+
+func TestReadinessReachesTheCoordinator(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	a, _ := netComputer(t, ctx, "a")
+	b, _ := netComputer(t, ctx, "b")
+	if err := a.server.Enable(broker.ScopeLocal, freeLocalPort(t)); err != nil {
+		t.Fatal(err)
+	}
+	code, err := a.server.Invite(a.server.Status().Host.Addresses[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := b.server.Connect(ctx, code.Code, "Ноутбук"); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.store.SetNetAccept(false); err != nil {
+		t.Fatal(err)
+	}
+	b.server.ReportPresence(ctx)
+	a.round(t, 0)
+	a.networkRound(ctx)
+	list, err := a.store.ProjectAgents("Game")
+	if err != nil {
+		t.Fatal(err)
+	}
+	computers := list["computers"].([]core.ComputerSummary)
+	if len(computers) != 2 || computers[1].AcceptsTasks == nil || *computers[1].AcceptsTasks || computers[1].HasProject == nil || !*computers[1].HasProject {
+		t.Fatalf("readiness %+v", computers)
+	}
+}

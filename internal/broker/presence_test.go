@@ -136,3 +136,46 @@ func TestPresenceOfUnreachableBrokerAges(t *testing.T) {
 		t.Fatalf("stale roster %+v", p)
 	}
 }
+
+func TestPresenceReadiness(t *testing.T) {
+	host := newService(t, t.TempDir())
+	if err := host.Enable(ScopeLocal, freePort(t)); err != nil {
+		t.Fatal(err)
+	}
+	code, err := host.Invite(host.Status().Host.Addresses[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	member := newService(t, t.TempDir())
+	if err := member.Connect(ctx(t), code.Code, "Ноутбук"); err != nil {
+		t.Fatal(err)
+	}
+	ready := &PresenceReady{Accept: true, Projects: []string{"Game"}}
+	member.SetPresence(func() (Presence, error) {
+		return Presence{Agents: []PresenceAgent{{Agent: "codex"}}, Ready: ready}, nil
+	})
+	member.ReportPresence(ctx(t))
+	if peers := host.Status().Peers; len(peers) != 1 || !reflect.DeepEqual(peers[0].Ready, ready) {
+		t.Fatalf("host sees %+v", peers)
+	}
+
+	// An older host refuses the field; the member still reports its agents.
+	olderHost = func(p Presence) bool { return p.Ready != nil }
+	t.Cleanup(func() { olderHost = nil })
+	member.SetPresence(func() (Presence, error) {
+		return Presence{Agents: []PresenceAgent{{Agent: "codex", Running: 1}}, Ready: ready}, nil
+	})
+	member.ReportPresence(ctx(t))
+	peers := host.Status().Peers
+	if len(peers) != 1 || peers[0].Ready != nil || len(peers[0].Agents) != 1 || peers[0].Agents[0].Running != 1 {
+		t.Fatalf("older host sees %+v", peers)
+	}
+	if ms := member.Status().Member; !ms.Reachable || ms.Error != "" {
+		t.Fatalf("member after fallback %+v", ms)
+	}
+
+	bad := Presence{Agents: []PresenceAgent{}, Ready: &PresenceReady{Projects: []string{"a\nb"}}}
+	if bad.valid() {
+		t.Fatal("a project name with a line break passed")
+	}
+}

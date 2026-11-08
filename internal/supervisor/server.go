@@ -128,6 +128,19 @@ func (s *Supervisor) presence() (broker.Presence, error) {
 	if name, err := s.store.ComputerName(); err == nil {
 		p.Name = clipName(name)
 	}
+	// Readiness for other computers' tasks (T-070): left out if it cannot
+	// be read, so the others see it as unknown rather than wrong.
+	if accept, err := s.store.NetAccept(); err == nil {
+		if projects, err := s.store.Projects(); err == nil {
+			ready := &broker.PresenceReady{Accept: accept, Projects: []string{}}
+			for _, pr := range projects {
+				if pr.Folder != "" && len(ready.Projects) < 64 && len([]rune(pr.Name)) <= broker.MaxDeviceName {
+					ready.Projects = append(ready.Projects, pr.Name)
+				}
+			}
+			p.Ready = ready
+		}
+	}
 	return p, nil
 }
 
