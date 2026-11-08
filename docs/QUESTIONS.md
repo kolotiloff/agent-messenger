@@ -39,6 +39,9 @@ DEPLOYMENT.md asks for the OS secure storage (Keychain on the Mac). Today the ke
 
 ## Answered
 
+### Q-017: How short may the invitation be (T-052)?
+The owner wants a 6-digit code to type from memory instead of the long one. The long code carries the host's address, its certificate fingerprint and a 32-byte secret; six digits cannot carry them, so the joining computer has to find the host on the local network and both sides have to prove the code without sending it (a password-authenticated key exchange), or anyone on the network could try all million codes or pose as the host. **Options:** (a) 6 digits with discovery on the local network and the key exchange, 3 tries, 10 minutes; the long code stays for other networks; (b) 6 digits plus the host's address typed by hand; (c) keep only the long code. **Chosen until answered:** (a), the most careful one that still gives a short code. **Blocks:** T-052.
+
 ### Q-016: A real program window on Linux without Chrome?
 
 Asked 2026-11-08 (T-046). On Linux the window is a Chrome, Chromium, Edge or Brave window in app mode (D-054). With none of them installed (Ubuntu ships Firefox, which has no app mode) the page opens in the default browser, as the owner saw. A built-in window needs the system's WebKitGTK through cgo, so every Linux build (x64 and ARM) would be built with GTK libraries and would not start on a system without them. **Cautious choice:** keep D-054; tell the owner to install Chromium (`sudo snap install chromium` on Ubuntu) for the own window. **Owner:** keep this, or build Linux with WebKitGTK?
