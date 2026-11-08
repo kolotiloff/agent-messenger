@@ -87,7 +87,6 @@ func TestCheckCLIExactCommandsAndProfile(t *testing.T) {
 func TestCheckCLIStopsBeforeAuthForUnknownVersionOrFailure(t *testing.T) {
 	cli, profile := checkFixture(t)
 	for _, version := range []probeOutput{
-		{stdout: []byte("2.1.999 (Claude Code)")},
 		{stdout: []byte("PRIVATE_TOKEN")},
 		{stdout: []byte("2.1.318 (Claude Code)"), exit: 1},
 		{stdout: []byte("2.1.318 (Claude Code)"), failure: "output_limit"},
@@ -116,9 +115,24 @@ func TestCheckCLIRejectsImplicitPathsAndUnsupportedPlatform(t *testing.T) {
 			t.Fatal("invalid binding accepted")
 		}
 	}
-	r, err := checkCLI(context.Background(), "claude", cli, profile, "windows", runner)
-	if err != nil || r.ProbeAttempts != 0 || r.Authentication.State != "not_checked" {
-		t.Fatal(r, err)
+}
+
+// Windows and Linux run the same two requests, and a newer version still gets
+// the login request (D-051).
+func TestCheckCLIOnEveryPlatformAndNewerVersion(t *testing.T) {
+	cli, profile := checkFixture(t)
+	for _, goos := range []string{"windows", "linux", "darwin"} {
+		var calls [][]string
+		r, err := checkCLI(context.Background(), "claude", cli, profile, goos, func(_ context.Context, _ string, _ string, _ []string, args []string) probeOutput {
+			calls = append(calls, args)
+			if args[0] == "--version" {
+				return probeOutput{stdout: []byte("2.1.999 (Claude Code)\n")}
+			}
+			return probeOutput{stdout: []byte(`{"loggedIn":true}`)}
+		})
+		if err != nil || len(calls) != 2 || r.Version.Value != "2.1.999" || r.Authentication.State != "authenticated" || r.OS != goos {
+			t.Fatal(goos, r, err, calls)
+		}
 	}
 }
 
@@ -188,5 +202,33 @@ func TestProbeRunnerLimitsOutputAndTime(t *testing.T) {
 	out = runProbe(context.Background(), script, dir, os.Environ(), nil)
 	if out.failure != "output_limit" || len(out.stdout) != 65536 {
 		t.Fatal(fmt.Sprint("output bound failed: ", len(out.stdout), out.failure))
+	}
+}
+
+// A Windows Cursor version folder is checked through its node.exe and
+// index.js (D-052).
+func TestCheckCLICursorNode(t *testing.T) {
+	_, profile := checkFixture(t)
+	dir := filepath.Join(t.TempDir(), "versions", "2026.11.05-86047df")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"node.exe", "index.js"} {
+		if err := os.WriteFile(filepath.Join(dir, f), []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	node, _ := filepath.EvalSymlinks(filepath.Join(dir, "node.exe"))
+	var seen [][]string
+	r, err := checkCLI(context.Background(), "cursor", node, profile, "windows", func(_ context.Context, cli, _ string, _ []string, args []string) probeOutput {
+		seen = append(seen, append([]string{cli}, args...))
+		if args[1] == "--version" {
+			return probeOutput{stdout: []byte("2026.11.05-86047df\n")}
+		}
+		return probeOutput{stdout: []byte(`{"isAuthenticated":true}`)}
+	})
+	index := filepath.Join(filepath.Dir(node), "index.js")
+	if err != nil || len(seen) != 2 || seen[0][0] != node || seen[0][1] != index || seen[1][2] != "status" || r.Authentication.State != "authenticated" {
+		t.Fatal(r, err, seen)
 	}
 }

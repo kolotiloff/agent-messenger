@@ -190,6 +190,13 @@ func taskWorkerFixture(mode string) int {
 	switch mode {
 	case "report", "wrong-session":
 		tool("report", map[string]any{"text": "done: " + brief.Task})
+	case "chatty":
+		// Many feed lines right before the exit: the last line must still
+		// be read after the process is gone.
+		tool("report", map[string]any{"text": "done: " + brief.Task})
+		for i := 0; i < 400; i++ {
+			emit(map[string]any{"type": "item.completed", "item": map[string]any{"type": "agent_message", "text": fmt.Sprintf("step %d %s", i, strings.Repeat("x", 200))}})
+		}
 	case "ask-then-report":
 		if brief.Answer == "" {
 			tool("ask", map[string]any{"text": "Which level?"})

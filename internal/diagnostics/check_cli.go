@@ -14,7 +14,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kolotiloff/agent-messenger/internal/adapters"
 	"github.com/kolotiloff/agent-messenger/internal/core"
+	"github.com/kolotiloff/agent-messenger/internal/platform"
 	"github.com/kolotiloff/agent-messenger/internal/supervisor"
 )
 
@@ -75,6 +77,7 @@ func runProbe(ctx context.Context, cli, dir string, env, args []string) probeOut
 	// Bound inherited pipes after direct-child exit/cancellation. This does not
 	// claim to stop every detached descendant and is never session-unlock proof.
 	cmd.WaitDelay = 500 * time.Millisecond
+	platform.HideConsole(cmd)
 	var stdout, stderr cappedOutput
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()
@@ -101,12 +104,6 @@ var versionPatterns = map[string]*regexp.Regexp{
 	"cursor": regexp.MustCompile(`^([0-9]{4}\.[0-9]{2}\.[0-9]{2}-[a-f0-9]{7,40})$`),
 }
 
-// Exact diagnostic command contracts observed on Mac, not a claim that these
-// versions have passed the full Messenger execution/streaming test matrix.
-var qualifiedProbeVersions = map[string]string{
-	"claude": "2.1.318", "codex": "0.155.1", "cursor": "2026.11.05-86047df",
-}
-
 func CheckCLI(ctx context.Context, provider, cli, environment string) (CLICheck, error) {
 	return checkCLI(ctx, provider, cli, environment, runtime.GOOS, runProbe)
 }
@@ -131,10 +128,6 @@ func checkCLI(ctx context.Context, provider, cli, environment, goos string, runn
 		return r, fmt.Errorf("выбранный CLI должен быть обычным файлом")
 	}
 	r.CLI, r.Environment = resolved, canonical
-	if goos != "darwin" {
-		r.Version.Reason, r.Authentication.Reason = "platform_not_qualified", "platform_not_qualified"
-		return r, nil
-	}
 	// The neutral temporary cwd avoids loading instructions from the caller's
 	// project. Credentials remain in the explicitly selected CLI environment.
 	dir, err := os.MkdirTemp("", "messenger-check-")
@@ -143,8 +136,15 @@ func checkCLI(ctx context.Context, provider, cli, environment, goos string, runn
 	}
 	defer os.RemoveAll(dir)
 	env := supervisor.ProfileEnvironment(os.Environ(), provider, canonical)
+	program := []string{resolved}
+	if provider == "cursor" {
+		program = adapters.CursorProgram(resolved) // node.exe and index.js on Windows (D-052)
+	}
+	probe := func(args ...string) probeOutput {
+		return runner(ctx, program[0], dir, env, append(append([]string(nil), program[1:]...), args...))
+	}
 	r.ProbeAttempts++
-	v := runner(ctx, resolved, dir, env, []string{"--version"})
+	v := probe("--version")
 	if v.failure != "" {
 		r.Version.Reason = v.failure
 		return r, nil
@@ -155,10 +155,9 @@ func checkCLI(ctx context.Context, provider, cli, environment, goos string, runn
 		return r, nil
 	}
 	r.Version = CheckState{State: "reported", Value: match[1]}
-	if match[1] != qualifiedProbeVersions[provider] {
-		r.Authentication.Reason = "version_not_qualified_for_auth_probe"
-		return r, nil
-	}
+	// The login request runs for any recognized version (D-051): it only
+	// reads the CLI's own status, and anything but the exact known answer is
+	// reported as unknown.
 	current, err := os.Stat(resolved)
 	if err != nil || !os.SameFile(info, current) || info.Size() != current.Size() || !info.ModTime().Equal(current.ModTime()) {
 		r.Authentication.Reason = "executable_changed"
@@ -178,7 +177,7 @@ func checkCLI(ctx context.Context, provider, cli, environment, goos string, runn
 		return r, nil
 	}
 	r.ProbeAttempts++
-	r.Authentication = parseAuthentication(provider, runner(ctx, resolved, dir, env, args))
+	r.Authentication = parseAuthentication(provider, probe(args...))
 	return r, nil
 }
 

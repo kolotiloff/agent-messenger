@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"sort"
 
+	"github.com/kolotiloff/agent-messenger/internal/adapters"
 	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
 
@@ -38,6 +39,9 @@ func CollectDesktop(ctx context.Context, root string) Report {
 		r = desktopCandidates(r, []string{filepath.Join(home, ".local", "bin")})
 		if appData := os.Getenv("AppData"); filepath.IsAbs(appData) {
 			r = npmCodexCandidate(r, filepath.Join(appData, "npm"))
+		}
+		if local := os.Getenv("LocalAppData"); filepath.IsAbs(local) {
+			r = cursorNodeCandidate(r, filepath.Join(local, "cursor-agent", "versions"))
 		}
 	}
 	return r
@@ -85,10 +89,15 @@ func npmCodexCandidate(r Report, npm string) Report {
 		}
 		modules := filepath.Join(npm, "node_modules", "@openai")
 		var found []string
-		for _, pattern := range []string{
-			filepath.Join(modules, "codex*", "vendor", "*", "codex", "codex.exe"),
-			filepath.Join(modules, "codex", "node_modules", "@openai", "codex*", "vendor", "*", "codex", "codex.exe"),
-		} {
+		// Older packages keep the program in vendor/<target>/codex, newer
+		// ones in vendor/<target>/bin.
+		var patterns []string
+		for _, folder := range []string{"codex", "bin"} {
+			patterns = append(patterns,
+				filepath.Join(modules, "codex*", "vendor", "*", folder, "codex.exe"),
+				filepath.Join(modules, "codex", "node_modules", "@openai", "codex*", "vendor", "*", folder, "codex.exe"))
+		}
+		for _, pattern := range patterns {
 			matches, _ := filepath.Glob(pattern)
 			found = append(found, matches...)
 		}
@@ -97,6 +106,25 @@ func npmCodexCandidate(r Report, npm string) Report {
 			if info, err := os.Stat(path); err == nil && platform.IsExecutable(path, info) {
 				a.CLI.State, a.CLI.Path, a.CLI.Command, a.CLI.Source = "candidate_found", path, "codex", "installation_directory"
 				break
+			}
+		}
+	}
+	return r
+}
+
+// cursorNodeCandidate finds Cursor on Windows: the node.exe of the newest
+// version folder, which Messenger starts with its index.js (D-052). The
+// cursor-agent command itself is a .cmd script.
+func cursorNodeCandidate(r Report, versions string) Report {
+	for i := range r.Agents {
+		a := &r.Agents[i]
+		if a.Provider != "cursor" || a.CLI.State == "candidate_found" {
+			continue
+		}
+		if dir := adapters.LatestCursorVersion(versions); dir != "" {
+			path := filepath.Join(dir, "node.exe")
+			if info, err := os.Stat(path); err == nil && platform.IsExecutable(path, info) {
+				a.CLI.State, a.CLI.Path, a.CLI.Command, a.CLI.Source = "candidate_found", path, "cursor-agent", "installation_directory"
 			}
 		}
 	}

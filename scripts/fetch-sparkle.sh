@@ -6,7 +6,7 @@ cache="$1"
 mkdir -p "$cache"
 archive="$cache/Sparkle-2.10.1.tar.xz"
 if [[ ! -f "$archive" ]]; then
-  curl --fail --location --proto '=https' --tlsv1.2 --max-time 600 \
+  curl --fail --location --proto '=https' --tlsv1.2 --max-time 600 --retry 5 --retry-delay 10 --retry-all-errors \
     'https://github.com/sparkle-project/Sparkle/releases/download/2.10.1/Sparkle-2.10.1.tar.xz' -o "$archive.part"
   mv "$archive.part" "$archive"
 fi
