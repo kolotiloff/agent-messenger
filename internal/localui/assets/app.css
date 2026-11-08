@@ -356,6 +356,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-task-list .am-task:is(:hover,:focus-visible) { background:var(--am-soft); }
 #am-concept .am-task-list .am-task[aria-pressed=true] { background:var(--am-selected); }
 #am-concept .am-task-agent { display:flex; align-items:center; gap:var(--am-space-1); color:var(--am-muted); font-size:var(--am-text-xs); }
+/* In a list the logo fits the row, so rows with and without a logo are the same height */
+#am-concept .am-select-option .am-provider-icon { width:20px; height:20px; }
 #am-concept .am-task-agent .am-provider-icon { width:14px; height:14px; }
 #am-concept .am-task-agent .am-provider-icon svg { width:12px; height:12px; }
 #am-concept .am-task-title { display:block; min-width:0; max-width:100%; font-size:var(--am-text-m); color:var(--am-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
