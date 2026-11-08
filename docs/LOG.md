@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (T-068 token statistics)
+
+- «Статистика» tab (D-077): today / 7 days / 30 days, total, bar per day with a tooltip, by agent, by computer, ten most expensive tasks (click opens the task). Backend: `Store.UsageStats`, control `usage-stats`, `GET /api/usage-stats?period=`.
+- Verified: core and route tests, `check.sh`, headless Chromium with stubs in both themes. Not verified: native windows, real usage.
+
 ## 2026-11-08 — Claude Code (T-062 Windows window without title bar)
 
 - Windows window without the system title bar (D-076): own minimise, maximise, close; drag by the tab row and the sidebar top; double click maximises. Built on `claude/t061-agent-cards`, released together with T-061.

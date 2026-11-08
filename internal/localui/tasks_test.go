@@ -47,6 +47,12 @@ func TestTaskWindowRoutes(t *testing.T) {
 	if code, _ := do("GET", "/api/task", ""); code != 400 {
 		t.Fatalf("task without id %d", code)
 	}
+	if code, _ := do("GET", "/api/usage-stats?period=year", ""); code != 400 {
+		t.Fatalf("bad period %d", code)
+	}
+	if code, _ := do("GET", "/api/usage-stats?period=week", ""); code != 200 || got[len(got)-1].Cmd != "usage-stats" || got[len(got)-1].Alias != "week" {
+		t.Fatalf("usage stats %d %+v", code, got)
+	}
 	code, _ := do("POST", "/api/task-answer", `{"task":"task-1","question":"q-1","op_id":"op-1","text":"yes"}`)
 	last := got[len(got)-1]
 	if code != 200 || last.Cmd != "task-owner-answer" || last.MessageID != "task-1" || last.ConversationID != "q-1" || last.Confirmation != "op-1" || last.Text != "yes" {
