@@ -88,3 +88,9 @@ Format: ID, date, decision, why, where it is discussed.
 2026-11-08, Claude Code (owner asleep, asked to decide alone and keep it simple).
 
 The «Статистика» tab sums `tasks.usage_*` on request; no new table, no background job. A task counts on the day it finished (or was last updated while it still runs), in the window computer's local days. Tokens are input plus output; cache is shown as part of the input. Periods: today, 7 days, 30 days. Bars use one neutral ink so none reads as a status. The server does not keep or share totals yet: that needs a protocol change and T-047 (shared task list) will bring the other computers' tasks anyway.
+
+## D-078 — Linux window from WebKitGTK loaded at run time (T-069)
+
+2026-11-08, Claude Code (owner asleep, asked to decide alone and keep it simple; owner asked for a real Linux window, Q-016).
+
+`messenger open` on Linux loads `libgtk-3.so.0` and `libwebkit2gtk-4.1.so.0` (or `-4.0.so.37`) with `purego` and shows the page in a GTK window. No cgo and no second program: the release stays one static file per architecture, self-update is unchanged, and a system without the libraries falls back to D-054 (Chromium-type browser in app mode, then the default browser). The page gets `window.amDesktop = "linux"` (no inner frame) and `window.amTitleBar`, which sets GTK's dark-theme preference like the Windows title bar. Rejected: a cgo build (would not start without the libraries and needs native ARM64 builders) and a separate helper program (two files to ship and update).

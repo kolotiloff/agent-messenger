@@ -11,8 +11,9 @@ The owner asked the agent to finish the program without them ("доделай б
 Updated 2026-11-08 (night, T-068) by Claude Code. The owner is asleep and asked to keep working alone, deciding by simplicity.
 
 - **PR #73** (`claude/t061-agent-cards`): T-061 agent cards with the on/off switch, T-062 Windows window without the title bar; goes out as preview.43.
-- **T-068** token statistics on `claude/t068-token-stats` (D-077), goes out as preview.44.
-- **Next, in the owner's order:** T-069 Linux window (WebKitGTK), T-059 language, T-047 shared task list, T-052, T-053, T-057, T-049.
+- **T-068** token statistics on `claude/t068-token-stats` (D-077, PR #74), goes out as preview.44.
+- **T-069** Linux window on `claude/t069-linux-window` (D-078, built on T-068), goes out as preview.45. Owner's test on the Linux laptop: the window, its title bar in light and dark, the dock icon.
+- **Next, in the owner's order:** T-059 language, T-047 shared task list, T-052, T-053, T-057, T-049.
 
 Updated 2026-11-08 (before preview.42) by Claude Code.
 

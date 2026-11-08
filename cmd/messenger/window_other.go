@@ -19,14 +19,17 @@ import (
 // address bar (--app). The first one installed is used.
 var appBrowsers = []string{"google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "microsoft-edge", "microsoft-edge-stable", "brave-browser"}
 
-// showWindow shows the page in a window of its own on Linux (D-054): a
-// Chromium-based browser in app mode with Messenger's own profile, so the
+// showWindow shows the page in a window of its own on Linux: WebKitGTK when
+// the system has it (T-069), otherwise (D-054) a Chromium-based browser in app mode with Messenger's own profile, so the
 // window has no tabs or address bar and closing it closes the page. Only the
 // private forwarding file is passed, never the page's key. Without such a
 // browser the page opens in the default browser as before.
 func showWindow(ctx context.Context, cancel context.CancelFunc, home string, page windowPage, out io.Writer) {
 	if runtime.GOOS == "linux" {
 		installMenuEntry()
+		if showGTKWindow(ctx, page) {
+			return
+		}
 		// Each window has a profile of its own: a browser started with a
 		// profile that is already open hands the page over and exits at once,
 		// which would look like a closed window.
