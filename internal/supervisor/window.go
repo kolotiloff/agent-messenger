@@ -87,6 +87,16 @@ func (s *Supervisor) SetProjectWorkerRules(name, rules string) error {
 	return s.store.SetProjectWorkerRules(name, rules)
 }
 
+// RemoveProject takes a project out of the window (T-055).
+func (s *Supervisor) RemoveProject(name string) error {
+	return s.store.RemoveProject(name)
+}
+
+// SetAgentFullAccess turns «Разрешить любые команды» on or off (T-054).
+func (s *Supervisor) SetAgentFullAccess(provider string, on bool) error {
+	return s.store.SetAgentFullAccess(provider, on)
+}
+
 // SetAgentModels records the model names the owner listed for an agent (T-043).
 func (s *Supervisor) SetAgentModels(provider string, models []string) error {
 	return s.store.SetAgentModels(provider, models)

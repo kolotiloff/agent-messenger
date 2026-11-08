@@ -205,7 +205,10 @@ type Task struct {
 	CancelRequested             bool
 	// FromNetwork marks a task another computer started (T-037). This
 	// computer runs it; only the other computer's coordinator manages it.
-	FromNetwork  bool
+	FromNetwork bool
+	// FullAccess lifts the agent's own permission checks and sandbox for
+	// this task's runs (T-054, D-065), copied from the agent at start.
+	FullAccess   bool
 	Version      int
 	OpenQuestion *TaskQuestion
 }
@@ -338,7 +341,7 @@ func (s *Store) CreateProject(name, folder string) error {
 			return err
 		}
 		var existing int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM projects WHERE name=?`, name).Scan(&existing); err != nil {
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM projects WHERE name=? AND removed_at IS NULL`, name).Scan(&existing); err != nil {
 			return err
 		}
 		if existing != 0 {
@@ -350,10 +353,50 @@ func (s *Store) CreateProject(name, folder string) error {
 			return fmt.Errorf("%w: a project with this name already exists", ErrRejected)
 		}
 		at := now()
-		if _, err := tx.Exec(`INSERT INTO projects(name,created_at) VALUES (?,?)`, name, at); err != nil {
+		// A removed project of the same name comes back with its history.
+		res, err := tx.Exec(`UPDATE projects SET removed_at=NULL WHERE name=? AND removed_at IS NOT NULL`, name)
+		if err != nil {
 			return err
 		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			if _, err := tx.Exec(`INSERT INTO projects(name,created_at) VALUES (?,?)`, name, at); err != nil {
+				return err
+			}
+		}
 		_, err = tx.Exec(`INSERT INTO project_folders(project,computer,folder,updated_at) VALUES (?,?,?,?)`, name, computer, folder, at)
+		return err
+	})
+}
+
+// RemoveProject takes a project out of the window (T-055, D-066). It refuses
+// while any task of the project is unfinished or has a run that is not
+// closed, so nothing that may still run or wait is hidden. The tasks and
+// their runs stay in the database; only the project's folders and its
+// coordinator mark are dropped. Creating the project again brings it back.
+func (s *Store) RemoveProject(name string) error {
+	return s.tx(func(tx *sql.Tx) error {
+		var n int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM projects WHERE name=? AND removed_at IS NULL`, name).Scan(&n); err != nil {
+			return err
+		}
+		if n == 0 {
+			return fmt.Errorf("%w: unknown project", ErrRejected)
+		}
+		var open int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM tasks t WHERE t.project=? AND (t.state IN ('running','waiting_coordinator','waiting_owner','blocked','interrupted')
+ OR EXISTS (SELECT 1 FROM task_runs r WHERE r.task_id=t.id AND r.state IN ('intent','launching','running','blocked','interrupted')))`, name).Scan(&open); err != nil {
+			return err
+		}
+		if open != 0 {
+			return fmt.Errorf("%w: у проекта есть незавершённые задачи (%d); отмените их или дождитесь конца", ErrRejected, open)
+		}
+		if _, err := tx.Exec(`UPDATE projects SET removed_at=? WHERE name=?`, now(), name); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM project_folders WHERE project=?`, name); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`DELETE FROM coordinator_connections WHERE project=?`, name)
 		return err
 	})
 }
@@ -371,7 +414,7 @@ func (s *Store) SetProjectFolder(name, folder string) error {
 			return err
 		}
 		var n int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM projects WHERE name=?`, name).Scan(&n); err != nil {
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM projects WHERE name=? AND removed_at IS NULL`, name).Scan(&n); err != nil {
 			return err
 		}
 		if n == 0 {
@@ -429,7 +472,7 @@ func (s *Store) Projects() ([]Project, error) {
 		if err != nil {
 			return err
 		}
-		rows, err := tx.Query(`SELECT p.name,COALESCE(f.folder,'') FROM projects p LEFT JOIN project_folders f ON f.project=p.name AND f.computer=? ORDER BY p.created_at,p.name`, computer)
+		rows, err := tx.Query(`SELECT p.name,COALESCE(f.folder,'') FROM projects p LEFT JOIN project_folders f ON f.project=p.name AND f.computer=? WHERE p.removed_at IS NULL ORDER BY p.created_at,p.name`, computer)
 		if err != nil {
 			return err
 		}
@@ -599,7 +642,7 @@ func (s *Store) StartTask(r StartTaskRequest) (string, bool, error) {
 			return err
 		}
 		var projects int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM projects WHERE name=?`, r.Project).Scan(&projects); err != nil {
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM projects WHERE name=? AND removed_at IS NULL`, r.Project).Scan(&projects); err != nil {
 			return err
 		}
 		if projects == 0 {
@@ -634,7 +677,8 @@ func startLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, origin *net
 	}
 	var agent ComputerAgent
 	var models string
-	if err := tx.QueryRow(`SELECT cli_path,environment,profile,models FROM computer_agents WHERE computer=? AND provider=?`, computer, r.Provider).Scan(&agent.CLI, &agent.Environment, &agent.Profile, &models); err != nil {
+	var fullAccess int
+	if err := tx.QueryRow(`SELECT cli_path,environment,profile,models,full_access FROM computer_agents WHERE computer=? AND provider=?`, computer, r.Provider).Scan(&agent.CLI, &agent.Environment, &agent.Profile, &models, &fullAccess); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", fmt.Errorf("%w: agent %s is not set up on this computer", ErrRejected, r.Provider)
 		}
@@ -662,6 +706,11 @@ func startLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, origin *net
 	if _, err := tx.Exec(`INSERT INTO tasks(id,project,op_id,computer,provider,cli_path,environment,profile,folder,title,text,state,session_id,created_at,updated_at,model) VALUES (?,?,?,?,?,?,?,?,?,?,?,'running',?,?,?,?)`,
 		id, r.Project, r.OpID, computer, r.Provider, agent.CLI, agent.Environment, agent.Profile, folder, taskTitle(r.Title, r.Text), r.Text, nullString(session), at, at, r.Model); err != nil {
 		return "", err
+	}
+	if fullAccess != 0 {
+		if _, err := tx.Exec(`UPDATE tasks SET full_access=1 WHERE id=?`, id); err != nil {
+			return "", err
+		}
 	}
 	if r.Rules != "" {
 		if _, err := tx.Exec(`UPDATE tasks SET rules=? WHERE id=?`, r.Rules, id); err != nil {
@@ -692,13 +741,13 @@ func insertTaskRun(tx *sql.Tx, task string, ordinal int, kind, input string) err
 	return err
 }
 
-const taskColumns = `id,project,computer,provider,profile,folder,title,text,state,COALESCE(session_id,''),detail,created_at,updated_at,COALESCE(finished_at,''),cli_path,environment,cancel_requested,version,COALESCE(model,''),COALESCE(failure_reason,''),COALESCE(failure_reset,''),origin_peer IS NOT NULL`
+const taskColumns = `id,project,computer,provider,profile,folder,title,text,state,COALESCE(session_id,''),detail,created_at,updated_at,COALESCE(finished_at,''),cli_path,environment,cancel_requested,version,COALESCE(model,''),COALESCE(failure_reason,''),COALESCE(failure_reset,''),origin_peer IS NOT NULL,full_access`
 
 func scanTask(scan func(...any) error) (Task, error) {
 	var t Task
-	var cancel, origin int
-	err := scan(&t.ID, &t.Project, &t.Computer, &t.Provider, &t.Profile, &t.Folder, &t.Title, &t.Text, &t.State, &t.SessionID, &t.Detail, &t.CreatedAt, &t.UpdatedAt, &t.FinishedAt, &t.CLI, &t.Environment, &cancel, &t.Version, &t.Model, &t.FailureReason, &t.FailureReset, &origin)
-	t.CancelRequested, t.FromNetwork = cancel != 0, origin != 0
+	var cancel, origin, full int
+	err := scan(&t.ID, &t.Project, &t.Computer, &t.Provider, &t.Profile, &t.Folder, &t.Title, &t.Text, &t.State, &t.SessionID, &t.Detail, &t.CreatedAt, &t.UpdatedAt, &t.FinishedAt, &t.CLI, &t.Environment, &cancel, &t.Version, &t.Model, &t.FailureReason, &t.FailureReset, &origin, &full)
+	t.CancelRequested, t.FromNetwork, t.FullAccess = cancel != 0, origin != 0, full != 0
 	return t, err
 }
 
@@ -1676,6 +1725,9 @@ type AgentSummary struct {
 	Models []string `json:"models"`
 	// Limit is the last usage-limit state the agent reported (T-044).
 	Limit *AgentLimit `json:"limit,omitempty"`
+	// FullAccess: the owner allowed this agent any command (T-054). Only
+	// known for this computer.
+	FullAccess bool `json:"full_access,omitempty"`
 }
 
 // ComputerSummary is one computer as list_agents shows it for a project.
@@ -1714,7 +1766,7 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 		rows, err := tx.Query(`SELECT a.provider,a.profile,
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='running'),
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state IN ('waiting_coordinator','waiting_owner')),
- a.models, a.limit_state
+ a.models, a.limit_state, a.full_access
  FROM computer_agents a WHERE a.computer=? ORDER BY a.provider`, computer)
 		if err != nil {
 			return err
@@ -1723,7 +1775,7 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 		for rows.Next() {
 			var a AgentSummary
 			var models, limit string
-			if err := rows.Scan(&a.Agent, &a.Profile, &a.Running, &a.Waiting, &models, &limit); err != nil {
+			if err := rows.Scan(&a.Agent, &a.Profile, &a.Running, &a.Waiting, &models, &limit, &a.FullAccess); err != nil {
 				return err
 			}
 			a.Models = splitModels(models)
@@ -1753,6 +1805,30 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 		list = append(list, o)
 	}
 	return map[string]any{"project": project, "computers": list}, nil
+}
+
+// SetAgentFullAccess turns «Разрешить любые команды» on or off for an agent
+// of this computer (T-054, D-065). New tasks of the agent take it; started
+// tasks keep what they started with.
+func (s *Store) SetAgentFullAccess(provider string, on bool) error {
+	v := 0
+	if on {
+		v = 1
+	}
+	return s.tx(func(tx *sql.Tx) error {
+		computer, err := localComputer(tx)
+		if err != nil {
+			return err
+		}
+		res, err := tx.Exec(`UPDATE computer_agents SET full_access=?,updated_at=? WHERE computer=? AND provider=?`, v, now(), computer, provider)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return fmt.Errorf("%w: agent %s is not set up on this computer", ErrRejected, provider)
+		}
+		return nil
+	})
 }
 
 // MaxAgentModels bounds the model names the owner lists for one agent.

@@ -593,7 +593,7 @@ func applyStart(tx *sql.Tx, from netLink, b netBody) error {
 			return fmt.Errorf("%w: the worker rules are too long", ErrRejected)
 		}
 		var projects int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM projects WHERE name=?`, r.Project).Scan(&projects); err != nil {
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM projects WHERE name=? AND removed_at IS NULL`, r.Project).Scan(&projects); err != nil {
 			return err
 		}
 		if projects == 0 {

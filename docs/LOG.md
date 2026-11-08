@@ -2,6 +2,12 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (T-054 full access for workers, T-055 remove a project)
+
+- preview.38 released from PR #68. The owner's coordinator found that only Cursor on PC-1 could commit: Claude workers wait for command approval, Codex's sandbox has no network. «Разрешить любые команды» per agent (D-065). The owner's missing task on the Mac was another project selected in the window, not a bug.
+- «Удалить проект» in the project dialog (D-066): refused while a task of the project is unfinished; history kept.
+- Verified here: adapter, core and window route tests, `check.sh`. Not verified: real CLIs with the switch; the dialogs in a browser.
+
 ## 2026-11-08 — Claude Code (sidebar without «координатор»; T-052, T-053 planned)
 
 - PRs #66 and #67 merged. The sidebar no longer marks agents as «координатор» (D-064). The owner asked for a 6-digit invitation (T-052, Q-017) and a normal Windows installation with removal from Settings (T-053); both planned on `claude/t052-t053-plan`.
