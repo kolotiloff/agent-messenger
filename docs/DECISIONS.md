@@ -94,3 +94,9 @@ The «Статистика» tab sums `tasks.usage_*` on request; no new table, 
 2026-11-08, Claude Code (owner asleep, asked to decide alone and keep it simple; owner asked for a real Linux window, Q-016).
 
 `messenger open` on Linux loads `libgtk-3.so.0` and `libwebkit2gtk-4.1.so.0` (or `-4.0.so.37`) with `purego` and shows the page in a GTK window. No cgo and no second program: the release stays one static file per architecture, self-update is unchanged, and a system without the libraries falls back to D-054 (Chromium-type browser in app mode, then the default browser). The page gets `window.amDesktop = "linux"` (no inner frame) and `window.amTitleBar`, which sets GTK's dark-theme preference like the Windows title bar. Rejected: a cgo build (would not start without the libraries and needs native ARM64 builders) and a separate helper program (two files to ship and update).
+
+## D-079 — Window language through one dictionary (T-059)
+
+2026-11-08, Claude Code (owner asleep, asked to decide alone and keep it simple).
+
+The Russian texts stay in the code as they are and are the dictionary's keys: app.js wraps each of its texts in `tr('…')`, `assets/i18n.js` maps them to English and translates the static texts of index.html once at load. A test fails when a text has no English entry. Text the owner, agents or the client write is never translated. The choice («Язык» in the sidebar) is kept in the window's local storage like the theme and applies by reloading the page. Numbers and dates follow the language. Messages produced by the Go client (errors, check details), the CLI and the Mac shell stay Russian for now.

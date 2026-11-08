@@ -157,7 +157,7 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			return
 		}
 		if !strings.HasPrefix(r.URL.Path, "/api/") {
-			files := map[string]string{"/": "index.html", "/app.js": "app.js", "/app.css": "app.css", "/design-v1.css": "design-v1.css", "/icon.svg": "icon.svg"}
+			files := map[string]string{"/": "index.html", "/app.js": "app.js", "/i18n.js": "i18n.js", "/app.css": "app.css", "/design-v1.css": "design-v1.css", "/icon.svg": "icon.svg"}
 			name, ok := files[r.URL.Path]
 			if !ok {
 				http.NotFound(w, r)

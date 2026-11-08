@@ -13,7 +13,8 @@ Updated 2026-11-08 (night, T-068) by Claude Code. The owner is asleep and asked 
 - **PR #73** (`claude/t061-agent-cards`): T-061 agent cards with the on/off switch, T-062 Windows window without the title bar; goes out as preview.43.
 - **T-068** token statistics on `claude/t068-token-stats` (D-077, PR #74), goes out as preview.44.
 - **T-069** Linux window on `claude/t069-linux-window` (D-078, built on T-068), goes out as preview.45. Owner's test on the Linux laptop: the window, its title bar in light and dark, the dock icon.
-- **Next, in the owner's order:** T-059 language, T-047 shared task list, T-052, T-053, T-057, T-049.
+- **T-059** window language on `claude/t059-language` (D-079, built on T-069), goes out as preview.46.
+- **Next, in the owner's order:** T-059 done; language, T-047 shared task list, T-052, T-053, T-057, T-049.
 
 Updated 2026-11-08 (before preview.42) by Claude Code.
 
