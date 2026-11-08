@@ -1035,8 +1035,15 @@
     if(!code)return;
     note('host','');invitation=code;
     $('invite-code').textContent=code.code;copyState('');
+    // The 6-digit code for a computer on the same network (T-052).
+    $('invite-short').hidden=!code.short;
+    if(code.short)$('invite-short-code').textContent=code.short.slice(0,3)+' '+code.short.slice(3);
     clearInterval(inviteTimer);
-    const tick=()=>{const left=Math.ceil((new Date(code.expires_at)-Date.now())/60000);if(left<=0){hideInvitation();return;}$('invite-expiry').textContent=tr('Действует ещё ')+left+tr(' мин., один раз.');};
+    const tick=()=>{
+      const left=Math.ceil((new Date(code.expires_at)-Date.now())/60000);if(left<=0){hideInvitation();return;}
+      $('invite-expiry').textContent=tr('Длинный код действует ещё ')+left+tr(' мин., один раз.');
+      if(code.short){const s=Math.ceil((new Date(code.short_expires_at)-Date.now())/60000);$('invite-short-note').textContent=s>0?tr('Для компьютера в этой же сети. Действует ещё ')+s+tr(' мин., три попытки.'):tr('Короткий код больше не действует.');}
+    };
     tick();inviteTimer=setInterval(tick,15000);
     $('invite-dialog').showModal();$('invite-copy').focus();
     // The invitation is not in the status yet; show it until the next poll.

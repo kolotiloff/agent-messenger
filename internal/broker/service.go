@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -188,6 +189,18 @@ func (s *Service) startLocked() error {
 	ctx, cancel := context.WithCancel(s.base)
 	done := make(chan struct{})
 	s.broker, s.stop, s.done, s.hostErr = b, cancel, done, ""
+	// Discovery for short invitations (T-052). If the port is taken, only
+	// the long code works; nothing else depends on it.
+	discoveryAt := net.JoinHostPort("127.0.0.1", strconv.Itoa(DiscoveryPort))
+	if s.settings.Scope == ScopeLAN {
+		discoveryAt = net.JoinHostPort("", strconv.Itoa(DiscoveryPort))
+	}
+	if pc, err := net.ListenPacket("udp4", discoveryAt); err == nil {
+		port := s.settings.Port
+		go serveDiscovery(ctx, pc, func() (discoverAnswer, bool) {
+			return discoverAnswer{V: 1, Broker: b.id, Port: port}, b.ShortActive()
+		})
+	}
 	go func() {
 		// Serve returns after every request has ended; only then are the
 		// database and the lock released, and only then is the broker
@@ -343,9 +356,13 @@ func (s *Service) Revoke(id string) error {
 // joining another one needs an explicit disconnect first, so nothing is ever
 // sent to a new broker silently.
 func (s *Service) Connect(ctx context.Context, code, name string) error {
-	inv, err := ParseInvitation(code)
-	if err != nil {
-		return err
+	short := shortCodeOf(code)
+	var inv Invitation
+	if short == "" {
+		var err error
+		if inv, err = ParseInvitation(code); err != nil {
+			return err
+		}
 	}
 	s.mu.Lock()
 	switch {
@@ -368,6 +385,12 @@ func (s *Service) Connect(ctx context.Context, code, name string) error {
 		s.connecting = false
 		s.mu.Unlock()
 	}()
+	if short != "" {
+		var err error
+		if inv, err = pairOnNetwork(ctx, short); err != nil {
+			return err
+		}
+	}
 	c, err := Register(ctx, inv, name)
 	if err != nil {
 		return err
@@ -644,4 +667,36 @@ func (s *Service) Inbox(ctx context.Context, n Network, after int64) ([]Message,
 	call, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	return ReadInbox(call, c, after)
+}
+
+// shortCodeOf returns the 6 digits of a short invitation code, which the
+// owner may type with spaces or a dash; empty if code is not one.
+func shortCodeOf(code string) string {
+	digits := strings.NewReplacer(" ", "", "-", "", "\u00a0", "").Replace(strings.TrimSpace(code))
+	if !ValidShortCode(digits) {
+		return ""
+	}
+	return digits
+}
+
+// pairOnNetwork finds the host with an open short invitation and proves the
+// code to it. A refused code is final; it is not tried on other hosts, so
+// it costs one try.
+func pairOnNetwork(ctx context.Context, code string) (Invitation, error) {
+	hosts, err := Discover(ctx, 2*time.Second)
+	if err != nil {
+		return Invitation{}, err
+	}
+	if len(hosts) == 0 {
+		return Invitation{}, ErrNoHost
+	}
+	var last error
+	for _, address := range hosts {
+		inv, err := PairShort(ctx, address, code)
+		if err == nil || errors.Is(err, ErrShortCode) || errors.Is(err, ErrShortGone) {
+			return inv, err
+		}
+		last = err
+	}
+	return Invitation{}, last
 }

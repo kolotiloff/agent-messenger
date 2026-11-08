@@ -53,7 +53,7 @@ Asked in chat 2026-11-08 (T-067). **Owner (2026-11-08):** «Подключено
 
 
 ### Q-017: How short may the invitation be (T-052)?
-The owner wants a 6-digit code to type from memory instead of the long one. The long code carries the host's address, its certificate fingerprint and a 32-byte secret; six digits cannot carry them, so the joining computer has to find the host on the local network and both sides have to prove the code without sending it (a password-authenticated key exchange), or anyone on the network could try all million codes or pose as the host. **Options:** (a) 6 digits with discovery on the local network and the key exchange, 3 tries, 10 minutes; the long code stays for other networks; (b) 6 digits plus the host's address typed by hand; (c) keep only the long code. **Chosen until answered:** (a), the most careful one that still gives a short code. **Blocks:** T-052.
+The owner wants a 6-digit code to type from memory instead of the long one. The long code carries the host's address, its certificate fingerprint and a 32-byte secret; six digits cannot carry them, so the joining computer has to find the host on the local network and both sides have to prove the code without sending it (a password-authenticated key exchange), or anyone on the network could try all million codes or pose as the host. **Options:** (a) 6 digits with discovery on the local network and the key exchange, 3 tries, 10 minutes; the long code stays for other networks; (b) 6 digits plus the host's address typed by hand; (c) keep only the long code. **Chosen until answered:** (a), the most careful one that still gives a short code. **Blocks:** T-052. **Built (2026-11-08):** (a), D-081.
 
 ### Q-016: A real program window on Linux without Chrome?
 

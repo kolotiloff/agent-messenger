@@ -88,6 +88,9 @@ type Broker struct {
 
 	limit    sync.Mutex
 	failedAt []time.Time
+
+	// The current short invitation and its open exchanges (T-052).
+	pair pairState
 }
 
 // Device is a registered device.
@@ -303,6 +306,10 @@ type InviteCode struct {
 	Code      string `json:"code"`
 	Address   string `json:"address"`
 	ExpiresAt string `json:"expires_at"`
+	// Short is the 6-digit code for a computer on the local network
+	// (T-052); it ends earlier, at ShortExpiresAt.
+	Short          string `json:"short,omitempty"`
+	ShortExpiresAt string `json:"short_expires_at,omitempty"`
 }
 
 // Invite creates a one-time invitation for a device that will reach the
@@ -321,7 +328,11 @@ func (b *Broker) Invite(address string) (InviteCode, error) {
 		return InviteCode{}, err
 	}
 	inv := Invitation{Address: address, BrokerID: b.id, Fingerprint: b.fingerprint, Secret: secret}
-	return InviteCode{ID: hash(secret)[:16], Code: inv.String(), Address: address, ExpiresAt: expires}, nil
+	short, shortExpires, err := b.newShortInvite(secret, now)
+	if err != nil {
+		return InviteCode{}, err
+	}
+	return InviteCode{ID: hash(secret)[:16], Code: inv.String(), Address: address, ExpiresAt: expires, Short: short, ShortExpiresAt: shortExpires}, nil
 }
 
 // register uses an invitation once and creates a device.
@@ -612,6 +623,8 @@ func (b *Broker) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, PingResult{BrokerID: b.id, DeviceID: d.ID, Name: d.Name, Time: d.LastSeen})
 	})
+	mux.HandleFunc("/v1/pair/start", b.handlePairStart)
+	mux.HandleFunc("/v1/pair/finish", b.handlePairFinish)
 	mux.HandleFunc("/v1/presence", b.handlePresence)
 	mux.HandleFunc("/v1/tasks", b.handleSharedTasks)
 	mux.HandleFunc("/v1/send", b.handleSend)
