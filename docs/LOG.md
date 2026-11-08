@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (T-052 short invitation)
+
+- 6-digit code next to the long one (D-081): found on the local network over UDP 47100, proved with SPAKE2, 3 tries, 10 minutes. New dependency `filippo.io/edwards25519` v1.1.0. Screenshot: docs/mockups/short-invite-built.png (stubbed).
+- Verified: pairing tests on this computer (loopback), `check.sh`. Not verified: two real computers, firewalls, broadcast on Wi-Fi.
+
 ## 2026-11-08 — Claude Code (T-047 shared task list)
 
 - Each computer shares the tasks it started (7 days, up to 50, start of the report) through the broker's `POST /v1/tasks`; the task list shows the other computers' tasks of the project read-only (D-080). Screenshot: docs/mockups/shared-tasks-built.png (stubbed data).

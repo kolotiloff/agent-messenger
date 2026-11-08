@@ -3,6 +3,8 @@ module github.com/kolotiloff/agent-messenger
 go 1.22.2
 
 require (
+	filippo.io/edwards25519 v1.1.0
+	github.com/ebitengine/purego v0.10.0
 	github.com/jchv/go-webview2 v0.0.0-20260205173254-56598839c808
 	golang.org/x/sys v0.22.0
 	modernc.org/sqlite v1.34.5
@@ -10,7 +12,6 @@ require (
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/ebitengine/purego v0.10.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/jchv/go-winloader v0.0.0-20250406163304-c1995be93bd1 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
