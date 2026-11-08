@@ -277,16 +277,17 @@
     if(coordProvider&&!providers.includes(coordProvider))providers.unshift(coordProvider);
     for(const provider of providers){
       const a=agents.find(x=>x.agent===provider);
-      const coordinator=provider===coordProvider;
-      let [state,text]=!live?['offline','Нет связи']:a?agentState(a):['run','Подключён'];
-      if(coordinator&&state==='idle'){state='run';text='Свободен';}
+      // Blue means a task is running (T-060). A chat that once used
+      // Messenger's tools is listed but not lit: nothing tells whether it is
+      // still open.
+      const [state,text]=!live?['offline','Нет связи']:a?agentState(a):['idle','Чат с инструментами Messenger'];
       const line=el('div',undefined,'am-agent-line');line.dataset.provider=provider;
       line.title=(names[provider]||provider)+(a?': '+text:'');
       line.append(el('span',undefined,'am-dot am-dot-'+state),el('span',shortNames[provider]||provider));
       lines.append(line);
     }
     if(coordinatorClient!==null&&!coordProvider){
-      const line=el('div',undefined,'am-agent-line');line.append(el('span',undefined,'am-dot am-dot-'+(live?'run':'offline')),el('span',coordLabel));lines.append(line);
+      const line=el('div',undefined,'am-agent-line');line.append(el('span',undefined,'am-dot am-dot-'+(live?'idle':'offline')),el('span',coordLabel));lines.append(line);
     }
     return lines;
   }
