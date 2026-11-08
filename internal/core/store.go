@@ -157,6 +157,7 @@ func Open(path string) (*Store, error) {
 		{"computer_agents", "models", "TEXT NOT NULL DEFAULT ''"},
 		{"computer_agents", "limit_state", "TEXT NOT NULL DEFAULT ''"},
 		{"computer_agents", "full_access", "INTEGER NOT NULL DEFAULT 0"},
+		{"projects", "removed_at", "TEXT"},
 		{"tasks", "full_access", "INTEGER NOT NULL DEFAULT 0"},
 		{"tasks", "failure_reason", "TEXT"},
 		{"tasks", "failure_reset", "TEXT"},

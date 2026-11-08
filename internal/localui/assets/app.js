@@ -845,7 +845,19 @@
     $('project-name-field').hidden=edit;$('project-name').value='';$('project-folder').value=edit?view.folder:'';
     $('project-rules').value=edit?(view.worker_rules||''):'';
     $('project-save').textContent=edit?'Сохранить':'Создать проект';$('project-status').textContent='';
+    $('project-remove').hidden=!edit;$('project-remove').textContent='Удалить проект';removeAsk=false;
     $('project-dialog').showModal();
+  }
+  // Two clicks remove a project: the first asks, the second removes. Its tasks
+  // stay in the database; creating the project again brings them back.
+  let removeAsk=false;
+  async function removeProject(){
+    const name=view?.project;if(!name)return;
+    if(!removeAsk){removeAsk=true;$('project-remove').textContent='Точно удалить?';$('project-status').textContent='Проект пропадёт из списка. История задач сохранится и вернётся, если создать проект с тем же именем.';return;}
+    $('project-remove').disabled=true;
+    try{await postAPI('/api/project-remove',{name});project='';remember('messenger-project','');selectedTask='';feed=null;feedSignature='';$('project-dialog').close();viewSignature='';await refresh();}
+    catch(error){$('project-status').textContent=error.message;removeAsk=false;$('project-remove').textContent='Удалить проект';}
+    finally{$('project-remove').disabled=false;}
   }
   async function saveProject(){
     const name=editingFolder?view.project:$('project-name').value.trim(),folder=$('project-folder').value.trim();
@@ -1059,6 +1071,7 @@
   // A closed invitation is not shown again; a new one can be made at any time.
   $('invite-dialog').addEventListener('close',()=>{invitation=null;clearInterval(inviteTimer);});
   $('project-save').addEventListener('click',saveProject);
+  $('project-remove').addEventListener('click',removeProject);
   $('project-pick').addEventListener('click',()=>{if(window.webkit?.messageHandlers?.folder)window.webkit.messageHandlers.folder.postMessage('pick');else pick('project-folder','folder','project-status');});
   $('agent-cli-pick').addEventListener('click',()=>pick('agent-cli','file','agent-check-status'));
   $('agent-profile-pick').addEventListener('click',()=>pick('agent-profile','folder','agent-check-status'));

@@ -341,7 +341,7 @@ func (s *Store) CreateProject(name, folder string) error {
 			return err
 		}
 		var existing int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM projects WHERE name=?`, name).Scan(&existing); err != nil {
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM projects WHERE name=? AND removed_at IS NULL`, name).Scan(&existing); err != nil {
 			return err
 		}
 		if existing != 0 {
@@ -353,10 +353,50 @@ func (s *Store) CreateProject(name, folder string) error {
 			return fmt.Errorf("%w: a project with this name already exists", ErrRejected)
 		}
 		at := now()
-		if _, err := tx.Exec(`INSERT INTO projects(name,created_at) VALUES (?,?)`, name, at); err != nil {
+		// A removed project of the same name comes back with its history.
+		res, err := tx.Exec(`UPDATE projects SET removed_at=NULL WHERE name=? AND removed_at IS NOT NULL`, name)
+		if err != nil {
 			return err
 		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			if _, err := tx.Exec(`INSERT INTO projects(name,created_at) VALUES (?,?)`, name, at); err != nil {
+				return err
+			}
+		}
 		_, err = tx.Exec(`INSERT INTO project_folders(project,computer,folder,updated_at) VALUES (?,?,?,?)`, name, computer, folder, at)
+		return err
+	})
+}
+
+// RemoveProject takes a project out of the window (T-055, D-066). It refuses
+// while any task of the project is unfinished or has a run that is not
+// closed, so nothing that may still run or wait is hidden. The tasks and
+// their runs stay in the database; only the project's folders and its
+// coordinator mark are dropped. Creating the project again brings it back.
+func (s *Store) RemoveProject(name string) error {
+	return s.tx(func(tx *sql.Tx) error {
+		var n int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM projects WHERE name=? AND removed_at IS NULL`, name).Scan(&n); err != nil {
+			return err
+		}
+		if n == 0 {
+			return fmt.Errorf("%w: unknown project", ErrRejected)
+		}
+		var open int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM tasks t WHERE t.project=? AND (t.state IN ('running','waiting_coordinator','waiting_owner','blocked','interrupted')
+ OR EXISTS (SELECT 1 FROM task_runs r WHERE r.task_id=t.id AND r.state IN ('intent','launching','running','blocked','interrupted')))`, name).Scan(&open); err != nil {
+			return err
+		}
+		if open != 0 {
+			return fmt.Errorf("%w: у проекта есть незавершённые задачи (%d); отмените их или дождитесь конца", ErrRejected, open)
+		}
+		if _, err := tx.Exec(`UPDATE projects SET removed_at=? WHERE name=?`, now(), name); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM project_folders WHERE project=?`, name); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`DELETE FROM coordinator_connections WHERE project=?`, name)
 		return err
 	})
 }
@@ -374,7 +414,7 @@ func (s *Store) SetProjectFolder(name, folder string) error {
 			return err
 		}
 		var n int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM projects WHERE name=?`, name).Scan(&n); err != nil {
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM projects WHERE name=? AND removed_at IS NULL`, name).Scan(&n); err != nil {
 			return err
 		}
 		if n == 0 {
@@ -432,7 +472,7 @@ func (s *Store) Projects() ([]Project, error) {
 		if err != nil {
 			return err
 		}
-		rows, err := tx.Query(`SELECT p.name,COALESCE(f.folder,'') FROM projects p LEFT JOIN project_folders f ON f.project=p.name AND f.computer=? ORDER BY p.created_at,p.name`, computer)
+		rows, err := tx.Query(`SELECT p.name,COALESCE(f.folder,'') FROM projects p LEFT JOIN project_folders f ON f.project=p.name AND f.computer=? WHERE p.removed_at IS NULL ORDER BY p.created_at,p.name`, computer)
 		if err != nil {
 			return err
 		}
@@ -602,7 +642,7 @@ func (s *Store) StartTask(r StartTaskRequest) (string, bool, error) {
 			return err
 		}
 		var projects int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM projects WHERE name=?`, r.Project).Scan(&projects); err != nil {
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM projects WHERE name=? AND removed_at IS NULL`, r.Project).Scan(&projects); err != nil {
 			return err
 		}
 		if projects == 0 {
