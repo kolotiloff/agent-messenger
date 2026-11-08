@@ -484,6 +484,7 @@
     for(const it of feed.items){
       if(it.kind==='task'){outgoing(coordLabel,coordProvider,'координатор',it.text,it.at);continue;}
       if(it.kind==='answer'){if(it.author==='owner')outgoing('Вы','owner','',it.text,it.at);else outgoing(coordLabel,coordProvider,'координатор',it.text,it.at);continue;}
+      if(it.kind==='accepted'){const c=out[out.length-1]?.querySelector('.am-message-content');if(c)c.append(delivery('Принято на компьютере «'+it.text+'»','am-status-good'));group=null;continue;}
       if(it.kind==='text'){workerGroup(it.at).append(richText(it.text));continue;}
       if(it.kind==='tool'){workerGroup(it.at).append(toolLine(it));continue;}
       if(it.kind==='report'||it.kind==='question'){
@@ -496,7 +497,9 @@
       }
       if(it.kind==='outcome'){
         group=null;const text={failed:t.remote&&!t.remote.from?'Задача не выполнена':'Запуск не прошёл проверку',blocked:t.remote&&!t.remote.from?'Задача заблокирована: результат на другом компьютере неизвестен':'Задача заблокирована: процесс не завершился полностью',interrupted:'Клиент перезапустился во время работы; результат неизвестен',cancelled:'Задача отменена'}[it.state]||it.state;
-        const note=el('div',undefined,'am-outcome '+(it.state==='cancelled'?'am-muted':'am-status-bad'));note.append(el('p',text));if(it.text)note.append(el('p',it.text,'am-small am-muted'));
+        const note=el('div',undefined,'am-outcome '+(it.state==='cancelled'?'am-muted':'am-status-bad'));note.append(el('p',text));
+        const why=t.remote&&!t.remote.from?refusalText(it.text,t.remote.name):'';if(why)note.append(el('p',why));
+        if(it.text)note.append(el('p',it.text,'am-small am-muted'));
         const g=el('article',undefined,'am-message-group');g.append(note);out.push(g);
       }
     }
@@ -510,6 +513,14 @@
     if(q&&$('compose').dataset.question!==q.id){$('compose').dataset.question=q.id;$('answer-text').value='';$('answer-status').textContent='';}
     answerControls();
     if(atBottom)thread.scrollTop=thread.scrollHeight;
+  }
+  // Known refusals of another computer, explained in the window's language.
+  function refusalText(text,name){
+    if(/does not run tasks of other computers/.test(text||''))return 'Компьютер «'+name+'» не принимает задачи других компьютеров. Включите на нём «Задачи других компьютеров» на вкладке «Сервер» и дайте задачу снова.';
+    if(/has no project/.test(text||''))return 'На компьютере «'+name+'» нет проекта с таким названием. Создайте его там и выберите папку.';
+    if(/has no folder for the project|project folder is missing/.test(text||''))return 'На компьютере «'+name+'» у проекта не выбрана папка или её нет. Выберите папку проекта там и дайте задачу снова.';
+    if(/is not set up on this computer/.test(text||''))return 'На компьютере «'+name+'» этот агент не настроен. Настройте его там на вкладке агентов.';
+    return '';
   }
   function answerControls(){$('answer-send').disabled=answering||!$('answer-text').value.trim()||!feed?.task?.owner_question||!!feed?.task?.remote?.from;}
   async function sendAnswer(){

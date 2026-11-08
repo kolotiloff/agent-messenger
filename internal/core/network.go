@@ -512,7 +512,7 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 			return applyAnswer(tx, from, m.OpID, b)
 		case "cancel":
 			return applyCancel(tx, from)
-		case "accepted", "refused", "event", "answer_refused":
+		case "accepted", "refused", "event", "answer_refused", "progress":
 			return applyReport(tx, from, b)
 		}
 		return nil
@@ -654,6 +654,20 @@ func applyReport(tx *sql.Tx, from netLink, b netBody) error {
 	}
 	name := peerName(tx, from.peer)
 	switch b.Kind {
+	case "progress":
+		// A line of the worker's progress, for the window only (D-055).
+		if b.Event != "text" && b.Event != "tool" {
+			return nil
+		}
+		var n int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM remote_task_items WHERE task_id=?`, t.ID).Scan(&n); err != nil {
+			return err
+		}
+		if n >= maxRunItems {
+			return nil
+		}
+		_, err := tx.Exec(`INSERT INTO remote_task_items(task_id,seq,kind,title,text,created_at) VALUES (?,?,?,?,?,?)`, t.ID, n+1, b.Event, clip(b.Title, 200), clip(b.Text, maxForwardedItemText), now())
+		return err
 	case "accepted":
 		if _, err := tx.Exec(`UPDATE tasks SET folder=?,remote_task=?,detail=?,updated_at=?,version=version+1 WHERE id=?`, clip(b.Folder, 4096), clip(b.Mirror, 64), "accepted by "+name, now(), t.ID); err != nil {
 			return err

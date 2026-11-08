@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (T-042 progress between computers)
+
+- The owner ran preview.35 on a Mac and a Windows computer: Windows hosted the server, the Mac joined and gave Codex on Windows a task. It was first refused because «Задачи других компьютеров» was off (Q-014, by design); the refusal showed as an English note in the middle of the feed. After turning it on, Codex worked on Windows, but the Mac showed nothing until the end.
+- Now the Mac shows «Принято на компьютере …» and the worker's progress lines (D-055), and known refusals are explained in Russian. Tested with core tests (two stores, messages carried by hand); the window change is checked for syntax only. Not tested on two real computers.
+
 ## 2026-11-08 — Claude Code (T-041 agents on Windows)
 
 - The owner ran preview.34 on Windows: the window opened in the browser (as designed, D-045). Claude Code was found but «Проверить версию и вход» showed nothing: the check ran only on macOS and asked for login only for one exact version. Fixed (D-051). Codex was not found: newer npm packages keep `codex.exe` in `vendor/<target>/bin`, not `vendor/<target>/codex`; both are searched now. Cursor is `%LOCALAPPDATA%\cursor-agent\agent.cmd`, a script that runs `versions\<newest>\node.exe index.js` through PowerShell; Messenger now starts that pair directly (D-052). Verified with tests on Linux; not on a real Windows computer.
