@@ -35,7 +35,7 @@ func TaskEnv(s TaskRunSpec) []string {
 		return nil
 	}
 	raw, _ := json.Marshal(map[string]string{"db": s.DB, "run": s.RunID, "receipt": s.Receipt})
-	return []string{TaskEnvVariable + "=" + string(raw)}
+	return append(cursorProgramEnv(s.CLI), TaskEnvVariable+"="+string(raw))
 }
 
 func cursorTaskEntry(messenger string) map[string]any {
@@ -149,7 +149,7 @@ func cursorTaskArgs(s TaskRunSpec) ([]string, error) {
 			return nil, errors.New("invalid Cursor chat id")
 		}
 	}
-	args := []string{s.CLI, "-p", "--output-format", "stream-json", "--trust", "--approve-mcps"}
+	args := append(CursorProgram(s.CLI), "-p", "--output-format", "stream-json", "--trust", "--approve-mcps")
 	if s.Profile == ProfileMessengerOnly {
 		// Tests: tools other than Messenger's are not approved, and the
 		// sandbox stays on.
