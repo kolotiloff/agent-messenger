@@ -434,8 +434,6 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-context-menu { min-width:180px; }
 #am-concept .am-server .am-check-result { grid-template-columns:max-content minmax(0,1fr); column-gap:var(--am-gap-section); row-gap:var(--am-gap-control); }
 #am-concept .am-card-head h3:focus { outline:none; }
-#am-concept .am-project-name { display:flex; gap:var(--am-gap-content); margin:0; overflow-wrap:anywhere; }
-#am-concept .am-project-name #project-page-name { font-weight:600; }
 
 /* Dialogs */
 #am-concept .am-session-dialog { width:min(680px,calc(100vw - 48px)); max-height:80vh; padding:0; border:1px solid var(--am-line); border-radius:var(--am-radius-l); color:var(--am-text); background:var(--am-panel); box-shadow:var(--am-shadow-l); }

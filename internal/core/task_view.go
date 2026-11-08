@@ -191,7 +191,9 @@ type WindowAgent struct {
 type WindowView struct {
 	Projects []Project `json:"projects"`
 	Project  string    `json:"project"`
-	Folder   string    `json:"folder"`
+	// ProjectTitle is the name the window shows for the project (T-065).
+	ProjectTitle string `json:"project_title"`
+	Folder       string `json:"folder"`
 	// WorkerRules are the owner's rules for this project's workers (T-050).
 	WorkerRules string `json:"worker_rules"`
 	Computer    string `json:"computer"`
@@ -226,7 +228,7 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 	found := false
 	for _, p := range projects {
 		if p.Name == project {
-			found, v.Project, v.Folder = true, p.Name, p.Folder
+			found, v.Project, v.ProjectTitle, v.Folder = true, p.Name, p.Title, p.Folder
 		}
 	}
 	err = s.tx(func(tx *sql.Tx) error {

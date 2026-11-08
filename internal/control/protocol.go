@@ -309,6 +309,17 @@ func dispatch(handler Handler, request Request) Response {
 			return Response{Error: err.Error()}
 		}
 		return Response{OK: true}
+	case "project-title":
+		h, ok := handler.(interface {
+			SetProjectTitle(string, string) error
+		})
+		if !ok {
+			return Response{Error: "project rename unsupported; update the background client"}
+		}
+		if err := h.SetProjectTitle(request.Alias, request.Text); err != nil {
+			return Response{Error: err.Error()}
+		}
+		return Response{OK: true}
 	case "project-remove":
 		h, ok := handler.(interface {
 			RemoveProject(string) error

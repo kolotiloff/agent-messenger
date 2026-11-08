@@ -242,7 +242,7 @@
   }
   function renderProjects(){
     const select=$('project-select');select.replaceChildren();
-    for(const p of view?.projects||[]){const o=el('option',p.name);o.value=p.name;select.append(o);}
+    for(const p of view?.projects||[]){const o=el('option',p.title||p.name);o.value=p.name;select.append(o);}
     const add=el('option','Новый проект');add.value='__new';select.append(add);
     select.value=view?.project||'__new';
     if(!view?.project&&select.options.length>1)select.selectedIndex=0;
@@ -907,7 +907,7 @@
   }
   async function createProject(){
     const name=$('project-name').value.trim(),folder=$('project-folder').value.trim();
-    if(!name||!folder){$('project-status').textContent='Укажите имя и папку.';return;}
+    if(!name||!folder){$('project-status').textContent='Укажите название и папку.';return;}
     $('project-save').disabled=true;$('project-status').textContent='Сохраняем…';
     try{
       await postAPI('/api/project-create',{name,folder});
@@ -932,7 +932,11 @@
     if(!name){projectPageFor='';return;}
     if(projectPageFor!==name){$('project-page-status').textContent='';clearTimeout(rulesTimer);}
     const fresh=projectPageFor!==name;projectPageFor=name;
-    $('project-page-name').textContent=name;
+    if(fresh||document.activeElement!==$('project-page-name'))$('project-page-name').value=view.project_title||name;
+    // Other computers and the coordinator chat know the project by the name it
+    // was created with; a rename shows it so the owner can match them (T-065).
+    const renamed=!!view.project_title&&view.project_title!==name;$('project-page-key').hidden=!renamed;
+    $('project-page-key').textContent=renamed?'Для других компьютеров и координатора проект по-прежнему называется «'+name+'».':'';
     if(fresh||document.activeElement!==$('project-page-folder'))$('project-page-folder').value=view.folder||'';
     if(fresh||(document.activeElement!==$('project-page-rules')&&!rulesTimer))$('project-page-rules').value=view.worker_rules||'';
   }
@@ -942,7 +946,12 @@
     projectSaving=projectSaving.then(async()=>{
       if(view?.project!==name)return;
       try{
-        if(field==='folder'){
+        if(field==='title'){
+          const title=$('project-page-name').value.trim();
+          if(!title){status.textContent='Укажите название.';return;}
+          if(title===(view.project_title||name))return;
+          status.textContent='';await postAPI('/api/project-title',{name,title});
+        }else if(field==='folder'){
           const folder=$('project-page-folder').value.trim();
           if(!folder){status.textContent='Укажите папку.';return;}
           if(folder===(view.folder||''))return;
@@ -960,7 +969,7 @@
   // creating the project again brings them back.
   function askRemoveProject(){
     const name=view?.project;if(!name)return;
-    askConfirm('Удалить проект «'+name+'»?','Проект пропадёт из списка. История задач сохранится и вернётся, если создать проект с тем же именем.','Удалить',async()=>{
+    askConfirm('Удалить проект «'+(view.project_title||name)+'»?','Проект пропадёт из списка. История задач сохранится и вернётся, если создать проект с тем же именем.','Удалить',async()=>{
       await postAPI('/api/project-remove',{name});
       project='';remember('messenger-project','');selectedTask='';feed=null;feedSignature='';viewSignature='';projectPageFor='';await refresh();
     });
@@ -1224,6 +1233,8 @@
   $('project-save').addEventListener('click',createProject);
   $('project-page-rules').addEventListener('input',()=>{clearTimeout(rulesTimer);rulesTimer=setTimeout(()=>{rulesTimer=0;saveProjectField('rules');},800);});
   $('project-page-rules').addEventListener('blur',()=>{if(rulesTimer){clearTimeout(rulesTimer);rulesTimer=0;saveProjectField('rules');}});
+  $('project-page-name').addEventListener('change',()=>saveProjectField('title'));
+  $('project-page-name').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();saveProjectField('title');}});
   $('project-page-folder').addEventListener('change',()=>saveProjectField('folder'));
   $('project-page-folder').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();saveProjectField('folder');}});
   $('project-page-remove').addEventListener('click',askRemoveProject);

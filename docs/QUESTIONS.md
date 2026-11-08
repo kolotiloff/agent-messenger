@@ -37,6 +37,9 @@ The owner asked to clean the program of old code. The old "message a live sessio
 ### Q-013: Where should a computer keep its broker device key?
 DEPLOYMENT.md asks for the OS secure storage (Keychain on the Mac). Today the key is in `server-connection.json` in the data directory with mode 0600, readable by the owner's account only; the window and `status` never show it. **Options:** Keychain on the Mac and the Windows credential store, with the file keeping only a reference; or keep the 0600 file. **Chosen for now:** the 0600 file, because nothing crosses computers yet and the Keychain needs Mac-side work that cannot be tested here. **Blocks:** the rest of T-015 (before tasks travel between computers).
 
+### Q-019: Should a project rename reach other computers and the coordinator chat?
+The owner asked to rename a project on the «Проект» tab. The project's name links it to other computers (a task for another computer finds the project there by that name) and to the coordinator chat (it connects with that name). The careful variant built now (T-065, D-072): a rename changes only the name this computer's window shows; the original name keeps working underneath, and the tab says which name other computers and the coordinator use. **Options:** keep it local; or rename everywhere, which needs the other computers to agree and the coordinator chat to reconnect.
+
 ## Answered
 
 ### Q-017: How short may the invitation be (T-052)?

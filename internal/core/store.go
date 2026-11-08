@@ -168,6 +168,7 @@ func Open(path string) (*Store, error) {
 		{"tasks", "usage_cost", "REAL"},
 		{"requests", "in_reply_to", "TEXT"},
 		{"projects", "worker_rules", "TEXT NOT NULL DEFAULT ''"},
+		{"projects", "title", "TEXT NOT NULL DEFAULT ''"},
 		{"tasks", "rules", "TEXT NOT NULL DEFAULT ''"},
 		{"task_runs", "op_id", "TEXT"},
 		{"requests", "hops", "INTEGER NOT NULL DEFAULT 0"},

@@ -373,3 +373,9 @@ Reports for each step are in [reports/](reports/). The handoff is in [HANDOFF.md
 ## 2026-11-08 — T-064 tab «Проект»
 
 - The project's settings moved from the project list to a new tab «Проект» (D-071). The project list now holds only projects and «Новый проект». Ellipses dropped from all button labels. Checked in Chromium with a stubbed window API; not against a live client or in the native windows.
+
+## 2026-11-08 — T-064 auto-save, T-065 project rename
+
+- The «Проект» tab saves by itself and shows only errors; «Удалить проект» stands on the right; the folder label is «Папка проекта».
+- A project can be renamed on the tab. Only the shown name changes (D-072); Q-019 asks whether a rename should reach other computers and the coordinator. Core and route tests added; the page checked in Chromium with a stubbed API, not against a live client.
+- Owner idea recorded as T-066: the update offer as a blue button at the top right.

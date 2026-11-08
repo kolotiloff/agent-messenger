@@ -77,6 +77,8 @@ func TestTaskWindowRoutes(t *testing.T) {
 		{"/api/agent-access", `{"provider":"gemini","on":true}`},
 		{"/api/agent-access", `{"provider":"codex","on":"yes"}`},
 		{"/api/project-rules", `{"name":"a/b","rules":"x"}`},
+		{"/api/project-title", `{"name":"a/b","title":"x"}`},
+		{"/api/project-title", `{"name":"Game","title":"x","extra":1}`},
 		{"/api/project-rules", `{"name":"Game","rules":"x","extra":1}`},
 		{"/api/task-cancel", `{"task":""}`},
 		{"/api/project-remove", `{"name":"a/b"}`},
@@ -95,6 +97,9 @@ func TestTaskWindowRoutes(t *testing.T) {
 	}
 	if code, _ := do("POST", "/api/agent-models", `{"provider":"codex","models":["gpt-5.5","gpt-5.5-mini"]}`); code != 200 || got[len(got)-1].Cmd != "agent-models" || got[len(got)-1].Provider != "codex" || got[len(got)-1].Text != "gpt-5.5\ngpt-5.5-mini" {
 		t.Fatalf("agent models %d %+v", code, got[len(got)-1])
+	}
+	if code, _ := do("POST", "/api/project-title", `{"name":"Game","title":"Гонки 2"}`); code != 200 || got[len(got)-1].Cmd != "project-title" || got[len(got)-1].Alias != "Game" || got[len(got)-1].Text != "Гонки 2" {
+		t.Fatalf("project-title not forwarded: %d %+v", code, got)
 	}
 	if code, _ := do("POST", "/api/project-rules", `{"name":"Game","rules":"Отчёт до 8 строк."}`); code != 200 || got[len(got)-1].Cmd != "project-rules" || got[len(got)-1].Alias != "Game" || got[len(got)-1].Text != "Отчёт до 8 строк." {
 		t.Fatalf("project rules %d %+v", code, got[len(got)-1])
