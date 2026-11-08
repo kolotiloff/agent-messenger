@@ -146,7 +146,10 @@ func fill(peer *Peer, report, at string, now time.Time) {
 	if report == "" || err != nil || json.Unmarshal([]byte(report), &p) != nil {
 		return
 	}
-	peer.Name, peer.Coordinator = p.Name, p.Coordinator
+	if p.Name != "" {
+		peer.Name = p.Name
+	}
+	peer.Coordinator = p.Coordinator
 	if p.Agents != nil {
 		peer.Agents = p.Agents
 	}

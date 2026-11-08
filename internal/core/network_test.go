@@ -83,8 +83,23 @@ func (p *netPair) mirror(t *testing.T, origin string) Task {
 	return Task{}
 }
 
+// D-056: a computer accepts tasks of its network until its owner turns that
+// off.
+func TestRemoteTaskIsAcceptedByDefault(t *testing.T) {
+	p := newNetPair(t)
+	if on, err := p.b.st.NetAccept(); err != nil || !on {
+		t.Fatalf("default %v %v", on, err)
+	}
+	id := p.startRemote(t, "op1", "codex", "Build level 1")
+	p.carry(t, true)
+	p.mirror(t, id)
+}
+
 func TestRemoteTaskIsRefusedUnlessTheOwnerAllows(t *testing.T) {
 	p := newNetPair(t)
+	if err := p.b.st.SetNetAccept(false); err != nil {
+		t.Fatal(err)
+	}
 	id := p.startRemote(t, "op1", "codex", "Build level 1")
 	task, _ := p.a.st.TaskByID(id)
 	if task.State != "running" || task.Computer != "dev-b" || task.SessionID != "" {
@@ -240,7 +255,7 @@ func TestRemoteTaskQuestionAnswerReport(t *testing.T) {
 	for _, it := range feed.Items {
 		got = append(got, it.Kind+":"+it.Author)
 	}
-	if strings.Join(got, ",") != "task:coordinator,question:worker,answer:owner,report:worker" {
+	if strings.Join(got, ",") != "task:coordinator,accepted:messenger,question:worker,answer:owner,report:worker" {
 		t.Fatalf("feed items %v", got)
 	}
 }
@@ -361,8 +376,11 @@ func TestNetPeersAndAcceptSetting(t *testing.T) {
 	if err != nil || len(peers) != 1 || peers[0].Name != "Ноутбук" || len(peers[0].Agents) != 2 {
 		t.Fatalf("peers %+v %v", peers, err)
 	}
+	if err := p.b.st.SetNetAccept(false); err != nil {
+		t.Fatal(err)
+	}
 	if on, _ := p.b.st.NetAccept(); on {
-		t.Fatal("accepting by default")
+		t.Fatal("still accepting after turning it off")
 	}
 	agents, err := p.a.st.ProjectAgents("Game")
 	if err != nil {
@@ -371,5 +389,64 @@ func TestNetPeersAndAcceptSetting(t *testing.T) {
 	list := agents["computers"].([]ComputerSummary)
 	if len(list) != 2 || list[1].Computer != "dev-b" || list[1].This || !list[1].Online {
 		t.Fatalf("list_agents %+v", list)
+	}
+}
+
+// D-055: the computer that started a task sees that it was accepted and the
+// worker's progress lines from the computer that runs it.
+func TestRemoteTaskProgressReachesTheStarter(t *testing.T) {
+	p := newNetPair(t)
+	if err := p.b.st.SetNetAccept(true); err != nil {
+		t.Fatal(err)
+	}
+	id := p.startRemote(t, "op1", "codex", "Build level 1")
+	p.carry(t, true)
+	p.carry(t, false)
+	m := p.mirror(t, id)
+	r := p.b.launch(t, m.ID, "019a0000-0000-7000-8000-0000000000b1")
+	if err := p.b.st.AppendTaskRunItem(r.ID, "text", "", "Reading the level files"); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.b.st.AppendTaskRunItem(r.ID, "tool", "Команда", "ls levels"); err != nil {
+		t.Fatal(err)
+	}
+	sent := p.carry(t, false)
+	if len(sent) != 2 {
+		t.Fatalf("progress messages %d", len(sent))
+	}
+	// A message read twice is applied once.
+	if err := p.a.st.ApplyNet(testBroker, sent[0]); err != nil {
+		t.Fatal(err)
+	}
+	f, err := p.a.st.TaskFeed(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var kinds []string
+	for _, it := range f.Items {
+		kinds = append(kinds, it.Kind+":"+it.Text)
+	}
+	want := "task:Build level 1|accepted:Ноутбук|text:Reading the level files|tool:ls levels"
+	if got := strings.Join(kinds, "|"); got != want {
+		t.Fatalf("feed\n got %s\nwant %s", got, want)
+	}
+	if f.Items[3].Title != "Команда" {
+		t.Fatalf("tool title %+v", f.Items[3])
+	}
+	// Progress is for the window only: the coordinator gets no event for it.
+	for _, e := range p.a.events(t, AudienceCoordinator, 0) {
+		if e.Kind == "text" || e.Kind == "tool" || e.Kind == "progress" {
+			t.Fatalf("coordinator event %+v", e)
+		}
+	}
+	// A task of this computer sends nothing.
+	before, _ := p.a.st.NetPending(testBroker, 100)
+	local := p.a.start(t, "op-local", "codex", "Local work")
+	lr := p.a.launch(t, local, "019a0000-0000-7000-8000-0000000000c1")
+	if err := p.a.st.AppendTaskRunItem(lr.ID, "text", "", "local line"); err != nil {
+		t.Fatal(err)
+	}
+	if after, _ := p.a.st.NetPending(testBroker, 100); len(after) != len(before) {
+		t.Fatalf("a local item was sent: %d -> %d", len(before), len(after))
 	}
 }

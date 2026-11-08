@@ -8,6 +8,14 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-08 (T-042) by Claude Code.
+
+- **T-042 on `claude/t041-sparkle-retry` (PR #63):** after the owner's Mac → Windows test: progress and «Принято» on the starting computer (D-055), grouped tool actions, a computer name for every computer (host included), tasks of other computers accepted by default (D-056), Codex trust read from all `config.toml` forms, «Войти в аккаунт» / «Установить …» buttons, a frameless Windows window with a themed title bar (D-057).
+- **Verified here:** `check.sh`, Windows vet, tests with fakes, headless Chromium screenshots. **Not verified:** real Windows, the real two-computer relay, the Codex/Cursor install page addresses.
+- **Next:** CI, merge, preview.36; the owner tests it. Open idea from the owner: show every agent's usage limits (not started; see LOG).
+
+Previous state:
+
 Updated 2026-11-08 (preview.35) by Claude Code.
 
 - **preview.35 released** from `main` 48b883e (PR #62, T-041; run 42470255420, the Mac build re-run once after GitHub's download server returned 504), 21 assets. Own window on Windows (WebView2) and Linux (app-mode browser window), the agent check on every OS, Codex and Cursor found on Windows, «Выбрать…» buttons (D-051–D-054). Also fixed: a worker's last output lines could be lost when it exited, so a finished task was marked unverified.

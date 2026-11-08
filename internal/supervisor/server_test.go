@@ -48,14 +48,22 @@ func TestServerCommandRunsTheHostedBroker(t *testing.T) {
 	waitSocket(t, root)
 
 	st, _ := serverCall(t, root, "status", nil)
-	if st.Host.Enabled || st.Host.Running || st.Member.Connected || st.Accept {
-		t.Fatalf("server on by default %+v", st)
+	// The server is off by default; accepting the network's tasks is on (D-056).
+	if st.Host.Enabled || st.Host.Running || st.Member.Connected || !st.Accept {
+		t.Fatalf("defaults %+v", st)
 	}
 	if st, response := serverCall(t, root, "accept", map[string]any{"on": true}); !response.OK || !st.Accept {
 		t.Fatalf("accept on %+v %+v", response, st)
 	}
 	if st, _ := serverCall(t, root, "accept", map[string]any{"on": false}); st.Accept {
 		t.Fatal("accept stays on")
+	}
+	// The owner names this computer for the network.
+	if _, response := serverCall(t, root, "rename", map[string]any{"name": "Студия"}); !response.OK {
+		t.Fatalf("rename %+v", response)
+	}
+	if _, response := serverCall(t, root, "rename", map[string]any{"name": "a\nb"}); response.OK {
+		t.Fatal("a name with a line break was accepted")
 	}
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

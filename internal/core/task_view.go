@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
+	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -22,12 +25,24 @@ CREATE TABLE IF NOT EXISTS task_run_items (
  created_at TEXT NOT NULL,
  PRIMARY KEY (run_id, seq)
 );
+CREATE TABLE IF NOT EXISTS remote_task_items (
+ task_id TEXT NOT NULL REFERENCES tasks(id),
+ seq INTEGER NOT NULL,
+ kind TEXT NOT NULL,
+ title TEXT NOT NULL,
+ text TEXT NOT NULL,
+ created_at TEXT NOT NULL,
+ PRIMARY KEY (task_id, seq)
+);
 `
 
 // Bounds on what the window keeps of a worker's event stream.
 const (
 	maxRunItems    = 400
 	maxRunItemText = 4000
+	// What goes to the computer that started a task (D-055).
+	maxForwardedItems    = 200
+	maxForwardedItemText = 1000
 )
 
 func clip(text string, n int) string {
@@ -52,8 +67,24 @@ func (s *Store) AppendTaskRunItem(run, kind, title, text string) error {
 		if n >= maxRunItems {
 			return nil
 		}
-		_, err := tx.Exec(`INSERT INTO task_run_items(run_id,seq,kind,title,text,created_at) VALUES (?,?,?,?,?,?)`, run, n+1, kind, clip(title, 200), clip(text, maxRunItemText), now())
-		return err
+		if _, err := tx.Exec(`INSERT INTO task_run_items(run_id,seq,kind,title,text,created_at) VALUES (?,?,?,?,?,?)`, run, n+1, kind, clip(title, 200), clip(text, maxRunItemText), now()); err != nil {
+			return err
+		}
+		if n >= maxForwardedItems {
+			return nil
+		}
+		// A task another computer started shows its progress there too
+		// (D-055), in the same transaction.
+		var task string
+		if err := tx.QueryRow(`SELECT task_id FROM task_runs WHERE id=?`, run).Scan(&task); err != nil {
+			return err
+		}
+		link, err := taskLink(tx, task)
+		if err != nil || link.origin == nil {
+			return err
+		}
+		return enqueueNet(tx, link.origin.broker, link.origin.peer, fmt.Sprintf("progress.%s.%d", run, n+1), task,
+			netBody{Kind: "progress", Task: link.origin.task, Event: kind, Title: clip(title, 200), Text: clip(text, maxForwardedItemText)})
 	})
 }
 
@@ -194,7 +225,9 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 			return err
 		}
 		v.Computer = computer
-		v.Name, _ = os.Hostname()
+		if v.Name, err = computerName(tx); err != nil {
+			return err
+		}
 		rows, err := tx.Query(`SELECT a.provider,a.cli_path,a.profile,a.environment,
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='running'),
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='waiting_owner'),
@@ -382,6 +415,33 @@ func (s *Store) TaskFeed(id string) (TaskFeed, error) {
 // report and outcome. The worker's own text and tool actions stay on the
 // computer that ran it.
 func (s *Store) remoteFeed(f *TaskFeed) error {
+	if err := s.remoteEvents(f); err != nil {
+		return err
+	}
+	rows, err := s.db.Query(`SELECT kind,title,text,created_at FROM remote_task_items WHERE task_id=? ORDER BY seq`, f.Task.ID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		it := FeedItem{Author: "worker", Verified: true}
+		if err := rows.Scan(&it.Kind, &it.Title, &it.Text, &it.At); err != nil {
+			return err
+		}
+		f.Items = append(f.Items, it)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	// Events and progress lines come from two tables: show them in time
+	// order. The task itself stays first.
+	at := func(i int) time.Time { v, _ := time.Parse(time.RFC3339Nano, f.Items[i].At); return v }
+	rest := f.Items[1:]
+	sort.SliceStable(rest, func(i, j int) bool { return at(i + 1).Before(at(j + 1)) })
+	return nil
+}
+
+func (s *Store) remoteEvents(f *TaskFeed) error {
 	rows, err := s.db.Query(`SELECT audience,kind,text,created_at FROM task_events WHERE task_id=? ORDER BY seq`, f.Task.ID)
 	if err != nil {
 		return err
@@ -401,6 +461,8 @@ func (s *Store) remoteFeed(f *TaskFeed) error {
 				by = AudienceOwner
 			}
 			f.Items = append(f.Items, FeedItem{Kind: "answer", Author: by, Text: text, At: at, Verified: true})
+		case "accepted":
+			f.Items = append(f.Items, FeedItem{Kind: "accepted", Author: "messenger", Text: f.Task.Remote.Name, At: at, Verified: true})
 		case "report":
 			f.Items = append(f.Items, FeedItem{Kind: "report", Author: "worker", Text: text, At: at, Verified: true, State: "finished"})
 		case "failed", "blocked", "interrupted", "cancelled":
@@ -472,4 +534,41 @@ func (s *Store) Presence() (agents []AgentPresence, coordinator string, err erro
 		return nil
 	})
 	return agents, coordinator, err
+}
+
+// MaxComputerName bounds the name of this computer in the network, as the
+// broker bounds device names.
+const MaxComputerName = 64
+
+func computerName(tx *sql.Tx) (string, error) {
+	name, err := metaValue(tx, "computer_name")
+	if err != nil || name != "" {
+		return name, err
+	}
+	name, _ = os.Hostname()
+	return name, nil
+}
+
+// ComputerName is the name other computers of the network see: the owner's
+// choice, or the system's name.
+func (s *Store) ComputerName() (string, error) {
+	var name string
+	err := s.tx(func(tx *sql.Tx) (err error) { name, err = computerName(tx); return })
+	return name, err
+}
+
+// SetComputerName names this computer for its network; an empty name goes
+// back to the system's name.
+func (s *Store) SetComputerName(name string) error {
+	name = strings.TrimSpace(name)
+	if utf8.RuneCountInString(name) > MaxComputerName || strings.IndexFunc(name, unicode.IsControl) >= 0 {
+		return fmt.Errorf("%w: имя компьютера — до %d символов, в одну строку", ErrRejected, MaxComputerName)
+	}
+	return s.tx(func(tx *sql.Tx) error {
+		if name == "" {
+			_, err := tx.Exec(`DELETE FROM meta WHERE key='computer_name'`)
+			return err
+		}
+		return setMeta(tx, "computer_name", name)
+	})
 }

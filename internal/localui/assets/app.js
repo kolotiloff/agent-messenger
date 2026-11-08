@@ -1,7 +1,8 @@
 'use strict';
 (() => {
   const root = document.getElementById('am-concept');
-  if(window.webkit?.messageHandlers?.updates)document.body.classList.add('am-native');
+  // The Mac app and the Windows window draw their own frame and title (D-054).
+  if(window.webkit?.messageHandlers?.updates||window.amDesktop)document.body.classList.add('am-native');
   const $ = id => root.querySelector('#' + id);
   const selectViews = new Map();
   function syncSelects(){selectViews.forEach(view=>view.sync());}
@@ -86,6 +87,8 @@
   function applyTheme(theme, persist=false) {
     if(!['system','light','dark'].includes(theme))theme='system';
     document.documentElement.dataset.theme=theme;$('theme-select').value=theme;syncSelects();
+    // The Windows window colours its title bar like the page.
+    if(window.amTitleBar){const dark=theme==='dark'||(theme==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);try{window.amTitleBar(dark);}catch(_){}}
     if(persist) {
       if(window.webkit?.messageHandlers?.appearance)window.webkit.messageHandlers.appearance.postMessage(theme);
       else try {localStorage.setItem('messenger-theme',theme);} catch(_) {}
@@ -434,9 +437,17 @@
   }
   // A tool action as one line: its kind and, shortened, what it acted on.
   const toolNames={Bash:'Команда',Read:'Чтение',Edit:'Правка',MultiEdit:'Правка',Write:'Запись',Grep:'Поиск',Glob:'Поиск файлов',WebFetch:'Загрузка страницы',WebSearch:'Поиск в интернете',Task:'Подзадача',TodoWrite:'План'};
+  // The command itself, without the shell that runs it.
+  function commandText(line){
+    const m=line.match(/^"?[^"]*(?:powershell|pwsh)(?:\.exe)?"?\s+-Command\s+([\s\S]*)$/i)||line.match(/^"?\S*\/(?:ba|z)?sh"?\s+-l?c\s+([\s\S]*)$/);
+    if(!m)return line;
+    const c=m[1].trim(),q=c[0];
+    return (q==="'"||q==='"')&&c.endsWith(q)&&c.length>1?c.slice(1,-1):c;
+  }
+  function toolName(it){return toolNames[it.title]||it.title||'Действие';}
   function toolLine(it){
-    const name=toolNames[it.title]||it.title||'Действие';
-    const first=(it.text||'').split('\n')[0];
+    const name=toolName(it);
+    const first=commandText((it.text||'').split('\n')[0]);
     const short=first.length>90?first.slice(0,89)+'…':first;
     const d=el('details',undefined,'am-tool');const s=el('summary');s.append(el('span',name,'am-tool-name'));
     if(short)s.append(el('span',' '+short,'am-tool-arg'));
@@ -465,7 +476,16 @@
     const headRow=el('div',undefined,'am-task-head-row');headRow.append(title);
     head.replaceChildren(headRow);
     const [coordProvider,coordLabel]=coordinatorName();
-    const out=[];let group=null;
+    const opened=new Set([...thread.querySelectorAll('details[open][data-key]')].map(d=>d.dataset.key));
+    const out=[];let group=null,tools=null;
+    // Actions in a row fold into one line (D-055 follow-up).
+    const addTool=(c,it,key)=>{
+      const line=toolLine(it);line.dataset.key='t'+key;
+      if(!tools||tools.host!==c||c.lastChild!==tools.node){c.append(line);tools={host:c,node:line,key,count:1,names:new Set([toolName(it)])};return;}
+      if(!tools.box){const box=el('details',undefined,'am-tool-group');box.dataset.key='g'+tools.key;tools.sum=el('summary');box.append(tools.sum);tools.node.replaceWith(box);box.append(tools.node);tools.box=box;tools.node=box;}
+      tools.box.append(line);tools.count++;tools.names.add(toolName(it));
+      tools.sum.textContent='Действий: '+tools.count+' — '+[...tools.names].join(', ');
+    };
     const outgoing=(author,provider,role,text,at)=>{
       group=null;const g=el('article',undefined,'am-message-group');const row=el('div',undefined,'am-message am-outgoing');
       const body=el('div',undefined,'am-message-body');const meta=el('div',undefined,'am-meta');
@@ -481,11 +501,13 @@
       const content=el('div',undefined,'am-message-content');body.append(meta,content);row.append(avatar,body);g.append(row);out.push(g);group=content;return content;
     };
     const delivery=(text,cls)=>el('div',text,'am-delivery '+cls);
-    for(const it of feed.items){
+    for(const [index,it] of feed.items.entries()){
+      if(it.kind!=='tool')tools=null;
       if(it.kind==='task'){outgoing(coordLabel,coordProvider,'координатор',it.text,it.at);continue;}
       if(it.kind==='answer'){if(it.author==='owner')outgoing('Вы','owner','',it.text,it.at);else outgoing(coordLabel,coordProvider,'координатор',it.text,it.at);continue;}
+      if(it.kind==='accepted'){const c=out[out.length-1]?.querySelector('.am-message-content');if(c)c.append(delivery('Принято на компьютере «'+it.text+'»','am-status-good'));group=null;continue;}
       if(it.kind==='text'){workerGroup(it.at).append(richText(it.text));continue;}
-      if(it.kind==='tool'){workerGroup(it.at).append(toolLine(it));continue;}
+      if(it.kind==='tool'){addTool(workerGroup(it.at),it,index);continue;}
       if(it.kind==='report'||it.kind==='question'){
         const c=workerGroup(it.at);c.append(richText(it.text,'am-disposition'));
         if(!it.verified)c.append(delivery('Не опубликовано: запуск не прошёл проверку','am-status-bad'));
@@ -496,11 +518,14 @@
       }
       if(it.kind==='outcome'){
         group=null;const text={failed:t.remote&&!t.remote.from?'Задача не выполнена':'Запуск не прошёл проверку',blocked:t.remote&&!t.remote.from?'Задача заблокирована: результат на другом компьютере неизвестен':'Задача заблокирована: процесс не завершился полностью',interrupted:'Клиент перезапустился во время работы; результат неизвестен',cancelled:'Задача отменена'}[it.state]||it.state;
-        const note=el('div',undefined,'am-outcome '+(it.state==='cancelled'?'am-muted':'am-status-bad'));note.append(el('p',text));if(it.text)note.append(el('p',it.text,'am-small am-muted'));
+        const note=el('div',undefined,'am-outcome '+(it.state==='cancelled'?'am-muted':'am-status-bad'));note.append(el('p',text));
+        const why=t.remote&&!t.remote.from?refusalText(it.text,t.remote.name):'';if(why)note.append(el('p',why));
+        if(it.text)note.append(el('p',it.text,'am-small am-muted'));
         const g=el('article',undefined,'am-message-group');g.append(note);out.push(g);
       }
     }
     thread.replaceChildren(...out);
+    for(const d of thread.querySelectorAll('details[data-key]'))if(opened.has(d.dataset.key))d.open=true;
     // A task another computer started is answered there.
     const q=t.remote?.from?null:t.owner_question;
     const active=activeStates.includes(t.state),box=$('answer-text');
@@ -510,6 +535,14 @@
     if(q&&$('compose').dataset.question!==q.id){$('compose').dataset.question=q.id;$('answer-text').value='';$('answer-status').textContent='';}
     answerControls();
     if(atBottom)thread.scrollTop=thread.scrollHeight;
+  }
+  // Known refusals of another computer, explained in the window's language.
+  function refusalText(text,name){
+    if(/does not run tasks of other computers/.test(text||''))return 'Компьютер «'+name+'» не принимает задачи других компьютеров. Включите на нём «Задачи других компьютеров» на вкладке «Сервер» и дайте задачу снова.';
+    if(/has no project/.test(text||''))return 'На компьютере «'+name+'» нет проекта с таким названием. Создайте его там и выберите папку.';
+    if(/has no folder for the project|project folder is missing/.test(text||''))return 'На компьютере «'+name+'» у проекта не выбрана папка или её нет. Выберите папку проекта там и дайте задачу снова.';
+    if(/is not set up on this computer/.test(text||''))return 'На компьютере «'+name+'» этот агент не настроен. Настройте его там на вкладке агентов.';
+    return '';
   }
   function answerControls(){$('answer-send').disabled=answering||!$('answer-text').value.trim()||!feed?.task?.owner_question||!!feed?.task?.remote?.from;}
   async function sendAnswer(){
@@ -566,7 +599,11 @@
       const tasks=el('button',running||today?'Задачи: '+running+' идёт, '+today+' сегодня':'Задач нет');tasks.type='button';tasks.disabled=!running&&!today;
       tasks.addEventListener('click',()=>{$('agent-filter').value=provider;syncSelects();show('tasks');renderTaskList();});
       const setup=el('button','Настроить');setup.type='button';setup.addEventListener('click',()=>openAgentSetup(provider));
-      const actions=el('div',undefined,'am-actions-stack');actions.append(tasks,setup);card.append(actions);cards.append(card);
+      const actions=el('div',undefined,'am-actions-stack');
+      const cli=a?.cli||found?.cli||'',profile=a?.environment||found?.environment||'';
+      if(!a&&found?.state==='not_found'){const install=el('button','Установить '+names[provider],'am-primary');install.type='button';install.addEventListener('click',()=>installAgent(provider,install));actions.append(install);}
+      if(auth==='not_authenticated'&&cli){const login=el('button','Войти в аккаунт','am-primary');login.type='button';login.addEventListener('click',()=>loginAgent(provider,cli,profile,login));actions.append(login);}
+      actions.append(tasks,setup);card.append(actions);cards.append(card);
     }
   }
   // The background client can be older than this window after an update.
@@ -668,7 +705,7 @@
     $('host-scope').disabled=running;$('host-port').disabled=running;
     const accept=!!server.accept;swap($('accept-off'),$('accept-on'),accept);
     badge($('accept-badge'),accept?'Принимаются':'Не принимаются',accept?'good':'');
-    $('accept-badge').title=accept?'Задачи других компьютеров выполняются здесь, если есть проект с тем же именем и папкой.':'Задачи других компьютеров сети отклоняются; координатор получает причину.';
+    $('accept-badge').title=accept?'Задачи других компьютеров выполняются здесь, если есть проект с тем же именем и папкой.':'Задачи других компьютеров сети отклоняются; координатор получает причину. Включено по умолчанию: все компьютеры сети подключены по вашему приглашению.';
   }
   async function loadServer(){
     if(serverBusy||serverPolling)return;
@@ -722,6 +759,8 @@
     $('member-badge').title=m.connected?'Этот компьютер входит в сервер '+m.address+'.':'Вставьте код приглашения, который выдал сервер на другом компьютере.';
     $('member-state').textContent='';
     if(!nameFilled&&view?.computer_name){nameFilled=true;if(!$('member-name').value)$('member-name').value=view.computer_name;}
+    const cn=$('computer-name');if(view?.computer_name&&document.activeElement!==cn&&!cn.dataset.edited)cn.value=view.computer_name;
+    $('computer-rename').disabled=serverBusy||!cn.value.trim()||cn.value.trim()===view?.computer_name;
     const dl=$('member-details');dl.replaceChildren();
     const rows=[['Сервер',m.address],['Имя на сервере',m.device_name],['Подключено',stamp(m.connected_at)],['Последняя проверка',m.checked_at?stamp(m.checked_at)+(m.reachable?' — на связи':' — нет связи'):'ещё не проверяли']];
     if(m.connected)rows.forEach(([k,v])=>{if(v){dl.append(el('dt',k),el('dd',v));}});
@@ -805,13 +844,30 @@
     }catch(error){$('project-status').textContent=error.message;}
     finally{$('project-save').disabled=false;}
   }
+  // «Установить» opens the agent's official page; «Войти» opens a terminal
+  // with the agent's own sign-in (D-057).
+  async function installAgent(provider,button){
+    button.disabled=true;
+    try{await postAPI('/api/agent-install',{provider});button.textContent='Страница установки открыта';}
+    catch(error){button.textContent='Установить '+names[provider];showError(error);}
+    finally{setTimeout(()=>{button.disabled=false;},3000);}
+  }
+  async function loginAgent(provider,cli,environment,button,status){
+    button.disabled=true;
+    try{
+      await postAPI('/api/agent-login',{provider,cli,environment});
+      const text='Открыто окно входа. Войдите в браузере, затем нажмите «Проверить версию и вход».';
+      if(status)status.textContent=text;else button.textContent='Окно входа открыто';
+    }catch(error){if(status)status.textContent=error.message;else showError(error);}
+    finally{setTimeout(()=>{button.disabled=false;},3000);}
+  }
   let setupProvider='';
   function openAgentSetup(provider){
     setupProvider=provider;const a=(view?.agents||[]).find(x=>x.agent===provider),found=discovery.find(d=>d.provider===provider);
     $('agent-setup-title').textContent='Настройка: '+names[provider];
     $('agent-setup-note').hidden=provider!=='cursor';
     $('agent-cli').value=a?.cli||found?.cli||'';$('agent-profile').value=a?.environment||found?.environment||'';
-    $('agent-check-status').textContent='';$('agent-save-status').textContent='';$('agent-check-result').hidden=true;
+    $('agent-check-status').textContent='';$('agent-save-status').textContent='';$('agent-check-result').hidden=true;$('agent-login').hidden=true;
     $('agent-setup').showModal();
   }
   async function checkAgent(){
@@ -826,6 +882,7 @@
       const dl=$('agent-check-result');dl.replaceChildren();
       for(const [label,value] of [['Версия',result.check.version?.value||'Не определена'],['Вход в аккаунт',{authenticated:'Выполнен',not_authenticated:'Не выполнен'}[result.check.authentication?.state]||'Не удалось определить']]){const p=el('div');p.append(el('dt',label),el('dd',value));dl.append(p);}
       dl.hidden=false;$('agent-check-status').textContent='Проверка завершена.';renderAgents();
+      $('agent-login').hidden=result.check.authentication?.state!=='not_authenticated';
     }catch(error){$('agent-check-status').textContent=error.name==='TimeoutError'?'Проверка не завершилась вовремя.':error.message;}
     finally{$('agent-check').disabled=false;}
   }
@@ -955,6 +1012,9 @@
     b.title=label;b.setAttribute('aria-label',state?label:'Скопировать код');}
   $('invite-copy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('invite-code').textContent);copyState('done');}catch(_){copyState('failed');}});
   $('member-connect').addEventListener('click',connectServer);
+  $('agent-login').addEventListener('click',()=>loginAgent(setupProvider,$('agent-cli').value.trim(),$('agent-profile').value.trim(),$('agent-login'),$('agent-check-status')));
+  $('computer-name').addEventListener('input',e=>{e.target.dataset.edited='1';renderServer();});
+  $('computer-rename').addEventListener('click',async()=>{const name=$('computer-name').value.trim();if(!name)return;if(await serverAction({action:'rename',name},'computer','Имя сохранено. Другие компьютеры увидят его через несколько секунд.')){delete $('computer-name').dataset.edited;await refresh();renderServer();}});
   $('accept-on').addEventListener('click',()=>serverAction({action:'accept',on:true},'accept',''));
   $('accept-off').addEventListener('click',()=>serverAction({action:'accept',on:false},'accept','Новые задачи других компьютеров будут отклоняться. Уже принятые продолжат работу.'));
   $('member-check').addEventListener('click',()=>serverAction({action:'check'},'member',''));
@@ -969,6 +1029,7 @@
   enhanceSelect($('theme-select'));enhanceSelect($('project-select'));enhanceSelect($('agent-filter'));enhanceSelect($('host-scope'));enhanceSelect($('host-address'));
   centreControlText();
   applyTheme(initialTheme||'system');
+  matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{if(document.documentElement.dataset.theme==='system')applyTheme('system');});
   $('theme-select').addEventListener('change',()=>applyTheme($('theme-select').value,true));
   const gutterObserver=new ResizeObserver(entries=>{
     for(const {target} of entries){
