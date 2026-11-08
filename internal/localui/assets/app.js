@@ -225,6 +225,7 @@
   function renderProjects(){
     const select=$('project-select');select.replaceChildren();
     for(const p of view?.projects||[]){const o=el('option',p.name);o.value=p.name;select.append(o);}
+    if(view?.project){const edit=el('option','Настроить проект…');edit.value='__edit';select.append(edit);}
     const add=el('option','Новый проект…');add.value='__new';select.append(add);
     select.value=view?.project||'__new';
     if(!view?.project&&select.options.length>1)select.selectedIndex=0;
@@ -552,15 +553,7 @@
     catch(error){$('answer-status').textContent='';showError({message:error.message+' Повтор с тем же текстом безопасен.',command:error.command,hint:error.hint});}
     finally{answering=false;answerControls();}
   }
-  const folderIcon='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
   function renderAgents(){
-    const bar=$('folder-bar');bar.hidden=!view?.project;bar.replaceChildren();
-    if(view?.project){
-      const icon=el('span',undefined,'am-folder-icon');icon.innerHTML=folderIcon;
-      const edit=el('button','Изменить');edit.type='button';edit.addEventListener('click',()=>openProjectDialog(true));
-      bar.append(icon,el('span','Рабочая папка проекта «'+view.project+'»','am-folder-title'),el('span',view.folder||'не выбрана','am-folder-path'),edit);
-      bar.querySelector('.am-folder-path').title=view.folder||'';
-    }
     const cards=$('agents');cards.replaceChildren();
     for(const provider of ['claude','codex','cursor']){
       const a=(view?.agents||[]).find(x=>x.agent===provider);
@@ -838,6 +831,9 @@
     if(!name){note('member','Укажите имя этого компьютера.',true);return;}
     if(await serverAction({action:'connect',code,name},'member','Подключено.'))$('member-code').value='';
   }
+  // Two buttons instead of a checkbox: «Не разрешены» / «Разрешены».
+  let agentFull=false;
+  function setAgentFull(on){agentFull=on;$('agent-full-on').setAttribute('aria-checked',String(on));$('agent-full-off').setAttribute('aria-checked',String(!on));}
   let editingFolder=false;
   function openProjectDialog(edit){
     editingFolder=edit;
@@ -845,19 +841,27 @@
     $('project-name-field').hidden=edit;$('project-name').value='';$('project-folder').value=edit?view.folder:'';
     $('project-rules').value=edit?(view.worker_rules||''):'';
     $('project-save').textContent=edit?'Сохранить':'Создать проект';$('project-status').textContent='';
-    $('project-remove').hidden=!edit;$('project-remove').textContent='Удалить проект';removeAsk=false;
+    $('project-remove').hidden=!edit;
     $('project-dialog').showModal();
   }
-  // Two clicks remove a project: the first asks, the second removes. Its tasks
-  // stay in the database; creating the project again brings them back.
-  let removeAsk=false;
+  // Removing a project asks in a popup first. Its tasks stay in the database;
+  // creating the project again brings them back.
+  function askRemoveProject(){
+    const name=view?.project;if(!name)return;
+    $('project-remove-title').textContent='Удалить проект «'+name+'»?';
+    $('project-remove-error').hidden=true;$('project-remove-error').textContent='';
+    $('project-remove-go').disabled=false;
+    $('project-remove-dialog').showModal();
+  }
   async function removeProject(){
     const name=view?.project;if(!name)return;
-    if(!removeAsk){removeAsk=true;$('project-remove').textContent='Точно удалить?';$('project-status').textContent='Проект пропадёт из списка. История задач сохранится и вернётся, если создать проект с тем же именем.';return;}
-    $('project-remove').disabled=true;
-    try{await postAPI('/api/project-remove',{name});project='';remember('messenger-project','');selectedTask='';feed=null;feedSignature='';$('project-dialog').close();viewSignature='';await refresh();}
-    catch(error){$('project-status').textContent=error.message;removeAsk=false;$('project-remove').textContent='Удалить проект';}
-    finally{$('project-remove').disabled=false;}
+    $('project-remove-go').disabled=true;
+    try{
+      await postAPI('/api/project-remove',{name});
+      $('project-remove-dialog').close();$('project-dialog').close();
+      project='';remember('messenger-project','');selectedTask='';feed=null;feedSignature='';viewSignature='';await refresh();
+    }catch(error){$('project-remove-error').textContent=error.message;$('project-remove-error').hidden=false;}
+    finally{$('project-remove-go').disabled=false;}
   }
   async function saveProject(){
     const name=editingFolder?view.project:$('project-name').value.trim(),folder=$('project-folder').value.trim();
@@ -903,7 +907,7 @@
     $('agent-setup-title').textContent='Настройка: '+names[provider];
     $('agent-setup-note').hidden=provider!=='cursor';
     $('agent-cli').value=a?.cli||found?.cli||'';$('agent-profile').value=a?.environment||found?.environment||'';
-    $('agent-models').value=(a?.models||[]).join('\n');$('agent-full').checked=!!a?.full_access;
+    $('agent-models').value=(a?.models||[]).join('\n');setAgentFull(!!a?.full_access);
     $('agent-models-note').textContent=provider==='claude'?'Claude сам принимает opus, sonnet и haiku. Сюда можно добавить полные названия моделей Claude.':'Пишите названия точно так, как их принимает сам агент. Координатор сможет выбрать только модель из этого списка; если список пуст, задачи идут на модели по умолчанию.';
     $('agent-check-status').textContent='';$('agent-save-status').textContent='';$('agent-check-result').hidden=true;$('agent-login').hidden=true;
     $('agent-remove').hidden=!a;
@@ -963,7 +967,7 @@
     $('agent-save').disabled=true;$('agent-save-status').textContent='Сохраняем…';
     try{await postAPI('/api/agent-set',{provider:setupProvider,cli:$('agent-cli').value.trim(),environment});
       await postAPI('/api/agent-models',{provider:setupProvider,models:$('agent-models').value.split('\n').map(m=>m.trim()).filter(Boolean)});
-      if($('agent-full').checked!==!!view?.agents?.find(x=>x.agent===setupProvider)?.full_access)await postAPI('/api/agent-access',{provider:setupProvider,on:$('agent-full').checked});
+      if(agentFull!==!!view?.agents?.find(x=>x.agent===setupProvider)?.full_access)await postAPI('/api/agent-access',{provider:setupProvider,on:agentFull});
       $('agent-save-status').textContent='Сохранено.';$('agent-remove').hidden=false;viewSignature='';await refresh();checkAgent();}
     catch(error){$('agent-save-status').textContent=error.message;}
     finally{$('agent-save').disabled=false;}
@@ -1055,7 +1059,7 @@
   });
   $('project-select').addEventListener('change',()=>{
     const value=$('project-select').value;
-    if(value==='__new'){$('project-select').value=view?.project||'__new';syncSelects();openProjectDialog(false);return;}
+    if(value==='__new'||value==='__edit'){$('project-select').value=view?.project||'__new';syncSelects();openProjectDialog(value==='__edit');return;}
     project=value;remember('messenger-project',value);selectedTask='';feed=null;feedSignature='';viewSignature='';refresh();
   });
   $('agent-filter').addEventListener('change',renderTaskList);
@@ -1071,7 +1075,11 @@
   // A closed invitation is not shown again; a new one can be made at any time.
   $('invite-dialog').addEventListener('close',()=>{invitation=null;clearInterval(inviteTimer);});
   $('project-save').addEventListener('click',saveProject);
-  $('project-remove').addEventListener('click',removeProject);
+  $('project-remove').addEventListener('click',askRemoveProject);
+  $('agent-full-on').addEventListener('click',()=>setAgentFull(true));
+  $('agent-full-off').addEventListener('click',()=>setAgentFull(false));
+  $('project-remove-go').addEventListener('click',removeProject);
+  $('project-remove-cancel').addEventListener('click',()=>$('project-remove-dialog').close());
   $('project-pick').addEventListener('click',()=>{if(window.webkit?.messageHandlers?.folder)window.webkit.messageHandlers.folder.postMessage('pick');else pick('project-folder','folder','project-status');});
   $('agent-cli-pick').addEventListener('click',()=>pick('agent-cli','file','agent-check-status'));
   $('agent-profile-pick').addEventListener('click',()=>pick('agent-profile','folder','agent-check-status'));
