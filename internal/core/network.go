@@ -171,6 +171,9 @@ type netBody struct {
 	// Usage is the running computer's total for the task (T-058). A
 	// computer before it ignores the field.
 	Usage *TaskUsage `json:"usage,omitempty"`
+	// Lock is the task's resource lock (T-072). A computer before it
+	// ignores it.
+	Lock string `json:"lock,omitempty"`
 	// Lines is how many log lines a log request asks for (T-057).
 	Lines int `json:"lines,omitempty"`
 }
@@ -366,14 +369,14 @@ func startRemoteTask(tx *sql.Tx, r StartTaskRequest) (string, error) {
 	id = "task-" + id[:16]
 	at := now()
 	title := taskTitle(r.Title, r.Text)
-	if _, err := tx.Exec(`INSERT INTO tasks(id,project,op_id,computer,provider,cli_path,environment,profile,folder,title,text,state,detail,created_at,updated_at,model,remote_broker,remote_peer) VALUES (?,?,?,?,?,'','','','',?,?,'running',?,?,?,?,?,?)`,
-		id, r.Project, r.OpID, r.Computer, r.Provider, title, r.Text, "sent to "+peer.Name+"; waiting for it to accept", at, at, r.Model, broker, r.Computer); err != nil {
+	if _, err := tx.Exec(`INSERT INTO tasks(id,project,op_id,computer,provider,cli_path,environment,profile,folder,title,text,state,detail,created_at,updated_at,model,remote_broker,remote_peer,resource) VALUES (?,?,?,?,?,'','','','',?,?,'running',?,?,?,?,?,?,?)`,
+		id, r.Project, r.OpID, r.Computer, r.Provider, title, r.Text, "sent to "+peer.Name+"; waiting for it to accept", at, at, r.Model, broker, r.Computer, r.Lock); err != nil {
 		return "", err
 	}
 	if err := insertTaskEvent(tx, r.Project, id, AudienceLog, "started", title, ""); err != nil {
 		return "", err
 	}
-	return id, enqueueNet(tx, broker, r.Computer, "start."+id, id, netBody{Kind: "start", Task: id, Project: r.Project, Agent: r.Provider, Title: title, Text: r.Text, Model: r.Model, Rules: r.Rules})
+	return id, enqueueNet(tx, broker, r.Computer, "start."+id, id, netBody{Kind: "start", Task: id, Project: r.Project, Agent: r.Provider, Title: title, Text: r.Text, Model: r.Model, Rules: r.Rules, Lock: r.Lock})
 }
 
 // answerRemoteTask sends an answer to the computer that runs the task.
@@ -627,9 +630,13 @@ func applyStart(tx *sql.Tx, from netLink, b netBody) error {
 		return reply("refused", netBody{Reason: "this computer does not run tasks of other computers; its owner can turn this on in the Server tab"})
 	}
 	r := StartTaskRequest{Project: b.Project, OpID: mirrorOp(from), Provider: b.Agent, Title: b.Title, Text: strings.TrimSpace(b.Text), Model: strings.TrimSpace(b.Model), Rules: strings.TrimSpace(b.Rules)}
+	lock, lockOK := normalizeLock(b.Lock)
+	r.Lock = lock
 	var id string
 	err = savepoint(tx, func() error {
 		switch {
+		case !lockOK:
+			return fmt.Errorf("%w: invalid lock name", ErrRejected)
 		case !TaskProviders[r.Provider]:
 			return fmt.Errorf("%w: unsupported agent %q", ErrRejected, r.Provider)
 		case r.Text == "" || utf8.RuneCountInString(r.Text) > MaxTaskText:

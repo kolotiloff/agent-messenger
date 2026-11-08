@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-08 — Claude Code (T-072 resource locks)
+
+- `start_task` takes an optional `lock`; a later unfinished task with the same lock on the same computer waits to start (D-086). The window says «Ждёт ресурс «…»», the coordinator sees `waiting_for_lock`.
+- Verified: core and MCP tests, `check.sh`. Not verified with real workers.
+
 ## 2026-11-08 — Claude Code (T-070 readiness)
 
 - Each computer's presence report says whether it takes other computers' tasks and which projects have a folder; `list_agents` shows `accepts_tasks` and `has_project` (D-085). An older host refuses the field; the report then goes without it for 10 minutes.

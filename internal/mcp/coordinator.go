@@ -58,6 +58,7 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - Messenger already tells every worker to keep its report to a few lines, to put long details in a file and to follow the owner's rules for this project. A report ends with labelled lines when the worker gave them: «Изменения:» (commit or changeset), «Тесты:» and «Файлы:» (paths to read when needed). Do not ask workers for a «taken» line or a limit line: the task's state shows when it was accepted, and limits come from list_agents.
 - get_log reads the end of another computer's Messenger log, for debugging Messenger itself (a task that never arrived, a refusal you cannot explain). That computer answers only if its owner turned on «Отдавать журнал по сети»; otherwise the reply says so. Session ids, codes and keys are removed. If no answer came in time, call get_log again with request_id. Do not use it to watch workers: wait does that.
 - To tell a working task from a stuck one, call tasks: an open task shows the worker's last action and when it was (last_activity, last_activity_at; for another computer's task, the last progress line it forwarded). A long quiet time is a reason to tell the owner, not to cancel or start the task again by yourself. tokens is what the task used so far.
+- When two tasks must not use one resource of a computer at the same time (the Unity editor, a device, a long build), give both start_task the same lock, such as unity-editor. The later task then waits to start until the earlier one is done, failed or cancelled; tasks shows waiting_for_lock with the task it waits for. A blocked task keeps its lock until the owner resolves it.
 - A failure caused by a usage or rate limit says so and gives the reset time when the agent reported one. Tell the owner that time; do not start the task again before it.
 How work is planned and split is decided with the owner under this project's own rules.`
 
@@ -183,6 +184,7 @@ func coordinatorTools() []map[string]any {
 				"title":    map[string]any{"type": "string", "maxLength": core.MaxTaskTitle, "description": "short title shown in the window"},
 				"computer": str("computer id from list_agents: this computer (the default) or another computer of the network"),
 				"model":    map[string]any{"type": "string", "maxLength": 80, "description": "optional model for the worker, such as opus, sonnet or haiku for claude, or, for Codex and Cursor, a name from the agent's models in list_agents; leave it out to use the agent's default. Never guess a name: an unknown model fails the run."},
+				"lock":     map[string]any{"type": "string", "maxLength": core.MaxTaskLock, "description": "optional name of a resource only one worker on that computer may use at a time, such as unity-editor; the task waits to start while an earlier unfinished task with the same lock is on that computer"},
 			}, "op_id", "agent", "text")},
 		{"name": "wait", "description": "Block until a new event of this project's tasks arrives after the cursor, or until timeout_seconds. Costs no tokens while blocked. Always pass after. Returns a bounded batch; more: true means further events are ready, so call wait again at once with the new cursor.",
 			"inputSchema": obj(map[string]any{
@@ -253,11 +255,12 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 			Title    string `json:"title"`
 			Computer string `json:"computer"`
 			Model    string `json:"model"`
+			Lock     string `json:"lock"`
 		}
 		if err := strict(&a); err != nil {
 			return nil, err
 		}
-		id, created, err := c.store.StartTask(core.StartTaskRequest{Project: c.project, OpID: a.OpID, Computer: a.Computer, Provider: a.Agent, Title: a.Title, Text: a.Text, Model: a.Model})
+		id, created, err := c.store.StartTask(core.StartTaskRequest{Project: c.project, OpID: a.OpID, Computer: a.Computer, Provider: a.Agent, Title: a.Title, Text: a.Text, Model: a.Model, Lock: a.Lock})
 		if err != nil {
 			return nil, err
 		}
@@ -429,6 +432,8 @@ type coordinatorTask struct {
 	LastActivity   string `json:"last_activity,omitempty"`
 	LastActivityAt string `json:"last_activity_at,omitempty"`
 	Tokens         int64  `json:"tokens,omitempty"`
+	// T-072: the task waits to start until this task of the same lock ends.
+	WaitingForLock string `json:"waiting_for_lock,omitempty"`
 }
 
 // closedTaskStates are left out of the default tasks list (T-032).
@@ -495,6 +500,9 @@ func (c *coordinator) tasks(state string, limit int, ifVersion string) (any, err
 		item.Tokens = a.Tokens
 		if !closedTaskStates[t.State] {
 			item.LastActivity, item.LastActivityAt = a.Last, a.At
+			if item.WaitingForLock, err = c.store.TaskLockHolder(t.ID); err != nil {
+				return nil, err
+			}
 		}
 		out = append(out, item)
 	}

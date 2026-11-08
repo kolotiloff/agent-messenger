@@ -114,6 +114,8 @@ type WindowTask struct {
 	// PendingLaunch is set while the task's latest run is recorded but not
 	// launched (paused queue or tasks not allowed).
 	PendingLaunch bool `json:"pending_launch,omitempty"`
+	// WaitsForLock is the lock a pending task waits for (T-072).
+	WaitsForLock string `json:"waits_for_lock,omitempty"`
 	// StartedAt is when the first run was launched; durations count from it.
 	StartedAt string `json:"started_at,omitempty"`
 	// FailureReason and FailureReset explain a failed task (T-034).
@@ -312,6 +314,11 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 		if t.State == "running" {
 			if w.PendingLaunch, err = s.pendingLaunch(t.ID); err != nil {
 				return v, err
+			}
+			if w.PendingLaunch {
+				if w.WaitsForLock, err = s.waitingLock(t.ID); err != nil {
+					return v, err
+				}
 			}
 		}
 		if w.StartedAt, err = s.startedAt(t.ID); err != nil {

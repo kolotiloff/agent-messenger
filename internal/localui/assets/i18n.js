@@ -42,6 +42,7 @@
   'Имя в сети':'Name on the network',
   'Принимать задачи других компьютеров':'Accept tasks from other computers',
   'Отдавать журнал по сети':'Share the log over the network',
+  'Ждёт ресурс «':'Waiting for «',
   'Координаторы других компьютеров сети смогут прочитать конец журнала программы на этом компьютере, чтобы разобраться с ошибкой. Идентификаторы сессий, коды и ключи из него убираются.':'Coordinators on other computers of the network can read the end of the program\'s log on this computer to look into an error. Session ids, codes and keys are removed from it.',
   'Координаторы других компьютеров смогут прочитать журнал.':'Coordinators on other computers can read the log.',
   'Координаторы других компьютеров сети смогут запускать здесь исполнителей. Задача выполняется в папке проекта с тем же именем на этом компьютере.':'Coordinators on other computers of the network can start workers here. A task runs in the folder of the project with the same name on this computer.',
