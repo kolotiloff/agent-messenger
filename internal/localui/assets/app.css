@@ -343,6 +343,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-status-lines { display:grid; gap:var(--am-gap-control); }
 #am-concept .am-status-lines > p { display:flex; align-items:baseline; justify-content:space-between; gap:var(--am-gap-control); margin:0; }
 #am-concept .am-status-label { flex:none; color:var(--am-text); }
+#am-concept button.am-inline-action { min-height:var(--am-control-compact); padding-inline:var(--am-space-2); }
 #am-concept .am-status-value { display:flex; align-items:center; gap:var(--am-gap-control); min-width:0; text-align:right; overflow-wrap:anywhere; }
 #am-concept .am-card dt { font-size:var(--am-text-xs); color:var(--am-muted); }
 #am-concept .am-card dd { display:flex; align-items:center; gap:var(--am-gap-control); margin:0; overflow-wrap:anywhere; }
