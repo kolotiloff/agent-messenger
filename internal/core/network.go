@@ -274,7 +274,9 @@ func (s *Store) NetAccept() (bool, error) {
 	var on bool
 	err := s.tx(func(tx *sql.Tx) error {
 		v, err := metaValue(tx, "net_accept")
-		on = v == "1"
+		// On unless the owner turned it off (D-056): every computer of the
+		// network joined with the owner's invitation.
+		on = v != "0"
 		return err
 	})
 	return on, err
@@ -569,7 +571,7 @@ func applyStart(tx *sql.Tx, from netLink, b netBody) error {
 	if err != nil {
 		return err
 	}
-	if accept != "1" {
+	if accept == "0" {
 		return reply("refused", netBody{Reason: "this computer does not run tasks of other computers; its owner can turn this on in the Server tab"})
 	}
 	r := StartTaskRequest{Project: b.Project, OpID: mirrorOp(from), Provider: b.Agent, Title: b.Title, Text: strings.TrimSpace(b.Text), Model: strings.TrimSpace(b.Model)}

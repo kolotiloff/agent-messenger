@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -224,7 +225,9 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 			return err
 		}
 		v.Computer = computer
-		v.Name, _ = os.Hostname()
+		if v.Name, err = computerName(tx); err != nil {
+			return err
+		}
 		rows, err := tx.Query(`SELECT a.provider,a.cli_path,a.profile,a.environment,
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='running'),
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='waiting_owner'),
@@ -531,4 +534,41 @@ func (s *Store) Presence() (agents []AgentPresence, coordinator string, err erro
 		return nil
 	})
 	return agents, coordinator, err
+}
+
+// MaxComputerName bounds the name of this computer in the network, as the
+// broker bounds device names.
+const MaxComputerName = 64
+
+func computerName(tx *sql.Tx) (string, error) {
+	name, err := metaValue(tx, "computer_name")
+	if err != nil || name != "" {
+		return name, err
+	}
+	name, _ = os.Hostname()
+	return name, nil
+}
+
+// ComputerName is the name other computers of the network see: the owner's
+// choice, or the system's name.
+func (s *Store) ComputerName() (string, error) {
+	var name string
+	err := s.tx(func(tx *sql.Tx) (err error) { name, err = computerName(tx); return })
+	return name, err
+}
+
+// SetComputerName names this computer for its network; an empty name goes
+// back to the system's name.
+func (s *Store) SetComputerName(name string) error {
+	name = strings.TrimSpace(name)
+	if utf8.RuneCountInString(name) > MaxComputerName || strings.IndexFunc(name, unicode.IsControl) >= 0 {
+		return fmt.Errorf("%w: имя компьютера — до %d символов, в одну строку", ErrRejected, MaxComputerName)
+	}
+	return s.tx(func(tx *sql.Tx) error {
+		if name == "" {
+			_, err := tx.Exec(`DELETE FROM meta WHERE key='computer_name'`)
+			return err
+		}
+		return setMeta(tx, "computer_name", name)
+	})
 }

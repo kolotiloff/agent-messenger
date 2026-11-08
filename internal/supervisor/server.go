@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"os"
+	"strings"
 	"time"
 
 	"github.com/kolotiloff/agent-messenger/internal/broker"
@@ -57,12 +57,23 @@ func (s *Supervisor) Server(_ context.Context, action string, payload json.RawMe
 		if err := s.server.Connect(ctx, in.Code, in.Name); err != nil {
 			return nil, err
 		}
+		// The name given when joining is this computer's name in the network.
+		if strings.TrimSpace(in.Name) == "" {
+			break
+		}
+		if err := s.store.SetComputerName(in.Name); err != nil {
+			return nil, err
+		}
 	case "check":
 		// The result is part of the status; a failed check is not an error
 		// of the request.
 		_ = s.server.CheckConnection(ctx)
 	case "disconnect":
 		if err := s.server.Disconnect(); err != nil {
+			return nil, err
+		}
+	case "rename":
+		if err := s.store.SetComputerName(in.Name); err != nil {
 			return nil, err
 		}
 	case "accept":
@@ -92,7 +103,7 @@ func (s *Supervisor) presence() (broker.Presence, error) {
 	for _, a := range agents {
 		p.Agents = append(p.Agents, broker.PresenceAgent{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting})
 	}
-	if name, err := os.Hostname(); err == nil {
+	if name, err := s.store.ComputerName(); err == nil {
 		p.Name = clipName(name)
 	}
 	return p, nil

@@ -698,7 +698,7 @@
     $('host-scope').disabled=running;$('host-port').disabled=running;
     const accept=!!server.accept;swap($('accept-off'),$('accept-on'),accept);
     badge($('accept-badge'),accept?'Принимаются':'Не принимаются',accept?'good':'');
-    $('accept-badge').title=accept?'Задачи других компьютеров выполняются здесь, если есть проект с тем же именем и папкой.':'Задачи других компьютеров сети отклоняются; координатор получает причину.';
+    $('accept-badge').title=accept?'Задачи других компьютеров выполняются здесь, если есть проект с тем же именем и папкой.':'Задачи других компьютеров сети отклоняются; координатор получает причину. Включено по умолчанию: все компьютеры сети подключены по вашему приглашению.';
   }
   async function loadServer(){
     if(serverBusy||serverPolling)return;
@@ -752,6 +752,8 @@
     $('member-badge').title=m.connected?'Этот компьютер входит в сервер '+m.address+'.':'Вставьте код приглашения, который выдал сервер на другом компьютере.';
     $('member-state').textContent='';
     if(!nameFilled&&view?.computer_name){nameFilled=true;if(!$('member-name').value)$('member-name').value=view.computer_name;}
+    const cn=$('computer-name');if(view?.computer_name&&document.activeElement!==cn&&!cn.dataset.edited)cn.value=view.computer_name;
+    $('computer-rename').disabled=serverBusy||!cn.value.trim()||cn.value.trim()===view?.computer_name;
     const dl=$('member-details');dl.replaceChildren();
     const rows=[['Сервер',m.address],['Имя на сервере',m.device_name],['Подключено',stamp(m.connected_at)],['Последняя проверка',m.checked_at?stamp(m.checked_at)+(m.reachable?' — на связи':' — нет связи'):'ещё не проверяли']];
     if(m.connected)rows.forEach(([k,v])=>{if(v){dl.append(el('dt',k),el('dd',v));}});
@@ -985,6 +987,8 @@
     b.title=label;b.setAttribute('aria-label',state?label:'Скопировать код');}
   $('invite-copy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('invite-code').textContent);copyState('done');}catch(_){copyState('failed');}});
   $('member-connect').addEventListener('click',connectServer);
+  $('computer-name').addEventListener('input',e=>{e.target.dataset.edited='1';renderServer();});
+  $('computer-rename').addEventListener('click',async()=>{const name=$('computer-name').value.trim();if(!name)return;if(await serverAction({action:'rename',name},'computer','Имя сохранено. Другие компьютеры увидят его через несколько секунд.')){delete $('computer-name').dataset.edited;await refresh();renderServer();}});
   $('accept-on').addEventListener('click',()=>serverAction({action:'accept',on:true},'accept',''));
   $('accept-off').addEventListener('click',()=>serverAction({action:'accept',on:false},'accept','Новые задачи других компьютеров будут отклоняться. Уже принятые продолжат работу.'));
   $('member-check').addEventListener('click',()=>serverAction({action:'check'},'member',''));

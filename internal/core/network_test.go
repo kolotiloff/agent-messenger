@@ -83,8 +83,23 @@ func (p *netPair) mirror(t *testing.T, origin string) Task {
 	return Task{}
 }
 
+// D-056: a computer accepts tasks of its network until its owner turns that
+// off.
+func TestRemoteTaskIsAcceptedByDefault(t *testing.T) {
+	p := newNetPair(t)
+	if on, err := p.b.st.NetAccept(); err != nil || !on {
+		t.Fatalf("default %v %v", on, err)
+	}
+	id := p.startRemote(t, "op1", "codex", "Build level 1")
+	p.carry(t, true)
+	p.mirror(t, id)
+}
+
 func TestRemoteTaskIsRefusedUnlessTheOwnerAllows(t *testing.T) {
 	p := newNetPair(t)
+	if err := p.b.st.SetNetAccept(false); err != nil {
+		t.Fatal(err)
+	}
 	id := p.startRemote(t, "op1", "codex", "Build level 1")
 	task, _ := p.a.st.TaskByID(id)
 	if task.State != "running" || task.Computer != "dev-b" || task.SessionID != "" {
@@ -361,8 +376,11 @@ func TestNetPeersAndAcceptSetting(t *testing.T) {
 	if err != nil || len(peers) != 1 || peers[0].Name != "Ноутбук" || len(peers[0].Agents) != 2 {
 		t.Fatalf("peers %+v %v", peers, err)
 	}
+	if err := p.b.st.SetNetAccept(false); err != nil {
+		t.Fatal(err)
+	}
 	if on, _ := p.b.st.NetAccept(); on {
-		t.Fatal("accepting by default")
+		t.Fatal("still accepting after turning it off")
 	}
 	agents, err := p.a.st.ProjectAgents("Game")
 	if err != nil {
