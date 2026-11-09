@@ -457,46 +457,50 @@
       all.addEventListener('click',()=>{$('agent-filter').value='';syncSelects();renderTaskList();});
       box.append(all);
     }
-    $('task-count').textContent=view?.tasks?.length?String(view.tasks.length):'';
-    const section=(label,items)=>{
-      if(!items.length)return;
-      box.append(el('div',label,'am-label am-task-section'));
-      for(const t of items){
-        const row=el('button',undefined,'am-task');row.type='button';row.setAttribute('aria-pressed',String(t.id===selectedTask));
-        const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),el('span',(names[t.agent]||t.agent)+(t.remote&&!t.remote.from?tr(' на ')+t.remote.name:'')));
-        if(t.remote)agent.title=t.remote.from?tr('Задачу дал компьютер «')+t.remote.name+'»':tr('Выполняется на компьютере «')+t.remote.name+'»';
-        const when=taskWhen(t);if(when){const w=el('span',when,'am-task-when');w.title=tr('Когда задача дана')+(t.finished_at?tr(' и когда завершилась'):'');agent.append(w);}
-        const [text,cls]=taskStatus(t);
-        const status=el('span',undefined,'am-task-status '+cls);
-        if(t.state==='waiting_owner')status.append(el('span',undefined,'am-dot am-dot-wait'));
-        const words=el('span');status.append(words);words.append(statusPiece(text,!!t.usage));
-        if(t.usage){const used=el('span',usageShort(t.usage),'am-task-usage');used.title=usageLong(t.usage);words.append(used);}
-        row.append(agent,el('span',t.title,'am-task-title'),status);
-        row.addEventListener('click',()=>{selectedTask=t.id;feedSignature='';renderTaskList();loadFeed();});
-        box.append(row);
-      }
-    };
-    section(tr('Активные'),active);section(tr('Завершённые'),done);
-    // Other computers' tasks of the project, read-only (T-047).
+    $('task-count').textContent=(view?.tasks?.length||0)+(view?.shared||[]).reduce((n,p)=>n+p.tasks.length,0)||'';
+    // Own tasks and other computers' tasks of the project (T-047) share the
+    // «Активные» and «Завершённые» sections, newest first (T-110); another
+    // computer's task is read-only and says which computer gave it.
     const agentFilter=$('agent-filter').value;
+    const shared=[];
     for(const p of view?.shared||[]){
       if(computerFilter&&computerFilter!==p.peer)continue;
-      const items=p.tasks.filter(t=>!agentFilter||t.agent===agentFilter);
-      if(!items.length)continue;
-      box.append(el('div',tr('На компьютере «')+p.name+'»','am-label am-task-section'));
-      for(const t of items){
-        const row=el('div',undefined,'am-task am-task-shared');row.title=tr('Задачу ведёт компьютер «')+p.name+tr('», здесь её можно только посмотреть');
-        const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),el('span',names[t.agent]||t.agent));
-        const sharedWhen=taskWhen(t);if(sharedWhen)agent.append(el('span',sharedWhen,'am-task-when'));
-        const [text,cls]=taskStatus(t);
-        const words=el('span');words.append(statusPiece(text,!!t.tokens));
-        if(t.tokens)words.append(el('span',tokensText(t.tokens)+tr(' токенов'),'am-task-usage'));
-        const status=el('span',undefined,'am-task-status '+cls);status.append(words);
-        row.append(agent,el('span',t.title,'am-task-title'),status);
-        if(t.report)row.append(el('span',t.report,'am-task-report'));
-        box.append(row);
-      }
+      for(const t of p.tasks)if(!agentFilter||t.agent===agentFilter)shared.push({t,peer:p});
     }
+    const ownRow=t=>{
+      const row=el('button',undefined,'am-task');row.type='button';row.setAttribute('aria-pressed',String(t.id===selectedTask));
+      const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),el('span',(names[t.agent]||t.agent)+(t.remote&&!t.remote.from?tr(' на ')+t.remote.name:'')));
+      if(t.remote)agent.title=t.remote.from?tr('Задачу дал компьютер «')+t.remote.name+'»':tr('Выполняется на компьютере «')+t.remote.name+'»';
+      const when=taskWhen(t);if(when){const w=el('span',when,'am-task-when');w.title=tr('Когда задача дана')+(t.finished_at?tr(' и когда завершилась'):'');agent.append(w);}
+      const [text,cls]=taskStatus(t);
+      const status=el('span',undefined,'am-task-status '+cls);
+      if(t.state==='waiting_owner')status.append(el('span',undefined,'am-dot am-dot-wait'));
+      const words=el('span');status.append(words);words.append(statusPiece(text,!!t.usage));
+      if(t.usage){const used=el('span',usageShort(t.usage),'am-task-usage');used.title=usageLong(t.usage);words.append(used);}
+      row.append(agent,el('span',t.title,'am-task-title'),status);
+      row.addEventListener('click',()=>{selectedTask=t.id;feedSignature='';renderTaskList();loadFeed();});
+      return row;
+    };
+    const sharedRow=(t,p)=>{
+      const row=el('div',undefined,'am-task am-task-shared');row.title=tr('Задачу дал компьютер «')+p.name+tr('». Здесь её можно только посмотреть');
+      const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),el('span',(names[t.agent]||t.agent)+tr(' от «')+p.name+'»'));
+      const sharedWhen=taskWhen(t);if(sharedWhen)agent.append(el('span',sharedWhen,'am-task-when'));
+      const [text,cls]=taskStatus(t);
+      const words=el('span');words.append(statusPiece(text,!!t.tokens));
+      if(t.tokens)words.append(el('span',tokensText(t.tokens)+tr(' токенов'),'am-task-usage'));
+      const status=el('span',undefined,'am-task-status '+cls);status.append(words);
+      row.append(agent,el('span',t.title,'am-task-title'),status);
+      if(t.report)row.append(el('span',t.report,'am-task-report'));
+      return row;
+    };
+    const section=(label,own,others)=>{
+      const items=[...own.map(t=>({t})),...others].sort((x,y)=>String(y.t.created_at).localeCompare(String(x.t.created_at)));
+      if(!items.length)return;
+      box.append(el('div',label,'am-label am-task-section'));
+      for(const it of items)box.append(it.peer?sharedRow(it.t,it.peer):ownRow(it.t));
+    };
+    section(tr('Активные'),active,shared.filter(x=>activeStates.includes(x.t.state)));
+    section(tr('Завершённые'),done,shared.filter(x=>!activeStates.includes(x.t.state)));
     if(!box.children.length)box.append(el('p',view?.project?(computerFilter||$('agent-filter').value?tr('Здесь задач нет'):tr('Задач пока нет')):'','am-small am-muted'));
   }
   // Coordinator connection (T-039): the client runs Claude's own
