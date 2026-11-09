@@ -238,6 +238,9 @@
     }
     return null;
   }
+  // The status with its trailing comma: the comma stays at the end of the line
+  // and keeps the muted colour, the token count wraps to the next line.
+  function statusPiece(text,comma){const piece=el('span',text);if(comma)piece.append(el('span',',','am-task-comma'));return piece;}
   function taskStatus(t){
     const end=t.finished_at||t.updated_at,from=t.started_at||t.created_at;
     switch(t.state){
@@ -466,8 +469,7 @@
         const [text,cls]=taskStatus(t);
         const status=el('span',undefined,'am-task-status '+cls);
         if(t.state==='waiting_owner')status.append(el('span',undefined,'am-dot am-dot-wait'));
-        // The comma stays with the status, so a wrapped token count starts its own line cleanly.
-        const words=el('span');status.append(words);words.append(el('span',t.usage?text+',':text));
+        const words=el('span');status.append(words);words.append(statusPiece(text,!!t.usage));
         if(t.usage){const used=el('span',usageShort(t.usage),'am-task-usage');used.title=usageLong(t.usage);words.append(used);}
         row.append(agent,el('span',t.title,'am-task-title'),status);
         row.addEventListener('click',()=>{selectedTask=t.id;feedSignature='';renderTaskList();loadFeed();});
@@ -487,7 +489,7 @@
         const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),el('span',names[t.agent]||t.agent));
         const sharedWhen=taskWhen(t);if(sharedWhen)agent.append(el('span',sharedWhen,'am-task-when'));
         const [text,cls]=taskStatus(t);
-        const words=el('span');words.append(el('span',t.tokens?text+',':text));
+        const words=el('span');words.append(statusPiece(text,!!t.tokens));
         if(t.tokens)words.append(el('span',tokensText(t.tokens)+tr(' токенов'),'am-task-usage'));
         const status=el('span',undefined,'am-task-status '+cls);status.append(words);
         row.append(agent,el('span',t.title,'am-task-title'),status);
@@ -1619,7 +1621,7 @@
     });
     pane.append(handle);
   }
-  splitter(root.querySelector('.am-sidebar'),tr('Ширина левой панели'),'--am-nav',204,160,420,1);
+  splitter(root.querySelector('.am-sidebar'),tr('Ширина левой панели'),'--am-nav',248,160,420,1);
   splitter($('task-panel'),tr('Ширина списка задач'),'--am-queue',290,200,520,-1);
   // A click on empty space in the sidebar shows all computers' tasks again.
   root.querySelector('.am-sidebar').addEventListener('click',event=>{if(computerFilter&&!event.target.closest('.am-machine-card,.am-project,.am-side-bottom,.am-splitter,button,select,input,a,[popover]'))clearComputer();});

@@ -104,7 +104,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-text-display:28px;
   --am-mono:ui-monospace,SFMono-Regular,Menlo,monospace;
   --am-scrollbar:6px;
-  --am-nav:204px;
+  --am-nav:248px;
 
   height:100%; min-height:0; max-width:1250px; margin:auto;
   font:400 var(--am-text-m)/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
@@ -251,8 +251,10 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-agent-line .am-muted { margin-left:auto; }
 #am-concept .am-side-bottom { display:flex; flex-direction:column; gap:var(--am-gap-control); margin-top:auto; padding-top:var(--am-space-3); border-top:1px solid var(--am-line); flex-shrink:0; }
 #am-concept .am-side-bottom > button { width:100%; }
-/* Language and theme share one grid: labels in one column, both lists the same width. */
-#am-concept .am-prefs { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:var(--am-gap-control) var(--am-gap-content); }
+/* Language and theme share one grid: labels in one column, both lists the same width.
+   The label column fits the longest label of either language and the lists stop
+   growing at a fixed width, so neither jumps on a language switch or a wider sidebar. */
+#am-concept .am-prefs { display:grid; grid-template-columns:minmax(4.75em,max-content) minmax(0,12em); justify-content:start; align-items:center; gap:var(--am-gap-control) var(--am-gap-content); }
 #am-concept .am-theme-setting { display:contents; }
 #am-concept .am-theme-setting .am-select-trigger { width:100%; }
 #am-concept .am-version { font-size:var(--am-text-xs); color:var(--am-muted); line-height:1.4; }
@@ -396,6 +398,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-task-agent { min-width:0; }
 #am-concept .am-task-agent > span:not(.am-task-when):not(.am-provider-icon) { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #am-concept .am-task-when { margin-left:auto; flex-shrink:0; white-space:nowrap; padding-left:var(--am-space-2); font-variant-numeric:tabular-nums; }
+#am-concept .am-task-comma { color:var(--am-muted); }
 #am-concept .am-task-usage { flex-shrink:0; white-space:nowrap; color:var(--am-muted); font-size:var(--am-text-xs); font-variant-numeric:tabular-nums; }
 
 /* Cards: agent cards and the server sections share one look. */
