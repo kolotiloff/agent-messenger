@@ -10,7 +10,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-09 — Claude Code (coordinator's list, T-091)
 
-- The coordinator's list of Messenger issues became T-087..T-093 and Q-027 (own Plastic workspace per worker). T-091: a failed run says why in plain words (not signed in, error exit, crashed, ended without a report) before the raw evidence; the window shows it in Russian. On `claude/ui-tweaks`, not released.
+- The coordinator's list of Messenger issues became T-087..T-093 and Q-027 (a worker that cannot commit next to another session). T-091: a failed run says why in plain words (not signed in, error exit, crashed, ended without a report) before the raw evidence; the window shows it in Russian. On `claude/ui-tweaks`, not released.
 
 ## 2026-11-09 — Claude Code (T-086 fresh coordinator chat)
 
