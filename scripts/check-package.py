@@ -27,46 +27,37 @@ def control(command,**fields):
   with connection.makefile('rb') as stream:response=json.loads(stream.readline(2*1024*1024))
   assert response.get('ok') is True,response
   return response
-prepared_id='ui-00000000-0000-4000-8000-000000000001'
-queued_id='ui-00000000-0000-4000-8000-000000000002'
+def snapshot():
+ # The task-mode state the owner set up: connected agents and the pause switch.
+ view=control('window-view')['overview']
+ agents=[(a['agent'],a['cli'],a['profile'],a['environment'],a['models'],a['full_access']) for a in view['agents']]
+ return dict(paused=view['paused'],agents=agents)
 client=subprocess.Popen([str(installed),'serve'],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 try:
  for _ in range(100):
   try:run(installed,'status');break
   except Exception:time.sleep(.05)
  else:raise RuntimeError('installed client did not start')
- profile=root/'profile';workspace=root/'workspace';profile.mkdir();workspace.mkdir()
- run(installed,'register-session','--provider','claude','--environment',str(profile),'--conversation-id','test-only-install','--alias','test','--cli','/usr/bin/false','--workspace',str(workspace))
- run(installed,'pause');run(installed,'enqueue','--alias','test','--id','install-test-one','--from','test-user','--text','Queue must survive an update')
+ # A fake agent program: tasks are never enabled for plain serve, so it never runs.
+ control('agent-set',provider='claude',cli='/usr/bin/false')
+ run(installed,'pause')
  run(second,'install','--prefix',str(prefix),ok=False);assert installed.resolve()==old
- # Preserve both an unsent durable envelope and a queued envelope whose browser
- # acknowledgment was lost. Neither is allowed to replay automatically on update.
- for identifier,text in [(prepared_id,'Prepared before update'),(queued_id,'Queued before update')]:
-  control('ui-prepare',message_id=identifier,alias='test',text=text)
- assert control('ui-submit',message_id=queued_id)['created'] is True
- outbox_before=control('ui-outbox')['outbox']
- assert {item['state'] for item in outbox_before['items']}=={'prepared','queued'}
- before=json.loads(run(installed,'inspect').stdout)
- assert len(before['Requests'])==2 and not before['Attempts']
+ before=snapshot()
+ assert before['paused'] and [a[0] for a in before['agents']]==['claude'],before
  run(installed,'shutdown');client.wait(timeout=10)
  run(second,'install','--prefix',str(prefix));new=installed.resolve();assert new!=old and old.is_file()
  assert json.loads(run(installed,'version').stdout)['version']==second_version
  run(second,'install','--prefix',str(prefix));assert installed.resolve()==new
  client=subprocess.Popen([str(installed),'serve'],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
  for _ in range(100):
-  try:after=json.loads(run(installed,'inspect').stdout);break
+  try:run(installed,'status');break
   except Exception:time.sleep(.05)
  else:raise RuntimeError('updated client did not start')
+ after=snapshot()
  assert before==after,(before,after)
- assert control('ui-outbox')['outbox']==outbox_before
- assert control('ui-submit',message_id=queued_id)['created'] is False
- # Reading and idempotent submit have not turned the prepared envelope into work.
- final=json.loads(run(installed,'inspect').stdout)
- assert len(final['Requests'])==2 and not final['Attempts']
- assert all(request['id']!=prepared_id for request in final['Requests'])
- status=run(installed,'status').stdout;assert 'cli_launch=not-authorized' in status
+ status=run(installed,'status').stdout;assert 'paused=true' in status and 'cli_launch=disabled' in status,status
  run(installed,'shutdown');client.wait(timeout=10)
- report=dict(archive_and_binary_checksums=True,version_without_state_creation=True,clean_install=True,running_client_update_refused=True,update_while_stopped=True,idempotent_install=True,old_binary_retained=True,queue_snapshot_unchanged=True,prepared_and_queued_outbox_preserved=True,no_automatic_submission=True,queued_id_deduplicated_after_update=True,new_models_started=0,test_processes_stopped=True)
+ report=dict(archive_and_binary_checksums=True,version_without_state_creation=True,clean_install=True,running_client_update_refused=True,update_while_stopped=True,idempotent_install=True,old_binary_retained=True,agents_and_pause_unchanged=True,tasks_not_enabled=True,new_models_started=0,test_processes_stopped=True)
  print(json.dumps(report))
 finally:
  if client.poll() is None:
