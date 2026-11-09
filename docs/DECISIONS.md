@@ -236,6 +236,8 @@ A newly connected agent starts with a model list, so the coordinator can choose 
 
 A list the owner already saved is never replaced. For an agent connected earlier whose list is still empty, the settings dialog shows these names and they are saved when the owner presses Save; nothing changes without that. Messenger does not check the Codex and Cursor names against the CLIs: an unknown name fails the run, and the owner edits the list on the card. Which model each CLI uses when the task names none is the CLI's own setting; Messenger does not know it. Follows D-058.
 
+Agents connected before this change kept an empty list; the next version fills every empty list once when it first opens the data (T-109, a `meta` key marks it done), so a list the owner empties afterwards stays empty.
+
 ## D-102 — The coordinator sees questions to the owner (T-099)
 
 2026-11-09, Claude Code, coordinator's list item 13, passed on by the owner.

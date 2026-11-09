@@ -2175,6 +2175,34 @@ var (
 	DefaultCursorModels = []string{"composer-2.5-fast", "grok-4.7-high-fast", "claude-opus-5-thinking-high"}
 )
 
+// fillDefaultModels gives agents that were set up before T-098 with an
+// empty model list the starting list once (T-109, owner's request). A list
+// the owner empties later stays empty: the meta key marks it done.
+func fillDefaultModels(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var done string
+	err = tx.QueryRow(`SELECT value FROM meta WHERE key='default_models_filled'`).Scan(&done)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	for provider, models := range map[string][]string{"claude": DefaultClaudeModels, "codex": DefaultCodexModels, "cursor": DefaultCursorModels} {
+		if _, err := tx.Exec(`UPDATE computer_agents SET models=? WHERE provider=? AND models=''`, strings.Join(models, "\n"), provider); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(`INSERT INTO meta(key,value) VALUES ('default_models_filled','1')`); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // errAgentPaused refuses work for an agent the owner turned off on its card.
 func errAgentPaused(provider string) error {
 	return fmt.Errorf("%w: agent %s is turned off on this computer by its owner", ErrRejected, provider)
