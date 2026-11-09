@@ -119,7 +119,9 @@ type Service struct {
 	done        chan struct{}
 	hostErr     string
 
-	member     *Connection
+	member *Connection
+	// former are this computer's own devices from earlier connections.
+	former     []formerDevice
 	checkedAt  string
 	reachable  bool
 	memberErr  string
@@ -165,6 +167,9 @@ func NewService(ctx context.Context, root string) *Service {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		s.memberErr = "не удалось прочитать подключение к серверу: " + err.Error()
 		s.damaged = true
+	}
+	if raw, err := os.ReadFile(s.formerPath()); err == nil {
+		_ = json.Unmarshal(raw, &s.former)
 	}
 	return s
 }
@@ -275,6 +280,11 @@ func (s *Service) Enable(scope string, port int) error {
 	defer s.op.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// A computer either hosts its network or belongs to another one, never
+	// both: tasks would go through one while the owner watches the other.
+	if s.member != nil || s.damaged {
+		return errors.New("этот компьютер подключён к другому серверу; сначала отключите его")
+	}
 	previous := s.settings
 	s.stopLocked()
 	s.settings = Settings{Enabled: true, Scope: scope, Port: port}
@@ -378,7 +388,8 @@ func (s *Service) Revoke(id string) error {
 
 // Connect joins a broker with an invitation. A device belongs to one broker:
 // joining another one needs an explicit disconnect first, so nothing is ever
-// sent to a new broker silently.
+// sent to a new broker silently. A computer that hosts a broker stops it
+// first: it hosts its network or joins another one, not both.
 func (s *Service) Connect(ctx context.Context, code, name string) error {
 	short := shortCodeOf(code)
 	var inv Invitation
@@ -390,6 +401,9 @@ func (s *Service) Connect(ctx context.Context, code, name string) error {
 	}
 	s.mu.Lock()
 	switch {
+	case s.broker != nil || s.settings.Enabled:
+		s.mu.Unlock()
+		return errors.New("на этом компьютере запущен свой сервер; сначала остановите его")
 	case s.member != nil:
 		s.mu.Unlock()
 		return errors.New("этот компьютер уже подключён к серверу; сначала отключите его")
@@ -451,16 +465,78 @@ func (s *Service) CheckConnection(ctx context.Context) error {
 	return err
 }
 
-// Disconnect forgets this device's connection. The device stays listed on
-// the broker until its owner revokes it there.
-func (s *Service) Disconnect() error {
+// Disconnect forgets this device's connection. The device first leaves the
+// broker, so the others stop listing it; if the broker cannot be reached or
+// is older than leaving, the device stays listed there until its owner
+// revokes it. Either way this computer remembers the device as a former one
+// of its own and never lists it as another computer.
+func (s *Service) Disconnect(ctx context.Context) error {
+	s.mu.Lock()
+	var c *Connection
+	if s.member != nil {
+		copied := *s.member
+		c = &copied
+	}
+	own := s.broker
+	s.mu.Unlock()
+	if c != nil {
+		if own != nil && own.ID() == c.BrokerID {
+			_ = own.Revoke(c.DeviceID)
+		} else {
+			call, cancel := context.WithTimeout(ctx, 5*time.Second)
+			_ = Leave(call, *c)
+			cancel()
+		}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := os.Remove(s.connectionPath()); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
+	if c != nil {
+		s.rememberFormerLocked(c.BrokerID, c.DeviceID)
+	}
 	s.member, s.checkedAt, s.reachable, s.memberErr, s.damaged, s.peers = nil, "", false, "", false, nil
 	return nil
+}
+
+// formerDevice is a device this computer had on a broker before it
+// disconnected.
+type formerDevice struct {
+	BrokerID string `json:"broker_id"`
+	DeviceID string `json:"device_id"`
+}
+
+// maxFormer bounds the remembered former devices.
+const maxFormer = 32
+
+func (s *Service) formerPath() string { return filepath.Join(s.root, "server-former.json") }
+
+func (s *Service) rememberFormerLocked(brokerID, deviceID string) {
+	for _, f := range s.former {
+		if f.BrokerID == brokerID && f.DeviceID == deviceID {
+			return
+		}
+	}
+	s.former = append(s.former, formerDevice{BrokerID: brokerID, DeviceID: deviceID})
+	if len(s.former) > maxFormer {
+		s.former = s.former[len(s.former)-maxFormer:]
+	}
+	// Only a list to hide; a failed write shows the device again after a
+	// restart, nothing worse.
+	if raw, err := json.Marshal(s.former); err == nil {
+		_ = writeFile(s.formerPath(), raw)
+	}
+}
+
+// formerLocked reports whether id was this computer's own device on broker.
+func (s *Service) formerLocked(brokerID, id string) bool {
+	for _, f := range s.former {
+		if f.BrokerID == brokerID && f.DeviceID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // MemberName is the name this computer has on the server it joined; empty
@@ -503,7 +579,7 @@ func (s *Service) Status() Status {
 		if roster, err := s.broker.Roster(nil); err == nil {
 			for _, p := range roster {
 				// A computer that joined its own server is not its own peer.
-				if p.ID != HostPeer && (s.member == nil || p.ID != s.member.DeviceID) {
+				if p.ID != HostPeer && (s.member == nil || p.ID != s.member.DeviceID) && !s.formerLocked(s.broker.ID(), p.ID) {
 					peers = append(peers, p)
 				}
 			}
@@ -513,7 +589,10 @@ func (s *Service) Status() Status {
 		// every computer as not reporting.
 		late := int(time.Since(s.peersAt) / time.Second)
 		for _, p := range s.peers {
-			if p.ID != s.member.DeviceID {
+			// A device under this computer's own name is its earlier one,
+			// left there when it joined again (a host before preview.59
+			// still lists it).
+			if p.ID != s.member.DeviceID && !s.formerLocked(s.member.BrokerID, p.ID) && !strings.EqualFold(strings.TrimSpace(p.Name), strings.TrimSpace(s.member.DeviceName)) {
 				if p.Age >= 0 {
 					p.Age += late
 				}

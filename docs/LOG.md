@@ -4,6 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-09 — Claude Code (T-121 task time label, T-122 one place for «Любые команды», T-123 restart waits for tasks)
 
+- T-127 (D-111): own server or joining another one, not both; «Отключить» leaves the server; a computer that joined again is listed once; the network error clears on a change.
 - T-124: stop and send in the reply box are drawn icons on one grid, level and alike, with the same hover.
 - T-125 (D-110): the owner's message to a worker waiting for the coordinator answers its question at once.
 - T-123: the restart warning lists the running tasks and by default waits for them, then restarts by itself (owner's variant 1).

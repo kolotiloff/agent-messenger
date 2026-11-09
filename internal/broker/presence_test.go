@@ -95,7 +95,7 @@ func TestPresenceRoster(t *testing.T) {
 	if ms := member.Status().Member; ms.Reachable || ms.Error != ErrRevoked.Error() {
 		t.Fatalf("revoked member %+v", ms)
 	}
-	if err := member.Disconnect(); err != nil {
+	if err := member.Disconnect(ctx(t)); err != nil {
 		t.Fatal(err)
 	}
 	if len(member.Status().Peers) != 0 {

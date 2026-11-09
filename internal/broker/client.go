@@ -264,6 +264,20 @@ func Check(ctx context.Context, c Connection) (PingResult, error) {
 	return out, nil
 }
 
+// Leave removes this device from the broker. A broker older than leaving
+// answers 404; the device then stays listed until the host revokes it.
+func Leave(ctx context.Context, c Connection) error {
+	var fail apiError
+	code, err := call(ctx, pinnedClient(c.Fingerprint), http.MethodPost, c.Address, "/v1/leave", c.DeviceKey, struct{}{}, &fail)
+	if err != nil {
+		return err
+	}
+	if code != http.StatusOK && code != http.StatusUnauthorized {
+		return fmt.Errorf("сервер не удалил устройство (код %d)", code)
+	}
+	return nil
+}
+
 // Report sends this device's presence and returns the broker's list of
 // computers. The pinned certificate and the broker ID in the answer identify
 // the broker, so no separate hello is needed every time.

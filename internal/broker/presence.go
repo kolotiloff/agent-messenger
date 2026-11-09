@@ -321,7 +321,33 @@ func (b *Broker) roster() ([]Peer, error) {
 		peer.Name = name
 		out = append(out, peer)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return withoutReplaced(out), nil
+}
+
+// withoutReplaced leaves out a device that the same computer replaced by
+// joining again: an older device with the name of a newer one that reported
+// more recently. Nothing is revoked; the older device shows again if it
+// reports again.
+func withoutReplaced(peers []Peer) []Peer {
+	out := peers[:0:0]
+	for i, p := range peers {
+		replaced := false
+		for _, later := range peers[i+1:] {
+			if p.Host || later.Host || !strings.EqualFold(strings.TrimSpace(p.Name), strings.TrimSpace(later.Name)) {
+				continue
+			}
+			if later.Age >= 0 && (p.Age < 0 || later.Age < p.Age) {
+				replaced = true
+			}
+		}
+		if !replaced {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // fill copies a stored report into peer. A report that cannot be read is

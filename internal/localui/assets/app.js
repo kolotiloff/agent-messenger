@@ -1262,7 +1262,7 @@
     // Explanations live in the status tooltip so the card does not change
     // height; only a problem the owner must fix stays visible.
     $('host-badge').title=!h.running?tr('Другие устройства смогут подключаться к этому компьютеру по одноразовому приглашению.'):tr('Принимает устройства: ')+(h.scope==='lan'?tr('в локальной сети'):tr('только с этого компьютера'))+tr(', порт ')+h.port+'.';
-    $('host-state').textContent=h.running&&!h.addresses.length?tr('У компьютера нет адреса в локальной сети. Подключитесь к сети или выберите «Только этот компьютер».'):'';
+    $('host-state').textContent=h.enabled&&m.connected?tr('Запущен свой сервер и есть подключение к другому. Задачи идут только через свой сервер. Остановите сервер или отключитесь от другого.'):h.running&&!h.addresses.length?tr('У компьютера нет адреса в локальной сети. Подключитесь к сети или выберите «Только этот компьютер».'):'';
     if(!serverEdited){$('host-scope').value=h.scope||'local';$('host-port').value=h.port||47100;}
     $('host-running').hidden=!h.running;
     const select=$('host-address'),current=select.value;
@@ -1277,7 +1277,13 @@
     // The certificate fingerprint travels inside the invitation code and the
     // joining computer checks it itself, so the window does not show it.
     badge($('member-badge'),m.connected?(m.reachable||!m.checked_at?tr('Подключено'):tr('Нет связи')):tr('Не подключено'),m.connected?(m.reachable?'good':m.checked_at?'bad':''):'');
-    $('member-join').hidden=m.connected;$('member-joined').hidden=!m.connected;
+    // A computer hosts its network or joins another one, not both: the
+    // other card only says how to switch.
+    const hostOn=h.enabled||h.running;
+    $('member-join').hidden=m.connected||hostOn;$('member-joined').hidden=!m.connected;
+    $('member-blocked').hidden=!hostOn||m.connected;
+    $('host-blocked').hidden=hostOn||!m.connected;
+    $('host-running').closest('.am-card').querySelector('.am-server-grid').hidden=!hostOn&&m.connected;
     $('member-badge').title=m.connected?tr('Этот компьютер входит в сервер ')+m.address+'.':tr('Вставьте код приглашения, который выдал сервер на другом компьютере.');
     $('member-state').textContent='';
     const cn=$('computer-name');if(view?.computer_name&&document.activeElement!==cn&&!cn.dataset.edited)cn.value=view.computer_name;

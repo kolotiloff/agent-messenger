@@ -65,12 +65,7 @@ func TestServerCommandRunsTheHostedBroker(t *testing.T) {
 	if _, response := serverCall(t, root, "rename", map[string]any{"name": "a\nb"}); response.OK {
 		t.Fatal("a name with a line break was accepted")
 	}
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	port := ln.Addr().(*net.TCPAddr).Port
-	ln.Close()
+	port := freeTCPPort(t)
 	st, response := serverCall(t, root, "enable", map[string]any{"scope": "local", "port": port})
 	if !response.OK || !st.Host.Running || len(st.Host.Addresses) != 1 {
 		t.Fatalf("enable %+v %+v", response, st)
@@ -80,18 +75,38 @@ func TestServerCommandRunsTheHostedBroker(t *testing.T) {
 	if !response.OK || json.Unmarshal(response.Overview, &code) != nil || !strings.HasPrefix(code.Code, broker.InvitePrefix) {
 		t.Fatalf("invite %+v", response)
 	}
-	// This client joins its own broker, as a second computer would.
-	st, response = serverCall(t, root, "connect", map[string]any{"code": code.Code, "name": "Этот Mac"})
-	if !response.OK || !st.Member.Connected || !st.Member.Reachable || len(st.Host.Devices) != 1 {
+	// A computer hosts its network or joins another one, not both (D-111).
+	if _, response = serverCall(t, root, "connect", map[string]any{"code": code.Code, "name": "Этот Mac"}); response.OK || !strings.Contains(response.Error, "остановите") {
+		t.Fatalf("joined while hosting %+v", response)
+	}
+	if st, _ = serverCall(t, root, "disable", nil); st.Host.Running {
+		t.Fatalf("after disable %+v", st)
+	}
+	other := broker.NewService(context.Background(), t.TempDir())
+	t.Cleanup(other.Close)
+	if err := other.Enable(broker.ScopeLocal, freeTCPPort(t)); err != nil {
+		t.Fatal(err)
+	}
+	invite, err := other.Invite(other.Status().Host.Addresses[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, response = serverCall(t, root, "connect", map[string]any{"code": invite.Code, "name": "Этот Mac"})
+	if !response.OK || !st.Member.Connected || !st.Member.Reachable {
 		t.Fatalf("connect %+v %+v", response, st)
 	}
-	if status, err := control.Call(root, control.Request{Cmd: "status"}); err != nil || status.Status == nil || status.Status.Broker != "hosting+connected" {
+	if status, err := control.Call(root, control.Request{Cmd: "status"}); err != nil || status.Status == nil || status.Status.Broker != "connected" {
 		t.Fatalf("status %+v %v", status, err)
 	}
 	if strings.Contains(string(response.Overview), "device_key") {
 		t.Fatal("device key in status")
 	}
-	st, _ = serverCall(t, root, "revoke", map[string]any{"device": st.Host.Devices[0].ID})
+	if _, response = serverCall(t, root, "enable", map[string]any{"scope": "local", "port": port}); response.OK || !strings.Contains(response.Error, "отключите") {
+		t.Fatalf("hosted while joined %+v", response)
+	}
+	if err := other.Revoke(other.Status().Host.Devices[0].ID); err != nil {
+		t.Fatal(err)
+	}
 	st, response = serverCall(t, root, "check", nil)
 	if !response.OK || st.Member.Reachable || st.Member.Error == "" {
 		t.Fatalf("check after revoke %+v %+v", response, st)
@@ -99,9 +114,17 @@ func TestServerCommandRunsTheHostedBroker(t *testing.T) {
 	if _, response = serverCall(t, root, "nonsense", nil); response.OK {
 		t.Fatal("unknown action accepted")
 	}
-	st, _ = serverCall(t, root, "disconnect", nil)
-	st, _ = serverCall(t, root, "disable", nil)
-	if st.Host.Running || st.Member.Connected {
-		t.Fatalf("after disable %+v", st)
+	if st, _ = serverCall(t, root, "disconnect", nil); st.Host.Running || st.Member.Connected {
+		t.Fatalf("after disconnect %+v", st)
 	}
+}
+
+func freeTCPPort(t *testing.T) int {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	return ln.Addr().(*net.TCPAddr).Port
 }
