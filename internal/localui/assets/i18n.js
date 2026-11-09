@@ -20,8 +20,6 @@
   'Подключаемся к локальному клиенту…':'Connecting to the local client…',
   'Ответ исполнителю':'Reply to the worker',
   'Остановить':'Stop',
-  'Enter отправляет, Shift+Enter переносит строку. Ответ продолжит сессию исполнителя.':'Enter sends, Shift+Enter starts a new line. The reply continues the worker\u2019s session.',
-  'Enter отправляет, Shift+Enter переносит строку. Исполнитель прочитает, когда закончит текущий шаг.':'Enter sends, Shift+Enter starts a new line. The worker reads it when its current step ends.',
   'Написать исполнителю…':'Write to the worker…',
   'дана ':'given ',
   'Когда задача дана':'When the task was given',

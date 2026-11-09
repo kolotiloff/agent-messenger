@@ -681,8 +681,7 @@
     const note=canNote(t),wasNote=$('compose').dataset.mode==='note';
     $('compose').hidden=!q&&!active;
     box.disabled=!q&&!note;box.placeholder=q?tr('Ответить исполнителю…'):note?tr('Написать исполнителю…'):t.remote?.from&&t.owner_question?tr('Отвечают на компьютере «')+t.remote.name+'»':t.pending_launch?tr('Задача ждёт запуска…'):tr('Исполнитель работает…');
-    $('answer-send').hidden=!q&&!note;$('answer-hint').hidden=!q&&!note;$('task-stop').hidden=!active;
-    $('answer-hint').textContent=q?tr('Enter отправляет, Shift+Enter переносит строку. Ответ продолжит сессию исполнителя.'):tr('Enter отправляет, Shift+Enter переносит строку. Исполнитель прочитает, когда закончит текущий шаг.');
+    $('answer-send').hidden=!q&&!note;$('task-stop').hidden=!active;
     $('compose').dataset.mode=q?'answer':note?'note':'';
     if($('compose').dataset.task!==feed.task.id){$('compose').dataset.task=feed.task.id;$('answer-status').textContent='';}
     if(q&&$('compose').dataset.question!==q.id){$('compose').dataset.question=q.id;$('answer-text').value='';$('answer-status').textContent='';}
