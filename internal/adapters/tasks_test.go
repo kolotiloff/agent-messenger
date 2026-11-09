@@ -153,3 +153,13 @@ func TestTaskModelIsPassedToTheCLI(t *testing.T) {
 		}
 	}
 }
+
+// T-075: a worker commits its change, and when it cannot it asks instead of
+// finishing, so its conversation stays open.
+func TestWorkerPromptKeepsAFailedCommitOpen(t *testing.T) {
+	for _, want := range []string{"commit", "cannot commit", "ask", "do not report"} {
+		if !strings.Contains(TaskWorkerPrompt, want) {
+			t.Fatalf("worker prompt lacks %q: %s", want, TaskWorkerPrompt)
+		}
+	}
+}

@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-09 — Claude Code (T-074, T-075, UI tweak)
+
+- Owner's first working days with the program: the coordinator stops reading the owner while it waits and forgets workers' events after an interruption (T-074, D-088); workers that could not commit finished with a cut report (T-075, D-089). Both changed on `claude/ui-tweaks` with tests; not released, the owner asked to collect changes first.
+- The empty «Самые затратные задачи» card: «Пока пусто» aligned with the rows.
+
 ## 2026-11-09 — Claude Code (releases 50–53, backlog tidy)
 
 - Merged #81 (T-071), #82 (T-070), #83 (T-072 + T-073 decision); released preview.51, .52, .53 and checked every release has all its files. preview.50 (T-057) checked too.

@@ -26,8 +26,10 @@ import (
 // progress notifications every 60 s, and cancellation without losing events.
 
 const (
-	coordinatorDefaultWait = 600
-	coordinatorMaxWait     = 3600
+	// A short wait lets the owner's messages reach the chat between waits
+	// (T-074); an empty wait costs one small call.
+	coordinatorDefaultWait = 120
+	coordinatorMaxWait     = 300
 	coordinatorMaxReturned = 20
 	// coordinatorWaitBudget bounds the text one wait returns (T-031), in
 	// characters. One event is always returned, whatever its size.
@@ -50,12 +52,14 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - list_agents shows this project's computers, their project folder and agents: this computer and the other computers of its network. A task for another computer is sent to it and runs there; it fails with the reason if that computer does not take tasks from other computers or has no folder for the project. Another computer shows accepts_tasks and has_project when it reported them; do not send a task where either is false, and tell the owner instead. Questions, reports and outcomes come back through wait as usual.
 - start_task starts one task in a new worker session. Give every task a unique op_id and reuse it only to retry the same call after a lost response.
 - wait blocks until something happens in this project's tasks: a report, a question for you, a failure, an interruption, a block or a cancellation. Always pass after = the cursor from the previous wait. When it returns events, act on them (answer questions with answer, tell the owner about reports), then call wait again with the new cursor. When it times out with no events, call wait again without comment. If it says more: true, more events are ready: call wait again at once with the new cursor.
+- The owner may write to you or stop a wait at any time. When you wake up because of the owner (a new message or an interrupted wait), first call wait with your last cursor and timeout_seconds 1 to see what workers sent meanwhile, then answer the owner, and then go back to waiting. Leave timeout_seconds out otherwise: a short wait lets the owner's messages reach you. When another tool's answer ends with a «Messenger: … new events» note, events are waiting for you: read them with wait after this step.
 - start_task takes an optional model. Leave it out for the agent's default. For Claude use opus for hard work (design, tricky bugs, large refactors), sonnet for ordinary coding, haiku for small mechanical work. For Codex and Cursor pass only a name from that agent's models in list_agents (the owner lists them in the window); if the list is empty, leave model out. Never guess a name: an unknown model fails the run. Tell the owner when you chose a non-default model and why.
 - answer answers a worker's question (pass question_id and a unique op_id); the worker continues in the same session.
 - Never start a task again by yourself after it failed, was interrupted or blocked; tell the owner and let them decide.
 - list_agents shows each agent's limit when it reported one: state ok, warning (close to the limit) or exhausted, used_percent when the agent gave it, resets_at and observed_at. It is what the agent said at the end of its last run, not a live reading. Prefer an agent whose limit is not exhausted, and tell the owner when one is close to or at its limit.
 - To follow up on a finished task in the same worker conversation (it keeps its context), use continue_task instead of a new start_task. It works for tasks of this computer; for another computer's task start a new one.
 - Messenger already tells every worker to keep its report to a few lines, to put long details in a file and to follow the owner's rules for this project. A report ends with labelled lines when the worker gave them: «Изменения:» (commit or changeset), «Тесты:» and «Файлы:» (paths to read when needed). Do not ask workers for a «taken» line or a limit line: the task's state shows when it was accepted, and limits come from list_agents.
+- A report is a short message: at most 20000 characters reach you. Never ask a worker to send a long report in a message: ask it to write it to a file in the project, commit it and give the path. Workers are told to commit their change before they report. A worker that could not commit asks you instead of finishing, and its task stays open: tell it to resolve the problem and commit, or tell the owner. Do not tell it to finish without its change committed: a finished task of another computer cannot be continued.
 - get_log reads the end of another computer's Messenger log, for debugging Messenger itself (a task that never arrived, a refusal you cannot explain). That computer answers only if its owner turned on «Отдавать журнал по сети»; otherwise the reply says so. Session ids, codes and keys are removed. If no answer came in time, call get_log again with request_id. Do not use it to watch workers: wait does that.
 - To tell a working task from a stuck one, call tasks: an open task shows the worker's last action and when it was (last_activity, last_activity_at; for another computer's task, the last progress line it forwarded). A long quiet time is a reason to tell the owner, not to cancel or start the task again by yourself. tokens is what the task used so far.
 - When two tasks must not use one resource of a computer at the same time (the Unity editor, a device, a long build), give both start_task the same lock, such as unity-editor. The later task then waits to start until the earlier one is done, failed or cancelled; tasks shows waiting_for_lock with the task it waits for. A blocked task keeps its lock until the owner resolves it.
@@ -69,6 +73,44 @@ type coordinator struct {
 	w       io.Writer
 	mu      sync.Mutex
 	pending map[string]context.CancelFunc
+	// seen is the highest cursor this chat has passed to or received from
+	// wait; seenKnown is false until its first wait (T-074).
+	seen      int64
+	seenKnown bool
+}
+
+// markSeen records a cursor the chat has reached.
+func (c *coordinator) markSeen(cursor int64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.seenKnown || cursor > c.seen {
+		c.seen, c.seenKnown = cursor, true
+	}
+}
+
+// unreadNotice says how many events came after the chat's last wait, so a
+// chat whose wait the owner interrupted goes back for them (T-074). It never
+// moves the cursor.
+func (c *coordinator) unreadNotice() string {
+	c.mu.Lock()
+	seen, known := c.seen, c.seenKnown
+	c.mu.Unlock()
+	if !known {
+		return ""
+	}
+	events, _, err := c.store.TaskEvents(c.project, core.AudienceCoordinator, seen, coordinatorMaxReturned+1)
+	if err != nil || len(events) == 0 {
+		return ""
+	}
+	count := fmt.Sprint(len(events))
+	if len(events) > coordinatorMaxReturned {
+		count = fmt.Sprintf("more than %d", coordinatorMaxReturned)
+	}
+	noun := "events"
+	if len(events) == 1 {
+		noun = "event"
+	}
+	return fmt.Sprintf("Messenger: %s new %s of this project's tasks (reports, questions or failures) arrived since your last wait. Finish this step, then call wait with after=%d to read them.", count, noun, seen)
 }
 
 // ServeCoordinator runs the coordinator MCP server for one project until in closes.
@@ -146,7 +188,19 @@ func ServeCoordinator(store *core.Store, project string, in io.Reader, out io.Wr
 					return
 				}
 				raw, _ := json.Marshal(result)
-				c.respond(id, coordinatorResult(string(raw), false), nil)
+				reply := coordinatorResult(string(raw), false)
+				if !isWaitCall(params) {
+					if notice := c.unreadNotice(); notice != "" {
+						reply["content"] = append(reply["content"].([]map[string]any), map[string]any{"type": "text", "text": notice})
+					}
+				}
+				c.respond(id, reply, nil)
+				if m, ok := result.(map[string]any); ok && isWaitCall(params) {
+					// Only events actually sent count as seen.
+					if cursor, ok := m["cursor"].(int64); ok {
+						c.markSeen(cursor)
+					}
+				}
 			}(req.ID, req.Params)
 		default:
 			c.respond(req.ID, nil, map[string]any{"code": -32601, "message": "Method not found"})
@@ -158,6 +212,14 @@ func ServeCoordinator(store *core.Store, project string, in io.Reader, out io.Wr
 	}
 	c.mu.Unlock()
 	return scanner.Err()
+}
+
+func isWaitCall(params json.RawMessage) bool {
+	var p struct {
+		Name string `json:"name"`
+	}
+	_ = json.Unmarshal(params, &p)
+	return p.Name == "wait"
 }
 
 func coordinatorResult(text string, isError bool) map[string]any {
@@ -186,7 +248,7 @@ func coordinatorTools() []map[string]any {
 				"model":    map[string]any{"type": "string", "maxLength": 80, "description": "optional model for the worker, such as opus, sonnet or haiku for claude, or, for Codex and Cursor, a name from the agent's models in list_agents; leave it out to use the agent's default. Never guess a name: an unknown model fails the run."},
 				"lock":     map[string]any{"type": "string", "maxLength": core.MaxTaskLock, "description": "optional name of a resource only one worker on that computer may use at a time, such as unity-editor; the task waits to start while an earlier unfinished task with the same lock is on that computer"},
 			}, "op_id", "agent", "text")},
-		{"name": "wait", "description": "Block until a new event of this project's tasks arrives after the cursor, or until timeout_seconds. Costs no tokens while blocked. Always pass after. Returns a bounded batch; more: true means further events are ready, so call wait again at once with the new cursor.",
+		{"name": "wait", "description": "Block until a new event of this project's tasks arrives after the cursor, or until timeout_seconds (default 120, at most 300). Costs no tokens while blocked. Always pass after. Returns a bounded batch; more: true means further events are ready, so call wait again at once with the new cursor.",
 			"inputSchema": obj(map[string]any{
 				"after":           map[string]any{"type": "integer", "minimum": 0, "description": "cursor from the previous wait"},
 				"timeout_seconds": map[string]any{"type": "integer", "minimum": 1, "maximum": coordinatorMaxWait},
@@ -527,6 +589,7 @@ func boundEvents(events []core.TaskEvent) ([]core.TaskEvent, bool) {
 }
 
 func (c *coordinator) wait(ctx context.Context, after int64, timeout time.Duration, progressToken json.RawMessage) (any, error) {
+	c.markSeen(after)
 	start := time.Now()
 	hasProgress := len(progressToken) > 0 && string(progressToken) != "null"
 	lastProgress := start

@@ -148,3 +148,15 @@ Every presence report (every 15 seconds) now carries `ready`: whether the comput
 2026-11-08, Claude Code (owner asleep, asked to decide alone and keep it simple).
 
 No new channel for result files. A worker's report (up to 20 000 characters) already comes back whole from another computer in the task's events, and the coordinator reads it through `wait`. Files, diffs and builds stay where the project keeps them: the worker commits or checks them in to the project's version control, or writes them to a folder the owner shares, and names them in the report's «Изменения:» and «Файлы:» lines. Copying files between computers through the broker would need size limits, storage and the owner's consent for each project, and would duplicate what version control already does.
+
+## D-088 — The coordinator catches up after the owner interrupts its wait (T-074)
+
+2026-11-09, Claude Code, from the owner's report: while the coordinator chat waits it does not read the owner; after the owner interrupts, it answers the owner and forgets the workers' questions that came meanwhile.
+
+The coordinator server remembers the highest cursor the chat reached through `wait` (only events actually sent count). Every other tool's answer gets a second text when newer events exist: their count and the cursor to pass to `wait`. The note never moves the cursor, so nothing is skipped. The instructions tell the chat to call `wait` with its last cursor and a 1-second timeout whenever it wakes because of the owner, before answering. `wait` now lasts 120 s by default and at most 300 s instead of 600 s and 3600 s, so a message the owner sends during a wait reaches the chat when the wait returns; an empty wait costs one small call and keeps the chat's prompt cache warm. A hook in the owner's Claude settings would make the check certain, but it changes files Messenger does not own; not done.
+
+## D-089 — A worker commits, or asks and stays open (T-075)
+
+2026-11-09, Claude Code, from the owner's report: two workers on another computer could not commit, the coordinator asked one for its whole report, a cut piece came back, the task was finished and could not be continued there.
+
+The worker's first message now says: commit (or check in) the change before reporting, unless the task or the owner's rules say not to; when the commit fails and the worker cannot fix it, use `ask` instead of `report`, so the conversation stays open for the answer. The coordinator's instructions say a report is short (at most 20 000 characters reach it), never to ask for a long report in a message but for a file that is committed, and not to let a worker finish without its change committed. Continuing a finished task of another computer stays out of scope.
