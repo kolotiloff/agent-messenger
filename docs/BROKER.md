@@ -17,6 +17,16 @@ Status on 2026-11-07: the background client can host a broker, a computer can jo
 - **Mailbox** (T-037, D-041). `POST /v1/send {to, op_id, body}` stores a message for another computer of the broker (`host` or a device ID); `POST /v1/inbox {after}` deletes the caller's messages up to `after`, which it has applied, and returns the next ones in order (at most 16). The broker never reads a body (a JSON object up to 256 KB). The same `(sender, op_id)` is stored once while it waits; an unknown or revoked recipient is refused (404 `recipient`), a recipient with 500 unread messages too (429), and so is a sender that already has 100 unread messages for that recipient, so one computer cannot fill another's mailbox for everybody. Revoking a device drops the mail to and from it. The hosting computer uses the same mailbox directly, under `host`. An older broker without the mailbox answers 404 without `recipient`; the window then says the server must be updated.
 - **Disconnect** forgets the connection on this computer. The device stays listed on the broker until it is revoked there.
 
+## Computers in different places
+
+The broker has no internet mode. Computers in different homes still work together when they share a VPN that gives them private addresses (10.x, 172.16–31.x, 192.168.x, or IPv6 fc00::/7): to the broker they are one private network, so "local network" accepts them (D-040).
+
+- The VPN keeps outsiders away from the broker. Inside the VPN a computer still needs an invitation or the short code, and all traffic is TLS with the broker's pinned fingerprint, so the VPN server only carries encrypted data.
+- A VPN that hands out 100.64.0.0/10 addresses is refused: Go does not count that range as private. Change the VPN's address range, or ask for this to be allowed as a separate decision.
+- Finding the server automatically uses local broadcast and usually does not cross a VPN; join by the address in the invitation.
+- The computer that hosts the broker must stay on and awake; while it is off, the others cannot exchange tasks.
+- Give other people their own broker and their own VPN rather than a place in yours.
+
 ## Files
 
 In the client's data directory:

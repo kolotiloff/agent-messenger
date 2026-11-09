@@ -28,7 +28,7 @@ The interface shows separately:
 - the state of the local client and agents;
 - the location of the database and backups, and the latest service errors.
 
-"Broker running" does not mean it is reachable from another computer. Connecting over the internet may require a VPN or network/router configuration. The program does not open ports and does not promise to get around NAT with a single switch. Remote connections go through TLS verification and authorization; hosting on a home PC does not waive these requirements.
+"Broker running" does not mean it is reachable from another computer. Connecting over the internet may require a VPN or network/router configuration. The program does not open ports and does not promise to get around NAT with a single switch. Remote connections go through TLS verification and authorization; hosting on a home PC does not waive these requirements. How a VPN between computers in different places works with "local network" is in [BROKER.md](BROKER.md#computers-in-different-places).
 
 ## VPS setup wizard in the app
 
