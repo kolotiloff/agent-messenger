@@ -87,3 +87,23 @@ func TestFinalMessageComesBackFromAnotherComputer(t *testing.T) {
 		t.Fatalf("report on a %+v", last)
 	}
 }
+
+// T-088: a report says what the task spent: new input, cache write, cache
+// read and output.
+func TestReportCarriesUsage(t *testing.T) {
+	f := newTaskFixture(t)
+	id := f.start(t, "op", "claude", "Audit")
+	r := f.launch(t, id, f.sessionOf(t, id))
+	f.dispose(t, r, DispositionReport, "Done")
+	ev := cleanExit
+	cost := 0.25
+	ev.Usage = &TaskUsage{InputTokens: 430018, CacheWriteTokens: 55000, CachedTokens: 375000, OutputTokens: 3200, CostUSD: &cost}
+	if _, err := f.st.FinishTaskRun(r.ID, ev); err != nil {
+		t.Fatal(err)
+	}
+	events, _, _ := f.st.TaskEvents("Game", AudienceCoordinator, 0, 50)
+	want := "new input 18, cache write 55000, cache read 375000, output 3200, price the agent reported $0.2500."
+	if last := events[len(events)-1]; last.Kind != "report" || !strings.Contains(last.Text, want) {
+		t.Fatalf("report %+v", last)
+	}
+}

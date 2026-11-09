@@ -6,6 +6,9 @@ package adapters
 // was reported. It only informs the owner and never changes a run's outcome.
 type Usage struct {
 	Input, Cached, Output int64
+	// CacheWrite is the part of Input written to the cache (T-088); Codex
+	// reports none.
+	CacheWrite int64
 	Cost                  float64
 	HasCost               bool
 }
@@ -21,7 +24,7 @@ func count(v any) (int64, bool) {
 
 // noteUsage adds one report to the run's total. A report without any
 // readable number adds nothing.
-func (r *TaskEventResult) noteUsage(input, cached, output []any, cost any) {
+func (r *TaskEventResult) noteUsage(input, cached, output []any, cost any, write ...any) {
 	var add Usage
 	seen := false
 	sum := func(dst *int64, values []any) {
@@ -35,6 +38,7 @@ func (r *TaskEventResult) noteUsage(input, cached, output []any, cost any) {
 	sum(&add.Input, input)
 	sum(&add.Cached, cached)
 	sum(&add.Output, output)
+	sum(&add.CacheWrite, write)
 	if c, ok := cost.(float64); ok && c >= 0 {
 		add.Cost, add.HasCost, seen = c, true, true
 	}
@@ -47,6 +51,7 @@ func (r *TaskEventResult) noteUsage(input, cached, output []any, cost any) {
 	r.Usage.Input += add.Input
 	r.Usage.Cached += add.Cached
 	r.Usage.Output += add.Output
+	r.Usage.CacheWrite += add.CacheWrite
 	if add.HasCost {
 		r.Usage.Cost += add.Cost
 		r.Usage.HasCost = true
@@ -61,7 +66,7 @@ func claudeUsage(e map[string]any, r *TaskEventResult) {
 		return
 	}
 	read := u["cache_read_input_tokens"]
-	r.noteUsage([]any{u["input_tokens"], u["cache_creation_input_tokens"], read}, []any{read}, []any{u["output_tokens"]}, e["total_cost_usd"])
+	r.noteUsage([]any{u["input_tokens"], u["cache_creation_input_tokens"], read}, []any{read}, []any{u["output_tokens"]}, e["total_cost_usd"], u["cache_creation_input_tokens"])
 }
 
 // Codex's turn.completed: input_tokens already includes the cached part.
@@ -81,5 +86,5 @@ func cursorUsage(e map[string]any, r *TaskEventResult) {
 		return
 	}
 	read := u["cacheReadTokens"]
-	r.noteUsage([]any{u["inputTokens"], u["cacheWriteTokens"], read}, []any{read}, []any{u["outputTokens"]}, nil)
+	r.noteUsage([]any{u["inputTokens"], u["cacheWriteTokens"], read}, []any{read}, []any{u["outputTokens"]}, nil, u["cacheWriteTokens"])
 }

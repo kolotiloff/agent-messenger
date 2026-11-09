@@ -184,3 +184,13 @@ func TestFinalTextIsKeptWhole(t *testing.T) {
 		t.Fatal("codex final text")
 	}
 }
+
+// T-088: Claude's cache writes are kept apart from its reads.
+func TestClaudeCacheWriteIsKept(t *testing.T) {
+	line, _ := json.Marshal(map[string]any{"type": "result", "session_id": "s", "usage": map[string]any{"input_tokens": 18, "cache_creation_input_tokens": 55000, "cache_read_input_tokens": 375000, "output_tokens": 3200}})
+	var r TaskEventResult
+	ParseTaskEvent("claude", line, &r)
+	if r.Usage == nil || r.Usage.Input != 430018 || r.Usage.CacheWrite != 55000 || r.Usage.Cached != 375000 || r.Usage.Output != 3200 {
+		t.Fatalf("usage %+v", r.Usage)
+	}
+}

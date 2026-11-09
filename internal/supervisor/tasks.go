@@ -268,7 +268,7 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	result, readErr := read.result, read.err
 	ev := core.RunEvidence{ExitObserved: waitErr == nil, ExitCode: exitCode, Cancelled: cancelled, LastText: result.LastText, FinalText: result.FinalText}
 	if u := result.Usage; u != nil {
-		ev.Usage = &core.TaskUsage{InputTokens: u.Input, CachedTokens: u.Cached, OutputTokens: u.Output}
+		ev.Usage = &core.TaskUsage{InputTokens: u.Input, CachedTokens: u.Cached, OutputTokens: u.Output, CacheWriteTokens: u.CacheWrite}
 		if u.HasCost {
 			cost := u.Cost
 			ev.Usage.CostUSD = &cost

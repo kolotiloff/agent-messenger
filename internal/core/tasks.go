@@ -1498,6 +1498,9 @@ func (s *Store) FinishTaskRun(run string, ev RunEvidence) (string, error) {
 			if text, err = withOutputNote(tx, t.ID, text); err != nil {
 				return err
 			}
+			if text, err = withUsageNote(tx, t.ID, text); err != nil {
+				return err
+			}
 			return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "failed", bound4000(text), "")
 		default:
 			if err := setTaskState(tx, t.ID, "blocked", detail); err != nil {
@@ -1524,6 +1527,9 @@ func publishDisposition(tx *sql.Tx, t Task, r TaskRun) error {
 		}
 		text, err := withOutputNote(tx, t.ID, r.DispositionText)
 		if err != nil {
+			return err
+		}
+		if text, err = withUsageNote(tx, t.ID, text); err != nil {
 			return err
 		}
 		return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "report", text, "")
