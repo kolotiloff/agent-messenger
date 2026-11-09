@@ -8,7 +8,7 @@ The first native shell for Mac: AppKit, the system WKWebView and an embedded Go 
 2. Unpack the ZIP by double-clicking it. The archive's long name is its checksum; inside is `Agent Messenger.app`.
 3. Move `Agent Messenger.app` to the user folder `~/Applications` («Программы», "Applications"). Open it by double-clicking or via Spotlight/Dock.
 
-Later versions are checked automatically at launch, every 5 minutes and when you return to the window (with an overall interval of no less than 5 minutes). **«Доступно обновление»** ("Update available") appears at the bottom left; the manual check is in the menu **Agent Messenger → Проверить обновления…** ("Check for Updates…"). No GitHub sign-in is needed.
+Later versions are checked automatically at launch, every 30 minutes and when you return to the window (with an overall interval of no less than 30 minutes). **«Доступно обновление»** ("Update available") appears at the bottom left; the manual check is in the menu **Agent Messenger → Проверить обновления…** ("Check for Updates…"). No GitHub sign-in is needed.
 
  The package currently has an ad-hoc signature: clean distribution through Gatekeeper, Developer ID and notarization is not accepted. Bypassing macOS protections is not required and not suggested. Verified locally on Apple Silicon; the minimum version for the shell is macOS 15, Intel is not accepted separately.
 

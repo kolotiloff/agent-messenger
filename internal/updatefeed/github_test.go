@@ -16,8 +16,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
@@ -35,7 +37,7 @@ func fixturePackage(t *testing.T, key ed25519.PrivateKey, build int) (Manifest, 
 	return m, raw, signature, archive
 }
 func TestGitHubDownloadCommitAndFailurePreservePreviousPackage(t *testing.T) {
-	for _, scenario := range []string{"valid", "tampered manifest", "tampered archive", "interrupted", "oversized", "duplicate asset", "missing signature", "http error", "downgrade", "conflict", "redirect", "bad redirect"} {
+	for _, scenario := range []string{"valid", "tampered manifest", "tampered archive", "interrupted", "oversized", "duplicate asset", "missing signature", "http error", "downgrade", "conflict", "redirect", "bad redirect", "foreign address", "rate limit"} {
 		t.Run(scenario, func(t *testing.T) {
 			pub, key, _ := ed25519.GenerateKey(rand.Reader)
 			c := Channel{Directory: t.TempDir(), PublicKey: base64.StdEncoding.EncodeToString(pub)}
@@ -55,14 +57,19 @@ func TestGitHubDownloadCommitAndFailurePreservePreviousPackage(t *testing.T) {
 				sig = []byte(base64.StdEncoding.EncodeToString(ed25519.Sign(key, raw)))
 			}
 			name := "update-" + runtime.GOOS + "-" + runtime.GOARCH + ".json"
-			assets := []releaseAsset{{ID: 1, Name: name, State: "uploaded", Size: int64(len(raw))}, {ID: 2, Name: name + ".sig", State: "uploaded", Size: int64(len(sig))}, {ID: 3, Name: m.SHA256 + ".zip", State: "uploaded", Size: int64(len(archive))}}
+			const tag = "v0.0.0-preview.7"
+			at := func(n string) string { return releaseDownload + tag + "/" + n }
+			assets := []releaseAsset{{ID: 1, Name: name, State: "uploaded", Size: int64(len(raw)), URL: at(name)}, {ID: 2, Name: name + ".sig", State: "uploaded", Size: int64(len(sig)), URL: at(name + ".sig")}, {ID: 3, Name: m.SHA256 + ".zip", State: "uploaded", Size: int64(len(archive)), URL: at(m.SHA256 + ".zip")}}
 			if scenario == "duplicate asset" {
 				assets = append(assets, assets[0])
+			}
+			if scenario == "foreign address" {
+				assets[2].URL = "https://github.com/someone/else/releases/download/" + tag + "/" + m.SHA256 + ".zip"
 			}
 			if scenario == "missing signature" {
 				assets = append(assets[:1], assets[2:]...)
 			}
-			list, _ := json.Marshal([]release{{Assets: assets}})
+			list, _ := json.Marshal([]release{{Tag: tag, Assets: assets}})
 			client := updateHTTPClient()
 			requests := 0
 			cdn := false
@@ -74,15 +81,24 @@ func TestGitHubDownloadCommitAndFailurePreservePreviousPackage(t *testing.T) {
 				data := list
 				status := 200
 				headers := make(http.Header)
-				switch req.URL.Path {
-				case "/repos/kolotiloff/agent-messenger/releases/assets/1":
+				if req.URL.Host == "api.github.com" && req.URL.Path != "/repos/kolotiloff/agent-messenger/releases" {
+					t.Fatalf("release file fetched through the API: %s", req.URL)
+				}
+				if scenario == "rate limit" && req.URL.Host == "api.github.com" {
+					headers.Set("X-RateLimit-Remaining", "0")
+					headers.Set("X-RateLimit-Reset", strconv.FormatInt(time.Now().Add(20*time.Minute).Unix(), 10))
+					status = 403
+				}
+				download := "/kolotiloff/agent-messenger/releases/download/" + tag + "/"
+				switch strings.TrimPrefix(req.URL.Path, download) {
+				case name:
 					data = raw
 					if scenario == "tampered manifest" {
 						data = bytes.ReplaceAll(raw, []byte("preview"), []byte("invalid"))
 					}
-				case "/repos/kolotiloff/agent-messenger/releases/assets/2":
+				case name + ".sig":
 					data = sig
-				case "/repos/kolotiloff/agent-messenger/releases/assets/3":
+				case m.SHA256 + ".zip":
 					data = archive
 					switch scenario {
 					case "tampered archive":
@@ -134,6 +150,10 @@ func TestGitHubDownloadCommitAndFailurePreservePreviousPackage(t *testing.T) {
 					}
 				} else if err == nil {
 					t.Fatal("invalid update accepted")
+				}
+				var limit RateLimitError
+				if (scenario == "rate limit") != errors.As(err, &limit) || (scenario == "rate limit" && limit.Reset.IsZero()) {
+					t.Fatalf("rate limit reported as %v", err)
 				}
 				after, _ := os.ReadFile(filepath.Join(c.Directory, "current.json"))
 				if !bytes.Equal(before, after) {

@@ -12,8 +12,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/kolotiloff/agent-messenger/internal/platform"
@@ -23,21 +25,64 @@ var ErrDownloadBusy = errors.New("another update download owns the channel")
 
 const releaseAPI = "https://api.github.com/repos/kolotiloff/agent-messenger/releases"
 
+// releaseDownload is where release files are downloaded from. Unlike the
+// API, these downloads do not count against GitHub's hourly limit per
+// address, which several computers behind one address shared before.
+const releaseDownload = "https://github.com/kolotiloff/agent-messenger/releases/download/"
+
+var releaseTag = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
+
 type releaseAsset struct {
 	ID    int64  `json:"id"`
 	Name  string `json:"name"`
 	Size  int64  `json:"size"`
 	State string `json:"state"`
+	URL   string `json:"browser_download_url"`
 }
 type release struct {
 	Draft  bool           `json:"draft"`
+	Tag    string         `json:"tag_name"`
 	Assets []releaseAsset `json:"assets"`
 }
 type SyncResult struct {
 	Updated bool   `json:"updated"`
 	Version string `json:"version,omitempty"`
 	State   string `json:"state"`
+	RetryAt string `json:"retry_at,omitempty"`
 }
+
+// RateLimitError says GitHub refused the check for its hourly limit per
+// address. It is not a broken update: the check may be repeated after Reset.
+type RateLimitError struct{ Reset time.Time }
+
+func (e RateLimitError) Error() string {
+	if e.Reset.IsZero() {
+		return "GitHub limits update checks from this address for now"
+	}
+	return "GitHub limits update checks from this address until " + e.Reset.Format(time.RFC3339)
+}
+
+// rateLimited reads GitHub's limit answer: 403 or 429 with no requests
+// left, or with a Retry-After.
+func rateLimited(response *http.Response) (RateLimitError, bool) {
+	if response.StatusCode != http.StatusForbidden && response.StatusCode != http.StatusTooManyRequests {
+		return RateLimitError{}, false
+	}
+	if seconds, err := strconv.Atoi(response.Header.Get("Retry-After")); err == nil && seconds >= 0 && seconds < 86400 {
+		return RateLimitError{Reset: time.Now().Add(time.Duration(seconds) * time.Second)}, true
+	}
+	if response.Header.Get("X-RateLimit-Remaining") != "0" {
+		return RateLimitError{}, false
+	}
+	e := RateLimitError{}
+	if unix, err := strconv.ParseInt(response.Header.Get("X-RateLimit-Reset"), 10, 64); err == nil && unix > 0 {
+		if reset := time.Unix(unix, 0); reset.After(time.Now().Add(-time.Minute)) && reset.Before(time.Now().Add(24*time.Hour)) {
+			e.Reset = reset
+		}
+	}
+	return e, true
+}
+
 type signedEnvelope struct {
 	Manifest  []byte `json:"manifest"`
 	Signature []byte `json:"signature"`
@@ -50,7 +95,7 @@ func allowedUpdateURL(u *url.URL) bool {
 		return false
 	}
 	switch u.Hostname() {
-	case "api.github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com":
+	case "api.github.com", "github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com":
 		return true
 	}
 	return false
@@ -78,6 +123,9 @@ func remoteGet(ctx context.Context, client *http.Client, address, accept string,
 		return nil, errors.New("GitHub update download unavailable")
 	}
 	defer response.Body.Close()
+	if limit, ok := rateLimited(response); ok {
+		return nil, limit
+	}
 	if response.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitHub update returned HTTP %d", response.StatusCode)
 	}
@@ -93,14 +141,17 @@ func remoteGet(ctx context.Context, client *http.Client, address, accept string,
 	}
 	return data, nil
 }
-func uniqueAsset(assets []releaseAsset, name string, max int64) (releaseAsset, bool, error) {
+
+// uniqueAsset finds the one asset with this name. Its download address must
+// be exactly the release's own download address for that name.
+func uniqueAsset(assets []releaseAsset, tag, name string, max int64) (releaseAsset, bool, error) {
 	var found releaseAsset
 	exists := false
 	for _, a := range assets {
 		if a.Name != name {
 			continue
 		}
-		if exists || a.ID <= 0 || a.Size <= 0 || a.Size > max || a.State != "uploaded" {
+		if exists || a.ID <= 0 || a.Size <= 0 || a.Size > max || a.State != "uploaded" || !releaseTag.MatchString(tag) || strings.ContainsAny(name, "/?#%\\") || a.URL != releaseDownload+tag+"/"+name {
 			return found, false, errors.New("invalid or duplicate release asset")
 		}
 		found = a
@@ -149,19 +200,19 @@ func (c Channel) syncGitHub(ctx context.Context, minimumBuild int, client *http.
 		if r.Draft {
 			continue
 		}
-		ma, found, err := uniqueAsset(r.Assets, manifestName, 32768)
+		ma, found, err := uniqueAsset(r.Assets, r.Tag, manifestName, 32768)
 		if err != nil {
 			return result, err
 		}
 		if !found {
 			continue
 		}
-		sa, found, err := uniqueAsset(r.Assets, manifestName+".sig", 256)
+		sa, found, err := uniqueAsset(r.Assets, r.Tag, manifestName+".sig", 256)
 		if err != nil || !found {
 			return result, errors.New("release signature asset missing or invalid")
 		}
 		download := func(a releaseAsset, max int64) ([]byte, error) {
-			b, e := remoteGet(ctx, client, releaseAPI+"/assets/"+strconv.FormatInt(a.ID, 10), "application/octet-stream", max)
+			b, e := remoteGet(ctx, client, a.URL, "application/octet-stream", max)
 			if e == nil && int64(len(b)) != a.Size {
 				e = errors.New("release asset length mismatch")
 			}
@@ -185,7 +236,7 @@ func (c Channel) syncGitHub(ctx context.Context, minimumBuild int, client *http.
 		if m.Build <= floor {
 			return SyncResult{State: "current", Version: m.Version}, nil
 		}
-		archive, found, err := uniqueAsset(r.Assets, m.SHA256+".zip", MaxArchive)
+		archive, found, err := uniqueAsset(r.Assets, r.Tag, m.SHA256+".zip", MaxArchive)
 		if err != nil || !found || archive.Size != m.Length {
 			return result, errors.New("signed archive missing or wrong size")
 		}

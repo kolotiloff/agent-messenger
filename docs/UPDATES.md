@@ -8,7 +8,9 @@ Sparkle 2.10.1 replaces the app and the embedded interface, then reopens it. A r
 
 ## Delivery
 
-When the window opens, then every 5 minutes, and when the app is activated (with an overall limit of one automatic request per 5 minutes), if automatic checking is enabled, the built-in `update-fetch` command checks the 20 most recent GitHub Releases. An available version is indicated by the «Доступно обновление» ("Update available") button at the bottom left. A manual check is in the app menu. When there is no update, there is no permanent large button. Drafts are skipped; preview releases are allowed. The first published release with metadata for the current OS and architecture defines the channel. File names: `update-darwin-arm64.json`, `update-darwin-arm64.json.sig` and `<sha256>.zip` (for Intel, `darwin-amd64`). A release with an incomplete or corrupted set is rejected, not masked by an older release.
+When the window opens, then every 30 minutes, and when the app is activated (with an overall limit of one automatic request per 30 minutes), if automatic checking is enabled, the built-in `update-fetch` command checks the 20 most recent GitHub Releases. An available version is indicated by the «Доступно обновление» ("Update available") button at the bottom left. A manual check is in the app menu. When there is no update, there is no permanent large button. Drafts are skipped; preview releases are allowed. The first published release with metadata for the current OS and architecture defines the channel. File names: `update-darwin-arm64.json`, `update-darwin-arm64.json.sig` and `<sha256>.zip` (for Intel, `darwin-amd64`). A release with an incomplete or corrupted set is rejected, not masked by an older release.
+
+Only the release list uses the GitHub API (`api.github.com`), once per check. The files are downloaded from the release's own download address (`github.com/kolotiloff/agent-messenger/releases/download/<tag>/<name>`, which redirects to GitHub's file host); an asset whose address is anything else is refused. These downloads do not count against GitHub's limit of 60 API requests an hour per address. Before 2026-11-09 each check made three API requests, and the owner's computers behind one address used the limit up, so a manual check failed (T-103). When GitHub still refuses for that limit, the check says so with the time to try again («GitHub временно ограничил проверки…»; `update-fetch` returns `state: rate_limited` with `retry_at`) instead of a download failure.
 
 The command contacts only the fixed repository over HTTPS. Only the exact API and GitHub asset CDN domains are allowed; redirects are restricted. Requests carry no account tokens, cookies, provider keys or the window's local key. Responses are limited in size and time. On a network error the UI reports a failure and does not present it as "no updates". The command does not contact the supervisor, models or the session database.
 
@@ -20,7 +22,7 @@ A local HTTP bridge with a separate window Bearer key hands the verified package
 
 The programs for Windows and Linux use the same channel and the same public key, built into the program (D-048). Each release has `update-windows-amd64.json`, `update-windows-arm64.json`, `update-linux-amd64.json`, `update-linux-arm64.json`, their `.sig` files, and a `<sha256>.zip` for each with only `messenger.exe` or `messenger` inside. `scripts/package-others.sh` builds the archives; the release job signs them on macOS with the same key and Sparkle's `sign_update` (`scripts/sign-other-updates.py`) and checks each signature against the public key before uploading.
 
-The window (`messenger open`) checks when it opens and then every 5 minutes, in the background, without the Mac's `update-fetch` helper. «Обновиться» in the window:
+The window (`messenger open`) checks when it opens and then every 30 minutes, in the background, without the Mac's `update-fetch` helper. «Обновиться» in the window:
 
 1. checks the downloaded archive's size, SHA-256 and Ed25519 signature again;
 2. unpacks the one program file and writes it next to the running one (`.<name>.update`);
@@ -79,7 +81,7 @@ API contracts: [GitHub Releases](https://docs.github.com/en/rest/releases/releas
 
 The preview.13 → preview.14 transition has also been [verified on Mac](reports/2026-11-06-github-update14-mac.md), with the queue and the previous background client preserved.
 
-Starting with preview.15, the timer allows a deviation of up to 15 seconds. Automatic requests are limited to one run per 5 minutes; no parallel download is created. With automatic checking disabled, the manual menu command remains. This is a periodic check, not push: computer sleep, the network and an active installer may delay detection.
+Starting with preview.15, the timer allows a deviation of up to 15 seconds. Automatic requests are limited to one run per 30 minutes (5 minutes before T-103); no parallel download is created. With automatic checking disabled, the manual menu command remains. This is a periodic check, not push: computer sleep, the network and an active installer may delay detection.
 
 The preview.14 → preview.15 transition and a repeated automatic check without restart have been [accepted on Mac](reports/2026-11-06-github-update15-mac.md).
 # Reopening the window during a download

@@ -37,6 +37,16 @@ func runUpdateFetch(root string, args []string) error {
 	if errors.Is(err, updatefeed.ErrDownloadBusy) {
 		return json.NewEncoder(os.Stdout).Encode(updatefeed.SyncResult{State: "busy"})
 	}
+	// GitHub's hourly limit is not a broken update: the app says when to
+	// try again instead of a download failure.
+	var limit updatefeed.RateLimitError
+	if errors.As(err, &limit) {
+		out := updatefeed.SyncResult{State: "rate_limited"}
+		if !limit.Reset.IsZero() {
+			out.RetryAt = limit.Reset.UTC().Format(time.RFC3339)
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
+	}
 	if err != nil {
 		return err
 	}

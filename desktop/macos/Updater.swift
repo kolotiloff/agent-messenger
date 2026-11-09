@@ -47,7 +47,7 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverD
             controller.startUpdater()
             started = true
             startWatchingLocalChannel()
-            fetchTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+            fetchTimer = Timer.scheduledTimer(withTimeInterval: 1800, repeats: true) { [weak self] _ in
                 self?.checkAutomaticallyIfDue()
             }
             fetchTimer?.tolerance = 15
@@ -109,7 +109,7 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverD
     // Focus changes share the same throttle as the timer; waiting never calls a model.
     func checkAutomaticallyIfDue() {
         guard started, endpoint != nil, controller.updater.automaticallyChecksForUpdates,
-              ProcessInfo.processInfo.systemUptime - lastRemoteCheck >= 300 else { return }
+              ProcessInfo.processInfo.systemUptime - lastRemoteCheck >= 1800 else { return }
         fetchRemote(manual: false)
     }
     func fetchRemote(manual: Bool) {
@@ -154,6 +154,16 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverD
                     return
                 }
                 self.busySince = nil
+                if child.terminationStatus == 0, result?["state"] as? String == "rate_limited" {
+                    // GitHub's hourly limit per address, shared by the owner's computers.
+                    var when = ""
+                    if let at = result?["retry_at"] as? String, let date = ISO8601DateFormatter().date(from: at) {
+                        let f = DateFormatter(); f.dateFormat = "HH:mm"; when = " после " + f.string(from: date)
+                    }
+                    self.fetchStatus = "GitHub ограничил проверки, повторить" + when; self.onStatus?(self.availableVersion)
+                    if manual { self.remoteMessage("GitHub временно ограничил проверки", "С этого адреса сегодня было слишком много проверок обновлений. Повторите" + (when.isEmpty ? " позже" : when) + ". Программа и сохранённый пакет не изменены.") }
+                    return
+                }
                 if child.terminationStatus != 0 {
                     self.fetchStatus = "Не удалось получить обновление, повторить"; self.onStatus?(self.availableVersion)
                     if manual { self.remoteMessage("Не удалось получить обновление", "Загрузка или проверка пакета не завершилась. Повторите позже. Сохранённый пакет и работающий клиент не изменены; неподписанные пакеты не принимаются.") }

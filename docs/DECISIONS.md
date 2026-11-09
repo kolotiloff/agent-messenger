@@ -241,3 +241,9 @@ A list the owner already saved is never replaced. For an agent connected earlier
 2026-11-09, Claude Code, coordinator's list item 13, passed on by the owner.
 
 A worker's question to the owner (`ask_owner`) and the owner's answer also reach the coordinator, as `owner_question` and `owner_answered` events of `wait`. They are for reading: the question stays the owner's, and `answer` from the coordinator is still refused for it. Before, the coordinator saw only «waiting for an answer» and could not plan around it. The copy is written where the task is managed: for a task run on another computer, on the computer that started it.
+
+## D-103 — Update checks within GitHub's limit (T-103)
+
+2026-11-09, Claude Code, owner's agreement.
+
+GitHub answers 60 API requests an hour per address without an account, and all of the owner's computers reach it through one address. A check made three API requests (the release list and two files) every 5 minutes on each computer, so the limit ran out and even a manual check failed. Now only the release list uses the API; the release files are downloaded from the release's own download address, which must be exactly `https://github.com/kolotiloff/agent-messenger/releases/download/<tag>/<name>`. Checks run every 30 minutes. When GitHub refuses for its limit, the window says so and when to try again; nothing retries on its own beyond the usual next check. Signature and checksum checks are unchanged.
