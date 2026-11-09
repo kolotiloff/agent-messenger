@@ -160,6 +160,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-tab[aria-pressed=true] { background:var(--am-selected); color:var(--am-text); }
 #am-concept .am-tab[aria-pressed=true]:is(:hover,:focus-visible) { background:var(--am-button-hover); }
 #am-concept .am-actions { display:flex; flex-wrap:wrap; align-items:center; gap:var(--am-gap-control); }
+#am-concept .am-actions-end { justify-content:flex-end; }
 /* The main action sits on the right (dialogs follow the Claude app). */
 #am-concept .am-end-actions { justify-content:flex-end; }
 #am-concept .am-end-actions > .am-danger:not(.am-alone) { margin-right:auto; }
