@@ -770,3 +770,13 @@ func TestCoordinatorWarnsAboutTheAgentsLimit(t *testing.T) {
 		t.Fatalf("after reset %v", started)
 	}
 }
+
+// T-086: a new coordinator chat starts from tasks and its cursor instead of
+// replaying the project's history.
+func TestNewCoordinatorChatStartsFromTasks(t *testing.T) {
+	for _, want := range []string{"A new chat starts from the current state", "first call tasks", "Never wait from 0 in a new chat"} {
+		if !strings.Contains(coordinatorInstructions, want) {
+			t.Fatalf("instructions lack %q", want)
+		}
+	}
+}

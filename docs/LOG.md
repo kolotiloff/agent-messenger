@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-09 — Claude Code (T-086 fresh coordinator chat)
+
+- The owner moves all work to Messenger and wants a fresh coordinator chat each day and night. T-086: the coordinator's instructions tell a new chat to start from `tasks` and its cursor; `wait` from 0 would replay the whole history. On `claude/ui-tweaks`, not released.
+
 ## 2026-11-09 — Claude Code (T-085 write to a working worker)
 
 - T-085 (D-096, Q-026 a): the owner writes to a working worker; the note waits and the same conversation continues with it when the current run ends; a report written meanwhile is held. On `claude/ui-tweaks`, not released. Security review: all four reports are in; fixes follow.
