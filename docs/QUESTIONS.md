@@ -6,6 +6,9 @@ Format: ID, question, why it matters, options, which tasks it blocks.
 
 ## Open
 
+### Q-027: A worker that cannot commit next to another session (T-089)?
+Asked 2026-11-09 (coordinator's list, item 3). In a Plastic project a worker cannot check in while another session works in the same workspace: Plastic wants the workspace on the latest version, and updating under another session is unsafe. Options: (a) **own workspace per worker**: Messenger makes or reuses a second workspace of the project for tasks (the owner names it once per project; Messenger never creates workspaces itself); (b) **files with the report**: the worker lists changed files and Messenger copies them to the coordinator's computer; (c) keep today's rule: the worker asks and waits until the other task is done (T-075). **Cautious choice until answered:** (c). **Recommended:** (a), set by the owner in the project's settings.
+
 ### Q-026: Write to a worker while it works (T-085)?
 Asked 2026-11-09. Today the owner can write to a worker only when it asks a question: a task run is one agent process that takes its instructions at start, and the coordinator gets the report when it ends. Options: (a) **a message waits**: the owner writes any time, the message is kept and, as soon as the current run ends, the worker continues the same conversation with it; the coordinator gets the report after that; (b) **interrupt and send**: the run is stopped at once and the worker continues the same conversation with the message (like Esc and typing in an agent's own window); (c) **live**: the message reaches the running agent without stopping it; only Claude supports this, Codex does not. **Cautious choice until answered:** nothing changes; the box says why it is closed. **Recommended:** (a), with (b) as a second button later.
 **Answer (2026-11-09):** (a). Built in T-085 (D-096).
