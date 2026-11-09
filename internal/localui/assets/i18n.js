@@ -430,7 +430,6 @@
   'Вышла ':'Released: ',
   '. Нажмите, чтобы обновить':'. Click to update',
   'Обновить':'Update',
-  'Альфа-версия, точный номер ':'Alpha version, exact number ',
   'Обновление загружается в фоне':'The update downloads in the background',
   'Обновлено. Окно откроется заново.':'Updated. The window opens again.',
   'Скрыть список задач':'Hide the task list',

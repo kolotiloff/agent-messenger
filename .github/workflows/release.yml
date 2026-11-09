@@ -184,10 +184,12 @@ jobs:
             printf -- '- **Linux**: [AgentMessenger-Linux-x64](%s/AgentMessenger-Linux-x64) · ARM: [AgentMessenger-Linux-ARM64](%s/AgentMessenger-Linux-ARM64)\n' "$base" "$base"
             printf '\nКак запустить: https://github.com/%s/blob/main/docs/DOWNLOAD.md\n' "$GITHUB_REPOSITORY"
           } > "$RUNNER_TEMP/page.md"
+          # The title shows the short version (0.58); the tag keeps the full
+          # one, which installed programs check (owner, 2026-11-09).
           # Not a pre-release, so /releases/latest/download/<name> always
           # points to this build. The in-app updater reads every release.
           gh release create "v$VERSION" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --draft --latest \
-            --target "$GITHUB_SHA" --title "Agent Messenger $VERSION" --notes-file "$RUNNER_TEMP/page.md"
+            --target "$GITHUB_SHA" --title "Agent Messenger 0.${VERSION##*.}" --notes-file "$RUNNER_TEMP/page.md"
           gh release edit "v$VERSION" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease=false --latest
           gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" --json url,assets --jq '.url, (.assets[].name)'
       - name: Remove signing material

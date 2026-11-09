@@ -31,7 +31,10 @@ cp "$sparkle/LICENSE" "$app/Contents/Resources/Sparkle-LICENSE.txt"
 # Non-numbered CI/development previews have build 0, never a release sequence.
 build_number="${version##*.}"
 [[ "$build_number" =~ ^[1-9][0-9]{0,8}$ ]] || build_number=0
-/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$app/Contents/Info.plist"
+# People see the short version (0.58); the program inside keeps the full one.
+short_version="$version"
+[[ "$build_number" != 0 ]] && short_version="0.$build_number"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $short_version" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$app/Contents/Info.plist"
 xcrun swiftc -swift-version 5 desktop/macos/icon.swift -o "$out/icon-generator"
 "$out/icon-generator" "$out/AppIcon.iconset"

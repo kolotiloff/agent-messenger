@@ -40,6 +40,8 @@ Any failure before step 4 leaves the program untouched and removes the staged fi
 
 The **Release Mac preview** workflow (`.github/workflows/release.yml`) builds, signs and publishes a preview from `main`. Run it by hand under Actions → Release Mac preview → Run workflow, with a version such as `0.0.0-preview.20` and release notes.
 
+People see the short version: the release title, the Mac app («О программе», `CFBundleShortVersionString`), the Mac update dialog and the window say «0.58» for `0.0.0-preview.58` (owner, 2026-11-09, D-105). The tag, the manifests and the program's own `version` keep the full form, because every installed program checks it before it accepts an update; changing it would need a release that accepts both forms first, and all computers updated to it.
+
 1. **Checks.** It refuses any ref other than `main`, a malformed version, an existing tag and empty notes. Then it runs `scripts/check.sh`.
 2. **Build.** It builds the app with `build-mac-app.sh` and runs the desktop lifecycle check.
 3. **Signing.** It signs with `publish-local-update.py --key-file`.

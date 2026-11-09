@@ -247,3 +247,9 @@ A worker's question to the owner (`ask_owner`) and the owner's answer also reach
 2026-11-09, Claude Code, owner's agreement.
 
 GitHub answers 60 API requests an hour per address without an account, and all of the owner's computers reach it through one address. A check made three API requests (the release list and two files) every 5 minutes on each computer, so the limit ran out and even a manual check failed. Now only the release list uses the API; the release files are downloaded from the release's own download address, which must be exactly `https://github.com/kolotiloff/agent-messenger/releases/download/<tag>/<name>`. Checks run every 30 minutes. When GitHub refuses for its limit, the window says so and when to try again; nothing retries on its own beyond the usual next check. Signature and checksum checks are unchanged.
+
+## D-105 — Short version for people (T-104)
+
+2026-11-09, Claude Code, owner's request.
+
+People see «0.58» instead of «0.0.0-preview.58»: in the release title, the Mac app's short version (About and update dialog), and the window. The full version stays in the release tag, the signed manifests and the program's `version`, because installed programs check exactly that form before they accept an update; switching the inner form needs one release that accepts both forms, and every computer on it, before releases use the new form.

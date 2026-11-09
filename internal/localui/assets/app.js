@@ -1511,9 +1511,9 @@
   // The Mac shell's folder picker answers here, into the field that asked.
   let folderTarget='project-folder';
   window.messengerFolderPicked=path=>{if(typeof path==='string'&&path){$(folderTarget).value=path;$(folderTarget).dispatchEvent(new Event('input'));}};
-  // The window names a build the usual short way, «v0.41» for
-  // 0.0.0-preview.41 (owner); the release tag stays as it is because updates
-  // compare it. The tooltip says it is an alpha and gives the exact tag.
+  // The window names a build the short way, «v0.41» for 0.0.0-preview.41
+  // (owner); the release tag stays as it is because updates compare it. The
+  // Mac app already reports the short form (0.58).
   function versionName(version){
     const preview=version.match(/^0\.0\.0-preview\.(\d+)$/);
     return preview?'v0.'+preview[1]:version?'v'+version:'';
@@ -1530,7 +1530,7 @@
     const version=typeof status?.version==='string'?status.version:'';
     const installed=typeof status?.installedVersion==='string'?status.installedVersion:'';
     $('app-installed-version').hidden=!installed;
-    $('app-installed-version').title=installed?tr('Альфа-версия, точный номер ')+installed:'';
+    $('app-installed-version').title=installed?tr('Версия ')+versionName(installed).slice(1):'';
     const detail=typeof status?.detail==='string'?status.detail:'';
     const waiting=detail===tr('Обновление загружается в фоне');
     // Only an available update is shown, as the blue icon next to the version.
@@ -1550,7 +1550,7 @@
     const s=selfUpdate;if(!s)return;
     const installed=typeof s.installed_version==='string'?s.installed_version:'';
     $('app-installed-version').hidden=!installed;
-    $('app-installed-version').title=installed?tr('Альфа-версия, точный номер ')+installed:'';
+    $('app-installed-version').title=installed?tr('Версия ')+versionName(installed).slice(1):'';
     const version=typeof s.version==='string'?s.version:'';
     const done=s.state==='installed',shown=(s.state==='available'&&!!version)||selfUpdateBusy||done||!!s.message;
     // Only the update icon while an update waits (owner, T-056, T-066); a line
