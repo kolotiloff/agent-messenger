@@ -40,7 +40,7 @@ var (
 	// ErrMailboxFull means the recipient has too many unread messages.
 	ErrMailboxFull = errors.New("у компьютера слишком много непрочитанных сообщений")
 	// ErrNoMailbox means the broker is older and cannot carry messages.
-	ErrNoMailbox  = errors.New("сервер не умеет передавать задачи: обновите программу на компьютере с сервером")
+	ErrNoMailbox = errors.New("сервер не умеет передавать задачи: обновите программу на компьютере с сервером")
 	// ErrBadMessage means the broker refused the message itself (its op id,
 	// size or body); sending it again cannot help.
 	ErrBadMessage = errors.New("сообщение не прошло проверку")

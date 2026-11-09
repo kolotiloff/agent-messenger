@@ -6,6 +6,9 @@ Format: ID, question, why it matters, options, which tasks it blocks.
 
 ## Open
 
+### Q-028: Security choices left to the owner (T-094)
+Asked 2026-11-09 after the security review. (a) Messages between computers are not signed end to end: the computer running the server sees them and could pose as another computer. Signing needs a key per computer and a change of the message format. (b) A worker can start a coordinator for another project by itself (the guard against workers is an environment variable); a real boundary needs a secret workers cannot read. (c) Workers skip their agent's own folder-trust prompt, so project settings files (hooks, MCP servers) in a cloned project run without asking. **Cautious choice until answered:** none of these is changed; network tasks already run without full access (D-097). **Recommended:** (a) later if computers of other people ever join a network; (b) and (c) keep as they are for one owner's own projects.
+
 ### Q-027: A worker that cannot commit next to another session (T-089)?
 Asked 2026-11-09 (coordinator's list, item 3). In a Plastic project a worker cannot check in while another session works in the same workspace: Plastic wants the workspace on the latest version, and updating under another session is unsafe. Options: (a) **own workspace per worker**: Messenger makes or reuses a second workspace of the project for tasks (the owner names it once per project; Messenger never creates workspaces itself); (b) **files with the report**: the worker lists changed files and Messenger copies them to the coordinator's computer; (c) keep today's rule: the worker asks and waits until the other task is done (T-075). **Cautious choice until answered:** (c). **Recommended:** (a), set by the owner in the project's settings.
 

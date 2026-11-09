@@ -207,7 +207,7 @@ While a task of this computer is running or waits for the coordinator, the windo
 
 ## D-097 — Tasks of other computers run without «Любые команды» by default (T-094)
 
-2026-11-09, Claude Code, after the security review: with «Любые команды» on (D-067) and tasks of the network accepted (D-056), any computer of the network, or anyone holding its device key, could run any command on every other computer. Now a task from another computer runs with the agent's own permission checks even when the agent has «Любые команды» here; the owner can allow it with «Любые команды для задач других компьютеров» on «Сервер» (off by default). Answers and follow-ups of such a task follow the same rule. Accepting tasks of the network stays on (D-056): a task with permission checks still does useful work.
+2026-11-09, Claude Code, after the security review: with «Любые команды» on (D-067) and tasks of the network accepted (D-056), any computer of the network, or anyone holding its device key, could run any command on every other computer. Now a task from another computer runs with the agent's own permission checks even when the agent has «Любые команды» here; the owner can allow it with «Любые команды для задач других компьютеров» on «Сервер» (off by default). Answers and follow-ups of such a task follow the same rule. Accepting tasks of the network stays on (D-056): a task with permission checks still does useful work. Cursor without «Любые команды» now runs with `--sandbox enabled` instead of the owner's own Cursor setting, so such a Cursor worker may be unable to commit; the owner can allow full access per computer.
 
 ## D-098 — The worker's last message is kept whole and readable by the coordinator (T-087)
 

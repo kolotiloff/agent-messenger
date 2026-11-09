@@ -2035,8 +2035,8 @@ type ComputerSummary struct {
 	Folder   string         `json:"folder,omitempty"`
 	Agents   []AgentSummary `json:"agents"`
 	// Reconnecting: see NetPeer.Reconnecting (T-092).
-	Reconnecting bool `json:"reconnecting,omitempty"`
-	Note     string         `json:"note,omitempty"`
+	Reconnecting bool   `json:"reconnecting,omitempty"`
+	Note         string `json:"note,omitempty"`
 	// AcceptsTasks and HasProject are another computer's readiness as it
 	// reported it (T-070); left out when it did not report them.
 	AcceptsTasks *bool `json:"accepts_tasks,omitempty"`

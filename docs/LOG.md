@@ -2,6 +2,12 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-09 — Claude Code (coordinator's list done, security fixes)
+
+- T-087 full last worker message kept and read with `task_output` (D-098); T-088 tokens in every report; T-090 the newest coordinator chat takes over (D-099); T-092 computers stay listed while reconnecting; T-093 `list_agents` explains empty models, limits and folders. T-089 waits for Q-027.
+- T-094 security fixes (D-097, Q-028): network tasks without full access by default, outbox can no longer be stopped, broker hardening, log redaction, CI permissions and smaller items. Two helper agents did the broker and small fixes in separate worktrees; merged by cherry-pick.
+- All on `claude/ui-tweaks`, not released.
+
 ## 2026-11-09 — Claude Code (coordinator's list, T-091)
 
 - The coordinator's list of Messenger issues became T-087..T-093 and Q-027 (own Plastic workspace per worker). T-091: a failed run says why in plain words (not signed in, error exit, crashed, ended without a report) before the raw evidence; the window shows it in Russian. On `claude/ui-tweaks`, not released.
