@@ -295,6 +295,11 @@
       items.push(item);
     };
     if(can.update)add(tr('Обновить программу'),()=>requestUpdate(d));
+    else if(can.why){
+      // Why the item cannot work yet, instead of no menu at all (owner).
+      const item=el('div',undefined,'am-select-option am-menu-off');item.setAttribute('role','menuitem');item.setAttribute('aria-disabled','true');item.tabIndex=0;
+      item.append(el('span',tr('Обновить программу')),el('span',can.why,'am-small am-muted'));items.push(item);
+    }
     if(can.revoke)add(tr('Отозвать устройство'),()=>{revokeAsk=d.id;clearTimeout(revokeTimer);revokeTimer=setTimeout(()=>{revokeAsk='';renderMachines();},8000);renderMachines();$('machines').querySelector('[data-key="'+CSS.escape('revoke-yes-'+d.id)+'"]')?.focus();});
     if(!items.length)return;
     menu.replaceChildren(...items);menu.style.left=x+'px';menu.style.top=y+'px';menu.showPopover();items[0].focus();
@@ -395,7 +400,8 @@
       const status=updateLine(peer);
       if(status)card.append(el('p',status[0],'am-small am-update-line '+status[1]));
       const can={revoke:hosted.has(peer.id),update:fresh&&!!peer.version};
-      if(can.revoke||can.update){
+      if(!can.update)can.why=!fresh?tr('Компьютер не на связи'):tr('Там старая версия: один раз обновите её на том компьютере');
+      {
         card.classList.add('am-device-card');card.tabIndex=0;card.dataset.key='revoke-'+peer.id;card.title=tr('Правая кнопка мыши — действия');
         card.addEventListener('contextmenu',event=>{event.preventDefault();deviceMenu(peer,event.clientX,event.clientY,can);});
         card.addEventListener('keydown',event=>{if(event.key==='ContextMenu'||(event.shiftKey&&event.key==='F10')){event.preventDefault();const r=card.getBoundingClientRect();deviceMenu(peer,r.left+16,r.top+24,can);}});

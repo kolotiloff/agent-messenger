@@ -202,6 +202,8 @@
   'Фильтр «':'Filter «',
   '» скрывает активные задачи: ':'» hides active tasks: ',
   'Показать всех агентов':'Show all agents',
+  'Компьютер не на связи':'The computer is offline',
+  'Там старая версия: один раз обновите её на том компьютере':'It runs an old version: update it once on that computer',
   'Задач пока нет':'No tasks yet',
   'Подключаем Claude к проекту…':'Connecting Claude to the project…',
   'Messenger добавляет этот проект в настройки Claude. Это займёт несколько секунд.':'Messenger adds this project to Claude\'s settings. It takes a few seconds.',
