@@ -829,7 +829,7 @@ func applyAnswer(tx *sql.Tx, from netLink, opID string, b netBody) error {
 		return err
 	}
 	err = savepoint(tx, func() error {
-		return answerTask(tx, t.ID, b.Question, "net:"+from.broker+":"+from.peer+":"+opID, b.Text, b.By, true)
+		return answerTask(tx, t.ID, b.Question, "net:"+from.broker+":"+from.peer+":"+opID, b.Text, b.By, true, false)
 	})
 	if errors.Is(err, ErrRejected) {
 		return enqueueNet(tx, from.broker, from.peer, "answer-refused."+b.Question, t.ID, netBody{Kind: "answer_refused", Task: from.task, Question: b.Question, Reason: refusalText(err)})

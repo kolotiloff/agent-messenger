@@ -113,17 +113,37 @@ func TestOwnerNoteWithQuestionsAndFailures(t *testing.T) {
 	if task.State != "waiting_coordinator" || task.OpenQuestion == nil {
 		t.Fatalf("task %+v", task)
 	}
-	// While the coordinator answers, the owner may still write.
-	if err := f.st.AddOwnerNote(id, "n2", "And bigger cells"); err != nil {
+	// T-125: the owner comes first. While the worker waits for the
+	// coordinator, the owner's message answers its question at once.
+	if err := f.st.AddOwnerNote(id, "n2", "Main scene"); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.st.AnswerTask(id, task.OpenQuestion.ID, "a1", "Main scene", AudienceCoordinator); err != nil {
+	// A repeat after a lost response changes nothing.
+	if err := f.st.AddOwnerNote(id, "n2", "Main scene"); err != nil {
 		t.Fatal(err)
+	}
+	if task, _ := f.st.TaskByID(id); task.State != "running" {
+		t.Fatalf("task after the owner's answer %+v", task)
+	}
+	// The coordinator learns of it, and its own late answer is refused.
+	events, _, _ := f.st.TaskEvents("Game", AudienceCoordinator, 0, 50)
+	told := false
+	for _, e := range events {
+		told = told || (e.Kind == "owner_answered" && e.Text == "Main scene")
+	}
+	if !told {
+		t.Fatalf("coordinator events %+v", events)
+	}
+	if err := f.st.AnswerTask(id, task.OpenQuestion.ID, "a1", "Other scene", AudienceCoordinator); !errors.Is(err, ErrRejected) {
+		t.Fatalf("late coordinator answer: %v", err)
 	}
 	r2 := f.launch(t, id, f.sessionOf(t, id))
 	brief, err := f.st.ReadTask(r2.ID, r2.Receipt, false)
-	if err != nil || brief.Answer != "Main scene" || !strings.Contains(brief.OwnerNotes, "Use blue") || !strings.Contains(brief.OwnerNotes, "And bigger cells") {
+	if err != nil || brief.Answer != "Main scene" || !strings.Contains(brief.OwnerNotes, "Use blue") {
 		t.Fatalf("brief %+v %v", brief, err)
+	}
+	if runs, _ := f.st.NextTaskRunIntents(10); len(runs) != 0 {
+		t.Fatalf("a second run was recorded: %v", runs)
 	}
 	if err := f.st.AddOwnerNote(id, "n3", "Never mind"); err != nil {
 		t.Fatal(err)

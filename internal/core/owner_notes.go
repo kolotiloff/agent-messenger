@@ -16,7 +16,9 @@ import (
 // sends them again by itself.
 
 // AddOwnerNote records the owner's note to a working task of this computer.
-// opID makes it idempotent.
+// opID makes it idempotent. A worker that asked the coordinator has ended
+// its step and waits: the owner's message answers that question at once,
+// instead of waiting for the coordinator (T-125).
 func (s *Store) AddOwnerNote(task, opID, text string) error {
 	text = strings.TrimSpace(text)
 	if opID == "" || len(opID) > 128 || text == "" || utf8.RuneCountInString(text) > MaxTaskText {
@@ -34,6 +36,13 @@ func (s *Store) AddOwnerNote(task, opID, text string) error {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
+		var answered int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM task_questions WHERE task_id=? AND answer_op=? AND answer=?`, task, opID, text).Scan(&answered); err != nil {
+			return err
+		}
+		if answered > 0 {
+			return nil
+		}
 		t, err := scanTask(tx.QueryRow(`SELECT `+taskColumns+` FROM tasks WHERE id=?`, task).Scan)
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("%w: unknown task", ErrRejected)
@@ -50,6 +59,16 @@ func (s *Store) AddOwnerNote(task, opID, text string) error {
 		}
 		if t.State == "waiting_owner" {
 			return fmt.Errorf("%w: the worker asked you a question; answer it instead", ErrRejected)
+		}
+		if t.State == "waiting_coordinator" && !t.CancelRequested {
+			var question string
+			err := tx.QueryRow(`SELECT id FROM task_questions WHERE task_id=? AND audience=? AND state='open' ORDER BY rowid DESC LIMIT 1`, task, AudienceCoordinator).Scan(&question)
+			if err == nil {
+				return answerTask(tx, task, question, opID, text, AudienceOwner, false, true)
+			}
+			if !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
 		}
 		if (t.State != "running" && t.State != "waiting_coordinator") || t.CancelRequested {
 			return fmt.Errorf("%w: only a working task takes messages; this one is %s", ErrRejected, t.State)

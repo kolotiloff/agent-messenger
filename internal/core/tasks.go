@@ -1597,12 +1597,14 @@ func publishDisposition(tx *sql.Tx, t Task, r TaskRun) error {
 // question must be the newest open one and addressed to by (coordinator or
 // owner); a late or stale answer is refused.
 func (s *Store) AnswerTask(task, question, opID, text, by string) error {
-	return s.tx(func(tx *sql.Tx) error { return answerTask(tx, task, question, opID, text, by, false) })
+	return s.tx(func(tx *sql.Tx) error { return answerTask(tx, task, question, opID, text, by, false, false) })
 }
 
 // answerTask answers in tx. fromNetwork is set when the computer that
 // started the task sends the answer; nobody else answers such a task.
-func answerTask(tx *sql.Tx, task, question, opID, text, by string, fromNetwork bool) error {
+// ownerOver lets the owner answer a question to the coordinator (T-125):
+// the owner comes first, and the coordinator learns of it.
+func answerTask(tx *sql.Tx, task, question, opID, text, by string, fromNetwork, ownerOver bool) error {
 	text = strings.TrimSpace(text)
 	if opID == "" || len(opID) > 128 || text == "" || utf8.RuneCountInString(text) > MaxTaskText {
 		return fmt.Errorf("%w: answer needs an operation id and 1..%d characters", ErrRejected, MaxTaskText)
@@ -1629,7 +1631,7 @@ func answerTask(tx *sql.Tx, task, question, opID, text, by string, fromNetwork b
 		if state != "open" {
 			return fmt.Errorf("%w: this question is no longer open", ErrRejected)
 		}
-		if audience != by {
+		if audience != by && !(ownerOver && by == AudienceOwner && audience == AudienceCoordinator) {
 			return fmt.Errorf("%w: this question is for the %s", ErrRejected, audience)
 		}
 		t, err := scanTask(tx.QueryRow(`SELECT `+taskColumns+` FROM tasks WHERE id=?`, task).Scan)

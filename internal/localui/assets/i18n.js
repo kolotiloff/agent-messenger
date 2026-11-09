@@ -38,6 +38,7 @@
   'Дождаться и перезапустить':'Wait and restart',
   'Прервать сейчас':'Cut them now',
   'Прервать и перезапустить':'Cut and restart',
+  'Ответить вместо координатора…':'Answer instead of the coordinator…',
   'Закрыть окно':'Close the window',
   'Закрыть окно. Задачи продолжат работать':'Close the window. The tasks keep running',
   'И для задач с других компьютеров':'Also for tasks from other computers',

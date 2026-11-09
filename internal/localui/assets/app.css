@@ -357,11 +357,14 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-compose textarea { display:block; flex:1; min-width:0; width:100%; height:var(--am-control); min-height:var(--am-control); max-height:140px; padding:calc((var(--am-control) - 1lh) / 2) var(--am-space-3); border:0; background:transparent; color:var(--am-text); outline:none; box-shadow:none; overflow:hidden; resize:none; }
 #am-concept .am-compose textarea::placeholder { color:var(--am-muted); }
 #am-concept .am-compose textarea:disabled { cursor:default; }
-#am-concept .am-send-icon { width:var(--am-control); height:var(--am-control); padding:0; flex-shrink:0; font-size:22px; line-height:1; }
+#am-concept .am-send-icon { width:var(--am-control); height:var(--am-control); padding:0; flex-shrink:0; border-radius:var(--am-radius-m); }
+/* T-124: a drawn icon, so it sits in the middle like the stop square. */
+#am-concept .am-send-icon svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; }
 #am-concept .am-send-icon:disabled { background:transparent; color:var(--am-disabled-text); }
-#am-concept .am-stop-btn { position:relative; width:var(--am-control); height:var(--am-control); padding:0; flex-shrink:0; background:transparent; }
+/* T-124: stop and send light up the same way on hover, with a gap between. */
+#am-concept .am-stop-btn { position:relative; width:var(--am-control); height:var(--am-control); padding:0; flex-shrink:0; border-radius:var(--am-radius-m); background:transparent; }
 #am-concept .am-stop-btn:is(:hover,:focus-visible):not(:disabled) { background:var(--am-soft); }
-#am-concept .am-stop-square { width:12px; height:12px; border-radius:3px; background:var(--am-text); }
+#am-concept .am-stop-square { width:20px; height:20px; fill:currentColor; }
 #am-concept .am-tip { position:absolute; top:50%; right:calc(100% + var(--am-space-2)); transform:translateY(-50%); display:none; align-items:center; gap:var(--am-gap-control); padding:var(--am-space-1) var(--am-space-3); border:1px solid var(--am-line); border-radius:var(--am-radius-s); background:var(--am-composer); color:var(--am-text); white-space:nowrap; box-shadow:var(--am-shadow-s); pointer-events:none; }
 #am-concept .am-tip kbd { font:inherit; color:var(--am-muted); }
 #am-concept .am-stop-btn:is(:hover,:focus-visible) .am-tip { display:inline-flex; }

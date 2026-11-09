@@ -282,3 +282,7 @@ An interrupted run (the client restarted while it ran) was a dead end: nobody sa
 
 2026-11-09, Claude Code, owner's decision. Changes the default of D-097. The owner found two switches in two places confusing: «Любые команды» on «Агенты» and «Любые команды для задач других компьютеров» on «Сервер». Both are about what agents may do, so the second one is now under the first on «Агенты» («И для задач с других компьютеров»). It is on by default: a new computer, set up by someone who will not look for it, works as it is, and the network holds only the owner's own computers. A computer where the owner turned it off keeps that. With it on, any computer of the network, or anyone holding its device key, can run any command on a computer whose agents have «Любые команды»; the owner accepted that.
 
+## D-110 — The owner's message answers a question to the coordinator (T-125)
+
+2026-11-09, Claude Code, owner's request («Разве автор не главнее»). A worker that asked the coordinator has ended its run and waits; an owner note (T-085) used to wait for the coordinator's answer too. Now the owner's message to such a task answers its open question at once, as the owner, and the same conversation continues. The coordinator gets an owner_answered event for that question and its own answer is refused as already given. Pending notes travel with that answer as before. Tasks of other computers still take no notes.
+
