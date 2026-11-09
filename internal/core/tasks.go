@@ -2007,6 +2007,23 @@ type AgentSummary struct {
 	// FullAccess: the owner allowed this agent any command (T-054). Only
 	// known for this computer.
 	FullAccess bool `json:"full_access,omitempty"`
+	// ModelsNote and LimitNote explain an empty models list and a missing
+	// limit (T-093).
+	ModelsNote string `json:"models_note,omitempty"`
+	LimitNote  string `json:"limit_note,omitempty"`
+}
+
+// explain fills the notes of an agent with no models or no limit (T-093).
+func (a *AgentSummary) explain() {
+	if len(a.Models) == 0 && a.Agent != "claude" {
+		a.ModelsNote = "the owner listed no models for this agent on that computer (window, agent settings): leave model out to use the agent's own default"
+	}
+	if a.Limit == nil {
+		a.LimitNote = "no limit reported yet: it appears after a worker task of this agent on that computer"
+		if a.Agent == "codex" {
+			a.LimitNote = "Codex does not report its limit in worker runs; ask the owner if it matters"
+		}
+	}
 }
 
 // ComputerSummary is one computer as list_agents shows it for a project.
@@ -2015,8 +2032,10 @@ type ComputerSummary struct {
 	Name     string         `json:"name"`
 	This     bool           `json:"this"`
 	Online   bool           `json:"online"`
-	Folder   string         `json:"folder"`
+	Folder   string         `json:"folder,omitempty"`
 	Agents   []AgentSummary `json:"agents"`
+	// Reconnecting: see NetPeer.Reconnecting (T-092).
+	Reconnecting bool `json:"reconnecting,omitempty"`
 	Note     string         `json:"note,omitempty"`
 	// AcceptsTasks and HasProject are another computer's readiness as it
 	// reported it (T-070); left out when it did not report them.
@@ -2099,7 +2118,16 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 			if models == nil {
 				models = []string{}
 			}
-			o.Agents = append(o.Agents, AgentSummary{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting, Models: models, Limit: limitView(a.Limit, time.Now())})
+			as := AgentSummary{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting, Models: models, Limit: limitView(a.Limit, time.Now())}
+			as.explain()
+			o.Agents = append(o.Agents, as)
+		}
+		if p.Ready == nil {
+			o.Note = "it runs an older Messenger that does not say whether it takes tasks or has this project's folder; a task there fails with its reason if not. Its folder path is never shown here."
+		}
+		if p.Reconnecting {
+			o.Reconnecting = true
+			o.Note = strings.TrimSpace("reconnecting after a restart: a task for it is accepted and waits on the server until it is back. " + o.Note)
 		}
 		list = append(list, o)
 	}

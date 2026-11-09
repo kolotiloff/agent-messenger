@@ -176,6 +176,7 @@ func Open(path string) (*Store, error) {
 		{"requests", "hops", "INTEGER NOT NULL DEFAULT 0"},
 		{"net_peers", "ready", "TEXT NOT NULL DEFAULT ''"},
 		{"net_peers", "usage", "TEXT NOT NULL DEFAULT ''"},
+		{"net_peers", "missing_since", "TEXT NOT NULL DEFAULT ''"},
 		{"tasks", "resource", "TEXT NOT NULL DEFAULT ''"},
 		networkTaskColumns[0], networkTaskColumns[1], networkTaskColumns[2],
 		networkTaskColumns[3], networkTaskColumns[4], networkTaskColumns[5],

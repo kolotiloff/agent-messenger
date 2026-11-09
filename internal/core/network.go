@@ -98,7 +98,15 @@ type NetPeer struct {
 	// Usage is what the tasks that ran on it spent, by day and agent
 	// (T-076); nil when it did not report it (an older version).
 	Usage []UsageDayAgent
+	// Reconnecting: the computer was in the network a moment ago and has
+	// not reported since this computer or the server restarted (T-092). A
+	// task for it waits in the server's mailbox until it is back.
+	Reconnecting bool
 }
+
+// reconnectGrace is how long a computer that left the server's list stays
+// listed as reconnecting.
+const reconnectGrace = 15 * time.Minute
 
 // NetReady says whether a computer runs tasks from other computers and for
 // which projects it has a folder.
@@ -252,10 +260,73 @@ func (s *Store) SetNetwork(broker, self string, peers []NetPeer) error {
 		if err := setMeta(tx, "net_self", self); err != nil {
 			return err
 		}
+		// T-092: a computer of the same network that is missing or has not
+		// reported since a restart stays listed as reconnecting for a while,
+		// with what it reported before.
+		type oldPeer struct {
+			p     NetPeer
+			since string
+		}
+		old := map[string]oldPeer{}
+		if was == broker && broker != "" {
+			list, err := netPeers(tx)
+			if err != nil {
+				return err
+			}
+			for _, p := range list {
+				var since string
+				if err := tx.QueryRow(`SELECT missing_since FROM net_peers WHERE peer=?`, p.ID).Scan(&since); err != nil {
+					return err
+				}
+				old[p.ID] = oldPeer{p, since}
+			}
+		}
 		if _, err := tx.Exec(`DELETE FROM net_peers`); err != nil {
 			return err
 		}
 		at := now()
+		cutoff := time.Now().UTC().Add(-reconnectGrace).Format(time.RFC3339Nano)
+		listed := map[string]bool{}
+		for i := range peers {
+			listed[peers[i].ID] = true
+		}
+		missing := map[string]string{}
+		for id, o := range old {
+			if listed[id] {
+				continue
+			}
+			if o.since != "" && o.since < cutoff {
+				continue
+			}
+			p := o.p
+			p.Reconnecting, p.Age = true, -1
+			peers = append(peers, p)
+			if o.since == "" {
+				missing[id] = at
+			} else {
+				missing[id] = o.since
+			}
+		}
+		for i := range peers {
+			p := &peers[i]
+			o, known := old[p.ID]
+			if listed[p.ID] && p.Age < 0 && len(p.Agents) == 0 && known && len(o.p.Agents) > 0 {
+				if o.since != "" && o.since < cutoff {
+					continue
+				}
+				p.Agents, p.Reconnecting = o.p.Agents, true
+				if p.Ready == nil {
+					p.Ready = o.p.Ready
+				}
+				if p.Usage == nil {
+					p.Usage = o.p.Usage
+				}
+				missing[p.ID] = o.since
+				if o.since == "" {
+					missing[p.ID] = at
+				}
+			}
+		}
 		for _, p := range peers {
 			if p.Agents == nil {
 				p.Agents = []NetAgent{}
@@ -271,7 +342,7 @@ func (s *Store) SetNetwork(broker, self string, peers []NetPeer) error {
 				u, _ := json.Marshal(p.Usage)
 				usage = string(u)
 			}
-			if _, err := tx.Exec(`INSERT INTO net_peers(peer,name,host,age,agents,ready,usage,updated_at) VALUES (?,?,?,?,?,?,?,?)`, p.ID, p.Name, boolInt(p.Host), p.Age, string(raw), ready, usage, at); err != nil {
+			if _, err := tx.Exec(`INSERT INTO net_peers(peer,name,host,age,agents,ready,usage,updated_at,missing_since) VALUES (?,?,?,?,?,?,?,?,?)`, p.ID, p.Name, boolInt(p.Host), p.Age, string(raw), ready, usage, at, missing[p.ID]); err != nil {
 				return err
 			}
 		}
@@ -292,7 +363,7 @@ func (s *Store) NetPeers() ([]NetPeer, error) {
 }
 
 func netPeers(tx *sql.Tx) ([]NetPeer, error) {
-	rows, err := tx.Query(`SELECT peer,name,host,age,agents,ready,usage,updated_at FROM net_peers ORDER BY host DESC, name, peer`)
+	rows, err := tx.Query(`SELECT peer,name,host,age,agents,ready,usage,updated_at,missing_since!='' FROM net_peers ORDER BY host DESC, name, peer`)
 	if err != nil {
 		return nil, err
 	}
@@ -302,7 +373,7 @@ func netPeers(tx *sql.Tx) ([]NetPeer, error) {
 		var p NetPeer
 		var host int
 		var agents, ready, usage, at string
-		if err := rows.Scan(&p.ID, &p.Name, &host, &p.Age, &agents, &ready, &usage, &at); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &host, &p.Age, &agents, &ready, &usage, &at, &p.Reconnecting); err != nil {
 			return nil, err
 		}
 		p.Host = host != 0

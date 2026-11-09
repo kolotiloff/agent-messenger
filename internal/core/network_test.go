@@ -508,3 +508,78 @@ func TestBadNetIdsCannotBlockTheOutbox(t *testing.T) {
 		}
 	}
 }
+
+// T-092: after a restart the computers of the network stay listed as
+// reconnecting, and a task for one is accepted and waits for it.
+func TestPeersStayListedWhileReconnecting(t *testing.T) {
+	p := newNetPair(t)
+	// The server restarted: b is listed but has not reported yet.
+	if err := p.a.st.SetNetwork(testBroker, HostPeerID, []NetPeer{{ID: "dev-b", Name: "Ноутбук", Age: -1}}); err != nil {
+		t.Fatal(err)
+	}
+	peers, _ := p.a.st.NetPeers()
+	if len(peers) != 1 || !peers[0].Reconnecting || len(peers[0].Agents) != 2 {
+		t.Fatalf("peers %+v", peers)
+	}
+	// This computer restarted and has no list yet.
+	if err := p.a.st.SetNetwork(testBroker, HostPeerID, nil); err != nil {
+		t.Fatal(err)
+	}
+	view, err := p.a.st.ProjectAgents("Game")
+	if err != nil {
+		t.Fatal(err)
+	}
+	computers := view["computers"].([]ComputerSummary)
+	if len(computers) != 2 || !computers[1].Reconnecting || computers[1].Online {
+		t.Fatalf("list_agents %+v", computers)
+	}
+	id := p.startRemote(t, "op1", "codex", "Build level 1")
+	if pending, _ := p.a.st.NetPending(testBroker, 10); len(pending) != 1 {
+		t.Fatalf("start not queued for %s: %+v", id, pending)
+	}
+	// Back: the flag goes.
+	if err := p.a.st.SetNetwork(testBroker, HostPeerID, []NetPeer{{ID: "dev-b", Name: "Ноутбук", Age: 1, Agents: []NetAgent{{Agent: "codex"}}}}); err != nil {
+		t.Fatal(err)
+	}
+	if peers, _ := p.a.st.NetPeers(); len(peers) != 1 || peers[0].Reconnecting {
+		t.Fatalf("back %+v", peers)
+	}
+	// Gone longer than the grace: dropped.
+	if err := p.a.st.SetNetwork(testBroker, HostPeerID, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.a.st.db.Exec(`UPDATE net_peers SET missing_since='2000-01-01T00:00:00Z'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.a.st.SetNetwork(testBroker, HostPeerID, nil); err != nil {
+		t.Fatal(err)
+	}
+	if peers, _ := p.a.st.NetPeers(); len(peers) != 0 {
+		t.Fatalf("stale peer kept %+v", peers)
+	}
+	// Another network forgets the old computers at once.
+	if err := p.a.st.SetNetwork(testBroker, HostPeerID, []NetPeer{{ID: "dev-b", Name: "Ноутбук", Age: 1, Agents: []NetAgent{{Agent: "codex"}}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.a.st.SetNetwork("brk-00000000000000bb", HostPeerID, nil); err != nil {
+		t.Fatal(err)
+	}
+	if peers, _ := p.a.st.NetPeers(); len(peers) != 0 {
+		t.Fatalf("other network %+v", peers)
+	}
+}
+
+// T-093: list_agents explains empty models and a missing limit.
+func TestListAgentsExplainsEmptyFields(t *testing.T) {
+	p := newNetPair(t)
+	view, _ := p.a.st.ProjectAgents("Game")
+	other := view["computers"].([]ComputerSummary)[1]
+	for _, a := range other.Agents {
+		if a.LimitNote == "" || (a.Agent == "codex" && a.ModelsNote == "") {
+			t.Fatalf("agent %+v", a)
+		}
+	}
+	if other.Folder != "" || !strings.Contains(other.Note, "older Messenger") {
+		t.Fatalf("computer %+v", other)
+	}
+}
