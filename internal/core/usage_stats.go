@@ -21,8 +21,10 @@ type UsageTotal struct {
 	OutputTokens int64 `json:"output_tokens"`
 }
 
-func (t *UsageTotal) add(in, cached, out int64) {
-	t.Tasks++
+func (t *UsageTotal) add(in, cached, out int64) { t.addN(1, in, cached, out) }
+
+func (t *UsageTotal) addN(tasks int, in, cached, out int64) {
+	t.Tasks += tasks
 	t.InputTokens += in
 	t.CachedTokens += cached
 	t.OutputTokens += out
@@ -54,9 +56,23 @@ type UsageTask struct {
 	Tokens   int64  `json:"tokens"`
 }
 
+// UsageDayAgent is what one agent's tasks that ran on one computer spent
+// on one of its local days (T-076). Computers report these to each other.
+type UsageDayAgent struct {
+	Day    string `json:"day"`
+	Agent  string `json:"agent"`
+	Tasks  int    `json:"tasks"`
+	Input  int64  `json:"input_tokens"`
+	Cached int64  `json:"cached_tokens"`
+	Output int64  `json:"output_tokens"`
+}
+
 // UsageStats is the window's statistics page.
 type UsageStats struct {
-	Since     string       `json:"since"`
+	Since string `json:"since"`
+	// Computer names the computer the page is limited to; empty for the
+	// whole network.
+	Computer  string       `json:"computer,omitempty"`
 	Total     UsageTotal   `json:"total"`
 	Agents    []UsageGroup `json:"agents"`
 	Computers []UsageGroup `json:"computers"`
@@ -67,10 +83,15 @@ type UsageStats struct {
 // MaxUsageTop is how many of the largest tasks the page lists.
 const MaxUsageTop = 10
 
-// UsageStats sums the tasks with reported usage that finished (or were last
-// updated) at or after since. Days are local days of loc, oldest first,
-// including days without tasks.
-func (s *Store) UsageStats(since time.Time, loc *time.Location) (UsageStats, error) {
+// UsageStats sums what tasks spent at or after since (T-068, T-076).
+// Tasks that ran on this computer count from its own records; tasks that
+// ran on another computer count from that computer's daily report, or from
+// this computer's records of the tasks it gave there when that computer
+// sent no report (an older version). computer limits the page to "local"
+// or one peer; empty means the whole network. Days are local days of loc,
+// oldest first, including days without tasks; the largest tasks are the
+// ones this computer knows.
+func (s *Store) UsageStats(since time.Time, loc *time.Location, computer string) (UsageStats, error) {
 	out := UsageStats{Since: since.UTC().Format(time.RFC3339Nano), Agents: []UsageGroup{}, Computers: []UsageGroup{}, Days: []UsageDay{}, Top: []UsageTask{}}
 	err := s.tx(func(tx *sql.Tx) error {
 		local, err := localComputer(tx)
@@ -81,6 +102,55 @@ func (s *Store) UsageStats(since time.Time, loc *time.Location) (UsageStats, err
 		if err != nil {
 			return err
 		}
+		peers, err := netPeers(tx)
+		if err != nil {
+			return err
+		}
+		reported := map[string]NetPeer{}
+		for _, p := range peers {
+			if p.Usage != nil {
+				reported[p.ID] = p
+			}
+		}
+		wanted := func(key string) bool {
+			return computer == "" || (computer == "local" && key == local) || computer == key
+		}
+		switch {
+		case computer == "local":
+			out.Computer = localName
+		case computer != "":
+			for _, p := range peers {
+				if p.ID == computer {
+					out.Computer = p.Name
+				}
+			}
+		}
+		agents := map[string]*UsageGroup{}
+		computers := map[string]*UsageGroup{}
+		days := map[string]*UsageDay{}
+		count := func(key, name string, this bool, agent, day string, tasks int, in, cached, outTokens int64) {
+			out.Total.addN(tasks, in, cached, outTokens)
+			a := agents[agent]
+			if a == nil {
+				a = &UsageGroup{Key: agent, Name: agent}
+				agents[agent] = a
+			}
+			a.addN(tasks, in, cached, outTokens)
+			c := computers[key]
+			if c == nil {
+				c = &UsageGroup{Key: key, Name: name, This: this}
+				computers[key] = c
+			}
+			c.addN(tasks, in, cached, outTokens)
+			if day != "" {
+				d := days[day]
+				if d == nil {
+					d = &UsageDay{Day: day}
+					days[day] = d
+				}
+				d.addN(tasks, in, cached, outTokens)
+			}
+		}
 		rows, err := tx.Query(`SELECT t.id,t.title,t.project,t.provider,COALESCE(t.remote_peer,''),COALESCE(p.name,''),
  COALESCE(t.finished_at,t.updated_at),t.usage_input,t.usage_cached,t.usage_output
  FROM tasks t LEFT JOIN net_peers p ON p.peer=t.remote_peer
@@ -89,9 +159,6 @@ func (s *Store) UsageStats(since time.Time, loc *time.Location) (UsageStats, err
 			return err
 		}
 		defer rows.Close()
-		agents := map[string]*UsageGroup{}
-		computers := map[string]*UsageGroup{}
-		days := map[string]*UsageDay{}
 		for rows.Next() {
 			var task UsageTask
 			var peer, peerName string
@@ -100,37 +167,38 @@ func (s *Store) UsageStats(since time.Time, loc *time.Location) (UsageStats, err
 				return err
 			}
 			task.Tokens = in + outTokens
-			out.Total.add(in, cached, outTokens)
-			a := agents[task.Agent]
-			if a == nil {
-				a = &UsageGroup{Key: task.Agent, Name: task.Agent}
-				agents[task.Agent] = a
-			}
-			a.add(in, cached, outTokens)
 			key, name, this := local, localName, true
 			if peer != "" {
 				key, name, this = peer, peerName, false
 			}
-			c := computers[key]
-			if c == nil {
-				c = &UsageGroup{Key: key, Name: name, This: this}
-				computers[key] = c
+			if !wanted(key) {
+				continue
 			}
-			c.add(in, cached, outTokens)
 			task.Computer = name
-			if at, err := time.Parse(time.RFC3339Nano, task.At); err == nil {
-				day := at.In(loc).Format("2006-01-02")
-				d := days[day]
-				if d == nil {
-					d = &UsageDay{Day: day}
-					days[day] = d
-				}
-				d.add(in, cached, outTokens)
-			}
 			out.Top = append(out.Top, task)
+			if _, ok := reported[peer]; peer != "" && ok {
+				continue // counted from that computer's own report
+			}
+			day := ""
+			if at, err := time.Parse(time.RFC3339Nano, task.At); err == nil {
+				day = at.In(loc).Format("2006-01-02")
+			}
+			count(key, name, this, task.Agent, day, 1, in, cached, outTokens)
 		}
 		if err := rows.Err(); err != nil {
 			return err
+		}
+		firstDay := since.In(loc).Format("2006-01-02")
+		for _, p := range peers {
+			if p.Usage == nil || !wanted(p.ID) {
+				continue
+			}
+			for _, u := range p.Usage {
+				if u.Day < firstDay || u.Tasks <= 0 {
+					continue
+				}
+				count(p.ID, p.Name, false, u.Agent, u.Day, u.Tasks, u.Input, u.Cached, u.Output)
+			}
 		}
 		for _, a := range agents {
 			out.Agents = append(out.Agents, *a)
@@ -168,6 +236,60 @@ func (s *Store) UsageStats(since time.Time, loc *time.Location) (UsageStats, err
 				out.Days = append(out.Days, UsageDay{Day: day})
 			}
 		}
+		return nil
+	})
+	return out, err
+}
+
+// MaxUsageDays is how many days a computer reports to the others.
+const MaxUsageDays = 31
+
+// UsageDaily sums, by local day of loc and agent, what the tasks that ran on
+// this computer spent at or after since (T-076). Tasks this computer gave to
+// another computer are left out: that computer reports them.
+func (s *Store) UsageDaily(since time.Time, loc *time.Location) ([]UsageDayAgent, error) {
+	out := []UsageDayAgent{}
+	err := s.tx(func(tx *sql.Tx) error {
+		rows, err := tx.Query(`SELECT provider,COALESCE(finished_at,updated_at),usage_input,usage_cached,usage_output FROM tasks
+ WHERE usage_seen=1 AND COALESCE(remote_peer,'')='' AND COALESCE(finished_at,updated_at)>=?`, since.UTC().Format(time.RFC3339Nano))
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		sums := map[[2]string]*UsageDayAgent{}
+		for rows.Next() {
+			var agent, at string
+			var in, cached, outTokens int64
+			if err := rows.Scan(&agent, &at, &in, &cached, &outTokens); err != nil {
+				return err
+			}
+			when, err := time.Parse(time.RFC3339Nano, at)
+			if err != nil {
+				continue
+			}
+			k := [2]string{when.In(loc).Format("2006-01-02"), agent}
+			u := sums[k]
+			if u == nil {
+				u = &UsageDayAgent{Day: k[0], Agent: agent}
+				sums[k] = u
+			}
+			u.Tasks++
+			u.Input += in
+			u.Cached += cached
+			u.Output += outTokens
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		for _, u := range sums {
+			out = append(out, *u)
+		}
+		sort.Slice(out, func(i, j int) bool {
+			if out[i].Day != out[j].Day {
+				return out[i].Day < out[j].Day
+			}
+			return out[i].Agent < out[j].Agent
+		})
 		return nil
 	})
 	return out, err

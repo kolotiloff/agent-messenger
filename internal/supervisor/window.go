@@ -109,7 +109,7 @@ func (s *Supervisor) UsageStats(period string) (any, error) {
 	}
 	y, m, d := time.Now().Date()
 	since := time.Date(y, m, d-(days-1), 0, 0, 0, 0, time.Local)
-	return s.store.UsageStats(since, time.Local)
+	return s.store.UsageStats(since, time.Local, "")
 }
 
 // SetAgentPaused turns an agent off or on from its card (T-061).
