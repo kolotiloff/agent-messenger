@@ -1034,7 +1034,7 @@
       renderRestart();
     }catch(_){}
   }
-  // T-123: «Перезапустить после них» keeps asking the client every few
+  // T-123: «Дождаться и перезапустить» keeps asking the client every few
   // seconds; it restarts by itself once no task runs (the client checks
   // again), and nothing is cut. Closing the window stops the waiting only.
   setInterval(()=>{if(restart.wait&&!restart.busy&&clientInfo?.outdated)restartClient(false);},5000);
@@ -1080,7 +1080,7 @@
     // them is the separate red button.
     const cut=$('restart-cut');
     go.hidden=!canRestart||!answering||(restart.busy&&!restart.wait)||(!!ask&&restart.wait);
-    go.textContent=ask?tr('Перезапустить после них'):tr('Перезапустить');go.disabled=restart.busy;
+    go.textContent=ask?tr('Дождаться и перезапустить'):tr('Перезапустить');go.disabled=restart.busy;
     cut.hidden=!ask||!canRestart||!answering;cut.disabled=restart.busy&&!restart.wait;
     cut.textContent=restart.wait?tr('Прервать сейчас'):tr('Прервать и перезапустить');
     quit.hidden=!canQuit;quit.disabled=restart.busy;

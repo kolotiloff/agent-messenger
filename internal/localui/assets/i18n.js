@@ -35,7 +35,7 @@
   'Чтобы она заработала, Messenger перезапустится и прервёт задачи, которые идут сейчас. Сами они не повторятся.':'To use it, Messenger restarts and cuts the tasks running now. They are not repeated by themselves.',
   'Если задачи сейчас идут, перезапуск прервёт их. Сами они не повторятся.':'If tasks are running, the restart cuts them. They are not repeated by themselves.',
   'И ещё в других проектах: ':'And in other projects: ',
-  'Перезапустить после них':'Restart after them',
+  'Дождаться и перезапустить':'Wait and restart',
   'Прервать сейчас':'Cut them now',
   'Прервать и перезапустить':'Cut and restart',
   'Закрыть окно':'Close the window',
