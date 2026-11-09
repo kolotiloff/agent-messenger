@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-09 — Claude Code (release preview.57)
+
+- Merged #88 (T-096 agent filter, T-078 remote update, reply box without a needless scrollbar) and released preview.57; all files checked (Mac, Windows x64/ARM64, Linux x64/ARM64, checksums, 5 signed update feeds and archives).
+- Remote update works only between computers on preview.57 or newer: the first install of preview.57 on each computer is by hand.
+
 ## 2026-11-09 — Claude Code (T-078 remote update)
 
 - T-078 (D-100, Q-025 a): «Обновить программу» in another computer's menu; that computer installs its newest signed update and restarts its client only when no task runs; a Mac refuses. Computers report their version, shown on the cards. On `claude/ui-tweaks`, not released. Real Windows/Linux installs between computers are left to CI and the owner.
