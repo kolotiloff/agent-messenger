@@ -71,14 +71,14 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 | T-013 | Developer ID signing and notarization of the Mac app. | owner | blocked: Q-003 |
 | T-014 | Intel Mac build and acceptance. | agent + owner | |
 | T-017 | Coordinator role handover. Stage 6. | agent | |
-| T-019 | Decide and implement the UI language. | owner → agent | blocked: Q-001 |
 | T-036 | Standalone broker for a VPS and its setup wizard. Optional (D-040): only for computers in different networks. | agent + owner | was part of T-015 |
-| T-030 | `/api/setup-codex` allows 100 s, but the window HTTP server cuts every reply at 25 s (`WriteTimeout`), so a slow successful setup shows as an error. Set a per-request write deadline for it. Persistent Codex path: moot if T-028 removes it. | agent | found in the T-015 audit |
 
 ## Done
 
 | ID | Task | PR |
 |---|---|---|
+| T-019 | UI language: Russian by default, English as a choice under «Язык» (the owner asked for it, T-059). CLI messages stay Russian. | T-059, PR #76 |
+| T-030 | `/api/setup-codex` no longer cut at 25 s: each long route sets its own write deadline (`internal/localui/server.go`, added with T-029, commit 02774a3). Found stale on 2026-11-09. | T-029 |
 | T-040 | Faster release: the Mac checks run next to the Windows and Linux job instead of after it. To confirm on the next release run. | `claude/t040-faster-release` |
 | T-037 | Tasks between computers: a coordinator gives a task to an agent on another computer of the network through the broker mailbox; questions, answers, cancel and reports travel back (D-041, D-042). The other computer runs them only when its owner allows it (Q-014). Waits for the owner's test on two Macs. | PR #50, preview.31 |
 | T-035 | Computers of the network report their agents to the broker every 15 s; the sidebar shows every computer with its agents and statuses (D-039). | PR #49, preview.30 |
