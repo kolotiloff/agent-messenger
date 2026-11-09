@@ -235,3 +235,9 @@ A newly connected agent starts with a model list, so the coordinator can choose 
 - Cursor: `composer-2.5-fast`, `grok-4.7-high-fast`, `claude-opus-5-thinking-high` (the owner's choice).
 
 A list the owner already saved is never replaced. For an agent connected earlier whose list is still empty, the settings dialog shows these names and they are saved when the owner presses Save; nothing changes without that. Messenger does not check the Codex and Cursor names against the CLIs: an unknown name fails the run, and the owner edits the list on the card. Which model each CLI uses when the task names none is the CLI's own setting; Messenger does not know it. Follows D-058.
+
+## D-102 — The coordinator sees questions to the owner (T-099)
+
+2026-11-09, Claude Code, coordinator's list item 13, passed on by the owner.
+
+A worker's question to the owner (`ask_owner`) and the owner's answer also reach the coordinator, as `owner_question` and `owner_answered` events of `wait`. They are for reading: the question stays the owner's, and `answer` from the coordinator is still refused for it. Before, the coordinator saw only «waiting for an answer» and could not plan around it. The copy is written where the task is managed: for a task run on another computer, on the computer that started it.

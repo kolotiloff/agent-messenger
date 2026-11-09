@@ -647,6 +647,20 @@ func insertTaskEvent(tx *sql.Tx, project, task, audience, kind, text, question s
 		project, task, audience, kind, text, nullString(sql.NullString{String: question, Valid: question != ""}), now()); err != nil {
 		return err
 	}
+	// The coordinator also learns of a worker's question to the owner and
+	// of the owner's answer, for reading only: the owner answers it
+	// (T-099, coordinator's item 13). It is recorded where the task is
+	// managed, so a task of another computer gets it on that computer.
+	if link.origin == nil && audience == AudienceOwner && (kind == "question" || kind == "answered") {
+		copyKind := "owner_question"
+		if kind == "answered" {
+			copyKind = "owner_answered"
+		}
+		if _, err := tx.Exec(`INSERT INTO task_events(project,task_id,audience,kind,text,question_id,created_at) VALUES (?,?,?,?,?,?,?)`,
+			project, task, AudienceCoordinator, copyKind, text, nullString(sql.NullString{String: question, Valid: question != ""}), now()); err != nil {
+			return err
+		}
+	}
 	// An event of a task another computer started also goes back to it,
 	// in the same transaction (T-037). History events and answers stay
 	// here: the other computer records its own.

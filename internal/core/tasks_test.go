@@ -432,6 +432,8 @@ func TestTaskQuestionAnswerResumesSameConversation(t *testing.T) {
 	}
 }
 
+// The owner answers an owner question; the coordinator only sees it and the
+// answer (T-099) and cannot answer it itself.
 func TestOwnerQuestionGoesToTheOwnerOnly(t *testing.T) {
 	f := newTaskFixture(t)
 	id := f.start(t, "op", "claude", "x")
@@ -440,8 +442,12 @@ func TestOwnerQuestionGoesToTheOwnerOnly(t *testing.T) {
 	if _, err := f.st.FinishTaskRun(r.ID, cleanExit); err != nil {
 		t.Fatal(err)
 	}
-	if got := kinds(f.events(t, AudienceCoordinator, 0)); got != "" {
-		t.Fatalf("coordinator saw the owner question: %s", got)
+	seen := f.events(t, AudienceCoordinator, 0)
+	if kinds(seen) != "owner_question" || seen[0].Text != "May I delete the old saves?" || seen[0].QuestionID == "" {
+		t.Fatalf("coordinator copy %+v", seen)
+	}
+	if err := f.st.AnswerTask(id, seen[0].QuestionID, "c1", "yes", AudienceCoordinator); !errors.Is(err, ErrRejected) {
+		t.Fatalf("coordinator answered the owner question: %v", err)
 	}
 	owner := f.events(t, AudienceOwner, 0)
 	if kinds(owner) != "question" {

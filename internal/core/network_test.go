@@ -247,7 +247,7 @@ func TestRemoteTaskQuestionAnswerReport(t *testing.T) {
 		t.Fatalf("done %+v", task)
 	}
 	events := p.a.events(t, AudienceCoordinator, 0)
-	if kinds(events) != "report" || events[0].Text != "Level 2 is built" {
+	if kinds(events) != "owner_question,owner_answered,report" || events[2].Text != "Level 2 is built" || events[1].Text != "Level 2" {
 		t.Fatalf("report %+v", events)
 	}
 	feed, _ = p.a.st.TaskFeed(id)
