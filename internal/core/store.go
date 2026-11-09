@@ -182,6 +182,7 @@ func Open(path string) (*Store, error) {
 		{"tasks", "resource", "TEXT NOT NULL DEFAULT ''"},
 		networkTaskColumns[0], networkTaskColumns[1], networkTaskColumns[2],
 		networkTaskColumns[3], networkTaskColumns[4], networkTaskColumns[5],
+		networkTaskColumns[6],
 	} {
 		if err := ensureColumn(db, c[0], c[1], c[2]); err != nil {
 			db.Close()

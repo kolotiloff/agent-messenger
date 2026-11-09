@@ -70,6 +70,9 @@ var networkTaskColumns = [][3]string{
 	{"tasks", "origin_broker", "TEXT"},
 	{"tasks", "origin_peer", "TEXT"},
 	{"tasks", "origin_task", "TEXT"},
+	// T-126: the other computer's name when the task was sent, kept for
+	// when that computer is no longer in the network.
+	{"tasks", "remote_name", "TEXT"},
 }
 
 // PeerFresh is how old, in seconds, a computer's last report may be for it
@@ -508,8 +511,8 @@ func startRemoteTask(tx *sql.Tx, r StartTaskRequest) (string, error) {
 	id = "task-" + id[:16]
 	at := now()
 	title := taskTitle(r.Title, r.Text)
-	if _, err := tx.Exec(`INSERT INTO tasks(id,project,op_id,computer,provider,cli_path,environment,profile,folder,title,text,state,detail,created_at,updated_at,model,remote_broker,remote_peer,resource) VALUES (?,?,?,?,?,'','','','',?,?,'running',?,?,?,?,?,?,?)`,
-		id, r.Project, r.OpID, r.Computer, r.Provider, title, r.Text, "sent to "+peer.Name+"; waiting for it to accept", at, at, r.Model, broker, r.Computer, r.Lock); err != nil {
+	if _, err := tx.Exec(`INSERT INTO tasks(id,project,op_id,computer,provider,cli_path,environment,profile,folder,title,text,state,detail,created_at,updated_at,model,remote_broker,remote_peer,resource,remote_name) VALUES (?,?,?,?,?,'','','','',?,?,'running',?,?,?,?,?,?,?,?)`,
+		id, r.Project, r.OpID, r.Computer, r.Provider, title, r.Text, "sent to "+peer.Name+"; waiting for it to accept", at, at, r.Model, broker, r.Computer, r.Lock, peer.Name); err != nil {
 		return "", err
 	}
 	if err := insertTaskEvent(tx, r.Project, id, AudienceLog, "started", title, ""); err != nil {

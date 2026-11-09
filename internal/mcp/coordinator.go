@@ -75,6 +75,7 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - Messenger already tells every worker to keep its report to a few lines, to put long details in a file and to follow the owner's rules for this project. A report ends with labelled lines when the worker gave them: «Изменения:» (commit or changeset), «Тесты:» and «Файлы:» (paths to read when needed). Do not ask workers for a «taken» line or a limit line: the task's state shows when it was accepted, and limits come from list_agents.
 - Work reaches the project only through the worker's own commit; workers are told to commit before they report. A report is a short message (at most 20000 characters reach you), so never ask for the full text of an audit or a long document instead of a commit: it will not fit, and the work still is not in the project. A worker that could not commit (files locked by another agent, its copy behind the server) asks you instead of finishing, and its task stays open. Decide what lets the commit happen: if another task holds the files, you may answer later, after that task is done, telling the worker to update and commit; otherwise tell it what to do or tell the owner. Do not tell it to finish without committing: a finished task of another computer cannot be continued.
 - get_log reads the end of another computer's Messenger log, for debugging Messenger itself (a task that never arrived, a refusal you cannot explain). That computer answers only if its owner turned on «Отдавать журнал по сети»; otherwise the reply says so. Session ids, codes and keys are removed. If no answer came in time, call get_log again with request_id. Do not use it to watch workers: wait does that.
+- contact_lost on an open task of another computer means this computer has no contact with it (offline, left the network, or the network was made again); computer_last_seen is when it last reported. Its outcome there is unknown: do not start it again by yourself; tell the owner, and when that computer is back the task goes on reporting.
 - To tell a working task from a stuck one, call tasks: an open task shows the worker's last action and when it was (last_activity, last_activity_at; for another computer's task, the last progress line it forwarded). A long quiet time is a reason to tell the owner, not to cancel or start the task again by yourself. tokens is what the task used so far. Every report and failure ends with a «[Messenger] Tokens of this task so far» line (new input, cache write, cache read, output); use it to compare costs instead of asking the worker to add up its log.
 - When two tasks must not use one resource of a computer at the same time (the Unity editor, a device, a long build), give both start_task the same lock, such as unity-editor. The later task then waits to start until the earlier one is done, failed or cancelled; tasks shows waiting_for_lock with the task it waits for. A blocked task keeps its lock until the owner resolves it.
 - A failure caused by a usage or rate limit says so and gives the reset time when the agent reported one. Tell the owner that time; do not start the task again before it.
@@ -603,6 +604,10 @@ type coordinatorTask struct {
 	Tokens         int64  `json:"tokens,omitempty"`
 	// T-072: the task waits to start until this task of the same lock ends.
 	WaitingForLock string `json:"waiting_for_lock,omitempty"`
+	// T-126: an open task on another computer this computer has no contact
+	// with; its outcome there is unknown.
+	ContactLost bool   `json:"contact_lost,omitempty"`
+	LastSeen    string `json:"computer_last_seen,omitempty"`
 }
 
 // closedTaskStates are left out of the default tasks list (T-032).
@@ -671,6 +676,13 @@ func (c *coordinator) tasks(state string, limit int, ifVersion string) (any, err
 			item.LastActivity, item.LastActivityAt = a.Last, a.At
 			if item.WaitingForLock, err = c.store.TaskLockHolder(t.ID); err != nil {
 				return nil, err
+			}
+			r, err := c.store.TaskRemote(t.ID)
+			if err != nil {
+				return nil, err
+			}
+			if r != nil && !r.From && r.Lost {
+				item.ContactLost, item.LastSeen = true, r.LastSeen
 			}
 		}
 		out = append(out, item)

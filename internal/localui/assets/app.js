@@ -259,6 +259,9 @@
   function statusPiece(text,comma){const piece=el('span',text);if(comma)piece.append(el('span',',','am-task-comma'));return piece;}
   function taskStatus(t){
     const end=t.finished_at||t.updated_at,from=t.started_at||t.created_at;
+    // T-126: an open task on a computer this one lost contact with.
+    if(t.remote?.lost&&!t.remote.from&&activeStates.includes(t.state))
+      return [tr('Связь потеряна, исход неизвестен'),'am-muted',t.remote.last_seen?'«'+t.remote.name+tr('» не на связи с ')+stamp(t.remote.last_seen):'«'+t.remote.name+tr('» больше нет в сети')];
     switch(t.state){
       case 'running':return t.pending_launch?[t.waits_for_lock?tr('Ждёт ресурс «')+t.waits_for_lock+'»':tr('Ждёт запуска'),'am-status-wait']:[tr('Работает ')+minutes(from),'am-status-run'];
       case 'waiting_owner':return [tr('Ждёт вашего ответа'),'am-status-wait'];
@@ -536,8 +539,8 @@
       const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),label);
       if(t.remote)agent.title=t.remote.from?tr('Задачу дал компьютер «')+t.remote.name+'»':tr('Выполняется на компьютере «')+t.remote.name+'»';
       const when=taskWhen(t);if(when){const w=el('span',when,'am-task-when');w.title=taskWhenTitle(t);agent.append(w);}
-      const [text,cls]=taskStatus(t);
-      const status=el('span',undefined,'am-task-status '+cls);
+      const [text,cls,tip]=taskStatus(t);
+      const status=el('span',undefined,'am-task-status '+cls);if(tip)status.title=tip;
       if(t.state==='waiting_owner')status.append(el('span',undefined,'am-dot am-dot-wait'));
       const words=el('span');status.append(words);words.append(statusPiece(text,!!t.usage));
       if(t.usage){const used=el('span',usageShort(t.usage),'am-task-usage');used.title=usageLong(t.usage);words.append(used);}
@@ -718,9 +721,10 @@
     const title=el('div',undefined,'am-task-head');title.append(el('h3',t.title));
     const where=t.remote&&!t.remote.from?tr(' на компьютере «')+t.remote.name+'»':tr(' на ')+(view.computer_name||tr('этом компьютере'))+(t.remote?.from?tr(', по заданию компьютера «')+t.remote.name+'»':'');
     title.append(el('p',(names[t.agent]||t.agent)+((t.ran_model||t.model)?' ('+(t.ran_model||t.model)+')':'')+where+tr(', папка ')+(t.folder||tr('ещё не известна')),'am-small am-muted'));
-    const [statusText,statusCls]=taskStatus(t);
+    const [statusText,statusCls,statusTip]=taskStatus(t);
     const when=t.finished_at?', '+clock(t.created_at)+'–'+clock(t.finished_at):tr(', начата в ')+clock(t.created_at);
     const line=el('p',undefined,'am-small');line.append(el('span',statusText,statusCls),el('span',when,'am-muted'));
+    if(statusTip)line.append(el('span',', '+statusTip,'am-muted'));
     if(t.usage){const used=el('span',', '+usageShort(t.usage),'am-muted');used.title=usageLong(t.usage);line.append(used);}
     title.append(line);
     const headRow=el('div',undefined,'am-task-head-row');headRow.append(title);

@@ -136,6 +136,41 @@ type RemoteComputer struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 	From bool   `json:"from,omitempty"`
+	// Lost: this computer has no contact with the computer that runs the
+	// task (T-126). It is offline, left the network, or the network was
+	// made again. The task's outcome there is unknown; LastSeen is when it
+	// last reported, if known.
+	Lost     bool   `json:"lost,omitempty"`
+	LastSeen string `json:"last_seen,omitempty"`
+}
+
+// TaskRemote names the other computer of a task, or nil for a task of this
+// computer only.
+func (s *Store) TaskRemote(task string) (*RemoteComputer, error) { return s.remoteOf(task) }
+
+// remoteContact fills in whether the computer that runs a task is out of
+// reach (T-126).
+func remoteContact(tx *sql.Tx, task string, link netLink, out *RemoteComputer) error {
+	var name sql.NullString
+	if err := tx.QueryRow(`SELECT remote_name FROM tasks WHERE id=?`, task).Scan(&name); err != nil {
+		return err
+	}
+	var broker string
+	if err := tx.QueryRow(`SELECT COALESCE((SELECT value FROM meta WHERE key='net_broker'),'')`).Scan(&broker); err != nil {
+		return err
+	}
+	peer, found, err := netPeer(tx, link.peer)
+	if err != nil {
+		return err
+	}
+	if out.Name == link.peer && name.String != "" {
+		out.Name = name.String
+	}
+	if found && peer.Age >= 0 {
+		out.LastSeen = time.Now().UTC().Add(-time.Duration(peer.Age) * time.Second).Format(time.RFC3339)
+	}
+	out.Lost = broker == "" || broker != link.broker || !found || peer.Age < 0 || peer.Age > PeerFresh
+	return nil
 }
 
 func (s *Store) remoteOf(task string) (*RemoteComputer, error) {
@@ -148,6 +183,7 @@ func (s *Store) remoteOf(task string) (*RemoteComputer, error) {
 		switch {
 		case link.remote != nil:
 			out = &RemoteComputer{ID: link.remote.peer, Name: peerName(tx, link.remote.peer)}
+			return remoteContact(tx, task, *link.remote, out)
 		case link.origin != nil:
 			out = &RemoteComputer{ID: link.origin.peer, Name: peerName(tx, link.origin.peer), From: true}
 		}
