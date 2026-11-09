@@ -210,6 +210,9 @@ type TaskEventResult struct {
 	// LastText is the worker's last message, shortened. It only explains a
 	// run that ended without a report (T-056).
 	LastText string
+	// FinalText is the worker's last message in full (up to FinalTextLimit
+	// characters), kept so a long final answer is never lost (T-087).
+	FinalText string
 	// Usage is what the run spent, when the provider reported it (T-058).
 	Usage *Usage
 }
@@ -217,7 +220,16 @@ type TaskEventResult struct {
 // lastTextLimit bounds LastText in characters.
 const lastTextLimit = 300
 
+// FinalTextLimit bounds FinalText in characters.
+const FinalTextLimit = 60000
+
 func (r *TaskEventResult) noteText(text string) {
+	if full := strings.TrimSpace(text); full != "" {
+		if runes := []rune(full); len(runes) > FinalTextLimit {
+			full = string(runes[:FinalTextLimit]) + "…"
+		}
+		r.FinalText = full
+	}
 	text = strings.Join(strings.Fields(text), " ")
 	if text == "" {
 		return

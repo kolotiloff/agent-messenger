@@ -1,6 +1,7 @@
 package adapters
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -164,5 +165,22 @@ func TestWorkerPromptKeepsAFailedCommitOpen(t *testing.T) {
 		if !strings.Contains(TaskWorkerPrompt, want) {
 			t.Fatalf("worker prompt lacks %q: %s", want, TaskWorkerPrompt)
 		}
+	}
+}
+
+// T-087: the last message is kept in full, line breaks included.
+func TestFinalTextIsKeptWhole(t *testing.T) {
+	long := strings.Repeat("line of the audit\n", 200)
+	line, _ := json.Marshal(map[string]any{"type": "result", "session_id": "s", "result": long})
+	var r TaskEventResult
+	ParseTaskEvent("claude", line, &r)
+	if r.FinalText != strings.TrimSpace(long) || len([]rune(r.LastText)) > lastTextLimit+1 {
+		t.Fatalf("final %d last %d", len(r.FinalText), len(r.LastText))
+	}
+	codex, _ := json.Marshal(map[string]any{"type": "item.completed", "item": map[string]any{"type": "agent_message", "text": long}})
+	var c TaskEventResult
+	ParseTaskEvent("codex", codex, &c)
+	if c.FinalText != strings.TrimSpace(long) {
+		t.Fatal("codex final text")
 	}
 }

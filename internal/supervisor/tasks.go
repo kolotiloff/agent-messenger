@@ -266,7 +266,7 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	}
 	_ = stdout.Close()
 	result, readErr := read.result, read.err
-	ev := core.RunEvidence{ExitObserved: waitErr == nil, ExitCode: exitCode, Cancelled: cancelled, LastText: result.LastText}
+	ev := core.RunEvidence{ExitObserved: waitErr == nil, ExitCode: exitCode, Cancelled: cancelled, LastText: result.LastText, FinalText: result.FinalText}
 	if u := result.Usage; u != nil {
 		ev.Usage = &core.TaskUsage{InputTokens: u.Input, CachedTokens: u.Cached, OutputTokens: u.Output}
 		if u.HasCost {

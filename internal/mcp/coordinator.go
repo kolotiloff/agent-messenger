@@ -55,6 +55,7 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - wait blocks until something happens in this project's tasks: a report, a question for you, a failure, an interruption, a block or a cancellation. Always pass after = the cursor from the previous wait. When it returns events, act on them (answer questions with answer, tell the owner about reports), then call wait again with the new cursor. When it times out with no events, call wait again without comment. If it says more: true, more events are ready: call wait again at once with the new cursor.
 - The owner may write to you or stop a wait at any time. When you wake up because of the owner (a new message or an interrupted wait), first call wait with your last cursor and timeout_seconds 1 to see what workers sent meanwhile, then answer the owner, and then go back to waiting. Leave timeout_seconds out otherwise: a short wait lets the owner's messages reach you. When another tool's answer ends with a «Messenger: … new events» note, events are waiting for you: read them with wait after this step.
 - start_task takes an optional model. Leave it out for the agent's default. For Claude use opus for hard work (design, tricky bugs, large refactors), sonnet for ordinary coding, haiku for small mechanical work. For Codex and Cursor pass only a name from that agent's models in list_agents (the owner lists them in the window); if the list is empty, leave model out. Never guess a name: an unknown model fails the run. Tell the owner when you chose a non-default model and why.
+- A report is the worker's short summary. Its full last message is kept too: when a report or failure ends with «[Messenger] The worker's full final message has N characters», read it with task_output before asking the worker again; it is lost nowhere, even if the worker deleted its file.
 - answer answers a worker's question (pass question_id and a unique op_id); the worker continues in the same session.
 - The owner may write to a working worker from the window. wait then returns an owner_note event with the text; the worker reads it when its current step ends and continues the same task, so a report it had written by then is held and a new one follows. Nothing to do on your side; do not repeat the note to the worker.
 - Never start a task again by yourself after it failed, was interrupted or blocked; tell the owner and let them decide.
@@ -275,6 +276,12 @@ func coordinatorTools() []map[string]any {
 				"op_id":   str("unique id of this operation"),
 				"text":    map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxTaskText},
 			}, "task_id", "op_id", "text")},
+		{"name": "task_output", "description": "Read the worker's full last message of a task, kept whole even when its report is short (up to 60000 characters; 20000 per call). A report or failure says when there is more to read. run 0 or left out is the latest run; pass offset = next_offset to read on.",
+			"inputSchema": obj(map[string]any{
+				"task_id": str("task id"),
+				"run":     map[string]any{"type": "integer", "minimum": 0},
+				"offset":  map[string]any{"type": "integer", "minimum": 0},
+			}, "task_id")},
 		{"name": "cancel", "description": "Cancel a task: a waiting task at once, a running worker is stopped.",
 			"inputSchema": obj(map[string]any{"task_id": str("task id")}, "task_id")},
 		{"name": "get_log", "description": "Ask another computer of the network for the last lines of its Messenger log, to debug Messenger itself. It answers only if its owner allowed it. Waits up to 20 seconds; if the answer has not come, call again with request_id.",
@@ -383,6 +390,19 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 			return nil, err
 		}
 		return map[string]any{"answered": true, "next": "The worker continues; call wait for its next report or question."}, nil
+	case "task_output":
+		var a struct {
+			TaskID string `json:"task_id"`
+			Run    int    `json:"run"`
+			Offset int    `json:"offset"`
+		}
+		if err := strict(&a); err != nil {
+			return nil, err
+		}
+		if err := c.ownTask(a.TaskID); err != nil {
+			return nil, err
+		}
+		return c.store.TaskOutputOf(a.TaskID, a.Run, a.Offset)
 	case "continue_task":
 		var a struct {
 			TaskID string `json:"task_id"`

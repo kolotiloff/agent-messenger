@@ -208,3 +208,7 @@ While a task of this computer is running or waits for the coordinator, the windo
 ## D-097 — Tasks of other computers run without «Любые команды» by default (T-094)
 
 2026-11-09, Claude Code, after the security review: with «Любые команды» on (D-067) and tasks of the network accepted (D-056), any computer of the network, or anyone holding its device key, could run any command on every other computer. Now a task from another computer runs with the agent's own permission checks even when the agent has «Любые команды» here; the owner can allow it with «Любые команды для задач других компьютеров» on «Сервер» (off by default). Answers and follow-ups of such a task follow the same rule. Accepting tasks of the network stays on (D-056): a task with permission checks still does useful work.
+
+## D-098 — The worker's last message is kept whole and readable by the coordinator (T-087)
+
+2026-11-09, Claude Code, after a Codex audit on ПК-2 came back as a six-line report while its full text was only in the worker's last message, and the file it had written was deleted. Messenger now keeps each run's last worker message in full (up to 60 000 characters) on the computer that ran it; a task of another computer sends it back before its report (an `output` message; older computers ignore it). When it says more than the report, the report or failure tells the coordinator so, and the coordinator reads it with `task_output` in parts of 20 000 characters. Reports stay short (D-087); this only makes sure nothing the worker wrote is lost.

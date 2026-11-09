@@ -638,6 +638,8 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 			return applyLogRequest(tx, from, b)
 		case "log":
 			return applyLogReply(tx, from, b)
+		case "output":
+			return applyOutput(tx, from, b)
 		}
 		return nil
 	})
@@ -880,5 +882,12 @@ func applyReport(tx *sql.Tx, from netLink, b netBody) error {
 	if err := setTaskUsage(tx, t.ID, b.Usage); err != nil {
 		return err
 	}
-	return insertTaskEvent(tx, t.Project, t.ID, b.Audience, b.Event, clip(b.Text, MaxDispositionText+1000), question)
+	text := clip(b.Text, MaxDispositionText+1000)
+	if b.Event == "report" || b.Event == "failed" {
+		var err error
+		if text, err = withOutputNote(tx, t.ID, text); err != nil {
+			return err
+		}
+	}
+	return insertTaskEvent(tx, t.Project, t.ID, b.Audience, b.Event, text, question)
 }

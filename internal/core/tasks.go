@@ -1392,6 +1392,8 @@ type RunEvidence struct {
 	// LastText is the worker's last message; it is shown only when the run
 	// failed without a report (T-056).
 	LastText string
+	// FinalText is the worker's last message in full (T-087).
+	FinalText string
 	// Usage is what the run spent, when its provider reported it (T-058).
 	// It only informs the owner.
 	Usage *TaskUsage
@@ -1452,6 +1454,13 @@ func (s *Store) FinishTaskRun(run string, ev RunEvidence) (string, error) {
 		if err := addTaskUsage(tx, t.ID, ev.Usage); err != nil {
 			return err
 		}
+		// T-087: keep the worker's full last message before any event, so
+		// a task of another computer sends it ahead of its report.
+		if final == "finished" || final == "failed" {
+			if err := saveTaskOutput(tx, t.ID, r.Ordinal, ev.FinalText); err != nil {
+				return err
+			}
+		}
 		switch final {
 		case "finished":
 			if held, err := holdForOwnerNotes(tx, t, r); err != nil || held {
@@ -1486,6 +1495,9 @@ func (s *Store) FinishTaskRun(run string, ev RunEvidence) (string, error) {
 			if r.DispositionText != "" {
 				text += "\nUnverified text from the worker:\n" + r.DispositionText
 			}
+			if text, err = withOutputNote(tx, t.ID, text); err != nil {
+				return err
+			}
 			return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "failed", bound4000(text), "")
 		default:
 			if err := setTaskState(tx, t.ID, "blocked", detail); err != nil {
@@ -1510,7 +1522,11 @@ func publishDisposition(tx *sql.Tx, t Task, r TaskRun) error {
 		if err := setTaskState(tx, t.ID, "done", "reported"); err != nil {
 			return err
 		}
-		return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "report", r.DispositionText, "")
+		text, err := withOutputNote(tx, t.ID, r.DispositionText)
+		if err != nil {
+			return err
+		}
+		return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "report", text, "")
 	case DispositionAsk, DispositionAskOwner:
 		audience, state := AudienceCoordinator, "waiting_coordinator"
 		if r.Disposition == DispositionAskOwner {
