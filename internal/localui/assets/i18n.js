@@ -298,6 +298,7 @@
   'Не удалось проверить задачи':'Could not check the tasks',
   'Задач в работе: ':'Tasks running: ',
   '. Перезапуск прервёт их.':'. A restart interrupts them.',
+  'Обновляем Messenger':'Updating Messenger',
   'Если задачи сейчас идут, перезапуск прервёт их.':'If tasks are running now, a restart interrupts them.',
   ' Сами они не повторятся и будут ждать вашего решения.':' They do not run again by themselves and wait for your decision.',
   'Останавливаем старую версию и запускаем новую. Это займёт несколько секунд.':'Stopping the old version and starting the new one. It takes a few seconds.',

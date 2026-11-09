@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-09 — Claude Code (T-077, release)
+
+- T-077 (D-091): the window restarts the old background client by itself after an update when no task runs; asks only otherwise. The owner's wish to update another computer remotely is T-078, Q-025.
+
 ## 2026-11-09 — Claude Code (T-076, UI tweak)
 
 - T-076 (D-090): statistics of the whole network and filtered by the computer chosen in the sidebar; another computer's agents with their limits, view only. Usage travels with presence only when it changes. The owner approved the look from screenshots with test data. Collected on `claude/ui-tweaks`, not released.

@@ -6,6 +6,9 @@ Format: ID, question, why it matters, options, which tasks it blocks.
 
 ## Open
 
+### Q-025: Update another computer from this one (T-078)?
+Asked 2026-11-09. The owner would like to point at a computer in the sidebar and update it: it installs the new version and restarts by itself. Why it matters: any computer of the network could then make another one restart, which interrupts its tasks. Options: (a) a «Обновить» item in the computer's menu that only works when that computer runs no tasks and the update is signed; (b) each computer updates itself as soon as a new version is out and nothing runs; (c) keep updating by hand on each computer. Proposed: (b), it needs no command between computers; (a) if the owner wants to choose the moment. Blocks T-078.
+
 ### Q-024: What is «one list with remote-control sessions» (T-049 item 6)?
 Asked 2026-11-08. The coordinator's wishlist asks for one list with the owner's remote-control sessions. Messenger's task list already shows every task of the network (T-047); sessions the owner opens by remote control are not Messenger tasks and Messenger cannot see them. **Cautious choice:** nothing built until the owner says which sessions and where they should show.
 

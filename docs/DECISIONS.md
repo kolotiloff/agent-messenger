@@ -168,3 +168,9 @@ The owner's rule: work reaches the project only through the worker's own commit,
 Each computer adds to its presence report its token usage of the last 31 local days, summed by day and agent, for the tasks that ran on it (started there or received from another computer); no titles or texts. The broker client sends it only when the sums changed since the broker last accepted them, and repeats it every 10 minutes in case the host lost it; a report without usage keeps the stored one. The broker names each version with a hash and, in its answer, leaves out the days of every computer whose version the asking computer already holds (`usage_seen`). A host before T-076 refuses the new fields; the client then reports without them for 10 minutes, as with readiness.
 
 The window sums this computer's own tasks and the others' reports; a task this computer sent to another one counts on the computer that reported it, so nothing is counted twice. The costliest tasks list only tasks this computer knows. In the sidebar, a click on a computer filters the statistics or the agents tab when one of them is open, and opens the tasks otherwise. Another computer's agents are view only: status, last limit and models; they are set up on that computer. Limits are not shown in the sidebar (owner).
+
+## D-091 — The window restarts the old client by itself (T-077)
+
+2026-11-09, Claude Code, from the owner: after every update the window asked to restart the background client, and the answer was always yes.
+
+The window now asks the client to restart once, without the owner, as soon as it sees an older client. The client keeps its old rule: without confirmation it refuses while task runs are going or their count cannot be read, because a restart interrupts them and they are never repeated by themselves. Only then the window shows the question as before. While restarting it shows «Обновляем Messenger». A failed restart is shown and not retried automatically.

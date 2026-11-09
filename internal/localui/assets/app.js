@@ -117,7 +117,7 @@
   let view=null,project=recall('messenger-project'),selectedTask='',feed=null,feedSignature='',viewSignature='';
   let online=false,offlineReason='',discovery=[],tab='tasks',refreshing=false,answering=false;
   const agentChecks=new Map(),checking=new Set(),rowNote=new Map();let autoChecked=false,discoveryLoaded=false;
-  let clientInfo=null,clientInfoAt=0,restart={busy:false,ask:null,error:''};
+  let clientInfo=null,clientInfoAt=0,restart={busy:false,ask:null,error:''},autoRestarted=false;
   // The window can be newer than the client still running in the background
   // (after an update). Say how to restart it; nothing is restarted by itself.
   function shutdownCommand(){return view?.messenger&&view?.data_root?'"'+view.messenger+'" --root "'+view.data_root+'" shutdown':'';}
@@ -818,7 +818,14 @@
   // The desktop window offers to restart it; a browser window shows how.
   async function loadClientInfo(){
     clientInfoAt=Date.now();
-    try{const info=await api('/api/client-info');clientInfo=info;if(!info.outdated)restart.ask=null;renderRestart();}catch(_){}
+    try{
+      const info=await api('/api/client-info');clientInfo=info;if(!info.outdated)restart.ask=null;
+      // T-077: after an update the window restarts the old client itself,
+      // once. The client refuses while tasks run or their count is unknown;
+      // only then the owner is asked.
+      if(info.outdated&&info.restart&&info.client==='running'&&!autoRestarted&&!restart.busy&&!restart.ask){autoRestarted=true;restartClient(false);return;}
+      renderRestart();
+    }catch(_){}
   }
   async function restartClient(confirm){
     restart={busy:true,ask:restart.ask,error:''};renderRestart();
@@ -840,7 +847,7 @@
     const canQuit=!!window.webkit?.messageHandlers?.app;
     let title=tr('Нужно перезапустить Messenger'),text;
     if(ask){title=ask.known?tr('Сейчас выполняются задачи'):tr('Не удалось проверить задачи');text=(ask.known?tr('Задач в работе: ')+ask.running+tr('. Перезапуск прервёт их.'):tr('Если задачи сейчас идут, перезапуск прервёт их.'))+tr(' Сами они не повторятся и будут ждать вашего решения.');}
-    else if(restart.busy)text=tr('Останавливаем старую версию и запускаем новую. Это займёт несколько секунд.');
+    else if(restart.busy){title=tr('Обновляем Messenger');text=tr('Останавливаем старую версию и запускаем новую. Это займёт несколько секунд.');}
     else if(canRestart)text=tr('Приложение обновилось до версии ')+clientInfo.window_version+tr(', а в фоне работает ')+(clientInfo.client_version?tr('версия ')+clientInfo.client_version:tr('более ранняя версия'))+tr('. Пока она не перезапущена, Messenger не может работать. Задачи, история и устройства сохранятся.');
     else text=tr('В фоне работает более ранняя версия клиента. Закройте окно, выполните скопированную команду в Терминале и откройте окно снова.');
     $('restart-title').textContent=title;$('restart-text').textContent=text;
