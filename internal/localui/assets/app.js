@@ -214,6 +214,13 @@
   }
   function clock(at){const d=new Date(at);return isNaN(d.getTime())?'':d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});}
   const activeStates=['running','waiting_owner','waiting_coordinator'];
+  // When a task was given and when it ended, with the date unless today.
+  function taskWhen(t){
+    const from=dayClock(t.created_at);if(!from)return '';
+    if(!t.finished_at)return tr('дана ')+from;
+    const end=new Date(t.finished_at).toDateString()===new Date(t.created_at).toDateString()?clock(t.finished_at):dayClock(t.finished_at);
+    return from+'–'+end;
+  }
   // T-034: why a run failed, as the provider reported it. Nothing is retried.
   function resetText(at){
     const d=new Date(at);if(isNaN(d.getTime()))return '';
@@ -399,6 +406,7 @@
         const row=el('button',undefined,'am-task');row.type='button';row.setAttribute('aria-pressed',String(t.id===selectedTask));
         const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),el('span',(names[t.agent]||t.agent)+(t.remote&&!t.remote.from?tr(' на ')+t.remote.name:'')));
         if(t.remote)agent.title=t.remote.from?tr('Задачу дал компьютер «')+t.remote.name+'»':tr('Выполняется на компьютере «')+t.remote.name+'»';
+        const when=taskWhen(t);if(when){const w=el('span',when,'am-task-when');w.title=tr('Когда задача дана')+(t.finished_at?tr(' и когда завершилась'):'');agent.append(w);}
         const [text,cls]=taskStatus(t);
         const status=el('span',undefined,'am-task-status '+cls);
         if(t.state==='waiting_owner')status.append(el('span',undefined,'am-dot am-dot-wait'));
@@ -420,6 +428,7 @@
       for(const t of items){
         const row=el('div',undefined,'am-task am-task-shared');row.title=tr('Задачу ведёт компьютер «')+p.name+tr('», здесь её можно только посмотреть');
         const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),el('span',names[t.agent]||t.agent));
+        const sharedWhen=taskWhen(t);if(sharedWhen)agent.append(el('span',sharedWhen,'am-task-when'));
         const [text,cls]=taskStatus(t);
         const words=el('span',text);
         if(t.tokens)words.append(el('span',', '+tokensText(t.tokens)+tr(' токенов'),'am-task-usage'));
