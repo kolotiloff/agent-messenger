@@ -100,12 +100,15 @@ func (s *Store) TouchCoordinatorClient(project, client string) error {
 
 // WindowTask is one row of the task list.
 type WindowTask struct {
-	ID         string `json:"id"`
-	Title      string `json:"title"`
-	Agent      string `json:"agent"`
-	State      string `json:"state"`
-	Folder     string `json:"folder"`
-	Model      string `json:"model,omitempty"`
+	ID     string `json:"id"`
+	Title  string `json:"title"`
+	Agent  string `json:"agent"`
+	State  string `json:"state"`
+	Folder string `json:"folder"`
+	Model  string `json:"model,omitempty"`
+	// RanModel is the model the worker's CLI reported at its last start
+	// (T-108); Model is the one the coordinator asked for.
+	RanModel   string `json:"ran_model,omitempty"`
 	CreatedAt  string `json:"created_at"`
 	UpdatedAt  string `json:"updated_at"`
 	FinishedAt string `json:"finished_at,omitempty"`
@@ -151,6 +154,12 @@ func (s *Store) remoteOf(task string) (*RemoteComputer, error) {
 		return nil
 	})
 	return out, err
+}
+
+func (s *Store) ranModel(task string) string {
+	var m sql.NullString
+	_ = s.db.QueryRow(`SELECT ran_model FROM tasks WHERE id=?`, task).Scan(&m)
+	return m.String
 }
 
 func (s *Store) startedAt(task string) (string, error) {
@@ -367,7 +376,7 @@ func (s *Store) TaskFeed(id string) (TaskFeed, error) {
 	if err != nil {
 		return f, err
 	}
-	f.Task = WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt}
+	f.Task = WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt, RanModel: s.ranModel(t.ID)}
 	if t.OpenQuestion != nil && t.OpenQuestion.Audience == AudienceOwner {
 		f.Task.OwnerQuestion = t.OpenQuestion
 	}

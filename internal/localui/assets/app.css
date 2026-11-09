@@ -309,6 +309,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-meta { display:flex; flex-wrap:wrap; align-items:center; gap:var(--am-gap-control); margin-bottom:var(--am-space-1); }
 #am-concept .am-meta strong { font-weight:500; }
 #am-concept .am-meta time { color:var(--am-muted); font-size:var(--am-text-xs); }
+#am-concept .am-meta-model { color:var(--am-muted); font-size:var(--am-text-s); min-width:0; overflow-wrap:anywhere; }
 #am-concept .am-role { padding:0 var(--am-space-1); border-radius:var(--am-radius-xs); background:var(--am-soft); color:var(--am-muted); font-size:var(--am-text-xs); font-weight:400; }
 #am-concept .am-message-content { line-height:1.65; }
 #am-concept .am-avatar { display:flex; align-items:center; justify-content:center; width:24px; height:28px; flex-shrink:0; }

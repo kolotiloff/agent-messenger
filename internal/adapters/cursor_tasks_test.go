@@ -158,7 +158,7 @@ func TestParseCursorTaskEvents(t *testing.T) {
 	} {
 		ParseTaskEvent("cursor", []byte(line), &r)
 	}
-	if r.Session != "chat-1" || r.Conflicting || !r.Completed || r.Failure != "" {
+	if r.Session != "chat-1" || r.Conflicting || !r.Completed || r.Failure != "" || r.Model != "x" {
 		t.Fatalf("%+v", r)
 	}
 	r = TaskEventResult{}

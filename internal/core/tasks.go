@@ -1208,6 +1208,17 @@ func (s *Store) RecordTaskRunProcess(run string, obs platform.Observation) error
 	})
 }
 
+// SetTaskRunModel records the model a run's CLI reported at its start
+// (T-108). It is shown to people only and decides nothing.
+func (s *Store) SetTaskRunModel(run, model string) error {
+	model = strings.TrimSpace(model)
+	if model == "" || len(model) > 120 {
+		return nil
+	}
+	_, err := s.db.Exec(`UPDATE tasks SET ran_model=? WHERE id=(SELECT task_id FROM task_runs WHERE id=?)`, model, run)
+	return err
+}
+
 // BindTaskSession checks the conversation ID the CLI reported. A Claude task
 // and every resumed run must match the recorded ID exactly. A new Codex task
 // binds the first ID once; an ID already bound to another task is refused.

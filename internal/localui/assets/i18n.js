@@ -174,6 +174,8 @@
   'Ещё не выходил на связь.':'Has not connected yet.',
   'Модели':'Models',
   'Модель по умолчанию':'Default model',
+  'Модель, на которой исполнитель запущен':'The model the worker runs on',
+  'Модель, которую указал координатор':'The model the coordinator asked for',
   'Задачи на этом компьютере':'Tasks on this computer',
   'Задач сейчас нет':'No tasks now',
   'Считаются все компьютеры сети: каждый сообщает расход своих задач по отчётам агентов. Задача попадает в день, когда закончилась.':'Counts every computer of the network: each reports the usage of its tasks from their agents\' reports. A task counts on the day it finished.',
