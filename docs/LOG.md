@@ -2,8 +2,9 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
-## 2026-11-09 — Claude Code (T-121 task time label, T-122 one place for «Любые команды»)
+## 2026-11-09 — Claude Code (T-121 task time label, T-122 one place for «Любые команды», T-123 restart waits for tasks)
 
+- T-123: the restart warning lists the running tasks and by default waits for them, then restarts by itself (owner's variant 1).
 - T-122 (D-109): the switch for other computers' tasks is on «Агенты» under «Любые команды» and on by default (owner's decision).
 - The owner chose variant 2 of three mockups: the task row shows «сегодня 21:49», «вчера 18:05» or the date; full times are in the tooltip. On `claude/ui-tweaks`, not released.
 

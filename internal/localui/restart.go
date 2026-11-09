@@ -59,26 +59,58 @@ func clientInfo(ctx context.Context, call caller, restart Restarter) map[string]
 	return info
 }
 
+// runningTask is one task the restart would cut, as the window lists it.
+type runningTask struct {
+	Agent     string `json:"agent"`
+	Title     string `json:"title"`
+	StartedAt string `json:"started_at,omitempty"`
+}
+
 // runningTasks counts task runs on this computer from the window view. A
-// client that cannot answer makes the count unknown, never zero.
-func runningTasks(ctx context.Context, call caller, project string) (int, bool) {
+// client that cannot answer makes the count unknown, never zero. The list
+// holds the running tasks of the project the window shows (T-123); the
+// count covers every project.
+func runningTasks(ctx context.Context, call caller, project string) (int, bool, []runningTask) {
 	response, err := call(ctx, control.Request{Cmd: "window-view", Alias: project})
 	if err != nil || !response.OK || len(response.Overview) == 0 {
-		return 0, false
+		return 0, false, nil
 	}
 	var view struct {
 		Agents *[]struct {
 			Running int `json:"running"`
 		} `json:"agents"`
+		Tasks []struct {
+			Agent         string `json:"agent"`
+			Title         string `json:"title"`
+			State         string `json:"state"`
+			StartedAt     string `json:"started_at"`
+			CreatedAt     string `json:"created_at"`
+			PendingLaunch bool   `json:"pending_launch"`
+			Remote        *struct {
+				From bool `json:"from"`
+			} `json:"remote"`
+		} `json:"tasks"`
 	}
 	if json.Unmarshal(response.Overview, &view) != nil || view.Agents == nil {
-		return 0, false
+		return 0, false, nil
 	}
 	n := 0
 	for _, a := range *view.Agents {
 		n += a.Running
 	}
-	return n, true
+	list := []runningTask{}
+	for _, t := range view.Tasks {
+		// A task this computer sent elsewhere runs there, not here.
+		if t.State != "running" || t.PendingLaunch || (t.Remote != nil && !t.Remote.From) {
+			continue
+		}
+		at := t.StartedAt
+		if at == "" {
+			at = t.CreatedAt
+		}
+		list = append(list, runningTask{Agent: t.Agent, Title: t.Title, StartedAt: at})
+	}
+	return n, true, list
 }
 
 func serveRestart(w http.ResponseWriter, r *http.Request, decoder *json.Decoder, call caller, restart Restarter, busy chan struct{}) {
@@ -113,11 +145,11 @@ func serveRestart(w http.ResponseWriter, r *http.Request, decoder *json.Decoder,
 	}
 	// A task run interrupted by the restart stays blocked until the owner
 	// decides; it is never repeated by itself. Ask before doing that.
-	running, known := runningTasks(ctx, call, input.Project)
+	running, known, tasks := runningTasks(ctx, call, input.Project)
 	if !input.Confirm && (!known || running > 0) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.WriteHeader(http.StatusConflict)
-		writeJSON(w, map[string]any{"ok": false, "state": "confirm", "running": running, "known": known})
+		writeJSON(w, map[string]any{"ok": false, "state": "confirm", "running": running, "known": known, "tasks": tasks})
 		return
 	}
 	if err := restart(ctx); err != nil {

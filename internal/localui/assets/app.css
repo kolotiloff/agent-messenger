@@ -485,6 +485,16 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 /* The main action is the last button: it stays on the right even when the
    buttons before it are hidden. */
 #am-concept .am-alert-actions > :last-child { margin-left:auto; }
+/* T-123: the restart question lists the tasks it would cut; its buttons
+   stay in one line. */
+#am-concept .am-alert.am-restart-ask { width:min(560px,calc(100vw - 32px)); }
+#am-concept .am-restart-ask .am-alert-actions { flex-wrap:nowrap; justify-content:flex-end; }
+#am-concept .am-restart-ask .am-alert-actions > :last-child { margin-left:0; }
+#am-concept .am-restart-head { display:flex; align-items:flex-start; justify-content:space-between; gap:var(--am-gap-control); }
+#am-concept .am-restart-tasks { display:grid; grid-template-columns:minmax(0,1fr); gap:var(--am-space-1); padding:var(--am-space-2) var(--am-space-3); border-radius:var(--am-radius-m); background:var(--am-soft); }
+#am-concept .am-restart-task { min-width:0; display:flex; justify-content:space-between; gap:var(--am-gap-control); }
+#am-concept .am-restart-task > :first-child { min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+#am-concept .am-restart-task > :last-child { flex:none; }
 #am-concept .am-dialog-header { display:flex; align-items:center; justify-content:space-between; gap:var(--am-gap-section); padding:var(--am-space-4); border-bottom:1px solid var(--am-line); flex-shrink:0; }
 #am-concept .am-dialog-body { min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; padding:0 calc(var(--am-space-4) - var(--am-gutter, 0px)) var(--am-space-4) var(--am-space-4); }
 #am-concept .am-setup-body { display:flex; flex-direction:column; gap:var(--am-gap-section); padding-top:var(--am-space-4); }
@@ -534,6 +544,7 @@ body.am-native #am-concept .am-titlebar { display:none; }
 body.am-native #am-concept .am-panel-toggle { margin-left:auto; }
 @media (max-width: 640px) {
   #am-concept .am-access-row { flex-direction:column; align-items:stretch; }
+  #am-concept .am-restart-ask .am-alert-actions { flex-wrap:wrap; }
 }
 
 /* Agent cards (T-061, D-070): a head with the name, check, settings and the

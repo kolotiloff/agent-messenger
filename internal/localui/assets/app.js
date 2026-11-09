@@ -117,12 +117,12 @@
   let view=null,project=recall('messenger-project'),selectedTask='',selectedShared=null,feed=null,feedSignature='',viewSignature='';
   let online=false,offlineReason='',discovery=[],tab='tasks',refreshing=false,answering=false;
   const agentChecks=new Map(),checking=new Set(),rowNote=new Map();let autoChecked=false,discoveryLoaded=false;
-  let clientInfo=null,clientInfoAt=0,restart={busy:false,ask:null,error:''},autoRestarted=false;
+  let clientInfo=null,clientInfoAt=0,restart={busy:false,ask:null,error:'',wait:false},autoRestarted=false;
   // The start screen covers the window until the client first answers, for
   // at most bootLimit; then the usual notices take over (T-079).
   let booting=true;const bootLimit=20000;setTimeout(()=>{booting=false;renderBoot();},bootLimit);
   function renderBoot(){
-    const updating=restart.busy&&!restart.ask;
+    const updating=restart.busy&&!restart.ask&&!restart.wait;
     $('boot-cover').hidden=!(booting||updating);
     $('boot-text').textContent=updating?tr('Устанавливаем обновление…'):tr('Запуск…');
   }
@@ -1034,14 +1034,19 @@
       renderRestart();
     }catch(_){}
   }
+  // T-123: «Перезапустить после них» keeps asking the client every few
+  // seconds; it restarts by itself once no task runs (the client checks
+  // again), and nothing is cut. Closing the window stops the waiting only.
+  setInterval(()=>{if(restart.wait&&!restart.busy&&clientInfo?.outdated)restartClient(false);},5000);
   async function restartClient(confirm){
-    restart={busy:true,ask:restart.ask,error:''};renderRestart();
+    const wait=restart.wait&&!confirm;
+    restart={busy:true,ask:restart.ask,error:'',wait};renderRestart();
     let response,result={};
     try{response=await fetch('/api/restart-client',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({project,confirm}),cache:'no-store',signal:AbortSignal.timeout(50000)});result=await response.json().catch(()=>({}));}
-    catch(_){restart={busy:false,ask:null,error:tr('Ответ не получен, результат неизвестен. Подождите немного: окно проверит клиент само.')};renderRestart();loadClientInfo();return;}
-    if(response.ok&&result.ok){restart={busy:false,ask:null,error:''};showError(null);await loadClientInfo();viewSignature='';refresh();return;}
-    if(result.state==='confirm'){restart={busy:false,ask:{running:result.running||0,known:result.known!==false},error:''};renderRestart();return;}
-    restart={busy:false,ask:null,error:result.detail||tr('Перезапуск не подтверждён. Проверьте состояние.')};renderRestart();loadClientInfo();
+    catch(_){restart={busy:false,ask:null,error:tr('Ответ не получен, результат неизвестен. Подождите немного: окно проверит клиент само.'),wait:false};renderRestart();loadClientInfo();return;}
+    if(response.ok&&result.ok){restart={busy:false,ask:null,error:'',wait:false};showError(null);await loadClientInfo();viewSignature='';refresh();return;}
+    if(result.state==='confirm'){restart={busy:false,ask:{running:result.running||0,known:result.known!==false,tasks:result.tasks||[]},error:'',wait};renderRestart();return;}
+    restart={busy:false,ask:null,error:result.detail||tr('Перезапуск не подтверждён. Проверьте состояние.'),wait:false};renderRestart();loadClientInfo();
   }
   // A window newer than its client cannot work properly, so this dialog
   // covers the whole window until the client is restarted or the app quits.
@@ -1055,16 +1060,29 @@
     const ask=restart.ask,canRestart=!!clientInfo?.restart,answering=clientInfo?.client==='running';
     const canQuit=!!window.webkit?.messageHandlers?.app;
     let title=tr('Нужно перезапустить Messenger'),text;
-    if(ask){title=ask.known?tr('Сейчас выполняются задачи'):tr('Не удалось проверить задачи');text=(ask.known?tr('Задач в работе: ')+ask.running+tr('. Перезапуск прервёт их.'):tr('Если задачи сейчас идут, перезапуск прервёт их.'))+tr(' Сами они не повторятся и будут ждать вашего решения.');}
+    const version=clientInfo?.window_version?tr('Версия ')+versionName(clientInfo.window_version).slice(1)+tr(' установлена. '):'';
+    if(ask&&restart.wait){title=tr('Ждём окончания задач');text=(ask.known?tr('Задач в работе: ')+ask.running+'. ':'')+tr('Messenger перезапустится сам, когда они закончатся. Если закрыть окно, задачи продолжат работать, но перезапуска не будет до следующего открытия.');}
+    else if(ask&&ask.known){title=tr('Обновление ждёт задачи: ')+ask.running;text=version+tr('Чтобы она заработала, Messenger перезапустится и прервёт задачи, которые идут сейчас. Сами они не повторятся.');}
+    else if(ask){title=tr('Не удалось проверить задачи');text=version+tr('Если задачи сейчас идут, перезапуск прервёт их. Сами они не повторятся.');}
     else if(restart.busy){title=tr('Обновляем Messenger');text=tr('Останавливаем старую версию и запускаем новую. Это займёт несколько секунд.');}
     else if(canRestart)text=tr('Приложение обновилось до версии ')+clientInfo.window_version+tr(', а в фоне работает ')+(clientInfo.client_version?tr('версия ')+clientInfo.client_version:tr('более ранняя версия'))+tr('. Пока она не перезапущена, Messenger не может работать. Задачи, история и устройства сохранятся.');
     else text=tr('В фоне работает более ранняя версия клиента. Закройте окно, выполните скопированную команду в Терминале и откройте окно снова.');
     $('restart-title').textContent=title;$('restart-text').textContent=text;
+    const list=$('restart-tasks');list.replaceChildren();
+    for(const t of ask?.tasks||[]){const row=el('div',undefined,'am-restart-task');row.append(el('span',(names[t.agent]||t.agent)+' · '+t.title),el('span',minutes(t.started_at),'am-status-run'));list.append(row);}
+    const others=ask?.known?ask.running-(ask.tasks||[]).length:0;
+    if(others>0)list.append(el('p',tr('И ещё в других проектах: ')+others,'am-small am-muted'));
+    list.hidden=!list.childElementCount;
+    dialog.classList.toggle('am-restart-ask',!!ask);
     $('restart-error').textContent=restart.error;$('restart-error').hidden=!restart.error;
     const go=$('restart-go'),quit=$('restart-quit'),copy=$('restart-copy');
-    go.hidden=!canRestart||!answering||restart.busy;
-    go.textContent=ask?tr('Перезапустить всё равно'):tr('Перезапустить');
-    go.classList.toggle('am-primary',!ask);go.classList.toggle('am-danger',!!ask);
+    // T-123: with tasks running the main button waits for them; cutting
+    // them is the separate red button.
+    const cut=$('restart-cut');
+    go.hidden=!canRestart||!answering||(restart.busy&&!restart.wait)||(!!ask&&restart.wait);
+    go.textContent=ask?tr('Перезапустить после них'):tr('Перезапустить');go.disabled=restart.busy;
+    cut.hidden=!ask||!canRestart||!answering;cut.disabled=restart.busy&&!restart.wait;
+    cut.textContent=restart.wait?tr('Прервать сейчас'):tr('Прервать и перезапустить');
     quit.hidden=!canQuit;quit.disabled=restart.busy;
     copy.hidden=canRestart||!shutdownCommand();
     if(!dialog.open){dialog.showModal();(go.hidden?quit.hidden?copy:quit:go).focus();}
@@ -1723,7 +1741,8 @@
   $('agent-cli-pick').addEventListener('click',()=>pick('agent-cli','file','agent-save-status'));
   $('agent-profile-pick').addEventListener('click',()=>pick('agent-profile','folder','agent-save-status'));
   $('restart-dialog').addEventListener('cancel',event=>event.preventDefault());
-  $('restart-go').addEventListener('click',()=>restartClient(!!restart.ask));
+  $('restart-go').addEventListener('click',()=>{if(restart.ask){restart.wait=true;renderRestart();restartClient(false);}else restartClient(false);});
+  $('restart-cut').addEventListener('click',()=>{restart.wait=false;restartClient(true);});
   $('restart-quit').addEventListener('click',()=>window.webkit?.messageHandlers?.app?.postMessage('quit'));
   $('restart-copy').addEventListener('click',async()=>{const b=$('restart-copy');try{await navigator.clipboard.writeText(shutdownCommand());b.textContent=tr('Скопировано');}catch(_){b.textContent=tr('Не удалось скопировать');}setTimeout(()=>b.textContent=tr('Скопировать команду'),2000);});
   $('agent-setup-close').addEventListener('click',()=>$('agent-setup').close());

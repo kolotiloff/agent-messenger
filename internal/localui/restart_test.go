@@ -143,3 +143,38 @@ func TestClientInfoReportsVersions(t *testing.T) {
 		}
 	}
 }
+
+// T-123: the restart question lists the running tasks of this computer; a
+// task this computer sent elsewhere or one still waiting to start is left out.
+func TestRestartQuestionListsRunningTasks(t *testing.T) {
+	call := func(_ context.Context, r control.Request) (control.Response, error) {
+		switch r.Cmd {
+		case "status":
+			return control.Response{OK: true, Status: &control.Status{Version: ""}}, nil
+		case "window-view":
+			raw, _ := json.Marshal(map[string]any{
+				"agents": []map[string]int{{"running": 3}},
+				"tasks": []map[string]any{
+					{"agent": "codex", "title": "Build menu", "state": "running", "started_at": "2026-11-09T20:00:00Z"},
+					{"agent": "cursor", "title": "From a peer", "state": "running", "remote": map[string]any{"name": "PC", "from": true}},
+					{"agent": "claude", "title": "Sent elsewhere", "state": "running", "remote": map[string]any{"name": "PC"}},
+					{"agent": "claude", "title": "Not started", "state": "running", "pending_launch": true},
+					{"agent": "claude", "title": "Done", "state": "done"},
+				},
+			})
+			return control.Response{OK: true, Overview: raw}, nil
+		}
+		return control.Response{}, errors.New("unexpected command " + r.Cmd)
+	}
+	w := restartHandler(call, func(context.Context) error { t.Fatal("restarted"); return nil })
+	var got struct {
+		State string        `json:"state"`
+		Tasks []runningTask `json:"tasks"`
+	}
+	if w.Code != 409 || json.Unmarshal(w.Body.Bytes(), &got) != nil || got.State != "confirm" {
+		t.Fatalf("answer %d %s", w.Code, w.Body)
+	}
+	if len(got.Tasks) != 2 || got.Tasks[0].Title != "Build menu" || got.Tasks[1].Title != "From a peer" {
+		t.Fatalf("tasks %+v", got.Tasks)
+	}
+}
