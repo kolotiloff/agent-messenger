@@ -1,5 +1,7 @@
 # Setup from the window
 
+> **Historical: removed in T-028 ([D-104](DECISIONS.md)).** Creating test sessions from the window is gone; agent cards and «Проверить версию и вход» stay. This page describes code that no longer exists; it is kept as a record. Old reservations of this mode stay in `active-runs.json` and are listed by `messenger status` and `doctor`.
+
 Agent card → «Настроить» ("Set up") shows the CLI program and the profile directory. Program discovery is passive. «Проверить версию и вход» ("Check version and login") runs only the diagnostic commands of the selected CLI; the limitations are described in [CLI_CHECK.md](CLI_CHECK.md).
 
 For Claude, a «Создать тестовую сессию» ("Create test session") button has been added. It is available only if the background client reports support for the new operation and for Claude's persistent mode. An old client is not sent a substitute registration command: the window states plainly that it needs to be updated.

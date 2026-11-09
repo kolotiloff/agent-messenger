@@ -35,17 +35,9 @@ These change all the time. Every tool reads them at the start and updates them a
 | File | About |
 |---|---|
 | [CLIENT.md](CLIENT.md) | The local Go client: decision and work plan |
-| [CLAUDE_STREAM.md](CLAUDE_STREAM.md) | Persistent Claude in one process |
-| [CODEX_ADAPTER_NEXT.md](CODEX_ADAPTER_NEXT.md) | Persistent Codex: research and the components built so far |
 | [BACKGROUND.md](BACKGROUND.md) | The background client and reconnecting to it |
 | [DIAGNOSTICS.md](DIAGNOSTICS.md) | `doctor`: diagnostics without launching a CLI |
 | [CLI_CHECK.md](CLI_CHECK.md) | `check-cli`: explicit version and login check |
-| [UI_READ_API.md](UI_READ_API.md) | `overview`: data for the agent cards |
-| [TIMELINE.md](TIMELINE.md) | `timeline`: message history API |
-| [LOCAL_UI.md](LOCAL_UI.md) | The local browser UI: messages and queue |
-| [SESSION_SETUP.md](SESSION_SETUP.md) | Setting up an agent from the window |
-| [SCOPED_LAUNCH.md](SCOPED_LAUNCH.md) | Launching only the selected session |
-| [ROUTING.md](ROUTING.md) | Replies between agents and the automatic reply limit |
 
 ## Install, release and checks
 
@@ -57,7 +49,22 @@ These change all the time. Every tool reads them at the start and updates them a
 | [WINDOWS_LINUX.md](WINDOWS_LINUX.md) | Windows and Linux: download, the browser window, job objects, what is verified |
 | [UPDATES.md](UPDATES.md) | Mac app updates through Sparkle and GitHub Releases |
 | [CI.md](CI.md) | Automated checks in GitHub Actions |
+
+## Removed: the persistent session mode
+
+T-028 ([D-104](DECISIONS.md)) removed the old mode that delivered messages into live Claude and Codex sessions. These pages describe it and are kept as a record only:
+
+| File | About |
+|---|---|
+| [CLAUDE_STREAM.md](CLAUDE_STREAM.md) | Persistent Claude in one process |
+| [CODEX_ADAPTER_NEXT.md](CODEX_ADAPTER_NEXT.md) | Persistent Codex app-server |
 | [ACCEPTANCE_CODEX_MAC.md](ACCEPTANCE_CODEX_MAC.md) | Runbook for the first real Codex run on the Mac (T-004) |
+| [UI_READ_API.md](UI_READ_API.md) | `overview` |
+| [TIMELINE.md](TIMELINE.md) | `timeline` |
+| [LOCAL_UI.md](LOCAL_UI.md) | The first browser UI: messages and queue |
+| [SESSION_SETUP.md](SESSION_SETUP.md) | Creating test sessions from the window |
+| [SCOPED_LAUNCH.md](SCOPED_LAUNCH.md) | Launching only the selected session |
+| [ROUTING.md](ROUTING.md) | Replies between agents |
 
 ## Reports
 

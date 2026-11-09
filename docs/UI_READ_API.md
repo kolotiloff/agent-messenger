@@ -1,5 +1,7 @@
 # Data for the first window: overview v1
 
+> **Historical: removed in T-028 ([D-104](DECISIONS.md)).** `overview` and its window route are gone; the window reads `window-view`. This page describes code that no longer exists; it is kept as a record. Old reservations of this mode stay in `active-runs.json` and are listed by `messenger status` and `doctor`.
+
 `messenger --root DIR overview` talks only to an already running client through its local socket. The output is JSON. Waiting for a response is limited to five seconds. A missing client is not started; the CLI, the model and the login check are not called. A timeout does not prove that the client or agent has stopped.
 
 IPC request: `{"cmd":"overview"}`. Response: `{"ok":true,"overview":{...}}`. An error must be shown as data being unavailable, keeping it distinct from an empty session list. The summary does not replace `doctor` diagnostics, and `check-cli` remains a separate explicit action.

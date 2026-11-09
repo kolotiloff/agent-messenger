@@ -17,13 +17,14 @@ Search names: `claude`, `codex`, and for Cursor first `cursor-agent`, then `agen
 
 - `schema_version`, `checked_at` (UTC), `os`, `arch`;
 - `data.root` and `data.state`: `exists`, `missing`, `not_directory`, `unreadable` — only information about the directory, not the result of a database check;
-- `controller.state`: `reachable`, `unreachable` or `unknown`; with a confirmed status — client PID, pause, CLI permission, number of pending messages/held sessions and the existing broker status;
+- `controller.state`: `reachable`, `unreachable` or `unknown`; with a confirmed status — client PID, pause, whether task workers run, and the broker status;
+- `reservations`: read from `active-runs.json` without changing it, even when the client is stopped: the number of task-run reservations and, in `old`, each reservation of the removed persistent mode (`kind` `claude-stream`, `codex-app-server` or `session`, provider, data directory, pid). Old ones are kept as they are and only shown (D-104);
 - `agents`: three independent cards, `cli.state`, candidate path, command name, `PATH` source, `identity`, `version`, `authentication`, `session`;
 - `probe_cli_starts=0`: the diagnostic operation itself did not launch a CLI. This is not a counter of actions by another already running client.
 
 Conversation text, conversation IDs, MCP tokens, profile contents, raw errors and the extended `status.detail` field are not included in the report. Paths and PIDs are local diagnostics: anonymize them before publishing.
 
-`held_sessions` includes any held owner, including a healthy persistent process; it is not an error count. Broker status `not_configured` does not mean a network connection. Per-session readiness is not derived from the aggregate counters.
+Broker status `not_configured` does not mean a network connection. Per-session readiness is not derived from the aggregate counters.
 
 Exit code 0 means "report generated", even if the CLI was not found or the client did not respond. For automation, read the JSON fields. Unknown flags are rejected; the command has no permission to launch models.
 

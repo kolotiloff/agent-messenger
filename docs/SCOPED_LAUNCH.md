@@ -1,5 +1,7 @@
 # Launching only the selected session
 
+> **Historical: removed in T-028 ([D-104](DECISIONS.md)).** Launching a selected session (`--only-session`, authorize-setup) is gone. This page describes code that no longer exists; it is kept as a record. Old reservations of this mode stay in `active-runs.json` and are listed by `messenger status` and `doctor`.
+
 In preview.19, launching a new test Claude session is available from the window: «Агенты» ("Agents") → Claude Code → «Сессии» ("Sessions") → «Запустить тестовую сессию» ("Launch test session"). It can be created via «Настроить» ("Set up"). The button explicitly permits message processing for the selected session only and resumes the queue. If messages are already queued for this session, they will start being processed. Other recipients stay in the queue. Replies spend tokens; idle waiting sends no model requests.
 
 The button is available only for a new test session created by Messenger that has no owner. Older registered and working conversations are not connected by this action. While one permission is active in the client, it cannot be switched to another session. Repeating the confirmation returns the same result and does not resume a subsequent pause. The permission is not kept after the background client stops; closing one window is not the same as stopping the client. After an attempt, a protective reservation may remain — the button does not bypass it.

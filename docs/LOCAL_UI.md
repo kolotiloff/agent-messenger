@@ -1,5 +1,7 @@
 # Local UI: messages and queue
 
+> **Historical: removed in T-028 ([D-104](DECISIONS.md)).** The message, queue and outbox pages are gone; the window shows tasks, agents, statistics and the server. This page describes code that no longer exists; it is kept as a record. Old reservations of this mode stay in `active-runs.json` and are listed by `messenger status` and `doctor`.
+
 This is a technical preview in the browser, connected to the real local API. It is not the native macOS shell and not an installer. The saved [design/v1](../design/README.md) styling has been carried over into the product; HTML, CSS and JavaScript are embedded in the Go binary, and no external CDN or Node is needed to run it.
 
 ## Running

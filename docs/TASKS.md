@@ -86,7 +86,7 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 
 | ID | Task | Owner | Notes |
 |---|---|---|---|
-| T-028 | Close or migrate existing persistent sessions and state, then retire the persistent Claude stream and Codex app-server owners. | agent | blocked: Q-012 |
+| — | Nothing queued. | | |
 
 ## Backlog
 
@@ -104,6 +104,7 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 
 | ID | Task | PR |
 |---|---|---|
+| T-028 | Retire the persistent session mode (D-104, Q-012): the Claude stream and Codex app-server owners, `messenger mcp`, their window routes and CLI commands are removed; old tables stay in the database and old reservations stay in `active-runs.json`, listed read-only by `status` and `doctor`. Verified on Linux: `check.sh` (race tests, including an old-mode database that opens unchanged and old reservations kept byte-identical through status, pause, resume and shutdown), `check-builds.sh`, `check-desktop.py`. `check-package.py` and the Swift shell are verified by macOS CI only. | `claude/t028-retire-persistent` (no PR yet) |
 | T-019 | UI language: Russian by default, English as a choice under «Язык» (the owner asked for it, T-059). CLI messages stay Russian. | T-059, PR #76 |
 | T-030 | `/api/setup-codex` no longer cut at 25 s: each long route sets its own write deadline (`internal/localui/server.go`, added with T-029, commit 02774a3). Found stale on 2026-11-09. | T-029 |
 | T-040 | Faster release: the Mac checks run next to the Windows and Linux job instead of after it. To confirm on the next release run. | `claude/t040-faster-release` |

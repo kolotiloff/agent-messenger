@@ -1,13 +1,15 @@
 # Background client and reconnecting
 
-`start` launches the regular local Messenger in the background. The command exits; you can close the terminal. Subsequent `status`, `inspect`, `pause`, `resume` and `enqueue` connect to the same process through a local socket. No service is installed, and there is no autostart after login or reboot and no automatic restart.
+`start` launches the regular local Messenger in the background. The command exits; you can close the terminal. Subsequent `status`, `pause`, `resume` and `shutdown` connect to the same process through a local socket. No service is installed, and there is no autostart after login or reboot and no automatic restart.
 
 On macOS the behavior was verified with real Claude. On Linux the implementation builds but was not run in this verification. On Windows the command explicitly reports that it is unsupported: platform locking and process management are not implemented yet.
 
-## Running without models
+> T-028 ([D-104](DECISIONS.md)) removed the persistent session mode: `--claude-stream` is accepted and ignored, `--allow-model-calls` and `--only-session` are refused, and `recover-stream` is gone. Task workers run only with `--allow-tasks` (D-027); the window's own client uses it (D-029). The sections below keep the older wording about sessions as a record.
+
+## Running without task workers
 
 ```sh
-messenger --root /absolute/data/path start --claude-stream
+messenger --root /absolute/data/path start
 messenger --root /absolute/data/path status
 ```
 
@@ -15,14 +17,11 @@ The data directory must be persistent; for regular use, do not put it in `/tmp`.
 
 Without `--allow-model-calls`, no CLIs are launched, even after `resume`. The command prints the background client's PID and the path of a separate log with `0600` permissions. Model permission applies only to this process launch; it is not saved in settings and is not inherited by a new `start`.
 
-## Running with message delivery allowed
-
-Only for a separate, registered test CLI session:
+## Running with task workers
 
 ```sh
-messenger --root /absolute/data/path start --claude-stream --allow-model-calls
+messenger --root /absolute/data/path start --allow-tasks
 messenger --root /absolute/data/path status
-# Check the relevant queue and sessions before allowing delivery:
 messenger --root /absolute/data/path resume
 ```
 
@@ -35,7 +34,7 @@ messenger --root /absolute/data/path resume
 - Closing the terminal: the background client and the Claude it owns keep running. You can open another terminal and run `status`; no new CLI is created.
 - `pause`: subsequent messages stay in the queue; the current reply may finish. The process and the lock are kept.
 - `shutdown`: terminates Messenger itself. It keeps the protective reservations; the next `start` does not release the stopped CLI session. This is a separate operation from closing the terminal.
-- Recovery after a confirmed Mac reboot is still the explicit `recover-stream`. Background mode does not change that command's conditions.
+- Recovery after a confirmed reboot whose data directory is gone is the explicit `recover-missing-root`. `recover-stream` was removed in T-028.
 
 So closing the user's connection does not require a reboot. **Fully terminating the CLI and safely releasing its reservation within the same OS boot are not implemented by this change.** There is no window interface yet; a future interface must connect to this same client and must not call `shutdown` every time the window is closed.
 

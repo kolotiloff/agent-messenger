@@ -2,7 +2,9 @@
 
 The original decision was recorded on November 5, 2026. Current instructions for launching the window, installation and checks are in [LOCAL_UI.md](LOCAL_UI.md), [INSTALL.md](INSTALL.md) and [CI.md](CI.md). The history of the first one-shot client is also kept below; its old limitations should not be carried over to every later version.
 
-## Current addendum: persistent Claude
+## Former addendum: persistent Claude
+
+> Removed in T-028 ([D-104](DECISIONS.md)); kept as a record.
 
 `serve --claude-stream` serves Claude messages one at a time in a single process. The model still requires a separate `--allow-model-calls`. Two messages, pause/resume and the queue surviving shutdown/restart were verified on a Mac. Turn state and process-owner state are separate; a successful turn does not release the reservation. [Instructions and limitations](CLAUDE_STREAM.md), [report](reports/2026-11-05-claude-stream-product-mac.md).
 

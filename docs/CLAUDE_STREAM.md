@@ -1,5 +1,7 @@
 # Persistent Claude in the local client
 
+> **Historical: removed in T-028 ([D-104](DECISIONS.md)).** The persistent Claude stream (`serve --claude-stream`, `stop-job`, `recover-stream`) is gone; Claude works through tasks. This page describes code that no longer exists; it is kept as a record. Old reservations of this mode stay in `active-runs.json` and are listed by `messenger status` and `doctor`.
+
 `messenger serve --claude-stream` supports sequential Claude messages in a single process. It is an explicit mode, enabled separately from the permission to call the model. In this mode Cursor stays in the queue; Codex sessions are served by their own owners (see [CODEX_ADAPTER_NEXT.md](CODEX_ADAPTER_NEXT.md)).
 
 **Several Claude sessions.** Each persistent Claude session gets its own controller and process, and up to 4 run at the same time. A live stream for one session no longer blocks another. `stop-job` and shutdown stop every live stream. A session whose stream is uncertain stays locked; the others keep working.

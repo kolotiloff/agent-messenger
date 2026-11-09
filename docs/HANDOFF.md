@@ -8,6 +8,13 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-09 (T-028) by Claude Code.
+
+- **T-028 done on branch `claude/t028-retire-persistent`** (from `claude/ui-tweaks`, not merged, no PR yet): the persistent session mode is removed (D-104). Gone: the Claude stream and Codex app-server owners, `messenger mcp`, the alias/queue/outbox window routes and the old CLI commands (`register-session`, `enqueue`, `inspect`, `resolve`, `stop-job`, `timeline`, `overview`, `create-claude-session`, `setup-codex`, `create-codex-session`, `recover-stream`, `recover-codex`, `recover-failed`), plus `serve --allow-model-calls` and `--only-session`. Tasks, the coordinator, the network, updates and the window are unchanged.
+- **Kept on purpose:** the old tables stay in SQLite (`internal/core/legacy_schema.go`, schema version still 3); old reservations stay in `active-runs.json`, untouched, and `status` / `doctor` list them read-only. Only `recover-missing-root` can retire one. They still refuse `install`, the Windows installer/uninstaller and another data directory, as before.
+- **Verified here (Linux):** `check.sh`, `check-builds.sh`, `check-desktop.py`. `check-package.py` (rewritten: agents and pause instead of sessions and queue) and the Swift shell only run in macOS CI.
+- **Owner to check:** after updating, run `messenger status` on the Mac; if it lists old reservations, they are from the old mode and stay until a proven reboot plus `recover-missing-root`, or a later decision.
+
 Updated 2026-11-09 (day) by Claude Code.
 
 - T-077 (D-091): automatic restart of the old client after an update. All collected changes go to `main` and a preview release.

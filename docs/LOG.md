@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-09 — Claude Code (T-028 retire the persistent mode)
+
+- Removed the persistent Claude stream, the Codex app-server owner, `messenger mcp`, the old window routes and CLI commands (D-104, Q-012). Old SQLite tables and `active-runs.json` reservations are kept untouched; `status` and `doctor` list old reservations read-only. `check-package.py` and `check-desktop.py` now check agents and the pause. Verified on Linux (`check.sh`, `check-builds.sh`, `check-desktop.py`); Mac scripts run in CI. Branch `claude/t028-retire-persistent`, no PR.
+
 ## 2026-11-09 — Claude Code (T-097 hints in the chat)
 
 - The answer hint moved from under the reply box into the chat, in italics under the owner's answer (owner's choice). On `claude/ui-tweaks`, not released.

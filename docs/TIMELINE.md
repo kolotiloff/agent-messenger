@@ -1,5 +1,7 @@
 # Local message timeline v1
 
+> **Historical: removed in T-028 ([D-104](DECISIONS.md)).** `timeline` and its window route are gone. This page describes code that no longer exists; it is kept as a record. Old reservations of this mode stay in `active-runs.json` and are listed by `messenger status` and `doctor`.
+
 ```sh
 messenger --root DIR timeline --alias claude-test --limit 50
 messenger --root DIR timeline --alias claude-test --limit 50 --before MESSAGE_ID

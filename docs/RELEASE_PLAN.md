@@ -4,6 +4,8 @@ Updated November 6, 2026. This is the current sequence of work on top of the ori
 
 ## Current status
 
+> **T-028 ([D-104](DECISIONS.md)):** the persistent session mode described in this page (persistent Claude, persistent Codex, sessions, the message queue and outbox) was removed; the product is "one task, one session" (D-021). Old reservations stay in `active-runs.json` and are listed by `status` and `doctor`. The text below is kept as the record of that stage.
+
 The current functional step, preview.19, is accepted on Mac: [creating and explicitly launching a separate test Claude session from the window](SCOPED_LAUNCH.md). After the fake CLI, real Claude Code 2.1.318 was verified: two sequential messages, two confirmed replies in one process, replies appearing automatically, and three older messages of other sessions preserved. The shell was updated to preview.19 through the native updater. Automatically switching the version of a running background client is still a separate task. The next step is persistent Codex, then several independent owners without starvation, and Claude ↔ Codex on one Mac. Cosmetic issues are folded into functional steps and do not form a separate release queue.
 
 We are at the stage of a local technical prototype on Mac. There is a Go client, SQLite, protected session ownership, linked MCP replies, persistent Claude, exact resume, explicit recovery after a real reboot, and background launch. This was verified with separate test CLI conversations, not working chats. The product lives in `cmd/messenger` and `internal`; early experiments are kept separately. A technical preview and a full release for three OSes are different checkpoints.

@@ -1,5 +1,7 @@
 # Next adapter: persistent Codex
 
+> **Historical: removed in T-028 ([D-104](DECISIONS.md)).** The persistent Codex app-server owner (`setup-codex`, `create-codex-session`, `recover-codex`) is gone; Codex works through tasks. This page describes code that no longer exists; it is kept as a record. Old reservations of this mode stay in `active-runs.json` and are listed by `messenger status` and `doctor`.
+
 Research and first Go components as of November 6, 2026, with Codex CLI 0.155.1 installed. The full persistent adapter is not yet connected to the product client.
 
 ## Implemented in Go

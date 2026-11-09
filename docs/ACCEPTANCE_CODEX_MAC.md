@@ -1,5 +1,7 @@
 # T-004: first real Codex run on the Mac
 
+> **Historical: removed in T-028 ([D-104](DECISIONS.md)).** The persistent Codex mode and `scripts/codex-acceptance-summary.py` are gone. This page describes code that no longer exists; it is kept as a record. Old reservations of this mode stay in `active-runs.json` and are listed by `messenger status` and `doctor`.
+
 This runbook covers two real messages in a new, separate Codex test session, served by one live app-server. It uses the owner's Codex account and spends a little of its quota. Nothing else is touched: no working chats, no default `~/.codex` profile, no Cursor.
 
 Exact resume of the saved thread after a restart is **not** part of this run. Resuming a Codex thread with a new owner is not implemented yet.

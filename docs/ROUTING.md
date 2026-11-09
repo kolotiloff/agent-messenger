@@ -1,5 +1,7 @@
 # Replies between agents
 
+> **Historical: removed in T-028 ([D-104](DECISIONS.md)).** Replies between live sessions are gone; tasks report to the coordinator instead. This page describes code that no longer exists; it is kept as a record. Old reservations of this mode stay in `active-runs.json` and are listed by `messenger status` and `doctor`.
+
 A reply always goes to the sender of the message it answers. The code sets the recipient; the model cannot choose it.
 
 When that sender is the alias of another open local session, the reply is also queued for that session as a new message.

@@ -40,7 +40,7 @@ Checking two Mac archives:
 python3 scripts/check-package.py /archives/dir VERSION_1 VERSION_2
 ```
 
-This is a developer/CI tool using the Python standard library. The installed product does not need Python. The check creates separate HOME, program directory and queue, does not change the working installation and does not call real models.
+This is a developer/CI tool using the Python standard library. The installed product does not need Python. The check creates a separate HOME, program directory and data, connects a fake agent program (`/usr/bin/false`) and pauses the client, refuses an update while the client runs, updates while it is stopped, and compares the agents and the pause before and after. It does not change the working installation and does not call real models (T-028 replaced its old session and queue steps).
 
 After a successful Mac job, the archives are available in that run's Artifacts. They contain the revision of the checked-out code. For a PR this may be GitHub's temporary merge commit; it is not automatically equal to the branch head. Actions archives remain preview even if all checks are green.
 
