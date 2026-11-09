@@ -6,12 +6,11 @@ var (
 	ErrRejected        = errors.New("rejected")
 	ErrBusy            = errors.New("busy")
 	ErrPaused          = errors.New("paused")
-	ErrEmpty           = errors.New("empty")
 	ErrClosed          = errors.New("closed")
 	ErrRecoveryBlocked = errors.New("recovery blocked")
-	ErrNotVerified     = errors.New("result not verified")
-	ErrBadConfirmation = errors.New("retry confirmation missing")
+	ErrBadConfirmation = errors.New("recovery confirmation missing")
 )
 
-// RetryConfirmation is the explicit operator phrase required before a new attempt.
-const RetryConfirmation = "actions-may-repeat"
+// RecoveryConfirmation is the explicit operator phrase required before a
+// proven-reboot recovery retires a reservation (recover-missing-root).
+const RecoveryConfirmation = "preserve-uncertain"

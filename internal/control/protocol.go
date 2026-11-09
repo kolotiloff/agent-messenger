@@ -1,5 +1,5 @@
-// Package control is the local command API. A future window uses this socket
-// and does not launch CLI processes itself.
+// Package control is the local command API between the window, the command
+// line and the background client. It does not launch CLI processes itself.
 package control
 
 import (
@@ -37,56 +37,58 @@ type Request struct {
 	ConversationID string `json:"conversation_id,omitempty"`
 	CLI            string `json:"cli,omitempty"`
 	Workspace      string `json:"workspace,omitempty"`
-	Limit          int    `json:"limit,omitempty"`
-	Before         string `json:"before,omitempty"`
 }
 
 type Status struct {
-	SessionLaunch  bool     `json:"session_launch,omitempty"`
-	LaunchSession  string   `json:"launch_session,omitempty"`
-	LaunchSessions []string `json:"launch_sessions,omitempty"`
-	SessionSetup   bool     `json:"session_setup,omitempty"`
-	StreamState    string   `json:"stream_state,omitempty"`
-	Paused         bool     `json:"paused"`
-	CLILaunch      string   `json:"cli_launch"`
-	Broker         string   `json:"broker"`
-	Held           int      `json:"held_sessions"`
-	Queued         int      `json:"queued"`
-	Supervisor     int      `json:"supervisor_pid"`
-	Detail         string   `json:"detail,omitempty"`
-	TasksEnabled   bool     `json:"tasks_enabled,omitempty"`
+	Paused bool `json:"paused"`
+	// CLILaunch is "tasks" when this client starts task workers and
+	// "disabled" when it only records tasks.
+	CLILaunch    string `json:"cli_launch"`
+	Broker       string `json:"broker"`
+	Supervisor   int    `json:"supervisor_pid"`
+	Detail       string `json:"detail,omitempty"`
+	TasksEnabled bool   `json:"tasks_enabled,omitempty"`
 	// Version is the client build; clients before preview.27 leave it empty.
 	Version string `json:"version,omitempty"`
+	// Reservations are the CLI reservations in the user's registry
+	// (active-runs.json), read without changing it.
+	Reservations *Reservations `json:"reservations,omitempty"`
 }
 
-type StopResult struct {
-	State  string `json:"state"`
-	Signal string `json:"signal"`
-	Note   string `json:"note"`
+// Reservations summarises active-runs.json. A task run releases its own
+// reservation once the run is proven finished (D-021). Old reservations were
+// left by the removed persistent mode (T-028, D-104); nothing in this version
+// releases them, so they are listed for the owner to see.
+type Reservations struct {
+	Tasks int              `json:"tasks"`
+	Old   []OldReservation `json:"old,omitempty"`
+	// Error is set when the registry could not be read; the counts are then
+	// unknown, not zero.
+	Error string `json:"error,omitempty"`
+}
+
+// OldReservation is one reservation of the removed persistent mode.
+type OldReservation struct {
+	// Kind is "claude-stream" (a persistent Claude process), "codex-app-server"
+	// (a Codex owner process) or "session" (a run of a registered session).
+	Kind     string `json:"kind"`
+	Provider string `json:"provider,omitempty"`
+	Root     string `json:"root"`
+	PID      int    `json:"pid,omitempty"`
 }
 
 type Response struct {
-	Outbox   json.RawMessage `json:"outbox,omitempty"`
 	OK       bool            `json:"ok"`
 	Error    string          `json:"error,omitempty"`
 	Status   *Status         `json:"status,omitempty"`
-	Stop     *StopResult     `json:"stop,omitempty"`
-	Created  *bool           `json:"created,omitempty"`
-	Inspect  json.RawMessage `json:"inspect,omitempty"`
 	Overview json.RawMessage `json:"overview,omitempty"`
-	Timeline json.RawMessage `json:"timeline,omitempty"`
 }
 
 type Handler interface {
 	Status() (Status, error)
 	Pause() error
 	Resume() error
-	StopJob() (StopResult, error)
 	Shutdown() error
-	Enqueue(alias, id, sender, text string) (bool, error)
-	Inspect() (any, error)
-	Resolve(alias, action, confirmation string) (string, error)
-	RegisterSession(provider, environment, conversationID, alias, cliPath, workspace string) (string, error)
 }
 
 // SocketPath keeps the shorter lexical spelling for Unix socket length limits.
@@ -153,86 +155,6 @@ func Serve(ln net.Listener, handler Handler) error {
 
 func dispatch(handler Handler, request Request) Response {
 	switch request.Cmd {
-	case "authorize-setup":
-		h, ok := handler.(interface{ AuthorizeSetup(string) error })
-		if !ok || request.Confirmation != "allow-model-calls" {
-			return Response{Error: "explicit test-session authorization required"}
-		}
-		if err := h.AuthorizeSetup(request.Alias); err != nil {
-			return Response{Error: "test-session authorization rejected"}
-		}
-		return Response{OK: true}
-	case "setup-new-claude":
-		h, ok := handler.(interface {
-			SetupNewClaude(string, string, string, string, string) error
-		})
-		if !ok {
-			return Response{Error: "setup unsupported; update the background client"}
-		}
-		if err := h.SetupNewClaude(request.Environment, request.ConversationID, request.Alias, request.CLI, request.Workspace); err != nil {
-			return Response{Error: "session setup rejected; existing sessions unchanged"}
-		}
-		return Response{OK: true}
-	case "ui-prepare", "ui-submit", "ui-ack", "ui-outbox":
-		h, ok := handler.(interface {
-			PrepareUIMessage(string, string, string) error
-			SubmitUIMessage(string) (bool, error)
-			AcknowledgeUIMessage(string) error
-			UIOutbox() (any, error)
-		})
-		if !ok {
-			return Response{Error: "UI outbox unsupported"}
-		}
-		var err error
-		switch request.Cmd {
-		case "ui-prepare":
-			err = h.PrepareUIMessage(request.MessageID, request.Alias, request.Text)
-		case "ui-submit":
-			var created bool
-			created, err = h.SubmitUIMessage(request.MessageID)
-			if err == nil {
-				return Response{OK: true, Created: &created}
-			}
-		case "ui-ack":
-			err = h.AcknowledgeUIMessage(request.MessageID)
-		case "ui-outbox":
-			var value any
-			value, err = h.UIOutbox()
-			if err == nil {
-				var raw []byte
-				raw, err = json.Marshal(value)
-				if err == nil {
-					return Response{OK: true, Outbox: raw}
-				}
-			}
-		}
-		if err != nil {
-			return Response{Error: "UI outbox operation rejected"}
-		}
-		return Response{OK: true}
-	case "timeline":
-		reader, ok := handler.(interface {
-			Timeline(string, int, string) (any, error)
-		})
-		if !ok {
-			return Response{Error: "timeline unsupported"}
-		}
-		limit := request.Limit
-		if limit == 0 {
-			limit = 50
-		}
-		if request.Alias == "" || limit < 1 || limit > 100 {
-			return Response{Error: "timeline requires alias and limit 1..100"}
-		}
-		value, err := reader.Timeline(request.Alias, limit, request.Before)
-		if err != nil {
-			return Response{Error: "timeline unavailable; check alias and cursor"}
-		}
-		raw, err := json.Marshal(value)
-		if err != nil {
-			return Response{Error: "timeline unavailable"}
-		}
-		return Response{OK: true, Timeline: raw}
 	case "window-view", "task-feed":
 		reader, ok := handler.(interface {
 			WindowView(string) (any, error)
@@ -432,20 +354,6 @@ func dispatch(handler Handler, request Request) Response {
 			return Response{Error: "server status unavailable"}
 		}
 		return Response{OK: true, Overview: raw}
-	case "overview":
-		reader, ok := handler.(interface{ Overview() (any, error) })
-		if !ok {
-			return Response{Error: "overview unsupported"}
-		}
-		value, err := reader.Overview()
-		if err != nil {
-			return Response{Error: "overview unavailable"}
-		}
-		raw, err := json.Marshal(value)
-		if err != nil {
-			return Response{Error: "overview unavailable"}
-		}
-		return Response{OK: true, Overview: raw}
 	case "status":
 		status, err := handler.Status()
 		if err != nil {
@@ -462,78 +370,11 @@ func dispatch(handler Handler, request Request) Response {
 			return Response{OK: false, Error: err.Error()}
 		}
 		return Response{OK: true}
-	case "stop-job":
-		result, err := handler.StopJob()
-		if err != nil {
-			return Response{OK: false, Error: err.Error()}
-		}
-		return Response{OK: true, Stop: &result}
 	case "shutdown":
 		if err := handler.Shutdown(); err != nil {
 			return Response{OK: false, Error: err.Error()}
 		}
 		return Response{OK: true}
-	case "enqueue":
-		created, err := handler.Enqueue(request.Alias, request.MessageID, request.Sender, request.Text)
-		if err != nil {
-			return Response{OK: false, Error: err.Error()}
-		}
-		return Response{OK: true, Created: &created}
-	case "inspect":
-		value, err := handler.Inspect()
-		if err != nil {
-			return Response{OK: false, Error: err.Error()}
-		}
-		raw, _ := json.Marshal(value)
-		return Response{OK: true, Inspect: raw}
-	case "resolve":
-		detail, err := handler.Resolve(request.Alias, request.Action, request.Confirmation)
-		if err != nil {
-			return Response{OK: false, Error: err.Error()}
-		}
-		return Response{OK: true, Status: &Status{Detail: detail}}
-	case "create-claude-session":
-		creator, ok := handler.(interface {
-			CreateClaudeSession(string, string, string, string) (string, error)
-		})
-		if !ok {
-			return Response{OK: false, Error: "unsupported"}
-		}
-		detail, err := creator.CreateClaudeSession(request.Environment, request.Alias, request.CLI, request.Workspace)
-		if err != nil {
-			return Response{OK: false, Error: err.Error()}
-		}
-		return Response{OK: true, Status: &Status{Detail: detail}}
-	case "setup-codex":
-		h, ok := handler.(interface {
-			SetupCodexFromWindow(string, string, string, string) (string, error)
-		})
-		if !ok {
-			return Response{Error: "Codex setup unsupported; update the background client"}
-		}
-		detail, err := h.SetupCodexFromWindow(request.Environment, request.Alias, request.CLI, request.Confirmation)
-		if err != nil {
-			return Response{Error: err.Error()}
-		}
-		return Response{OK: true, Status: &Status{Detail: detail}}
-	case "create-codex-session":
-		creator, ok := handler.(interface {
-			CreateCodexSession(string, string, string) (string, error)
-		})
-		if !ok {
-			return Response{OK: false, Error: "unsupported; update the background client"}
-		}
-		detail, err := creator.CreateCodexSession(request.Environment, request.Alias, request.CLI)
-		if err != nil {
-			return Response{OK: false, Error: err.Error()}
-		}
-		return Response{OK: true, Status: &Status{Detail: detail}}
-	case "register-session":
-		key, err := handler.RegisterSession(request.Provider, request.Environment, request.ConversationID, request.Alias, request.CLI, request.Workspace)
-		if err != nil {
-			return Response{OK: false, Error: err.Error()}
-		}
-		return Response{OK: true, Status: &Status{Detail: key}}
 	default:
 		return Response{OK: false, Error: "неизвестная команда"}
 	}

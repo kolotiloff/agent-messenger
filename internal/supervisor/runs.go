@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/kolotiloff/agent-messenger/internal/control"
 	"github.com/kolotiloff/agent-messenger/internal/core"
 	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
@@ -21,11 +22,11 @@ var ErrRunsCorrupt = errors.New("active-runs.json is empty or damaged")
 // beforeRenameHook, when set by tests, runs after the temp file is synced and before rename.
 var beforeRenameHook func() error
 
-// ownsObservation and groupEmpty are the process checks used before a reservation
-// may be retired. Tests replace them to simulate an observation failure.
-var ownsObservation = platform.OwnsObservation
-var groupEmpty = platform.GroupEmpty
-
+// recordedRun is one entry of active-runs.json. Task runs write TaskRunID.
+// StreamRunID (a persistent Claude process), CodexSetupID (a Codex app-server
+// owner) and entries with neither (a run of a registered session) were
+// written by the persistent mode removed in T-028. This version never writes
+// them and never releases them (D-104); they are kept and listed read-only.
 type recordedRun struct {
 	StreamRunID    string                 `json:"stream_run_id,omitempty"`
 	CodexSetupID   string                 `json:"codex_setup_id,omitempty"`
@@ -212,31 +213,6 @@ func runBlocks(run recordedRun) (bool, error) {
 	return true, nil
 }
 
-// reservationReadyToRetire reports whether this reservation may be retired.
-// A missing PID, a live process, a live group, or an observation error refuses.
-func reservationReadyToRetire(run recordedRun) error {
-	if run.PID <= 0 || run.PGID <= 1 || run.StartToken == "" || run.BootID == "" {
-		return fmt.Errorf("%w: observation is incomplete", core.ErrRecoveryBlocked)
-	}
-	owned, err := ownsObservation(platform.Observation{
-		PID: run.PID, PGID: run.PGID, StartToken: run.StartToken, BootID: run.BootID,
-	})
-	if err != nil {
-		return fmt.Errorf("%w: %v", core.ErrRecoveryBlocked, err)
-	}
-	if owned {
-		return fmt.Errorf("%w: recorded process is still running", core.ErrRecoveryBlocked)
-	}
-	empty, err := groupEmpty(run.PGID)
-	if err != nil {
-		return fmt.Errorf("%w: %v", core.ErrRecoveryBlocked, err)
-	}
-	if !empty {
-		return fmt.Errorf("%w: a descendant is still in the process group", core.ErrRecoveryBlocked)
-	}
-	return nil
-}
-
 // reconcileRuns refuses a different data directory while any reservation remains.
 // It does not delete a reservation when the original PID is gone or observation fails.
 // The caller must already hold the user supervisor lock.
@@ -266,4 +242,37 @@ func reconcileRuns(root string) error {
 		}
 	}
 	return nil
+}
+
+// oldKind names the removed mode's kind of a reservation, or "" for a task run.
+func (run recordedRun) oldKind() string {
+	switch {
+	case run.TaskRunID != "":
+		return ""
+	case run.StreamRunID != "":
+		return "claude-stream"
+	case run.CodexSetupID != "":
+		return "codex-app-server"
+	default:
+		return "session"
+	}
+}
+
+// ReadReservations summarises active-runs.json for status and doctor. It only
+// reads the file: it takes no lock and never changes or releases anything.
+func ReadReservations() control.Reservations {
+	runs, err := loadRuns()
+	if err != nil {
+		return control.Reservations{Error: err.Error()}
+	}
+	out := control.Reservations{}
+	for _, run := range runs {
+		kind := run.oldKind()
+		if kind == "" {
+			out.Tasks++
+			continue
+		}
+		out.Old = append(out.Old, control.OldReservation{Kind: kind, Provider: run.Provider, Root: run.Root, PID: run.PID})
+	}
+	return out
 }

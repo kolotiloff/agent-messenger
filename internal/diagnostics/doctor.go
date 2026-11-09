@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/kolotiloff/agent-messenger/internal/control"
+	"github.com/kolotiloff/agent-messenger/internal/supervisor"
 )
 
 type CLI struct {
@@ -52,6 +53,9 @@ type Report struct {
 	Data          Data       `json:"data"`
 	Controller    Controller `json:"controller"`
 	Agents        []Agent    `json:"agents"`
+	// Reservations is read straight from active-runs.json, also when the
+	// client does not answer. Reading it changes nothing.
+	Reservations control.Reservations `json:"reservations"`
 	// This counts only CLI processes started by this diagnostic operation.
 	ProbeCLIStarts int `json:"probe_cli_starts"`
 }
@@ -106,6 +110,7 @@ func Collect(ctx context.Context, root string) Report {
 		}
 		r.Agents = append(r.Agents, agent)
 	}
+	r.Reservations = supervisor.ReadReservations()
 	// Even a caller with no deadline cannot leave doctor blocked indefinitely.
 	probe, cancel := context.WithTimeout(ctx, 750*time.Millisecond)
 	defer cancel()
@@ -124,6 +129,7 @@ func Collect(ctx context.Context, root string) Report {
 		// Copy only status fields, never Inspect, provider output or error text.
 		status := *response.Status
 		status.Detail = ""
+		status.Reservations = nil
 		r.Controller = Controller{State: "reachable", Status: &status}
 	}
 	return r
@@ -133,11 +139,12 @@ func WriteText(w io.Writer, r Report) {
 	fmt.Fprintf(w, "Диагностика Messenger (%s/%s)\n", r.OS, r.Arch)
 	if r.Controller.State == "reachable" {
 		s := r.Controller.Status
-		fmt.Fprintf(w, "Клиент доступен: pid=%d, пауза=%t, вызовы CLI=%s, очередь=%d, занятых сессий=%d.\n", s.Supervisor, s.Paused, s.CLILaunch, s.Queued, s.Held)
+		fmt.Fprintf(w, "Клиент доступен: pid=%d, пауза=%t, запуск исполнителей задач=%t.\n", s.Supervisor, s.Paused, s.TasksEnabled)
 	} else {
 		fmt.Fprintln(w, "Клиент не ответил достоверным статусом. Это не доказывает остановку CLI и не снимает блокировки.")
 	}
 	fmt.Fprintf(w, "Каталог данных: %s (%s).\n", r.Data.Root, r.Data.State)
+	WriteReservations(w, r.Reservations)
 	for _, a := range r.Agents {
 		if a.CLI.State == "candidate_found" {
 			fmt.Fprintf(w, "%s: найден исполняемый файл %s; подлинность/версия и вход не проверены.\n", a.Name, a.CLI.Path)
@@ -146,4 +153,32 @@ func WriteText(w io.Writer, r Report) {
 		}
 	}
 	fmt.Fprintln(w, "Эта проверка не запускает CLI, не читает учётные данные и не подтверждает готовность сессий. Для отдельной проверки версии и входа выбранного CLI используйте check-cli.")
+}
+
+// WriteReservations explains the reservations in active-runs.json in plain
+// words. Old ones belong to the persistent mode removed in T-028 (D-104):
+// they are kept as they are and no command of this version releases them.
+func WriteReservations(w io.Writer, r control.Reservations) {
+	if r.Error != "" {
+		fmt.Fprintf(w, "Защитный реестр запусков не прочитан (%s); резервы неизвестны и не изменялись.\n", r.Error)
+		return
+	}
+	if r.Tasks > 0 {
+		fmt.Fprintf(w, "Резервов запусков задач: %d.\n", r.Tasks)
+	}
+	if len(r.Old) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "Резервов старого режима (постоянные сессии, удалены в этой версии): %d. Они сохранены как есть и только показываются; эта версия их не снимает и не запускает эти сессии.\n", len(r.Old))
+	for _, old := range r.Old {
+		kind := map[string]string{"claude-stream": "постоянный Claude", "codex-app-server": "постоянный Codex", "session": "сессия"}[old.Kind]
+		if kind == "" {
+			kind = old.Kind
+		}
+		fmt.Fprintf(w, "  %s (%s): каталог %s", kind, old.Provider, old.Root)
+		if old.PID > 0 {
+			fmt.Fprintf(w, ", pid %d", old.PID)
+		}
+		fmt.Fprintln(w)
+	}
 }

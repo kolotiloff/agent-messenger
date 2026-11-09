@@ -53,7 +53,7 @@ func startBackground(root string, flags []string) (int, string, error) {
 
 func startBackgroundAt(root string, flags []string, executable string) (int, string, error) {
 	// Validate here too: callers other than the CLI must not smuggle child modes.
-	if _, err := serveAllowsModels(flags); err != nil {
+	if _, err := serveOptions(flags); err != nil {
 		return 0, "", err
 	}
 	root, err := filepath.Abs(root)

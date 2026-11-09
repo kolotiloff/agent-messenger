@@ -16,16 +16,6 @@ import (
 	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
 
-// TaskLauncher reports whether this client may launch task workers. It is
-// separate from per-session model permission: `serve --allow-tasks` enables
-// it, and a paused queue still launches nothing.
-type TaskLauncher interface {
-	TasksEnabled() bool
-}
-
-// TasksEnabled is set by serve --allow-tasks.
-func (l AdapterLauncher) TasksEnabled() bool { return l.AllowTasks }
-
 // taskGroupWait bounds how long the runner waits for a signalled process
 // group to empty after the worker exits. A group that is still not empty
 // blocks the task; it is never released by this timeout.
@@ -67,8 +57,7 @@ func (t *taskRuns) release(id string) {
 // parallel workers (D-022); one task never has two runs at once, because a
 // run is recorded only when the previous one has finished.
 func (s *Supervisor) dispatchTasks(ctx context.Context) {
-	launcher, ok := s.currentLauncher().(TaskLauncher)
-	if !ok || !launcher.TasksEnabled() || s.stopping.Load() {
+	if !s.currentLauncher().TasksEnabled() || s.stopping.Load() {
 		return
 	}
 	if paused, err := s.store.Paused(); err != nil || paused {
@@ -359,4 +348,24 @@ func agentLimit(r adapters.TaskEventResult) (core.AgentLimit, bool) {
 		}
 	}
 	return l, true
+}
+
+// waitUnlessStopped waits for the worker, or returns at once with detached
+// set when the client stops: the worker then keeps running and its
+// reservation stays.
+func waitUnlessStopped(ctx context.Context, wait func() (int, error)) (int, error, bool) {
+	finished := make(chan struct{})
+	var code int
+	var err error
+	go func() {
+		code, err = wait()
+		close(finished)
+	}()
+	select {
+	case <-finished:
+		return code, err, false
+	case <-ctx.Done():
+		go func() { <-finished }()
+		return 0, ctx.Err(), true
+	}
 }

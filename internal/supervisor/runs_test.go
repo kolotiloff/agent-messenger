@@ -89,15 +89,17 @@ func TestNullRunRegistryMustNotAllowAnotherRoot(t *testing.T) {
 		if err = rememberRun(recordedRun{ID: "new", Root: "/new"}); err == nil {
 			t.Fatal("damaged registry replaced")
 		}
-		if _, err = RecoverFailed(core.RetryConfirmation); !errors.Is(err, ErrRunsCorrupt) {
+		if _, err = RecoverMissingRoots(core.RecoveryConfirmation); !errors.Is(err, ErrRunsCorrupt) {
 			t.Fatalf("recovery accepted null: %v", err)
 		}
-		launcher := &countingLauncher{enabled: true}
+		if got := ReadReservations(); got.Error == "" {
+			t.Fatalf("damaged registry read as %+v", got)
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		err = Run(ctx, t.TempDir(), launcher)
+		err = Run(ctx, t.TempDir(), AdapterLauncher{AllowTasks: true})
 		cancel()
-		if !errors.Is(err, ErrLiveCLI) || launcher.calls() != 0 {
-			t.Fatalf("supervisor started: %v calls=%d", err, launcher.calls())
+		if !errors.Is(err, ErrLiveCLI) {
+			t.Fatalf("supervisor started: %v", err)
 		}
 		after, err := os.ReadFile(path)
 		if err != nil || string(after) != raw {
@@ -140,47 +142,5 @@ func TestRelativeOrMissingRegistryRootCannotMatchCurrentDirectory(t *testing.T) 
 		if err = reconcileRuns("data"); !errors.Is(err, ErrLiveCLI) {
 			t.Fatalf("relative root accepted in a different working directory: %s: %v", raw, err)
 		}
-	}
-}
-
-func TestRelativeStartupRecordsCanonicalDataRoot(t *testing.T) {
-	root, st := seedStreamClient(t, "normal")
-	if _, err := st.Enqueue("m1", "worker", "test", "one"); err != nil {
-		t.Fatal(err)
-	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	relative, err := filepath.Rel(cwd, root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, done := startStreamClient(t, relative, true)
-	waitStreamState(t, st, func(s core.Snapshot) bool { return len(s.StreamRuns) == 1 && s.StreamRuns[0]["state"] == "idle" })
-	runs, err := loadRuns()
-	if err != nil || len(runs) != 1 {
-		t.Fatalf("registry: %+v %v", runs, err)
-	}
-	canonical, err := core.CanonicalEnvironment(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if runs[0].Root != canonical || !filepath.IsAbs(runs[0].Root) {
-		t.Fatalf("noncanonical root: %q", runs[0].Root)
-	}
-	// /tmp and /private/tmp or another symlink to the same root are one DB.
-	link := filepath.Join(t.TempDir(), "same-data")
-	if err = os.Symlink(root, link); err != nil {
-		t.Fatal(err)
-	}
-	if err = reconcileRuns(link); err != nil {
-		t.Fatal("same physical DB rejected", err)
-	}
-	streamControl(t, relative, "shutdown")
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("shutdown timeout")
 	}
 }

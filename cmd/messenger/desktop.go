@@ -82,9 +82,9 @@ func ensureDesktopClient(ctx context.Context, root string) error {
 }
 
 // startDesktopClient starts the background client the way the window does.
-// No --allow-model-calls can reach this launch. Task workers are allowed
-// (D-029): the owner starts them from the coordinator chat and stops
-// everything with the pause. The client always starts paused.
+// Task workers are allowed (D-029): the owner starts them from the
+// coordinator chat and stops everything with the pause. The client always
+// starts paused.
 func startDesktopClient(root string) error {
 	executable, err := os.Executable()
 	if err != nil {
@@ -104,7 +104,7 @@ func startClientFrom(root, executable string) error {
 	if err != nil {
 		return err
 	}
-	_, _, err = startBackgroundAt(root, []string{"--claude-stream", "--allow-tasks"}, executable)
+	_, _, err = startBackgroundAt(root, []string{"--allow-tasks"}, executable)
 	return err
 }
 

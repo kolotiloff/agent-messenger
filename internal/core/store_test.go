@@ -1,29 +1,15 @@
 package core
 
 import (
-	"errors"
+	"database/sql"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
-	"strconv"
+	"strings"
 	"testing"
-	"time"
-
-	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
-
-func TestMain(m *testing.M) {
-	if mode := os.Getenv("MESSENGER_FIXTURE"); mode != "" {
-		if err := runFixture(mode); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-		os.Exit(0)
-	}
-	os.Exit(m.Run())
-}
 
 func TestCanonicalEnvironmentRejectsNamesAndRelativePaths(t *testing.T) {
 	root := t.TempDir()
@@ -33,415 +19,12 @@ func TestCanonicalEnvironmentRejectsNamesAndRelativePaths(t *testing.T) {
 	if _, err := CanonicalEnvironment(filepath.Join(root, "missing")); err == nil {
 		t.Fatal("missing directory was accepted")
 	}
-	if _, err := SessionKey("synthetic", "relative", "conversation-1"); err == nil {
+	if _, err := CanonicalEnvironment("relative"); err == nil {
 		t.Fatal("relative environment was accepted")
 	}
 }
 
-func TestAliasesAndPathSpellingsShareOneLock(t *testing.T) {
-	st, env := openTest(t)
-	key, err := st.Register("Claude", env, "conversation-1", "alpha")
-	if err != nil {
-		t.Fatal(err)
-	}
-	again, err := st.Register("claude", env, "conversation-1", "beta")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if key != again {
-		t.Fatalf("provider spelling created two keys")
-	}
-	link := filepath.Join(t.TempDir(), "link")
-	if err := os.Symlink(env, link); err != nil {
-		t.Skip("symlink is not available")
-	}
-	linked, err := st.Register("claude", link, "conversation-1", "gamma")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if linked != key {
-		t.Fatal("symlink path created a second session")
-	}
-	if _, err := st.Enqueue("m1", "alpha", "coordinator", "one"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := st.Claim("alpha"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := st.Claim("beta"); !errors.Is(err, ErrBusy) {
-		t.Fatalf("second alias claim = %v", err)
-	}
-	if _, err := st.Claim("gamma"); !errors.Is(err, ErrBusy) {
-		t.Fatalf("symlink alias claim = %v", err)
-	}
-}
-
-func TestIndependentEnvironmentsDoNotShareLock(t *testing.T) {
-	st, env := openTest(t)
-	other := filepath.Join(filepath.Dir(env), "other-home")
-	if err := os.Mkdir(other, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := st.Register("synthetic", env, "conversation-1", "alpha"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := st.Register("synthetic", other, "conversation-1", "other"); err != nil {
-		t.Fatal(err)
-	}
-	enqueue(t, st, "alpha", "m1")
-	enqueue(t, st, "other", "m2")
-	if _, err := st.Claim("alpha"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := st.Claim("other"); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestReplyIsBoundAndDuplicateTextDoesNotOverwrite(t *testing.T) {
-	st, env := openTest(t)
-	register(t, st, env, "worker")
-	token := running(t, st, env, "worker", "m1", "conversation-1")
-	first, err := st.Reply(token, "correct")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if first.ReplyTo != "m1" || first.Sender != "worker" || first.Recipient != "coordinator" {
-		t.Fatalf("route = %+v", first)
-	}
-	again, err := st.Reply(token, "correct")
-	if err != nil || again.ID != first.ID {
-		t.Fatalf("duplicate reply = %+v %v", again, err)
-	}
-	if _, err := st.Reply(token, "different"); !errors.Is(err, ErrRejected) {
-		t.Fatalf("conflicting reply = %v", err)
-	}
-	snap := mustSnap(t, st)
-	if len(snap.Replies) != 1 {
-		t.Fatalf("replies = %d", len(snap.Replies))
-	}
-}
-
-func TestForeignAndCompletedContextCannotReply(t *testing.T) {
-	st, env := openTest(t)
-	register(t, st, env, "worker")
-	token := running(t, st, env, "worker", "m1", "conversation-1")
-	if _, err := st.Reply(token, "ok"); err != nil {
-		t.Fatal(err)
-	}
-	state, err := st.FinishObserved(token, 0, true, true, "test")
-	if err != nil || state != "uncertain" {
-		t.Fatalf("finish = %s %v", state, err)
-	}
-	if _, err := st.Reply(token, "late"); !errors.Is(err, ErrRejected) {
-		t.Fatalf("old token reply = %v", err)
-	}
-	if _, err := st.Reply("invented-context", "late"); !errors.Is(err, ErrRejected) {
-		t.Fatalf("invented reply = %v", err)
-	}
-	if _, err := st.Claim("worker"); !errors.Is(err, ErrBusy) {
-		t.Fatalf("empty group released the lock: %v", err)
-	}
-}
-
-func TestDuplicateDeliveryDoesNotStartAnotherAttempt(t *testing.T) {
-	st, env := openTest(t)
-	register(t, st, env, "worker")
-	token := running(t, st, env, "worker", "m1", "conversation-1")
-	created, err := st.Enqueue("m1", "worker", "coordinator", "request m1")
-	if err != nil || created {
-		t.Fatalf("duplicate created = %t %v", created, err)
-	}
-	if _, err := st.Enqueue("m1", "worker", "coordinator", "other"); !errors.Is(err, ErrRejected) {
-		t.Fatalf("conflict = %v", err)
-	}
-	if _, err := st.Reply(token, "done"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := st.FinishObserved(token, 0, true, true, "test"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := st.Claim("worker"); !errors.Is(err, ErrBusy) {
-		t.Fatalf("claim after observed exit = %v", err)
-	}
-	if len(mustSnap(t, st).Attempts) != 1 {
-		t.Fatal("attempt count")
-	}
-}
-
-func TestSameReservationCannotLaunchTwice(t *testing.T) {
-	st, env := openTest(t)
-	register(t, st, env, "worker")
-	enqueue(t, st, "worker", "m1")
-	token, err := st.Claim("worker")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := st.BeginLaunch(token); err != nil {
-		t.Fatal(err)
-	}
-	if err := st.BeginLaunch(token); !errors.Is(err, ErrRejected) {
-		t.Fatalf("second launch = %v", err)
-	}
-}
-
-func TestIdentityGateAndWrongID(t *testing.T) {
-	st, env := openTest(t)
-	register(t, st, env, "worker")
-	enqueue(t, st, "worker", "m1")
-	token, err := st.Claim("worker")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := st.BeginLaunch(token); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := st.CurrentMessage(token); !errors.Is(err, ErrRejected) {
-		t.Fatalf("early read = %v", err)
-	}
-	if _, err := st.Reply(token, "early"); !errors.Is(err, ErrRejected) {
-		t.Fatalf("early reply = %v", err)
-	}
-	if err := st.ConfirmIdentity(token, "synthetic", env, "conversation-1"); err != nil {
-		t.Fatal(err)
-	}
-	msg, err := st.CurrentMessage(token)
-	if err != nil || msg.ID != "m1" {
-		t.Fatalf("message = %+v %v", msg, err)
-	}
-
-	st2, env2 := openTest(t)
-	register(t, st2, env2, "worker")
-	enqueue(t, st2, "worker", "m1")
-	bad, err := st2.Claim("worker")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := st2.BeginLaunch(bad); err != nil {
-		t.Fatal(err)
-	}
-	if err := st2.ConfirmIdentity(bad, "synthetic", env2, "wrong-id"); !errors.Is(err, ErrRejected) {
-		t.Fatalf("mismatch = %v", err)
-	}
-	if _, err := st2.CurrentMessage(bad); !errors.Is(err, ErrRejected) {
-		t.Fatalf("mcp after mismatch = %v", err)
-	}
-	if _, err := st2.Claim("worker"); !errors.Is(err, ErrBusy) {
-		t.Fatalf("claim after mismatch = %v", err)
-	}
-	if len(mustSnap(t, st2).Replies) != 0 {
-		t.Fatal("mismatch stored a reply")
-	}
-}
-
-func TestExitCodeOrMissingReplyDoesNotComplete(t *testing.T) {
-	st, env := openTest(t)
-	register(t, st, env, "worker")
-	token := running(t, st, env, "worker", "m1", "conversation-1")
-	state, err := st.FinishObserved(token, 0, true, true, "no reply")
-	if err != nil || state != "uncertain" {
-		t.Fatalf("clean exit without reply = %s %v", state, err)
-	}
-	enqueue(t, st, "worker", "m2")
-	if _, err := st.Claim("worker"); !errors.Is(err, ErrBusy) {
-		t.Fatalf("claim = %v", err)
-	}
-
-	st, env = openTest(t)
-	register(t, st, env, "worker")
-	token = running(t, st, env, "worker", "m1", "conversation-1")
-	if _, err := st.Reply(token, "stored"); err != nil {
-		t.Fatal(err)
-	}
-	state, err = st.FinishObserved(token, 1, true, true, "nonzero")
-	if err != nil || state != "uncertain" {
-		t.Fatalf("nonzero = %s %v", state, err)
-	}
-	if _, err := st.CurrentMessage(token); !errors.Is(err, ErrRejected) {
-		t.Fatalf("mcp after uncertain = %v", err)
-	}
-	if len(mustSnap(t, st).Replies) != 1 {
-		t.Fatal("reply was deleted")
-	}
-}
-
-func TestGroupNotEmptyDoesNotCompleteAndAcceptNeedsVerification(t *testing.T) {
-	st, env := openTest(t)
-	register(t, st, env, "worker")
-	token := running(t, st, env, "worker", "m1", "conversation-1")
-	if _, err := st.Reply(token, "stored"); err != nil {
-		t.Fatal(err)
-	}
-	state, err := st.FinishObserved(token, 0, false, true, "group occupied")
-	if err != nil || state != "uncertain" {
-		t.Fatalf("occupied group = %s %v", state, err)
-	}
-	if err := st.Accept("worker", platform.Proof{}); !errors.Is(err, ErrRecoveryBlocked) {
-		t.Fatalf("accept without proof = %v", err)
-	}
-	if _, err := st.Claim("worker"); !errors.Is(err, ErrBusy) {
-		t.Fatal(err)
-	}
-	if err := st.Accept("worker", platform.Proof{Proven: true, Detail: "injected"}); err != nil {
-		t.Fatalf("accept after verification = %v", err)
-	}
-	snap := mustSnap(t, st)
-	if snap.Requests[0]["state"] != "completed" || len(snap.Replies) != 1 {
-		t.Fatalf("history changed: %+v", snap.Requests)
-	}
-	if _, err := st.Claim("worker"); !errors.Is(err, ErrEmpty) {
-		t.Fatalf("claim after accept = %v", err)
-	}
-}
-
-func TestAcceptRejectsReplyTextWithoutExitVerification(t *testing.T) {
-	st, env := openTest(t)
-	register(t, st, env, "worker")
-	token := running(t, st, env, "worker", "m1", "conversation-1")
-	if _, err := st.Reply(token, "stored"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := st.FinishObserved(token, 7, false, true, "bad exit"); err != nil {
-		t.Fatal(err)
-	}
-	if err := st.Accept("worker", platform.Proof{Proven: true, Detail: "injected"}); !errors.Is(err, ErrNotVerified) {
-		t.Fatalf("accept = %v", err)
-	}
-	if _, err := st.Claim("worker"); !errors.Is(err, ErrBusy) {
-		t.Fatal("lock was cleared")
-	}
-}
-
-func TestRetryKeepsHistoryAndRealStopStaysBlocked(t *testing.T) {
-	st, env := openTest(t)
-	register(t, st, env, "worker")
-	token := running(t, st, env, "worker", "m1", "conversation-1")
-	if _, err := st.Reply(token, "stored"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := st.FinishObserved(token, 0, false, true, "not proven"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := st.Retry("worker", "please", platform.Proof{Proven: true}); !errors.Is(err, ErrBadConfirmation) {
-		t.Fatalf("retry phrase = %v", err)
-	}
-	if _, err := st.Retry("worker", RetryConfirmation, platform.Proof{}); !errors.Is(err, ErrRecoveryBlocked) {
-		t.Fatalf("retry without proof = %v", err)
-	}
-	if len(mustSnap(t, st).Requests) != 1 {
-		t.Fatal("blocked retry created a request")
-	}
-	newID, err := st.Retry("worker", RetryConfirmation, platform.Proof{Proven: true, Detail: "injected"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	snap := mustSnap(t, st)
-	if len(snap.Requests) != 2 || snap.Requests[0]["state"] != "uncertain" || snap.Requests[1]["retry_of"] != "m1" {
-		t.Fatalf("retry rows = %+v", snap.Requests)
-	}
-	if snap.Requests[1]["id"] != newID {
-		t.Fatal("new id")
-	}
-	var warning bool
-	for _, event := range snap.Events {
-		if event["kind"] == "retry_authorized" && fmt.Sprint(event["detail"]) != "" {
-			warning = true
-		}
-	}
-	if !warning {
-		t.Fatal("retry warning was not recorded")
-	}
-	if _, err := st.CurrentMessage(token); !errors.Is(err, ErrRejected) {
-		t.Fatal("old mcp context still open")
-	}
-}
-
-func TestFailClosedPreservesHistoryAndRefusesRetry(t *testing.T) {
-	st, env := openTest(t)
-	register(t, st, env, "worker")
-	token := running(t, st, env, "worker", "m1", "conversation-1")
-	if _, err := st.Reply(token, "stored"); err != nil {
-		t.Fatal(err)
-	}
-	if err := st.FailClosed("worker"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := st.CurrentMessage(token); !errors.Is(err, ErrRejected) {
-		t.Fatal("mcp still open")
-	}
-	if _, err := st.Enqueue("m2", "worker", "coordinator", "next"); !errors.Is(err, ErrClosed) {
-		t.Fatalf("enqueue = %v", err)
-	}
-	if _, err := st.Retry("worker", RetryConfirmation, platform.Proof{Proven: true}); !errors.Is(err, ErrClosed) {
-		t.Fatalf("retry after fail = %v", err)
-	}
-	if len(mustSnap(t, st).Replies) != 1 {
-		t.Fatal("reply deleted")
-	}
-}
-
-func TestAcceptRejectsInvalidProviderResult(t *testing.T) {
-	st, env := openTest(t)
-	register(t, st, env, "worker")
-	token := running(t, st, env, "worker", "m1", "conversation-1")
-	if _, err := st.Reply(token, "stored"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := st.FinishObserved(token, 0, false, false, "provider result rejected"); err != nil {
-		t.Fatal(err)
-	}
-	if err := st.Accept("worker", platform.Proof{Proven: true, Detail: "injected"}); !errors.Is(err, ErrNotVerified) {
-		t.Fatalf("accept = %v", err)
-	}
-	if _, err := st.Claim("worker"); !errors.Is(err, ErrBusy) {
-		t.Fatalf("invalid result released the lock: %v", err)
-	}
-}
-
-func TestEmptyGroupDoesNotReleaseTheSession(t *testing.T) {
-	st, env := openTest(t)
-	register(t, st, env, "worker")
-	token := running(t, st, env, "worker", "m1", "conversation-1")
-	if _, err := st.Reply(token, "stored"); err != nil {
-		t.Fatal(err)
-	}
-	state, err := st.FinishObserved(token, 0, true, true, "group empty")
-	if err != nil || state != "uncertain" {
-		t.Fatalf("state = %s %v", state, err)
-	}
-	enqueue(t, st, "worker", "m2")
-	if _, err := st.Claim("worker"); !errors.Is(err, ErrBusy) {
-		t.Fatalf("second message was reserved: %v", err)
-	}
-	if _, err := st.CurrentMessage(token); !errors.Is(err, ErrRejected) {
-		t.Fatal("mcp stayed open after finish")
-	}
-}
-
-func TestRestartRevokesPreviousMCP(t *testing.T) {
-	st, env := openTest(t)
-	register(t, st, env, "worker")
-	token := running(t, st, env, "worker", "m1", "conversation-1")
-	if _, err := st.Reply(token, "still-open"); err != nil {
-		t.Fatal(err)
-	}
-	n, err := st.RevokeInherited()
-	if err != nil || n != 1 {
-		t.Fatalf("revoke = %d %v", n, err)
-	}
-	if _, err := st.Reply(token, "after-restart"); !errors.Is(err, ErrRejected) {
-		t.Fatalf("old mcp after restart = %v", err)
-	}
-	if _, err := st.CurrentMessage(token); !errors.Is(err, ErrRejected) {
-		t.Fatal("old mcp can still read")
-	}
-	enqueue(t, st, "worker", "m2")
-	if _, err := st.Claim("worker"); !errors.Is(err, ErrBusy) {
-		t.Fatalf("restart cleared the lock: %v", err)
-	}
-}
-
-func TestCaseFoldSharesOneSessionKey(t *testing.T) {
+func TestCaseFoldSharesOneEnvironment(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the test folds a case-sensitive POSIX folder")
 	}
@@ -467,13 +50,9 @@ func TestCaseFoldSharesOneSessionKey(t *testing.T) {
 	}
 }
 
-func TestPauseSurvivesRestartAndDoesNotDropQueue(t *testing.T) {
-	root := t.TempDir()
-	env := mkdir(t, filepath.Join(root, "cli"))
-	db := filepath.Join(root, "queue.sqlite")
+func TestPauseSurvivesRestart(t *testing.T) {
+	db := filepath.Join(t.TempDir(), "queue.sqlite")
 	st := mustOpen(t, db)
-	register(t, st, env, "worker")
-	enqueue(t, st, "worker", "m1")
 	if err := st.Pause(); err != nil {
 		t.Fatal(err)
 	}
@@ -482,140 +61,145 @@ func TestPauseSurvivesRestartAndDoesNotDropQueue(t *testing.T) {
 	if paused, err := st.Paused(); err != nil || !paused {
 		t.Fatalf("paused = %t %v", paused, err)
 	}
-	if _, err := st.Claim("worker"); !errors.Is(err, ErrPaused) {
-		t.Fatalf("claim while paused = %v", err)
+	if err := st.ResumeWork(); err != nil {
+		t.Fatal(err)
 	}
-	if mustSnap(t, st).Requests[0]["state"] != "queued" {
-		t.Fatal("queue was not preserved")
+	if paused, err := st.Paused(); err != nil || paused {
+		t.Fatalf("paused after resume = %t %v", paused, err)
+	}
+}
+
+// legacyTables are the old mode's tables (T-028, D-104). They must survive
+// every open unchanged.
+var legacyTables = []string{"sessions", "aliases", "requests", "attempts", "replies", "verifications",
+	"stream_runs", "stream_turns", "archived_stream_runs", "archived_stream_turns", "stream_recoveries",
+	"ui_outbox", "codex_setups", "codex_turns"}
+
+// A database written by the old mode, with a live persistent session, a
+// queued message and an unsent window message, opens in this version and
+// keeps every old row as it was. A task can be recorded next to them.
+func TestOldModeDatabaseOpensAndKeepsItsRows(t *testing.T) {
+	root := t.TempDir()
+	db := filepath.Join(root, "queue.sqlite")
+	writeOldModeDatabase(t, db)
+	before := dumpTables(t, db, legacyTables)
+	st := mustOpen(t, db)
+	if err := st.Pause(); err != nil {
+		t.Fatal(err)
 	}
 	if err := st.ResumeWork(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.Claim("worker"); err != nil {
+	folder := realDir(t, mkdir(t, filepath.Join(root, "game")))
+	allowTempFolders(t)
+	if err := st.CreateProject("Game", folder); err != nil {
 		t.Fatal(err)
+	}
+	st.Close()
+	if after := dumpTables(t, db, legacyTables); !reflect.DeepEqual(before, after) {
+		t.Fatalf("old rows changed:\nbefore %v\nafter  %v", before, after)
+	}
+	mustOpen(t, db).Close()
+	if after := dumpTables(t, db, legacyTables); !reflect.DeepEqual(before, after) {
+		t.Fatal("old rows changed on a second open")
 	}
 }
 
-func TestSixProcessesOnlyOneClaim(t *testing.T) {
-	root := t.TempDir()
-	env := mkdir(t, filepath.Join(root, "cli"))
-	db := filepath.Join(root, "queue.sqlite")
-	st := mustOpen(t, db)
-	register(t, st, env, "worker")
-	enqueue(t, st, "worker", "m1")
-	enqueue(t, st, "worker", "m2")
-	barrier := filepath.Join(root, "barrier")
-	var cmds []*exec.Cmd
-	var outs []*os.File
-	for i := 0; i < 6; i++ {
-		ready := filepath.Join(root, "ready-"+strconv.Itoa(i))
-		out, err := os.Create(filepath.Join(root, "out-"+strconv.Itoa(i)))
-		if err != nil {
-			t.Fatal(err)
-		}
-		cmd := exec.Command(os.Args[0])
-		cmd.Env = append(os.Environ(),
-			"MESSENGER_FIXTURE=claim",
-			"MESSENGER_DB="+db,
-			"MESSENGER_ALIAS=worker",
-			"MESSENGER_BARRIER="+barrier,
-			"MESSENGER_READY="+ready,
-		)
-		cmd.Stdout = out
-		cmd.Stderr = out
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-		cmds = append(cmds, cmd)
-		outs = append(outs, out)
-	}
-	t.Cleanup(func() {
-		for _, cmd := range cmds {
-			if cmd.Process != nil {
-				_ = cmd.Process.Kill()
-			}
-		}
-	})
-	waitFiles(t, root, "ready-", 6)
-	if err := os.WriteFile(barrier, []byte("go"), 0o600); err != nil {
+// The earliest recorded layout (no CLI path, workspace or start mode on
+// sessions, no schema version) still opens and gains the later columns.
+func TestEarliestDatabaseLayoutStillOpens(t *testing.T) {
+	db := filepath.Join(t.TempDir(), "queue.sqlite")
+	raw, err := sql.Open("sqlite", dsn(db))
+	if err != nil {
 		t.Fatal(err)
 	}
-	wins := 0
-	for i, cmd := range cmds {
-		if err := cmd.Wait(); err != nil {
-			t.Fatal(err)
-		}
-		outs[i].Close()
-		text, err := os.ReadFile(outs[i].Name())
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(text) > 0 && text[0] != 'B' && text[0] != 'E' {
-			wins++
-		}
+	if _, err := raw.Exec(`CREATE TABLE sessions (key TEXT PRIMARY KEY, provider TEXT NOT NULL, environment TEXT NOT NULL, conversation_id TEXT NOT NULL, active_token TEXT, decision TEXT, UNIQUE(provider, environment, conversation_id));
+INSERT INTO sessions(key,provider,environment,conversation_id) VALUES ('k1','claude','/profile','old-conversation')`); err != nil {
+		t.Fatal(err)
 	}
-	if wins != 1 {
-		t.Fatalf("claims won = %d", wins)
-	}
-	states := requestStates(mustSnap(t, st))
-	if states[0] != "reserved" || states[1] != "queued" {
-		t.Fatalf("states = %v", states)
+	raw.Close()
+	mustOpen(t, db).Close()
+	dump := dumpTables(t, db, []string{"sessions"})
+	if !strings.Contains(dump["sessions"], "old-conversation") || !strings.Contains(dump["sessions"], "start_mode=resume") || !strings.Contains(dump["sessions"], "cli_path=<nil>") {
+		t.Fatalf("sessions = %s", dump["sessions"])
 	}
 }
 
-func TestCrashLeavesSessionLockedAndChildCanOutliveSupervisor(t *testing.T) {
-	root := t.TempDir()
-	env := mkdir(t, filepath.Join(root, "cli"))
-	db := filepath.Join(root, "queue.sqlite")
-	st := mustOpen(t, db)
-	register(t, st, env, "worker")
-	enqueue(t, st, "worker", "m1")
-	enqueue(t, st, "worker", "m2")
-	cmd, dir := startFixture(t, root, "hold", db)
-	waitFile(t, filepath.Join(dir, "ready"))
-	if err := cmd.Process.Kill(); err != nil {
-		t.Fatal(err)
-	}
-	_ = cmd.Wait()
-	if _, err := st.Claim("worker"); !errors.Is(err, ErrBusy) {
-		t.Fatalf("claim after crash = %v", err)
-	}
-
-	root = t.TempDir()
-	env = mkdir(t, filepath.Join(root, "cli"))
-	db = filepath.Join(root, "queue.sqlite")
-	st = mustOpen(t, db)
-	register(t, st, env, "worker")
-	enqueue(t, st, "worker", "m1")
-	cmd, dir = startFixture(t, root, "orphan", db)
-	waitFile(t, filepath.Join(dir, "ready"))
-	if err := cmd.Process.Kill(); err != nil {
-		t.Fatal(err)
-	}
-	_ = cmd.Wait()
-	before := waitHeartbeat(t, dir)
-	time.Sleep(80 * time.Millisecond)
-	after, err := os.ReadFile(filepath.Join(dir, "heartbeat"))
-	if err != nil || string(after) == before {
-		t.Fatalf("child did not survive supervisor: %s %v", after, err)
-	}
-	if _, err := st.Claim("worker"); !errors.Is(err, ErrBusy) {
-		t.Fatalf("claim with live child = %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "release"), []byte("1"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	waitFile(t, filepath.Join(dir, "child-exited"))
-	if _, err := st.Claim("worker"); !errors.Is(err, ErrBusy) {
-		t.Fatalf("claim after child exit = %v", err)
-	}
-}
-
-func openTest(t *testing.T) (*Store, string) {
+// writeOldModeDatabase fills the old tables the way the removed mode left
+// them on the owner's computer: a persistent Claude session holding its
+// reservation, one finished turn, one queued message, a Codex owner and a
+// prepared window message.
+func writeOldModeDatabase(t *testing.T, path string) {
 	t.Helper()
-	root := t.TempDir()
-	env := mkdir(t, filepath.Join(root, "cli"))
-	return mustOpen(t, filepath.Join(root, "queue.sqlite")), env
+	mustOpen(t, path).Close()
+	raw, err := sql.Open("sqlite", dsn(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	for _, statement := range []string{
+		`INSERT INTO sessions(key,provider,environment,conversation_id,active_token,cli_path,workspace,start_mode) VALUES ('s1','claude','/profile','11111111-1111-4111-8111-111111111111','t2','/bin/claude','/work','new')`,
+		`INSERT INTO sessions(key,provider,environment,conversation_id,cli_path,workspace) VALUES ('s2','codex','/codex','thread-1','/bin/codex','/work2')`,
+		`INSERT INTO aliases(alias,session_key) VALUES ('worker','s1'),('codex-test','s2')`,
+		`INSERT INTO requests(id,session_key,sender,text,state,created_at) VALUES ('m1','s1','local-user','first','replied','2026-11-06T10:00:00Z'),('m2','s1','local-user','second','claimed','2026-11-06T10:01:00Z'),('m3','s2','worker','third','queued','2026-11-06T10:02:00Z')`,
+		`INSERT INTO attempts(token,session_key,request_id,alias,state,pid,pgid,start_token,boot_id) VALUES ('t1','s1','m1','worker','completed',100,100,'st','boot'),('t2','s1','m2','worker','running',100,100,'st','boot')`,
+		`INSERT INTO replies(id,reply_to,attempt_token,sender,recipient,text,held) VALUES ('r1','m1','t1','worker','local-user','answer',0)`,
+		`INSERT INTO verifications(attempt_token,identity_confirmed,reply_id,exit_observed,exit_code,group_empty,provider_ok,detail) VALUES ('t1',1,'r1',0,NULL,0,1,'turn verified')`,
+		`INSERT INTO stream_runs(id,session_key,state,current_token) VALUES ('t1','s1','running','t2')`,
+		`INSERT INTO stream_turns(attempt_token,run_id,receipt,sent_intent,read_seen) VALUES ('t1','t1','rc1',1,1),('t2','t1','rc2',1,0)`,
+		`INSERT INTO codex_setups(id,alias,environment,cli_path,workspace,state,thread_id,pid,pgid,start_token,boot_id,created_at,updated_at,session_key) VALUES ('c1','codex-test','/codex','/bin/codex','/work2','created','thread-1',200,200,'st2','boot','2026-11-06T09:00:00Z','2026-11-06T09:00:00Z','s2')`,
+		`INSERT INTO ui_outbox(id,session_key,alias,text,state,created_at) VALUES ('ui-00000000-0000-4000-8000-000000000001','s1','worker','not sent yet','prepared','2026-11-06T10:03:00Z')`,
+	} {
+		if _, err := raw.Exec(statement); err != nil {
+			t.Fatalf("%s: %v", statement, err)
+		}
+	}
+}
+
+// dumpTables renders every row of the given tables in a stable order.
+func dumpTables(t *testing.T, path string, tables []string) map[string]string {
+	t.Helper()
+	raw, err := sql.Open("sqlite", dsn(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	out := map[string]string{}
+	for _, table := range tables {
+		rows, err := raw.Query(`SELECT * FROM ` + table + ` ORDER BY rowid`)
+		if err != nil {
+			t.Fatalf("%s: %v", table, err)
+		}
+		cols, err := rows.Columns()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var b strings.Builder
+		for rows.Next() {
+			values := make([]any, len(cols))
+			ptrs := make([]any, len(cols))
+			for i := range values {
+				ptrs[i] = &values[i]
+			}
+			if err := rows.Scan(ptrs...); err != nil {
+				t.Fatal(err)
+			}
+			for i, col := range cols {
+				value := values[i]
+				if bytes, ok := value.([]byte); ok {
+					value = string(bytes)
+				}
+				fmt.Fprintf(&b, "%s=%v ", col, value)
+			}
+			b.WriteString("\n")
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
+		rows.Close()
+		out[table] = b.String()
+	}
+	return out
 }
 
 func mustOpen(t *testing.T, path string) *Store {
@@ -634,221 +218,4 @@ func mkdir(t *testing.T, path string) string {
 		t.Fatal(err)
 	}
 	return path
-}
-
-func register(t *testing.T, st *Store, env, alias string) {
-	t.Helper()
-	if _, err := st.Register("synthetic", env, "conversation-1", alias); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func enqueue(t *testing.T, st *Store, alias, id string) {
-	t.Helper()
-	if _, err := st.Enqueue(id, alias, "coordinator", "request "+id); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func running(t *testing.T, st *Store, env, alias, id, conversation string) string {
-	t.Helper()
-	enqueue(t, st, alias, id)
-	return claimBeginConfirm(t, st, env, alias, conversation)
-}
-
-func claimBeginConfirm(t *testing.T, st *Store, env, alias, conversation string) string {
-	t.Helper()
-	token, err := st.Claim(alias)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := st.BeginLaunch(token); err != nil {
-		t.Fatal(err)
-	}
-	if err := st.ConfirmIdentity(token, "synthetic", env, conversation); err != nil {
-		t.Fatal(err)
-	}
-	return token
-}
-
-func mustSnap(t *testing.T, st *Store) Snapshot {
-	t.Helper()
-	snap, err := st.Snapshot()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return snap
-}
-
-func requestStates(snap Snapshot) []string {
-	var states []string
-	for _, row := range snap.Requests {
-		states = append(states, fmt.Sprint(row["state"]))
-	}
-	return states
-}
-
-func startFixture(t *testing.T, root, mode, db string) (*exec.Cmd, string) {
-	t.Helper()
-	dir := mkdir(t, filepath.Join(root, mode))
-	cmd := exec.Command(os.Args[0])
-	cmd.Env = append(os.Environ(),
-		"MESSENGER_FIXTURE="+mode,
-		"MESSENGER_DB="+db,
-		"MESSENGER_ALIAS=worker",
-		"MESSENGER_DIR="+dir,
-	)
-	cmd.Stdout = os.Stdout
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		_ = os.WriteFile(filepath.Join(dir, "release"), []byte("1"), 0o600)
-		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
-			_ = cmd.Wait()
-		}
-	})
-	return cmd, dir
-}
-
-func waitFiles(t *testing.T, root, prefix string, n int) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		count := 0
-		for i := 0; i < n; i++ {
-			if _, err := os.Stat(filepath.Join(root, prefix+strconv.Itoa(i))); err == nil {
-				count++
-			}
-		}
-		if count == n {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("timed out waiting for fixture files")
-}
-
-func waitFile(t *testing.T, path string) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := os.Stat(path); err == nil {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatalf("timed out waiting for %s", path)
-}
-
-func waitHeartbeat(t *testing.T, dir string) string {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		text, err := os.ReadFile(filepath.Join(dir, "heartbeat"))
-		if err == nil && len(text) > 0 {
-			return string(text)
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("heartbeat missing")
-	return ""
-}
-
-func runFixture(mode string) error {
-	switch mode {
-	case "claim":
-		return fixtureClaim()
-	case "hold":
-		return fixtureHold(false)
-	case "orphan":
-		return fixtureHold(true)
-	case "heartbeat":
-		return fixtureHeartbeat()
-	default:
-		return fmt.Errorf("unknown fixture %s", mode)
-	}
-}
-
-func fixtureClaim() error {
-	ready := os.Getenv("MESSENGER_READY")
-	if err := os.WriteFile(ready, []byte("1"), 0o600); err != nil {
-		return err
-	}
-	barrier := os.Getenv("MESSENGER_BARRIER")
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		if _, err := os.Stat(barrier); err == nil {
-			break
-		}
-		if time.Now().After(deadline) {
-			return errors.New("barrier timeout")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	st, err := Open(os.Getenv("MESSENGER_DB"))
-	if err != nil {
-		return err
-	}
-	defer st.Close()
-	token, err := st.Claim(os.Getenv("MESSENGER_ALIAS"))
-	if err != nil {
-		fmt.Print("BUSY")
-		return nil
-	}
-	fmt.Print(token)
-	return nil
-}
-
-func fixtureHold(orphan bool) error {
-	st, err := Open(os.Getenv("MESSENGER_DB"))
-	if err != nil {
-		return err
-	}
-	defer st.Close()
-	token, err := st.Claim(os.Getenv("MESSENGER_ALIAS"))
-	if err != nil {
-		return err
-	}
-	if err := st.BeginLaunch(token); err != nil {
-		return err
-	}
-	dir := os.Getenv("MESSENGER_DIR")
-	if orphan {
-		cmd := exec.Command(os.Args[0])
-		cmd.Env = append(os.Environ(), "MESSENGER_FIXTURE=heartbeat", "MESSENGER_DIR="+dir)
-		if err := cmd.Start(); err != nil {
-			return err
-		}
-	}
-	if err := os.WriteFile(filepath.Join(dir, "ready"), []byte("1"), 0o600); err != nil {
-		return err
-	}
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "release")); err == nil {
-			return nil
-		}
-		if time.Now().After(deadline) {
-			return errors.New("hold timeout")
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-}
-
-func fixtureHeartbeat() error {
-	dir := os.Getenv("MESSENGER_DIR")
-	for i := 1; ; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "release")); err == nil {
-			return os.WriteFile(filepath.Join(dir, "child-exited"), []byte("1"), 0o600)
-		}
-		if err := os.WriteFile(filepath.Join(dir, "heartbeat"), []byte(strconv.Itoa(i)), 0o600); err != nil {
-			return err
-		}
-		time.Sleep(20 * time.Millisecond)
-		if i > 500 {
-			return errors.New("heartbeat timeout")
-		}
-	}
 }

@@ -61,9 +61,9 @@ func stopBackground(t *testing.T, root string) {
 	t.Fatal("background supervisor did not release lock")
 }
 
-func TestBackgroundStartReconnectAndExplicitAuthorization(t *testing.T) {
+func TestBackgroundStartReconnectAndExplicitPermission(t *testing.T) {
 	root := backgroundTestHome(t)
-	pid, log, err := startBackground(root, []string{"--claude-stream"})
+	pid, log, err := startBackground(root, nil)
 	if err != nil || pid <= 1 {
 		t.Fatal(pid, err)
 	}
@@ -78,45 +78,35 @@ func TestBackgroundStartReconnectAndExplicitAuthorization(t *testing.T) {
 		t.Fatal("log permissions", info, err)
 	}
 	status := backgroundCall(t, root, control.Request{Cmd: "status"}).Status
-	if status.Supervisor != pid || !status.Paused || status.CLILaunch != "not-authorized" {
+	if status.Supervisor != pid || !status.Paused || status.CLILaunch != "disabled" || status.TasksEnabled {
 		t.Fatal("unexpected detached status", status)
 	}
-	backgroundCall(t, root, control.Request{Cmd: "register-session", Alias: "test", Provider: "claude",
-		Environment: root, ConversationID: "12345678-1234-1234-1234-123456789abc", CLI: "/usr/bin/false", Workspace: root})
-	backgroundCall(t, root, control.Request{Cmd: "enqueue", Alias: "test", MessageID: "m1", Sender: "tester", Text: "must stay queued"})
 	backgroundCall(t, root, control.Request{Cmd: "resume"})
-	time.Sleep(120 * time.Millisecond)
-	status = backgroundCall(t, root, control.Request{Cmd: "status"}).Status
-	if status.Held != 0 || status.Queued != 1 || status.Paused {
-		t.Fatal("default startup invoked provider", status)
-	}
 	// A second start must fail rather than attach with different permissions,
 	// pause the existing instance, or report its PID as a new successful launch.
-	if _, _, err := startBackground(root, []string{"--allow-model-calls"}); err == nil {
+	if _, _, err := startBackground(root, []string{"--allow-tasks"}); err == nil {
 		t.Fatal("second instance accepted")
 	}
 	if _, _, err := startBackground(filepath.Join(filepath.Dir(root), "other"), nil); err == nil {
 		t.Fatal("other root bypassed global owner")
 	}
 	status = backgroundCall(t, root, control.Request{Cmd: "status"}).Status
-	if status.Supervisor != pid || status.Paused || status.CLILaunch != "not-authorized" {
+	if status.Supervisor != pid || status.Paused || status.TasksEnabled {
 		t.Fatal("second start changed live controller", status)
 	}
 	stopBackground(t, root)
 	live = false
-	pid, _, err = startBackground(root, []string{"--claude-stream", "--allow-model-calls"})
+	pid, _, err = startBackground(root, []string{"--claude-stream", "--allow-tasks"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	live = true
 	status = backgroundCall(t, root, control.Request{Cmd: "status"}).Status
-	if status.Supervisor != pid || !status.Paused || status.Queued != 1 || status.Held != 0 || status.CLILaunch == "not-authorized" {
-		t.Fatal("authorized background start did not preserve paused queue", status)
+	if status.Supervisor != pid || !status.Paused || !status.TasksEnabled || status.CLILaunch != "tasks" {
+		t.Fatal("task permission or pause lost in the background start", status)
 	}
-	time.Sleep(120 * time.Millisecond)
-	status = backgroundCall(t, root, control.Request{Cmd: "status"}).Status
-	if status.Held != 0 || status.Queued != 1 {
-		t.Fatal("model launched before explicit resume", status)
+	if _, _, err := startBackground(filepath.Join(filepath.Dir(root), "third"), []string{"--allow-model-calls"}); err == nil || !strings.Contains(err.Error(), "T-028") {
+		t.Fatal("removed flag accepted", err)
 	}
 }
 
@@ -129,7 +119,7 @@ func TestBackgroundParentDisappearsBeforeCommit(t *testing.T) {
 	defer conn.Close()
 	defer child.Close()
 	executable, _ := os.Executable()
-	cmd := exec.Command(executable, "--root", root, "_background-serve", "--allow-model-calls", "--claude-stream")
+	cmd := exec.Command(executable, "--root", root, "_background-serve", "--allow-tasks")
 	cmd.ExtraFiles = []*os.File{child}
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
@@ -160,27 +150,6 @@ func TestBackgroundParentDisappearsBeforeCommit(t *testing.T) {
 	stopBackground(t, root)
 }
 
-func TestBackgroundScopeSurvivesDetachedStartup(t *testing.T) {
-	root := backgroundTestHome(t)
-	_, _, err := startBackground(root, []string{"--claude-stream", "--allow-model-calls", "--only-session=chosen"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { stopBackground(t, root) })
-	status := backgroundCall(t, root, control.Request{Cmd: "status"}).Status
-	if status.LaunchSession != "chosen" || !status.Paused {
-		t.Fatal("scope lost in child", status)
-	}
-	backgroundCall(t, root, control.Request{Cmd: "register-session", Alias: "other", Provider: "claude", Environment: root, ConversationID: "other-test", CLI: "/usr/bin/false", Workspace: root})
-	backgroundCall(t, root, control.Request{Cmd: "enqueue", Alias: "other", MessageID: "other-message", Sender: "user", Text: "must remain queued"})
-	backgroundCall(t, root, control.Request{Cmd: "resume"})
-	time.Sleep(150 * time.Millisecond)
-	status = backgroundCall(t, root, control.Request{Cmd: "status"}).Status
-	if status.Held != 0 || status.Queued != 1 || status.LaunchSession != "chosen" {
-		t.Fatal("missing selected session fell back to another queue", status)
-	}
-}
-
 func TestBackgroundReportsInitializationFailure(t *testing.T) {
 	root := backgroundTestHome(t)
 	if err := os.MkdirAll(root, 0o700); err != nil {
@@ -202,7 +171,7 @@ func TestBackgroundCommandExitLeavesControllerReachable(t *testing.T) {
 	executable, _ := os.Executable()
 	// Capture pipes as a terminal frontend would: the child must not keep them
 	// open after the start command exits, otherwise CombinedOutput hangs.
-	cmd := exec.Command(executable, "--root", root, "start", "--claude-stream")
+	cmd := exec.Command(executable, "--root", root, "start", "--allow-tasks")
 	done := make(chan struct{})
 	var output []byte
 	var err error
@@ -224,7 +193,7 @@ func TestBackgroundCommandExitLeavesControllerReachable(t *testing.T) {
 	}
 	for i := 0; i < 3; i++ {
 		status := backgroundCall(t, root, control.Request{Cmd: "status"}).Status
-		if status.Supervisor != pid || !status.Paused || status.CLILaunch != "not-authorized" {
+		if status.Supervisor != pid || !status.Paused || status.CLILaunch != "tasks" {
 			t.Fatal("frontend reconnection changed daemon", status)
 		}
 	}

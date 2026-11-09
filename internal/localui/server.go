@@ -1,4 +1,5 @@
-// Package localui exposes selected local reads and explicit queue actions.
+// Package localui is the window's local HTTP server: selected reads and the
+// explicit project, task, agent and server actions of the window.
 // Explicit diagnostics execute only the selected CLI's qualified status
 // commands. The UI never opens model sessions or proxies arbitrary commands.
 package localui
@@ -145,7 +146,7 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			http.Error(w, "cross-site request refused", http.StatusForbidden)
 			return
 		}
-		mutation := r.URL.Path == "/api/enqueue" || r.URL.Path == "/api/pause" || r.URL.Path == "/api/resume" || r.URL.Path == "/api/outbox/ack" || r.URL.Path == "/api/check-cli" || r.URL.Path == "/api/setup-claude" || r.URL.Path == "/api/setup-codex" || r.URL.Path == "/api/authorize-setup" || r.URL.Path == "/api/restart-client" || r.URL.Path == "/api/pick" || r.URL.Path == "/api/agent-login" || r.URL.Path == "/api/agent-logout" || r.URL.Path == "/api/agent-install" || taskMutation(r.URL.Path) ||
+		mutation := r.URL.Path == "/api/pause" || r.URL.Path == "/api/resume" || r.URL.Path == "/api/check-cli" || r.URL.Path == "/api/restart-client" || r.URL.Path == "/api/pick" || r.URL.Path == "/api/agent-login" || r.URL.Path == "/api/agent-logout" || r.URL.Path == "/api/agent-install" || taskMutation(r.URL.Path) ||
 			(r.URL.Path == "/api/self-update" && r.Method != http.MethodGet)
 		method := http.MethodGet
 		if mutation {
@@ -200,10 +201,6 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 		if r.URL.Path == "/api/server-action" {
 			// Joining or checking a server goes over the network.
 			deadline = 22 * time.Second
-		}
-		if r.URL.Path == "/api/setup-codex" {
-			// Starting app-server and creating a thread takes a few RPC rounds.
-			deadline = 100 * time.Second
 		}
 		if r.URL.Path == "/api/self-update" {
 			if r.Method == http.MethodGet {
@@ -310,111 +307,21 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 				writeJSON(w, map[string]any{"ok": true, "action": req.Cmd})
 				return
 			}
-			if r.URL.Path == "/api/authorize-setup" {
-				var input struct {
-					Alias        string `json:"alias"`
-					Confirmation string `json:"confirmation"`
-				}
-				if err := decoder.Decode(&input); err != nil || strings.TrimSpace(input.Alias) == "" || len(input.Alias) > 128 || input.Confirmation != "allow-model-calls" {
-					http.Error(w, "explicit test-session authorization required", 400)
-					return
-				}
-				req = control.Request{Cmd: "authorize-setup", Alias: input.Alias, Confirmation: input.Confirmation}
-			} else if r.URL.Path == "/api/setup-claude" {
-				var input struct {
-					ID          string `json:"id"`
-					Alias       string `json:"alias"`
-					CLI         string `json:"cli"`
-					Environment string `json:"environment"`
-				}
-				if err := decoder.Decode(&input); err != nil || !core.ValidSetupID(input.ID) || strings.TrimSpace(input.Alias) == "" || len(input.Alias) > 128 || !filepath.IsAbs(input.CLI) || !filepath.IsAbs(input.Environment) || len(input.CLI) > 4096 || len(input.Environment) > 4096 {
-					http.Error(w, "invalid new session", 400)
-					return
-				}
-				req = control.Request{Cmd: "setup-new-claude", ConversationID: input.ID, Alias: input.Alias, CLI: input.CLI, Environment: input.Environment}
-			} else if r.URL.Path == "/api/setup-codex" {
-				var input struct {
-					Alias        string `json:"alias"`
-					CLI          string `json:"cli"`
-					Environment  string `json:"environment"`
-					Confirmation string `json:"confirmation"`
-				}
-				if err := decoder.Decode(&input); err != nil || strings.TrimSpace(input.Alias) == "" || len(input.Alias) > 128 || !filepath.IsAbs(input.CLI) || !filepath.IsAbs(input.Environment) || len(input.CLI) > 4096 || len(input.Environment) > 4096 || input.Confirmation != "allow-model-calls" {
-					http.Error(w, "invalid Codex session", 400)
-					return
-				}
-				req = control.Request{Cmd: "setup-codex", Alias: input.Alias, CLI: input.CLI, Environment: input.Environment, Confirmation: input.Confirmation}
-			} else if r.URL.Path == "/api/enqueue" {
-				var envelope struct {
-					ID    string `json:"message_id"`
-					Alias string `json:"alias"`
-					Text  string `json:"text"`
-				}
-				if err := decoder.Decode(&envelope); err != nil {
-					http.Error(w, "invalid message", 400)
-					return
-				}
-				if !core.ValidUIMessageID(envelope.ID) || strings.TrimSpace(envelope.Alias) == "" || len(envelope.Alias) > 4096 || strings.TrimSpace(envelope.Text) == "" || len(envelope.Text) > 16000 {
-					http.Error(w, "invalid message", 400)
-					return
-				}
-				req = control.Request{Cmd: "ui-prepare", MessageID: envelope.ID, Alias: envelope.Alias, Text: envelope.Text, Sender: "local-user"}
-			} else if r.URL.Path == "/api/outbox/ack" {
-				var envelope struct {
-					ID string `json:"message_id"`
-				}
-				if err := decoder.Decode(&envelope); err != nil || !core.ValidUIMessageID(envelope.ID) {
-					http.Error(w, "invalid acknowledgment", 400)
-					return
-				}
-				req = control.Request{Cmd: "ui-ack", MessageID: envelope.ID}
-			} else {
-				var envelope *struct{}
-				if err := decoder.Decode(&envelope); err != nil || envelope == nil {
-					http.Error(w, "invalid command", 400)
-					return
-				}
-				req.Cmd = strings.TrimPrefix(r.URL.Path, "/api/")
+			var envelope *struct{}
+			if err := decoder.Decode(&envelope); err != nil || envelope == nil {
+				http.Error(w, "invalid command", 400)
+				return
 			}
+			req.Cmd = strings.TrimPrefix(r.URL.Path, "/api/")
 			if decoder.Decode(new(any)) != io.EOF {
 				http.Error(w, "one JSON object required", 400)
 				return
 			}
 			response, err := call(ctx, req)
-			if req.Cmd == "setup-codex" && err == nil && !response.OK {
-				// Setup errors carry no secrets: no config values, server names or tokens.
-				w.Header().Set("Content-Type", "application/json; charset=utf-8")
-				w.WriteHeader(http.StatusConflict)
-				writeJSON(w, map[string]any{"ok": false, "state": "rejected", "detail": response.Error})
-				return
-			}
-			if (req.Cmd == "setup-new-claude" || req.Cmd == "authorize-setup") && err == nil && !response.OK {
-				w.Header().Set("Content-Type", "application/json; charset=utf-8")
-				w.WriteHeader(http.StatusConflict)
-				writeJSON(w, map[string]any{"ok": false, "state": "rejected"})
-				return
-			}
-			if req.Cmd == "ui-prepare" && err == nil && response.OK {
-				req = control.Request{Cmd: "ui-submit", MessageID: req.MessageID}
-				response, err = call(ctx, req)
-			}
-			if err != nil || !response.OK || (req.Cmd == "ui-submit" && response.Created == nil) {
+			if err != nil || !response.OK {
 				w.Header().Set("Content-Type", "application/json; charset=utf-8")
 				w.WriteHeader(http.StatusServiceUnavailable)
-				writeJSON(w, map[string]any{"ok": false, "state": "unconfirmed", "message_id": req.MessageID})
-				return
-			}
-			// This ACK proves queue persistence only, never provider success.
-			if req.Cmd == "ui-submit" {
-				writeJSON(w, map[string]any{"ok": true, "message_id": req.MessageID, "created": *response.Created})
-				return
-			}
-			if req.Cmd == "setup-codex" {
-				writeJSON(w, map[string]any{"ok": true, "action": req.Cmd, "alias": req.Alias})
-				return
-			}
-			if req.Cmd == "setup-new-claude" {
-				writeJSON(w, map[string]any{"ok": true, "action": req.Cmd, "id": req.ConversationID, "alias": req.Alias})
+				writeJSON(w, map[string]any{"ok": false, "state": "unconfirmed"})
 				return
 			}
 			writeJSON(w, map[string]any{"ok": true, "action": req.Cmd})
@@ -430,12 +337,8 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 		}
 		req := control.Request{}
 		switch r.URL.Path {
-		case "/api/outbox":
-			req.Cmd = "ui-outbox"
 		case "/api/status":
 			req.Cmd = "status"
-		case "/api/overview":
-			req.Cmd = "overview"
 		case "/api/server":
 			req.Cmd, req.Action = "server", "status"
 		case "/api/window":
@@ -466,23 +369,6 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 				http.Error(w, "invalid task", 400)
 				return
 			}
-		case "/api/timeline":
-			req.Cmd = "timeline"
-			req.Alias = r.URL.Query().Get("alias")
-			req.Before = r.URL.Query().Get("before")
-			req.Limit = 50
-			if v := r.URL.Query().Get("limit"); v != "" {
-				n, err := strconv.Atoi(v)
-				if err != nil {
-					http.Error(w, "invalid limit", 400)
-					return
-				}
-				req.Limit = n
-			}
-			if strings.TrimSpace(req.Alias) == "" || len(req.Alias) > 4096 || len(req.Before) > 4096 || req.Limit < 1 || req.Limit > 100 {
-				http.Error(w, "invalid page", 400)
-				return
-			}
 		default:
 			http.NotFound(w, r)
 			return
@@ -503,8 +389,6 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			return
 		}
 		switch req.Cmd {
-		case "ui-outbox":
-			writeRaw(w, response.Outbox)
 		case "status":
 			if response.Status == nil {
 				http.Error(w, "missing status", 502)
@@ -512,11 +396,11 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			}
 			status := *response.Status
 			status.Detail = ""
+			// The registry lists data directories; the window does not show it.
+			status.Reservations = nil
 			writeJSON(w, status)
-		case "overview", "window-view", "task-feed", "server", "usage-stats":
+		case "window-view", "task-feed", "server", "usage-stats":
 			writeRaw(w, response.Overview)
-		case "timeline":
-			writeRaw(w, response.Timeline)
 		}
 	})
 }

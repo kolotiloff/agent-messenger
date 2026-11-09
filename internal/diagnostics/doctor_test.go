@@ -96,11 +96,12 @@ func TestDoctorReadsOnlyStatusAndOmitsPrivateDetails(t *testing.T) {
 		json.NewDecoder(conn).Decode(&request)
 		requests <- request
 		json.NewEncoder(conn).Encode(control.Response{OK: true, Status: &control.Status{Supervisor: 123,
-			Paused: true, CLILaunch: "not-authorized", Queued: 4, Held: 2, Broker: "not_configured", Detail: "PRIVATE_FIXTURE_DETAIL"},
-			Inspect: json.RawMessage(`{"private":"PRIVATE_FIXTURE_INSPECT"}`)})
+			Paused: true, CLILaunch: "tasks", TasksEnabled: true, Broker: "not_configured", Detail: "PRIVATE_FIXTURE_DETAIL",
+			Reservations: &control.Reservations{Old: []control.OldReservation{{Kind: "session", Root: "/PRIVATE_FIXTURE_ROOT"}}}},
+			Overview: json.RawMessage(`{"private":"PRIVATE_FIXTURE_INSPECT"}`)})
 	}()
 	r := Collect(context.Background(), root)
-	if r.Controller.State != "reachable" || r.Controller.Status == nil || r.Controller.Status.Queued != 4 || !r.Controller.Status.Paused {
+	if r.Controller.State != "reachable" || r.Controller.Status == nil || !r.Controller.Status.TasksEnabled || !r.Controller.Status.Paused || r.Controller.Status.Reservations != nil {
 		t.Fatal(r.Controller)
 	}
 	select {

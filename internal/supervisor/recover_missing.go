@@ -11,6 +11,9 @@ import (
 	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
 
+// recoveryEpoch reads this boot's identity; tests replace it.
+var recoveryEpoch = platform.CurrentRecoveryEpoch
+
 // RecoverMissingRoots retires registry entries whose data directory no longer
 // exists, for example a test directory in a temporary folder that the OS
 // removed on reboot. Each one needs the usual proof: the entry recorded a
@@ -20,7 +23,7 @@ import (
 // Nothing is retried and no model is started; the missing database cannot be
 // read, so its history cannot be recovered by this command.
 func RecoverMissingRoots(confirmation string) (string, error) {
-	if confirmation != core.StreamRecoveryConfirmation {
+	if confirmation != core.RecoveryConfirmation {
 		return "", core.ErrBadConfirmation
 	}
 	lockPath, err := platform.SupervisorLockFile()

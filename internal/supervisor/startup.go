@@ -1,8 +1,6 @@
 package supervisor
 
 import (
-	"context"
-
 	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
 
@@ -24,41 +22,4 @@ func checkStartupLease() error {
 		return err
 	}
 	return lease.Release()
-}
-
-func (s *Supervisor) startStream(ctx context.Context, launcher StreamLauncher, spec Spec, url, secret string) (StreamProcess, error) {
-	lease, err := acquireStartupLease()
-	if err != nil {
-		return StreamProcess{}, err
-	}
-	type result struct {
-		process StreamProcess
-		err     error
-	}
-	done := make(chan result)
-	s.starting.Store(true)
-	go func() {
-		defer s.starting.Store(false)
-		defer lease.Release()
-		if ctx.Err() != nil {
-			return
-		}
-		process, err := launcher.StartStream(ctx, spec, url, secret)
-		select {
-		case done <- result{process, err}:
-		case <-ctx.Done():
-			if err == nil {
-				// No prompt was sent. Never attach a late process to a stopped run.
-				process.Input.Close()
-				process.Output.Close()
-				go process.Wait()
-			}
-		}
-	}()
-	select {
-	case r := <-done:
-		return r.process, r.err
-	case <-ctx.Done():
-		return StreamProcess{}, ctx.Err()
-	}
 }

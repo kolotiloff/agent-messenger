@@ -466,7 +466,7 @@ func TestCancelStopsARunningTask(t *testing.T) {
 }
 
 func TestTasksNeedPermissionAndAnOpenQueue(t *testing.T) {
-	h := newTaskHarness(t, "report", AdapterLauncher{AllowModels: true})
+	h := newTaskHarness(t, "report", AdapterLauncher{})
 	id := h.startTask("op-1", "claude", "x")
 	time.Sleep(300 * time.Millisecond)
 	if len(h.runs()) != 0 {

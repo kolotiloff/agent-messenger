@@ -33,14 +33,14 @@ func TestRecoverMissingRootsNeedsProvenReboot(t *testing.T) {
 	}
 	// Same boot: the directory is gone, but that does not prove the process is.
 	recoveryEpoch = func() (platform.RecoveryEpoch, error) { return epochOf("11111111-1111-4111-8111-111111111111"), nil }
-	if _, err := RecoverMissingRoots(core.StreamRecoveryConfirmation); !errors.Is(err, core.ErrRecoveryBlocked) {
+	if _, err := RecoverMissingRoots(core.RecoveryConfirmation); !errors.Is(err, core.ErrRecoveryBlocked) {
 		t.Fatalf("same boot: %v", err)
 	}
 	if runs, _ := loadRuns(); len(runs) != 3 {
 		t.Fatal("registry changed without proof")
 	}
 	recoveryEpoch = func() (platform.RecoveryEpoch, error) { return epochOf("22222222-2222-4222-8222-222222222222"), nil }
-	message, err := RecoverMissingRoots(core.StreamRecoveryConfirmation)
+	message, err := RecoverMissingRoots(core.RecoveryConfirmation)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func TestRecoverMissingRootsNeedsProvenReboot(t *testing.T) {
 		t.Fatalf("kept %+v", runs)
 	}
 	// Nothing left to prove: the legacy entry has no epoch and stays.
-	if _, err := RecoverMissingRoots(core.StreamRecoveryConfirmation); !errors.Is(err, core.ErrRecoveryBlocked) {
+	if _, err := RecoverMissingRoots(core.RecoveryConfirmation); !errors.Is(err, core.ErrRecoveryBlocked) {
 		t.Fatalf("legacy entry: %v", err)
 	}
 }
@@ -67,7 +67,7 @@ func TestRecoverMissingRootsRefusesNextToLiveClient(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- Run(ctx, root, AdapterLauncher{}) }()
 	waitSocket(t, root)
-	if _, err := RecoverMissingRoots(core.StreamRecoveryConfirmation); err == nil {
+	if _, err := RecoverMissingRoots(core.RecoveryConfirmation); err == nil {
 		t.Fatal("ran next to a live client")
 	}
 	cancel()

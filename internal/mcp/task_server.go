@@ -1,3 +1,5 @@
+// Package mcp serves Messenger's stdio MCP tools: the coordinator's tools for
+// the owner's chat and the worker tools of one task run.
 package mcp
 
 import (
@@ -11,6 +13,12 @@ import (
 	"github.com/kolotiloff/agent-messenger/internal/adapters"
 	"github.com/kolotiloff/agent-messenger/internal/core"
 )
+
+type rpcRequest struct {
+	ID     any            `json:"id"`
+	Method string         `json:"method"`
+	Params map[string]any `json:"params"`
+}
 
 // The worker tools of one task run (T-024, T-026). The server is bound to one
 // run and its receipt; the tools work only while that run is running and its

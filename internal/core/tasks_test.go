@@ -525,7 +525,7 @@ func TestRestartInterruptsRunsButKeepsIntents(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer st.Close()
-	if _, err := st.RevokeInherited(); err != nil {
+	if err := st.InterruptInheritedTaskRuns(); err != nil {
 		t.Fatal(err)
 	}
 	ta, _ := st.TaskByID(a)

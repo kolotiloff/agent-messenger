@@ -23,18 +23,17 @@ func TestUIRejectsUntrustedAccessAndMutations(t *testing.T) {
 		method, path, host, origin, site, token string
 		code                                    int
 	}{
-		{"GET", "/api/overview", "127.0.0.1:1234", "", "", "", 401},
-		{"GET", "/api/outbox", "127.0.0.1:1234", "", "", "", 401},
-		{"GET", "/api/outbox/ack", "127.0.0.1:1234", "", "", "secret", 405},
-		{"GET", "/api/overview", "evil.example:1234", "", "", "secret", 403},
-		{"GET", "/api/overview", "127.0.0.1:1234", "https://evil.example", "", "secret", 403},
-		{"GET", "/api/overview", "127.0.0.1:1234", "", "cross-site", "secret", 403},
-		{"POST", "/api/overview", "127.0.0.1:1234", "", "", "secret", 405},
+		{"GET", "/api/status", "127.0.0.1:1234", "", "", "", 401},
+		{"GET", "/api/server", "127.0.0.1:1234", "", "", "", 401},
+		{"GET", "/api/pause", "127.0.0.1:1234", "", "", "secret", 405},
+		{"GET", "/api/status", "evil.example:1234", "", "", "secret", 403},
+		{"GET", "/api/status", "127.0.0.1:1234", "https://evil.example", "", "secret", 403},
+		{"GET", "/api/status", "127.0.0.1:1234", "", "cross-site", "secret", 403},
+		{"POST", "/api/status", "127.0.0.1:1234", "", "", "secret", 405},
 		{"GET", "/api/shutdown", "127.0.0.1:1234", "", "", "secret", 404},
-		{"GET", "/api/enqueue", "127.0.0.1:1234", "", "", "secret", 405},
+		{"GET", "/api/enqueue", "127.0.0.1:1234", "", "", "secret", 404},
 		{"GET", "/api/inspect", "127.0.0.1:1234", "", "", "secret", 404},
-		{"GET", "/api/timeline?alias=a&limit=101", "127.0.0.1:1234", "", "", "secret", 400},
-		{"GET", "/api/timeline", "127.0.0.1:1234", "", "", "secret", 400},
+		{"GET", "/api/timeline", "127.0.0.1:1234", "", "", "secret", 404},
 		{"GET", "/../../go.mod", "127.0.0.1:1234", "", "", "secret", 404},
 	} {
 		r := httptest.NewRequest(test.method, "http://"+test.host+test.path, nil)
@@ -94,21 +93,32 @@ func TestUIOnlyForwardsReadCommandsAndRedactsStatus(t *testing.T) {
 		if !ok || time.Until(deadline) > 3*time.Second {
 			t.Fatal("missing deadline")
 		}
-		return control.Response{OK: true, Status: &control.Status{Detail: "private diagnostic", Queued: 1}, Overview: json.RawMessage(`{"schema_version":1,"sessions":[]}`), Timeline: json.RawMessage(`{"schema_version":1,"items":[]}`)}, nil
+		return control.Response{OK: true, Status: &control.Status{Detail: "private diagnostic", Reservations: &control.Reservations{Old: []control.OldReservation{{Kind: "session", Root: "/private/root"}}}}, Overview: json.RawMessage(`{"schema_version":1,"agents":[]}`)}, nil
 	}, func(context.Context) any { return map[string]string{"os": "darwin"} })
-	for _, path := range []string{"/api/status", "/api/overview", "/api/timeline?alias=worker&before=m1&limit=5", "/api/discovery"} {
+	for _, path := range []string{"/api/status", "/api/window?project=Game", "/api/server", "/api/discovery"} {
 		r := httptest.NewRequest("GET", "http://127.0.0.1:1234"+path, nil)
 		r.Header.Set("Authorization", "Bearer secret")
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
-		if w.Code != 200 || !json.Valid(w.Body.Bytes()) || strings.Contains(w.Body.String(), "private diagnostic") {
+		if w.Code != 200 || !json.Valid(w.Body.Bytes()) || strings.Contains(w.Body.String(), "private diagnostic") || strings.Contains(w.Body.String(), "/private/root") {
 			t.Fatalf("bad response %d %s", w.Code, w.Body.String())
 		}
-		if path == "/api/timeline?alias=worker&before=m1&limit=5" && (got.Cmd != "timeline" || got.Alias != "worker" || got.Before != "m1" || got.Limit != 5) {
+		if path == "/api/window?project=Game" && (got.Cmd != "window-view" || got.Alias != "Game") {
 			t.Fatalf("route changed %+v", got)
 		}
 		if w.Header().Get("Cache-Control") != "no-store" || !strings.Contains(w.Header().Get("Content-Security-Policy"), "frame-ancestors 'none'") {
 			t.Fatal("missing private response headers")
+		}
+	}
+	// The removed mode's read routes (T-028) are gone.
+	got = control.Request{}
+	for _, path := range []string{"/api/overview", "/api/timeline?alias=worker", "/api/outbox"} {
+		r := httptest.NewRequest("GET", "http://127.0.0.1:1234"+path, nil)
+		r.Header.Set("Authorization", "Bearer secret")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != http.StatusNotFound || got.Cmd != "" {
+			t.Fatalf("%s: %d %+v", path, w.Code, got)
 		}
 	}
 }
@@ -116,7 +126,7 @@ func TestUIOnlyForwardsReadCommandsAndRedactsStatus(t *testing.T) {
 func TestUIUnavailableIsNotEmptySuccess(t *testing.T) {
 	for _, response := range []control.Response{{OK: false, Error: "private-path"}, {OK: true}, {OK: true, Overview: json.RawMessage(`invalid`)}} {
 		h := newHandler("127.0.0.1:1234", "secret", func(context.Context, control.Request) (control.Response, error) { return response, nil }, nil)
-		r := httptest.NewRequest("GET", "http://127.0.0.1:1234/api/overview", nil)
+		r := httptest.NewRequest("GET", "http://127.0.0.1:1234/api/server", nil)
 		r.Header.Set("Authorization", "Bearer secret")
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)

@@ -47,9 +47,7 @@ func (s *Supervisor) WindowView(project string) (any, error) {
 		}
 		out.Agents = append(out.Agents, windowAgent{WindowAgent: a, Trust: trust})
 	}
-	if l, ok := s.currentLauncher().(TaskLauncher); ok {
-		out.TasksEnabled = l.TasksEnabled()
-	}
+	out.TasksEnabled = s.currentLauncher().TasksEnabled()
 	out.Paused, _ = s.store.Paused()
 	out.Messenger, _ = os.Executable()
 	out.DataRoot = s.root
