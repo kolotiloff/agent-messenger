@@ -40,6 +40,16 @@ type Manifest struct {
 
 var digestPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 var revisionPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
+// ShortVersion is the version people see: 0.58 for 0.0.0-preview.58. The
+// full version stays in manifests and tags, which installed programs check.
+func ShortVersion(version string) string {
+	if versionPattern.MatchString(version) && strings.HasPrefix(version, "0.0.0-preview.") {
+		return "0." + strings.TrimPrefix(version, "0.0.0-preview.")
+	}
+	return version
+}
+
 var versionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+-preview\.[1-9][0-9]{0,8}$`)
 
 type Channel struct{ Directory, PublicKey string }
@@ -109,7 +119,7 @@ func (c Channel) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/api/updates/feed.xml":
 		w.Header().Set("Content-Type", "application/rss+xml; charset=utf-8")
-		_, _ = fmt.Fprintf(w, `<?xml version="1.0" encoding="utf-8"?><rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel><title>Agent Messenger — проверенные обновления</title><item><title>%s</title><sparkle:version>%d</sparkle:version><sparkle:shortVersionString>%s</sparkle:shortVersionString><sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion><description><![CDATA[%s]]></description><enclosure url="http://%s/api/updates/%s" sparkle:edSignature="%s" length="%d" type="application/octet-stream"/></item></channel></rss>`, escape(m.Version), m.Build, escape(m.Version), escape(m.Notes)+"\n\nФоновый клиент и активные сессии сохраняются. Обновляется приложение; версия уже работающего клиента может отличаться.", escape(r.Host), name, m.Signature, m.Length)
+		_, _ = fmt.Fprintf(w, `<?xml version="1.0" encoding="utf-8"?><rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel><title>Agent Messenger — проверенные обновления</title><item><title>%s</title><sparkle:version>%d</sparkle:version><sparkle:shortVersionString>%s</sparkle:shortVersionString><sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion><description><![CDATA[%s]]></description><enclosure url="http://%s/api/updates/%s" sparkle:edSignature="%s" length="%d" type="application/octet-stream"/></item></channel></rss>`, escape(ShortVersion(m.Version)), m.Build, escape(ShortVersion(m.Version)), escape(m.Notes)+"\n\nФоновый клиент и активные сессии сохраняются. Обновляется приложение; версия уже работающего клиента может отличаться.", escape(r.Host), name, m.Signature, m.Length)
 	case "/api/updates/" + name:
 		f, err := openRegular(filepath.Join(c.Directory, name), MaxArchive)
 		if err != nil {

@@ -195,6 +195,7 @@ func parseCursorEvent(e map[string]any, kind string, r *TaskEventResult, note fu
 		if e["subtype"] == "init" {
 			id, _ := e["session_id"].(string)
 			note(id)
+			r.noteModel(e)
 		}
 	case "result":
 		id, _ := e["session_id"].(string)

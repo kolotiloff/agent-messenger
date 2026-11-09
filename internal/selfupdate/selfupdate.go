@@ -118,6 +118,13 @@ func (u *Updater) Check(ctx context.Context) Status {
 	defer u.mu.Unlock()
 	if err != nil && !errors.Is(err, updatefeed.ErrDownloadBusy) {
 		u.status = Status{State: "failed", Error: "не удалось проверить обновления"}
+		var limit updatefeed.RateLimitError
+		if errors.As(err, &limit) {
+			u.status.Error = "GitHub временно ограничил проверки с этого адреса"
+			if !limit.Reset.IsZero() {
+				u.status.Error += ", повторите после " + limit.Reset.Local().Format("15:04")
+			}
+		}
 		if s := u.idle(); s.State == "available" {
 			u.status = s
 		}

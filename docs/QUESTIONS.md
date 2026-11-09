@@ -29,9 +29,11 @@ The window and CLI messages are in Russian; code and docs are now in English. **
 
 ### Q-002: May the old remote branches be deleted?
 There are about 26 `codex/*` and `cursor/*` branches. Their content is in `main`. Four of them have a separate history from before `main` was rebuilt, so they hold the original commit history. **Options:** delete all; delete only the branches already merged into `main` and keep the four; keep all. **Blocks:** T-018.
+**Answer (2026-11-09):** delete the ones that are not needed. Chosen: delete every branch whose work reached `main` through a closed pull request (the pull request keeps its commits) and two superseded drafts (`claude/t052-t053-plan`, `claude/t051-continue-task`); keep `main`, the working branch, the branches of open pull requests #34 and #35, and the nine branches with history from before `main` was rebuilt (`codex/*-20261105`, `cursor/*-ff55`, `claude/t016-window-grant-fix`). The deletion itself waits for the owner's confirmation of the exact list.
 
 ### Q-003: Is there an Apple Developer ID account for signing and notarization?
 Without one, macOS can block the downloaded preview on another Mac. **Blocks:** T-013.
+**Answer (2026-11-09):** no paid Apple developer account. The Mac app stays ad-hoc signed: on another Mac the first start needs right-click → «Открыть» (or System Settings → Privacy & Security). Updates through the app keep working. T-013 stays blocked.
 
 ### Q-004: When can Cursor CLI be turned on?
 Stage 2 requires all three CLIs. Until then Cursor stays off (D-011). **Blocks:** T-012.
@@ -51,6 +53,7 @@ Claude Code 2.1.319 defers MCP tools behind `ToolSearch` by default. A real mode
 
 ### Q-012: Remove the persistent Claude stream and Codex app-server now (T-028)?
 The owner asked to clean the program of old code. The old "message a live session" paths (persistent Claude stream, Codex app-server owners, their window pages and commands) are the biggest part of it. Tasks and the coordinator do not use them. But sessions registered on the owner's Mac through them keep their reservations in `active-runs.json`, which are never released automatically. **Options:** remove them in a separate release after the owner closes the old sessions (the client then refuses old commands); or remove them now and leave old reservations to manual closing; or keep them. **Chosen for now:** keep them; only unused code and `experiments/` were removed (D-032). **Blocks:** T-028.
+**Answer (2026-11-09):** remove it. Done as T-028 in a separate release; existing reservations in `active-runs.json` are never deleted or released by it.
 
 ### Q-013: Where should a computer keep its broker device key?
 DEPLOYMENT.md asks for the OS secure storage (Keychain on the Mac). Today the key is in `server-connection.json` in the data directory with mode 0600, readable by the owner's account only; the window and `status` never show it. **Options:** Keychain on the Mac and the Windows credential store, with the file keeping only a reference; or keep the 0600 file. **Chosen for now:** the 0600 file, because nothing crosses computers yet and the Keychain needs Mac-side work that cannot be tested here. **Blocks:** the rest of T-015 (before tasks travel between computers).

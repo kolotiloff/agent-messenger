@@ -12,6 +12,15 @@ import (
 // never reaches the CLI.
 func TestAgentModels(t *testing.T) {
 	f := newTaskFixture(t)
+	start, err := f.st.ComputerAgents()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range start {
+		if a.Provider == "codex" && !reflect.DeepEqual(a.Models, DefaultCodexModels) {
+			t.Fatalf("new codex models %q, want the owner's defaults (T-098)", a.Models)
+		}
+	}
 	if err := f.st.SetAgentModels("codex", []string{" gpt-5.5 ", "", "gpt-5.5-mini", "gpt-5.5"}); err != nil {
 		t.Fatal(err)
 	}
@@ -128,5 +137,61 @@ func TestRemoveComputerAgent(t *testing.T) {
 	}
 	if _, _, err := f.st.StartTask(StartTaskRequest{Project: "Game", OpID: "op-2", Provider: "claude", Text: "x"}); !errors.Is(err, ErrRejected) {
 		t.Fatalf("task for a removed agent: %v", err)
+	}
+}
+
+// T-109: agents set up before T-098 with empty model lists get the starting
+// lists once; a list the owner empties afterwards stays empty.
+func TestEmptyModelListsAreFilledOnce(t *testing.T) {
+	f := newTaskFixture(t)
+	if _, err := f.st.db.Exec(`UPDATE computer_agents SET models=''`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.st.db.Exec(`DELETE FROM meta WHERE key='default_models_filled'`); err != nil {
+		t.Fatal(err)
+	}
+	models := func(st *Store) map[string]string {
+		out := map[string]string{}
+		rows, err := st.db.Query(`SELECT provider,models FROM computer_agents`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var p, m string
+			if err := rows.Scan(&p, &m); err != nil {
+				t.Fatal(err)
+			}
+			out[p] = m
+		}
+		return out
+	}
+	if len(models(f.st)) == 0 {
+		t.Fatal("no agents in the fixture")
+	}
+	f.st.Close()
+	st, err := Open(f.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"claude": strings.Join(DefaultClaudeModels, "\n"), "codex": strings.Join(DefaultCodexModels, "\n"), "cursor": strings.Join(DefaultCursorModels, "\n")}
+	for p, m := range models(st) {
+		if m != want[p] {
+			t.Fatalf("%s not filled: %q", p, m)
+		}
+	}
+	if _, err := st.db.Exec(`UPDATE computer_agents SET models=''`); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+	st, err = Open(f.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	for p, m := range models(st) {
+		if m != "" {
+			t.Fatalf("%s filled again: %q", p, m)
+		}
 	}
 }

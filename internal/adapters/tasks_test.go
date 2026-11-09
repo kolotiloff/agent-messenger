@@ -194,3 +194,13 @@ func TestClaudeCacheWriteIsKept(t *testing.T) {
 		t.Fatalf("usage %+v", r.Usage)
 	}
 }
+
+// T-108: the model a Claude worker reports at its start is kept.
+func TestClaudeReportsItsModel(t *testing.T) {
+	var r TaskEventResult
+	ParseTaskEvent("claude", []byte(`{"type":"system","subtype":"init","session_id":"s-1","model":"claude-sonnet-test"}`), &r)
+	ParseTaskEvent("claude", []byte(`{"type":"assistant","session_id":"s-1","message":{"content":[]}}`), &r)
+	if r.Model != "claude-sonnet-test" {
+		t.Fatalf("model %q", r.Model)
+	}
+}

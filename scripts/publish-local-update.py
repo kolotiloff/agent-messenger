@@ -12,8 +12,9 @@ p.add_argument('--directory',type=pathlib.Path,default=pathlib.Path.home()/'Libr
 a=p.parse_args();source=a.bundle_directory.resolve();target=a.directory.resolve()
 app=source/'Agent Messenger.app';archive=source/'Agent-Messenger-mac.zip'
 with (app/'Contents/Info.plist').open('rb') as f: info=plistlib.load(f)
-version=info['CFBundleShortVersionString'];build=int(info['CFBundleVersion'])
-if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+-preview\.[1-9][0-9]{0,8}',version) or int(version.rsplit('.',1)[1])!=build: raise SystemExit('A numbered preview version is required')
+build=int(info['CFBundleVersion']);version='0.0.0-preview.%d'%build
+# The bundle shows the short version (0.58); the channel keeps the full one.
+if build<1 or info['CFBundleShortVersionString']!='0.%d'%build: raise SystemExit('A numbered preview version is required')
 if info.get('AMClientAPI')!=1: raise SystemExit('Unsupported client API')
 subprocess.run(['/usr/bin/codesign','--verify','--deep','--strict',str(app)],check=True)
 meta=json.loads(subprocess.check_output([str(app/'Contents/Resources/messenger'),'version']))

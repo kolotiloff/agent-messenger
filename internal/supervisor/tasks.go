@@ -195,7 +195,11 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 		for {
 			line, err := reader.ReadBytes('\n')
 			if len(line) > 0 {
+				model := result.Model
 				adapters.ParseTaskEvent(task.Provider, line, &result)
+				if result.Model != model {
+					_ = s.store.SetTaskRunModel(runID, result.Model)
+				}
 				for _, item := range adapters.TaskFeedEntries(task.Provider, line) {
 					_ = s.store.AppendTaskRunItem(runID, item.Kind, item.Title, item.Text)
 				}

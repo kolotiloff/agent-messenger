@@ -587,12 +587,16 @@ func (s *Store) SetComputerAgent(provider, cli, environment, profile string) err
 		if profile == "worker" {
 			full = 1
 		}
-		// Claude's own model names are listed from the start, so the
-		// coordinator sees them (T-061); Codex and Cursor names are not
-		// invented here.
+		// Starting model lists, so the coordinator sees them from the start
+		// (T-061, T-098). A list the owner saved is never replaced here.
 		models := ""
-		if provider == "claude" {
+		switch provider {
+		case "claude":
 			models = strings.Join(DefaultClaudeModels, "\n")
+		case "codex":
+			models = strings.Join(DefaultCodexModels, "\n")
+		case "cursor":
+			models = strings.Join(DefaultCursorModels, "\n")
 		}
 		_, err = tx.Exec(`INSERT INTO computer_agents(computer,provider,cli_path,environment,profile,updated_at,full_access,models) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(computer,provider) DO UPDATE SET cli_path=excluded.cli_path,environment=excluded.environment,profile=excluded.profile,updated_at=excluded.updated_at`,
 			computer, provider, cli, environment, profile, now(), full, models)
@@ -642,6 +646,20 @@ func insertTaskEvent(tx *sql.Tx, project, task, audience, kind, text, question s
 	if _, err := tx.Exec(`INSERT INTO task_events(project,task_id,audience,kind,text,question_id,created_at) VALUES (?,?,?,?,?,?,?)`,
 		project, task, audience, kind, text, nullString(sql.NullString{String: question, Valid: question != ""}), now()); err != nil {
 		return err
+	}
+	// The coordinator also learns of a worker's question to the owner and
+	// of the owner's answer, for reading only: the owner answers it
+	// (T-099, coordinator's item 13). It is recorded where the task is
+	// managed, so a task of another computer gets it on that computer.
+	if link.origin == nil && audience == AudienceOwner && (kind == "question" || kind == "answered") {
+		copyKind := "owner_question"
+		if kind == "answered" {
+			copyKind = "owner_answered"
+		}
+		if _, err := tx.Exec(`INSERT INTO task_events(project,task_id,audience,kind,text,question_id,created_at) VALUES (?,?,?,?,?,?,?)`,
+			project, task, AudienceCoordinator, copyKind, text, nullString(sql.NullString{String: question, Valid: question != ""}), now()); err != nil {
+			return err
+		}
 	}
 	// An event of a task another computer started also goes back to it,
 	// in the same transaction (T-037). History events and answers stay
@@ -1188,6 +1206,17 @@ func (s *Store) RecordTaskRunProcess(run string, obs platform.Observation) error
 		_, err := tx.Exec(`UPDATE task_runs SET pid=?,pgid=?,start_token=?,boot_id=? WHERE id=?`, obs.PID, obs.PGID, obs.StartToken, obs.BootID, run)
 		return err
 	})
+}
+
+// SetTaskRunModel records the model a run's CLI reported at its start
+// (T-108). It is shown to people only and decides nothing.
+func (s *Store) SetTaskRunModel(run, model string) error {
+	model = strings.TrimSpace(model)
+	if model == "" || len(model) > 120 {
+		return nil
+	}
+	_, err := s.db.Exec(`UPDATE tasks SET ran_model=? WHERE id=(SELECT task_id FROM task_runs WHERE id=?)`, model, run)
+	return err
 }
 
 // BindTaskSession checks the conversation ID the CLI reported. A Claude task
@@ -2134,8 +2163,45 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 	return map[string]any{"project": project, "computers": list}, nil
 }
 
-// DefaultClaudeModels are the short model names Claude Code itself accepts.
-var DefaultClaudeModels = []string{"haiku", "sonnet", "opus"}
+// DefaultClaudeModels are the short model names Claude Code itself accepts;
+// each always means the newest model of that line. Strongest first.
+var DefaultClaudeModels = []string{"opus", "sonnet", "haiku"}
+
+// DefaultCodexModels and DefaultCursorModels are the names the owner chose
+// as the starting lists (T-098, D-101); the owner can change them on the
+// agent's card.
+var (
+	DefaultCodexModels  = []string{"gpt-6-luna", "gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-astra"}
+	DefaultCursorModels = []string{"composer-2.5-fast", "grok-4.7-high-fast", "claude-opus-5-thinking-high"}
+)
+
+// fillDefaultModels gives agents that were set up before T-098 with an
+// empty model list the starting list once (T-109, owner's request). A list
+// the owner empties later stays empty: the meta key marks it done.
+func fillDefaultModels(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var done string
+	err = tx.QueryRow(`SELECT value FROM meta WHERE key='default_models_filled'`).Scan(&done)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	for provider, models := range map[string][]string{"claude": DefaultClaudeModels, "codex": DefaultCodexModels, "cursor": DefaultCursorModels} {
+		if _, err := tx.Exec(`UPDATE computer_agents SET models=? WHERE provider=? AND models=''`, strings.Join(models, "\n"), provider); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(`INSERT INTO meta(key,value) VALUES ('default_models_filled','1')`); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
 
 // errAgentPaused refuses work for an agent the owner turned off on its card.
 func errAgentPaused(provider string) error {

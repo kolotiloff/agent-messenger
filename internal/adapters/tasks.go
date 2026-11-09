@@ -215,6 +215,19 @@ type TaskEventResult struct {
 	FinalText string
 	// Usage is what the run spent, when the provider reported it (T-058).
 	Usage *Usage
+	// Model is the model the CLI said it runs on, from its start event
+	// (T-108); empty when the CLI does not say.
+	Model string
+}
+
+// noteModel keeps the model a start event names.
+func (r *TaskEventResult) noteModel(e map[string]any) {
+	if e["type"] != "system" || e["subtype"] != "init" {
+		return
+	}
+	if m, _ := e["model"].(string); m != "" && len(m) <= 120 {
+		r.Model = m
+	}
 }
 
 // lastTextLimit bounds LastText in characters.
@@ -267,6 +280,7 @@ func ParseTaskEvent(provider string, line []byte, r *TaskEventResult) {
 	case "claude":
 		id, _ := e["session_id"].(string)
 		note(id)
+		r.noteModel(e)
 		switch kind {
 		case "result":
 			if text, _ := e["result"].(string); text != "" {

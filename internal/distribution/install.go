@@ -28,6 +28,19 @@ func ValidBuild(version, revision string) bool {
 // Install does not start a process, modify shell files, migrate SQLite or remove
 // previous binaries. The shared supervisor/startup leases protect activation.
 func Install(source, prefix string, info buildinfo.Info) (string, error) {
+	return install(source, prefix, info, supervisor.WithInstallationLease)
+}
+
+// InstallUpdate installs a verified update next to the running version
+// while the background client keeps running (T-107). The client runs from
+// its own version folder, which is never removed or changed, so it needs no
+// supervisor lease; it goes on with its version until it is restarted, as on
+// Windows (D-048). The installation's own lock keeps two installs apart.
+func InstallUpdate(source, prefix string, info buildinfo.Info) (string, error) {
+	return install(source, prefix, info, func(install func() error) error { return install() })
+}
+
+func install(source, prefix string, info buildinfo.Info, lease func(func() error) error) (string, error) {
 	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
 		return "", errors.New("installer is validated only on macOS and Linux; on Windows start the downloaded .exe with a double click: it installs itself")
 	}
@@ -38,7 +51,7 @@ func Install(source, prefix string, info buildinfo.Info) (string, error) {
 		return "", errors.New("prefix must be an absolute user directory")
 	}
 	var installed string
-	err := supervisor.WithInstallationLease(func() error {
+	err := lease(func() error {
 		canonicalSource, err := filepath.EvalSymlinks(source)
 		if err != nil {
 			return err
@@ -75,6 +88,14 @@ func Install(source, prefix string, info buildinfo.Info) (string, error) {
 		if err != nil {
 			return err
 		}
+		lock, err := platform.Acquire(filepath.Join(library, "install.lock"))
+		if err != nil {
+			if errors.Is(err, platform.ErrAlreadyRunning) {
+				return errors.New("another installation of this program is in progress")
+			}
+			return err
+		}
+		defer lock.Release()
 		link := filepath.Join(binDir, "messenger")
 		if old, err := os.Lstat(link); err == nil {
 			if old.Mode()&os.ModeSymlink == 0 {

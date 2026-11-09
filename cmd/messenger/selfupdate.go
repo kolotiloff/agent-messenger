@@ -16,7 +16,9 @@ import (
 )
 
 // selfUpdateEvery is how often the window looks for a new signed release.
-const selfUpdateEvery = 5 * time.Minute
+// GitHub allows 60 checks an hour per address, shared by every computer
+// behind it, so the window checks rarely (owner, 2026-11-09).
+const selfUpdateEvery = 30 * time.Minute
 
 // relaunch remembers the program to start once the window has closed.
 type relaunch struct {
@@ -103,7 +105,7 @@ func newUpdater(home, executable string) *selfupdate.Updater {
 	}
 	if prefix := installPrefix(executable); prefix != "" && runtime.GOOS != "windows" {
 		u.Install = func(program string, info buildinfo.Info) (string, error) {
-			return distribution.Install(program, prefix, info)
+			return distribution.InstallUpdate(program, prefix, info)
 		}
 	}
 	return u

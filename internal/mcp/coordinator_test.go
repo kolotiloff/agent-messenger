@@ -391,12 +391,17 @@ func TestCoordinatorSeesOnlyItsProject(t *testing.T) {
 	if _, ok := c.tool("continue_task", map[string]any{"task_id": other, "op_id": "x", "text": "y"}, nil); ok {
 		t.Fatal("continued another project's task")
 	}
-	// An owner question of this project does not reach the coordinator.
+	// An owner question of this project reaches the coordinator only to
+	// read (T-099); answering it is the owner's.
 	mine, _, _ := st.StartTask(core.StartTaskRequest{Project: "Game", OpID: "m", Provider: "claude", Text: "mine"})
 	finishRun(t, st, mine, core.DispositionAskOwner, "for the owner")
 	c.tool("wait", map[string]any{"after": 0, "timeout_seconds": 1}, &w)
-	if len(w.Events) != 0 {
-		t.Fatalf("owner question reached the coordinator: %+v", w.Events)
+	if len(w.Events) != 1 || w.Events[0].Kind != "owner_question" || w.Events[0].TaskID != mine {
+		t.Fatalf("owner question for the coordinator: %+v", w.Events)
+	}
+	mt, _ := st.TaskByID(mine)
+	if _, ok := c.tool("answer", map[string]any{"task_id": mine, "question_id": mt.OpenQuestion.ID, "op_id": "own", "text": "y"}, nil); ok {
+		t.Fatal("the coordinator answered the owner's question")
 	}
 }
 
