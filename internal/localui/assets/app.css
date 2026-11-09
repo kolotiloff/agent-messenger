@@ -316,7 +316,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-outgoing .am-avatar { display:none; }
 #am-concept .am-outgoing .am-meta { justify-content:flex-end; }
 #am-concept .am-outgoing .am-message-content { padding:var(--am-space-3) var(--am-space-4); border-radius:var(--am-radius-l); background:var(--am-bubble); }
-#am-concept .am-delivery { margin-top:var(--am-space-1); font-size:var(--am-text-xs); color:var(--am-muted); }
+#am-concept .am-delivery { margin-top:var(--am-space-1); font-size:var(--am-text-xs); font-style:italic; color:var(--am-muted); }
 #am-concept .am-outgoing .am-delivery { text-align:right; }
 #am-concept .am-rich p { margin:0 0 var(--am-space-2); }
 #am-concept .am-rich p:last-child { margin-bottom:0; }

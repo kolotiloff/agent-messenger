@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-09 — Claude Code (T-097 hints in the chat)
+
+- The answer hint moved from under the reply box into the chat, in italics under the owner's answer (owner's choice). On `claude/ui-tweaks`, not released.
+
 ## 2026-11-09 — Claude Code (release preview.57)
 
 - Merged #88 (T-096 agent filter, T-078 remote update, reply box without a needless scrollbar) and released preview.57; all files checked (Mac, Windows x64/ARM64, Linux x64/ARM64, checksums, 5 signed update feeds and archives).
