@@ -15,8 +15,10 @@ if [[ -n "$unformatted" ]]; then
 fi
 "$go_bin" mod verify
 "$go_bin" vet ./...
+# The timeout catches a hung test. The supervisor package alone runs close to
+# five minutes with -race on a shared CI machine, so the budget is ten.
 case "$("$go_bin" env GOOS)" in
-  darwin) CGO_ENABLED=1 "$go_bin" test -race -count=1 -timeout=5m -ldflags=-linkmode=external ./... ;;
-  linux) CGO_ENABLED=1 "$go_bin" test -race -count=1 -timeout=5m ./... ;;
+  darwin) CGO_ENABLED=1 "$go_bin" test -race -count=1 -timeout=10m -ldflags=-linkmode=external ./... ;;
+  linux) CGO_ENABLED=1 "$go_bin" test -race -count=1 -timeout=10m ./... ;;
   *) printf 'Native race checks are currently accepted only on macOS/Linux.\n' >&2; exit 1 ;;
 esac
