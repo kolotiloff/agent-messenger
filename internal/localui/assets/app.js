@@ -324,30 +324,70 @@
     menu.replaceChildren(...items);menu.style.left=x+'px';menu.style.top=y+'px';menu.showPopover();items[0].focus();
   }
   // Asking another computer to update itself (T-078). Its answers arrive
-  // with the server status; a refused request shows on the card for a while.
-  let updateErrors={};
+  // with the server status and show as notices above the reply box (T-128);
+  // the card only says while it is under way.
   async function requestUpdate(peer){
-    delete updateErrors[peer.id];
     try{const answer=await postAPI('/api/server-action',{action:'update',device:peer.id},28000);if(answer?.result)server=answer.result;}
-    catch(error){const id=peer.id;updateErrors[id]=error.message;setTimeout(()=>{if(updateErrors[id]===error.message){delete updateErrors[id];renderMachines();}},10000);}
+    catch(error){addNotice('refused-'+peer.id+'-'+Date.now(),'bad',(peer.name||'')+tr(' не обновлён'),capital(error.message));}
     renderMachines();
   }
-  // The card's update line: the last request to that computer, while recent.
+  // The card's update line, only while the request is under way.
   function updateLine(peer){
-    if(updateErrors[peer.id])return [tr('Не обновлено: ')+updateErrors[peer.id],'am-status-bad'];
     const u=(server?.updates||[]).find(x=>x.computer===peer.id);
-    if(!u)return null;
-    const at=Date.parse(u.updated_at);
-    if(!(Date.now()-at<24*3600*1000))return null;
-    if(u.stale)return [tr('Нет ответа об обновлении'),'am-status-bad'];
-    switch(u.state){
-      case 'waiting':return [tr('Обновление запрошено…'),'am-status-wait'];
-      case 'updating':return [tr('Обновляется…'),'am-status-run'];
-      case 'done':return u.text?[tr('Версия ')+versionName(u.version||'')+': '+u.text,'am-muted']:[tr('Обновлено до ')+versionName(u.version||''),'am-muted'];
-      case 'refused':case 'failed':return [tr('Не обновлено: ')+(u.text||u.state),'am-status-bad'];
-    }
+    if(!u||u.stale||!(Date.now()-Date.parse(u.updated_at)<24*3600*1000))return null;
+    if(u.state==='waiting')return [tr('Обновление запрошено…'),'am-status-wait'];
+    if(u.state==='updating')return [tr('Обновляется…'),'am-status-run'];
     return null;
   }
+  // T-128: notices above the reply box. A good one fades after a few seconds
+  // on screen; a bad one stays until the owner closes it, also across
+  // reloads of the window. Only answers that came while the window was open
+  // are shown as good news; problems of the last day are kept.
+  const notices=[],noticeSince=Date.now();
+  function closedNotices(){try{return JSON.parse(localStorage.getItem('messenger-notices-closed')||'{}')||{};}catch(_){return {};}}
+  function closeNotice(key){
+    const i=notices.findIndex(n=>n.key===key);if(i>=0)notices.splice(i,1);
+    const closed=closedNotices(),cut=Date.now()-2*24*3600*1000;closed[key]=Date.now();
+    for(const k of Object.keys(closed))if(closed[k]<cut)delete closed[k];
+    remember('messenger-notices-closed',JSON.stringify(closed));renderNotices();
+  }
+  function addNotice(key,kind,title,text){
+    if(notices.some(n=>n.key===key)||closedNotices()[key])return;
+    notices.push({key,kind,title,text:text||''});renderNotices();
+  }
+  function collectNotices(){
+    const names=Object.fromEntries((server?.peers||[]).map(p=>[p.id,p.name]));
+    for(const u of server?.updates||[]){
+      const at=Date.parse(u.updated_at),name=names[u.computer]||tr('Компьютер');
+      if(!(Date.now()-at<24*3600*1000))continue;
+      const key='update-'+u.request_id+'-'+(u.stale?'stale':u.state);
+      if(u.stale)addNotice(key,'bad',name+tr(' не ответил об обновлении'),tr('Проверьте, что программа там запущена, и попросите ещё раз.'));
+      else if(u.state==='done'&&at>=noticeSince-60000){
+        const same=/последн/i.test(u.text||'');
+        addNotice(key,same?'info':'good',same?name+tr(': уже последняя версия'):name+tr(' обновлён до ')+versionName(u.version||''),same?'':u.text||'');
+      }else if(u.state==='refused'||u.state==='failed')addNotice(key,'bad',name+tr(' не обновлён'),capital(u.text||''));
+    }
+  }
+  const noticeIcons={good:'<path d="M8 12.5l2.7 2.7L16 9.8"/>',info:'<path d="M12 11v5M12 8h.01"/>',bad:'<path d="M12 7.5v5.5M12 16.5h.01"/>'};
+  function renderNotices(){
+    const box=$('notices');if(!box)return;
+    box.replaceChildren();box.hidden=!notices.length;
+    for(const n of notices){
+      const card=el('div',undefined,'am-notice am-notice-'+n.kind);card.dataset.key=n.key;
+      const icon=document.createElementNS('http://www.w3.org/2000/svg','svg');icon.setAttribute('viewBox','0 0 24 24');icon.setAttribute('aria-hidden','true');icon.classList.add('am-notice-icon');
+      icon.innerHTML='<circle cx="12" cy="12" r="9"/>'+noticeIcons[n.kind];
+      const body=el('div',undefined,'am-notice-body');body.append(el('span',n.title,'am-notice-title'));if(n.text)body.append(el('span',n.text,'am-small am-muted'));
+      const close=el('button','×','am-toast-close');close.type='button';close.setAttribute('aria-label',tr('Закрыть'));close.addEventListener('click',()=>closeNotice(n.key));
+      card.append(icon,body,close);
+      if(n.kind!=='bad'){
+        card.append(el('span',undefined,'am-notice-timer'));
+        // The countdown starts once the notice can be seen.
+        if(!n.timer&&tab==='tasks'&&!document.hidden)n.timer=setTimeout(()=>closeNotice(n.key),6000);
+      }
+      box.append(card);
+    }
+  }
+  document.addEventListener('visibilitychange',renderNotices);
   // One line per agent program, with its state (D-064: no coordinator mark).
   // live is false when the computer cannot be reached.
   function agentLines(agents,coordinatorClient,live){
@@ -381,6 +421,7 @@
     card.addEventListener('keydown',event=>{if(event.target===card&&(event.key==='Enter'||event.key===' ')){event.preventDefault();filterComputer(id);}});
   }
   function renderMachines(){
+    collectNotices();
     const box=$('machines');box.replaceChildren();
     const machine=el('div',undefined,'am-machine-card');machine.setAttribute('aria-current','true');pickable(machine,'local');
     const head=el('div',undefined,'am-machine-name');head.append(el('span',view?.computer_name||tr('Этот компьютер')));
@@ -1127,7 +1168,7 @@
   }
   async function loadDiscovery(){try{const d=await api('/api/discovery',8000);discovery=d.agents||[];discoveryLoaded=true;renderAgents();autoCheck();}catch(_){}}
   function show(next){
-    tab=next;root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab);
+    tab=next;root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab);renderNotices();
     root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
     $('list-toggle').hidden=tab!=='tasks';if(tab==='server')loadServer();if(tab==='stats')loadStats();if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сервер'),stats:tr('Статистика')}[tab];
   }
