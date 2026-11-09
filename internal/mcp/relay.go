@@ -173,7 +173,7 @@ func (r *coordinatorRelay) toClaude(line []byte) {
 // start runs the program file's coordinator server and passes its output on.
 func (r *coordinatorRelay) start() (*relayChild, error) {
 	cmd := exec.Command(r.program, r.args...)
-	cmd.Env = append(os.Environ(), CoordinatorChatVariable+"="+r.chat)
+	cmd.Env = append(os.Environ(), CoordinatorChatVariable+"="+r.chat, CoordinatorProgramVariable+"="+r.program)
 	cmd.Stderr = os.Stderr
 	platform.HideConsole(cmd)
 	in, err := cmd.StdinPipe()

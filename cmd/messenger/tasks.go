@@ -39,6 +39,10 @@ func runTaskCommand(root string, args []string) (bool, error) {
 			return true, err
 		}
 		return true, mcp.CoordinatorRelayMain(program, append([]string{"--root", root, mcp.CoordinatorServeCommand}, args[1:]...))
+	case mcp.CoordinatorWatchCommand:
+		// The coordinator's background watch (T-120): exits when an event of
+		// the project's tasks arrives.
+		return true, mcp.CoordinatorWatchMain(filepath.Join(root, "queue.sqlite"), args[1:], os.Stdout)
 	case mcp.CoordinatorServeCommand:
 		if err := os.MkdirAll(root, 0o700); err != nil {
 			return true, err

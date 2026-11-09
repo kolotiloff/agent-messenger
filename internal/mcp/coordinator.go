@@ -28,8 +28,8 @@ import (
 const (
 	// A short wait lets the owner's messages reach the chat between waits
 	// (T-074); an empty wait costs one small call.
-	coordinatorDefaultWait = 120
-	coordinatorMaxWait     = 300
+	coordinatorDefaultWait = 60
+	coordinatorMaxWait     = 120
 	coordinatorMaxReturned = 20
 	// coordinatorWaitBudget bounds the text one wait returns (T-031), in
 	// characters. One event is always returned, whatever its size.
@@ -53,8 +53,9 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - start_task starts one task in a new worker session. Give every task a unique op_id and reuse it only to retry the same call after a lost response.
 - One chat is the project's coordinator at a time: the newest chat that waits or acts. If wait answers superseded: true, another chat took over; stop, do not call wait again, and tell the owner, unless they ask you to take over again.
 - A new chat starts from the current state, not from the history: first call tasks, which gives the open tasks, their open questions and the event cursor, then wait with after = that cursor. Never wait from 0 in a new chat: it replays every old event of the project. Agreements of an earlier coordinator chat that are not in the project's rules or files are not known here; ask the owner when it matters.
-- wait blocks until something happens in this project's tasks: a report, a question for you, a failure, an interruption, a block or a cancellation. Always pass after = the cursor from the previous wait. When it returns events, act on them (answer questions with answer, tell the owner about reports), then call wait again with the new cursor. When it times out with no events, call wait again without comment. If it says more: true, more events are ready: call wait again at once with the new cursor.
-- The owner may write to you or stop a wait at any time. When you wake up because of the owner (a new message or an interrupted wait), first call wait with your last cursor and timeout_seconds 1 to see what workers sent meanwhile, then answer the owner, and then go back to waiting. Leave timeout_seconds out otherwise: a short wait lets the owner's messages reach you. When another tool's answer ends with a «Messenger: … new events» note, events are waiting for you: read them with wait after this step.
+- wait returns the events of this project's tasks after the cursor: a report, a question for you, a failure, an interruption, a block or a cancellation; with none, it blocks until one comes or timeout_seconds pass (default 60, at most 120). Always pass after = the cursor from the previous wait. When it returns events, act on them (answer questions with answer, tell the owner about reports). If it says more: true, more events are ready: call wait again at once with the new cursor.
+- Do not hold your turn in wait while workers run: the owner's messages reach you only between your turns, so a chat that waits again and again cannot hear them. Instead, once tasks are started or answered, run the background watch command (below) with your shell tool in the background, so your turn can end; tell the owner in a line what is running and end your turn. The command exits when an event arrives, or after 30 minutes with none, and you are woken with its output. Then call wait with your cursor and timeout_seconds 1 to read the events, act on them, start the watch again with the new cursor and end your turn. If it exited with no events, start it again with the same cursor. Use tasks to see the state of open tasks at any time. Only if you have no background shell, wait with the default timeout and answer the owner between waits.
+- When you wake up because of the owner (a new message or an interrupted wait), first call wait with your last cursor and timeout_seconds 1 to see what workers sent meanwhile, then answer the owner, then make sure a watch runs. When another tool's answer ends with a «Messenger: … new events» note, events are waiting for you: read them with wait after this step.
 - start_task takes an optional model. Leave it out for the agent's default. For Claude use opus for hard work (design, tricky bugs, large refactors), sonnet for ordinary coding, haiku for small mechanical work. For Codex and Cursor pass only a name from that agent's models in list_agents (the owner lists them in the window); if the list is empty, leave model out. Never guess a name: an unknown model fails the run. Tell the owner when you chose a non-default model and why.
 - A report is the worker's short summary. Its full last message is kept too: when a report or failure ends with «[Messenger] The worker's full final message has N characters», read it with task_output before asking the worker again; it is lost nowhere, even if the worker deleted its file.
 - answer answers a worker's question (pass question_id and a unique op_id); the worker continues in the same session.
@@ -147,6 +148,12 @@ func (c *coordinator) unreadNotice() string {
 
 // ServeCoordinator runs the coordinator MCP server for one project until in closes.
 func ServeCoordinator(store *core.Store, project string, in io.Reader, out io.Writer) error {
+	return serveCoordinator(store, project, "", in, out)
+}
+
+// serveCoordinator serves with watch, the background watch command the
+// instructions give (T-120), or none.
+func serveCoordinator(store *core.Store, project, watch string, in io.Reader, out io.Writer) error {
 	// Under the relay (T-117) every program version serving the same chat
 	// keeps the relay's chat id, so a switch is not a new chat.
 	chat := os.Getenv(CoordinatorChatVariable)
@@ -199,7 +206,7 @@ func ServeCoordinator(store *core.Store, project string, in io.Reader, out io.Wr
 				"protocolVersion": p.ProtocolVersion,
 				"capabilities":    map[string]any{"tools": map[string]any{"listChanged": true}},
 				"serverInfo":      map[string]any{"name": "agent-messenger", "version": "0.2.0"},
-				"instructions":    coordinatorInstructions + "\nProject: " + c.project,
+				"instructions":    coordinatorInstructions + "\nProject: " + c.project + watchNote(watch),
 			}, nil)
 		case req.Method == "ping":
 			c.respond(req.ID, map[string]any{}, nil)
@@ -296,7 +303,7 @@ func coordinatorTools() []map[string]any {
 				"model":    map[string]any{"type": "string", "maxLength": 80, "description": "optional model for the worker, such as opus, sonnet or haiku for claude, or, for Codex and Cursor, a name from the agent's models in list_agents; leave it out to use the agent's default. Never guess a name: an unknown model fails the run."},
 				"lock":     map[string]any{"type": "string", "maxLength": core.MaxTaskLock, "description": "optional name of a resource only one worker on that computer may use at a time, such as unity-editor; the task waits to start while an earlier unfinished task with the same lock is on that computer"},
 			}, "op_id", "agent", "text")},
-		{"name": "wait", "description": "Block until a new event of this project's tasks arrives after the cursor, or until timeout_seconds (default 120, at most 300). Costs no tokens while blocked. Always pass after. Returns a bounded batch; more: true means further events are ready, so call wait again at once with the new cursor.",
+		{"name": "wait", "description": "Return the events of this project's tasks after the cursor; with none, block until one arrives or timeout_seconds pass (default 60, at most 120). Costs no tokens while blocked, but the owner's messages cannot reach you meanwhile: between tasks, end your turn with the background watch running instead. Always pass after. Returns a bounded batch; more: true means further events are ready, so call wait again at once with the new cursor.",
 			"inputSchema": obj(map[string]any{
 				"after":           map[string]any{"type": "integer", "minimum": 0, "description": "cursor from the previous wait"},
 				"timeout_seconds": map[string]any{"type": "integer", "minimum": 1, "maximum": coordinatorMaxWait},
@@ -762,5 +769,12 @@ func runCoordinator(dbPath, project, workerRun string, in io.Reader, out io.Writ
 		return err
 	}
 	defer store.Close()
-	return ServeCoordinator(store, project, in, out)
+	return serveCoordinator(store, project, coordinatorWatchLine(dbPath, project), in, out)
+}
+
+func watchNote(watch string) string {
+	if watch == "" {
+		return ""
+	}
+	return "\nBackground watch command (put your cursor in place of CURSOR; run it in the background): " + watch
 }
