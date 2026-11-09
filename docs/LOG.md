@@ -4,6 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-09 — Claude Code (T-121 task time label, T-122 one place for «Любые команды», T-123 restart waits for tasks)
 
+- The update button at the bottom left shows a down arrow with a bar (owner); the page menu with «Перезагрузить» (it only reloads the page) is gone outside text. T-126, T-128, T-129 recorded for 0.60.
 - T-127 (D-111): own server or joining another one, not both; «Отключить» leaves the server; a computer that joined again is listed once; the network error clears on a change.
 - T-124: stop and send in the reply box are drawn icons on one grid, level and alike, with the same hover.
 - T-125 (D-110): the owner's message to a worker waiting for the coordinator answers its question at once.

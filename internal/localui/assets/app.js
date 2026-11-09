@@ -1780,6 +1780,13 @@
   let serverPolls=0;
   // The sidebar lists devices from the server state, so it is read on every
   // tab, every 15 s outside «Сервер» (as often as computers report).
+  // The window's own page menu offers «Перезагрузить», which only reloads
+  // the page and reads as restarting the program. It stays where it helps:
+  // in text fields and on selected text.
+  document.addEventListener('contextmenu',event=>{
+    if(event.defaultPrevented||event.target.closest?.('input,textarea,[contenteditable]')||String(window.getSelection?.()||''))return;
+    event.preventDefault();
+  });
   setInterval(()=>{serverPolls++;if(tab==='server'||serverPolls%3===0)loadServer();},5000);
   loadServer();
   let initialTheme=window.messengerInitialTheme;
