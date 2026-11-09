@@ -718,7 +718,7 @@ func TestCoordinatorOtherToolsTellAboutUnreadEvents(t *testing.T) {
 // T-075: the coordinator knows a report is short and asks for a file and a
 // commit instead of a long message.
 func TestCoordinatorKnowsTheReportLimit(t *testing.T) {
-	for _, want := range []string{"20000 characters", "write it to a file", "could not commit"} {
+	for _, want := range []string{"20000 characters", "could not commit", "answer later", "never ask for the full text"} {
 		if !strings.Contains(coordinatorInstructions, want) {
 			t.Fatalf("instructions lack %q", want)
 		}
