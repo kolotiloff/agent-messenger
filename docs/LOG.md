@@ -2,6 +2,13 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-09 — Claude Code (T-117, T-119, T-120, T-112, T-118)
+
+- Coordinator's chat had six tools: its entry in Claude started the client's copy of an old version. T-117: the entry starts the installed program, our stale entry is replaced by itself, and `messenger coordinator` relays to the updated program (D-107). A chat open before this version needs one reconnect or a new chat.
+- T-120: the coordinator watches in the background (`coordinator-watch`) and ends its turn, so the owner's messages reach it; wait waits at most 120 s.
+- T-112: `task_messages` reads the last messages of any task. T-119: own tasks name this computer. T-118 is blocked by Q-029 (continuing an interrupted run would relax D-021).
+- All on `claude/ui-tweaks`, not released.
+
 ## 2026-11-09 — Claude Code (T-111 open other computers' tasks)
 
 - Owner on 0.58: some tasks in the list would not open. They were other computers' tasks, now mixed with own ones (T-110) but still not clickable. They open as a read-only card now. On `claude/ui-tweaks`, not released.
