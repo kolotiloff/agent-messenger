@@ -104,6 +104,8 @@ type Service struct {
 	// readySkip is until when reports leave out readiness, after the host
 	// refused it (an older host, T-070).
 	readySkip time.Time
+	// versionSkip is the same for the program version (T-078).
+	versionSkip time.Time
 	// usageSkip is the same for usage. usageSent is the version of this
 	// computer's usage that usageTo (broker/device) last accepted, at
 	// usageAt; usageCopies holds the other computers' usage from there.
@@ -607,6 +609,9 @@ func (s *Service) ReportPresence(ctx context.Context) {
 	}
 	s.mu.Lock()
 	skipReady := time.Now().Before(s.readySkip)
+	if time.Now().Before(s.versionSkip) {
+		p.Version = ""
+	}
 	if s.usageTo != to {
 		s.usageTo, s.usageSent, s.usageCopies = to, "", nil
 	}
@@ -625,6 +630,14 @@ func (s *Service) ReportPresence(ctx context.Context) {
 		p.Ready = nil
 	}
 	peers, err := Report(call, *c, p)
+	if errors.Is(err, errPresenceRefused) && p.Version != "" {
+		// A host older than versions refuses the field (T-078).
+		s.mu.Lock()
+		s.versionSkip = time.Now().Add(readyRetry)
+		s.mu.Unlock()
+		p.Version = ""
+		peers, err = Report(call, *c, p)
+	}
 	if errors.Is(err, errPresenceRefused) && (p.Usage != nil || p.UsageSeen != nil) {
 		// A host older than usage refuses the fields (T-076).
 		s.mu.Lock()

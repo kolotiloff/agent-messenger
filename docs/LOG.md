@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-09 — Claude Code (T-078 remote update)
+
+- T-078 (D-100, Q-025 a): «Обновить программу» in another computer's menu; that computer installs its newest signed update and restarts its client only when no task runs; a Mac refuses. Computers report their version, shown on the cards. On `claude/ui-tweaks`, not released. Real Windows/Linux installs between computers are left to CI and the owner.
+
 ## 2026-11-09 — Claude Code (T-096 agent filter)
 
 - The owner did not see a running task of ПК-1: the agent filter was «Cursor». T-096: choosing a computer resets the filter; a hidden active task is announced with «Показать всех агентов». On `claude/ui-tweaks`, not released.

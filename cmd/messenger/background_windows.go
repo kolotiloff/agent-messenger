@@ -136,6 +136,27 @@ func startBackgroundAt(root string, flags []string, executable string) (int, str
 	return ready.PID, log.Name(), nil
 }
 
+// startDetached starts a helper outside the client's process group and,
+// if allowed, its job, writing to log, and does not wait for it (T-078).
+func startDetached(executable string, args []string, log *os.File) error {
+	start := func(flags uint32) (*exec.Cmd, error) {
+		cmd := exec.Command(executable, args...)
+		cmd.Stdout, cmd.Stderr = log, log
+		cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: flags, HideWindow: true}
+		return cmd, cmd.Start()
+	}
+	base := uint32(windows.CREATE_NEW_PROCESS_GROUP | windows.CREATE_NO_WINDOW)
+	cmd, err := start(base | windows.CREATE_BREAKAWAY_FROM_JOB)
+	if err != nil && errors.Is(err, windows.ERROR_ACCESS_DENIED) {
+		cmd, err = start(base)
+	}
+	if err != nil {
+		return err
+	}
+	go func() { _ = cmd.Wait() }()
+	return nil
+}
+
 func runBackgroundChild(root string, flags []string) error {
 	options, err := serveOptions(flags)
 	if err != nil {
@@ -181,7 +202,7 @@ func runBackgroundChild(root string, flags []string) error {
 	}
 	err = supervisor.RunWithOptions(context.Background(), root,
 		options,
-		supervisor.RunOptions{StartPaused: true, Ready: ready})
+		supervisor.RunOptions{StartPaused: true, Ready: ready, StartUpdate: remoteUpdateStarter(root)})
 	if err != nil {
 		_ = json.NewEncoder(readyFile).Encode(backgroundReady{Error: err.Error()})
 	}

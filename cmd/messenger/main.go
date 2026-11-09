@@ -265,6 +265,8 @@ func run(root string, args []string) error {
 		return nil
 	case "_background-serve":
 		return runBackgroundChild(root, args[1:])
+	case "_remote-update":
+		return runRemoteUpdate(root, args[1:])
 	case "recover-stream":
 		fs := flag.NewFlagSet("recover-stream", flag.ContinueOnError)
 		alias := fs.String("alias", "", "exact session alias")

@@ -102,6 +102,9 @@ type NetPeer struct {
 	// not reported since this computer or the server restarted (T-092). A
 	// task for it waits in the server's mailbox until it is back.
 	Reconnecting bool
+	// Version is the program version the computer reported (T-078); empty
+	// for an older version.
+	Version string
 }
 
 // reconnectGrace is how long a computer that left the server's list stays
@@ -342,7 +345,7 @@ func (s *Store) SetNetwork(broker, self string, peers []NetPeer) error {
 				u, _ := json.Marshal(p.Usage)
 				usage = string(u)
 			}
-			if _, err := tx.Exec(`INSERT INTO net_peers(peer,name,host,age,agents,ready,usage,updated_at,missing_since) VALUES (?,?,?,?,?,?,?,?,?)`, p.ID, p.Name, boolInt(p.Host), p.Age, string(raw), ready, usage, at, missing[p.ID]); err != nil {
+			if _, err := tx.Exec(`INSERT INTO net_peers(peer,name,host,age,agents,ready,usage,updated_at,missing_since,version) VALUES (?,?,?,?,?,?,?,?,?,?)`, p.ID, p.Name, boolInt(p.Host), p.Age, string(raw), ready, usage, at, missing[p.ID], clip(p.Version, 64)); err != nil {
 				return err
 			}
 		}
@@ -363,7 +366,7 @@ func (s *Store) NetPeers() ([]NetPeer, error) {
 }
 
 func netPeers(tx *sql.Tx) ([]NetPeer, error) {
-	rows, err := tx.Query(`SELECT peer,name,host,age,agents,ready,usage,updated_at,missing_since!='' FROM net_peers ORDER BY host DESC, name, peer`)
+	rows, err := tx.Query(`SELECT peer,name,host,age,agents,ready,usage,updated_at,missing_since!='',version FROM net_peers ORDER BY host DESC, name, peer`)
 	if err != nil {
 		return nil, err
 	}
@@ -373,7 +376,7 @@ func netPeers(tx *sql.Tx) ([]NetPeer, error) {
 		var p NetPeer
 		var host int
 		var agents, ready, usage, at string
-		if err := rows.Scan(&p.ID, &p.Name, &host, &p.Age, &agents, &ready, &usage, &at, &p.Reconnecting); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &host, &p.Age, &agents, &ready, &usage, &at, &p.Reconnecting, &p.Version); err != nil {
 			return nil, err
 		}
 		p.Host = host != 0
@@ -629,6 +632,9 @@ func (s *Store) NetUndeliverable(seq int64) error {
 		if kind == "log_request" || kind == "log" {
 			return logUndeliverable(tx, kind, task)
 		}
+		if kind == "update_request" || kind == "update" {
+			return updateUndeliverable(tx, kind, task)
+		}
 		var project, state string
 		if err := tx.QueryRow(`SELECT project,state FROM tasks WHERE id=?`, task).Scan(&project, &state); err != nil {
 			return err
@@ -709,6 +715,10 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 			return applyLogRequest(tx, from, b)
 		case "log":
 			return applyLogReply(tx, from, b)
+		case "update_request":
+			return applyUpdateRequest(tx, from)
+		case "update":
+			return applyUpdateReply(tx, from, b)
 		case "output":
 			return applyOutput(tx, from, b)
 		}

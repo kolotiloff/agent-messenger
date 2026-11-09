@@ -120,6 +120,19 @@ func startBackgroundAt(root string, flags []string, executable string) (int, str
 	return ready.PID, log.Name(), nil
 }
 
+// startDetached starts a helper in its own session, writing to log, and
+// does not wait for it (T-078).
+func startDetached(executable string, args []string, log *os.File) error {
+	cmd := exec.Command(executable, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	cmd.Stdout, cmd.Stderr = log, log
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go func() { _ = cmd.Wait() }()
+	return nil
+}
+
 func runBackgroundChild(root string, flags []string) error {
 	options, err := serveOptions(flags)
 	if err != nil {
@@ -153,7 +166,7 @@ func runBackgroundChild(root string, flags []string) error {
 	}
 	err = supervisor.RunWithOptions(context.Background(), root,
 		options,
-		supervisor.RunOptions{StartPaused: true, Ready: ready})
+		supervisor.RunOptions{StartPaused: true, Ready: ready, StartUpdate: remoteUpdateStarter(root)})
 	if err != nil {
 		_ = json.NewEncoder(conn).Encode(backgroundReady{Error: err.Error()})
 	}

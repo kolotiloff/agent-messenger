@@ -90,6 +90,12 @@ func startDesktopClient(root string) error {
 	if err != nil {
 		return err
 	}
+	return startClientFrom(root, executable)
+}
+
+// startClientFrom starts the background client from a runtime copy of the
+// program file executable.
+func startClientFrom(root, executable string) error {
 	home, err := platform.DefaultRoot()
 	if err != nil {
 		return err
