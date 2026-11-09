@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-09 — Claude Code (T-083)
+
+- T-083: another computer's agent card shows «Задачи: N идёт, N ждёт ответа» instead of «Задачи на этом компьютере». On `claude/ui-tweaks`, not released.
+
 ## 2026-11-09 — Claude Code (release preview.55)
 
 - Merged #86 (T-079 to T-082) and released preview.55; all files checked (Mac, Windows x64/ARM64, Linux x64/ARM64, checksums, 5 signed update feeds and archives).

@@ -801,7 +801,12 @@
       card.append(steps);
       const n=(a.running||0)+(a.waiting_owner||0);
       const tasks=el('button',undefined,'am-agent-tasks');tasks.type='button';
-      if(n){tasks.textContent=tr('Задачи на этом компьютере');tasks.addEventListener('click',()=>{$('agent-filter').value=a.agent;syncSelects();show('tasks');renderTaskList();});}
+      // T-083: what runs there, as on this computer's cards.
+      if(n){const label=el('span');label.append(tr('Задачи: '));
+        if(a.running)label.append(el('span',a.running+tr(' идёт'),'am-status-run'));
+        if(a.running&&a.waiting_owner)label.append(', ');
+        if(a.waiting_owner)label.append(el('span',a.waiting_owner+tr(' ждёт ответа'),'am-status-wait'));
+        tasks.append(label);tasks.addEventListener('click',()=>{$('agent-filter').value=a.agent;syncSelects();show('tasks');renderTaskList();});}
       else{tasks.textContent=tr('Задач сейчас нет');tasks.disabled=true;}
       card.append(tasks);cards.append(card);
     }

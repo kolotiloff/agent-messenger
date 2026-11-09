@@ -286,6 +286,7 @@
   'Появится после задачи исполнителя на том компьютере':'Shown after a worker task on that computer',
   'Задачи: ':'Tasks: ',
   ' идёт':' running',
+  ' ждёт ответа':' waiting for an answer',
   ' сегодня':' today',
   'Задачи':'Tasks',
   'Любые команды: разрешены не всем':'Any commands: not allowed for all',
