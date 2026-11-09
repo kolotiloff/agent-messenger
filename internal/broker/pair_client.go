@@ -53,23 +53,53 @@ func observingClient() (*http.Client, func() string) {
 		DisableKeepAlives:     true,
 		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true, VerifyPeerCertificate: verify, MinVersion: tls.VersionTLS13},
 	}
-	return &http.Client{Transport: transport, Timeout: 15 * time.Second}, func() string {
+	return &http.Client{Transport: transport, Timeout: 15 * time.Second, CheckRedirect: noRedirects}, func() string {
 		mu.Lock()
 		defer mu.Unlock()
 		return seen
 	}
 }
 
+// errUnproven means the server did not prove that it knows the code: a
+// wrong code, or a server that is not the host. Nothing was sent that the
+// server could use to check another code.
+var errUnproven = errors.New("сервер не подтвердил код")
+
+// errSkipped means the server was already asked in this search.
+var errSkipped = errors.New("этот сервер уже проверен")
+
 // PairShort proves the short code to the host at address and returns the
 // long invitation it hands over.
 func PairShort(ctx context.Context, address, code string) (Invitation, error) {
-	if !ValidShortCode(code) {
+	inv, _, err := pairShort(ctx, address, code, nil)
+	if errors.Is(err, errUnproven) {
 		return Invitation{}, ErrShortCode
 	}
-	if err := validAddress(address); err != nil {
-		return Invitation{}, err
+	return inv, err
+}
+
+// pairShort is PairShort that also returns the certificate fingerprint the
+// server showed, and asks nothing of a server whose fingerprint skip names.
+func pairShort(ctx context.Context, address, code string, skip map[string]bool) (Invitation, string, error) {
+	if !ValidShortCode(code) {
+		return Invitation{}, "", ErrShortCode
 	}
+	if err := validAddress(address); err != nil {
+		return Invitation{}, "", err
+	}
+	inv, err := pairExchange(ctx, address, code, skip)
+	return inv, inv.Fingerprint, err
+}
+
+func pairExchange(ctx context.Context, address, code string, skip map[string]bool) (inv Invitation, err error) {
 	client, seen := observingClient()
+	defer func() {
+		// The fingerprint goes back even with an error, so the search can
+		// skip this server's other addresses.
+		if err != nil {
+			inv = Invitation{Fingerprint: seen()}
+		}
+	}()
 	var h hello
 	status, err := call(ctx, client, http.MethodGet, address, "/v1/hello", "", nil, &h)
 	if err != nil {
@@ -80,6 +110,9 @@ func PairShort(ctx context.Context, address, code string) (Invitation, error) {
 	}
 	if h.Protocol != Protocol {
 		return Invitation{}, fmt.Errorf("версия сервера (%d) не совпадает с этой программой (%d): обновите обе стороны", h.Protocol, Protocol)
+	}
+	if fp := seen(); fp == "" || skip[fp] {
+		return Invitation{}, errSkipped
 	}
 	x, msg, err := pairStart(code, pairM)
 	if err != nil {
@@ -100,11 +133,11 @@ func PairShort(ctx context.Context, address, code string) (Invitation, error) {
 	fingerprint := seen()
 	shared, err := pairShared(code, x, started.Msg, pairN)
 	if err != nil || fingerprint == "" {
-		return Invitation{}, ErrShortCode
+		return Invitation{}, errUnproven
 	}
 	keys := derivePairKeys(code, h.BrokerID, fingerprint, msg, started.Msg, shared)
 	if !hmac.Equal(started.Confirm, keys.hostConfirm) {
-		return Invitation{}, ErrShortCode
+		return Invitation{}, errUnproven
 	}
 	// From here the certificate is pinned to the one the exchange covered.
 	var finished pairFinishResponse

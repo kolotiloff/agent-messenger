@@ -20,11 +20,14 @@ import (
 
 // Mailbox limits.
 const (
-	MaxMessageBody  = 256 << 10
-	maxSendRequest  = MaxMessageBody + 4<<10
-	maxPending      = 500
-	InboxBatch      = 16
-	maxInboxRequest = 1 << 10
+	MaxMessageBody = 256 << 10
+	maxSendRequest = MaxMessageBody + 4<<10
+	maxPending     = 500
+	// maxPendingPerSender is one sender's share of a recipient's mailbox,
+	// so one computer cannot fill it for every other one.
+	maxPendingPerSender = 100
+	InboxBatch          = 16
+	maxInboxRequest     = 1 << 10
 )
 
 var messageOp = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9:._-]{0,159}$`)
@@ -37,8 +40,10 @@ var (
 	// ErrMailboxFull means the recipient has too many unread messages.
 	ErrMailboxFull = errors.New("у компьютера слишком много непрочитанных сообщений")
 	// ErrNoMailbox means the broker is older and cannot carry messages.
-	ErrNoMailbox  = errors.New("сервер не умеет передавать задачи: обновите программу на компьютере с сервером")
-	errBadMessage = errors.New("сообщение не прошло проверку")
+	ErrNoMailbox = errors.New("сервер не умеет передавать задачи: обновите программу на компьютере с сервером")
+	// ErrBadMessage means the broker refused the message itself (its op id,
+	// size or body); sending it again cannot help.
+	ErrBadMessage = errors.New("сообщение не прошло проверку")
 )
 
 // Message is one message waiting for its recipient.
@@ -95,7 +100,7 @@ func (b *Broker) member(peer string) (bool, error) {
 // the same (from, opID) again while it waits stores nothing new.
 func (b *Broker) Send(from, to, opID string, body []byte) error {
 	if !messageOp.MatchString(opID) || len(body) == 0 || len(body) > MaxMessageBody || !json.Valid(body) || body[0] != '{' || from == to {
-		return errBadMessage
+		return ErrBadMessage
 	}
 	ok, err := b.member(to)
 	if err != nil {
@@ -121,6 +126,12 @@ func (b *Broker) Send(from, to, opID string, body []byte) error {
 		return err
 	}
 	if pending >= maxPending {
+		return ErrMailboxFull
+	}
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM messages WHERE recipient=? AND sender=?`, to, from).Scan(&pending); err != nil {
+		return err
+	}
+	if pending >= maxPendingPerSender {
 		return ErrMailboxFull
 	}
 	if _, err := tx.Exec(`INSERT INTO messages(sender,recipient,op_id,body,created_at) VALUES (?,?,?,?,?)`, from, to, opID, string(body), b.now().UTC().Format(time.RFC3339)); err != nil {
@@ -183,7 +194,7 @@ func (b *Broker) handleSend(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "recipient"})
 	case errors.Is(err, ErrMailboxFull):
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "full"})
-	case errors.Is(err, errBadMessage):
+	case errors.Is(err, ErrBadMessage):
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
 	default:
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "unavailable"})

@@ -339,7 +339,7 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 // Claude app: messages to the worker, the worker's text and tool actions,
 // its questions and report, and the outcome.
 type FeedItem struct {
-	// Kind: task, answer, text, tool, question, report, outcome.
+	// Kind: task, answer, note, text, tool, question, report, outcome.
 	Kind string `json:"kind"`
 	// Author: coordinator, owner, worker or messenger.
 	Author string `json:"author"`
@@ -414,7 +414,7 @@ func (s *Store) TaskFeed(id string) (TaskFeed, error) {
 		if err := runs.Err(); err != nil {
 			return err
 		}
-		for _, r := range list {
+		for i, r := range list {
 			if r.kind == "answer" || r.kind == "continue" {
 				f.Items = append(f.Items, FeedItem{Kind: "answer", Author: r.by, Text: r.input, At: r.created, Run: r.ordinal, Verified: true})
 			}
@@ -444,6 +444,10 @@ func (s *Store) TaskFeed(id string) (TaskFeed, error) {
 				if at == "" {
 					at = r.created
 				}
+				// A report kept back because the owner wrote meanwhile (T-085).
+				if kind == "report" && i+1 < len(list) && list[i+1].kind == "note" {
+					audience = "held"
+				}
 				f.Items = append(f.Items, FeedItem{Kind: kind, Author: "worker", Text: r.text, At: at, Run: r.ordinal, Verified: r.state == "finished", Audience: audience, State: r.state})
 			}
 			switch r.state {
@@ -451,6 +455,11 @@ func (s *Store) TaskFeed(id string) (TaskFeed, error) {
 				f.Items = append(f.Items, FeedItem{Kind: "outcome", Author: "messenger", Text: r.detail, At: r.finished, Run: r.ordinal, State: r.state, Verified: true})
 			}
 		}
+		notes, err := ownerNoteItems(tx, id)
+		if err != nil {
+			return err
+		}
+		f.Items = mergeByTime(f.Items, notes)
 		return nil
 	})
 	return f, err

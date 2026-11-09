@@ -4,6 +4,7 @@ package control
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -17,6 +18,11 @@ import (
 )
 
 const SocketName = "control.sock"
+
+// MaxRequestBytes bounds one request line. The largest legitimate request
+// carries one message text (at most 256 KiB in the broker); the rest is
+// small fields, so 4 MiB leaves ample room for JSON escaping.
+const MaxRequestBytes = 4 << 20
 
 type Request struct {
 	Cmd            string `json:"cmd"`
@@ -125,9 +131,14 @@ func Serve(ln net.Listener, handler Handler) error {
 		}
 		go func(conn net.Conn) {
 			defer conn.Close()
-			reader := bufio.NewReader(conn)
+			// One byte past the limit is enough to tell a long line apart.
+			reader := bufio.NewReader(io.LimitReader(conn, MaxRequestBytes+1))
 			line, err := reader.ReadBytes('\n')
 			if err != nil && !errors.Is(err, io.EOF) {
+				return
+			}
+			if len(bytes.TrimSuffix(line, []byte("\n"))) > MaxRequestBytes {
+				writeResponse(conn, Response{OK: false, Error: "команда слишком длинная"})
 				return
 			}
 			var request Request
@@ -302,6 +313,17 @@ func dispatch(handler Handler, request Request) Response {
 			err = h.CancelTask(request.MessageID)
 		}
 		if err != nil {
+			return Response{Error: err.Error()}
+		}
+		return Response{OK: true}
+	case "task-owner-note":
+		h, ok := handler.(interface {
+			OwnerNote(string, string, string) error
+		})
+		if !ok {
+			return Response{Error: "messages to working tasks unsupported; update the background client"}
+		}
+		if err := h.OwnerNote(request.MessageID, request.Confirmation, request.Text); err != nil {
 			return Response{Error: err.Error()}
 		}
 		return Response{OK: true}

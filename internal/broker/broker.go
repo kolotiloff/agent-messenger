@@ -58,8 +58,15 @@ const MaxDeviceName = 64
 // client's file descriptors.
 const maxConnections = 64
 
-// maxFailedRegistrations bounds wrong registration attempts per minute; past
-// it the broker answers 429 without touching the database.
+// maxConnectionsPerSource bounds open connections from one computer of the
+// network (one IPv4 address or one IPv6 /64), so a single host cannot take
+// every slot. This computer itself is not limited per source.
+const maxConnectionsPerSource = 16
+
+// maxFailedRegistrations bounds wrong registration attempts per minute from
+// one source; past it the broker answers 429 to that source without
+// touching the database. Other sources are not affected, so junk from one
+// computer cannot lock out a real join from another.
 const maxFailedRegistrations = 20
 
 var (
@@ -87,7 +94,7 @@ type Broker struct {
 	lock        *platform.Lock
 
 	limit    sync.Mutex
-	failedAt []time.Time
+	failedAt map[string][]time.Time
 
 	// The current short invitation and its open exchanges (T-052).
 	pair pairState
@@ -263,25 +270,61 @@ func validDeviceName(name string) bool {
 	return true
 }
 
-// allowRegistration reports whether a registration attempt may run now.
-func (b *Broker) allowRegistration() bool {
+// allowRegistration reports whether a registration attempt from source may
+// run now. Old failures of every source are dropped, so the table holds only
+// the sources that failed in the last minute.
+func (b *Broker) allowRegistration(source string) bool {
 	b.limit.Lock()
 	defer b.limit.Unlock()
 	cutoff := time.Now().Add(-time.Minute)
-	kept := b.failedAt[:0]
-	for _, at := range b.failedAt {
-		if at.After(cutoff) {
-			kept = append(kept, at)
+	for src, times := range b.failedAt {
+		kept := times[:0]
+		for _, at := range times {
+			if at.After(cutoff) {
+				kept = append(kept, at)
+			}
+		}
+		if len(kept) == 0 {
+			delete(b.failedAt, src)
+		} else {
+			b.failedAt[src] = kept
 		}
 	}
-	b.failedAt = kept
-	return len(b.failedAt) < maxFailedRegistrations
+	return len(b.failedAt[source]) < maxFailedRegistrations
 }
 
-func (b *Broker) registrationFailed() {
+func (b *Broker) registrationFailed(source string) {
 	b.limit.Lock()
-	b.failedAt = append(b.failedAt, time.Now())
+	if b.failedAt == nil {
+		b.failedAt = map[string][]time.Time{}
+	}
+	b.failedAt[source] = append(b.failedAt[source], time.Now())
 	b.limit.Unlock()
+}
+
+// sourceOf names the computer a request or connection comes from: its IPv4
+// address, or the /64 network of its IPv6 address, since one computer
+// easily holds many addresses of its /64.
+func sourceOf(ip net.IP) string {
+	if v4 := ip.To4(); v4 != nil {
+		return v4.String()
+	}
+	if len(ip) == net.IPv6len {
+		return ip.Mask(net.CIDRMask(64, 128)).String() + "/64"
+	}
+	return ip.String()
+}
+
+// requestSource is sourceOf for an HTTP request.
+func requestSource(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return sourceOf(ip)
+	}
+	return host
 }
 
 // ID is the broker's stable identity.
@@ -463,17 +506,24 @@ func (b *Broker) Listen(addr string) (net.Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	ln = &guardedListener{Listener: ln, slots: make(chan struct{}, maxConnections)}
-	return tls.NewListener(ln, &tls.Config{Certificates: []tls.Certificate{b.cert}, MinVersion: tls.VersionTLS13}), nil
+	return tls.NewListener(newGuardedListener(ln), &tls.Config{Certificates: []tls.Certificate{b.cert}, MinVersion: tls.VersionTLS13}), nil
+}
+
+// newGuardedListener wraps ln with the peer check and connection limits.
+func newGuardedListener(ln net.Listener) *guardedListener {
+	return &guardedListener{Listener: ln, slots: make(chan struct{}, maxConnections), perSource: map[string]int{}}
 }
 
 // guardedListener accepts only peers on this computer or a private network
-// and bounds open connections. "Local network" listens on every interface,
-// so a peer from a public address (a public IPv6 address, for example) is
-// dropped before TLS.
+// and bounds open connections, in all and per source. "Local network"
+// listens on every interface, so a peer from a public address (a public
+// IPv6 address, for example) is dropped before TLS.
 type guardedListener struct {
 	net.Listener
 	slots chan struct{}
+
+	mu        sync.Mutex
+	perSource map[string]int
 }
 
 func (l *guardedListener) Accept() (net.Conn, error) {
@@ -484,26 +534,57 @@ func (l *guardedListener) Accept() (net.Conn, error) {
 			<-l.slots
 			return nil, err
 		}
-		if !localPeer(conn.RemoteAddr()) {
+		ip, ok := peerIP(conn.RemoteAddr())
+		if !ok || !(ip.IsLoopback() || ip.IsPrivate()) {
 			conn.Close()
 			<-l.slots
 			continue
 		}
-		return &slotConn{Conn: conn, release: func() { <-l.slots }}, nil
+		if ip.IsLoopback() {
+			return &slotConn{Conn: conn, release: func() { <-l.slots }}, nil
+		}
+		source := sourceOf(ip)
+		l.mu.Lock()
+		if l.perSource[source] >= maxConnectionsPerSource {
+			l.mu.Unlock()
+			conn.Close()
+			<-l.slots
+			continue
+		}
+		l.perSource[source]++
+		l.mu.Unlock()
+		return &slotConn{Conn: conn, release: func() {
+			l.mu.Lock()
+			if l.perSource[source]--; l.perSource[source] <= 0 {
+				delete(l.perSource, source)
+			}
+			l.mu.Unlock()
+			<-l.slots
+		}}, nil
 	}
+}
+
+// peerIP is the IP address of a TCP or UDP peer, IPv4 in its 4-byte form.
+func peerIP(addr net.Addr) (net.IP, bool) {
+	var ip net.IP
+	switch a := addr.(type) {
+	case *net.TCPAddr:
+		ip = a.IP
+	case *net.UDPAddr:
+		ip = a.IP
+	default:
+		return nil, false
+	}
+	if v4 := ip.To4(); v4 != nil {
+		ip = v4
+	}
+	return ip, ip != nil
 }
 
 // localPeer reports whether addr is this computer or a private network.
 func localPeer(addr net.Addr) bool {
-	tcp, ok := addr.(*net.TCPAddr)
-	if !ok {
-		return false
-	}
-	ip := tcp.IP
-	if v4 := ip.To4(); v4 != nil {
-		ip = v4
-	}
-	return ip.IsLoopback() || ip.IsPrivate()
+	ip, ok := peerIP(addr)
+	return ok && (ip.IsLoopback() || ip.IsPrivate())
 }
 
 type slotConn struct {
@@ -587,7 +668,8 @@ func (b *Broker) Handler() http.Handler {
 			http.Error(w, "method", http.StatusMethodNotAllowed)
 			return
 		}
-		if !b.allowRegistration() {
+		source := requestSource(r)
+		if !b.allowRegistration(source) {
 			writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many attempts"})
 			return
 		}
@@ -595,14 +677,14 @@ func (b *Broker) Handler() http.Handler {
 		decoder := json.NewDecoder(io.LimitReader(r.Body, 4096))
 		decoder.DisallowUnknownFields()
 		if decoder.Decode(&in) != nil || len(in.Secret) != 64 {
-			b.registrationFailed()
+			b.registrationFailed(source)
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
 			return
 		}
 		id, key, err := b.register(in.Secret, in.Name)
 		switch {
 		case errors.Is(err, ErrInvitation):
-			b.registrationFailed()
+			b.registrationFailed(source)
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "invitation"})
 		case err != nil && strings.HasPrefix(err.Error(), "имя устройства"):
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})

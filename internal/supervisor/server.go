@@ -81,6 +81,10 @@ func (s *Supervisor) Server(_ context.Context, action string, payload json.RawMe
 		if err := s.store.SetNetAccept(in.On); err != nil {
 			return nil, err
 		}
+	case "net_full_access":
+		if err := s.store.SetNetFullAccess(in.On); err != nil {
+			return nil, err
+		}
 	case "log_share":
 		if err := s.store.SetNetLogShare(in.On); err != nil {
 			return nil, err
@@ -98,7 +102,11 @@ func (s *Supervisor) Server(_ context.Context, action string, payload json.RawMe
 		return nil, err
 	}
 	st.Accept, st.LogShare, st.Network = accept, share, s.networkProblem()
-	return st, nil
+	full, err := s.store.NetFullAccess()
+	if err != nil {
+		return nil, err
+	}
+	return serverView{Status: st, NetFullAccess: full}, nil
 }
 
 // presence describes this computer's agents for its network: the agent
@@ -162,4 +170,12 @@ func clipName(name string) string {
 		runes = runes[:broker.MaxDeviceName]
 	}
 	return string(runes)
+}
+
+// serverView is the «Сервер» tab: the network status and this computer's
+// settings for other computers' tasks.
+type serverView struct {
+	broker.Status
+	// NetFullAccess: tasks of other computers may use «Любые команды» (T-094).
+	NetFullAccess bool `json:"net_full_access"`
 }

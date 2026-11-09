@@ -133,7 +133,7 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	if _, err := db.Exec(schema + streamSchema + streamRecoverySchema + uiOutboxSchema + codexSetupSchema + taskSchema + taskRunItemsSchema + networkSchema + netTasksSchema + netLogsSchema); err != nil {
+	if _, err := db.Exec(schema + streamSchema + streamRecoverySchema + uiOutboxSchema + codexSetupSchema + taskSchema + taskRunItemsSchema + taskOutputSchema + networkSchema + netTasksSchema + netLogsSchema); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -165,6 +165,7 @@ func Open(path string) (*Store, error) {
 		{"tasks", "usage_seen", "INTEGER NOT NULL DEFAULT 0"},
 		{"tasks", "usage_input", "INTEGER NOT NULL DEFAULT 0"},
 		{"tasks", "usage_cached", "INTEGER NOT NULL DEFAULT 0"},
+		{"tasks", "usage_cache_write", "INTEGER NOT NULL DEFAULT 0"},
 		{"tasks", "usage_output", "INTEGER NOT NULL DEFAULT 0"},
 		{"tasks", "usage_cost", "REAL"},
 		{"requests", "in_reply_to", "TEXT"},
@@ -175,6 +176,7 @@ func Open(path string) (*Store, error) {
 		{"requests", "hops", "INTEGER NOT NULL DEFAULT 0"},
 		{"net_peers", "ready", "TEXT NOT NULL DEFAULT ''"},
 		{"net_peers", "usage", "TEXT NOT NULL DEFAULT ''"},
+		{"net_peers", "missing_since", "TEXT NOT NULL DEFAULT ''"},
 		{"tasks", "resource", "TEXT NOT NULL DEFAULT ''"},
 		networkTaskColumns[0], networkTaskColumns[1], networkTaskColumns[2],
 		networkTaskColumns[3], networkTaskColumns[4], networkTaskColumns[5],

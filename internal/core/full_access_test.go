@@ -171,3 +171,31 @@ func TestNewWorkerAgentFullAccessOn(t *testing.T) {
 		t.Fatal("saving again turned it back on")
 	}
 }
+
+// T-091: a failed run says why in plain words before the raw evidence.
+func TestFailedRunSaysWhy(t *testing.T) {
+	for _, c := range []struct {
+		ev   RunEvidence
+		want string
+	}{
+		{cleanExit, "ended without sending its report"},
+		{RunEvidence{ExitObserved: true, ExitCode: 2, GroupEmpty: true, ProviderOK: true}, "stopped with an error (exit code 2)"},
+		{RunEvidence{ExitObserved: true, GroupEmpty: true}, "did not report a successful end"},
+		{RunEvidence{ExitObserved: true, ExitCode: 1, GroupEmpty: true, Reason: "sign_in"}, "not signed in"},
+	} {
+		f := newTaskFixture(t)
+		id := f.start(t, "op", "codex", "Fix the menu")
+		r := f.launch(t, id, "019a0000-0000-7000-8000-000000000001")
+		if _, err := f.st.FinishTaskRun(r.ID, c.ev); err != nil {
+			t.Fatal(err)
+		}
+		task, _ := f.st.TaskByID(id)
+		if task.State != "failed" || !strings.Contains(task.Detail, c.want) {
+			t.Fatalf("want %q: %+v", c.want, task)
+		}
+		events, _, _ := f.st.TaskEvents("Game", AudienceCoordinator, 0, 50)
+		if last := events[len(events)-1]; !strings.Contains(last.Text, c.want) {
+			t.Fatalf("event %+v", last)
+		}
+	}
+}

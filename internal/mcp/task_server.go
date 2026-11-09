@@ -26,7 +26,7 @@ func taskTools() []map[string]any {
 			"properties": map[string]any{"text": map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxDispositionText, "description": desc}}}
 	}
 	return []map[string]any{
-		{"name": "read_task", "description": "Read your task: its text, project and folder. On a resumed run it returns your question and its answer instead of the task text, which this conversation already has; pass include_task: true to get the text again.",
+		{"name": "read_task", "description": "Read your task: its text, project and folder. On a resumed run it returns your question and its answer instead of the task text, which this conversation already has; pass include_task: true to get the text again. owner_notes is what the owner wrote to you while you worked: take it into account.",
 			"inputSchema": map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{
 				"include_task": map[string]any{"type": "boolean", "description": "also return the task text on a resumed run"},
 			}}},

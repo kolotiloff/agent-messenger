@@ -64,6 +64,11 @@ func TestTaskWindowRoutes(t *testing.T) {
 	if code != 200 || last.Cmd != "task-owner-answer" || last.MessageID != "task-1" || last.ConversationID != "q-1" || last.Confirmation != "op-1" || last.Text != "yes" {
 		t.Fatalf("answer %d %+v", code, last)
 	}
+	code, _ = do("POST", "/api/task-note", `{"task":"task-1","op_id":"op-n","text":"Use blue"}`)
+	last = got[len(got)-1]
+	if code != 200 || last.Cmd != "task-owner-note" || last.MessageID != "task-1" || last.Confirmation != "op-n" || last.Text != "Use blue" {
+		t.Fatalf("note %d %+v", code, last)
+	}
 	// A client older than the window does not know the command: the window
 	// is told so instead of showing the client's raw error.
 	outdated = true
@@ -78,6 +83,9 @@ func TestTaskWindowRoutes(t *testing.T) {
 	for _, bad := range []struct{ path, body string }{
 		{"/api/task-answer", `{"task":"task-1","question":"q-1","text":"yes"}`},
 		{"/api/task-answer", `{"task":"task-1","question":"q-1","op_id":"o","text":"yes","extra":1}`},
+		{"/api/task-note", `{"task":"task-1","text":"x"}`},
+		{"/api/task-note", `{"task":"task-1","op_id":"o","text":"  "}`},
+		{"/api/task-note", `{"task":"task-1","op_id":"o","text":"x","extra":1}`},
 		{"/api/project-create", `{"name":"a/b","folder":"/x"}`},
 		{"/api/project-create", `{"name":"Game","folder":"relative"}`},
 		{"/api/agent-set", `{"provider":"gemini","cli":"/bin/x"}`},

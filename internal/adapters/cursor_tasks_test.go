@@ -23,6 +23,20 @@ func TestCursorTaskArgs(t *testing.T) {
 	if strings.Contains(j, "--resume") || strings.Contains(j, "r1") || args[len(args)-1] != TaskWorkerPrompt {
 		t.Fatalf("new run %v", args)
 	}
+	// Without full access the sandbox is asked for explicitly, so the
+	// owner's own setting cannot leave a forced run unsandboxed.
+	if !strings.Contains(j, "\x00--sandbox\x00enabled\x00") || strings.Contains(j, "disabled") {
+		t.Fatalf("worker sandbox %v", args)
+	}
+	full := taskSpec("cursor", ProfileWorker, "", false)
+	full.FullAccess = true
+	args, err = TaskArgs(full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if j := joined(args); !strings.Contains(j, "\x00--force\x00") || !strings.Contains(j, "\x00--sandbox\x00disabled\x00") || strings.Contains(j, "enabled") {
+		t.Fatalf("full access %v", args)
+	}
 	args, err = TaskArgs(taskSpec("cursor", ProfileMessengerOnly, "c8f1a1b2-0000-4000-8000-000000000001", true))
 	if err != nil {
 		t.Fatal(err)

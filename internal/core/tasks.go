@@ -124,6 +124,16 @@ CREATE TABLE IF NOT EXISTS task_questions (
  answered_by TEXT,
  created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS task_owner_notes (
+ id TEXT PRIMARY KEY,
+ task_id TEXT NOT NULL REFERENCES tasks(id),
+ op_id TEXT NOT NULL UNIQUE,
+ text TEXT NOT NULL,
+ state TEXT NOT NULL,
+ run_id TEXT,
+ created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS task_owner_notes_task ON task_owner_notes(task_id, state);
 CREATE TABLE IF NOT EXISTS task_events (
  seq INTEGER PRIMARY KEY AUTOINCREMENT,
  project TEXT NOT NULL,
@@ -138,6 +148,11 @@ CREATE INDEX IF NOT EXISTS task_events_project ON task_events(project, seq);
 CREATE TABLE IF NOT EXISTS coordinator_connections (
  project TEXT PRIMARY KEY,
  last_seen TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS coordinator_chats (
+ project TEXT PRIMARY KEY,
+ chat TEXT NOT NULL,
+ since TEXT NOT NULL
 );
 `
 
@@ -787,6 +802,15 @@ func startLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, origin *net
 		id, r.Project, r.OpID, computer, r.Provider, agent.CLI, agent.Environment, agent.Profile, folder, taskTitle(r.Title, r.Text), r.Text, nullString(session), at, at, r.Model); err != nil {
 		return "", err
 	}
+	if fullAccess != 0 && origin != nil {
+		// T-094: a task of another computer gets «Любые команды» only when
+		// the owner allowed it for network tasks too.
+		if on, err := netFullAccess(tx); err != nil {
+			return "", err
+		} else if !on {
+			fullAccess = 0
+		}
+	}
 	if fullAccess != 0 {
 		if _, err := tx.Exec(`UPDATE tasks SET full_access=1 WHERE id=?`, id); err != nil {
 			return "", err
@@ -822,7 +846,15 @@ func insertTaskRun(tx *sql.Tx, task string, ordinal int, kind, input string) err
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(`INSERT INTO task_runs(id,task_id,ordinal,kind,input,receipt,state,created_at) VALUES (?,?,?,?,?,?,'intent',?)`, "run-"+id[:16], task, ordinal, kind, input, receipt, now())
+	run := "run-" + id[:16]
+	if _, err = tx.Exec(`INSERT INTO task_runs(id,task_id,ordinal,kind,input,receipt,state,created_at) VALUES (?,?,?,?,?,?,'intent',?)`, run, task, ordinal, kind, input, receipt, now()); err != nil {
+		return err
+	}
+	// T-085: what the owner wrote while the task worked goes with the next
+	// run of the same conversation, whatever started it.
+	if ordinal > 1 {
+		_, err = tx.Exec(`UPDATE task_owner_notes SET state='delivered',run_id=? WHERE task_id=? AND state='pending'`, run, task)
+	}
 	return err
 }
 
@@ -990,6 +1022,14 @@ func setRunState(tx *sql.Tx, run, state, detail string, from ...string) error {
 }
 
 func setTaskState(tx *sql.Tx, task, state, detail string) error {
+	// A task that stops keeps the owner's waiting notes as undelivered;
+	// nothing sends them again by itself (T-085).
+	switch state {
+	case "done", "failed", "cancelled", "blocked", "interrupted":
+		if _, err := tx.Exec(`UPDATE task_owner_notes SET state='undelivered' WHERE task_id=? AND state='pending'`, task); err != nil {
+			return err
+		}
+	}
 	finished := sql.NullString{}
 	if state == "done" || state == "failed" || state == "cancelled" {
 		finished = sql.NullString{String: now(), Valid: true}
@@ -1001,6 +1041,28 @@ func setTaskState(tx *sql.Tx, task, state, detail string) error {
 // Failure reasons a run can report (T-034). They match the adapters'
 // classes; anything else is stored as "other".
 var failureReasons = map[string]bool{"usage_limit": true, "rate_limit": true, "overload": true, "sign_in": true, "other": true}
+
+// failedRunWhy says in plain words why a run that ended was not accepted
+// (T-091), so the owner knows what to do; the raw evidence follows it.
+func failedRunWhy(ev RunEvidence, identity bool, disposition string) string {
+	switch {
+	case ev.Reason == "sign_in":
+		return "the agent is not signed in on this computer"
+	case ev.Reason == "usage_limit" || ev.Reason == "rate_limit" || ev.Reason == "overload":
+		return "the agent stopped at a provider limit"
+	case !ev.ExitObserved:
+		return "the agent program's exit was not observed"
+	case !identity:
+		return "the agent answered in a different conversation than the one Messenger started, so its result cannot be trusted"
+	case ev.ExitCode != 0:
+		return fmt.Sprintf("the agent program stopped with an error (exit code %d)", ev.ExitCode)
+	case !ev.ProviderOK:
+		return "the agent did not report a successful end of its work; it may have crashed or been stopped"
+	case disposition == "":
+		return "the worker ended without sending its report or a question through Messenger (report, ask or ask_owner were never called); with the owner's consent continue_task asks the same conversation to send it"
+	}
+	return "the run was not accepted"
+}
 
 // failureNote is the coordinator line that explains a failure reason. It
 // says what to tell the owner; nothing is ever started again by itself.
@@ -1057,11 +1119,20 @@ func (s *Store) BeginTaskRun(run, reservation string) (TaskRun, Task, error) {
 		// asked for now: it takes the agent's current «Любые команды», so
 		// turning it on helps a task started before (T-056). Without the
 		// agent row the task keeps what it had.
-		if r.Kind == "answer" || r.Kind == "continue" {
+		if r.Kind == "answer" || r.Kind == "continue" || r.Kind == "note" {
 			var full int
 			err := tx.QueryRow(`SELECT full_access FROM computer_agents WHERE computer=? AND provider=?`, t.Computer, t.Provider).Scan(&full)
 			if err != nil && !errors.Is(err, sql.ErrNoRows) {
 				return err
+			}
+			if err == nil && full != 0 && t.FromNetwork {
+				on, nerr := netFullAccess(tx)
+				if nerr != nil {
+					return nerr
+				}
+				if !on {
+					full = 0
+				}
 			}
 			if err == nil && (full != 0) != t.FullAccess {
 				if _, err := tx.Exec(`UPDATE tasks SET full_access=? WHERE id=?`, full, t.ID); err != nil {
@@ -1207,10 +1278,23 @@ type TaskBrief struct {
 	// FollowUp is the coordinator's new request on a run that continues a
 	// finished task (T-051).
 	FollowUp string `json:"follow_up,omitempty"`
+	// OwnerNotes is what the owner wrote while the task worked (T-085);
+	// HeldReport is the report that was not sent because of them.
+	OwnerNotes string `json:"owner_notes,omitempty"`
+	HeldReport string `json:"held_report,omitempty"`
 }
 
 // continuedTaskNote tells a continued worker what this run is.
 const continuedTaskNote = "This run continues the same conversation after you finished the task. Do what follow_up asks; the task text is the one from your first read_task."
+
+// ownerNoteTaskNote tells a worker why its run goes on after its report.
+const ownerNoteTaskNote = "This run continues the same conversation. The owner wrote to you while you worked (owner_notes), " +
+	"so your report (held_report) was not sent yet. Take what the owner wrote into account, then end the run as before " +
+	"with exactly one report, ask or ask_owner; the report should cover the whole task."
+
+// ownerNotesAlsoNote is added when owner notes come with an answer or a
+// follow-up.
+const ownerNotesAlsoNote = "The owner also wrote to you while you worked: see owner_notes."
 
 // resumedTaskNote tells a resumed worker where its task text is.
 const resumedTaskNote = "This run continues the same conversation, which already has the task from your first read_task. " +
@@ -1242,6 +1326,19 @@ func (s *Store) ReadTask(run, receipt string, includeTask bool) (TaskBrief, erro
 				b.Task = ""
 			}
 			b.Note, b.FollowUp = continuedTaskNote, r.Input
+		}
+		if r.Kind == "note" {
+			if !includeTask {
+				b.Task = ""
+			}
+			b.Note = ownerNoteTaskNote
+			_ = tx.QueryRow(`SELECT COALESCE(disposition_text,'') FROM task_runs WHERE task_id=? AND ordinal=?`, t.ID, r.Ordinal-1).Scan(&b.HeldReport)
+		}
+		if b.OwnerNotes, err = ownerNotesOf(tx, r.ID); err != nil {
+			return err
+		}
+		if b.OwnerNotes != "" && r.Kind != "note" {
+			b.Note = strings.TrimSpace(b.Note + " " + ownerNotesAlsoNote)
 		}
 		_, err = tx.Exec(`UPDATE task_runs SET read_seen=1 WHERE id=?`, run)
 		return err
@@ -1300,6 +1397,8 @@ type RunEvidence struct {
 	// LastText is the worker's last message; it is shown only when the run
 	// failed without a report (T-056).
 	LastText string
+	// FinalText is the worker's last message in full (T-087).
+	FinalText string
 	// Usage is what the run spent, when its provider reported it (T-058).
 	// It only informs the owner.
 	Usage *TaskUsage
@@ -1344,7 +1443,7 @@ func (s *Store) FinishTaskRun(run string, ev RunEvidence) (string, error) {
 			detail = "verified: identity, completion, exit 0, empty group, one " + r.Disposition
 		default:
 			final = "failed"
-			detail = fmt.Sprintf("not verified: exit %d, identity %t, provider %t, disposition %q", ev.ExitCode, bound == 1, ev.ProviderOK, r.Disposition)
+			detail = failedRunWhy(ev, bound == 1, r.Disposition) + fmt.Sprintf(" (exit %d, identity %t, provider %t, disposition %q)", ev.ExitCode, bound == 1, ev.ProviderOK, r.Disposition)
 		}
 		if ev.Detail != "" {
 			detail += "; " + ev.Detail
@@ -1360,8 +1459,18 @@ func (s *Store) FinishTaskRun(run string, ev RunEvidence) (string, error) {
 		if err := addTaskUsage(tx, t.ID, ev.Usage); err != nil {
 			return err
 		}
+		// T-087: keep the worker's full last message before any event, so
+		// a task of another computer sends it ahead of its report.
+		if final == "finished" || final == "failed" {
+			if err := saveTaskOutput(tx, t.ID, r.Ordinal, ev.FinalText); err != nil {
+				return err
+			}
+		}
 		switch final {
 		case "finished":
+			if held, err := holdForOwnerNotes(tx, t, r); err != nil || held {
+				return err
+			}
 			return publishDisposition(tx, t, r)
 		case "cancelled":
 			if err := setTaskState(tx, t.ID, "cancelled", "cancelled by request"); err != nil {
@@ -1391,6 +1500,12 @@ func (s *Store) FinishTaskRun(run string, ev RunEvidence) (string, error) {
 			if r.DispositionText != "" {
 				text += "\nUnverified text from the worker:\n" + r.DispositionText
 			}
+			if text, err = withOutputNote(tx, t.ID, text); err != nil {
+				return err
+			}
+			if text, err = withUsageNote(tx, t.ID, text); err != nil {
+				return err
+			}
 			return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "failed", bound4000(text), "")
 		default:
 			if err := setTaskState(tx, t.ID, "blocked", detail); err != nil {
@@ -1415,7 +1530,14 @@ func publishDisposition(tx *sql.Tx, t Task, r TaskRun) error {
 		if err := setTaskState(tx, t.ID, "done", "reported"); err != nil {
 			return err
 		}
-		return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "report", r.DispositionText, "")
+		text, err := withOutputNote(tx, t.ID, r.DispositionText)
+		if err != nil {
+			return err
+		}
+		if text, err = withUsageNote(tx, t.ID, text); err != nil {
+			return err
+		}
+		return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "report", text, "")
 	case DispositionAsk, DispositionAskOwner:
 		audience, state := AudienceCoordinator, "waiting_coordinator"
 		if r.Disposition == DispositionAskOwner {
@@ -1829,6 +1951,36 @@ func (s *Store) TouchCoordinator(project string) error {
 	return err
 }
 
+// ClaimCoordinator makes chat the project's active coordinator chat (T-090)
+// and returns the chat it replaced, or "". The newest chat that acts is the
+// coordinator; the one before is told so by its wait.
+func (s *Store) ClaimCoordinator(project, chat string) (string, error) {
+	var old string
+	err := s.tx(func(tx *sql.Tx) error {
+		err := tx.QueryRow(`SELECT chat FROM coordinator_chats WHERE project=?`, project).Scan(&old)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		if old == chat {
+			old = ""
+			return nil
+		}
+		_, err = tx.Exec(`INSERT INTO coordinator_chats(project,chat,since) VALUES (?,?,?) ON CONFLICT(project) DO UPDATE SET chat=excluded.chat,since=excluded.since`, project, chat, now())
+		return err
+	})
+	return old, err
+}
+
+// CoordinatorChat returns the project's active coordinator chat, or "".
+func (s *Store) CoordinatorChat(project string) (string, error) {
+	var chat string
+	err := s.db.QueryRow(`SELECT chat FROM coordinator_chats WHERE project=?`, project).Scan(&chat)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return chat, err
+}
+
 // CoordinatorLastSeen returns when a coordinator last called this project, or "".
 func (s *Store) CoordinatorLastSeen(project string) (string, error) {
 	var at string
@@ -1855,6 +2007,23 @@ type AgentSummary struct {
 	// FullAccess: the owner allowed this agent any command (T-054). Only
 	// known for this computer.
 	FullAccess bool `json:"full_access,omitempty"`
+	// ModelsNote and LimitNote explain an empty models list and a missing
+	// limit (T-093).
+	ModelsNote string `json:"models_note,omitempty"`
+	LimitNote  string `json:"limit_note,omitempty"`
+}
+
+// explain fills the notes of an agent with no models or no limit (T-093).
+func (a *AgentSummary) explain() {
+	if len(a.Models) == 0 && a.Agent != "claude" {
+		a.ModelsNote = "the owner listed no models for this agent on that computer (window, agent settings): leave model out to use the agent's own default"
+	}
+	if a.Limit == nil {
+		a.LimitNote = "no limit reported yet: it appears after a worker task of this agent on that computer"
+		if a.Agent == "codex" {
+			a.LimitNote = "Codex does not report its limit in worker runs; ask the owner if it matters"
+		}
+	}
 }
 
 // ComputerSummary is one computer as list_agents shows it for a project.
@@ -1863,9 +2032,11 @@ type ComputerSummary struct {
 	Name     string         `json:"name"`
 	This     bool           `json:"this"`
 	Online   bool           `json:"online"`
-	Folder   string         `json:"folder"`
+	Folder   string         `json:"folder,omitempty"`
 	Agents   []AgentSummary `json:"agents"`
-	Note     string         `json:"note,omitempty"`
+	// Reconnecting: see NetPeer.Reconnecting (T-092).
+	Reconnecting bool   `json:"reconnecting,omitempty"`
+	Note         string `json:"note,omitempty"`
 	// AcceptsTasks and HasProject are another computer's readiness as it
 	// reported it (T-070); left out when it did not report them.
 	AcceptsTasks *bool `json:"accepts_tasks,omitempty"`
@@ -1947,7 +2118,16 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 			if models == nil {
 				models = []string{}
 			}
-			o.Agents = append(o.Agents, AgentSummary{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting, Models: models, Limit: limitView(a.Limit, time.Now())})
+			as := AgentSummary{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting, Models: models, Limit: limitView(a.Limit, time.Now())}
+			as.explain()
+			o.Agents = append(o.Agents, as)
+		}
+		if p.Ready == nil {
+			o.Note = "it runs an older Messenger that does not say whether it takes tasks or has this project's folder; a task there fails with its reason if not. Its folder path is never shown here."
+		}
+		if p.Reconnecting {
+			o.Reconnecting = true
+			o.Note = strings.TrimSpace("reconnecting after a restart: a task for it is accepted and waits on the server until it is back. " + o.Note)
 		}
 		list = append(list, o)
 	}
@@ -2127,4 +2307,13 @@ func (s *Store) RemoveComputerAgent(provider string) error {
 		}
 		return nil
 	})
+}
+
+// NewChatID names one coordinator chat (T-090).
+func NewChatID() (string, error) {
+	id, err := randomID()
+	if err != nil {
+		return "", err
+	}
+	return "chat-" + id[:16], nil
 }

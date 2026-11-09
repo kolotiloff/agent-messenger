@@ -1,6 +1,7 @@
 package adapters
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -164,5 +165,32 @@ func TestWorkerPromptKeepsAFailedCommitOpen(t *testing.T) {
 		if !strings.Contains(TaskWorkerPrompt, want) {
 			t.Fatalf("worker prompt lacks %q: %s", want, TaskWorkerPrompt)
 		}
+	}
+}
+
+// T-087: the last message is kept in full, line breaks included.
+func TestFinalTextIsKeptWhole(t *testing.T) {
+	long := strings.Repeat("line of the audit\n", 200)
+	line, _ := json.Marshal(map[string]any{"type": "result", "session_id": "s", "result": long})
+	var r TaskEventResult
+	ParseTaskEvent("claude", line, &r)
+	if r.FinalText != strings.TrimSpace(long) || len([]rune(r.LastText)) > lastTextLimit+1 {
+		t.Fatalf("final %d last %d", len(r.FinalText), len(r.LastText))
+	}
+	codex, _ := json.Marshal(map[string]any{"type": "item.completed", "item": map[string]any{"type": "agent_message", "text": long}})
+	var c TaskEventResult
+	ParseTaskEvent("codex", codex, &c)
+	if c.FinalText != strings.TrimSpace(long) {
+		t.Fatal("codex final text")
+	}
+}
+
+// T-088: Claude's cache writes are kept apart from its reads.
+func TestClaudeCacheWriteIsKept(t *testing.T) {
+	line, _ := json.Marshal(map[string]any{"type": "result", "session_id": "s", "usage": map[string]any{"input_tokens": 18, "cache_creation_input_tokens": 55000, "cache_read_input_tokens": 375000, "output_tokens": 3200}})
+	var r TaskEventResult
+	ParseTaskEvent("claude", line, &r)
+	if r.Usage == nil || r.Usage.Input != 430018 || r.Usage.CacheWrite != 55000 || r.Usage.Cached != 375000 || r.Usage.Output != 3200 {
+		t.Fatalf("usage %+v", r.Usage)
 	}
 }

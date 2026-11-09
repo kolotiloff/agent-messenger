@@ -198,3 +198,21 @@ A limit is recorded only from a worker task that ran on that computer; the coord
 2026-11-09, Claude Code, after the owner found the system title bar still on the Mac and asked that the program look the same everywhere.
 
 Mac: the window keeps its title bar but makes it transparent and hides the title, so the page runs under it. The red, yellow and green buttons stay the system's own at the top left, where Mac users expect them; the sidebar leaves room for them. Web content takes every click, so the page sends the app the rectangles of its empty top (the tab row up to the edge, the sidebar above its first item) and of the controls in them; the app moves the window on a press there and follows the system's double-click setting. Linux: GTK gets an empty, zero-height title bar, which keeps GTK's own border for resizing, and the page draws the Windows-style buttons and asks GTK to move, maximise, minimise or close. Rejected: Windows-style buttons on the Mac (foreign there, and full screen would be lost).
+
+## D-096 — The owner's message to a working worker waits for its current run (T-085)
+
+2026-11-09, Claude Code, owner's answer (a) to Q-026.
+
+While a task of this computer is running or waits for the coordinator, the window's box writes to the worker. The note is kept (`task_owner_notes`, idempotent by operation id) and the coordinator gets an `owner_note` event. When the current run ends: with a question, the note travels with the answer; with a report, the report is held (shown as an interim report, not sent to the coordinator) and the task continues at once in the same conversation with a `note` run, whose `read_task` gives the notes and the held report. The next run of any kind takes every waiting note. A task that stops (done, failed, cancelled, blocked, interrupted) marks its waiting notes undelivered; nothing sends them again by itself. Refused: tasks between computers (the message would have to cross the network; later), a question to the owner (answer it instead). Rejected for now: interrupting the run (b) and live delivery (c).
+
+## D-097 — Tasks of other computers run without «Любые команды» by default (T-094)
+
+2026-11-09, Claude Code, after the security review: with «Любые команды» on (D-067) and tasks of the network accepted (D-056), any computer of the network, or anyone holding its device key, could run any command on every other computer. Now a task from another computer runs with the agent's own permission checks even when the agent has «Любые команды» here; the owner can allow it with «Любые команды для задач других компьютеров» on «Сервер» (off by default). Answers and follow-ups of such a task follow the same rule. Accepting tasks of the network stays on (D-056): a task with permission checks still does useful work. Cursor without «Любые команды» now runs with `--sandbox enabled` instead of the owner's own Cursor setting, so such a Cursor worker may be unable to commit; the owner can allow full access per computer.
+
+## D-098 — The worker's last message is kept whole and readable by the coordinator (T-087)
+
+2026-11-09, Claude Code, after a Codex audit on ПК-2 came back as a six-line report while its full text was only in the worker's last message, and the file it had written was deleted. Messenger now keeps each run's last worker message in full (up to 60 000 characters) on the computer that ran it; a task of another computer sends it back before its report (an `output` message; older computers ignore it). When it says more than the report, the report or failure tells the coordinator so, and the coordinator reads it with `task_output` in parts of 20 000 characters. Reports stay short (D-087); this only makes sure nothing the worker wrote is lost.
+
+## D-099 — The newest coordinator chat that acts is the coordinator (T-090)
+
+2026-11-09, Claude Code, coordinator's list item 4. Each coordinator chat gets its own id. The newest chat that waits, starts, answers, continues or cancels becomes the project's coordinator; the wait of the chat before ends at once with `superseded`, and that chat is told to stop and tell the owner. The new chat is told it replaced another one. Nothing is refused: refusing would leave the owner stuck when the old chat is gone without a goodbye; replacing matches the owner's plan of a fresh chat each day and night.

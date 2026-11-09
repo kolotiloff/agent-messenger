@@ -111,7 +111,7 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	}
 	spec := adapters.TaskRunSpec{
 		Provider: task.Provider, CLI: task.CLI, Messenger: exe, DB: filepath.Join(s.root, dbName),
-		RunID: run.ID, Receipt: run.Receipt, Session: task.SessionID, Resume: run.Kind == "answer" || run.Kind == "continue", Profile: task.Profile, Model: task.Model, FullAccess: task.FullAccess,
+		RunID: run.ID, Receipt: run.Receipt, Session: task.SessionID, Resume: run.Kind == "answer" || run.Kind == "continue" || run.Kind == "note", Profile: task.Profile, Model: task.Model, FullAccess: task.FullAccess,
 	}
 	args, err := adapters.TaskArgs(spec)
 	if err != nil {
@@ -266,9 +266,9 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	}
 	_ = stdout.Close()
 	result, readErr := read.result, read.err
-	ev := core.RunEvidence{ExitObserved: waitErr == nil, ExitCode: exitCode, Cancelled: cancelled, LastText: result.LastText}
+	ev := core.RunEvidence{ExitObserved: waitErr == nil, ExitCode: exitCode, Cancelled: cancelled, LastText: result.LastText, FinalText: result.FinalText}
 	if u := result.Usage; u != nil {
-		ev.Usage = &core.TaskUsage{InputTokens: u.Input, CachedTokens: u.Cached, OutputTokens: u.Output}
+		ev.Usage = &core.TaskUsage{InputTokens: u.Input, CachedTokens: u.Cached, OutputTokens: u.Output, CacheWriteTokens: u.CacheWrite}
 		if u.HasCost {
 			cost := u.Cost
 			ev.Usage.CostUSD = &cost

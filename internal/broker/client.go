@@ -114,8 +114,13 @@ func pinnedClient(fingerprint string) *http.Client {
 		// certificate is still verified against the pinned fingerprint.
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true, VerifyPeerCertificate: verify, MinVersion: tls.VersionTLS13},
 	}
-	return &http.Client{Transport: transport, Timeout: 15 * time.Second}
+	return &http.Client{Transport: transport, Timeout: 15 * time.Second, CheckRedirect: noRedirects}
 }
+
+// noRedirects keeps a client at the address it was given: a redirect would
+// carry the device key to another server, possibly over plain HTTP. The
+// redirect answer itself is returned, and call treats it as an error.
+func noRedirects(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
 // call makes one request. A pin mismatch is ErrUntrusted; an unreachable
 // server is a plain error that says so.
@@ -146,6 +151,9 @@ func call(ctx context.Context, client *http.Client, method, address, path, key s
 		return 0, fmt.Errorf("сервер %s недоступен: %w", address, unwrapNet(err))
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+		return resp.StatusCode, fmt.Errorf("сервер %s ответил перенаправлением (код %d); оно не выполняется", address, resp.StatusCode)
+	}
 	if out != nil && resp.StatusCode == http.StatusOK {
 		if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponse)).Decode(out); err != nil {
 			return resp.StatusCode, errors.New("сервер ответил непонятно")
@@ -303,6 +311,8 @@ func SendMessage(ctx context.Context, c Connection, to, opID string, body []byte
 		return ErrNoMailbox
 	case code == http.StatusTooManyRequests:
 		return ErrMailboxFull
+	case code == http.StatusBadRequest:
+		return ErrBadMessage
 	}
 	return fmt.Errorf("сервер не принял сообщение (код %d)", code)
 }

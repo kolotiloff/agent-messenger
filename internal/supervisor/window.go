@@ -78,6 +78,12 @@ func (s *Supervisor) OwnerAnswer(task, question, op, text string) error {
 	return s.store.WindowAnswer(task, question, op, text)
 }
 
+// OwnerNote keeps the owner's message to a working task; the worker gets it
+// when its current step ends (T-085).
+func (s *Supervisor) OwnerNote(task, op, text string) error {
+	return s.store.AddOwnerNote(task, op, text)
+}
+
 // SetAgent registers an agent program for tasks with the worker profile.
 func (s *Supervisor) SetAgent(provider, cli, environment string) error {
 	return s.store.SetComputerAgent(provider, cli, environment, "worker")

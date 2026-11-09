@@ -1,10 +1,13 @@
 package core
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -95,7 +98,15 @@ type NetPeer struct {
 	// Usage is what the tasks that ran on it spent, by day and agent
 	// (T-076); nil when it did not report it (an older version).
 	Usage []UsageDayAgent
+	// Reconnecting: the computer was in the network a moment ago and has
+	// not reported since this computer or the server restarted (T-092). A
+	// task for it waits in the server's mailbox until it is back.
+	Reconnecting bool
 }
+
+// reconnectGrace is how long a computer that left the server's list stays
+// listed as reconnecting.
+const reconnectGrace = 15 * time.Minute
 
 // NetReady says whether a computer runs tasks from other computers and for
 // which projects it has a folder.
@@ -181,7 +192,28 @@ type netBody struct {
 	Lines int `json:"lines,omitempty"`
 }
 
+// netOpID is the broker's rule for an operation id. An id built from
+// another computer's task or question id may break it; such an id is
+// replaced by a stable hash so one message can never stop the outbox.
+var netOpID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9:._-]{0,159}$`)
+
+// netRef is what a task or question id from another computer may look like.
+var netRef = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9:._-]{0,79}$`)
+
+// remoteEventKinds are the task events another computer may forward; any
+// other kind is ignored (audit 2026-11-09).
+var remoteEventKinds = map[string]bool{"report": true, "question": true, "failed": true, "blocked": true, "interrupted": true, "cancelled": true, "answered": true, "continued": true, "started": true, "accepted": true}
+
+func safeNetOp(opID string) string {
+	if netOpID.MatchString(opID) {
+		return opID
+	}
+	sum := sha256.Sum256([]byte(opID))
+	return "h." + hex.EncodeToString(sum[:20])
+}
+
 func enqueueNet(tx *sql.Tx, broker, to, opID, task string, b netBody) error {
+	opID = safeNetOp(opID)
 	raw, err := json.Marshal(b)
 	if err != nil {
 		return err
@@ -228,10 +260,73 @@ func (s *Store) SetNetwork(broker, self string, peers []NetPeer) error {
 		if err := setMeta(tx, "net_self", self); err != nil {
 			return err
 		}
+		// T-092: a computer of the same network that is missing or has not
+		// reported since a restart stays listed as reconnecting for a while,
+		// with what it reported before.
+		type oldPeer struct {
+			p     NetPeer
+			since string
+		}
+		old := map[string]oldPeer{}
+		if was == broker && broker != "" {
+			list, err := netPeers(tx)
+			if err != nil {
+				return err
+			}
+			for _, p := range list {
+				var since string
+				if err := tx.QueryRow(`SELECT missing_since FROM net_peers WHERE peer=?`, p.ID).Scan(&since); err != nil {
+					return err
+				}
+				old[p.ID] = oldPeer{p, since}
+			}
+		}
 		if _, err := tx.Exec(`DELETE FROM net_peers`); err != nil {
 			return err
 		}
 		at := now()
+		cutoff := time.Now().UTC().Add(-reconnectGrace).Format(time.RFC3339Nano)
+		listed := map[string]bool{}
+		for i := range peers {
+			listed[peers[i].ID] = true
+		}
+		missing := map[string]string{}
+		for id, o := range old {
+			if listed[id] {
+				continue
+			}
+			if o.since != "" && o.since < cutoff {
+				continue
+			}
+			p := o.p
+			p.Reconnecting, p.Age = true, -1
+			peers = append(peers, p)
+			if o.since == "" {
+				missing[id] = at
+			} else {
+				missing[id] = o.since
+			}
+		}
+		for i := range peers {
+			p := &peers[i]
+			o, known := old[p.ID]
+			if listed[p.ID] && p.Age < 0 && len(p.Agents) == 0 && known && len(o.p.Agents) > 0 {
+				if o.since != "" && o.since < cutoff {
+					continue
+				}
+				p.Agents, p.Reconnecting = o.p.Agents, true
+				if p.Ready == nil {
+					p.Ready = o.p.Ready
+				}
+				if p.Usage == nil {
+					p.Usage = o.p.Usage
+				}
+				missing[p.ID] = o.since
+				if o.since == "" {
+					missing[p.ID] = at
+				}
+			}
+		}
 		for _, p := range peers {
 			if p.Agents == nil {
 				p.Agents = []NetAgent{}
@@ -247,7 +342,7 @@ func (s *Store) SetNetwork(broker, self string, peers []NetPeer) error {
 				u, _ := json.Marshal(p.Usage)
 				usage = string(u)
 			}
-			if _, err := tx.Exec(`INSERT INTO net_peers(peer,name,host,age,agents,ready,usage,updated_at) VALUES (?,?,?,?,?,?,?,?)`, p.ID, p.Name, boolInt(p.Host), p.Age, string(raw), ready, usage, at); err != nil {
+			if _, err := tx.Exec(`INSERT INTO net_peers(peer,name,host,age,agents,ready,usage,updated_at,missing_since) VALUES (?,?,?,?,?,?,?,?,?)`, p.ID, p.Name, boolInt(p.Host), p.Age, string(raw), ready, usage, at, missing[p.ID]); err != nil {
 				return err
 			}
 		}
@@ -268,7 +363,7 @@ func (s *Store) NetPeers() ([]NetPeer, error) {
 }
 
 func netPeers(tx *sql.Tx) ([]NetPeer, error) {
-	rows, err := tx.Query(`SELECT peer,name,host,age,agents,ready,usage,updated_at FROM net_peers ORDER BY host DESC, name, peer`)
+	rows, err := tx.Query(`SELECT peer,name,host,age,agents,ready,usage,updated_at,missing_since!='' FROM net_peers ORDER BY host DESC, name, peer`)
 	if err != nil {
 		return nil, err
 	}
@@ -278,7 +373,7 @@ func netPeers(tx *sql.Tx) ([]NetPeer, error) {
 		var p NetPeer
 		var host int
 		var agents, ready, usage, at string
-		if err := rows.Scan(&p.ID, &p.Name, &host, &p.Age, &agents, &ready, &usage, &at); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &host, &p.Age, &agents, &ready, &usage, &at, &p.Reconnecting); err != nil {
 			return nil, err
 		}
 		p.Host = host != 0
@@ -347,6 +442,34 @@ func (s *Store) SetNetAccept(on bool) error {
 		v = "1"
 	}
 	return s.tx(func(tx *sql.Tx) error { return setMeta(tx, "net_accept", v) })
+}
+
+// NetFullAccess reports whether tasks of other computers may run with the
+// agent's «Любые команды» (T-094). Off unless the owner turns it on: a task
+// from the network runs with the agent's own permission checks.
+func (s *Store) NetFullAccess() (bool, error) {
+	var on bool
+	err := s.tx(func(tx *sql.Tx) error {
+		var err error
+		on, err = netFullAccess(tx)
+		return err
+	})
+	return on, err
+}
+
+func netFullAccess(tx *sql.Tx) (bool, error) {
+	v, err := metaValue(tx, "net_full_access")
+	return v == "1", err
+}
+
+// SetNetFullAccess turns «Любые команды для задач других компьютеров» on or
+// off. It applies to new runs; a run already started keeps what it had.
+func (s *Store) SetNetFullAccess(on bool) error {
+	v := "0"
+	if on {
+		v = "1"
+	}
+	return s.tx(func(tx *sql.Tx) error { return setMeta(tx, "net_full_access", v) })
 }
 
 // ---- origin side ----
@@ -567,7 +690,9 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 			return nil
 		}
 		var b netBody
-		if json.Unmarshal(m.Body, &b) != nil || b.Task == "" {
+		// A message whose ids could not travel back is ignored, so a reply
+		// to it can never block this computer's outbox.
+		if json.Unmarshal(m.Body, &b) != nil || !netRef.MatchString(b.Task) || (b.Question != "" && !netRef.MatchString(b.Question)) {
 			return nil
 		}
 		from := netLink{broker: broker, peer: m.From, task: b.Task}
@@ -584,6 +709,8 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 			return applyLogRequest(tx, from, b)
 		case "log":
 			return applyLogReply(tx, from, b)
+		case "output":
+			return applyOutput(tx, from, b)
 		}
 		return nil
 	})
@@ -769,7 +896,7 @@ func applyReport(tx *sql.Tx, from netLink, b netBody) error {
 		return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "blocked", why, "")
 	}
 	// An event of the run on the other computer.
-	if !taskStates[b.State] || (b.Audience != AudienceCoordinator && b.Audience != AudienceOwner) || b.Event == "" {
+	if !taskStates[b.State] || (b.Audience != AudienceCoordinator && b.Audience != AudienceOwner) || !remoteEventKinds[b.Event] {
 		return nil
 	}
 	question := ""
@@ -826,5 +953,12 @@ func applyReport(tx *sql.Tx, from netLink, b netBody) error {
 	if err := setTaskUsage(tx, t.ID, b.Usage); err != nil {
 		return err
 	}
-	return insertTaskEvent(tx, t.Project, t.ID, b.Audience, b.Event, clip(b.Text, MaxDispositionText+1000), question)
+	text := clip(b.Text, MaxDispositionText+1000)
+	if b.Event == "report" || b.Event == "failed" {
+		var err error
+		if text, err = withOutputNote(tx, t.ID, text); err != nil {
+			return err
+		}
+	}
+	return insertTaskEvent(tx, t.Project, t.ID, b.Audience, b.Event, text, question)
 }

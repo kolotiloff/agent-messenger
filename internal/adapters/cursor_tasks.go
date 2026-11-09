@@ -157,10 +157,14 @@ func cursorTaskArgs(s TaskRunSpec) ([]string, error) {
 	} else {
 		// D-023, D-028: a headless run cannot ask, so its actions are
 		// approved, as for the other workers. The project's own Cursor
-		// rules and the owner's sandbox setting still apply.
+		// rules still apply. Without full access (D-065) the sandbox is
+		// asked for explicitly, so a forced run never depends on the
+		// owner's own sandbox setting.
 		args = append(args, "--force")
 		if s.FullAccess {
 			args = append(args, "--sandbox", "disabled")
+		} else {
+			args = append(args, "--sandbox", "enabled")
 		}
 	}
 	if s.Model != "" {

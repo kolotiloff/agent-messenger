@@ -113,26 +113,55 @@ func logTail(root string, lines int) (string, error) {
 }
 
 var (
-	logSecretWord = regexp.MustCompile(`(?i)\b(authorization|bearer|token|secret|password|passwd|api[_-]?key|access[_-]?key|cookie)\b(["']?\s*[:=]\s*|\s+)("[^"]*"|\S+)`)
-	logInvite     = regexp.MustCompile(`am1:\S+`)
-	logUUID       = regexp.MustCompile(`(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b`)
-	logHex        = regexp.MustCompile(`\b[0-9a-fA-F]{24,}\b`)
-	logLongToken  = regexp.MustCompile(`[A-Za-z0-9+_=-]{32,}`)
+	// An authorization header hides its whole value, whatever the scheme.
+	logAuthorization = regexp.MustCompile(`(?i)\b([a-z-]*authorization)(["']?\s*[:=]\s*)[^\r\n]*`)
+	logSecretWord    = regexp.MustCompile(`(?i)\b(bearer|token|secret|password|passwd|api[_-]?key|access[_-]?key|cookie)\b(["']?\s*[:=]\s*|\s+)("[^"]*"|\S+)`)
+	// Compound keys such as access_token, device_key or session_id hide a
+	// value given with "=" or ":".
+	logSecretKey = regexp.MustCompile(`(?i)\b([a-z0-9_-]*(?:token|secret|key|password|passwd|session[_-]?id))(["']?\s*[:=]\s*)("[^"]*"|[^\s,;&"'}]+)`)
+	logURLCred   = regexp.MustCompile(`(?i)\b([a-z][a-z0-9+.-]*://)[^\s/@:]+:[^\s/@]+@`)
+	logShortCode = regexp.MustCompile(`(?i)(code|код)([^\n\d]{0,24}?)\b\d{6}\b`)
+	logInvite    = regexp.MustCompile(`am1:\S+`)
+	logUUID      = regexp.MustCompile(`(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b`)
+	logHex       = regexp.MustCompile(`\b[0-9a-fA-F]{24,}\b`)
+	logLongToken = regexp.MustCompile(`[A-Za-z0-9+/._=-]{32,}`)
 )
 
 // redactLog removes what must not leave the computer: session ids,
-// invitation codes, keys and long tokens.
+// invitation codes, keys, passwords, short codes and long tokens.
 func redactLog(text string) string {
+	text = logAuthorization.ReplaceAllString(text, "${1}${2}[скрыто]")
+	text = logURLCred.ReplaceAllString(text, "${1}[скрыто]@")
 	text = logSecretWord.ReplaceAllString(text, "${1}${2}[скрыто]")
+	text = logSecretKey.ReplaceAllString(text, "${1}${2}[скрыто]")
+	text = logShortCode.ReplaceAllString(text, "${1}${2}[скрыто]")
 	text = logInvite.ReplaceAllString(text, "am1:[скрыто]")
 	text = logUUID.ReplaceAllString(text, "[id]")
 	text = logHex.ReplaceAllString(text, "[hex]")
 	return logLongToken.ReplaceAllStringFunc(text, func(s string) string {
-		// A run of letters with digits is a token; a long word or a line
-		// of dashes is not.
-		if strings.ContainsAny(s, "0123456789") && strings.IndexFunc(s, func(r rune) bool { return r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' }) >= 0 {
-			return "[скрыто]"
+		// A run of letters with digits is a token; a long word, a line of
+		// dashes or a path of short parts is not.
+		if !strings.ContainsAny(s, "0123456789") || strings.IndexFunc(s, func(r rune) bool { return r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' }) < 0 {
+			return s
 		}
-		return s
+		if looksLikePath(s) {
+			return s
+		}
+		return "[скрыто]"
 	})
+}
+
+// looksLikePath reports a run split by "/" or "." into short parts, such as
+// a file path or a dotted name; a base64 or JWT value has long parts or
+// "+" and "=" in it.
+func looksLikePath(s string) bool {
+	if !strings.ContainsAny(s, "/.") || strings.ContainsAny(s, "+=") {
+		return false
+	}
+	for _, part := range strings.FieldsFunc(s, func(r rune) bool { return r == '/' || r == '.' }) {
+		if len(part) >= 24 {
+			return false
+		}
+	}
+	return true
 }
