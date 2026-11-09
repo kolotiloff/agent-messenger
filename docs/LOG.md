@@ -2,6 +2,28 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-09 — Claude Code (T-121 task time label, T-122 one place for «Любые команды», T-123 restart waits for tasks)
+
+- The update button at the bottom left shows a down arrow with a bar (owner); the page menu with «Перезагрузить» (it only reloads the page) is gone outside text. T-126, T-128, T-129 recorded for 0.60.
+- T-127 (D-111): own server or joining another one, not both; «Отключить» leaves the server; a computer that joined again is listed once; the network error clears on a change.
+- T-124: stop and send in the reply box are drawn icons on one grid, level and alike, with the same hover.
+- T-125 (D-110): the owner's message to a worker waiting for the coordinator answers its question at once.
+- T-123: the restart warning lists the running tasks and by default waits for them, then restarts by itself (owner's variant 1).
+- T-122 (D-109): the switch for other computers' tasks is on «Агенты» under «Любые команды» and on by default (owner's decision).
+- The owner chose variant 2 of three mockups: the task row shows «сегодня 21:49», «вчера 18:05» or the date; full times are in the tooltip. On `claude/ui-tweaks`, not released.
+
+## 2026-11-09 — Claude Code (T-117, T-119, T-120, T-112, T-118)
+
+- Coordinator's chat had six tools: its entry in Claude started the client's copy of an old version. T-117: the entry starts the installed program, our stale entry is replaced by itself, and `messenger coordinator` relays to the updated program (D-107). A chat open before this version needs one reconnect or a new chat.
+- T-120: the coordinator watches in the background (`coordinator-watch`) and ends its turn, so the owner's messages reach it; wait waits at most 120 s.
+- T-112: `task_messages` reads the last messages of any task. T-119: own tasks name this computer. T-118 is blocked by Q-029 (continuing an interrupted run would relax D-021).
+- All on `claude/ui-tweaks`, not released.
+
+## 2026-11-09 — Claude Code (T-111 open other computers' tasks)
+
+- Owner on 0.58: some tasks in the list would not open. They were other computers' tasks, now mixed with own ones (T-110) but still not clickable. They open as a read-only card now. On `claude/ui-tweaks`, not released.
+- The same owner restarted ПК-1's client during tasks after an update; the window asks first («Перезапустить всё равно») and the interrupted runs wait for the owner with an unknown result, as designed (no automatic retry).
+
 ## 2026-11-09 — Claude Code (release 0.58)
 
 - PR #89 merged and released as 0.58 (`0.0.0-preview.58`): T-097 to T-110 and a ten-minute test budget per package in `scripts/check.sh` (the supervisor package timed out on CI at five).

@@ -705,6 +705,23 @@ func (b *Broker) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, PingResult{BrokerID: b.id, DeviceID: d.ID, Name: d.Name, Time: d.LastSeen})
 	})
+	// A device leaves the broker when its computer disconnects, so the
+	// others do not keep seeing it as a computer that went away.
+	mux.HandleFunc("/v1/leave", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method", http.StatusMethodNotAllowed)
+			return
+		}
+		d, ok := b.authorized(w, r)
+		if !ok {
+			return
+		}
+		if err := b.Revoke(d.ID); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "unavailable"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{})
+	})
 	mux.HandleFunc("/v1/pair/start", b.handlePairStart)
 	mux.HandleFunc("/v1/pair/finish", b.handlePairFinish)
 	mux.HandleFunc("/v1/presence", b.handlePresence)

@@ -448,8 +448,8 @@ func (s *Store) SetNetAccept(on bool) error {
 }
 
 // NetFullAccess reports whether tasks of other computers may run with the
-// agent's «Любые команды» (T-094). Off unless the owner turns it on: a task
-// from the network runs with the agent's own permission checks.
+// agent's «Любые команды» (T-094). On unless the owner turned it off
+// (D-109): a computer that has just joined the network works as it is.
 func (s *Store) NetFullAccess() (bool, error) {
 	var on bool
 	err := s.tx(func(tx *sql.Tx) error {
@@ -462,7 +462,7 @@ func (s *Store) NetFullAccess() (bool, error) {
 
 func netFullAccess(tx *sql.Tx) (bool, error) {
 	v, err := metaValue(tx, "net_full_access")
-	return v == "1", err
+	return v != "0", err
 }
 
 // SetNetFullAccess turns «Любые команды для задач других компьютеров» on or
@@ -829,7 +829,7 @@ func applyAnswer(tx *sql.Tx, from netLink, opID string, b netBody) error {
 		return err
 	}
 	err = savepoint(tx, func() error {
-		return answerTask(tx, t.ID, b.Question, "net:"+from.broker+":"+from.peer+":"+opID, b.Text, b.By, true)
+		return answerTask(tx, t.ID, b.Question, "net:"+from.broker+":"+from.peer+":"+opID, b.Text, b.By, true, false)
 	})
 	if errors.Is(err, ErrRejected) {
 		return enqueueNet(tx, from.broker, from.peer, "answer-refused."+b.Question, t.ID, netBody{Kind: "answer_refused", Task: from.task, Question: b.Question, Reason: refusalText(err)})

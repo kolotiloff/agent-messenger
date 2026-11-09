@@ -53,6 +53,9 @@ func (s *Supervisor) WindowView(project string) (any, error) {
 	out.Paused, _ = s.store.Paused()
 	out.Messenger, _ = os.Executable()
 	out.DataRoot = s.root
+	if v.Project != "" {
+		s.repairStaleCoordinator(v.Project)
+	}
 	if v.Project != "" && !v.Coordinator.Connected {
 		link := s.CoordinatorLinkState(v.Project)
 		out.CoordinatorLink = &link

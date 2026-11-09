@@ -71,7 +71,7 @@ func (s *Supervisor) Server(_ context.Context, action string, payload json.RawMe
 		// of the request.
 		_ = s.server.CheckConnection(ctx)
 	case "disconnect":
-		if err := s.server.Disconnect(); err != nil {
+		if err := s.server.Disconnect(ctx); err != nil {
 			return nil, err
 		}
 	case "rename":
@@ -98,6 +98,12 @@ func (s *Supervisor) Server(_ context.Context, action string, payload json.RawMe
 		}
 	default:
 		return nil, errors.New("неизвестное действие сервера")
+	}
+	switch action {
+	case "enable", "disable", "connect", "disconnect":
+		// The last exchange's problem belongs to the network before the
+		// change; the next round reports the new one's.
+		s.setNetworkProblem("")
 	}
 	st := s.server.Status()
 	accept, err := s.store.NetAccept()

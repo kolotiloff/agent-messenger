@@ -218,3 +218,7 @@ func fileDigest(path string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 func syncDir(path string) error { return platform.SyncDir(path) }
+
+// InstallPrefix returns the prefix of an installation made by
+// `messenger install`, or "" for a plain program file.
+func InstallPrefix(executable string) string { return supervisor.InstallPrefix(executable) }

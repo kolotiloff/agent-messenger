@@ -36,6 +36,7 @@ func runDesktop(root string, args []string) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 	go func() { _, _ = io.Copy(io.Discard, os.Stdin); cancel() }()
+	recordProgram(root)
 	if err := ensureDesktopClient(ctx, root); err != nil {
 		return err
 	}

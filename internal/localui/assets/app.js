@@ -114,15 +114,15 @@
   if(location.hash)history.replaceState(null,'',location.pathname);
   function remember(key,value){try{localStorage.setItem(key,value);}catch(_){}}
   function recall(key){try{return localStorage.getItem(key)||'';}catch(_){return '';}}
-  let view=null,project=recall('messenger-project'),selectedTask='',feed=null,feedSignature='',viewSignature='';
+  let view=null,project=recall('messenger-project'),selectedTask='',selectedShared=null,feed=null,feedSignature='',viewSignature='';
   let online=false,offlineReason='',discovery=[],tab='tasks',refreshing=false,answering=false;
   const agentChecks=new Map(),checking=new Set(),rowNote=new Map();let autoChecked=false,discoveryLoaded=false;
-  let clientInfo=null,clientInfoAt=0,restart={busy:false,ask:null,error:''},autoRestarted=false;
+  let clientInfo=null,clientInfoAt=0,restart={busy:false,ask:null,error:'',wait:false},autoRestarted=false;
   // The start screen covers the window until the client first answers, for
   // at most bootLimit; then the usual notices take over (T-079).
   let booting=true;const bootLimit=20000;setTimeout(()=>{booting=false;renderBoot();},bootLimit);
   function renderBoot(){
-    const updating=restart.busy&&!restart.ask;
+    const updating=restart.busy&&!restart.ask&&!restart.wait;
     $('boot-cover').hidden=!(booting||updating);
     $('boot-text').textContent=updating?tr('Устанавливаем обновление…'):tr('Запуск…');
   }
@@ -214,12 +214,28 @@
   }
   function clock(at){const d=new Date(at);return isNaN(d.getTime())?'':d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});}
   const activeStates=['running','waiting_owner','waiting_coordinator'];
-  // When a task was given and when it ended, with the date unless today.
+  // T-121: the row shows only when the task was created: «сегодня 21:49»,
+  // «вчера 18:05», or the date alone for older ones. The status line below
+  // already says how long it took; the tooltip has the full times.
+  function sameDay(a,b){return a.toDateString()===b.toDateString();}
+  function longDay(d){return d.toLocaleDateString(amLocale,d.getFullYear()===new Date().getFullYear()?{day:'numeric',month:'long'}:{day:'numeric',month:'long',year:'numeric'});}
   function taskWhen(t){
-    const from=dayClock(t.created_at);if(!from)return '';
-    if(!t.finished_at)return tr('дана ')+from;
-    const end=new Date(t.finished_at).toDateString()===new Date(t.created_at).toDateString()?clock(t.finished_at):dayClock(t.finished_at);
-    return from+'–'+end;
+    const d=new Date(t.created_at);if(isNaN(d.getTime()))return '';
+    const today=new Date(),yesterday=new Date();yesterday.setDate(today.getDate()-1);
+    if(sameDay(d,today))return tr('сегодня ')+clock(t.created_at);
+    if(sameDay(d,yesterday))return tr('вчера ')+clock(t.created_at);
+    return d.toLocaleDateString(amLocale,d.getFullYear()===today.getFullYear()?{day:'numeric',month:'short'}:{day:'numeric',month:'short',year:'numeric'});
+  }
+  function taskWhenTitle(t){
+    const d=new Date(t.created_at);if(isNaN(d.getTime()))return '';
+    const lines=[tr('Создана ')+longDay(d)+tr(' в ')+clock(t.created_at)];
+    const e=new Date(t.finished_at||'');
+    if(t.finished_at&&!isNaN(e.getTime())){
+      const verb={failed:tr('Завершилась ошибкой'),interrupted:tr('Прервана'),blocked:tr('Заблокирована'),cancelled:tr('Отменена')}[t.state]||tr('Завершена');
+      lines.push(verb+' '+(sameDay(d,e)?'':longDay(e)+' ')+tr('в ')+clock(t.finished_at));
+      lines.push(tr('Всего ')+minutes(t.created_at,t.finished_at));
+    }
+    return lines.join('\n');
   }
   // T-034: why a run failed, as the provider reported it. Nothing is retried.
   function resetText(at){
@@ -469,22 +485,28 @@
     }
     const ownRow=t=>{
       const row=el('button',undefined,'am-task');row.type='button';row.setAttribute('aria-pressed',String(t.id===selectedTask));
-      const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),el('span',(names[t.agent]||t.agent)+(t.remote&&!t.remote.from?tr(' на ')+t.remote.name:'')));
+      // T-119: every own task says where it runs; this computer's name stands out.
+      const here=!(t.remote&&!t.remote.from),label=el('span',(names[t.agent]||t.agent)+tr(' на '));
+      label.append(el('span',here?(view.computer_name||tr('этом компьютере')):t.remote.name,here?'am-task-here':''));
+      const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),label);
       if(t.remote)agent.title=t.remote.from?tr('Задачу дал компьютер «')+t.remote.name+'»':tr('Выполняется на компьютере «')+t.remote.name+'»';
-      const when=taskWhen(t);if(when){const w=el('span',when,'am-task-when');w.title=tr('Когда задача дана')+(t.finished_at?tr(' и когда завершилась'):'');agent.append(w);}
+      const when=taskWhen(t);if(when){const w=el('span',when,'am-task-when');w.title=taskWhenTitle(t);agent.append(w);}
       const [text,cls]=taskStatus(t);
       const status=el('span',undefined,'am-task-status '+cls);
       if(t.state==='waiting_owner')status.append(el('span',undefined,'am-dot am-dot-wait'));
       const words=el('span');status.append(words);words.append(statusPiece(text,!!t.usage));
       if(t.usage){const used=el('span',usageShort(t.usage),'am-task-usage');used.title=usageLong(t.usage);words.append(used);}
       row.append(agent,el('span',t.title,'am-task-title'),status);
-      row.addEventListener('click',()=>{selectedTask=t.id;feedSignature='';renderTaskList();loadFeed();});
+      row.addEventListener('click',()=>{selectedTask=t.id;selectedShared=null;feedSignature='';renderTaskList();loadFeed();});
       return row;
     };
     const sharedRow=(t,p)=>{
-      const row=el('div',undefined,'am-task am-task-shared');row.title=tr('Задачу дал компьютер «')+p.name+tr('». Здесь её можно только посмотреть');
+      const row=el('button',undefined,'am-task am-task-shared');row.type='button';row.title=tr('Задачу дал компьютер «')+p.name+tr('». Здесь её можно только посмотреть');
+      row.setAttribute('aria-pressed',String(selectedShared?.peer===p.peer&&selectedShared?.id===t.id));
+      // T-111: another computer's task opens as a read-only card.
+      row.addEventListener('click',()=>{selectedShared={peer:p.peer,id:t.id};selectedTask='';feed=null;feedSignature='';renderTaskList();renderThread();});
       const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),el('span',(names[t.agent]||t.agent)+tr(' от «')+p.name+'»'));
-      const sharedWhen=taskWhen(t);if(sharedWhen)agent.append(el('span',sharedWhen,'am-task-when'));
+      const sharedWhen=taskWhen(t);if(sharedWhen){const w=el('span',sharedWhen,'am-task-when');w.title=taskWhenTitle(t);agent.append(w);}
       const [text,cls]=taskStatus(t);
       const words=el('span');words.append(statusPiece(text,!!t.tokens));
       if(t.tokens)words.append(el('span',tokensText(t.tokens)+tr(' токенов'),'am-task-usage'));
@@ -558,12 +580,38 @@
       thread.replaceChildren(box);return;
     }
     if(!view.coordinator.connected&&!view.tasks.length){head.replaceChildren();thread.replaceChildren(connectHelp());return;}
+    const shared=sharedSelection();
+    if(shared){renderSharedTask(shared.t,shared.p);return;}
     if(!selectedTask||!feed||feed.task.id!==selectedTask){
       head.replaceChildren();
       if(!selectedTask)thread.replaceChildren(el('p',view.tasks.length?tr('Выберите задачу в списке справа.'):tr('Задач пока нет. Их создаёт чат-координатор.'),'am-muted am-empty'));
       return;
     }
     renderFeed();
+  }
+  // The chosen task of another computer, if it is still in the lists.
+  function sharedSelection(){
+    if(!selectedShared)return null;
+    const p=(view?.shared||[]).find(x=>x.peer===selectedShared.peer),t=p?.tasks.find(x=>x.id===selectedShared.id);
+    return t?{t,p}:null;
+  }
+  // Another computer's task (T-111): the window has only what that computer
+  // shares, so the card shows it and says where the full history is.
+  function renderSharedTask(t,p){
+    const thread=$('thread'),head=$('task-head');
+    const title=el('div',undefined,'am-task-head');title.append(el('h3',t.title));
+    title.append(el('p',(names[t.agent]||t.agent)+tr(', задачу дал компьютер «')+p.name+'»','am-small am-muted'));
+    const [statusText,statusCls]=taskStatus(t);
+    const when=t.finished_at?', '+clock(t.created_at)+'–'+clock(t.finished_at):tr(', начата в ')+clock(t.created_at);
+    const line=el('p',undefined,'am-small');line.append(el('span',statusText,statusCls),el('span',when,'am-muted'));
+    if(t.tokens)line.append(el('span',', '+tokensText(t.tokens)+tr(' токенов'),'am-muted'));
+    title.append(line);
+    const headRow=el('div',undefined,'am-task-head-row');headRow.append(title);head.replaceChildren(headRow);
+    const box=el('div',undefined,'am-settings');
+    if(t.report){box.append(el('h3',tr('Начало отчёта')),el('p',t.report,'am-shared-report'));}
+    else box.append(el('p',tr('Отчёта пока нет.'),'am-muted'));
+    box.append(el('p',tr('Полная история задачи — в окне компьютера «')+p.name+tr('». Здесь её можно только посмотреть.'),'am-small am-muted'));
+    thread.replaceChildren(box);$('compose').hidden=true;
   }
   // Called when only the feed may have changed.
   function updateFeed(){
@@ -696,7 +744,7 @@
     const active=activeStates.includes(t.state),box=$('answer-text');
     const note=canNote(t),wasNote=$('compose').dataset.mode==='note';
     $('compose').hidden=!q&&!active;
-    box.disabled=!q&&!note;box.placeholder=q?tr('Ответить исполнителю…'):note?tr('Написать исполнителю…'):t.remote?.from&&t.owner_question?tr('Отвечают на компьютере «')+t.remote.name+'»':t.pending_launch?tr('Задача ждёт запуска…'):tr('Исполнитель работает…');
+    box.disabled=!q&&!note;box.placeholder=q?tr('Ответить исполнителю…'):note&&t.state==='waiting_coordinator'?tr('Ответить вместо координатора…'):note?tr('Написать исполнителю…'):t.remote?.from&&t.owner_question?tr('Отвечают на компьютере «')+t.remote.name+'»':t.pending_launch?tr('Задача ждёт запуска…'):tr('Исполнитель работает…');
     $('answer-send').hidden=!q&&!note;$('task-stop').hidden=!active;
     $('compose').dataset.mode=q?'answer':note?'note':'';
     if($('compose').dataset.task!==feed.task.id){$('compose').dataset.task=feed.task.id;$('answer-status').textContent='';}
@@ -939,6 +987,19 @@
     const on=agents.filter(a=>a.full_access).length,all=!!agents.length&&on===agents.length;
     $('access-toggle').setAttribute('aria-checked',all?'true':on?'mixed':'false');
     $('access-title').textContent=on&&!all?tr('Любые команды: разрешены не всем'):tr('Любые команды');
+    // D-109: other computers' tasks follow this computer's agents unless the
+    // owner turns it off; on until the window has heard otherwise.
+    const net=!server||server.net_full_access!==false;
+    $('net-full-toggle').setAttribute('aria-checked',String(net));
+    $('net-full-toggle').disabled=!server;
+  }
+  async function toggleNetAccess(){
+    if(!server)return;
+    const on=!server.net_full_access,toggle=$('net-full-toggle');
+    toggle.disabled=true;toggle.setAttribute('aria-checked',String(on));
+    try{const answer=await postAPI('/api/server-action',{action:'net_full_access',on},28000);if(answer?.result)server=answer.result;}
+    catch(error){showError(error);}
+    finally{renderAccessBar();}
   }
   async function toggleAllAccess(){
     const on=$('access-toggle').getAttribute('aria-checked')!=='true';
@@ -973,14 +1034,19 @@
       renderRestart();
     }catch(_){}
   }
+  // T-123: «Дождаться и перезапустить» keeps asking the client every few
+  // seconds; it restarts by itself once no task runs (the client checks
+  // again), and nothing is cut. Closing the window stops the waiting only.
+  setInterval(()=>{if(restart.wait&&!restart.busy&&clientInfo?.outdated)restartClient(false);},5000);
   async function restartClient(confirm){
-    restart={busy:true,ask:restart.ask,error:''};renderRestart();
+    const wait=restart.wait&&!confirm;
+    restart={busy:true,ask:restart.ask,error:'',wait};renderRestart();
     let response,result={};
     try{response=await fetch('/api/restart-client',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({project,confirm}),cache:'no-store',signal:AbortSignal.timeout(50000)});result=await response.json().catch(()=>({}));}
-    catch(_){restart={busy:false,ask:null,error:tr('Ответ не получен, результат неизвестен. Подождите немного: окно проверит клиент само.')};renderRestart();loadClientInfo();return;}
-    if(response.ok&&result.ok){restart={busy:false,ask:null,error:''};showError(null);await loadClientInfo();viewSignature='';refresh();return;}
-    if(result.state==='confirm'){restart={busy:false,ask:{running:result.running||0,known:result.known!==false},error:''};renderRestart();return;}
-    restart={busy:false,ask:null,error:result.detail||tr('Перезапуск не подтверждён. Проверьте состояние.')};renderRestart();loadClientInfo();
+    catch(_){restart={busy:false,ask:null,error:tr('Ответ не получен, результат неизвестен. Подождите немного: окно проверит клиент само.'),wait:false};renderRestart();loadClientInfo();return;}
+    if(response.ok&&result.ok){restart={busy:false,ask:null,error:'',wait:false};showError(null);await loadClientInfo();viewSignature='';refresh();return;}
+    if(result.state==='confirm'){restart={busy:false,ask:{running:result.running||0,known:result.known!==false,tasks:result.tasks||[]},error:'',wait};renderRestart();return;}
+    restart={busy:false,ask:null,error:result.detail||tr('Перезапуск не подтверждён. Проверьте состояние.'),wait:false};renderRestart();loadClientInfo();
   }
   // A window newer than its client cannot work properly, so this dialog
   // covers the whole window until the client is restarted or the app quits.
@@ -994,16 +1060,29 @@
     const ask=restart.ask,canRestart=!!clientInfo?.restart,answering=clientInfo?.client==='running';
     const canQuit=!!window.webkit?.messageHandlers?.app;
     let title=tr('Нужно перезапустить Messenger'),text;
-    if(ask){title=ask.known?tr('Сейчас выполняются задачи'):tr('Не удалось проверить задачи');text=(ask.known?tr('Задач в работе: ')+ask.running+tr('. Перезапуск прервёт их.'):tr('Если задачи сейчас идут, перезапуск прервёт их.'))+tr(' Сами они не повторятся и будут ждать вашего решения.');}
+    const version=clientInfo?.window_version?tr('Версия ')+versionName(clientInfo.window_version).slice(1)+tr(' установлена. '):'';
+    if(ask&&restart.wait){title=tr('Ждём окончания задач');text=(ask.known?tr('Задач в работе: ')+ask.running+'. ':'')+tr('Messenger перезапустится сам, когда они закончатся. Если закрыть окно, задачи продолжат работать, но перезапуска не будет до следующего открытия.');}
+    else if(ask&&ask.known){title=tr('Обновление ждёт задачи: ')+ask.running;text=version+tr('Чтобы она заработала, Messenger перезапустится и прервёт задачи, которые идут сейчас. Сами они не повторятся.');}
+    else if(ask){title=tr('Не удалось проверить задачи');text=version+tr('Если задачи сейчас идут, перезапуск прервёт их. Сами они не повторятся.');}
     else if(restart.busy){title=tr('Обновляем Messenger');text=tr('Останавливаем старую версию и запускаем новую. Это займёт несколько секунд.');}
     else if(canRestart)text=tr('Приложение обновилось до версии ')+clientInfo.window_version+tr(', а в фоне работает ')+(clientInfo.client_version?tr('версия ')+clientInfo.client_version:tr('более ранняя версия'))+tr('. Пока она не перезапущена, Messenger не может работать. Задачи, история и устройства сохранятся.');
     else text=tr('В фоне работает более ранняя версия клиента. Закройте окно, выполните скопированную команду в Терминале и откройте окно снова.');
     $('restart-title').textContent=title;$('restart-text').textContent=text;
+    const list=$('restart-tasks');list.replaceChildren();
+    for(const t of ask?.tasks||[]){const row=el('div',undefined,'am-restart-task');row.append(el('span',(names[t.agent]||t.agent)+' · '+t.title),el('span',minutes(t.started_at),'am-status-run'));list.append(row);}
+    const others=ask?.known?ask.running-(ask.tasks||[]).length:0;
+    if(others>0)list.append(el('p',tr('И ещё в других проектах: ')+others,'am-small am-muted'));
+    list.hidden=!list.childElementCount;
+    dialog.classList.toggle('am-restart-ask',!!ask);
     $('restart-error').textContent=restart.error;$('restart-error').hidden=!restart.error;
     const go=$('restart-go'),quit=$('restart-quit'),copy=$('restart-copy');
-    go.hidden=!canRestart||!answering||restart.busy;
-    go.textContent=ask?tr('Перезапустить всё равно'):tr('Перезапустить');
-    go.classList.toggle('am-primary',!ask);go.classList.toggle('am-danger',!!ask);
+    // T-123: with tasks running the main button waits for them; cutting
+    // them is the separate red button.
+    const cut=$('restart-cut');
+    go.hidden=!canRestart||!answering||(restart.busy&&!restart.wait)||(!!ask&&restart.wait);
+    go.textContent=ask?tr('Дождаться и перезапустить'):tr('Перезапустить');go.disabled=restart.busy;
+    cut.hidden=!ask||!canRestart||!answering;cut.disabled=restart.busy&&!restart.wait;
+    cut.textContent=restart.wait?tr('Прервать сейчас'):tr('Прервать и перезапустить');
     quit.hidden=!canQuit;quit.disabled=restart.busy;
     copy.hidden=canRestart||!shutdownCommand();
     if(!dialog.open){dialog.showModal();(go.hidden?quit.hidden?copy:quit:go).focus();}
@@ -1040,7 +1119,7 @@
       if(booting){await loadClientInfo();booting=false;renderBoot();}
       if(!v.projects.some(p=>p.name===project))project=v.project||'';
       const signature=JSON.stringify(v);
-      if(signature!==viewSignature){viewSignature=signature;view=v;if(selectedTask&&!v.tasks.some(t=>t.id===selectedTask)){selectedTask='';feed=null;feedSignature='';}render();}
+      if(signature!==viewSignature){viewSignature=signature;view=v;if(selectedTask&&!v.tasks.some(t=>t.id===selectedTask)){selectedTask='';feed=null;feedSignature='';}if(selectedShared&&!sharedSelection())selectedShared=null;render();}
       else{renderMachines();renderNotice();}
       if(selectedTask)await loadFeed();
     }catch(error){notice(el('p',tr('Окно не смогло показать данные: ')+error.message));}
@@ -1123,7 +1202,7 @@
       row.title=tr('Открыть задачу');
       row.addEventListener('click',()=>{
         if(task.project&&task.project!==project){project=task.project;remember('messenger-project',project);viewSignature='';}
-        selectedTask=task.id;feed=null;feedSignature='';show('tasks');refresh();
+        selectedTask=task.id;selectedShared=null;feed=null;feedSignature='';show('tasks');refresh();
       });
       top.append(row);
     }
@@ -1146,7 +1225,7 @@
     if(!server)return;const running=server.host.running;
     swap($('host-disable'),$('host-enable'),running);
     $('host-scope').disabled=running;$('host-port').disabled=running;
-    const accept=!!server.accept;$('accept-toggle').setAttribute('aria-checked',String(accept));$('net-full-toggle').setAttribute('aria-checked',String(!!server.net_full_access));
+    const accept=!!server.accept;$('accept-toggle').setAttribute('aria-checked',String(accept));
     $('log-share-toggle').setAttribute('aria-checked',String(!!server.log_share));
   }
   async function loadServer(){
@@ -1176,13 +1255,14 @@
   }
   function hideInvitation(){invitation=null;clearInterval(inviteTimer);const d=$('invite-dialog');if(d.open)d.close();}
   function renderServer(){
+    renderAccessBar();
     if(!server)return;const h=server.host,m=server.member;
     const focused=document.activeElement?.dataset?.key||'';
     badge($('host-badge'),h.running?tr('Работает'):h.enabled?tr('Не запустился'):tr('Остановлен'),h.running?'good':h.enabled?'bad':'');
     // Explanations live in the status tooltip so the card does not change
     // height; only a problem the owner must fix stays visible.
     $('host-badge').title=!h.running?tr('Другие устройства смогут подключаться к этому компьютеру по одноразовому приглашению.'):tr('Принимает устройства: ')+(h.scope==='lan'?tr('в локальной сети'):tr('только с этого компьютера'))+tr(', порт ')+h.port+'.';
-    $('host-state').textContent=h.running&&!h.addresses.length?tr('У компьютера нет адреса в локальной сети. Подключитесь к сети или выберите «Только этот компьютер».'):'';
+    $('host-state').textContent=h.enabled&&m.connected?tr('Запущен свой сервер и есть подключение к другому. Задачи идут только через свой сервер. Остановите сервер или отключитесь от другого.'):h.running&&!h.addresses.length?tr('У компьютера нет адреса в локальной сети. Подключитесь к сети или выберите «Только этот компьютер».'):'';
     if(!serverEdited){$('host-scope').value=h.scope||'local';$('host-port').value=h.port||47100;}
     $('host-running').hidden=!h.running;
     const select=$('host-address'),current=select.value;
@@ -1197,7 +1277,13 @@
     // The certificate fingerprint travels inside the invitation code and the
     // joining computer checks it itself, so the window does not show it.
     badge($('member-badge'),m.connected?(m.reachable||!m.checked_at?tr('Подключено'):tr('Нет связи')):tr('Не подключено'),m.connected?(m.reachable?'good':m.checked_at?'bad':''):'');
-    $('member-join').hidden=m.connected;$('member-joined').hidden=!m.connected;
+    // A computer hosts its network or joins another one, not both: the
+    // other card only says how to switch.
+    const hostOn=h.enabled||h.running;
+    $('member-join').hidden=m.connected||hostOn;$('member-joined').hidden=!m.connected;
+    $('member-blocked').hidden=!hostOn||m.connected;
+    $('host-blocked').hidden=hostOn||!m.connected;
+    $('host-running').closest('.am-card').querySelector('.am-server-grid').hidden=!hostOn&&m.connected;
     $('member-badge').title=m.connected?tr('Этот компьютер входит в сервер ')+m.address+'.':tr('Вставьте код приглашения, который выдал сервер на другом компьютере.');
     $('member-state').textContent='';
     const cn=$('computer-name');if(view?.computer_name&&document.activeElement!==cn&&!cn.dataset.edited)cn.value=view.computer_name;
@@ -1343,7 +1429,7 @@
     const name=view?.project;if(!name)return;
     askConfirm(tr('Удалить проект «')+(view.project_title||name)+'»?',tr('Проект пропадёт из списка. История задач сохранится и вернётся, если создать проект с тем же именем.'),tr('Удалить'),async()=>{
       await postAPI('/api/project-remove',{name});
-      project='';remember('messenger-project','');selectedTask='';feed=null;feedSignature='';viewSignature='';projectPageFor='';await refresh();
+      project='';remember('messenger-project','');selectedTask='';selectedShared=null;feed=null;feedSignature='';viewSignature='';projectPageFor='';await refresh();
     });
   }
   // «Установить» opens the agent's official page; «Войти» opens a terminal
@@ -1598,7 +1684,7 @@
   $('project-select').addEventListener('change',()=>{
     const value=$('project-select').value;
     if(value==='__new'){$('project-select').value=view?.project||'__new';syncSelects();openProjectDialog();return;}
-    project=value;remember('messenger-project',value);selectedTask='';feed=null;feedSignature='';viewSignature='';refresh();
+    project=value;remember('messenger-project',value);selectedTask='';selectedShared=null;feed=null;feedSignature='';viewSignature='';refresh();
   });
   $('agent-filter').addEventListener('change',renderTaskList);
   for(const id of ['computer-chip','stats-computer-chip','agents-computer-chip'])$(id).querySelector('button').addEventListener('click',clearComputer);
@@ -1661,7 +1747,8 @@
   $('agent-cli-pick').addEventListener('click',()=>pick('agent-cli','file','agent-save-status'));
   $('agent-profile-pick').addEventListener('click',()=>pick('agent-profile','folder','agent-save-status'));
   $('restart-dialog').addEventListener('cancel',event=>event.preventDefault());
-  $('restart-go').addEventListener('click',()=>restartClient(!!restart.ask));
+  $('restart-go').addEventListener('click',()=>{if(restart.ask){restart.wait=true;renderRestart();restartClient(false);}else restartClient(false);});
+  $('restart-cut').addEventListener('click',()=>{restart.wait=false;restartClient(true);});
   $('restart-quit').addEventListener('click',()=>window.webkit?.messageHandlers?.app?.postMessage('quit'));
   $('restart-copy').addEventListener('click',async()=>{const b=$('restart-copy');try{await navigator.clipboard.writeText(shutdownCommand());b.textContent=tr('Скопировано');}catch(_){b.textContent=tr('Не удалось скопировать');}setTimeout(()=>b.textContent=tr('Скопировать команду'),2000);});
   $('agent-setup-close').addEventListener('click',()=>$('agent-setup').close());
@@ -1687,12 +1774,19 @@
   $('computer-name').addEventListener('change',renameComputer);
   $('computer-name').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();renameComputer();}});
   $('log-share-toggle').addEventListener('click',()=>{if(!server)return;const on=!server.log_share;serverAction({action:'log_share',on},'accept',on?tr('Координаторы других компьютеров смогут прочитать журнал.'):'');});
-  $('net-full-toggle').addEventListener('click',()=>{if(!server)return;const on=!server.net_full_access;serverAction({action:'net_full_access',on},'accept',on?tr('Задачи других компьютеров смогут выполнять любые команды на этом компьютере.'):tr('Новые запуски задач других компьютеров пойдут с проверками разрешений агента.'));});
+  $('net-full-toggle').addEventListener('click',toggleNetAccess);
   $('accept-toggle').addEventListener('click',()=>{if(!server)return;const on=!server.accept;serverAction({action:'accept',on},'accept',on?'':tr('Новые задачи других компьютеров будут отклоняться. Уже принятые продолжат работу.'));});
   $('member-disconnect').addEventListener('click',()=>serverAction({action:'disconnect'},'member',tr('Отключено. Устройство остаётся в списке сервера, пока его там не отзовут.')));
   let serverPolls=0;
   // The sidebar lists devices from the server state, so it is read on every
   // tab, every 15 s outside «Сервер» (as often as computers report).
+  // The window's own page menu offers «Перезагрузить», which only reloads
+  // the page and reads as restarting the program. It stays where it helps:
+  // in text fields and on selected text.
+  document.addEventListener('contextmenu',event=>{
+    if(event.defaultPrevented||event.target.closest?.('input,textarea,[contenteditable]')||String(window.getSelection?.()||''))return;
+    event.preventDefault();
+  });
   setInterval(()=>{serverPolls++;if(tab==='server'||serverPolls%3===0)loadServer();},5000);
   loadServer();
   let initialTheme=window.messengerInitialTheme;

@@ -92,7 +92,7 @@ func TestHostedBrokerAndMembership(t *testing.T) {
 	if ms := member.Status().Member; ms.Reachable || ms.Error == "" {
 		t.Fatalf("revocation not shown %+v", ms)
 	}
-	if err := member.Disconnect(); err != nil || member.Status().Member.Connected {
+	if err := member.Disconnect(ctx(t)); err != nil || member.Status().Member.Connected {
 		t.Fatalf("disconnect %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(memberRoot, "server-connection.json")); !errors.Is(err, os.ErrNotExist) {
@@ -194,7 +194,7 @@ func TestDamagedConnectionBlocksConnectUntilDisconnect(t *testing.T) {
 	if raw, _ := os.ReadFile(filepath.Join(root, "server-connection.json")); string(raw) != "{" {
 		t.Fatal("damaged file changed")
 	}
-	if err := s.Disconnect(); err != nil || s.Status().Member.Error != "" {
+	if err := s.Disconnect(ctx(t)); err != nil || s.Status().Member.Error != "" {
 		t.Fatalf("disconnect %v %+v", err, s.Status().Member)
 	}
 }

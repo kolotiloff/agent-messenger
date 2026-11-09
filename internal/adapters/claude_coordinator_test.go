@@ -70,6 +70,8 @@ func TestCoordinatorLink(t *testing.T) {
 	check(LinkMissing)
 	write(folder, map[string]any{"type": "stdio", "command": "/app/messenger", "args": CoordinatorArgs("/data", "Other")})
 	check(LinkOther)
+	write(folder, map[string]any{"type": "stdio", "command": "/data/runtimes/old/messenger", "args": CoordinatorArgs("/data", "Game")})
+	check(LinkStale)
 	write(folder, map[string]any{"type": "http", "url": "https://example.invalid"})
 	check(LinkOther)
 	if runtime.GOOS != "windows" {

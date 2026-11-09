@@ -31,11 +31,9 @@ import (
 const remoteUpdateLimit = 20 * time.Minute
 
 // recordProgram writes the program file this window runs from, for a later
-// remote update. Only Windows and Linux update this way.
+// remote update (Windows and Linux) and for the coordinator's connection in
+// Claude, which must start the program file, not the client's copy (T-117).
 func recordProgram(root string) {
-	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
-		return
-	}
 	executable, err := os.Executable()
 	if err == nil {
 		executable, err = filepath.EvalSymlinks(executable)

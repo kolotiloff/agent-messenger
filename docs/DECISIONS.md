@@ -262,3 +262,30 @@ People see «0.58» instead of «0.0.0-preview.58»: in the release title, the M
 
 An update of a program installed with `messenger install` (window or another computer's request) adds the new version folder and moves the `messenger` link without the supervisor and startup leases. The running background client keeps its own version folder, which is never changed or removed, so nothing it uses moves; it goes on with its version until it is restarted, as on Windows (D-048). A lock file in the installation's library folder keeps two installs apart. A manual `messenger install` keeps the leases and the check of `active-runs.json`.
 
+## D-107 — The coordinator follows updates (T-117)
+
+2026-11-09, Claude Code, coordinator's report: its chat had only six tools although `continue_task`, `task_output` and `get_log` were released.
+
+The coordinator's entry in Claude started the program the client ran from, which is the client's copy of one version (`runtimes/<digest>/messenger`). Copies stay on disk, so the chat kept that version through every update; the window never said so because the chat was connected. Now:
+
+- The entry starts the program file the owner installed (recorded by the window on every system, `program.json`), or the `bin/messenger` link of an installation, which updates replace.
+- An entry of this Messenger (same data folder and project) that starts another file is replaced once per client start, with Claude's own `mcp remove` and `mcp add`. Entries of anything else are never touched. A failure is shown, not retried.
+- `messenger coordinator` is a relay: it runs `coordinator-serve` from that file and passes MCP lines. When the file changes and the new program answers `version`, the relay initializes it with the chat's own initialize request and the same chat id, sends new calls there, lets running calls finish in the old one and tells Claude `notifications/tools/list_changed`. A new program that fails is dropped and the old one keeps serving. A chat open before this version still runs its old copy: it needs one reconnect or a new chat, after which it follows updates by itself.
+
+## D-108 — Continue an interrupted task after checking its worker is gone (T-118, Q-029)
+
+2026-11-09, owner's answer to Q-029 («попробуй проверить»).
+
+An interrupted run (the client restarted while it ran) was a dead end: nobody saw its worker end, so by D-021 the task stayed as it was. Now `continue_task` may continue an interrupted task of this computer. It is never automatic: only the coordinator's explicit call. Messenger first checks, for every interrupted run of the task, that its worker is certainly gone: the computer restarted since (another boot id), or neither the recorded process (same id and start time) nor any process of its group is running. If the process was never recorded, the snapshot fails or anything still runs, the call is refused and the task stays as it was. When the check passes, those runs are closed as failed («closed for a follow-up») and the same conversation goes on with the coordinator's text. Their reservations stay where they are; `active-runs.json` is not touched. A task of another computer is not covered.
+
+## D-109 — Other computers' tasks take «Любые команды» by default; the switch is on «Агенты» (T-122)
+
+2026-11-09, Claude Code, owner's decision. Changes the default of D-097. The owner found two switches in two places confusing: «Любые команды» on «Агенты» and «Любые команды для задач других компьютеров» on «Сервер». Both are about what agents may do, so the second one is now under the first on «Агенты» («И для задач с других компьютеров»). It is on by default: a new computer, set up by someone who will not look for it, works as it is, and the network holds only the owner's own computers. A computer where the owner turned it off keeps that. With it on, any computer of the network, or anyone holding its device key, can run any command on a computer whose agents have «Любые команды»; the owner accepted that.
+
+## D-110 — The owner's message answers a question to the coordinator (T-125)
+
+2026-11-09, Claude Code, owner's request («Разве автор не главнее»). A worker that asked the coordinator has ended its run and waits; an owner note (T-085) used to wait for the coordinator's answer too. Now the owner's message to such a task answers its open question at once, as the owner, and the same conversation continues. The coordinator gets an owner_answered event for that question and its own answer is refused as already given. Pending notes travel with that answer as before. Tasks of other computers still take no notes.
+
+## D-111 — A computer hosts its network or joins another one, not both (T-127)
+
+2026-11-09, Claude Code, owner's request («Тут либо создать, либо подключиться»). A computer that hosted a server and joined another one sent tasks through its own while the owner watched the other. Now «Запустить сервер» is refused while connected to another server, and «Подключить» while the own server is on (also when it failed to start); the window shows only how to switch. A setup that already has both keeps working as before and the window says so. «Отключить» also removes the device from the server it leaves; when that server cannot be reached the device stays there, but this computer remembers it and does not list it. A broker leaves an older device out of its list when a newer one with the same name reported later: that is the same computer that joined again. It is only hidden, never revoked, so a different computer that happens to have the same name shows again as soon as it reports.

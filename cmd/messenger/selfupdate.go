@@ -38,19 +38,6 @@ func (r *relaunch) get() string {
 	return r.program
 }
 
-// installPrefix returns the prefix of an installation made by
-// `messenger install` (<prefix>/lib/agent-messenger/<version>/messenger),
-// or "" for a plain program file.
-func installPrefix(executable string) string {
-	version := filepath.Dir(executable)
-	library := filepath.Dir(version)
-	lib := filepath.Dir(library)
-	if filepath.Base(executable) != "messenger" || filepath.Base(library) != "agent-messenger" || filepath.Base(lib) != "lib" {
-		return ""
-	}
-	return filepath.Dir(lib)
-}
-
 // windowSelfUpdate prepares the window's update on Windows and Linux (D-048)
 // and starts the background check. The running background client is not
 // touched: it keeps its version until the window offers to restart it.
@@ -103,7 +90,7 @@ func newUpdater(home, executable string) *selfupdate.Updater {
 			return err
 		},
 	}
-	if prefix := installPrefix(executable); prefix != "" && runtime.GOOS != "windows" {
+	if prefix := distribution.InstallPrefix(executable); prefix != "" && runtime.GOOS != "windows" {
 		u.Install = func(program string, info buildinfo.Info) (string, error) {
 			return distribution.InstallUpdate(program, prefix, info)
 		}
