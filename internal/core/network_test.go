@@ -450,3 +450,61 @@ func TestRemoteTaskProgressReachesTheStarter(t *testing.T) {
 		t.Fatalf("a local item was sent: %d -> %d", len(before), len(after))
 	}
 }
+
+// T-094: a task of another computer does not take the agent's «Любые
+// команды» unless the owner allowed it for network tasks.
+func TestRemoteTaskRunsWithoutFullAccessByDefault(t *testing.T) {
+	p := newNetPair(t)
+	if err := p.b.st.SetAgentFullAccess("codex", true); err != nil {
+		t.Fatal(err)
+	}
+	if on, err := p.b.st.NetFullAccess(); err != nil || on {
+		t.Fatalf("default %v %v", on, err)
+	}
+	id := p.startRemote(t, "op1", "codex", "Build level 1")
+	p.carry(t, true)
+	if m := p.mirror(t, id); m.FullAccess {
+		t.Fatalf("network task with full access: %+v", m)
+	}
+	// A local task of b still has it.
+	local := p.b.start(t, "op-local", "codex", "Local work")
+	if lt, _ := p.b.st.TaskByID(local); !lt.FullAccess {
+		t.Fatalf("local task %+v", lt)
+	}
+	if err := p.b.st.SetNetFullAccess(true); err != nil {
+		t.Fatal(err)
+	}
+	id2 := p.startRemote(t, "op2", "codex", "Build level 2")
+	p.carry(t, true)
+	if m := p.mirror(t, id2); !m.FullAccess {
+		t.Fatalf("allowed network task %+v", m)
+	}
+}
+
+// Audit 2026-11-09: a message with ids that could not travel back is
+// ignored, and an op id the broker would refuse is replaced by a stable one,
+// so one message can never stop the outbox.
+func TestBadNetIdsCannotBlockTheOutbox(t *testing.T) {
+	p := newNetPair(t)
+	for i, task := range []string{"a b", strings.Repeat("x", 150), ""} {
+		body := `{"kind":"start","task":"` + task + `","project":"Game","provider":"codex","text":"x"}`
+		if err := p.b.st.ApplyNet(testBroker, NetIncoming{Seq: int64(i + 1), From: HostPeerID, OpID: "op-bad-" + string(rune('a'+i)), Body: []byte(body)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if pending, _ := p.b.st.NetPending(testBroker, 100); len(pending) != 0 {
+		t.Fatalf("replies queued for bad ids: %+v", pending)
+	}
+	if tasks, _ := p.b.st.Tasks("Game", 10); len(tasks) != 0 {
+		t.Fatalf("tasks %+v", tasks)
+	}
+	for _, op := range []string{"reply.dev b.task", strings.Repeat("y", 200), "ok.op-1"} {
+		got := safeNetOp(op)
+		if !netOpID.MatchString(got) || safeNetOp(op) != got {
+			t.Fatalf("%q -> %q", op, got)
+		}
+		if op == "ok.op-1" && got != op {
+			t.Fatalf("valid op changed: %q", got)
+		}
+	}
+}

@@ -797,6 +797,15 @@ func startLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, origin *net
 		id, r.Project, r.OpID, computer, r.Provider, agent.CLI, agent.Environment, agent.Profile, folder, taskTitle(r.Title, r.Text), r.Text, nullString(session), at, at, r.Model); err != nil {
 		return "", err
 	}
+	if fullAccess != 0 && origin != nil {
+		// T-094: a task of another computer gets «Любые команды» only when
+		// the owner allowed it for network tasks too.
+		if on, err := netFullAccess(tx); err != nil {
+			return "", err
+		} else if !on {
+			fullAccess = 0
+		}
+	}
 	if fullAccess != 0 {
 		if _, err := tx.Exec(`UPDATE tasks SET full_access=1 WHERE id=?`, id); err != nil {
 			return "", err
@@ -1110,6 +1119,15 @@ func (s *Store) BeginTaskRun(run, reservation string) (TaskRun, Task, error) {
 			err := tx.QueryRow(`SELECT full_access FROM computer_agents WHERE computer=? AND provider=?`, t.Computer, t.Provider).Scan(&full)
 			if err != nil && !errors.Is(err, sql.ErrNoRows) {
 				return err
+			}
+			if err == nil && full != 0 && t.FromNetwork {
+				on, nerr := netFullAccess(tx)
+				if nerr != nil {
+					return nerr
+				}
+				if !on {
+					full = 0
+				}
 			}
 			if err == nil && (full != 0) != t.FullAccess {
 				if _, err := tx.Exec(`UPDATE tasks SET full_access=? WHERE id=?`, full, t.ID); err != nil {

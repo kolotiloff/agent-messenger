@@ -1060,7 +1060,7 @@
     if(!server)return;const running=server.host.running;
     swap($('host-disable'),$('host-enable'),running);
     $('host-scope').disabled=running;$('host-port').disabled=running;
-    const accept=!!server.accept;$('accept-toggle').setAttribute('aria-checked',String(accept));
+    const accept=!!server.accept;$('accept-toggle').setAttribute('aria-checked',String(accept));$('net-full-toggle').setAttribute('aria-checked',String(!!server.net_full_access));
     $('log-share-toggle').setAttribute('aria-checked',String(!!server.log_share));
   }
   async function loadServer(){
@@ -1601,6 +1601,7 @@
   $('computer-name').addEventListener('change',renameComputer);
   $('computer-name').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();renameComputer();}});
   $('log-share-toggle').addEventListener('click',()=>{if(!server)return;const on=!server.log_share;serverAction({action:'log_share',on},'accept',on?tr('Координаторы других компьютеров смогут прочитать журнал.'):'');});
+  $('net-full-toggle').addEventListener('click',()=>{if(!server)return;const on=!server.net_full_access;serverAction({action:'net_full_access',on},'accept',on?tr('Задачи других компьютеров смогут выполнять любые команды на этом компьютере.'):tr('Новые запуски задач других компьютеров пойдут с проверками разрешений агента.'));});
   $('accept-toggle').addEventListener('click',()=>{if(!server)return;const on=!server.accept;serverAction({action:'accept',on},'accept',on?'':tr('Новые задачи других компьютеров будут отклоняться. Уже принятые продолжат работу.'));});
   $('member-disconnect').addEventListener('click',()=>serverAction({action:'disconnect'},'member',tr('Отключено. Устройство остаётся в списке сервера, пока его там не отзовут.')));
   let serverPolls=0;

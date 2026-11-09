@@ -1,10 +1,13 @@
 package core
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -181,7 +184,28 @@ type netBody struct {
 	Lines int `json:"lines,omitempty"`
 }
 
+// netOpID is the broker's rule for an operation id. An id built from
+// another computer's task or question id may break it; such an id is
+// replaced by a stable hash so one message can never stop the outbox.
+var netOpID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9:._-]{0,159}$`)
+
+// netRef is what a task or question id from another computer may look like.
+var netRef = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9:._-]{0,79}$`)
+
+// remoteEventKinds are the task events another computer may forward; any
+// other kind is ignored (audit 2026-11-09).
+var remoteEventKinds = map[string]bool{"report": true, "question": true, "failed": true, "blocked": true, "interrupted": true, "cancelled": true, "answered": true, "continued": true, "started": true, "accepted": true}
+
+func safeNetOp(opID string) string {
+	if netOpID.MatchString(opID) {
+		return opID
+	}
+	sum := sha256.Sum256([]byte(opID))
+	return "h." + hex.EncodeToString(sum[:20])
+}
+
 func enqueueNet(tx *sql.Tx, broker, to, opID, task string, b netBody) error {
+	opID = safeNetOp(opID)
 	raw, err := json.Marshal(b)
 	if err != nil {
 		return err
@@ -347,6 +371,34 @@ func (s *Store) SetNetAccept(on bool) error {
 		v = "1"
 	}
 	return s.tx(func(tx *sql.Tx) error { return setMeta(tx, "net_accept", v) })
+}
+
+// NetFullAccess reports whether tasks of other computers may run with the
+// agent's «Любые команды» (T-094). Off unless the owner turns it on: a task
+// from the network runs with the agent's own permission checks.
+func (s *Store) NetFullAccess() (bool, error) {
+	var on bool
+	err := s.tx(func(tx *sql.Tx) error {
+		var err error
+		on, err = netFullAccess(tx)
+		return err
+	})
+	return on, err
+}
+
+func netFullAccess(tx *sql.Tx) (bool, error) {
+	v, err := metaValue(tx, "net_full_access")
+	return v == "1", err
+}
+
+// SetNetFullAccess turns «Любые команды для задач других компьютеров» on or
+// off. It applies to new runs; a run already started keeps what it had.
+func (s *Store) SetNetFullAccess(on bool) error {
+	v := "0"
+	if on {
+		v = "1"
+	}
+	return s.tx(func(tx *sql.Tx) error { return setMeta(tx, "net_full_access", v) })
 }
 
 // ---- origin side ----
@@ -567,7 +619,9 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 			return nil
 		}
 		var b netBody
-		if json.Unmarshal(m.Body, &b) != nil || b.Task == "" {
+		// A message whose ids could not travel back is ignored, so a reply
+		// to it can never block this computer's outbox.
+		if json.Unmarshal(m.Body, &b) != nil || !netRef.MatchString(b.Task) || (b.Question != "" && !netRef.MatchString(b.Question)) {
 			return nil
 		}
 		from := netLink{broker: broker, peer: m.From, task: b.Task}
@@ -769,7 +823,7 @@ func applyReport(tx *sql.Tx, from netLink, b netBody) error {
 		return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "blocked", why, "")
 	}
 	// An event of the run on the other computer.
-	if !taskStates[b.State] || (b.Audience != AudienceCoordinator && b.Audience != AudienceOwner) || b.Event == "" {
+	if !taskStates[b.State] || (b.Audience != AudienceCoordinator && b.Audience != AudienceOwner) || !remoteEventKinds[b.Event] {
 		return nil
 	}
 	question := ""
