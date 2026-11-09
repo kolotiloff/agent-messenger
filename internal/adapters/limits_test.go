@@ -1,6 +1,8 @@
 package adapters
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -40,5 +42,24 @@ func TestLimitStateFromEvents(t *testing.T) {
 	ParseTaskEvent("codex", []byte(`{"type":"x","rate_limits":{"primary":{"used_percent":"lots"}}}`), &none)
 	if none.Limit != nil {
 		t.Fatalf("no limit expected: %+v", none.Limit)
+	}
+}
+
+// T-080: the plain fields the agent sent about its limit are kept, so the
+// units of a share can be learned from a real run; objects and long texts
+// are left out.
+func TestLimitKeepsWhatTheAgentReported(t *testing.T) {
+	var r TaskEventResult
+	ParseTaskEvent("claude", []byte(`{"type":"rate_limit_event","session_id":"s","rate_limit_info":{"status":"allowed_warning","resetsAt":1762900000,"rateLimitType":"seven_day","utilization":0.83,"isUsingOverage":false,"nested":{"a":1}}}`), &r)
+	want := `{"isUsingOverage":false,"rateLimitType":"seven_day","resetsAt":1762900000,"status":"allowed_warning","utilization":0.83}`
+	if r.Limit == nil || r.Limit.Reported != want || r.Limit.HasPercent {
+		t.Fatalf("reported %+v", r.Limit)
+	}
+	long := map[string]any{"status": strings.Repeat("x", 300)}
+	for i := 0; i < 40; i++ {
+		long[fmt.Sprintf("field_%02d", i)] = float64(i)
+	}
+	if got := reported(long); len(got) > maxReported || !strings.HasSuffix(got, "}") {
+		t.Fatalf("long %d %q", len(got), got)
 	}
 }

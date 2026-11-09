@@ -20,12 +20,15 @@ type AgentLimit struct {
 	ResetsAt string `json:"resets_at,omitempty"`
 	// ObservedAt is when Messenger read it (RFC 3339, UTC).
 	ObservedAt string `json:"observed_at"`
+	// Reported is what the agent sent about the limit (its plain fields as
+	// JSON), kept so its units can be learned from real runs (T-080).
+	Reported string `json:"reported,omitempty"`
 }
 
 var agentLimitStates = map[string]bool{"ok": true, "warning": true, "exhausted": true}
 
 func (l AgentLimit) valid() bool {
-	if !agentLimitStates[l.State] || len(l.Window) > 32 {
+	if !agentLimitStates[l.State] || len(l.Window) > 32 || len(l.Reported) > 512 {
 		return false
 	}
 	if l.UsedPercent != nil && (*l.UsedPercent < 0 || *l.UsedPercent > 1000) {

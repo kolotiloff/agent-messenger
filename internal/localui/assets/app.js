@@ -651,6 +651,16 @@
     if(typeof l.used_percent==='number')return l.used_percent>85?'bad':l.used_percent>=60?'wait':'good';
     return l.state==='exhausted'?'bad':l.state==='warning'?'wait':'good';
   }
+  // Which limit the agent named: Claude's rateLimitType or Codex's window
+  // length (T-080). Unknown names are left out.
+  function limitWindow(w){
+    if(!w)return '';
+    if(w==='five_hour'||w==='5h')return tr('Лимит на 5 часов');
+    if(w==='seven_day'||w==='7d')return tr('Недельный лимит');
+    if(w==='seven_day_opus')return tr('Недельный лимит Opus');
+    if(w==='seven_day_sonnet')return tr('Недельный лимит Sonnet');
+    return '';
+  }
   function limitRing(l){
     const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 18 18');svg.setAttribute('class','am-ring');svg.setAttribute('aria-hidden','true');
     const ring=(cls,share)=>{const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx','9');c.setAttribute('cy','9');c.setAttribute('r','7');c.setAttribute('class',cls);
@@ -738,9 +748,10 @@
         const title=el('span');title.append(tr('Лимит '));
         const used=typeof l.used_percent==='number'?Math.round(l.used_percent)+'%':l.state==='exhausted'?tr('исчерпан'):l.state==='warning'?tr('близко к пределу'):tr('в норме');
         title.append(el('span',used,'am-status-'+level));
-        const r=l.resets_at?tr('Сброс ')+resetText(l.resets_at):'';
-        step(limitRing(l),title,[r,today].filter(Boolean).join(', ')||(l.observed_at?tr('По данным задачи в ')+clock(l.observed_at):''));
-      }else step(limitRing(null),tr('Лимит'),today?today[0].toUpperCase()+today.slice(1):tr('Появится после первой задачи'));
+        const r=l.resets_at?tr('сброс ')+resetText(l.resets_at):'';
+        const sub=[limitWindow(l.window),r,today].filter(Boolean).join(', ');
+        step(limitRing(l),title,sub?sub[0].toUpperCase()+sub.slice(1):(l.observed_at?tr('По данным задачи в ')+clock(l.observed_at):''));
+      }else step(limitRing(null),tr('Лимит'),today?today[0].toUpperCase()+today.slice(1):tr('Появится после задачи исполнителя на этом компьютере'));
       card.append(steps);
       const running=a?.project_running||0,todayTasks=a?.project_today||0;
       const tasks=el('button',undefined,'am-agent-tasks');tasks.type='button';
@@ -781,8 +792,9 @@
       if(l){
         const title=el('span');title.append(tr('Лимит '));
         title.append(el('span',typeof l.used_percent==='number'?Math.round(l.used_percent)+'%':l.state==='exhausted'?tr('исчерпан'):l.state==='warning'?tr('близко к пределу'):tr('в норме'),'am-status-'+level));
-        row(limitRing(l),title,l.resets_at?tr('Сброс ')+resetText(l.resets_at):l.observed_at?tr('По данным задачи в ')+dayClock(l.observed_at):'');
-      }else row(limitRing(null),tr('Лимит'),tr('Появится после первой задачи'));
+        const sub=[limitWindow(l.window),l.resets_at?tr('сброс ')+resetText(l.resets_at):''].filter(Boolean).join(', ');
+        row(limitRing(l),title,sub?sub[0].toUpperCase()+sub.slice(1):l.observed_at?tr('По данным задачи в ')+dayClock(l.observed_at):'');
+      }else row(limitRing(null),tr('Лимит'),tr('Появится после задачи исполнителя на том компьютере'));
       const models=el('span',undefined,'am-agent-models');models.textContent=a.models?.length?a.models.join(', '):tr('Модель по умолчанию');
       const mm=el('span','✓','am-mark am-mark-ok');
       const r=el('div',undefined,'am-step');const t=el('div',undefined,'am-step-text');t.append(el('p',tr('Модели'),'am-step-title'),el('p',models.textContent,'am-step-sub'));r.append(mm,t,el('span'));steps.append(r);

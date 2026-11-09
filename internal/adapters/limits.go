@@ -1,7 +1,9 @@
 package adapters
 
 import (
+	"encoding/json"
 	"fmt"
+	"sort"
 	"time"
 )
 
@@ -22,6 +24,45 @@ type LimitState struct {
 	// Window names the limit window as the agent reported it.
 	Window  string
 	ResetAt time.Time
+	// Reported is what the agent sent about the limit, its plain fields
+	// only, so its units can be learned from real runs (T-080).
+	Reported string
+}
+
+// maxReported bounds Reported.
+const maxReported = 480
+
+// reported keeps the plain (string, number, bool) fields of a limit object
+// as compact JSON, in key order, at most maxReported bytes.
+func reported(m map[string]any) string {
+	keys := make([]string, 0, len(m))
+	for k, v := range m {
+		switch v.(type) {
+		case string, float64, bool:
+			if len(k) <= 40 {
+				keys = append(keys, k)
+			}
+		}
+	}
+	sort.Strings(keys)
+	out := "{"
+	for _, k := range keys {
+		v := m[k]
+		if s, ok := v.(string); ok && len(s) > 64 {
+			v = s[:64]
+		}
+		kb, _ := json.Marshal(k)
+		vb, _ := json.Marshal(v)
+		part := string(kb) + ":" + string(vb)
+		if len(out)+len(part)+2 > maxReported {
+			break
+		}
+		if len(out) > 1 {
+			out += ","
+		}
+		out += part
+	}
+	return out + "}"
 }
 
 func limitRank(state string) int {
@@ -46,7 +87,7 @@ func (r *TaskEventResult) noteLimit(l LimitState) {
 // the reset time; a share used is not taken from it.
 func claudeLimit(info map[string]any) (LimitState, bool) {
 	status, _ := info["status"].(string)
-	l := LimitState{ResetAt: unixReset(info["resetsAt"])}
+	l := LimitState{ResetAt: unixReset(info["resetsAt"]), Reported: reported(info)}
 	l.Window, _ = info["rateLimitType"].(string)
 	switch status {
 	case "allowed":
@@ -89,6 +130,7 @@ func codexLimit(e map[string]any) (LimitState, bool) {
 		if used >= 100 {
 			l.State = LimitExhausted
 		}
+		l.Reported = reported(w)
 		if minutes, ok := w["window_minutes"].(float64); ok && minutes > 0 {
 			l.Window = windowName(int(minutes))
 		}

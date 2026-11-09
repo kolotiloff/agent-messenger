@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-09 — Claude Code (T-080 limits)
+
+- The owner sees no limits on the Mac and no percent elsewhere. Causes: limits come only from worker tasks on that computer; Claude sends a state, not a share we can read; Codex prints none in `exec` mode. T-080 (D-093): cards name the window and reset, clearer empty text, and the agent's own limit fields are kept for the coordinator (`limit.reported`). On `claude/ui-tweaks`, not released; not verified with real agents.
+
 ## 2026-11-09 — Claude Code (T-077, release)
 
 - T-077 (D-091): the window restarts the old background client by itself after an update when no task runs; asks only otherwise. The owner's wish to update another computer remotely is T-078, Q-025.

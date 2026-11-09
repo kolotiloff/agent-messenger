@@ -339,7 +339,7 @@ func agentLimit(r adapters.TaskEventResult) (core.AgentLimit, bool) {
 	var l core.AgentLimit
 	switch {
 	case r.Limit != nil:
-		l.State, l.Window = r.Limit.State, r.Limit.Window
+		l.State, l.Window, l.Reported = r.Limit.State, r.Limit.Window, r.Limit.Reported
 		if r.Limit.HasPercent {
 			p := r.Limit.UsedPercent
 			l.UsedPercent = &p

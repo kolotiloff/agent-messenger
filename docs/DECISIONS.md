@@ -180,3 +180,9 @@ The window now asks the client to restart once, without the owner, as soon as it
 2026-11-09, Claude Code, with the owner, who chose it from three mockups: a thin bar, a start screen, a bar that waits for tasks.
 
 Until the background part first answers, and while it installs an update, the whole window is covered by the app's name, a spinner and one status line, as applications do while they start. The window first learns the client's version, so an update starts behind the screen and the old window never flashes. If nothing answers within 20 seconds, the screen goes and the usual notice says what is wrong. When tasks are running, the question from D-091 stays: a restart would interrupt them. Waiting for the tasks to finish instead was offered and not chosen.
+
+## D-093 — Show which limit, keep what the agent said about it (T-080)
+
+2026-11-09, Claude Code, after the owner saw no limits on the Mac and only «близко к пределу» without a percent on the other computers.
+
+A limit is recorded only from a worker task that ran on that computer; the coordinator's own chat is not a task run, so a computer that only coordinates shows nothing. Claude's stream gives a state, a window and a reset time; a share used was not taken from it because its units are not known. The cards now name the window and the reset, and the empty card says where the limit comes from. The plain fields (text, number, yes/no) of the agent's limit report are kept, at most 480 characters, and the coordinator sees them in `list_agents` as `limit.reported`. After a real run they tell whether a share is sent and in which units; only then is a percent shown. Nothing acts on a limit automatically.
