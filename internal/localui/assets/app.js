@@ -292,8 +292,8 @@
     select.disabled=!view;syncSelects();
   }
   // Right-click menu on another computer of the network. Revoking cannot be
-  // undone, so its item only opens a confirmation inside the card; updating
-  // (T-078) asks that computer to install the newest signed update.
+  // undone, so its item only opens a confirmation inside the card. Updating
+  // moved to an icon on the card (T-128).
   function deviceMenu(d,x,y,can){
     let menu=$('device-menu');
     if(!menu){
@@ -313,12 +313,6 @@
       item.addEventListener('click',run);item.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();run();}});
       items.push(item);
     };
-    if(can.update)add(tr('Обновить программу'),()=>requestUpdate(d));
-    else if(can.why){
-      // Why the item cannot work yet, instead of no menu at all (owner).
-      const item=el('div',undefined,'am-select-option am-menu-off');item.setAttribute('role','menuitem');item.setAttribute('aria-disabled','true');item.tabIndex=0;
-      item.append(el('span',tr('Обновить программу')),el('span',can.why,'am-small am-muted'));items.push(item);
-    }
     if(can.revoke)add(tr('Отозвать устройство'),()=>{revokeAsk=d.id;clearTimeout(revokeTimer);revokeTimer=setTimeout(()=>{revokeAsk='';renderMachines();},8000);renderMachines();$('machines').querySelector('[data-key="'+CSS.escape('revoke-yes-'+d.id)+'"]')?.focus();});
     if(!items.length)return;
     menu.replaceChildren(...items);menu.style.left=x+'px';menu.style.top=y+'px';menu.showPopover();items[0].focus();
@@ -440,7 +434,18 @@
       const pdot=el('span',undefined,'am-dot'+(fresh?' online':''));pdot.title=fresh?tr('На связи'):tr('Нет связи');
       name.append(el('span',peer.name));
       if(peer.version)name.append(el('span',versionName(peer.version),'am-small am-muted am-machine-version'));
-      name.append(pdot);card.append(name);
+      name.append(pdot);
+      // T-128: an older computer gets the update icon next to its dot; the
+      // owner confirms in a popup.
+      const busy=!!updateLine(peer);
+      if(fresh&&peer.version&&!busy&&versionOlder(peer.version,newestVersion())){
+        const newest=versionName(newestVersion()),label=tr('Обновить до ')+newest;
+        const b=el('button',undefined,'am-update-icon am-peer-update');b.type='button';b.title=label;b.setAttribute('aria-label',label);b.append(svgIcon(['M12 4v11M7 10l5 5 5-5M5 20h14']));
+        b.addEventListener('click',event=>{event.stopPropagation();askConfirm(tr('Обновить ')+(peer.name||tr('компьютер'))+tr(' до ')+newest+'?',tr('Программа на том компьютере обновится и перезапустится. Задачи и история сохранятся.'),tr('Обновить'),()=>requestUpdate(peer),true);});
+        b.addEventListener('keydown',event=>event.stopPropagation());
+        name.append(b);
+      }
+      card.append(name);
       if(revokeAsk===peer.id&&hosted.has(peer.id)){
         card.append(el('p',tr('Отозвать устройство? Вернуть его можно только новым приглашением.'),'am-small am-muted'));
         const actions=el('div',undefined,'am-actions am-device-confirm');
@@ -459,9 +464,8 @@
       }
       const status=updateLine(peer);
       if(status)card.append(el('p',status[0],'am-small am-update-line '+status[1]));
-      const can={revoke:hosted.has(peer.id),update:fresh&&!!peer.version};
-      if(!can.update)can.why=!fresh?tr('Компьютер не на связи'):tr('Там старая версия: один раз обновите её на том компьютере');
-      {
+      const can={revoke:hosted.has(peer.id)};
+      if(can.revoke){
         card.classList.add('am-device-card');card.tabIndex=0;card.dataset.key='revoke-'+peer.id;card.title=tr('Правая кнопка мыши — действия');
         card.addEventListener('contextmenu',event=>{event.preventDefault();deviceMenu(peer,event.clientX,event.clientY,can);});
         card.addEventListener('keydown',event=>{if(event.key==='ContextMenu'||(event.shiftKey&&event.key==='F10')){event.preventDefault();const r=card.getBoundingClientRect();deviceMenu(peer,r.left+16,r.top+24,can);}});
@@ -1052,8 +1056,8 @@
   // A popup asks before something that is hard to undo: «Отмена» or the
   // named action. The action's error stays in the popup.
   let confirmAction=null;
-  function askConfirm(title,text,go,action){
-    confirmAction=action;$('confirm-title').textContent=title;$('confirm-text').textContent=text;$('confirm-go').textContent=go;
+  function askConfirm(title,text,go,action,safe){
+    confirmAction=action;$('confirm-go').className=safe?'am-primary':'am-danger';$('confirm-title').textContent=title;$('confirm-text').textContent=text;$('confirm-go').textContent=go;
     $('confirm-error').hidden=true;$('confirm-go').disabled=false;$('confirm-dialog').showModal();
   }
   async function runConfirm(){
@@ -1656,6 +1660,26 @@
     return preview?'v0.'+preview[1]:version?'v'+version:'';
   }
   function versionText(installed){return versionName(installed);}
+  // Comparing builds: 0.0.0-preview.41 and 0.41 are the same build.
+  function versionRank(version){
+    const v=String(version||'').replace(/^v/,'');
+    const preview=v.match(/^0\.0\.0-preview\.(\d+)$/);
+    return preview?[0,Number(preview[1])]:v.split(/[.-]/).map(x=>Number(x)||0);
+  }
+  function versionOlder(a,b){
+    if(!a||!b)return false;
+    const x=versionRank(a),y=versionRank(b);
+    for(let i=0;i<Math.max(x.length,y.length);i++){if((x[i]||0)!==(y[i]||0))return (x[i]||0)<(y[i]||0);}
+    return false;
+  }
+  // The newest build this window knows of: its own, the background
+  // program's, an update that came out, or another computer's.
+  let knownUpdate='';
+  function newestVersion(){
+    let best='';
+    for(const v of [clientInfo?.window_version,clientInfo?.client_version,knownUpdate,...(server?.peers||[]).map(p=>p.version)])if(v&&(!best||versionOlder(best,v)))best=v;
+    return best;
+  }
   // The update icon says in its tooltip which version came out (T-066).
   function updateTip(version,busy){
     const name=versionName(version);
@@ -1674,6 +1698,7 @@
     // Background checks and their failures stay quiet; the app checks again
     // by itself.
     const shown=!!version||waiting;
+    if(version)knownUpdate=version;
     $('app-update-version').hidden=true;$('app-update-button').hidden=!shown;
     $('app-installed-version').textContent=versionText(installed);
     updateTip(version,waiting);
@@ -1689,6 +1714,7 @@
     $('app-installed-version').hidden=!installed;
     $('app-installed-version').title=installed?tr('Версия ')+versionName(installed).slice(1):'';
     const version=typeof s.version==='string'?s.version:'';
+    if(version&&s.state==='available')knownUpdate=version;
     const done=s.state==='installed',shown=(s.state==='available'&&!!version)||selfUpdateBusy||done||!!s.message;
     // Only the update icon while an update waits (owner, T-056, T-066); a line
     // appears only for an error or after the update.
