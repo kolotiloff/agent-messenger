@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-09 — Claude Code (release preview.55)
+
+- Merged #86 (T-079 to T-082) and released preview.55; all files checked (Mac, Windows x64/ARM64, Linux x64/ARM64, checksums, 5 signed update feeds and archives).
+
 ## 2026-11-09 — Claude Code (T-082 no title bar on Mac and Linux)
 
 - T-082 (D-095): the page runs to the top edge on Mac (transparent title bar, system buttons at the top left) and Linux (empty GTK title bar, page buttons). Verified: Linux window under Xvfb, page in Chromium with a stubbed Mac bridge. The Swift app is checked by CI and the owner. On `claude/ui-tweaks`, not released.
