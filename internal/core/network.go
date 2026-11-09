@@ -92,6 +92,9 @@ type NetPeer struct {
 	// Ready is what the computer reported about taking tasks (T-070); nil
 	// when it did not (an older version).
 	Ready *NetReady
+	// Usage is what the tasks that ran on it spent, by day and agent
+	// (T-076); nil when it did not report it (an older version).
+	Usage []UsageDayAgent
 }
 
 // NetReady says whether a computer runs tasks from other computers and for
@@ -239,7 +242,12 @@ func (s *Store) SetNetwork(broker, self string, peers []NetPeer) error {
 				r, _ := json.Marshal(p.Ready)
 				ready = string(r)
 			}
-			if _, err := tx.Exec(`INSERT INTO net_peers(peer,name,host,age,agents,ready,updated_at) VALUES (?,?,?,?,?,?,?)`, p.ID, p.Name, boolInt(p.Host), p.Age, string(raw), ready, at); err != nil {
+			usage := ""
+			if p.Usage != nil {
+				u, _ := json.Marshal(p.Usage)
+				usage = string(u)
+			}
+			if _, err := tx.Exec(`INSERT INTO net_peers(peer,name,host,age,agents,ready,usage,updated_at) VALUES (?,?,?,?,?,?,?,?)`, p.ID, p.Name, boolInt(p.Host), p.Age, string(raw), ready, usage, at); err != nil {
 				return err
 			}
 		}
@@ -260,7 +268,7 @@ func (s *Store) NetPeers() ([]NetPeer, error) {
 }
 
 func netPeers(tx *sql.Tx) ([]NetPeer, error) {
-	rows, err := tx.Query(`SELECT peer,name,host,age,agents,ready,updated_at FROM net_peers ORDER BY host DESC, name, peer`)
+	rows, err := tx.Query(`SELECT peer,name,host,age,agents,ready,usage,updated_at FROM net_peers ORDER BY host DESC, name, peer`)
 	if err != nil {
 		return nil, err
 	}
@@ -269,8 +277,8 @@ func netPeers(tx *sql.Tx) ([]NetPeer, error) {
 	for rows.Next() {
 		var p NetPeer
 		var host int
-		var agents, ready, at string
-		if err := rows.Scan(&p.ID, &p.Name, &host, &p.Age, &agents, &ready, &at); err != nil {
+		var agents, ready, usage, at string
+		if err := rows.Scan(&p.ID, &p.Name, &host, &p.Age, &agents, &ready, &usage, &at); err != nil {
 			return nil, err
 		}
 		p.Host = host != 0
@@ -279,6 +287,11 @@ func netPeers(tx *sql.Tx) ([]NetPeer, error) {
 			var r NetReady
 			if json.Unmarshal([]byte(ready), &r) == nil {
 				p.Ready = &r
+			}
+		}
+		if usage != "" {
+			if json.Unmarshal([]byte(usage), &p.Usage) != nil || p.Usage == nil {
+				p.Usage = []UsageDayAgent{}
 			}
 		}
 		if when, err := time.Parse(time.RFC3339Nano, at); err == nil && p.Age >= 0 {

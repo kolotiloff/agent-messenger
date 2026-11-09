@@ -1,7 +1,9 @@
 package broker
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -23,9 +25,14 @@ const HostPeer = "host"
 const (
 	maxPresenceAgents = 16
 	maxAgentCount     = 9999
-	maxPresenceBody   = 32 << 10
+	maxPresenceBody   = 128 << 10
 	maxPresenceModels = 12
 	maxReadyProjects  = 64
+	// A computer reports up to 31 days of usage for each of its agents.
+	maxUsageRows   = 31 * maxPresenceAgents
+	maxUsageTasks  = 1_000_000
+	maxUsageTokens = 1_000_000_000_000_000
+	maxUsageSeen   = 256
 )
 
 // PresenceInterval is how often a computer reports its agents.
@@ -99,6 +106,59 @@ func (r *PresenceReady) valid() bool {
 	return true
 }
 
+// PresenceUsage is one local day of one agent's token usage on a computer
+// (T-076): the tasks that ran there and finished that day.
+type PresenceUsage struct {
+	Day    string `json:"day"`
+	Agent  string `json:"agent"`
+	Tasks  int    `json:"tasks"`
+	Input  int64  `json:"input_tokens"`
+	Cached int64  `json:"cached_tokens"`
+	Output int64  `json:"output_tokens"`
+}
+
+// PresenceUsageReport is a computer's usage of the last days. Hash names
+// its version; the broker sets it. In a roster, Days is left out when the
+// receiver already holds that version.
+type PresenceUsageReport struct {
+	Hash string          `json:"hash,omitempty"`
+	Days []PresenceUsage `json:"days,omitempty"`
+}
+
+// UsageHash names a version of a usage report.
+func UsageHash(days []PresenceUsage) string {
+	if days == nil {
+		days = []PresenceUsage{}
+	}
+	raw, _ := json.Marshal(days)
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:8])
+}
+
+func (u *PresenceUsageReport) valid() bool {
+	if u == nil {
+		return true
+	}
+	if len(u.Days) > maxUsageRows || len(u.Hash) > 64 {
+		return false
+	}
+	seen := map[[2]string]bool{}
+	for _, d := range u.Days {
+		if _, err := time.Parse("2006-01-02", d.Day); err != nil || !agentName.MatchString(d.Agent) {
+			return false
+		}
+		if d.Tasks < 0 || d.Tasks > maxUsageTasks || d.Input < 0 || d.Cached < 0 || d.Output < 0 || d.Input > maxUsageTokens || d.Cached > maxUsageTokens || d.Output > maxUsageTokens {
+			return false
+		}
+		k := [2]string{d.Day, d.Agent}
+		if seen[k] {
+			return false
+		}
+		seen[k] = true
+	}
+	return true
+}
+
 // Presence is what a computer reports about itself. Name is the name the
 // owner gave the computer; a device's name replaces the one it joined with.
 type Presence struct {
@@ -106,6 +166,12 @@ type Presence struct {
 	Agents      []PresenceAgent `json:"agents"`
 	Coordinator string          `json:"coordinator,omitempty"`
 	Ready       *PresenceReady  `json:"ready,omitempty"`
+	// Usage is sent only when it changed since the last report, or rarely
+	// to refresh; a report without it keeps the stored one (T-076).
+	Usage *PresenceUsageReport `json:"usage,omitempty"`
+	// UsageSeen lists the usage versions the reporting computer holds, by
+	// peer, so the roster leaves out what it already has. Not stored.
+	UsageSeen map[string]string `json:"usage_seen,omitempty"`
 }
 
 // Peer is one computer of the broker as others see it.
@@ -122,6 +188,9 @@ type Peer struct {
 	Agents      []PresenceAgent `json:"agents"`
 	Coordinator string          `json:"coordinator,omitempty"`
 	Ready       *PresenceReady  `json:"ready,omitempty"`
+	// Usage is the computer's token usage of the last days; nil if it
+	// never reported any (T-076).
+	Usage *PresenceUsageReport `json:"usage,omitempty"`
 }
 
 // rosterResponse answers a presence report.
@@ -132,8 +201,13 @@ type rosterResponse struct {
 }
 
 func (p Presence) valid() bool {
-	if len(p.Agents) > maxPresenceAgents || len(p.Coordinator) > 64 || (p.Name != "" && !validDeviceName(p.Name)) || !p.Ready.valid() {
+	if len(p.Agents) > maxPresenceAgents || len(p.Coordinator) > 64 || (p.Name != "" && !validDeviceName(p.Name)) || !p.Ready.valid() || !p.Usage.valid() || len(p.UsageSeen) > maxUsageSeen {
 		return false
+	}
+	for peer, hash := range p.UsageSeen {
+		if len(peer) > 64 || len(hash) > 64 {
+			return false
+		}
 	}
 	if p.Coordinator != "" && !validDeviceName(p.Coordinator) {
 		return false
@@ -162,7 +236,7 @@ func (b *Broker) initPresence() error {
 }
 
 // Report stores a computer's latest presence. The hosting computer reports
-// under HostPeer.
+// under HostPeer. A report without usage keeps the stored usage.
 func (b *Broker) Report(peer string, p Presence) error {
 	if !p.valid() {
 		return errors.New("сведения об агентах не прошли проверку")
@@ -170,14 +244,42 @@ func (b *Broker) Report(peer string, p Presence) error {
 	if p.Agents == nil {
 		p.Agents = []PresenceAgent{}
 	}
+	p.UsageSeen = nil
+	if p.Usage != nil {
+		p.Usage = &PresenceUsageReport{Hash: UsageHash(p.Usage.Days), Days: p.Usage.Days}
+	} else {
+		var old string
+		err := b.db.QueryRow(`SELECT report FROM presence WHERE peer=?`, peer).Scan(&old)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		var stored Presence
+		if old != "" && json.Unmarshal([]byte(old), &stored) == nil {
+			p.Usage = stored.Usage
+		}
+	}
 	raw, _ := json.Marshal(p)
 	_, err := b.db.Exec(`INSERT INTO presence(peer,report,reported_at) VALUES(?,?,?) ON CONFLICT(peer) DO UPDATE SET report=excluded.report, reported_at=excluded.reported_at`, peer, string(raw), b.now().UTC().Format(time.RFC3339))
 	return err
 }
 
 // Roster lists the hosting computer (if it reported) and every device that
-// is not revoked, with their latest presence.
-func (b *Broker) Roster() ([]Peer, error) {
+// is not revoked, with their latest presence. A peer's usage days are left
+// out when seen already holds that version (T-076).
+func (b *Broker) Roster(seen map[string]string) ([]Peer, error) {
+	out, err := b.roster()
+	if err != nil {
+		return nil, err
+	}
+	for i, p := range out {
+		if p.Usage != nil && seen[p.ID] == p.Usage.Hash {
+			out[i].Usage = &PresenceUsageReport{Hash: p.Usage.Hash}
+		}
+	}
+	return out, nil
+}
+
+func (b *Broker) roster() ([]Peer, error) {
 	now := b.now().UTC()
 	out := []Peer{}
 	var report, at string
@@ -224,7 +326,7 @@ func fill(peer *Peer, report, at string, now time.Time) {
 	if p.Name != "" {
 		peer.Name = p.Name
 	}
-	peer.Coordinator, peer.Ready = p.Coordinator, p.Ready
+	peer.Coordinator, peer.Ready, peer.Usage = p.Coordinator, p.Ready, p.Usage
 	if p.Agents != nil {
 		peer.Agents = p.Agents
 	}
@@ -278,11 +380,12 @@ func (b *Broker) handlePresence(w http.ResponseWriter, r *http.Request) {
 	}
 	// The stored report keeps no name: the device's name is in devices.
 	in.Name = ""
+	seen := in.UsageSeen
 	if err := b.Report(d.ID, in); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "unavailable"})
 		return
 	}
-	peers, err := b.Roster()
+	peers, err := b.Roster(seen)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "unavailable"})
 		return

@@ -148,3 +148,29 @@ Every presence report (every 15 seconds) now carries `ready`: whether the comput
 2026-11-08, Claude Code (owner asleep, asked to decide alone and keep it simple).
 
 No new channel for result files. A worker's report (up to 20 000 characters) already comes back whole from another computer in the task's events, and the coordinator reads it through `wait`. Files, diffs and builds stay where the project keeps them: the worker commits or checks them in to the project's version control, or writes them to a folder the owner shares, and names them in the report's «Изменения:» and «Файлы:» lines. Copying files between computers through the broker would need size limits, storage and the owner's consent for each project, and would duplicate what version control already does.
+
+## D-088 — The coordinator catches up after the owner interrupts its wait (T-074)
+
+2026-11-09, Claude Code, from the owner's report: while the coordinator chat waits it does not read the owner; after the owner interrupts, it answers the owner and forgets the workers' questions that came meanwhile.
+
+The coordinator server remembers the highest cursor the chat reached through `wait` (only events actually sent count). Every other tool's answer gets a second text when newer events exist: their count and the cursor to pass to `wait`. The note never moves the cursor, so nothing is skipped. The instructions tell the chat to call `wait` with its last cursor and a 1-second timeout whenever it wakes because of the owner, before answering. `wait` now lasts 120 s by default and at most 300 s instead of 600 s and 3600 s, so a message the owner sends during a wait reaches the chat when the wait returns; an empty wait costs one small call and keeps the chat's prompt cache warm. A hook in the owner's Claude settings would make the check certain, but it changes files Messenger does not own; not done.
+
+## D-089 — A worker commits, or asks and stays open (T-075)
+
+2026-11-09, Claude Code, from the owner's report: two workers on another computer could not commit, the coordinator asked one for its whole report, a cut piece came back, the task was finished and could not be continued there.
+
+The owner's rule: work reaches the project only through the worker's own commit, always; a text copy is no substitute. The worker's first message now says: commit (or check in) the work before reporting; when the commit fails (files locked by another agent, the copy behind the server) and the worker cannot fix it within its task, use `ask` instead of `report`, so the conversation stays open, and try again when the answer comes. The coordinator's instructions say a report is short (at most 20 000 characters reach it), never to ask for the full text of an audit instead of a commit, and how to handle such a question: when another task holds the files, answer later, after that task is done, telling the worker to update and commit; otherwise tell it what to do or tell the owner; never let it finish without committing. An open question has no time limit. Continuing a finished task of another computer stays out of scope.
+
+## D-090 — Statistics of the whole network, sent only when it changes (T-076)
+
+2026-11-09, Claude Code, with the owner: statistics should be seen on any computer, and a click on a computer in the sidebar should filter statistics and agents as it filters tasks. Usage must not load the network.
+
+Each computer adds to its presence report its token usage of the last 31 local days, summed by day and agent, for the tasks that ran on it (started there or received from another computer); no titles or texts. The broker client sends it only when the sums changed since the broker last accepted them, and repeats it every 10 minutes in case the host lost it; a report without usage keeps the stored one. The broker names each version with a hash and, in its answer, leaves out the days of every computer whose version the asking computer already holds (`usage_seen`). A host before T-076 refuses the new fields; the client then reports without them for 10 minutes, as with readiness.
+
+The window sums this computer's own tasks and the others' reports; a task this computer sent to another one counts on the computer that reported it, so nothing is counted twice. The costliest tasks list only tasks this computer knows. In the sidebar, a click on a computer filters the statistics or the agents tab when one of them is open, and opens the tasks otherwise. Another computer's agents are view only: status, last limit and models; they are set up on that computer. Limits are not shown in the sidebar (owner).
+
+## D-091 — The window restarts the old client by itself (T-077)
+
+2026-11-09, Claude Code, from the owner: after every update the window asked to restart the background client, and the answer was always yes.
+
+The window now asks the client to restart once, without the owner, as soon as it sees an older client. The client keeps its old rule: without confirmation it refuses while task runs are going or their count cannot be read, because a restart interrupts them and they are never repeated by themselves. Only then the window shows the question as before. While restarting it shows «Обновляем Messenger». A failed restart is shown and not retried automatically.

@@ -42,7 +42,7 @@ func TestUsageStats(t *testing.T) {
 		t.Fatal(err)
 	}
 	since := time.Now().Add(-7 * 24 * time.Hour)
-	s, err := f.st.UsageStats(since, time.Local)
+	s, err := f.st.UsageStats(since, time.Local, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestUsageStats(t *testing.T) {
 		}
 	}
 	// A period with nothing in it.
-	empty, err := f.st.UsageStats(time.Now().Add(time.Hour), time.Local)
+	empty, err := f.st.UsageStats(time.Now().Add(time.Hour), time.Local, "")
 	if err != nil || empty.Total.Tasks != 0 || len(empty.Agents) != 0 || len(empty.Top) != 0 {
 		t.Fatalf("empty %+v %v", empty, err)
 	}

@@ -30,7 +30,7 @@ func taskTools() []map[string]any {
 			"inputSchema": map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{
 				"include_task": map[string]any{"type": "boolean", "description": "also return the task text on a resumed run"},
 			}}},
-		{"name": "report", "description": "Finish the task: what you did, what you verified and what remains, in at most 8 short lines. Put longer details in a file in the project and list its path in files. Ends this run; the task is done.",
+		{"name": "report", "description": "Finish the task: what you did, what you verified and what remains, in at most 8 short lines. Put longer details in a file in the project and list its path in files. Commit your change first; if you cannot commit, use ask instead. Ends this run; the task is done.",
 			"inputSchema": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"text"},
 				"properties": map[string]any{
 					"text":    map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxDispositionText, "description": "the report, at most 8 short lines"},

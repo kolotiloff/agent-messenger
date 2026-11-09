@@ -245,8 +245,10 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-agent-line .am-muted { margin-left:auto; }
 #am-concept .am-side-bottom { display:flex; flex-direction:column; gap:var(--am-gap-control); margin-top:auto; padding-top:var(--am-space-3); border-top:1px solid var(--am-line); flex-shrink:0; }
 #am-concept .am-side-bottom > button { width:100%; }
-#am-concept .am-theme-setting { display:flex; align-items:center; gap:var(--am-gap-content); }
-#am-concept .am-theme-setting .am-select-trigger { flex:1; }
+/* Language and theme share one grid: labels in one column, both lists the same width. */
+#am-concept .am-prefs { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:var(--am-gap-control) var(--am-gap-content); }
+#am-concept .am-theme-setting { display:contents; }
+#am-concept .am-theme-setting .am-select-trigger { width:100%; }
 #am-concept .am-version { font-size:var(--am-text-xs); color:var(--am-muted); line-height:1.4; }
 /* An available update is a small blue round arrow next to the version (owner, T-066) */
 #am-concept .am-version-row { display:flex; align-items:center; justify-content:space-between; gap:var(--am-gap-control); min-width:0; }
@@ -496,6 +498,8 @@ body.am-native #am-concept .am-titlebar { display:none; }
   #am-concept .am-side-bottom { flex-direction:row; align-items:center; gap:var(--am-gap-control); min-width:0; margin:0 0 0 auto; padding:0; border:0; }
   #am-concept .am-side-bottom > button { width:auto; }
   #am-concept .am-theme-setting label { display:none; }
+  #am-concept .am-prefs { display:flex; gap:var(--am-gap-control); }
+  #am-concept .am-theme-setting .am-select-trigger { width:auto; }
   #am-concept .am-main { --am-pane-inset:var(--am-space-3); padding:var(--am-space-3) 0; }
   #am-concept .am-tab { padding:var(--am-text-nudge) var(--am-space-2) 0; }
   #am-concept .am-cards { grid-template-columns:1fr; }
@@ -566,6 +570,13 @@ body.am-frameless #am-concept .am-tabs, body.am-frameless #am-concept .am-sideba
    status; names and numbers sit beside the bars in text colors. */
 #am-concept .am-stats { max-width:720px; }
 #am-concept .am-stats-periods { display:flex; gap:var(--am-space-1); }
+/* T-076: the period tabs and the chosen computer share one row. */
+#am-concept .am-stats-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:var(--am-gap-control); }
+#am-concept .am-stats-head .am-filter-chip, #am-concept [data-screen="agents"] > .am-filter-chip { margin-top:0; max-width:320px; }
+#am-concept [data-screen="agents"] > .am-filter-chip { margin-bottom:var(--am-gap-section); }
+#am-concept .am-peer-agents-note { grid-column:1/-1; margin:0; }
+#am-concept [data-screen="agents"] > .am-filter-chip { width:fit-content; }
+#am-concept .am-peer-state { display:inline-flex; align-items:center; gap:var(--am-space-2); white-space:nowrap; }
 #am-concept .am-stats-hero { font-size:var(--am-text-xl); margin:0; }
 #am-concept .am-stats-hero:focus { outline:none; }
 #am-concept .am-stats-pair { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:var(--am-gap-section); }
@@ -585,6 +596,7 @@ body.am-frameless #am-concept .am-tabs, body.am-frameless #am-concept .am-sideba
 #am-concept .am-stats-bar > span { display:block; height:100%; border-radius:var(--am-radius-xs); background:var(--am-muted); }
 #am-concept .am-stats-tasks { text-align:right; }
 #am-concept .am-stats-top { display:flex; flex-direction:column; margin:0 calc(-1 * var(--am-space-3)); }
+#am-concept .am-stats-top > p { margin:0; padding:var(--am-pad-compact); }
 #am-concept .am-stats-task { display:flex; align-items:center; justify-content:space-between; gap:var(--am-gap-content); min-height:var(--am-control); padding:var(--am-pad-compact); border:0; border-radius:var(--am-radius-s); background:transparent; text-align:left; font-weight:inherit; }
 #am-concept .am-stats-task:is(:hover,:focus-visible) { background:var(--am-soft); }
 #am-concept .am-stats-task-text { display:flex; flex-direction:column; gap:var(--am-gap-line); min-width:0; }

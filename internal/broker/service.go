@@ -88,6 +88,10 @@ type Status struct {
 // host refused it.
 const readyRetry = 10 * time.Minute
 
+// usageRefresh is how often a computer repeats its unchanged usage, in
+// case the host lost it (T-076). A change is sent at the next report.
+const usageRefresh = 10 * time.Minute
+
 type Service struct {
 	root string
 	base context.Context
@@ -100,10 +104,18 @@ type Service struct {
 	// readySkip is until when reports leave out readiness, after the host
 	// refused it (an older host, T-070).
 	readySkip time.Time
-	broker    *Broker
-	stop      context.CancelFunc
-	done      chan struct{}
-	hostErr   string
+	// usageSkip is the same for usage. usageSent is the version of this
+	// computer's usage that usageTo (broker/device) last accepted, at
+	// usageAt; usageCopies holds the other computers' usage from there.
+	usageSkip   time.Time
+	usageSent   string
+	usageAt     time.Time
+	usageTo     string
+	usageCopies map[string]PresenceUsageReport
+	broker      *Broker
+	stop        context.CancelFunc
+	done        chan struct{}
+	hostErr     string
 
 	member     *Connection
 	checkedAt  string
@@ -486,7 +498,7 @@ func (s *Service) Status() Status {
 	}
 	peers := []Peer{}
 	if s.broker != nil {
-		if roster, err := s.broker.Roster(); err == nil {
+		if roster, err := s.broker.Roster(nil); err == nil {
 			for _, p := range roster {
 				// A computer that joined its own server is not its own peer.
 				if p.ID != HostPeer && (s.member == nil || p.ID != s.member.DeviceID) {
@@ -588,13 +600,39 @@ func (s *Service) ReportPresence(ctx context.Context) {
 	}
 	call, cancel := context.WithTimeout(ctx, 12*time.Second)
 	defer cancel()
+	to := c.BrokerID + "/" + c.DeviceID
+	sent := ""
+	if p.Usage != nil {
+		sent = UsageHash(p.Usage.Days)
+	}
 	s.mu.Lock()
 	skipReady := time.Now().Before(s.readySkip)
+	if s.usageTo != to {
+		s.usageTo, s.usageSent, s.usageCopies = to, "", nil
+	}
+	// Usage goes only when it changed, or rarely to refresh (T-076).
+	if time.Now().Before(s.usageSkip) || (sent == s.usageSent && time.Since(s.usageAt) < usageRefresh) {
+		p.Usage = nil
+	}
+	if len(s.usageCopies) > 0 && !time.Now().Before(s.usageSkip) {
+		p.UsageSeen = map[string]string{}
+		for peer, u := range s.usageCopies {
+			p.UsageSeen[peer] = u.Hash
+		}
+	}
 	s.mu.Unlock()
 	if skipReady {
 		p.Ready = nil
 	}
 	peers, err := Report(call, *c, p)
+	if errors.Is(err, errPresenceRefused) && (p.Usage != nil || p.UsageSeen != nil) {
+		// A host older than usage refuses the fields (T-076).
+		s.mu.Lock()
+		s.usageSkip = time.Now().Add(readyRetry)
+		s.mu.Unlock()
+		p.Usage, p.UsageSeen = nil, nil
+		peers, err = Report(call, *c, p)
+	}
 	if errors.Is(err, errPresenceRefused) && p.Ready != nil {
 		// A host older than readiness refuses the field; report without it
 		// and try it again later, after the host may have been updated.
@@ -614,7 +652,10 @@ func (s *Service) ReportPresence(ctx context.Context) {
 		s.memberErr = err.Error()
 		return
 	}
-	s.peers, s.peersAt = peers, time.Now()
+	if p.Usage != nil && s.usageTo == to {
+		s.usageSent, s.usageAt = sent, time.Now()
+	}
+	s.peers, s.peersAt = s.keepUsage(to, peers), time.Now()
 	// The broker now lists this computer under the reported name. A host
 	// before preview.37 ignores the name and keeps the one it joined with.
 	if p.Name != "" && s.member.DeviceName != p.Name {
@@ -724,4 +765,26 @@ func pairOnNetwork(ctx context.Context, code string) (Invitation, error) {
 		last = err
 	}
 	return Invitation{}, last
+}
+
+// keepUsage fills in the usage the roster left out because this computer
+// already holds that version, and remembers the rest. Called with mu held.
+func (s *Service) keepUsage(to string, peers []Peer) []Peer {
+	if s.usageTo != to {
+		return peers
+	}
+	copies := map[string]PresenceUsageReport{}
+	for i, p := range peers {
+		if p.Usage == nil {
+			continue
+		}
+		u := *p.Usage
+		if old, ok := s.usageCopies[p.ID]; ok && u.Days == nil && old.Hash == u.Hash {
+			u = old
+		}
+		copies[p.ID] = u
+		peers[i].Usage = &u
+	}
+	s.usageCopies = copies
+	return peers
 }

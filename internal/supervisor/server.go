@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kolotiloff/agent-messenger/internal/broker"
+	"github.com/kolotiloff/agent-messenger/internal/core"
 )
 
 // serverNetworkTimeout bounds a connection attempt or check from the window.
@@ -140,6 +141,16 @@ func (s *Supervisor) presence() (broker.Presence, error) {
 			}
 			p.Ready = ready
 		}
+	}
+	// Token usage of the last days, for the others' statistics (T-076);
+	// the broker client sends it only when it changed.
+	y, m, d := time.Now().Date()
+	if days, err := s.store.UsageDaily(time.Date(y, m, d-(core.MaxUsageDays-1), 0, 0, 0, 0, time.Local), time.Local); err == nil {
+		u := &broker.PresenceUsageReport{Days: make([]broker.PresenceUsage, 0, len(days))}
+		for _, day := range days {
+			u.Days = append(u.Days, broker.PresenceUsage(day))
+		}
+		p.Usage = u
 	}
 	return p, nil
 }

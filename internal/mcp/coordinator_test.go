@@ -149,7 +149,8 @@ func decodeTool(t *testing.T, resp map[string]any, out any) (string, bool) {
 	result, _ := resp["result"].(map[string]any)
 	isErr, _ := result["isError"].(bool)
 	content, _ := result["content"].([]any)
-	if len(content) != 1 {
+	// A second text, when present, is the unread-events notice (T-074).
+	if len(content) < 1 || len(content) > 2 {
 		t.Fatalf("result %v", resp)
 	}
 	text, _ := content[0].(map[string]any)["text"].(string)
@@ -645,5 +646,81 @@ func TestCoordinatorTaskLock(t *testing.T) {
 	}
 	if waits[first.TaskID] != nil || waits[second.TaskID] != first.TaskID {
 		t.Fatalf("waits %v", waits)
+	}
+}
+
+// toolNotice calls a tool and returns its unread-events notice, if any.
+func (c *coordClient) toolNotice(name string, args any) string {
+	c.t.Helper()
+	c.next++
+	id := c.next
+	c.send(id, "tools/call", map[string]any{"name": name, "arguments": args})
+	resp, _ := c.expect(id, 5*time.Second)
+	result, _ := resp["result"].(map[string]any)
+	content, _ := result["content"].([]any)
+	if len(content) < 2 {
+		return ""
+	}
+	text, _ := content[1].(map[string]any)["text"].(string)
+	return text
+}
+
+// T-074: after the owner interrupts a wait, the next call of any other tool
+// says that events came meanwhile and where to resume.
+func TestCoordinatorOtherToolsTellAboutUnreadEvents(t *testing.T) {
+	st := newCoordinatorStore(t)
+	c := startCoordinator(t, st, "Game")
+	var started struct {
+		TaskID string `json:"task_id"`
+	}
+	// Before the first wait the cursor is unknown: no notice.
+	c.tool("start_task", map[string]any{"op_id": "n1", "agent": "claude", "text": "Scene A"}, &started)
+	finishRun(t, st, started.TaskID, core.DispositionAsk, "Which scene?")
+	if n := c.toolNotice("tasks", map[string]any{}); n != "" {
+		t.Fatalf("notice before any wait: %q", n)
+	}
+	var w waitResult
+	c.tool("wait", map[string]any{"after": 0, "timeout_seconds": 1}, &w)
+	if len(w.Events) != 1 {
+		t.Fatalf("wait %+v", w)
+	}
+	// Everything delivered: no notice.
+	if n := c.toolNotice("list_agents", map[string]any{}); n != "" {
+		t.Fatalf("notice with nothing new: %q", n)
+	}
+	// A wait is interrupted; meanwhile a report arrives.
+	c.next++
+	waitID := c.next
+	c.send(waitID, "tools/call", map[string]any{"name": "wait", "arguments": map[string]any{"after": w.Cursor, "timeout_seconds": 30}})
+	c.none(waitID, 200*time.Millisecond)
+	c.send(nil, "notifications/cancelled", map[string]any{"requestId": waitID})
+	c.none(waitID, 200*time.Millisecond)
+	var other struct {
+		TaskID string `json:"task_id"`
+	}
+	c.tool("start_task", map[string]any{"op_id": "n2", "agent": "claude", "text": "Scene B"}, &other)
+	finishRun(t, st, other.TaskID, core.DispositionReport, "Scene B built")
+	n := c.toolNotice("tasks", map[string]any{})
+	if !strings.Contains(n, "1 new event") || !strings.Contains(n, fmt.Sprintf("after=%d", w.Cursor)) {
+		t.Fatalf("notice %q", n)
+	}
+	// The notice does not move the cursor: wait still returns the report.
+	var again waitResult
+	c.tool("wait", map[string]any{"after": w.Cursor, "timeout_seconds": 1}, &again)
+	if len(again.Events) != 1 || again.Events[0].Text != "Scene B built" {
+		t.Fatalf("again %+v", again)
+	}
+	if n := c.toolNotice("tasks", map[string]any{}); n != "" {
+		t.Fatalf("notice after reading: %q", n)
+	}
+}
+
+// T-075: the coordinator knows a report is short and asks for a file and a
+// commit instead of a long message.
+func TestCoordinatorKnowsTheReportLimit(t *testing.T) {
+	for _, want := range []string{"20000 characters", "could not commit", "answer later", "never ask for the full text"} {
+		if !strings.Contains(coordinatorInstructions, want) {
+			t.Fatalf("instructions lack %q", want)
+		}
 	}
 }

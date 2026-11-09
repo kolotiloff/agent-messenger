@@ -50,8 +50,14 @@ func TestTaskWindowRoutes(t *testing.T) {
 	if code, _ := do("GET", "/api/usage-stats?period=year", ""); code != 400 {
 		t.Fatalf("bad period %d", code)
 	}
-	if code, _ := do("GET", "/api/usage-stats?period=week", ""); code != 200 || got[len(got)-1].Cmd != "usage-stats" || got[len(got)-1].Alias != "week" {
+	if code, _ := do("GET", "/api/usage-stats?period=week", ""); code != 200 || got[len(got)-1].Cmd != "usage-stats" || got[len(got)-1].Alias != "week" || got[len(got)-1].Text != "" {
 		t.Fatalf("usage stats %d %+v", code, got)
+	}
+	if code, _ := do("GET", "/api/usage-stats?period=month&computer=dev-1", ""); code != 200 || got[len(got)-1].Alias != "month" || got[len(got)-1].Text != "dev-1" {
+		t.Fatalf("usage stats of a computer %d %+v", code, got[len(got)-1])
+	}
+	if code, _ := do("GET", "/api/usage-stats?period=week&computer="+strings.Repeat("x", 65), ""); code != 400 {
+		t.Fatalf("long computer %d", code)
 	}
 	code, _ := do("POST", "/api/task-answer", `{"task":"task-1","question":"q-1","op_id":"op-1","text":"yes"}`)
 	last := got[len(got)-1]

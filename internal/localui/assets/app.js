@@ -117,7 +117,7 @@
   let view=null,project=recall('messenger-project'),selectedTask='',feed=null,feedSignature='',viewSignature='';
   let online=false,offlineReason='',discovery=[],tab='tasks',refreshing=false,answering=false;
   const agentChecks=new Map(),checking=new Set(),rowNote=new Map();let autoChecked=false,discoveryLoaded=false;
-  let clientInfo=null,clientInfoAt=0,restart={busy:false,ask:null,error:''};
+  let clientInfo=null,clientInfoAt=0,restart={busy:false,ask:null,error:''},autoRestarted=false;
   // The window can be newer than the client still running in the background
   // (after an update). Say how to restart it; nothing is restarted by itself.
   function shutdownCommand(){return view?.messenger&&view?.data_root?'"'+view.messenger+'" --root "'+view.data_root+'" shutdown':'';}
@@ -296,7 +296,7 @@
   const peerFresh=peer=>peer.age>=0&&peer.age<=45;
   function pickable(card,id){
     card.setAttribute('role','button');card.tabIndex=0;card.setAttribute('aria-pressed',String(computerFilter===id));
-    card.title=computerFilter===id?tr('Показать задачи всех компьютеров'):tr('Показать задачи этого компьютера');
+    card.title=computerFilter===id?tr('Показать все компьютеры'):tr('Показать только этот компьютер');
     card.addEventListener('click',event=>{if(!event.target.closest('button'))filterComputer(id);});
     card.addEventListener('keydown',event=>{if(event.target===card&&(event.key==='Enter'||event.key===' ')){event.preventDefault();filterComputer(id);}});
   }
@@ -347,11 +347,24 @@
   // A click on a computer in the sidebar shows only its tasks; a second click,
   // the chip's cross or a click on empty sidebar space shows all again (T-056).
   let computerFilter='';
+  // On the statistics and agents tabs the choice filters that tab (T-076);
+  // elsewhere it opens the tasks.
   function filterComputer(id){
     computerFilter=computerFilter===id?'':id;
-    if(computerFilter)show('tasks');
-    renderMachines();renderTaskList();
+    if(computerFilter&&tab!=='stats'&&tab!=='agents')show('tasks');
+    computerChanged();
   }
+  function clearComputer(){computerFilter='';computerChanged();}
+  function computerChanged(){
+    renderMachines();renderTaskList();
+    if(tab==='stats'){stats=null;renderStats();loadStats();}
+    if(tab==='agents')renderAgents();
+  }
+  function computerName(id){
+    return id==='local'?(view?.computer_name||tr('Этот компьютер')):(server?.peers||[]).find(p=>p.id===id)?.name||(view?.tasks||[]).find(t=>taskComputer(t)===id)?.remote?.name||'';
+  }
+  // The chip of a tab filtered by computer; its cross shows all again.
+  function computerChip(chip){chip.hidden=!computerFilter;chip.querySelector('span').textContent=computerFilter?tr('Компьютер: ')+computerName(computerFilter):'';}
   function visibleTasks(){
     const filter=$('agent-filter').value;
     const list=(view?.tasks||[]).filter(t=>(!filter||t.agent===filter)&&(!computerFilter||taskComputer(t)===computerFilter));
@@ -361,8 +374,7 @@
   function renderTaskList(){
     const box=$('task-list');box.replaceChildren();
     const [active,done]=visibleTasks();
-    const chipName=computerFilter==='local'?(view?.computer_name||tr('Этот компьютер')):(server?.peers||[]).find(p=>p.id===computerFilter)?.name||(view?.tasks||[]).find(t=>taskComputer(t)===computerFilter)?.remote?.name||'';
-    $('computer-chip').hidden=!computerFilter;$('computer-chip-text').textContent=computerFilter?tr('Компьютер: ')+chipName:'';
+    computerChip($('computer-chip'));
     $('task-count').textContent=view?.tasks?.length?String(view.tasks.length):'';
     const section=(label,items)=>{
       if(!items.length)return;
@@ -653,6 +665,8 @@
   }
   function renderAgents(){
     const cards=$('agents');cards.replaceChildren();
+    computerChip($('agents-computer-chip'));
+    if(computerFilter&&computerFilter!=='local'){renderPeerAgents(cards);return;}
     for(const provider of ['claude','codex','cursor']){
       const a=(view?.agents||[]).find(x=>x.agent===provider);
       const found=discovery.find(d=>d.provider===provider);
@@ -734,6 +748,45 @@
     }
     renderAccessBar();
   }
+  // Another computer's agents, as its reports show them: view only (T-076).
+  function renderPeerAgents(cards){
+    $('access-bar').hidden=true;
+    const peer=(server?.peers||[]).find(p=>p.id===computerFilter);
+    const fresh=!!peer&&peerFresh(peer);
+    cards.append(el('p',!peer?tr('Компьютер не найден в сети.'):fresh?tr('Только просмотр: агентов этого компьютера настраивают на нём самом.'):(peer.last_seen?tr('Нет связи. Был на связи ')+stamp(peer.last_seen)+'.':tr('Ещё не выходил на связь.')),'am-small am-muted am-peer-agents-note'));
+    for(const a of peer?.agents||[]){
+      const card=el('article',undefined,'am-card am-agent-card am-agent-remote'+(fresh?'':' am-agent-off'));
+      const head=el('div',undefined,'am-agent-head');
+      const heading=el('h3',undefined,'am-provider-heading');heading.append(providerIcon(a.agent),el('span',names[a.agent]||a.agent));
+      const [state,text]=fresh?agentState(a):['offline',tr('Нет связи')];
+      const st=el('span',undefined,'am-peer-state am-small am-muted');st.append(el('span',undefined,'am-dot am-dot-'+state),el('span',text));
+      head.append(heading,st);card.append(head);
+      const steps=el('div',undefined,'am-steps');
+      const row=(mark,title,sub)=>{
+        const r=el('div',undefined,'am-step');const m=el('span',undefined,'am-mark am-mark-ring');m.append(mark);r.append(m);
+        const t=el('div',undefined,'am-step-text');const line=el('p',undefined,'am-step-title');
+        if(title instanceof Node)line.append(title);else line.textContent=title;t.append(line);
+        if(sub){const s=el('p',sub,'am-step-sub');s.title=sub;t.append(s);}
+        r.append(t,el('span'));steps.append(r);
+      };
+      const l=a.limit,level=limitLevel(l);
+      if(l){
+        const title=el('span');title.append(tr('Лимит '));
+        title.append(el('span',typeof l.used_percent==='number'?Math.round(l.used_percent)+'%':l.state==='exhausted'?tr('исчерпан'):l.state==='warning'?tr('близко к пределу'):tr('в норме'),'am-status-'+level));
+        row(limitRing(l),title,l.resets_at?tr('Сброс ')+resetText(l.resets_at):l.observed_at?tr('По данным задачи в ')+dayClock(l.observed_at):'');
+      }else row(limitRing(null),tr('Лимит'),tr('Появится после первой задачи'));
+      const models=el('span',undefined,'am-agent-models');models.textContent=a.models?.length?a.models.join(', '):tr('Модель по умолчанию');
+      const mm=el('span','✓','am-mark am-mark-ok');
+      const r=el('div',undefined,'am-step');const t=el('div',undefined,'am-step-text');t.append(el('p',tr('Модели'),'am-step-title'),el('p',models.textContent,'am-step-sub'));r.append(mm,t,el('span'));steps.append(r);
+      card.append(steps);
+      const n=(a.running||0)+(a.waiting_owner||0);
+      const tasks=el('button',undefined,'am-agent-tasks');tasks.type='button';
+      if(n){tasks.textContent=tr('Задачи на этом компьютере');tasks.addEventListener('click',()=>{$('agent-filter').value=a.agent;syncSelects();show('tasks');renderTaskList();});}
+      else{tasks.textContent=tr('Задач сейчас нет');tasks.disabled=true;}
+      card.append(tasks);cards.append(card);
+    }
+    if(fresh&&!(peer.agents||[]).length)cards.append(el('p',tr('Агенты не подключены'),'am-small am-muted'));
+  }
   // T-056: one «Любые команды» switch for every agent of this computer.
   function renderAccessBar(){
     const agents=view?.agents||[],bar=$('access-bar');bar.hidden=!agents.length;
@@ -765,7 +818,14 @@
   // The desktop window offers to restart it; a browser window shows how.
   async function loadClientInfo(){
     clientInfoAt=Date.now();
-    try{const info=await api('/api/client-info');clientInfo=info;if(!info.outdated)restart.ask=null;renderRestart();}catch(_){}
+    try{
+      const info=await api('/api/client-info');clientInfo=info;if(!info.outdated)restart.ask=null;
+      // T-077: after an update the window restarts the old client itself,
+      // once. The client refuses while tasks run or their count is unknown;
+      // only then the owner is asked.
+      if(info.outdated&&info.restart&&info.client==='running'&&!autoRestarted&&!restart.busy&&!restart.ask){autoRestarted=true;restartClient(false);return;}
+      renderRestart();
+    }catch(_){}
   }
   async function restartClient(confirm){
     restart={busy:true,ask:restart.ask,error:''};renderRestart();
@@ -787,7 +847,7 @@
     const canQuit=!!window.webkit?.messageHandlers?.app;
     let title=tr('Нужно перезапустить Messenger'),text;
     if(ask){title=ask.known?tr('Сейчас выполняются задачи'):tr('Не удалось проверить задачи');text=(ask.known?tr('Задач в работе: ')+ask.running+tr('. Перезапуск прервёт их.'):tr('Если задачи сейчас идут, перезапуск прервёт их.'))+tr(' Сами они не повторятся и будут ждать вашего решения.');}
-    else if(restart.busy)text=tr('Останавливаем старую версию и запускаем новую. Это займёт несколько секунд.');
+    else if(restart.busy){title=tr('Обновляем Messenger');text=tr('Останавливаем старую версию и запускаем новую. Это займёт несколько секунд.');}
     else if(canRestart)text=tr('Приложение обновилось до версии ')+clientInfo.window_version+tr(', а в фоне работает ')+(clientInfo.client_version?tr('версия ')+clientInfo.client_version:tr('более ранняя версия'))+tr('. Пока она не перезапущена, Messenger не может работать. Задачи, история и устройства сохранятся.');
     else text=tr('В фоне работает более ранняя версия клиента. Закройте окно, выполните скопированную команду в Терминале и откройте окно снова.');
     $('restart-title').textContent=title;$('restart-text').textContent=text;
@@ -839,7 +899,7 @@
   function show(next){
     tab=next;root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab);
     root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
-    $('list-toggle').hidden=tab!=='tasks';if(tab==='server')loadServer();if(tab==='stats')loadStats();$('screen-title').textContent={tasks:tr('Задачи'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сервер'),stats:tr('Статистика')}[tab];
+    $('list-toggle').hidden=tab!=='tasks';if(tab==='server')loadServer();if(tab==='stats')loadStats();if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сервер'),stats:tr('Статистика')}[tab];
   }
 
 
@@ -853,7 +913,7 @@
   function tokensFull(n){return n.toLocaleString(amLocale)+' '+tokensWord(n);}
   async function loadStats(){
     const gen=++statsGen;
-    try{const s=await api('/api/usage-stats?period='+statsPeriod,8000);if(gen===statsGen){stats=s;renderStats();}}
+    try{const s=await api('/api/usage-stats?period='+statsPeriod+(computerFilter?'&computer='+encodeURIComponent(computerFilter):''),8000);if(gen===statsGen){stats=s;renderStats();}}
     catch(error){if(gen===statsGen){$('stats-total-title').textContent=tr('Статистика недоступна');$('stats-total-note').textContent=error.message;}}
   }
   function statsBars(box,groups,total,agents){
@@ -892,6 +952,9 @@
   }
   function renderStats(){
     root.querySelectorAll('[data-period]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.period===statsPeriod)));
+    computerChip($('stats-computer-chip'));
+    $('stats-computers-card').hidden=!!computerFilter;
+    $('stats-foot').textContent=!computerFilter?tr('Считаются все компьютеры сети: каждый сообщает расход своих задач по отчётам агентов. Задача попадает в день, когда закончилась.'):computerFilter==='local'?tr('Задачи, которые выполнялись на этом компьютере. Задача попадает в день, когда закончилась.'):tr('Расход сообщает сам компьютер, когда он меняется. В самых затратных задачах — только отправленные туда с этого компьютера.');
     if(!stats)return;
     const t=stats.total;
     $('stats-total-title').textContent=t.tasks?tokensFull(t.tokens)+' '+periodWords[statsPeriod]:tr('Нет задач с расходом ')+periodWords[statsPeriod];
@@ -1358,7 +1421,7 @@
     project=value;remember('messenger-project',value);selectedTask='';feed=null;feedSignature='';viewSignature='';refresh();
   });
   $('agent-filter').addEventListener('change',renderTaskList);
-  $('computer-chip-clear').addEventListener('click',()=>{computerFilter='';renderMachines();renderTaskList();});
+  for(const id of ['computer-chip','stats-computer-chip','agents-computer-chip'])$(id).querySelector('button').addEventListener('click',clearComputer);
   // The sidebar and the task list are as wide as the owner drags them (T-063).
   // A double click or Home restores the usual width; the width is remembered.
   function splitter(pane,name,variable,usual,min,max,side){
@@ -1388,7 +1451,7 @@
   splitter(root.querySelector('.am-sidebar'),tr('Ширина левой панели'),'--am-nav',204,160,420,1);
   splitter($('task-panel'),tr('Ширина списка задач'),'--am-queue',240,200,520,-1);
   // A click on empty space in the sidebar shows all computers' tasks again.
-  root.querySelector('.am-sidebar').addEventListener('click',event=>{if(computerFilter&&!event.target.closest('.am-machine-card,.am-project,.am-side-bottom,.am-splitter,button,select,input,a,[popover]')){computerFilter='';renderMachines();renderTaskList();}});
+  root.querySelector('.am-sidebar').addEventListener('click',event=>{if(computerFilter&&!event.target.closest('.am-machine-card,.am-project,.am-side-bottom,.am-splitter,button,select,input,a,[popover]'))clearComputer();});
   $('answer-text').addEventListener('input',()=>{const f=$('answer-text');f.style.height='auto';f.style.height=Math.min(140,Math.max(44,f.scrollHeight))+'px';answerControls();});
   $('answer-send').addEventListener('click',sendAnswer);
   // Enter sends; Shift+Enter adds a line. An IME composition keeps its Enter.
