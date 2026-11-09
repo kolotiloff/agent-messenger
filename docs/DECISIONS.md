@@ -272,3 +272,9 @@ The coordinator's entry in Claude started the program the client ran from, which
 - An entry of this Messenger (same data folder and project) that starts another file is replaced once per client start, with Claude's own `mcp remove` and `mcp add`. Entries of anything else are never touched. A failure is shown, not retried.
 - `messenger coordinator` is a relay: it runs `coordinator-serve` from that file and passes MCP lines. When the file changes and the new program answers `version`, the relay initializes it with the chat's own initialize request and the same chat id, sends new calls there, lets running calls finish in the old one and tells Claude `notifications/tools/list_changed`. A new program that fails is dropped and the old one keeps serving. A chat open before this version still runs its old copy: it needs one reconnect or a new chat, after which it follows updates by itself.
 
+## D-108 — Continue an interrupted task after checking its worker is gone (T-118, Q-029)
+
+2026-11-09, owner's answer to Q-029 («попробуй проверить»).
+
+An interrupted run (the client restarted while it ran) was a dead end: nobody saw its worker end, so by D-021 the task stayed as it was. Now `continue_task` may continue an interrupted task of this computer. It is never automatic: only the coordinator's explicit call. Messenger first checks, for every interrupted run of the task, that its worker is certainly gone: the computer restarted since (another boot id), or neither the recorded process (same id and start time) nor any process of its group is running. If the process was never recorded, the snapshot fails or anything still runs, the call is refused and the task stays as it was. When the check passes, those runs are closed as failed («closed for a follow-up») and the same conversation goes on with the coordinator's text. Their reservations stay where they are; `active-runs.json` is not touched. A task of another computer is not covered.
+

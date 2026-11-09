@@ -1690,6 +1690,19 @@ func answerTask(tx *sql.Tx, task, question, opID, text, by string, fromNetwork b
 // blocked one is not, and nothing tries to recover a conversation the agent
 // no longer has: such a run fails like any other. opID makes it idempotent.
 func (s *Store) ContinueTask(task, opID, text, by string) error {
+	return s.ContinueTaskChecked(task, opID, text, by, nil)
+}
+
+// WorkerGone tells whether the recorded worker of an interrupted run is
+// certainly gone, and why; an error means it is not certain (D-108).
+type WorkerGone func(platform.Observation) (string, error)
+
+// ContinueTaskChecked is ContinueTask that may also continue an interrupted
+// task of this computer (T-118, D-108): only when gone confirms, for every
+// interrupted run of the task, that its worker is gone. Those runs are then
+// closed as failed, their reservations stay as they are, and the same
+// conversation goes on. Anything unclear leaves the task as it was.
+func (s *Store) ContinueTaskChecked(task, opID, text, by string, gone WorkerGone) error {
 	text = strings.TrimSpace(text)
 	if opID == "" || len(opID) > 128 || text == "" || utf8.RuneCountInString(text) > MaxTaskText {
 		return fmt.Errorf("%w: continue needs an operation id and 1..%d characters", ErrRejected, MaxTaskText)
@@ -1716,8 +1729,9 @@ func (s *Store) ContinueTask(task, opID, text, by string) error {
 		if err != nil {
 			return err
 		}
-		if t.State != "done" && t.State != "failed" {
-			return fmt.Errorf("%w: only a finished task (done or failed) can be continued; this one is %s", ErrRejected, t.State)
+		interrupted := t.State == "interrupted" && gone != nil
+		if t.State != "done" && t.State != "failed" && !interrupted {
+			return fmt.Errorf("%w: only a finished task (done or failed) or an interrupted one can be continued; this one is %s", ErrRejected, t.State)
 		}
 		link, err := taskLink(tx, task)
 		if err != nil {
@@ -1725,6 +1739,11 @@ func (s *Store) ContinueTask(task, opID, text, by string) error {
 		}
 		if link.origin != nil || link.remote != nil {
 			return fmt.Errorf("%w: a task of another computer cannot be continued yet; start a new task", ErrRejected)
+		}
+		if interrupted {
+			if err := closeInterruptedRuns(tx, task, gone); err != nil {
+				return err
+			}
 		}
 		if t.SessionID == "" {
 			return fmt.Errorf("%w: no recorded conversation to continue; start a new task", ErrRejected)
@@ -1761,6 +1780,49 @@ func (s *Store) ContinueTask(task, opID, text, by string) error {
 		}
 		return insertTaskEvent(tx, t.Project, task, AudienceLog, "continued", text, "")
 	})
+}
+
+// closeInterruptedRuns closes the task's interrupted runs as failed when
+// their workers are certainly gone (D-108).
+func closeInterruptedRuns(tx *sql.Tx, task string, gone WorkerGone) error {
+	rows, err := tx.Query(`SELECT id,COALESCE(pid,0),COALESCE(pgid,0),COALESCE(start_token,''),COALESCE(boot_id,'') FROM task_runs WHERE task_id=? AND state='interrupted'`, task)
+	if err != nil {
+		return err
+	}
+	type run struct {
+		id  string
+		obs platform.Observation
+	}
+	var runs []run
+	for rows.Next() {
+		var r run
+		if err := rows.Scan(&r.id, &r.obs.PID, &r.obs.PGID, &r.obs.StartToken, &r.obs.BootID); err != nil {
+			rows.Close()
+			return err
+		}
+		runs = append(runs, r)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if len(runs) == 0 {
+		return fmt.Errorf("%w: no interrupted run to close", ErrRejected)
+	}
+	whys := make([]string, len(runs))
+	for i, r := range runs {
+		why, err := gone(r.obs)
+		if err != nil {
+			return fmt.Errorf("%w: the interrupted worker may still run (%v); the task stays as it is", ErrRejected, err)
+		}
+		whys[i] = why
+	}
+	for i, r := range runs {
+		if err := setRunState(tx, r.id, "failed", "interrupted; closed for a follow-up: "+whys[i], "interrupted"); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // CancelTask cancels a task. A task that is waiting, or whose run is only

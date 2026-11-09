@@ -15,6 +15,7 @@ import (
 
 	"github.com/kolotiloff/agent-messenger/internal/adapters"
 	"github.com/kolotiloff/agent-messenger/internal/core"
+	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
 
 // The coordinator's MCP server (T-025). One server serves one project: the
@@ -69,7 +70,7 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - Never start a task again by yourself after it failed, was interrupted or blocked; tell the owner and let them decide.
 - A computer marked reconnecting was in the network a moment ago and has not reported since a restart: a task for it is accepted and waits on the server until it is back. models_note and limit_note explain an empty models list or a missing limit.
 - list_agents shows each agent's limit when it reported one: state ok, warning (close to the limit) or exhausted, used_percent when the agent gave it, resets_at and observed_at. It is what the agent said at the end of its last run, not a live reading; reset_passed means its reset time has passed, so it is likely available again. A limit is shared by every use of the same account, this chat included. Before choosing where to start a task, look at the limits: prefer an agent whose limit is not exhausted, and tell the owner when the one they asked for is close to or at its limit, before or instead of starting it. start_task adds limit_note when the chosen agent's last limit is close or exhausted.
-- To follow up on a finished task in the same worker conversation (it keeps its context), use continue_task instead of a new start_task. It works for done and failed tasks of this computer, a task stopped by a usage limit included (after its reset time): read task_messages first and say in your text what is already done, such as «continue; item 1 is already committed». An interrupted task (the client restarted while it ran) cannot be continued: whether its worker still runs is unknown. For another computer's task, or an interrupted one, read task_messages and start a new task that names what is already done.
+- To follow up on a finished task in the same worker conversation (it keeps its context), use continue_task instead of a new start_task. It works for done and failed tasks of this computer, a task stopped by a usage limit included (after its reset time): read task_messages first and say in your text what is already done, such as «continue; item 1 is already committed». An interrupted task of this computer (the client restarted while it ran) can be continued too, only after Messenger checks that its worker is gone; if it may still run, continue_task says so and the task stays as it is: tell the owner. For another computer's task, read task_messages and start a new task that names what is already done.
 - Messenger already tells every worker to keep its report to a few lines, to put long details in a file and to follow the owner's rules for this project. A report ends with labelled lines when the worker gave them: «Изменения:» (commit or changeset), «Тесты:» and «Файлы:» (paths to read when needed). Do not ask workers for a «taken» line or a limit line: the task's state shows when it was accepted, and limits come from list_agents.
 - Work reaches the project only through the worker's own commit; workers are told to commit before they report. A report is a short message (at most 20000 characters reach you), so never ask for the full text of an audit or a long document instead of a commit: it will not fit, and the work still is not in the project. A worker that could not commit (files locked by another agent, its copy behind the server) asks you instead of finishing, and its task stays open. Decide what lets the commit happen: if another task holds the files, you may answer later, after that task is done, telling the worker to update and commit; otherwise tell it what to do or tell the owner. Do not tell it to finish without committing: a finished task of another computer cannot be continued.
 - get_log reads the end of another computer's Messenger log, for debugging Messenger itself (a task that never arrived, a refusal you cannot explain). That computer answers only if its owner turned on «Отдавать журнал по сети»; otherwise the reply says so. Session ids, codes and keys are removed. If no answer came in time, call get_log again with request_id. Do not use it to watch workers: wait does that.
@@ -326,7 +327,7 @@ func coordinatorTools() []map[string]any {
 				"op_id":       str("unique id of this operation"),
 				"text":        map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxTaskText},
 			}, "task_id", "question_id", "op_id", "text")},
-		{"name": "continue_task", "description": "Give a finished task (done or failed) of this computer a follow-up: the same worker conversation resumes with your text, so it keeps its context and needs no new briefing. If the agent no longer has that conversation, the run fails; then start a new task. Repeating with the same op_id is safe.",
+		{"name": "continue_task", "description": "Give a finished task (done or failed) or an interrupted task of this computer a follow-up (an interrupted one only once its worker is certainly gone): the same worker conversation resumes with your text, so it keeps its context and needs no new briefing. If the agent no longer has that conversation, the run fails; then start a new task. Repeating with the same op_id is safe.",
 			"inputSchema": obj(map[string]any{
 				"task_id": str("task id"),
 				"op_id":   str("unique id of this operation"),
@@ -491,7 +492,7 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 		if err := c.ownTask(a.TaskID); err != nil {
 			return nil, err
 		}
-		if err := c.store.ContinueTask(a.TaskID, a.OpID, a.Text, core.AudienceCoordinator); err != nil {
+		if err := c.store.ContinueTaskChecked(a.TaskID, a.OpID, a.Text, core.AudienceCoordinator, workerGone); err != nil {
 			return nil, err
 		}
 		return map[string]any{"continued": true, "next": "The worker resumes its conversation; call wait for its report or question."}, nil
@@ -854,4 +855,29 @@ func (c *coordinator) taskMessages(id string, last int) (any, error) {
 		result["remote"] = "This task ran on another computer: its worker's own texts stay there; these are the lines it forwarded."
 	}
 	return result, nil
+}
+
+// workerGone confirms that an interrupted run's worker is gone (D-108): the
+// computer restarted since, or neither its process (same id and start time)
+// nor any process of its group is running.
+func workerGone(o platform.Observation) (string, error) {
+	if o.PID <= 0 || o.PGID <= 0 || o.StartToken == "" || o.BootID == "" {
+		return "", errors.New("its process was never recorded")
+	}
+	boot, live, err := platform.Snapshot()
+	if err != nil {
+		return "", err
+	}
+	if boot != "" && boot != o.BootID {
+		return "the computer restarted since", nil
+	}
+	if boot == "" {
+		return "", errors.New("this computer's start could not be read")
+	}
+	for _, p := range live {
+		if p.PGID == o.PGID || (p.PID == o.PID && p.StartToken == o.StartToken) {
+			return "", errors.New("its process or a process of its group is still running")
+		}
+	}
+	return "its process and its process group are gone", nil
 }
