@@ -214,12 +214,28 @@
   }
   function clock(at){const d=new Date(at);return isNaN(d.getTime())?'':d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});}
   const activeStates=['running','waiting_owner','waiting_coordinator'];
-  // When a task was given and when it ended, with the date unless today.
+  // T-121: the row shows only when the task was created: «сегодня 21:49»,
+  // «вчера 18:05», or the date alone for older ones. The status line below
+  // already says how long it took; the tooltip has the full times.
+  function sameDay(a,b){return a.toDateString()===b.toDateString();}
+  function longDay(d){return d.toLocaleDateString(amLocale,d.getFullYear()===new Date().getFullYear()?{day:'numeric',month:'long'}:{day:'numeric',month:'long',year:'numeric'});}
   function taskWhen(t){
-    const from=dayClock(t.created_at);if(!from)return '';
-    if(!t.finished_at)return tr('дана ')+from;
-    const end=new Date(t.finished_at).toDateString()===new Date(t.created_at).toDateString()?clock(t.finished_at):dayClock(t.finished_at);
-    return from+'–'+end;
+    const d=new Date(t.created_at);if(isNaN(d.getTime()))return '';
+    const today=new Date(),yesterday=new Date();yesterday.setDate(today.getDate()-1);
+    if(sameDay(d,today))return tr('сегодня ')+clock(t.created_at);
+    if(sameDay(d,yesterday))return tr('вчера ')+clock(t.created_at);
+    return d.toLocaleDateString(amLocale,d.getFullYear()===today.getFullYear()?{day:'numeric',month:'short'}:{day:'numeric',month:'short',year:'numeric'});
+  }
+  function taskWhenTitle(t){
+    const d=new Date(t.created_at);if(isNaN(d.getTime()))return '';
+    const lines=[tr('Создана ')+longDay(d)+tr(' в ')+clock(t.created_at)];
+    const e=new Date(t.finished_at||'');
+    if(t.finished_at&&!isNaN(e.getTime())){
+      const verb={failed:tr('Завершилась ошибкой'),interrupted:tr('Прервана'),blocked:tr('Заблокирована'),cancelled:tr('Отменена')}[t.state]||tr('Завершена');
+      lines.push(verb+' '+(sameDay(d,e)?'':longDay(e)+' ')+tr('в ')+clock(t.finished_at));
+      lines.push(tr('Всего ')+minutes(t.created_at,t.finished_at));
+    }
+    return lines.join('\n');
   }
   // T-034: why a run failed, as the provider reported it. Nothing is retried.
   function resetText(at){
@@ -474,7 +490,7 @@
       label.append(el('span',here?(view.computer_name||tr('этом компьютере')):t.remote.name,here?'am-task-here':''));
       const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),label);
       if(t.remote)agent.title=t.remote.from?tr('Задачу дал компьютер «')+t.remote.name+'»':tr('Выполняется на компьютере «')+t.remote.name+'»';
-      const when=taskWhen(t);if(when){const w=el('span',when,'am-task-when');w.title=tr('Когда задача дана')+(t.finished_at?tr(' и когда завершилась'):'');agent.append(w);}
+      const when=taskWhen(t);if(when){const w=el('span',when,'am-task-when');w.title=taskWhenTitle(t);agent.append(w);}
       const [text,cls]=taskStatus(t);
       const status=el('span',undefined,'am-task-status '+cls);
       if(t.state==='waiting_owner')status.append(el('span',undefined,'am-dot am-dot-wait'));
@@ -490,7 +506,7 @@
       // T-111: another computer's task opens as a read-only card.
       row.addEventListener('click',()=>{selectedShared={peer:p.peer,id:t.id};selectedTask='';feed=null;feedSignature='';renderTaskList();renderThread();});
       const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),el('span',(names[t.agent]||t.agent)+tr(' от «')+p.name+'»'));
-      const sharedWhen=taskWhen(t);if(sharedWhen)agent.append(el('span',sharedWhen,'am-task-when'));
+      const sharedWhen=taskWhen(t);if(sharedWhen){const w=el('span',sharedWhen,'am-task-when');w.title=taskWhenTitle(t);agent.append(w);}
       const [text,cls]=taskStatus(t);
       const words=el('span');words.append(statusPiece(text,!!t.tokens));
       if(t.tokens)words.append(el('span',tokensText(t.tokens)+tr(' токенов'),'am-task-usage'));

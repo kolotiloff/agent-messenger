@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-09 — Claude Code (T-121 task time label)
+
+- The owner chose variant 2 of three mockups: the task row shows «сегодня 21:49», «вчера 18:05» or the date; full times are in the tooltip. On `claude/ui-tweaks`, not released.
+
 ## 2026-11-09 — Claude Code (T-117, T-119, T-120, T-112, T-118)
 
 - Coordinator's chat had six tools: its entry in Claude started the client's copy of an old version. T-117: the entry starts the installed program, our stale entry is replaced by itself, and `messenger coordinator` relays to the updated program (D-107). A chat open before this version needs one reconnect or a new chat.
