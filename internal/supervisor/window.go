@@ -102,14 +102,16 @@ func (s *Supervisor) RemoveProject(name string) error {
 // The provider "all" sets every agent of this computer at once (T-056).
 // UsageStats is the window's token statistics for a period (T-068): "day"
 // is today, "week" the last 7 days and "month" the last 30, in local days.
-func (s *Supervisor) UsageStats(period string) (any, error) {
+// computer is "" for every computer of the network, "local" or a peer's ID
+// (T-076).
+func (s *Supervisor) UsageStats(period, computer string) (any, error) {
 	days := map[string]int{"day": 1, "week": 7, "month": 30}[period]
 	if days == 0 {
 		return nil, fmt.Errorf("unknown period %q", period)
 	}
 	y, m, d := time.Now().Date()
 	since := time.Date(y, m, d-(days-1), 0, 0, 0, 0, time.Local)
-	return s.store.UsageStats(since, time.Local, "")
+	return s.store.UsageStats(since, time.Local, computer)
 }
 
 // SetAgentPaused turns an agent off or on from its card (T-061).

@@ -81,6 +81,12 @@ func (s *Supervisor) networkRound(ctx context.Context) {
 			if r := p.Ready; r != nil {
 				np.Ready = &core.NetReady{Accept: r.Accept, Projects: r.Projects}
 			}
+			if u := p.Usage; u != nil {
+				np.Usage = make([]core.UsageDayAgent, 0, len(u.Days))
+				for _, d := range u.Days {
+					np.Usage = append(np.Usage, core.UsageDayAgent(d))
+				}
+			}
 			for _, a := range p.Agents {
 				na := core.NetAgent{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting, Models: a.Models}
 				if l := a.Limit; l != nil {

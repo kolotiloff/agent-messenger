@@ -107,7 +107,7 @@ func (b *Broker) ShareTasks(peer string, tasks []SharedTask) ([]PeerTasks, error
 	// The hosting computer's name comes from its presence; devices have
 	// theirs in devices.
 	hostName := "Сервер"
-	if roster, err := b.Roster(); err == nil {
+	if roster, err := b.Roster(nil); err == nil {
 		for _, p := range roster {
 			if p.Host && p.Name != "" {
 				hostName = p.Name

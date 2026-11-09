@@ -452,6 +452,13 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 				http.Error(w, "invalid period", 400)
 				return
 			}
+			// The computer the statistics are for: '' for the whole
+			// network, "local" or a peer's ID (T-076).
+			req.Text = r.URL.Query().Get("computer")
+			if len(req.Text) > 64 || strings.ContainsAny(req.Text, "\x00\r\n") {
+				http.Error(w, "invalid computer", 400)
+				return
+			}
 		case "/api/task":
 			req.Cmd = "task-feed"
 			req.MessageID = r.URL.Query().Get("id")

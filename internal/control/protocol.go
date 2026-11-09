@@ -247,12 +247,12 @@ func dispatch(handler Handler, request Request) Response {
 		return Response{OK: true, Overview: raw}
 	case "usage-stats":
 		h, ok := handler.(interface {
-			UsageStats(string) (any, error)
+			UsageStats(period, computer string) (any, error)
 		})
 		if !ok {
 			return Response{Error: "statistics unsupported; update the background client"}
 		}
-		value, err := h.UsageStats(request.Alias)
+		value, err := h.UsageStats(request.Alias, request.Text)
 		if err != nil {
 			return Response{Error: err.Error()}
 		}

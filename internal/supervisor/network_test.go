@@ -307,3 +307,39 @@ func TestReadinessReachesTheCoordinator(t *testing.T) {
 		t.Fatalf("readiness %+v", computers)
 	}
 }
+
+// A computer's token usage reaches the others and their statistics can be
+// filtered by it (T-076).
+func TestUsageReachesTheOtherComputers(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	a, _ := netComputer(t, ctx, "a")
+	b, _ := netComputer(t, ctx, "b")
+	if err := a.server.Enable(broker.ScopeLocal, freeLocalPort(t)); err != nil {
+		t.Fatal(err)
+	}
+	code, err := a.server.Invite(a.server.Status().Host.Addresses[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := b.server.Connect(ctx, code.Code, "Ноутбук"); err != nil {
+		t.Fatal(err)
+	}
+	p, err := b.presence()
+	if err != nil || p.Usage == nil || p.Usage.Days == nil {
+		t.Fatalf("b reports no usage: %+v %v", p.Usage, err)
+	}
+	b.server.ReportPresence(ctx)
+	a.networkRound(ctx)
+	peers, err := a.store.NetPeers()
+	if err != nil || len(peers) != 1 || peers[0].Usage == nil {
+		t.Fatalf("a's peers %+v %v", peers, err)
+	}
+	value, err := a.UsageStats("week", peers[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := value.(core.UsageStats); s.Computer != "Ноутбук" || s.Total.Tasks != 0 {
+		t.Fatalf("stats of b %+v", s)
+	}
+}

@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-09 — Claude Code (T-076, UI tweak)
+
+- T-076 (D-090): statistics of the whole network and filtered by the computer chosen in the sidebar; another computer's agents with their limits, view only. Usage travels with presence only when it changes. The owner approved the look from screenshots with test data. Collected on `claude/ui-tweaks`, not released.
+- Language and theme lists have the same width in both languages.
+
 ## 2026-11-09 — Claude Code (T-074, T-075, UI tweak)
 
 - Owner's first working days with the program: the coordinator stops reading the owner while it waits and forgets workers' events after an interruption (T-074, D-088); workers that could not commit finished with a cut report (T-075, D-089). Both changed on `claude/ui-tweaks` with tests; not released, the owner asked to collect changes first.
