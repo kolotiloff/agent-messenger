@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-09 — Claude Code (T-084, security review started)
+
+- T-084: the reply box is one line, grows with its text and shrinks after sending; buttons at its bottom. T-085 (write to a working worker) waits for Q-026. A full security review was started at the owner's request.
+
 ## 2026-11-09 — Claude Code (T-083)
 
 - T-083: another computer's agent card shows «Задачи: N идёт, N ждёт ответа» instead of «Задачи на этом компьютере». On `claude/ui-tweaks`, not released.

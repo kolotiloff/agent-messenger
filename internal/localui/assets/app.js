@@ -610,7 +610,7 @@
     box.disabled=!q;box.placeholder=q?tr('Ответить исполнителю…'):t.remote?.from&&t.owner_question?tr('Отвечают на компьютере «')+t.remote.name+'»':t.pending_launch?tr('Задача ждёт запуска…'):tr('Исполнитель работает…');
     $('answer-send').hidden=!q;$('answer-hint').hidden=!q;$('task-stop').hidden=!active;
     if(q&&$('compose').dataset.question!==q.id){$('compose').dataset.question=q.id;$('answer-text').value='';$('answer-status').textContent='';}
-    answerControls();
+    sizeAnswer();answerControls();
     if(atBottom)thread.scrollTop=thread.scrollHeight;
   }
   // Known refusals of another computer, explained in the window's language.
@@ -621,6 +621,9 @@
     if(/is not set up on this computer/.test(text||''))return tr('На компьютере «')+name+tr('» этот агент не настроен. Настройте его там на вкладке агентов.');
     return '';
   }
+  // The reply box is one line and grows only while its text does not fit;
+  // the stop and send buttons stay at its bottom.
+  function sizeAnswer(){const f=$('answer-text');f.style.height='';if(f.value)f.style.height=Math.min(140,f.scrollHeight+(f.offsetHeight-f.clientHeight))+'px';}
   function answerControls(){$('answer-send').disabled=answering||!$('answer-text').value.trim()||!feed?.task?.owner_question||!!feed?.task?.remote?.from;}
   async function sendAnswer(){
     const q=feed?.task?.owner_question;if(!q||answering||feed.task.remote?.from)return;
@@ -628,7 +631,7 @@
     let op=recall('messenger-answer-op:'+q.id);
     if(!op){op='window-'+q.id+'-'+crypto.randomUUID();remember('messenger-answer-op:'+q.id,op);}
     answering=true;answerControls();$('answer-status').textContent=tr('Отправляем ответ…');
-    try{await postAPI('/api/task-answer',{task:feed.task.id,question:q.id,op_id:op,text});showError(null);$('answer-status').textContent=tr('Ответ записан. Исполнитель продолжит в той же сессии.');$('answer-text').value='';feedSignature='';await refresh();}
+    try{await postAPI('/api/task-answer',{task:feed.task.id,question:q.id,op_id:op,text});showError(null);$('answer-status').textContent=tr('Ответ записан. Исполнитель продолжит в той же сессии.');$('answer-text').value='';sizeAnswer();feedSignature='';await refresh();}
     catch(error){$('answer-status').textContent='';showError({message:error.message+tr(' Повтор с тем же текстом безопасен.'),command:error.command,hint:error.hint});}
     finally{answering=false;answerControls();}
   }
@@ -1511,7 +1514,7 @@
   splitter($('task-panel'),tr('Ширина списка задач'),'--am-queue',240,200,520,-1);
   // A click on empty space in the sidebar shows all computers' tasks again.
   root.querySelector('.am-sidebar').addEventListener('click',event=>{if(computerFilter&&!event.target.closest('.am-machine-card,.am-project,.am-side-bottom,.am-splitter,button,select,input,a,[popover]'))clearComputer();});
-  $('answer-text').addEventListener('input',()=>{const f=$('answer-text');f.style.height='auto';f.style.height=Math.min(140,Math.max(44,f.scrollHeight))+'px';answerControls();});
+  $('answer-text').addEventListener('input',()=>{sizeAnswer();answerControls();});
   $('answer-send').addEventListener('click',sendAnswer);
   // Enter sends; Shift+Enter adds a line. An IME composition keeps its Enter.
   $('task-stop').addEventListener('click',stopTask);
