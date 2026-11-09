@@ -451,20 +451,28 @@ func TestRemoteTaskProgressReachesTheStarter(t *testing.T) {
 	}
 }
 
-// T-094: a task of another computer does not take the agent's «Любые
-// команды» unless the owner allowed it for network tasks.
-func TestRemoteTaskRunsWithoutFullAccessByDefault(t *testing.T) {
+// T-094, D-109: a task of another computer takes the agent's «Любые
+// команды» unless the owner turned that off for network tasks.
+func TestRemoteTaskFullAccessFollowsTheNetworkSwitch(t *testing.T) {
 	p := newNetPair(t)
 	if err := p.b.st.SetAgentFullAccess("codex", true); err != nil {
 		t.Fatal(err)
 	}
-	if on, err := p.b.st.NetFullAccess(); err != nil || on {
+	if on, err := p.b.st.NetFullAccess(); err != nil || !on {
 		t.Fatalf("default %v %v", on, err)
 	}
 	id := p.startRemote(t, "op1", "codex", "Build level 1")
 	p.carry(t, true)
-	if m := p.mirror(t, id); m.FullAccess {
-		t.Fatalf("network task with full access: %+v", m)
+	if m := p.mirror(t, id); !m.FullAccess {
+		t.Fatalf("network task without full access by default: %+v", m)
+	}
+	if err := p.b.st.SetNetFullAccess(false); err != nil {
+		t.Fatal(err)
+	}
+	id2 := p.startRemote(t, "op2", "codex", "Build level 2")
+	p.carry(t, true)
+	if m := p.mirror(t, id2); m.FullAccess {
+		t.Fatalf("network task with full access after it was turned off: %+v", m)
 	}
 	// A local task of b still has it.
 	local := p.b.start(t, "op-local", "codex", "Local work")
@@ -474,9 +482,9 @@ func TestRemoteTaskRunsWithoutFullAccessByDefault(t *testing.T) {
 	if err := p.b.st.SetNetFullAccess(true); err != nil {
 		t.Fatal(err)
 	}
-	id2 := p.startRemote(t, "op2", "codex", "Build level 2")
+	id3 := p.startRemote(t, "op3", "codex", "Build level 3")
 	p.carry(t, true)
-	if m := p.mirror(t, id2); !m.FullAccess {
+	if m := p.mirror(t, id3); !m.FullAccess {
 		t.Fatalf("allowed network task %+v", m)
 	}
 }

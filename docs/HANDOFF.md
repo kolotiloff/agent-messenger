@@ -10,10 +10,10 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Updated 2026-11-09 (evening) by Claude Code.
 
-- After 0.58, on `claude/ui-tweaks`, not released: T-117 (coordinator follows updates, D-107), T-120 (background watch), T-112 (`task_messages`), T-119 (own computer name in the list), T-118 (continue an interrupted task once its worker is gone, D-108), T-121 (task time label). Open: T-113 (continue another computer's task), T-114 (coordinator writes to a running worker), T-115 (show full access per task), T-116 (changed files after a limit).
+- After 0.58, on `claude/ui-tweaks`, not released: T-117 (coordinator follows updates, D-107), T-120 (background watch), T-112 (`task_messages`), T-119 (own computer name in the list), T-118 (continue an interrupted task once its worker is gone, D-108), T-121 (task time label), T-122 (other computers' tasks take «Любые команды» by default, the switch is on «Агенты», D-109). Open: T-113 (continue another computer's task), T-114 (coordinator writes to a running worker), T-115 (show full access per task), T-116 (changed files after a limit).
 - After 0.58: T-111 (other computers' tasks open as a read-only card) on `claude/ui-tweaks`, not released.
 - 0.58 released (PR #89): model lists by default and filled once for earlier agents (T-098, T-109), questions to the owner visible to the coordinator (T-099), update checks within GitHub's limit (T-103), short version «0.58» (T-104), task list wider and wrapping (T-105), steady language/theme lists (T-106), Linux installation updates while the client runs (T-107, D-106), the worker's model next to its name (T-108), all active tasks of every computer together (T-110).
-- Owner's steps: on a Linux computer installed with `install`, install 0.58 by hand once (`messenger shutdown`, then `./AgentMessenger-Linux-x64 install`, then `messenger open`). On computers that run tasks of others, turn on «Любые команды для задач других компьютеров» on «Сервер» if they should run commands.
+- Owner's steps: on a Linux computer installed with `install`, install 0.58 by hand once (`messenger shutdown`, then `./AgentMessenger-Linux-x64 install`, then `messenger open`).
 - Open: where another computer's task runs is not shared (the 0.57 server refuses unknown fields, T-110); Linux title bar seen by the owner, waiting for a screenshot with the version; T-028 branch `claude/t028-retire-persistent` to merge and release as 0.59 with the README rewrite.
 
 Updated 2026-11-09 (day) by Claude Code.

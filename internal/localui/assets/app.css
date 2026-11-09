@@ -165,8 +165,9 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 /* The main action sits on the right (dialogs follow the Claude app). */
 #am-concept .am-end-actions { justify-content:flex-end; }
 #am-concept .am-end-actions > .am-danger:not(.am-alone) { margin-right:auto; }
-/* The one «Любые команды» switch above the agent cards (T-056). */
-#am-concept .am-access-bar { display:flex; align-items:center; gap:var(--am-gap-section); margin-bottom:var(--am-gap-content); padding:var(--am-gap-section); border:1px solid var(--am-line); border-radius:var(--am-radius-m); background:var(--am-panel); }
+/* The «Любые команды» switches above the agent cards (T-056, D-109). */
+#am-concept .am-access-bar { display:flex; flex-direction:column; gap:var(--am-gap-content); margin-bottom:var(--am-gap-content); padding:var(--am-gap-section); border:1px solid var(--am-line); border-radius:var(--am-radius-m); background:var(--am-panel); }
+#am-concept .am-access-row { display:flex; align-items:center; gap:var(--am-gap-section); }
 #am-concept .am-access-text { flex:1; min-width:0; display:grid; gap:var(--am-space-1); }
 #am-concept .am-access-text p { margin:0; }
 /* A switch with its title and explanation inside a card, under a divider */
@@ -532,7 +533,7 @@ body.am-native #am-concept .am-titlebar { display:none; }
 @media (prefers-reduced-motion:no-preference) { #am-concept button { transition:background-color .12s ease; } }
 body.am-native #am-concept .am-panel-toggle { margin-left:auto; }
 @media (max-width: 640px) {
-  #am-concept .am-access-bar { flex-direction:column; align-items:stretch; }
+  #am-concept .am-access-row { flex-direction:column; align-items:stretch; }
 }
 
 /* Agent cards (T-061, D-070): a head with the name, check, settings and the

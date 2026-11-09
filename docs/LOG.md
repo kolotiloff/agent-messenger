@@ -2,8 +2,9 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
-## 2026-11-09 — Claude Code (T-121 task time label)
+## 2026-11-09 — Claude Code (T-121 task time label, T-122 one place for «Любые команды»)
 
+- T-122 (D-109): the switch for other computers' tasks is on «Агенты» under «Любые команды» and on by default (owner's decision).
 - The owner chose variant 2 of three mockups: the task row shows «сегодня 21:49», «вчера 18:05» or the date; full times are in the tooltip. On `claude/ui-tweaks`, not released.
 
 ## 2026-11-09 — Claude Code (T-117, T-119, T-120, T-112, T-118)

@@ -43,7 +43,7 @@ Files are written to a fresh temporary file, flushed to disk and renamed. A dama
 
 ## Interfaces
 
-- Control command `server` with actions `status`, `enable`, `disable`, `invite`, `revoke`, `connect`, `check`, `disconnect`, `accept` (`{"on": true|false}`: run tasks of other computers). Accepting is on by default (D-056, replacing Q-014's cautious default); the owner turns it off with «Задачи других компьютеров». Tasks from the network run without full access unless the owner also turns on «Любые команды для задач других компьютеров», which is off by default. The status never contains the device key; it carries `accept` and the last task-exchange problem (`network_error`).
+- Control command `server` with actions `status`, `enable`, `disable`, `invite`, `revoke`, `connect`, `check`, `disconnect`, `accept` (`{"on": true|false}`: run tasks of other computers). Accepting is on by default (D-056, replacing Q-014's cautious default); the owner turns it off with «Задачи других компьютеров». Tasks from the network take the agent's «Любые команды» unless the owner turns off «И для задач с других компьютеров» on «Агенты»; it is on by default (D-109, replacing D-097's default). The status never contains the device key; it carries `accept` and the last task-exchange problem (`network_error`).
 - Window API: `GET /api/server`, `POST /api/server-action` (same rules as other window actions: token, Origin, JSON, bounded fields).
 - Timeouts: each broker request 15 s, a window server action 18 s in the client, 22 s at the window route, 28 s in the page. If the page gets no answer it says the result is unknown and asks to check the state before repeating.
 - `messenger status` shows `broker=not_configured|hosting|connected|hosting+connected`.

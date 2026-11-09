@@ -987,6 +987,19 @@
     const on=agents.filter(a=>a.full_access).length,all=!!agents.length&&on===agents.length;
     $('access-toggle').setAttribute('aria-checked',all?'true':on?'mixed':'false');
     $('access-title').textContent=on&&!all?tr('Любые команды: разрешены не всем'):tr('Любые команды');
+    // D-109: other computers' tasks follow this computer's agents unless the
+    // owner turns it off; on until the window has heard otherwise.
+    const net=!server||server.net_full_access!==false;
+    $('net-full-toggle').setAttribute('aria-checked',String(net));
+    $('net-full-toggle').disabled=!server;
+  }
+  async function toggleNetAccess(){
+    if(!server)return;
+    const on=!server.net_full_access,toggle=$('net-full-toggle');
+    toggle.disabled=true;toggle.setAttribute('aria-checked',String(on));
+    try{const answer=await postAPI('/api/server-action',{action:'net_full_access',on},28000);if(answer?.result)server=answer.result;}
+    catch(error){showError(error);}
+    finally{renderAccessBar();}
   }
   async function toggleAllAccess(){
     const on=$('access-toggle').getAttribute('aria-checked')!=='true';
@@ -1194,7 +1207,7 @@
     if(!server)return;const running=server.host.running;
     swap($('host-disable'),$('host-enable'),running);
     $('host-scope').disabled=running;$('host-port').disabled=running;
-    const accept=!!server.accept;$('accept-toggle').setAttribute('aria-checked',String(accept));$('net-full-toggle').setAttribute('aria-checked',String(!!server.net_full_access));
+    const accept=!!server.accept;$('accept-toggle').setAttribute('aria-checked',String(accept));
     $('log-share-toggle').setAttribute('aria-checked',String(!!server.log_share));
   }
   async function loadServer(){
@@ -1224,6 +1237,7 @@
   }
   function hideInvitation(){invitation=null;clearInterval(inviteTimer);const d=$('invite-dialog');if(d.open)d.close();}
   function renderServer(){
+    renderAccessBar();
     if(!server)return;const h=server.host,m=server.member;
     const focused=document.activeElement?.dataset?.key||'';
     badge($('host-badge'),h.running?tr('Работает'):h.enabled?tr('Не запустился'):tr('Остановлен'),h.running?'good':h.enabled?'bad':'');
@@ -1735,7 +1749,7 @@
   $('computer-name').addEventListener('change',renameComputer);
   $('computer-name').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();renameComputer();}});
   $('log-share-toggle').addEventListener('click',()=>{if(!server)return;const on=!server.log_share;serverAction({action:'log_share',on},'accept',on?tr('Координаторы других компьютеров смогут прочитать журнал.'):'');});
-  $('net-full-toggle').addEventListener('click',()=>{if(!server)return;const on=!server.net_full_access;serverAction({action:'net_full_access',on},'accept',on?tr('Задачи других компьютеров смогут выполнять любые команды на этом компьютере.'):tr('Новые запуски задач других компьютеров пойдут с проверками разрешений агента.'));});
+  $('net-full-toggle').addEventListener('click',toggleNetAccess);
   $('accept-toggle').addEventListener('click',()=>{if(!server)return;const on=!server.accept;serverAction({action:'accept',on},'accept',on?'':tr('Новые задачи других компьютеров будут отклоняться. Уже принятые продолжат работу.'));});
   $('member-disconnect').addEventListener('click',()=>serverAction({action:'disconnect'},'member',tr('Отключено. Устройство остаётся в списке сервера, пока его там не отзовут.')));
   let serverPolls=0;
