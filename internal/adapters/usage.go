@@ -9,8 +9,8 @@ type Usage struct {
 	// CacheWrite is the part of Input written to the cache (T-088); Codex
 	// reports none.
 	CacheWrite int64
-	Cost                  float64
-	HasCost               bool
+	Cost       float64
+	HasCost    bool
 }
 
 // count reads a non-negative whole number of tokens.

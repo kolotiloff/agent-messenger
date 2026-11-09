@@ -12,9 +12,9 @@ import (
 // CostUSD is set only when a provider reported a price (Claude does; Codex
 // and Cursor report tokens only). It only informs the owner.
 type TaskUsage struct {
-	InputTokens  int64    `json:"input_tokens"`
-	CachedTokens int64    `json:"cached_tokens"`
-	OutputTokens int64    `json:"output_tokens"`
+	InputTokens  int64 `json:"input_tokens"`
+	CachedTokens int64 `json:"cached_tokens"`
+	OutputTokens int64 `json:"output_tokens"`
 	// CacheWriteTokens is the part of InputTokens written to the cache
 	// (T-088); 0 when the agent does not report it.
 	CacheWriteTokens int64    `json:"cache_write_tokens,omitempty"`
