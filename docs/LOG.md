@@ -2,6 +2,12 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-09 — Claude Code (release 0.58)
+
+- PR #89 merged and released as 0.58 (`0.0.0-preview.58`): T-097 to T-110 and a ten-minute test budget per package in `scripts/check.sh` (the supervisor package timed out on CI at five).
+- Linux computers installed with `install` cannot update themselves from 0.57 (T-107): install 0.58 there by hand once. Other computers' tasks from coordinators on 0.57 show which computer gave them, not where they run (T-110).
+- Tasks from other computers run with permission checks unless «Любые команды для задач других компьютеров» is on, on the computer that runs them (D-097); the owner hit this on ПК-1 and Linux.
+
 ## 2026-11-09 — Claude Code (T-097 hints in the chat)
 
 - The answer hint moved from under the reply box into the chat, in italics under the owner's answer (owner's choice). On `claude/ui-tweaks`, not released.

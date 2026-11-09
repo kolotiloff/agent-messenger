@@ -8,6 +8,12 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-09 (evening) by Claude Code.
+
+- 0.58 released (PR #89): model lists by default and filled once for earlier agents (T-098, T-109), questions to the owner visible to the coordinator (T-099), update checks within GitHub's limit (T-103), short version «0.58» (T-104), task list wider and wrapping (T-105), steady language/theme lists (T-106), Linux installation updates while the client runs (T-107, D-106), the worker's model next to its name (T-108), all active tasks of every computer together (T-110).
+- Owner's steps: on a Linux computer installed with `install`, install 0.58 by hand once (`messenger shutdown`, then `./AgentMessenger-Linux-x64 install`, then `messenger open`). On computers that run tasks of others, turn on «Любые команды для задач других компьютеров» on «Сервер» if they should run commands.
+- Open: where another computer's task runs is not shared (the 0.57 server refuses unknown fields, T-110); Linux title bar seen by the owner, waiting for a screenshot with the version; T-028 branch `claude/t028-retire-persistent` to merge and release as 0.59 with the README rewrite.
+
 Updated 2026-11-09 (day) by Claude Code.
 
 - T-077 (D-091): automatic restart of the old client after an update. All collected changes go to `main` and a preview release.
