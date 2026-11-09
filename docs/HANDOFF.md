@@ -8,6 +8,12 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-10 (morning) by Claude Code.
+
+- Ready for 0.60 on `claude/ui-tweaks` (PR to `main` open, not released; the owner releases): T-130, T-128 (notices, update icon), T-126 (lost contact), T-115 (full access shown), T-129 (sandbox warning), T-114 (`note_task`), T-113 (continue another computer's task, D-113).
+- Owner's checks after the release: update ПК-1 from the Mac card icon; turn ПК-1 off during a task and see «Связь потеряна, исход неизвестен»; ask the coordinator to write to a running worker and to continue a finished task of ПК-1 (both computers on 0.60). On the Mac, if Codex workers still have no network, quit Messenger fully and open it by hand; the window now warns when it was started from an agent sandbox.
+- Next: T-128 restart icon, update that waits for tasks, continuing tasks of an earlier network (by computer name), interrupted runs on another computer.
+
 Updated 2026-11-09 (evening) by Claude Code.
 
 - Released in 0.59: T-111, T-112, T-117–T-125, T-127. After 0.59, on `claude/ui-tweaks`, not released: T-130 (the coordinator may answer a question to the owner, D-112). Next for 0.60: T-126 (offline and vanished computers' tasks), T-128 (notifications above the reply box, update and restart icons on computer cards), T-129 (client started inside an agent sandbox). Open: T-113, T-114, T-115.
