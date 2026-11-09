@@ -5,6 +5,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 ## 2026-11-09 — Claude Code (T-077, release)
 
 - T-077 (D-091): the window restarts the old background client by itself after an update when no task runs; asks only otherwise. The owner's wish to update another computer remotely is T-078, Q-025.
+- Released preview.54 (PR #85) and checked its files. T-079 (D-092): a start screen instead of the restart popup, chosen by the owner from mockups; on `claude/ui-tweaks`, not released.
 
 ## 2026-11-09 — Claude Code (T-076, UI tweak)
 

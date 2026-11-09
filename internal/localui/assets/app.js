@@ -118,6 +118,14 @@
   let online=false,offlineReason='',discovery=[],tab='tasks',refreshing=false,answering=false;
   const agentChecks=new Map(),checking=new Set(),rowNote=new Map();let autoChecked=false,discoveryLoaded=false;
   let clientInfo=null,clientInfoAt=0,restart={busy:false,ask:null,error:''},autoRestarted=false;
+  // The start screen covers the window until the client first answers, for
+  // at most bootLimit; then the usual notices take over (T-079).
+  let booting=true;const bootLimit=20000;setTimeout(()=>{booting=false;renderBoot();},bootLimit);
+  function renderBoot(){
+    const updating=restart.busy&&!restart.ask;
+    $('boot-cover').hidden=!(booting||updating);
+    $('boot-text').textContent=updating?tr('Устанавливаем обновление…'):tr('Запуск…');
+  }
   // The window can be newer than the client still running in the background
   // (after an update). Say how to restart it; nothing is restarted by itself.
   function shutdownCommand(){return view?.messenger&&view?.data_root?'"'+view.messenger+'" --root "'+view.data_root+'" shutdown':'';}
@@ -840,8 +848,10 @@
   // covers the whole window until the client is restarted or the app quits.
   // Quitting closes only the window; the background client keeps running.
   function renderRestart(){
+    renderBoot();
     const dialog=$('restart-dialog');
-    const show=!!clientInfo?.outdated||restart.busy||!!restart.error;
+    // While the update installs, the start screen shows it instead (T-079).
+    const show=(!!clientInfo?.outdated&&!restart.busy)||!!restart.ask||!!restart.error;
     if(!show){if(dialog.open)dialog.close();return;}
     const ask=restart.ask,canRestart=!!clientInfo?.restart,answering=clientInfo?.client==='running';
     const canQuit=!!window.webkit?.messageHandlers?.app;
@@ -887,6 +897,9 @@
       try{v=await api('/api/window?project='+encodeURIComponent(project));}
       catch(error){if(Date.now()-clientInfoAt>5000)loadClientInfo();online=false;offlineReason=error.name==='TimeoutError'||error.name==='TypeError'?tr('Окно потеряло связь с программой Messenger. Закройте окно и откройте снова.'):error.message;renderMachines();renderNotice();return;}
       online=true;offlineReason='';if(Date.now()-clientInfoAt>10000)loadClientInfo();
+      // The first answer: learn the client's version before the start screen
+      // goes, so an update starts without the old window showing.
+      if(booting){await loadClientInfo();booting=false;renderBoot();}
       if(!v.projects.some(p=>p.name===project))project=v.project||'';
       const signature=JSON.stringify(v);
       if(signature!==viewSignature){viewSignature=signature;view=v;if(selectedTask&&!v.tasks.some(t=>t.id===selectedTask)){selectedTask='';feed=null;feedSignature='';}render();}

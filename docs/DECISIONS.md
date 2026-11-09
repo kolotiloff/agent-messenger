@@ -174,3 +174,9 @@ The window sums this computer's own tasks and the others' reports; a task this c
 2026-11-09, Claude Code, from the owner: after every update the window asked to restart the background client, and the answer was always yes.
 
 The window now asks the client to restart once, without the owner, as soon as it sees an older client. The client keeps its old rule: without confirmation it refuses while task runs are going or their count cannot be read, because a restart interrupts them and they are never repeated by themselves. Only then the window shows the question as before. While restarting it shows «Обновляем Messenger». A failed restart is shown and not retried automatically.
+
+## D-092 — A start screen instead of the restart popup (T-079)
+
+2026-11-09, Claude Code, with the owner, who chose it from three mockups: a thin bar, a start screen, a bar that waits for tasks.
+
+Until the background part first answers, and while it installs an update, the whole window is covered by the app's name, a spinner and one status line, as applications do while they start. The window first learns the client's version, so an update starts behind the screen and the old window never flashes. If nothing answers within 20 seconds, the screen goes and the usual notice says what is wrong. When tasks are running, the question from D-091 stays: a restart would interrupt them. Waiting for the tasks to finish instead was offered and not chosen.

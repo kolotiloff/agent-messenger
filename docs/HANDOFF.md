@@ -11,6 +11,7 @@ The owner asked the agent to finish the program without them ("доделай б
 Updated 2026-11-09 (day) by Claude Code.
 
 - T-077 (D-091): automatic restart of the old client after an update. All collected changes go to `main` and a preview release. T-078 (remote update) waits for Q-025.
+- preview.54 released (PR #85 merged). After it, on `claude/ui-tweaks`, not released: T-079 start screen (D-092).
 
 - **Collected, not released** on `claude/ui-tweaks` (owner: collect changes, release later): «Пока пусто» alignment in statistics; T-074 coordinator catches up after an interrupted wait, wait 120 s by default (D-088); T-075 workers commit or ask and stay open (D-089). Language and theme lists of the same width; T-076 statistics of the whole network, filtered by the sidebar computer, another computer's agents view only, usage sent only when it changes (D-090). Not verified between real computers yet: check it on the Mac and ПК-1 after the release.
 
