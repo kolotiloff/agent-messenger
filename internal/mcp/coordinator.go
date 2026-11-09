@@ -51,6 +51,7 @@ var (
 const coordinatorInstructions = `Agent Messenger: start tasks for worker agents in this project and wait for their reports.
 - list_agents shows this project's computers, their project folder and agents: this computer and the other computers of its network. A task for another computer is sent to it and runs there; it fails with the reason if that computer does not take tasks from other computers or has no folder for the project. Another computer shows accepts_tasks and has_project when it reported them; do not send a task where either is false, and tell the owner instead. Questions, reports and outcomes come back through wait as usual.
 - start_task starts one task in a new worker session. Give every task a unique op_id and reuse it only to retry the same call after a lost response.
+- One chat is the project's coordinator at a time: the newest chat that waits or acts. If wait answers superseded: true, another chat took over; stop, do not call wait again, and tell the owner, unless they ask you to take over again.
 - A new chat starts from the current state, not from the history: first call tasks, which gives the open tasks, their open questions and the event cursor, then wait with after = that cursor. Never wait from 0 in a new chat: it replays every old event of the project. Agreements of an earlier coordinator chat that are not in the project's rules or files are not known here; ask the owner when it matters.
 - wait blocks until something happens in this project's tasks: a report, a question for you, a failure, an interruption, a block or a cancellation. Always pass after = the cursor from the previous wait. When it returns events, act on them (answer questions with answer, tell the owner about reports), then call wait again with the new cursor. When it times out with no events, call wait again without comment. If it says more: true, more events are ready: call wait again at once with the new cursor.
 - The owner may write to you or stop a wait at any time. When you wake up because of the owner (a new message or an interrupted wait), first call wait with your last cursor and timeout_seconds 1 to see what workers sent meanwhile, then answer the owner, and then go back to waiting. Leave timeout_seconds out otherwise: a short wait lets the owner's messages reach you. When another tool's answer ends with a «Messenger: … new events» note, events are waiting for you: read them with wait after this step.
@@ -81,6 +82,31 @@ type coordinator struct {
 	// wait; seenKnown is false until its first wait (T-074).
 	seen      int64
 	seenKnown bool
+	// chat names this coordinator chat; tookOver is a one-time note that it
+	// replaced another chat of the project (T-090).
+	chat     string
+	tookOver string
+}
+
+// acting tools make this chat the project's coordinator (T-090).
+var actingTools = map[string]bool{"wait": true, "start_task": true, "answer": true, "continue_task": true, "cancel": true}
+
+// claim makes this chat the active coordinator of its project.
+func (c *coordinator) claim() {
+	old, err := c.store.ClaimCoordinator(c.project, c.chat)
+	if err == nil && old != "" {
+		c.mu.Lock()
+		c.tookOver = "Messenger: this chat is now the coordinator of the project; another coordinator chat was active before and is told to stop. If the owner did not mean to replace it, tell them."
+		c.mu.Unlock()
+	}
+}
+
+// supersededNote is the wait answer of a chat another chat replaced.
+const supersededNote = "Another coordinator chat of this project took over: it is the coordinator now. Stop waiting and do not call wait again; tell the owner that this chat is no longer the coordinator. Only if the owner asks you to take over again, call wait."
+
+func (c *coordinator) superseded() bool {
+	chat, err := c.store.CoordinatorChat(c.project)
+	return err == nil && chat != "" && chat != c.chat
 }
 
 // markSeen records a cursor the chat has reached.
@@ -119,7 +145,11 @@ func (c *coordinator) unreadNotice() string {
 
 // ServeCoordinator runs the coordinator MCP server for one project until in closes.
 func ServeCoordinator(store *core.Store, project string, in io.Reader, out io.Writer) error {
-	c := &coordinator{store: store, project: project, w: out, pending: map[string]context.CancelFunc{}}
+	chat, err := core.NewChatID()
+	if err != nil {
+		return err
+	}
+	c := &coordinator{store: store, project: project, w: out, pending: map[string]context.CancelFunc{}, chat: chat}
 	var wg sync.WaitGroup
 	defer wg.Wait()
 	scanner := bufio.NewScanner(in)
@@ -197,6 +227,13 @@ func ServeCoordinator(store *core.Store, project string, in io.Reader, out io.Wr
 					if notice := c.unreadNotice(); notice != "" {
 						reply["content"] = append(reply["content"].([]map[string]any), map[string]any{"type": "text", "text": notice})
 					}
+				}
+				c.mu.Lock()
+				took := c.tookOver
+				c.tookOver = ""
+				c.mu.Unlock()
+				if took != "" {
+					reply["content"] = append(reply["content"].([]map[string]any), map[string]any{"type": "text", "text": took})
 				}
 				c.respond(id, reply, nil)
 				if m, ok := result.(map[string]any); ok && isWaitCall(params) {
@@ -315,6 +352,9 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 	_ = c.store.TouchCoordinator(c.project)
 	if err := c.projectExists(); err != nil {
 		return nil, err
+	}
+	if actingTools[p.Name] {
+		c.claim()
 	}
 	switch p.Name {
 	case "list_agents":
@@ -627,6 +667,9 @@ func (c *coordinator) wait(ctx context.Context, after int64, timeout time.Durati
 	tick := time.NewTicker(coordinatorPoll)
 	defer tick.Stop()
 	for {
+		if c.superseded() {
+			return map[string]any{"events": []core.TaskEvent{}, "cursor": after, "timed_out": false, "superseded": true, "next": supersededNote}, nil
+		}
 		events, _, err := c.store.TaskEvents(c.project, core.AudienceCoordinator, after, coordinatorMaxReturned+1)
 		if err != nil {
 			return nil, err

@@ -787,3 +787,31 @@ func TestCoordinatorTreatsWorkerTextAsData(t *testing.T) {
 		t.Fatal("instructions lack the data rule")
 	}
 }
+
+// T-090: the newest chat that waits or acts is the coordinator; the wait of
+// the chat it replaced ends with superseded, and the new chat is told.
+func TestSecondCoordinatorChatTakesOver(t *testing.T) {
+	st := newCoordinatorStore(t)
+	a := startCoordinator(t, st, "Game")
+	a.send(1, "initialize", map[string]any{})
+	a.expect(1, 2*time.Second)
+	a.send(2, "tools/call", map[string]any{"name": "wait", "arguments": map[string]any{"after": 0, "timeout_seconds": 30}})
+	time.Sleep(500 * time.Millisecond)
+	b := startCoordinator(t, st, "Game")
+	b.send(1, "initialize", map[string]any{})
+	b.expect(1, 2*time.Second)
+	b.send(2, "tools/call", map[string]any{"name": "wait", "arguments": map[string]any{"after": 0, "timeout_seconds": 1}})
+	resp, _ := b.expect(2, 5*time.Second)
+	raw, _ := json.Marshal(resp)
+	if !strings.Contains(string(raw), "this chat is now the coordinator") {
+		t.Fatalf("new chat not told: %s", raw)
+	}
+	resp, _ = a.expect(2, 5*time.Second)
+	raw, _ = json.Marshal(resp)
+	if !strings.Contains(string(raw), `\"superseded\":true`) {
+		t.Fatalf("old chat's wait: %s", raw)
+	}
+	if chat, _ := st.CoordinatorChat("Game"); chat == "" {
+		t.Fatal("no active chat")
+	}
+}

@@ -149,6 +149,11 @@ CREATE TABLE IF NOT EXISTS coordinator_connections (
  project TEXT PRIMARY KEY,
  last_seen TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS coordinator_chats (
+ project TEXT PRIMARY KEY,
+ chat TEXT NOT NULL,
+ since TEXT NOT NULL
+);
 `
 
 // Bounds on stored text. A report is bounded so wait and the window stay
@@ -1946,6 +1951,36 @@ func (s *Store) TouchCoordinator(project string) error {
 	return err
 }
 
+// ClaimCoordinator makes chat the project's active coordinator chat (T-090)
+// and returns the chat it replaced, or "". The newest chat that acts is the
+// coordinator; the one before is told so by its wait.
+func (s *Store) ClaimCoordinator(project, chat string) (string, error) {
+	var old string
+	err := s.tx(func(tx *sql.Tx) error {
+		err := tx.QueryRow(`SELECT chat FROM coordinator_chats WHERE project=?`, project).Scan(&old)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		if old == chat {
+			old = ""
+			return nil
+		}
+		_, err = tx.Exec(`INSERT INTO coordinator_chats(project,chat,since) VALUES (?,?,?) ON CONFLICT(project) DO UPDATE SET chat=excluded.chat,since=excluded.since`, project, chat, now())
+		return err
+	})
+	return old, err
+}
+
+// CoordinatorChat returns the project's active coordinator chat, or "".
+func (s *Store) CoordinatorChat(project string) (string, error) {
+	var chat string
+	err := s.db.QueryRow(`SELECT chat FROM coordinator_chats WHERE project=?`, project).Scan(&chat)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return chat, err
+}
+
 // CoordinatorLastSeen returns when a coordinator last called this project, or "".
 func (s *Store) CoordinatorLastSeen(project string) (string, error) {
 	var at string
@@ -2244,4 +2279,13 @@ func (s *Store) RemoveComputerAgent(provider string) error {
 		}
 		return nil
 	})
+}
+
+// NewChatID names one coordinator chat (T-090).
+func NewChatID() (string, error) {
+	id, err := randomID()
+	if err != nil {
+		return "", err
+	}
+	return "chat-" + id[:16], nil
 }

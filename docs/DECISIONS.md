@@ -212,3 +212,7 @@ While a task of this computer is running or waits for the coordinator, the windo
 ## D-098 — The worker's last message is kept whole and readable by the coordinator (T-087)
 
 2026-11-09, Claude Code, after a Codex audit on ПК-2 came back as a six-line report while its full text was only in the worker's last message, and the file it had written was deleted. Messenger now keeps each run's last worker message in full (up to 60 000 characters) on the computer that ran it; a task of another computer sends it back before its report (an `output` message; older computers ignore it). When it says more than the report, the report or failure tells the coordinator so, and the coordinator reads it with `task_output` in parts of 20 000 characters. Reports stay short (D-087); this only makes sure nothing the worker wrote is lost.
+
+## D-099 — The newest coordinator chat that acts is the coordinator (T-090)
+
+2026-11-09, Claude Code, coordinator's list item 4. Each coordinator chat gets its own id. The newest chat that waits, starts, answers, continues or cancels becomes the project's coordinator; the wait of the chat before ends at once with `superseded`, and that chat is told to stop and tell the owner. The new chat is told it replaced another one. Nothing is refused: refusing would leave the owner stuck when the old chat is gone without a goodbye; replacing matches the owner's plan of a fresh chat each day and night.
