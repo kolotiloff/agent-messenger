@@ -466,8 +466,9 @@
         const [text,cls]=taskStatus(t);
         const status=el('span',undefined,'am-task-status '+cls);
         if(t.state==='waiting_owner')status.append(el('span',undefined,'am-dot am-dot-wait'));
-        const words=el('span',text);status.append(words);
-        if(t.usage){const used=el('span',', '+usageShort(t.usage),'am-task-usage');used.title=usageLong(t.usage);words.append(used);}
+        // The comma stays with the status, so a wrapped token count starts its own line cleanly.
+        const words=el('span');status.append(words);words.append(el('span',t.usage?text+',':text));
+        if(t.usage){const used=el('span',usageShort(t.usage),'am-task-usage');used.title=usageLong(t.usage);words.append(used);}
         row.append(agent,el('span',t.title,'am-task-title'),status);
         row.addEventListener('click',()=>{selectedTask=t.id;feedSignature='';renderTaskList();loadFeed();});
         box.append(row);
@@ -486,8 +487,8 @@
         const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),el('span',names[t.agent]||t.agent));
         const sharedWhen=taskWhen(t);if(sharedWhen)agent.append(el('span',sharedWhen,'am-task-when'));
         const [text,cls]=taskStatus(t);
-        const words=el('span',text);
-        if(t.tokens)words.append(el('span',', '+tokensText(t.tokens)+tr(' токенов'),'am-task-usage'));
+        const words=el('span');words.append(el('span',t.tokens?text+',':text));
+        if(t.tokens)words.append(el('span',tokensText(t.tokens)+tr(' токенов'),'am-task-usage'));
         const status=el('span',undefined,'am-task-status '+cls);status.append(words);
         row.append(agent,el('span',t.title,'am-task-title'),status);
         if(t.report)row.append(el('span',t.report,'am-task-report'));
@@ -1619,7 +1620,7 @@
     pane.append(handle);
   }
   splitter(root.querySelector('.am-sidebar'),tr('Ширина левой панели'),'--am-nav',204,160,420,1);
-  splitter($('task-panel'),tr('Ширина списка задач'),'--am-queue',240,200,520,-1);
+  splitter($('task-panel'),tr('Ширина списка задач'),'--am-queue',290,200,520,-1);
   // A click on empty space in the sidebar shows all computers' tasks again.
   root.querySelector('.am-sidebar').addEventListener('click',event=>{if(computerFilter&&!event.target.closest('.am-machine-card,.am-project,.am-side-bottom,.am-splitter,button,select,input,a,[popover]'))clearComputer();});
   $('answer-text').addEventListener('input',()=>{sizeAnswer();answerControls();});

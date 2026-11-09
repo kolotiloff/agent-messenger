@@ -288,7 +288,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-connect details button { margin-top:var(--am-space-2); }
 
 /* Tasks screen: the task feed and the task list beside it. */
-#am-concept .am-chat-layout { display:grid; grid-template-columns:minmax(0,1fr) min(var(--am-queue,240px),50%); height:100%; min-height:0; position:relative; }
+#am-concept .am-chat-layout { display:grid; grid-template-columns:minmax(0,1fr) min(var(--am-queue,290px),50%); height:100%; min-height:0; position:relative; }
 #am-concept .am-chat-layout.am-queue-collapsed { grid-template-columns:minmax(0,1fr); }
 #am-concept .am-chat { display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; }
 #am-concept .am-chat-head { display:flex; align-items:center; gap:var(--am-gap-content); padding:0 var(--am-pane-inset) var(--am-space-3); flex-shrink:0; }
@@ -389,8 +389,13 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-task-agent .am-provider-icon { width:14px; height:14px; }
 #am-concept .am-task-agent .am-provider-icon svg { width:12px; height:12px; }
 #am-concept .am-task-title { display:block; min-width:0; max-width:100%; font-size:var(--am-text-m); color:var(--am-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-#am-concept .am-task-status { display:flex; align-items:center; gap:var(--am-space-1); white-space:nowrap; }
-#am-concept .am-task-when { margin-left:auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-left:var(--am-space-2); font-variant-numeric:tabular-nums; }
+/* The status line wraps instead of running past the edge; the token count moves as one piece (owner, T-105) */
+#am-concept .am-task-status { display:flex; align-items:center; gap:var(--am-space-1); white-space:normal; min-width:0; }
+#am-concept .am-task-status > span:last-child { display:inline-flex; flex-wrap:wrap; align-items:baseline; column-gap:var(--am-space-1); min-width:0; white-space:nowrap; }
+/* The agent's name gives way first; the time stays whole */
+#am-concept .am-task-agent { min-width:0; }
+#am-concept .am-task-agent > span:not(.am-task-when):not(.am-provider-icon) { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#am-concept .am-task-when { margin-left:auto; flex-shrink:0; white-space:nowrap; padding-left:var(--am-space-2); font-variant-numeric:tabular-nums; }
 #am-concept .am-task-usage { flex-shrink:0; white-space:nowrap; color:var(--am-muted); font-size:var(--am-text-xs); font-variant-numeric:tabular-nums; }
 
 /* Cards: agent cards and the server sections share one look. */
