@@ -91,6 +91,37 @@ func ProgramPath(root string) string {
 	return in.Path
 }
 
+// InstallPrefix returns the prefix of an installation made by
+// `messenger install` (<prefix>/lib/agent-messenger/<version>/messenger),
+// or "" for a plain program file.
+func InstallPrefix(executable string) string {
+	version := filepath.Dir(executable)
+	library := filepath.Dir(version)
+	lib := filepath.Dir(library)
+	if filepath.Base(executable) != "messenger" || filepath.Base(library) != "agent-messenger" || filepath.Base(lib) != "lib" {
+		return ""
+	}
+	return filepath.Dir(lib)
+}
+
+// CoordinatorProgram is the program file the coordinator's connection in
+// Claude starts (T-117): the program the owner installed, which updates
+// replace, never the client's copy of one version. An installation made by
+// `messenger install` is started through its bin/messenger link, which each
+// update moves to the new version.
+func CoordinatorProgram(root string) (string, error) {
+	if p := ProgramPath(root); p != "" {
+		if prefix := InstallPrefix(p); prefix != "" {
+			link := filepath.Join(prefix, "bin", "messenger")
+			if fi, err := os.Stat(link); err == nil && fi.Mode().IsRegular() {
+				return link, nil
+			}
+		}
+		return p, nil
+	}
+	return os.Executable()
+}
+
 // WriteProgramPath records the program file the owner installed.
 func WriteProgramPath(root, program string) error {
 	if !filepath.IsAbs(program) {

@@ -29,7 +29,17 @@ func runTaskCommand(root string, args []string) (bool, error) {
 	switch args[0] {
 	case "coordinator":
 		// stdio MCP server for one project's coordinator chat; stdout carries
-		// only JSON-RPC.
+		// only JSON-RPC. It is a relay to coordinator-serve of the program
+		// file, so an update reaches a running chat (T-117).
+		if err := os.MkdirAll(root, 0o700); err != nil {
+			return true, err
+		}
+		program, err := coordinatorProgram()
+		if err != nil {
+			return true, err
+		}
+		return true, mcp.CoordinatorRelayMain(program, append([]string{"--root", root, mcp.CoordinatorServeCommand}, args[1:]...))
+	case mcp.CoordinatorServeCommand:
 		if err := os.MkdirAll(root, 0o700); err != nil {
 			return true, err
 		}
@@ -141,4 +151,17 @@ func runTaskCommand(root string, args []string) (bool, error) {
 		return true, err
 	}
 	return false, nil
+}
+
+// coordinatorProgram is the program file Claude started: the path in
+// Claude's settings, so an update that replaces that file (or moves the
+// installation's link) is seen by the relay. Resolving the link would pin
+// the old version.
+func coordinatorProgram() (string, error) {
+	if filepath.IsAbs(os.Args[0]) {
+		if fi, err := os.Stat(os.Args[0]); err == nil && fi.Mode().IsRegular() {
+			return os.Args[0], nil
+		}
+	}
+	return os.Executable()
 }

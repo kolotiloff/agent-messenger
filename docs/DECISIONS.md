@@ -262,3 +262,13 @@ People see «0.58» instead of «0.0.0-preview.58»: in the release title, the M
 
 An update of a program installed with `messenger install` (window or another computer's request) adds the new version folder and moves the `messenger` link without the supervisor and startup leases. The running background client keeps its own version folder, which is never changed or removed, so nothing it uses moves; it goes on with its version until it is restarted, as on Windows (D-048). A lock file in the installation's library folder keeps two installs apart. A manual `messenger install` keeps the leases and the check of `active-runs.json`.
 
+## D-107 — The coordinator follows updates (T-117)
+
+2026-11-09, Claude Code, coordinator's report: its chat had only six tools although `continue_task`, `task_output` and `get_log` were released.
+
+The coordinator's entry in Claude started the program the client ran from, which is the client's copy of one version (`runtimes/<digest>/messenger`). Copies stay on disk, so the chat kept that version through every update; the window never said so because the chat was connected. Now:
+
+- The entry starts the program file the owner installed (recorded by the window on every system, `program.json`), or the `bin/messenger` link of an installation, which updates replace.
+- An entry of this Messenger (same data folder and project) that starts another file is replaced once per client start, with Claude's own `mcp remove` and `mcp add`. Entries of anything else are never touched. A failure is shown, not retried.
+- `messenger coordinator` is a relay: it runs `coordinator-serve` from that file and passes MCP lines. When the file changes and the new program answers `version`, the relay initializes it with the chat's own initialize request and the same chat id, sends new calls there, lets running calls finish in the old one and tells Claude `notifications/tools/list_changed`. A new program that fails is dropped and the old one keeps serving. A chat open before this version still runs its old copy: it needs one reconnect or a new chat, after which it follows updates by itself.
+

@@ -33,6 +33,12 @@ func ClaudeAddCoordinatorArgs(cli, messenger, root, project string) []string {
 	return append([]string{cli, "mcp", "add", "--scope", "local", CoordinatorServerName, "--", messenger}, CoordinatorArgs(root, project)...)
 }
 
+// ClaudeRemoveCoordinatorArgs removes the folder's coordinator entry, before
+// a stale one is added again.
+func ClaudeRemoveCoordinatorArgs(cli string) []string {
+	return []string{cli, "mcp", "remove", "--scope", "local", CoordinatorServerName}
+}
+
 // ClaudeUserConfig is the settings file where Claude keeps local-scope MCP
 // servers: $CLAUDE_CONFIG_DIR/.claude.json, or ~/.claude.json.
 func ClaudeUserConfig(home string, env []string) string {
@@ -49,7 +55,11 @@ const (
 	LinkConnected = "connected" // the entry starts this Messenger for this project
 	LinkMissing   = "missing"   // no "messenger" entry for the folder
 	LinkOther     = "other"     // a "messenger" entry starts something else
-	LinkUnknown   = "unknown"   // the settings file could not be read
+	// LinkStale is this Messenger's own entry (same data folder and
+	// project) that starts another program file, such as the client's copy
+	// of an earlier version (T-117). It is replaced.
+	LinkStale   = "stale"
+	LinkUnknown = "unknown" // the settings file could not be read
 )
 
 // CoordinatorLink reads Claude's settings file and reports whether the
@@ -86,8 +96,11 @@ func CoordinatorLink(config, folder, messenger, root, project string) (string, e
 			Args    []string `json:"args"`
 		}
 		if json.Unmarshal(entry, &server) != nil || (server.Type != "" && server.Type != "stdio") ||
-			server.Command != messenger || strings.Join(server.Args, "\x00") != strings.Join(CoordinatorArgs(root, project), "\x00") {
+			strings.Join(server.Args, "\x00") != strings.Join(CoordinatorArgs(root, project), "\x00") {
 			return LinkOther, nil
+		}
+		if server.Command != messenger {
+			return LinkStale, nil
 		}
 	}
 	if found {

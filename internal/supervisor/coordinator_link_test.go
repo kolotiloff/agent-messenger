@@ -30,6 +30,26 @@ func fakeClaudeMCP(mode string) int {
 		return 0
 	}
 	a := os.Args[1:]
+	if len(a) == 5 && a[0] == "mcp" && a[1] == "remove" && a[2] == "--scope" && a[3] == "local" {
+		home, _ := os.UserHomeDir()
+		path := filepath.Join(home, ".claude.json")
+		settings := map[string]any{}
+		raw, _ := os.ReadFile(path)
+		_ = json.Unmarshal(raw, &settings)
+		projects, _ := settings["projects"].(map[string]any)
+		project, _ := projects[cwd].(map[string]any)
+		servers, _ := project["mcpServers"].(map[string]any)
+		if servers[a[4]] == nil {
+			fmt.Fprintln(os.Stderr, "No MCP server found")
+			return 1
+		}
+		delete(servers, a[4])
+		raw, _ = json.MarshalIndent(settings, "", "  ")
+		if err := os.WriteFile(path, raw, 0o600); err != nil {
+			return 3
+		}
+		return 0
+	}
 	if len(a) < 7 || a[0] != "mcp" || a[1] != "add" || a[2] != "--scope" || a[3] != "local" || a[5] != "--" {
 		fmt.Fprintln(os.Stderr, "unexpected arguments")
 		return 2
@@ -174,6 +194,43 @@ func TestConnectCoordinatorNeverReplacesAnotherEntry(t *testing.T) {
 	}
 	if after, _ := os.ReadFile(f.config); string(after) != string(raw) {
 		t.Fatal("another entry was changed")
+	}
+}
+
+// T-117: an entry this Messenger made for an earlier program file, such as
+// the client's copy of an old version, is replaced by one that starts the
+// program file the owner installed.
+func TestStaleCoordinatorEntryIsReplaced(t *testing.T) {
+	f := newLinkFixture(t, true)
+	t.Setenv("MESSENGER_CLAUDE_MCP_FIXTURE", "ok")
+	program := filepath.Join(t.TempDir(), "messenger")
+	if err := os.WriteFile(program, []byte("program"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteProgramPath(f.sup.root, program); err != nil {
+		t.Fatal(err)
+	}
+	stale := map[string]any{"numStartups": 2, "projects": map[string]any{f.folder: map[string]any{"mcpServers": map[string]any{
+		"messenger": map[string]any{"type": "stdio", "command": filepath.Join(f.sup.root, "runtimes", "old", "messenger"), "args": adapters.CoordinatorArgs(f.sup.root, f.project)},
+		"other":     map[string]any{"command": "keep"},
+	}}}}
+	raw, _ := json.Marshal(stale)
+	if err := os.WriteFile(f.config, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.sup.CoordinatorLinkState(f.project); got.State != adapters.LinkStale {
+		t.Fatalf("before: %+v", got)
+	}
+	if got := f.sup.connectCoordinator(f.project); got.State != adapters.LinkConnected {
+		t.Fatalf("repair: %+v", got)
+	}
+	calls := f.calls(t)
+	if len(calls) != 2 || !strings.Contains(calls[0], "remove") || !strings.Contains(calls[1], "\x00"+program+"\x00") {
+		t.Fatalf("calls %q", calls)
+	}
+	after, _ := os.ReadFile(f.config)
+	if !strings.Contains(string(after), `"keep"`) {
+		t.Fatalf("another server was lost: %s", after)
 	}
 }
 

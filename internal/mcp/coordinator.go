@@ -147,9 +147,14 @@ func (c *coordinator) unreadNotice() string {
 
 // ServeCoordinator runs the coordinator MCP server for one project until in closes.
 func ServeCoordinator(store *core.Store, project string, in io.Reader, out io.Writer) error {
-	chat, err := core.NewChatID()
-	if err != nil {
-		return err
+	// Under the relay (T-117) every program version serving the same chat
+	// keeps the relay's chat id, so a switch is not a new chat.
+	chat := os.Getenv(CoordinatorChatVariable)
+	if !validChatID(chat) {
+		var err error
+		if chat, err = core.NewChatID(); err != nil {
+			return err
+		}
 	}
 	c := &coordinator{store: store, project: project, w: out, pending: map[string]context.CancelFunc{}, chat: chat}
 	var wg sync.WaitGroup
@@ -192,7 +197,7 @@ func ServeCoordinator(store *core.Store, project string, in io.Reader, out io.Wr
 			_ = c.store.TouchCoordinatorClient(c.project, p.ClientInfo.Name)
 			c.respond(req.ID, map[string]any{
 				"protocolVersion": p.ProtocolVersion,
-				"capabilities":    map[string]any{"tools": map[string]any{}},
+				"capabilities":    map[string]any{"tools": map[string]any{"listChanged": true}},
 				"serverInfo":      map[string]any{"name": "agent-messenger", "version": "0.2.0"},
 				"instructions":    coordinatorInstructions + "\nProject: " + c.project,
 			}, nil)

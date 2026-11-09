@@ -56,7 +56,7 @@ func (s *Supervisor) coordinatorTarget(project string) (coordinatorTarget, Coord
 			t.cli = a.CLI
 		}
 	}
-	t.messenger, err = os.Executable()
+	t.messenger, err = CoordinatorProgram(s.root)
 	if err != nil {
 		return t, CoordinatorLinkView{State: adapters.LinkUnknown, Detail: err.Error()}, false
 	}
@@ -107,19 +107,29 @@ func (s *Supervisor) connectCoordinator(project string) CoordinatorLinkView {
 		return view
 	}
 	before := s.readCoordinatorLink(project, t)
-	if before.State != adapters.LinkMissing {
+	if before.State != adapters.LinkMissing && before.State != adapters.LinkStale {
 		return before
 	}
-	args := adapters.ClaudeAddCoordinatorArgs(t.cli, t.messenger, s.root, project)
 	ctx, cancel := context.WithTimeout(context.Background(), coordinatorAddTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
-	cmd.Dir = t.folder
-	cmd.WaitDelay = time.Second
-	platform.HideConsole(cmd)
 	var out bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &out, &out
-	runErr := cmd.Run()
+	run := func(args []string) error {
+		cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+		cmd.Dir = t.folder
+		cmd.WaitDelay = time.Second
+		platform.HideConsole(cmd)
+		cmd.Stdout, cmd.Stderr = &out, &out
+		return cmd.Run()
+	}
+	var runErr error
+	if before.State == adapters.LinkStale {
+		// Our own entry for an earlier program file (T-117): Claude's add
+		// does not replace an entry, so it is removed first.
+		runErr = run(adapters.ClaudeRemoveCoordinatorArgs(t.cli))
+	}
+	if runErr == nil {
+		runErr = run(adapters.ClaudeAddCoordinatorArgs(t.cli, t.messenger, s.root, project))
+	}
 	after := s.readCoordinatorLink(project, t)
 	if after.State == adapters.LinkConnected {
 		return after
@@ -140,4 +150,26 @@ func (s *Supervisor) connectCoordinator(project string) CoordinatorLinkView {
 		detail = "Claude не сообщил об ошибке, но подключения в его настройках нет."
 	}
 	return CoordinatorLinkView{State: linkFailed, Detail: detail}
+}
+
+// staleRepairs remembers the projects whose stale coordinator entry this
+// client already tried to replace: one try per project and client start, so
+// a failure is not repeated by itself.
+var staleRepairs sync.Map
+
+// repairStaleCoordinator replaces, in the background, the project's
+// coordinator entry when it starts an earlier program file (T-117). A chat
+// that is open keeps its running program until it reconnects; new chats
+// and reconnects start the program file.
+func (s *Supervisor) repairStaleCoordinator(project string) {
+	if _, tried := staleRepairs.LoadOrStore(s.root+"\x00"+project, true); tried {
+		return
+	}
+	go func() {
+		t, _, ok := s.coordinatorTarget(project)
+		if !ok || t.cli == "" || s.readCoordinatorLink(project, t).State != adapters.LinkStale {
+			return
+		}
+		s.connectCoordinator(project)
+	}()
 }
