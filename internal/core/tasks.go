@@ -1028,6 +1028,28 @@ func setTaskState(tx *sql.Tx, task, state, detail string) error {
 // classes; anything else is stored as "other".
 var failureReasons = map[string]bool{"usage_limit": true, "rate_limit": true, "overload": true, "sign_in": true, "other": true}
 
+// failedRunWhy says in plain words why a run that ended was not accepted
+// (T-091), so the owner knows what to do; the raw evidence follows it.
+func failedRunWhy(ev RunEvidence, identity bool, disposition string) string {
+	switch {
+	case ev.Reason == "sign_in":
+		return "the agent is not signed in on this computer"
+	case ev.Reason == "usage_limit" || ev.Reason == "rate_limit" || ev.Reason == "overload":
+		return "the agent stopped at a provider limit"
+	case !ev.ExitObserved:
+		return "the agent program's exit was not observed"
+	case !identity:
+		return "the agent answered in a different conversation than the one Messenger started, so its result cannot be trusted"
+	case ev.ExitCode != 0:
+		return fmt.Sprintf("the agent program stopped with an error (exit code %d)", ev.ExitCode)
+	case !ev.ProviderOK:
+		return "the agent did not report a successful end of its work; it may have crashed or been stopped"
+	case disposition == "":
+		return "the worker ended without sending its report or a question through Messenger (report, ask or ask_owner were never called); with the owner's consent continue_task asks the same conversation to send it"
+	}
+	return "the run was not accepted"
+}
+
 // failureNote is the coordinator line that explains a failure reason. It
 // says what to tell the owner; nothing is ever started again by itself.
 func failureNote(reason, reset string) string {
@@ -1396,7 +1418,7 @@ func (s *Store) FinishTaskRun(run string, ev RunEvidence) (string, error) {
 			detail = "verified: identity, completion, exit 0, empty group, one " + r.Disposition
 		default:
 			final = "failed"
-			detail = fmt.Sprintf("not verified: exit %d, identity %t, provider %t, disposition %q", ev.ExitCode, bound == 1, ev.ProviderOK, r.Disposition)
+			detail = failedRunWhy(ev, bound == 1, r.Disposition) + fmt.Sprintf(" (exit %d, identity %t, provider %t, disposition %q)", ev.ExitCode, bound == 1, ev.ProviderOK, r.Disposition)
 		}
 		if ev.Detail != "" {
 			detail += "; " + ev.Detail

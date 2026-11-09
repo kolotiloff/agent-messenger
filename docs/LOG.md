@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-09 — Claude Code (coordinator's list, T-091)
+
+- The coordinator's list of Messenger issues became T-087..T-093 and Q-027 (own Plastic workspace per worker). T-091: a failed run says why in plain words (not signed in, error exit, crashed, ended without a report) before the raw evidence; the window shows it in Russian. On `claude/ui-tweaks`, not released.
+
 ## 2026-11-09 — Claude Code (T-086 fresh coordinator chat)
 
 - The owner moves all work to Messenger and wants a fresh coordinator chat each day and night. T-086: the coordinator's instructions tell a new chat to start from `tasks` and its cursor; `wait` from 0 would replay the whole history. On `claude/ui-tweaks`, not released.

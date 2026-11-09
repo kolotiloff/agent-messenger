@@ -598,7 +598,7 @@
       if(it.kind==='outcome'){
         group=null;const text={failed:t.remote&&!t.remote.from?tr('Задача не выполнена'):tr('Запуск завершился с ошибкой'),blocked:t.remote&&!t.remote.from?tr('Задача заблокирована: результат на другом компьютере неизвестен'):tr('Задача заблокирована: процесс не завершился полностью'),interrupted:tr('Клиент перезапустился во время работы; результат неизвестен'),cancelled:tr('Задача отменена')}[it.state]||it.state;
         const note=el('div',undefined,'am-outcome '+(it.state==='cancelled'?'am-muted':'am-status-bad'));note.append(el('p',text));
-        const why=t.remote&&!t.remote.from?refusalText(it.text,t.remote.name):'';if(why)note.append(el('p',why));
+        const why=t.remote&&!t.remote.from?refusalText(it.text,t.remote.name)||failureText(it.text):failureText(it.text);if(why)note.append(el('p',why));
         if(it.text)note.append(el('p',it.text,'am-small am-muted'));
         const g=el('article',undefined,'am-message-group');g.append(note);out.push(g);
       }
@@ -618,6 +618,17 @@
     else if(!q&&!note&&wasNote){$('answer-text').value='';}
     sizeAnswer();answerControls();
     if(atBottom)thread.scrollTop=thread.scrollHeight;
+  }
+  // Why a run was not accepted (T-091), in the window's language.
+  function failureText(text){
+    text=text||'';const code=text.match(/stopped with an error \(exit code (\d+)\)/);
+    if(/not signed in/.test(text))return tr('Агент не вошёл в аккаунт на этом компьютере. Войдите на вкладке «Агенты».');
+    if(/stopped at a provider limit/.test(text))return tr('Агент упёрся в лимит.');
+    if(/different conversation/.test(text))return tr('Агент ответил не в той сессии, которую запустил Messenger; результату нельзя доверять.');
+    if(code)return tr('Программа агента завершилась с ошибкой, код ')+code[1]+'.';
+    if(/did not report a successful end/.test(text))return tr('Агент не сообщил об успешном окончании работы: возможно, упал или был остановлен.');
+    if(/ended without sending its report/.test(text))return tr('Исполнитель закончил, но не отправил отчёт через Messenger. Координатор может попросить его прислать отчёт в той же сессии.');
+    return '';
   }
   // Known refusals of another computer, explained in the window's language.
   function refusalText(text,name){
