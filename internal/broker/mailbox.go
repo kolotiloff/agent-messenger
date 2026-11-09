@@ -41,7 +41,9 @@ var (
 	ErrMailboxFull = errors.New("у компьютера слишком много непрочитанных сообщений")
 	// ErrNoMailbox means the broker is older and cannot carry messages.
 	ErrNoMailbox  = errors.New("сервер не умеет передавать задачи: обновите программу на компьютере с сервером")
-	errBadMessage = errors.New("сообщение не прошло проверку")
+	// ErrBadMessage means the broker refused the message itself (its op id,
+	// size or body); sending it again cannot help.
+	ErrBadMessage = errors.New("сообщение не прошло проверку")
 )
 
 // Message is one message waiting for its recipient.
@@ -98,7 +100,7 @@ func (b *Broker) member(peer string) (bool, error) {
 // the same (from, opID) again while it waits stores nothing new.
 func (b *Broker) Send(from, to, opID string, body []byte) error {
 	if !messageOp.MatchString(opID) || len(body) == 0 || len(body) > MaxMessageBody || !json.Valid(body) || body[0] != '{' || from == to {
-		return errBadMessage
+		return ErrBadMessage
 	}
 	ok, err := b.member(to)
 	if err != nil {
@@ -192,7 +194,7 @@ func (b *Broker) handleSend(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "recipient"})
 	case errors.Is(err, ErrMailboxFull):
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "full"})
-	case errors.Is(err, errBadMessage):
+	case errors.Is(err, ErrBadMessage):
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
 	default:
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "unavailable"})

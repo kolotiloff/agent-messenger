@@ -162,15 +162,27 @@ func (s *Supervisor) sendOutbox(ctx context.Context, n broker.Network) string {
 	if err != nil {
 		return "очередь сообщений не читается: " + err.Error()
 	}
+	// A computer whose mailbox is full waits; messages to the others still
+	// go, each recipient's in order (audit 2026-11-09).
+	full := map[string]bool{}
+	problem := ""
 	for _, m := range pending {
+		if full[m.To] {
+			continue
+		}
 		err := s.server.Send(ctx, n, m.To, m.OpID, m.Body)
 		switch {
 		case err == nil:
 			err = s.store.NetSent(m.Seq)
-		case errors.Is(err, broker.ErrRecipient):
+		case errors.Is(err, broker.ErrRecipient), errors.Is(err, broker.ErrBadMessage):
+			// Sending it again cannot help: it is dropped, never retried.
 			err = s.store.NetUndeliverable(m.Seq)
 		case errors.Is(err, broker.ErrNetworkChanged):
 			return ""
+		case errors.Is(err, broker.ErrMailboxFull):
+			full[m.To] = true
+			problem = "задачи не отправлены: " + err.Error()
+			continue
 		default:
 			return "задачи не отправлены: " + err.Error()
 		}
@@ -178,7 +190,7 @@ func (s *Supervisor) sendOutbox(ctx context.Context, n broker.Network) string {
 			return "очередь сообщений не обновлена: " + err.Error()
 		}
 	}
-	return ""
+	return problem
 }
 
 func (s *Supervisor) readInbox(ctx context.Context, n broker.Network) string {

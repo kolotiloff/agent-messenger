@@ -311,6 +311,8 @@ func SendMessage(ctx context.Context, c Connection, to, opID string, body []byte
 		return ErrNoMailbox
 	case code == http.StatusTooManyRequests:
 		return ErrMailboxFull
+	case code == http.StatusBadRequest:
+		return ErrBadMessage
 	}
 	return fmt.Errorf("сервер не принял сообщение (код %d)", code)
 }
