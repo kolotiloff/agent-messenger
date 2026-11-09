@@ -124,6 +124,16 @@ CREATE TABLE IF NOT EXISTS task_questions (
  answered_by TEXT,
  created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS task_owner_notes (
+ id TEXT PRIMARY KEY,
+ task_id TEXT NOT NULL REFERENCES tasks(id),
+ op_id TEXT NOT NULL UNIQUE,
+ text TEXT NOT NULL,
+ state TEXT NOT NULL,
+ run_id TEXT,
+ created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS task_owner_notes_task ON task_owner_notes(task_id, state);
 CREATE TABLE IF NOT EXISTS task_events (
  seq INTEGER PRIMARY KEY AUTOINCREMENT,
  project TEXT NOT NULL,
@@ -822,7 +832,15 @@ func insertTaskRun(tx *sql.Tx, task string, ordinal int, kind, input string) err
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(`INSERT INTO task_runs(id,task_id,ordinal,kind,input,receipt,state,created_at) VALUES (?,?,?,?,?,?,'intent',?)`, "run-"+id[:16], task, ordinal, kind, input, receipt, now())
+	run := "run-" + id[:16]
+	if _, err = tx.Exec(`INSERT INTO task_runs(id,task_id,ordinal,kind,input,receipt,state,created_at) VALUES (?,?,?,?,?,?,'intent',?)`, run, task, ordinal, kind, input, receipt, now()); err != nil {
+		return err
+	}
+	// T-085: what the owner wrote while the task worked goes with the next
+	// run of the same conversation, whatever started it.
+	if ordinal > 1 {
+		_, err = tx.Exec(`UPDATE task_owner_notes SET state='delivered',run_id=? WHERE task_id=? AND state='pending'`, run, task)
+	}
 	return err
 }
 
@@ -990,6 +1008,14 @@ func setRunState(tx *sql.Tx, run, state, detail string, from ...string) error {
 }
 
 func setTaskState(tx *sql.Tx, task, state, detail string) error {
+	// A task that stops keeps the owner's waiting notes as undelivered;
+	// nothing sends them again by itself (T-085).
+	switch state {
+	case "done", "failed", "cancelled", "blocked", "interrupted":
+		if _, err := tx.Exec(`UPDATE task_owner_notes SET state='undelivered' WHERE task_id=? AND state='pending'`, task); err != nil {
+			return err
+		}
+	}
 	finished := sql.NullString{}
 	if state == "done" || state == "failed" || state == "cancelled" {
 		finished = sql.NullString{String: now(), Valid: true}
@@ -1057,7 +1083,7 @@ func (s *Store) BeginTaskRun(run, reservation string) (TaskRun, Task, error) {
 		// asked for now: it takes the agent's current «Любые команды», so
 		// turning it on helps a task started before (T-056). Without the
 		// agent row the task keeps what it had.
-		if r.Kind == "answer" || r.Kind == "continue" {
+		if r.Kind == "answer" || r.Kind == "continue" || r.Kind == "note" {
 			var full int
 			err := tx.QueryRow(`SELECT full_access FROM computer_agents WHERE computer=? AND provider=?`, t.Computer, t.Provider).Scan(&full)
 			if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -1207,10 +1233,23 @@ type TaskBrief struct {
 	// FollowUp is the coordinator's new request on a run that continues a
 	// finished task (T-051).
 	FollowUp string `json:"follow_up,omitempty"`
+	// OwnerNotes is what the owner wrote while the task worked (T-085);
+	// HeldReport is the report that was not sent because of them.
+	OwnerNotes string `json:"owner_notes,omitempty"`
+	HeldReport string `json:"held_report,omitempty"`
 }
 
 // continuedTaskNote tells a continued worker what this run is.
 const continuedTaskNote = "This run continues the same conversation after you finished the task. Do what follow_up asks; the task text is the one from your first read_task."
+
+// ownerNoteTaskNote tells a worker why its run goes on after its report.
+const ownerNoteTaskNote = "This run continues the same conversation. The owner wrote to you while you worked (owner_notes), " +
+	"so your report (held_report) was not sent yet. Take what the owner wrote into account, then end the run as before " +
+	"with exactly one report, ask or ask_owner; the report should cover the whole task."
+
+// ownerNotesAlsoNote is added when owner notes come with an answer or a
+// follow-up.
+const ownerNotesAlsoNote = "The owner also wrote to you while you worked: see owner_notes."
 
 // resumedTaskNote tells a resumed worker where its task text is.
 const resumedTaskNote = "This run continues the same conversation, which already has the task from your first read_task. " +
@@ -1242,6 +1281,19 @@ func (s *Store) ReadTask(run, receipt string, includeTask bool) (TaskBrief, erro
 				b.Task = ""
 			}
 			b.Note, b.FollowUp = continuedTaskNote, r.Input
+		}
+		if r.Kind == "note" {
+			if !includeTask {
+				b.Task = ""
+			}
+			b.Note = ownerNoteTaskNote
+			_ = tx.QueryRow(`SELECT COALESCE(disposition_text,'') FROM task_runs WHERE task_id=? AND ordinal=?`, t.ID, r.Ordinal-1).Scan(&b.HeldReport)
+		}
+		if b.OwnerNotes, err = ownerNotesOf(tx, r.ID); err != nil {
+			return err
+		}
+		if b.OwnerNotes != "" && r.Kind != "note" {
+			b.Note = strings.TrimSpace(b.Note + " " + ownerNotesAlsoNote)
 		}
 		_, err = tx.Exec(`UPDATE task_runs SET read_seen=1 WHERE id=?`, run)
 		return err
@@ -1362,6 +1414,9 @@ func (s *Store) FinishTaskRun(run string, ev RunEvidence) (string, error) {
 		}
 		switch final {
 		case "finished":
+			if held, err := holdForOwnerNotes(tx, t, r); err != nil || held {
+				return err
+			}
 			return publishDisposition(tx, t, r)
 		case "cancelled":
 			if err := setTaskState(tx, t.ID, "cancelled", "cancelled by request"); err != nil {

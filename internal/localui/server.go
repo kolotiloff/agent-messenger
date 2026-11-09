@@ -544,7 +544,7 @@ var serverActions = map[string]bool{"enable": true, "disable": true, "invite": t
 
 func taskMutation(path string) bool {
 	switch path {
-	case "/api/project-create", "/api/project-folder", "/api/task-answer", "/api/agent-set", "/api/agent-models", "/api/agent-access", "/api/agent-pause", "/api/agent-remove", "/api/task-cancel", "/api/server-action", "/api/coordinator-connect", "/api/project-rules", "/api/project-title", "/api/project-remove":
+	case "/api/project-create", "/api/project-folder", "/api/task-answer", "/api/task-note", "/api/agent-set", "/api/agent-models", "/api/agent-access", "/api/agent-pause", "/api/agent-remove", "/api/task-cancel", "/api/server-action", "/api/coordinator-connect", "/api/project-rules", "/api/project-title", "/api/project-remove":
 		return true
 	}
 	return false
@@ -609,6 +609,16 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 			return control.Request{}, false
 		}
 		return control.Request{Cmd: "task-owner-answer", MessageID: in.Task, ConversationID: in.Question, Confirmation: in.OpID, Text: in.Text}, true
+	case "/api/task-note":
+		var in struct {
+			Task string `json:"task"`
+			OpID string `json:"op_id"`
+			Text string `json:"text"`
+		}
+		if decoder.Decode(&in) != nil || in.Task == "" || len(in.Task) > 128 || in.OpID == "" || len(in.OpID) > 128 || strings.TrimSpace(in.Text) == "" || len(in.Text) > 4*core.MaxTaskText {
+			return control.Request{}, false
+		}
+		return control.Request{Cmd: "task-owner-note", MessageID: in.Task, Confirmation: in.OpID, Text: in.Text}, true
 	case "/api/server-action":
 		var in struct {
 			Action  string `json:"action,omitempty"`

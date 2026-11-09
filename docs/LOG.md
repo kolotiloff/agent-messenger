@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-09 — Claude Code (T-085 write to a working worker)
+
+- T-085 (D-096, Q-026 a): the owner writes to a working worker; the note waits and the same conversation continues with it when the current run ends; a report written meanwhile is held. On `claude/ui-tweaks`, not released. Security review: all four reports are in; fixes follow.
+
 ## 2026-11-09 — Claude Code (T-084, security review started)
 
 - T-084: the reply box is one line, grows with its text and shrinks after sending; buttons at its bottom. T-085 (write to a working worker) waits for Q-026. A full security review was started at the owner's request.

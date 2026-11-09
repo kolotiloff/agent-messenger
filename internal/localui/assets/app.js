@@ -581,6 +581,7 @@
     for(const [index,it] of feed.items.entries()){
       if(it.kind!=='tool')tools=null;
       if(it.kind==='task'){outgoing(coordLabel,coordProvider,tr('координатор'),it.text,it.at);continue;}
+      if(it.kind==='note'){outgoing(tr('Вы'),'owner','',it.text,it.at);const c=out[out.length-1].querySelector('.am-message-content');c.append(delivery(...({pending:[tr('Исполнитель прочитает, когда закончит текущий шаг'),'am-status-wait'],delivered:[tr('Передано исполнителю'),'am-status-good'],undelivered:[tr('Не передано: задача остановилась'),'am-status-bad']}[it.state]||[it.state,'am-muted'])));continue;}
       if(it.kind==='answer'){if(it.author==='owner')outgoing(tr('Вы'),'owner','',it.text,it.at);else outgoing(coordLabel,coordProvider,tr('координатор'),it.text,it.at);continue;}
       if(it.kind==='accepted'){const c=out[out.length-1]?.querySelector('.am-message-content');if(c)c.append(delivery(tr('Принято на компьютере «')+it.text+'»','am-status-good'));group=null;continue;}
       if(it.kind==='text'){workerGroup(it.at).append(richText(it.text));continue;}
@@ -588,6 +589,7 @@
       if(it.kind==='report'||it.kind==='question'){
         const c=workerGroup(it.at);c.append(richText(it.text,'am-disposition'));
         if(!it.verified)c.append(delivery(tr('Не опубликовано: запуск не прошёл проверку'),'am-status-bad'));
+        else if(it.kind==='report'&&it.audience==='held')c.append(delivery(tr('Промежуточный отчёт: исполнитель продолжает с вашим сообщением'),'am-status-wait'));
         else if(it.kind==='report')c.append(delivery(tr('Отчёт отправлен координатору, сессия закрыта'),'am-status-good'));
         else if(it.audience==='owner')c.append(delivery(tr('Вопрос вам, координатор его не видит'),'am-status-wait'));
         else c.append(delivery(tr('Вопрос координатору'),'am-status-wait'));
@@ -606,10 +608,14 @@
     // A task another computer started is answered there.
     const q=t.remote?.from?null:t.owner_question;
     const active=activeStates.includes(t.state),box=$('answer-text');
+    const note=canNote(t),wasNote=$('compose').dataset.mode==='note';
     $('compose').hidden=!q&&!active;
-    box.disabled=!q;box.placeholder=q?tr('Ответить исполнителю…'):t.remote?.from&&t.owner_question?tr('Отвечают на компьютере «')+t.remote.name+'»':t.pending_launch?tr('Задача ждёт запуска…'):tr('Исполнитель работает…');
-    $('answer-send').hidden=!q;$('answer-hint').hidden=!q;$('task-stop').hidden=!active;
+    box.disabled=!q&&!note;box.placeholder=q?tr('Ответить исполнителю…'):note?tr('Написать исполнителю…'):t.remote?.from&&t.owner_question?tr('Отвечают на компьютере «')+t.remote.name+'»':t.pending_launch?tr('Задача ждёт запуска…'):tr('Исполнитель работает…');
+    $('answer-send').hidden=!q&&!note;$('answer-hint').hidden=!q&&!note;$('task-stop').hidden=!active;
+    $('answer-hint').textContent=q?tr('Enter отправляет, Shift+Enter переносит строку. Ответ продолжит сессию исполнителя.'):tr('Enter отправляет, Shift+Enter переносит строку. Исполнитель прочитает, когда закончит текущий шаг.');
+    $('compose').dataset.mode=q?'answer':note?'note':'';
     if(q&&$('compose').dataset.question!==q.id){$('compose').dataset.question=q.id;$('answer-text').value='';$('answer-status').textContent='';}
+    else if(!q&&!note&&wasNote){$('answer-text').value='';}
     sizeAnswer();answerControls();
     if(atBottom)thread.scrollTop=thread.scrollHeight;
   }
@@ -624,8 +630,23 @@
   // The reply box is one line and grows only while its text does not fit;
   // the stop and send buttons stay at its bottom.
   function sizeAnswer(){const f=$('answer-text');f.style.height='';if(f.value)f.style.height=Math.min(140,f.scrollHeight+(f.offsetHeight-f.clientHeight))+'px';}
-  function answerControls(){$('answer-send').disabled=answering||!$('answer-text').value.trim()||!feed?.task?.owner_question||!!feed?.task?.remote?.from;}
+  // T-085: the owner may write to a working worker of this computer; the
+  // message waits until the worker's current step ends.
+  function canNote(t){return !!t&&!t.remote&&!t.owner_question&&(t.state==='running'||t.state==='waiting_coordinator');}
+  function answerControls(){const t=feed?.task;$('answer-send').disabled=answering||!$('answer-text').value.trim()||!(t?.owner_question&&!t.remote?.from||canNote(t));}
+  async function sendNote(){
+    const t=feed?.task;if(!canNote(t)||answering)return;
+    const text=$('answer-text').value.trim();if(!text)return;
+    const key='messenger-note-op:'+t.id+':'+text;
+    let op=recall(key);
+    if(!op){op='window-'+t.id+'-'+crypto.randomUUID();remember(key,op);}
+    answering=true;answerControls();$('answer-status').textContent=tr('Отправляем сообщение…');
+    try{await postAPI('/api/task-note',{task:t.id,op_id:op,text});showError(null);try{localStorage.removeItem(key);}catch(_){}$('answer-status').textContent='';$('answer-text').value='';sizeAnswer();feedSignature='';await refresh();}
+    catch(error){$('answer-status').textContent='';showError({message:error.message+tr(' Повтор с тем же текстом безопасен.'),command:error.command,hint:error.hint});}
+    finally{answering=false;answerControls();}
+  }
   async function sendAnswer(){
+    if(!feed?.task?.owner_question&&canNote(feed?.task))return sendNote();
     const q=feed?.task?.owner_question;if(!q||answering||feed.task.remote?.from)return;
     const text=$('answer-text').value.trim();if(!text)return;
     let op=recall('messenger-answer-op:'+q.id);

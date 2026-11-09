@@ -305,6 +305,17 @@ func dispatch(handler Handler, request Request) Response {
 			return Response{Error: err.Error()}
 		}
 		return Response{OK: true}
+	case "task-owner-note":
+		h, ok := handler.(interface {
+			OwnerNote(string, string, string) error
+		})
+		if !ok {
+			return Response{Error: "messages to working tasks unsupported; update the background client"}
+		}
+		if err := h.OwnerNote(request.MessageID, request.Confirmation, request.Text); err != nil {
+			return Response{Error: err.Error()}
+		}
+		return Response{OK: true}
 	case "agent-remove":
 		h, ok := handler.(interface{ RemoveAgent(string) error })
 		if !ok {
