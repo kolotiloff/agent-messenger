@@ -724,3 +724,49 @@ func TestCoordinatorKnowsTheReportLimit(t *testing.T) {
 		}
 	}
 }
+
+// T-081: start_task warns when the chosen agent last reported a limit that is
+// close or exhausted and not yet reset; list_agents marks a passed reset.
+func TestCoordinatorWarnsAboutTheAgentsLimit(t *testing.T) {
+	st := newCoordinatorStore(t)
+	c := startCoordinator(t, st, "Game")
+	soon := time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339)
+	if err := st.RecordAgentLimit("claude", core.AgentLimit{State: "exhausted", Window: "five_hour", ResetsAt: soon}); err != nil {
+		t.Fatal(err)
+	}
+	var started map[string]any
+	if _, ok := c.tool("start_task", map[string]any{"op_id": "l1", "agent": "claude", "text": "x"}, &started); !ok {
+		t.Fatal("start refused")
+	}
+	note, _ := started["limit_note"].(string)
+	if !strings.Contains(note, "exhausted") || !strings.Contains(note, soon) || started["task_id"] == "" {
+		t.Fatalf("no warning: %v", started)
+	}
+	// No limit known: no note.
+	started = nil
+	if _, ok := c.tool("start_task", map[string]any{"op_id": "l2", "agent": "codex", "text": "x"}, &started); !ok || started["limit_note"] != nil {
+		t.Fatalf("codex %v", started)
+	}
+	// The reset time has passed: marked in list_agents, no warning.
+	past := time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)
+	if err := st.RecordAgentLimit("claude", core.AgentLimit{State: "exhausted", ResetsAt: past}); err != nil {
+		t.Fatal(err)
+	}
+	var agents struct {
+		Computers []core.ComputerSummary `json:"computers"`
+	}
+	c.tool("list_agents", map[string]any{}, &agents)
+	var limit *core.AgentLimit
+	for _, a := range agents.Computers[0].Agents {
+		if a.Agent == "claude" {
+			limit = a.Limit
+		}
+	}
+	if limit == nil || !limit.ResetPassed {
+		t.Fatalf("reset not marked: %+v", limit)
+	}
+	started = nil
+	if _, ok := c.tool("start_task", map[string]any{"op_id": "l3", "agent": "claude", "text": "x"}, &started); !ok || started["limit_note"] != nil {
+		t.Fatalf("after reset %v", started)
+	}
+}

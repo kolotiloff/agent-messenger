@@ -186,3 +186,9 @@ Until the background part first answers, and while it installs an update, the wh
 2026-11-09, Claude Code, after the owner saw no limits on the Mac and only «близко к пределу» without a percent on the other computers.
 
 A limit is recorded only from a worker task that ran on that computer; the coordinator's own chat is not a task run, so a computer that only coordinates shows nothing. Claude's stream gives a state, a window and a reset time; a share used was not taken from it because its units are not known. The cards now name the window and the reset, and the empty card says where the limit comes from. The plain fields (text, number, yes/no) of the agent's limit report are kept, at most 480 characters, and the coordinator sees them in `list_agents` as `limit.reported`. After a real run they tell whether a share is sent and in which units; only then is a percent shown. Nothing acts on a limit automatically.
+
+## D-094 — The coordinator is warned about a limit, not stopped by it (T-081)
+
+2026-11-09, Claude Code, after the owner asked that the coordinator use the limits it already sees when choosing where to send a task.
+
+`list_agents` already gave every computer's last limit. Now `start_task` also answers with `limit_note` when the chosen agent last reported a limit close or exhausted and its reset time has not passed, and `list_agents` marks `reset_passed` when the reset time is behind. The task is still started: the state is what the agent said at the end of its last run, it may be stale, and refusing on it would be acting automatically on unclear evidence. The coordinator tells the owner and may choose another agent or computer.

@@ -23,6 +23,63 @@ type AgentLimit struct {
 	// Reported is what the agent sent about the limit (its plain fields as
 	// JSON), kept so its units can be learned from real runs (T-080).
 	Reported string `json:"reported,omitempty"`
+	// ResetPassed is set when the limit is listed after its reset time
+	// (T-081): the state above is then likely out of date. Never stored.
+	ResetPassed bool `json:"reset_passed,omitempty"`
+}
+
+// limitView is a copy of l for the coordinator, with ResetPassed set.
+func limitView(l *AgentLimit, at time.Time) *AgentLimit {
+	if l == nil {
+		return nil
+	}
+	c := *l
+	c.ResetPassed = false
+	if t, err := time.Parse(time.RFC3339, c.ResetsAt); c.ResetsAt != "" && err == nil && !t.After(at) {
+		c.ResetPassed = true
+	}
+	return &c
+}
+
+// LimitNote is a warning for the coordinator when an agent last reported
+// that it is close to or at its limit and the reset time has not passed
+// (T-081). It is only advice: nothing is refused or retried because of it.
+func LimitNote(l *AgentLimit) string {
+	if l == nil || l.ResetPassed {
+		return ""
+	}
+	resets := ""
+	if l.ResetsAt != "" {
+		resets = ", resets at " + l.ResetsAt
+	}
+	switch l.State {
+	case "exhausted":
+		return "this agent reported its usage limit exhausted at " + l.ObservedAt + resets + ": the task will likely fail until then. Tell the owner, or start it on another agent or computer."
+	case "warning":
+		return "this agent reported it is close to its usage limit at " + l.ObservedAt + resets + ". Tell the owner if the task is long."
+	}
+	return ""
+}
+
+// AgentLimitFor is the limit list_agents shows for an agent on a computer
+// of the project ("" is this computer), or nil when none is known.
+func (s *Store) AgentLimitFor(project, computer, provider string) (*AgentLimit, error) {
+	out, err := s.ProjectAgents(project)
+	if err != nil {
+		return nil, err
+	}
+	list, _ := out["computers"].([]ComputerSummary)
+	for _, c := range list {
+		if !(computer == "" && c.This || computer != "" && c.Computer == computer) {
+			continue
+		}
+		for _, a := range c.Agents {
+			if a.Agent == provider {
+				return a.Limit, nil
+			}
+		}
+	}
+	return nil, nil
 }
 
 var agentLimitStates = map[string]bool{"ok": true, "warning": true, "exhausted": true}

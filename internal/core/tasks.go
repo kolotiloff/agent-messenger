@@ -1910,7 +1910,7 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 				return err
 			}
 			a.Models = splitModels(models)
-			a.Limit = parseAgentLimit(limit)
+			a.Limit = limitView(parseAgentLimit(limit), time.Now())
 			c.Agents = append(c.Agents, a)
 		}
 		return rows.Err()
@@ -1947,7 +1947,7 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 			if models == nil {
 				models = []string{}
 			}
-			o.Agents = append(o.Agents, AgentSummary{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting, Models: models, Limit: a.Limit})
+			o.Agents = append(o.Agents, AgentSummary{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting, Models: models, Limit: limitView(a.Limit, time.Now())})
 		}
 		list = append(list, o)
 	}

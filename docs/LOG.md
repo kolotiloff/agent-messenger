@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-09 — Claude Code (T-081 limit advice)
+
+- T-081 (D-094): `start_task` warns the coordinator (`limit_note`) when the chosen agent was last close to or at its limit; `list_agents` marks a passed reset. Advice only. On `claude/ui-tweaks`, not released.
+
 ## 2026-11-09 — Claude Code (T-080 limits)
 
 - The owner sees no limits on the Mac and no percent elsewhere. Causes: limits come only from worker tasks on that computer; Claude sends a state, not a share we can read; Codex prints none in `exec` mode. T-080 (D-093): cards name the window and reset, clearer empty text, and the agent's own limit fields are kept for the coordinator (`limit.reported`). On `claude/ui-tweaks`, not released; not verified with real agents.
