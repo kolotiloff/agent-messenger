@@ -1603,7 +1603,9 @@ func (s *Store) AnswerTask(task, question, opID, text, by string) error {
 // answerTask answers in tx. fromNetwork is set when the computer that
 // started the task sends the answer; nobody else answers such a task.
 // ownerOver lets the owner answer a question to the coordinator (T-125):
-// the owner comes first, and the coordinator learns of it.
+// the owner comes first, and the coordinator learns of it. The coordinator
+// may answer a question to the owner, usually with the owner's own words
+// from its chat (T-130).
 func answerTask(tx *sql.Tx, task, question, opID, text, by string, fromNetwork, ownerOver bool) error {
 	text = strings.TrimSpace(text)
 	if opID == "" || len(opID) > 128 || text == "" || utf8.RuneCountInString(text) > MaxTaskText {
@@ -1631,7 +1633,10 @@ func answerTask(tx *sql.Tx, task, question, opID, text, by string, fromNetwork, 
 		if state != "open" {
 			return fmt.Errorf("%w: this question is no longer open", ErrRejected)
 		}
-		if audience != by && !(ownerOver && by == AudienceOwner && audience == AudienceCoordinator) {
+		// The coordinator may answer a question to the owner: the owner often
+		// answers it in the coordinator's chat (T-130, D-112). The task shows
+		// who answered.
+		if audience != by && !(ownerOver && by == AudienceOwner && audience == AudienceCoordinator) && !(by == AudienceCoordinator && audience == AudienceOwner) {
 			return fmt.Errorf("%w: this question is for the %s", ErrRejected, audience)
 		}
 		t, err := scanTask(tx.QueryRow(`SELECT `+taskColumns+` FROM tasks WHERE id=?`, task).Scan)

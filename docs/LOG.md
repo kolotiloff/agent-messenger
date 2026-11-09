@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-10 — Claude Code (release 0.59, T-130)
+
+- 0.59 released from PR #90 (T-111, T-112, T-117–T-125, T-127).
+- T-130 (D-112): the coordinator may answer a question to the owner; the window shows it as the coordinator's answer. On `claude/ui-tweaks`, not released.
+
 ## 2026-11-09 — Claude Code (T-121 task time label, T-122 one place for «Любые команды», T-123 restart waits for tasks)
 
 - The update button at the bottom left shows a down arrow with a bar (owner); the page menu with «Перезагрузить» (it only reloads the page) is gone outside text. T-126, T-128, T-129 recorded for 0.60.
