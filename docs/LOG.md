@@ -4,7 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-09 — Claude Code (release preview.56)
 
-- Merged #87 (T-083 to T-095) and released preview.56.
+- Merged #87 (T-083 to T-095) and released preview.56; all files checked (Mac, Windows x64/ARM64, Linux x64/ARM64, checksums, 5 signed update feeds and archives).
 - The owner works from another flat with all four computers through his own VPN; it works because the VPN gives private addresses. BROKER.md now says how a VPN works with "local network" and that 100.64.0.0/10 is refused.
 
 ## 2026-11-09 — Claude Code (coordinator's list done, security fixes)
