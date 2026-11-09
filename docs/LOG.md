@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-09 — Claude Code (T-082 no title bar on Mac and Linux)
+
+- T-082 (D-095): the page runs to the top edge on Mac (transparent title bar, system buttons at the top left) and Linux (empty GTK title bar, page buttons). Verified: Linux window under Xvfb, page in Chromium with a stubbed Mac bridge. The Swift app is checked by CI and the owner. On `claude/ui-tweaks`, not released.
+
 ## 2026-11-09 — Claude Code (T-081 limit advice)
 
 - T-081 (D-094): `start_task` warns the coordinator (`limit_note`) when the chosen agent was last close to or at its limit; `list_agents` marks a passed reset. Advice only. On `claude/ui-tweaks`, not released.

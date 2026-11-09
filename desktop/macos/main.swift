@@ -2,6 +2,32 @@ import AppKit
 import WebKit
 import Darwin
 
+// The page under a transparent title bar (T-082). The page reports the empty
+// parts of its top (in page points, from the top left) and the controls in
+// them; a press there moves the window, a double click does what the
+// system's title bar does.
+final class TitlebarWebView: WKWebView {
+    var dragZones: [NSRect] = []
+    var dragHoles: [NSRect] = []
+    override func mouseDown(with event: NSEvent) {
+        let local = convert(event.locationInWindow, from: nil)
+        let point = NSPoint(x: local.x, y: isFlipped ? local.y : bounds.height - local.y)
+        guard let window = window, dragZones.contains(where: { $0.contains(point) }), !dragHoles.contains(where: { $0.contains(point) }) else {
+            super.mouseDown(with: event)
+            return
+        }
+        if event.clickCount == 2 {
+            switch UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick") {
+            case "Minimize": window.miniaturize(nil)
+            case "None": break
+            default: window.zoom(nil)
+            }
+            return
+        }
+        window.performDrag(with: event)
+    }
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     var window: NSWindow!
     var web: WKWebView!
@@ -36,16 +62,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         config.userContentController.add(self, name: "appearance")
         config.userContentController.add(self, name: "folder")
         config.userContentController.add(self, name: "app")
+        config.userContentController.add(self, name: "titlebar")
         let savedTheme = UserDefaults.standard.string(forKey: "appearance") ?? "system"
         let safeTheme = ["system", "light", "dark"].contains(savedTheme) ? savedTheme : "system"
-        config.userContentController.addUserScript(WKUserScript(source: "window.messengerInitialTheme = '\(safeTheme)'", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        addPageScripts(config.userContentController, theme: safeTheme)
         updates.onStatus = { [weak self] _ in self?.showUpdateStatus() }
-        web = WKWebView(frame: .zero, configuration: config)
+        web = TitlebarWebView(frame: .zero, configuration: config)
         web.navigationDelegate = self
         web.uiDelegate = self
         web.allowsBackForwardNavigationGestures = false
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 850), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 850), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         window.title = "Agent Messenger"
+        // T-082: no separate title bar; the page runs to the top edge and the
+        // system's window buttons stay at the top left over it.
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
         window.minSize = NSSize(width: 780, height: 600)
         window.isReleasedWhenClosed = false
         window.setFrameAutosaveName("AgentMessengerMainWindow")
@@ -206,6 +237,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             self?.web?.evaluateJavaScript("window.messengerFolderPicked && window.messengerFolderPicked(" + json + "[0])", completionHandler: nil)
         }
     }
+    // theme is one of "system", "light", "dark", checked by the caller.
+    func addPageScripts(_ controller: WKUserContentController, theme: String) {
+        controller.addUserScript(WKUserScript(source: "window.messengerInitialTheme = '\(theme)'; window.amMacTitlebar = true", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+    }
+    func rects(_ value: Any?) -> [NSRect] {
+        guard let list = value as? [[Double]] else { return [] }
+        return list.prefix(64).compactMap { r in r.count == 4 && r.allSatisfy({ $0.isFinite }) ? NSRect(x: r[0], y: r[1], width: r[2], height: r[3]) : nil }
+    }
     func applyTheme(_ theme: String) {
         NSApp.appearance = theme == "dark" ? NSAppearance(named: .darkAqua) : theme == "light" ? NSAppearance(named: .aqua) : nil
     }
@@ -221,7 +260,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             UserDefaults.standard.set(theme, forKey: "appearance"); applyTheme(theme)
             // A reconnect creates a new document in the same WebView.
             web.configuration.userContentController.removeAllUserScripts()
-            web.configuration.userContentController.addUserScript(WKUserScript(source: "window.messengerInitialTheme = '\(theme)'", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+            addPageScripts(web.configuration.userContentController, theme: theme)
+        }
+        // The empty parts of the page's top that move the window (T-082).
+        if message.name == "titlebar", let body = message.body as? [String: Any], let view = web as? TitlebarWebView {
+            view.dragZones = rects(body["zones"])
+            view.dragHoles = rects(body["holes"])
         }
     }
 

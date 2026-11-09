@@ -1324,12 +1324,12 @@
     try{await postAPI('/api/agent-models',{provider:setupProvider,models});viewSignature='';await refresh();}
     catch(error){setStatus('agent-save-status',error.message);}
   }
-  // Windows without the system title bar (T-062): the page draws minimise,
-  // maximise and close at the top right, and the empty top of the window
-  // (the tab row and the top of the sidebar) drags it; a double click there
-  // maximises or restores it.
+  // Windows (T-062) and Linux (T-082) without the system title bar: the page
+  // draws minimise, maximise and close at the top right, and the empty top of
+  // the window (the tab row and the top of the sidebar) drags it; a double
+  // click there maximises or restores it.
   function framelessWindow(){
-    if(window.amDesktop!=='windows'||!window.amFrameless||typeof window.amWindow!=='function')return;
+    if(!['windows','linux'].includes(window.amDesktop)||!window.amFrameless||typeof window.amWindow!=='function')return;
     document.body.classList.add('am-frameless');
     const bar=el('div',undefined,'am-window-controls');
     const make=(action,label,paths,cls)=>{const b=el('button',undefined,'am-window-btn'+(cls?' '+cls:''));b.type='button';b.title=label;b.setAttribute('aria-label',label);b.tabIndex=-1;b.append(svgIcon(paths));b.addEventListener('click',()=>window.amWindow(action));bar.append(b);};
@@ -1337,9 +1337,8 @@
     make('maximize',tr('Развернуть'),['M6 6h12v12H6z']);
     make('close',tr('Закрыть'),['M6 6l12 12M18 6L6 18'],'am-window-close');
     root.append(bar);
-    const interactive='button,input,select,textarea,a,[role=switch],[popover],.am-machine-card,.am-project,.am-splitter,.am-window-controls';
     const dragZone=e=>{
-      if(e.button!==0||e.target.closest(interactive))return false;
+      if(e.button!==0||e.target.closest(titleInteractive))return false;
       if(e.target.closest('.am-tabs'))return true;
       const side=e.target.closest('.am-sidebar');
       return !!side&&e.clientY<side.getBoundingClientRect().top+40;
@@ -1349,6 +1348,36 @@
       e.preventDefault();
       window.amWindow(e.detail===2?'maximize':'drag');
     });
+  }
+  const titleInteractive='button,input,select,textarea,a,[role=switch],[popover],.am-machine-card,.am-project,.am-splitter,.am-window-controls';
+  // Mac (T-082): the page runs under a transparent title bar with the
+  // system's buttons at the top left. The app moves the window by the empty
+  // parts of the top, so the page tells it where they are: the tab row and
+  // the sidebar above its first item, less the controls in them.
+  function macTitlebar(){
+    const bridge=window.webkit?.messageHandlers?.titlebar;
+    if(!window.amMacTitlebar||!bridge)return;
+    document.body.classList.add('am-mac-titlebar');
+    const box=r=>[r.left,r.top,r.width,r.height].map(Math.round);
+    let last='',queued=false;
+    const send=()=>{
+      queued=false;
+      const zones=[],holes=[];
+      const tabs=document.querySelector('.am-tabs'),side=document.querySelector('.am-sidebar');
+      if(tabs&&tabs.offsetParent){const r=tabs.getBoundingClientRect();zones.push(new DOMRect(r.left,0,r.width,r.bottom));}
+      if(side){const r=side.getBoundingClientRect(),first=side.firstElementChild?.getBoundingClientRect();zones.push(new DOMRect(r.left,r.top,r.width,Math.max(16,(first?first.top:r.top+40)-r.top)));}
+      for(const parent of [tabs,side])for(const node of parent?parent.querySelectorAll(titleInteractive):[]){
+        const r=node.getBoundingClientRect();
+        if(r.width&&r.height&&zones.some(z=>r.left<z.right&&r.right>z.left&&r.top<z.bottom&&r.bottom>z.top))holes.push(r);
+      }
+      const message={zones:zones.map(box),holes:holes.map(box)},text=JSON.stringify(message);
+      if(text!==last){last=text;bridge.postMessage(message);}
+    };
+    const later=()=>{if(!queued){queued=true;requestAnimationFrame(send);}};
+    new ResizeObserver(later).observe(document.documentElement);
+    for(const node of document.querySelectorAll('.am-tabs,.am-sidebar'))new MutationObserver(later).observe(node,{childList:true,subtree:true,attributes:true});
+    addEventListener('resize',later);
+    later();
   }
   window.messengerRefresh=()=>{viewSignature='';refresh();};
   // «Выбрать»: the local server opens the system's own dialog (D-053); the
@@ -1502,6 +1531,7 @@
   $('project-pick').addEventListener('click',()=>{folderTarget='project-folder';if(window.webkit?.messageHandlers?.folder)window.webkit.messageHandlers.folder.postMessage('pick');else pick('project-folder','folder','project-status');});
   $('project-page-pick').addEventListener('click',()=>{folderTarget='project-page-folder';if(window.webkit?.messageHandlers?.folder)window.webkit.messageHandlers.folder.postMessage('pick');else pick('project-page-folder','folder','project-page-status');});
   framelessWindow();
+  macTitlebar();
   $('agent-cli-pick').addEventListener('click',()=>pick('agent-cli','file','agent-save-status'));
   $('agent-profile-pick').addEventListener('click',()=>pick('agent-profile','folder','agent-save-status'));
   $('restart-dialog').addEventListener('cancel',event=>event.preventDefault());

@@ -192,3 +192,9 @@ A limit is recorded only from a worker task that ran on that computer; the coord
 2026-11-09, Claude Code, after the owner asked that the coordinator use the limits it already sees when choosing where to send a task.
 
 `list_agents` already gave every computer's last limit. Now `start_task` also answers with `limit_note` when the chosen agent last reported a limit close or exhausted and its reset time has not passed, and `list_agents` marks `reset_passed` when the reset time is behind. The task is still started: the state is what the agent said at the end of its last run, it may be stale, and refusing on it would be acting automatically on unclear evidence. The coordinator tells the owner and may choose another agent or computer.
+
+## D-095 — The page runs to the top edge on every system (T-082)
+
+2026-11-09, Claude Code, after the owner found the system title bar still on the Mac and asked that the program look the same everywhere.
+
+Mac: the window keeps its title bar but makes it transparent and hides the title, so the page runs under it. The red, yellow and green buttons stay the system's own at the top left, where Mac users expect them; the sidebar leaves room for them. Web content takes every click, so the page sends the app the rectangles of its empty top (the tab row up to the edge, the sidebar above its first item) and of the controls in them; the app moves the window on a press there and follows the system's double-click setting. Linux: GTK gets an empty, zero-height title bar, which keeps GTK's own border for resizing, and the page draws the Windows-style buttons and asks GTK to move, maximise, minimise or close. Rejected: Windows-style buttons on the Mac (foreign there, and full screen would be lost).

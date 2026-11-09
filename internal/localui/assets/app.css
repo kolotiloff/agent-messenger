@@ -73,6 +73,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-gap-section:var(--am-space-4);
   --am-gap-region:var(--am-space-6);
   --am-pad-compact:var(--am-space-2) var(--am-space-3);
+  /* Height of the Mac title bar the page runs under (T-082) */
+  --am-mac-titlebar:28px;
   --am-pane-inset:var(--am-space-4);
 
   /* Radii */
@@ -565,6 +567,8 @@ body.am-native #am-concept .am-panel-toggle { margin-left:auto; }
 #am-concept button.am-window-btn.am-window-close:is(:hover,:focus-visible) { background:#c42b1c; color:#fff; }
 body.am-frameless #am-concept .am-tabs { padding-right:calc(3 * 46px); }
 body.am-frameless #am-concept .am-tabs, body.am-frameless #am-concept .am-sidebar { user-select:none; }
+body.am-mac-titlebar #am-concept .am-sidebar { padding-top:calc(var(--am-space-4) + var(--am-mac-titlebar)); }
+body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-sidebar { user-select:none; }
 
 /* T-068 statistics: one neutral ink for every bar, so no bar reads as a
    status; names and numbers sit beside the bars in text colors. */
