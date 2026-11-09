@@ -223,3 +223,15 @@ While a task of this computer is running or waits for the coordinator, the windo
 
 The right-click menu of another computer in the sidebar has «Обновить программу» while that computer is on line. The request and its answers travel through the broker's mailbox like the log request (T-057). The other computer refuses while any of its tasks is not finished or has a run that is not closed, because the update restarts its background client; it checks again right before installing. It installs only the newest release of the signed update channel (Ed25519 signature, checksum and the program's own `version` check, D-048), with the same updater as its window. A Mac refuses and says to update it in its own app: Sparkle updates the app bundle, which a background client cannot replace. The background client runs from a copy, so the window records the program file the owner installed (`program.json`, 0600); without it the request is refused. A helper started from that program installs the update, restarts the client from the installed program with the old client's shutdown command (a pause the owner set stays) and writes its result, which the new client sends. Nothing is retried on its own: a helper that did not start or never reported is answered as failed with the reason, and the owner decides. There is no switch to allow it, unlike the log or tasks of other computers: the network holds only the owner's own computers, a request can only install the signed release that computer would offer anyway, and it never runs while tasks do. Every computer reports its program version to the network; the cards show it. An older computer reports none and would never answer, so it gets no menu item and a request to it is refused: update it by hand once.
 
+
+## D-101 — Starting model lists for Codex and Cursor (T-098)
+
+2026-11-09, Claude Code, owner's request.
+
+A newly connected agent starts with a model list, so the coordinator can choose a model without guessing:
+
+- Claude: `opus`, `sonnet`, `haiku`. These are Claude Code's own short names; each always means the newest model of that line, so the list does not age. Strongest first.
+- Codex: `gpt-6-luna`, `gpt-6.1-terra`, `gpt-6.1-sol`, `gpt-6-astra` (recommended to the owner by Codex).
+- Cursor: `composer-2.5-fast`, `grok-4.7-high-fast`, `claude-opus-5-thinking-high` (the owner's choice).
+
+A list the owner already saved is never replaced. For an agent connected earlier whose list is still empty, the settings dialog shows these names and they are saved when the owner presses Save; nothing changes without that. Messenger does not check the Codex and Cursor names against the CLIs: an unknown name fails the run, and the owner edits the list on the card. Which model each CLI uses when the task names none is the CLI's own setting; Messenger does not know it. Follows D-058.

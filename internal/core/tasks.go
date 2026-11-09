@@ -587,12 +587,16 @@ func (s *Store) SetComputerAgent(provider, cli, environment, profile string) err
 		if profile == "worker" {
 			full = 1
 		}
-		// Claude's own model names are listed from the start, so the
-		// coordinator sees them (T-061); Codex and Cursor names are not
-		// invented here.
+		// Starting model lists, so the coordinator sees them from the start
+		// (T-061, T-098). A list the owner saved is never replaced here.
 		models := ""
-		if provider == "claude" {
+		switch provider {
+		case "claude":
 			models = strings.Join(DefaultClaudeModels, "\n")
+		case "codex":
+			models = strings.Join(DefaultCodexModels, "\n")
+		case "cursor":
+			models = strings.Join(DefaultCursorModels, "\n")
 		}
 		_, err = tx.Exec(`INSERT INTO computer_agents(computer,provider,cli_path,environment,profile,updated_at,full_access,models) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(computer,provider) DO UPDATE SET cli_path=excluded.cli_path,environment=excluded.environment,profile=excluded.profile,updated_at=excluded.updated_at`,
 			computer, provider, cli, environment, profile, now(), full, models)
@@ -2134,8 +2138,17 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 	return map[string]any{"project": project, "computers": list}, nil
 }
 
-// DefaultClaudeModels are the short model names Claude Code itself accepts.
-var DefaultClaudeModels = []string{"haiku", "sonnet", "opus"}
+// DefaultClaudeModels are the short model names Claude Code itself accepts;
+// each always means the newest model of that line. Strongest first.
+var DefaultClaudeModels = []string{"opus", "sonnet", "haiku"}
+
+// DefaultCodexModels and DefaultCursorModels are the names the owner chose
+// as the starting lists (T-098, D-101); the owner can change them on the
+// agent's card.
+var (
+	DefaultCodexModels  = []string{"gpt-6-luna", "gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-astra"}
+	DefaultCursorModels = []string{"composer-2.5-fast", "grok-4.7-high-fast", "claude-opus-5-thinking-high"}
+)
 
 // errAgentPaused refuses work for an agent the owner turned off on its card.
 func errAgentPaused(provider string) error {

@@ -117,10 +117,7 @@ func TestClaudeDefaultModels(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, a := range view.Agents {
-		want := 0
-		if a.Agent == "claude" {
-			want = 3
-		}
+		want := map[string]int{"claude": len(DefaultClaudeModels), "codex": len(DefaultCodexModels), "cursor": len(DefaultCursorModels)}[a.Agent]
 		if len(a.Models) != want {
 			t.Fatalf("%s models %v", a.Agent, a.Models)
 		}

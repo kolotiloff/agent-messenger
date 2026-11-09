@@ -12,6 +12,15 @@ import (
 // never reaches the CLI.
 func TestAgentModels(t *testing.T) {
 	f := newTaskFixture(t)
+	start, err := f.st.ComputerAgents()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range start {
+		if a.Provider == "codex" && !reflect.DeepEqual(a.Models, DefaultCodexModels) {
+			t.Fatalf("new codex models %q, want the owner's defaults (T-098)", a.Models)
+		}
+	}
 	if err := f.st.SetAgentModels("codex", []string{" gpt-5.5 ", "", "gpt-5.5-mini", "gpt-5.5"}); err != nil {
 		t.Fatal(err)
 	}

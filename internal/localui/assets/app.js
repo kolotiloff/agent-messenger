@@ -1363,9 +1363,9 @@
   });
 
   let setupProvider='';
-  // The models Claude itself accepts by these names; Codex and Cursor names
-  // are not invented here (T-061).
-  const defaultModels={claude:['haiku','sonnet','opus']};
+  // Starting lists, the same as the store's (T-061, T-098); shown for an
+  // agent whose list is still empty and saved with the dialog.
+  const defaultModels={claude:['opus','sonnet','haiku'],codex:['gpt-6-luna','gpt-6.1-terra','gpt-6.1-sol','gpt-6-astra'],cursor:['composer-2.5-fast','grok-4.7-high-fast','claude-opus-5-thinking-high']};
   function openAgentSetup(provider){
     setupProvider=provider;const a=(view?.agents||[]).find(x=>x.agent===provider),found=discovery.find(d=>d.provider===provider);
     $('agent-setup-title').textContent=tr('Настройки: ')+names[provider];
