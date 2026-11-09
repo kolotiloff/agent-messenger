@@ -174,3 +174,27 @@ The window sums this computer's own tasks and the others' reports; a task this c
 2026-11-09, Claude Code, from the owner: after every update the window asked to restart the background client, and the answer was always yes.
 
 The window now asks the client to restart once, without the owner, as soon as it sees an older client. The client keeps its old rule: without confirmation it refuses while task runs are going or their count cannot be read, because a restart interrupts them and they are never repeated by themselves. Only then the window shows the question as before. While restarting it shows «Обновляем Messenger». A failed restart is shown and not retried automatically.
+
+## D-092 — A start screen instead of the restart popup (T-079)
+
+2026-11-09, Claude Code, with the owner, who chose it from three mockups: a thin bar, a start screen, a bar that waits for tasks.
+
+Until the background part first answers, and while it installs an update, the whole window is covered by the app's name, a spinner and one status line, as applications do while they start. The window first learns the client's version, so an update starts behind the screen and the old window never flashes. If nothing answers within 20 seconds, the screen goes and the usual notice says what is wrong. When tasks are running, the question from D-091 stays: a restart would interrupt them. Waiting for the tasks to finish instead was offered and not chosen.
+
+## D-093 — Show which limit, keep what the agent said about it (T-080)
+
+2026-11-09, Claude Code, after the owner saw no limits on the Mac and only «близко к пределу» without a percent on the other computers.
+
+A limit is recorded only from a worker task that ran on that computer; the coordinator's own chat is not a task run, so a computer that only coordinates shows nothing. Claude's stream gives a state, a window and a reset time; a share used was not taken from it because its units are not known. The cards now name the window and the reset, and the empty card says where the limit comes from. The plain fields (text, number, yes/no) of the agent's limit report are kept, at most 480 characters, and the coordinator sees them in `list_agents` as `limit.reported`. After a real run they tell whether a share is sent and in which units; only then is a percent shown. Nothing acts on a limit automatically.
+
+## D-094 — The coordinator is warned about a limit, not stopped by it (T-081)
+
+2026-11-09, Claude Code, after the owner asked that the coordinator use the limits it already sees when choosing where to send a task.
+
+`list_agents` already gave every computer's last limit. Now `start_task` also answers with `limit_note` when the chosen agent last reported a limit close or exhausted and its reset time has not passed, and `list_agents` marks `reset_passed` when the reset time is behind. The task is still started: the state is what the agent said at the end of its last run, it may be stale, and refusing on it would be acting automatically on unclear evidence. The coordinator tells the owner and may choose another agent or computer.
+
+## D-095 — The page runs to the top edge on every system (T-082)
+
+2026-11-09, Claude Code, after the owner found the system title bar still on the Mac and asked that the program look the same everywhere.
+
+Mac: the window keeps its title bar but makes it transparent and hides the title, so the page runs under it. The red, yellow and green buttons stay the system's own at the top left, where Mac users expect them; the sidebar leaves room for them. Web content takes every click, so the page sends the app the rectangles of its empty top (the tab row up to the edge, the sidebar above its first item) and of the controls in them; the app moves the window on a press there and follows the system's double-click setting. Linux: GTK gets an empty, zero-height title bar, which keeps GTK's own border for resizing, and the page draws the Windows-style buttons and asks GTK to move, maximise, minimise or close. Rejected: Windows-style buttons on the Mac (foreign there, and full screen would be lost).

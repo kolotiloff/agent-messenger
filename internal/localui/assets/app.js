@@ -118,6 +118,14 @@
   let online=false,offlineReason='',discovery=[],tab='tasks',refreshing=false,answering=false;
   const agentChecks=new Map(),checking=new Set(),rowNote=new Map();let autoChecked=false,discoveryLoaded=false;
   let clientInfo=null,clientInfoAt=0,restart={busy:false,ask:null,error:''},autoRestarted=false;
+  // The start screen covers the window until the client first answers, for
+  // at most bootLimit; then the usual notices take over (T-079).
+  let booting=true;const bootLimit=20000;setTimeout(()=>{booting=false;renderBoot();},bootLimit);
+  function renderBoot(){
+    const updating=restart.busy&&!restart.ask;
+    $('boot-cover').hidden=!(booting||updating);
+    $('boot-text').textContent=updating?tr('Устанавливаем обновление…'):tr('Запуск…');
+  }
   // The window can be newer than the client still running in the background
   // (after an update). Say how to restart it; nothing is restarted by itself.
   function shutdownCommand(){return view?.messenger&&view?.data_root?'"'+view.messenger+'" --root "'+view.data_root+'" shutdown':'';}
@@ -643,6 +651,16 @@
     if(typeof l.used_percent==='number')return l.used_percent>85?'bad':l.used_percent>=60?'wait':'good';
     return l.state==='exhausted'?'bad':l.state==='warning'?'wait':'good';
   }
+  // Which limit the agent named: Claude's rateLimitType or Codex's window
+  // length (T-080). Unknown names are left out.
+  function limitWindow(w){
+    if(!w)return '';
+    if(w==='five_hour'||w==='5h')return tr('Лимит на 5 часов');
+    if(w==='seven_day'||w==='7d')return tr('Недельный лимит');
+    if(w==='seven_day_opus')return tr('Недельный лимит Opus');
+    if(w==='seven_day_sonnet')return tr('Недельный лимит Sonnet');
+    return '';
+  }
   function limitRing(l){
     const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 18 18');svg.setAttribute('class','am-ring');svg.setAttribute('aria-hidden','true');
     const ring=(cls,share)=>{const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx','9');c.setAttribute('cy','9');c.setAttribute('r','7');c.setAttribute('class',cls);
@@ -730,9 +748,10 @@
         const title=el('span');title.append(tr('Лимит '));
         const used=typeof l.used_percent==='number'?Math.round(l.used_percent)+'%':l.state==='exhausted'?tr('исчерпан'):l.state==='warning'?tr('близко к пределу'):tr('в норме');
         title.append(el('span',used,'am-status-'+level));
-        const r=l.resets_at?tr('Сброс ')+resetText(l.resets_at):'';
-        step(limitRing(l),title,[r,today].filter(Boolean).join(', ')||(l.observed_at?tr('По данным задачи в ')+clock(l.observed_at):''));
-      }else step(limitRing(null),tr('Лимит'),today?today[0].toUpperCase()+today.slice(1):tr('Появится после первой задачи'));
+        const r=l.resets_at?tr('сброс ')+resetText(l.resets_at):'';
+        const sub=[limitWindow(l.window),r,today].filter(Boolean).join(', ');
+        step(limitRing(l),title,sub?sub[0].toUpperCase()+sub.slice(1):(l.observed_at?tr('По данным задачи в ')+clock(l.observed_at):''));
+      }else step(limitRing(null),tr('Лимит'),today?today[0].toUpperCase()+today.slice(1):tr('Появится после задачи исполнителя на этом компьютере'));
       card.append(steps);
       const running=a?.project_running||0,todayTasks=a?.project_today||0;
       const tasks=el('button',undefined,'am-agent-tasks');tasks.type='button';
@@ -773,8 +792,9 @@
       if(l){
         const title=el('span');title.append(tr('Лимит '));
         title.append(el('span',typeof l.used_percent==='number'?Math.round(l.used_percent)+'%':l.state==='exhausted'?tr('исчерпан'):l.state==='warning'?tr('близко к пределу'):tr('в норме'),'am-status-'+level));
-        row(limitRing(l),title,l.resets_at?tr('Сброс ')+resetText(l.resets_at):l.observed_at?tr('По данным задачи в ')+dayClock(l.observed_at):'');
-      }else row(limitRing(null),tr('Лимит'),tr('Появится после первой задачи'));
+        const sub=[limitWindow(l.window),l.resets_at?tr('сброс ')+resetText(l.resets_at):''].filter(Boolean).join(', ');
+        row(limitRing(l),title,sub?sub[0].toUpperCase()+sub.slice(1):l.observed_at?tr('По данным задачи в ')+dayClock(l.observed_at):'');
+      }else row(limitRing(null),tr('Лимит'),tr('Появится после задачи исполнителя на том компьютере'));
       const models=el('span',undefined,'am-agent-models');models.textContent=a.models?.length?a.models.join(', '):tr('Модель по умолчанию');
       const mm=el('span','✓','am-mark am-mark-ok');
       const r=el('div',undefined,'am-step');const t=el('div',undefined,'am-step-text');t.append(el('p',tr('Модели'),'am-step-title'),el('p',models.textContent,'am-step-sub'));r.append(mm,t,el('span'));steps.append(r);
@@ -840,8 +860,10 @@
   // covers the whole window until the client is restarted or the app quits.
   // Quitting closes only the window; the background client keeps running.
   function renderRestart(){
+    renderBoot();
     const dialog=$('restart-dialog');
-    const show=!!clientInfo?.outdated||restart.busy||!!restart.error;
+    // While the update installs, the start screen shows it instead (T-079).
+    const show=(!!clientInfo?.outdated&&!restart.busy)||!!restart.ask||!!restart.error;
     if(!show){if(dialog.open)dialog.close();return;}
     const ask=restart.ask,canRestart=!!clientInfo?.restart,answering=clientInfo?.client==='running';
     const canQuit=!!window.webkit?.messageHandlers?.app;
@@ -887,6 +909,9 @@
       try{v=await api('/api/window?project='+encodeURIComponent(project));}
       catch(error){if(Date.now()-clientInfoAt>5000)loadClientInfo();online=false;offlineReason=error.name==='TimeoutError'||error.name==='TypeError'?tr('Окно потеряло связь с программой Messenger. Закройте окно и откройте снова.'):error.message;renderMachines();renderNotice();return;}
       online=true;offlineReason='';if(Date.now()-clientInfoAt>10000)loadClientInfo();
+      // The first answer: learn the client's version before the start screen
+      // goes, so an update starts without the old window showing.
+      if(booting){await loadClientInfo();booting=false;renderBoot();}
       if(!v.projects.some(p=>p.name===project))project=v.project||'';
       const signature=JSON.stringify(v);
       if(signature!==viewSignature){viewSignature=signature;view=v;if(selectedTask&&!v.tasks.some(t=>t.id===selectedTask)){selectedTask='';feed=null;feedSignature='';}render();}
@@ -1299,12 +1324,12 @@
     try{await postAPI('/api/agent-models',{provider:setupProvider,models});viewSignature='';await refresh();}
     catch(error){setStatus('agent-save-status',error.message);}
   }
-  // Windows without the system title bar (T-062): the page draws minimise,
-  // maximise and close at the top right, and the empty top of the window
-  // (the tab row and the top of the sidebar) drags it; a double click there
-  // maximises or restores it.
+  // Windows (T-062) and Linux (T-082) without the system title bar: the page
+  // draws minimise, maximise and close at the top right, and the empty top of
+  // the window (the tab row and the top of the sidebar) drags it; a double
+  // click there maximises or restores it.
   function framelessWindow(){
-    if(window.amDesktop!=='windows'||!window.amFrameless||typeof window.amWindow!=='function')return;
+    if(!['windows','linux'].includes(window.amDesktop)||!window.amFrameless||typeof window.amWindow!=='function')return;
     document.body.classList.add('am-frameless');
     const bar=el('div',undefined,'am-window-controls');
     const make=(action,label,paths,cls)=>{const b=el('button',undefined,'am-window-btn'+(cls?' '+cls:''));b.type='button';b.title=label;b.setAttribute('aria-label',label);b.tabIndex=-1;b.append(svgIcon(paths));b.addEventListener('click',()=>window.amWindow(action));bar.append(b);};
@@ -1312,9 +1337,8 @@
     make('maximize',tr('Развернуть'),['M6 6h12v12H6z']);
     make('close',tr('Закрыть'),['M6 6l12 12M18 6L6 18'],'am-window-close');
     root.append(bar);
-    const interactive='button,input,select,textarea,a,[role=switch],[popover],.am-machine-card,.am-project,.am-splitter,.am-window-controls';
     const dragZone=e=>{
-      if(e.button!==0||e.target.closest(interactive))return false;
+      if(e.button!==0||e.target.closest(titleInteractive))return false;
       if(e.target.closest('.am-tabs'))return true;
       const side=e.target.closest('.am-sidebar');
       return !!side&&e.clientY<side.getBoundingClientRect().top+40;
@@ -1324,6 +1348,36 @@
       e.preventDefault();
       window.amWindow(e.detail===2?'maximize':'drag');
     });
+  }
+  const titleInteractive='button,input,select,textarea,a,[role=switch],[popover],.am-machine-card,.am-project,.am-splitter,.am-window-controls';
+  // Mac (T-082): the page runs under a transparent title bar with the
+  // system's buttons at the top left. The app moves the window by the empty
+  // parts of the top, so the page tells it where they are: the tab row and
+  // the sidebar above its first item, less the controls in them.
+  function macTitlebar(){
+    const bridge=window.webkit?.messageHandlers?.titlebar;
+    if(!window.amMacTitlebar||!bridge)return;
+    document.body.classList.add('am-mac-titlebar');
+    const box=r=>[r.left,r.top,r.width,r.height].map(Math.round);
+    let last='',queued=false;
+    const send=()=>{
+      queued=false;
+      const zones=[],holes=[];
+      const tabs=document.querySelector('.am-tabs'),side=document.querySelector('.am-sidebar');
+      if(tabs&&tabs.offsetParent){const r=tabs.getBoundingClientRect();zones.push(new DOMRect(r.left,0,r.width,r.bottom));}
+      if(side){const r=side.getBoundingClientRect(),first=side.firstElementChild?.getBoundingClientRect();zones.push(new DOMRect(r.left,r.top,r.width,Math.max(16,(first?first.top:r.top+40)-r.top)));}
+      for(const parent of [tabs,side])for(const node of parent?parent.querySelectorAll(titleInteractive):[]){
+        const r=node.getBoundingClientRect();
+        if(r.width&&r.height&&zones.some(z=>r.left<z.right&&r.right>z.left&&r.top<z.bottom&&r.bottom>z.top))holes.push(r);
+      }
+      const message={zones:zones.map(box),holes:holes.map(box)},text=JSON.stringify(message);
+      if(text!==last){last=text;bridge.postMessage(message);}
+    };
+    const later=()=>{if(!queued){queued=true;requestAnimationFrame(send);}};
+    new ResizeObserver(later).observe(document.documentElement);
+    for(const node of document.querySelectorAll('.am-tabs,.am-sidebar'))new MutationObserver(later).observe(node,{childList:true,subtree:true,attributes:true});
+    addEventListener('resize',later);
+    later();
   }
   window.messengerRefresh=()=>{viewSignature='';refresh();};
   // «Выбрать»: the local server opens the system's own dialog (D-053); the
@@ -1477,6 +1531,7 @@
   $('project-pick').addEventListener('click',()=>{folderTarget='project-folder';if(window.webkit?.messageHandlers?.folder)window.webkit.messageHandlers.folder.postMessage('pick');else pick('project-folder','folder','project-status');});
   $('project-page-pick').addEventListener('click',()=>{folderTarget='project-page-folder';if(window.webkit?.messageHandlers?.folder)window.webkit.messageHandlers.folder.postMessage('pick');else pick('project-page-folder','folder','project-page-status');});
   framelessWindow();
+  macTitlebar();
   $('agent-cli-pick').addEventListener('click',()=>pick('agent-cli','file','agent-save-status'));
   $('agent-profile-pick').addEventListener('click',()=>pick('agent-profile','folder','agent-save-status'));
   $('restart-dialog').addEventListener('cancel',event=>event.preventDefault());
