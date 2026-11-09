@@ -585,6 +585,7 @@ body.am-frameless #am-concept .am-tabs, body.am-frameless #am-concept .am-sideba
 #am-concept .am-stats-bar > span { display:block; height:100%; border-radius:var(--am-radius-xs); background:var(--am-muted); }
 #am-concept .am-stats-tasks { text-align:right; }
 #am-concept .am-stats-top { display:flex; flex-direction:column; margin:0 calc(-1 * var(--am-space-3)); }
+#am-concept .am-stats-top > p { margin:0; padding:var(--am-pad-compact); }
 #am-concept .am-stats-task { display:flex; align-items:center; justify-content:space-between; gap:var(--am-gap-content); min-height:var(--am-control); padding:var(--am-pad-compact); border:0; border-radius:var(--am-radius-s); background:transparent; text-align:left; font-weight:inherit; }
 #am-concept .am-stats-task:is(:hover,:focus-visible) { background:var(--am-soft); }
 #am-concept .am-stats-task-text { display:flex; flex-direction:column; gap:var(--am-gap-line); min-width:0; }
