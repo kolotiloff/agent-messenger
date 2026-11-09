@@ -105,7 +105,7 @@ func newUpdater(home, executable string) *selfupdate.Updater {
 	}
 	if prefix := installPrefix(executable); prefix != "" && runtime.GOOS != "windows" {
 		u.Install = func(program string, info buildinfo.Info) (string, error) {
-			return distribution.Install(program, prefix, info)
+			return distribution.InstallUpdate(program, prefix, info)
 		}
 	}
 	return u

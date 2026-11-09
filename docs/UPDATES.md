@@ -27,7 +27,7 @@ The window (`messenger open`) checks when it opens and then every 30 minutes, in
 1. checks the downloaded archive's size, SHA-256 and Ed25519 signature again;
 2. unpacks the one program file and writes it next to the running one (`.<name>.update`);
 3. runs it with `version` and requires the exact version, revision, system and architecture from the signed metadata;
-4. replaces the program: on Linux one rename; on Windows the running file is renamed to `<name>.old` (or `.old-1`… if an older one is still running) and the new one takes its name; the leftovers are removed at a later start. A program installed with `messenger install` is installed as a new version with the same installer instead;
+4. replaces the program: on Linux one rename; on Windows the running file is renamed to `<name>.old` (or `.old-1`… if an older one is still running) and the new one takes its name; the leftovers are removed at a later start. A program installed with `messenger install` is installed as a new version folder next to the running one instead, while the background client keeps running from its own folder (T-107); a manual `messenger install` still needs the client stopped;
 5. closes the page and starts the new program with the same arguments, which opens the window again.
 
 Any failure before step 4 leaves the program untouched and removes the staged file. The background client and its tasks are not touched; the window then offers «Перезапустить», as on the Mac. The program must sit in a folder the user can write to.

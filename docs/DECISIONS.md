@@ -253,3 +253,10 @@ GitHub answers 60 API requests an hour per address without an account, and all o
 2026-11-09, Claude Code, owner's request.
 
 People see «0.58» instead of «0.0.0-preview.58»: in the release title, the Mac app's short version (About and update dialog), and the window. The full version stays in the release tag, the signed manifests and the program's `version`, because installed programs check exactly that form before they accept an update; switching the inner form needs one release that accepts both forms, and every computer on it, before releases use the new form.
+
+## D-106 — Updates of a Linux installation while the client runs (T-107)
+
+2026-11-09, Claude Code, owner's report: on Linux the update failed with «client is already running».
+
+An update of a program installed with `messenger install` (window or another computer's request) adds the new version folder and moves the `messenger` link without the supervisor and startup leases. The running background client keeps its own version folder, which is never changed or removed, so nothing it uses moves; it goes on with its version until it is restarted, as on Windows (D-048). A lock file in the installation's library folder keeps two installs apart. A manual `messenger install` keeps the leases and the check of `active-runs.json`.
+

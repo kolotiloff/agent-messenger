@@ -151,3 +151,55 @@ func TestInstallRejectsForeignLinkAndCorruptVersion(t *testing.T) {
 		t.Fatal("unexpected mutation of damaged version")
 	}
 }
+
+// T-107: an update installs while the background client holds its lock; the
+// running version's file stays as it was.
+func TestInstallUpdateWhileTheClientRuns(t *testing.T) {
+	source, prefix, info := installFixture(t)
+	link, err := Install(source, prefix, info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old, err := os.Readlink(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path, err := platform.SupervisorLockFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := platform.Acquire(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Release()
+	if err = os.WriteFile(source, []byte("fixture-v2"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	info.Version = "0.0.0-preview.2"
+	if _, err = Install(source, prefix, info); err == nil {
+		t.Fatal("manual install accepted while the client runs")
+	}
+	installed, err := InstallUpdate(source, prefix, info)
+	if err != nil {
+		t.Fatal("update refused while the client runs:", err)
+	}
+	current, _ := os.Readlink(installed)
+	if current == old {
+		t.Fatal("link not moved to the new version")
+	}
+	oldBytes, _ := os.ReadFile(old)
+	newBytes, _ := os.ReadFile(installed)
+	if string(oldBytes) != "fixture-v1" || string(newBytes) != "fixture-v2" {
+		t.Fatal("running version changed or new version missing")
+	}
+	lock, err := platform.Acquire(filepath.Join(filepath.Dir(filepath.Dir(current)), "install.lock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Release()
+	info.Version = "0.0.0-preview.3"
+	if _, err = InstallUpdate(source, prefix, info); err == nil {
+		t.Fatal("second installation at the same time accepted")
+	}
+}
