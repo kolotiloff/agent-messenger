@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-09 — Claude Code (T-111 open other computers' tasks)
+
+- Owner on 0.58: some tasks in the list would not open. They were other computers' tasks, now mixed with own ones (T-110) but still not clickable. They open as a read-only card now. On `claude/ui-tweaks`, not released.
+- The same owner restarted ПК-1's client during tasks after an update; the window asks first («Перезапустить всё равно») and the interrupted runs wait for the owner with an unknown result, as designed (no automatic retry).
+
 ## 2026-11-09 — Claude Code (release 0.58)
 
 - PR #89 merged and released as 0.58 (`0.0.0-preview.58`): T-097 to T-110 and a ten-minute test budget per package in `scripts/check.sh` (the supervisor package timed out on CI at five).

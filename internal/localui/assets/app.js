@@ -114,7 +114,7 @@
   if(location.hash)history.replaceState(null,'',location.pathname);
   function remember(key,value){try{localStorage.setItem(key,value);}catch(_){}}
   function recall(key){try{return localStorage.getItem(key)||'';}catch(_){return '';}}
-  let view=null,project=recall('messenger-project'),selectedTask='',feed=null,feedSignature='',viewSignature='';
+  let view=null,project=recall('messenger-project'),selectedTask='',selectedShared=null,feed=null,feedSignature='',viewSignature='';
   let online=false,offlineReason='',discovery=[],tab='tasks',refreshing=false,answering=false;
   const agentChecks=new Map(),checking=new Set(),rowNote=new Map();let autoChecked=false,discoveryLoaded=false;
   let clientInfo=null,clientInfoAt=0,restart={busy:false,ask:null,error:''},autoRestarted=false;
@@ -478,11 +478,14 @@
       const words=el('span');status.append(words);words.append(statusPiece(text,!!t.usage));
       if(t.usage){const used=el('span',usageShort(t.usage),'am-task-usage');used.title=usageLong(t.usage);words.append(used);}
       row.append(agent,el('span',t.title,'am-task-title'),status);
-      row.addEventListener('click',()=>{selectedTask=t.id;feedSignature='';renderTaskList();loadFeed();});
+      row.addEventListener('click',()=>{selectedTask=t.id;selectedShared=null;feedSignature='';renderTaskList();loadFeed();});
       return row;
     };
     const sharedRow=(t,p)=>{
-      const row=el('div',undefined,'am-task am-task-shared');row.title=tr('Задачу дал компьютер «')+p.name+tr('». Здесь её можно только посмотреть');
+      const row=el('button',undefined,'am-task am-task-shared');row.type='button';row.title=tr('Задачу дал компьютер «')+p.name+tr('». Здесь её можно только посмотреть');
+      row.setAttribute('aria-pressed',String(selectedShared?.peer===p.peer&&selectedShared?.id===t.id));
+      // T-111: another computer's task opens as a read-only card.
+      row.addEventListener('click',()=>{selectedShared={peer:p.peer,id:t.id};selectedTask='';feed=null;feedSignature='';renderTaskList();renderThread();});
       const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),el('span',(names[t.agent]||t.agent)+tr(' от «')+p.name+'»'));
       const sharedWhen=taskWhen(t);if(sharedWhen)agent.append(el('span',sharedWhen,'am-task-when'));
       const [text,cls]=taskStatus(t);
@@ -558,12 +561,38 @@
       thread.replaceChildren(box);return;
     }
     if(!view.coordinator.connected&&!view.tasks.length){head.replaceChildren();thread.replaceChildren(connectHelp());return;}
+    const shared=sharedSelection();
+    if(shared){renderSharedTask(shared.t,shared.p);return;}
     if(!selectedTask||!feed||feed.task.id!==selectedTask){
       head.replaceChildren();
       if(!selectedTask)thread.replaceChildren(el('p',view.tasks.length?tr('Выберите задачу в списке справа.'):tr('Задач пока нет. Их создаёт чат-координатор.'),'am-muted am-empty'));
       return;
     }
     renderFeed();
+  }
+  // The chosen task of another computer, if it is still in the lists.
+  function sharedSelection(){
+    if(!selectedShared)return null;
+    const p=(view?.shared||[]).find(x=>x.peer===selectedShared.peer),t=p?.tasks.find(x=>x.id===selectedShared.id);
+    return t?{t,p}:null;
+  }
+  // Another computer's task (T-111): the window has only what that computer
+  // shares, so the card shows it and says where the full history is.
+  function renderSharedTask(t,p){
+    const thread=$('thread'),head=$('task-head');
+    const title=el('div',undefined,'am-task-head');title.append(el('h3',t.title));
+    title.append(el('p',(names[t.agent]||t.agent)+tr(', задачу дал компьютер «')+p.name+'»','am-small am-muted'));
+    const [statusText,statusCls]=taskStatus(t);
+    const when=t.finished_at?', '+clock(t.created_at)+'–'+clock(t.finished_at):tr(', начата в ')+clock(t.created_at);
+    const line=el('p',undefined,'am-small');line.append(el('span',statusText,statusCls),el('span',when,'am-muted'));
+    if(t.tokens)line.append(el('span',', '+tokensText(t.tokens)+tr(' токенов'),'am-muted'));
+    title.append(line);
+    const headRow=el('div',undefined,'am-task-head-row');headRow.append(title);head.replaceChildren(headRow);
+    const box=el('div',undefined,'am-settings');
+    if(t.report){box.append(el('h3',tr('Начало отчёта')),el('p',t.report,'am-shared-report'));}
+    else box.append(el('p',tr('Отчёта пока нет.'),'am-muted'));
+    box.append(el('p',tr('Полная история задачи — в окне компьютера «')+p.name+tr('». Здесь её можно только посмотреть.'),'am-small am-muted'));
+    thread.replaceChildren(box);$('compose').hidden=true;
   }
   // Called when only the feed may have changed.
   function updateFeed(){
@@ -1040,7 +1069,7 @@
       if(booting){await loadClientInfo();booting=false;renderBoot();}
       if(!v.projects.some(p=>p.name===project))project=v.project||'';
       const signature=JSON.stringify(v);
-      if(signature!==viewSignature){viewSignature=signature;view=v;if(selectedTask&&!v.tasks.some(t=>t.id===selectedTask)){selectedTask='';feed=null;feedSignature='';}render();}
+      if(signature!==viewSignature){viewSignature=signature;view=v;if(selectedTask&&!v.tasks.some(t=>t.id===selectedTask)){selectedTask='';feed=null;feedSignature='';}if(selectedShared&&!sharedSelection())selectedShared=null;render();}
       else{renderMachines();renderNotice();}
       if(selectedTask)await loadFeed();
     }catch(error){notice(el('p',tr('Окно не смогло показать данные: ')+error.message));}
@@ -1123,7 +1152,7 @@
       row.title=tr('Открыть задачу');
       row.addEventListener('click',()=>{
         if(task.project&&task.project!==project){project=task.project;remember('messenger-project',project);viewSignature='';}
-        selectedTask=task.id;feed=null;feedSignature='';show('tasks');refresh();
+        selectedTask=task.id;selectedShared=null;feed=null;feedSignature='';show('tasks');refresh();
       });
       top.append(row);
     }
@@ -1343,7 +1372,7 @@
     const name=view?.project;if(!name)return;
     askConfirm(tr('Удалить проект «')+(view.project_title||name)+'»?',tr('Проект пропадёт из списка. История задач сохранится и вернётся, если создать проект с тем же именем.'),tr('Удалить'),async()=>{
       await postAPI('/api/project-remove',{name});
-      project='';remember('messenger-project','');selectedTask='';feed=null;feedSignature='';viewSignature='';projectPageFor='';await refresh();
+      project='';remember('messenger-project','');selectedTask='';selectedShared=null;feed=null;feedSignature='';viewSignature='';projectPageFor='';await refresh();
     });
   }
   // «Установить» opens the agent's official page; «Войти» opens a terminal
@@ -1598,7 +1627,7 @@
   $('project-select').addEventListener('change',()=>{
     const value=$('project-select').value;
     if(value==='__new'){$('project-select').value=view?.project||'__new';syncSelects();openProjectDialog();return;}
-    project=value;remember('messenger-project',value);selectedTask='';feed=null;feedSignature='';viewSignature='';refresh();
+    project=value;remember('messenger-project',value);selectedTask='';selectedShared=null;feed=null;feedSignature='';viewSignature='';refresh();
   });
   $('agent-filter').addEventListener('change',renderTaskList);
   for(const id of ['computer-chip','stats-computer-chip','agents-computer-chip'])$(id).querySelector('button').addEventListener('click',clearComputer);
