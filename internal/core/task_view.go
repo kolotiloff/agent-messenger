@@ -129,6 +129,9 @@ type WindowTask struct {
 	Remote *RemoteComputer `json:"remote,omitempty"`
 	// Usage is what the task's runs spent so far (T-058).
 	Usage *TaskUsage `json:"usage,omitempty"`
+	// FullAccess: the worker runs with «Любые команды» (T-115). Only for
+	// tasks that run on this computer.
+	FullAccess bool `json:"full_access,omitempty"`
 }
 
 // RemoteComputer is the other computer of a task (T-037).
@@ -352,7 +355,7 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 		return v, err
 	}
 	for _, t := range tasks {
-		w := WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt, FailureReason: t.FailureReason, FailureReset: t.FailureReset}
+		w := WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt, FailureReason: t.FailureReason, FailureReset: t.FailureReset, FullAccess: t.FullAccess}
 		if t.OpenQuestion != nil && t.OpenQuestion.Audience == AudienceOwner {
 			w.OwnerQuestion = t.OpenQuestion
 		}
@@ -412,7 +415,7 @@ func (s *Store) TaskFeed(id string) (TaskFeed, error) {
 	if err != nil {
 		return f, err
 	}
-	f.Task = WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt, RanModel: s.ranModel(t.ID)}
+	f.Task = WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt, RanModel: s.ranModel(t.ID), FullAccess: t.FullAccess}
 	if t.OpenQuestion != nil && t.OpenQuestion.Audience == AudienceOwner {
 		f.Task.OwnerQuestion = t.OpenQuestion
 	}

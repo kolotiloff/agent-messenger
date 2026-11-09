@@ -348,6 +348,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-notices { display:flex; flex-direction:column; align-items:flex-end; gap:var(--am-gap-control); padding-top:var(--am-space-3); }
 #am-concept .am-notices[hidden] { display:none; }
 #am-concept .am-notice { position:relative; display:flex; align-items:center; gap:var(--am-gap-control); width:min(420px,100%); padding:var(--am-space-2) var(--am-space-1) var(--am-space-2) var(--am-space-3); border:1px solid var(--am-line); border-radius:var(--am-radius-m); background:var(--am-composer); color:var(--am-text); line-height:1.35; box-shadow:var(--am-shadow-s); overflow:hidden; }
+#am-concept .am-notices .am-notice { max-height:none; margin-inline:0; }
 #am-concept .am-notice-icon { flex:none; width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; color:var(--am-muted); }
 #am-concept .am-notice-good .am-notice-icon { color:var(--am-good); }
 #am-concept .am-notice-bad .am-notice-icon { color:var(--am-bad); }

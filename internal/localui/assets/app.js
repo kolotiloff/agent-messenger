@@ -353,6 +353,8 @@
     notices.push({key,kind,title,text:text||''});renderNotices();
   }
   function collectNotices(){
+    // T-129: the background program was started inside an agent's sandbox.
+    if(clientInfo?.sandbox)addNotice('sandbox-'+(clientInfo.client_version||''),'bad',tr('Messenger запущен из песочницы агента'),tr('Исполнители унаследуют её: без сети и без части папок, даже с «Любыми командами». Закройте Messenger полностью и откройте его снова сами, не из агента.'));
     const names=Object.fromEntries((server?.peers||[]).map(p=>[p.id,p.name]));
     for(const u of server?.updates||[]){
       const at=Date.parse(u.updated_at),name=names[u.computer]||tr('Компьютер');
@@ -720,7 +722,7 @@
     const atBottom=thread.scrollHeight-thread.clientHeight-thread.scrollTop<40||!feedSignature;feedSignature=signature;
     const title=el('div',undefined,'am-task-head');title.append(el('h3',t.title));
     const where=t.remote&&!t.remote.from?tr(' на компьютере «')+t.remote.name+'»':tr(' на ')+(view.computer_name||tr('этом компьютере'))+(t.remote?.from?tr(', по заданию компьютера «')+t.remote.name+'»':'');
-    title.append(el('p',(names[t.agent]||t.agent)+((t.ran_model||t.model)?' ('+(t.ran_model||t.model)+')':'')+where+tr(', папка ')+(t.folder||tr('ещё не известна')),'am-small am-muted'));
+    title.append(el('p',(names[t.agent]||t.agent)+((t.ran_model||t.model)?' ('+(t.ran_model||t.model)+')':'')+where+tr(', папка ')+(t.folder||tr('ещё не известна'))+(t.remote&&!t.remote.from?'':t.full_access?tr(', любые команды разрешены'):tr(', без «Любых команд»')),'am-small am-muted'));
     const [statusText,statusCls,statusTip]=taskStatus(t);
     const when=t.finished_at?', '+clock(t.created_at)+'–'+clock(t.finished_at):tr(', начата в ')+clock(t.created_at);
     const line=el('p',undefined,'am-small');line.append(el('span',statusText,statusCls),el('span',when,'am-muted'));

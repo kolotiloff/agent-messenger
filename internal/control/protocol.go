@@ -57,6 +57,9 @@ type Status struct {
 	TasksEnabled   bool     `json:"tasks_enabled,omitempty"`
 	// Version is the client build; clients before preview.27 leave it empty.
 	Version string `json:"version,omitempty"`
+	// Sandbox names the marker of an agent's sandbox the client was started
+	// in (T-129); its workers inherit that sandbox.
+	Sandbox string `json:"sandbox,omitempty"`
 }
 
 type StopResult struct {
