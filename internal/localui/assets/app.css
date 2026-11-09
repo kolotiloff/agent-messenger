@@ -384,6 +384,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-task-list .am-task { display:flex; flex-direction:column; flex-wrap:nowrap; align-items:stretch; flex-shrink:0; gap:var(--am-gap-line); width:100%; min-width:0; max-width:100%; min-height:0; padding:var(--am-pad-compact); border-radius:var(--am-radius-s); background:transparent; text-align:left; font-size:var(--am-text-s); line-height:1.5; overflow:hidden; }
 #am-concept .am-task-list .am-task:is(:hover,:focus-visible) { background:var(--am-soft); }
 #am-concept .am-task-list .am-task[aria-pressed=true] { background:var(--am-selected); }
+#am-concept .am-task-here { color:var(--am-text); font-weight:600; }
 #am-concept .am-shared-report { white-space:pre-wrap; overflow-wrap:anywhere; }
 #am-concept .am-task-report { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; color:var(--am-muted); font-size:var(--am-text-xs); white-space:normal; overflow-wrap:anywhere; }
 #am-concept .am-task-agent { display:flex; align-items:center; gap:var(--am-space-1); color:var(--am-muted); font-size:var(--am-text-xs); }
