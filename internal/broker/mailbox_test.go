@@ -113,7 +113,9 @@ func TestMailboxRefusals(t *testing.T) {
 
 	// A full mailbox refuses more until it is read.
 	for i := 0; i < maxPending; i++ {
-		if err := host.broker.Send(HostPeer, bn.Self, fmt.Sprintf("fill-%d", i), []byte(`{}`)); err != nil {
+		// Several senders, each within its own share.
+		sender := fmt.Sprintf("dev-%016x", i/maxPendingPerSender)
+		if err := host.broker.Send(sender, bn.Self, fmt.Sprintf("fill-%d", i), []byte(`{}`)); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -656,10 +656,18 @@ func (s *Service) ReportPresence(ctx context.Context) {
 		s.usageSent, s.usageAt = sent, time.Now()
 	}
 	s.peers, s.peersAt = s.keepUsage(to, peers), time.Now()
-	// The broker now lists this computer under the reported name. A host
-	// before preview.37 ignores the name and keeps the one it joined with.
-	if p.Name != "" && s.member.DeviceName != p.Name {
-		s.member.DeviceName = p.Name
+	// The broker now lists this computer under the name in its own roster
+	// entry: the reported name, or the old one if the host refused it (a
+	// name another computer has). A host before preview.37 ignores the name
+	// and keeps the one it joined with.
+	name := p.Name
+	for _, peer := range peers {
+		if peer.ID == c.DeviceID && validDeviceName(peer.Name) {
+			name = peer.Name
+		}
+	}
+	if p.Name != "" && s.member.DeviceName != name {
+		s.member.DeviceName = name
 		if raw, err := json.Marshal(s.member); err == nil {
 			_ = writeFile(s.connectionPath(), raw)
 		}
@@ -746,8 +754,7 @@ func shortCodeOf(code string) string {
 }
 
 // pairOnNetwork finds the host with an open short invitation and proves the
-// code to it. A refused code is final; it is not tried on other hosts, so
-// it costs one try.
+// code to it.
 func pairOnNetwork(ctx context.Context, code string) (Invitation, error) {
 	hosts, err := Discover(ctx, 2*time.Second)
 	if err != nil {
@@ -756,15 +763,42 @@ func pairOnNetwork(ctx context.Context, code string) (Invitation, error) {
 	if len(hosts) == 0 {
 		return Invitation{}, ErrNoHost
 	}
-	var last error
+	return pairCandidates(ctx, hosts, code)
+}
+
+// pairCandidates tries the code on the hosts that answered discovery, in
+// order. Anyone on the network can answer, so a candidate that cannot prove
+// the code or has no invitation does not end the search. Each server (told
+// apart by its certificate) is asked once: the real host may answer on
+// several addresses, and every exchange with it costs one of its tries. A
+// host that proved the code and then refused this computer's proof is
+// final.
+func pairCandidates(ctx context.Context, hosts []string, code string) (Invitation, error) {
+	asked := map[string]bool{}
+	var unproven, gone, last error
 	for _, address := range hosts {
-		inv, err := PairShort(ctx, address, code)
-		if err == nil || errors.Is(err, ErrShortCode) || errors.Is(err, ErrShortGone) {
-			return inv, err
+		inv, fp, err := pairShort(ctx, address, code, asked)
+		if fp != "" {
+			asked[fp] = true
 		}
-		last = err
+		switch {
+		case err == nil, errors.Is(err, ErrShortCode):
+			return inv, err
+		case errors.Is(err, errSkipped):
+		case errors.Is(err, errUnproven):
+			unproven = ErrShortCode
+		case errors.Is(err, ErrShortGone):
+			gone = err
+		default:
+			last = err
+		}
 	}
-	return Invitation{}, last
+	for _, err := range []error{unproven, gone, last} {
+		if err != nil {
+			return Invitation{}, err
+		}
+	}
+	return Invitation{}, ErrNoHost
 }
 
 // keepUsage fills in the usage the roster left out because this computer

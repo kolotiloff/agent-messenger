@@ -40,7 +40,10 @@ func serveDiscovery(ctx context.Context, conn net.PacketConn, answer func() (dis
 			}
 			continue
 		}
-		if string(buf[:n]) != discoverQuestion {
+		// Only this computer and private networks are answered, like the
+		// broker's own connections: "local network" listens on every
+		// interface.
+		if string(buf[:n]) != discoverQuestion || !localPeer(from) {
 			continue
 		}
 		if a, ok := answer(); ok {
@@ -93,28 +96,57 @@ func Discover(ctx context.Context, wait time.Duration) ([]string, error) {
 		deadline = d
 	}
 	_ = conn.SetReadDeadline(deadline)
-	seen := map[string]bool{}
-	var out []string
+	var found candidates
 	buf := make([]byte, 512)
 	for {
 		n, from, err := conn.ReadFrom(buf)
 		if err != nil {
-			return out, nil
+			return found.out, nil
 		}
 		var a discoverAnswer
-		udp, ok := from.(*net.UDPAddr)
-		if !ok || json.Unmarshal(buf[:n], &a) != nil || a.V != 1 || !brokerID.MatchString(a.Broker) || !validPort(a.Port) {
+		if json.Unmarshal(buf[:n], &a) != nil {
 			continue
 		}
-		address := net.JoinHostPort(udp.IP.String(), strconv.Itoa(a.Port))
-		// A host may answer on several networks (and on this computer
-		// itself); its first answer is used, so a wrong code costs one try.
-		if !seen[a.Broker] {
-			seen[a.Broker] = true
-			out = append(out, address)
-		}
-		if len(out) >= 4 {
-			return out, nil
+		if found.add(from, a) && len(found.out) >= maxCandidates {
+			return found.out, nil
 		}
 	}
+}
+
+// Discovery limits: answers are not trusted, so one address may name only
+// a few brokers, and the list stays short enough to try in turn.
+const (
+	maxCandidates        = 8
+	maxCandidatesPerAddr = 2
+)
+
+// candidates collects the hosts that answered, in order. A host is kept per
+// (broker ID, address): anyone on the network can answer with the real
+// host's broker ID, so keeping only the first answer per broker would let a
+// faster wrong answer hide the real host. Each candidate proves the code in
+// its own exchange (pairCandidates).
+type candidates struct {
+	out   []string
+	seen  map[string]bool
+	perIP map[string]int
+}
+
+func (c *candidates) add(from net.Addr, a discoverAnswer) bool {
+	udp, ok := from.(*net.UDPAddr)
+	if !ok || !localPeer(from) || a.V != 1 || !brokerID.MatchString(a.Broker) || !validPort(a.Port) || len(c.out) >= maxCandidates {
+		return false
+	}
+	if c.seen == nil {
+		c.seen, c.perIP = map[string]bool{}, map[string]int{}
+	}
+	ip := udp.IP.String()
+	address := net.JoinHostPort(ip, strconv.Itoa(a.Port))
+	key := a.Broker + "|" + address
+	if c.seen[key] || c.perIP[ip] >= maxCandidatesPerAddr {
+		return false
+	}
+	c.seen[key] = true
+	c.perIP[ip]++
+	c.out = append(c.out, address)
+	return true
 }

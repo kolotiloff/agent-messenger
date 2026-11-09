@@ -289,7 +289,7 @@ func (b *Broker) roster() ([]Peer, error) {
 		peer := Peer{ID: HostPeer, Host: true, LastSeen: at}
 		fill(&peer, report, at, now)
 		if peer.Name == "" {
-			peer.Name = "Сервер"
+			peer.Name = hostName
 		}
 		out = append(out, peer)
 	case !errors.Is(err, sql.ErrNoRows):
@@ -352,6 +352,43 @@ func (b *Broker) authorized(w http.ResponseWriter, r *http.Request) (Device, boo
 	return d, true
 }
 
+// hostName is the name the roster shows for the hosting computer.
+const hostName = "Сервер"
+
+// nameTaken reports whether name, ignoring case and surrounding spaces, is
+// the host's name or the name of an active device other than id.
+func (b *Broker) nameTaken(id, name string) (bool, error) {
+	same := func(other string) bool { return strings.EqualFold(strings.TrimSpace(other), name) }
+	host := hostName
+	var report string
+	err := b.db.QueryRow(`SELECT report FROM presence WHERE peer=?`, HostPeer).Scan(&report)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return false, err
+	}
+	var p Presence
+	if report != "" && json.Unmarshal([]byte(report), &p) == nil && p.Name != "" {
+		host = p.Name
+	}
+	if same(host) {
+		return true, nil
+	}
+	rows, err := b.db.Query(`SELECT name FROM devices WHERE revoked_at IS NULL AND id<>?`, id)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var other string
+		if err := rows.Scan(&other); err != nil {
+			return false, err
+		}
+		if same(other) {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
+}
+
 // handlePresence stores the calling device's presence and answers with the
 // roster.
 func (b *Broker) handlePresence(w http.ResponseWriter, r *http.Request) {
@@ -372,8 +409,14 @@ func (b *Broker) handlePresence(w http.ResponseWriter, r *http.Request) {
 	}
 	// A device may rename itself: the owner changes the name on that
 	// computer, and every computer of the network sees the new one (D-061).
-	if in.Name != "" && in.Name != d.Name {
-		if _, err := b.db.Exec(`UPDATE devices SET name=? WHERE id=? AND revoked_at IS NULL`, in.Name, d.ID); err != nil {
+	// A name the host or another computer already has is not taken: the
+	// report is kept with the old name, which the roster shows the device.
+	if name := strings.TrimSpace(in.Name); name != "" && name != d.Name {
+		taken, err := b.nameTaken(d.ID, name)
+		if err == nil && !taken {
+			_, err = b.db.Exec(`UPDATE devices SET name=? WHERE id=? AND revoked_at IS NULL`, name, d.ID)
+		}
+		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "unavailable"})
 			return
 		}

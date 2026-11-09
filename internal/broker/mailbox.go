@@ -20,11 +20,14 @@ import (
 
 // Mailbox limits.
 const (
-	MaxMessageBody  = 256 << 10
-	maxSendRequest  = MaxMessageBody + 4<<10
-	maxPending      = 500
-	InboxBatch      = 16
-	maxInboxRequest = 1 << 10
+	MaxMessageBody = 256 << 10
+	maxSendRequest = MaxMessageBody + 4<<10
+	maxPending     = 500
+	// maxPendingPerSender is one sender's share of a recipient's mailbox,
+	// so one computer cannot fill it for every other one.
+	maxPendingPerSender = 100
+	InboxBatch          = 16
+	maxInboxRequest     = 1 << 10
 )
 
 var messageOp = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9:._-]{0,159}$`)
@@ -121,6 +124,12 @@ func (b *Broker) Send(from, to, opID string, body []byte) error {
 		return err
 	}
 	if pending >= maxPending {
+		return ErrMailboxFull
+	}
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM messages WHERE recipient=? AND sender=?`, to, from).Scan(&pending); err != nil {
+		return err
+	}
+	if pending >= maxPendingPerSender {
 		return ErrMailboxFull
 	}
 	if _, err := tx.Exec(`INSERT INTO messages(sender,recipient,op_id,body,created_at) VALUES (?,?,?,?,?)`, from, to, opID, string(body), b.now().UTC().Format(time.RFC3339)); err != nil {
