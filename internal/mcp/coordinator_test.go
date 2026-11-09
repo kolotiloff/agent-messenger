@@ -227,7 +227,7 @@ func TestCoordinatorHandshakeAndTools(t *testing.T) {
 	for _, tool := range resp["result"].(map[string]any)["tools"].([]any) {
 		names = append(names, tool.(map[string]any)["name"].(string))
 	}
-	if strings.Join(names, ",") != "list_agents,start_task,wait,tasks,answer,continue_task,task_output,cancel,get_log" {
+	if strings.Join(names, ",") != "list_agents,start_task,wait,tasks,answer,continue_task,task_output,task_messages,cancel,get_log" {
 		t.Fatalf("tools %v", names)
 	}
 	var agents struct {
