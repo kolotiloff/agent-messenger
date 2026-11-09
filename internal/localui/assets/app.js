@@ -128,7 +128,15 @@
   }
   // The window can be newer than the client still running in the background
   // (after an update). Say how to restart it; nothing is restarted by itself.
-  function shutdownCommand(){return view?.messenger&&view?.data_root?'"'+view.messenger+'" --root "'+view.data_root+'" shutdown':'';}
+  // Values in a copied command are quoted for the shell it is pasted into:
+  // single quotes on macOS and Linux (an inner ' becomes '\''), double
+  // quotes on Windows, where a path cannot contain ".
+  function shellQuote(value){
+    value=String(value);
+    if(window.amDesktop==='windows'||/Windows/.test(navigator.userAgent))return '"'+value+'"';
+    return "'"+value.replace(/'/g,"'\\''")+"'";
+  }
+  function shutdownCommand(){return view?.messenger&&view?.data_root?shellQuote(view.messenger)+' --root '+shellQuote(view.data_root)+' shutdown':'';}
   function outdatedMessage(){
     if(Date.now()-clientInfoAt>3000)loadClientInfo();
     if(clientInfo?.restart)return Error(tr('В фоне старая версия Messenger.'));
@@ -272,7 +280,7 @@
       window.addEventListener('resize',close);
     }
     const item=el('div',tr('Отозвать устройство'),'am-select-option');item.setAttribute('role','menuitem');item.tabIndex=0;
-    const pick=()=>{menu.hidePopover();revokeAsk=d.id;clearTimeout(revokeTimer);revokeTimer=setTimeout(()=>{revokeAsk='';renderMachines();},8000);renderMachines();$('machines').querySelector('[data-key="revoke-yes-'+d.id+'"]')?.focus();};
+    const pick=()=>{menu.hidePopover();revokeAsk=d.id;clearTimeout(revokeTimer);revokeTimer=setTimeout(()=>{revokeAsk='';renderMachines();},8000);renderMachines();$('machines').querySelector('[data-key="'+CSS.escape('revoke-yes-'+d.id)+'"]')?.focus();};
     item.addEventListener('click',pick);item.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();pick();}});
     menu.replaceChildren(item);menu.style.left=x+'px';menu.style.top=y+'px';menu.showPopover();item.focus();
   }
@@ -332,7 +340,7 @@
         const yes=el('button',tr('Отозвать'),'am-danger');yes.type='button';yes.dataset.key='revoke-yes-'+peer.id;
         yes.addEventListener('click',()=>{revokeAsk='';serverAction({action:'revoke',device:peer.id},'host','');});
         const no=el('button',tr('Отмена'));no.type='button';
-        no.addEventListener('click',()=>{revokeAsk='';renderMachines();$('machines').querySelector('[data-key="revoke-'+peer.id+'"]')?.focus();});
+        no.addEventListener('click',()=>{revokeAsk='';renderMachines();$('machines').querySelector('[data-key="'+CSS.escape('revoke-'+peer.id)+'"]')?.focus();});
         actions.append(no,yes);card.append(actions);box.append(card);continue;
       }
       if(fresh){
@@ -460,7 +468,7 @@
       else{box.append(el('p',tr('Задачи проекта даёт ваш чат в Claude. Messenger сам добавит этот проект в настройки Claude.')),connect(tr('Подключить к Claude')));}
     }
     const manual=el('details',undefined,'am-tool');manual.append(el('summary',tr('Подключить вручную через Терминал')));
-    const command='cd "'+view.folder+'" && claude mcp add --scope local messenger -- "'+view.messenger+'" --root "'+view.data_root+'" coordinator --project "'+view.project+'"';
+    const command='cd '+shellQuote(view.folder)+' && claude mcp add --scope local messenger -- '+shellQuote(view.messenger)+' --root '+shellQuote(view.data_root)+' coordinator --project '+shellQuote(view.project);
     const copy=el('button',tr('Скопировать команду'));copy.type='button';
     copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(command);copy.textContent=tr('Скопировано');}catch(_){copy.textContent=tr('Скопируйте вручную');}setTimeout(()=>copy.textContent=tr('Скопировать команду'),2000);});
     manual.append(el('pre',command,'am-command'),copy);
@@ -1122,7 +1130,7 @@
     if(!serverBusy)$('host-invite').disabled=!h.addresses.length;
     renderHostToggle();
     syncSelects();renderNotes();
-    if(focused&&document.activeElement===document.body)root.querySelector('[data-key="'+focused+'"]')?.focus();
+    if(focused&&document.activeElement===document.body)root.querySelector('[data-key="'+CSS.escape(focused)+'"]')?.focus();
   }
   async function serverAction(body,section,done){
     if(serverBusy)return null;

@@ -18,7 +18,7 @@ name: Release preview
         required: true
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-mac-preview
@@ -92,6 +92,8 @@ jobs:
     # The Mac checks run next to the Windows and Linux job instead of after
     # it; publishing still waits for both.
     needs: [others, mac-checks]
+    permissions:
+      contents: write
     runs-on: macos-15
     timeout-minutes: 40
     env:

@@ -31,7 +31,7 @@ messenger --root DIR serve --allow-tasks
 2. **Launch.** The client launches recorded runs only with `serve --allow-tasks` and only while the queue is not paused. There is no limit on parallel workers (D-022).
    - `launching` is committed before the reservation in `active-runs.json` is written, and the reservation before exec.
    - The worker runs with the task's folder as its working directory.
-   - Worker permissions: Claude runs with `--permission-mode acceptEdits` (D-028), Codex with `--sandbox workspace-write` (D-023), Cursor with `--force --trust --approve-mcps` (D-049). With «Разрешить любые команды» on for the agent (D-065): Claude `--permission-mode bypassPermissions`, Codex `--dangerously-bypass-approvals-and-sandbox`, Cursor also `--sandbox disabled`. A new task copies the setting; an answer or a follow-up takes the agent's current setting (D-067). A newly connected worker agent starts with it on (D-067).
+   - Worker permissions: Claude runs with `--permission-mode acceptEdits` (D-028), Codex with `--sandbox workspace-write` (D-023), Cursor with `--force --trust --approve-mcps --sandbox enabled` (D-049). With «Разрешить любые команды» on for the agent (D-065): Claude `--permission-mode bypassPermissions`, Codex `--dangerously-bypass-approvals-and-sandbox`, Cursor also `--sandbox disabled`. A new task copies the setting; an answer or a follow-up takes the agent's current setting (D-067). A newly connected worker agent starts with it on (D-067).
 3. **Identity.** The run's first conversation ID from the event stream is bound:
    - a Claude ID must equal the recorded UUID;
    - a new Codex or Cursor task binds the first thread or chat ID once, and the ID may not belong to another task;
