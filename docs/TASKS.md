@@ -94,6 +94,11 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 
 | ID | Task | Owner | Notes |
 |---|---|---|---|
+| T-112 | Coordinator's list, row 19 (2026-11-09): a cut or failed task has no last words of the worker for the coordinator. `task_output` keeps only the final message of a finished run; add a read-only call with the worker's last N messages of any task, interrupted and failed ones included. | agent | Not started. The coordinator also said it has no `task_output` / `continue_task`: both are listed since 0.56; its chat was most likely opened before the update (a chat reads the tool list when it starts). |
+| T-113 | `continue_task` for a task of another computer (coordinator's list, rows 12 and 19). | agent | Not started. Needs a new kind of network message, so both computers must run the version that has it. |
+| T-114 | A message from the coordinator to a running worker (coordinator's list, row 10): today only the owner can write one from the window. | agent | Not started. |
+| T-115 | Worker commands refused with "requires approval" and nobody to approve (rows 15, 16): say in the failure which switch to turn on («Любые команды» on «Агенты», or «Любые команды для задач других компьютеров» on «Сервер»), and check that a resumed Codex run (answer, note, `continue_task`) keeps the sandbox setting of the switch. | agent | Not started. The owner says both switches are on and the Mac Codex task passed on the second try. |
+| T-116 | A worker stopped by a usage limit ends as failed without a report (row 18): give the reset time (done since T-034) and the files the worker changed in the folder, without naming any version control. | agent | Not started. |
 | T-028 | Close or migrate existing persistent sessions and state, then retire the persistent Claude stream and Codex app-server owners. | agent | blocked: Q-012 |
 
 ## Backlog
