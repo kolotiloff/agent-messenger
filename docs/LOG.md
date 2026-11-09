@@ -2,6 +2,19 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-09 — Claude Code (T-078 remote update)
+
+- T-078 (D-100, Q-025 a): «Обновить программу» in another computer's menu; that computer installs its newest signed update and restarts its client only when no task runs; a Mac refuses. Computers report their version, shown on the cards. On `claude/ui-tweaks`, not released. Real Windows/Linux installs between computers are left to CI and the owner.
+
+## 2026-11-09 — Claude Code (T-096 agent filter)
+
+- The owner did not see a running task of ПК-1: the agent filter was «Cursor». T-096: choosing a computer resets the filter; a hidden active task is announced with «Показать всех агентов». On `claude/ui-tweaks`, not released.
+
+## 2026-11-09 — Claude Code (release preview.56)
+
+- Merged #87 (T-083 to T-095) and released preview.56; all files checked (Mac, Windows x64/ARM64, Linux x64/ARM64, checksums, 5 signed update feeds and archives).
+- The owner works from another flat with all four computers through his own VPN; it works because the VPN gives private addresses. BROKER.md now says how a VPN works with "local network" and that 100.64.0.0/10 is refused.
+
 ## 2026-11-09 — Claude Code (coordinator's list done, security fixes)
 
 - T-087 full last worker message kept and read with `task_output` (D-098); T-088 tokens in every report; T-090 the newest coordinator chat takes over (D-099); T-092 computers stay listed while reconnecting; T-093 `list_agents` explains empty models, limits and folders. T-089 waits for Q-027.

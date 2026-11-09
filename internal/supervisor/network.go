@@ -77,7 +77,7 @@ func (s *Supervisor) networkRound(ctx context.Context) {
 	if refresh {
 		var peers []core.NetPeer
 		for _, p := range s.server.Status().Peers {
-			np := core.NetPeer{ID: p.ID, Name: p.Name, Host: p.Host, Age: p.Age}
+			np := core.NetPeer{ID: p.ID, Name: p.Name, Host: p.Host, Age: p.Age, Version: p.Version}
 			if r := p.Ready; r != nil {
 				np.Ready = &core.NetReady{Accept: r.Accept, Projects: r.Projects}
 			}
@@ -108,6 +108,9 @@ func (s *Supervisor) networkRound(ctx context.Context) {
 		problem = p
 	}
 	if p := s.answerLogRequests(n.BrokerID); problem == "" {
+		problem = p
+	}
+	if p := s.answerUpdateRequests(n.BrokerID); problem == "" {
 		problem = p
 	}
 	if problem == "" {

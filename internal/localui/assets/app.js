@@ -272,9 +272,10 @@
     if(!view?.project&&select.options.length>1)select.selectedIndex=0;
     select.disabled=!view;syncSelects();
   }
-  // Right-click menu on a joined device. Revoking cannot be undone, so the
-  // menu item only opens a confirmation inside the card.
-  function deviceMenu(d,x,y){
+  // Right-click menu on another computer of the network. Revoking cannot be
+  // undone, so its item only opens a confirmation inside the card; updating
+  // (T-078) asks that computer to install the newest signed update.
+  function deviceMenu(d,x,y,can){
     let menu=$('device-menu');
     if(!menu){
       // A manual popover: an automatic one closes on the same right click
@@ -286,10 +287,42 @@
       menu.addEventListener('focusout',e=>{if(!menu.contains(e.relatedTarget))close();});
       window.addEventListener('resize',close);
     }
-    const item=el('div',tr('Отозвать устройство'),'am-select-option');item.setAttribute('role','menuitem');item.tabIndex=0;
-    const pick=()=>{menu.hidePopover();revokeAsk=d.id;clearTimeout(revokeTimer);revokeTimer=setTimeout(()=>{revokeAsk='';renderMachines();},8000);renderMachines();$('machines').querySelector('[data-key="'+CSS.escape('revoke-yes-'+d.id)+'"]')?.focus();};
-    item.addEventListener('click',pick);item.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();pick();}});
-    menu.replaceChildren(item);menu.style.left=x+'px';menu.style.top=y+'px';menu.showPopover();item.focus();
+    const items=[];
+    const add=(text,pick)=>{
+      const item=el('div',text,'am-select-option');item.setAttribute('role','menuitem');item.tabIndex=0;
+      const run=()=>{menu.hidePopover();pick();};
+      item.addEventListener('click',run);item.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();run();}});
+      items.push(item);
+    };
+    if(can.update)add(tr('Обновить программу'),()=>requestUpdate(d));
+    if(can.revoke)add(tr('Отозвать устройство'),()=>{revokeAsk=d.id;clearTimeout(revokeTimer);revokeTimer=setTimeout(()=>{revokeAsk='';renderMachines();},8000);renderMachines();$('machines').querySelector('[data-key="'+CSS.escape('revoke-yes-'+d.id)+'"]')?.focus();});
+    if(!items.length)return;
+    menu.replaceChildren(...items);menu.style.left=x+'px';menu.style.top=y+'px';menu.showPopover();items[0].focus();
+  }
+  // Asking another computer to update itself (T-078). Its answers arrive
+  // with the server status; a refused request shows on the card for a while.
+  let updateErrors={};
+  async function requestUpdate(peer){
+    delete updateErrors[peer.id];
+    try{const answer=await postAPI('/api/server-action',{action:'update',device:peer.id},28000);if(answer?.result)server=answer.result;}
+    catch(error){const id=peer.id;updateErrors[id]=error.message;setTimeout(()=>{if(updateErrors[id]===error.message){delete updateErrors[id];renderMachines();}},10000);}
+    renderMachines();
+  }
+  // The card's update line: the last request to that computer, while recent.
+  function updateLine(peer){
+    if(updateErrors[peer.id])return [tr('Не обновлено: ')+updateErrors[peer.id],'am-status-bad'];
+    const u=(server?.updates||[]).find(x=>x.computer===peer.id);
+    if(!u)return null;
+    const at=Date.parse(u.updated_at);
+    if(!(Date.now()-at<24*3600*1000))return null;
+    if(u.stale)return [tr('Нет ответа об обновлении'),'am-status-bad'];
+    switch(u.state){
+      case 'waiting':return [tr('Обновление запрошено…'),'am-status-wait'];
+      case 'updating':return [tr('Обновляется…'),'am-status-run'];
+      case 'done':return u.text?[tr('Версия ')+versionName(u.version||'')+': '+u.text,'am-muted']:[tr('Обновлено до ')+versionName(u.version||''),'am-muted'];
+      case 'refused':case 'failed':return [tr('Не обновлено: ')+(u.text||u.state),'am-status-bad'];
+    }
+    return null;
   }
   // One line per agent program, with its state (D-064: no coordinator mark).
   // live is false when the computer cannot be reached.
@@ -340,7 +373,9 @@
       const card=el('div',undefined,'am-machine-card am-peer-card');card.dataset.peer=peer.id;pickable(card,peer.id);
       const name=el('div',undefined,'am-machine-name');
       const pdot=el('span',undefined,'am-dot'+(fresh?' online':''));pdot.title=fresh?tr('На связи'):tr('Нет связи');
-      name.append(el('span',peer.name),pdot);card.append(name);
+      name.append(el('span',peer.name));
+      if(peer.version)name.append(el('span',versionName(peer.version),'am-small am-muted am-machine-version'));
+      name.append(pdot);card.append(name);
       if(revokeAsk===peer.id&&hosted.has(peer.id)){
         card.append(el('p',tr('Отозвать устройство? Вернуть его можно только новым приглашением.'),'am-small am-muted'));
         const actions=el('div',undefined,'am-actions am-device-confirm');
@@ -357,10 +392,13 @@
       }else{
         card.append(el('p',peer.last_seen?tr('Был на связи ')+stamp(peer.last_seen):tr('Ещё не выходил на связь'),'am-small am-muted'));
       }
-      if(hosted.has(peer.id)){
+      const status=updateLine(peer);
+      if(status)card.append(el('p',status[0],'am-small am-update-line '+status[1]));
+      const can={revoke:hosted.has(peer.id),update:fresh&&!!peer.version};
+      if(can.revoke||can.update){
         card.classList.add('am-device-card');card.tabIndex=0;card.dataset.key='revoke-'+peer.id;card.title=tr('Правая кнопка мыши — действия');
-        card.addEventListener('contextmenu',event=>{event.preventDefault();deviceMenu(peer,event.clientX,event.clientY);});
-        card.addEventListener('keydown',event=>{if(event.key==='ContextMenu'||(event.shiftKey&&event.key==='F10')){event.preventDefault();const r=card.getBoundingClientRect();deviceMenu(peer,r.left+16,r.top+24);}});
+        card.addEventListener('contextmenu',event=>{event.preventDefault();deviceMenu(peer,event.clientX,event.clientY,can);});
+        card.addEventListener('keydown',event=>{if(event.key==='ContextMenu'||(event.shiftKey&&event.key==='F10')){event.preventDefault();const r=card.getBoundingClientRect();deviceMenu(peer,r.left+16,r.top+24,can);}});
       }
       box.append(card);
     }
@@ -374,6 +412,9 @@
   // elsewhere it opens the tasks.
   function filterComputer(id){
     computerFilter=computerFilter===id?'':id;
+    // T-096: a new computer starts with all its agents, so an agent chosen
+    // earlier cannot hide what runs there.
+    if($('agent-filter').value){$('agent-filter').value='';syncSelects();}
     if(computerFilter&&tab!=='stats'&&tab!=='agents')show('tasks');
     computerChanged();
   }
@@ -398,6 +439,15 @@
     const box=$('task-list');box.replaceChildren();
     const [active,done]=visibleTasks();
     computerChip($('computer-chip'));
+    // T-096: say when the agent filter hides active tasks, with a way back.
+    const agentChosen=$('agent-filter').value;
+    const hidden=agentChosen?(view?.tasks||[]).filter(t=>t.agent!==agentChosen&&activeStates.includes(t.state)&&(!computerFilter||taskComputer(t)===computerFilter)).length:0;
+    if(hidden){
+      const all=el('button',undefined,'am-task am-task-hidden');all.type='button';
+      all.append(el('span',tr('Фильтр «')+(names[agentChosen]||agentChosen)+tr('» скрывает активные задачи: ')+hidden,'am-task-agent'),el('span',tr('Показать всех агентов'),'am-status-run'));
+      all.addEventListener('click',()=>{$('agent-filter').value='';syncSelects();renderTaskList();});
+      box.append(all);
+    }
     $('task-count').textContent=view?.tasks?.length?String(view.tasks.length):'';
     const section=(label,items)=>{
       if(!items.length)return;
@@ -657,7 +707,7 @@
   }
   // The reply box is one line and grows only while its text does not fit;
   // the stop and send buttons stay at its bottom.
-  function sizeAnswer(){const f=$('answer-text');f.style.height='';if(f.value)f.style.height=Math.min(140,f.scrollHeight+(f.offsetHeight-f.clientHeight))+'px';}
+  function sizeAnswer(){const f=$('answer-text');f.style.height='';f.style.overflowY='';if(!f.value)return;const full=f.scrollHeight+(f.offsetHeight-f.clientHeight);f.style.height=Math.min(140,full)+'px';if(full>140)f.style.overflowY='auto';}
   // T-085: the owner may write to a working worker of this computer; the
   // message waits until the worker's current step ends.
   function canNote(t){return !!t&&!t.remote&&!t.owner_question&&(t.state==='running'||t.state==='waiting_coordinator');}

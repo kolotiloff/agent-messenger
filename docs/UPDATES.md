@@ -30,6 +30,10 @@ The window (`messenger open`) checks when it opens and then every 5 minutes, in 
 
 Any failure before step 4 leaves the program untouched and removes the staged file. The background client and its tasks are not touched; the window then offers «Перезапустить», as on the Mac. The program must sit in a folder the user can write to.
 
+### From another computer of the network (T-078, D-100)
+
+«Обновить программу» in the right-click menu of another computer in the sidebar asks that computer, through the broker's mailbox, to update itself. The item is offered only for a computer on line that reports its version (older ones would not answer). It answers at once: refused while any task is unfinished, on a Mac (update it in the app there), when its window never recorded the program file (`program.json` in the data folder, written each time `messenger open` starts) or while another update runs; otherwise «updating». Its client then starts the hidden `_remote-update` command from that program file, detached. The helper checks the tasks again, runs the same check and steps 1–4 above, restarts the background client from the installed program (the client's own shutdown command, then a start from a runtime copy; a pause stays), and writes `remote-update.json` (0600). Whichever client runs sends that result and removes the file; one that never appears is answered as failed after 30 minutes. If there is no newer release, the answer is «уже последняя версия», or a restart when the running client is older than the program file. Nothing is retried on its own; `active-runs.json` and reservations are not touched.
+
 ## Releasing from GitHub Actions
 
 The **Release Mac preview** workflow (`.github/workflows/release.yml`) builds, signs and publishes a preview from `main`. Run it by hand under Actions → Release Mac preview → Run workflow, with a version such as `0.0.0-preview.20` and release notes.

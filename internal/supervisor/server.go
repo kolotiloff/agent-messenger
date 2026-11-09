@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kolotiloff/agent-messenger/internal/broker"
+	"github.com/kolotiloff/agent-messenger/internal/buildinfo"
 	"github.com/kolotiloff/agent-messenger/internal/core"
 )
 
@@ -89,6 +90,12 @@ func (s *Supervisor) Server(_ context.Context, action string, payload json.RawMe
 		if err := s.store.SetNetLogShare(in.On); err != nil {
 			return nil, err
 		}
+	case "update":
+		// Another computer of the network installs the newest signed
+		// update (T-078); its answer arrives through the mailbox.
+		if _, err := s.store.RequestNetUpdate(in.Device); err != nil {
+			return nil, err
+		}
 	default:
 		return nil, errors.New("неизвестное действие сервера")
 	}
@@ -106,7 +113,11 @@ func (s *Supervisor) Server(_ context.Context, action string, payload json.RawMe
 	if err != nil {
 		return nil, err
 	}
-	return serverView{Status: st, NetFullAccess: full}, nil
+	updates, err := s.store.NetUpdates()
+	if err != nil {
+		return nil, err
+	}
+	return serverView{Status: st, NetFullAccess: full, Updates: updates}, nil
 }
 
 // presence describes this computer's agents for its network: the agent
@@ -116,7 +127,7 @@ func (s *Supervisor) presence() (broker.Presence, error) {
 	if err != nil {
 		return broker.Presence{}, err
 	}
-	p := broker.Presence{Agents: []broker.PresenceAgent{}, Coordinator: clipName(coordinator)}
+	p := broker.Presence{Agents: []broker.PresenceAgent{}, Coordinator: clipName(coordinator), Version: buildinfo.Version}
 	for _, a := range agents {
 		pa := broker.PresenceAgent{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting}
 		if len(a.Models) > 0 {
@@ -178,4 +189,6 @@ type serverView struct {
 	broker.Status
 	// NetFullAccess: tasks of other computers may use «Любые команды» (T-094).
 	NetFullAccess bool `json:"net_full_access"`
+	// Updates are the last update requests to the other computers (T-078).
+	Updates []core.NetUpdate `json:"updates"`
 }

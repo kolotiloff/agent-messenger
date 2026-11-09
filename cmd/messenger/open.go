@@ -40,6 +40,9 @@ func runOpen(root string, args []string, out io.Writer) error {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+	// The background client runs from a copy; a remote update (T-078)
+	// replaces the program file the owner installed.
+	recordProgram(root)
 	if err := ensureDesktopClient(ctx, root); err != nil {
 		return err
 	}

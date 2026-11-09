@@ -90,6 +90,9 @@ type Supervisor struct {
 	tasks         taskRuns
 	server        *broker.Service
 	net           netState
+	// startUpdate starts the update helper for another computer's request
+	// (T-078); nil when this client cannot be updated that way.
+	startUpdate UpdateStarter
 }
 
 type activeJob struct {
@@ -110,6 +113,9 @@ func Run(parent context.Context, root string, launcher Launcher) error {
 type RunOptions struct {
 	StartPaused bool
 	Ready       func() error
+	// StartUpdate starts the update helper when another computer of the
+	// network asks this one to update (T-078); nil refuses such requests.
+	StartUpdate UpdateStarter
 }
 
 func RunWithOptions(parent context.Context, root string, launcher Launcher, options RunOptions) error {
@@ -170,7 +176,7 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 	}
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
-	sup := &Supervisor{store: store, root: root, launcher: launcher, cancel: cancel, ctx: ctx}
+	sup := &Supervisor{store: store, root: root, launcher: launcher, cancel: cancel, ctx: ctx, startUpdate: options.StartUpdate}
 	defer sup.codex.closeAll()
 	server := broker.NewService(ctx, root)
 	sup.server = server

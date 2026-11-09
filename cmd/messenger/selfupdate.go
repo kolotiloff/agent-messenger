@@ -64,22 +64,7 @@ func windowSelfUpdate(ctx context.Context, home string, stop context.CancelFunc,
 		return nil
 	}
 	selfupdate.RemoveLeftover(executable)
-	channel := updatefeed.Channel{Directory: filepath.Join(home, "updates"), PublicKey: buildinfo.UpdatePublicKey}
-	running := selfupdate.Build(buildinfo.Version)
-	u := &selfupdate.Updater{
-		Channel:    channel,
-		Executable: executable,
-		Running:    running,
-		Sync: func(ctx context.Context) error {
-			_, err := channel.SyncGitHub(ctx, running)
-			return err
-		},
-	}
-	if prefix := installPrefix(executable); prefix != "" && runtime.GOOS != "windows" {
-		u.Install = func(program string, info buildinfo.Info) (string, error) {
-			return distribution.Install(program, prefix, info)
-		}
-	}
+	u := newUpdater(home, executable)
 	if u.Status().State != "unsupported" {
 		go func() {
 			for {
@@ -100,4 +85,26 @@ func windowSelfUpdate(ctx context.Context, home string, stop context.CancelFunc,
 			stop()
 		}
 	}}
+}
+
+// newUpdater builds the updater of the program file executable from the
+// signed channel in home: the window's and the remote update's (T-078).
+func newUpdater(home, executable string) *selfupdate.Updater {
+	channel := updatefeed.Channel{Directory: filepath.Join(home, "updates"), PublicKey: buildinfo.UpdatePublicKey}
+	running := selfupdate.Build(buildinfo.Version)
+	u := &selfupdate.Updater{
+		Channel:    channel,
+		Executable: executable,
+		Running:    running,
+		Sync: func(ctx context.Context) error {
+			_, err := channel.SyncGitHub(ctx, running)
+			return err
+		},
+	}
+	if prefix := installPrefix(executable); prefix != "" && runtime.GOOS != "windows" {
+		u.Install = func(program string, info buildinfo.Info) (string, error) {
+			return distribution.Install(program, prefix, info)
+		}
+	}
+	return u
 }

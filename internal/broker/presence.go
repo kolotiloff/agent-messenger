@@ -43,6 +43,9 @@ var modelName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/\[\]-]{0,79}$`)
 
 var agentName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 
+// versionName is what a reported program version may look like.
+var versionName = regexp.MustCompile(`^[0-9A-Za-z][0-9A-Za-z.+-]{0,63}$`)
+
 // PresenceAgent is one agent program of a computer.
 type PresenceAgent struct {
 	Agent   string `json:"agent"`
@@ -172,6 +175,10 @@ type Presence struct {
 	// UsageSeen lists the usage versions the reporting computer holds, by
 	// peer, so the roster leaves out what it already has. Not stored.
 	UsageSeen map[string]string `json:"usage_seen,omitempty"`
+	// Version is the program version of the reporting computer (T-078). A
+	// host before it refuses a report that carries it; the client then
+	// reports without it.
+	Version string `json:"version,omitempty"`
 }
 
 // Peer is one computer of the broker as others see it.
@@ -191,6 +198,9 @@ type Peer struct {
 	// Usage is the computer's token usage of the last days; nil if it
 	// never reported any (T-076).
 	Usage *PresenceUsageReport `json:"usage,omitempty"`
+	// Version is the computer's program version; empty if it did not
+	// report one (an older version, T-078).
+	Version string `json:"version,omitempty"`
 }
 
 // rosterResponse answers a presence report.
@@ -201,7 +211,7 @@ type rosterResponse struct {
 }
 
 func (p Presence) valid() bool {
-	if len(p.Agents) > maxPresenceAgents || len(p.Coordinator) > 64 || (p.Name != "" && !validDeviceName(p.Name)) || !p.Ready.valid() || !p.Usage.valid() || len(p.UsageSeen) > maxUsageSeen {
+	if len(p.Agents) > maxPresenceAgents || len(p.Coordinator) > 64 || (p.Name != "" && !validDeviceName(p.Name)) || !p.Ready.valid() || !p.Usage.valid() || len(p.UsageSeen) > maxUsageSeen || (p.Version != "" && !versionName.MatchString(p.Version)) {
 		return false
 	}
 	for peer, hash := range p.UsageSeen {
@@ -326,7 +336,7 @@ func fill(peer *Peer, report, at string, now time.Time) {
 	if p.Name != "" {
 		peer.Name = p.Name
 	}
-	peer.Coordinator, peer.Ready, peer.Usage = p.Coordinator, p.Ready, p.Usage
+	peer.Coordinator, peer.Ready, peer.Usage, peer.Version = p.Coordinator, p.Ready, p.Usage, p.Version
 	if p.Agents != nil {
 		peer.Agents = p.Agents
 	}

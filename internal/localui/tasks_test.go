@@ -180,7 +180,12 @@ func TestServerRoutes(t *testing.T) {
 	if last := got[len(got)-1]; code != 200 || last.Action != "accept" || last.Text != `{"on":true}` {
 		t.Fatalf("accept %d %+v", code, last)
 	}
-	for _, bad := range []string{`{"action":"delete-everything"}`, `{"action":"connect","code":"` + strings.Repeat("x", 3000) + `"}`, `{"action":"enable","extra":1}`, `{"action":"enable","port":70000}`} {
+	// T-078: asking another computer to update itself.
+	code, _ = do("POST", "/api/server-action", `{"action":"update","device":"dev-b"}`)
+	if last := got[len(got)-1]; code != 200 || last.Cmd != "server" || last.Action != "update" || last.Text != `{"device":"dev-b"}` {
+		t.Fatalf("update %d %+v", code, last)
+	}
+	for _, bad := range []string{`{"action":"update","device":"` + strings.Repeat("d", 65) + `"}`, `{"action":"delete-everything"}`, `{"action":"connect","code":"` + strings.Repeat("x", 3000) + `"}`, `{"action":"enable","extra":1}`, `{"action":"enable","port":70000}`} {
 		if code, _ := do("POST", "/api/server-action", bad); code != 400 {
 			t.Errorf("accepted %s: %d", bad[:min(len(bad), 60)], code)
 		}

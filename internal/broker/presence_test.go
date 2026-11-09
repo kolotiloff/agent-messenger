@@ -179,3 +179,55 @@ func TestPresenceReadiness(t *testing.T) {
 		t.Fatal("a project name with a line break passed")
 	}
 }
+
+// T-078: a computer reports its program version; an older host refuses
+// the field and the member reports without it, keeping its other fields.
+func TestPresenceVersion(t *testing.T) {
+	host := newService(t, t.TempDir())
+	if err := host.Enable(ScopeLocal, freePort(t)); err != nil {
+		t.Fatal(err)
+	}
+	code, err := host.Invite(host.Status().Host.Addresses[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	member := newService(t, t.TempDir())
+	if err := member.Connect(ctx(t), code.Code, "Ноутбук"); err != nil {
+		t.Fatal(err)
+	}
+	ready := &PresenceReady{Accept: true, Projects: []string{"Game"}}
+	member.SetPresence(func() (Presence, error) {
+		return Presence{Agents: []PresenceAgent{{Agent: "codex"}}, Ready: ready, Version: "0.0.0-preview.57"}, nil
+	})
+	host.SetPresence(func() (Presence, error) {
+		return Presence{Agents: []PresenceAgent{}, Version: "0.0.0-preview.56"}, nil
+	})
+	host.ReportPresence(ctx(t))
+	member.ReportPresence(ctx(t))
+	if peers := host.Status().Peers; len(peers) != 1 || peers[0].Version != "0.0.0-preview.57" {
+		t.Fatalf("host sees %+v", peers)
+	}
+	if peers := member.Status().Peers; len(peers) != 1 || peers[0].Version != "0.0.0-preview.56" {
+		t.Fatalf("member sees %+v", peers)
+	}
+
+	olderHost = func(p Presence) bool { return p.Version != "" }
+	t.Cleanup(func() { olderHost = nil })
+	member.SetPresence(func() (Presence, error) {
+		return Presence{Agents: []PresenceAgent{{Agent: "codex", Running: 1}}, Ready: ready, Version: "0.0.0-preview.58"}, nil
+	})
+	member.ReportPresence(ctx(t))
+	peers := host.Status().Peers
+	if len(peers) != 1 || peers[0].Version != "" || !reflect.DeepEqual(peers[0].Ready, ready) || peers[0].Agents[0].Running != 1 {
+		t.Fatalf("older host sees %+v", peers)
+	}
+	if ms := member.Status().Member; !ms.Reachable || ms.Error != "" {
+		t.Fatalf("member after fallback %+v", ms)
+	}
+
+	for _, bad := range []string{"0.1 beta", strings.Repeat("9", 65), "-1", "v1\n"} {
+		if (Presence{Agents: []PresenceAgent{}, Version: bad}).valid() {
+			t.Errorf("version %q passed", bad)
+		}
+	}
+}
