@@ -374,6 +374,9 @@
   // elsewhere it opens the tasks.
   function filterComputer(id){
     computerFilter=computerFilter===id?'':id;
+    // T-096: a new computer starts with all its agents, so an agent chosen
+    // earlier cannot hide what runs there.
+    if($('agent-filter').value){$('agent-filter').value='';syncSelects();}
     if(computerFilter&&tab!=='stats'&&tab!=='agents')show('tasks');
     computerChanged();
   }
@@ -398,6 +401,15 @@
     const box=$('task-list');box.replaceChildren();
     const [active,done]=visibleTasks();
     computerChip($('computer-chip'));
+    // T-096: say when the agent filter hides active tasks, with a way back.
+    const agentChosen=$('agent-filter').value;
+    const hidden=agentChosen?(view?.tasks||[]).filter(t=>t.agent!==agentChosen&&activeStates.includes(t.state)&&(!computerFilter||taskComputer(t)===computerFilter)).length:0;
+    if(hidden){
+      const all=el('button',undefined,'am-task am-task-hidden');all.type='button';
+      all.append(el('span',tr('Фильтр «')+(names[agentChosen]||agentChosen)+tr('» скрывает активные задачи: ')+hidden,'am-task-agent'),el('span',tr('Показать всех агентов'),'am-status-run'));
+      all.addEventListener('click',()=>{$('agent-filter').value='';syncSelects();renderTaskList();});
+      box.append(all);
+    }
     $('task-count').textContent=view?.tasks?.length?String(view.tasks.length):'';
     const section=(label,items)=>{
       if(!items.length)return;

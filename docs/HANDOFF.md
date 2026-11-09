@@ -11,6 +11,7 @@ The owner asked the agent to finish the program without them ("доделай б
 Updated 2026-11-09 (day) by Claude Code.
 
 - T-077 (D-091): automatic restart of the old client after an update. All collected changes go to `main` and a preview release. T-078 (remote update) waits for Q-025.
+- On `claude/ui-tweaks`, not released: T-096 agent filter reset and hint.
 - preview.56 released (PR #87 merged) with T-083 to T-095 (T-089 closed without code): writing to a working worker (D-096), a new coordinator chat starts from `tasks`, full final message with `task_output` (D-098), tokens in every report, the newest coordinator chat takes over (D-099), plain failure reasons, computers listed while reconnecting, `list_agents` explanations, security fixes (D-097), task times on cards. Not verified with real agents between real computers yet: check on the Mac and ПК-1. Working from different places through a VPN is described in BROKER.md.
 - preview.55 released (PR #86 merged) with: T-079 start screen (D-092), T-080 limit window and reset on the cards, the agent's raw limit fields in `list_agents` (D-093), T-081 limit warning in `start_task` (D-094), T-082 no system title bar on Mac and Linux (D-095; Mac: check dragging and double click by the top). After one real worker task of each agent, read `limit.reported` to learn whether a percent can be shown (Q-015).
 

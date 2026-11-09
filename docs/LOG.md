@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-09 — Claude Code (T-096 agent filter)
+
+- The owner did not see a running task of ПК-1: the agent filter was «Cursor». T-096: choosing a computer resets the filter; a hidden active task is announced with «Показать всех агентов». On `claude/ui-tweaks`, not released.
+
 ## 2026-11-09 — Claude Code (release preview.56)
 
 - Merged #87 (T-083 to T-095) and released preview.56; all files checked (Mac, Windows x64/ARM64, Linux x64/ARM64, checksums, 5 signed update feeds and archives).
