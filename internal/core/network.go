@@ -652,6 +652,12 @@ func (s *Store) NetUndeliverable(seq int64) error {
 				return err
 			}
 			return insertTaskEvent(tx, project, task, AudienceCoordinator, "failed", why, "")
+		case "continue":
+			t, err := scanTask(tx.QueryRow(`SELECT `+taskColumns+` FROM tasks WHERE id=?`, task).Scan)
+			if err != nil {
+				return err
+			}
+			return continueNotRun(tx, t, "the follow-up was not delivered: the other computer is no longer in the network; it never ran there")
 		case "answer", "cancel":
 			what := map[string]string{"answer": "the answer", "cancel": "the cancel request"}[kind]
 			why := what + " was not delivered: the other computer is no longer in the network; what happens there is unknown and nothing is retried"
@@ -710,9 +716,11 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 			return applyStart(tx, from, b)
 		case "answer":
 			return applyAnswer(tx, from, m.OpID, b)
+		case "continue":
+			return applyContinue(tx, from, b)
 		case "cancel":
 			return applyCancel(tx, from)
-		case "accepted", "refused", "event", "answer_refused", "progress":
+		case "accepted", "refused", "event", "answer_refused", "continue_refused", "progress":
 			return applyReport(tx, from, b)
 		case "log_request":
 			return applyLogRequest(tx, from, b)
@@ -898,6 +906,8 @@ func applyReport(tx *sql.Tx, from netLink, b netBody) error {
 			return err
 		}
 		return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "failed", why, "")
+	case "continue_refused":
+		return continueNotRun(tx, t, name+" did not continue the task: "+clip(b.Reason, 2000))
 	case "answer_refused":
 		if t.State != "running" {
 			return nil

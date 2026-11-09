@@ -1718,75 +1718,88 @@ func (s *Store) ContinueTaskChecked(task, opID, text, by string, gone WorkerGone
 		return fmt.Errorf("%w: only the coordinator continues a task", ErrRejected)
 	}
 	return s.tx(func(tx *sql.Tx) error {
-		var oldTask, oldInput string
-		err := tx.QueryRow(`SELECT task_id,input FROM task_runs WHERE op_id=?`, opID).Scan(&oldTask, &oldInput)
-		if err == nil {
-			if oldTask == task && oldInput == text {
-				return nil
-			}
-			return fmt.Errorf("%w: this operation id was used for another follow-up", ErrRejected)
-		}
-		if !errors.Is(err, sql.ErrNoRows) {
-			return err
-		}
-		t, err := scanTask(tx.QueryRow(`SELECT `+taskColumns+` FROM tasks WHERE id=?`, task).Scan)
-		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("%w: unknown task", ErrRejected)
-		}
-		if err != nil {
-			return err
-		}
-		interrupted := t.State == "interrupted" && gone != nil
-		if t.State != "done" && t.State != "failed" && !interrupted {
-			return fmt.Errorf("%w: only a finished task (done or failed) or an interrupted one can be continued; this one is %s", ErrRejected, t.State)
-		}
 		link, err := taskLink(tx, task)
 		if err != nil {
 			return err
 		}
-		if link.origin != nil || link.remote != nil {
-			return fmt.Errorf("%w: a task of another computer cannot be continued yet; start a new task", ErrRejected)
+		if link.remote != nil {
+			return continueRemoteTask(tx, task, *link.remote, opID, text)
 		}
-		if interrupted {
-			if err := closeInterruptedRuns(tx, task, gone); err != nil {
-				return err
-			}
-		}
-		if t.SessionID == "" {
-			return fmt.Errorf("%w: no recorded conversation to continue; start a new task", ErrRejected)
-		}
-		var paused int
-		if err := tx.QueryRow(`SELECT paused FROM computer_agents WHERE computer=? AND provider=?`, t.Computer, t.Provider).Scan(&paused); err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return err
-		}
-		if paused != 0 {
-			return errAgentPaused(t.Provider)
-		}
-		var open int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM task_runs WHERE task_id=? AND state IN ('intent','launching','running','blocked','interrupted')`, task).Scan(&open); err != nil {
-			return err
-		}
-		if open != 0 {
-			return fmt.Errorf("%w: a run of this task is not finished or its outcome is unclear", ErrRejected)
-		}
-		var ordinal int
-		if err := tx.QueryRow(`SELECT MAX(ordinal) FROM task_runs WHERE task_id=?`, task).Scan(&ordinal); err != nil {
-			return err
-		}
-		if err := insertTaskRun(tx, task, ordinal+1, "continue", text); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(`UPDATE task_runs SET op_id=? WHERE task_id=? AND ordinal=?`, opID, task, ordinal+1); err != nil {
-			return err
-		}
-		if err := setTaskState(tx, task, "running", "continued; the same conversation resumes"); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(`UPDATE tasks SET finished_at=NULL WHERE id=?`, task); err != nil {
-			return err
-		}
-		return insertTaskEvent(tx, t.Project, task, AudienceLog, "continued", text, "")
+		return continueTaskTx(tx, task, opID, text, gone, false)
 	})
+}
+
+// continueTaskTx continues a task that runs on this computer. fromNet is
+// set when the computer that started it asked (T-113).
+func continueTaskTx(tx *sql.Tx, task, opID, text string, gone WorkerGone, fromNet bool) error {
+	var oldTask, oldInput string
+	err := tx.QueryRow(`SELECT task_id,input FROM task_runs WHERE op_id=?`, opID).Scan(&oldTask, &oldInput)
+	if err == nil {
+		if oldTask == task && oldInput == text {
+			return nil
+		}
+		return fmt.Errorf("%w: this operation id was used for another follow-up", ErrRejected)
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	t, err := scanTask(tx.QueryRow(`SELECT `+taskColumns+` FROM tasks WHERE id=?`, task).Scan)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("%w: unknown task", ErrRejected)
+	}
+	if err != nil {
+		return err
+	}
+	interrupted := t.State == "interrupted" && gone != nil
+	if t.State != "done" && t.State != "failed" && !interrupted {
+		return fmt.Errorf("%w: only a finished task (done or failed) or an interrupted one can be continued; this one is %s", ErrRejected, t.State)
+	}
+	link, err := taskLink(tx, task)
+	if err != nil {
+		return err
+	}
+	if link.remote != nil || (link.origin != nil && !fromNet) {
+		return fmt.Errorf("%w: another computer's coordinator manages this task", ErrRejected)
+	}
+	if interrupted {
+		if err := closeInterruptedRuns(tx, task, gone); err != nil {
+			return err
+		}
+	}
+	if t.SessionID == "" {
+		return fmt.Errorf("%w: no recorded conversation to continue; start a new task", ErrRejected)
+	}
+	var paused int
+	if err := tx.QueryRow(`SELECT paused FROM computer_agents WHERE computer=? AND provider=?`, t.Computer, t.Provider).Scan(&paused); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if paused != 0 {
+		return errAgentPaused(t.Provider)
+	}
+	var open int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM task_runs WHERE task_id=? AND state IN ('intent','launching','running','blocked','interrupted')`, task).Scan(&open); err != nil {
+		return err
+	}
+	if open != 0 {
+		return fmt.Errorf("%w: a run of this task is not finished or its outcome is unclear", ErrRejected)
+	}
+	var ordinal int
+	if err := tx.QueryRow(`SELECT MAX(ordinal) FROM task_runs WHERE task_id=?`, task).Scan(&ordinal); err != nil {
+		return err
+	}
+	if err := insertTaskRun(tx, task, ordinal+1, "continue", text); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE task_runs SET op_id=? WHERE task_id=? AND ordinal=?`, opID, task, ordinal+1); err != nil {
+		return err
+	}
+	if err := setTaskState(tx, task, "running", "continued; the same conversation resumes"); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE tasks SET finished_at=NULL WHERE id=?`, task); err != nil {
+		return err
+	}
+	return insertTaskEvent(tx, t.Project, task, AudienceLog, "continued", text, "")
 }
 
 // closeInterruptedRuns closes the task's interrupted runs as failed when
