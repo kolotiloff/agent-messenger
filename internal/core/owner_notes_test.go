@@ -192,3 +192,50 @@ func TestOwnerNoteRefusals(t *testing.T) {
 		t.Fatalf("long note: %v", err)
 	}
 }
+
+// T-114: the coordinator writes to a working worker the same way; the note
+// is marked as the coordinator's and raises no event back to it.
+func TestCoordinatorNoteWaitsForTheRun(t *testing.T) {
+	f := newTaskFixture(t)
+	id := f.start(t, "op", "claude", "Build the grid")
+	r := f.launch(t, id, f.sessionOf(t, id))
+	if err := f.st.AddCoordinatorNote("Other", id, "c0", "x"); !errors.Is(err, ErrRejected) {
+		t.Fatalf("note across projects: %v", err)
+	}
+	if err := f.st.AddCoordinatorNote("Game", id, "c1", "Also add a legend"); err != nil {
+		t.Fatal(err)
+	}
+	events, _, _ := f.st.TaskEvents("Game", AudienceCoordinator, 0, 50)
+	for _, e := range events {
+		if e.Kind == "owner_note" {
+			t.Fatalf("coordinator told about its own note: %+v", e)
+		}
+	}
+	f.dispose(t, r, DispositionReport, "Grid built")
+	if _, err := f.st.FinishTaskRun(r.ID, cleanExit); err != nil {
+		t.Fatal(err)
+	}
+	r2 := f.launch(t, id, f.sessionOf(t, id))
+	brief, err := f.st.ReadTask(r2.ID, r2.Receipt, false)
+	if err != nil || r2.Kind != "note" || !strings.Contains(brief.OwnerNotes, "From the coordinator: Also add a legend") {
+		t.Fatalf("brief %+v %v", brief, err)
+	}
+	feed, err := f.st.TaskFeed(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, it := range feed.Items {
+		found = found || (it.Kind == "note" && it.Author == AudienceCoordinator && it.State == "delivered")
+	}
+	if !found {
+		t.Fatalf("feed %+v", feed.Items)
+	}
+	f.dispose(t, r2, DispositionAsk, "Which colours?")
+	if _, err := f.st.FinishTaskRun(r2.ID, cleanExit); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.AddCoordinatorNote("Game", id, "c2", "Blue"); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "answer") {
+		t.Fatalf("note instead of an answer: %v", err)
+	}
+}

@@ -180,6 +180,7 @@ func Open(path string) (*Store, error) {
 		{"net_peers", "missing_since", "TEXT NOT NULL DEFAULT ''"},
 		{"net_peers", "version", "TEXT NOT NULL DEFAULT ''"},
 		{"tasks", "resource", "TEXT NOT NULL DEFAULT ''"},
+		{"task_owner_notes", "author", "TEXT NOT NULL DEFAULT 'owner'"},
 		networkTaskColumns[0], networkTaskColumns[1], networkTaskColumns[2],
 		networkTaskColumns[3], networkTaskColumns[4], networkTaskColumns[5],
 		networkTaskColumns[6],

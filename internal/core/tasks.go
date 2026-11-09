@@ -1317,13 +1317,13 @@ type TaskBrief struct {
 const continuedTaskNote = "This run continues the same conversation after you finished the task. Do what follow_up asks; the task text is the one from your first read_task."
 
 // ownerNoteTaskNote tells a worker why its run goes on after its report.
-const ownerNoteTaskNote = "This run continues the same conversation. The owner wrote to you while you worked (owner_notes), " +
+const ownerNoteTaskNote = "This run continues the same conversation. The owner (or the coordinator, where a note starts with «From the coordinator») wrote to you while you worked (owner_notes), " +
 	"so your report (held_report) was not sent yet. Take what the owner wrote into account, then end the run as before " +
 	"with exactly one report, ask or ask_owner; the report should cover the whole task."
 
 // ownerNotesAlsoNote is added when owner notes come with an answer or a
 // follow-up.
-const ownerNotesAlsoNote = "The owner also wrote to you while you worked: see owner_notes."
+const ownerNotesAlsoNote = "The owner or the coordinator also wrote to you while you worked: see owner_notes."
 
 // resumedTaskNote tells a resumed worker where its task text is.
 const resumedTaskNote = "This run continues the same conversation, which already has the task from your first read_task. " +
