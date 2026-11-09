@@ -707,7 +707,7 @@
   }
   // The reply box is one line and grows only while its text does not fit;
   // the stop and send buttons stay at its bottom.
-  function sizeAnswer(){const f=$('answer-text');f.style.height='';if(f.value)f.style.height=Math.min(140,f.scrollHeight+(f.offsetHeight-f.clientHeight))+'px';}
+  function sizeAnswer(){const f=$('answer-text');f.style.height='';f.style.overflowY='';if(!f.value)return;const full=f.scrollHeight+(f.offsetHeight-f.clientHeight);f.style.height=Math.min(140,full)+'px';if(full>140)f.style.overflowY='auto';}
   // T-085: the owner may write to a working worker of this computer; the
   // message waits until the worker's current step ends.
   function canNote(t){return !!t&&!t.remote&&!t.owner_question&&(t.state==='running'||t.state==='waiting_coordinator');}
