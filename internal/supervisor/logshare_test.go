@@ -70,6 +70,19 @@ func TestLogTail(t *testing.T) {
 	if len(lines) != 5 || lines[4] != "последняя" || strings.Contains(got, "старый") {
 		t.Fatalf("tail %q", got)
 	}
+	// A newer empty log (a client that just started) is skipped; only
+	// empty logs give a reason instead of an empty answer.
+	empty := filepath.Join(root, "background-3.log")
+	_ = os.WriteFile(empty, nil, 0o600)
+	if got, err := logTail(root, 5); err != nil || !strings.HasSuffix(got, "последняя\n") {
+		t.Fatalf("with an empty newer log %q %v", got, err)
+	}
+	only := t.TempDir()
+	_ = os.WriteFile(filepath.Join(only, "background-1.log"), nil, 0o600)
+	if _, err := logTail(only, 5); err == nil || !strings.Contains(err.Error(), "empty") {
+		t.Fatalf("empty log: %v", err)
+	}
+	_ = os.Remove(empty)
 	// A huge log is read from its end only, within the byte limit.
 	_ = os.WriteFile(filepath.Join(root, "background-2.log"), []byte(strings.Repeat(strings.Repeat("я", 500)+"\n", 2000)+"конец\n"), 0o600)
 	got, err = logTail(root, 1000)

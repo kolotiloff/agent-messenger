@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -60,7 +61,7 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - One chat is the project's coordinator at a time: the newest chat that waits or acts. If wait answers superseded: true, another chat took over; stop, do not call wait again, and tell the owner, unless they ask you to take over again.
 - A new chat starts from the current state, not from the history: first call tasks, which gives the open tasks, their open questions and the event cursor, then wait with after = that cursor. Never wait from 0 in a new chat: it replays every old event of the project. Agreements of an earlier coordinator chat that are not in the project's rules or files are not known here; ask the owner when it matters.
 - wait returns the events of this project's tasks after the cursor: a report, a question for you, a failure, an interruption, a block or a cancellation; with none, it blocks until one comes or timeout_seconds pass (default 60, at most 120). Always pass after = the cursor from the previous wait. When it returns events, act on them (answer questions with answer, tell the owner about reports). If it says more: true, more events are ready: call wait again at once with the new cursor.
-- Do not hold your turn in wait while workers run: the owner's messages reach you only between your turns, so a chat that waits again and again cannot hear them. Instead, once tasks are started or answered, run the background watch command (below) with your shell tool in the background, so your turn can end; tell the owner in a line what is running and end your turn. The command exits when an event arrives, or after 30 minutes with none, and you are woken with its output. Then call wait with your cursor and timeout_seconds 1 to read the events, act on them, start the watch again with the new cursor and end your turn. If it exited with no events, start it again with the same cursor. Use tasks to see the state of open tasks at any time. Only if you have no background shell, wait with the default timeout and answer the owner between waits.
+- Do not hold your turn in wait while workers run: the owner's messages reach you only between your turns, so a chat that waits again and again cannot hear them. Instead, once tasks are started or answered, run the background watch command (given at the top of these instructions and in every wait and tasks result as watch) with your shell tool in the background, so your turn can end; tell the owner in a line what is running and end your turn. The command exits when an event arrives, or after 30 minutes with none, and you are woken with its output. Then call wait with your cursor and timeout_seconds 1 to read the events, act on them, start the watch again with the new cursor and end your turn. If it exited with no events, start it again with the same cursor. Use tasks to see the state of open tasks at any time. Only if you have no background shell, wait with the default timeout and answer the owner between waits.
 - When you wake up because of the owner (a new message or an interrupted wait), first call wait with your last cursor and timeout_seconds 1 to see what workers sent meanwhile, then answer the owner, then make sure a watch runs. When another tool's answer ends with a «Messenger: … new events» note, events are waiting for you: read them with wait after this step.
 - start_task takes an optional model. Leave it out for the agent's default. For Claude use opus for hard work (design, tricky bugs, large refactors), sonnet for ordinary coding, haiku for small mechanical work. For Codex and Cursor pass only a name from that agent's models in list_agents (the owner lists them in the window); if the list is empty, leave model out. Never guess a name: an unknown model fails the run. Tell the owner when you chose a non-default model and why.
 - A report is the worker's short summary. Its full last message is kept too: when a report or failure ends with «[Messenger] The worker's full final message has N characters», read it with task_output before asking the worker again; it is lost nowhere, even if the worker deleted its file.
@@ -87,6 +88,8 @@ How work is planned and split is decided with the owner under this project's own
 type coordinator struct {
 	store   *core.Store
 	project string
+	// watch is the background watch command with CURSOR in it, or "".
+	watch   string
 	out     sync.Mutex
 	w       io.Writer
 	mu      sync.Mutex
@@ -173,7 +176,7 @@ func serveCoordinator(store *core.Store, project, watch string, in io.Reader, ou
 			return err
 		}
 	}
-	c := &coordinator{store: store, project: project, w: out, pending: map[string]context.CancelFunc{}, chat: chat}
+	c := &coordinator{store: store, project: project, watch: watch, w: out, pending: map[string]context.CancelFunc{}, chat: chat}
 	var wg sync.WaitGroup
 	defer wg.Wait()
 	scanner := bufio.NewScanner(in)
@@ -216,7 +219,7 @@ func serveCoordinator(store *core.Store, project, watch string, in io.Reader, ou
 				"protocolVersion": p.ProtocolVersion,
 				"capabilities":    map[string]any{"tools": map[string]any{"listChanged": true}},
 				"serverInfo":      map[string]any{"name": "agent-messenger", "version": "0.2.0"},
-				"instructions":    coordinatorInstructions + "\nProject: " + c.project + watchNote(watch),
+				"instructions":    watchNote(watch) + coordinatorInstructions + "\nProject: " + c.project,
 			}, nil)
 		case req.Method == "ping":
 			c.respond(req.ID, map[string]any{}, nil)
@@ -657,7 +660,7 @@ func (c *coordinator) tasks(state string, limit int, ifVersion string) (any, err
 		return nil, err
 	}
 	if ifVersion != "" && ifVersion == version {
-		return map[string]any{"unchanged": true, "version": version, "cursor": cursor}, nil
+		return c.withWatch(map[string]any{"unchanged": true, "version": version, "cursor": cursor}, cursor), nil
 	}
 	tasks, err := c.store.Tasks(c.project, coordinatorTaskMax)
 	if err != nil {
@@ -714,7 +717,7 @@ func (c *coordinator) tasks(state string, limit int, ifVersion string) (any, err
 		}
 		out = append(out, item)
 	}
-	result := map[string]any{"tasks": out, "cursor": cursor, "version": version}
+	result := c.withWatch(map[string]any{"tasks": out, "cursor": cursor, "version": version}, cursor)
 	if more {
 		result["more"] = true
 	}
@@ -767,14 +770,14 @@ func (c *coordinator) wait(ctx context.Context, after int64, timeout time.Durati
 				result["more"] = true
 				result["next"] = fmt.Sprintf("More events are ready. Act on these, then call wait with after=%d at once.", cursor)
 			}
-			return result, nil
+			return c.withWatch(result, cursor), nil
 		}
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-deadline.C:
-			return map[string]any{"events": []core.TaskEvent{}, "cursor": after, "timed_out": true,
-				"next": fmt.Sprintf("Nothing yet. Call wait again with after=%d.", after)}, nil
+			return c.withWatch(map[string]any{"events": []core.TaskEvent{}, "cursor": after, "timed_out": true,
+				"next": fmt.Sprintf("Nothing yet. Call wait again with after=%d.", after)}, after), nil
 		case <-tick.C:
 			if hasProgress && time.Since(lastProgress) >= coordinatorProgress {
 				lastProgress = time.Now()
@@ -839,7 +842,16 @@ func watchNote(watch string) string {
 	if watch == "" {
 		return ""
 	}
-	return "\nBackground watch command (put your cursor in place of CURSOR; run it in the background): " + watch
+	return "Background watch command (put your cursor in place of CURSOR; run it in the background with your shell tool): " + watch + "\n"
+}
+
+// withWatch adds the watch command for cursor to a wait or tasks result,
+// so a client that cut the instructions short still has it (row 28).
+func (c *coordinator) withWatch(result map[string]any, cursor int64) map[string]any {
+	if c.watch != "" {
+		result["watch"] = strings.ReplaceAll(c.watch, "CURSOR", strconv.FormatInt(cursor, 10))
+	}
+	return result
 }
 
 type coordinatorMessage struct {

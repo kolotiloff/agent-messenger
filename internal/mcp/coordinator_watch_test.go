@@ -58,3 +58,20 @@ func TestCoordinatorWatchLineIsQuoted(t *testing.T) {
 		t.Fatalf("got  %s\nwant %s", line, want)
 	}
 }
+
+// Row 28: clients cut long instructions short, so the watch command comes
+// first and every wait and tasks result carries it with the cursor in place.
+func TestWatchCommandComesFirstAndInResults(t *testing.T) {
+	watch := "messenger coordinator-watch --project 'Game' --after CURSOR"
+	if note := watchNote(watch); !strings.HasPrefix(note, "Background watch command") || !strings.Contains(note, watch) {
+		t.Fatalf("note %q", note)
+	}
+	c := &coordinator{watch: watch}
+	got := c.withWatch(map[string]any{"cursor": int64(42)}, 42)["watch"]
+	if got != "messenger coordinator-watch --project 'Game' --after 42" {
+		t.Fatalf("watch %v", got)
+	}
+	if _, ok := (&coordinator{}).withWatch(map[string]any{}, 1)["watch"]; ok {
+		t.Fatal("watch without a command")
+	}
+}

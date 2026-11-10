@@ -691,6 +691,14 @@ func (s *Store) ComputerName() (string, error) {
 	return name, err
 }
 
+// ComputerID is this computer's lasting id, the same in every network
+// (T-132).
+func (s *Store) ComputerID() (string, error) {
+	var id string
+	err := s.tx(func(tx *sql.Tx) (err error) { id, err = localComputer(tx); return })
+	return id, err
+}
+
 // AdoptComputerName keeps name as this computer's name unless the owner
 // already chose one. A computer that joined a network before the window
 // remembered the joining name (D-061) still uses the name the others see.

@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS net_applied (
  applied_at TEXT NOT NULL,
  PRIMARY KEY (broker, sender, op_id)
 );
+CREATE INDEX IF NOT EXISTS net_applied_op ON net_applied(op_id);
 CREATE TABLE IF NOT EXISTS net_peers (
  peer TEXT PRIMARY KEY,
  name TEXT NOT NULL,
@@ -108,6 +109,10 @@ type NetPeer struct {
 	// Version is the program version the computer reported (T-078); empty
 	// for an older version.
 	Version string
+	// Computer is the computer's own lasting id (T-132): it stays the same
+	// when the computer joins another network, where its peer id is new.
+	// Empty for a computer before 0.61.
+	Computer string
 }
 
 // reconnectGrace is how long a computer that left the server's list stays
@@ -191,6 +196,10 @@ type netBody struct {
 	// Usage is the running computer's total for the task (T-058). A
 	// computer before it ignores the field.
 	Usage *TaskUsage `json:"usage,omitempty"`
+	// Computer is the sender's lasting id (T-132), set on every message, so
+	// the receiver finds the tasks it shares with that computer after the
+	// network changed. A computer before 0.61 ignores it.
+	Computer string `json:"computer,omitempty"`
 	// Lock is the task's resource lock (T-072). A computer before it
 	// ignores it.
 	Lock string `json:"lock,omitempty"`
@@ -220,6 +229,11 @@ func safeNetOp(opID string) string {
 
 func enqueueNet(tx *sql.Tx, broker, to, opID, task string, b netBody) error {
 	opID = safeNetOp(opID)
+	self, err := localComputer(tx)
+	if err != nil {
+		return err
+	}
+	b.Computer = self
 	raw, err := json.Marshal(b)
 	if err != nil {
 		return err
@@ -348,7 +362,21 @@ func (s *Store) SetNetwork(broker, self string, peers []NetPeer) error {
 				u, _ := json.Marshal(p.Usage)
 				usage = string(u)
 			}
-			if _, err := tx.Exec(`INSERT INTO net_peers(peer,name,host,age,agents,ready,usage,updated_at,missing_since,version) VALUES (?,?,?,?,?,?,?,?,?,?)`, p.ID, p.Name, boolInt(p.Host), p.Age, string(raw), ready, usage, at, missing[p.ID], clip(p.Version, 64)); err != nil {
+			if _, err := tx.Exec(`INSERT INTO net_peers(peer,name,host,age,agents,ready,usage,updated_at,missing_since,version,computer) VALUES (?,?,?,?,?,?,?,?,?,?,?)`, p.ID, p.Name, boolInt(p.Host), p.Age, string(raw), ready, usage, at, missing[p.ID], clip(p.Version, 64), validComputer(p.Computer)); err != nil {
+				return err
+			}
+		}
+		// T-132: tasks shared with a computer follow it into this network.
+		if err := fillComputers(tx, broker, peers); err != nil {
+			return err
+		}
+		for _, p := range peers {
+			// Only a computer that reports now: an old entry of the same
+			// computer (it joined again) must not take its tasks back.
+			if p.Reconnecting || p.Age < 0 || p.Age > PeerFresh || validComputer(p.Computer) == "" {
+				continue
+			}
+			if err := rebindComputer(tx, p.Computer, broker, p.ID); err != nil {
 				return err
 			}
 		}
@@ -369,7 +397,7 @@ func (s *Store) NetPeers() ([]NetPeer, error) {
 }
 
 func netPeers(tx *sql.Tx) ([]NetPeer, error) {
-	rows, err := tx.Query(`SELECT peer,name,host,age,agents,ready,usage,updated_at,missing_since!='',version FROM net_peers ORDER BY host DESC, name, peer`)
+	rows, err := tx.Query(`SELECT peer,name,host,age,agents,ready,usage,updated_at,missing_since!='',version,computer FROM net_peers ORDER BY host DESC, name, peer`)
 	if err != nil {
 		return nil, err
 	}
@@ -379,7 +407,7 @@ func netPeers(tx *sql.Tx) ([]NetPeer, error) {
 		var p NetPeer
 		var host int
 		var agents, ready, usage, at string
-		if err := rows.Scan(&p.ID, &p.Name, &host, &p.Age, &agents, &ready, &usage, &at, &p.Reconnecting, &p.Version); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &host, &p.Age, &agents, &ready, &usage, &at, &p.Reconnecting, &p.Version, &p.Computer); err != nil {
 			return nil, err
 		}
 		p.Host = host != 0
@@ -513,6 +541,9 @@ func startRemoteTask(tx *sql.Tx, r StartTaskRequest) (string, error) {
 	title := taskTitle(r.Title, r.Text)
 	if _, err := tx.Exec(`INSERT INTO tasks(id,project,op_id,computer,provider,cli_path,environment,profile,folder,title,text,state,detail,created_at,updated_at,model,remote_broker,remote_peer,resource,remote_name) VALUES (?,?,?,?,?,'','','','',?,?,'running',?,?,?,?,?,?,?,?)`,
 		id, r.Project, r.OpID, r.Computer, r.Provider, title, r.Text, "sent to "+peer.Name+"; waiting for it to accept", at, at, r.Model, broker, r.Computer, r.Lock, peer.Name); err != nil {
+		return "", err
+	}
+	if _, err := tx.Exec(`UPDATE tasks SET remote_computer=? WHERE id=?`, validComputer(peer.Computer), id); err != nil {
 		return "", err
 	}
 	if err := insertTaskEvent(tx, r.Project, id, AudienceLog, "started", title, ""); err != nil {
@@ -732,11 +763,18 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 		if err := setMeta(tx, "net_cursor:"+broker, fmt.Sprint(cursor)); err != nil {
 			return err
 		}
+		// T-132: a message re-sent through a new network after the old one
+		// may already have delivered it carries the same op id; it is
+		// applied once whatever network and sender id it came with.
+		var seen int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM net_applied WHERE op_id=?`, m.OpID).Scan(&seen); err != nil {
+			return err
+		}
 		res, err := tx.Exec(`INSERT INTO net_applied(broker,sender,op_id,applied_at) VALUES (?,?,?,?) ON CONFLICT DO NOTHING`, broker, m.From, m.OpID, now())
 		if err != nil {
 			return err
 		}
-		if n, _ := res.RowsAffected(); n == 0 {
+		if n, _ := res.RowsAffected(); n == 0 || seen > 0 {
 			return nil
 		}
 		var b netBody
@@ -746,9 +784,18 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 			return nil
 		}
 		from := netLink{broker: broker, peer: m.From, task: b.Task}
+		if c := validComputer(b.Computer); c != "" {
+			if err := rebindComputer(tx, c, broker, m.From); err != nil {
+				return err
+			}
+		}
 		switch b.Kind {
 		case "start":
-			return applyStart(tx, from, b)
+			if err := applyStart(tx, from, b); err != nil {
+				return err
+			}
+			_, err := tx.Exec(`UPDATE tasks SET origin_computer=? WHERE origin_broker=? AND origin_peer=? AND origin_task=? AND origin_computer=''`, validComputer(b.Computer), from.broker, from.peer, from.task)
+			return err
 		case "answer":
 			return applyAnswer(tx, from, m.OpID, b)
 		case "continue":

@@ -118,6 +118,8 @@ func newLinkFixture(t *testing.T, withClaude bool) linkFixture {
 	f := linkFixture{sup: &Supervisor{store: st, root: root}, folder: folder, home: home, messenger: exe, project: "Game",
 		log: filepath.Join(t.TempDir(), "calls"), config: filepath.Join(home, ".claude.json")}
 	t.Setenv("MESSENGER_CLAUDE_MCP_LOG", f.log)
+	// Background repairs end before the store closes.
+	t.Cleanup(f.sup.bg.Wait)
 	return f
 }
 

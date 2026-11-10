@@ -2,6 +2,13 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-10 — Claude Code (T-132, coordinator list rows 28 and 32, WIP)
+
+- T-132 (D-115): tasks follow a computer into a new network by a lasting computer id; starts are never re-sent.
+- T-134: watch command first in the coordinator instructions and in every `wait`/`tasks` result; `get_log` gives a reason for an empty log; Codex and Cursor failures carry the CLI's error text.
+- A flaky supervisor test fixed: the background coordinator repair finishes before the store closes.
+- Still to do for 0.61: rows 24, 26, 30, 31 of the coordinator list, T-133 (scroll arrow, screenshots first).
+
 ## 2026-11-10 — Claude Code (T-131 stuck tasks, WIP)
 
 - T-131 (D-114): lost-contact status for other computers' tasks; own task out of reach shows «Закрыть» instead of input and stop; right-click «Удалить из списка». Dialogs close with a cross. Screenshots shown to the owner.

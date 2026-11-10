@@ -351,8 +351,9 @@ func ParseTaskEvent(provider string, line []byte, r *TaskEventResult) {
 			}
 		case "turn.failed", "error":
 			r.Completed = false
-			r.Failure = "Codex " + kind
-			r.noteFailure(errorText(e), taskNow())
+			text := errorText(e)
+			r.Failure = withErrorText("Codex "+kind, text)
+			r.noteFailure(text, taskNow())
 		}
 	case "cursor":
 		parseCursorEvent(e, kind, r, note)

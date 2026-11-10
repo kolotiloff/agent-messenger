@@ -221,8 +221,9 @@ func parseCursorEvent(e map[string]any, kind string, r *TaskEventResult, note fu
 		}
 	case "error":
 		r.Completed = false
-		r.Failure = "Cursor error"
-		r.noteFailure(errorText(e), taskNow())
+		text := errorText(e)
+		r.Failure = withErrorText("Cursor error", text)
+		r.noteFailure(text, taskNow())
 	default:
 		// Every other event names the same chat; a different one is a
 		// conflict.

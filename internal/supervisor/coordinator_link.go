@@ -165,7 +165,9 @@ func (s *Supervisor) repairStaleCoordinator(project string) {
 	if _, tried := staleRepairs.LoadOrStore(s.root+"\x00"+project, true); tried {
 		return
 	}
+	s.bg.Add(1)
 	go func() {
+		defer s.bg.Done()
 		t, _, ok := s.coordinatorTarget(project)
 		if !ok || t.cli == "" || s.readCoordinatorLink(project, t).State != adapters.LinkStale {
 			return

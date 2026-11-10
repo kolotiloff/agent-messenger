@@ -95,7 +95,7 @@ func TestParseTaskEventFailureReasons(t *testing.T) {
 		t.Fatalf("codex limit %+v", r)
 	}
 	r = feed("codex", `{"type":"turn.failed","error":{"message":"stream disconnected before completion"}}`)
-	if r.Reason != ReasonOther || r.Failure == "" {
+	if r.Reason != ReasonOther || r.Failure != "Codex turn.failed: stream disconnected before completion" {
 		t.Fatalf("codex unknown %+v", r)
 	}
 }

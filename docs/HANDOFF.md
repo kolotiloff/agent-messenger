@@ -10,8 +10,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Updated 2026-11-10 (day) by Claude Code.
 
-- On `claude/ui-tweaks`, not released: T-128 busy update icon, T-131 stuck tasks (D-114). Screenshots of all dialogs sent to the owner.
-- Next: T-132 (tasks stranded by moving the server), the coordinator list rows 24–31, the feedback channel idea (not started, needs the owner's go).
+- On `claude/ui-tweaks`, not released (all goes into 0.61, released after the whole coordinator list is done): T-128 busy update icon, T-131 stuck tasks (D-114), T-132 tasks follow a computer into a new network (D-115), T-134 coordinator list rows 28 and 32.
+- Next: coordinator list rows 24, 26, 30, 31; T-133 scroll arrow (screenshots first); row 27 (closing local interrupted tasks) needs the owner's OK because of D-021/D-108; row 29 (waking the coordinator) needs discussion; the feedback channel idea (not started).
 
 Updated 2026-11-10 (morning) by Claude Code.
 

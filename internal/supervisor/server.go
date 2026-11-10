@@ -154,6 +154,11 @@ func (s *Supervisor) presence() (broker.Presence, error) {
 	if name, err := s.store.ComputerName(); err == nil {
 		p.Name = clipName(name)
 	}
+	// The lasting id lets tasks follow this computer into another network
+	// (T-132).
+	if id, err := s.store.ComputerID(); err == nil {
+		p.Computer = id
+	}
 	// Readiness for other computers' tasks (T-070): left out if it cannot
 	// be read, so the others see it as unknown rather than wrong.
 	if accept, err := s.store.NetAccept(); err == nil {
