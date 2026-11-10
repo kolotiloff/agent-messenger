@@ -4,7 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-10 — Claude Code (T-131 stuck tasks, WIP)
 
-- T-131 (D-114): lost-contact status for other computers' tasks; own task out of reach shows «Закрыть задачу» instead of input and stop; right-click «Удалить из списка». Dialogs close with a cross. Screenshots shown to the owner.
+- T-131 (D-114): lost-contact status for other computers' tasks; own task out of reach shows «Закрыть» instead of input and stop; right-click «Удалить из списка». Dialogs close with a cross. Screenshots shown to the owner.
 - The owner's Mac/ПК-2 mismatch comes from moving the server (new network, new ids): recorded as T-132.
 - The coordinator's list (rows 24–31) still needs to be gone through.
 

@@ -190,7 +190,6 @@
   '» нет с ':'» since ',
   '» нет. ':'». ',
   'Что с задачей там, неизвестно.':'What happens to the task there is unknown.',
-  'Закрыть задачу':'Close task',
   'Закрыть задачу?':'Close the task?',
   'Удалить из списка':'Remove from list',
   'Задача ещё идёт на компьютере «':'The task is still going on computer «',
