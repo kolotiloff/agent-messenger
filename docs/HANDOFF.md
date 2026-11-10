@@ -10,7 +10,7 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Updated 2026-11-10 (late evening) by Claude Code.
 
-- 0.62 release started (PR #93, tag `v0.0.0-preview.62`; check the downloads are in place): README for 0.61 with window screenshots; T-136 (D-118) the Windows client runs from `runtimes\messenger.exe` for every version, so the firewall permission survives updates.
+- 0.62 released (PR #93, tag `v0.0.0-preview.62`, all downloads and signed update files in place): README for 0.61 with window screenshots; T-136 (D-118) the Windows client runs from `runtimes\messenger.exe` for every version, so the firewall permission survives updates.
 - Owner's steps: on each Windows computer, after 0.62 starts, press «Разрешить доступ» once more (the new path); after that, updates do not ask again. Update the Windows server computer remotely only after it runs 0.62 and was allowed once. Not verified on a real Windows computer yet.
 - ПК-2 (the server) is cut off after the remote update to 0.61: someone has to press «Разрешить доступ» in the firewall window there.
 

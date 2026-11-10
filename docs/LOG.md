@@ -6,7 +6,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 - README rewritten for 0.61 with window screenshots (PR #93).
 - The owner's remote update of ПК-2 (the server, Windows) cut the network: the firewall asked again for the new version's folder. T-136 (D-118): the Windows client now runs from one path for every version. ПК-2 itself still needs someone to press «Разрешить доступ» there.
-- PR #93 merged; release 0.62 (`v0.0.0-preview.62`) started.
+- PR #93 merged and released as 0.62 (`v0.0.0-preview.62`); every download and signed update file is in place.
 
 ## 2026-11-10 — Claude Code (0.61 released)
 
