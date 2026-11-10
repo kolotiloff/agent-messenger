@@ -246,7 +246,6 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-machine-name { display:flex; align-items:center; gap:var(--am-gap-control); font-weight:500; }
 #am-concept .am-machine-name .am-dot { margin-left:auto; }
 #am-concept .am-machine-version { font-weight:400; }
-#am-concept .am-update-line { overflow-wrap:anywhere; }
 #am-concept .am-machine-agents { display:flex; flex-direction:column; gap:var(--am-space-1); }
 #am-concept .am-agent-line { display:flex; align-items:center; gap:var(--am-gap-control); min-width:0; font-size:var(--am-text-s); }
 #am-concept .am-agent-line .am-muted { margin-left:auto; }
@@ -266,6 +265,10 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept button.am-update-icon:hover:not(:disabled) { background:color-mix(in srgb,var(--am-run) 34%,transparent); }
 #am-concept button.am-update-icon:disabled { opacity:.6; cursor:default; }
 #am-concept button.am-update-icon[hidden] { display:none; }
+/* An update asked for or under way: the same icon, dimmed and pulsing (owner) */
+#am-concept .am-update-icon.am-update-busy { flex-shrink:0; width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background:var(--am-soft); color:var(--am-muted); cursor:default; animation:am-update-pulse 1.6s ease-in-out infinite; }
+@keyframes am-update-pulse { 50% { opacity:.4; } }
+@media (prefers-reduced-motion:reduce) { #am-concept .am-update-icon.am-update-busy { animation:none; } }
 #am-concept .am-update-icon svg { width:13px; height:13px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
 
 /* Main pane and tabs */

@@ -328,7 +328,7 @@
     catch(error){addNotice('refused-'+peer.id+'-'+Date.now(),'bad',(peer.name||'')+tr(' не обновлён'),capital(error.message));}
     renderMachines();
   }
-  // The card's update line, only while the request is under way.
+  // The update under way for a card's icon: asked for or updating.
   function updateLine(peer){
     const u=(server?.updates||[]).find(x=>x.computer===peer.id);
     if(!u||u.stale||!(Date.now()-Date.parse(u.updated_at)<24*3600*1000))return null;
@@ -442,8 +442,14 @@
       name.append(pdot);
       // T-128: an older computer gets the update icon next to its dot; the
       // owner confirms in a popup.
-      const busy=!!updateLine(peer);
-      if(fresh&&peer.version&&!busy&&versionOlder(peer.version,newestVersion())){
+      const busy=updateLine(peer);
+      if(busy){
+        // While an update is asked for or under way, the icon stays, dimmed
+        // and pulsing, and says so on hover (owner).
+        const tip=busy[1]==='am-status-run'?tr('Обновляется…'):tr('Обновление уже запрошено');
+        const b=el('span',undefined,'am-update-icon am-peer-update am-update-busy');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);b.append(svgIcon(['M12 4v11M7 10l5 5 5-5M5 20h14']));
+        name.append(b);
+      }else if(fresh&&peer.version&&versionOlder(peer.version,newestVersion())){
         const newest=versionName(newestVersion()),label=tr('Обновить до ')+newest;
         const b=el('button',undefined,'am-update-icon am-peer-update');b.type='button';b.title=label;b.setAttribute('aria-label',label);b.append(svgIcon(['M12 4v11M7 10l5 5 5-5M5 20h14']));
         b.addEventListener('click',event=>{event.stopPropagation();askConfirm(tr('Обновить ')+(peer.name||tr('компьютер'))+tr(' до ')+newest+'?',tr('Программа на том компьютере обновится и перезапустится. Задачи и история сохранятся.'),tr('Обновить'),()=>requestUpdate(peer),true);});
@@ -467,8 +473,6 @@
       }else{
         card.append(el('p',peer.last_seen?tr('Был на связи ')+stamp(peer.last_seen):tr('Ещё не выходил на связь'),'am-small am-muted'));
       }
-      const status=updateLine(peer);
-      if(status)card.append(el('p',status[0],'am-small am-update-line '+status[1]));
       const can={revoke:hosted.has(peer.id)};
       if(can.revoke){
         card.classList.add('am-device-card');card.tabIndex=0;card.dataset.key='revoke-'+peer.id;card.title=tr('Правая кнопка мыши — действия');

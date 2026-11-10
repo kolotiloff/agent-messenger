@@ -185,6 +185,7 @@
   'Связь потеряна, исход неизвестен':'Contact lost, outcome unknown',
   '» не на связи с ':'» offline since ',
   '» больше нет в сети':'» is no longer in the network',
+  'Обновление уже запрошено':'Update already requested',
   'Обновить до ':'Update to ',
   'Обновить ':'Update ',
   ' до ':' to ',

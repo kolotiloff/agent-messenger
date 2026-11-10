@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-10 — Claude Code (0.60 released, busy update icon)
+
+- 0.60 released from PR #91.
+- T-128 (owner): the yellow «Обновление запрошено…» line is replaced by the update icon, dimmed and pulsing, with the state on hover. On `claude/ui-tweaks`, not released.
+
 ## 2026-11-10 — Claude Code (night: 0.60 changes T-128, T-126, T-115, T-129, T-114, T-113)
 
 - T-128: notices above the reply box; update icon with a confirm on older computers' cards. Restart icon and «update after the tasks» deferred.
