@@ -212,6 +212,7 @@
   'Выгружаем…':'Exporting…',
   'Файл сохранён в папке ':'The file is saved in ',
   'работает':'working',
+  'Настройки программы':'App settings',
   'ждёт ответа':'waiting for an answer',
   'Скопируйте путь вручную: ':'Copy the path by hand: ',
   'Вниз, к новым сообщениям':'Down to new messages',

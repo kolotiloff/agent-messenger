@@ -1921,6 +1921,8 @@
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.isComposing&&!$('task-stop').hidden&&!$('compose').hidden&&!document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true]')){e.preventDefault();stopTask();}});
   $('answer-text').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();sendAnswer();}});
   $('project-dialog-close').addEventListener('click',()=>$('project-dialog').close());
+  $('settings-open').addEventListener('click',()=>$('settings-dialog').showModal());
+  $('settings-close').addEventListener('click',()=>$('settings-dialog').close());
   $('fb-open').addEventListener('click',openFeedback);
   $('fb-close').addEventListener('click',()=>$('fb-dialog').close());
   $('fb-save').addEventListener('click',saveFeedback);

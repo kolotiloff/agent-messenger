@@ -7,7 +7,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 - T-133: the task chat keeps its place while the owner reads; down arrow, «Новые сообщения».
 - T-135 (D-117): feedback journal: bug icon in the window, `report_feedback` / `export_feedback` for the coordinator, zip export.
 - Coordinator list file updated with versions and given to the owner. Owner asked to release 0.61.
-- Owner's UI tweaks: sidebar agents without circles, a busy agent reads «Claude работает» / «Codex ждёт ответа»; the feedback icon sits next to the version at the bottom of the sidebar; the feedback dialog keeps one height for the picture row and shows the export as folder + file name with a copy icon.
+- Owner's UI tweaks: sidebar agents without circles, a busy agent reads «Claude работает» / «Codex ждёт ответа»; the feedback icon sits next to the version at the bottom of the sidebar; the feedback dialog keeps one height for the picture row and shows the export as folder + file name with a copy icon. Language and theme moved from the sidebar into «Настройки программы» (gear next to the feedback icon); later app settings go there too.
 
 ## 2026-11-10 — Claude Code (coordinator list rows 24, 26, 30, 31, WIP)
 
