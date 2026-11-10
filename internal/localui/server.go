@@ -544,7 +544,7 @@ var serverActions = map[string]bool{"enable": true, "disable": true, "invite": t
 
 func taskMutation(path string) bool {
 	switch path {
-	case "/api/project-create", "/api/project-folder", "/api/task-answer", "/api/task-note", "/api/agent-set", "/api/agent-models", "/api/agent-access", "/api/agent-pause", "/api/agent-remove", "/api/task-cancel", "/api/server-action", "/api/coordinator-connect", "/api/project-rules", "/api/project-title", "/api/project-remove":
+	case "/api/project-create", "/api/project-folder", "/api/task-answer", "/api/task-note", "/api/agent-set", "/api/agent-models", "/api/agent-access", "/api/agent-pause", "/api/agent-remove", "/api/task-cancel", "/api/task-hide", "/api/server-action", "/api/coordinator-connect", "/api/project-rules", "/api/project-title", "/api/project-remove":
 		return true
 	}
 	return false
@@ -645,6 +645,15 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 			return control.Request{}, false
 		}
 		return control.Request{Cmd: "task-cancel", MessageID: in.Task}, true
+	case "/api/task-hide":
+		var in struct {
+			Peer string `json:"peer"`
+			Task string `json:"task"`
+		}
+		if decoder.Decode(&in) != nil || in.Task == "" || len(in.Peer) > 128 || len(in.Task) > 128 {
+			return control.Request{}, false
+		}
+		return control.Request{Cmd: "task-hide", Alias: in.Peer, MessageID: in.Task}, true
 	case "/api/agent-set":
 		var in struct {
 			Provider    string `json:"provider"`

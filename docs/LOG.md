@@ -2,6 +2,12 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-10 — Claude Code (T-131 stuck tasks, WIP)
+
+- T-131 (D-114): lost-contact status for other computers' tasks; own task out of reach shows «Закрыть задачу» instead of input and stop; right-click «Удалить из списка». Dialogs close with a cross. Screenshots shown to the owner.
+- The owner's Mac/ПК-2 mismatch comes from moving the server (new network, new ids): recorded as T-132.
+- The coordinator's list (rows 24–31) still needs to be gone through.
+
 ## 2026-11-10 — Claude Code (0.60 released, busy update icon)
 
 - 0.60 released from PR #91.

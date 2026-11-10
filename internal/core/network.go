@@ -542,9 +542,13 @@ func answerRemoteTask(tx *sql.Tx, t Task, remote netLink, question, opID, text, 
 // cancelRemoteTask asks the computer that runs the task to cancel it. A
 // start that has not left this computer yet is withdrawn: the task never
 // ran anywhere, so it is cancelled at once.
+// cancelAnswerWait is how long a cancel sent to another computer may go
+// unanswered before the owner can close the task here (T-131).
+var cancelAnswerWait = 2 * time.Minute
+
 func cancelRemoteTask(tx *sql.Tx, t Task, remote netLink) (string, error) {
 	switch t.State {
-	case "running", "waiting_coordinator", "waiting_owner":
+	case "running", "waiting_coordinator", "waiting_owner", "blocked", "interrupted":
 	default:
 		return t.State, fmt.Errorf("%w: task is %s", ErrRejected, t.State)
 	}
@@ -558,8 +562,39 @@ func cancelRemoteTask(tx *sql.Tx, t Task, remote netLink) (string, error) {
 		}
 		return "cancelled", insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "cancelled", "the task was cancelled before it reached the other computer", "")
 	}
+	// T-131: no process of this computer runs the task, so it can always be
+	// closed here: when that computer is out of reach, when the outcome
+	// there is already unknown, or when a cancel was asked for and no
+	// answer came. What happened there stays unknown; a cancel still goes
+	// out if that computer is in this network, for when it is back.
+	contact := RemoteComputer{ID: remote.peer, Name: peerName(tx, remote.peer)}
+	if err := remoteContact(tx, t.ID, remote, &contact); err != nil {
+		return "", err
+	}
+	unanswered := false
 	if t.CancelRequested {
-		return "cancelling", nil
+		at, err := time.Parse(time.RFC3339Nano, t.UpdatedAt)
+		unanswered = err == nil && time.Since(at) > cancelAnswerWait
+		if !unanswered && !contact.Lost {
+			return "cancelling", nil
+		}
+	}
+	if contact.Lost || unanswered || t.State == "blocked" || t.State == "interrupted" {
+		why := "closed on this computer; what happened on " + contact.Name + " is unknown"
+		if err := setTaskState(tx, t.ID, "cancelled", why); err != nil {
+			return "", err
+		}
+		if err := insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "cancelled", "the owner closed this task here; what happened on "+contact.Name+" is unknown", ""); err != nil {
+			return "", err
+		}
+		broker, err := metaValue(tx, "net_broker")
+		if err != nil {
+			return "", err
+		}
+		if broker == remote.broker && !t.CancelRequested {
+			return "cancelled", enqueueNet(tx, remote.broker, remote.peer, "cancel."+t.ID, t.ID, netBody{Kind: "cancel", Task: t.ID})
+		}
+		return "cancelled", nil
 	}
 	if _, err := tx.Exec(`UPDATE tasks SET cancel_requested=1,updated_at=?,version=version+1 WHERE id=?`, now(), t.ID); err != nil {
 		return "", err
@@ -921,6 +956,11 @@ func applyReport(tx *sql.Tx, from netLink, b netBody) error {
 	// An event of the run on the other computer.
 	if !taskStates[b.State] || (b.Audience != AudienceCoordinator && b.Audience != AudienceOwner) || !remoteEventKinds[b.Event] {
 		return nil
+	}
+	// The owner closed it here (T-131): what that computer reports later is
+	// kept in the log and does not reopen the task.
+	if t.State == "cancelled" {
+		return insertTaskEvent(tx, t.Project, t.ID, AudienceLog, b.Event, clip(b.Text, MaxDispositionText+1000), "")
 	}
 	question := ""
 	if b.Event == "question" && strings.HasPrefix(b.Question, "q-") && len(b.Question) <= 64 {

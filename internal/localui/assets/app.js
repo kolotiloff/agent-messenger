@@ -274,6 +274,37 @@
     }
     return [t.state,'am-muted'];
   }
+  // T-131: another computer's task is known only from that computer's
+  // reports. While it is out of contact, an open task's last state is
+  // stale: say that its outcome is unknown instead of «Работает 10 ч».
+  function sharedStatus(t,p){
+    if(sharedLost(t,p)){
+      const since=p.age>=0?stamp(new Date(Date.now()-p.age*1000).toISOString()):'';
+      return [tr('Связь потеряна, исход неизвестен'),'am-muted',since?'«'+p.name+tr('» не на связи с ')+since:'«'+p.name+tr('» больше нет в сети')];
+    }
+    return taskStatus(t);
+  }
+  // T-131: a task leaves the list only when it no longer runs; a running
+  // one is stopped first. Another computer's task can also go when that
+  // computer is out of contact, since its last state is stale.
+  const finishedStates=['done','failed','cancelled'];
+  function sharedLost(t,p){return activeStates.includes(t.state)&&!(p.age>=0&&p.age<=45);}
+  function taskMenu(event,t,p){
+    event.preventDefault();
+    const ok=p?finishedStates.includes(t.state)||sharedLost(t,p):finishedStates.includes(t.state);
+    const tip=ok?'':p?tr('Задача ещё идёт на компьютере «')+p.name+tr('». Удалить её можно, когда она закончится'):tr('Сначала остановите задачу');
+    popMenu(event.clientX,event.clientY,[{text:tr('Удалить из списка'),off:!ok,tip,pick:()=>askRemoveTask(t,p)}]);
+  }
+  function askRemoveTask(t,p){
+    const text=p?tr('Задача пропадёт из списка на этом компьютере. У других она останется, пока её не удалят на компьютере «')+p.name+'».'
+      :tr('Задача пропадёт из списка на всех компьютерах сети. Её история останется в базе этого компьютера.');
+    askConfirm(tr('Удалить задачу из списка?'),text,tr('Удалить'),async()=>{
+      await postAPI('/api/task-hide',{peer:p?.peer||'',task:t.id});
+      if(p){if(selectedShared?.peer===p.peer&&selectedShared?.id===t.id)selectedShared=null;}
+      else if(selectedTask===t.id){selectedTask='';feed=null;feedSignature='';}
+      viewSignature='';await refresh();
+    });
+  }
   function coordinatorName(client=view?.coordinator?.client){
     const c=(client||'').toLowerCase();
     if(c.includes('codex'))return ['codex','Codex'];
@@ -297,7 +328,9 @@
   // Right-click menu on another computer of the network. Revoking cannot be
   // undone, so its item only opens a confirmation inside the card. Updating
   // moved to an icon on the card (T-128).
-  function deviceMenu(d,x,y,can){
+  // A right-click menu; entries are {text,pick,off,tip}. An entry with off
+  // is shown dimmed with its reason as a tooltip.
+  function popMenu(x,y,entries){
     let menu=$('device-menu');
     if(!menu){
       // A manual popover: an automatic one closes on the same right click
@@ -310,15 +343,22 @@
       window.addEventListener('resize',close);
     }
     const items=[];
-    const add=(text,pick)=>{
-      const item=el('div',text,'am-select-option');item.setAttribute('role','menuitem');item.tabIndex=0;
-      const run=()=>{menu.hidePopover();pick();};
+    for(const it of entries){
+      const item=el('div',it.text,'am-select-option');item.setAttribute('role','menuitem');item.tabIndex=0;
+      if(it.tip)item.title=it.tip;
+      if(it.off)item.setAttribute('aria-disabled','true');
+      const run=()=>{if(it.off)return;menu.hidePopover();it.pick();};
       item.addEventListener('click',run);item.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();run();}});
       items.push(item);
-    };
-    if(can.revoke)add(tr('Отозвать устройство'),()=>{revokeAsk=d.id;clearTimeout(revokeTimer);revokeTimer=setTimeout(()=>{revokeAsk='';renderMachines();},8000);renderMachines();$('machines').querySelector('[data-key="'+CSS.escape('revoke-yes-'+d.id)+'"]')?.focus();});
+    }
     if(!items.length)return;
     menu.replaceChildren(...items);menu.style.left=x+'px';menu.style.top=y+'px';menu.showPopover();items[0].focus();
+  }
+  function deviceMenu(d,x,y,can){
+    const items=[];
+    const add=(text,pick)=>items.push({text,pick});
+    if(can.revoke)add(tr('Отозвать устройство'),()=>{revokeAsk=d.id;clearTimeout(revokeTimer);revokeTimer=setTimeout(()=>{revokeAsk='';renderMachines();},8000);renderMachines();$('machines').querySelector('[data-key="'+CSS.escape('revoke-yes-'+d.id)+'"]')?.focus();});
+    popMenu(x,y,items);
   }
   // Asking another computer to update itself (T-078). Its answers arrive
   // with the server status and show as notices above the reply box (T-128);
@@ -552,6 +592,7 @@
       if(t.usage){const used=el('span',usageShort(t.usage),'am-task-usage');used.title=usageLong(t.usage);words.append(used);}
       row.append(agent,el('span',t.title,'am-task-title'),status);
       row.addEventListener('click',()=>{selectedTask=t.id;selectedShared=null;feedSignature='';renderTaskList();loadFeed();});
+      row.addEventListener('contextmenu',e=>taskMenu(e,t,null));
       return row;
     };
     const sharedRow=(t,p)=>{
@@ -559,12 +600,13 @@
       row.setAttribute('aria-pressed',String(selectedShared?.peer===p.peer&&selectedShared?.id===t.id));
       // T-111: another computer's task opens as a read-only card.
       row.addEventListener('click',()=>{selectedShared={peer:p.peer,id:t.id};selectedTask='';feed=null;feedSignature='';renderTaskList();renderThread();});
+      row.addEventListener('contextmenu',e=>taskMenu(e,t,p));
       const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),el('span',(names[t.agent]||t.agent)+tr(' от «')+p.name+'»'));
       const sharedWhen=taskWhen(t);if(sharedWhen){const w=el('span',sharedWhen,'am-task-when');w.title=taskWhenTitle(t);agent.append(w);}
-      const [text,cls]=taskStatus(t);
+      const [text,cls,tip]=sharedStatus(t,p);
       const words=el('span');words.append(statusPiece(text,!!t.tokens));
       if(t.tokens)words.append(el('span',tokensText(t.tokens)+tr(' токенов'),'am-task-usage'));
-      const status=el('span',undefined,'am-task-status '+cls);status.append(words);
+      const status=el('span',undefined,'am-task-status '+cls);status.append(words);if(tip)status.title=tip;
       row.append(agent,el('span',t.title,'am-task-title'),status);
       if(t.report)row.append(el('span',t.report,'am-task-report'));
       return row;
@@ -625,7 +667,7 @@
   }
   function renderThread(){
     const thread=$('thread'),head=$('task-head');
-    $('compose').hidden=true;feedSignature='';
+    $('compose').hidden=true;$('lost-bar').hidden=true;feedSignature='';
     if(!view){head.replaceChildren();return;}
     if(!view.project){
       head.replaceChildren();
@@ -655,17 +697,19 @@
     const thread=$('thread'),head=$('task-head');
     const title=el('div',undefined,'am-task-head');title.append(el('h3',t.title));
     title.append(el('p',(names[t.agent]||t.agent)+tr(', задачу дал компьютер «')+p.name+'»','am-small am-muted'));
-    const [statusText,statusCls]=taskStatus(t);
+    const [statusText,statusCls,statusTip]=sharedStatus(t,p);
     const when=t.finished_at?', '+clock(t.created_at)+'–'+clock(t.finished_at):tr(', начата в ')+clock(t.created_at);
     const line=el('p',undefined,'am-small');line.append(el('span',statusText,statusCls),el('span',when,'am-muted'));
+    if(statusTip)line.append(el('span',', '+statusTip,'am-muted'));
     if(t.tokens)line.append(el('span',', '+tokensText(t.tokens)+tr(' токенов'),'am-muted'));
     title.append(line);
-    const headRow=el('div',undefined,'am-task-head-row');headRow.append(title);head.replaceChildren(headRow);
+    const headRow=el('div',undefined,'am-task-head-row');headRow.append(title);
+    head.replaceChildren(headRow);
     const box=el('div',undefined,'am-settings');
     if(t.report){box.append(el('h3',tr('Начало отчёта')),el('p',t.report,'am-shared-report'));}
     else box.append(el('p',tr('Отчёта пока нет.'),'am-muted'));
     box.append(el('p',tr('Полная история задачи — в окне компьютера «')+p.name+tr('». Здесь её можно только посмотреть.'),'am-small am-muted'));
-    thread.replaceChildren(box);$('compose').hidden=true;
+    thread.replaceChildren(box);$('compose').hidden=true;$('lost-bar').hidden=true;
   }
   // Called when only the feed may have changed.
   function updateFeed(){
@@ -713,8 +757,14 @@
   }
   // Stop, like in a chat: a square button in the input field, or Esc.
   let stopping=false;
+  function closeHere(){
+    const t=feed?.task;if(!t?.remote||t.remote.from)return;
+    askConfirm(tr('Закрыть задачу?'),tr('С компьютером «')+t.remote.name+tr('» нет связи. Задача закроется в этом окне, а что с ней на том компьютере, неизвестно. Если связь вернётся, ему придёт отмена.'),tr('Закрыть'),async()=>{
+      await postAPI('/api/task-cancel',{task:t.id});feedSignature='';await refresh();
+    });
+  }
   async function stopTask(){
-    const t=feed?.task;if(!t||stopping||!activeStates.includes(t.state))return;
+    const t=feed?.task;if(!t||stopping||$('task-stop').hidden)return;
     stopping=true;$('task-stop').disabled=true;$('task-stop').classList.add('am-tip-off');
     try{await postAPI('/api/task-cancel',{task:t.id});showError(null);feedSignature='';await refresh();}
     catch(e){showError(e);}
@@ -796,9 +846,19 @@
     for(const d of thread.querySelectorAll('details[data-key]'))if(opened.has(d.dataset.key))d.open=true;
     // A task another computer started is answered there.
     const q=t.remote?.from?null:t.owner_question;
-    const active=activeStates.includes(t.state),box=$('answer-text');
+    // T-131: a task sent to another computer can be closed here also when
+    // its outcome there is already unknown.
+    // T-131: an own task on another computer that cannot be reached has no
+    // input and no stop button: nothing would arrive. One action closes it here.
+    const unreachable=!!t.remote&&!t.remote.from&&(t.state==='blocked'||t.state==='interrupted'||(activeStates.includes(t.state)&&!!t.remote.lost));
+    $('lost-bar').hidden=!unreachable;
+    if(unreachable){
+      const since=t.remote.last_seen?stamp(t.remote.last_seen):'';
+      $('lost-text').textContent=(since?tr('Связи с «')+t.remote.name+tr('» нет с ')+since+'. ':tr('Связи с «')+t.remote.name+tr('» нет. '))+tr('Что с задачей там, неизвестно.');
+    }
+    const active=activeStates.includes(t.state)&&!unreachable,box=$('answer-text');
     const note=canNote(t),wasNote=$('compose').dataset.mode==='note';
-    $('compose').hidden=!q&&!active;
+    $('compose').hidden=unreachable||(!q&&!active);
     box.disabled=!q&&!note;box.placeholder=q?tr('Ответить исполнителю…'):note&&t.state==='waiting_coordinator'?tr('Ответить вместо координатора…'):note?tr('Написать исполнителю…'):t.remote?.from&&t.owner_question?tr('Отвечают на компьютере «')+t.remote.name+'»':t.pending_launch?tr('Задача ждёт запуска…'):tr('Исполнитель работает…');
     $('answer-send').hidden=!q&&!note;$('task-stop').hidden=!active;
     $('compose').dataset.mode=q?'answer':note?'note':'';
@@ -1799,6 +1859,7 @@
   $('answer-send').addEventListener('click',sendAnswer);
   // Enter sends; Shift+Enter adds a line. An IME composition keeps its Enter.
   $('task-stop').addEventListener('click',stopTask);
+  $('lost-close').addEventListener('click',closeHere);
   $('task-stop').addEventListener('mouseleave',()=>$('task-stop').classList.remove('am-tip-off'));
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.isComposing&&!$('task-stop').hidden&&!$('compose').hidden&&!document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true]')){e.preventDefault();stopTask();}});
   $('answer-text').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();sendAnswer();}});

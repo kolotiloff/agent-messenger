@@ -145,6 +145,15 @@ func (s *Supervisor) RemoveAgent(provider string) error {
 	return s.store.RemoveComputerAgent(provider)
 }
 
+// HideNetTask removes a task from the window's list (T-131): another
+// computer's task when peer is set, else a finished task of this computer.
+func (s *Supervisor) HideNetTask(peer, task string) error {
+	if peer == "" {
+		return s.store.HideTask(task)
+	}
+	return s.store.HideNetTask(peer, task)
+}
+
 // CancelTask stops a task from the window's stop button. The running worker
 // is signalled by the client's cancel watcher and verified like any run.
 func (s *Supervisor) CancelTask(id string) error {

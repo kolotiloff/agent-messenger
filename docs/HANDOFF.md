@@ -8,6 +8,11 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-10 (day) by Claude Code.
+
+- On `claude/ui-tweaks`, not released: T-128 busy update icon, T-131 stuck tasks (D-114). Screenshots of all dialogs sent to the owner.
+- Next: T-132 (tasks stranded by moving the server), the coordinator list rows 24–31, the feedback channel idea (not started, needs the owner's go).
+
 Updated 2026-11-10 (morning) by Claude Code.
 
 - Ready for 0.60 on `claude/ui-tweaks` (PR to `main` open, not released; the owner releases): T-130, T-128 (notices, update icon), T-126 (lost contact), T-115 (full access shown), T-129 (sandbox warning), T-114 (`note_task`), T-113 (continue another computer's task, D-113).

@@ -330,6 +330,15 @@ func dispatch(handler Handler, request Request) Response {
 			return Response{Error: err.Error()}
 		}
 		return Response{OK: true}
+	case "task-hide":
+		h, ok := handler.(interface{ HideNetTask(string, string) error })
+		if !ok {
+			return Response{Error: "hiding tasks unsupported; update the background client"}
+		}
+		if err := h.HideNetTask(request.Alias, request.MessageID); err != nil {
+			return Response{Error: err.Error()}
+		}
+		return Response{OK: true}
 	case "agent-remove":
 		h, ok := handler.(interface{ RemoveAgent(string) error })
 		if !ok {
