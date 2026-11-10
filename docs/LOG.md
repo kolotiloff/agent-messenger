@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-10 — Claude Code (0.61 released)
+
+- PR #92 merged and 0.61 released (`v0.0.0-preview.61`); every download and signed update file is in place. The first Windows CI run failed in the feedback export test (home folder comes from USERPROFILE there); fixed in the test.
+
 ## 2026-11-10 — Claude Code (T-133 scroll, T-135 feedback; 0.61 ready)
 
 - T-133: the task chat keeps its place while the owner reads; down arrow, «Новые сообщения».

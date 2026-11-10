@@ -10,7 +10,7 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Updated 2026-11-10 (evening) by Claude Code.
 
-- 0.61 goes out from `claude/ui-tweaks`: T-128 busy update icon, T-131 stuck tasks, T-132 tasks follow a computer into a new network, T-133 scroll arrow, T-134 coordinator list rows 18, 24, 26, 28, 30, 31, 32, T-135 feedback journal, plus window tweaks (agent status text in the sidebar, «Настройки программы» with language and theme).
+- 0.61 released (PR #92, tag `v0.0.0-preview.61`, all downloads and signed update files in place): T-128 busy update icon, T-131 stuck tasks, T-132 tasks follow a computer into a new network, T-133 scroll arrow, T-134 coordinator list rows 18, 24, 26, 28, 30, 31, 32, T-135 feedback journal, plus window tweaks (agent status text in the sidebar, «Настройки программы» with language and theme).
 - Owner's checks after 0.61 (every computer on 0.61): the coordinator records a remark with `report_feedback` and exports with `export_feedback`; the bug icon by the version saves a remark with a picture; tasks keep their computer after the server moves; a task not accepted in 5 minutes gives `not_accepted`. Not verified between real computers yet.
 - Next after 0.61: feedback from other computers through the network; row 27 needs the owner's OK (D-021/D-108); row 29 (waking the coordinator) needs discussion; row 23 (images in reports); app settings may later hold updates and notifications.
 
