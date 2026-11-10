@@ -71,7 +71,7 @@ func (l AdapterLauncher) Start(spec Spec) (Started, error) {
 	if spec.CLI == "" {
 		return Started{}, errNoCLI
 	}
-	exe, err := os.Executable()
+	exe, err := workerProgram()
 	if err != nil {
 		return Started{}, err
 	}

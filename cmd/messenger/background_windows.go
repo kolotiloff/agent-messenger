@@ -38,6 +38,12 @@ func startBackground(root string, flags []string) (int, string, error) {
 }
 
 func startBackgroundAt(root string, flags []string, executable string) (int, string, error) {
+	return startBackgroundEnv(root, flags, executable, nil)
+}
+
+// startBackgroundEnv is startBackgroundAt with extra environment entries for
+// the client only.
+func startBackgroundEnv(root string, flags []string, executable string, env []string) (int, string, error) {
 	if _, err := serveAllowsModels(flags); err != nil {
 		return 0, "", err
 	}
@@ -72,7 +78,7 @@ func startBackgroundAt(root string, flags []string, executable string) (int, str
 	args := append([]string{"--root", root, "_background-serve"}, flags...)
 	start := func(flags uint32) (*exec.Cmd, error) {
 		cmd := exec.Command(executable, args...)
-		cmd.Env = append(os.Environ(), readyHandleEnv+"="+strconv.FormatUint(uint64(handle), 10))
+		cmd.Env = append(append(os.Environ(), env...), readyHandleEnv+"="+strconv.FormatUint(uint64(handle), 10))
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = commitRead, log, log
 		cmd.SysProcAttr = &syscall.SysProcAttr{
 			CreationFlags:              flags,

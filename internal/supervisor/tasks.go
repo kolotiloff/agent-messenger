@@ -104,7 +104,7 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	if err != nil {
 		return // paused, cancelled or no longer pending: nothing was launched
 	}
-	exe, err := os.Executable()
+	exe, err := workerProgram()
 	if err != nil {
 		_ = s.store.TaskRunNotStarted(runID, "messenger executable not found")
 		return

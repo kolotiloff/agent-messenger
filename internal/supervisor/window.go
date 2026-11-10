@@ -54,7 +54,7 @@ func (s *Supervisor) WindowView(project string) (any, error) {
 		out.TasksEnabled = l.TasksEnabled()
 	}
 	out.Paused, _ = s.store.Paused()
-	out.Messenger, _ = os.Executable()
+	out.Messenger, _ = workerProgram()
 	out.DataRoot = s.root
 	out.FeedbackCount, _ = s.store.FeedbackCount()
 	if v.Project != "" {
