@@ -443,13 +443,16 @@
       // Messenger's tools is listed but not lit: nothing tells whether it is
       // still open.
       const [state,text]=!live?['offline',tr('Нет связи')]:a?agentState(a):['idle',tr('Чат с инструментами Messenger')];
-      const line=el('div',undefined,'am-agent-line');line.dataset.provider=provider;
+      // A busy agent says so to the right of its name: «работает» in blue,
+      // «ждёт ответа» in yellow. A free agent is just its name.
+      const line=el('div',undefined,'am-agent-line am-agent-'+state);line.dataset.provider=provider;
       line.title=(names[provider]||provider)+(a?': '+text:'');
-      line.append(el('span',undefined,'am-dot am-dot-'+state),el('span',shortNames[provider]||provider));
+      line.append(el('span',shortNames[provider]||provider));
+      if(state==='run'||state==='wait'){const n=a?.running||0;line.append(el('span',state==='wait'?tr('ждёт ответа'):tr('работает')+(n>1?' ('+n+')':''),'am-agent-status'));}
       lines.append(line);
     }
     if(coordinatorClient!==null&&!coordProvider){
-      const line=el('div',undefined,'am-agent-line');line.append(el('span',undefined,'am-dot am-dot-'+(live?'idle':'offline')),el('span',coordLabel));lines.append(line);
+      const line=el('div',undefined,'am-agent-line am-agent-'+(live?'idle':'offline'));line.append(el('span',coordLabel));lines.append(line);
     }
     return lines;
   }
@@ -1524,7 +1527,7 @@
     $('fb-export').disabled=true;$('fb-status').textContent=tr('Выгружаем…');
     try{
       const r=await postAPI('/api/feedback-export',{},15000);
-      $('fb-path').textContent=tr('Сохранено: ')+r.result.path;$('fb-copy').dataset.path=r.result.path;$('fb-saved').hidden=false;$('fb-status').textContent='';
+      const cut=Math.max(r.result.path.lastIndexOf('/'),r.result.path.lastIndexOf('\\'));$('fb-dir').textContent=tr('Файл сохранён в папке ')+r.result.path.slice(0,cut>0?cut:0)+':';$('fb-path').textContent=r.result.path.slice(cut+1);$('fb-path').title=r.result.path;$('fb-copy').dataset.path=r.result.path;$('fb-copy').removeAttribute('data-copied');$('fb-saved').hidden=false;$('fb-status').textContent='';
     }catch(e){$('fb-status').textContent=e.message;}
     finally{fbExportLabel();}
   }
@@ -1925,7 +1928,7 @@
   $('fb-pick').addEventListener('click',()=>$('fb-file').click());
   $('fb-file').addEventListener('change',e=>{fbTake(e.target.files[0]);e.target.value='';});
   $('fb-shot-remove').addEventListener('click',fbClear);
-  $('fb-copy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('fb-copy').dataset.path||'');$('fb-copy').textContent=tr('Скопировано');}catch(_){$('fb-copy').textContent=tr('Скопируйте вручную');}setTimeout(()=>$('fb-copy').textContent=tr('Скопировать путь'),2000);});
+  $('fb-copy').addEventListener('click',async()=>{const b=$('fb-copy');try{await navigator.clipboard.writeText(b.dataset.path||'');b.setAttribute('data-copied','');}catch(_){$('fb-status').textContent=tr('Скопируйте путь вручную: ')+(b.dataset.path||'');}setTimeout(()=>b.removeAttribute('data-copied'),2000);});
   $('fb-dialog').addEventListener('paste',e=>{const f=[...(e.clipboardData?.files||[])].find(x=>x.type.startsWith('image/'));if(f){e.preventDefault();fbTake(f);}});
   const fbShot=$('fb-shot');
   fbShot.addEventListener('dragover',e=>{e.preventDefault();fbShot.classList.add('am-drop');});
