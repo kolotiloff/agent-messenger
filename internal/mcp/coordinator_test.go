@@ -826,6 +826,7 @@ func TestSecondCoordinatorChatTakesOver(t *testing.T) {
 func TestCoordinatorFeedback(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // the home folder on Windows
 	if err := os.Mkdir(filepath.Join(home, "Downloads"), 0o700); err != nil {
 		t.Fatal(err)
 	}
