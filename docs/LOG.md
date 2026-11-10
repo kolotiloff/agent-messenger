@@ -2,6 +2,12 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-10 — Claude Code (coordinator list rows 24, 26, 30, 31, WIP)
+
+- T-134 (D-116): a refused answer opens the question again; `not_accepted` after 5 minutes; `network_note` when the server has not been heard from; `idle_computers` in `wait`; watch command in `--help`.
+- Owner looked at moving «Отключить» next to «Подключено» and chose to keep it where it is.
+- Next: T-133 scroll arrow (screenshots first), then 0.61 when the owner says so.
+
 ## 2026-11-10 — Claude Code (T-132, coordinator list rows 28 and 32, WIP)
 
 - T-132 (D-115): tasks follow a computer into a new network by a lasting computer id; starts are never re-sent.

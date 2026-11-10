@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -589,5 +590,65 @@ func TestListAgentsExplainsEmptyFields(t *testing.T) {
 	}
 	if other.Folder != "" || !strings.Contains(other.Note, "older Messenger") {
 		t.Fatalf("computer %+v", other)
+	}
+}
+
+// Row 26: when the other computer refuses an answer and its question is
+// still open there, the question opens here again instead of blocking the
+// task, and a second answer goes through.
+func TestRefusedAnswerOpensTheQuestionAgain(t *testing.T) {
+	p := newNetPair(t)
+	if err := p.b.st.SetNetAccept(true); err != nil {
+		t.Fatal(err)
+	}
+	id := p.startRemote(t, "op", "codex", "Ask")
+	p.carry(t, true)
+	p.carry(t, false)
+	m := p.mirror(t, id)
+	r := p.b.launch(t, m.ID, "019a0000-0000-7000-8000-0000000000d2")
+	p.b.dispose(t, r, DispositionAsk, "Which?")
+	if _, err := p.b.st.FinishTaskRun(r.ID, cleanExit); err != nil {
+		t.Fatal(err)
+	}
+	p.carry(t, false)
+	task, _ := p.a.st.TaskByID(id)
+	q := task.OpenQuestion.ID
+	if err := p.a.st.AnswerTask(id, q, "a1", "This one", AudienceCoordinator); err != nil {
+		t.Fatal(err)
+	}
+	// The answer is lost on the way; b refuses it as a computer before 0.61
+	// did, with no state.
+	pending, _ := p.a.st.NetPending(testBroker, 10)
+	for _, msg := range pending {
+		if err := p.a.st.NetSent(msg.Seq); err != nil {
+			t.Fatal(err)
+		}
+	}
+	body, _ := json.Marshal(netBody{Kind: "answer_refused", Task: id, Question: q, Reason: "rejected: this question is for the owner"})
+	p.seq++
+	if err := p.a.st.ApplyNet(testBroker, NetIncoming{Seq: p.seq, From: "dev-b", OpID: "refused-1", Body: body}); err != nil {
+		t.Fatal(err)
+	}
+	task, _ = p.a.st.TaskByID(id)
+	if task.State != "waiting_coordinator" || task.OpenQuestion == nil || task.OpenQuestion.ID != q {
+		t.Fatalf("after the refusal %+v", task)
+	}
+	// A second answer reaches b and the worker goes on.
+	if err := p.a.st.AnswerTask(id, q, "a2", "That one", AudienceCoordinator); err != nil {
+		t.Fatal(err)
+	}
+	p.carry(t, true)
+	if mt, _ := p.b.st.TaskByID(m.ID); mt.State != "running" {
+		t.Fatalf("copy on b %+v", mt)
+	}
+	// An answer refused because it was already answered there keeps the
+	// old rule: blocked, nothing retried.
+	body, _ = json.Marshal(netBody{Kind: "answer_refused", Task: id, Question: q, Reason: "rejected: this question was already answered", State: "answered"})
+	p.seq++
+	if err := p.a.st.ApplyNet(testBroker, NetIncoming{Seq: p.seq, From: "dev-b", OpID: "refused-2", Body: body}); err != nil {
+		t.Fatal(err)
+	}
+	if task, _ = p.a.st.TaskByID(id); task.State != "blocked" {
+		t.Fatalf("after an answered refusal %+v", task)
 	}
 }

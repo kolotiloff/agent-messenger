@@ -70,6 +70,10 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - The owner may write to a working worker from the window. wait then returns an owner_note event with the text; the worker reads it when its current step ends and continues the same task, so a report it had written by then is held and a new one follows. Nothing to do on your side; do not repeat the note to the worker.
 - If the owner writes to a worker that waits for your answer, the owner's message is the answer and the worker continues at once: wait returns owner_answered for that question. Do not answer it again; your answer would be refused.
 - Never start a task again by yourself after it failed, was interrupted or blocked; tell the owner and let them decide.
+- not_accepted: a task sent to another computer was not accepted within 5 minutes; the event gives the likely reason (offline, not in the network, an earlier network). Nothing is retried. Tell the owner; cancelling it closes it at once, and a new start_task on an online computer is the owner's call.
+- idle_computers in a wait result names the computers where a task just stopped and nothing of this project runs now: give them the next task if the plan has one, or tell the owner.
+- network_note in list_agents means this computer's client has not heard from the server for minutes: online and other computers' task states are out of date. Tell the owner; do not start or cancel tasks on other computers because of them.
+- answer_refused: the other computer did not accept your answer, and the question is open again (the task waits again); answer it once more if the reason allows, or tell the owner.
 - A computer marked reconnecting was in the network a moment ago and has not reported since a restart: a task for it is accepted and waits on the server until it is back. models_note and limit_note explain an empty models list or a missing limit.
 - list_agents shows each agent's limit when it reported one: state ok, warning (close to the limit) or exhausted, used_percent when the agent gave it, resets_at and observed_at. It is what the agent said at the end of its last run, not a live reading; reset_passed means its reset time has passed, so it is likely available again. A limit is shared by every use of the same account, this chat included. Before choosing where to start a task, look at the limits: prefer an agent whose limit is not exhausted, and tell the owner when the one they asked for is close to or at its limit, before or instead of starting it. start_task adds limit_note when the chosen agent's last limit is close or exhausted.
 - To add something to a task that is still running on this computer (a forgotten detail, a change of plan), use note_task; it does not stop the worker. Do not use it to hurry a worker or to repeat the task.
@@ -602,6 +606,11 @@ func (c *coordinator) projectExists() error {
 // ownTask refuses tasks of another project.
 func (c *coordinator) ownTask(id string) error {
 	t, err := c.store.TaskByID(id)
+	if errors.Is(err, core.ErrRejected) {
+		// Row 24: tasks listed it, answer did not find it. Usually a second,
+		// older copy of this tool is connected to the chat.
+		return fmt.Errorf("%w: unknown task %s. If tasks lists it, this chat has an old second copy of the Messenger tool connected: tell the owner to connect the coordinator again from the Messenger window", core.ErrRejected, id)
+	}
 	if err != nil {
 		return err
 	}
@@ -769,6 +778,10 @@ func (c *coordinator) wait(ctx context.Context, after int64, timeout time.Durati
 			if more {
 				result["more"] = true
 				result["next"] = fmt.Sprintf("More events are ready. Act on these, then call wait with after=%d at once.", cursor)
+			}
+			// Row 31: a computer whose last task just stopped stands idle.
+			if idle, err := c.store.IdleComputers(c.project, events); err == nil && len(idle) > 0 {
+				result["idle_computers"] = idle
 			}
 			return c.withWatch(result, cursor), nil
 		}

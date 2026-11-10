@@ -43,6 +43,9 @@ func (s *Supervisor) runNetwork(ctx context.Context) {
 	defer ticker.Stop()
 	for {
 		s.networkRound(ctx)
+		// Row 30: a task the other computer has not accepted in time is
+		// reported to the coordinator once; nothing is retried.
+		_, _ = s.store.NoteUnaccepted(time.Now())
 		select {
 		case <-ctx.Done():
 			return

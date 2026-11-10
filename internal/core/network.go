@@ -567,7 +567,9 @@ func answerRemoteTask(tx *sql.Tx, t Task, remote netLink, question, opID, text, 
 	if err := insertTaskEvent(tx, t.Project, t.ID, answeredFor, "answered", text, question); err != nil {
 		return err
 	}
-	return enqueueNet(tx, remote.broker, remote.peer, "answer."+question, t.ID, netBody{Kind: "answer", Task: t.ID, Question: question, OpID: opID, Text: text, By: by})
+	// The op id names this answer, not only the question: a question that
+	// opens again after a refusal (row 26) gets a second answer.
+	return enqueueNet(tx, remote.broker, remote.peer, "answer."+question+"."+opID, t.ID, netBody{Kind: "answer", Task: t.ID, Question: question, OpID: opID, Text: text, By: by})
 }
 
 // cancelRemoteTask asks the computer that runs the task to cancel it. A
@@ -925,7 +927,13 @@ func applyAnswer(tx *sql.Tx, from netLink, opID string, b netBody) error {
 		return answerTask(tx, t.ID, b.Question, "net:"+from.broker+":"+from.peer+":"+opID, b.Text, b.By, true, false)
 	})
 	if errors.Is(err, ErrRejected) {
-		return enqueueNet(tx, from.broker, from.peer, "answer-refused."+b.Question, t.ID, netBody{Kind: "answer_refused", Task: from.task, Question: b.Question, Reason: refusalText(err)})
+		// State tells the asking computer whether the question is still open
+		// here, so it can be answered again there (row 26).
+		var state string
+		if err := tx.QueryRow(`SELECT state FROM task_questions WHERE id=? AND task_id=?`, b.Question, t.ID).Scan(&state); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		return enqueueNet(tx, from.broker, from.peer, "answer-refused."+b.Question+"."+opID, t.ID, netBody{Kind: "answer_refused", Task: from.task, Question: b.Question, Reason: refusalText(err), State: state})
 	}
 	return err
 }
@@ -994,7 +1002,22 @@ func applyReport(tx *sql.Tx, from netLink, b netBody) error {
 		if t.State != "running" {
 			return nil
 		}
-		why := name + " did not accept the answer: " + clip(b.Reason, 2000) + "; nothing is retried"
+		reason := clip(b.Reason, 2000)
+		// Row 26: when the question is still open there, it opens here again
+		// and waits for another answer; nothing is re-sent on its own. A
+		// computer before 0.61 sends no state; its «is for the owner» refusal
+		// also leaves the question open.
+		if open, waiting := reopenable(tx, t.ID, b.Question, b.State, reason); open {
+			why := name + " did not accept the answer: " + reason + "; the question is open again"
+			if _, err := tx.Exec(`UPDATE task_questions SET state='open',answer=NULL,answer_op=NULL,answered_by=NULL WHERE id=? AND task_id=?`, b.Question, t.ID); err != nil {
+				return err
+			}
+			if err := setTaskState(tx, t.ID, waiting, why); err != nil {
+				return err
+			}
+			return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "answer_refused", why, b.Question)
+		}
+		why := name + " did not accept the answer: " + reason + "; nothing is retried"
 		if err := setTaskState(tx, t.ID, "blocked", why); err != nil {
 			return err
 		}
@@ -1071,4 +1094,20 @@ func applyReport(tx *sql.Tx, from netLink, b netBody) error {
 		}
 	}
 	return insertTaskEvent(tx, t.Project, t.ID, b.Audience, b.Event, text, question)
+}
+
+// reopenable tells whether a question whose answer another computer refused
+// can be answered again, and the state the task then waits in.
+func reopenable(tx *sql.Tx, task, question, state, reason string) (bool, string) {
+	if state != "open" && !(state == "" && strings.Contains(reason, "this question is for the")) {
+		return false, ""
+	}
+	var audience, here string
+	if err := tx.QueryRow(`SELECT audience,state FROM task_questions WHERE id=? AND task_id=?`, question, task).Scan(&audience, &here); err != nil || here != "answered" {
+		return false, ""
+	}
+	if audience == AudienceOwner {
+		return true, "waiting_owner"
+	}
+	return true, "waiting_coordinator"
 }

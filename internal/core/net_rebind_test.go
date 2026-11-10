@@ -1,6 +1,10 @@
 package core
 
-import "testing"
+import (
+	"strings"
+	"testing"
+	"time"
+)
 
 // carryVia delivers one side's waiting messages of a network to the other
 // side, as sent by the given peer id.
@@ -106,5 +110,58 @@ func TestStartIsNotResentThroughANewNetwork(t *testing.T) {
 	}
 	if pending, _ := p.a.st.NetPending(newBroker, 10); len(pending) != 0 {
 		t.Fatalf("start re-sent %+v", pending)
+	}
+}
+
+// Row 30: a task the other computer has not accepted in time is reported to
+// the coordinator once, with the reason, and nothing is retried.
+func TestUnacceptedTaskIsReported(t *testing.T) {
+	p := newNetPair(t)
+	id := p.startRemote(t, "op-wait", "codex", "night audit")
+	// The start never left: the server was out of reach.
+	if n, err := p.a.st.NoteUnaccepted(time.Now()); err != nil || n != 0 {
+		t.Fatalf("too early %d %v", n, err)
+	}
+	later := time.Now().Add(unacceptedAfter + time.Minute)
+	if n, err := p.a.st.NoteUnaccepted(later); err != nil || n != 1 {
+		t.Fatalf("noted %d %v", n, err)
+	}
+	if n, _ := p.a.st.NoteUnaccepted(later); n != 0 {
+		t.Fatal("noted twice")
+	}
+	task, _ := p.a.st.TaskByID(id)
+	if task.State != "running" || !strings.Contains(task.Detail, "the start has not left this computer") {
+		t.Fatalf("task %+v", task)
+	}
+	events, _, err := p.a.st.TaskEvents("Game", AudienceCoordinator, 0, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, e := range events {
+		found = found || (e.Kind == "not_accepted" && e.TaskID == id)
+	}
+	if !found {
+		t.Fatalf("no event %+v", events)
+	}
+	// An accepted task is never reported.
+	id2 := p.startRemote(t, "op-ok", "codex", "fine")
+	p.carry(t, true)
+	p.carry(t, false)
+	if n, _ := p.a.st.NoteUnaccepted(time.Now().Add(time.Hour)); n != 0 {
+		t.Fatalf("accepted task %s reported", id2)
+	}
+}
+
+// Row 24: when this computer's client stops refreshing the network's list,
+// list_agents says so instead of showing every computer quietly offline.
+func TestStaleNetworkIsExplained(t *testing.T) {
+	p := newNetPair(t)
+	if note, err := p.a.st.networkStale(time.Now()); err != nil || note != "" {
+		t.Fatalf("fresh %q %v", note, err)
+	}
+	note, err := p.a.st.networkStale(time.Now().Add(10 * time.Minute))
+	if err != nil || !strings.Contains(note, "has not heard from the server for 10 minutes") {
+		t.Fatalf("stale %q %v", note, err)
 	}
 }

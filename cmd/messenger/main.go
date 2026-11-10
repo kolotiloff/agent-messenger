@@ -498,6 +498,7 @@ func usage() {
   messenger --root КАТАЛОГ task-answer --task ID --question ID --op ID --text ТЕКСТ
   messenger --root КАТАЛОГ task-cancel --task ID
   messenger --root КАТАЛОГ coordinator --project ИМЯ
+  messenger --root КАТАЛОГ coordinator-watch --project ИМЯ --after КУРСОР [--minutes 30]
   messenger --root КАТАЛОГ recover-codex --alias ИМЯ --confirm preserve-uncertain
   messenger recover-missing-root --confirm preserve-uncertain
   messenger --root КАТАЛОГ register-session --provider claude|codex|cursor --environment КАТАЛОГ --conversation-id ID --alias ИМЯ --cli ФАЙЛ [--workspace КАТАЛОГ]
@@ -513,6 +514,7 @@ func usage() {
   messenger --root КАТАЛОГ inspect
   messenger --root КАТАЛОГ resolve fail|accept|retry --alias ИМЯ [--confirm actions-may-repeat]
 
+coordinator-watch — фоновое ожидание координатора: выходит, когда у задач проекта появились события после курсора, или через 30 минут без них.
 pause — новые задания не резервируются, активный процесс не останавливается.
 doctor — показывает наличие CLI в PATH и статус доступного клиента; CLI/модели не запускает, вход не проверяет, блокировки не меняет. Код 0 означает сформированный отчёт, а не готовность агентов.
 start — запускает клиент в фоне, всегда на паузе; не устанавливает службу или автозапуск. Закрытие терминала не останавливает клиент. Повторный start не заменяет живой экземпляр и не меняет его разрешения.
