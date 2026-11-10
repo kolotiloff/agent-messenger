@@ -8,9 +8,15 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-10 (morning) by Claude Code.
+
+- Ready for 0.60 on `claude/ui-tweaks` (PR to `main` open, not released; the owner releases): T-130, T-128 (notices, update icon), T-126 (lost contact), T-115 (full access shown), T-129 (sandbox warning), T-114 (`note_task`), T-113 (continue another computer's task, D-113).
+- Owner's checks after the release: update ПК-1 from the Mac card icon; turn ПК-1 off during a task and see «Связь потеряна, исход неизвестен»; ask the coordinator to write to a running worker and to continue a finished task of ПК-1 (both computers on 0.60). On the Mac, if Codex workers still have no network, quit Messenger fully and open it by hand; the window now warns when it was started from an agent sandbox.
+- Next: T-128 restart icon, update that waits for tasks, continuing tasks of an earlier network (by computer name), interrupted runs on another computer.
+
 Updated 2026-11-09 (evening) by Claude Code.
 
-- After 0.58, on `claude/ui-tweaks`, not released: T-117 (coordinator follows updates, D-107), T-120 (background watch), T-112 (`task_messages`), T-119 (own computer name in the list), T-118 (continue an interrupted task once its worker is gone, D-108), T-121 (task time label), T-122 (other computers' tasks take «Любые команды» by default, the switch is on «Агенты», D-109), T-123 (restart waits for running tasks), T-124 (stop and send icons alike), T-125 (the owner's message answers a question to the coordinator, D-110), T-127 (own server or another one, not both; a rejoined computer listed once, D-111). Open: T-113 (continue another computer's task), T-114 (coordinator writes to a running worker), T-115 (show full access per task), T-116 (changed files after a limit).
+- Released in 0.59: T-111, T-112, T-117–T-125, T-127. After 0.59, on `claude/ui-tweaks`, not released: T-130 (the coordinator may answer a question to the owner, D-112). Next for 0.60: T-126 (offline and vanished computers' tasks), T-128 (notifications above the reply box, update and restart icons on computer cards), T-129 (client started inside an agent sandbox). Open: T-113, T-114, T-115.
 - After 0.58: T-111 (other computers' tasks open as a read-only card) on `claude/ui-tweaks`, not released.
 - 0.58 released (PR #89): model lists by default and filled once for earlier agents (T-098, T-109), questions to the owner visible to the coordinator (T-099), update checks within GitHub's limit (T-103), short version «0.58» (T-104), task list wider and wrapping (T-105), steady language/theme lists (T-106), Linux installation updates while the client runs (T-107, D-106), the worker's model next to its name (T-108), all active tasks of every computer together (T-110).
 - Owner's steps: on a Linux computer installed with `install`, install 0.58 by hand once (`messenger shutdown`, then `./AgentMessenger-Linux-x64 install`, then `messenger open`).

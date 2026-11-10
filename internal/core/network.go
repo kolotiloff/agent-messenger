@@ -70,6 +70,9 @@ var networkTaskColumns = [][3]string{
 	{"tasks", "origin_broker", "TEXT"},
 	{"tasks", "origin_peer", "TEXT"},
 	{"tasks", "origin_task", "TEXT"},
+	// T-126: the other computer's name when the task was sent, kept for
+	// when that computer is no longer in the network.
+	{"tasks", "remote_name", "TEXT"},
 }
 
 // PeerFresh is how old, in seconds, a computer's last report may be for it
@@ -508,8 +511,8 @@ func startRemoteTask(tx *sql.Tx, r StartTaskRequest) (string, error) {
 	id = "task-" + id[:16]
 	at := now()
 	title := taskTitle(r.Title, r.Text)
-	if _, err := tx.Exec(`INSERT INTO tasks(id,project,op_id,computer,provider,cli_path,environment,profile,folder,title,text,state,detail,created_at,updated_at,model,remote_broker,remote_peer,resource) VALUES (?,?,?,?,?,'','','','',?,?,'running',?,?,?,?,?,?,?)`,
-		id, r.Project, r.OpID, r.Computer, r.Provider, title, r.Text, "sent to "+peer.Name+"; waiting for it to accept", at, at, r.Model, broker, r.Computer, r.Lock); err != nil {
+	if _, err := tx.Exec(`INSERT INTO tasks(id,project,op_id,computer,provider,cli_path,environment,profile,folder,title,text,state,detail,created_at,updated_at,model,remote_broker,remote_peer,resource,remote_name) VALUES (?,?,?,?,?,'','','','',?,?,'running',?,?,?,?,?,?,?,?)`,
+		id, r.Project, r.OpID, r.Computer, r.Provider, title, r.Text, "sent to "+peer.Name+"; waiting for it to accept", at, at, r.Model, broker, r.Computer, r.Lock, peer.Name); err != nil {
 		return "", err
 	}
 	if err := insertTaskEvent(tx, r.Project, id, AudienceLog, "started", title, ""); err != nil {
@@ -649,6 +652,12 @@ func (s *Store) NetUndeliverable(seq int64) error {
 				return err
 			}
 			return insertTaskEvent(tx, project, task, AudienceCoordinator, "failed", why, "")
+		case "continue":
+			t, err := scanTask(tx.QueryRow(`SELECT `+taskColumns+` FROM tasks WHERE id=?`, task).Scan)
+			if err != nil {
+				return err
+			}
+			return continueNotRun(tx, t, "the follow-up was not delivered: the other computer is no longer in the network; it never ran there")
 		case "answer", "cancel":
 			what := map[string]string{"answer": "the answer", "cancel": "the cancel request"}[kind]
 			why := what + " was not delivered: the other computer is no longer in the network; what happens there is unknown and nothing is retried"
@@ -707,9 +716,11 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 			return applyStart(tx, from, b)
 		case "answer":
 			return applyAnswer(tx, from, m.OpID, b)
+		case "continue":
+			return applyContinue(tx, from, b)
 		case "cancel":
 			return applyCancel(tx, from)
-		case "accepted", "refused", "event", "answer_refused", "progress":
+		case "accepted", "refused", "event", "answer_refused", "continue_refused", "progress":
 			return applyReport(tx, from, b)
 		case "log_request":
 			return applyLogRequest(tx, from, b)
@@ -895,6 +906,8 @@ func applyReport(tx *sql.Tx, from netLink, b netBody) error {
 			return err
 		}
 		return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "failed", why, "")
+	case "continue_refused":
+		return continueNotRun(tx, t, name+" did not continue the task: "+clip(b.Reason, 2000))
 	case "answer_refused":
 		if t.State != "running" {
 			return nil

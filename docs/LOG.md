@@ -2,6 +2,19 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-10 — Claude Code (night: 0.60 changes T-128, T-126, T-115, T-129, T-114, T-113)
+
+- T-128: notices above the reply box; update icon with a confirm on older computers' cards. Restart icon and «update after the tasks» deferred.
+- T-126: a task on a computer out of reach says «Связь потеряна, исход неизвестен»; the coordinator sees `contact_lost`.
+- T-115, T-129: the task header and `tasks` say whether the worker had «Любые команды»; a client started inside an agent sandbox is reported in the window.
+- T-114: coordinator tool `note_task`. T-113 (D-113): `continue_task` for another computer's finished task.
+- All on `claude/ui-tweaks`, checked with `scripts/check.sh` and fake stores only; not released (the owner releases 0.60).
+
+## 2026-11-10 — Claude Code (release 0.59, T-130)
+
+- 0.59 released from PR #90 (T-111, T-112, T-117–T-125, T-127).
+- T-130 (D-112): the coordinator may answer a question to the owner; the window shows it as the coordinator's answer. On `claude/ui-tweaks`, not released.
+
 ## 2026-11-09 — Claude Code (T-121 task time label, T-122 one place for «Любые команды», T-123 restart waits for tasks)
 
 - The update button at the bottom left shows a down arrow with a bar (owner); the page menu with «Перезагрузить» (it only reloads the page) is gone outside text. T-126, T-128, T-129 recorded for 0.60.

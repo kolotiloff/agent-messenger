@@ -259,6 +259,9 @@
   function statusPiece(text,comma){const piece=el('span',text);if(comma)piece.append(el('span',',','am-task-comma'));return piece;}
   function taskStatus(t){
     const end=t.finished_at||t.updated_at,from=t.started_at||t.created_at;
+    // T-126: an open task on a computer this one lost contact with.
+    if(t.remote?.lost&&!t.remote.from&&activeStates.includes(t.state))
+      return [tr('Связь потеряна, исход неизвестен'),'am-muted',t.remote.last_seen?'«'+t.remote.name+tr('» не на связи с ')+stamp(t.remote.last_seen):'«'+t.remote.name+tr('» больше нет в сети')];
     switch(t.state){
       case 'running':return t.pending_launch?[t.waits_for_lock?tr('Ждёт ресурс «')+t.waits_for_lock+'»':tr('Ждёт запуска'),'am-status-wait']:[tr('Работает ')+minutes(from),'am-status-run'];
       case 'waiting_owner':return [tr('Ждёт вашего ответа'),'am-status-wait'];
@@ -292,8 +295,8 @@
     select.disabled=!view;syncSelects();
   }
   // Right-click menu on another computer of the network. Revoking cannot be
-  // undone, so its item only opens a confirmation inside the card; updating
-  // (T-078) asks that computer to install the newest signed update.
+  // undone, so its item only opens a confirmation inside the card. Updating
+  // moved to an icon on the card (T-128).
   function deviceMenu(d,x,y,can){
     let menu=$('device-menu');
     if(!menu){
@@ -313,41 +316,77 @@
       item.addEventListener('click',run);item.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();run();}});
       items.push(item);
     };
-    if(can.update)add(tr('Обновить программу'),()=>requestUpdate(d));
-    else if(can.why){
-      // Why the item cannot work yet, instead of no menu at all (owner).
-      const item=el('div',undefined,'am-select-option am-menu-off');item.setAttribute('role','menuitem');item.setAttribute('aria-disabled','true');item.tabIndex=0;
-      item.append(el('span',tr('Обновить программу')),el('span',can.why,'am-small am-muted'));items.push(item);
-    }
     if(can.revoke)add(tr('Отозвать устройство'),()=>{revokeAsk=d.id;clearTimeout(revokeTimer);revokeTimer=setTimeout(()=>{revokeAsk='';renderMachines();},8000);renderMachines();$('machines').querySelector('[data-key="'+CSS.escape('revoke-yes-'+d.id)+'"]')?.focus();});
     if(!items.length)return;
     menu.replaceChildren(...items);menu.style.left=x+'px';menu.style.top=y+'px';menu.showPopover();items[0].focus();
   }
   // Asking another computer to update itself (T-078). Its answers arrive
-  // with the server status; a refused request shows on the card for a while.
-  let updateErrors={};
+  // with the server status and show as notices above the reply box (T-128);
+  // the card only says while it is under way.
   async function requestUpdate(peer){
-    delete updateErrors[peer.id];
     try{const answer=await postAPI('/api/server-action',{action:'update',device:peer.id},28000);if(answer?.result)server=answer.result;}
-    catch(error){const id=peer.id;updateErrors[id]=error.message;setTimeout(()=>{if(updateErrors[id]===error.message){delete updateErrors[id];renderMachines();}},10000);}
+    catch(error){addNotice('refused-'+peer.id+'-'+Date.now(),'bad',(peer.name||'')+tr(' не обновлён'),capital(error.message));}
     renderMachines();
   }
-  // The card's update line: the last request to that computer, while recent.
+  // The card's update line, only while the request is under way.
   function updateLine(peer){
-    if(updateErrors[peer.id])return [tr('Не обновлено: ')+updateErrors[peer.id],'am-status-bad'];
     const u=(server?.updates||[]).find(x=>x.computer===peer.id);
-    if(!u)return null;
-    const at=Date.parse(u.updated_at);
-    if(!(Date.now()-at<24*3600*1000))return null;
-    if(u.stale)return [tr('Нет ответа об обновлении'),'am-status-bad'];
-    switch(u.state){
-      case 'waiting':return [tr('Обновление запрошено…'),'am-status-wait'];
-      case 'updating':return [tr('Обновляется…'),'am-status-run'];
-      case 'done':return u.text?[tr('Версия ')+versionName(u.version||'')+': '+u.text,'am-muted']:[tr('Обновлено до ')+versionName(u.version||''),'am-muted'];
-      case 'refused':case 'failed':return [tr('Не обновлено: ')+(u.text||u.state),'am-status-bad'];
-    }
+    if(!u||u.stale||!(Date.now()-Date.parse(u.updated_at)<24*3600*1000))return null;
+    if(u.state==='waiting')return [tr('Обновление запрошено…'),'am-status-wait'];
+    if(u.state==='updating')return [tr('Обновляется…'),'am-status-run'];
     return null;
   }
+  // T-128: notices above the reply box. A good one fades after a few seconds
+  // on screen; a bad one stays until the owner closes it, also across
+  // reloads of the window. Only answers that came while the window was open
+  // are shown as good news; problems of the last day are kept.
+  const notices=[],noticeSince=Date.now();
+  function closedNotices(){try{return JSON.parse(localStorage.getItem('messenger-notices-closed')||'{}')||{};}catch(_){return {};}}
+  function closeNotice(key){
+    const i=notices.findIndex(n=>n.key===key);if(i>=0)notices.splice(i,1);
+    const closed=closedNotices(),cut=Date.now()-2*24*3600*1000;closed[key]=Date.now();
+    for(const k of Object.keys(closed))if(closed[k]<cut)delete closed[k];
+    remember('messenger-notices-closed',JSON.stringify(closed));renderNotices();
+  }
+  function addNotice(key,kind,title,text){
+    if(notices.some(n=>n.key===key)||closedNotices()[key])return;
+    notices.push({key,kind,title,text:text||''});renderNotices();
+  }
+  function collectNotices(){
+    // T-129: the background program was started inside an agent's sandbox.
+    if(clientInfo?.sandbox)addNotice('sandbox-'+(clientInfo.client_version||''),'bad',tr('Messenger запущен из песочницы агента'),tr('Исполнители унаследуют её: без сети и без части папок, даже с «Любыми командами». Закройте Messenger полностью и откройте его снова сами, не из агента.'));
+    const names=Object.fromEntries((server?.peers||[]).map(p=>[p.id,p.name]));
+    for(const u of server?.updates||[]){
+      const at=Date.parse(u.updated_at),name=names[u.computer]||tr('Компьютер');
+      if(!(Date.now()-at<24*3600*1000))continue;
+      const key='update-'+u.request_id+'-'+(u.stale?'stale':u.state);
+      if(u.stale)addNotice(key,'bad',name+tr(' не ответил об обновлении'),tr('Проверьте, что программа там запущена, и попросите ещё раз.'));
+      else if(u.state==='done'&&at>=noticeSince-60000){
+        const same=/последн/i.test(u.text||'');
+        addNotice(key,same?'info':'good',same?name+tr(': уже последняя версия'):name+tr(' обновлён до ')+versionName(u.version||''),same?'':u.text||'');
+      }else if(u.state==='refused'||u.state==='failed')addNotice(key,'bad',name+tr(' не обновлён'),capital(u.text||''));
+    }
+  }
+  const noticeIcons={good:'<path d="M8 12.5l2.7 2.7L16 9.8"/>',info:'<path d="M12 11v5M12 8h.01"/>',bad:'<path d="M12 7.5v5.5M12 16.5h.01"/>'};
+  function renderNotices(){
+    const box=$('notices');if(!box)return;
+    box.replaceChildren();box.hidden=!notices.length;
+    for(const n of notices){
+      const card=el('div',undefined,'am-notice am-notice-'+n.kind);card.dataset.key=n.key;
+      const icon=document.createElementNS('http://www.w3.org/2000/svg','svg');icon.setAttribute('viewBox','0 0 24 24');icon.setAttribute('aria-hidden','true');icon.classList.add('am-notice-icon');
+      icon.innerHTML='<circle cx="12" cy="12" r="9"/>'+noticeIcons[n.kind];
+      const body=el('div',undefined,'am-notice-body');body.append(el('span',n.title,'am-notice-title'));if(n.text)body.append(el('span',n.text,'am-small am-muted'));
+      const close=el('button','×','am-toast-close');close.type='button';close.setAttribute('aria-label',tr('Закрыть'));close.addEventListener('click',()=>closeNotice(n.key));
+      card.append(icon,body,close);
+      if(n.kind!=='bad'){
+        card.append(el('span',undefined,'am-notice-timer'));
+        // The countdown starts once the notice can be seen.
+        if(!n.timer&&tab==='tasks'&&!document.hidden)n.timer=setTimeout(()=>closeNotice(n.key),6000);
+      }
+      box.append(card);
+    }
+  }
+  document.addEventListener('visibilitychange',renderNotices);
   // One line per agent program, with its state (D-064: no coordinator mark).
   // live is false when the computer cannot be reached.
   function agentLines(agents,coordinatorClient,live){
@@ -381,6 +420,7 @@
     card.addEventListener('keydown',event=>{if(event.target===card&&(event.key==='Enter'||event.key===' ')){event.preventDefault();filterComputer(id);}});
   }
   function renderMachines(){
+    collectNotices();
     const box=$('machines');box.replaceChildren();
     const machine=el('div',undefined,'am-machine-card');machine.setAttribute('aria-current','true');pickable(machine,'local');
     const head=el('div',undefined,'am-machine-name');head.append(el('span',view?.computer_name||tr('Этот компьютер')));
@@ -399,7 +439,18 @@
       const pdot=el('span',undefined,'am-dot'+(fresh?' online':''));pdot.title=fresh?tr('На связи'):tr('Нет связи');
       name.append(el('span',peer.name));
       if(peer.version)name.append(el('span',versionName(peer.version),'am-small am-muted am-machine-version'));
-      name.append(pdot);card.append(name);
+      name.append(pdot);
+      // T-128: an older computer gets the update icon next to its dot; the
+      // owner confirms in a popup.
+      const busy=!!updateLine(peer);
+      if(fresh&&peer.version&&!busy&&versionOlder(peer.version,newestVersion())){
+        const newest=versionName(newestVersion()),label=tr('Обновить до ')+newest;
+        const b=el('button',undefined,'am-update-icon am-peer-update');b.type='button';b.title=label;b.setAttribute('aria-label',label);b.append(svgIcon(['M12 4v11M7 10l5 5 5-5M5 20h14']));
+        b.addEventListener('click',event=>{event.stopPropagation();askConfirm(tr('Обновить ')+(peer.name||tr('компьютер'))+tr(' до ')+newest+'?',tr('Программа на том компьютере обновится и перезапустится. Задачи и история сохранятся.'),tr('Обновить'),()=>requestUpdate(peer),true);});
+        b.addEventListener('keydown',event=>event.stopPropagation());
+        name.append(b);
+      }
+      card.append(name);
       if(revokeAsk===peer.id&&hosted.has(peer.id)){
         card.append(el('p',tr('Отозвать устройство? Вернуть его можно только новым приглашением.'),'am-small am-muted'));
         const actions=el('div',undefined,'am-actions am-device-confirm');
@@ -418,9 +469,8 @@
       }
       const status=updateLine(peer);
       if(status)card.append(el('p',status[0],'am-small am-update-line '+status[1]));
-      const can={revoke:hosted.has(peer.id),update:fresh&&!!peer.version};
-      if(!can.update)can.why=!fresh?tr('Компьютер не на связи'):tr('Там старая версия: один раз обновите её на том компьютере');
-      {
+      const can={revoke:hosted.has(peer.id)};
+      if(can.revoke){
         card.classList.add('am-device-card');card.tabIndex=0;card.dataset.key='revoke-'+peer.id;card.title=tr('Правая кнопка мыши — действия');
         card.addEventListener('contextmenu',event=>{event.preventDefault();deviceMenu(peer,event.clientX,event.clientY,can);});
         card.addEventListener('keydown',event=>{if(event.key==='ContextMenu'||(event.shiftKey&&event.key==='F10')){event.preventDefault();const r=card.getBoundingClientRect();deviceMenu(peer,r.left+16,r.top+24,can);}});
@@ -491,8 +541,8 @@
       const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),label);
       if(t.remote)agent.title=t.remote.from?tr('Задачу дал компьютер «')+t.remote.name+'»':tr('Выполняется на компьютере «')+t.remote.name+'»';
       const when=taskWhen(t);if(when){const w=el('span',when,'am-task-when');w.title=taskWhenTitle(t);agent.append(w);}
-      const [text,cls]=taskStatus(t);
-      const status=el('span',undefined,'am-task-status '+cls);
+      const [text,cls,tip]=taskStatus(t);
+      const status=el('span',undefined,'am-task-status '+cls);if(tip)status.title=tip;
       if(t.state==='waiting_owner')status.append(el('span',undefined,'am-dot am-dot-wait'));
       const words=el('span');status.append(words);words.append(statusPiece(text,!!t.usage));
       if(t.usage){const used=el('span',usageShort(t.usage),'am-task-usage');used.title=usageLong(t.usage);words.append(used);}
@@ -672,10 +722,11 @@
     const atBottom=thread.scrollHeight-thread.clientHeight-thread.scrollTop<40||!feedSignature;feedSignature=signature;
     const title=el('div',undefined,'am-task-head');title.append(el('h3',t.title));
     const where=t.remote&&!t.remote.from?tr(' на компьютере «')+t.remote.name+'»':tr(' на ')+(view.computer_name||tr('этом компьютере'))+(t.remote?.from?tr(', по заданию компьютера «')+t.remote.name+'»':'');
-    title.append(el('p',(names[t.agent]||t.agent)+((t.ran_model||t.model)?' ('+(t.ran_model||t.model)+')':'')+where+tr(', папка ')+(t.folder||tr('ещё не известна')),'am-small am-muted'));
-    const [statusText,statusCls]=taskStatus(t);
+    title.append(el('p',(names[t.agent]||t.agent)+((t.ran_model||t.model)?' ('+(t.ran_model||t.model)+')':'')+where+tr(', папка ')+(t.folder||tr('ещё не известна'))+(t.remote&&!t.remote.from?'':t.full_access?tr(', любые команды разрешены'):tr(', без «Любых команд»')),'am-small am-muted'));
+    const [statusText,statusCls,statusTip]=taskStatus(t);
     const when=t.finished_at?', '+clock(t.created_at)+'–'+clock(t.finished_at):tr(', начата в ')+clock(t.created_at);
     const line=el('p',undefined,'am-small');line.append(el('span',statusText,statusCls),el('span',when,'am-muted'));
+    if(statusTip)line.append(el('span',', '+statusTip,'am-muted'));
     if(t.usage){const used=el('span',', '+usageShort(t.usage),'am-muted');used.title=usageLong(t.usage);line.append(used);}
     title.append(line);
     const headRow=el('div',undefined,'am-task-head-row');headRow.append(title);
@@ -712,7 +763,7 @@
     for(const [index,it] of feed.items.entries()){
       if(it.kind!=='tool')tools=null;
       if(it.kind==='task'){outgoing(coordLabel,coordProvider,tr('координатор'),it.text,it.at);continue;}
-      if(it.kind==='note'){outgoing(tr('Вы'),'owner','',it.text,it.at);const c=out[out.length-1].querySelector('.am-message-content');c.append(delivery(...({pending:[tr('Исполнитель прочитает, когда закончит текущий шаг'),'am-status-wait'],delivered:[tr('Передано исполнителю'),'am-status-good'],undelivered:[tr('Не передано: задача остановилась'),'am-status-bad']}[it.state]||[it.state,'am-muted'])));continue;}
+      if(it.kind==='note'){if(it.author==='coordinator')outgoing(coordLabel,coordProvider,tr('координатор'),it.text,it.at);else outgoing(tr('Вы'),'owner','',it.text,it.at);const c=out[out.length-1].querySelector('.am-message-content');c.append(delivery(...({pending:[tr('Исполнитель прочитает, когда закончит текущий шаг'),'am-status-wait'],delivered:[tr('Передано исполнителю'),'am-status-good'],undelivered:[tr('Не передано: задача остановилась'),'am-status-bad']}[it.state]||[it.state,'am-muted'])));continue;}
       if(it.kind==='answer'){if(it.author==='owner'){outgoing(tr('Вы'),'owner','',it.text,it.at);
         // A hint about this answer lives under it while the worker has not
         // gone on yet, so it never stays in another task (owner, 2026-11-09).
@@ -1011,8 +1062,8 @@
   // A popup asks before something that is hard to undo: «Отмена» or the
   // named action. The action's error stays in the popup.
   let confirmAction=null;
-  function askConfirm(title,text,go,action){
-    confirmAction=action;$('confirm-title').textContent=title;$('confirm-text').textContent=text;$('confirm-go').textContent=go;
+  function askConfirm(title,text,go,action,safe){
+    confirmAction=action;$('confirm-go').className=safe?'am-primary':'am-danger';$('confirm-title').textContent=title;$('confirm-text').textContent=text;$('confirm-go').textContent=go;
     $('confirm-error').hidden=true;$('confirm-go').disabled=false;$('confirm-dialog').showModal();
   }
   async function runConfirm(){
@@ -1127,7 +1178,7 @@
   }
   async function loadDiscovery(){try{const d=await api('/api/discovery',8000);discovery=d.agents||[];discoveryLoaded=true;renderAgents();autoCheck();}catch(_){}}
   function show(next){
-    tab=next;root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab);
+    tab=next;root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab);renderNotices();
     root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
     $('list-toggle').hidden=tab!=='tasks';if(tab==='server')loadServer();if(tab==='stats')loadStats();if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сервер'),stats:tr('Статистика')}[tab];
   }
@@ -1615,6 +1666,26 @@
     return preview?'v0.'+preview[1]:version?'v'+version:'';
   }
   function versionText(installed){return versionName(installed);}
+  // Comparing builds: 0.0.0-preview.41 and 0.41 are the same build.
+  function versionRank(version){
+    const v=String(version||'').replace(/^v/,'');
+    const preview=v.match(/^0\.0\.0-preview\.(\d+)$/);
+    return preview?[0,Number(preview[1])]:v.split(/[.-]/).map(x=>Number(x)||0);
+  }
+  function versionOlder(a,b){
+    if(!a||!b)return false;
+    const x=versionRank(a),y=versionRank(b);
+    for(let i=0;i<Math.max(x.length,y.length);i++){if((x[i]||0)!==(y[i]||0))return (x[i]||0)<(y[i]||0);}
+    return false;
+  }
+  // The newest build this window knows of: its own, the background
+  // program's, an update that came out, or another computer's.
+  let knownUpdate='';
+  function newestVersion(){
+    let best='';
+    for(const v of [clientInfo?.window_version,clientInfo?.client_version,knownUpdate,...(server?.peers||[]).map(p=>p.version)])if(v&&(!best||versionOlder(best,v)))best=v;
+    return best;
+  }
   // The update icon says in its tooltip which version came out (T-066).
   function updateTip(version,busy){
     const name=versionName(version);
@@ -1633,6 +1704,7 @@
     // Background checks and their failures stay quiet; the app checks again
     // by itself.
     const shown=!!version||waiting;
+    if(version)knownUpdate=version;
     $('app-update-version').hidden=true;$('app-update-button').hidden=!shown;
     $('app-installed-version').textContent=versionText(installed);
     updateTip(version,waiting);
@@ -1648,6 +1720,7 @@
     $('app-installed-version').hidden=!installed;
     $('app-installed-version').title=installed?tr('Версия ')+versionName(installed).slice(1):'';
     const version=typeof s.version==='string'?s.version:'';
+    if(version&&s.state==='available')knownUpdate=version;
     const done=s.state==='installed',shown=(s.state==='available'&&!!version)||selfUpdateBusy||done||!!s.message;
     // Only the update icon while an update waits (owner, T-056, T-066); a line
     // appears only for an error or after the update.

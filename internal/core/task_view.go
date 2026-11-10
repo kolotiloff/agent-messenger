@@ -129,6 +129,9 @@ type WindowTask struct {
 	Remote *RemoteComputer `json:"remote,omitempty"`
 	// Usage is what the task's runs spent so far (T-058).
 	Usage *TaskUsage `json:"usage,omitempty"`
+	// FullAccess: the worker runs with «Любые команды» (T-115). Only for
+	// tasks that run on this computer.
+	FullAccess bool `json:"full_access,omitempty"`
 }
 
 // RemoteComputer is the other computer of a task (T-037).
@@ -136,6 +139,41 @@ type RemoteComputer struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 	From bool   `json:"from,omitempty"`
+	// Lost: this computer has no contact with the computer that runs the
+	// task (T-126). It is offline, left the network, or the network was
+	// made again. The task's outcome there is unknown; LastSeen is when it
+	// last reported, if known.
+	Lost     bool   `json:"lost,omitempty"`
+	LastSeen string `json:"last_seen,omitempty"`
+}
+
+// TaskRemote names the other computer of a task, or nil for a task of this
+// computer only.
+func (s *Store) TaskRemote(task string) (*RemoteComputer, error) { return s.remoteOf(task) }
+
+// remoteContact fills in whether the computer that runs a task is out of
+// reach (T-126).
+func remoteContact(tx *sql.Tx, task string, link netLink, out *RemoteComputer) error {
+	var name sql.NullString
+	if err := tx.QueryRow(`SELECT remote_name FROM tasks WHERE id=?`, task).Scan(&name); err != nil {
+		return err
+	}
+	var broker string
+	if err := tx.QueryRow(`SELECT COALESCE((SELECT value FROM meta WHERE key='net_broker'),'')`).Scan(&broker); err != nil {
+		return err
+	}
+	peer, found, err := netPeer(tx, link.peer)
+	if err != nil {
+		return err
+	}
+	if out.Name == link.peer && name.String != "" {
+		out.Name = name.String
+	}
+	if found && peer.Age >= 0 {
+		out.LastSeen = time.Now().UTC().Add(-time.Duration(peer.Age) * time.Second).Format(time.RFC3339)
+	}
+	out.Lost = broker == "" || broker != link.broker || !found || peer.Age < 0 || peer.Age > PeerFresh
+	return nil
 }
 
 func (s *Store) remoteOf(task string) (*RemoteComputer, error) {
@@ -148,6 +186,7 @@ func (s *Store) remoteOf(task string) (*RemoteComputer, error) {
 		switch {
 		case link.remote != nil:
 			out = &RemoteComputer{ID: link.remote.peer, Name: peerName(tx, link.remote.peer)}
+			return remoteContact(tx, task, *link.remote, out)
 		case link.origin != nil:
 			out = &RemoteComputer{ID: link.origin.peer, Name: peerName(tx, link.origin.peer), From: true}
 		}
@@ -316,7 +355,7 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 		return v, err
 	}
 	for _, t := range tasks {
-		w := WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt, FailureReason: t.FailureReason, FailureReset: t.FailureReset}
+		w := WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt, FailureReason: t.FailureReason, FailureReset: t.FailureReset, FullAccess: t.FullAccess}
 		if t.OpenQuestion != nil && t.OpenQuestion.Audience == AudienceOwner {
 			w.OwnerQuestion = t.OpenQuestion
 		}
@@ -376,7 +415,7 @@ func (s *Store) TaskFeed(id string) (TaskFeed, error) {
 	if err != nil {
 		return f, err
 	}
-	f.Task = WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt, RanModel: s.ranModel(t.ID)}
+	f.Task = WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt, RanModel: s.ranModel(t.ID), FullAccess: t.FullAccess}
 	if t.OpenQuestion != nil && t.OpenQuestion.Audience == AudienceOwner {
 		f.Task.OwnerQuestion = t.OpenQuestion
 	}

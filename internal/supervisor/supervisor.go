@@ -458,6 +458,7 @@ func (s *Supervisor) Status() (control.Status, error) {
 		Broker:     "not_configured",
 		Supervisor: os.Getpid(),
 		Version:    buildinfo.Version,
+		Sandbox:    AgentSandbox(),
 	}
 	if s.server != nil {
 		status.Broker = s.server.Summary()

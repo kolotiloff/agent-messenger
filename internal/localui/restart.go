@@ -55,6 +55,9 @@ func clientInfo(ctx context.Context, call caller, restart Restarter) map[string]
 	}
 	info["client"] = "running"
 	info["client_version"] = response.Status.Version
+	if response.Status.Sandbox != "" {
+		info["sandbox"] = response.Status.Sandbox
+	}
 	info["outdated"] = clientOutdated(response.Status.Version, buildinfo.Version)
 	return info
 }

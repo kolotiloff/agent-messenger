@@ -20,6 +20,21 @@ import (
 // its step and waits: the owner's message answers that question at once,
 // instead of waiting for the coordinator (T-125).
 func (s *Store) AddOwnerNote(task, opID, text string) error {
+	return s.addNote(task, "", opID, text, AudienceOwner)
+}
+
+// AddCoordinatorNote records the coordinator's message to a working task of
+// its project on this computer (T-114). It travels like the owner's note,
+// marked as the coordinator's. A worker that waits for the coordinator gets
+// an answer instead; one that asked the owner waits for the owner.
+func (s *Store) AddCoordinatorNote(project, task, opID, text string) error {
+	if project == "" {
+		return fmt.Errorf("%w: no project", ErrRejected)
+	}
+	return s.addNote(task, project, opID, text, AudienceCoordinator)
+}
+
+func (s *Store) addNote(task, project, opID, text, author string) error {
 	text = strings.TrimSpace(text)
 	if opID == "" || len(opID) > 128 || text == "" || utf8.RuneCountInString(text) > MaxTaskText {
 		return fmt.Errorf("%w: a message needs an operation id and 1..%d characters", ErrRejected, MaxTaskText)
@@ -50,6 +65,9 @@ func (s *Store) AddOwnerNote(task, opID, text string) error {
 		if err != nil {
 			return err
 		}
+		if project != "" && t.Project != project {
+			return fmt.Errorf("%w: unknown task", ErrRejected)
+		}
 		link, err := taskLink(tx, task)
 		if err != nil {
 			return err
@@ -58,7 +76,13 @@ func (s *Store) AddOwnerNote(task, opID, text string) error {
 			return fmt.Errorf("%w: a task of another computer takes no messages yet", ErrRejected)
 		}
 		if t.State == "waiting_owner" {
+			if author == AudienceCoordinator {
+				return fmt.Errorf("%w: the worker asked the owner a question and waits for the answer", ErrRejected)
+			}
 			return fmt.Errorf("%w: the worker asked you a question; answer it instead", ErrRejected)
+		}
+		if author == AudienceCoordinator && t.State == "waiting_coordinator" && !t.CancelRequested {
+			return fmt.Errorf("%w: the worker asked you a question; answer it with answer", ErrRejected)
 		}
 		if t.State == "waiting_coordinator" && !t.CancelRequested {
 			var question string
@@ -84,8 +108,11 @@ func (s *Store) AddOwnerNote(task, opID, text string) error {
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(`INSERT INTO task_owner_notes(id,task_id,op_id,text,state,created_at) VALUES (?,?,?,?,'pending',?)`, "note-"+id[:16], task, opID, text, now()); err != nil {
+		if _, err := tx.Exec(`INSERT INTO task_owner_notes(id,task_id,op_id,text,state,created_at,author) VALUES (?,?,?,?,'pending',?,?)`, "note-"+id[:16], task, opID, text, now(), author); err != nil {
 			return err
+		}
+		if author == AudienceCoordinator {
+			return nil
 		}
 		return insertTaskEvent(tx, t.Project, task, AudienceCoordinator, "owner_note",
 			"The owner wrote to this worker; it reads this when its current step ends and then continues the same task:\n"+text, "")
@@ -110,16 +137,19 @@ func holdForOwnerNotes(tx *sql.Tx, t Task, r TaskRun) (bool, error) {
 
 // ownerNotesOf is the owner's notes delivered with a run, oldest first.
 func ownerNotesOf(tx *sql.Tx, run string) (string, error) {
-	rows, err := tx.Query(`SELECT text FROM task_owner_notes WHERE run_id=? ORDER BY created_at,rowid`, run)
+	rows, err := tx.Query(`SELECT text,author FROM task_owner_notes WHERE run_id=? ORDER BY created_at,rowid`, run)
 	if err != nil {
 		return "", err
 	}
 	defer rows.Close()
 	var parts []string
 	for rows.Next() {
-		var text string
-		if err := rows.Scan(&text); err != nil {
+		var text, author string
+		if err := rows.Scan(&text, &author); err != nil {
 			return "", err
+		}
+		if author == AudienceCoordinator {
+			text = "From the coordinator: " + text
 		}
 		parts = append(parts, text)
 	}
@@ -128,7 +158,7 @@ func ownerNotesOf(tx *sql.Tx, run string) (string, error) {
 
 // ownerNoteItems are the task's notes for the window, in time order.
 func ownerNoteItems(tx *sql.Tx, task string) ([]FeedItem, error) {
-	rows, err := tx.Query(`SELECT text,state,created_at FROM task_owner_notes WHERE task_id=? ORDER BY created_at,rowid`, task)
+	rows, err := tx.Query(`SELECT text,state,created_at,author FROM task_owner_notes WHERE task_id=? ORDER BY created_at,rowid`, task)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +166,7 @@ func ownerNoteItems(tx *sql.Tx, task string) ([]FeedItem, error) {
 	var out []FeedItem
 	for rows.Next() {
 		it := FeedItem{Kind: "note", Author: AudienceOwner, Verified: true}
-		if err := rows.Scan(&it.Text, &it.State, &it.At); err != nil {
+		if err := rows.Scan(&it.Text, &it.State, &it.At, &it.Author); err != nil {
 			return nil, err
 		}
 		out = append(out, it)

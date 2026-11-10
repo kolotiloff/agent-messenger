@@ -446,9 +446,6 @@ func TestOwnerQuestionGoesToTheOwnerOnly(t *testing.T) {
 	if kinds(seen) != "owner_question" || seen[0].Text != "May I delete the old saves?" || seen[0].QuestionID == "" {
 		t.Fatalf("coordinator copy %+v", seen)
 	}
-	if err := f.st.AnswerTask(id, seen[0].QuestionID, "c1", "yes", AudienceCoordinator); !errors.Is(err, ErrRejected) {
-		t.Fatalf("coordinator answered the owner question: %v", err)
-	}
 	owner := f.events(t, AudienceOwner, 0)
 	if kinds(owner) != "question" {
 		t.Fatalf("owner events %s", kinds(owner))
@@ -457,11 +454,19 @@ func TestOwnerQuestionGoesToTheOwnerOnly(t *testing.T) {
 	if task.State != "waiting_owner" {
 		t.Fatalf("state %s", task.State)
 	}
-	if err := f.st.AnswerTask(id, owner[0].QuestionID, "a1", "yes", AudienceCoordinator); !errors.Is(err, ErrRejected) {
-		t.Fatalf("coordinator answered an owner question: %v", err)
+	// The coordinator passes on the owner's answer from its chat (T-130).
+	if err := f.st.AnswerTask(id, owner[0].QuestionID, "a1", "yes", AudienceCoordinator); err != nil {
+		t.Fatalf("coordinator could not pass on the owner's answer: %v", err)
 	}
-	if err := f.st.AnswerTask(id, owner[0].QuestionID, "a1", "yes", AudienceOwner); err != nil {
-		t.Fatal(err)
+	if task, _ := f.st.TaskByID(id); task.State != "running" {
+		t.Fatalf("state after the answer %s", task.State)
+	}
+	var by string
+	if err := f.st.db.QueryRow(`SELECT answered_by FROM task_questions WHERE id=?`, owner[0].QuestionID).Scan(&by); err != nil || by != AudienceCoordinator {
+		t.Fatalf("answered by %q %v", by, err)
+	}
+	if err := f.st.AnswerTask(id, owner[0].QuestionID, "a2", "no", AudienceOwner); !errors.Is(err, ErrRejected) {
+		t.Fatalf("a second answer was taken: %v", err)
 	}
 }
 

@@ -65,16 +65,19 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - start_task takes an optional model. Leave it out for the agent's default. For Claude use opus for hard work (design, tricky bugs, large refactors), sonnet for ordinary coding, haiku for small mechanical work. For Codex and Cursor pass only a name from that agent's models in list_agents (the owner lists them in the window); if the list is empty, leave model out. Never guess a name: an unknown model fails the run. Tell the owner when you chose a non-default model and why.
 - A report is the worker's short summary. Its full last message is kept too: when a report or failure ends with «[Messenger] The worker's full final message has N characters», read it with task_output before asking the worker again; it is lost nowhere, even if the worker deleted its file.
 - answer answers a worker's question (pass question_id and a unique op_id); the worker continues in the same session.
-- A worker may ask the owner instead of you, when the project's rules allow it. wait then returns an owner_question event with the question, and owner_answered with the owner's answer once given; the task shows waiting_owner meanwhile. They are for your information: the owner answers in the window, so do not call answer for them.
+- A worker may ask the owner instead of you, when the project's rules allow it. wait then returns an owner_question event with the question, and owner_answered with the owner's answer once given; the task shows waiting_owner meanwhile. The owner usually answers in the window. When the owner answers it to you in this chat, or asks you to answer for them, call answer with that question; the window shows that you gave the answer. Do not answer it on your own.
 - The owner may write to a working worker from the window. wait then returns an owner_note event with the text; the worker reads it when its current step ends and continues the same task, so a report it had written by then is held and a new one follows. Nothing to do on your side; do not repeat the note to the worker.
 - If the owner writes to a worker that waits for your answer, the owner's message is the answer and the worker continues at once: wait returns owner_answered for that question. Do not answer it again; your answer would be refused.
 - Never start a task again by yourself after it failed, was interrupted or blocked; tell the owner and let them decide.
 - A computer marked reconnecting was in the network a moment ago and has not reported since a restart: a task for it is accepted and waits on the server until it is back. models_note and limit_note explain an empty models list or a missing limit.
 - list_agents shows each agent's limit when it reported one: state ok, warning (close to the limit) or exhausted, used_percent when the agent gave it, resets_at and observed_at. It is what the agent said at the end of its last run, not a live reading; reset_passed means its reset time has passed, so it is likely available again. A limit is shared by every use of the same account, this chat included. Before choosing where to start a task, look at the limits: prefer an agent whose limit is not exhausted, and tell the owner when the one they asked for is close to or at its limit, before or instead of starting it. start_task adds limit_note when the chosen agent's last limit is close or exhausted.
-- To follow up on a finished task in the same worker conversation (it keeps its context), use continue_task instead of a new start_task. It works for done and failed tasks of this computer, a task stopped by a usage limit included (after its reset time): read task_messages first and say in your text what is already done, such as «continue; item 1 is already committed». An interrupted task of this computer (the client restarted while it ran) can be continued too, only after Messenger checks that its worker is gone; if it may still run, continue_task says so and the task stays as it is: tell the owner. For another computer's task, read task_messages and start a new task that names what is already done.
+- To add something to a task that is still running on this computer (a forgotten detail, a change of plan), use note_task; it does not stop the worker. Do not use it to hurry a worker or to repeat the task.
+- To follow up on a finished task in the same worker conversation (it keeps its context), use continue_task instead of a new start_task. It works for done and failed tasks of this computer, a task stopped by a usage limit included (after its reset time): read task_messages first and say in your text what is already done, such as «continue; item 1 is already committed». An interrupted task of this computer (the client restarted while it ran) can be continued too, only after Messenger checks that its worker is gone; if it may still run, continue_task says so and the task stays as it is: tell the owner. A done or failed task of another computer of this network can be continued the same way when that computer runs Messenger 0.60 or newer; if it refuses (older version, not in the network, no conversation), you get continue_refused with the reason: then start a new task that names what is already done.
 - Messenger already tells every worker to keep its report to a few lines, to put long details in a file and to follow the owner's rules for this project. A report ends with labelled lines when the worker gave them: «Изменения:» (commit or changeset), «Тесты:» and «Файлы:» (paths to read when needed). Do not ask workers for a «taken» line or a limit line: the task's state shows when it was accepted, and limits come from list_agents.
 - Work reaches the project only through the worker's own commit; workers are told to commit before they report. A report is a short message (at most 20000 characters reach you), so never ask for the full text of an audit or a long document instead of a commit: it will not fit, and the work still is not in the project. A worker that could not commit (files locked by another agent, its copy behind the server) asks you instead of finishing, and its task stays open. Decide what lets the commit happen: if another task holds the files, you may answer later, after that task is done, telling the worker to update and commit; otherwise tell it what to do or tell the owner. Do not tell it to finish without committing: a finished task of another computer cannot be continued.
 - get_log reads the end of another computer's Messenger log, for debugging Messenger itself (a task that never arrived, a refusal you cannot explain). That computer answers only if its owner turned on «Отдавать журнал по сети»; otherwise the reply says so. Session ids, codes and keys are removed. If no answer came in time, call get_log again with request_id. Do not use it to watch workers: wait does that.
+- full_access on a task of this computer means its worker may run any command (the owner's «Любые команды» switch on «Агенты»). Without it a command that needs approval is refused, and nobody can approve it: tell the owner to turn that switch on and then continue the task. For tasks from other computers the switch is «Любые команды для задач других компьютеров» on «Сервер».
+- contact_lost on an open task of another computer means this computer has no contact with it (offline, left the network, or the network was made again); computer_last_seen is when it last reported. Its outcome there is unknown: do not start it again by yourself; tell the owner, and when that computer is back the task goes on reporting.
 - To tell a working task from a stuck one, call tasks: an open task shows the worker's last action and when it was (last_activity, last_activity_at; for another computer's task, the last progress line it forwarded). A long quiet time is a reason to tell the owner, not to cancel or start the task again by yourself. tokens is what the task used so far. Every report and failure ends with a «[Messenger] Tokens of this task so far» line (new input, cache write, cache read, output); use it to compare costs instead of asking the worker to add up its log.
 - When two tasks must not use one resource of a computer at the same time (the Unity editor, a device, a long build), give both start_task the same lock, such as unity-editor. The later task then waits to start until the earlier one is done, failed or cancelled; tasks shows waiting_for_lock with the task it waits for. A blocked task keeps its lock until the owner resolves it.
 - A failure caused by a usage or rate limit says so and gives the reset time when the agent reported one. Tell the owner that time; do not start the task again before it.
@@ -99,7 +102,7 @@ type coordinator struct {
 }
 
 // acting tools make this chat the project's coordinator (T-090).
-var actingTools = map[string]bool{"wait": true, "start_task": true, "answer": true, "continue_task": true, "cancel": true}
+var actingTools = map[string]bool{"wait": true, "start_task": true, "answer": true, "continue_task": true, "note_task": true, "cancel": true}
 
 // claim makes this chat the active coordinator of its project.
 func (c *coordinator) claim() {
@@ -328,7 +331,13 @@ func coordinatorTools() []map[string]any {
 				"op_id":       str("unique id of this operation"),
 				"text":        map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxTaskText},
 			}, "task_id", "question_id", "op_id", "text")},
-		{"name": "continue_task", "description": "Give a finished task (done or failed) or an interrupted task of this computer a follow-up (an interrupted one only once its worker is certainly gone): the same worker conversation resumes with your text, so it keeps its context and needs no new briefing. If the agent no longer has that conversation, the run fails; then start a new task. Repeating with the same op_id is safe.",
+		{"name": "continue_task", "description": "Give a finished task (done or failed), here or on another computer of the network, or an interrupted task of this computer a follow-up (an interrupted one only once its worker is certainly gone): the same worker conversation resumes with your text, so it keeps its context and needs no new briefing. If the agent no longer has that conversation, the run fails; then start a new task. Repeating with the same op_id is safe.",
+			"inputSchema": obj(map[string]any{
+				"task_id": str("task id"),
+				"op_id":   str("unique id of this operation"),
+				"text":    map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxTaskText},
+			}, "task_id", "op_id", "text")},
+		{"name": "note_task", "description": "Write to a worker of this computer while its task runs, without stopping it: it reads your text when its current step ends and goes on in the same conversation; a report it was about to send waits until it has read your text. For a worker that asked you, use answer instead. Repeating with the same op_id is safe.",
 			"inputSchema": obj(map[string]any{
 				"task_id": str("task id"),
 				"op_id":   str("unique id of this operation"),
@@ -497,6 +506,22 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 			return nil, err
 		}
 		return map[string]any{"continued": true, "next": "The worker resumes its conversation; call wait for its report or question."}, nil
+	case "note_task":
+		var a struct {
+			TaskID string `json:"task_id"`
+			OpID   string `json:"op_id"`
+			Text   string `json:"text"`
+		}
+		if err := strict(&a); err != nil {
+			return nil, err
+		}
+		if err := c.ownTask(a.TaskID); err != nil {
+			return nil, err
+		}
+		if err := c.store.AddCoordinatorNote(c.project, a.TaskID, a.OpID, a.Text); err != nil {
+			return nil, err
+		}
+		return map[string]any{"noted": true, "next": "The worker reads it when its current step ends; call wait as usual."}, nil
 	case "cancel":
 		var a struct {
 			TaskID string `json:"task_id"`
@@ -603,6 +628,13 @@ type coordinatorTask struct {
 	Tokens         int64  `json:"tokens,omitempty"`
 	// T-072: the task waits to start until this task of the same lock ends.
 	WaitingForLock string `json:"waiting_for_lock,omitempty"`
+	// T-126: an open task on another computer this computer has no contact
+	// with; its outcome there is unknown.
+	ContactLost bool `json:"contact_lost,omitempty"`
+	// T-115: the worker may run any command (the owner's «Любые команды»).
+	// Shown for tasks of this computer only.
+	FullAccess bool   `json:"full_access,omitempty"`
+	LastSeen   string `json:"computer_last_seen,omitempty"`
 }
 
 // closedTaskStates are left out of the default tasks list (T-032).
@@ -653,7 +685,7 @@ func (c *coordinator) tasks(state string, limit int, ifVersion string) (any, err
 			more = true
 			break
 		}
-		item := coordinatorTask{ID: t.ID, Title: t.Title, Agent: t.Provider, Computer: t.Computer, State: t.State, CreatedAt: t.CreatedAt, FinishedAt: t.FinishedAt, FailureReason: t.FailureReason, FailureReset: t.FailureReset}
+		item := coordinatorTask{ID: t.ID, Title: t.Title, Agent: t.Provider, Computer: t.Computer, State: t.State, CreatedAt: t.CreatedAt, FinishedAt: t.FinishedAt, FailureReason: t.FailureReason, FailureReset: t.FailureReset, FullAccess: t.FullAccess}
 		// A verified task's detail is the same verification line every
 		// time; only unfinished or unsuccessful ones explain something.
 		if t.State != "done" {
@@ -671,6 +703,13 @@ func (c *coordinator) tasks(state string, limit int, ifVersion string) (any, err
 			item.LastActivity, item.LastActivityAt = a.Last, a.At
 			if item.WaitingForLock, err = c.store.TaskLockHolder(t.ID); err != nil {
 				return nil, err
+			}
+			r, err := c.store.TaskRemote(t.ID)
+			if err != nil {
+				return nil, err
+			}
+			if r != nil && !r.From && r.Lost {
+				item.ContactLost, item.LastSeen = true, r.LastSeen
 			}
 		}
 		out = append(out, item)
