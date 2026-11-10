@@ -306,6 +306,13 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-chat-body { position:relative; flex:1; min-height:0; --am-footer-height:120px; }
 #am-concept .am-thread { position:absolute; inset:0; display:flex; flex-direction:column; gap:var(--am-gap-region); padding:var(--am-space-3) calc(var(--am-pane-inset) - var(--am-gutter, 0px)) calc(var(--am-footer-height) + var(--am-space-6)) var(--am-pane-inset); scroll-padding-bottom:calc(var(--am-footer-height) + var(--am-space-6)); scrollbar-gutter:stable; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; }
 #am-concept .am-thread:focus { outline:none; }
+/* T-133: the feed keeps its place while the owner reads higher up; this
+   button brings them back down and says when something new came. */
+#am-concept .am-to-bottom { position:absolute; left:50%; bottom:calc(var(--am-footer-height) + var(--am-space-3)); transform:translateX(-50%); z-index:2; display:inline-flex; align-items:center; gap:var(--am-gap-control); height:var(--am-control); min-width:var(--am-control); padding:0 var(--am-space-2); border-radius:var(--am-radius-l); border:1px solid var(--am-line); background:var(--am-soft); color:var(--am-text); box-shadow:var(--am-shadow-s); }
+#am-concept .am-to-bottom[hidden] { display:none; }
+#am-concept .am-to-bottom svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+#am-concept .am-to-bottom-text { display:none; padding-left:var(--am-space-1); font-size:var(--am-text-s); }
+#am-concept .am-to-bottom.am-has-new .am-to-bottom-text { display:inline; }
 #am-concept .am-message-group { display:flex; flex-direction:column; gap:var(--am-gap-region); min-width:0; }
 #am-concept .am-message { display:flex; align-items:flex-start; gap:var(--am-gap-content); min-width:0; max-width:100%; }
 #am-concept .am-message-body { min-width:0; overflow-wrap:anywhere; }

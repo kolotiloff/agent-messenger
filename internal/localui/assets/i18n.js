@@ -191,6 +191,8 @@
   '» нет. ':'». ',
   'Что с задачей там, неизвестно.':'What happens to the task there is unknown.',
   'Закрыть задачу?':'Close the task?',
+  'Новые сообщения':'New messages',
+  'Вниз, к новым сообщениям':'Down to new messages',
   'Удалить из списка':'Remove from list',
   'Задача ещё идёт на компьютере «':'The task is still going on computer «',
   '». Удалить её можно, когда она закончится':'». You can remove it once it ends',
