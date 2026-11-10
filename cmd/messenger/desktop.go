@@ -101,12 +101,11 @@ func startClientFrom(root, executable string) error {
 	if err != nil {
 		return err
 	}
-	executable, err = distribution.CacheRuntime(executable, filepath.Join(home, "runtimes"))
+	pinned, err := distribution.CacheRuntime(executable, filepath.Join(home, "runtimes"))
 	if err != nil {
 		return err
 	}
-	_, _, err = startBackgroundAt(root, []string{"--claude-stream", "--allow-tasks"}, executable)
-	return err
+	return startPinnedClient(root, pinned, filepath.Join(home, "runtimes"))
 }
 
 // restartClient replaces an older background client with this build's one,

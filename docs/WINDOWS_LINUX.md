@@ -45,6 +45,8 @@ The single-instance lock uses `LockFileEx`; the background client starts with pr
 
 From preview.33 the window updates the program from the same signed channel as the Mac app: every 30 minutes it looks for `update-<os>-<arch>.json` in the newest releases, checks its Ed25519 signature and downloads the signed archive. «Обновиться» checks the archive's checksum and signature again, unpacks the one `messenger` / `messenger.exe` inside next to the program, runs its `version` and requires the exact signed version, revision, system and architecture, and only then replaces the program file. On Windows the running file is renamed to `<name>.old` (a running program cannot be overwritten) and removed at a later start; on Linux the new file is renamed over the old one. A program installed with `messenger install` gets the new version as another installation instead. The window then closes and opens again from the new program. The background client keeps its version until the window's «Перезапустить» (as on the Mac); tasks are not touched. Any failed check leaves the old program as it was. Details: [UPDATES.md](UPDATES.md#windows-and-linux).
 
+On Windows the background client always runs from `runtimes\messenger.exe` in the data folder, whatever the version (D-118). Windows Firewall remembers the permission by that path, so it asks «Разрешить доступ» once, not after every update; this matters for a computer that hosts the server and is updated from another one.
+
 ## Not there yet
 
 - No installer, Start menu entry or autostart on Windows. On Linux the first `messenger open` adds Agent Messenger with its icon to the application menu (`~/.local/share/applications`); there is no package (deb, snap, flatpak).

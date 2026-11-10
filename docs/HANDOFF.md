@@ -8,6 +8,11 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-10 (late evening) by Claude Code.
+
+- After 0.61, on `claude/ui-tweaks`, not released: README for 0.61 (PR #93); T-136 (D-118) the Windows client runs from `runtimes\messenger.exe` for every version, so the firewall permission survives updates. The first start of the version with T-136 asks once more on each Windows computer; until then, do not update the Windows server computer remotely.
+- ПК-2 (the server) is cut off after a remote update to 0.61: someone has to press «Разрешить доступ» in the firewall window there.
+
 Updated 2026-11-10 (evening) by Claude Code.
 
 - 0.61 released (PR #92, tag `v0.0.0-preview.61`, all downloads and signed update files in place): T-128 busy update icon, T-131 stuck tasks, T-132 tasks follow a computer into a new network, T-133 scroll arrow, T-134 coordinator list rows 18, 24, 26, 28, 30, 31, 32, T-135 feedback journal, plus window tweaks (agent status text in the sidebar, «Настройки программы» with language and theme).
