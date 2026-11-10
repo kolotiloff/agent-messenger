@@ -2,6 +2,12 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-10 — Claude Code (T-133 scroll, T-135 feedback; 0.61 ready)
+
+- T-133: the task chat keeps its place while the owner reads; down arrow, «Новые сообщения».
+- T-135 (D-117): feedback journal: bug icon in the window, `report_feedback` / `export_feedback` for the coordinator, zip export.
+- Coordinator list file updated with versions and given to the owner. Owner asked to release 0.61.
+
 ## 2026-11-10 — Claude Code (coordinator list rows 24, 26, 30, 31, WIP)
 
 - T-134 (D-116): a refused answer opens the question again; `not_accepted` after 5 minutes; `network_note` when the server has not been heard from; `idle_computers` in `wait`; watch command in `--help`.

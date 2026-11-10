@@ -1485,6 +1485,49 @@
   }
   // «Новый проект» opens a dialog; the current project is set up on its own
   // tab «Проект» (T-064).
+  // Feedback about the program (T-135): text and a picture stay on this
+  // computer; the export writes them all into one file.
+  let fbImage=null;
+  function fbExportLabel(){const n=view?.feedback_count||0;$('fb-export').textContent=tr('Выгрузить все отзывы')+(n?' ('+n+')':'');$('fb-export').disabled=!n;}
+  function openFeedback(){
+    $('fb-status').textContent='';$('fb-saved').hidden=true;fbExportLabel();$('fb-dialog').showModal();$('fb-text').focus();
+  }
+  function fbClear(){fbImage=null;$('fb-shot-full').hidden=true;$('fb-shot-empty').hidden=false;$('fb-thumb').removeAttribute('src');}
+  // Large screenshots are scaled down and stored as JPEG, so a remark stays
+  // well under the size limit.
+  function fbTake(file){
+    if(!file||!/^image\/(png|jpeg|webp)$/.test(file.type)){$('fb-status').textContent=tr('Нужна картинка PNG, JPEG или WebP.');return;}
+    const url=URL.createObjectURL(file),img=new Image();
+    img.onload=()=>{
+      const scale=Math.min(1,1600/img.width),w=Math.round(img.width*scale),h=Math.round(img.height*scale);
+      const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);URL.revokeObjectURL(url);
+      const data=c.toDataURL('image/jpeg',0.85);
+      fbImage={type:'image/jpeg',data:data.slice(data.indexOf(',')+1)};
+      $('fb-thumb').src=data;$('fb-shot-info').textContent=tr('Снимок ')+img.width+'×'+img.height+', '+Math.round(fbImage.data.length*3/4/1024)+tr(' КБ');
+      $('fb-shot-empty').hidden=true;$('fb-shot-full').hidden=false;$('fb-status').textContent='';
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);$('fb-status').textContent=tr('Картинку не удалось открыть.');};
+    img.src=url;
+  }
+  async function saveFeedback(){
+    const text=$('fb-text').value.trim();
+    if(!text&&!fbImage){$('fb-status').textContent=tr('Напишите, что не так, или приложите снимок.');return;}
+    $('fb-save').disabled=true;$('fb-status').textContent=tr('Сохраняем…');
+    try{
+      await postAPI('/api/feedback',{project:view?.project||'',text,image:fbImage?.data||'',image_type:fbImage?.type||''},15000);
+      $('fb-text').value='';fbClear();if(view)view.feedback_count=(view.feedback_count||0)+1;fbExportLabel();
+      $('fb-status').textContent=tr('Отзыв сохранён. Спасибо!');
+    }catch(e){$('fb-status').textContent=e.message;}
+    finally{$('fb-save').disabled=false;}
+  }
+  async function exportFeedback(){
+    $('fb-export').disabled=true;$('fb-status').textContent=tr('Выгружаем…');
+    try{
+      const r=await postAPI('/api/feedback-export',{},15000);
+      $('fb-path').textContent=tr('Сохранено: ')+r.result.path;$('fb-copy').dataset.path=r.result.path;$('fb-saved').hidden=false;$('fb-status').textContent='';
+    }catch(e){$('fb-status').textContent=e.message;}
+    finally{fbExportLabel();}
+  }
   function openProjectDialog(){
     $('project-name').value='';$('project-folder').value='';$('project-rules').value='';$('project-status').textContent='';
     $('project-dialog').showModal();
@@ -1875,6 +1918,19 @@
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.isComposing&&!$('task-stop').hidden&&!$('compose').hidden&&!document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true]')){e.preventDefault();stopTask();}});
   $('answer-text').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();sendAnswer();}});
   $('project-dialog-close').addEventListener('click',()=>$('project-dialog').close());
+  $('fb-open').addEventListener('click',openFeedback);
+  $('fb-close').addEventListener('click',()=>$('fb-dialog').close());
+  $('fb-save').addEventListener('click',saveFeedback);
+  $('fb-export').addEventListener('click',exportFeedback);
+  $('fb-pick').addEventListener('click',()=>$('fb-file').click());
+  $('fb-file').addEventListener('change',e=>{fbTake(e.target.files[0]);e.target.value='';});
+  $('fb-shot-remove').addEventListener('click',fbClear);
+  $('fb-copy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('fb-copy').dataset.path||'');$('fb-copy').textContent=tr('Скопировано');}catch(_){$('fb-copy').textContent=tr('Скопируйте вручную');}setTimeout(()=>$('fb-copy').textContent=tr('Скопировать путь'),2000);});
+  $('fb-dialog').addEventListener('paste',e=>{const f=[...(e.clipboardData?.files||[])].find(x=>x.type.startsWith('image/'));if(f){e.preventDefault();fbTake(f);}});
+  const fbShot=$('fb-shot');
+  fbShot.addEventListener('dragover',e=>{e.preventDefault();fbShot.classList.add('am-drop');});
+  fbShot.addEventListener('dragleave',()=>fbShot.classList.remove('am-drop'));
+  fbShot.addEventListener('drop',e=>{e.preventDefault();fbShot.classList.remove('am-drop');fbTake(e.dataTransfer.files[0]);});
   $('invite-close').addEventListener('click',()=>$('invite-dialog').close());
   // A closed invitation is not shown again; a new one can be made at any time.
   $('invite-dialog').addEventListener('close',()=>{invitation=null;clearInterval(inviteTimer);});

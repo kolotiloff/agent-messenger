@@ -244,7 +244,12 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 				http.Error(w, "JSON required", 415)
 				return
 			}
-			r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+			limit := int64(64 << 10)
+			if r.URL.Path == "/api/feedback" {
+				// A remark may carry a picture (T-135).
+				limit = 3 << 20
+			}
+			r.Body = http.MaxBytesReader(w, r.Body, limit)
 			decoder := json.NewDecoder(r.Body)
 			decoder.DisallowUnknownFields()
 			if r.URL.Path == "/api/check-cli" {
@@ -544,7 +549,7 @@ var serverActions = map[string]bool{"enable": true, "disable": true, "invite": t
 
 func taskMutation(path string) bool {
 	switch path {
-	case "/api/project-create", "/api/project-folder", "/api/task-answer", "/api/task-note", "/api/agent-set", "/api/agent-models", "/api/agent-access", "/api/agent-pause", "/api/agent-remove", "/api/task-cancel", "/api/task-hide", "/api/server-action", "/api/coordinator-connect", "/api/project-rules", "/api/project-title", "/api/project-remove":
+	case "/api/project-create", "/api/project-folder", "/api/task-answer", "/api/task-note", "/api/agent-set", "/api/agent-models", "/api/agent-access", "/api/agent-pause", "/api/agent-remove", "/api/task-cancel", "/api/task-hide", "/api/server-action", "/api/coordinator-connect", "/api/project-rules", "/api/project-title", "/api/project-remove", "/api/feedback", "/api/feedback-export":
 		return true
 	}
 	return false
@@ -645,6 +650,22 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 			return control.Request{}, false
 		}
 		return control.Request{Cmd: "task-cancel", MessageID: in.Task}, true
+	case "/api/feedback":
+		var in struct {
+			Project   string `json:"project"`
+			Text      string `json:"text"`
+			Image     string `json:"image"`
+			ImageType string `json:"image_type"`
+		}
+		if decoder.Decode(&in) != nil || len(in.Project) > 256 || len(in.Text) > 4*core.MaxFeedbackText || len(in.Image) > 3<<20 || len(in.ImageType) > 32 {
+			return control.Request{}, false
+		}
+		return control.Request{Cmd: "feedback-add", Alias: in.Project, Text: in.Text, Action: in.ImageType, Data: in.Image}, true
+	case "/api/feedback-export":
+		if decoder.Decode(&struct{}{}) != nil {
+			return control.Request{}, false
+		}
+		return control.Request{Cmd: "feedback-export"}, true
 	case "/api/task-hide":
 		var in struct {
 			Peer string `json:"peer"`

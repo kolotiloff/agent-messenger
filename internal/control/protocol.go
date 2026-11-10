@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -39,6 +40,8 @@ type Request struct {
 	Workspace      string `json:"workspace,omitempty"`
 	Limit          int    `json:"limit,omitempty"`
 	Before         string `json:"before,omitempty"`
+	// Data is a base64 picture attached to a remark (T-135).
+	Data string `json:"data,omitempty"`
 }
 
 type Status struct {
@@ -330,6 +333,35 @@ func dispatch(handler Handler, request Request) Response {
 			return Response{Error: err.Error()}
 		}
 		return Response{OK: true}
+	case "feedback-add":
+		h, ok := handler.(interface {
+			AddFeedback(string, string, string, []byte) error
+		})
+		if !ok {
+			return Response{Error: "feedback unsupported; update the background client"}
+		}
+		var image []byte
+		if request.Data != "" {
+			var err error
+			if image, err = base64.StdEncoding.DecodeString(request.Data); err != nil {
+				return Response{Error: "the picture is damaged"}
+			}
+		}
+		if err := h.AddFeedback(request.Alias, request.Text, request.Action, image); err != nil {
+			return Response{Error: err.Error()}
+		}
+		return Response{OK: true}
+	case "feedback-export":
+		h, ok := handler.(interface{ ExportFeedback() (string, int, error) })
+		if !ok {
+			return Response{Error: "feedback unsupported; update the background client"}
+		}
+		path, n, err := h.ExportFeedback()
+		if err != nil {
+			return Response{Error: err.Error()}
+		}
+		raw, _ := json.Marshal(map[string]any{"path": path, "remarks": n})
+		return Response{OK: true, Overview: raw}
 	case "task-hide":
 		h, ok := handler.(interface{ HideNetTask(string, string) error })
 		if !ok {

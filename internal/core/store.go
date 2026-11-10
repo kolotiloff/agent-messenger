@@ -133,7 +133,7 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	if _, err := db.Exec(schema + streamSchema + streamRecoverySchema + uiOutboxSchema + codexSetupSchema + taskSchema + taskRunItemsSchema + taskOutputSchema + networkSchema + netTasksSchema + netLogsSchema + netUpdatesSchema); err != nil {
+	if _, err := db.Exec(schema + streamSchema + streamRecoverySchema + uiOutboxSchema + codexSetupSchema + taskSchema + taskRunItemsSchema + taskOutputSchema + networkSchema + netTasksSchema + netLogsSchema + netUpdatesSchema + feedbackSchema); err != nil {
 		db.Close()
 		return nil, err
 	}

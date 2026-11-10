@@ -276,6 +276,23 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-tabs { display:flex; align-items:center; gap:var(--am-space-1); margin-inline:var(--am-pane-inset); padding-bottom:var(--am-space-3); border-bottom:1px solid var(--am-line); flex-shrink:0; }
 #am-concept .am-tab { min-height:var(--am-control-compact); padding:var(--am-text-nudge) var(--am-space-3) 0; color:var(--am-muted); white-space:nowrap; }
 #am-concept .am-panel-toggle { margin-left:auto; }
+/* T-135: the feedback bug sits just left of the task list toggle. */
+#am-concept .am-fb-open { margin-left:auto; }
+#am-concept .am-fb-open + .am-panel-toggle { margin-left:var(--am-space-1); }
+#am-concept .am-fb-open svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; }
+#am-concept .am-field textarea.am-fb-text { font:inherit; line-height:1.5; }
+#am-concept .am-fb-shot { padding:var(--am-pad-compact); border:1px dashed var(--am-line); border-radius:var(--am-radius-m); }
+#am-concept .am-fb-shot.am-drop { border-color:currentColor; }
+#am-concept .am-fb-shot-empty, #am-concept .am-fb-shot-full { display:flex; align-items:center; gap:var(--am-gap-content); }
+#am-concept .am-fb-shot-empty button, #am-concept .am-fb-shot-full button { margin-left:auto; }
+#am-concept .am-fb-shot [hidden] { display:none; }
+#am-concept .am-fb-shot img { width:88px; height:56px; object-fit:cover; border-radius:var(--am-radius-s); flex:none; }
+#am-concept .am-fb-actions { display:flex; align-items:center; justify-content:space-between; gap:var(--am-gap-content); }
+#am-concept .am-link-btn { padding:0; background:none; color:var(--am-muted); }
+#am-concept .am-link-btn:hover { color:var(--am-text); background:none; }
+#am-concept .am-fb-saved { display:flex; align-items:center; gap:var(--am-gap-content); }
+#am-concept .am-fb-saved[hidden] { display:none; }
+#am-concept .am-fb-saved p { flex:1; min-width:0; overflow-wrap:anywhere; }
 #am-concept .am-panel-toggle svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.5; }
 #am-concept .am-panel-toggle[aria-expanded=true] { background:var(--am-soft); }
 #am-concept .am-notice { margin-inline:var(--am-pane-inset); max-height:60px; padding:var(--am-space-3) var(--am-space-4); border-radius:var(--am-radius-m); background:var(--am-soft); overflow:auto; overflow-wrap:anywhere; flex-shrink:0; }
