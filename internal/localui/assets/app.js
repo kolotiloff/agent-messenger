@@ -115,6 +115,9 @@
   function remember(key,value){try{localStorage.setItem(key,value);}catch(_){}}
   function recall(key){try{return localStorage.getItem(key)||'';}catch(_){return '';}}
   let view=null,project=recall('messenger-project'),selectedTask='',selectedShared=null,feed=null,feedSignature='',viewSignature='';
+  // T-133: the task shown last, and whether the feed should go to its end on
+  // the next render (a new task opened, or the owner just wrote).
+  let feedShown='',feedStick=false,feedPinned=true,feedCount=0;
   let online=false,offlineReason='',discovery=[],tab='tasks',refreshing=false,answering=false;
   const agentChecks=new Map(),checking=new Set(),rowNote=new Map();let autoChecked=false,discoveryLoaded=false;
   let clientInfo=null,clientInfoAt=0,restart={busy:false,ask:null,error:'',wait:false},autoRestarted=false;
@@ -274,6 +277,37 @@
     }
     return [t.state,'am-muted'];
   }
+  // T-131: another computer's task is known only from that computer's
+  // reports. While it is out of contact, an open task's last state is
+  // stale: say that its outcome is unknown instead of «Работает 10 ч».
+  function sharedStatus(t,p){
+    if(sharedLost(t,p)){
+      const since=p.age>=0?stamp(new Date(Date.now()-p.age*1000).toISOString()):'';
+      return [tr('Связь потеряна, исход неизвестен'),'am-muted',since?'«'+p.name+tr('» не на связи с ')+since:'«'+p.name+tr('» больше нет в сети')];
+    }
+    return taskStatus(t);
+  }
+  // T-131: a task leaves the list only when it no longer runs; a running
+  // one is stopped first. Another computer's task can also go when that
+  // computer is out of contact, since its last state is stale.
+  const finishedStates=['done','failed','cancelled'];
+  function sharedLost(t,p){return activeStates.includes(t.state)&&!(p.age>=0&&p.age<=45);}
+  function taskMenu(event,t,p){
+    event.preventDefault();
+    const ok=p?finishedStates.includes(t.state)||sharedLost(t,p):finishedStates.includes(t.state);
+    const tip=ok?'':p?tr('Задача ещё идёт на компьютере «')+p.name+tr('». Удалить её можно, когда она закончится'):tr('Сначала остановите задачу');
+    popMenu(event.clientX,event.clientY,[{text:tr('Удалить из списка'),off:!ok,tip,pick:()=>askRemoveTask(t,p)}]);
+  }
+  function askRemoveTask(t,p){
+    const text=p?tr('Задача пропадёт из списка на этом компьютере. У других она останется, пока её не удалят на компьютере «')+p.name+'».'
+      :tr('Задача пропадёт из списка на всех компьютерах сети. Её история останется в базе этого компьютера.');
+    askConfirm(tr('Удалить задачу из списка?'),text,tr('Удалить'),async()=>{
+      await postAPI('/api/task-hide',{peer:p?.peer||'',task:t.id});
+      if(p){if(selectedShared?.peer===p.peer&&selectedShared?.id===t.id)selectedShared=null;}
+      else if(selectedTask===t.id){selectedTask='';feed=null;feedSignature='';}
+      viewSignature='';await refresh();
+    });
+  }
   function coordinatorName(client=view?.coordinator?.client){
     const c=(client||'').toLowerCase();
     if(c.includes('codex'))return ['codex','Codex'];
@@ -297,7 +331,9 @@
   // Right-click menu on another computer of the network. Revoking cannot be
   // undone, so its item only opens a confirmation inside the card. Updating
   // moved to an icon on the card (T-128).
-  function deviceMenu(d,x,y,can){
+  // A right-click menu; entries are {text,pick,off,tip}. An entry with off
+  // is shown dimmed with its reason as a tooltip.
+  function popMenu(x,y,entries){
     let menu=$('device-menu');
     if(!menu){
       // A manual popover: an automatic one closes on the same right click
@@ -310,15 +346,22 @@
       window.addEventListener('resize',close);
     }
     const items=[];
-    const add=(text,pick)=>{
-      const item=el('div',text,'am-select-option');item.setAttribute('role','menuitem');item.tabIndex=0;
-      const run=()=>{menu.hidePopover();pick();};
+    for(const it of entries){
+      const item=el('div',it.text,'am-select-option');item.setAttribute('role','menuitem');item.tabIndex=0;
+      if(it.tip)item.title=it.tip;
+      if(it.off)item.setAttribute('aria-disabled','true');
+      const run=()=>{if(it.off)return;menu.hidePopover();it.pick();};
       item.addEventListener('click',run);item.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();run();}});
       items.push(item);
-    };
-    if(can.revoke)add(tr('Отозвать устройство'),()=>{revokeAsk=d.id;clearTimeout(revokeTimer);revokeTimer=setTimeout(()=>{revokeAsk='';renderMachines();},8000);renderMachines();$('machines').querySelector('[data-key="'+CSS.escape('revoke-yes-'+d.id)+'"]')?.focus();});
+    }
     if(!items.length)return;
     menu.replaceChildren(...items);menu.style.left=x+'px';menu.style.top=y+'px';menu.showPopover();items[0].focus();
+  }
+  function deviceMenu(d,x,y,can){
+    const items=[];
+    const add=(text,pick)=>items.push({text,pick});
+    if(can.revoke)add(tr('Отозвать устройство'),()=>{revokeAsk=d.id;clearTimeout(revokeTimer);revokeTimer=setTimeout(()=>{revokeAsk='';renderMachines();},8000);renderMachines();$('machines').querySelector('[data-key="'+CSS.escape('revoke-yes-'+d.id)+'"]')?.focus();});
+    popMenu(x,y,items);
   }
   // Asking another computer to update itself (T-078). Its answers arrive
   // with the server status and show as notices above the reply box (T-128);
@@ -328,7 +371,7 @@
     catch(error){addNotice('refused-'+peer.id+'-'+Date.now(),'bad',(peer.name||'')+tr(' не обновлён'),capital(error.message));}
     renderMachines();
   }
-  // The card's update line, only while the request is under way.
+  // The update under way for a card's icon: asked for or updating.
   function updateLine(peer){
     const u=(server?.updates||[]).find(x=>x.computer===peer.id);
     if(!u||u.stale||!(Date.now()-Date.parse(u.updated_at)<24*3600*1000))return null;
@@ -400,13 +443,16 @@
       // Messenger's tools is listed but not lit: nothing tells whether it is
       // still open.
       const [state,text]=!live?['offline',tr('Нет связи')]:a?agentState(a):['idle',tr('Чат с инструментами Messenger')];
-      const line=el('div',undefined,'am-agent-line');line.dataset.provider=provider;
+      // A busy agent says so to the right of its name: «работает» in blue,
+      // «ждёт ответа» in yellow. A free agent is just its name.
+      const line=el('div',undefined,'am-agent-line am-agent-'+state);line.dataset.provider=provider;
       line.title=(names[provider]||provider)+(a?': '+text:'');
-      line.append(el('span',undefined,'am-dot am-dot-'+state),el('span',shortNames[provider]||provider));
+      line.append(el('span',shortNames[provider]||provider));
+      if(state==='run'||state==='wait'){const n=a?.running||0;line.append(el('span',state==='wait'?tr('ждёт ответа'):tr('работает')+(n>1?' ('+n+')':''),'am-agent-status'));}
       lines.append(line);
     }
     if(coordinatorClient!==null&&!coordProvider){
-      const line=el('div',undefined,'am-agent-line');line.append(el('span',undefined,'am-dot am-dot-'+(live?'idle':'offline')),el('span',coordLabel));lines.append(line);
+      const line=el('div',undefined,'am-agent-line am-agent-'+(live?'idle':'offline'));line.append(el('span',coordLabel));lines.append(line);
     }
     return lines;
   }
@@ -442,8 +488,14 @@
       name.append(pdot);
       // T-128: an older computer gets the update icon next to its dot; the
       // owner confirms in a popup.
-      const busy=!!updateLine(peer);
-      if(fresh&&peer.version&&!busy&&versionOlder(peer.version,newestVersion())){
+      const busy=updateLine(peer);
+      if(busy){
+        // While an update is asked for or under way, the icon stays, dimmed
+        // and pulsing, and says so on hover (owner).
+        const tip=busy[1]==='am-status-run'?tr('Обновляется…'):tr('Обновление уже запрошено');
+        const b=el('span',undefined,'am-update-icon am-peer-update am-update-busy');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);b.append(svgIcon(['M12 4v11M7 10l5 5 5-5M5 20h14']));
+        name.append(b);
+      }else if(fresh&&peer.version&&versionOlder(peer.version,newestVersion())){
         const newest=versionName(newestVersion()),label=tr('Обновить до ')+newest;
         const b=el('button',undefined,'am-update-icon am-peer-update');b.type='button';b.title=label;b.setAttribute('aria-label',label);b.append(svgIcon(['M12 4v11M7 10l5 5 5-5M5 20h14']));
         b.addEventListener('click',event=>{event.stopPropagation();askConfirm(tr('Обновить ')+(peer.name||tr('компьютер'))+tr(' до ')+newest+'?',tr('Программа на том компьютере обновится и перезапустится. Задачи и история сохранятся.'),tr('Обновить'),()=>requestUpdate(peer),true);});
@@ -467,8 +519,6 @@
       }else{
         card.append(el('p',peer.last_seen?tr('Был на связи ')+stamp(peer.last_seen):tr('Ещё не выходил на связь'),'am-small am-muted'));
       }
-      const status=updateLine(peer);
-      if(status)card.append(el('p',status[0],'am-small am-update-line '+status[1]));
       const can={revoke:hosted.has(peer.id)};
       if(can.revoke){
         card.classList.add('am-device-card');card.tabIndex=0;card.dataset.key='revoke-'+peer.id;card.title=tr('Правая кнопка мыши — действия');
@@ -548,6 +598,7 @@
       if(t.usage){const used=el('span',usageShort(t.usage),'am-task-usage');used.title=usageLong(t.usage);words.append(used);}
       row.append(agent,el('span',t.title,'am-task-title'),status);
       row.addEventListener('click',()=>{selectedTask=t.id;selectedShared=null;feedSignature='';renderTaskList();loadFeed();});
+      row.addEventListener('contextmenu',e=>taskMenu(e,t,null));
       return row;
     };
     const sharedRow=(t,p)=>{
@@ -555,12 +606,13 @@
       row.setAttribute('aria-pressed',String(selectedShared?.peer===p.peer&&selectedShared?.id===t.id));
       // T-111: another computer's task opens as a read-only card.
       row.addEventListener('click',()=>{selectedShared={peer:p.peer,id:t.id};selectedTask='';feed=null;feedSignature='';renderTaskList();renderThread();});
+      row.addEventListener('contextmenu',e=>taskMenu(e,t,p));
       const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),el('span',(names[t.agent]||t.agent)+tr(' от «')+p.name+'»'));
       const sharedWhen=taskWhen(t);if(sharedWhen){const w=el('span',sharedWhen,'am-task-when');w.title=taskWhenTitle(t);agent.append(w);}
-      const [text,cls]=taskStatus(t);
+      const [text,cls,tip]=sharedStatus(t,p);
       const words=el('span');words.append(statusPiece(text,!!t.tokens));
       if(t.tokens)words.append(el('span',tokensText(t.tokens)+tr(' токенов'),'am-task-usage'));
-      const status=el('span',undefined,'am-task-status '+cls);status.append(words);
+      const status=el('span',undefined,'am-task-status '+cls);status.append(words);if(tip)status.title=tip;
       row.append(agent,el('span',t.title,'am-task-title'),status);
       if(t.report)row.append(el('span',t.report,'am-task-report'));
       return row;
@@ -621,7 +673,7 @@
   }
   function renderThread(){
     const thread=$('thread'),head=$('task-head');
-    $('compose').hidden=true;feedSignature='';
+    $('compose').hidden=true;$('lost-bar').hidden=true;feedSignature='';$('to-bottom').hidden=true;
     if(!view){head.replaceChildren();return;}
     if(!view.project){
       head.replaceChildren();
@@ -651,17 +703,19 @@
     const thread=$('thread'),head=$('task-head');
     const title=el('div',undefined,'am-task-head');title.append(el('h3',t.title));
     title.append(el('p',(names[t.agent]||t.agent)+tr(', задачу дал компьютер «')+p.name+'»','am-small am-muted'));
-    const [statusText,statusCls]=taskStatus(t);
+    const [statusText,statusCls,statusTip]=sharedStatus(t,p);
     const when=t.finished_at?', '+clock(t.created_at)+'–'+clock(t.finished_at):tr(', начата в ')+clock(t.created_at);
     const line=el('p',undefined,'am-small');line.append(el('span',statusText,statusCls),el('span',when,'am-muted'));
+    if(statusTip)line.append(el('span',', '+statusTip,'am-muted'));
     if(t.tokens)line.append(el('span',', '+tokensText(t.tokens)+tr(' токенов'),'am-muted'));
     title.append(line);
-    const headRow=el('div',undefined,'am-task-head-row');headRow.append(title);head.replaceChildren(headRow);
+    const headRow=el('div',undefined,'am-task-head-row');headRow.append(title);
+    head.replaceChildren(headRow);
     const box=el('div',undefined,'am-settings');
     if(t.report){box.append(el('h3',tr('Начало отчёта')),el('p',t.report,'am-shared-report'));}
     else box.append(el('p',tr('Отчёта пока нет.'),'am-muted'));
     box.append(el('p',tr('Полная история задачи — в окне компьютера «')+p.name+tr('». Здесь её можно только посмотреть.'),'am-small am-muted'));
-    thread.replaceChildren(box);$('compose').hidden=true;
+    thread.replaceChildren(box);$('compose').hidden=true;$('lost-bar').hidden=true;
   }
   // Called when only the feed may have changed.
   function updateFeed(){
@@ -709,8 +763,14 @@
   }
   // Stop, like in a chat: a square button in the input field, or Esc.
   let stopping=false;
+  function closeHere(){
+    const t=feed?.task;if(!t?.remote||t.remote.from)return;
+    askConfirm(tr('Закрыть задачу?'),tr('С компьютером «')+t.remote.name+tr('» нет связи. Задача закроется в этом окне, а что с ней на том компьютере, неизвестно. Если связь вернётся, ему придёт отмена.'),tr('Закрыть'),async()=>{
+      await postAPI('/api/task-cancel',{task:t.id});feedSignature='';await refresh();
+    });
+  }
   async function stopTask(){
-    const t=feed?.task;if(!t||stopping||!activeStates.includes(t.state))return;
+    const t=feed?.task;if(!t||stopping||$('task-stop').hidden)return;
     stopping=true;$('task-stop').disabled=true;$('task-stop').classList.add('am-tip-off');
     try{await postAPI('/api/task-cancel',{task:t.id});showError(null);feedSignature='';await refresh();}
     catch(e){showError(e);}
@@ -719,7 +779,7 @@
   function renderFeed(){
     const t=feed.task,thread=$('thread'),head=$('task-head');
     const signature=JSON.stringify(feed);if(signature===feedSignature)return;
-    const atBottom=thread.scrollHeight-thread.clientHeight-thread.scrollTop<40||!feedSignature;feedSignature=signature;
+    const count=(feed.items||[]).length,fresh=feedShown!==t.id,atBottom=fresh||feedStick||feedPinned,grew=!fresh&&!atBottom&&count>feedCount;feedShown=t.id;feedStick=false;feedCount=count;feedSignature=signature;
     const title=el('div',undefined,'am-task-head');title.append(el('h3',t.title));
     const where=t.remote&&!t.remote.from?tr(' на компьютере «')+t.remote.name+'»':tr(' на ')+(view.computer_name||tr('этом компьютере'))+(t.remote?.from?tr(', по заданию компьютера «')+t.remote.name+'»':'');
     title.append(el('p',(names[t.agent]||t.agent)+((t.ran_model||t.model)?' ('+(t.ran_model||t.model)+')':'')+where+tr(', папка ')+(t.folder||tr('ещё не известна'))+(t.remote&&!t.remote.from?'':t.full_access?tr(', любые команды разрешены'):tr(', без «Любых команд»')),'am-small am-muted'));
@@ -792,9 +852,19 @@
     for(const d of thread.querySelectorAll('details[data-key]'))if(opened.has(d.dataset.key))d.open=true;
     // A task another computer started is answered there.
     const q=t.remote?.from?null:t.owner_question;
-    const active=activeStates.includes(t.state),box=$('answer-text');
+    // T-131: a task sent to another computer can be closed here also when
+    // its outcome there is already unknown.
+    // T-131: an own task on another computer that cannot be reached has no
+    // input and no stop button: nothing would arrive. One action closes it here.
+    const unreachable=!!t.remote&&!t.remote.from&&(t.state==='blocked'||t.state==='interrupted'||(activeStates.includes(t.state)&&!!t.remote.lost));
+    $('lost-bar').hidden=!unreachable;
+    if(unreachable){
+      const since=t.remote.last_seen?stamp(t.remote.last_seen):'';
+      $('lost-text').textContent=(since?tr('Связи с «')+t.remote.name+tr('» нет с ')+since+'. ':tr('Связи с «')+t.remote.name+tr('» нет. '))+tr('Что с задачей там, неизвестно.');
+    }
+    const active=activeStates.includes(t.state)&&!unreachable,box=$('answer-text');
     const note=canNote(t),wasNote=$('compose').dataset.mode==='note';
-    $('compose').hidden=!q&&!active;
+    $('compose').hidden=unreachable||(!q&&!active);
     box.disabled=!q&&!note;box.placeholder=q?tr('Ответить исполнителю…'):note&&t.state==='waiting_coordinator'?tr('Ответить вместо координатора…'):note?tr('Написать исполнителю…'):t.remote?.from&&t.owner_question?tr('Отвечают на компьютере «')+t.remote.name+'»':t.pending_launch?tr('Задача ждёт запуска…'):tr('Исполнитель работает…');
     $('answer-send').hidden=!q&&!note;$('task-stop').hidden=!active;
     $('compose').dataset.mode=q?'answer':note?'note':'';
@@ -802,7 +872,15 @@
     if(q&&$('compose').dataset.question!==q.id){$('compose').dataset.question=q.id;$('answer-text').value='';$('answer-status').textContent='';}
     else if(!q&&!note&&wasNote){$('answer-text').value='';}
     sizeAnswer();answerControls();
-    if(atBottom)thread.scrollTop=thread.scrollHeight;
+    if(atBottom){thread.scrollTop=thread.scrollHeight;feedPinned=true;}
+    else if(grew)$('to-bottom').classList.add('am-has-new');
+    toBottomState();
+  }
+  function nearBottom(thread){return thread.scrollHeight-thread.clientHeight-thread.scrollTop<40;}
+  // The down button shows while the owner reads higher up in a task.
+  function toBottomState(){
+    const thread=$('thread'),b=$('to-bottom');feedPinned=nearBottom(thread);const show=!!feed&&!!selectedTask&&!feedPinned;
+    b.hidden=!show;if(!show)b.classList.remove('am-has-new');
   }
   // Why a run was not accepted (T-091), in the window's language.
   function failureText(text){
@@ -837,7 +915,7 @@
     let op=recall(key);
     if(!op){op='window-'+t.id+'-'+crypto.randomUUID();remember(key,op);}
     answering=true;answerControls();$('answer-status').textContent=tr('Отправляем сообщение…');
-    try{await postAPI('/api/task-note',{task:t.id,op_id:op,text});showError(null);try{localStorage.removeItem(key);}catch(_){}$('answer-status').textContent='';$('answer-text').value='';sizeAnswer();feedSignature='';await refresh();}
+    try{await postAPI('/api/task-note',{task:t.id,op_id:op,text});showError(null);try{localStorage.removeItem(key);}catch(_){}$('answer-status').textContent='';$('answer-text').value='';sizeAnswer();feedSignature='';feedStick=true;await refresh();}
     catch(error){$('answer-status').textContent='';showError({message:error.message+tr(' Повтор с тем же текстом безопасен.'),command:error.command,hint:error.hint});}
     finally{answering=false;answerControls();}
   }
@@ -848,7 +926,7 @@
     let op=recall('messenger-answer-op:'+q.id);
     if(!op){op='window-'+q.id+'-'+crypto.randomUUID();remember('messenger-answer-op:'+q.id,op);}
     answering=true;answerControls();$('answer-status').textContent=tr('Отправляем ответ…');
-    try{await postAPI('/api/task-answer',{task:feed.task.id,question:q.id,op_id:op,text});showError(null);$('answer-status').textContent='';$('answer-text').value='';sizeAnswer();feedSignature='';await refresh();}
+    try{await postAPI('/api/task-answer',{task:feed.task.id,question:q.id,op_id:op,text});showError(null);$('answer-status').textContent='';$('answer-text').value='';sizeAnswer();feedSignature='';feedStick=true;await refresh();}
     catch(error){$('answer-status').textContent='';showError({message:error.message+tr(' Повтор с тем же текстом безопасен.'),command:error.command,hint:error.hint});}
     finally{answering=false;answerControls();}
   }
@@ -1410,6 +1488,49 @@
   }
   // «Новый проект» opens a dialog; the current project is set up on its own
   // tab «Проект» (T-064).
+  // Feedback about the program (T-135): text and a picture stay on this
+  // computer; the export writes them all into one file.
+  let fbImage=null;
+  function fbExportLabel(){const n=view?.feedback_count||0;$('fb-export').textContent=tr('Выгрузить все отзывы')+(n?' ('+n+')':'');$('fb-export').disabled=!n;}
+  function openFeedback(){
+    $('fb-status').textContent='';$('fb-saved').hidden=true;fbExportLabel();$('fb-dialog').showModal();$('fb-text').focus();
+  }
+  function fbClear(){fbImage=null;$('fb-shot-full').hidden=true;$('fb-shot-empty').hidden=false;$('fb-thumb').removeAttribute('src');}
+  // Large screenshots are scaled down and stored as JPEG, so a remark stays
+  // well under the size limit.
+  function fbTake(file){
+    if(!file||!/^image\/(png|jpeg|webp)$/.test(file.type)){$('fb-status').textContent=tr('Нужна картинка PNG, JPEG или WebP.');return;}
+    const url=URL.createObjectURL(file),img=new Image();
+    img.onload=()=>{
+      const scale=Math.min(1,1600/img.width),w=Math.round(img.width*scale),h=Math.round(img.height*scale);
+      const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);URL.revokeObjectURL(url);
+      const data=c.toDataURL('image/jpeg',0.85);
+      fbImage={type:'image/jpeg',data:data.slice(data.indexOf(',')+1)};
+      $('fb-thumb').src=data;$('fb-shot-info').textContent=tr('Снимок ')+img.width+'×'+img.height+', '+Math.round(fbImage.data.length*3/4/1024)+tr(' КБ');
+      $('fb-shot-empty').hidden=true;$('fb-shot-full').hidden=false;$('fb-status').textContent='';
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);$('fb-status').textContent=tr('Картинку не удалось открыть.');};
+    img.src=url;
+  }
+  async function saveFeedback(){
+    const text=$('fb-text').value.trim();
+    if(!text&&!fbImage){$('fb-status').textContent=tr('Напишите, что не так, или приложите снимок.');return;}
+    $('fb-save').disabled=true;$('fb-status').textContent=tr('Сохраняем…');
+    try{
+      await postAPI('/api/feedback',{project:view?.project||'',text,image:fbImage?.data||'',image_type:fbImage?.type||''},15000);
+      $('fb-text').value='';fbClear();if(view)view.feedback_count=(view.feedback_count||0)+1;fbExportLabel();
+      $('fb-status').textContent=tr('Отзыв сохранён. Спасибо!');
+    }catch(e){$('fb-status').textContent=e.message;}
+    finally{$('fb-save').disabled=false;}
+  }
+  async function exportFeedback(){
+    $('fb-export').disabled=true;$('fb-status').textContent=tr('Выгружаем…');
+    try{
+      const r=await postAPI('/api/feedback-export',{},15000);
+      const cut=Math.max(r.result.path.lastIndexOf('/'),r.result.path.lastIndexOf('\\'));$('fb-dir').textContent=tr('Файл сохранён в папке ')+r.result.path.slice(0,cut>0?cut:0)+':';$('fb-path').textContent=r.result.path.slice(cut+1);$('fb-path').title=r.result.path;$('fb-copy').dataset.path=r.result.path;$('fb-copy').removeAttribute('data-copied');$('fb-saved').hidden=false;$('fb-status').textContent='';
+    }catch(e){$('fb-status').textContent=e.message;}
+    finally{fbExportLabel();}
+  }
   function openProjectDialog(){
     $('project-name').value='';$('project-folder').value='';$('project-rules').value='';$('project-status').textContent='';
     $('project-dialog').showModal();
@@ -1795,10 +1916,26 @@
   $('answer-send').addEventListener('click',sendAnswer);
   // Enter sends; Shift+Enter adds a line. An IME composition keeps its Enter.
   $('task-stop').addEventListener('click',stopTask);
+  $('lost-close').addEventListener('click',closeHere);
   $('task-stop').addEventListener('mouseleave',()=>$('task-stop').classList.remove('am-tip-off'));
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.isComposing&&!$('task-stop').hidden&&!$('compose').hidden&&!document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true]')){e.preventDefault();stopTask();}});
   $('answer-text').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();sendAnswer();}});
   $('project-dialog-close').addEventListener('click',()=>$('project-dialog').close());
+  $('settings-open').addEventListener('click',()=>$('settings-dialog').showModal());
+  $('settings-close').addEventListener('click',()=>$('settings-dialog').close());
+  $('fb-open').addEventListener('click',openFeedback);
+  $('fb-close').addEventListener('click',()=>$('fb-dialog').close());
+  $('fb-save').addEventListener('click',saveFeedback);
+  $('fb-export').addEventListener('click',exportFeedback);
+  $('fb-pick').addEventListener('click',()=>$('fb-file').click());
+  $('fb-file').addEventListener('change',e=>{fbTake(e.target.files[0]);e.target.value='';});
+  $('fb-shot-remove').addEventListener('click',fbClear);
+  $('fb-copy').addEventListener('click',async()=>{const b=$('fb-copy');try{await navigator.clipboard.writeText(b.dataset.path||'');b.setAttribute('data-copied','');}catch(_){$('fb-status').textContent=tr('Скопируйте путь вручную: ')+(b.dataset.path||'');}setTimeout(()=>b.removeAttribute('data-copied'),2000);});
+  $('fb-dialog').addEventListener('paste',e=>{const f=[...(e.clipboardData?.files||[])].find(x=>x.type.startsWith('image/'));if(f){e.preventDefault();fbTake(f);}});
+  const fbShot=$('fb-shot');
+  fbShot.addEventListener('dragover',e=>{e.preventDefault();fbShot.classList.add('am-drop');});
+  fbShot.addEventListener('dragleave',()=>fbShot.classList.remove('am-drop'));
+  fbShot.addEventListener('drop',e=>{e.preventDefault();fbShot.classList.remove('am-drop');fbTake(e.dataTransfer.files[0]);});
   $('invite-close').addEventListener('click',()=>$('invite-dialog').close());
   // A closed invitation is not shown again; a new one can be made at any time.
   $('invite-dialog').addEventListener('close',()=>{invitation=null;clearInterval(inviteTimer);});
@@ -1882,7 +2019,10 @@
   });
   root.querySelectorAll('.am-screen,.am-thread,.am-queue-list,.am-dialog-body,.am-machines').forEach(element=>gutterObserver.observe(element));
   const chatBody=root.querySelector('.am-chat-body'),chatFooter=root.querySelector('.am-chat-footer');
-  new ResizeObserver(()=>chatBody.style.setProperty('--am-footer-height',chatFooter.getBoundingClientRect().height+'px')).observe(chatFooter);
+  $('thread').addEventListener('scroll',toBottomState,{passive:true});
+  $('to-bottom').addEventListener('click',()=>{const t=$('thread');t.scrollTo({top:t.scrollHeight,behavior:'smooth'});});
+  // A taller reply box must not pull the owner off the end of the feed.
+  new ResizeObserver(()=>{chatBody.style.setProperty('--am-footer-height',chatFooter.getBoundingClientRect().height+'px');const t=$('thread');if(feedPinned)t.scrollTop=t.scrollHeight;}).observe(chatFooter);
   show('tasks');refresh();loadDiscovery();
   setInterval(refresh,2000);setInterval(loadDiscovery,60000);setInterval(()=>{if(tab==='stats')loadStats();},15000);
 })();

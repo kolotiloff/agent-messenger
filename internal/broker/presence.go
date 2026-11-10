@@ -179,6 +179,10 @@ type Presence struct {
 	// host before it refuses a report that carries it; the client then
 	// reports without it.
 	Version string `json:"version,omitempty"`
+	// Computer is the computer's lasting id, the same in every network
+	// (T-132). A host before 0.61 refuses a report that carries it; the
+	// client then reports without it.
+	Computer string `json:"computer,omitempty"`
 }
 
 // Peer is one computer of the broker as others see it.
@@ -201,6 +205,9 @@ type Peer struct {
 	// Version is the computer's program version; empty if it did not
 	// report one (an older version, T-078).
 	Version string `json:"version,omitempty"`
+	// Computer is the computer's lasting id (T-132); empty if it did not
+	// report one.
+	Computer string `json:"computer,omitempty"`
 }
 
 // rosterResponse answers a presence report.
@@ -211,7 +218,7 @@ type rosterResponse struct {
 }
 
 func (p Presence) valid() bool {
-	if len(p.Agents) > maxPresenceAgents || len(p.Coordinator) > 64 || (p.Name != "" && !validDeviceName(p.Name)) || !p.Ready.valid() || !p.Usage.valid() || len(p.UsageSeen) > maxUsageSeen || (p.Version != "" && !versionName.MatchString(p.Version)) {
+	if len(p.Agents) > maxPresenceAgents || len(p.Coordinator) > 64 || (p.Name != "" && !validDeviceName(p.Name)) || !p.Ready.valid() || !p.Usage.valid() || len(p.UsageSeen) > maxUsageSeen || (p.Version != "" && !versionName.MatchString(p.Version)) || (p.Computer != "" && !versionName.MatchString(p.Computer)) {
 		return false
 	}
 	for peer, hash := range p.UsageSeen {
@@ -362,7 +369,7 @@ func fill(peer *Peer, report, at string, now time.Time) {
 	if p.Name != "" {
 		peer.Name = p.Name
 	}
-	peer.Coordinator, peer.Ready, peer.Usage, peer.Version = p.Coordinator, p.Ready, p.Usage, p.Version
+	peer.Coordinator, peer.Ready, peer.Usage, peer.Version, peer.Computer = p.Coordinator, p.Ready, p.Usage, p.Version, p.Computer
 	if p.Agents != nil {
 		peer.Agents = p.Agents
 	}

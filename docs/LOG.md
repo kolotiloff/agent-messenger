@@ -2,6 +2,37 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-10 — Claude Code (T-133 scroll, T-135 feedback; 0.61 ready)
+
+- T-133: the task chat keeps its place while the owner reads; down arrow, «Новые сообщения».
+- T-135 (D-117): feedback journal: bug icon in the window, `report_feedback` / `export_feedback` for the coordinator, zip export.
+- Coordinator list file updated with versions and given to the owner. Owner asked to release 0.61.
+- Owner's UI tweaks: sidebar agents without circles, a busy agent reads «Claude работает» / «Codex ждёт ответа»; the feedback icon sits next to the version at the bottom of the sidebar; the feedback dialog keeps one height for the picture row and shows the export as folder + file name with a copy icon. Language and theme moved from the sidebar into «Настройки программы» (gear next to the feedback icon); later app settings go there too.
+
+## 2026-11-10 — Claude Code (coordinator list rows 24, 26, 30, 31, WIP)
+
+- T-134 (D-116): a refused answer opens the question again; `not_accepted` after 5 minutes; `network_note` when the server has not been heard from; `idle_computers` in `wait`; watch command in `--help`.
+- Owner looked at moving «Отключить» next to «Подключено» and chose to keep it where it is.
+- Next: T-133 scroll arrow (screenshots first), then 0.61 when the owner says so.
+
+## 2026-11-10 — Claude Code (T-132, coordinator list rows 28 and 32, WIP)
+
+- T-132 (D-115): tasks follow a computer into a new network by a lasting computer id; starts are never re-sent.
+- T-134: watch command first in the coordinator instructions and in every `wait`/`tasks` result; `get_log` gives a reason for an empty log; Codex and Cursor failures carry the CLI's error text.
+- A flaky supervisor test fixed: the background coordinator repair finishes before the store closes.
+- Still to do for 0.61: rows 24, 26, 30, 31 of the coordinator list, T-133 (scroll arrow, screenshots first).
+
+## 2026-11-10 — Claude Code (T-131 stuck tasks, WIP)
+
+- T-131 (D-114): lost-contact status for other computers' tasks; own task out of reach shows «Закрыть» instead of input and stop; right-click «Удалить из списка». Dialogs close with a cross. Screenshots shown to the owner.
+- The owner's Mac/ПК-2 mismatch comes from moving the server (new network, new ids): recorded as T-132.
+- The coordinator's list (rows 24–31) still needs to be gone through.
+
+## 2026-11-10 — Claude Code (0.60 released, busy update icon)
+
+- 0.60 released from PR #91.
+- T-128 (owner): the yellow «Обновление запрошено…» line is replaced by the update icon, dimmed and pulsing, with the state on hover. On `claude/ui-tweaks`, not released.
+
 ## 2026-11-10 — Claude Code (night: 0.60 changes T-128, T-126, T-115, T-129, T-114, T-113)
 
 - T-128: notices above the reply box; update icon with a confirm on older computers' cards. Restart icon and «update after the tasks» deferred.

@@ -227,7 +227,7 @@ func TestCoordinatorHandshakeAndTools(t *testing.T) {
 	for _, tool := range resp["result"].(map[string]any)["tools"].([]any) {
 		names = append(names, tool.(map[string]any)["name"].(string))
 	}
-	if strings.Join(names, ",") != "list_agents,start_task,wait,tasks,answer,continue_task,note_task,task_output,task_messages,cancel,get_log" {
+	if strings.Join(names, ",") != "list_agents,start_task,wait,tasks,answer,continue_task,note_task,task_output,task_messages,cancel,report_feedback,export_feedback,get_log" {
 		t.Fatalf("tools %v", names)
 	}
 	var agents struct {
@@ -818,5 +818,40 @@ func TestSecondCoordinatorChatTakesOver(t *testing.T) {
 	}
 	if chat, _ := st.CoordinatorChat("Game"); chat == "" {
 		t.Fatal("no active chat")
+	}
+}
+
+// T-135: the coordinator records remarks about Messenger and exports the
+// journal, its own remarks and the owner's, as one file.
+func TestCoordinatorFeedback(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // the home folder on Windows
+	if err := os.Mkdir(filepath.Join(home, "Downloads"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	st := newCoordinatorStore(t)
+	if !strings.Contains(coordinatorInstructions, "report_feedback") || !strings.Contains(coordinatorInstructions, "export_feedback") {
+		t.Fatal("instructions do not tell about feedback")
+	}
+	c := startCoordinator(t, st, "Game")
+	if _, ok := c.tool("export_feedback", map[string]any{}, nil); ok {
+		t.Fatal("export of an empty journal must fail")
+	}
+	var rec struct {
+		Recorded string `json:"recorded"`
+	}
+	if text, ok := c.tool("report_feedback", map[string]any{"text": "wait returned the same report twice"}, &rec); !ok || rec.Recorded == "" {
+		t.Fatalf("report_feedback %s", text)
+	}
+	if _, err := st.AddFeedback(core.AudienceOwner, "Game", "Не видно кнопку", "", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	var out struct {
+		Path    string `json:"path"`
+		Remarks int    `json:"remarks"`
+	}
+	if text, ok := c.tool("export_feedback", map[string]any{}, &out); !ok || out.Remarks != 2 || filepath.Dir(out.Path) != filepath.Join(home, "Downloads") {
+		t.Fatalf("export_feedback %s", text)
 	}
 }

@@ -113,6 +113,19 @@ func (r *TaskEventResult) noteFailure(text string, now time.Time) {
 	}
 }
 
+// withErrorText adds the CLI's own error words to a failure, shortened,
+// so a run that failed says why (coordinator list row 32).
+func withErrorText(failure, text string) string {
+	text = strings.Join(strings.Fields(text), " ")
+	if text == "" {
+		return failure
+	}
+	if r := []rune(text); len(r) > 300 {
+		text = string(r[:300]) + "…"
+	}
+	return failure + ": " + text
+}
+
 // errorText collects the human-readable error of an event: Claude's result
 // text and assistant message error, Codex's message or error.message.
 func errorText(e map[string]any) string {

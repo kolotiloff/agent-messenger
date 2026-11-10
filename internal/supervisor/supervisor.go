@@ -66,6 +66,9 @@ func (DisabledLauncher) Start(Spec) (Started, error) {
 }
 
 type Supervisor struct {
+	// bg counts background work that reads the store, so it ends before
+	// the store is closed.
+	bg         sync.WaitGroup
 	store      *core.Store
 	root       string
 	launcher   Launcher
@@ -177,6 +180,7 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 	sup := &Supervisor{store: store, root: root, launcher: launcher, cancel: cancel, ctx: ctx, startUpdate: options.StartUpdate}
+	defer sup.bg.Wait()
 	defer sup.codex.closeAll()
 	server := broker.NewService(ctx, root)
 	sup.server = server

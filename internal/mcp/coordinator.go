@@ -8,12 +8,15 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
 
 	"github.com/kolotiloff/agent-messenger/internal/adapters"
+	"github.com/kolotiloff/agent-messenger/internal/buildinfo"
 	"github.com/kolotiloff/agent-messenger/internal/core"
 	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
@@ -60,7 +63,7 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - One chat is the project's coordinator at a time: the newest chat that waits or acts. If wait answers superseded: true, another chat took over; stop, do not call wait again, and tell the owner, unless they ask you to take over again.
 - A new chat starts from the current state, not from the history: first call tasks, which gives the open tasks, their open questions and the event cursor, then wait with after = that cursor. Never wait from 0 in a new chat: it replays every old event of the project. Agreements of an earlier coordinator chat that are not in the project's rules or files are not known here; ask the owner when it matters.
 - wait returns the events of this project's tasks after the cursor: a report, a question for you, a failure, an interruption, a block or a cancellation; with none, it blocks until one comes or timeout_seconds pass (default 60, at most 120). Always pass after = the cursor from the previous wait. When it returns events, act on them (answer questions with answer, tell the owner about reports). If it says more: true, more events are ready: call wait again at once with the new cursor.
-- Do not hold your turn in wait while workers run: the owner's messages reach you only between your turns, so a chat that waits again and again cannot hear them. Instead, once tasks are started or answered, run the background watch command (below) with your shell tool in the background, so your turn can end; tell the owner in a line what is running and end your turn. The command exits when an event arrives, or after 30 minutes with none, and you are woken with its output. Then call wait with your cursor and timeout_seconds 1 to read the events, act on them, start the watch again with the new cursor and end your turn. If it exited with no events, start it again with the same cursor. Use tasks to see the state of open tasks at any time. Only if you have no background shell, wait with the default timeout and answer the owner between waits.
+- Do not hold your turn in wait while workers run: the owner's messages reach you only between your turns, so a chat that waits again and again cannot hear them. Instead, once tasks are started or answered, run the background watch command (given at the top of these instructions and in every wait and tasks result as watch) with your shell tool in the background, so your turn can end; tell the owner in a line what is running and end your turn. The command exits when an event arrives, or after 30 minutes with none, and you are woken with its output. Then call wait with your cursor and timeout_seconds 1 to read the events, act on them, start the watch again with the new cursor and end your turn. If it exited with no events, start it again with the same cursor. Use tasks to see the state of open tasks at any time. Only if you have no background shell, wait with the default timeout and answer the owner between waits.
 - When you wake up because of the owner (a new message or an interrupted wait), first call wait with your last cursor and timeout_seconds 1 to see what workers sent meanwhile, then answer the owner, then make sure a watch runs. When another tool's answer ends with a «Messenger: … new events» note, events are waiting for you: read them with wait after this step.
 - start_task takes an optional model. Leave it out for the agent's default. For Claude use opus for hard work (design, tricky bugs, large refactors), sonnet for ordinary coding, haiku for small mechanical work. For Codex and Cursor pass only a name from that agent's models in list_agents (the owner lists them in the window); if the list is empty, leave model out. Never guess a name: an unknown model fails the run. Tell the owner when you chose a non-default model and why.
 - A report is the worker's short summary. Its full last message is kept too: when a report or failure ends with «[Messenger] The worker's full final message has N characters», read it with task_output before asking the worker again; it is lost nowhere, even if the worker deleted its file.
@@ -69,12 +72,17 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - The owner may write to a working worker from the window. wait then returns an owner_note event with the text; the worker reads it when its current step ends and continues the same task, so a report it had written by then is held and a new one follows. Nothing to do on your side; do not repeat the note to the worker.
 - If the owner writes to a worker that waits for your answer, the owner's message is the answer and the worker continues at once: wait returns owner_answered for that question. Do not answer it again; your answer would be refused.
 - Never start a task again by yourself after it failed, was interrupted or blocked; tell the owner and let them decide.
+- not_accepted: a task sent to another computer was not accepted within 5 minutes; the event gives the likely reason (offline, not in the network, an earlier network). Nothing is retried. Tell the owner; cancelling it closes it at once, and a new start_task on an online computer is the owner's call.
+- idle_computers in a wait result names the computers where a task just stopped and nothing of this project runs now: give them the next task if the plan has one, or tell the owner.
+- network_note in list_agents means this computer's client has not heard from the server for minutes: online and other computers' task states are out of date. Tell the owner; do not start or cancel tasks on other computers because of them.
+- answer_refused: the other computer did not accept your answer, and the question is open again (the task waits again); answer it once more if the reason allows, or tell the owner.
 - A computer marked reconnecting was in the network a moment ago and has not reported since a restart: a task for it is accepted and waits on the server until it is back. models_note and limit_note explain an empty models list or a missing limit.
 - list_agents shows each agent's limit when it reported one: state ok, warning (close to the limit) or exhausted, used_percent when the agent gave it, resets_at and observed_at. It is what the agent said at the end of its last run, not a live reading; reset_passed means its reset time has passed, so it is likely available again. A limit is shared by every use of the same account, this chat included. Before choosing where to start a task, look at the limits: prefer an agent whose limit is not exhausted, and tell the owner when the one they asked for is close to or at its limit, before or instead of starting it. start_task adds limit_note when the chosen agent's last limit is close or exhausted.
 - To add something to a task that is still running on this computer (a forgotten detail, a change of plan), use note_task; it does not stop the worker. Do not use it to hurry a worker or to repeat the task.
 - To follow up on a finished task in the same worker conversation (it keeps its context), use continue_task instead of a new start_task. It works for done and failed tasks of this computer, a task stopped by a usage limit included (after its reset time): read task_messages first and say in your text what is already done, such as «continue; item 1 is already committed». An interrupted task of this computer (the client restarted while it ran) can be continued too, only after Messenger checks that its worker is gone; if it may still run, continue_task says so and the task stays as it is: tell the owner. A done or failed task of another computer of this network can be continued the same way when that computer runs Messenger 0.60 or newer; if it refuses (older version, not in the network, no conversation), you get continue_refused with the reason: then start a new task that names what is already done.
 - Messenger already tells every worker to keep its report to a few lines, to put long details in a file and to follow the owner's rules for this project. A report ends with labelled lines when the worker gave them: «Изменения:» (commit or changeset), «Тесты:» and «Файлы:» (paths to read when needed). Do not ask workers for a «taken» line or a limit line: the task's state shows when it was accepted, and limits come from list_agents.
 - Work reaches the project only through the worker's own commit; workers are told to commit before they report. A report is a short message (at most 20000 characters reach you), so never ask for the full text of an audit or a long document instead of a commit: it will not fit, and the work still is not in the project. A worker that could not commit (files locked by another agent, its copy behind the server) asks you instead of finishing, and its task stays open. Decide what lets the commit happen: if another task holds the files, you may answer later, after that task is done, telling the worker to update and commit; otherwise tell it what to do or tell the owner. Do not tell it to finish without committing: a finished task of another computer cannot be continued.
+- Feedback about Messenger itself: whenever Messenger does something wrong or unclear (an error you cannot explain, a lost or late event, a refusal that makes no sense, a missing feature you needed, or the owner complains about the program), record it at once with report_feedback: what happened, what you expected, the task and computer. Do not wait to be asked. When the owner asks for the feedback, the remarks or the journal, call export_feedback and give them the file's path; it holds the owner's remarks from the window (the bug icon) and yours.
 - get_log reads the end of another computer's Messenger log, for debugging Messenger itself (a task that never arrived, a refusal you cannot explain). That computer answers only if its owner turned on «Отдавать журнал по сети»; otherwise the reply says so. Session ids, codes and keys are removed. If no answer came in time, call get_log again with request_id. Do not use it to watch workers: wait does that.
 - full_access on a task of this computer means its worker may run any command (the owner's «Любые команды» switch on «Агенты»). Without it a command that needs approval is refused, and nobody can approve it: tell the owner to turn that switch on and then continue the task. For tasks from other computers the switch is «Любые команды для задач других компьютеров» on «Сервер».
 - contact_lost on an open task of another computer means this computer has no contact with it (offline, left the network, or the network was made again); computer_last_seen is when it last reported. Its outcome there is unknown: do not start it again by yourself; tell the owner, and when that computer is back the task goes on reporting.
@@ -87,10 +95,15 @@ How work is planned and split is decided with the owner under this project's own
 type coordinator struct {
 	store   *core.Store
 	project string
-	out     sync.Mutex
-	w       io.Writer
-	mu      sync.Mutex
-	pending map[string]context.CancelFunc
+	// watch is the background watch command with CURSOR in it, or "".
+	watch string
+	// dataRoot is the data directory, where an export goes when there is
+	// no Downloads folder.
+	dataRoot string
+	out      sync.Mutex
+	w        io.Writer
+	mu       sync.Mutex
+	pending  map[string]context.CancelFunc
 	// seen is the highest cursor this chat has passed to or received from
 	// wait; seenKnown is false until its first wait (T-074).
 	seen      int64
@@ -164,6 +177,10 @@ func ServeCoordinator(store *core.Store, project string, in io.Reader, out io.Wr
 // serveCoordinator serves with watch, the background watch command the
 // instructions give (T-120), or none.
 func serveCoordinator(store *core.Store, project, watch string, in io.Reader, out io.Writer) error {
+	return serveCoordinatorIn(store, project, watch, "", in, out)
+}
+
+func serveCoordinatorIn(store *core.Store, project, watch, dataRoot string, in io.Reader, out io.Writer) error {
 	// Under the relay (T-117) every program version serving the same chat
 	// keeps the relay's chat id, so a switch is not a new chat.
 	chat := os.Getenv(CoordinatorChatVariable)
@@ -173,7 +190,7 @@ func serveCoordinator(store *core.Store, project, watch string, in io.Reader, ou
 			return err
 		}
 	}
-	c := &coordinator{store: store, project: project, w: out, pending: map[string]context.CancelFunc{}, chat: chat}
+	c := &coordinator{store: store, project: project, watch: watch, dataRoot: dataRoot, w: out, pending: map[string]context.CancelFunc{}, chat: chat}
 	var wg sync.WaitGroup
 	defer wg.Wait()
 	scanner := bufio.NewScanner(in)
@@ -216,7 +233,7 @@ func serveCoordinator(store *core.Store, project, watch string, in io.Reader, ou
 				"protocolVersion": p.ProtocolVersion,
 				"capabilities":    map[string]any{"tools": map[string]any{"listChanged": true}},
 				"serverInfo":      map[string]any{"name": "agent-messenger", "version": "0.2.0"},
-				"instructions":    coordinatorInstructions + "\nProject: " + c.project + watchNote(watch),
+				"instructions":    watchNote(watch) + coordinatorInstructions + "\nProject: " + c.project,
 			}, nil)
 		case req.Method == "ping":
 			c.respond(req.ID, map[string]any{}, nil)
@@ -356,6 +373,12 @@ func coordinatorTools() []map[string]any {
 			}, "task_id")},
 		{"name": "cancel", "description": "Cancel a task: a waiting task at once, a running worker is stopped.",
 			"inputSchema": obj(map[string]any{"task_id": str("task id")}, "task_id")},
+		{"name": "report_feedback", "description": "Record a remark about Agent Messenger itself on this computer: a bug, an unclear error, a missing feature, something the owner dislikes. It goes into the program's feedback journal next to the owner's own remarks; nothing is sent anywhere.",
+			"inputSchema": obj(map[string]any{
+				"text": map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxFeedbackText, "description": "what happened, what you expected, and the task or computer it concerns"},
+			}, "text")},
+		{"name": "export_feedback", "description": "Write every remark of this computer's feedback journal (the owner's from the window and yours) into one zip file and return its path, for the owner to pass on to the program's developer.",
+			"inputSchema": obj(map[string]any{})},
 		{"name": "get_log", "description": "Ask another computer of the network for the last lines of its Messenger log, to debug Messenger itself. It answers only if its owner allowed it. Waits up to 20 seconds; if the answer has not come, call again with request_id.",
 			"inputSchema": obj(map[string]any{
 				"computer":   str("id of another computer from list_agents"),
@@ -537,6 +560,27 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 			return nil, err
 		}
 		return map[string]any{"state": state}, nil
+	case "report_feedback":
+		var a struct {
+			Text string `json:"text"`
+		}
+		if err := strict(&a); err != nil {
+			return nil, err
+		}
+		id, err := c.store.AddFeedback(core.AudienceCoordinator, c.project, a.Text, buildinfo.Version, "", nil)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"recorded": id, "next": "Recorded in this computer's feedback journal. Carry on; export_feedback writes the whole journal to a file when the owner asks."}, nil
+	case "export_feedback":
+		if err := strict(&struct{}{}); err != nil {
+			return nil, err
+		}
+		path, n, err := c.store.ExportFeedback(core.FeedbackDir(c.dataRoot), time.Now())
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"path": path, "remarks": n, "next": "Tell the owner where the file is; they pass it on to the program's developer. The journal is kept; nothing was deleted."}, nil
 	case "get_log":
 		var a struct {
 			Computer  string `json:"computer"`
@@ -599,6 +643,11 @@ func (c *coordinator) projectExists() error {
 // ownTask refuses tasks of another project.
 func (c *coordinator) ownTask(id string) error {
 	t, err := c.store.TaskByID(id)
+	if errors.Is(err, core.ErrRejected) {
+		// Row 24: tasks listed it, answer did not find it. Usually a second,
+		// older copy of this tool is connected to the chat.
+		return fmt.Errorf("%w: unknown task %s. If tasks lists it, this chat has an old second copy of the Messenger tool connected: tell the owner to connect the coordinator again from the Messenger window", core.ErrRejected, id)
+	}
 	if err != nil {
 		return err
 	}
@@ -657,7 +706,7 @@ func (c *coordinator) tasks(state string, limit int, ifVersion string) (any, err
 		return nil, err
 	}
 	if ifVersion != "" && ifVersion == version {
-		return map[string]any{"unchanged": true, "version": version, "cursor": cursor}, nil
+		return c.withWatch(map[string]any{"unchanged": true, "version": version, "cursor": cursor}, cursor), nil
 	}
 	tasks, err := c.store.Tasks(c.project, coordinatorTaskMax)
 	if err != nil {
@@ -714,7 +763,7 @@ func (c *coordinator) tasks(state string, limit int, ifVersion string) (any, err
 		}
 		out = append(out, item)
 	}
-	result := map[string]any{"tasks": out, "cursor": cursor, "version": version}
+	result := c.withWatch(map[string]any{"tasks": out, "cursor": cursor, "version": version}, cursor)
 	if more {
 		result["more"] = true
 	}
@@ -767,14 +816,18 @@ func (c *coordinator) wait(ctx context.Context, after int64, timeout time.Durati
 				result["more"] = true
 				result["next"] = fmt.Sprintf("More events are ready. Act on these, then call wait with after=%d at once.", cursor)
 			}
-			return result, nil
+			// Row 31: a computer whose last task just stopped stands idle.
+			if idle, err := c.store.IdleComputers(c.project, events); err == nil && len(idle) > 0 {
+				result["idle_computers"] = idle
+			}
+			return c.withWatch(result, cursor), nil
 		}
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-deadline.C:
-			return map[string]any{"events": []core.TaskEvent{}, "cursor": after, "timed_out": true,
-				"next": fmt.Sprintf("Nothing yet. Call wait again with after=%d.", after)}, nil
+			return c.withWatch(map[string]any{"events": []core.TaskEvent{}, "cursor": after, "timed_out": true,
+				"next": fmt.Sprintf("Nothing yet. Call wait again with after=%d.", after)}, after), nil
 		case <-tick.C:
 			if hasProgress && time.Since(lastProgress) >= coordinatorProgress {
 				lastProgress = time.Now()
@@ -832,14 +885,23 @@ func runCoordinator(dbPath, project, workerRun string, in io.Reader, out io.Writ
 		return err
 	}
 	defer store.Close()
-	return serveCoordinator(store, project, coordinatorWatchLine(dbPath, project), in, out)
+	return serveCoordinatorIn(store, project, coordinatorWatchLine(dbPath, project), filepath.Dir(dbPath), in, out)
 }
 
 func watchNote(watch string) string {
 	if watch == "" {
 		return ""
 	}
-	return "\nBackground watch command (put your cursor in place of CURSOR; run it in the background): " + watch
+	return "Background watch command (put your cursor in place of CURSOR; run it in the background with your shell tool): " + watch + "\n"
+}
+
+// withWatch adds the watch command for cursor to a wait or tasks result,
+// so a client that cut the instructions short still has it (row 28).
+func (c *coordinator) withWatch(result map[string]any, cursor int64) map[string]any {
+	if c.watch != "" {
+		result["watch"] = strings.ReplaceAll(c.watch, "CURSOR", strconv.FormatInt(cursor, 10))
+	}
+	return result
 }
 
 type coordinatorMessage struct {

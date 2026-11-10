@@ -8,6 +8,18 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-10 (evening) by Claude Code.
+
+- 0.61 goes out from `claude/ui-tweaks`: T-128 busy update icon, T-131 stuck tasks, T-132 tasks follow a computer into a new network, T-133 scroll arrow, T-134 coordinator list rows 18, 24, 26, 28, 30, 31, 32, T-135 feedback journal, plus window tweaks (agent status text in the sidebar, «Настройки программы» with language and theme).
+- Owner's checks after 0.61 (every computer on 0.61): the coordinator records a remark with `report_feedback` and exports with `export_feedback`; the bug icon by the version saves a remark with a picture; tasks keep their computer after the server moves; a task not accepted in 5 minutes gives `not_accepted`. Not verified between real computers yet.
+- Next after 0.61: feedback from other computers through the network; row 27 needs the owner's OK (D-021/D-108); row 29 (waking the coordinator) needs discussion; row 23 (images in reports); app settings may later hold updates and notifications.
+
+Updated 2026-11-10 (day) by Claude Code.
+
+- On `claude/ui-tweaks`, not released (all goes into 0.61, released after the whole coordinator list is done): T-128 busy update icon, T-131 stuck tasks (D-114), T-132 tasks follow a computer into a new network (D-115), T-134 coordinator list rows 24, 26, 28, 30, 31, 32 (D-116).
+- Also on `claude/ui-tweaks`: T-133 scroll arrow, T-135 feedback journal (D-117). The owner asked to release all of it as 0.61.
+- Next after 0.61: feedback from other computers through the network; row 27 (closing local interrupted tasks) needs the owner's OK because of D-021/D-108; row 29 (waking the coordinator) needs discussion; row 23 (images in reports).
+
 Updated 2026-11-10 (morning) by Claude Code.
 
 - Ready for 0.60 on `claude/ui-tweaks` (PR to `main` open, not released; the owner releases): T-130, T-128 (notices, update icon), T-126 (lost contact), T-115 (full access shown), T-129 (sandbox warning), T-114 (`note_task`), T-113 (continue another computer's task, D-113).

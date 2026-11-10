@@ -296,6 +296,13 @@ func TestTaskReportIsPublishedOnlyAfterVerification(t *testing.T) {
 	if kinds(events) != "report" || events[0].Text != "All done" {
 		t.Fatalf("events %+v", events)
 	}
+	// Row 31: the computer runs nothing of the project now.
+	if idle, err := f.st.IdleComputers("Game", events); err != nil || len(idle) != 1 {
+		t.Fatalf("idle %v %v", idle, err)
+	}
+	if idle, _ := f.st.IdleComputers("Other", events); len(idle) != 0 {
+		t.Fatalf("idle in another project %v", idle)
+	}
 	task, _ := f.st.TaskByID(id)
 	if task.State != "done" || task.FinishedAt == "" {
 		t.Fatalf("task %+v", task)

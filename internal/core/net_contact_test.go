@@ -41,3 +41,54 @@ func TestRemoteTaskShowsLostContact(t *testing.T) {
 		t.Fatalf("local task: %+v %v", r, err)
 	}
 }
+
+// T-131: a task on a computer out of reach can be closed here at once; a
+// cancel that got no answer can be closed after a while; what that computer
+// reports later does not reopen it.
+func TestRemoteTaskClosesHereWhenOutOfReach(t *testing.T) {
+	p := newNetPair(t)
+	agents := []NetAgent{{Agent: "claude"}}
+	id := p.startRemote(t, "op-a", "claude", "work")
+	p.carry(t, true)
+	m := p.mirror(t, id)
+	p.carry(t, false)
+	if err := p.a.st.SetNetwork(testBroker, HostPeerID, []NetPeer{{ID: "dev-b", Name: "Ноутбук", Age: PeerFresh + 30, Agents: agents}}); err != nil {
+		t.Fatal(err)
+	}
+	if state, err := p.a.st.CancelTask(id); err != nil || state != "cancelled" {
+		t.Fatalf("close out of reach: %s %v", state, err)
+	}
+	// The cancel still goes out for when that computer is back.
+	if sent := p.carry(t, true); len(sent) != 1 {
+		t.Fatalf("cancel messages %+v", sent)
+	}
+	// b cancels its copy and reports it; a stays as the owner closed it.
+	if mt, _ := p.b.st.TaskByID(m.ID); mt.State != "cancelled" {
+		t.Fatalf("copy on b %+v", mt)
+	}
+	p.carry(t, false)
+	if task, _ := p.a.st.TaskByID(id); task.State != "cancelled" {
+		t.Fatalf("reopened %+v", task)
+	}
+
+	// In contact: the first stop asks; a second one right away does not
+	// close it; after the wait without an answer it does.
+	if err := p.a.st.SetNetwork(testBroker, HostPeerID, []NetPeer{{ID: "dev-b", Name: "Ноутбук", Age: 1, Agents: agents}}); err != nil {
+		t.Fatal(err)
+	}
+	id2 := p.startRemote(t, "op-b", "claude", "more work")
+	p.carry(t, true)
+	p.carry(t, false)
+	if state, _ := p.a.st.CancelTask(id2); state != "cancelling" {
+		t.Fatalf("first stop %s", state)
+	}
+	if state, _ := p.a.st.CancelTask(id2); state != "cancelling" {
+		t.Fatalf("second stop at once %s", state)
+	}
+	old := cancelAnswerWait
+	cancelAnswerWait = 0
+	defer func() { cancelAnswerWait = old }()
+	if state, _ := p.a.st.CancelTask(id2); state != "cancelled" {
+		t.Fatalf("stop after no answer %s", state)
+	}
+}

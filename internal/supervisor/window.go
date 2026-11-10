@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/kolotiloff/agent-messenger/internal/adapters"
+	"github.com/kolotiloff/agent-messenger/internal/buildinfo"
 	"github.com/kolotiloff/agent-messenger/internal/core"
 )
 
@@ -28,6 +29,8 @@ type windowView struct {
 	// CoordinatorLink says whether Claude has the coordinator for the
 	// project folder; filled only while no coordinator chat is connected.
 	CoordinatorLink *CoordinatorLinkView `json:"coordinator_link,omitempty"`
+	// FeedbackCount is how many remarks the feedback journal holds (T-135).
+	FeedbackCount int `json:"feedback_count"`
 }
 
 // WindowView returns the selected project's view with folder trust per agent.
@@ -53,6 +56,7 @@ func (s *Supervisor) WindowView(project string) (any, error) {
 	out.Paused, _ = s.store.Paused()
 	out.Messenger, _ = os.Executable()
 	out.DataRoot = s.root
+	out.FeedbackCount, _ = s.store.FeedbackCount()
 	if v.Project != "" {
 		s.repairStaleCoordinator(v.Project)
 	}
@@ -145,9 +149,29 @@ func (s *Supervisor) RemoveAgent(provider string) error {
 	return s.store.RemoveComputerAgent(provider)
 }
 
+// HideNetTask removes a task from the window's list (T-131): another
+// computer's task when peer is set, else a finished task of this computer.
+func (s *Supervisor) HideNetTask(peer, task string) error {
+	if peer == "" {
+		return s.store.HideTask(task)
+	}
+	return s.store.HideNetTask(peer, task)
+}
+
 // CancelTask stops a task from the window's stop button. The running worker
 // is signalled by the client's cancel watcher and verified like any run.
 func (s *Supervisor) CancelTask(id string) error {
 	_, err := s.store.CancelTask(id)
 	return err
+}
+
+// AddFeedback records the owner's remark about the program (T-135).
+func (s *Supervisor) AddFeedback(project, text, imageType string, image []byte) error {
+	_, err := s.store.AddFeedback(core.AudienceOwner, project, text, buildinfo.Version, imageType, image)
+	return err
+}
+
+// ExportFeedback writes the feedback journal into one zip file (T-135).
+func (s *Supervisor) ExportFeedback() (string, int, error) {
+	return s.store.ExportFeedback(core.FeedbackDir(s.root), time.Now())
 }

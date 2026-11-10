@@ -133,7 +133,7 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	if _, err := db.Exec(schema + streamSchema + streamRecoverySchema + uiOutboxSchema + codexSetupSchema + taskSchema + taskRunItemsSchema + taskOutputSchema + networkSchema + netTasksSchema + netLogsSchema + netUpdatesSchema); err != nil {
+	if _, err := db.Exec(schema + streamSchema + streamRecoverySchema + uiOutboxSchema + codexSetupSchema + taskSchema + taskRunItemsSchema + taskOutputSchema + networkSchema + netTasksSchema + netLogsSchema + netUpdatesSchema + feedbackSchema); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -181,6 +181,10 @@ func Open(path string) (*Store, error) {
 		{"net_peers", "version", "TEXT NOT NULL DEFAULT ''"},
 		{"tasks", "resource", "TEXT NOT NULL DEFAULT ''"},
 		{"task_owner_notes", "author", "TEXT NOT NULL DEFAULT 'owner'"},
+		{"tasks", "hidden_at", "TEXT"},
+		{"net_peers", "computer", "TEXT NOT NULL DEFAULT ''"},
+		{"tasks", "remote_computer", "TEXT NOT NULL DEFAULT ''"},
+		{"tasks", "origin_computer", "TEXT NOT NULL DEFAULT ''"},
 		networkTaskColumns[0], networkTaskColumns[1], networkTaskColumns[2],
 		networkTaskColumns[3], networkTaskColumns[4], networkTaskColumns[5],
 		networkTaskColumns[6],

@@ -195,6 +195,24 @@ func (s *Store) remoteOf(task string) (*RemoteComputer, error) {
 	return out, err
 }
 
+// hiddenTasks lists the project's tasks the owner removed from the list.
+func (s *Store) hiddenTasks(project string) (map[string]bool, error) {
+	rows, err := s.db.Query(`SELECT id FROM tasks WHERE project=? AND hidden_at IS NOT NULL`, project)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[id] = true
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) ranModel(task string) string {
 	var m sql.NullString
 	_ = s.db.QueryRow(`SELECT ran_model FROM tasks WHERE id=?`, task).Scan(&m)
@@ -354,7 +372,14 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 	if err != nil {
 		return v, err
 	}
+	hidden, err := s.hiddenTasks(project)
+	if err != nil {
+		return v, err
+	}
 	for _, t := range tasks {
+		if hidden[t.ID] {
+			continue
+		}
 		w := WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt, FailureReason: t.FailureReason, FailureReset: t.FailureReset, FullAccess: t.FullAccess}
 		if t.OpenQuestion != nil && t.OpenQuestion.Audience == AudienceOwner {
 			w.OwnerQuestion = t.OpenQuestion
@@ -664,6 +689,14 @@ func (s *Store) ComputerName() (string, error) {
 	var name string
 	err := s.tx(func(tx *sql.Tx) (err error) { name, err = computerName(tx); return })
 	return name, err
+}
+
+// ComputerID is this computer's lasting id, the same in every network
+// (T-132).
+func (s *Store) ComputerID() (string, error) {
+	var id string
+	err := s.tx(func(tx *sql.Tx) (err error) { id, err = localComputer(tx); return })
+	return id, err
 }
 
 // AdoptComputerName keeps name as this computer's name unless the owner

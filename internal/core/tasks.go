@@ -2242,7 +2242,34 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 		}
 		list = append(list, o)
 	}
-	return map[string]any{"project": project, "computers": list}, nil
+	out := map[string]any{"project": project, "computers": list}
+	if note, err := s.networkStale(time.Now()); err != nil {
+		return nil, err
+	} else if note != "" {
+		out["network_note"] = note
+	}
+	return out, nil
+}
+
+// netStaleAfter is how long the list of the network's computers may go
+// without a refresh before list_agents says it is out of date (row 24).
+const netStaleAfter = 2 * time.Minute
+
+// networkStale explains why every other computer looks offline when this
+// computer's client has not refreshed the network's list for a while.
+func (s *Store) networkStale(at time.Time) (string, error) {
+	var broker, newest string
+	if err := s.db.QueryRow(`SELECT COALESCE((SELECT value FROM meta WHERE key='net_broker'),''),COALESCE((SELECT MAX(updated_at) FROM net_peers),'')`).Scan(&broker, &newest); err != nil {
+		return "", err
+	}
+	if broker == "" || newest == "" {
+		return "", nil
+	}
+	when, err := time.Parse(time.RFC3339Nano, newest)
+	if err != nil || at.Sub(when) < netStaleAfter {
+		return "", nil
+	}
+	return fmt.Sprintf("this computer has not heard from the server for %d minutes (its Messenger is not running, or the link to the server is down), so online and the states of other computers' tasks are out of date; tell the owner", int(at.Sub(when)/time.Minute)), nil
 }
 
 // DefaultClaudeModels are the short model names Claude Code itself accepts;
@@ -2464,4 +2491,53 @@ func NewChatID() (string, error) {
 		return "", err
 	}
 	return "chat-" + id[:16], nil
+}
+
+// idleKinds are the events after which a worker no longer runs.
+var idleKinds = map[string]bool{"report": true, "failed": true, "cancelled": true, "blocked": true, "interrupted": true}
+
+// IdleComputers names the computers where a task of these events stopped
+// and that run no task of the project now (coordinator list row 31), so
+// machines do not stand still between tasks unnoticed.
+func (s *Store) IdleComputers(project string, events []TaskEvent) ([]string, error) {
+	seen := map[string]bool{}
+	var out []string
+	err := s.tx(func(tx *sql.Tx) error {
+		self, err := localComputer(tx)
+		if err != nil {
+			return err
+		}
+		for _, e := range events {
+			if !idleKinds[e.Kind] {
+				continue
+			}
+			var computer string
+			if err := tx.QueryRow(`SELECT computer FROM tasks WHERE id=? AND project=?`, e.TaskID, project).Scan(&computer); err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					continue
+				}
+				return err
+			}
+			if seen[computer] {
+				continue
+			}
+			seen[computer] = true
+			var running int
+			if err := tx.QueryRow(`SELECT COUNT(*) FROM tasks WHERE project=? AND computer=? AND state='running' AND COALESCE(origin_broker,'')=''`, project, computer).Scan(&running); err != nil {
+				return err
+			}
+			if running > 0 {
+				continue
+			}
+			name := peerName(tx, computer)
+			if computer == self {
+				if name, err = computerName(tx); err != nil {
+					return err
+				}
+			}
+			out = append(out, name)
+		}
+		return nil
+	})
+	return out, err
 }

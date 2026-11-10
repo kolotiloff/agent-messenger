@@ -43,6 +43,9 @@ func (s *Supervisor) runNetwork(ctx context.Context) {
 	defer ticker.Stop()
 	for {
 		s.networkRound(ctx)
+		// Row 30: a task the other computer has not accepted in time is
+		// reported to the coordinator once; nothing is retried.
+		_, _ = s.store.NoteUnaccepted(time.Now())
 		select {
 		case <-ctx.Done():
 			return
@@ -77,7 +80,7 @@ func (s *Supervisor) networkRound(ctx context.Context) {
 	if refresh {
 		var peers []core.NetPeer
 		for _, p := range s.server.Status().Peers {
-			np := core.NetPeer{ID: p.ID, Name: p.Name, Host: p.Host, Age: p.Age, Version: p.Version}
+			np := core.NetPeer{ID: p.ID, Name: p.Name, Host: p.Host, Age: p.Age, Version: p.Version, Computer: p.Computer}
 			if r := p.Ready; r != nil {
 				np.Ready = &core.NetReady{Accept: r.Accept, Projects: r.Projects}
 			}

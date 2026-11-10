@@ -106,6 +106,8 @@ type Service struct {
 	readySkip time.Time
 	// versionSkip is the same for the program version (T-078).
 	versionSkip time.Time
+	// computerSkip is the same for the computer's lasting id (T-132).
+	computerSkip time.Time
 	// usageSkip is the same for usage. usageSent is the version of this
 	// computer's usage that usageTo (broker/device) last accepted, at
 	// usageAt; usageCopies holds the other computers' usage from there.
@@ -691,6 +693,9 @@ func (s *Service) ReportPresence(ctx context.Context) {
 	if time.Now().Before(s.versionSkip) {
 		p.Version = ""
 	}
+	if time.Now().Before(s.computerSkip) {
+		p.Computer = ""
+	}
 	if s.usageTo != to {
 		s.usageTo, s.usageSent, s.usageCopies = to, "", nil
 	}
@@ -709,6 +714,14 @@ func (s *Service) ReportPresence(ctx context.Context) {
 		p.Ready = nil
 	}
 	peers, err := Report(call, *c, p)
+	if errors.Is(err, errPresenceRefused) && p.Computer != "" {
+		// A host before 0.61 refuses the field (T-132).
+		s.mu.Lock()
+		s.computerSkip = time.Now().Add(readyRetry)
+		s.mu.Unlock()
+		p.Computer = ""
+		peers, err = Report(call, *c, p)
+	}
 	if errors.Is(err, errPresenceRefused) && p.Version != "" {
 		// A host older than versions refuses the field (T-078).
 		s.mu.Lock()

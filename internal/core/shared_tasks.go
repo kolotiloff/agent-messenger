@@ -3,6 +3,8 @@ package core
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"time"
 )
 
@@ -27,6 +29,12 @@ CREATE TABLE IF NOT EXISTS net_tasks (
  age INTEGER NOT NULL,
  tasks TEXT NOT NULL,
  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS net_tasks_hidden (
+ peer TEXT NOT NULL,
+ task TEXT NOT NULL,
+ at TEXT NOT NULL,
+ PRIMARY KEY(peer, task)
 );`
 
 // NetTask is one task of a computer's shared list.
@@ -56,7 +64,7 @@ func (s *Store) SharedTasks(since time.Time) ([]NetTask, error) {
 	rows, err := s.db.Query(`SELECT t.id,t.project,t.title,t.provider,t.state,t.created_at,COALESCE(t.finished_at,''),t.usage_input+t.usage_output,
  COALESCE((SELECT r.disposition_text FROM task_runs r WHERE r.task_id=t.id AND r.disposition='report' ORDER BY r.ordinal DESC LIMIT 1),
   (SELECT i.text FROM remote_task_items i WHERE i.task_id=t.id AND i.kind='report' ORDER BY i.seq DESC LIMIT 1),'')
- FROM tasks t WHERE t.origin_peer IS NULL AND t.created_at>=? ORDER BY t.created_at DESC, t.rowid DESC LIMIT ?`,
+ FROM tasks t WHERE t.origin_peer IS NULL AND t.hidden_at IS NULL AND t.created_at>=? ORDER BY t.created_at DESC, t.rowid DESC LIMIT ?`,
 		since.UTC().Format(time.RFC3339Nano), MaxSharedTasks)
 	if err != nil {
 		return nil, err
@@ -94,8 +102,43 @@ func (s *Store) SetNetTasks(peers []NetPeerTasks) error {
 	})
 }
 
+// HideTask removes a finished task of this computer from the list (T-131).
+// The task stays in the database; the window and the shared list leave it
+// out, so the other computers drop it with their next list. A task that
+// has not finished is refused: the owner stops it first.
+func (s *Store) HideTask(id string) error {
+	return s.tx(func(tx *sql.Tx) error {
+		var state string
+		err := tx.QueryRow(`SELECT state FROM tasks WHERE id=?`, id).Scan(&state)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%w: unknown task", ErrRejected)
+		}
+		if err != nil {
+			return err
+		}
+		if state != "done" && state != "failed" && state != "cancelled" {
+			return fmt.Errorf("%w: stop the task before removing it", ErrRejected)
+		}
+		_, err = tx.Exec(`UPDATE tasks SET hidden_at=COALESCE(hidden_at,?) WHERE id=?`, now(), id)
+		return err
+	})
+}
+
+// HideNetTask removes another computer's task from this window's list
+// (T-131). It only changes what this computer shows: the task and its
+// computer are left as they are, so the owner can drop a task that looks
+// stuck without touching anything that may still run there.
+func (s *Store) HideNetTask(peer, task string) error {
+	if peer == "" || task == "" {
+		return errors.New("task not specified")
+	}
+	_, err := s.db.Exec(`INSERT INTO net_tasks_hidden(peer,task,at) VALUES (?,?,?) ON CONFLICT(peer,task) DO NOTHING`, peer, task, now())
+	return err
+}
+
 // projectNetTasks returns the other computers' tasks of a project, leaving
-// out the computers with none and the tasks that run here.
+// out the computers with none, the tasks that run here and the tasks the
+// owner removed from the list.
 func projectNetTasks(tx *sql.Tx, project string) ([]NetPeerTasks, error) {
 	rows, err := tx.Query(`SELECT peer,name,age,tasks,updated_at FROM net_tasks ORDER BY name, peer`)
 	if err != nil {
@@ -129,7 +172,7 @@ func projectNetTasks(tx *sql.Tx, project string) ([]NetPeerTasks, error) {
 				continue
 			}
 			var here int
-			if err := tx.QueryRow(`SELECT COUNT(*) FROM tasks WHERE origin_peer=? AND origin_task=?`, p.Peer, t.ID).Scan(&here); err != nil {
+			if err := tx.QueryRow(`SELECT (SELECT COUNT(*) FROM tasks WHERE origin_peer=? AND origin_task=?)+(SELECT COUNT(*) FROM net_tasks_hidden WHERE peer=? AND task=?)`, p.Peer, t.ID, p.Peer, t.ID).Scan(&here); err != nil {
 				return nil, err
 			}
 			if here == 0 {

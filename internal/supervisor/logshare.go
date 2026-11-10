@@ -56,14 +56,23 @@ func (s *Supervisor) answerLogRequests(broker string) string {
 // within maxLogBytes.
 func logTail(root string, lines int) (string, error) {
 	files, _ := filepath.Glob(filepath.Join(root, "background-*.log"))
-	newest, newestAt := "", int64(0)
+	// The newest log that has anything in it: a client that just started
+	// may not have written a line yet (coordinator list row 32: an empty
+	// answer with no reason).
+	newest, newestAt, found := "", int64(0), false
 	for _, f := range files {
-		if fi, err := os.Stat(f); err == nil && fi.Mode().IsRegular() && fi.ModTime().UnixNano() >= newestAt {
-			newest, newestAt = f, fi.ModTime().UnixNano()
+		if fi, err := os.Stat(f); err == nil && fi.Mode().IsRegular() {
+			found = true
+			if fi.Size() > 0 && fi.ModTime().UnixNano() >= newestAt {
+				newest, newestAt = f, fi.ModTime().UnixNano()
+			}
 		}
 	}
-	if newest == "" {
+	if !found {
 		return "", errors.New("this computer has no background log: its client was not started in the background")
+	}
+	if newest == "" {
+		return "", errors.New("the log on this computer is empty: its client has written nothing since it started")
 	}
 	f, err := os.Open(newest)
 	if err != nil {
