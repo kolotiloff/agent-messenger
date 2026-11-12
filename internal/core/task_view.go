@@ -145,6 +145,9 @@ type RemoteComputer struct {
 	// last reported, if known.
 	Lost     bool   `json:"lost,omitempty"`
 	LastSeen string `json:"last_seen,omitempty"`
+	// Unaccepted: the computer that should run the task has not said it
+	// accepted it (T-137). Until it does, nothing is known to run there.
+	Unaccepted bool `json:"unaccepted,omitempty"`
 }
 
 // TaskRemote names the other computer of a task, or nil for a task of this
@@ -154,10 +157,11 @@ func (s *Store) TaskRemote(task string) (*RemoteComputer, error) { return s.remo
 // remoteContact fills in whether the computer that runs a task is out of
 // reach (T-126).
 func remoteContact(tx *sql.Tx, task string, link netLink, out *RemoteComputer) error {
-	var name sql.NullString
-	if err := tx.QueryRow(`SELECT remote_name FROM tasks WHERE id=?`, task).Scan(&name); err != nil {
+	var name, remoteTask sql.NullString
+	if err := tx.QueryRow(`SELECT remote_name,remote_task FROM tasks WHERE id=?`, task).Scan(&name, &remoteTask); err != nil {
 		return err
 	}
+	out.Unaccepted = remoteTask.String == ""
 	var broker string
 	if err := tx.QueryRow(`SELECT COALESCE((SELECT value FROM meta WHERE key='net_broker'),'')`).Scan(&broker); err != nil {
 		return err

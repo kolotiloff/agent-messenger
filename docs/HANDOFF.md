@@ -8,6 +8,11 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-12 by Claude Code.
+
+- After 0.62, on `claude/ui-tweaks`, not released: T-137 (a task another computer never accepted reads «Не принята», not «Работает»).
+- Waiting for the owner: the feedback export (zip) to read the coordinator's remarks.
+
 Updated 2026-11-10 (late evening) by Claude Code.
 
 - 0.62 released (PR #93, tag `v0.0.0-preview.62`, all downloads and signed update files in place): README for 0.61 with window screenshots; T-136 (D-118) the Windows client runs from `runtimes\messenger.exe` for every version, so the firewall permission survives updates.

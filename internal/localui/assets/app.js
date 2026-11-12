@@ -265,6 +265,12 @@
     // T-126: an open task on a computer this one lost contact with.
     if(t.remote?.lost&&!t.remote.from&&activeStates.includes(t.state))
       return [tr('Связь потеряна, исход неизвестен'),'am-muted',t.remote.last_seen?'«'+t.remote.name+tr('» не на связи с ')+stamp(t.remote.last_seen):'«'+t.remote.name+tr('» больше нет в сети')];
+    // T-137: sent to another computer that has not said it took the task.
+    // Nothing is known to run there, so it is not «Работает».
+    if(t.remote?.unaccepted&&!t.remote.from&&t.state==='running'){
+      if(Date.now()-Date.parse(t.created_at)<5*60*1000)return [tr('Ждёт, когда «')+t.remote.name+tr('» примет'),'am-status-wait'];
+      return [tr('Не принята'),'am-status-bad','«'+t.remote.name+tr('» не подтвердил, что получил задачу. Сама она не отправляется снова: остановите её и дайте заново')];
+    }
     switch(t.state){
       case 'running':return t.pending_launch?[t.waits_for_lock?tr('Ждёт ресурс «')+t.waits_for_lock+'»':tr('Ждёт запуска'),'am-status-wait']:[tr('Работает ')+minutes(from),'am-status-run'];
       case 'waiting_owner':return [tr('Ждёт вашего ответа'),'am-status-wait'];

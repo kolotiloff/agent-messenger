@@ -144,10 +144,17 @@ func TestUnacceptedTaskIsReported(t *testing.T) {
 	if !found {
 		t.Fatalf("no event %+v", events)
 	}
+	// T-137: the window says it was not accepted instead of «Работает».
+	if r, err := p.a.st.TaskRemote(id); err != nil || r == nil || !r.Unaccepted {
+		t.Fatalf("remote %+v %v", r, err)
+	}
 	// An accepted task is never reported.
 	id2 := p.startRemote(t, "op-ok", "codex", "fine")
 	p.carry(t, true)
 	p.carry(t, false)
+	if r, err := p.a.st.TaskRemote(id2); err != nil || r == nil || r.Unaccepted {
+		t.Fatalf("accepted remote %+v %v", r, err)
+	}
 	if n, _ := p.a.st.NoteUnaccepted(time.Now().Add(time.Hour)); n != 0 {
 		t.Fatalf("accepted task %s reported", id2)
 	}
