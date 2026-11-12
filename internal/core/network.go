@@ -280,6 +280,18 @@ func (s *Store) SetNetwork(broker, self string, peers []NetPeer) error {
 		if err := setMeta(tx, "net_self", self); err != nil {
 			return err
 		}
+		// T-146: parked replies go again to computers listed now.
+		if broker != "" {
+			ids := make([]string, 0, len(peers))
+			for _, p := range peers {
+				if !p.Reconnecting {
+					ids = append(ids, p.ID)
+				}
+			}
+			if err := unparkFor(tx, broker, ids); err != nil {
+				return err
+			}
+		}
 		// T-092: a computer of the same network that is missing or has not
 		// reported since a restart stays listed as reconnecting for a while,
 		// with what it reported before.
@@ -702,12 +714,20 @@ func (s *Store) NetSent(seq int64) error {
 // its task; an answer or cancel that never arrived blocks it.
 func (s *Store) NetUndeliverable(seq int64) error {
 	return s.tx(func(tx *sql.Tx) error {
-		var kind, task, to string
-		err := tx.QueryRow(`SELECT kind,task_id,recipient FROM net_outbox WHERE seq=?`, seq).Scan(&kind, &task, &to)
+		var kind, task, to, msgBroker string
+		err := tx.QueryRow(`SELECT kind,task_id,recipient,broker FROM net_outbox WHERE seq=?`, seq).Scan(&kind, &task, &to, &msgBroker)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}
 		if err != nil {
+			return err
+		}
+		// T-146: a reply about a task another computer gave (its report,
+		// events, acceptance) is never thrown away. The computer may be
+		// back under a new id (D-115) or again under the same one; the
+		// reply waits, parked, and goes when it shows up.
+		if parkedKinds[kind] {
+			_, err := tx.Exec(`UPDATE net_outbox SET broker=? WHERE seq=?`, parkedPrefix+msgBroker, seq)
 			return err
 		}
 		if _, err := tx.Exec(`DELETE FROM net_outbox WHERE seq=?`, seq); err != nil {
@@ -1164,4 +1184,23 @@ func NetDescribe(body []byte) (desc string, progress bool) {
 		parts = append(parts, "reason "+clip(b.Failure, 40))
 	}
 	return strings.Join(parts, " "), b.Kind == "progress"
+}
+
+// parkedKinds are the replies of the computer that runs another computer's
+// task. When their recipient is not in the network, they are parked, not
+// dropped (T-146).
+var parkedKinds = map[string]bool{"event": true, "accepted": true, "refused": true, "answer_refused": true, "continue_refused": true, "output": true}
+
+// parkedPrefix marks the broker of a parked message, so it is not sent
+// until its recipient is back.
+const parkedPrefix = "parked:"
+
+// unparkFor sends the parked messages for peers of broker again.
+func unparkFor(tx *sql.Tx, broker string, peers []string) error {
+	for _, p := range peers {
+		if _, err := tx.Exec(`UPDATE net_outbox SET broker=? WHERE broker=? AND recipient=?`, broker, parkedPrefix+broker, p); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -79,6 +79,10 @@ func rebindComputer(tx *sql.Tx, computer, broker, peer string) error {
 		if _, err := tx.Exec(`UPDATE net_outbox SET broker=?,recipient=? WHERE broker=? AND recipient=? AND kind<>'start'`, broker, peer, pair[0], pair[1]); err != nil {
 			return err
 		}
+		// T-146: replies parked for that computer's old id go too.
+		if _, err := tx.Exec(`UPDATE net_outbox SET broker=?,recipient=? WHERE broker=? AND recipient=?`, broker, peer, parkedPrefix+pair[0], pair[1]); err != nil {
+			return err
+		}
 	}
 	return nil
 }

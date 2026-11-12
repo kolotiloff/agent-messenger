@@ -39,6 +39,10 @@ type CLICheck struct {
 	Compatibility  string     `json:"messenger_compatibility"`
 	AuthScope      string     `json:"auth_scope"`
 	ProbeAttempts  int        `json:"probe_command_attempts"`
+	// T-139: the version this release was checked against and how the
+	// installed one compares ("tested", "newer", "older"; empty: unknown).
+	TestedVersion string `json:"tested_version,omitempty"`
+	Tested        string `json:"tested,omitempty"`
 }
 
 type probeOutput struct {
@@ -155,6 +159,9 @@ func checkCLI(ctx context.Context, provider, cli, environment, goos string, runn
 		return r, nil
 	}
 	r.Version = CheckState{State: "reported", Value: match[1]}
+	if r.Tested = Tested(provider, match[1]); r.Tested != "" {
+		r.TestedVersion = TestedCLI[provider]
+	}
 	// The login request runs for any recognized version (D-051): it only
 	// reads the CLI's own status, and anything but the exact known answer is
 	// reported as unknown.
