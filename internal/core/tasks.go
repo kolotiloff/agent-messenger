@@ -2478,7 +2478,55 @@ func modelAllowed(provider, model string, listed []string) error {
 	if len(listed) == 0 {
 		return fmt.Errorf("%w: the owner listed no models for %s on this computer; leave model out to use its default", ErrRejected, provider)
 	}
+	if near := nearModel(model, listed); near != "" {
+		// Coordinator feedback 2026-11-12: the owner's list had a typo of the
+		// right name, and the task was refused with no hint.
+		return fmt.Errorf("%w: model %q is not in the owner's list for %s, but the list has %q, which differs by a letter or two: if that is a typo in the list, ask the owner to fix it on the agent's card; otherwise use one of: %s, or leave model out", ErrRejected, model, provider, near, strings.Join(listed, ", "))
+	}
 	return fmt.Errorf("%w: model %q is not in the owner's list for %s: %s; use one of these or leave model out", ErrRejected, model, provider, strings.Join(listed, ", "))
+}
+
+// nearModel finds a listed name at most two letters away from model, the
+// closest first: a likely typo on one side or the other.
+func nearModel(model string, listed []string) string {
+	best, bestD := "", 3
+	for _, m := range listed {
+		if d := editDistance(strings.ToLower(model), strings.ToLower(m), bestD); d < bestD {
+			best, bestD = m, d
+		}
+	}
+	return best
+}
+
+// editDistance counts single-letter edits between a and b, giving up at
+// limit.
+func editDistance(a, b string, limit int) int {
+	ra, rb := []rune(a), []rune(b)
+	if d := len(ra) - len(rb); d >= limit || -d >= limit {
+		return limit
+	}
+	prev := make([]int, len(rb)+1)
+	cur := make([]int, len(rb)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(ra); i++ {
+		cur[0] = i
+		low := cur[0]
+		for j := 1; j <= len(rb); j++ {
+			cost := 1
+			if ra[i-1] == rb[j-1] {
+				cost = 0
+			}
+			cur[j] = min(prev[j]+1, cur[j-1]+1, prev[j-1]+cost)
+			low = min(low, cur[j])
+		}
+		if low >= limit {
+			return limit
+		}
+		prev, cur = cur, prev
+	}
+	return min(prev[len(rb)], limit)
 }
 
 // RemoveComputerAgent disconnects an agent of this computer from the window

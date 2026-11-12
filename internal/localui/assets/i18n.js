@@ -329,6 +329,8 @@
   'приём не подтверждён. Задача может идти там, но её ответы сюда не доходят; сама она не повторяется':'it has not confirmed the task. It may run there with its replies not arriving here; it is not sent again by itself',
   ', начата в ':', started at ',
   'Действий: ':'Actions: ',
+  'Похоже на опечатку: «':'Looks like a typo: «',
+  '», может быть «':'», did you mean «',
   'исполнитель':'worker',
   'координатор':'coordinator',
   'Вы':'You',

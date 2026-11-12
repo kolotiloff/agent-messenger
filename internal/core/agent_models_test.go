@@ -195,3 +195,26 @@ func TestEmptyModelListsAreFilledOnce(t *testing.T) {
 		}
 	}
 }
+
+func TestModelRefusalNamesALikelyTypo(t *testing.T) {
+	listed := []string{"composer-2.5-fast", "claude-opus-5-thinking-hig"}
+	err := modelAllowed("cursor", "claude-opus-5-thinking-high", listed)
+	if err == nil || !strings.Contains(err.Error(), `but the list has "claude-opus-5-thinking-hig"`) {
+		t.Fatalf("refusal %v", err)
+	}
+	err = modelAllowed("cursor", "gpt-6-luna", listed)
+	if err == nil || strings.Contains(err.Error(), "but the list has") {
+		t.Fatalf("an unrelated name got a hint: %v", err)
+	}
+	if err := modelAllowed("cursor", "composer-2.5-fast", listed); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		a, b string
+		want int
+	}{{"abc", "abc", 0}, {"abc", "abd", 1}, {"abc", "ab", 1}, {"abc", "xyz", 3}, {"a", "abcdef", 3}} {
+		if got := editDistance(c.a, c.b, 3); got != c.want {
+			t.Errorf("%q %q: %d, want %d", c.a, c.b, got, c.want)
+		}
+	}
+}

@@ -1723,7 +1723,22 @@
     if(models.join('\n')===(a.models||[]).join('\n'))return;
     setStatus('agent-save-status','');
     try{await postAPI('/api/agent-models',{provider:setupProvider,models});viewSignature='';await refresh();}
-    catch(error){setStatus('agent-save-status',error.message);}
+    catch(error){setStatus('agent-save-status',error.message);return;}
+    // A name a letter or two away from a known one is likely a typo
+    // (coordinator, 2026-11-12: «claude-opus-5-thinking-hig»). It is saved
+    // anyway: the agent may know names this window does not.
+    const known=defaultModels[setupProvider]||[];
+    const typos=models.map(m=>[m,known.find(k=>k!==m&&!models.includes(k)&&editDistance(m.toLowerCase(),k.toLowerCase())<=2)]).filter(p=>p[1]);
+    if(typos.length)setStatus('agent-save-status',typos.map(([m,k])=>tr('Похоже на опечатку: «')+m+tr('», может быть «')+k+'»?').join(' '));
+  }
+  function editDistance(a,b){
+    let prev=Array.from({length:b.length+1},(_,j)=>j);
+    for(let i=1;i<=a.length;i++){
+      const cur=[i];
+      for(let j=1;j<=b.length;j++)cur[j]=Math.min(prev[j]+1,cur[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1));
+      prev=cur;
+    }
+    return prev[b.length];
   }
   // Windows (T-062) and Linux (T-082) without the system title bar: the page
   // draws minimise, maximise and close at the top right, and the empty top of
