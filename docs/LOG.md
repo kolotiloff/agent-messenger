@@ -2,6 +2,13 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-12 — Claude Code (0.65, T-139 CLI watch, T-146 replies kept)
+
+- 0.65 released (PR #96): T-145 (D-120). All 21 release files checked; the Linux feed says build 65.
+- T-139: the agent card marks a CLI newer than the checked one «не проверена»; a daily workflow checks the flags and Codex features Messenger passes to the latest CLIs. Checked versions: Claude Code 2.1.322, Codex 0.167.2; Cursor not recorded yet.
+- T-146 (D-121): a worker's reply to a computer the server does not know is parked, not deleted, and goes when that computer is back (same or new id).
+- Owner: a worker restarting Unity is the project's matter; dropped from the open list.
+
 ## 2026-11-12 — Claude Code (0.64, T-145 stuck tasks close where they ran)
 
 - 0.64 merged (PR #95) and released on the owner's word: T-140 to T-144.

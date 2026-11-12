@@ -225,8 +225,10 @@ func (s *Supervisor) sendOutbox(ctx context.Context, n broker.Network) string {
 				}
 				err = s.store.NetSent(m.Seq)
 			case errors.Is(err, broker.ErrRecipient), errors.Is(err, broker.ErrBadMessage):
-				// Sending it again cannot help: it is dropped, never retried.
-				journal.Printf("not delivered, dropped: to %s: %s: %v", s.peerName(m.To), desc, err)
+				// Sending it again now cannot help: a reply about another
+				// computer's task waits for that computer (T-146); anything
+				// else is dropped, never retried.
+				journal.Printf("not delivered (a task reply waits for that computer, anything else is dropped): to %s: %s: %v", s.peerName(m.To), desc, err)
 				err = s.store.NetUndeliverable(m.Seq)
 			case errors.Is(err, broker.ErrNetworkChanged):
 				return ""
