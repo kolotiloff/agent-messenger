@@ -1,0 +1,39 @@
+name: Worker CLI watch (no real models)
+
+# T-139: once a day, installs the latest Claude Code, Codex and Cursor CLIs
+# and checks that every flag and feature Messenger passes them still exists.
+# A version newer than internal/diagnostics/tested.go is a warning in the
+# run summary; a missing flag or feature fails the run. Nothing is signed
+# in and no model is called.
+
+"on":
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  watch:
+    name: Latest worker CLIs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the latest Claude Code and Codex
+        run: npm install --prefix "$RUNNER_TEMP/cli" @anthropic-ai/claude-code@latest @openai/codex@latest
+      - name: Install the latest Cursor CLI
+        id: cursor
+        continue-on-error: true
+        run: |
+          curl -fsS https://cursor.com/install | bash
+          echo "path=$HOME/.local/bin/cursor-agent" >> "$GITHUB_OUTPUT"
+      - name: Check the flags and features Messenger uses
+        env:
+          CLAUDE: ${{ runner.temp }}/cli/node_modules/.bin/claude
+          CODEX: ${{ runner.temp }}/cli/node_modules/.bin/codex
+          CURSOR: ${{ steps.cursor.outputs.path }}
+        run: bash scripts/check-cli-surface.sh

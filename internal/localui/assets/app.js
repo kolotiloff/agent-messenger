@@ -1104,7 +1104,8 @@
         if(title instanceof Node)line.append(title);else line.textContent=title;
         if(tip){const q=el('span','?','am-q');q.title=tip;q.setAttribute('aria-label',tip);q.tabIndex=0;line.append(q);}
         text.append(line);
-        if(sub){const s=el('p',sub,'am-step-sub');s.title=sub;text.append(s);}
+        if(sub instanceof Node){const s=el('p',undefined,'am-step-sub');s.append(sub);text.append(s);}
+        else if(sub){const s=el('p',sub,'am-step-sub');s.title=sub;text.append(s);}
         row.append(text);
         if(action){const b=el('button',action[0]);b.type='button';b.addEventListener('click',action[1]);row.append(b);}else row.append(el('span'));
         steps.append(row);
@@ -1115,7 +1116,17 @@
       const programNote=rowNote.get(provider+':program');
       if(programNote)step(1,names[provider]+' CLI',programNote);
       else if(missing)step('no',names[provider]+tr(' CLI не установлен'),tr('Не найден на этом компьютере'),[tr('Установить'),()=>installAgent(provider)]);
-      else if(cli)step('ok',names[provider]+tr(' CLI установлен'),busy?tr('Проверяем'):check?.version?.value||'',[tr('Удалить'),()=>uninstallAgent(provider)]);
+      else if(cli){
+        // T-139: a CLI newer than the one this release was checked with.
+        const newer=!busy&&check?.tested==='newer';
+        let sub=busy?tr('Проверяем'):check?.version?.value||'';
+        if(newer){
+          const box=document.createDocumentFragment(),mark=el('span',' · '+tr('не проверена'),'am-status-wait');
+          mark.title=tr('Messenger проверен с версией ')+check.tested_version+tr('. Новая версия обычно работает, но если задачи этого агента начнут падать, причина может быть в ней.');
+          box.append(el('span',sub),mark);sub=box;
+        }
+        step('ok',names[provider]+tr(' CLI установлен'),sub,[tr('Удалить'),()=>uninstallAgent(provider)]);
+      }
       else step(1,names[provider]+' CLI',tr('Проверяем'));
       // 2. The sign-in. No confirmed login offers «Войти» (T-056).
       const authNote=rowNote.get(provider+':auth');
