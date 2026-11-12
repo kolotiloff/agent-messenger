@@ -6,6 +6,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 - T-138: a completed run clears a stale «exhausted» limit; `idle_computers` in `list_agents`; the remote update confirmation warns about the server computer.
 - The window rebuilt the sidebar every 2 s and the agent cards and task list on every task change, even when nothing on screen changed; that reset hover, tooltips and animations (the owner saw flicker). Unchanged parts now keep their nodes.
+- Linux: the menu entry pointed at one version's file of a `messenger install` installation, so after an update from the Mac or by hand the menu still started the old version. It now starts the installation's `bin/messenger` link; the new client fixes an existing entry when it starts.
 
 - Read the coordinator's feedback journal from the Mac (11 remarks) and its issue list (row 34). Found why Ноут-Linux's replies never reached the Mac: its outbox was stuck behind 50+ messages for a full mailbox (D-119). Fixed, with a supervisor test that fails on the old code.
 - The window says «Нет ответа от «X»» for an unaccepted task; `not_accepted` says when the task may be running there.

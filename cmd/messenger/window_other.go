@@ -4,7 +4,10 @@ package main
 
 import (
 	"context"
+	"github.com/kolotiloff/agent-messenger/internal/distribution"
 	"github.com/kolotiloff/agent-messenger/internal/localui"
+	"github.com/kolotiloff/agent-messenger/internal/platform"
+	"github.com/kolotiloff/agent-messenger/internal/supervisor"
 	"io"
 	"net/url"
 	"os"
@@ -75,16 +78,90 @@ func appWindowCommand(profile, file string) *exec.Cmd {
 // any other program. The file is rewritten only when it differs.
 func installMenuEntry() {
 	exe, err := os.Executable()
-	if err != nil || strings.ContainsAny(exe, "\"\n\\`$%") {
+	if err != nil {
 		return
 	}
+	writeMenuEntry(menuProgram(exe))
+}
+
+// menuEntryAfterInstall points the menu entry at an installation that
+// `messenger install` just made (owner, 2026-11-12: the menu started an old
+// version after an update made outside the window).
+func menuEntryAfterInstall(installed string) {
+	if runtime.GOOS == "linux" {
+		writeMenuEntry(menuProgram(installed))
+	}
+}
+
+// menuProgram is the file the menu entry starts. For an installation made
+// by `messenger install` it is the installation's bin/messenger link, which
+// every update moves to the new version; the file of one version would go
+// on starting that version after an update from another computer or by hand.
+func menuProgram(exe string) string {
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	prefix := distribution.InstallPrefix(exe)
+	if prefix == "" {
+		return exe
+	}
+	link := filepath.Join(prefix, "bin", "messenger")
+	if st, err := os.Lstat(link); err != nil || st.Mode()&os.ModeSymlink == 0 {
+		return exe
+	}
+	target, err := filepath.EvalSymlinks(link)
+	if err != nil || distribution.InstallPrefix(target) != prefix {
+		return exe
+	}
+	return link
+}
+
+// refreshMenuEntry runs when the desktop's background client starts: after
+// an update from another computer the new client points an existing menu
+// entry at the installation's link before the owner opens the window again
+// (the old version's entry would start the old version). It never creates
+// an entry and leaves other data folders alone.
+func refreshMenuEntry(root string) {
+	if runtime.GOOS != "linux" {
+		return
+	}
+	desktop, err := platform.DefaultRoot()
+	if err != nil || filepath.Clean(desktop) != filepath.Clean(root) {
+		return
+	}
+	program := supervisor.ProgramPath(root)
+	if program == "" {
+		return
+	}
+	link := menuProgram(program)
+	if link == program {
+		return
+	}
+	if _, err := os.Stat(filepath.Join(menuDataDir(), "applications", "agent-messenger.desktop")); err != nil {
+		return
+	}
+	writeMenuEntry(link)
+}
+
+func menuDataDir() string {
 	dir := os.Getenv("XDG_DATA_HOME")
 	if !filepath.IsAbs(dir) {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return
+			return ""
 		}
 		dir = filepath.Join(home, ".local", "share")
+	}
+	return dir
+}
+
+func writeMenuEntry(exe string) {
+	if strings.ContainsAny(exe, "\"\n\\`$%") {
+		return
+	}
+	dir := menuDataDir()
+	if dir == "" {
+		return
 	}
 	// The icon goes into the user's icon theme folder; the entry names it by
 	// its full path, which every desktop reads without an icon cache.

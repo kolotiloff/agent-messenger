@@ -109,3 +109,9 @@ func systemDark() bool {
 	v, _, err := k.GetIntegerValue("AppsUseLightTheme")
 	return err == nil && v == 0
 }
+
+// menuEntryAfterInstall: Windows has no application menu entry.
+func menuEntryAfterInstall(string) {}
+
+// refreshMenuEntry: Windows has no application menu entry.
+func refreshMenuEntry(string) {}

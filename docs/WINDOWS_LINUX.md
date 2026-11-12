@@ -49,5 +49,5 @@ On Windows the background client always runs from `runtimes\messenger.exe` in th
 
 ## Not there yet
 
-- No installer, Start menu entry or autostart on Windows. On Linux the first `messenger open` adds Agent Messenger with its icon to the application menu (`~/.local/share/applications`); there is no package (deb, snap, flatpak).
+- No installer, Start menu entry or autostart on Windows. On Linux the first `messenger open` adds Agent Messenger with its icon to the application menu (`~/.local/share/applications`); `messenger install` does too. For an installation made by `messenger install` the entry starts its `bin/messenger` link, which every update moves to the new version, and the background client fixes an existing entry when it starts, so an update from another computer or by hand no longer leaves the menu starting the old version (T-138). There is no package (deb, snap, flatpak).
 - The programs are not code-signed.

@@ -160,6 +160,7 @@ func run(root string, args []string) error {
 			return err
 		}
 		fmt.Println("Installed:", installed)
+		menuEntryAfterInstall(installed)
 		fmt.Println("No client, model, service or login was started. Add the bin directory to PATH if needed.")
 		return nil
 	case "ui":
@@ -336,6 +337,7 @@ func run(root string, args []string) error {
 		if err != nil {
 			return err
 		}
+		refreshMenuEntry(root)
 		err = supervisor.Run(context.Background(), root, options)
 		if errors.Is(err, platform.ErrAlreadyRunning) {
 			return errors.New("клиент уже запущен; команды нужно отправлять ему, а не запускать второй экземпляр")
