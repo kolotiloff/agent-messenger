@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/kolotiloff/agent-messenger/internal/core"
+	"github.com/kolotiloff/agent-messenger/internal/journal"
 )
 
 // Giving this computer's log to the network (T-057, D-083). The client
@@ -52,9 +53,20 @@ func (s *Supervisor) answerLogRequests(broker string) string {
 	return ""
 }
 
-// logTail returns the last lines of the newest background log in root,
-// within maxLogBytes.
+// logTail returns the last lines of this computer's journal (T-142): what
+// the client did with runs and network messages. A client before the
+// journal, or one that has not written it yet, gives its newest background
+// log as before. At most maxLogBytes.
 func logTail(root string, lines int) (string, error) {
+	var text string
+	for _, name := range []string{journal.Previous, journal.File} {
+		if t, err := fileTail(filepath.Join(root, name)); err == nil {
+			text += t
+		}
+	}
+	if strings.TrimSpace(text) != "" {
+		return lastLines(text, lines), nil
+	}
 	files, _ := filepath.Glob(filepath.Join(root, "background-*.log"))
 	// The newest log that has anything in it: a client that just started
 	// may not have written a line yet (coordinator list row 32: an empty
@@ -74,7 +86,16 @@ func logTail(root string, lines int) (string, error) {
 	if newest == "" {
 		return "", errors.New("the log on this computer is empty: its client has written nothing since it started")
 	}
-	f, err := os.Open(newest)
+	text, err := fileTail(newest)
+	if err != nil {
+		return "", err
+	}
+	return lastLines(text, lines), nil
+}
+
+// fileTail reads the end of a file, whole lines only.
+func fileTail(path string) (string, error) {
+	f, err := os.Open(path)
 	if err != nil {
 		return "", err
 	}
@@ -98,6 +119,11 @@ func logTail(root string, lines int) (string, error) {
 			text = text[i+1:]
 		}
 	}
+	return text, nil
+}
+
+// lastLines keeps the last lines of text within maxLogBytes.
+func lastLines(text string, lines int) string {
 	all := strings.SplitAfter(text, "\n")
 	if len(all) > 0 && all[len(all)-1] == "" {
 		all = all[:len(all)-1]
@@ -118,7 +144,7 @@ func logTail(root string, lines int) (string, error) {
 		// One line longer than the limit keeps its end.
 		out = strings.ToValidUTF8(out[len(out)-maxLogBytes:], "")
 	}
-	return out, nil
+	return out
 }
 
 var (

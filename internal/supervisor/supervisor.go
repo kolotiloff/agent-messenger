@@ -22,6 +22,7 @@ import (
 	"github.com/kolotiloff/agent-messenger/internal/buildinfo"
 	"github.com/kolotiloff/agent-messenger/internal/control"
 	"github.com/kolotiloff/agent-messenger/internal/core"
+	"github.com/kolotiloff/agent-messenger/internal/journal"
 	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
 
@@ -155,6 +156,11 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 	if err := checkStartupLease(); err != nil {
 		return err
 	}
+	// T-142: only the one running client writes the journal.
+	journal.Open(root)
+	defer journal.Close()
+	journal.Printf("client started, version %s", buildinfo.Current().Version)
+	defer journal.Printf("client stopped")
 	store, err := core.Open(filepath.Join(root, dbName))
 	if err != nil {
 		return err

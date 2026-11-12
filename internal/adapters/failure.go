@@ -22,6 +22,9 @@ var (
 	claudeLimitEpoch = regexp.MustCompile(`(?i)limit reached\|(\d{9,11})`)
 	// Codex: "... or try again at 6:12 PM." / "try again at 18:12".
 	codexTryAgainAt = regexp.MustCompile(`(?i)try again at (\d{1,2}):(\d{2})\s*([ap]\.?m\.?)?`)
+	// Cursor: "Your usage limits will reset when your monthly cycle ends on
+	// 12/10/2026." The date is month/day/year.
+	cursorCycleEnds = regexp.MustCompile(`(?i)reset[^.]*?\bon (\d{1,2})/(\d{1,2})/(\d{4})\b`)
 	// HTTP status codes count only as whole numbers.
 	statusCode = regexp.MustCompile(`\b(401|429|503|529)\b`)
 )
@@ -72,6 +75,16 @@ func resetFromText(text string, now time.Time) time.Time {
 		if sec, err := strconv.ParseInt(m[1], 10, 64); err == nil {
 			return time.Unix(sec, 0)
 		}
+	}
+	if m := cursorCycleEnds.FindStringSubmatch(text); m != nil {
+		month, _ := strconv.Atoi(m[1])
+		day, _ := strconv.Atoi(m[2])
+		year, _ := strconv.Atoi(m[3])
+		at := time.Date(year, time.Month(month), day, 0, 0, 0, 0, now.Location())
+		if month < 1 || month > 12 || at.Day() != day || !at.After(now) {
+			return time.Time{}
+		}
+		return at
 	}
 	if m := codexTryAgainAt.FindStringSubmatch(text); m != nil {
 		h, _ := strconv.Atoi(m[1])
@@ -155,4 +168,18 @@ func errorText(e map[string]any) string {
 		}
 	}
 	return strings.Join(parts, " ")
+}
+
+// StderrFailure reads what a worker CLI wrote to its error stream when its
+// run failed, for a CLI that stops before it reports an error in its own
+// output (coordinator feedback 2026-11-12: Cursor stopped with exit code 1
+// and no text). It gives the shortened text for the failure detail, its
+// reason and a reset time when the text names one. The text only explains
+// the failure; nothing is retried because of it.
+func StderrFailure(text string, now time.Time) (detail, reason string, reset time.Time) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return "", "", time.Time{}
+	}
+	return withErrorText("CLI error output", text), classifyFailure(text), resetFromText(text, now)
 }

@@ -1124,3 +1124,30 @@ func reopenable(tx *sql.Tx, task, question, state, reason string) (bool, string)
 	}
 	return true, "waiting_coordinator"
 }
+
+// NetDescribe names a network message for the journal (T-142): its kind,
+// event, task and state, never its text, title, rules or folder. A body
+// that does not parse is named by its size.
+func NetDescribe(body []byte) (desc string, progress bool) {
+	var b netBody
+	if json.Unmarshal(body, &b) != nil || b.Kind == "" {
+		return fmt.Sprintf("message of %d bytes", len(body)), false
+	}
+	parts := []string{b.Kind}
+	if b.Event != "" {
+		parts = append(parts, b.Event)
+	}
+	if netRef.MatchString(b.Task) {
+		parts = append(parts, b.Task)
+	}
+	if b.State != "" {
+		parts = append(parts, "state "+clip(b.State, 40))
+	}
+	if b.Agent != "" {
+		parts = append(parts, "agent "+clip(b.Agent, 40))
+	}
+	if b.Failure != "" {
+		parts = append(parts, "reason "+clip(b.Failure, 40))
+	}
+	return strings.Join(parts, " "), b.Kind == "progress"
+}

@@ -221,6 +221,14 @@ func taskWorkerFixture(mode string) int {
 		tool("report", map[string]any{"text": "claims done"})
 		finish()
 		return 1
+	case "stderr-only":
+		// A CLI that stops before it reports anything in its own output
+		// (coordinator, 2026-11-12: Cursor exit code 1, no text).
+		fmt.Fprintln(os.Stderr, "progress noise\nError: model claude-opus-5-thinking-hig is not available; api_key=sk-abcdef0123456789abcdef0123456789")
+		return 1
+	case "stderr-limit":
+		fmt.Fprintln(os.Stderr, "Error: You've hit your usage limit. Try again at 18:12.")
+		return 1
 	case "usage-limit":
 		// The provider's limit, in the documented event shapes (T-034).
 		if codex {
