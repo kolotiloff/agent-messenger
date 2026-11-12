@@ -40,7 +40,7 @@ chmod +x AgentMessenger-Linux-x64
 ./AgentMessenger-Linux-x64 open
 ```
 
-A browser download does not keep the "may run" mark of a file, hence `chmod +x` once. `./AgentMessenger-Linux-x64 install` optionally puts the program in `~/.local/bin` as `messenger`. The window opens on its own, without tabs or an address bar, through Chrome, Chromium, Edge or Brave when one is installed (D-054); after the first start Agent Messenger is in the application menu. Without them the page opens in the default browser, or the program prints the path of a file to open.
+A browser download does not keep the "may run" mark of a file, hence `chmod +x` once. `./AgentMessenger-Linux-x64 install` optionally puts the program in `~/.local/bin` as `messenger`. On a computer with such an installation, opening a newer downloaded file updates the installation and opens from it. The window opens on its own, without tabs or an address bar, through Chrome, Chromium, Edge or Brave when one is installed (D-054); after the first start Agent Messenger is in the application menu. Without them the page opens in the default browser, or the program prints the path of a file to open.
 
 Data: `$XDG_DATA_HOME/agent-messenger` or `~/.local/share/agent-messenger`. To stop the background client: `./AgentMessenger-Linux-x64 shutdown`. Later versions arrive in the window («Доступно обновление» → «Обновиться»), as on Windows; a program installed with `install` is updated there as well ([updates](UPDATES.md#windows-and-linux)).
 

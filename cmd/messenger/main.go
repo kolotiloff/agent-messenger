@@ -155,7 +155,15 @@ func run(root string, args []string) error {
 		if err != nil {
 			return err
 		}
-		installed, err := distribution.Install(exe, *prefix, buildinfo.Current())
+		install := distribution.Install
+		if link, _ := installedLink(*prefix); link != "" {
+			// An update of an existing installation goes next to the
+			// running version, as from the window (D-106): it needs no
+			// stopped client (owner, 2026-11-12: install refused while the
+			// client ran).
+			install = distribution.InstallUpdate
+		}
+		installed, err := install(exe, *prefix, buildinfo.Current())
 		if err != nil {
 			return err
 		}

@@ -199,3 +199,43 @@ func TestUnacceptedButBusySaysItMayRun(t *testing.T) {
 		t.Fatalf("detail %q", task.Detail)
 	}
 }
+
+// Owner, 2026-11-12: a task the other computer never accepted stayed among
+// the active ones: a cancel waited for an answer that never came. Once the
+// task is past unacceptedAfter it closes here at once; before, the cancel
+// still goes there and waits.
+func TestSilentTaskClosesAtOnce(t *testing.T) {
+	p := newNetPair(t)
+	id := p.startRemote(t, "op-silent", "codex", "check")
+	id2 := p.startRemote(t, "op-silent-2", "codex", "check 2")
+	p.carry(t, true)
+	if err := p.a.st.SetNetwork(testBroker, HostPeerID, []NetPeer{{ID: "dev-b", Name: "Ноутбук", Age: 1}}); err != nil {
+		t.Fatal(err)
+	}
+	unaccept := func(id string) {
+		if _, err := p.a.st.db.Exec(`UPDATE tasks SET remote_task='' WHERE id=?`, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	unaccept(id)
+	if r, _ := p.a.st.TaskRemote(id); r == nil || r.Lost || r.Silent {
+		t.Fatalf("fresh task %+v", r)
+	}
+	if state, err := p.a.st.CancelTask(id); err != nil || state != "cancelling" {
+		t.Fatalf("fresh cancel %q %v", state, err)
+	}
+	old := unacceptedAfter
+	unacceptedAfter = 0
+	defer func() { unacceptedAfter = old }()
+	if r, _ := p.a.st.TaskRemote(id); r == nil || !r.Silent {
+		t.Fatalf("not silent %+v", r)
+	}
+	if state, err := p.a.st.CancelTask(id); err != nil || state != "cancelled" {
+		t.Fatalf("silent cancel %q %v", state, err)
+	}
+	// Without an earlier cancel too.
+	unaccept(id2)
+	if state, err := p.a.st.CancelTask(id2); err != nil || state != "cancelled" {
+		t.Fatalf("silent first cancel %q %v", state, err)
+	}
+}

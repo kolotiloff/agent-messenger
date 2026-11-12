@@ -604,15 +604,12 @@ func cancelRemoteTask(tx *sql.Tx, t Task, remote netLink) (string, error) {
 	if err := remoteContact(tx, t.ID, remote, &contact); err != nil {
 		return "", err
 	}
-	unanswered := false
-	if t.CancelRequested {
-		at, err := time.Parse(time.RFC3339Nano, t.UpdatedAt)
-		unanswered = err == nil && time.Since(at) > cancelAnswerWait
-		if !unanswered && !contact.Lost {
-			return "cancelling", nil
-		}
+	if t.CancelRequested && !contact.Silent && !contact.Lost {
+		return "cancelling", nil
 	}
-	if contact.Lost || unanswered || t.State == "blocked" || t.State == "interrupted" {
+	// A task the other computer never accepted, or whose cancel it never
+	// answered, closes at once too: nothing here runs it.
+	if contact.Lost || contact.Silent || t.State == "blocked" || t.State == "interrupted" {
 		why := "closed on this computer; what happened on " + contact.Name + " is unknown"
 		if err := setTaskState(tx, t.ID, "cancelled", why); err != nil {
 			return "", err

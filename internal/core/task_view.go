@@ -148,6 +148,11 @@ type RemoteComputer struct {
 	// Unaccepted: the computer that should run the task has not said it
 	// accepted it (T-137). Until it does, nothing is known to run there.
 	Unaccepted bool `json:"unaccepted,omitempty"`
+	// Silent: that computer is in reach but has not answered: the task was
+	// not accepted within unacceptedAfter, or a cancel went unanswered for
+	// cancelAnswerWait. It can be closed here at once (owner, 2026-11-12:
+	// such a task stayed among the active ones).
+	Silent bool `json:"silent,omitempty"`
 }
 
 // TaskRemote names the other computer of a task, or nil for a task of this
@@ -158,10 +163,17 @@ func (s *Store) TaskRemote(task string) (*RemoteComputer, error) { return s.remo
 // reach (T-126).
 func remoteContact(tx *sql.Tx, task string, link netLink, out *RemoteComputer) error {
 	var name, remoteTask sql.NullString
-	if err := tx.QueryRow(`SELECT remote_name,remote_task FROM tasks WHERE id=?`, task).Scan(&name, &remoteTask); err != nil {
+	var created, updated string
+	var cancel int
+	if err := tx.QueryRow(`SELECT remote_name,remote_task,created_at,updated_at,cancel_requested FROM tasks WHERE id=?`, task).Scan(&name, &remoteTask, &created, &updated, &cancel); err != nil {
 		return err
 	}
 	out.Unaccepted = remoteTask.String == ""
+	older := func(at string, d time.Duration) bool {
+		t, err := time.Parse(time.RFC3339Nano, at)
+		return err == nil && time.Since(t) > d
+	}
+	out.Silent = (out.Unaccepted && older(created, unacceptedAfter)) || (cancel != 0 && older(updated, cancelAnswerWait))
 	var broker string
 	if err := tx.QueryRow(`SELECT COALESCE((SELECT value FROM meta WHERE key='net_broker'),'')`).Scan(&broker); err != nil {
 		return err

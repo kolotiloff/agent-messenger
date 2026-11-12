@@ -780,7 +780,7 @@
   let stopping=false;
   function closeHere(){
     const t=feed?.task;if(!t?.remote||t.remote.from)return;
-    askConfirm(tr('Закрыть задачу?'),tr('С компьютером «')+t.remote.name+tr('» нет связи. Задача закроется в этом окне, а что с ней на том компьютере, неизвестно. Если связь вернётся, ему придёт отмена.'),tr('Закрыть'),async()=>{
+    askConfirm(tr('Закрыть задачу?'),(t.remote.silent&&!t.remote.lost?tr('Компьютер «')+t.remote.name+tr('» не отвечает по этой задаче.'):tr('С компьютером «')+t.remote.name+tr('» нет связи.'))+' '+tr('Задача закроется в этом окне, а что с ней на том компьютере, неизвестно. Если связь вернётся, ему придёт отмена.'),tr('Закрыть'),async()=>{
       await postAPI('/api/task-cancel',{task:t.id});feedSignature='';await refresh();
     });
   }
@@ -871,11 +871,12 @@
     // its outcome there is already unknown.
     // T-131: an own task on another computer that cannot be reached has no
     // input and no stop button: nothing would arrive. One action closes it here.
-    const unreachable=!!t.remote&&!t.remote.from&&(t.state==='blocked'||t.state==='interrupted'||(activeStates.includes(t.state)&&!!t.remote.lost));
+    const unreachable=!!t.remote&&!t.remote.from&&(t.state==='blocked'||t.state==='interrupted'||(activeStates.includes(t.state)&&(!!t.remote.lost||!!t.remote.silent)));
     $('lost-bar').hidden=!unreachable;
     if(unreachable){
       const since=t.remote.last_seen?stamp(t.remote.last_seen):'';
-      $('lost-text').textContent=(since?tr('Связи с «')+t.remote.name+tr('» нет с ')+since+'. ':tr('Связи с «')+t.remote.name+tr('» нет. '))+tr('Что с задачей там, неизвестно.');
+      if(t.remote.silent&&!t.remote.lost)$('lost-text').textContent='«'+t.remote.name+tr('» на связи, но не отвечает по этой задаче. Что с ней там, неизвестно: она могла и выполниться.');
+      else $('lost-text').textContent=(since?tr('Связи с «')+t.remote.name+tr('» нет с ')+since+'. ':tr('Связи с «')+t.remote.name+tr('» нет. '))+tr('Что с задачей там, неизвестно.');
     }
     const active=activeStates.includes(t.state)&&!unreachable,box=$('answer-text');
     const note=canNote(t),wasNote=$('compose').dataset.mode==='note';
