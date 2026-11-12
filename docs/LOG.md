@@ -14,7 +14,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 - T-139 (CLI update tracking) recorded as the next task.
 - T-141 CLI error output in failures, T-142 run and network journal for `get_log`, T-143 model typo hint.
 - T-144: section «Требуют решения» with «Закрыть все» (asks first); choosing a computer opens its newest task. Screenshots with fictional data sent to the owner.
-- Coordinator feedback 2026-11-12 (journal of 12 entries): Cursor on ПК-1 failed with no text: its Opus limit was spent until 12/10 and Cursor said so only on its error stream (T-141). Lost report of 11-10 (task-3871…): events from ПК-1 stopped after 16:44:52, the cause is unknown without a journal (T-142). Model-list typo hint (T-143). The rest of the journal was fixed in 0.63 or stays open (server failover, Unity restart by a worker).
+- Coordinator feedback 2026-11-12 (journal of 12 entries): Cursor on ПК-1 failed with no text: its Opus limit was spent until 12/10 and Cursor said so only on its error stream (T-141). Lost report of 11-10 (task-3871…): events from ПК-1 stopped after 16:44:52, the cause is unknown without a journal (T-142). Model-list typo hint (T-143). The rest of the journal was fixed in 0.63 or stays open (server failover). A worker restarting Unity is the project's own matter, not Messenger's (owner, 2026-11-12).
 
 ## 2026-11-12 — Claude Code (T-137 lost replies from Ноут-Linux)
 
