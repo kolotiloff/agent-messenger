@@ -217,7 +217,7 @@ var netRef = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9:._-]{0,79}$`)
 
 // remoteEventKinds are the task events another computer may forward; any
 // other kind is ignored (audit 2026-11-09).
-var remoteEventKinds = map[string]bool{"report": true, "question": true, "failed": true, "blocked": true, "interrupted": true, "cancelled": true, "answered": true, "continued": true, "started": true, "accepted": true}
+var remoteEventKinds = map[string]bool{"report": true, "question": true, "failed": true, "blocked": true, "interrupted": true, "cancelled": true, "answered": true, "continued": true, "started": true, "accepted": true, "cancel_refused": true}
 
 func safeNetOp(opID string) string {
 	if netOpID.MatchString(opID) {
@@ -816,7 +816,7 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 		case "continue":
 			return applyContinue(tx, from, b)
 		case "cancel":
-			return applyCancel(tx, from)
+			return applyCancel(tx, from, s.gone)
 		case "accepted", "refused", "event", "answer_refused", "continue_refused", "progress":
 			return applyReport(tx, from, b)
 		case "log_request":
@@ -951,17 +951,22 @@ func applyAnswer(tx *sql.Tx, from netLink, opID string, b netBody) error {
 	return err
 }
 
-func applyCancel(tx *sql.Tx, from netLink) error {
+func applyCancel(tx *sql.Tx, from netLink, gone WorkerGone) error {
 	t, ok, err := mirrorTask(tx, from)
 	if err != nil || !ok {
 		return err
 	}
 	err = savepoint(tx, func() error {
-		_, err := cancelTask(tx, t.ID)
+		_, err := cancelTask(tx, t.ID, gone)
 		return err
 	})
 	if errors.Is(err, ErrRejected) {
-		// Already finished: its last event has been sent.
+		// D-120: a stuck task whose worker may still run stays as it is;
+		// the computer that gave it learns why. Otherwise it had already
+		// finished and its last event has been sent.
+		if t.State == "blocked" || t.State == "interrupted" {
+			return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "cancel_refused", "the task was not closed here: "+refusalText(err), "")
+		}
 		return nil
 	}
 	return err
@@ -1043,7 +1048,16 @@ func applyReport(tx *sql.Tx, from netLink, b netBody) error {
 	// The owner closed it here (T-131): what that computer reports later is
 	// kept in the log and does not reopen the task.
 	if t.State == "cancelled" {
-		return insertTaskEvent(tx, t.Project, t.ID, AudienceLog, b.Event, clip(b.Text, MaxDispositionText+1000), "")
+		// D-120: that computer could not close it; the coordinator and the
+		// owner learn so, since a task there still holds that computer.
+		audience := AudienceLog
+		if b.Event == "cancel_refused" {
+			audience = AudienceCoordinator
+		}
+		return insertTaskEvent(tx, t.Project, t.ID, audience, b.Event, clip(b.Text, MaxDispositionText+1000), "")
+	}
+	if b.Event == "cancel_refused" {
+		return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, b.Event, clip(b.Text, MaxDispositionText+1000), "")
 	}
 	question := ""
 	if b.Event == "question" && strings.HasPrefix(b.Question, "q-") && len(b.Question) <= 64 {

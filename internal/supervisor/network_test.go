@@ -444,7 +444,7 @@ func TestUpdateOfAnotherComputer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u := ask(); u.State != core.UpdateRefused || !strings.Contains(u.Text, "идут задачи (1)") {
+	if u := ask(); u.State != core.UpdateRefused || !strings.Contains(u.Text, "идут задачи (1)") || !strings.Contains(u.Text, "«работа» (") {
 		t.Fatalf("running task %+v", u)
 	}
 	if _, err := b.store.CancelTask(task); err != nil {

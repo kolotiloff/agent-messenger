@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/kolotiloff/agent-messenger/internal/core"
@@ -68,8 +69,48 @@ const (
 	updateRefusedBusy        = "Обновление на том компьютере уже идёт; дождитесь его результата."
 )
 
-func updateRefusedTasks(n int) string {
-	return fmt.Sprintf("На компьютере идут задачи (%d). Обновите, когда они закончатся.", n)
+func updateRefusedTasks(n int, tasks []core.ActiveTask) string {
+	text := fmt.Sprintf("На компьютере идут задачи (%d). Обновите, когда они закончатся.", n)
+	if len(tasks) == 0 {
+		return text
+	}
+	// The owner sees what holds the computer: a blocked or interrupted task
+	// does not end by itself and is closed by hand (D-120).
+	names := make([]string, 0, len(tasks))
+	stuck := false
+	for _, t := range tasks {
+		title := []rune(t.Title)
+		if len(title) > 60 {
+			title = append(title[:59], '…')
+		}
+		names = append(names, "«"+string(title)+"» ("+activeStateName(t.State)+")")
+		stuck = stuck || t.State == "blocked" || t.State == "interrupted"
+	}
+	text += " " + strings.Join(names, ", ")
+	if n > len(tasks) {
+		text += fmt.Sprintf(" и ещё %d", n-len(tasks))
+	}
+	text += "."
+	if stuck {
+		text += " Прерванные и заблокированные задачи сами не закончатся: закройте их в окне этого компьютера или попросите координатора."
+	}
+	return text
+}
+
+func activeStateName(state string) string {
+	switch state {
+	case "running":
+		return "работает"
+	case "waiting_coordinator":
+		return "ждёт координатора"
+	case "waiting_owner":
+		return "ждёт ответа"
+	case "blocked":
+		return "заблокирована"
+	case "interrupted":
+		return "прервана"
+	}
+	return "запуск не закончен"
 }
 
 // ProgramPath returns the program file the window last recorded, or "" if
@@ -276,7 +317,8 @@ func (s *Supervisor) updateRefusal() string {
 	if n, err := s.store.ActiveWork(); err != nil {
 		return "задачи на компьютере не читаются: " + err.Error()
 	} else if n > 0 {
-		return updateRefusedTasks(n)
+		tasks, _ := s.store.ActiveWorkTasks(3)
+		return updateRefusedTasks(n, tasks)
 	}
 	if s.updateBusy() {
 		return updateRefusedBusy

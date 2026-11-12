@@ -1,6 +1,7 @@
 package supervisor
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -162,6 +163,9 @@ func (s *Supervisor) HideNetTask(peer, task string) error {
 // is signalled by the client's cancel watcher and verified like any run.
 func (s *Supervisor) CancelTask(id string) error {
 	_, err := s.store.CancelTask(id)
+	if errors.Is(err, core.ErrWorkerMayRun) {
+		return errors.New("Задача не закрыта: процесс исполнителя на этом компьютере, возможно, ещё работает или о нём нет данных. Задача осталась как была.")
+	}
 	return err
 }
 

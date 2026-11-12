@@ -221,6 +221,30 @@ func (s *Store) FinishNetUpdate(broker, peer, id, state, version, text string) e
 
 // ActiveWork counts the tasks that are not finished, or have a run that is
 // not closed, in every project. An update waits until it is zero.
+// ActiveWorkTasks names up to limit of the tasks ActiveWork counts, newest
+// first: their title and state, so a refused update says what holds it.
+func (s *Store) ActiveWorkTasks(limit int) ([]ActiveTask, error) {
+	rows, err := s.db.Query(`SELECT t.title,t.state FROM tasks t WHERE t.state IN ('running','waiting_coordinator','waiting_owner','blocked','interrupted')
+ OR EXISTS (SELECT 1 FROM task_runs r WHERE r.task_id=t.id AND r.state IN ('intent','launching','running','blocked','interrupted'))
+ ORDER BY t.created_at DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ActiveTask
+	for rows.Next() {
+		var a ActiveTask
+		if err := rows.Scan(&a.Title, &a.State); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// ActiveTask is a task that keeps a computer from updating.
+type ActiveTask struct{ Title, State string }
+
 func (s *Store) ActiveWork() (int, error) {
 	var n int
 	err := s.db.QueryRow(`SELECT COUNT(*) FROM tasks t WHERE t.state IN ('running','waiting_coordinator','waiting_owner','blocked','interrupted')
