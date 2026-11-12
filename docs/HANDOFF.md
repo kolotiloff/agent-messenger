@@ -10,9 +10,9 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Updated 2026-11-12 by Claude Code.
 
-- After 0.62, on `claude/ui-tweaks`, not released: T-137 (D-119) a full mailbox no longer holds back a computer's other messages (Ноут-Linux's replies have not reached the Mac since 11-10); the window and `not_accepted` no longer call a possibly running task «Работает» or «not accepted». T-138: a completed run clears a stale «exhausted» limit, `list_agents` gives `idle_computers`, and the update confirmation warns when the computer runs the server.
-- Owner's steps after the release: update Ноут-Linux (from the Mac card is fine: it receives); its waiting replies then go out. Tasks the coordinator already cancelled may get late acceptance or report lines.
-- Open from the feedback journal: stale Codex limit, lost report from ПК-1 on 11-10 (maybe the same cause), server failover, `idle_computers` in `list_agents`.
+- 0.63 release started (tag `v0.0.0-preview.63`; check the downloads are in place): T-137 (D-119) a full mailbox no longer holds back a computer's other messages (Ноут-Linux's replies have not reached the Mac since 11-10); the window and `not_accepted` no longer call a possibly running task «Работает». T-138: a completed run clears a stale «exhausted» limit; `list_agents` gives `idle_computers`; the update confirmation warns about the server computer; the window no longer rebuilds unchanged parts (flicker); a remote task that never accepted or never answered a cancel closes at once; Linux: the menu entry starts the installation link, a downloaded newer file updates the installation, `install` works while the client runs.
+- Owner's steps: update Ноут-Linux once the old way (window «Обновиться», or `messenger shutdown` then `install` from the download); its waiting replies then go out, and later updates work from the Mac card and by download. Delete a hand-made Linux menu entry that points at an old file. Tasks the coordinator already cancelled may get late acceptance or report lines.
+- Open: lost report from ПК-1 on 11-10 (needs ПК-1's `background-*.log` from that evening); server failover (to discuss: a standby computer and a confirmed switch first); workers restarting Unity (likely the task-end process cleanup); a new product name (Artel and Agent Mesh are taken); Windows update failure: waiting for the exact message.
 
 Updated 2026-11-10 (late evening) by Claude Code.
 

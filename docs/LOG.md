@@ -4,6 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-12 — Claude Code (T-137 lost replies from Ноут-Linux)
 
+- Owner asked to release: 0.63 with T-137 and T-138.
 - T-138: a completed run clears a stale «exhausted» limit; `idle_computers` in `list_agents`; the remote update confirmation warns about the server computer.
 - The window rebuilt the sidebar every 2 s and the agent cards and task list on every task change, even when nothing on screen changed; that reset hover, tooltips and animations (the owner saw flicker). Unchanged parts now keep their nodes.
 - Linux: the menu entry pointed at one version's file of a `messenger install` installation, so after an update from the Mac or by hand the menu still started the old version. It now starts the installation's `bin/messenger` link; the new client fixes an existing entry when it starts.
