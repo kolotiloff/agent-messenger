@@ -51,7 +51,7 @@ func TestMenuEntry(t *testing.T) {
 // Owner, 2026-11-12: after an update made outside the window the menu
 // started the old version. An installation's entry starts its bin link.
 func TestMenuEntryOfInstallationStartsTheLink(t *testing.T) {
-	prefix := t.TempDir()
+	prefix := realTempDir(t)
 	version := filepath.Join(prefix, "lib", "agent-messenger", "0.62-abc")
 	if err := os.MkdirAll(version, 0o700); err != nil {
 		t.Fatal(err)
@@ -92,7 +92,7 @@ func TestMenuEntryOfInstallationStartsTheLink(t *testing.T) {
 // After an update from another computer the new client fixes an existing
 // entry; it never creates one, and only for the desktop's data folder.
 func TestClientRefreshesExistingMenuEntry(t *testing.T) {
-	home := t.TempDir()
+	home := realTempDir(t)
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "data"))
 	root, err := platform.DefaultRoot()
@@ -131,4 +131,15 @@ func TestClientRefreshesExistingMenuEntry(t *testing.T) {
 	if raw, _ := os.ReadFile(entry); !strings.Contains(string(raw), "Exec=\""+link+"\" open") {
 		t.Fatal("entry not refreshed: " + string(raw))
 	}
+}
+
+// realTempDir is a temporary folder without links in its path: the menu
+// entry names resolved files.
+func realTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
 }

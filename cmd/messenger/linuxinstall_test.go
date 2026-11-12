@@ -40,9 +40,15 @@ func TestDownloadedFileOpensFromInstallation(t *testing.T) {
 	if l, v := installedLink(prefix); l != link || v != "v0.0.0-preview.62" {
 		t.Fatalf("installed %q %q", l, v)
 	}
+	// On macOS the temporary folder is behind a link; the source is the
+	// resolved file.
+	resolved, err := filepath.EvalSymlinks(download)
+	if err != nil {
+		t.Fatal(err)
+	}
 	installs := 0
 	install := func(source, p string) error {
-		if source != download || p != prefix {
+		if source != resolved || p != prefix {
 			t.Fatalf("install %s into %s", source, p)
 		}
 		installs++
