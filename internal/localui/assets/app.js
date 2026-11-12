@@ -598,18 +598,25 @@
   // computer is out of contact.
   function needsDecision(it){
     if(it.peer)return sharedLost(it.t,it.peer);
+    // Blocked and interrupted tasks hold their computer (it will not update)
+    // until someone closes them (D-120).
+    if(it.t.state==='blocked'||it.t.state==='interrupted')return true;
     const r=it.t.remote;
     return !!r&&!r.from&&activeStates.includes(it.t.state)&&!!(r.lost||r.silent);
   }
-  // Each of them can be closed here: an own task is cancelled (it closes at
-  // once, D-119 follow-up), another computer's task leaves this list.
+  // Each of them can be closed here: an own task on another computer is
+  // cancelled (it closes here at once), a stuck task of this computer closes
+  // if its worker is certainly gone (D-120), another computer's task leaves
+  // this list.
   function closable(it){return needsDecision(it);}
   function askCloseAll(items){
-    const own=items.filter(it=>!it.peer).length,others=items.length-own;
+    const here=items.filter(it=>!it.peer&&!(it.t.remote&&!it.t.remote.from)).length;
+    const own=items.filter(it=>!it.peer).length-here,others=items.length-own-here;
     const parts=[];
+    if(here)parts.push(tr('Прерванные и заблокированные задачи этого компьютера закроются, если их исполнителя точно нет: ')+here+'.');
     if(own)parts.push(tr('Задачи, отправленные на другие компьютеры, закроются в этом окне: ')+own+tr('. Что с ними там, неизвестно; если связь вернётся, туда придёт отмена.'));
     if(others)parts.push(tr('Задачи других компьютеров пропадут из списка на этом компьютере: ')+others+'.');
-    askConfirm(tr('Закрыть все задачи без связи?'),parts.join(' '),tr('Закрыть все'),async()=>{
+    askConfirm(tr('Закрыть все задачи без решения?'),parts.join(' '),tr('Закрыть все'),async()=>{
       const failed=[];
       for(const it of items){
         try{
@@ -839,7 +846,14 @@
   // Stop, like in a chat: a square button in the input field, or Esc.
   let stopping=false;
   function closeHere(){
-    const t=feed?.task;if(!t?.remote||t.remote.from)return;
+    const t=feed?.task;if(!t)return;
+    if(!t.remote||t.remote.from){
+      if(t.state!=='blocked'&&t.state!=='interrupted')return;
+      askConfirm(tr('Закрыть задачу?'),tr('Messenger проверит, что процесса исполнителя на этом компьютере нет, и закроет задачу. Если процесс ещё есть, задача останется как была.')+(t.remote?.from?' '+tr('Компьютер «')+t.remote.name+tr('» узнает, что задача закрыта.'):''),tr('Закрыть'),async()=>{
+        await postAPI('/api/task-cancel',{task:t.id});feedSignature='';await refresh();
+      });
+      return;
+    }
     askConfirm(tr('Закрыть задачу?'),(t.remote.silent&&!t.remote.lost?tr('Компьютер «')+t.remote.name+tr('» не отвечает по этой задаче.'):tr('С компьютером «')+t.remote.name+tr('» нет связи.'))+' '+tr('Задача закроется в этом окне, а что с ней на том компьютере, неизвестно. Если связь вернётся, ему придёт отмена.'),tr('Закрыть'),async()=>{
       await postAPI('/api/task-cancel',{task:t.id});feedSignature='';await refresh();
     });
@@ -932,7 +946,11 @@
     // T-131: an own task on another computer that cannot be reached has no
     // input and no stop button: nothing would arrive. One action closes it here.
     const unreachable=!!t.remote&&!t.remote.from&&(t.state==='blocked'||t.state==='interrupted'||(activeStates.includes(t.state)&&(!!t.remote.lost||!!t.remote.silent)));
-    $('lost-bar').hidden=!unreachable;
+    // D-120: a stuck task of this computer is closed by hand once its worker
+    // is certainly gone; the client checks that and refuses otherwise.
+    const stuckHere=!unreachable&&(t.state==='blocked'||t.state==='interrupted');
+    $('lost-bar').hidden=!unreachable&&!stuckHere;
+    if(stuckHere)$('lost-text').textContent=(t.state==='interrupted'?tr('Клиент перезапустился во время работы, и исход задачи неизвестен.'):tr('Процесс исполнителя не завершился полностью, исход задачи неизвестен.'))+' '+tr('Закрыть её можно, когда исполнителя на этом компьютере точно нет.');
     if(unreachable){
       const since=t.remote.last_seen?stamp(t.remote.last_seen):'';
       if(t.remote.silent&&!t.remote.lost)$('lost-text').textContent='«'+t.remote.name+tr('» на связи, но не отвечает по этой задаче. Что с ней там, неизвестно: она могла и выполниться.');

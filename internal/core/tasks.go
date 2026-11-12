@@ -1845,6 +1845,60 @@ func closeInterruptedRuns(tx *sql.Tx, task string, gone WorkerGone) error {
 	return nil
 }
 
+// ErrWorkerMayRun refuses to close a stuck task whose worker may still run.
+var ErrWorkerMayRun = errors.New("the worker may still run")
+
+// closeStuckRuns closes the blocked and interrupted runs of a task whose
+// workers are certainly gone (D-120). A run that may still be starting or
+// running, or a worker that may still run, refuses the whole close.
+func closeStuckRuns(tx *sql.Tx, task string, gone WorkerGone) (string, error) {
+	var open int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM task_runs WHERE task_id=? AND state IN ('intent','launching','running')`, task).Scan(&open); err != nil {
+		return "", err
+	}
+	if open != 0 {
+		return "", fmt.Errorf("%w: a run of this task may still be starting or running; the task stays as it is", ErrRejected)
+	}
+	rows, err := tx.Query(`SELECT id,COALESCE(pid,0),COALESCE(pgid,0),COALESCE(start_token,''),COALESCE(boot_id,'') FROM task_runs WHERE task_id=? AND state IN ('blocked','interrupted')`, task)
+	if err != nil {
+		return "", err
+	}
+	type run struct {
+		id  string
+		obs platform.Observation
+	}
+	var runs []run
+	for rows.Next() {
+		var r run
+		if err := rows.Scan(&r.id, &r.obs.PID, &r.obs.PGID, &r.obs.StartToken, &r.obs.BootID); err != nil {
+			rows.Close()
+			return "", err
+		}
+		runs = append(runs, r)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	whys := make([]string, len(runs))
+	for i, r := range runs {
+		why, err := gone(r.obs)
+		if err != nil {
+			return "", fmt.Errorf("%w: %w (%v); the task stays as it is", ErrRejected, ErrWorkerMayRun, err)
+		}
+		whys[i] = why
+	}
+	for i, r := range runs {
+		if err := setRunState(tx, r.id, "cancelled", "closed by an explicit cancel: "+whys[i], "blocked", "interrupted"); err != nil {
+			return "", err
+		}
+	}
+	if len(whys) == 0 {
+		return "no run of it was left open", nil
+	}
+	return whys[0], nil
+}
+
 // CancelTask cancels a task. A task that is waiting, or whose run is only
 // recorded, is cancelled at once. A launched run is stopped by the
 // supervisor, which signals its process group; the task is cancelled when the
@@ -1854,14 +1908,14 @@ func (s *Store) CancelTask(task string) (string, error) {
 	var state string
 	err := s.tx(func(tx *sql.Tx) error {
 		var err error
-		state, err = cancelTask(tx, task)
+		state, err = cancelTask(tx, task, s.gone)
 		return err
 	})
 	return state, err
 }
 
 // cancelTask cancels in tx and returns the resulting state.
-func cancelTask(tx *sql.Tx, task string) (string, error) {
+func cancelTask(tx *sql.Tx, task string, gone WorkerGone) (string, error) {
 	var state string
 	err := func() error {
 		t, err := scanTask(tx.QueryRow(`SELECT `+taskColumns+` FROM tasks WHERE id=?`, task).Scan)
@@ -1910,6 +1964,22 @@ func cancelTask(tx *sql.Tx, task string) (string, error) {
 			}
 			state = "cancelling"
 			return nil
+		case "blocked", "interrupted":
+			// D-120: an explicit cancel (the owner's «Закрыть», the
+			// coordinator's cancel_task, or the cancel of the computer that
+			// gave the task) closes it once its worker is certainly gone.
+			if gone == nil {
+				return fmt.Errorf("%w: task is %s", ErrRejected, t.State)
+			}
+			why, err := closeStuckRuns(tx, task, gone)
+			if err != nil {
+				return err
+			}
+			state = "cancelled"
+			if err := setTaskState(tx, task, state, "closed by an explicit cancel: "+why); err != nil {
+				return err
+			}
+			return insertTaskEvent(tx, t.Project, task, AudienceCoordinator, "cancelled", "the task was closed; its worker is certainly gone ("+why+")", "")
 		default:
 			return fmt.Errorf("%w: task is %s", ErrRejected, t.State)
 		}

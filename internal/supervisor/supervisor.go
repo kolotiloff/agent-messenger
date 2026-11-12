@@ -166,6 +166,9 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 		return err
 	}
 	defer store.Close()
+	// D-120: an explicit cancel closes a stuck task once its worker is
+	// certainly gone.
+	store.SetWorkerCheck(core.CheckWorkerGone)
 	if err := store.CheckPendingStreamRecovery(); err != nil {
 		return err
 	}

@@ -29,7 +29,7 @@ Cloud sessions may run on Linux. Mac-only code (Swift shell, Sparkle, `*_darwin.
 
 ## Rules that must not be relaxed
 
-- Never delete, empty or rewrite `active-runs.json`. Never release a reservation on a timeout or a single PID. Persistent owners (Claude stream, Codex app-server) keep the old rule: an empty process group does not release them either. Task runs follow D-021: a run is finished only after an observed exit, an empty process group (after signalling it) and a revoked receipt; any unclear evidence keeps that task blocked. The one exception is D-108: on the coordinator's explicit `continue_task`, an interrupted run may be closed when its worker is certainly gone (another boot, or neither its process nor its group runs).
+- Never delete, empty or rewrite `active-runs.json`. Never release a reservation on a timeout or a single PID. Persistent owners (Claude stream, Codex app-server) keep the old rule: an empty process group does not release them either. Task runs follow D-021: a run is finished only after an observed exit, an empty process group (after signalling it) and a revoked receipt; any unclear evidence keeps that task blocked. The exceptions are D-108 and D-120: on an explicit command (the coordinator's `continue_task`; an explicit cancel by the owner, the coordinator or the computer that gave the task), an interrupted or blocked run may be closed when its worker is certainly gone (another boot, or neither its process nor its group runs). Nothing closes such a run on its own.
 - On an uncertain result, never retry automatically. Unknown is not success.
 - Do not bypass the shared registry to launch from another data directory.
 - Never commit session IDs, tokens, auth files, SQLite dumps or full logs. The repository is public.

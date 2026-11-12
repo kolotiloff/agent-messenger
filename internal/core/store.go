@@ -88,7 +88,8 @@ INSERT OR IGNORE INTO control(id, paused) VALUES (1, 0);
 
 // Store is the durable queue and session registry for one user client.
 type Store struct {
-	db *sql.DB
+	db   *sql.DB
+	gone WorkerGone
 }
 
 type Message struct {

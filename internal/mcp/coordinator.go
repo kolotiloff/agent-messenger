@@ -18,7 +18,6 @@ import (
 	"github.com/kolotiloff/agent-messenger/internal/adapters"
 	"github.com/kolotiloff/agent-messenger/internal/buildinfo"
 	"github.com/kolotiloff/agent-messenger/internal/core"
-	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
 
 // The coordinator's MCP server (T-025). One server serves one project: the
@@ -526,7 +525,7 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 		if err := c.ownTask(a.TaskID); err != nil {
 			return nil, err
 		}
-		if err := c.store.ContinueTaskChecked(a.TaskID, a.OpID, a.Text, core.AudienceCoordinator, workerGone); err != nil {
+		if err := c.store.ContinueTaskChecked(a.TaskID, a.OpID, a.Text, core.AudienceCoordinator, core.CheckWorkerGone); err != nil {
 			return nil, err
 		}
 		return map[string]any{"continued": true, "next": "The worker resumes its conversation; call wait for its report or question."}, nil
@@ -886,6 +885,7 @@ func runCoordinator(dbPath, project, workerRun string, in io.Reader, out io.Writ
 		return err
 	}
 	defer store.Close()
+	store.SetWorkerCheck(core.CheckWorkerGone)
 	return serveCoordinatorIn(store, project, coordinatorWatchLine(dbPath, project), filepath.Dir(dbPath), in, out)
 }
 
@@ -958,29 +958,4 @@ func (c *coordinator) taskMessages(id string, last int) (any, error) {
 		result["remote"] = "This task ran on another computer: its worker's own texts stay there; these are the lines it forwarded."
 	}
 	return result, nil
-}
-
-// workerGone confirms that an interrupted run's worker is gone (D-108): the
-// computer restarted since, or neither its process (same id and start time)
-// nor any process of its group is running.
-func workerGone(o platform.Observation) (string, error) {
-	if o.PID <= 0 || o.PGID <= 0 || o.StartToken == "" || o.BootID == "" {
-		return "", errors.New("its process was never recorded")
-	}
-	boot, live, err := platform.Snapshot()
-	if err != nil {
-		return "", err
-	}
-	if boot != "" && boot != o.BootID {
-		return "the computer restarted since", nil
-	}
-	if boot == "" {
-		return "", errors.New("this computer's start could not be read")
-	}
-	for _, p := range live {
-		if p.PGID == o.PGID || (p.PID == o.PID && p.StartToken == o.StartToken) {
-			return "", errors.New("its process or a process of its group is still running")
-		}
-	}
-	return "its process and its process group are gone", nil
 }

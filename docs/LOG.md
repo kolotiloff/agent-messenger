@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-12 — Claude Code (0.64, T-145 stuck tasks close where they ran)
+
+- 0.64 merged (PR #95) and released on the owner's word: T-140 to T-144.
+- ПК-1 (0.62) refused an update with «идут задачи (3)» after the owner closed those tasks on the Mac: they were interrupted or blocked on ПК-1, which refuses a cancel for them (D-021). T-145 (D-120): an explicit cancel closes such a task where it ran once its worker is certainly gone, or reports `cancel_refused`; the window offers «Закрыть» for this computer's stuck tasks; a refused update names the tasks. ПК-1 must first get this version from its own window.
+
 ## 2026-11-12 — Claude Code (T-140 fold arrow)
 
 - 0.63 merged (PR #94) and released on the owner's word; all release files and the five signed update feeds checked in place.
