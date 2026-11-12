@@ -2243,12 +2243,36 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 		list = append(list, o)
 	}
 	out := map[string]any{"project": project, "computers": list}
+	// Coordinator feedback 2026-11-10: the free machines without a wait.
+	if idle := idleComputers(list); len(idle) > 0 {
+		out["idle_computers"] = idle
+	}
 	if note, err := s.networkStale(time.Now()); err != nil {
 		return nil, err
 	} else if note != "" {
 		out["network_note"] = note
 	}
 	return out, nil
+}
+
+// idleComputers names the online computers that can take this project's
+// tasks and run no task now (of any project): where the next task can go.
+func idleComputers(list []ComputerSummary) []string {
+	var out []string
+	for _, c := range list {
+		if !c.Online || c.Reconnecting || (c.This && c.Folder == "") ||
+			(c.AcceptsTasks != nil && !*c.AcceptsTasks) || (c.HasProject != nil && !*c.HasProject) || len(c.Agents) == 0 {
+			continue
+		}
+		busy := false
+		for _, a := range c.Agents {
+			busy = busy || a.Running > 0
+		}
+		if !busy {
+			out = append(out, c.Name)
+		}
+	}
+	return out
 }
 
 // netStaleAfter is how long the list of the network's computers may go

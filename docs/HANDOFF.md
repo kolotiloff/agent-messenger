@@ -8,10 +8,17 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-12 by Claude Code.
+
+- 0.63 release started (tag `v0.0.0-preview.63`; check the downloads are in place): T-137 (D-119) a full mailbox no longer holds back a computer's other messages (Ноут-Linux's replies have not reached the Mac since 11-10); the window and `not_accepted` no longer call a possibly running task «Работает». T-138: a completed run clears a stale «exhausted» limit; `list_agents` gives `idle_computers`; the update confirmation warns about the server computer; the window no longer rebuilds unchanged parts (flicker); a remote task that never accepted or never answered a cancel closes at once; Linux: the menu entry starts the installation link, a downloaded newer file updates the installation while the client runs (`install` still needs a stopped client and says what to do).
+- Owner's steps: update Ноут-Linux once the old way (window «Обновиться», or `messenger shutdown` then `install` from the download); its waiting replies then go out, and later updates work from the Mac card and by download. Delete a hand-made Linux menu entry that points at an old file. Tasks the coordinator already cancelled may get late acceptance or report lines.
+- Open: lost report from ПК-1 on 11-10 (needs ПК-1's `background-*.log` from that evening); server failover (to discuss: a standby computer and a confirmed switch first); workers restarting Unity (likely the task-end process cleanup); a new product name (Artel and Agent Mesh are taken); Windows update failure: waiting for the exact message.
+
 Updated 2026-11-10 (late evening) by Claude Code.
 
-- After 0.61, on `claude/ui-tweaks`, not released: README for 0.61 (PR #93); T-136 (D-118) the Windows client runs from `runtimes\messenger.exe` for every version, so the firewall permission survives updates. The first start of the version with T-136 asks once more on each Windows computer; until then, do not update the Windows server computer remotely.
-- ПК-2 (the server) is cut off after a remote update to 0.61: someone has to press «Разрешить доступ» in the firewall window there.
+- 0.62 released (PR #93, tag `v0.0.0-preview.62`, all downloads and signed update files in place): README for 0.61 with window screenshots; T-136 (D-118) the Windows client runs from `runtimes\messenger.exe` for every version, so the firewall permission survives updates.
+- Owner's steps: on each Windows computer, after 0.62 starts, press «Разрешить доступ» once more (the new path); after that, updates do not ask again. Update the Windows server computer remotely only after it runs 0.62 and was allowed once. Not verified on a real Windows computer yet.
+- ПК-2 (the server) is cut off after the remote update to 0.61: someone has to press «Разрешить доступ» in the firewall window there.
 
 Updated 2026-11-10 (evening) by Claude Code.
 

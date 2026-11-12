@@ -38,6 +38,13 @@ func runOpen(root string, args []string, out io.Writer) error {
 			return fmt.Errorf("не удалось выбрать сохранённые данные: %w", err)
 		}
 	}
+	// Linux: a downloaded file updates the installation and opens from it,
+	// so the menu and the window never go on with the old version.
+	if desktop, err := platform.DefaultRoot(); err == nil && filepath.Clean(desktop) == filepath.Clean(root) {
+		if program := linuxSelfInstall(out); program != "" {
+			return startAgain(program)
+		}
+	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	// The background client runs from a copy; a remote update (T-078)

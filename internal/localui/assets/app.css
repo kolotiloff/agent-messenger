@@ -243,11 +243,12 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-computers { display:flex; flex-direction:column; min-height:0; }
 #am-concept .am-machines { display:flex; flex-direction:column; gap:var(--am-space-1); min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; margin-right:calc(-1 * var(--am-space-3)); padding-right:calc(var(--am-space-3) - var(--am-gutter, 0px)); }
 #am-concept .am-machine-card { display:flex; flex-direction:column; align-items:stretch; gap:var(--am-gap-control); padding:var(--am-pad-compact); border:1px solid var(--am-line); border-radius:var(--am-radius-s); background:var(--am-soft); }
-#am-concept .am-machine-name { display:flex; align-items:center; gap:var(--am-gap-control); font-weight:500; }
+#am-concept .am-machine-name { display:flex; align-items:center; gap:var(--am-space-1); font-weight:500; }
 #am-concept .am-machine-name .am-dot { margin-left:auto; }
+#am-concept .am-machine-name .am-dot ~ * { margin-left:var(--am-space-1); }
 #am-concept .am-machine-version { font-weight:400; }
 #am-concept .am-machine-agents { display:flex; flex-direction:column; gap:var(--am-space-1); }
-#am-concept .am-agent-line { display:flex; align-items:center; gap:var(--am-gap-control); min-width:0; font-size:var(--am-text-s); }
+#am-concept .am-agent-line { display:flex; align-items:center; gap:var(--am-space-1); min-width:0; font-size:var(--am-text-s); }
 #am-concept .am-agent-line .am-muted { margin-left:auto; }
 #am-concept .am-agent-status { white-space:nowrap; }
 #am-concept .am-agent-run .am-agent-status { color:var(--am-run); }

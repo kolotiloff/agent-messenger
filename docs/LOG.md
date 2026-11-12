@@ -2,10 +2,23 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
-## 2026-11-10 — Claude Code (T-136 firewall after updates)
+## 2026-11-12 — Claude Code (T-137 lost replies from Ноут-Linux)
+
+- Owner asked to release: 0.63 with T-137 and T-138.
+- T-138: a completed run clears a stale «exhausted» limit; `idle_computers` in `list_agents`; the remote update confirmation warns about the server computer.
+- The window rebuilt the sidebar every 2 s and the agent cards and task list on every task change, even when nothing on screen changed; that reset hover, tooltips and animations (the owner saw flicker). Unchanged parts now keep their nodes.
+- Linux: the menu entry pointed at one version's file of a `messenger install` installation, so after an update from the Mac or by hand the menu still started the old version. It now starts the installation's `bin/messenger` link; the new client fixes an existing entry when it starts.
+- Linux: a downloaded newer program updates the installation and opens from it, while the client runs; `install` still needs a stopped client and now says so in plain words instead of «client is already running». A remote task that never accepted, or never answered a cancel, closes at once; the window offers «Закрыть» for it.
+
+- Read the coordinator's feedback journal from the Mac (11 remarks) and its issue list (row 34). Found why Ноут-Linux's replies never reached the Mac: its outbox was stuck behind 50+ messages for a full mailbox (D-119). Fixed, with a supervisor test that fails on the old code.
+- The window says «Нет ответа от «X»» for an unaccepted task; `not_accepted` says when the task may be running there.
+- Other remarks of the journal not handled yet: lost report from ПК-1 (11-10 18:51, may be the same cause), server failover and a coordinator event when every computer is lost, workers restarting GUI apps.
+
+## 2026-11-10 — Claude Code (T-136 firewall after updates; 0.62)
 
 - README rewritten for 0.61 with window screenshots (PR #93).
 - The owner's remote update of ПК-2 (the server, Windows) cut the network: the firewall asked again for the new version's folder. T-136 (D-118): the Windows client now runs from one path for every version. ПК-2 itself still needs someone to press «Разрешить доступ» there.
+- PR #93 merged and released as 0.62 (`v0.0.0-preview.62`); every download and signed update file is in place.
 
 ## 2026-11-10 — Claude Code (0.61 released)
 

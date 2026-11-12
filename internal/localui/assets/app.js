@@ -265,6 +265,13 @@
     // T-126: an open task on a computer this one lost contact with.
     if(t.remote?.lost&&!t.remote.from&&activeStates.includes(t.state))
       return [tr('Связь потеряна, исход неизвестен'),'am-muted',t.remote.last_seen?'«'+t.remote.name+tr('» не на связи с ')+stamp(t.remote.last_seen):'«'+t.remote.name+tr('» больше нет в сети')];
+    // T-137: sent to another computer that has not said it took the task.
+    // It may run there with its replies lost, so neither «Работает» nor
+    // «not accepted»: say what is known.
+    if(t.remote?.unaccepted&&!t.remote.from&&t.state==='running'){
+      if(Date.now()-Date.parse(t.created_at)<5*60*1000)return [tr('Ждёт, когда «')+t.remote.name+tr('» примет'),'am-status-wait'];
+      return [tr('Нет ответа от «')+t.remote.name+'»','am-status-bad',tr('приём не подтверждён. Задача может идти там, но её ответы сюда не доходят; сама она не повторяется')];
+    }
     switch(t.state){
       case 'running':return t.pending_launch?[t.waits_for_lock?tr('Ждёт ресурс «')+t.waits_for_lock+'»':tr('Ждёт запуска'),'am-status-wait']:[tr('Работает ')+minutes(from),'am-status-run'];
       case 'waiting_owner':return [tr('Ждёт вашего ответа'),'am-status-wait'];
@@ -465,9 +472,15 @@
     card.addEventListener('click',event=>{if(!event.target.closest('button'))filterComputer(id);});
     card.addEventListener('keydown',event=>{if(event.target===card&&(event.key==='Enter'||event.key===' ')){event.preventDefault();filterComputer(id);}});
   }
+  // The window redraws every two seconds. A part whose content did not change
+  // keeps its nodes: rebuilding them anyway reset hover, tooltips and
+  // animations, and the window seemed to flicker (owner, 2026-11-12).
+  function swapChildren(live,next){
+    if(next.innerHTML!==live.innerHTML)live.replaceChildren(...next.childNodes);
+  }
   function renderMachines(){
     collectNotices();
-    const box=$('machines');box.replaceChildren();
+    const live=$('machines'),box=live.cloneNode(false);
     const machine=el('div',undefined,'am-machine-card');machine.setAttribute('aria-current','true');pickable(machine,'local');
     const head=el('div',undefined,'am-machine-name');head.append(el('span',view?.computer_name||tr('Этот компьютер')));
     const dot=el('span',undefined,'am-dot'+(online?' online':''));dot.title=online?tr('На связи'):tr('Нет связи');head.append(dot);machine.append(head);
@@ -480,7 +493,7 @@
     const hosted=new Set((server?.host?.devices||[]).filter(d=>!d.revoked_at).map(d=>d.id));
     for(const peer of server?.peers||[]){
       const fresh=peerFresh(peer);
-      const card=el('div',undefined,'am-machine-card am-peer-card');card.dataset.peer=peer.id;pickable(card,peer.id);
+      const card=el('div',undefined,'am-machine-card am-peer-card');card.dataset.peer=peer.id;if(peer.host)card.dataset.host='';pickable(card,peer.id);
       const name=el('div',undefined,'am-machine-name');
       const pdot=el('span',undefined,'am-dot'+(fresh?' online':''));pdot.title=fresh?tr('На связи'):tr('Нет связи');
       name.append(el('span',peer.name));
@@ -498,7 +511,7 @@
       }else if(fresh&&peer.version&&versionOlder(peer.version,newestVersion())){
         const newest=versionName(newestVersion()),label=tr('Обновить до ')+newest;
         const b=el('button',undefined,'am-update-icon am-peer-update');b.type='button';b.title=label;b.setAttribute('aria-label',label);b.append(svgIcon(['M12 4v11M7 10l5 5 5-5M5 20h14']));
-        b.addEventListener('click',event=>{event.stopPropagation();askConfirm(tr('Обновить ')+(peer.name||tr('компьютер'))+tr(' до ')+newest+'?',tr('Программа на том компьютере обновится и перезапустится. Задачи и история сохранятся.'),tr('Обновить'),()=>requestUpdate(peer),true);});
+        b.addEventListener('click',event=>{event.stopPropagation();askConfirm(tr('Обновить ')+(peer.name||tr('компьютер'))+tr(' до ')+newest+'?',tr('Программа на том компьютере обновится и перезапустится. Задачи и история сохранятся.')+(peer.host?' '+tr('На нём работает сервер сети: пока он перезапускается, компьютеры не видят друг друга. Если там попросят подтверждение, сервер не вернётся, пока кто-нибудь не ответит у того компьютера.'):''),tr('Обновить'),()=>requestUpdate(peer),true);});
         b.addEventListener('keydown',event=>event.stopPropagation());
         name.append(b);
       }
@@ -527,6 +540,7 @@
       }
       box.append(card);
     }
+    swapChildren(live,box);
   }
   // The computer that runs a task: this one, or the other one it was sent to.
   function taskComputer(t){return t.remote&&!t.remote.from?t.remote.id:'local';}
@@ -561,7 +575,7 @@
     return [active,done];
   }
   function renderTaskList(){
-    const box=$('task-list');box.replaceChildren();
+    const live=$('task-list'),box=live.cloneNode(false);
     const [active,done]=visibleTasks();
     computerChip($('computer-chip'));
     // T-096: say when the agent filter hides active tasks, with a way back.
@@ -626,6 +640,7 @@
     section(tr('Активные'),active,shared.filter(x=>activeStates.includes(x.t.state)));
     section(tr('Завершённые'),done,shared.filter(x=>!activeStates.includes(x.t.state)));
     if(!box.children.length)box.append(el('p',view?.project?(computerFilter||$('agent-filter').value?tr('Здесь задач нет'):tr('Задач пока нет')):'','am-small am-muted'));
+    swapChildren(live,box);
   }
   // Coordinator connection (T-039): the client runs Claude's own
   // `claude mcp add` in the project folder; the owner never opens a terminal.
@@ -765,7 +780,7 @@
   let stopping=false;
   function closeHere(){
     const t=feed?.task;if(!t?.remote||t.remote.from)return;
-    askConfirm(tr('Закрыть задачу?'),tr('С компьютером «')+t.remote.name+tr('» нет связи. Задача закроется в этом окне, а что с ней на том компьютере, неизвестно. Если связь вернётся, ему придёт отмена.'),tr('Закрыть'),async()=>{
+    askConfirm(tr('Закрыть задачу?'),(t.remote.silent&&!t.remote.lost?tr('Компьютер «')+t.remote.name+tr('» не отвечает по этой задаче.'):tr('С компьютером «')+t.remote.name+tr('» нет связи.'))+' '+tr('Задача закроется в этом окне, а что с ней на том компьютере, неизвестно. Если связь вернётся, ему придёт отмена.'),tr('Закрыть'),async()=>{
       await postAPI('/api/task-cancel',{task:t.id});feedSignature='';await refresh();
     });
   }
@@ -856,11 +871,12 @@
     // its outcome there is already unknown.
     // T-131: an own task on another computer that cannot be reached has no
     // input and no stop button: nothing would arrive. One action closes it here.
-    const unreachable=!!t.remote&&!t.remote.from&&(t.state==='blocked'||t.state==='interrupted'||(activeStates.includes(t.state)&&!!t.remote.lost));
+    const unreachable=!!t.remote&&!t.remote.from&&(t.state==='blocked'||t.state==='interrupted'||(activeStates.includes(t.state)&&(!!t.remote.lost||!!t.remote.silent)));
     $('lost-bar').hidden=!unreachable;
     if(unreachable){
       const since=t.remote.last_seen?stamp(t.remote.last_seen):'';
-      $('lost-text').textContent=(since?tr('Связи с «')+t.remote.name+tr('» нет с ')+since+'. ':tr('Связи с «')+t.remote.name+tr('» нет. '))+tr('Что с задачей там, неизвестно.');
+      if(t.remote.silent&&!t.remote.lost)$('lost-text').textContent='«'+t.remote.name+tr('» на связи, но не отвечает по этой задаче. Что с ней там, неизвестно: она могла и выполниться.');
+      else $('lost-text').textContent=(since?tr('Связи с «')+t.remote.name+tr('» нет с ')+since+'. ':tr('Связи с «')+t.remote.name+tr('» нет. '))+tr('Что с задачей там, неизвестно.');
     }
     const active=activeStates.includes(t.state)&&!unreachable,box=$('answer-text');
     const note=canNote(t),wasNote=$('compose').dataset.mode==='note';
@@ -980,9 +996,9 @@
     });
   }
   function renderAgents(){
-    const cards=$('agents');cards.replaceChildren();
+    const live=$('agents'),cards=live.cloneNode(false);
     computerChip($('agents-computer-chip'));
-    if(computerFilter&&computerFilter!=='local'){renderPeerAgents(cards);return;}
+    if(computerFilter&&computerFilter!=='local'){renderPeerAgents(cards);swapChildren(live,cards);return;}
     for(const provider of ['claude','codex','cursor']){
       const a=(view?.agents||[]).find(x=>x.agent===provider);
       const found=discovery.find(d=>d.provider===provider);
@@ -1063,6 +1079,7 @@
       }else{tasks.textContent=tr('Задачи');tasks.disabled=true;}
       card.append(tasks);cards.append(card);
     }
+    swapChildren(live,cards);
     renderAccessBar();
   }
   // Another computer's agents, as its reports show them: view only (T-076).

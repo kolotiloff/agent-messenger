@@ -156,10 +156,16 @@ func run(root string, args []string) error {
 			return err
 		}
 		installed, err := distribution.Install(exe, *prefix, buildinfo.Current())
+		if errors.Is(err, platform.ErrAlreadyRunning) {
+			// The install command keeps its rule: it activates only while no
+			// client runs. Say what to do instead (owner, 2026-11-12).
+			return errors.New("Messenger сейчас работает, поэтому install не ставит новую версию. Обновите из окна («Обновиться») или откройте новый скачанный файл командой open: он сам обновит установку. Либо остановите клиент (messenger shutdown) и повторите install")
+		}
 		if err != nil {
 			return err
 		}
 		fmt.Println("Installed:", installed)
+		menuEntryAfterInstall(installed)
 		fmt.Println("No client, model, service or login was started. Add the bin directory to PATH if needed.")
 		return nil
 	case "ui":
@@ -336,6 +342,7 @@ func run(root string, args []string) error {
 		if err != nil {
 			return err
 		}
+		refreshMenuEntry(root)
 		err = supervisor.Run(context.Background(), root, options)
 		if errors.Is(err, platform.ErrAlreadyRunning) {
 			return errors.New("клиент уже запущен; команды нужно отправлять ему, а не запускать второй экземпляр")

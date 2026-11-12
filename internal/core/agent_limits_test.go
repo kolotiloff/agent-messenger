@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"testing"
+	"time"
 )
 
 // T-044: the last limit state of an agent reaches list_agents and the window.
@@ -46,5 +47,45 @@ func TestAgentLimit(t *testing.T) {
 		if err := f.st.RecordAgentLimit("codex", l); !errors.Is(err, ErrRejected) {
 			t.Fatalf("%+v accepted: %v", l, err)
 		}
+	}
+}
+
+// Coordinator feedback 2026-11-10: a completed run clears a stale
+// «exhausted»; a «warning» stays.
+func TestCompletedRunClearsExhausted(t *testing.T) {
+	f := newTaskFixture(t)
+	if err := f.st.RecordAgentLimit("codex", AgentLimit{State: "exhausted", Window: "5h", ResetsAt: "2099-01-01T00:00:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
+	if err := f.st.AgentLimitCleared("codex", at); err != nil {
+		t.Fatal(err)
+	}
+	limit := func() *AgentLimit {
+		list, err := f.st.ProjectAgents("Game")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, a := range list["computers"].([]ComputerSummary)[0].Agents {
+			if a.Agent == "codex" {
+				return a.Limit
+			}
+		}
+		return nil
+	}
+	if l := limit(); l == nil || l.State != "ok" || l.Window != "5h" || l.ResetsAt != "" || l.ObservedAt != "2026-11-12T09:00:00Z" {
+		t.Fatalf("not cleared: %+v", l)
+	}
+	if err := f.st.RecordAgentLimit("codex", AgentLimit{State: "warning", Window: "5h"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.AgentLimitCleared("codex", at); err != nil {
+		t.Fatal(err)
+	}
+	if l := limit(); l == nil || l.State != "warning" {
+		t.Fatalf("warning dropped: %+v", l)
+	}
+	if err := f.st.AgentLimitCleared("claude", at); err != nil {
+		t.Fatal(err)
 	}
 }

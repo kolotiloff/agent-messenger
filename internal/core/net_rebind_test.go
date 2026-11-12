@@ -144,10 +144,17 @@ func TestUnacceptedTaskIsReported(t *testing.T) {
 	if !found {
 		t.Fatalf("no event %+v", events)
 	}
+	// T-137: the window says it was not accepted instead of «Работает».
+	if r, err := p.a.st.TaskRemote(id); err != nil || r == nil || !r.Unaccepted {
+		t.Fatalf("remote %+v %v", r, err)
+	}
 	// An accepted task is never reported.
 	id2 := p.startRemote(t, "op-ok", "codex", "fine")
 	p.carry(t, true)
 	p.carry(t, false)
+	if r, err := p.a.st.TaskRemote(id2); err != nil || r == nil || r.Unaccepted {
+		t.Fatalf("accepted remote %+v %v", r, err)
+	}
 	if n, _ := p.a.st.NoteUnaccepted(time.Now().Add(time.Hour)); n != 0 {
 		t.Fatalf("accepted task %s reported", id2)
 	}
@@ -163,5 +170,72 @@ func TestStaleNetworkIsExplained(t *testing.T) {
 	note, err := p.a.st.networkStale(time.Now().Add(10 * time.Minute))
 	if err != nil || !strings.Contains(note, "has not heard from the server for 10 minutes") {
 		t.Fatalf("stale %q %v", note, err)
+	}
+}
+
+// Coordinator feedback 2026-11-12: a computer that reports the agent busy
+// but never answered may run the task with its replies lost; the event
+// says so instead of suggesting a new start.
+func TestUnacceptedButBusySaysItMayRun(t *testing.T) {
+	p := newNetPair(t)
+	id := p.startRemote(t, "op-busy", "codex", "night audit")
+	// The start left; the computer reports codex busy and never answered.
+	p.carry(t, true)
+	agents := []NetAgent{{Agent: "codex", Running: 1}}
+	if err := p.a.st.SetNetwork(testBroker, HostPeerID, []NetPeer{{ID: "dev-b", Name: "Ноутбук", Age: 1, Agents: agents}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.a.st.db.Exec(`UPDATE tasks SET remote_task='' WHERE id=?`, id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.a.st.db.Exec(`DELETE FROM task_events WHERE task_id=? AND kind='accepted'`, id); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := p.a.st.NoteUnaccepted(time.Now().Add(time.Hour)); err != nil || n != 1 {
+		t.Fatalf("noted %d %v", n, err)
+	}
+	task, _ := p.a.st.TaskByID(id)
+	if !strings.Contains(task.Detail, "may be running there") {
+		t.Fatalf("detail %q", task.Detail)
+	}
+}
+
+// Owner, 2026-11-12: a task the other computer never accepted stayed among
+// the active ones: a cancel waited for an answer that never came. Once the
+// task is past unacceptedAfter it closes here at once; before, the cancel
+// still goes there and waits.
+func TestSilentTaskClosesAtOnce(t *testing.T) {
+	p := newNetPair(t)
+	id := p.startRemote(t, "op-silent", "codex", "check")
+	id2 := p.startRemote(t, "op-silent-2", "codex", "check 2")
+	p.carry(t, true)
+	if err := p.a.st.SetNetwork(testBroker, HostPeerID, []NetPeer{{ID: "dev-b", Name: "Ноутбук", Age: 1}}); err != nil {
+		t.Fatal(err)
+	}
+	unaccept := func(id string) {
+		if _, err := p.a.st.db.Exec(`UPDATE tasks SET remote_task='' WHERE id=?`, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	unaccept(id)
+	if r, _ := p.a.st.TaskRemote(id); r == nil || r.Lost || r.Silent {
+		t.Fatalf("fresh task %+v", r)
+	}
+	if state, err := p.a.st.CancelTask(id); err != nil || state != "cancelling" {
+		t.Fatalf("fresh cancel %q %v", state, err)
+	}
+	old := unacceptedAfter
+	unacceptedAfter = 0
+	defer func() { unacceptedAfter = old }()
+	if r, _ := p.a.st.TaskRemote(id); r == nil || !r.Silent {
+		t.Fatalf("not silent %+v", r)
+	}
+	if state, err := p.a.st.CancelTask(id); err != nil || state != "cancelled" {
+		t.Fatalf("silent cancel %q %v", state, err)
+	}
+	// Without an earlier cancel too.
+	unaccept(id2)
+	if state, err := p.a.st.CancelTask(id2); err != nil || state != "cancelled" {
+		t.Fatalf("silent first cancel %q %v", state, err)
 	}
 }

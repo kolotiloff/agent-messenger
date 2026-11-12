@@ -296,6 +296,9 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	// only informs; it never changes the run's outcome.
 	if limit, ok := agentLimit(result); ok {
 		_ = s.store.RecordAgentLimit(task.Provider, limit)
+	} else if ev.ProviderOK {
+		// A run that completed shows the limit was not exhausted.
+		_ = s.store.AgentLimitCleared(task.Provider, time.Now())
 	}
 	// D-021: after the exit, signal the group and require it to be empty.
 	_ = platform.SignalGroup(obs.PGID)

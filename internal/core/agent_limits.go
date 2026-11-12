@@ -133,3 +133,34 @@ func parseAgentLimit(raw string) *AgentLimit {
 	}
 	return &l
 }
+
+// AgentLimitCleared replaces a stored «exhausted» limit with «ok» after a
+// run of that agent completed on this computer without reporting a limit
+// (coordinator feedback 2026-11-10: Codex stayed «exhausted» for a day while
+// it ran task after task). A completed run shows the limit was not
+// exhausted then; a «warning» stays, since a run does not say how close it
+// is.
+func (s *Store) AgentLimitCleared(provider string, at time.Time) error {
+	return s.tx(func(tx *sql.Tx) error {
+		computer, err := localComputer(tx)
+		if err != nil {
+			return err
+		}
+		var raw string
+		err = tx.QueryRow(`SELECT limit_state FROM computer_agents WHERE computer=? AND provider=?`, computer, provider).Scan(&raw)
+		if err == sql.ErrNoRows {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		l := parseAgentLimit(raw)
+		if l == nil || l.State != "exhausted" {
+			return nil
+		}
+		ok := AgentLimit{State: "ok", Window: l.Window, ObservedAt: at.UTC().Format(time.RFC3339)}
+		out, _ := json.Marshal(ok)
+		_, err = tx.Exec(`UPDATE computer_agents SET limit_state=? WHERE computer=? AND provider=?`, string(out), computer, provider)
+		return err
+	})
+}

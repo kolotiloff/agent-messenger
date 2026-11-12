@@ -3,6 +3,7 @@ package supervisor
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"time"
 
@@ -164,36 +165,50 @@ func (s *Supervisor) shareTasks(ctx context.Context, n broker.Network) string {
 }
 
 func (s *Supervisor) sendOutbox(ctx context.Context, n broker.Network) string {
-	pending, err := s.store.NetPending(n.BrokerID, 50)
-	if err != nil {
-		return "очередь сообщений не читается: " + err.Error()
-	}
 	// A computer whose mailbox is full waits; messages to the others still
-	// go, each recipient's in order (audit 2026-11-09).
-	full := map[string]bool{}
+	// go, each recipient's in order (audit 2026-11-09). Its messages are
+	// left out of the next batch, so however many wait for it, they never
+	// hold back the others (T-137).
+	var full []string
 	problem := ""
-	for _, m := range pending {
-		if full[m.To] {
-			continue
-		}
-		err := s.server.Send(ctx, n, m.To, m.OpID, m.Body)
-		switch {
-		case err == nil:
-			err = s.store.NetSent(m.Seq)
-		case errors.Is(err, broker.ErrRecipient), errors.Is(err, broker.ErrBadMessage):
-			// Sending it again cannot help: it is dropped, never retried.
-			err = s.store.NetUndeliverable(m.Seq)
-		case errors.Is(err, broker.ErrNetworkChanged):
-			return ""
-		case errors.Is(err, broker.ErrMailboxFull):
-			full[m.To] = true
-			problem = "задачи не отправлены: " + err.Error()
-			continue
-		default:
-			return "задачи не отправлены: " + err.Error()
-		}
+	for round := 0; round < 8; round++ {
+		pending, err := s.store.NetPendingExcept(n.BrokerID, 50, full)
 		if err != nil {
-			return "очередь сообщений не обновлена: " + err.Error()
+			return "очередь сообщений не читается: " + err.Error()
+		}
+		if len(pending) == 0 {
+			return problem
+		}
+		fullNow := false
+		for _, m := range pending {
+			if slices.Contains(full, m.To) {
+				continue
+			}
+			err := s.server.Send(ctx, n, m.To, m.OpID, m.Body)
+			switch {
+			case err == nil:
+				err = s.store.NetSent(m.Seq)
+			case errors.Is(err, broker.ErrRecipient), errors.Is(err, broker.ErrBadMessage):
+				// Sending it again cannot help: it is dropped, never retried.
+				err = s.store.NetUndeliverable(m.Seq)
+			case errors.Is(err, broker.ErrNetworkChanged):
+				return ""
+			case errors.Is(err, broker.ErrMailboxFull):
+				full = append(full, m.To)
+				fullNow = true
+				problem = "задачи не отправлены: " + err.Error()
+				continue
+			default:
+				return "задачи не отправлены: " + err.Error()
+			}
+			if err != nil {
+				return "очередь сообщений не обновлена: " + err.Error()
+			}
+		}
+		// Without a newly full mailbox everything sendable in this batch
+		// went; the rest waits for the next round of the loop.
+		if !fullNow {
+			return problem
 		}
 	}
 	return problem
