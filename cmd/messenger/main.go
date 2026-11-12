@@ -155,15 +155,12 @@ func run(root string, args []string) error {
 		if err != nil {
 			return err
 		}
-		install := distribution.Install
-		if link, _ := installedLink(*prefix); link != "" {
-			// An update of an existing installation goes next to the
-			// running version, as from the window (D-106): it needs no
-			// stopped client (owner, 2026-11-12: install refused while the
-			// client ran).
-			install = distribution.InstallUpdate
+		installed, err := distribution.Install(exe, *prefix, buildinfo.Current())
+		if errors.Is(err, platform.ErrAlreadyRunning) {
+			// The install command keeps its rule: it activates only while no
+			// client runs. Say what to do instead (owner, 2026-11-12).
+			return errors.New("Messenger сейчас работает, поэтому install не ставит новую версию. Обновите из окна («Обновиться») или откройте новый скачанный файл командой open: он сам обновит установку. Либо остановите клиент (messenger shutdown) и повторите install")
 		}
-		installed, err := install(exe, *prefix, buildinfo.Current())
 		if err != nil {
 			return err
 		}
