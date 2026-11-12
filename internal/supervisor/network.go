@@ -9,6 +9,7 @@ import (
 
 	"github.com/kolotiloff/agent-messenger/internal/broker"
 	"github.com/kolotiloff/agent-messenger/internal/core"
+	"github.com/kolotiloff/agent-messenger/internal/journal"
 )
 
 // networkInterval is how often the client sends its task messages and reads
@@ -34,8 +35,32 @@ func (s *Supervisor) networkProblem() string {
 
 func (s *Supervisor) setNetworkProblem(p string) {
 	s.net.mu.Lock()
+	old := s.net.problem
 	s.net.problem = p
 	s.net.mu.Unlock()
+	if p != old {
+		if p == "" {
+			journal.Printf("network: problem cleared (was: %s)", old)
+		} else {
+			journal.Printf("network: problem: %s", p)
+		}
+	}
+}
+
+// peerName is the name of another computer of the network for the
+// journal, or a short form of its id.
+func (s *Supervisor) peerName(id string) string {
+	if s.server != nil {
+		for _, p := range s.server.Status().Peers {
+			if p.ID == id {
+				return "«" + p.Name + "»"
+			}
+		}
+	}
+	if len(id) > 8 {
+		id = id[:8]
+	}
+	return "computer " + id
 }
 
 // runNetwork exchanges task messages with the network until ctx ends.
@@ -71,6 +96,13 @@ func (s *Supervisor) networkRound(ctx context.Context) {
 	s.net.broker = n.BrokerID
 	s.net.round++
 	s.net.mu.Unlock()
+	if changed {
+		if ok {
+			journal.Printf("network: connected to a server")
+		} else {
+			journal.Printf("network: not connected to a server")
+		}
+	}
 	if !ok {
 		if changed {
 			_ = s.store.SetNetwork("", "", nil)
@@ -185,20 +217,27 @@ func (s *Supervisor) sendOutbox(ctx context.Context, n broker.Network) string {
 				continue
 			}
 			err := s.server.Send(ctx, n, m.To, m.OpID, m.Body)
+			desc, progress := core.NetDescribe(m.Body)
 			switch {
 			case err == nil:
+				if !progress {
+					journal.Printf("sent to %s: %s", s.peerName(m.To), desc)
+				}
 				err = s.store.NetSent(m.Seq)
 			case errors.Is(err, broker.ErrRecipient), errors.Is(err, broker.ErrBadMessage):
 				// Sending it again cannot help: it is dropped, never retried.
+				journal.Printf("not delivered, dropped: to %s: %s: %v", s.peerName(m.To), desc, err)
 				err = s.store.NetUndeliverable(m.Seq)
 			case errors.Is(err, broker.ErrNetworkChanged):
 				return ""
 			case errors.Is(err, broker.ErrMailboxFull):
+				journal.Printf("mailbox of %s is full; its messages wait, first: %s", s.peerName(m.To), desc)
 				full = append(full, m.To)
 				fullNow = true
 				problem = "задачи не отправлены: " + err.Error()
 				continue
 			default:
+				journal.Printf("send failed, kept for the next round: to %s: %s: %v", s.peerName(m.To), desc, err)
 				return "задачи не отправлены: " + err.Error()
 			}
 			if err != nil {
@@ -228,6 +267,9 @@ func (s *Supervisor) readInbox(ctx context.Context, n broker.Network) string {
 			return "сообщения сети не получены: " + err.Error()
 		}
 		for _, m := range messages {
+			if desc, progress := core.NetDescribe(m.Body); !progress {
+				journal.Printf("received from %s: %s", s.peerName(m.From), desc)
+			}
 			if err := s.store.ApplyNet(n.BrokerID, core.NetIncoming{Seq: m.Seq, From: m.From, OpID: m.OpID, Body: m.Body}); err != nil {
 				return "сообщение сети не применено: " + err.Error()
 			}

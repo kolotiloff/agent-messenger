@@ -15,6 +15,7 @@ import (
 	"github.com/kolotiloff/agent-messenger/internal/broker"
 	"github.com/kolotiloff/agent-messenger/internal/buildinfo"
 	"github.com/kolotiloff/agent-messenger/internal/core"
+	"github.com/kolotiloff/agent-messenger/internal/journal"
 	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
 
@@ -65,6 +66,10 @@ func freeLocalPort(t *testing.T) int {
 func TestTaskTravelsBetweenComputers(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	// T-142: both computers of this test write one journal.
+	journalDir := t.TempDir()
+	journal.Open(journalDir)
+	t.Cleanup(journal.Close)
 	a, _ := netComputer(t, ctx, "a")
 	b, folderB := netComputer(t, ctx, "b")
 	if err := a.server.Enable(broker.ScopeLocal, freeLocalPort(t)); err != nil {
@@ -104,6 +109,15 @@ func TestTaskTravelsBetweenComputers(t *testing.T) {
 	task, _ := a.store.TaskByID(id)
 	if task.Folder != folderB || task.State != "running" {
 		t.Fatalf("a's task %+v", task)
+	}
+	raw, _ := os.ReadFile(filepath.Join(journalDir, journal.File))
+	for _, want := range []string{"sent to «Ноутбук»: start " + id, "received from", ": start " + id, ": accepted " + id} {
+		if !strings.Contains(string(raw), want) {
+			t.Fatalf("journal has no %q:\n%s", want, raw)
+		}
+	}
+	if strings.Contains(string(raw), "Build level 1") {
+		t.Fatalf("task text in the journal:\n%s", raw)
 	}
 	runs, _ := b.store.NextTaskRunIntents(10)
 	if len(runs) != 1 {

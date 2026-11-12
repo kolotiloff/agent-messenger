@@ -13,6 +13,7 @@ import (
 
 	"github.com/kolotiloff/agent-messenger/internal/adapters"
 	"github.com/kolotiloff/agent-messenger/internal/core"
+	"github.com/kolotiloff/agent-messenger/internal/journal"
 	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
 
@@ -104,9 +105,10 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	if err != nil {
 		return // paused, cancelled or no longer pending: nothing was launched
 	}
+	journal.Printf("run %s of %s: launching %s (model %q, %s run)", runID, task.ID, task.Provider, task.Model, run.Kind)
 	exe, err := workerProgram()
 	if err != nil {
-		_ = s.store.TaskRunNotStarted(runID, "messenger executable not found")
+		s.runNotStarted(runID, task.ID, "messenger executable not found")
 		return
 	}
 	spec := adapters.TaskRunSpec{
@@ -115,12 +117,12 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	}
 	args, err := adapters.TaskArgs(spec)
 	if err != nil {
-		_ = s.store.TaskRunNotStarted(runID, err.Error())
+		s.runNotStarted(runID, task.ID, err.Error())
 		return
 	}
 	if task.Provider == "cursor" {
 		if err := ensureCursorTaskServer(exe, task.Environment); err != nil {
-			_ = s.store.TaskRunNotStarted(runID, "Cursor MCP settings: "+err.Error())
+			s.runNotStarted(runID, task.ID, "Cursor MCP settings: "+err.Error())
 			return
 		}
 	}
@@ -133,14 +135,14 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	stderr := &tailBuffer{max: stderrTail}
 	cmd.Stderr = stderr
 	if err := platform.SetNewGroup(cmd); err != nil {
-		_ = s.store.TaskRunNotStarted(runID, err.Error())
+		s.runNotStarted(runID, task.ID, err.Error())
 		return
 	}
 	// A plain pipe, not StdoutPipe: Wait would close StdoutPipe's read end
 	// as soon as the process exits and could drop its last lines.
 	stdout, stdoutW, err := os.Pipe()
 	if err != nil {
-		_ = s.store.TaskRunNotStarted(runID, err.Error())
+		s.runNotStarted(runID, task.ID, err.Error())
 		return
 	}
 	cmd.Stdout = stdoutW
@@ -153,7 +155,7 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	record := recordedRun{ID: reservation, Root: s.root, Provider: task.Provider, Environment: task.Environment, ConversationID: task.SessionID, TaskRunID: run.ID}
 	record.Epoch, _ = recoveryEpoch()
 	if err := rememberRun(record); err != nil {
-		_ = s.store.TaskRunNotStarted(runID, "reservation not written: "+err.Error())
+		s.runNotStarted(runID, task.ID, "reservation not written: "+err.Error())
 		return
 	}
 	err = platform.StartGroup(cmd)
@@ -161,11 +163,11 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	if err != nil {
 		if platform.NeverRan(cmd, err) {
 			_ = forgetRunID(reservation)
-			_ = s.store.TaskRunNotStarted(runID, err.Error())
+			s.runNotStarted(runID, task.ID, err.Error())
 			return
 		}
 		// Unknown whether anything ran: keep the reservation and block.
-		_, _ = s.store.FinishTaskRun(runID, core.RunEvidence{Detail: "start outcome unknown: " + err.Error()})
+		s.finishUnclear(runID, task.ID, core.RunEvidence{Detail: "start outcome unknown: " + err.Error()})
 		return
 	}
 	obs, obsErr := platform.ReadObservation(cmd.Process.Pid)
@@ -181,10 +183,11 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 		// block the task; the reservation stays.
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
-		_, _ = s.store.FinishTaskRun(runID, core.RunEvidence{Detail: "process not recorded: " + obsErr.Error()})
+		s.finishUnclear(runID, task.ID, core.RunEvidence{Detail: "process not recorded: " + obsErr.Error()})
 		return
 	}
 	started = true
+	journal.Printf("run %s of %s: worker started, process %d", runID, task.ID, obs.PID)
 
 	type readOutcome struct {
 		result adapters.TaskEventResult
@@ -340,6 +343,7 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	final, err := s.store.FinishTaskRun(runID, ev)
+	journal.Printf("run %s of %s: ended %s (exit %d observed %t, empty group %t, provider %t, reason %q, cancelled %t)%s", runID, task.ID, final, ev.ExitCode, ev.ExitObserved, ev.GroupEmpty, ev.ProviderOK, ev.Reason, ev.Cancelled, journalDetail(ev.Detail, err))
 	if err != nil {
 		return
 	}
@@ -391,4 +395,29 @@ func agentLimit(r adapters.TaskEventResult) (core.AgentLimit, bool) {
 		}
 	}
 	return l, true
+}
+
+// runNotStarted records a run that never started, also in the journal.
+func (s *Supervisor) runNotStarted(runID, task, why string) {
+	journal.Printf("run %s of %s: not started: %s", runID, task, why)
+	_ = s.store.TaskRunNotStarted(runID, why)
+}
+
+// finishUnclear closes a run whose start or process is unclear; the store
+// blocks its task.
+func (s *Supervisor) finishUnclear(runID, task string, ev core.RunEvidence) {
+	final, err := s.store.FinishTaskRun(runID, ev)
+	journal.Printf("run %s of %s: ended %s%s", runID, task, final, journalDetail(ev.Detail, err))
+}
+
+// journalDetail adds a run's detail and a store error to a journal line.
+func journalDetail(detail string, err error) string {
+	out := ""
+	if detail != "" {
+		out += "; " + detail
+	}
+	if err != nil {
+		out += "; not recorded: " + err.Error()
+	}
+	return out
 }

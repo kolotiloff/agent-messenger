@@ -416,6 +416,40 @@ func TestTaskFailureKeepsCLIErrorOutput(t *testing.T) {
 	})
 }
 
+func TestJournalRecordsRunsWithoutTaskText(t *testing.T) {
+	h := newTaskHarness(t, "stderr-only", AdapterLauncher{AllowTasks: true})
+	id := h.startTask("op-1", "cursor", "secret task text about level seven")
+	h.waitState(id, "failed")
+	waitNoTaskReservations(t)
+	var text string
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		raw, _ := os.ReadFile(filepath.Join(h.root, "events.log"))
+		text = string(raw)
+		if strings.Contains(text, id+": ended failed") {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	for _, want := range []string{"client started", id + ": launching cursor", id + ": worker started", id + ": ended failed", "model claude-opus-5-thinking-hig is not available"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("journal has no %q:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "level seven") {
+		t.Fatalf("the task text reached the journal:\n%s", text)
+	}
+	// get_log gives the journal, cleaned.
+	tail, err := logTail(h.root, 50)
+	if err != nil || !strings.Contains(tail, id+": ended failed") {
+		t.Fatalf("log tail %q %v", tail, err)
+	}
+	if strings.Contains(redactLog(tail), "sk-abcdef") {
+		t.Fatal("a key in the shared log")
+	}
+	h.stop()
+}
+
 func TestTaskUsageLimitIsExplainedNotRetried(t *testing.T) {
 	for _, provider := range []string{"claude", "codex", "cursor"} {
 		t.Run(provider, func(t *testing.T) {
