@@ -559,7 +559,8 @@
   }
   function clearComputer(){computerFilter='';computerChanged();}
   function computerChanged(){
-    renderMachines();renderTaskList();
+    renderMachines();
+    if(tab==='tasks')openTopTask();else renderTaskList();
     if(tab==='stats'){stats=null;renderStats();loadStats();}
     if(tab==='agents')renderAgents();
   }
@@ -574,9 +575,65 @@
     const active=list.filter(t=>activeStates.includes(t.state)),done=list.filter(t=>!activeStates.includes(t.state));
     return [active,done];
   }
+  // The task list's groups, newest first: own tasks and other computers'
+  // tasks of the project together (T-047, T-110).
+  function taskGroups(){
+    const [active,done]=visibleTasks(),agentFilter=$('agent-filter').value;
+    const items=[...active.map(t=>({t})),...done.map(t=>({t}))];
+    for(const p of view?.shared||[]){
+      if(computerFilter&&computerFilter!==p.peer)continue;
+      for(const t of p.tasks)if(!agentFilter||t.agent===agentFilter)items.push({t,peer:p});
+    }
+    items.sort((x,y)=>String(y.t.created_at).localeCompare(String(x.t.created_at)));
+    const groups={active:[],attention:[],done:[]};
+    for(const it of items){
+      if(needsDecision(it))groups.attention.push(it);
+      else if(activeStates.includes(it.t.state))groups.active.push(it);
+      else groups.done.push(it);
+    }
+    return groups;
+  }
+  // An open task whose outcome this computer cannot know: sent to a computer
+  // out of contact or silent about it, or another computer's task while that
+  // computer is out of contact.
+  function needsDecision(it){
+    if(it.peer)return sharedLost(it.t,it.peer);
+    const r=it.t.remote;
+    return !!r&&!r.from&&activeStates.includes(it.t.state)&&!!(r.lost||r.silent);
+  }
+  // Each of them can be closed here: an own task is cancelled (it closes at
+  // once, D-119 follow-up), another computer's task leaves this list.
+  function closable(it){return needsDecision(it);}
+  function askCloseAll(items){
+    const own=items.filter(it=>!it.peer).length,others=items.length-own;
+    const parts=[];
+    if(own)parts.push(tr('Задачи, отправленные на другие компьютеры, закроются в этом окне: ')+own+tr('. Что с ними там, неизвестно; если связь вернётся, туда придёт отмена.'));
+    if(others)parts.push(tr('Задачи других компьютеров пропадут из списка на этом компьютере: ')+others+'.');
+    askConfirm(tr('Закрыть все задачи без связи?'),parts.join(' '),tr('Закрыть все'),async()=>{
+      const failed=[];
+      for(const it of items){
+        try{
+          if(it.peer)await postAPI('/api/task-hide',{peer:it.peer.peer,task:it.t.id});
+          else await postAPI('/api/task-cancel',{task:it.t.id});
+        }catch(e){failed.push(e.message);}
+      }
+      viewSignature='';await refresh();
+      if(failed.length)showError(new Error(tr('Не закрылись: ')+failed.length+'. '+failed[0]));
+    });
+  }
+  // Owner, 2026-11-12: choosing a computer opens its newest active task, or
+  // its newest task; with no computer chosen, the top task of the list.
+  // On refresh (quiet) the caller loads the conversation itself, and an
+  // empty list changes nothing.
+  function openTopTask(quiet){
+    const g=taskGroups(),it=g.active[0]||[...g.attention,...g.done].sort((x,y)=>String(y.t.created_at).localeCompare(String(x.t.created_at)))[0];
+    if(!it){if(quiet)return;selectedTask='';selectedShared=null;feed=null;feedSignature='';renderTaskList();renderThread();return;}
+    if(it.peer){selectedShared={peer:it.peer.peer,id:it.t.id};selectedTask='';feed=null;feedSignature='';renderTaskList();renderThread();return;}
+    if(selectedTask===it.t.id&&!selectedShared)return;
+    selectedTask=it.t.id;selectedShared=null;feed=null;feedSignature='';renderTaskList();if(!quiet)loadFeed();
+  }
   function renderTaskList(){
     const live=$('task-list'),box=live.cloneNode(false);
-    const [active,done]=visibleTasks();
     computerChip($('computer-chip'));
     // T-096: say when the agent filter hides active tasks, with a way back.
     const agentChosen=$('agent-filter').value;
@@ -588,15 +645,7 @@
       box.append(all);
     }
     $('task-count').textContent=(view?.tasks?.length||0)+(view?.shared||[]).reduce((n,p)=>n+p.tasks.length,0)||'';
-    // Own tasks and other computers' tasks of the project (T-047) share the
-    // «Активные» and «Завершённые» sections, newest first (T-110); another
-    // computer's task is read-only and says which computer gave it.
-    const agentFilter=$('agent-filter').value;
-    const shared=[];
-    for(const p of view?.shared||[]){
-      if(computerFilter&&computerFilter!==p.peer)continue;
-      for(const t of p.tasks)if(!agentFilter||t.agent===agentFilter)shared.push({t,peer:p});
-    }
+    // Another computer's task is read-only and says which computer gave it.
     const ownRow=t=>{
       const row=el('button',undefined,'am-task');row.type='button';row.setAttribute('aria-pressed',String(t.id===selectedTask));
       // T-119: every own task says where it runs; this computer's name stands out.
@@ -631,14 +680,25 @@
       if(t.report)row.append(el('span',t.report,'am-task-report'));
       return row;
     };
-    const section=(label,own,others)=>{
-      const items=[...own.map(t=>({t})),...others].sort((x,y)=>String(y.t.created_at).localeCompare(String(x.t.created_at)));
+    const section=(label,items,action)=>{
       if(!items.length)return;
-      box.append(el('div',label,'am-label am-task-section'));
+      const head=el('div',undefined,'am-label am-task-section');head.append(el('span',label));
+      if(action)head.append(action);
+      box.append(head);
       for(const it of items)box.append(it.peer?sharedRow(it.t,it.peer):ownRow(it.t));
     };
-    section(tr('Активные'),active,shared.filter(x=>activeStates.includes(x.t.state)));
-    section(tr('Завершённые'),done,shared.filter(x=>!activeStates.includes(x.t.state)));
+    const groups=taskGroups();
+    section(tr('Активные'),groups.active);
+    // Owner, 2026-11-12: tasks whose outcome is unknown kept «Активные» full
+    // for days. They wait here until someone closes them; nothing closes
+    // them by itself (unknown is not success).
+    let closeAll=null;
+    if(groups.attention.some(closable)){
+      closeAll=el('button',tr('Закрыть все'),'am-task-section-action');closeAll.type='button';
+      closeAll.addEventListener('click',()=>askCloseAll(groups.attention.filter(closable)));
+    }
+    section(tr('Требуют решения'),groups.attention,closeAll);
+    section(tr('Завершённые'),groups.done);
     if(!box.children.length)box.append(el('p',view?.project?(computerFilter||$('agent-filter').value?tr('Здесь задач нет'):tr('Задач пока нет')):'','am-small am-muted'));
     swapChildren(live,box);
   }
@@ -1267,6 +1327,9 @@
       const signature=JSON.stringify(v);
       if(signature!==viewSignature){viewSignature=signature;view=v;if(selectedTask&&!v.tasks.some(t=>t.id===selectedTask)){selectedTask='';feed=null;feedSignature='';}if(selectedShared&&!sharedSelection())selectedShared=null;render();}
       else{renderMachines();renderNotice();}
+      // Nothing chosen yet (the first start, or the chosen task went away):
+      // show the top task instead of an empty conversation.
+      if(!selectedTask&&!selectedShared&&tab==='tasks'&&view?.project)openTopTask(true);
       if(selectedTask)await loadFeed();
     }catch(error){notice(el('p',tr('Окно не смогло показать данные: ')+error.message));}
     finally{refreshing=false;}

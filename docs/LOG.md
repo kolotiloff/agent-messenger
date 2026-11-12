@@ -7,6 +7,8 @@ One entry per work session, newest first. Write what was done, which tool did it
 - 0.63 merged (PR #94) and released on the owner's word; all release files and the five signed update feeds checked in place.
 - T-140: the fold arrow of grouped actions moved after the text (variant Б of three shown to the owner). On `claude/ui-tweaks`, waits for the next functional release.
 - T-139 (CLI update tracking) recorded as the next task.
+- T-141 CLI error output in failures, T-142 run and network journal for `get_log`, T-143 model typo hint.
+- T-144: section «Требуют решения» with «Закрыть все» (asks first); choosing a computer opens its newest task. Screenshots with fictional data sent to the owner.
 - Coordinator feedback 2026-11-12 (journal of 12 entries): Cursor on ПК-1 failed with no text: its Opus limit was spent until 12/10 and Cursor said so only on its error stream (T-141). Lost report of 11-10 (task-3871…): events from ПК-1 stopped after 16:44:52, the cause is unknown without a journal (T-142). Model-list typo hint (T-143). The rest of the journal was fixed in 0.63 or stays open (server failover, Unity restart by a worker).
 
 ## 2026-11-12 — Claude Code (T-137 lost replies from Ноут-Linux)
