@@ -230,6 +230,7 @@
   ' до ':' to ',
   'компьютер':'the computer',
   'Программа на том компьютере обновится и перезапустится. Задачи и история сохранятся.':'The program on that computer will update and restart. Tasks and history are kept.',
+  'На нём работает сервер сети: пока он перезапускается, компьютеры не видят друг друга. Если там попросят подтверждение, сервер не вернётся, пока кто-нибудь не ответит у того компьютера.':'It runs the network server: while it restarts, the computers do not see each other. If it asks for a confirmation there, the server does not come back until someone answers at that computer.',
   'Компьютер':'Computer',
   ' не обновлён':' was not updated',
   ' не ответил об обновлении':' did not answer about the update',

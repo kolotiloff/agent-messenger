@@ -505,7 +505,7 @@
       }else if(fresh&&peer.version&&versionOlder(peer.version,newestVersion())){
         const newest=versionName(newestVersion()),label=tr('Обновить до ')+newest;
         const b=el('button',undefined,'am-update-icon am-peer-update');b.type='button';b.title=label;b.setAttribute('aria-label',label);b.append(svgIcon(['M12 4v11M7 10l5 5 5-5M5 20h14']));
-        b.addEventListener('click',event=>{event.stopPropagation();askConfirm(tr('Обновить ')+(peer.name||tr('компьютер'))+tr(' до ')+newest+'?',tr('Программа на том компьютере обновится и перезапустится. Задачи и история сохранятся.'),tr('Обновить'),()=>requestUpdate(peer),true);});
+        b.addEventListener('click',event=>{event.stopPropagation();askConfirm(tr('Обновить ')+(peer.name||tr('компьютер'))+tr(' до ')+newest+'?',tr('Программа на том компьютере обновится и перезапустится. Задачи и история сохранятся.')+(peer.host?' '+tr('На нём работает сервер сети: пока он перезапускается, компьютеры не видят друг друга. Если там попросят подтверждение, сервер не вернётся, пока кто-нибудь не ответит у того компьютера.'):''),tr('Обновить'),()=>requestUpdate(peer),true);});
         b.addEventListener('keydown',event=>event.stopPropagation());
         name.append(b);
       }
