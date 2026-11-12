@@ -4,7 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-12 — Claude Code (T-140 fold arrow)
 
-- 0.63 merged (PR #94) and its release started on the owner's word.
+- 0.63 merged (PR #94) and released on the owner's word; all release files and the five signed update feeds checked in place.
 - T-140: the fold arrow of grouped actions moved after the text (variant Б of three shown to the owner). On `claude/ui-tweaks`, waits for the next functional release.
 - T-139 (CLI update tracking) recorded as the next task.
 
