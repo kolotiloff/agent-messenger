@@ -266,10 +266,11 @@
     if(t.remote?.lost&&!t.remote.from&&activeStates.includes(t.state))
       return [tr('Связь потеряна, исход неизвестен'),'am-muted',t.remote.last_seen?'«'+t.remote.name+tr('» не на связи с ')+stamp(t.remote.last_seen):'«'+t.remote.name+tr('» больше нет в сети')];
     // T-137: sent to another computer that has not said it took the task.
-    // Nothing is known to run there, so it is not «Работает».
+    // It may run there with its replies lost, so neither «Работает» nor
+    // «not accepted»: say what is known.
     if(t.remote?.unaccepted&&!t.remote.from&&t.state==='running'){
       if(Date.now()-Date.parse(t.created_at)<5*60*1000)return [tr('Ждёт, когда «')+t.remote.name+tr('» примет'),'am-status-wait'];
-      return [tr('Не принята'),'am-status-bad','«'+t.remote.name+tr('» не подтвердил, что получил задачу. Сама она не отправляется снова: остановите её и дайте заново')];
+      return [tr('Нет ответа от «')+t.remote.name+'»','am-status-bad',tr('приём не подтверждён. Задача может идти там, но её ответы сюда не доходят; сама она не повторяется')];
     }
     switch(t.state){
       case 'running':return t.pending_launch?[t.waits_for_lock?tr('Ждёт ресурс «')+t.waits_for_lock+'»':tr('Ждёт запуска'),'am-status-wait']:[tr('Работает ')+minutes(from),'am-status-run'];

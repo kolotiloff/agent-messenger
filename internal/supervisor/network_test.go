@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -502,5 +503,81 @@ func TestUpdateOfAnotherComputer(t *testing.T) {
 	}
 	if len(started) != 3 {
 		t.Fatalf("helper retried: %d", len(started))
+	}
+}
+
+// T-137: messages waiting for a computer whose mailbox is full (it is still
+// listed but nobody reads it) must not hold back the messages to the
+// others, however many there are.
+func TestFullMailboxDoesNotHoldBackOthers(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	a, _ := netComputer(t, ctx, "a")
+	b, _ := netComputer(t, ctx, "b")
+	c, _ := netComputer(t, ctx, "c")
+	if err := a.server.Enable(broker.ScopeLocal, freeLocalPort(t)); err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range []struct {
+		sup  *Supervisor
+		name string
+	}{{b, "Ноутбук"}, {c, "Старый"}} {
+		code, err := a.server.Invite(a.server.Status().Host.Addresses[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := m.sup.server.Connect(ctx, code.Code, m.name); err != nil {
+			t.Fatal(err)
+		}
+		m.sup.server.ReportPresence(ctx)
+	}
+	a.server.ReportPresence(ctx)
+	b.server.ReportPresence(ctx)
+	a.networkRound(ctx)
+	b.networkRound(ctx)
+	peers, err := b.store.NetPeers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dead string
+	for _, p := range peers {
+		if p.Name == "Старый" {
+			dead = p.ID
+		}
+	}
+	if dead == "" {
+		t.Fatalf("b's peers %+v", peers)
+	}
+	if err := c.store.SetNetAccept(true); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.store.SetNetAccept(true); err != nil {
+		t.Fatal(err)
+	}
+	// c never reads its mail: fill b's share of its mailbox.
+	n, _ := b.server.Network()
+	for i := 0; i < 100; i++ {
+		if err := b.server.Send(ctx, n, dead, "fill-"+strconv.Itoa(i), []byte(`{}`)); err != nil {
+			t.Fatal(i, err)
+		}
+	}
+	for i := 0; i < 60; i++ {
+		if _, _, err := b.store.StartTask(core.StartTaskRequest{Project: "Game", OpID: "dead-" + strconv.Itoa(i), Computer: dead, Provider: "codex", Text: "never read"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	id, _, err := b.store.StartTask(core.StartTaskRequest{Project: "Game", OpID: "live", Computer: broker.HostPeer, Provider: "codex", Text: "Build level 1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.networkRound(ctx) // the start to a goes although c's mailbox is full
+	a.networkRound(ctx) // a accepts it
+	b.networkRound(ctx) // b applies the acceptance
+	task, _ := b.store.TaskByID(id)
+	if task.Folder == "" {
+		t.Fatalf("the start to a was held back: %+v, problem %q", task, b.networkProblem())
+	}
+	if !strings.Contains(b.networkProblem(), "не отправлены") {
+		t.Fatalf("the full mailbox is not reported: %q", b.networkProblem())
 	}
 }

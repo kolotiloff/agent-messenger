@@ -172,3 +172,30 @@ func TestStaleNetworkIsExplained(t *testing.T) {
 		t.Fatalf("stale %q %v", note, err)
 	}
 }
+
+// Coordinator feedback 2026-11-12: a computer that reports the agent busy
+// but never answered may run the task with its replies lost; the event
+// says so instead of suggesting a new start.
+func TestUnacceptedButBusySaysItMayRun(t *testing.T) {
+	p := newNetPair(t)
+	id := p.startRemote(t, "op-busy", "codex", "night audit")
+	// The start left; the computer reports codex busy and never answered.
+	p.carry(t, true)
+	agents := []NetAgent{{Agent: "codex", Running: 1}}
+	if err := p.a.st.SetNetwork(testBroker, HostPeerID, []NetPeer{{ID: "dev-b", Name: "Ноутбук", Age: 1, Agents: agents}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.a.st.db.Exec(`UPDATE tasks SET remote_task='' WHERE id=?`, id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.a.st.db.Exec(`DELETE FROM task_events WHERE task_id=? AND kind='accepted'`, id); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := p.a.st.NoteUnaccepted(time.Now().Add(time.Hour)); err != nil || n != 1 {
+		t.Fatalf("noted %d %v", n, err)
+	}
+	task, _ := p.a.st.TaskByID(id)
+	if !strings.Contains(task.Detail, "may be running there") {
+		t.Fatalf("detail %q", task.Detail)
+	}
+}

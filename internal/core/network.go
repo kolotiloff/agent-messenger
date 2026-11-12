@@ -660,7 +660,23 @@ func forwardTaskEvent(tx *sql.Tx, o netLink, task, audience, kind, text, questio
 // NetPending lists the messages waiting to be sent in the network, oldest
 // first.
 func (s *Store) NetPending(broker string, limit int) ([]NetOutgoing, error) {
-	rows, err := s.db.Query(`SELECT seq,recipient,op_id,body FROM net_outbox WHERE broker=? ORDER BY seq LIMIT ?`, broker, limit)
+	return s.NetPendingExcept(broker, limit, nil)
+}
+
+// NetPendingExcept is NetPending without the messages to the recipients
+// in skip, so a computer whose mailbox is full cannot hold back the
+// messages to the others behind its own (T-137).
+func (s *Store) NetPendingExcept(broker string, limit int, skip []string) ([]NetOutgoing, error) {
+	query := `SELECT seq,recipient,op_id,body FROM net_outbox WHERE broker=?`
+	args := []any{broker}
+	if len(skip) > 0 {
+		query += ` AND recipient NOT IN (?` + strings.Repeat(`,?`, len(skip)-1) + `)`
+		for _, r := range skip {
+			args = append(args, r)
+		}
+	}
+	args = append(args, limit)
+	rows, err := s.db.Query(query+` ORDER BY seq LIMIT ?`, args...)
 	if err != nil {
 		return nil, err
 	}

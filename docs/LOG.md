@@ -2,10 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
-## 2026-11-12 — Claude Code (T-137 unaccepted tasks in the window)
+## 2026-11-12 — Claude Code (T-137 lost replies from Ноут-Linux)
 
-- T-137: a task the other computer never accepted no longer reads «Работает»: «Ждёт, когда «X» примет», then «Не принята» after 5 minutes. On `claude/ui-tweaks`, not released.
-- The owner asked to check the coordinator's feedback remarks: they live on the owner's computers only (D-117); asked the owner for the exported file.
+- Read the coordinator's feedback journal from the Mac (11 remarks) and its issue list (row 34). Found why Ноут-Linux's replies never reached the Mac: its outbox was stuck behind 50+ messages for a full mailbox (D-119). Fixed, with a supervisor test that fails on the old code.
+- The window says «Нет ответа от «X»» for an unaccepted task; `not_accepted` says when the task may be running there.
+- Other remarks of the journal not handled yet: stale Codex limit (11-10 12:21), lost report from ПК-1 (11-10 18:51, may be the same cause), server failover wishes, `idle_computers` in `list_agents`, workers restarting GUI apps.
 
 ## 2026-11-10 — Claude Code (T-136 firewall after updates; 0.62)
 

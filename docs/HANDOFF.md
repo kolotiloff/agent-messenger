@@ -10,8 +10,9 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Updated 2026-11-12 by Claude Code.
 
-- After 0.62, on `claude/ui-tweaks`, not released: T-137 (a task another computer never accepted reads «Не принята», not «Работает»).
-- Waiting for the owner: the feedback export (zip) to read the coordinator's remarks.
+- After 0.62, on `claude/ui-tweaks`, not released: T-137 (D-119) a full mailbox no longer holds back a computer's other messages (Ноут-Linux's replies have not reached the Mac since 11-10); the window and `not_accepted` no longer call a possibly running task «Работает» or «not accepted».
+- Owner's steps after the release: update Ноут-Linux (from the Mac card is fine: it receives); its waiting replies then go out. Tasks the coordinator already cancelled may get late acceptance or report lines.
+- Open from the feedback journal: stale Codex limit, lost report from ПК-1 on 11-10 (maybe the same cause), server failover, `idle_computers` in `list_agents`.
 
 Updated 2026-11-10 (late evening) by Claude Code.
 
