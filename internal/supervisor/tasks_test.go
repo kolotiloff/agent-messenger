@@ -361,6 +361,61 @@ func TestTaskFailuresAreNotRetried(t *testing.T) {
 	}
 }
 
+func TestTaskFailureKeepsCLIErrorOutput(t *testing.T) {
+	for _, provider := range []string{"cursor", "codex", "claude"} {
+		t.Run(provider, func(t *testing.T) {
+			h := newTaskHarness(t, "stderr-only", AdapterLauncher{AllowTasks: true})
+			id := h.startTask("op-1", provider, "x")
+			h.waitState(id, "failed")
+			found := false
+			for _, e := range coordinatorEvents(t, h.st) {
+				if e.Kind != "failed" {
+					continue
+				}
+				if strings.Contains(e.Text, "sk-abcdef") {
+					t.Fatalf("a key reached the coordinator: %s", e.Text)
+				}
+				if strings.Contains(e.Text, "model claude-opus-5-thinking-hig is not available") {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatal("the failed event does not carry the CLI's error output")
+			}
+			waitNoTaskReservations(t)
+			h.stop()
+		})
+	}
+	t.Run("limit", func(t *testing.T) {
+		h := newTaskHarness(t, "stderr-limit", AdapterLauncher{AllowTasks: true})
+		id := h.startTask("op-1", "cursor", "x")
+		h.waitState(id, "failed")
+		time.Sleep(300 * time.Millisecond)
+		if n := len(h.runs()); n != 1 {
+			t.Fatalf("%d runs; a limit is never retried", n)
+		}
+		task, err := h.st.TaskByID(id)
+		if err != nil || task.FailureReason != "usage_limit" || task.FailureReset == "" {
+			t.Fatalf("task %+v %v", task, err)
+		}
+		list, err := h.st.ProjectAgents("Game")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var limit *core.AgentLimit
+		for _, a := range list["computers"].([]core.ComputerSummary)[0].Agents {
+			if a.Agent == "cursor" {
+				limit = a.Limit
+			}
+		}
+		if limit == nil || limit.State != "exhausted" || limit.ResetsAt != task.FailureReset {
+			t.Fatalf("cursor limit %+v", limit)
+		}
+		waitNoTaskReservations(t)
+		h.stop()
+	})
+}
+
 func TestTaskUsageLimitIsExplainedNotRetried(t *testing.T) {
 	for _, provider := range []string{"claude", "codex", "cursor"} {
 		t.Run(provider, func(t *testing.T) {

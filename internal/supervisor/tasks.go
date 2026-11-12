@@ -128,7 +128,10 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	cmd.Env = append(ProfileEnvironment(os.Environ(), task.Provider, task.Environment), adapters.TaskEnv(spec)...)
 	cmd.Env = append(cmd.Env, adapters.WorkerRunVariable+"="+spec.RunID)
 	cmd.Dir = task.Folder
-	cmd.Stderr = io.Discard
+	// Keep only the end of the CLI's error output: it explains a run that
+	// failed before the CLI reported anything (coordinator, 2026-11-12).
+	stderr := &tailBuffer{max: stderrTail}
+	cmd.Stderr = stderr
 	if err := platform.SetNewGroup(cmd); err != nil {
 		_ = s.store.TaskRunNotStarted(runID, err.Error())
 		return
@@ -291,6 +294,28 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	}
 	if result.Conflicting {
 		ev.Detail = "the CLI reported two conversation ids"
+	}
+	if !ev.ProviderOK || exitCode != 0 {
+		// The error output is cleaned like a shared log: it reaches the
+		// coordinator and may travel to another computer.
+		if detail, reason, reset := adapters.StderrFailure(redactLog(stderr.String()), time.Now()); detail != "" {
+			if result.Failure == "" && !result.Conflicting {
+				ev.Detail = detail
+			} else {
+				ev.Detail += "; " + detail
+			}
+			if ev.Reason == "" || ev.Reason == adapters.ReasonOther {
+				ev.Reason = reason
+				if !reset.IsZero() && ev.ResetAt == "" {
+					ev.ResetAt = reset.UTC().Format(time.RFC3339)
+				}
+				// The agent's limit in list_agents follows the same text.
+				result.Reason = reason
+				if result.ResetAt.IsZero() {
+					result.ResetAt = reset
+				}
+			}
+		}
 	}
 	// T-044: keep the agent's last reported limit for the coordinator. It
 	// only informs; it never changes the run's outcome.

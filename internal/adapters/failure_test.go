@@ -36,10 +36,26 @@ func TestResetFromText(t *testing.T) {
 		"try again at 13:00 PM":                    {},
 		"try again later":                          {},
 		"resets soon":                              {},
+		// Cursor writes this only to its error output (coordinator, 2026-11-12).
+		"ActionRequiredError: You've hit your usage limit for Opus. Your usage limits will reset when your monthly cycle ends on 12/10/2026.": time.Date(2026, 12, 10, 0, 0, 0, 0, time.Local),
+		"Your usage limits will reset when your monthly cycle ends on 13/40/2026.":                                                            {},
+		"Your usage limits will reset when your monthly cycle ends on 11/01/2026.":                                                            {},
 	} {
 		if got := resetFromText(text, now); !got.Equal(want) {
 			t.Errorf("%q: %v, want %v", text, got, want)
 		}
+	}
+}
+
+func TestStderrFailure(t *testing.T) {
+	now := time.Date(2026, 11, 12, 15, 0, 0, 0, time.Local)
+	text := "ActionRequiredError: You've hit your usage limit for Opus. You've saved $274 on API model usage this month with Pro+. Switch to a different model or set a Spend Limit to continue with Opus. Your usage limits will reset when your monthly cycle ends on 12/10/2026."
+	detail, reason, reset := StderrFailure(text, now)
+	if reason != ReasonUsageLimit || !reset.Equal(time.Date(2026, 12, 10, 0, 0, 0, 0, time.Local)) || detail == "" {
+		t.Fatalf("%q %q %v", detail, reason, reset)
+	}
+	if d, r, at := StderrFailure("  \n", now); d != "" || r != "" || !at.IsZero() {
+		t.Fatalf("empty output gave %q %q %v", d, r, at)
 	}
 }
 
