@@ -472,9 +472,15 @@
     card.addEventListener('click',event=>{if(!event.target.closest('button'))filterComputer(id);});
     card.addEventListener('keydown',event=>{if(event.target===card&&(event.key==='Enter'||event.key===' ')){event.preventDefault();filterComputer(id);}});
   }
+  // The window redraws every two seconds. A part whose content did not change
+  // keeps its nodes: rebuilding them anyway reset hover, tooltips and
+  // animations, and the window seemed to flicker (owner, 2026-11-12).
+  function swapChildren(live,next){
+    if(next.innerHTML!==live.innerHTML)live.replaceChildren(...next.childNodes);
+  }
   function renderMachines(){
     collectNotices();
-    const box=$('machines');box.replaceChildren();
+    const live=$('machines'),box=live.cloneNode(false);
     const machine=el('div',undefined,'am-machine-card');machine.setAttribute('aria-current','true');pickable(machine,'local');
     const head=el('div',undefined,'am-machine-name');head.append(el('span',view?.computer_name||tr('Этот компьютер')));
     const dot=el('span',undefined,'am-dot'+(online?' online':''));dot.title=online?tr('На связи'):tr('Нет связи');head.append(dot);machine.append(head);
@@ -487,7 +493,7 @@
     const hosted=new Set((server?.host?.devices||[]).filter(d=>!d.revoked_at).map(d=>d.id));
     for(const peer of server?.peers||[]){
       const fresh=peerFresh(peer);
-      const card=el('div',undefined,'am-machine-card am-peer-card');card.dataset.peer=peer.id;pickable(card,peer.id);
+      const card=el('div',undefined,'am-machine-card am-peer-card');card.dataset.peer=peer.id;if(peer.host)card.dataset.host='';pickable(card,peer.id);
       const name=el('div',undefined,'am-machine-name');
       const pdot=el('span',undefined,'am-dot'+(fresh?' online':''));pdot.title=fresh?tr('На связи'):tr('Нет связи');
       name.append(el('span',peer.name));
@@ -534,6 +540,7 @@
       }
       box.append(card);
     }
+    swapChildren(live,box);
   }
   // The computer that runs a task: this one, or the other one it was sent to.
   function taskComputer(t){return t.remote&&!t.remote.from?t.remote.id:'local';}
@@ -568,7 +575,7 @@
     return [active,done];
   }
   function renderTaskList(){
-    const box=$('task-list');box.replaceChildren();
+    const live=$('task-list'),box=live.cloneNode(false);
     const [active,done]=visibleTasks();
     computerChip($('computer-chip'));
     // T-096: say when the agent filter hides active tasks, with a way back.
@@ -633,6 +640,7 @@
     section(tr('Активные'),active,shared.filter(x=>activeStates.includes(x.t.state)));
     section(tr('Завершённые'),done,shared.filter(x=>!activeStates.includes(x.t.state)));
     if(!box.children.length)box.append(el('p',view?.project?(computerFilter||$('agent-filter').value?tr('Здесь задач нет'):tr('Задач пока нет')):'','am-small am-muted'));
+    swapChildren(live,box);
   }
   // Coordinator connection (T-039): the client runs Claude's own
   // `claude mcp add` in the project folder; the owner never opens a terminal.
@@ -987,9 +995,9 @@
     });
   }
   function renderAgents(){
-    const cards=$('agents');cards.replaceChildren();
+    const live=$('agents'),cards=live.cloneNode(false);
     computerChip($('agents-computer-chip'));
-    if(computerFilter&&computerFilter!=='local'){renderPeerAgents(cards);return;}
+    if(computerFilter&&computerFilter!=='local'){renderPeerAgents(cards);swapChildren(live,cards);return;}
     for(const provider of ['claude','codex','cursor']){
       const a=(view?.agents||[]).find(x=>x.agent===provider);
       const found=discovery.find(d=>d.provider===provider);
@@ -1070,6 +1078,7 @@
       }else{tasks.textContent=tr('Задачи');tasks.disabled=true;}
       card.append(tasks);cards.append(card);
     }
+    swapChildren(live,cards);
     renderAccessBar();
   }
   // Another computer's agents, as its reports show them: view only (T-076).

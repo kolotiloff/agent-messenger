@@ -5,6 +5,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 ## 2026-11-12 — Claude Code (T-137 lost replies from Ноут-Linux)
 
 - T-138: a completed run clears a stale «exhausted» limit; `idle_computers` in `list_agents`; the remote update confirmation warns about the server computer.
+- The window rebuilt the sidebar every 2 s and the agent cards and task list on every task change, even when nothing on screen changed; that reset hover, tooltips and animations (the owner saw flicker). Unchanged parts now keep their nodes.
 
 - Read the coordinator's feedback journal from the Mac (11 remarks) and its issue list (row 34). Found why Ноут-Linux's replies never reached the Mac: its outbox was stuck behind 50+ messages for a full mailbox (D-119). Fixed, with a supervisor test that fails on the old code.
 - The window says «Нет ответа от «X»» for an unaccepted task; `not_accepted` says when the task may be running there.
