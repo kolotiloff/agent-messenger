@@ -2,6 +2,12 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-12 — Claude Code (T-140 fold arrow)
+
+- 0.63 merged (PR #94) and its release started on the owner's word.
+- T-140: the fold arrow of grouped actions moved after the text (variant Б of three shown to the owner). On `claude/ui-tweaks`, waits for the next functional release.
+- T-139 (CLI update tracking) recorded as the next task.
+
 ## 2026-11-12 — Claude Code (T-137 lost replies from Ноут-Linux)
 
 - Owner asked to release: 0.63 with T-137 and T-138.
