@@ -162,6 +162,24 @@ func (u *PresenceUsageReport) valid() bool {
 	return true
 }
 
+// PresenceOutbox is how many messages a computer has not yet handed to the
+// server, and how many seconds the oldest of them has waited by its own
+// clock (T-150). Messages for computers that are not listed are left out.
+type PresenceOutbox struct {
+	Waiting   int `json:"waiting"`
+	OldestAge int `json:"oldest_age"`
+}
+
+// Outbox limits: a count and an age, nothing else.
+const (
+	maxOutboxWaiting = 1_000_000
+	maxOutboxAge     = 400 * 24 * 3600
+)
+
+func (o *PresenceOutbox) valid() bool {
+	return o == nil || (o.Waiting >= 0 && o.Waiting <= maxOutboxWaiting && o.OldestAge >= 0 && o.OldestAge <= maxOutboxAge)
+}
+
 // Presence is what a computer reports about itself. Name is the name the
 // owner gave the computer; a device's name replaces the one it joined with.
 type Presence struct {
@@ -183,6 +201,10 @@ type Presence struct {
 	// (T-132). A host before 0.61 refuses a report that carries it; the
 	// client then reports without it.
 	Computer string `json:"computer,omitempty"`
+	// Outbox is what the computer has not sent yet (T-150). A host before
+	// 0.67 refuses a report that carries it; the client then reports
+	// without it.
+	Outbox *PresenceOutbox `json:"outbox,omitempty"`
 }
 
 // Peer is one computer of the broker as others see it.
@@ -208,6 +230,9 @@ type Peer struct {
 	// Computer is the computer's lasting id (T-132); empty if it did not
 	// report one.
 	Computer string `json:"computer,omitempty"`
+	// Outbox is what the computer had not sent at its last report (T-150);
+	// nil if it did not say.
+	Outbox *PresenceOutbox `json:"outbox,omitempty"`
 }
 
 // rosterResponse answers a presence report.
@@ -218,7 +243,7 @@ type rosterResponse struct {
 }
 
 func (p Presence) valid() bool {
-	if len(p.Agents) > maxPresenceAgents || len(p.Coordinator) > 64 || (p.Name != "" && !validDeviceName(p.Name)) || !p.Ready.valid() || !p.Usage.valid() || len(p.UsageSeen) > maxUsageSeen || (p.Version != "" && !versionName.MatchString(p.Version)) || (p.Computer != "" && !versionName.MatchString(p.Computer)) {
+	if len(p.Agents) > maxPresenceAgents || len(p.Coordinator) > 64 || (p.Name != "" && !validDeviceName(p.Name)) || !p.Ready.valid() || !p.Usage.valid() || len(p.UsageSeen) > maxUsageSeen || (p.Version != "" && !versionName.MatchString(p.Version)) || (p.Computer != "" && !versionName.MatchString(p.Computer)) || !p.Outbox.valid() {
 		return false
 	}
 	for peer, hash := range p.UsageSeen {
@@ -369,7 +394,7 @@ func fill(peer *Peer, report, at string, now time.Time) {
 	if p.Name != "" {
 		peer.Name = p.Name
 	}
-	peer.Coordinator, peer.Ready, peer.Usage, peer.Version, peer.Computer = p.Coordinator, p.Ready, p.Usage, p.Version, p.Computer
+	peer.Coordinator, peer.Ready, peer.Usage, peer.Version, peer.Computer, peer.Outbox = p.Coordinator, p.Ready, p.Usage, p.Version, p.Computer, p.Outbox
 	if p.Agents != nil {
 		peer.Agents = p.Agents
 	}

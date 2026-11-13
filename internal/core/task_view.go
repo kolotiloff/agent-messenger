@@ -153,6 +153,9 @@ type RemoteComputer struct {
 	// cancelAnswerWait. It can be closed here at once (owner, 2026-11-12:
 	// such a task stayed among the active ones).
 	Silent bool `json:"silent,omitempty"`
+	// Delayed: that computer reports, but its oldest unsent message has
+	// waited this many minutes (T-150): its replies are late, not lost.
+	Delayed int `json:"outbox_delayed_minutes,omitempty"`
 }
 
 // TaskRemote names the other computer of a task, or nil for a task of this
@@ -189,6 +192,9 @@ func remoteContact(tx *sql.Tx, task string, link netLink, out *RemoteComputer) e
 		out.LastSeen = time.Now().UTC().Add(-time.Duration(peer.Age) * time.Second).Format(time.RFC3339)
 	}
 	out.Lost = broker == "" || broker != link.broker || !found || peer.Age < 0 || peer.Age > PeerFresh
+	if !out.Lost {
+		out.Delayed = peer.OutboxDelayedMinutes()
+	}
 	return nil
 }
 
@@ -607,7 +613,7 @@ func (s *Store) remoteEvents(f *TaskFeed) error {
 			f.Items = append(f.Items, FeedItem{Kind: "answer", Author: by, Text: text, At: at, Verified: true})
 		case "accepted":
 			f.Items = append(f.Items, FeedItem{Kind: "accepted", Author: "messenger", Text: f.Task.Remote.Name, At: at, Verified: true})
-		case "report":
+		case "report", "late_report":
 			f.Items = append(f.Items, FeedItem{Kind: "report", Author: "worker", Text: text, At: at, Verified: true, State: "finished"})
 		case "failed", "blocked", "interrupted", "cancelled":
 			f.Items = append(f.Items, FeedItem{Kind: "outcome", Author: "messenger", Text: text, At: at, State: kind, Verified: true})

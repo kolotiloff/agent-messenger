@@ -117,6 +117,9 @@ func (s *Supervisor) networkRound(ctx context.Context) {
 			if r := p.Ready; r != nil {
 				np.Ready = &core.NetReady{Accept: r.Accept, Projects: r.Projects}
 			}
+			if o := p.Outbox; o != nil {
+				np.Outbox = &core.NetOutbox{Waiting: o.Waiting, OldestAge: o.OldestAge}
+			}
 			if u := p.Usage; u != nil {
 				np.Usage = make([]core.UsageDayAgent, 0, len(u.Days))
 				for _, d := range u.Days {

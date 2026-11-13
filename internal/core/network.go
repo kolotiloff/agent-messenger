@@ -113,6 +113,9 @@ type NetPeer struct {
 	// when the computer joins another network, where its peer id is new.
 	// Empty for a computer before 0.61.
 	Computer string
+	// Outbox is what it had not sent at its last report (T-150); nil for a
+	// computer before 0.67.
+	Outbox *NetOutbox
 }
 
 // reconnectGrace is how long a computer that left the server's list stays
@@ -374,7 +377,12 @@ func (s *Store) SetNetwork(broker, self string, peers []NetPeer) error {
 				u, _ := json.Marshal(p.Usage)
 				usage = string(u)
 			}
-			if _, err := tx.Exec(`INSERT INTO net_peers(peer,name,host,age,agents,ready,usage,updated_at,missing_since,version,computer) VALUES (?,?,?,?,?,?,?,?,?,?,?)`, p.ID, p.Name, boolInt(p.Host), p.Age, string(raw), ready, usage, at, missing[p.ID], clip(p.Version, 64), validComputer(p.Computer)); err != nil {
+			outbox := ""
+			if p.Outbox != nil && !p.Reconnecting {
+				o, _ := json.Marshal(p.Outbox)
+				outbox = string(o)
+			}
+			if _, err := tx.Exec(`INSERT INTO net_peers(peer,name,host,age,agents,ready,usage,updated_at,missing_since,version,computer,outbox) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, p.ID, p.Name, boolInt(p.Host), p.Age, string(raw), ready, usage, at, missing[p.ID], clip(p.Version, 64), validComputer(p.Computer), outbox); err != nil {
 				return err
 			}
 		}
@@ -409,7 +417,7 @@ func (s *Store) NetPeers() ([]NetPeer, error) {
 }
 
 func netPeers(tx *sql.Tx) ([]NetPeer, error) {
-	rows, err := tx.Query(`SELECT peer,name,host,age,agents,ready,usage,updated_at,missing_since!='',version,computer FROM net_peers ORDER BY host DESC, name, peer`)
+	rows, err := tx.Query(`SELECT peer,name,host,age,agents,ready,usage,updated_at,missing_since!='',version,computer,outbox FROM net_peers ORDER BY host DESC, name, peer`)
 	if err != nil {
 		return nil, err
 	}
@@ -418,8 +426,8 @@ func netPeers(tx *sql.Tx) ([]NetPeer, error) {
 	for rows.Next() {
 		var p NetPeer
 		var host int
-		var agents, ready, usage, at string
-		if err := rows.Scan(&p.ID, &p.Name, &host, &p.Age, &agents, &ready, &usage, &at, &p.Reconnecting, &p.Version, &p.Computer); err != nil {
+		var agents, ready, usage, at, outbox string
+		if err := rows.Scan(&p.ID, &p.Name, &host, &p.Age, &agents, &ready, &usage, &at, &p.Reconnecting, &p.Version, &p.Computer, &outbox); err != nil {
 			return nil, err
 		}
 		p.Host = host != 0
@@ -433,6 +441,12 @@ func netPeers(tx *sql.Tx) ([]NetPeer, error) {
 		if usage != "" {
 			if json.Unmarshal([]byte(usage), &p.Usage) != nil || p.Usage == nil {
 				p.Usage = []UsageDayAgent{}
+			}
+		}
+		if outbox != "" {
+			var o NetOutbox
+			if json.Unmarshal([]byte(outbox), &o) == nil {
+				p.Outbox = &o
 			}
 		}
 		if when, err := time.Parse(time.RFC3339Nano, at); err == nil && p.Age >= 0 {
@@ -1073,6 +1087,14 @@ func applyReport(tx *sql.Tx, from netLink, b netBody) error {
 		audience := AudienceLog
 		if b.Event == "cancel_refused" {
 			audience = AudienceCoordinator
+		}
+		// T-150: the worker finished after all; its work may be in the
+		// project. The coordinator learns it once, as its own kind of
+		// event, and the task stays closed.
+		if b.Event == "report" || b.Event == "failed" {
+			what := map[string]string{"report": "its report", "failed": "its failure"}[b.Event]
+			return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "late_report",
+				"This task was closed here before; "+name+" sent "+what+" afterwards. Its work may already be in the project; the task stays closed:\n"+clip(b.Text, MaxDispositionText+1000), "")
 		}
 		return insertTaskEvent(tx, t.Project, t.ID, audience, b.Event, clip(b.Text, MaxDispositionText+1000), "")
 	}

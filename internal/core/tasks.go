@@ -2222,6 +2222,9 @@ type ComputerSummary struct {
 	// reported it (T-070); left out when it did not report them.
 	AcceptsTasks *bool `json:"accepts_tasks,omitempty"`
 	HasProject   *bool `json:"has_project,omitempty"`
+	// OutboxDelayed: the computer's oldest unsent message has waited this
+	// many minutes (T-150).
+	OutboxDelayed int `json:"outbox_delayed_minutes,omitempty"`
 }
 
 // ProjectAgents lists the computers for a project: this one, then the other
@@ -2270,6 +2273,12 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	// T-150: this computer's own replies may be late too.
+	if b, err := s.OutboxBacklog(); err != nil {
+		return nil, err
+	} else if b.Waiting > 0 && time.Duration(b.OldestAge)*time.Second >= OutboxDelayedAfter {
+		c.OutboxDelayed = b.OldestAge / 60
+	}
 	list := []ComputerSummary{c}
 	peers, err := s.NetPeers()
 	if err != nil {
@@ -2309,6 +2318,9 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 		if p.Reconnecting {
 			o.Reconnecting = true
 			o.Note = strings.TrimSpace("reconnecting after a restart: a task for it is accepted and waits on the server until it is back. " + o.Note)
+		}
+		if o.Online {
+			o.OutboxDelayed = p.OutboxDelayedMinutes()
 		}
 		list = append(list, o)
 	}

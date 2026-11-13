@@ -159,6 +159,10 @@ func (s *Supervisor) presence() (broker.Presence, error) {
 	if id, err := s.store.ComputerID(); err == nil {
 		p.Computer = id
 	}
+	// What has not left yet, so the others see late replies (T-150).
+	if b, err := s.store.OutboxBacklog(); err == nil {
+		p.Outbox = &broker.PresenceOutbox{Waiting: b.Waiting, OldestAge: b.OldestAge}
+	}
 	// Readiness for other computers' tasks (T-070): left out if it cannot
 	// be read, so the others see it as unknown rather than wrong.
 	if accept, err := s.store.NetAccept(); err == nil {

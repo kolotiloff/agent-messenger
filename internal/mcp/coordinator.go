@@ -75,6 +75,8 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - idle_computers in a wait result names the computers where a task just stopped and nothing of this project runs now: give them the next task if the plan has one, or tell the owner.
 - idle_computers in list_agents names the online computers that can take this project's tasks and run no task now: the free machines, without waiting for an event.
 - network_note in list_agents means this computer's client has not heard from the server for minutes: online and other computers' task states are out of date. Tell the owner; do not start or cancel tasks on other computers because of them.
+- late_report: a task that was closed here (cancelled) sent its report or failure afterwards; the text follows. Its work may already be in the project, so check before giving the same work again; the task stays closed. Tell the owner.
+- outbox_delayed_minutes on a computer in list_agents, and computer_outbox_delayed_minutes on its tasks in tasks, mean that computer is in contact but has not been able to send its messages for that many minutes: its acceptances, progress and reports are late, not lost, and come when they go out. Do not cancel or start its tasks again because of it; tell the owner, who may restart Messenger on that computer.
 - answer_refused: the other computer did not accept your answer, and the question is open again (the task waits again); answer it once more if the reason allows, or tell the owner.
 - A computer marked reconnecting was in the network a moment ago and has not reported since a restart: a task for it is accepted and waits on the server until it is back. models_note and limit_note explain an empty models list or a missing limit.
 - list_agents shows each agent's limit when it reported one: state ok, warning (close to the limit) or exhausted, used_percent when the agent gave it, resets_at and observed_at. It is what the agent said at the end of its last run, not a live reading; reset_passed means its reset time has passed, so it is likely available again; a run that completed on that computer since clears exhausted to ok. A limit is shared by every use of the same account, this chat included. Before choosing where to start a task, look at the limits: prefer an agent whose limit is not exhausted, and tell the owner when the one they asked for is close to or at its limit, before or instead of starting it. start_task adds limit_note when the chosen agent's last limit is close or exhausted.
@@ -684,6 +686,9 @@ type coordinatorTask struct {
 	// Shown for tasks of this computer only.
 	FullAccess bool   `json:"full_access,omitempty"`
 	LastSeen   string `json:"computer_last_seen,omitempty"`
+	// T-150: the computer that runs the task reports, but its replies have
+	// waited to be sent this many minutes.
+	OutboxDelayed int `json:"computer_outbox_delayed_minutes,omitempty"`
 }
 
 // closedTaskStates are left out of the default tasks list (T-032).
@@ -759,6 +764,9 @@ func (c *coordinator) tasks(state string, limit int, ifVersion string) (any, err
 			}
 			if r != nil && !r.From && r.Lost {
 				item.ContactLost, item.LastSeen = true, r.LastSeen
+			}
+			if r != nil && !r.From && !r.Lost {
+				item.OutboxDelayed = r.Delayed
 			}
 		}
 		out = append(out, item)
