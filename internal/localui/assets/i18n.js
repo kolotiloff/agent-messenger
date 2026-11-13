@@ -372,7 +372,7 @@
   'Задача ждёт запуска…':'The task is waiting to start…',
   'Исполнитель работает…':'The worker is working…',
   'Компьютер «':'Computer «',
-  '» не принимает задачи других компьютеров. Включите на нём «Задачи других компьютеров» на вкладке «Сервер» и дайте задачу снова.':'» does not accept tasks from other computers. Turn on «Accept tasks from other computers» on its «Server» tab and give the task again.',
+  '» не принимает задачи других компьютеров. Включите на нём «Принимать задачи других компьютеров» на вкладке «Сервер» и дайте задачу снова.':'» does not accept tasks from other computers. Turn on «Accept tasks from other computers» on its «Server» tab and give the task again.',
   'На компьютере «':'On computer «',
   '» нет проекта с таким названием. Создайте его там и выберите папку.':'» there is no project with this name. Create it there and choose its folder.',
   '» у проекта не выбрана папка или её нет. Выберите папку проекта там и дайте задачу снова.':'» the project has no folder, or the folder is missing. Choose the project folder there and give the task again.',
