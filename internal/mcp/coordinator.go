@@ -321,7 +321,7 @@ func coordinatorTools() []map[string]any {
 	}
 	str := func(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
 	return []map[string]any{
-		{"name": "list_agents", "description": "List this project's computers (this one and the other computers of its network), the project folder on this one, and their agents with how many tasks they run, the model names the owner listed for them and their last reported usage limit. Another computer also shows accepts_tasks and has_project (this project's folder) when it reported them.",
+		{"name": "list_agents", "description": "List this project's computers (this one and the other computers of its network), the project folder on this one, and their agents with how many tasks they run, the model names the owner listed for them and their last reported usage limit. Another computer also shows accepts_tasks and has_project (this project's folder) when it reported them. messenger_version is the Messenger version each computer runs (left out when an older computer did not report it); check it before reporting a problem a newer version may already fix.",
 			"inputSchema": obj(map[string]any{})},
 		{"name": "start_task", "description": "Start a task in a new worker session of the chosen agent, in this project's folder on the computer. Returns the task id. Repeating a call with the same op_id returns the same task.",
 			"inputSchema": obj(map[string]any{

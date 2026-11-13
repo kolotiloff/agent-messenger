@@ -714,51 +714,46 @@
   let linkBusy='',linkFailure=null;
   async function connectCoordinator(name){
     if(linkBusy)return;
-    linkBusy=name;linkFailure=null;if(view?.project===name){renderThread();renderCoordinatorSetup();renderAgents();}
+    linkBusy=name;linkFailure=null;if(view?.project===name){renderThread();renderCoordinatorRow();}
     try{
       const r=await postAPI('/api/coordinator-connect',{project:name},40000);
       if(r.result?.state==='failed')linkFailure={project:name,detail:r.result.detail||''};
     }catch(error){linkFailure={project:name,detail:error.message};}
     finally{linkBusy='';viewSignature='';await refresh();}
   }
-  // The coordinator section of the Claude Code settings dialog (T-152).
-  // Another computer may run the project's coordinator instead; this
-  // computer then only runs workers and needs nothing here.
-  function fillCoordinator(box){
+  // The coordinator of the project on this computer (T-152): Claude's link
+  // for the project folder, as one row of the «Проект» page, and the manual
+  // command under it. Agents are set up once; the link is per folder.
+  function renderCoordinatorRow(){
+    const box=$('coord-box');if(!box||!view?.project)return;
     const link=view.coordinator_link||{state:'unknown'},failure=linkFailure?.project===view.project?linkFailure:null;
-    const p=(text,cls)=>el('p',text,cls);
-    // The connect button lives only on the card row (owner, T-152); the
-    // dialog explains the state and keeps the manual command.
-    if(linkBusy===view.project)box.append(p(tr('Messenger добавляет этот проект в настройки Claude. Это займёт несколько секунд.')));
-    else if(link.state==='connected'){
-      box.append(p(tr('Откройте папку проекта в Claude (вкладка Code, этот компьютер) и начните новый чат. Напишите в нём, что нужно сделать. Чтобы проверить подключение, спросите: «Каких агентов ты видишь?»')));
-      box.append(p(tr('Чат, открытый до подключения, проект не увидит: нужен новый.'),'am-small am-muted'));
-    }
-    else if(failure)box.append(p(tr('Не получилось подключить: ')+failure.detail));
-    else if(link.state==='other')box.append(p(tr('В настройках Claude для этой папки уже есть другое подключение с именем «messenger». Messenger его не меняет. Если оно больше не нужно, удалите его и нажмите «Подключить» в карточке.')));
-    else if(link.state==='unknown')box.append(p(tr('Не удалось прочитать настройки Claude')+(link.detail?': '+link.detail:'.')));
-    else if(link.state==='no_folder')box.append(p(tr('У проекта нет папки на этом компьютере. Укажите её во вкладке «Проект».')));
-    else box.append(p(tr('Не подключён. Кнопка «Подключить» — в строке «Координатор» на карточке Claude Code.')));
+    const connect=[tr('Подключить'),()=>connectCoordinator(view.project)];
+    const title=tr('Координатор');
+    const tip=tr('Координатор — ваш чат в Claude Code (в приложении Claude или в терминале), открытый в папке проекта. Он раздаёт задачи исполнителям и собирает отчёты. Новый проект подключается сам; кнопка нужна, если это не получилось.');
+    let row;
+    if(linkBusy===view.project)row=stepRow(1,title,tr('Подключаем…'),null,tip);
+    else if(coordinatorPlace())row=stepRow('ok',title,tr('Подключён к Claude Code. Откройте папку проекта в новом чате'),null,tip);
+    else if(failure)row=stepRow('no',title,tr('Не получилось: ')+failure.detail,[tr('Повторить'),()=>connectCoordinator(view.project)],tip);
+    else if(link.state==='no_claude')row=stepRow(1,title,tr('Сначала настройте Claude Code во вкладке «Агенты»'),[tr('Агенты'),()=>show('agents')],tip);
+    else if(link.state==='no_folder')row=stepRow(1,title,tr('Сначала укажите папку проекта'),null,tip);
+    else if(link.state==='other')row=stepRow('no',title,tr('В Claude у этой папки уже есть другое подключение «messenger». Messenger его не меняет'),connect,tip);
+    else if(link.state==='unknown')row=stepRow('no',title,tr('Не удалось прочитать настройки Claude')+(link.detail?': '+link.detail:''),connect,tip);
+    else row=stepRow(1,title,tr('Не подключён'),connect,tip);
+    const steps=el('div',undefined,'am-steps');steps.append(row);
     const manual=el('details',undefined,'am-tool');manual.append(el('summary',tr('Подключить вручную через Терминал')));
     const command='cd '+shellQuote(view.folder)+' && claude mcp add --scope local messenger -- '+shellQuote(view.messenger)+' --root '+shellQuote(view.data_root)+' coordinator --project '+shellQuote(view.project);
     const copy=el('button',tr('Скопировать команду'));copy.type='button';
     copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(command);copy.textContent=tr('Скопировано');}catch(_){copy.textContent=tr('Скопируйте вручную');}setTimeout(()=>copy.textContent=tr('Скопировать команду'),2000);});
     manual.append(el('pre',command,'am-command'),copy);
-    box.append(manual,p(tr('Чат-координатор видит только задачи этого проекта.'),'am-small am-muted'));
+    manual.hidden=link.state==='no_folder'||coordinatorPlace();
+    const body=el('div',undefined,'am-coord-box am-field-sep');body.id='coord-box';body.append(steps,manual);
+    if(box.querySelector('details')?.open)manual.open=true;
+    if(box.innerHTML!==body.innerHTML)box.replaceWith(body);
   }
   // Whether this computer's Claude Code is the project's coordinator. Other
   // computers are not shown: any computer may have its own (owner, T-152).
   function coordinatorPlace(){
     return view?.coordinator?.connected||view?.coordinator_link?.state==='connected';
-  }
-  // The coordinator's details and manual command sit in the Claude settings
-  // dialog (T-152); the card shows its state as a row.
-  function renderCoordinatorSetup(){
-    const box=$('agent-coord');if(!box)return;
-    box.hidden=setupProvider!=='claude'||!view?.project||!$('agent-setup').open;if(box.hidden)return;
-    const body=el('div',undefined,'am-connect-body');body.id='coord-body';fillCoordinator(body);
-    const old=$('coord-body');if(old.querySelector('details')?.open)body.querySelector('details').open=true;
-    if(old.innerHTML!==body.innerHTML)old.replaceWith(body);
   }
   // The task pane with no task yet (T-152): what the program does, drawn as
   // a short chain, and the first steps with their state on this computer.
@@ -784,8 +779,8 @@
     };
     const agents=(view.agents||[]).length;
     step(agents>0,tr('Агенты на этом компьютере'),agents?tr('Подключено: ')+agents:tr('Установите и подключите хотя бы одного'),agents?'':tr('Агенты'),()=>show('agents'));
-    const place=coordinatorPlace(),claudeReady=(view.agents||[]).some(a=>a.agent==='claude'&&a.cli)&&view.coordinator_link?.state!=='no_folder'&&linkBusy!==view.project;
-    step(!!place,tr('Координатор'),place?tr('Подключён к Claude на этом компьютере'):(linkFailure?.project===view.project?tr('Не получилось: ')+linkFailure.detail:tr('Подключите Claude Code координатором, чтобы давать задачи с этого компьютера')),place?'':claudeReady?tr('Подключить'):tr('Агенты'),()=>claudeReady?connectCoordinator(view.project):show('agents'));
+    const place=coordinatorPlace(),hasClaude=(view.agents||[]).some(a=>a.agent==='claude'&&a.cli),claudeReady=hasClaude&&view.coordinator_link?.state!=='no_folder'&&linkBusy!==view.project;
+    step(!!place,tr('Координатор'),place?tr('Подключён к Claude на этом компьютере'):(linkFailure?.project===view.project?tr('Не получилось: ')+linkFailure.detail:tr('Подключите Claude Code координатором, чтобы давать задачи с этого компьютера')),place?'':claudeReady?tr('Подключить'):hasClaude?tr('Проект'):tr('Агенты'),()=>claudeReady?connectCoordinator(view.project):show(hasClaude?'project':'agents'));
     const peers=(server?.peers||[]).length;
     step(peers>0,tr('Другие компьютеры'),peers?tr('В сети: ')+peers:tr('Необязательно: объедините компьютеры через сервер'),peers?'':tr('Сервер'),()=>show('server'));
     box.append(el('h3',tr('С чего начать')),steps);
@@ -1134,21 +1129,7 @@
       card.append(head);
       const steps=el('div',undefined,'am-steps');
       // mark: 'ok', 'no', a step number, or a node (the limit ring).
-      const step=(mark,title,sub,action,tip)=>{
-        const row=el('div',undefined,'am-step');
-        if(mark instanceof Node){const m=el('span',undefined,'am-mark am-mark-ring');m.append(mark);row.append(m);}
-        else row.append(el('span',mark==='ok'?'✓':mark==='no'?'✕':String(mark),'am-mark '+(mark==='ok'?'am-mark-ok':mark==='no'?'am-mark-no':'am-mark-off')));
-        const text=el('div',undefined,'am-step-text'+(typeof mark==='number'?' am-step-later':''));
-        const line=el('p',undefined,'am-step-title');
-        if(title instanceof Node)line.append(title);else line.textContent=title;
-        if(tip){const q=el('span','?','am-q');q.title=tip;q.setAttribute('aria-label',tip);q.tabIndex=0;line.append(q);}
-        text.append(line);
-        if(sub instanceof Node){const s=el('p',undefined,'am-step-sub');s.append(sub);text.append(s);}
-        else if(sub){const s=el('p',sub,'am-step-sub');s.title=sub;text.append(s);}
-        row.append(text);
-        if(action){const b=el('button',action[0]);b.type='button';b.addEventListener('click',action[1]);row.append(b);}else row.append(el('span'));
-        steps.append(row);
-      };
+      const step=(mark,title,sub,action,tip)=>steps.append(stepRow(mark,title,sub,action,tip));
       const check=agentChecks.get(provider),auth=check?.authentication?.state;
       const busy=checking.has(provider);
       // 1. The program.
@@ -1185,21 +1166,6 @@
       else step(3,tr('Работает с Messenger'),missing?tr('Проверится после установки'):tr('Проверится на первой задаче'));
       // The coordinator of the open project is this Claude in another role
       // (T-152): its connection is a row of the Claude card.
-      if(view?.project){
-        const place=coordinatorPlace(),link=view.coordinator_link||{},name=view.project_title||view.project;
-        const title=tr('Координатор');
-        if(provider!=='claude')step(4,title,tr('Пока только Claude Code'),null,tr('Координатором пока может быть только Claude Code. Для этого агента функция появится позже.'));
-        else{
-          const failure=linkFailure?.project===view.project?linkFailure:null;
-          const connect=[tr('Подключить'),()=>connectCoordinator(view.project)];
-          const tip=tr('Координатор — ваш чат в Claude Code (в приложении Claude или в терминале), открытый в папке проекта. Он раздаёт задачи исполнителям и собирает отчёты. Подключите его на том компьютере, с которого будете давать задачи. Подробности и ручная команда — в настройках Claude Code.');
-          if(linkBusy===view.project)step(4,title,tr('Подключаем…'),null,tip);
-          else if(place)step('ok',title,tr('Подключён к «')+name+'»',null,tip);
-          else if(failure)step('no',title,tr('Не получилось: ')+failure.detail,connect,tip);
-          else if(link.state==='no_folder')step(4,title,tr('Нет папки проекта на этом компьютере'),null,tip);
-          else step(4,title,tr('Не подключён к «')+name+'»',cli?connect:null,tip);
-        }
-      }
       // 4. The limit the agent reported during its last task (T-044).
       const l=a?.limit,level=limitLevel(l);
       const today=a?.today_tokens?tr('сегодня ')+tokensText(a.today_tokens)+tr(' токенов'):'';
@@ -1689,7 +1655,9 @@
     finally{$('fb-save').disabled=false;}
   }
   async function exportFeedback(){
-    $('fb-export').disabled=true;$('fb-status').textContent=tr('Выгружаем…');
+    // No «Выгружаем…» line: it appeared for a moment and made the dialog
+    // jump (owner, T-152). The button is disabled meanwhile.
+    $('fb-export').disabled=true;$('fb-status').textContent='';
     try{
       const r=await postAPI('/api/feedback-export',{},15000);
       const cut=Math.max(r.result.path.lastIndexOf('/'),r.result.path.lastIndexOf('\\'));$('fb-dir').textContent=tr('Файл сохранён в папке ')+r.result.path.slice(0,cut>0?cut:0)+':';$('fb-path').textContent=r.result.path.slice(cut+1);$('fb-path').title=r.result.path;$('fb-copy').dataset.path=r.result.path;$('fb-copy').removeAttribute('data-copied');$('fb-saved').hidden=false;$('fb-status').textContent='';
@@ -1721,6 +1689,23 @@
   // failed or unanswered save is shown and not repeated; a good one shows
   // nothing (T-064).
   let projectPageFor='',projectSaving=Promise.resolve(),rulesTimer=0;
+  // One row of a step list: a mark (✓, ✕, a number or a ring), a title with
+  // an optional «?» tip, a subtitle and an optional button.
+  function stepRow(mark,title,sub,action,tip){
+    const row=el('div',undefined,'am-step');
+    if(mark instanceof Node){const m=el('span',undefined,'am-mark am-mark-ring');m.append(mark);row.append(m);}
+    else row.append(el('span',mark==='ok'?'✓':mark==='no'?'✕':String(mark),'am-mark '+(mark==='ok'?'am-mark-ok':mark==='no'?'am-mark-no':'am-mark-off')));
+    const text=el('div',undefined,'am-step-text'+(typeof mark==='number'?' am-step-later':''));
+    const line=el('p',undefined,'am-step-title');
+    if(title instanceof Node)line.append(title);else line.textContent=title;
+    if(tip){const q=el('span','?','am-q');q.title=tip;q.setAttribute('aria-label',tip);q.tabIndex=0;line.append(q);}
+    text.append(line);
+    if(sub instanceof Node){const s=el('p',undefined,'am-step-sub');s.append(sub);text.append(s);}
+    else if(sub){const s=el('p',sub,'am-step-sub');s.title=sub;text.append(s);}
+    row.append(text);
+    if(action){const b=el('button',action[0]);b.type='button';b.addEventListener('click',action[1]);row.append(b);}else row.append(el('span'));
+    return row;
+  }
   function renderProjectPage(){
     const name=view?.project||'';
     $('project-none').hidden=!!name;$('project-page').hidden=!name;
@@ -1734,7 +1719,7 @@
     $('project-page-key').textContent=renamed?tr('Для других компьютеров и координатора проект по-прежнему называется «')+name+'».':'';
     if(fresh||document.activeElement!==$('project-page-folder'))$('project-page-folder').value=view.folder||'';
     if(fresh||(document.activeElement!==$('project-page-rules')&&!rulesTimer))$('project-page-rules').value=view.worker_rules||'';
-    renderCoordinatorSetup();
+    renderCoordinatorRow();
   }
   function saveProjectField(field){
     const name=view?.project;if(!name)return;
@@ -1811,7 +1796,6 @@
     $('agent-models-note').textContent=tr('Через запятую, как их пишет сам ')+shortNames[provider]+'.'+(defaultModels[provider]?tr(' Уже вписаны по умолчанию.'):'');
     setStatus('agent-save-status','');
     if(!$('agent-setup').open)$('agent-setup').showModal();
-    renderCoordinatorSetup();
   }
   // One check at a time: the client refuses a second one while one runs.
   let checkQueue=Promise.resolve();
@@ -2120,6 +2104,15 @@
   fbShot.addEventListener('drop',e=>{e.preventDefault();fbShot.classList.remove('am-drop');fbTake(e.dataTransfer.files[0]);});
   $('invite-close').addEventListener('click',()=>$('invite-dialog').close());
   // A closed invitation is not shown again; a new one can be made at any time.
+  // A click on the dimmed area outside an open dialog closes it, like its ✕
+  // (owner, T-152). The restart dialog stays: it waits for the restart.
+  for(const dialog of document.querySelectorAll('dialog')){
+    if(dialog.id==='restart-dialog')continue;
+    let downOutside=false;
+    const outside=event=>{const r=dialog.getBoundingClientRect();return event.target===dialog&&(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom);};
+    dialog.addEventListener('mousedown',event=>{downOutside=outside(event);});
+    dialog.addEventListener('click',event=>{if(downOutside&&outside(event))dialog.close();downOutside=false;});
+  }
   $('invite-dialog').addEventListener('close',()=>{invitation=null;clearInterval(inviteTimer);});
   $('project-save').addEventListener('click',createProject);
   $('project-page-rules').addEventListener('input',()=>{clearTimeout(rulesTimer);rulesTimer=setTimeout(()=>{rulesTimer=0;saveProjectField('rules');},800);});

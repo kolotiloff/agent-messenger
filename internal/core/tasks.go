@@ -14,6 +14,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/kolotiloff/agent-messenger/internal/buildinfo"
 	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
 
@@ -2225,6 +2226,9 @@ type ComputerSummary struct {
 	// OutboxDelayed: the computer's oldest unsent message has waited this
 	// many minutes (T-150).
 	OutboxDelayed int `json:"outbox_delayed_minutes,omitempty"`
+	// Version is the Messenger version the computer runs (T-158); empty
+	// for another computer that did not report it.
+	Version string `json:"messenger_version,omitempty"`
 }
 
 // ProjectAgents lists the computers for a project: this one, then the other
@@ -2242,7 +2246,7 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 		if err != nil {
 			return err
 		}
-		c = ComputerSummary{Computer: computer, Name: name, This: true, Online: true, Agents: []AgentSummary{}}
+		c = ComputerSummary{Computer: computer, Name: name, This: true, Online: true, Agents: []AgentSummary{}, Version: buildinfo.Version}
 		err = tx.QueryRow(`SELECT folder FROM project_folders WHERE project=? AND computer=?`, project, computer).Scan(&c.Folder)
 		if errors.Is(err, sql.ErrNoRows) {
 			c.Note = "no folder for this project on this computer; it refuses the project's tasks"
@@ -2285,7 +2289,7 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 		return nil, err
 	}
 	for _, p := range peers {
-		o := ComputerSummary{Computer: p.ID, Name: p.Name, Online: p.Age >= 0 && p.Age <= PeerFresh, Agents: []AgentSummary{},
+		o := ComputerSummary{Computer: p.ID, Name: p.Name, Online: p.Age >= 0 && p.Age <= PeerFresh, Agents: []AgentSummary{}, Version: p.Version,
 			Note: "another computer of the network: it runs the task only if its owner allows tasks from other computers and it has this project's folder; otherwise the task fails with its reason"}
 		if r := p.Ready; r != nil {
 			has := false
