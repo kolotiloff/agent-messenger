@@ -1,4 +1,6 @@
-# Local UI: messages and queue
+# Local UI: messages and queue (historical)
+
+> **Historical.** This page describes the first browser page of the session and queue model (November 2026). The window today is a different page: tasks, agents, project, server and statistics, served by the same local HTTP server through `/api/window`, `/api/task` and related routes. How to open it: [DOWNLOAD.md](DOWNLOAD.md); what it does: [TASK_MODEL.md](TASK_MODEL.md). The endpoints described here still exist but the window does not use them.
 
 This is a technical preview in the browser, connected to the real local API. It is not the native macOS shell and not an installer. The saved [design/v1](../design/README.md) styling has been carried over into the product; HTML, CSS and JavaScript are embedded in the Go binary, and no external CDN or Node is needed to run it.
 

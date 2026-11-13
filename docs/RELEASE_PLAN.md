@@ -1,18 +1,25 @@
 # Plan to the first release
 
-Updated November 6, 2026. This is the current sequence of work on top of the original [MVP](MVP.md), the [architecture](PLAN.md), the [window](APP.md) requirements and [broker deployment](DEPLOYMENT.md). No release date is set: transitions are decided by checks, not by the percentage of code written.
+Written November 6, 2026; the status was last updated on November 13. This is the sequence of work on top of the original [MVP](MVP.md), the [architecture](PLAN.md), the [window](APP.md) requirements and [broker deployment](DEPLOYMENT.md). No release date is set: transitions are decided by checks, not by the percentage of code written.
 
 ## Current status
 
-The current functional step, preview.19, is accepted on Mac: [creating and explicitly launching a separate test Claude session from the window](SCOPED_LAUNCH.md). After the fake CLI, real Claude Code 2.1.318 was verified: two sequential messages, two confirmed replies in one process, replies appearing automatically, and three older messages of other sessions preserved. The shell was updated to preview.19 through the native updater. Automatically switching the version of a running background client is still a separate task. The next step is persistent Codex, then several independent owners without starvation, and Claude ↔ Codex on one Mac. Cosmetic issues are folded into functional steps and do not form a separate release queue.
+Updated 2026-11-13. The details of each release are in [HANDOFF.md](HANDOFF.md) and [TASKS.md](TASKS.md); this section is the overview.
 
-We are at the stage of a local technical prototype on Mac. There is a Go client, SQLite, protected session ownership, linked MCP replies, persistent Claude, exact resume, explicit recovery after a real reboot, and background launch. This was verified with separate test CLI conversations, not working chats. The product lives in `cmd/messenger` and `internal`; early experiments are kept separately. A technical preview and a full release for three OSes are different checkpoints.
+The program is a technical preview used every day on the owner's Mac, Windows and Linux computers. Releases are numbered 0.N (tag `v0.0.0-preview.N`); 0.66 is the newest published one.
 
-In the persistent product mode, Claude has been verified on Mac. Earlier Codex/Cursor experiments do not replace their acceptance in the current client. Linux/Windows builds do not replace running on those OSes. A local browser UI with history, sending and queue management has been added. Outgoing messages, once first written by the client, survive closing the tab and restarting the UI. There is a native Mac preview builder and installation into a user directory, verified locally; the first [native Mac shell](MAC_APP.md) has been added. Signed distribution, acceptance of the shell on other Macs, and the network broker are not finished yet.
+Done since the plan below was written:
 
-Open problem: fully terminating a CLI and safely releasing its session within the same Mac boot. Background `start` lets you close the terminal while keeping a live owner, but it does not solve this problem. Release by timer, by empty group, or by a single exited PID is not added.
+- **Task model** ([TASK_MODEL.md](TASK_MODEL.md), D-021 to D-024): the owner talks to a coordinator in a Claude Code chat; each task runs as its own worker session of Claude Code, Codex or Cursor and reports back. The persistent session paths of stages 2 and 3 were replaced by this model.
+- **Network of computers** ([BROKER.md](BROKER.md)): the server runs inside the client on any computer of the network; invitations by code, TLS with a pinned certificate, tasks, answers, notes, logs and updates between computers.
+- **Windows and Linux** ([WINDOWS_LINUX.md](WINDOWS_LINUX.md)): ready downloads for x64 and ARM64, the program's own window, installation for the current user, job objects on Windows.
+- **Updates** ([UPDATES.md](UPDATES.md)) on all three systems from signed GitHub releases; the window restarts an older background client; Windows and Linux computers can be updated from another computer.
+- **Window**: tasks of all computers with progress and tokens, answers and notes to workers, closing stuck tasks, agents with their models and limits, statistics, feedback journal.
+- **CI** on Linux, macOS and Windows, with the downloads built and installed; a daily watch of the worker CLIs.
 
-Preview.19 was published after four successful CI jobs. The background client was updated separately with the previous data unchanged; the shell was installed through the updater. After two real replies, the test queue was paused and the live owner kept. [Release report](reports/2026-11-06-window-launch-mac.md). The [Codex adapter investigation](CODEX_ADAPTER_NEXT.md) continues: the app-server connection is confirmed without a model; an empty new conversation after exit does not yet guarantee a saved rollout. A reproducible check established that an empty MCP table does not clear inherited servers.
+Not done yet: Developer ID signing and notarization on Mac and code signing on Windows (T-013), an Intel Mac build (T-014), backup and rollback (T-011), coordinator role handover (T-017), a standalone server for a VPS (T-036), a standby server computer, pictures from workers in reports, a phone view (T-147).
+
+The stage table below is the plan of November 6 and is kept for its exit conditions; several stages were reached in a different order or replaced by the task model.
 
 ## Path to release
 
@@ -42,7 +49,7 @@ Delivering new builds through the window is accepted on Mac up to and including 
 
 Status: the local signed channel is implemented and verified by the preview.5 → preview.6 transition from the window. Updating the application while keeping the previous background client works. The repository was made public with the owner's permission after reviewing the history for secrets. Delivery of signed packages from public GitHub is implemented without an account key in the application; the preview.12 → preview.13 transition via GitHub was [verified on Mac](reports/2026-11-06-github-update-mac.md). Switching the background client version and full rollback are not accepted yet. The first build with the updater was installed once manually; subsequent local builds are installed through the window. See [boundaries and checks](UPDATES.md).
 
-## What is already done
+## What was done by November 6
 
 1. The background client is accepted on Mac: [result](reports/2026-11-05-background-client-mac.md).
 2. `doctor` and `doctor --json` were added as the first part of diagnostics: finding CLI candidates and the status of the existing client, without launching CLIs/models and without reading secrets.
@@ -69,7 +76,7 @@ Signing in to accounts through the standard browser; real Windows/Linux computer
 
 Requirement from November 6: a new-version notification, release notes, download and «Обновить и перезапустить» ("Update and restart"), as in a regular editor. Local and public delivery of the window are accepted. The detailed contract is [Mac app updates](UPDATES.md): trusted signatures, UI/client/schema compatibility, interruptible download, data preservation, and deferred installation while a CLI owner is active. The check spends no model tokens. Automatic switching of the background client and full rollback are not accepted yet.
 
-## Order of upcoming updates
+## Order of upcoming updates (November 6)
 
 At the owner's request of November 6: UI issues are accumulated together with the current development stage. One completed step and the accumulated fixes ship as one update; a separate package is not prepared for every small thing. First we finish the stage's verification, then publish a signed build to the channel and announce its availability.
 

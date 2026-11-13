@@ -1,5 +1,7 @@
 # Data for the first window: overview v1
 
+> **Superseded.** The `overview` command still exists, but the window does not use it.
+
 `messenger --root DIR overview` talks only to an already running client through its local socket. The output is JSON. Waiting for a response is limited to five seconds. A missing client is not started; the CLI, the model and the login check are not called. A timeout does not prove that the client or agent has stopped.
 
 IPC request: `{"cmd":"overview"}`. Response: `{"ok":true,"overview":{...}}`. An error must be shown as data being unavailable, keeping it distinct from an empty session list. The summary does not replace `doctor` diagnostics, and `check-cli` remains a separate explicit action.

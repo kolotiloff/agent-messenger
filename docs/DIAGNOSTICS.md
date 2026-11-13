@@ -29,4 +29,4 @@ Exit code 0 means "report generated", even if the CLI was not found or the clien
 
 ## Next parts
 
-Next: statuses of specific bindings, installation/authorization actions and integration of results into the window. An explicit limited check of the version and login of the chosen CLI, including a path outside PATH, is described in [CLI_CHECK.md](CLI_CHECK.md). A login error must not wipe the profile or offer re-authorization unnecessarily.
+The window's agent cards now check the chosen CLI themselves ([CLI_CHECK.md](CLI_CHECK.md)). An explicit limited check of the version and login of the chosen CLI, including a path outside PATH, is described in [CLI_CHECK.md](CLI_CHECK.md). A login error must not wipe the profile or offer re-authorization unnecessarily.

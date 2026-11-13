@@ -10,14 +10,22 @@ The `.github/workflows/checks.yml` workflow runs on pull requests, on changes to
 | macOS 15, Go 1.22.2 | Native checks of compatibility with the baseline Go version |
 | macOS 15, current stable Go | Native checks; two preview archives, SHA-256, clean install, refusal to update a live client, update of a stopped client with a non-empty queue and outgoing prepared/queued messages; no automatic sending and no duplicate after the update |
 | Ubuntu 24.04, current stable Go | Compatibility of code and tests with the current stable Go version; the actual version is recorded in the log |
+| Windows Server 2025, current stable Go | `scripts/check-windows.sh`: vet, the lock, job objects, the background client and task runs with fake workers (required); the whole suite runs after it for information only, since many tests use POSIX fake CLIs |
+| Windows and Linux downloads (Ubuntu) | Builds the four downloads as the release does, signs the update archives with a throwaway key and checks them, installs and starts the Linux download |
+| Windows download on Windows | Runs the client from the built `.exe`, then installs it for the user and removes it, keeping the data (T-053) |
 
-A Windows build is not presented as running on Windows. GitHub checks on Mac/Linux also do not replace experience on the four user computers, the availability of their CLIs, logins, sleep/wake and the operation of a network broker. Confirming that a specific SHA is ready requires all jobs to succeed for exactly that SHA.
+GitHub checks do not replace experience on the user's computers, the availability of their CLIs, logins, sleep/wake and the operation of a network broker. Confirming that a specific SHA is ready requires all jobs to succeed for exactly that SHA.
 
 ## Access and cost limits
 
 Workflow permissions are read-only access to repository contents. Actions are pinned to exact SHAs, and checkout does not persist credentials in git. Not used: pull_request_target, user secrets, agent logins, auto-merge or release publication. The build job creates only technical archives with an ad-hoc signature; there is no Developer ID/notarization.
 
-Each of the four jobs is limited to 20 minutes. A new run for the same PR cancels the previous one. There is no schedule or nightly polling. Artifacts are kept for 7 days. In a private repository GitHub uses the account's available Actions minutes; the workflow does not change billing or limit settings. [GitHub runner types and terms](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+The test jobs are limited to 20 minutes (Windows 30, the download jobs 15). A new run for the same PR cancels the previous one. Mac preview archives are kept for 7 days, the Windows and Linux downloads for 3. The workflow does not change billing or limit settings.
+
+## Other workflows
+
+- `.github/workflows/cli-watch.yml` runs every day (cron `17 4 * * *`) and by hand: it installs the newest worker CLIs and runs `scripts/check-cli-surface.sh`, which checks that the flags and features Messenger uses still exist, without calling a model (T-139). See [CLI_CHECK.md](CLI_CHECK.md).
+- `.github/workflows/release.yml` publishes a release on the owner's command; see [UPDATES.md](UPDATES.md#releasing-from-github-actions). [GitHub runner types and terms](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
 
 Pull request sources run in the ordinary restricted PR context, without being moved into a privileged workflow. [GitHub Actions events](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows).
 

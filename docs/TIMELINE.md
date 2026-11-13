@@ -1,5 +1,7 @@
 # Local message timeline v1
 
+> **Superseded.** The message history API of the old session path; the window does not use it.
+
 ```sh
 messenger --root DIR timeline --alias claude-test --limit 50
 messenger --root DIR timeline --alias claude-test --limit 50 --before MESSAGE_ID

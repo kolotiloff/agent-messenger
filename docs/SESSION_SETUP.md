@@ -1,5 +1,7 @@
 # Setup from the window
 
+> **Superseded.** The buttons described here («Настроить», «Проверить версию и вход», «Создать тестовую сессию») are gone; agent cards are described in [CLI_CHECK.md](CLI_CHECK.md) and [TASK_MODEL.md](TASK_MODEL.md).
+
 Agent card → «Настроить» ("Set up") shows the CLI program and the profile directory. Program discovery is passive. «Проверить версию и вход» ("Check version and login") runs only the diagnostic commands of the selected CLI; the limitations are described in [CLI_CHECK.md](CLI_CHECK.md).
 
 For Claude, a «Создать тестовую сессию» ("Create test session") button has been added. It is available only if the background client reports support for the new operation and for Claude's persistent mode. An old client is not sent a substitute registration command: the window states plainly that it needs to be updated.

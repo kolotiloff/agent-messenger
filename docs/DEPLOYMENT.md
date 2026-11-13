@@ -1,13 +1,13 @@
 # Broker placement: VPS or your own computer
 
-Agreed principle, November 5, 2026: **one broker component and one protocol regardless of where it runs**. A VPS is optional. These are implementation requirements. What is built so far (a broker hosted by the client, invitations, joining; no task exchange, no VPS package) is in [BROKER.md](BROKER.md).
+Agreed principle, November 5, 2026: **one broker component and one protocol regardless of where it runs**. A VPS is optional. These are implementation requirements. Parts of this page are still a plan. What is built (a server hosted inside the client on any computer of the network, invitations, joining, tasks between computers; no VPS package) is in [BROKER.md](BROKER.md).
 
 ## Application modes
 
 | Choice | What happens |
 |---|---|
 | Connect to a server | The user enters the broker address and registers the device. The broker can be on a VPS or another computer. |
-| Run a server on this computer | The application starts a local broker as a separate background service and connects its own client to it. Agents can run on the same machine. |
+| Run a server on this computer | The client runs the broker inside its own process and connects to it like the other computers. Agents can run on the same machine. |
 
 For the first launch on a single Mac, a local broker reachable only from that machine is used. Access for other devices is enabled explicitly. Client mode does not start a fallback broker when the connection is lost.
 
@@ -15,7 +15,7 @@ On a VPS the same broker is installed as a separate server package with no GUI a
 
 ## Settings and first launch
 
-To connect: server address, device name, a one-time invitation or a device approval procedure, then "Check connection". After registration, a separate revocable device key is stored in local secure storage.
+To connect: server address, device name, a one-time invitation or a device approval procedure, then "Check connection". After registration, a separate revocable device key is stored in a file only the user can read (mode 0600, Q-013).
 
 This is access to Messenger, not the root/SSH password of the VPS. A regular client does not need administrative privileges on the server. Agent credentials are not sent to the broker. Installing on a new VPS has a separate wizard with temporary SSH access; after installation the client uses a restricted Messenger key.
 

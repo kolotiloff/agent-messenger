@@ -1,5 +1,7 @@
 # Staged MVP v0.3: Mac app first
 
+> **Historical.** The MVP of November 5, 2026. For the current state see [RELEASE_PLAN.md](RELEASE_PLAN.md#current-status).
+
 Updated November 5, 2026 at the user's request. The interface, statuses, conversation history and installation from GitHub are part of the target MVP. A single broker supports hosting on your own computer or on a VPS; a VPS is optional. [Settings and boundaries](DEPLOYMENT.md). While only a Mac is available, checks and the first user version are done locally. Mac↔Windows remains the required next network acceptance.
 
 The current sequence, the product client's results and the open release conditions are collected in the [plan to release](RELEASE_PLAN.md). The original MVP breakdown is kept below; the early test bench results do not mean acceptance of all CLIs in the persistent Go client.

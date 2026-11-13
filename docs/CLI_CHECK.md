@@ -14,13 +14,15 @@ The command does not open sessions, send a prompt, call login/logout or lift loc
 
 ## Verified commands and versions
 
-On a Mac, specifically the diagnostic commands of the following versions were verified:
+The diagnostic commands were first verified on a Mac with these versions:
 
 | Provider | Version | Status command |
 |---|---|---|
 | Claude Code | 2.1.318 | `auth status --json` |
 | Codex CLI | 0.155.1 | `login status` |
 | Cursor Agent CLI | 2026.11.05-86047df | `status --format json` |
+
+The versions each release was last checked with are in `internal/diagnostics/tested.go` (now Claude Code 2.1.322 and Codex 0.167.2; none recorded for Cursor). When an agent's installed CLI is newer, its card adds «· не проверена» with a hint: a newer version usually works, but if its tasks start to fail, the new version may be why (T-139). Every day `.github/workflows/cli-watch.yml` installs the newest CLIs and runs `scripts/check-cli-surface.sh`, which checks the flags and features Messenger uses without calling a model ([CI.md](CI.md#other-workflows)).
 
 The login request runs for any recognized version and on macOS, Windows and Linux (D-051); only the exact known answers count as logged in or not, anything else is unknown. For an unknown version format the login request is not run. On Windows the requests run without a console window. This is a deliberately limited diagnostic matrix; it does not mean that all these CLIs are accepted for persistent Messenger message handling.
 
@@ -50,6 +52,6 @@ Raw stdout/stderr stays only in process memory. Email address, organization, use
 
 Each command gets up to 8 seconds, waiting for inherited pipes up to 500 ms. On cancellation/timeout the result is unknown. This bounds the diagnostics and does not prove that all detached descendants stopped; the result is never used to release a session. Messenger never on its own initiative auto-updates the CLI, installs it, or logs into or out of an account.
 
-Results are not written automatically into `doctor`: it keeps `not_checked`. In the window, the «Настроить» ("Configure") card shows the selected paths and a separate «Проверить версию и вход» ("Check version and login") button. Opening the card launches nothing. The check shows the time, path and profile; changing the fields resets the previous result. The report is kept only in the current window and does not count as a check of another session.
+Results are not written automatically into `doctor`: it keeps `not_checked`. In the window («Агенты»), each connected agent's card is checked once when the window opens; the card's «Проверить снова» icon repeats the check, and its «Настройки» gear holds the program path, profile and models. Changing the fields resets the previous result. The report is kept only in the current window and does not count as a check of another session.
 
 On a Mac, passive discovery for the window additionally checks `~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`: an app launched from the Dock usually does not inherit the terminal's PATH. Candidates are not executed until explicitly clicked. Over HTTP only fixed diagnostic commands are available, without passing arbitrary arguments; the local Origin and the window key are checked. One check runs at a time per window server.
