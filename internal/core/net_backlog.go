@@ -2,6 +2,7 @@ package core
 
 import (
 	"database/sql"
+	"errors"
 	"time"
 )
 
@@ -55,4 +56,39 @@ func (p NetPeer) OutboxDelayedMinutes() int {
 		return d / 60
 	}
 	return 0
+}
+
+// NetWorkers is what a computer ran for other computers' tasks at its last
+// report (T-149): the giver's task id and the seconds since its worker last
+// wrote output.
+type NetWorkers struct {
+	Runs []NetWorkerRun `json:"runs"`
+}
+
+// NetWorkerRun is one running worker of another computer's task.
+type NetWorkerRun struct {
+	Task      string `json:"task"`
+	OutputAge int    `json:"output_age"`
+}
+
+// OriginTasks maps tasks of this computer that another computer of the
+// current network gave it to that computer's task ids, for the running
+// workers it reports (T-149).
+func (s *Store) OriginTasks(ids []string) (map[string]string, error) {
+	out := map[string]string{}
+	for _, id := range ids {
+		var origin string
+		err := s.db.QueryRow(`SELECT COALESCE(origin_task,'') FROM tasks WHERE id=? AND origin_peer IS NOT NULL
+ AND origin_broker=(SELECT value FROM meta WHERE key='net_broker')`, id).Scan(&origin)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if netRef.MatchString(origin) {
+			out[id] = origin
+		}
+	}
+	return out, nil
 }

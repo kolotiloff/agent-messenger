@@ -35,11 +35,18 @@ func (s *Store) AddCoordinatorNote(project, task, opID, text string) error {
 }
 
 func (s *Store) addNote(task, project, opID, text, author string) error {
+	return s.tx(func(tx *sql.Tx) error { return addNoteTx(tx, task, project, opID, text, author, false) })
+}
+
+// addNoteTx records a note. viaNet is a coordinator's note that another
+// computer sent for the mirror of its task (T-149); its op id is built
+// here and may be longer.
+func addNoteTx(tx *sql.Tx, task, project, opID, text, author string, viaNet bool) error {
 	text = strings.TrimSpace(text)
-	if opID == "" || len(opID) > 128 || text == "" || utf8.RuneCountInString(text) > MaxTaskText {
+	if opID == "" || (len(opID) > 128 && !viaNet) || text == "" || utf8.RuneCountInString(text) > MaxTaskText {
 		return fmt.Errorf("%w: a message needs an operation id and 1..%d characters", ErrRejected, MaxTaskText)
 	}
-	return s.tx(func(tx *sql.Tx) error {
+	{
 		var oldTask, oldText string
 		err := tx.QueryRow(`SELECT task_id,text FROM task_owner_notes WHERE op_id=?`, opID).Scan(&oldTask, &oldText)
 		if err == nil {
@@ -72,8 +79,14 @@ func (s *Store) addNote(task, project, opID, text, author string) error {
 		if err != nil {
 			return err
 		}
-		if link.origin != nil || link.remote != nil {
-			return fmt.Errorf("%w: a task of another computer takes no messages yet", ErrRejected)
+		if link.remote != nil {
+			if author != AudienceCoordinator {
+				return fmt.Errorf("%w: a task of another computer takes messages from the coordinator only", ErrRejected)
+			}
+			return noteRemoteTask(tx, t, *link.remote, opID, text)
+		}
+		if link.origin != nil && !viaNet {
+			return fmt.Errorf("%w: this task came from another computer; its coordinator writes to it", ErrRejected)
 		}
 		if t.State == "waiting_owner" {
 			if author == AudienceCoordinator {
@@ -116,7 +129,7 @@ func (s *Store) addNote(task, project, opID, text, author string) error {
 		}
 		return insertTaskEvent(tx, t.Project, task, AudienceCoordinator, "owner_note",
 			"The owner wrote to this worker; it reads this only when its current run ends (a worker CLI takes no input while it works) and then continues the same task:\n"+text, "")
-	})
+	}
 }
 
 // holdForOwnerNotes keeps a run's report back when the owner wrote while it

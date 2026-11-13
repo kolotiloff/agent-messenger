@@ -185,6 +185,7 @@ func Open(path string) (*Store, error) {
 		{"tasks", "hidden_at", "TEXT"},
 		{"net_peers", "computer", "TEXT NOT NULL DEFAULT ''"},
 		{"net_peers", "outbox", "TEXT NOT NULL DEFAULT ''"},
+		{"net_peers", "workers", "TEXT NOT NULL DEFAULT ''"},
 		{"tasks", "remote_computer", "TEXT NOT NULL DEFAULT ''"},
 		{"tasks", "origin_computer", "TEXT NOT NULL DEFAULT ''"},
 		networkTaskColumns[0], networkTaskColumns[1], networkTaskColumns[2],

@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/kolotiloff/agent-messenger/internal/adapters"
@@ -43,6 +44,46 @@ type taskRuns struct {
 	mu      sync.Mutex
 	running map[string]bool
 	wg      sync.WaitGroup
+	// live are the worker processes started and not yet exited, by run
+	// (T-149): their task and when they last wrote output.
+	live map[string]*liveRun
+}
+
+type liveRun struct {
+	task       string
+	lastOutput atomic.Int64 // unix nanoseconds
+}
+
+func (t *taskRuns) started(run, task string) *liveRun {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.live == nil {
+		t.live = map[string]*liveRun{}
+	}
+	l := &liveRun{task: task}
+	l.lastOutput.Store(time.Now().UnixNano())
+	t.live[run] = l
+	return l
+}
+
+func (t *taskRuns) exited(run string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	delete(t.live, run)
+}
+
+// workers are the live workers: task and seconds since their last output.
+func (t *taskRuns) workers() map[string]int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	out := map[string]int{}
+	for _, l := range t.live {
+		age := max(0, int(time.Since(time.Unix(0, l.lastOutput.Load()))/time.Second))
+		if old, ok := out[l.task]; !ok || age < old {
+			out[l.task] = age
+		}
+	}
+	return out
 }
 
 func (t *taskRuns) claim(id string) bool {
@@ -188,6 +229,7 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	}
 	started = true
 	journal.Printf("run %s of %s: worker started, process %d", runID, task.ID, obs.PID)
+	live := s.tasks.started(runID, task.ID)
 
 	type readOutcome struct {
 		result adapters.TaskEventResult
@@ -201,6 +243,7 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 		for {
 			line, err := reader.ReadBytes('\n')
 			if len(line) > 0 {
+				live.lastOutput.Store(time.Now().UnixNano())
 				model := result.Model
 				adapters.ParseTaskEvent(task.Provider, line, &result)
 				if result.Model != model {
@@ -256,6 +299,9 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	})
 	close(stopWatch)
 	<-watchDone
+	if !detached {
+		s.tasks.exited(runID)
+	}
 	if detached {
 		// The client is stopping. The worker keeps running; the next start
 		// marks the run interrupted and keeps its reservation.

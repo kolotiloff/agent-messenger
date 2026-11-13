@@ -75,12 +75,13 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - idle_computers in a wait result names the computers where a task just stopped and nothing of this project runs now: give them the next task if the plan has one, or tell the owner.
 - idle_computers in list_agents names the online computers that can take this project's tasks and run no task now: the free machines, without waiting for an event.
 - network_note in list_agents means this computer's client has not heard from the server for minutes: online and other computers' task states are out of date. Tell the owner; do not start or cancel tasks on other computers because of them.
+- worker on a running task of another computer says what that computer reported a few seconds ago: running means its worker process is alive, and worker_output_at is when it last wrote anything (a long gap means it is thinking or waiting on a long command, not that it is gone); none means no worker process runs the task there now, so it ended and its report or outcome is on the way or lost: wait a few minutes, then tell the owner. It is missing when that computer runs Messenger before 0.67.
 - late_report: a task that was closed here (cancelled) sent its report or failure afterwards; the text follows. Its work may already be in the project, so check before giving the same work again; the task stays closed. Tell the owner.
 - outbox_delayed_minutes on a computer in list_agents, and computer_outbox_delayed_minutes on its tasks in tasks, mean that computer is in contact but has not been able to send its messages for that many minutes: its acceptances, progress and reports are late, not lost, and come when they go out. Do not cancel or start its tasks again because of it; tell the owner, who may restart Messenger on that computer.
 - answer_refused: the other computer did not accept your answer, and the question is open again (the task waits again); answer it once more if the reason allows, or tell the owner.
 - A computer marked reconnecting was in the network a moment ago and has not reported since a restart: a task for it is accepted and waits on the server until it is back. models_note and limit_note explain an empty models list or a missing limit.
 - list_agents shows each agent's limit when it reported one: state ok, warning (close to the limit) or exhausted, used_percent when the agent gave it, resets_at and observed_at. It is what the agent said at the end of its last run, not a live reading; reset_passed means its reset time has passed, so it is likely available again; a run that completed on that computer since clears exhausted to ok. A limit is shared by every use of the same account, this chat included. Before choosing where to start a task, look at the limits: prefer an agent whose limit is not exhausted, and tell the owner when the one they asked for is close to or at its limit, before or instead of starting it. start_task adds limit_note when the chosen agent's last limit is close or exhausted.
-- To add something to a task that is still running on this computer (a forgotten detail, a change of plan), use note_task; it does not stop the worker. Do not use it to hurry a worker or to repeat the task.
+- To add something to a task that is still running (a forgotten detail, a change of plan), use note_task, on this computer or another one of the network that runs Messenger 0.67 or newer; if that computer does not take it, you get note_refused with the reason; it does not stop the worker. Do not use it to hurry a worker or to repeat the task.
 - To follow up on a finished task in the same worker conversation (it keeps its context), use continue_task instead of a new start_task. It works for done and failed tasks of this computer, a task stopped by a usage limit included (after its reset time): read task_messages first and say in your text what is already done, such as «continue; item 1 is already committed». An interrupted task of this computer (the client restarted while it ran) can be continued too, only after Messenger checks that its worker is gone; if it may still run, continue_task says so and the task stays as it is: tell the owner. A done or failed task of another computer of this network can be continued the same way when that computer runs Messenger 0.60 or newer; if it refuses (older version, not in the network, no conversation), you get continue_refused with the reason: then start a new task that names what is already done.
 - Messenger already tells every worker to keep its report to a few lines, to put long details in a file and to follow the owner's rules for this project. A report ends with labelled lines when the worker gave them: «Изменения:» (commit or changeset), «Тесты:» and «Файлы:» (paths to read when needed). Do not ask workers for a «taken» line or a limit line: the task's state shows when it was accepted, and limits come from list_agents.
 - Work reaches the project only through the worker's own commit; workers are told to commit before they report. A report is a short message (at most 20000 characters reach you), so never ask for the full text of an audit or a long document instead of a commit: it will not fit, and the work still is not in the project. A worker that could not commit (files locked by another agent, its copy behind the server) asks you instead of finishing, and its task stays open. Decide what lets the commit happen: if another task holds the files, you may answer later, after that task is done, telling the worker to update and commit; otherwise tell it what to do or tell the owner. Do not tell it to finish without committing: a finished task of another computer cannot be continued.
@@ -356,7 +357,7 @@ func coordinatorTools() []map[string]any {
 				"op_id":   str("unique id of this operation"),
 				"text":    map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxTaskText},
 			}, "task_id", "op_id", "text")},
-		{"name": "note_task", "description": "Write to a worker of this computer while its task runs, without stopping it: it reads your text only when its current run ends and goes on in the same conversation. A worker CLI takes no input while it works, so this can be many minutes; to stop a worker now, use cancel. a report it was about to send waits until it has read your text. For a worker that asked you, use answer instead. Repeating with the same op_id is safe.",
+		{"name": "note_task", "description": "Write to a worker while its task runs, on this computer or another one of the network, without stopping it: it reads your text only when its current run ends and goes on in the same conversation. A worker CLI takes no input while it works, so this can be many minutes; to stop a worker now, use cancel. A report it was about to send waits until it has read your text. For a worker that asked you, use answer instead. Repeating with the same op_id is safe.",
 			"inputSchema": obj(map[string]any{
 				"task_id": str("task id"),
 				"op_id":   str("unique id of this operation"),
@@ -689,6 +690,10 @@ type coordinatorTask struct {
 	// T-150: the computer that runs the task reports, but its replies have
 	// waited to be sent this many minutes.
 	OutboxDelayed int `json:"computer_outbox_delayed_minutes,omitempty"`
+	// T-149: whether a worker process runs the task on that computer now,
+	// and when it last wrote output, as that computer last reported.
+	Worker         string `json:"worker,omitempty"`
+	WorkerOutputAt string `json:"worker_output_at,omitempty"`
 }
 
 // closedTaskStates are left out of the default tasks list (T-032).
@@ -767,6 +772,7 @@ func (c *coordinator) tasks(state string, limit int, ifVersion string) (any, err
 			}
 			if r != nil && !r.From && !r.Lost {
 				item.OutboxDelayed = r.Delayed
+				item.Worker, item.WorkerOutputAt = r.Worker, r.WorkerOutputAt
 			}
 		}
 		out = append(out, item)

@@ -108,3 +108,52 @@ func TestDelayedOutboxIsShown(t *testing.T) {
 		t.Fatalf("short wait shown: %+v", r)
 	}
 }
+
+// T-149: the computer that runs a task says whether its worker process
+// runs now and when it last wrote output.
+func TestRemoteWorkerIsShown(t *testing.T) {
+	p := newNetPair(t)
+	if err := p.b.st.SetNetAccept(true); err != nil {
+		t.Fatal(err)
+	}
+	id := p.startRemote(t, "op", "codex", "Do it")
+	p.carry(t, true)
+	m := p.mirror(t, id)
+	p.carry(t, false)
+	// The running side maps its mirror to the giver's task id.
+	origins, err := p.b.st.OriginTasks([]string{m.ID, "task-unknown"})
+	if err != nil || len(origins) != 1 || origins[m.ID] != id {
+		t.Fatalf("origins %v %v", origins, err)
+	}
+	agents := []NetAgent{{Agent: "codex"}}
+	set := func(w *NetWorkers) {
+		t.Helper()
+		if err := p.a.st.SetNetwork(testBroker, HostPeerID, []NetPeer{{ID: "dev-b", Name: "Ноутбук", Age: 2, Agents: agents, Workers: w}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A computer before 0.67 says nothing.
+	if r, _ := p.a.st.TaskRemote(id); r.Worker != "" {
+		t.Fatalf("old computer %+v", r)
+	}
+	set(&NetWorkers{Runs: []NetWorkerRun{{Task: id, OutputAge: 600}}})
+	r, err := p.a.st.TaskRemote(id)
+	if err != nil || r.Worker != "running" {
+		t.Fatalf("running %+v %v", r, err)
+	}
+	at, err := time.Parse(time.RFC3339, r.WorkerOutputAt)
+	if err != nil || time.Since(at) < 9*time.Minute || time.Since(at) > 11*time.Minute {
+		t.Fatalf("output at %q %v", r.WorkerOutputAt, err)
+	}
+	set(&NetWorkers{Runs: []NetWorkerRun{}})
+	if r, _ := p.a.st.TaskRemote(id); r.Worker != "none" || r.WorkerOutputAt != "" {
+		t.Fatalf("none %+v", r)
+	}
+	// Only a working task: one that waits for an answer has no worker.
+	if _, err := p.a.st.db.Exec(`UPDATE tasks SET state='waiting_coordinator' WHERE id=?`, id); err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := p.a.st.TaskRemote(id); r.Worker != "" {
+		t.Fatalf("waiting task %+v", r)
+	}
+}

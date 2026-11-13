@@ -156,6 +156,12 @@ type RemoteComputer struct {
 	// Delayed: that computer reports, but its oldest unsent message has
 	// waited this many minutes (T-150): its replies are late, not lost.
 	Delayed int `json:"outbox_delayed_minutes,omitempty"`
+	// Worker is whether a worker process runs the task there now, as that
+	// computer last reported (T-149): "running" or "none"; empty when that
+	// computer does not say (before 0.67) or the task is not working.
+	// WorkerOutputAt is when that worker last wrote output.
+	Worker         string `json:"worker,omitempty"`
+	WorkerOutputAt string `json:"worker_output_at,omitempty"`
 }
 
 // TaskRemote names the other computer of a task, or nil for a task of this
@@ -194,6 +200,19 @@ func remoteContact(tx *sql.Tx, task string, link netLink, out *RemoteComputer) e
 	out.Lost = broker == "" || broker != link.broker || !found || peer.Age < 0 || peer.Age > PeerFresh
 	if !out.Lost {
 		out.Delayed = peer.OutboxDelayedMinutes()
+		var state string
+		if err := tx.QueryRow(`SELECT state FROM tasks WHERE id=?`, task).Scan(&state); err != nil {
+			return err
+		}
+		if peer.Workers != nil && state == "running" && !out.Unaccepted {
+			out.Worker = "none"
+			for _, r := range peer.Workers.Runs {
+				if r.Task == task {
+					out.Worker = "running"
+					out.WorkerOutputAt = time.Now().UTC().Add(-time.Duration(r.OutputAge+peer.Age) * time.Second).Format(time.RFC3339)
+				}
+			}
+		}
 	}
 	return nil
 }
@@ -583,8 +602,16 @@ func (s *Store) remoteFeed(f *TaskFeed) error {
 	if err := rows.Err(); err != nil {
 		return err
 	}
-	// Events and progress lines come from two tables: show them in time
-	// order. The task itself stays first.
+	// T-149: the coordinator's notes sent to the worker there.
+	if err := s.tx(func(tx *sql.Tx) error {
+		notes, err := ownerNoteItems(tx, f.Task.ID)
+		f.Items = append(f.Items, notes...)
+		return err
+	}); err != nil {
+		return err
+	}
+	// Events, notes and progress lines come from three tables: show them in
+	// time order. The task itself stays first.
 	at := func(i int) time.Time { v, _ := time.Parse(time.RFC3339Nano, f.Items[i].At); return v }
 	rest := f.Items[1:]
 	sort.SliceStable(rest, func(i, j int) bool { return at(i + 1).Before(at(j + 1)) })

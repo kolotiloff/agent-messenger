@@ -163,6 +163,22 @@ func (s *Supervisor) presence() (broker.Presence, error) {
 	if b, err := s.store.OutboxBacklog(); err == nil {
 		p.Outbox = &broker.PresenceOutbox{Waiting: b.Waiting, OldestAge: b.OldestAge}
 	}
+	// The workers running other computers' tasks, so their coordinators can
+	// tell a quiet worker from a gone one (T-149).
+	live := s.tasks.workers()
+	ids := make([]string, 0, len(live))
+	for id := range live {
+		ids = append(ids, id)
+	}
+	if origins, err := s.store.OriginTasks(ids); err == nil {
+		w := &broker.PresenceWorkers{Runs: []broker.PresenceRun{}}
+		for id, origin := range origins {
+			if len(w.Runs) < 64 {
+				w.Runs = append(w.Runs, broker.PresenceRun{Task: origin, OutputAge: min(live[id], 400*24*3600)})
+			}
+		}
+		p.Workers = w
+	}
 	// Readiness for other computers' tasks (T-070): left out if it cannot
 	// be read, so the others see it as unknown rather than wrong.
 	if accept, err := s.store.NetAccept(); err == nil {

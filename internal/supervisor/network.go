@@ -120,6 +120,12 @@ func (s *Supervisor) networkRound(ctx context.Context) {
 			if o := p.Outbox; o != nil {
 				np.Outbox = &core.NetOutbox{Waiting: o.Waiting, OldestAge: o.OldestAge}
 			}
+			if w := p.Workers; w != nil {
+				np.Workers = &core.NetWorkers{Runs: make([]core.NetWorkerRun, 0, len(w.Runs))}
+				for _, r := range w.Runs {
+					np.Workers.Runs = append(np.Workers.Runs, core.NetWorkerRun(r))
+				}
+			}
 			if u := p.Usage; u != nil {
 				np.Usage = make([]core.UsageDayAgent, 0, len(u.Days))
 				for _, d := range u.Days {

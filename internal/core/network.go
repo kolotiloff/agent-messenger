@@ -116,6 +116,9 @@ type NetPeer struct {
 	// Outbox is what it had not sent at its last report (T-150); nil for a
 	// computer before 0.67.
 	Outbox *NetOutbox
+	// Workers is what it ran for other computers (T-149); nil for a
+	// computer before 0.67.
+	Workers *NetWorkers
 }
 
 // reconnectGrace is how long a computer that left the server's list stays
@@ -377,12 +380,16 @@ func (s *Store) SetNetwork(broker, self string, peers []NetPeer) error {
 				u, _ := json.Marshal(p.Usage)
 				usage = string(u)
 			}
-			outbox := ""
+			outbox, workers := "", ""
 			if p.Outbox != nil && !p.Reconnecting {
 				o, _ := json.Marshal(p.Outbox)
 				outbox = string(o)
 			}
-			if _, err := tx.Exec(`INSERT INTO net_peers(peer,name,host,age,agents,ready,usage,updated_at,missing_since,version,computer,outbox) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, p.ID, p.Name, boolInt(p.Host), p.Age, string(raw), ready, usage, at, missing[p.ID], clip(p.Version, 64), validComputer(p.Computer), outbox); err != nil {
+			if p.Workers != nil && !p.Reconnecting {
+				w, _ := json.Marshal(p.Workers)
+				workers = string(w)
+			}
+			if _, err := tx.Exec(`INSERT INTO net_peers(peer,name,host,age,agents,ready,usage,updated_at,missing_since,version,computer,outbox,workers) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, p.ID, p.Name, boolInt(p.Host), p.Age, string(raw), ready, usage, at, missing[p.ID], clip(p.Version, 64), validComputer(p.Computer), outbox, workers); err != nil {
 				return err
 			}
 		}
@@ -417,7 +424,7 @@ func (s *Store) NetPeers() ([]NetPeer, error) {
 }
 
 func netPeers(tx *sql.Tx) ([]NetPeer, error) {
-	rows, err := tx.Query(`SELECT peer,name,host,age,agents,ready,usage,updated_at,missing_since!='',version,computer,outbox FROM net_peers ORDER BY host DESC, name, peer`)
+	rows, err := tx.Query(`SELECT peer,name,host,age,agents,ready,usage,updated_at,missing_since!='',version,computer,outbox,workers FROM net_peers ORDER BY host DESC, name, peer`)
 	if err != nil {
 		return nil, err
 	}
@@ -426,8 +433,8 @@ func netPeers(tx *sql.Tx) ([]NetPeer, error) {
 	for rows.Next() {
 		var p NetPeer
 		var host int
-		var agents, ready, usage, at, outbox string
-		if err := rows.Scan(&p.ID, &p.Name, &host, &p.Age, &agents, &ready, &usage, &at, &p.Reconnecting, &p.Version, &p.Computer, &outbox); err != nil {
+		var agents, ready, usage, at, outbox, workers string
+		if err := rows.Scan(&p.ID, &p.Name, &host, &p.Age, &agents, &ready, &usage, &at, &p.Reconnecting, &p.Version, &p.Computer, &outbox, &workers); err != nil {
 			return nil, err
 		}
 		p.Host = host != 0
@@ -447,6 +454,12 @@ func netPeers(tx *sql.Tx) ([]NetPeer, error) {
 			var o NetOutbox
 			if json.Unmarshal([]byte(outbox), &o) == nil {
 				p.Outbox = &o
+			}
+		}
+		if workers != "" {
+			var w NetWorkers
+			if json.Unmarshal([]byte(workers), &w) == nil {
+				p.Workers = &w
 			}
 		}
 		if when, err := time.Parse(time.RFC3339Nano, at); err == nil && p.Age >= 0 {
@@ -849,9 +862,11 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 			return applyAnswer(tx, from, m.OpID, b)
 		case "continue":
 			return applyContinue(tx, from, b)
+		case "note":
+			return applyNote(tx, from, b)
 		case "cancel":
 			return applyCancel(tx, from, s.gone)
-		case "accepted", "refused", "event", "answer_refused", "continue_refused", "progress":
+		case "accepted", "refused", "event", "answer_refused", "continue_refused", "note_refused", "progress":
 			return applyReport(tx, from, b)
 		case "log_request":
 			return applyLogRequest(tx, from, b)
@@ -1050,6 +1065,8 @@ func applyReport(tx *sql.Tx, from netLink, b netBody) error {
 		return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "failed", why, "")
 	case "continue_refused":
 		return continueNotRun(tx, t, name+" did not continue the task: "+clip(b.Reason, 2000))
+	case "note_refused":
+		return noteRefused(tx, t, name, b)
 	case "answer_refused":
 		if t.State != "running" {
 			return nil
@@ -1211,7 +1228,7 @@ func NetDescribe(body []byte) (desc string, progress bool) {
 // parkedKinds are the replies of the computer that runs another computer's
 // task. When their recipient is not in the network, they are parked, not
 // dropped (T-146).
-var parkedKinds = map[string]bool{"event": true, "accepted": true, "refused": true, "answer_refused": true, "continue_refused": true, "output": true}
+var parkedKinds = map[string]bool{"event": true, "accepted": true, "refused": true, "answer_refused": true, "continue_refused": true, "note_refused": true, "output": true}
 
 // parkedPrefix marks the broker of a parked message, so it is not sent
 // until its recipient is back.
