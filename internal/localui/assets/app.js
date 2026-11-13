@@ -714,7 +714,7 @@
   let linkBusy='',linkFailure=null;
   async function connectCoordinator(name){
     if(linkBusy)return;
-    linkBusy=name;linkFailure=null;if(view?.project===name){renderThread();renderCoordinatorCard();}
+    linkBusy=name;linkFailure=null;if(view?.project===name){renderThread();renderCoordinatorCard();renderAgents();}
     try{
       const r=await postAPI('/api/coordinator-connect',{project:name},40000);
       if(r.result?.state==='failed')linkFailure={project:name,detail:r.result.detail||''};
@@ -1186,6 +1186,21 @@
       if(a&&trust&&trust!=='trusted')step('no',tr('Не доверяет папке проекта'),trust==='not_trusted'?tr('Откройте папку в агенте и подтвердите доверие'):tr('Не удалось определить'),null,a.trust?.hint||tr('Откройте папку проекта в этой программе и подтвердите доверие.'));
       else if(a?.last_done)step('ok',tr('Работает с Messenger'),tr('Последняя задача ')+dayClock(a.last_done));
       else step(3,tr('Работает с Messenger'),missing?tr('Проверится после установки'):tr('Проверится на первой задаче'));
+      // The coordinator of the open project is this Claude in another role
+      // (T-152): its connection is a row of the Claude card.
+      if(provider==='claude'&&view?.project){
+        const place=coordinatorPlace(),link=view.coordinator_link||{},name=view.project_title||view.project;
+        const title=tr('Координатор');
+        const failure=linkFailure?.project===view.project?linkFailure:null;
+        const connect=[tr('Подключить'),()=>connectCoordinator(view.project)];
+        const tip=tr('Координатор — ваш чат в Claude Code: он раздаёт задачи исполнителям и собирает отчёты. Подключите его на том компьютере, с которого будете давать задачи. Для каждого проекта отдельно.');
+        if(linkBusy===view.project)step(4,title,tr('Подключаем…'),null,tip);
+        else if(place?.here)step('ok',title,tr('Подключён к «')+name+tr('». Новый чат в папке проекта'),null,tip);
+        else if(failure)step('no',title,tr('Не получилось: ')+failure.detail,connect,tip);
+        else if(place?.peer)step(4,title,tr('Работает на «')+place.peer+'»',connect,tip);
+        else if(link.state==='no_folder')step(4,title,tr('Нет папки проекта на этом компьютере'),null,tip);
+        else step(4,title,tr('Не подключён к «')+name+'»',cli?connect:null,tip);
+      }
       // 4. The limit the agent reported during its last task (T-044).
       const l=a?.limit,level=limitLevel(l);
       const today=a?.today_tokens?tr('сегодня ')+tokensText(a.today_tokens)+tr(' токенов'):'';
