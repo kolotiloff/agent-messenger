@@ -259,12 +259,17 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 /* Language and theme share one grid: labels in one column, both lists the same width.
    The label column fits the longest label of either language and the lists stop
    growing at a fixed width, so neither jumps on a language switch or a wider sidebar. */
-#am-concept .am-prefs { display:grid; grid-template-columns:minmax(4.75em,max-content) minmax(0,12em); justify-content:start; align-items:center; gap:var(--am-gap-control) var(--am-gap-content); }
-#am-concept .am-theme-setting { display:contents; }
+#am-concept .am-prefs { display:flex; flex-direction:column; }
+#am-concept .am-theme-setting { display:flex; align-items:center; justify-content:space-between; gap:var(--am-gap-content); padding:var(--am-space-3) 0; }
+#am-concept .am-theme-setting + .am-theme-setting { border-top:1px solid var(--am-line); }
+#am-concept .am-theme-setting > :last-child { flex:0 0 12em; }
 #am-concept .am-theme-setting .am-select-trigger { width:100%; }
 #am-concept .am-version { font-size:var(--am-text-xs); color:var(--am-muted); line-height:1.4; }
 /* An available update is a small blue round arrow next to the version (owner, T-066) */
-#am-concept .am-version-row { display:flex; align-items:center; justify-content:space-between; gap:var(--am-gap-control); min-width:0; }
+#am-concept .am-version-row { display:flex; align-items:center; justify-content:flex-end; gap:var(--am-space-1); min-width:0; }
+/* The round update icon is smaller than the icon buttons; its margins give it
+   the same box so the three icons sit at equal steps (owner, T-152). */
+#am-concept .am-version-row .am-update-icon { margin-inline:calc((var(--am-control-compact) - 22px) / 2); }
 #am-concept .am-version-row .am-version { margin:0; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 #am-concept button.am-update-icon { flex-shrink:0; width:22px; height:22px; min-height:0; padding:0; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background:color-mix(in srgb,var(--am-run) 22%,transparent); color:var(--am-run); }
 #am-concept button.am-update-icon:hover:not(:disabled) { background:color-mix(in srgb,var(--am-run) 34%,transparent); }
@@ -705,8 +710,11 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 @media (prefers-reduced-motion:no-preference) { #am-concept .am-spinner { animation:am-spin .9s linear infinite; } }
 @keyframes am-spin { to { transform:rotate(360deg); } }
 /* Task pane without a task (T-152): the chain and the first steps. */
-#am-concept .am-welcome { margin:var(--am-space-6) auto 0; }
+#am-concept .am-welcome { margin:0; max-width:none; width:min(100%,760px); }
 #am-concept .am-welcome h3 { margin:0; }
+#am-concept .am-welcome-intro { display:flex; flex-direction:column; gap:var(--am-space-2); }
+#am-concept .am-welcome-intro p { margin:0; }
+#am-concept .am-welcome-title { margin:0; font-size:var(--am-text-display); font-weight:600; line-height:1.2; }
 #am-concept .am-welcome > p { margin:0; }
 #am-concept .am-chain { display:flex; align-items:stretch; gap:var(--am-space-2); }
 #am-concept .am-chain-node { flex:1 1 0; min-width:0; display:flex; flex-direction:column; gap:var(--am-gap-line); padding:var(--am-space-3); border:1px solid var(--am-line); border-radius:var(--am-radius-m); background:var(--am-panel); }
