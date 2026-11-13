@@ -1,6 +1,6 @@
 # Installing Agent Messenger
 
-For regular use of the Mac app, start with [downloading and installing Agent Messenger.app](MAC_APP.md). A technical preview is available for macOS 15+ on Apple Silicon. Windows, Linux and Intel Mac will get separate packages after installation and updates have been verified; there are no ready downloads for them yet.
+For regular use, start with [Download and start](DOWNLOAD.md): every release has the Mac app (Apple Silicon, macOS 15+) and ready programs for Windows and Linux (x64 and ARM64). There is no Intel Mac build.
 
 Below is a separate archive of the command-line client for developers and testing. It is a different package format; the commands on this page are not needed to install the `.app`.
 
@@ -9,7 +9,7 @@ Below is a separate archive of the command-line client for developers and testin
 1. Download the archive and the checksum to compare against from a trusted place. A checksum attached by an unknown sender to an unknown file does not confirm provenance.
 2. Verify the archive's SHA-256 and unpack it into a separate directory. In it, run `shasum -a 256 -c SHA256SUMS` and `./messenger version`. Metadata is also in `manifest.json`.
 3. Run `./messenger install`. By default the version is placed in `~/.local/lib/agent-messenger/`, and `~/.local/bin/messenger` points to it. You can set `--prefix /absolute/user/directory`.
-4. Add the `bin` directory to PATH yourself if needed. The installer does not change shell settings, does not start the client/model, does not sign in and does not install a service.
+4. Add the `bin` directory to PATH yourself if needed. The installer does not change shell settings, does not start the client/model, does not sign in and does not install a service. On Linux it also adds Agent Messenger to the application menu (T-138).
 5. Next steps — [local client](CLIENT.md), [background run](BACKGROUND.md), [window](LOCAL_UI.md). Without model authorization, launching does not invoke a CLI. For a first try you need a separate test directory and test sessions.
 
 No sudo is needed. The package has a local ad-hoc signature, without Developer ID and notarization. Running it after a browser download with Gatekeeper checks is not yet accepted; the package does not suggest any commands to remove protection or quarantine. This is a limitation before public distribution, not a passed check of installation by a new user.

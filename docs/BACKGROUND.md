@@ -1,8 +1,8 @@
 # Background client and reconnecting
 
-`start` launches the regular local Messenger in the background. The command exits; you can close the terminal. Subsequent `status`, `inspect`, `pause`, `resume` and `enqueue` connect to the same process through a local socket. No service is installed, and there is no autostart after login or reboot and no automatic restart.
+Normally the window (the Mac app or `messenger open`) starts the background client by itself; `start` is the command-line way. `start` launches the regular local Messenger in the background. The command exits; you can close the terminal. Subsequent `status`, `inspect`, `pause`, `resume` and `enqueue` connect to the same process through a local socket. No service is installed, and there is no autostart after login or reboot and no automatic restart.
 
-On macOS the behavior was verified with real Claude. On Linux the implementation builds but was not run in this verification. On Windows the command explicitly reports that it is unsupported: platform locking and process management are not implemented yet.
+It works on macOS, Linux and Windows (D-043; on Windows with `LockFileEx` and job objects). CI starts and stops the background client on all three.
 
 ## Running without models
 
@@ -37,7 +37,7 @@ messenger --root /absolute/data/path resume
 - `shutdown`: terminates Messenger itself. It keeps the protective reservations; the next `start` does not release the stopped CLI session. This is a separate operation from closing the terminal.
 - Recovery after a confirmed Mac reboot is still the explicit `recover-stream`. Background mode does not change that command's conditions.
 
-So closing the user's connection does not require a reboot. **Fully terminating the CLI and safely releasing its reservation within the same OS boot are not implemented by this change.** There is no window interface yet; a future interface must connect to this same client and must not call `shutdown` every time the window is closed.
+So closing the user's connection does not require a reboot. **Fully terminating the CLI and safely releasing its reservation within the same OS boot are not implemented by this change.** The window connects to this same client and does not call `shutdown` when it closes.
 
 ## Launch confirmation
 

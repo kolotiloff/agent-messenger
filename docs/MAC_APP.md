@@ -1,28 +1,37 @@
 # Agent Messenger.app
 
-The first native shell for Mac: AppKit, the system WKWebView and an embedded Go client. A separate browser, Python, Node, Go or a terminal is not needed for normal opening. The chosen design/v1 styling is preserved. This is a local preview, not a finished network release.
+The native shell for Mac: AppKit, the system WKWebView and the embedded Go client. No browser, Python, Node, Go or terminal is needed. It is a technical preview: the app is signed ad-hoc and not notarized.
 
 ## Installation and opening
 
-1. Download **[Mac preview.19 · Apple Silicon](https://github.com/kolotiloff/agent-messenger/releases/download/v0.0.0-preview.19/4584caecdbb280d861d2d06c812c19c08cde385781b3d632ab7f863339242afa.zip)**. [Release notes and files](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.19).
-2. Unpack the ZIP by double-clicking it. The archive's long name is its checksum; inside is `Agent Messenger.app`.
-3. Move `Agent Messenger.app` to the user folder `~/Applications` («Программы», "Applications"). Open it by double-clicking or via Spotlight/Dock.
+1. Download `AgentMessenger-Mac.zip` with the Mac button in the [README](../README.md) (always the newest release).
+2. Safari unpacks it into `Agent Messenger.app`; otherwise double-click the zip.
+3. Move `Agent Messenger.app` to `~/Applications` and open it. The first time macOS may ask to confirm the opening in System Settings → Privacy & Security.
 
-Later versions are checked automatically at launch, every 30 minutes and when you return to the window (with an overall interval of no less than 30 minutes). **«Доступно обновление»** ("Update available") appears at the bottom left; the manual check is in the menu **Agent Messenger → Проверить обновления…** ("Check for Updates…"). No GitHub sign-in is needed.
+Later versions are checked automatically at launch, every 30 minutes and when you return to the window (with an overall interval of no less than 30 minutes). **«Доступно обновление»** appears at the bottom left; the manual check is in the menu **Agent Messenger → Проверить обновления…**. No GitHub sign-in is needed.
 
- The package currently has an ad-hoc signature: clean distribution through Gatekeeper, Developer ID and notarization is not accepted. Bypassing macOS protections is not required and not suggested. Verified locally on Apple Silicon; the minimum version for the shell is macOS 15, Intel is not accepted separately.
+The package has an ad-hoc signature: Developer ID and notarization are not done yet. Bypassing macOS protections is not required and not suggested. Apple Silicon and macOS 15 or later only.
 
-On opening, the shell finds the previous database via the existing protective registry, or uses the normal user directory when there are no reservations. Several different directories, a corrupted registry or a missing saved database lead to a refusal. Reservations are not deleted or restored automatically. If the running client uses a different directory without recorded reservations, choose it via the menu «Файл → Выбрать каталог данных…» ("File → Choose Data Directory…"); there is no search for a "last session".
+On opening, the shell finds the previous database via the existing protective registry, or uses the normal user directory when there are no reservations. Several different directories, a corrupted registry or a missing saved database lead to a refusal. Reservations are not deleted or restored automatically. If the running client uses a different directory without recorded reservations, choose it via the menu «Файл → Выбрать каталог данных…»; there is no search for a "last session".
 
-The application connects to an already running client. If there is no client, it starts one background instance, paused and without model permissions. The global lock protects this path too. Opening an already running client does not change its pause or previously granted permissions. The window itself does not invoke a CLI and does not sign in on the user's behalf.
+The application connects to an already running client. If there is none, it starts one background client, which runs tasks at once (D-029). The global lock protects this path too. The window itself does not invoke a CLI and does not sign in on the user's behalf.
 
-The red button closes the window, but the application stays in the Dock; «Файл → Открыть окно» ("File → Open Window") or reopening the application brings it back. Cmd+Q closes the shell and its local HTTP process. The background client, the queue and the CLI owners remain. The application does not call shutdown on close. Its own UI process lives while the inherited stdin channel is open; if the shell crashes, EOF closes the HTTP server. There is no automatic restart of models.
+The red button closes the window, but the application stays in the Dock; «Файл → Открыть окно» or reopening the application brings it back. Cmd+Q closes the shell and its local HTTP process. The background client and its tasks keep running. Its own UI process lives while the inherited stdin channel is open; if the shell crashes, EOF closes the HTTP server. There is no automatic restart of models.
 
 ## Interface boundaries
 
-The embedded WebView receives only the random private loopback address of its UI process. It does not open external sites, new windows, file URLs or arbitrary navigations. WebView storage is non-persistent; after a full quit, unsent text may disappear. Outgoing messages already written are restored from SQLite under the existing rules. Additional saving of unsent drafts is not enabled yet; updates are installed on a button press.
+The embedded WebView receives only the random private loopback address of its UI process. It does not open external sites, new windows, file URLs or arbitrary navigations. WebView storage is non-persistent; after a full quit, unsent text may disappear.
 
-Existing window functions are messages, history, cards, sending, pause, CLI check and creating a separate test Claude session. In preview.19 it can be explicitly launched from the session list; the permission is limited to one conversation. A background client of version 19 is required. CLI login, the broker, four computers, safe release of old owners and Developer ID/notarization remain separate stages.
+## The window
+
+The tabs are **«Задачи» → «Агенты» → «Проект» → «Сервер» → «Статистика»**; tasks open first. The same window runs on Windows and Linux; what each tab does is in [TASK_MODEL.md](TASK_MODEL.md).
+
+- The left panel lists the project and the computers of the network with their agents. At its bottom are the version, the update notice, the gear «Настройки программы» (theme: light, dark or system; language: Русский or English) and the bug icon «Отзыв о программе» (a remark with a picture, saved on this computer; «Выгрузить все отзывы» writes them to one zip in Downloads).
+- An icon at the top right shows or hides the task list.
+- «Проект» holds the project folder and «Общие указания исполнителям», copied into every new task.
+- **«Вид → Обновить задачи и статусы»** (⌘R) refreshes the window. It does not install a new version.
+
+The theme set in the window also applies to the app's system windows and is kept across launches and updates.
 
 ## Build and checks
 
@@ -37,20 +46,10 @@ The builder refuses to overwrite an existing app/zip, builds Go with CGO_ENABLED
 
 An automated test on a separate HOME verifies launching without models, two UIs connecting to one client, EOF/reopening without losing the queue, and the absence of model attempts. Go tests separately verify directory selection, that reservations stay unchanged, and refusal of model flags. CI builds the bundle and checks the bridge, but this is not presented as a visual test of the WebView.
 
-On the user's Mac the window opened natively: history and cards are available; closing the window and returning via the menu were verified. The full Go suite with race passed. There are no real models in the tests.
+The owner uses the app daily on a Mac; CI builds the bundle on every pull request. There are no real models in the tests.
 
 Foundations of the shell: [NSApplication](https://developer.apple.com/documentation/appkit/nsapplication), [WKWebView](https://developer.apple.com/documentation/webkit/wkwebview). The Messenger core remains in Go; Swift is only the macOS platform shell.
 
 ## Updates from the window
 
-[Signed updates via GitHub Releases](UPDATES.md) are implemented, with a local channel for development. A new version is shown at the bottom of the left panel; installation and restart are done by Sparkle on a button press. An already running background client stays on its version; its processes, database and sessions are not restarted. Compatibility, check boundaries, publishing and acceptance boundaries are described separately.
-
-## Interface refinements of November 6
-
-Section order: **«Переписка» ("Conversations") → «Агенты» ("Agents") → «Сервер» ("Server")**. Conversations opens first. History scrolls within its own area; the input field stays at the bottom. The bottom info bar, the outer frame of the browser mockup and the duplicate header in the native window were removed; the input field is compact, with a soft background. Agents are grouped by provider: Claude Code, Codex, Cursor. The CLI discovery status is in the card, without a duplicate list below. The «Сессии» ("Sessions") button opens a separate window with its own scrolling. [Setup and a test launch of Claude](SESSION_SETUP.md) are available in the current client; existing working conversations are not rebound.
-
-The theme is chosen at the bottom of the left panel: light, dark or system. The native window setting is kept across launches/updates and also applies to the application's system windows.
-
-By default the message queue is shown to the right of the conversation; an icon at the top hides and restores the panel. There is no separate queue tab. Currently the panel shows the number of pending messages and sessions requiring attention, based on client data. The queue panel, the message history and the list of computers scroll independently; the theme, current version and update are pinned at the bottom left.
-
-Manual refresh of messages, queue and statuses is in the menu **«Вид → Обновить сообщения и статусы»** ("View → Refresh Messages and Statuses") (⌘R). It does not install a new version of the program. The top bar of the conversation keeps the toggle for the right queue column.
+[Signed updates via GitHub Releases](UPDATES.md) are installed by Sparkle on a button press. After an update the window restarts an older background client by itself (D-091). If tasks are running, it does not interrupt them on its own: it says «Обновление ждёт задачи» and offers «Дождаться и перезапустить» or «Прервать и перезапустить» (T-123).

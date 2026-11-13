@@ -25,9 +25,9 @@ One coordinator agent hands tasks to worker agents (Claude Code, Codex, Cursor A
 
 ## What it does
 
-- **Coordinator and workers.** You talk to a coordinator in Claude Code. It starts tasks with `start_task`; each task runs as its own worker session of Claude Code, Codex or Cursor in the project folder, and reports back.
+- **Coordinator and workers.** You talk to a coordinator in Claude Code. It starts tasks with `start_task`; each task runs as its own worker session of Claude Code, Codex or Cursor in the project folder, and reports back. While it is idle, a background watch wakes its chat when a worker reports or asks something; it can also write to a running worker, on any computer.
 - **Several computers.** One computer runs the server, the others join it with a short code. The coordinator sees every computer's agents, their models and limits, and can start a task on any of them. Tasks keep their computer when the server moves to another machine.
-- **One window for everything.** Every task of every computer with its live progress, tokens and time. You answer a worker's question, write to a running worker, stop a task or close a stuck one.
+- **One window for everything.** Every task of every computer with its live progress, tokens and time. You answer a worker's question, write to a running worker, stop a task or close a stuck one. Interrupted tasks and tasks whose computer was lost gather under «Требуют решения»; a computer whose replies are held back says for how long.
 - **Safe by default.** A task is finished only when its worker has visibly ended; an unclear result is never retried on its own. «Любые команды» (any commands without asking) is a switch per computer, off by default.
 - **Statistics and feedback.** Tokens per day, agent and computer. A bug icon records remarks about the app (with a picture); the coordinator records its own and exports them as one file.
 - **Updates from the window.** Signed updates on every platform; a Windows or Linux computer can also be updated from another computer's card.
@@ -50,7 +50,7 @@ A web chat on claude.ai does not see Messenger: the coordinator runs in Claude C
 | Windows and Linux | Used daily; install themselves for the current user, update from the window. Not code-signed: SmartScreen may warn. |
 | Workers | Claude Code, Codex and Cursor. Tests use fake CLIs only; real agents are checked in separate acceptance runs. |
 | Network | Server on any computer of the network, invitations by code, TLS with a pinned certificate. Not meant for the open internet; for remote work use a VPN ([BROKER.md](docs/BROKER.md)). |
-| Not done yet | Pictures from workers in reports, waking the coordinator when a worker asks a question, handing the coordinator role to another agent. |
+| Not done yet | Pictures from workers in reports, handing the coordinator role to another agent, watching from a phone. |
 
 The current state and next tasks are in [HANDOFF.md](docs/HANDOFF.md) and [TASKS.md](docs/TASKS.md); the full map of documents is in [docs/README.md](docs/README.md).
 

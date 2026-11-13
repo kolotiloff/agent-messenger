@@ -1,5 +1,7 @@
 # Persistent Claude in the local client
 
+> **Superseded.** The old session path; the window and task workers do not use it ([TASK_MODEL.md](TASK_MODEL.md)).
+
 `messenger serve --claude-stream` supports sequential Claude messages in a single process. It is an explicit mode, enabled separately from the permission to call the model. In this mode Cursor stays in the queue; Codex sessions are served by their own owners (see [CODEX_ADAPTER_NEXT.md](CODEX_ADAPTER_NEXT.md)).
 
 **Several Claude sessions.** Each persistent Claude session gets its own controller and process, and up to 4 run at the same time. A live stream for one session no longer blocks another. `stop-job` and shutdown stop every live stream. A session whose stream is uncertain stays locked; the others keep working.

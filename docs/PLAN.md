@@ -1,5 +1,7 @@
 **Agent Messenger — working plan v0.3: the app and a portable broker**
 
+> **Historical.** The original architecture of November 5, 2026. For the current state see [RELEASE_PLAN.md](RELEASE_PLAN.md#current-status).
+
 Updated November 5, 2026. The user approved continuing in stages and including the UI/installation in the MVP. Local CLI experiments and experimental code are done; there is no finished app yet. Actual readiness and limitations are in [VALIDATION.md](VALIDATION.md).
 
 **1. Purpose and working order**

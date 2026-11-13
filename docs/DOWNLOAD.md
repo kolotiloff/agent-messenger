@@ -25,7 +25,7 @@ Only the Mac app comes in a zip: a Mac app is a folder, and a browser cannot dow
 1. Download `AgentMessenger-Windows-x64.exe` (or `-ARM64.exe` on ARM).
 2. Double-click it. The program is not signed, so SmartScreen may warn: «Подробнее» → «Выполнить в любом случае».
 3. On the first start the program installs itself for the current user, without administrator rights (D-082): it copies itself to `%LOCALAPPDATA%\Programs\Agent Messenger`, adds «Agent Messenger» to the Start menu and to Settings → «Приложения». Then the installed copy opens. The downloaded file is no longer needed. Starting an older download opens the installed newer version instead.
-4. Agent Messenger opens in a window of its own (Windows' built-in WebView2 engine, D-054); the console window that Windows opens closes. Closing the window closes only the window; the background client and its tasks keep running. To come back, start it from the Start menu. On a computer without WebView2 the page opens in the browser instead.
+4. Agent Messenger opens in a window of its own (Windows' built-in WebView2 engine, D-054); the console window that Windows opens closes. Closing the window closes only the window; the background client and its tasks keep running. To come back, start it from the Start menu. On a computer without WebView2 the page opens in the browser instead. On the computer that runs the server, Windows Firewall asks «Разрешить доступ» once; the client always runs from the same file, so updates do not ask again (D-118).
 5. To remove it: Settings → «Приложения» → Agent Messenger → «Удалить». Removal is refused while tasks run. It stops the background client and removes the program, the shortcut and the entry. The data stays.
 
 Data: `%LOCALAPPDATA%\AgentMessenger` (tasks, history, settings, `active-runs.json`); removing the program never deletes it. Later versions arrive in the window («Доступно обновление» → «Обновиться»); the program replaces its own file and opens the window again ([updates](UPDATES.md#windows-and-linux)).
@@ -40,7 +40,7 @@ chmod +x AgentMessenger-Linux-x64
 ./AgentMessenger-Linux-x64 open
 ```
 
-A browser download does not keep the "may run" mark of a file, hence `chmod +x` once. `./AgentMessenger-Linux-x64 install` optionally puts the program in `~/.local/bin` as `messenger`. On a computer with such an installation, opening a newer downloaded file updates the installation and opens from it. The window opens on its own, without tabs or an address bar, through Chrome, Chromium, Edge or Brave when one is installed (D-054); after the first start Agent Messenger is in the application menu. Without them the page opens in the default browser, or the program prints the path of a file to open.
+A browser download does not keep the "may run" mark of a file, hence `chmod +x` once. `./AgentMessenger-Linux-x64 install` optionally puts the program in `~/.local/bin` as `messenger`. On a computer with such an installation, opening a newer downloaded file updates the installation and opens from it. The window opens on its own with the system's WebKitGTK (`libwebkit2gtk-4.1` or `-4.0`, present on most desktops; D-078); after the first start Agent Messenger is in the application menu. Without WebKitGTK it opens through Chrome, Chromium, Edge or Brave without tabs or an address bar (D-054), then in the default browser, or the program prints the path of a file to open.
 
 Data: `$XDG_DATA_HOME/agent-messenger` or `~/.local/share/agent-messenger`. To stop the background client: `./AgentMessenger-Linux-x64 shutdown`. Later versions arrive in the window («Доступно обновление» → «Обновиться»), as on Windows; a program installed with `install` is updated there as well ([updates](UPDATES.md#windows-and-linux)).
 
@@ -48,7 +48,7 @@ Data: `$XDG_DATA_HOME/agent-messenger` or `~/.local/share/agent-messenger`. To s
 
 - **Claude Code**: the usual installation (`claude.exe` on Windows, usually in `%USERPROFILE%\.local\bin`; `claude` on Linux and Mac).
 - **Codex**: on Windows the npm installation works; the program finds the `codex.exe` inside the npm package. `.cmd` and `.bat` files are not started (D-044).
-- **Cursor**: `cursor-agent` on Mac and Linux (usually in `~/.local/bin`). Before the first Cursor task Messenger adds one entry, `messenger_task`, to `~/.cursor/mcp.json`; other entries stay as they are (D-049). Not on Windows yet.
+- **Cursor**: `cursor-agent` on Mac and Linux (usually in `~/.local/bin`). Before the first Cursor task Messenger adds one entry, `messenger_task`, to `~/.cursor/mcp.json`; other entries stay as they are (D-049). On Windows Messenger runs Cursor's own `node.exe` with its `index.js` from the newest version in `%LOCALAPPDATA%\cursor-agent`.
 
 ## First steps
 

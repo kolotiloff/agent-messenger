@@ -1,5 +1,7 @@
 # Next adapter: persistent Codex
 
+> **Superseded.** This app-server work is not wired into the product; Codex task workers run `codex exec` ([TASK_MODEL.md](TASK_MODEL.md)).
+
 Research and first Go components as of November 6, 2026, with Codex CLI 0.155.1 installed. The full persistent adapter is not yet connected to the product client.
 
 ## Implemented in Go

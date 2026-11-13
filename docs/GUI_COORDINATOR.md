@@ -1,5 +1,7 @@
 # Optional scenario: a graphical Claude window
 
+> **Historical.** Superseded by D-024: the coordinator is the owner's Claude Code chat (in the Claude app's Code tab or a terminal) with Messenger's MCP server ([TASK_MODEL.md](TASK_MODEL.md)).
+
 On November 5, 2026 the user described a personal convenience: talking to the coordinator in the Code tab of the Claude app on the Mac and using their usual dictation. This is a note about a possible setup, not a product requirement, a priority in the main plan, or a release condition.
 
 Messenger remains a universal transport. The coordinator role can belong to Claude, Codex, Cursor or another supported agent, and can be handed between them. The choice of provider and of whichever window is convenient for the human must not dictate the architecture of the broker, the queue or addressing.

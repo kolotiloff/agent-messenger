@@ -706,7 +706,7 @@
     }
     section(tr('Требуют решения'),groups.attention,closeAll);
     section(tr('Завершённые'),groups.done);
-    if(!box.children.length)box.append(el('p',view?.project?(computerFilter||$('agent-filter').value?tr('Здесь задач нет'):tr('Задач пока нет')):'','am-small am-muted'));
+    if(!box.children.length)box.append(el('p',view?.project?(computerFilter||$('agent-filter').value?tr('Здесь задач нет'):tr('Задач пока нет. Когда координатор раздаст первые, они появятся здесь.')):'','am-small am-muted'));
     swapChildren(live,box);
   }
   // Coordinator connection (T-039): the client runs Claude's own
@@ -714,44 +714,78 @@
   let linkBusy='',linkFailure=null;
   async function connectCoordinator(name){
     if(linkBusy)return;
-    linkBusy=name;linkFailure=null;if(view?.project===name)renderThread();
+    linkBusy=name;linkFailure=null;if(view?.project===name){renderThread();renderCoordinatorRow();}
     try{
       const r=await postAPI('/api/coordinator-connect',{project:name},40000);
       if(r.result?.state==='failed')linkFailure={project:name,detail:r.result.detail||''};
     }catch(error){linkFailure={project:name,detail:error.message};}
     finally{linkBusy='';viewSignature='';await refresh();}
   }
-  // Shown as the first message of the project's conversation, from
-  // Messenger, until the coordinator chat connects.
-  function connectHelp(){
-    const g=el('article',undefined,'am-message-group am-connect'),row=el('div',undefined,'am-message');
-    const avatar=el('div',undefined,'am-avatar');const mark=el('span','M','am-provider-icon');mark.setAttribute('aria-hidden','true');avatar.append(mark);
-    const body=el('div',undefined,'am-message-body'),meta=el('div',undefined,'am-meta');meta.append(el('strong','Messenger'));
-    const box=el('div',undefined,'am-message-content');meta.prepend(avatar);body.append(meta,box);row.append(body);g.append(row);
+  // The coordinator of the project on this computer (T-152): Claude's link
+  // for the project folder, as one row of the «Проект» page, and the manual
+  // command under it. Agents are set up once; the link is per folder.
+  function renderCoordinatorRow(){
+    const box=$('coord-box');if(!box||!view?.project)return;
     const link=view.coordinator_link||{state:'unknown'},failure=linkFailure?.project===view.project?linkFailure:null;
-    const connect=label=>{const b=el('button',label);b.type='button';b.addEventListener('click',()=>connectCoordinator(view.project));return b;};
-    if(linkBusy===view.project){
-      box.append(el('p',tr('Подключаем Claude к проекту…'),'am-connect-title'),el('p',tr('Messenger добавляет этот проект в настройки Claude. Это займёт несколько секунд.')));
-    }else if(link.state==='connected'){
-      box.append(el('p',tr('Claude подключён к проекту'),'am-connect-title'));
-      box.append(el('p',tr('Откройте папку проекта в Claude (вкладка Code, этот компьютер) и начните новый чат. Напишите в нём, что нужно сделать. Чтобы проверить подключение, спросите: «Каких агентов ты видишь?»')));
-      box.append(el('p',tr('Чат, открытый до подключения, проект не увидит: нужен новый.'),'am-small am-muted'));
-    }else{
-      box.append(el('p',tr('Подключите Claude к проекту'),'am-connect-title'));
-      if(failure){box.append(el('p',tr('Не получилось подключить: ')+failure.detail),connect(tr('Попробовать ещё раз')));}
-      else if(link.state==='no_claude'){box.append(el('p',tr('Сначала подключите Claude Code во вкладке «Агенты», затем нажмите кнопку ниже.')),connect(tr('Подключить к Claude')));}
-      else if(link.state==='other'){box.append(el('p',tr('В настройках Claude для этой папки уже есть другое подключение с именем «messenger». Messenger его не меняет. Если оно больше не нужно, удалите его командой «claude mcp remove messenger» в этой папке и нажмите кнопку ниже.')),connect(tr('Подключить к Claude')));}
-      else if(link.state==='unknown'){box.append(el('p',tr('Не удалось прочитать настройки Claude')+(link.detail?': '+link.detail:'.')),connect(tr('Подключить к Claude')));}
-      else if(link.state==='no_folder'){box.append(el('p',tr('У проекта нет папки на этом компьютере. Укажите её в настройках проекта.')));}
-      else{box.append(el('p',tr('Задачи проекта даёт ваш чат в Claude. Messenger сам добавит этот проект в настройки Claude.')),connect(tr('Подключить к Claude')));}
-    }
+    const connect=[tr('Подключить'),()=>connectCoordinator(view.project)];
+    const title=tr('Координатор');
+    const tip=tr('Координатор — ваш чат в Claude Code (в приложении Claude или в терминале), открытый в папке проекта. Он раздаёт задачи исполнителям и собирает отчёты. Новый проект подключается сам; кнопка нужна, если это не получилось.');
+    let row;
+    if(linkBusy===view.project)row=stepRow(1,title,tr('Подключаем…'),null,tip);
+    else if(coordinatorPlace())row=stepRow('ok',title,tr('Подключён к Claude Code. Откройте папку проекта в новом чате'),null,tip);
+    else if(failure)row=stepRow('no',title,tr('Не получилось: ')+failure.detail,[tr('Повторить'),()=>connectCoordinator(view.project)],tip);
+    else if(link.state==='no_claude')row=stepRow(1,title,tr('Сначала настройте Claude Code во вкладке «Агенты»'),[tr('Агенты'),()=>show('agents')],tip);
+    else if(link.state==='no_folder')row=stepRow(1,title,tr('Сначала укажите папку проекта'),null,tip);
+    else if(link.state==='other')row=stepRow('no',title,tr('В Claude у этой папки уже есть другое подключение «messenger». Messenger его не меняет'),connect,tip);
+    else if(link.state==='unknown')row=stepRow('no',title,tr('Не удалось прочитать настройки Claude')+(link.detail?': '+link.detail:''),connect,tip);
+    else row=stepRow(1,title,tr('Не подключён'),connect,tip);
+    const steps=el('div',undefined,'am-steps');steps.append(row);
     const manual=el('details',undefined,'am-tool');manual.append(el('summary',tr('Подключить вручную через Терминал')));
     const command='cd '+shellQuote(view.folder)+' && claude mcp add --scope local messenger -- '+shellQuote(view.messenger)+' --root '+shellQuote(view.data_root)+' coordinator --project '+shellQuote(view.project);
     const copy=el('button',tr('Скопировать команду'));copy.type='button';
     copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(command);copy.textContent=tr('Скопировано');}catch(_){copy.textContent=tr('Скопируйте вручную');}setTimeout(()=>copy.textContent=tr('Скопировать команду'),2000);});
     manual.append(el('pre',command,'am-command'),copy);
-    box.append(manual,el('p',tr('Чат-координатор видит только задачи этого проекта.'),'am-small am-muted'));
-    return g;
+    manual.hidden=link.state==='no_folder'||coordinatorPlace();
+    const body=el('div',undefined,'am-coord-box am-field-sep');body.id='coord-box';body.append(steps,manual);
+    if(box.querySelector('details')?.open)manual.open=true;
+    if(box.innerHTML!==body.innerHTML)box.replaceWith(body);
+  }
+  // Whether this computer's Claude Code is the project's coordinator. Other
+  // computers are not shown: any computer may have its own (owner, T-152).
+  function coordinatorPlace(){
+    return view?.coordinator?.connected||view?.coordinator_link?.state==='connected';
+  }
+  // The task pane with no task yet (T-152): what the program does, drawn as
+  // a short chain, and the first steps with their state on this computer.
+  function welcome(){
+    const box=el('div',undefined,'am-settings am-welcome');
+    const intro=el('div',undefined,'am-welcome-intro');
+    intro.append(el('h2',tr('Добро пожаловать в Agent Messenger'),'am-welcome-title'),
+      el('p',tr('Ставьте задачи агентам на всех своих компьютерах из одного чата.'),'am-muted'));
+    box.append(intro);
+    const chain=el('div',undefined,'am-chain');
+    const node=(title,sub)=>{const n=el('div',undefined,'am-chain-node');n.append(el('strong',title),el('span',sub,'am-small am-muted'));return n;};
+    const arrow=()=>{const a=el('span','→','am-chain-arrow');a.setAttribute('aria-hidden','true');return a;};
+    chain.append(node(tr('Вы'),tr('Пишете координатору, что нужно сделать.')),arrow(),node(tr('Координатор'),tr('Чат в Claude Code. Раздаёт задачи и собирает отчёты.')),arrow(),node(tr('Исполнители'),tr('Claude Code, Codex и Cursor на ваших компьютерах.')));
+    box.append(el('h3',tr('Как это работает')),chain);
+    const steps=el('div',undefined,'am-steps am-welcome-steps');
+    let number=0;
+    const step=(ok,title,sub,label,go)=>{
+      const row=el('div',undefined,'am-step');number++;
+      row.append(el('span',ok?'✓':String(number),'am-mark '+(ok?'am-mark-ok':'am-mark-off')));
+      const text=el('div',undefined,'am-step-text');text.append(el('p',title,'am-step-title'),el('p',sub,'am-step-sub'));row.append(text);
+      if(label){const b=el('button',label);b.type='button';b.addEventListener('click',go);row.append(b);}else row.append(el('span'));
+      steps.append(row);
+    };
+    const agents=(view.agents||[]).length;
+    step(agents>0,tr('Агенты на этом компьютере'),agents?tr('Подключено: ')+agents:tr('Установите и подключите хотя бы одного'),agents?'':tr('Агенты'),()=>show('agents'));
+    const place=coordinatorPlace(),hasClaude=(view.agents||[]).some(a=>a.agent==='claude'&&a.cli),claudeReady=hasClaude&&view.coordinator_link?.state!=='no_folder'&&linkBusy!==view.project;
+    step(!!place,tr('Координатор'),place?tr('Подключён к Claude на этом компьютере'):(linkFailure?.project===view.project?tr('Не получилось: ')+linkFailure.detail:tr('Подключите Claude Code координатором, чтобы давать задачи с этого компьютера')),place?'':claudeReady?tr('Подключить'):hasClaude?tr('Проект'):tr('Агенты'),()=>claudeReady?connectCoordinator(view.project):show(hasClaude?'project':'agents'));
+    const peers=(server?.peers||[]).length;
+    step(peers>0,tr('Другие компьютеры'),peers?tr('В сети: ')+peers:tr('Необязательно: объедините компьютеры через сервер'),peers?'':tr('Сервер'),()=>show('server'));
+    box.append(el('h3',tr('С чего начать')),steps);
+    if(place)box.append(el('p',tr('Откройте папку проекта в Claude Code, начните новый чат и спросите: «Каких агентов ты видишь?»'),'am-small am-muted'));
+    return box;
   }
   function renderThread(){
     const thread=$('thread'),head=$('task-head');
@@ -763,12 +797,11 @@
       const b=el('button',tr('Новый проект'),'am-primary');b.type='button';b.addEventListener('click',()=>openProjectDialog(false));box.append(b);
       thread.replaceChildren(box);return;
     }
-    if(!view.coordinator.connected&&!view.tasks.length){head.replaceChildren();thread.replaceChildren(connectHelp());return;}
     const shared=sharedSelection();
     if(shared){renderSharedTask(shared.t,shared.p);return;}
     if(!selectedTask||!feed||feed.task.id!==selectedTask){
       head.replaceChildren();
-      if(!selectedTask)thread.replaceChildren(el('p',view.tasks.length?tr('Выберите задачу в списке справа.'):tr('Задач пока нет. Их создаёт чат-координатор.'),'am-muted am-empty'));
+      if(!selectedTask)thread.replaceChildren(welcome());
       return;
     }
     renderFeed();
@@ -989,7 +1022,7 @@
   }
   // Known refusals of another computer, explained in the window's language.
   function refusalText(text,name){
-    if(/does not run tasks of other computers/.test(text||''))return tr('Компьютер «')+name+tr('» не принимает задачи других компьютеров. Включите на нём «Задачи других компьютеров» на вкладке «Сервер» и дайте задачу снова.');
+    if(/does not run tasks of other computers/.test(text||''))return tr('Компьютер «')+name+tr('» не принимает задачи других компьютеров. Включите на нём «Принимать задачи других компьютеров» на вкладке «Сервер» и дайте задачу снова.');
     if(/has no project/.test(text||''))return tr('На компьютере «')+name+tr('» нет проекта с таким названием. Создайте его там и выберите папку.');
     if(/has no folder for the project|project folder is missing/.test(text||''))return tr('На компьютере «')+name+tr('» у проекта не выбрана папка или её нет. Выберите папку проекта там и дайте задачу снова.');
     if(/is not set up on this computer/.test(text||''))return tr('На компьютере «')+name+tr('» этот агент не настроен. Настройте его там на вкладке агентов.');
@@ -1096,21 +1129,7 @@
       card.append(head);
       const steps=el('div',undefined,'am-steps');
       // mark: 'ok', 'no', a step number, or a node (the limit ring).
-      const step=(mark,title,sub,action,tip)=>{
-        const row=el('div',undefined,'am-step');
-        if(mark instanceof Node){const m=el('span',undefined,'am-mark am-mark-ring');m.append(mark);row.append(m);}
-        else row.append(el('span',mark==='ok'?'✓':mark==='no'?'✕':String(mark),'am-mark '+(mark==='ok'?'am-mark-ok':mark==='no'?'am-mark-no':'am-mark-off')));
-        const text=el('div',undefined,'am-step-text'+(typeof mark==='number'?' am-step-later':''));
-        const line=el('p',undefined,'am-step-title');
-        if(title instanceof Node)line.append(title);else line.textContent=title;
-        if(tip){const q=el('span','?','am-q');q.title=tip;q.setAttribute('aria-label',tip);q.tabIndex=0;line.append(q);}
-        text.append(line);
-        if(sub instanceof Node){const s=el('p',undefined,'am-step-sub');s.append(sub);text.append(s);}
-        else if(sub){const s=el('p',sub,'am-step-sub');s.title=sub;text.append(s);}
-        row.append(text);
-        if(action){const b=el('button',action[0]);b.type='button';b.addEventListener('click',action[1]);row.append(b);}else row.append(el('span'));
-        steps.append(row);
-      };
+      const step=(mark,title,sub,action,tip)=>steps.append(stepRow(mark,title,sub,action,tip));
       const check=agentChecks.get(provider),auth=check?.authentication?.state;
       const busy=checking.has(provider);
       // 1. The program.
@@ -1145,6 +1164,8 @@
       if(a&&trust&&trust!=='trusted')step('no',tr('Не доверяет папке проекта'),trust==='not_trusted'?tr('Откройте папку в агенте и подтвердите доверие'):tr('Не удалось определить'),null,a.trust?.hint||tr('Откройте папку проекта в этой программе и подтвердите доверие.'));
       else if(a?.last_done)step('ok',tr('Работает с Messenger'),tr('Последняя задача ')+dayClock(a.last_done));
       else step(3,tr('Работает с Messenger'),missing?tr('Проверится после установки'):tr('Проверится на первой задаче'));
+      // The coordinator of the open project is this Claude in another role
+      // (T-152): its connection is a row of the Claude card.
       // 4. The limit the agent reported during its last task (T-044).
       const l=a?.limit,level=limitLevel(l);
       const today=a?.today_tokens?tr('сегодня ')+tokensText(a.today_tokens)+tr(' токенов'):'';
@@ -1634,7 +1655,9 @@
     finally{$('fb-save').disabled=false;}
   }
   async function exportFeedback(){
-    $('fb-export').disabled=true;$('fb-status').textContent=tr('Выгружаем…');
+    // No «Выгружаем…» line: it appeared for a moment and made the dialog
+    // jump (owner, T-152). The button is disabled meanwhile.
+    $('fb-export').disabled=true;$('fb-status').textContent='';
     try{
       const r=await postAPI('/api/feedback-export',{},15000);
       const cut=Math.max(r.result.path.lastIndexOf('/'),r.result.path.lastIndexOf('\\'));$('fb-dir').textContent=tr('Файл сохранён в папке ')+r.result.path.slice(0,cut>0?cut:0)+':';$('fb-path').textContent=r.result.path.slice(cut+1);$('fb-path').title=r.result.path;$('fb-copy').dataset.path=r.result.path;$('fb-copy').removeAttribute('data-copied');$('fb-saved').hidden=false;$('fb-status').textContent='';
@@ -1666,6 +1689,23 @@
   // failed or unanswered save is shown and not repeated; a good one shows
   // nothing (T-064).
   let projectPageFor='',projectSaving=Promise.resolve(),rulesTimer=0;
+  // One row of a step list: a mark (✓, ✕, a number or a ring), a title with
+  // an optional «?» tip, a subtitle and an optional button.
+  function stepRow(mark,title,sub,action,tip){
+    const row=el('div',undefined,'am-step');
+    if(mark instanceof Node){const m=el('span',undefined,'am-mark am-mark-ring');m.append(mark);row.append(m);}
+    else row.append(el('span',mark==='ok'?'✓':mark==='no'?'✕':String(mark),'am-mark '+(mark==='ok'?'am-mark-ok':mark==='no'?'am-mark-no':'am-mark-off')));
+    const text=el('div',undefined,'am-step-text'+(typeof mark==='number'?' am-step-later':''));
+    const line=el('p',undefined,'am-step-title');
+    if(title instanceof Node)line.append(title);else line.textContent=title;
+    if(tip){const q=el('span','?','am-q');q.title=tip;q.setAttribute('aria-label',tip);q.tabIndex=0;line.append(q);}
+    text.append(line);
+    if(sub instanceof Node){const s=el('p',undefined,'am-step-sub');s.append(sub);text.append(s);}
+    else if(sub){const s=el('p',sub,'am-step-sub');s.title=sub;text.append(s);}
+    row.append(text);
+    if(action){const b=el('button',action[0]);b.type='button';b.addEventListener('click',action[1]);row.append(b);}else row.append(el('span'));
+    return row;
+  }
   function renderProjectPage(){
     const name=view?.project||'';
     $('project-none').hidden=!!name;$('project-page').hidden=!name;
@@ -1679,6 +1719,7 @@
     $('project-page-key').textContent=renamed?tr('Для других компьютеров и координатора проект по-прежнему называется «')+name+'».':'';
     if(fresh||document.activeElement!==$('project-page-folder'))$('project-page-folder').value=view.folder||'';
     if(fresh||(document.activeElement!==$('project-page-rules')&&!rulesTimer))$('project-page-rules').value=view.worker_rules||'';
+    renderCoordinatorRow();
   }
   function saveProjectField(field){
     const name=view?.project;if(!name)return;
@@ -1754,7 +1795,7 @@
     $('agent-models').placeholder=a?tr('Пусто: задачи идут на модель по умолчанию'):tr('Сначала включите агента на карточке');
     $('agent-models-note').textContent=tr('Через запятую, как их пишет сам ')+shortNames[provider]+'.'+(defaultModels[provider]?tr(' Уже вписаны по умолчанию.'):'');
     setStatus('agent-save-status','');
-    $('agent-setup').showModal();
+    if(!$('agent-setup').open)$('agent-setup').showModal();
   }
   // One check at a time: the client refuses a second one while one runs.
   let checkQueue=Promise.resolve();
@@ -2063,6 +2104,15 @@
   fbShot.addEventListener('drop',e=>{e.preventDefault();fbShot.classList.remove('am-drop');fbTake(e.dataTransfer.files[0]);});
   $('invite-close').addEventListener('click',()=>$('invite-dialog').close());
   // A closed invitation is not shown again; a new one can be made at any time.
+  // A click on the dimmed area outside an open dialog closes it, like its ✕
+  // (owner, T-152). The restart dialog stays: it waits for the restart.
+  for(const dialog of document.querySelectorAll('dialog')){
+    if(dialog.id==='restart-dialog')continue;
+    let downOutside=false;
+    const outside=event=>{const r=dialog.getBoundingClientRect();return event.target===dialog&&(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom);};
+    dialog.addEventListener('mousedown',event=>{downOutside=outside(event);});
+    dialog.addEventListener('click',event=>{if(downOutside&&outside(event))dialog.close();downOutside=false;});
+  }
   $('invite-dialog').addEventListener('close',()=>{invitation=null;clearInterval(inviteTimer);});
   $('project-save').addEventListener('click',createProject);
   $('project-page-rules').addEventListener('input',()=>{clearTimeout(rulesTimer);rulesTimer=setTimeout(()=>{rulesTimer=0;saveProjectField('rules');},800);});

@@ -1,5 +1,7 @@
 # Replies between agents
 
+> **Superseded.** The old message path between sessions; tasks and reports replaced it ([TASK_MODEL.md](TASK_MODEL.md)).
+
 A reply always goes to the sender of the message it answers. The code sets the recipient; the model cannot choose it.
 
 When that sender is the alias of another open local session, the reply is also queued for that session as a new message.

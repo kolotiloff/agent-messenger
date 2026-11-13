@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-14 — Claude Code (docs check, T-152 window, 0.68)
+
+- Docs checked against the program (T-151). T-152 reworked with the owner over several rounds: welcome page, the coordinator as one row of «Проект» (this computer only), dialogs close on an outside click, settings and sidebar tidy-ups, feedback export without a jump. T-158 part: `messenger_version` in `list_agents`. Feedback export of 11-14 read; new T-157, T-158, T-159. Owner asked to release before going to sleep.
+
 ## 2026-11-13 — Claude Code (0.66, T-148 note texts, feedback review)
 
 - 0.66 released (PR #97): T-139, T-146. GitHub cancelled the publish job once (no Mac runner in 15 min); one re-run published it. All 21 files checked; Linux feed build 66. The CLI watch workflow's first manual run passed.

@@ -1,5 +1,7 @@
 # Launching only the selected session
 
+> **Superseded.** The preview.19 test session from the window; that button and the session path are gone ([TASK_MODEL.md](TASK_MODEL.md)).
+
 In preview.19, launching a new test Claude session is available from the window: «Агенты» ("Agents") → Claude Code → «Сессии» ("Sessions") → «Запустить тестовую сессию» ("Launch test session"). It can be created via «Настроить» ("Set up"). The button explicitly permits message processing for the selected session only and resumes the queue. If messages are already queued for this session, they will start being processed. Other recipients stay in the queue. Replies spend tokens; idle waiting sends no model requests.
 
 The button is available only for a new test session created by Messenger that has no owner. Older registered and working conversations are not connected by this action. While one permission is active in the client, it cannot be switched to another session. Repeating the confirmation returns the same result and does not resume a subsequent pause. The permission is not kept after the background client stops; closing one window is not the same as stopping the client. After an attempt, a protective reservation may remain — the button does not bypass it.

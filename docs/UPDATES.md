@@ -1,10 +1,10 @@
-# Mac app updates
+# Updates
 
-The app receives signed builds from the public GitHub Releases of `kolotiloff/agent-messenger`. No GitHub key or login is needed to download. The private signing key stays in the developer's Keychain; the sources and the app contain only the public Ed25519 verification key.
+Updates on Mac, Windows and Linux, and updates of another computer of the network. The programs receive signed builds from the public GitHub Releases of `kolotiloff/agent-messenger`. No GitHub key or login is needed to download. The private signing key stays in the developer's Keychain; the sources and the app contain only the public Ed25519 verification key.
 
 ## What gets updated
 
-Sparkle 2.10.1 replaces the app and the embedded interface, then reopens it. A running background client stays on its previous version: its processes, database, queue, model permission and protective reservations do not change. New clients are started from an immutable copy of the binary outside the `.app`. Full background client update, migrations and rollback have not yet been accepted. Unsaved input text may be lost when the window restarts.
+On Mac, Sparkle 2.10.1 replaces the app and the embedded interface, then reopens it. New clients are started from an immutable copy of the binary outside the `.app`. When the window then sees an older background client, it asks it to restart once, by itself (D-091); the database, protective reservations and `active-runs.json` stay as they are. A client with running tasks refuses that restart, because a restart interrupts them and they are never repeated on their own. The window then says «Обновление ждёт задачи» and offers «Дождаться и перезапустить» (restart once the tasks end) or «Прервать и перезапустить» (T-123). Rollback to an older version is not offered. Unsaved input text may be lost when the window restarts.
 
 ## Delivery
 
@@ -30,11 +30,11 @@ The window (`messenger open`) checks when it opens and then every 30 minutes, in
 4. replaces the program: on Linux one rename; on Windows the running file is renamed to `<name>.old` (or `.old-1`… if an older one is still running) and the new one takes its name; the leftovers are removed at a later start. A program installed with `messenger install` is installed as a new version folder next to the running one instead, while the background client keeps running from its own folder (T-107); a manual `messenger install` still needs the client stopped;
 5. closes the page and starts the new program with the same arguments, which opens the window again.
 
-Any failure before step 4 leaves the program untouched and removes the staged file. The background client and its tasks are not touched; the window then offers «Перезапустить», as on the Mac. The program must sit in a folder the user can write to.
+Any failure before step 4 leaves the program untouched and removes the staged file. The background client and its tasks are not touched by the replacement; the new window then restarts an older client as on the Mac (D-091, T-123). The program must sit in a folder the user can write to.
 
 ### From another computer of the network (T-078, D-100)
 
-«Обновить программу» in the right-click menu of another computer in the sidebar asks that computer, through the broker's mailbox, to update itself. The item is offered only for a computer on line that reports its version (older ones would not answer). It answers at once: refused while any task is unfinished, on a Mac (update it in the app there), when its window never recorded the program file (`program.json` in the data folder, written each time `messenger open` starts) or while another update runs; otherwise «updating». Its client then starts the hidden `_remote-update` command from that program file, detached. The helper checks the tasks again, runs the same check and steps 1–4 above, restarts the background client from the installed program (the client's own shutdown command, then a start from a runtime copy; a pause stays), and writes `remote-update.json` (0600). Whichever client runs sends that result and removes the file; one that never appears is answered as failed after 30 minutes. If there is no newer release, the answer is «уже последняя версия», or a restart when the running client is older than the program file. Nothing is retried on its own; `active-runs.json` and reservations are not touched.
+An update icon on another computer's card in the left panel, shown when that computer's version is older than this one, asks that computer, through the broker's mailbox, to update itself (T-128; it asks for confirmation first). It is offered only for a computer on line that reports its version (older ones would not answer). It answers at once: refused while any task is unfinished (the refusal names up to three of them, T-145), on a Mac (update it in the app there), when its window never recorded the program file (`program.json` in the data folder, written each time `messenger open` starts) or while another update runs; otherwise «updating». Its client then starts the hidden `_remote-update` command from that program file, detached. The helper checks the tasks again, runs the same check and steps 1–4 above, restarts the background client from the installed program (the client's own shutdown command, then a start from a runtime copy; a pause stays), and writes `remote-update.json` (0600). Whichever client runs sends that result and removes the file; one that never appears is answered as failed after 30 minutes. If there is no newer release, the answer is «уже последняя версия», or a restart when the running client is older than the program file. The result appears as a notice above the reply box (T-128). Nothing is retried on its own; `active-runs.json` and reservations are not touched.
 
 ## Releasing from GitHub Actions
 
@@ -77,7 +77,7 @@ Sparkle is downloaded from the official release with a pinned checksum; its lice
 
 Transport tests cover a correct download, an allowed CDN redirect, a foreign domain, a wrong signature, corruption/truncation/size overrun, a repeated asset name, a missing signature, HTTP errors, rejection of version downgrade/conflict, preservation of the previous channel and blocking of a second writer. A shell test checks that the queue is preserved and that no models are started.
 
-Local transitions between preview builds via Sparkle have been verified on the user's Mac. The public preview.12 → preview.13 transition on Mac has been accepted: [actual report](reports/2026-11-06-github-update-mac.md). Remaining before the full stage: background client update, backup and rollback, Gatekeeper/notarization on a clean Mac, and runtime acceptance on Windows/Linux.
+Local transitions between preview builds via Sparkle have been verified on the user's Mac. The public preview.12 → preview.13 transition on Mac has been accepted: [actual report](reports/2026-11-06-github-update-mac.md). Since then every release has been installed this way on the owner's Mac, Windows and Linux computers. Still missing: backup and rollback, and Gatekeeper/notarization on a clean Mac.
 
 API contracts: [GitHub Releases](https://docs.github.com/en/rest/releases/releases), [downloading assets](https://docs.github.com/en/rest/releases/assets). Preparing a future public release does not mean all Messenger features are ready.
 

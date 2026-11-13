@@ -1,6 +1,8 @@
 # Local client: decision and work plan
 
-The original decision was recorded on November 5, 2026. Current instructions for launching the window, installation and checks are in [LOCAL_UI.md](LOCAL_UI.md), [INSTALL.md](INSTALL.md) and [CI.md](CI.md). The history of the first one-shot client is also kept below; its old limitations should not be carried over to every later version.
+> Mostly historical: the decision and first stage of November 5, 2026. For using the program today see [DOWNLOAD.md](DOWNLOAD.md) and [TASK_MODEL.md](TASK_MODEL.md); for building and checks, [INSTALL.md](INSTALL.md) and [CI.md](CI.md). The research test benches named below were removed from the tree and stay in git history ([docs/README.md](README.md)).
+
+The original decision was recorded on November 5, 2026. The history of the first one-shot client is also kept below; its old limitations should not be carried over to every later version.
 
 ## Current addendum: persistent Claude
 
@@ -32,7 +34,7 @@ The data directory is created with `0700` permissions, the database and the comm
 |---|---|
 | macOS | `~/Library/Application Support/AgentMessenger` |
 | Linux | `$XDG_DATA_HOME/agent-messenger` or `~/.local/share/agent-messenger` |
-| Windows | `%AppData%\AgentMessenger`, if the directory is known |
+| Windows | `%LOCALAPPDATA%\AgentMessenger` |
 
 Tests pass their own temporary `--root` and do not write to these directories.
 

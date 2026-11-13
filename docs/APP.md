@@ -1,5 +1,7 @@
 # Application, installation and interface — requirements v0.3
 
+> **Historical.** The original target requirements of November 5, 2026. The product went another way in places: tasks instead of conversations between agents ([TASK_MODEL.md](TASK_MODEL.md)), and the repository is public. For the current state see [RELEASE_PLAN.md](RELEASE_PLAN.md#current-status).
+
 Agreed with the user on November 5, 2026. This is the target product; an item being in the plan does not mean the feature is ready. The first user-facing version is for Mac, then Windows x2 and Linux. The UI is part of the MVP.
 
 Diagnostics are available as [doctor](DIAGNOSTICS.md): detection of CLI candidates and client status. In passive doctor, the version, login and readiness of a specific session remain `not_checked`; for an explicitly selected CLI, a separate [check-cli](CLI_CHECK.md) is implemented with a limited verified Mac matrix. A [local interface](LOCAL_UI.md) in the browser has been added: history, sending, pausing and resuming the queue. Outgoing messages, once written to the client database, are recovered after the window is fully closed; there is a [technical archive for Mac](INSTALL.md), but there is no native shell and no accepted public installer yet. The release plan is [RELEASE_PLAN.md](RELEASE_PLAN.md).
