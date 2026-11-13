@@ -87,7 +87,7 @@ func (s *Supervisor) OwnerAnswer(task, question, op, text string) error {
 }
 
 // OwnerNote keeps the owner's message to a working task; the worker gets it
-// when its current step ends (T-085).
+// when its current run ends (T-085, T-148).
 func (s *Supervisor) OwnerNote(task, op, text string) error {
 	return s.store.AddOwnerNote(task, op, text)
 }

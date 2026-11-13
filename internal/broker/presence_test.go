@@ -231,3 +231,57 @@ func TestPresenceVersion(t *testing.T) {
 		}
 	}
 }
+
+// T-150: a computer reports its unsent messages; the others see them, and
+// an older host that refuses the field still gets the rest of the report.
+func TestPresenceOutbox(t *testing.T) {
+	host := newService(t, t.TempDir())
+	if err := host.Enable(ScopeLocal, freePort(t)); err != nil {
+		t.Fatal(err)
+	}
+	code, err := host.Invite(host.Status().Host.Addresses[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	member := newService(t, t.TempDir())
+	if err := member.Connect(ctx(t), code.Code, "Ноутбук"); err != nil {
+		t.Fatal(err)
+	}
+	outbox := &PresenceOutbox{Waiting: 4, OldestAge: 300}
+	workers := &PresenceWorkers{Runs: []PresenceRun{{Task: "task-0123456789abcdef", OutputAge: 42}}}
+	member.SetPresence(func() (Presence, error) {
+		return Presence{Agents: []PresenceAgent{{Agent: "codex"}}, Version: "0.0.0-preview.67", Outbox: outbox, Workers: workers}, nil
+	})
+	host.SetPresence(func() (Presence, error) { return Presence{Agents: []PresenceAgent{}}, nil })
+	host.ReportPresence(ctx(t))
+	member.ReportPresence(ctx(t))
+	if peers := host.Status().Peers; len(peers) != 1 || !reflect.DeepEqual(peers[0].Outbox, outbox) || !reflect.DeepEqual(peers[0].Workers, workers) {
+		t.Fatalf("host sees %+v", peers)
+	}
+
+	olderHost = func(p Presence) bool { return p.Outbox != nil || p.Workers != nil }
+	t.Cleanup(func() { olderHost = nil })
+	member.ReportPresence(ctx(t))
+	peers := host.Status().Peers
+	if len(peers) != 1 || peers[0].Outbox != nil || peers[0].Workers != nil || peers[0].Version != "0.0.0-preview.67" {
+		t.Fatalf("older host sees %+v", peers)
+	}
+	if ms := member.Status().Member; !ms.Reachable || ms.Error != "" {
+		t.Fatalf("member after fallback %+v", ms)
+	}
+
+	for _, bad := range []PresenceOutbox{{Waiting: -1}, {OldestAge: -1}, {Waiting: maxOutboxWaiting + 1}, {OldestAge: maxOutboxAge + 1}} {
+		if (Presence{Agents: []PresenceAgent{}, Outbox: &bad}).valid() {
+			t.Errorf("outbox %+v passed", bad)
+		}
+	}
+	many := make([]PresenceRun, maxPresenceRuns+1)
+	for i := range many {
+		many[i] = PresenceRun{Task: "task-1"}
+	}
+	for _, bad := range []PresenceWorkers{{Runs: many}, {Runs: []PresenceRun{{Task: "bad id"}}}, {Runs: []PresenceRun{{Task: "task-1", OutputAge: -1}}}} {
+		if (Presence{Agents: []PresenceAgent{}, Workers: &bad}).valid() {
+			t.Errorf("workers %d passed", len(bad.Runs))
+		}
+	}
+}
