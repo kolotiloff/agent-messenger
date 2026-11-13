@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-13 — Claude Code (0.66, T-148 note texts, feedback review)
+
+- 0.66 released (PR #97): T-139, T-146. GitHub cancelled the publish job once (no Mac runner in 15 min); one re-run published it. All 21 files checked; Linux feed build 66. The CLI watch workflow's first manual run passed.
+- Read the coordinator's feedback export (15 remarks). T-148: note texts say a worker reads a note only when its run ends and that `cancel` stops it now. New tasks T-147 (phone observer, not a priority), T-149, T-150.
+
 ## 2026-11-12 — Claude Code (0.65, T-139 CLI watch, T-146 replies kept)
 
 - 0.65 released (PR #96): T-145 (D-120). All 21 release files checked; the Linux feed says build 65.

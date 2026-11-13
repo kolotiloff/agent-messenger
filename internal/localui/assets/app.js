@@ -912,7 +912,7 @@
     for(const [index,it] of feed.items.entries()){
       if(it.kind!=='tool')tools=null;
       if(it.kind==='task'){outgoing(coordLabel,coordProvider,tr('координатор'),it.text,it.at);continue;}
-      if(it.kind==='note'){if(it.author==='coordinator')outgoing(coordLabel,coordProvider,tr('координатор'),it.text,it.at);else outgoing(tr('Вы'),'owner','',it.text,it.at);const c=out[out.length-1].querySelector('.am-message-content');c.append(delivery(...({pending:[tr('Исполнитель прочитает, когда закончит текущий шаг'),'am-status-wait'],delivered:[tr('Передано исполнителю'),'am-status-good'],undelivered:[tr('Не передано: задача остановилась'),'am-status-bad']}[it.state]||[it.state,'am-muted'])));continue;}
+      if(it.kind==='note'){if(it.author==='coordinator')outgoing(coordLabel,coordProvider,tr('координатор'),it.text,it.at);else outgoing(tr('Вы'),'owner','',it.text,it.at);const c=out[out.length-1].querySelector('.am-message-content');c.append(delivery(...({pending:[tr('Исполнитель прочитает, только когда закончит текущий ход'),'am-status-wait'],delivered:[tr('Передано исполнителю'),'am-status-good'],undelivered:[tr('Не передано: задача остановилась'),'am-status-bad']}[it.state]||[it.state,'am-muted'])));continue;}
       if(it.kind==='answer'){if(it.author==='owner'){outgoing(tr('Вы'),'owner','',it.text,it.at);
         // A hint about this answer lives under it while the worker has not
         // gone on yet, so it never stays in another task (owner, 2026-11-09).
@@ -999,7 +999,8 @@
   // the stop and send buttons stay at its bottom.
   function sizeAnswer(){const f=$('answer-text');f.style.height='';f.style.overflowY='';if(!f.value)return;const full=f.scrollHeight+(f.offsetHeight-f.clientHeight);f.style.height=Math.min(140,full)+'px';if(full>140)f.style.overflowY='auto';}
   // T-085: the owner may write to a working worker of this computer; the
-  // message waits until the worker's current step ends.
+  // message waits until the worker's current run ends: a worker CLI takes
+  // no input while it works (T-148).
   function canNote(t){return !!t&&!t.remote&&!t.owner_question&&(t.state==='running'||t.state==='waiting_coordinator');}
   function answerControls(){const t=feed?.task;$('answer-send').disabled=answering||!$('answer-text').value.trim()||!(t?.owner_question&&!t.remote?.from||canNote(t));}
   async function sendNote(){

@@ -115,7 +115,7 @@ func (s *Store) addNote(task, project, opID, text, author string) error {
 			return nil
 		}
 		return insertTaskEvent(tx, t.Project, task, AudienceCoordinator, "owner_note",
-			"The owner wrote to this worker; it reads this when its current step ends and then continues the same task:\n"+text, "")
+			"The owner wrote to this worker; it reads this only when its current run ends (a worker CLI takes no input while it works) and then continues the same task:\n"+text, "")
 	})
 }
 

@@ -68,7 +68,7 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - A report is the worker's short summary. Its full last message is kept too: when a report or failure ends with «[Messenger] The worker's full final message has N characters», read it with task_output before asking the worker again; it is lost nowhere, even if the worker deleted its file.
 - answer answers a worker's question (pass question_id and a unique op_id); the worker continues in the same session.
 - A worker may ask the owner instead of you, when the project's rules allow it. wait then returns an owner_question event with the question, and owner_answered with the owner's answer once given; the task shows waiting_owner meanwhile. The owner usually answers in the window. When the owner answers it to you in this chat, or asks you to answer for them, call answer with that question; the window shows that you gave the answer. Do not answer it on your own.
-- The owner may write to a working worker from the window. wait then returns an owner_note event with the text; the worker reads it when its current step ends and continues the same task, so a report it had written by then is held and a new one follows. Nothing to do on your side; do not repeat the note to the worker.
+- The owner may write to a working worker from the window. wait then returns an owner_note event with the text; the worker reads it only when its current run ends (a worker CLI takes no input while it works, which can be many minutes) and continues the same task, so a report it had written by then is held and a new one follows. Nothing to do on your side; do not repeat the note to the worker.
 - If the owner writes to a worker that waits for your answer, the owner's message is the answer and the worker continues at once: wait returns owner_answered for that question. Do not answer it again; your answer would be refused.
 - Never start a task again by yourself after it failed, was interrupted or blocked; tell the owner and let them decide.
 - not_accepted: a task sent to another computer was not accepted within 5 minutes; the event gives the likely reason (offline, not in the network, an earlier network). Nothing is retried. When the reason says the computer is online and its agent is busy, the task may be running there with its replies lost: do not start it again; ask the owner to look at that computer. Tell the owner; cancelling it closes it here at once, and a new start_task is the owner's call.
@@ -354,7 +354,7 @@ func coordinatorTools() []map[string]any {
 				"op_id":   str("unique id of this operation"),
 				"text":    map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxTaskText},
 			}, "task_id", "op_id", "text")},
-		{"name": "note_task", "description": "Write to a worker of this computer while its task runs, without stopping it: it reads your text when its current step ends and goes on in the same conversation; a report it was about to send waits until it has read your text. For a worker that asked you, use answer instead. Repeating with the same op_id is safe.",
+		{"name": "note_task", "description": "Write to a worker of this computer while its task runs, without stopping it: it reads your text only when its current run ends and goes on in the same conversation. A worker CLI takes no input while it works, so this can be many minutes; to stop a worker now, use cancel. a report it was about to send waits until it has read your text. For a worker that asked you, use answer instead. Repeating with the same op_id is safe.",
 			"inputSchema": obj(map[string]any{
 				"task_id": str("task id"),
 				"op_id":   str("unique id of this operation"),
@@ -544,7 +544,7 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 		if err := c.store.AddCoordinatorNote(c.project, a.TaskID, a.OpID, a.Text); err != nil {
 			return nil, err
 		}
-		return map[string]any{"noted": true, "next": "The worker reads it when its current step ends; call wait as usual."}, nil
+		return map[string]any{"noted": true, "next": "The worker reads it only when its current run ends, which can be many minutes; to stop it now, use cancel. Otherwise call wait as usual."}, nil
 	case "cancel":
 		var a struct {
 			TaskID string `json:"task_id"`

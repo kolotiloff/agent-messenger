@@ -8,6 +8,12 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-13 by Claude Code.
+
+- 0.66 released (PR #97, run 43317868228; the publish job was cancelled once by GitHub waiting for a Mac runner, re-run succeeded; 21 release files, the Linux feed says build 66): T-139 «не проверена» CLI mark and daily CLI watch (its first manual run passed), T-146 (D-121) worker replies parked, never dropped.
+- On `claude/ui-tweaks` for the next release: T-148 note texts say a worker reads a note only when its run ends. Recorded, not started: T-147 phone observer (not a priority), T-149 remote worker liveness and notes to other computers' workers, T-150 report after cancel and delayed outbox shown to the coordinator. Still open: server failover and an all-contact-lost event; `list_agents` lacks the «не проверена» mark; Cursor tested version not recorded.
+- Coordinator feedback export of 2026-11-13 (15 remarks, 11-10 to 11-13) was read; all but the items above were already fixed in 0.61–0.66. Suspected: two Cursor workers on one computer stop each other (unconfirmed; T-141 now shows the CLI error text).
+
 Updated 2026-11-12 by Claude Code.
 
 - 0.65 released (PR #96): T-145 (D-120) an explicit cancel closes a stuck task where it ran. On `claude/ui-tweaks` for the next release: T-139 «не проверена» CLI mark and the daily CLI watch workflow (raise `TestedCLI` in `internal/diagnostics/tested.go` after checking a newer CLI); T-146 (D-121) a worker's reply is parked, never dropped. Open: server failover and an all-contact-lost event; `list_agents` does not show the «не проверена» mark yet. ПК-1 was on 0.62 and must be updated from its own window, then its old stuck tasks closed there.
