@@ -704,3 +704,15 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-spinner { width:28px; height:28px; box-sizing:border-box; border-radius:50%; border:3px solid var(--am-line); border-top-color:var(--am-muted); }
 @media (prefers-reduced-motion:no-preference) { #am-concept .am-spinner { animation:am-spin .9s linear infinite; } }
 @keyframes am-spin { to { transform:rotate(360deg); } }
+/* Task pane without a task (T-152): the chain and the first steps. */
+#am-concept .am-welcome { margin:var(--am-space-6) auto 0; }
+#am-concept .am-welcome h3 { margin:0; }
+#am-concept .am-welcome > p { margin:0; }
+#am-concept .am-chain { display:flex; align-items:stretch; gap:var(--am-space-2); }
+#am-concept .am-chain-node { flex:1 1 0; min-width:0; display:flex; flex-direction:column; gap:var(--am-gap-line); padding:var(--am-space-3); border:1px solid var(--am-line); border-radius:var(--am-radius-m); background:var(--am-panel); }
+#am-concept .am-chain-arrow { align-self:center; color:var(--am-muted); }
+#am-concept .am-connect-body { display:flex; flex-direction:column; align-items:flex-start; gap:var(--am-space-2); }
+#am-concept .am-connect-body p { margin:0; }
+#am-concept .am-connect-body details { align-self:stretch; }
+#am-concept .am-connect-body details button { margin-top:var(--am-space-2); }
+@media (max-width: 720px) { #am-concept .am-chain { flex-direction:column; } #am-concept .am-chain-arrow { transform:rotate(90deg); } }
