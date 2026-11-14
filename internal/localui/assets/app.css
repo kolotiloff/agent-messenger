@@ -278,10 +278,16 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept button.am-update-icon:hover:not(:disabled) { background:color-mix(in srgb,var(--am-run) 34%,transparent); }
 #am-concept button.am-update-icon:disabled { opacity:.6; cursor:default; }
 #am-concept button.am-update-icon[hidden] { display:none; }
-/* An update asked for or under way: the same icon, dimmed and pulsing (owner) */
-#am-concept .am-update-icon.am-update-busy { flex-shrink:0; width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background:var(--am-soft); color:var(--am-muted); cursor:default; animation:am-update-pulse 1.6s ease-in-out infinite; }
-@keyframes am-update-pulse { 50% { opacity:.4; } }
-@media (prefers-reduced-motion:reduce) { #am-concept .am-update-icon.am-update-busy { animation:none; } }
+/* While an update is downloading or installing, the arrow becomes a ring
+   on the same blue circle (owner). A remote computer has no progress, so
+   the ring only says the update is under way. */
+#am-concept .am-update-ring { display:none; }
+#am-concept .am-update-icon.am-update-downloading { flex-shrink:0; width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background:var(--am-run); color:#fff; cursor:default; }
+#am-concept .am-update-ring path { fill:none; stroke:currentColor; stroke-width:2.5; stroke-linecap:round; }
+#am-concept .am-update-icon.am-update-downloading .am-update-arrow { display:none; }
+#am-concept .am-update-icon.am-update-downloading .am-update-ring { display:block; width:16px; height:16px; transform-origin:center; animation:am-spin .8s linear infinite; }
+#am-concept button.am-update-icon.am-update-downloading:disabled { opacity:1; cursor:default; }
+@media (prefers-reduced-motion:reduce) { #am-concept .am-update-icon.am-update-downloading .am-update-ring { animation:none; } }
 #am-concept .am-update-icon svg { width:13px; height:13px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
 
 /* Main pane and tabs */

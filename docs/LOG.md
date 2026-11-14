@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-14 — Cursor (update icon while downloading)
+
+- The update arrow stays while a release is ready. While this computer downloads or installs, and while another computer's update is under way, the same circle shows a spinning ring. A remote computer does not report progress. Not released. Branch `cursor/update-download-spinner-bfd1`.
+
 ## 2026-11-14 — Cursor (project page heading)
 
 - On «Проект», the «Координатор?» mark is a section: «MCP-плагин», with the hint «Подключение к графическому редактору», then Claude Code, Codex and Cursor as before. Not released. Branch `cursor/mcp-plugin-heading-bfd1`.
