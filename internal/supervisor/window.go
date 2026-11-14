@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/kolotiloff/agent-messenger/internal/adapters"
@@ -34,6 +35,12 @@ type windowView struct {
 	CursorLink      *CoordinatorLinkView `json:"cursor_link,omitempty"`
 	// FeedbackCount is how many remarks the feedback journal holds (T-135).
 	FeedbackCount int `json:"feedback_count"`
+	// PendingUpdate is this computer's queued or installing Messenger
+	// update (T-155): "queued" or "updating".
+	PendingUpdate string `json:"pending_update,omitempty"`
+	// LocalUpdate is this computer's last update of itself, for the
+	// window notice (T-155).
+	LocalUpdate *core.NetUpdate `json:"local_update,omitempty"`
 }
 
 // WindowView returns the selected project's view with folder trust per agent.
@@ -60,6 +67,17 @@ func (s *Supervisor) WindowView(project string) (any, error) {
 	out.Messenger, _ = workerProgram()
 	out.DataRoot = s.root
 	out.FeedbackCount, _ = s.store.FeedbackCount()
+	if pending, ok, err := s.store.PendingUpdate(); err == nil && ok {
+		out.PendingUpdate = core.UpdateQueued
+		if s.updateBusy() && pending.ID != "" {
+			if _, err := os.Lstat(filepath.Join(s.root, remoteUpdateMarker)); err == nil {
+				out.PendingUpdate = core.UpdateUpdating
+			}
+		}
+	}
+	if u, ok, err := s.store.LocalUpdate(); err == nil && ok {
+		out.LocalUpdate = &u
+	}
 	if v.Project != "" {
 		s.repairStaleCoordinator(v.Project)
 		claude := s.CoordinatorLinkState(v.Project)

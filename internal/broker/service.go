@@ -112,6 +112,8 @@ type Service struct {
 	// outboxSkip is the same for the unsent-messages count (T-150) and the
 	// running workers (T-149), both new in 0.67.
 	outboxSkip time.Time
+	// updatePendingSkip is the same for a queued Messenger update (T-155).
+	updatePendingSkip time.Time
 	// usageSkip is the same for usage. usageSent is the version of this
 	// computer's usage that usageTo (broker/device) last accepted, at
 	// usageAt; usageCopies holds the other computers' usage from there.
@@ -714,6 +716,9 @@ func (s *Service) ReportPresence(ctx context.Context) {
 	if time.Now().Before(s.outboxSkip) {
 		p.Outbox, p.Workers = nil, nil
 	}
+	if time.Now().Before(s.updatePendingSkip) {
+		p.UpdatePending = false
+	}
 	if s.usageTo != to {
 		s.usageTo, s.usageSent, s.usageCopies = to, "", nil
 	}
@@ -741,6 +746,15 @@ func (s *Service) ReportPresence(ctx context.Context) {
 		s.outboxSkip = time.Now().Add(readyRetry)
 		s.mu.Unlock()
 		p.Outbox, p.Workers = nil, nil
+		peers, err = Report(call, *c, p)
+	}
+	if errors.Is(err, errPresenceRefused) && p.UpdatePending {
+		// A host before T-155 refuses the field. Dropped before the model
+		// names for the same reason (T-173).
+		s.mu.Lock()
+		s.updatePendingSkip = time.Now().Add(readyRetry)
+		s.mu.Unlock()
+		p.UpdatePending = false
 		peers, err = Report(call, *c, p)
 	}
 	if errors.Is(err, errPresenceRefused) {

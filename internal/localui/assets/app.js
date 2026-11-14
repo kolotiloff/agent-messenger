@@ -388,9 +388,12 @@
   // The update under way for a card's icon: asked for or updating.
   function updateLine(peer){
     const u=(server?.updates||[]).find(x=>x.computer===peer.id);
-    if(!u||u.stale||!(Date.now()-Date.parse(u.updated_at)<24*3600*1000))return null;
-    if(u.state==='waiting')return [tr('Обновление запрошено…'),'am-status-wait'];
-    if(u.state==='updating')return [tr('Обновляется…'),'am-status-run'];
+    if(u&&!u.stale&&Date.now()-Date.parse(u.updated_at)<24*3600*1000){
+      if(u.state==='waiting')return [tr('Обновление запрошено…'),'am-status-wait'];
+      if(u.state==='queued')return [tr('ждёт обновления'),'am-status-wait'];
+      if(u.state==='updating')return [tr('Обновляется…'),'am-status-run'];
+    }
+    if(peer.update_pending)return [tr('ждёт обновления'),'am-status-wait'];
     return null;
   }
   // T-128: notices above the reply box. A good one fades after a few seconds
@@ -413,16 +416,19 @@
     // T-129: the background program was started inside an agent's sandbox.
     if(clientInfo?.sandbox)addNotice('sandbox-'+(clientInfo.client_version||''),'bad',tr('Messenger запущен из песочницы агента'),tr('Исполнители унаследуют её: без сети и без части папок, даже с «Любыми командами». Закройте Messenger полностью и откройте его снова сами, не из агента.'));
     const names=Object.fromEntries((server?.peers||[]).map(p=>[p.id,p.name]));
-    for(const u of server?.updates||[]){
-      const at=Date.parse(u.updated_at),name=names[u.computer]||tr('Компьютер');
-      if(!(Date.now()-at<24*3600*1000))continue;
+    const showUpdate=(u,name)=>{
+      const at=Date.parse(u.updated_at);
+      if(!(Date.now()-at<24*3600*1000))return;
       const key='update-'+u.request_id+'-'+(u.stale?'stale':u.state);
       if(u.stale)addNotice(key,'bad',name+tr(' не ответил об обновлении'),tr('Проверьте, что программа там запущена, и попросите ещё раз.'));
       else if(u.state==='done'&&at>=noticeSince-60000){
         const same=/последн/i.test(u.text||'');
         addNotice(key,same?'info':'good',same?name+tr(': уже последняя версия'):name+tr(' обновлён до ')+versionName(u.version||''),same?'':u.text||'');
-      }else if(u.state==='refused'||u.state==='failed')addNotice(key,'bad',name+tr(' не обновлён'),capital(u.text||''));
-    }
+      }else if(u.state==='queued'&&at>=noticeSince-60000)addNotice(key,'info',name+tr(' ждёт обновления'),u.text||tr('Программа обновится, когда задачи закончатся; до тех пор компьютер не берёт новых задач.'));
+      else if(u.state==='refused'||u.state==='failed')addNotice(key,'bad',name+tr(' не обновлён'),capital(u.text||''));
+    };
+    for(const u of server?.updates||[])showUpdate(u,names[u.computer]||tr('Компьютер'));
+    if(view?.local_update)showUpdate(view.local_update,view.computer_name||tr('Этот компьютер'));
   }
   const noticeIcons={good:'<path d="M8 12.5l2.7 2.7L16 9.8"/>',info:'<path d="M12 11v5M12 8h.01"/>',bad:'<path d="M12 7.5v5.5M12 16.5h.01"/>'};
   function renderNotices(){
@@ -490,7 +496,13 @@
     const live=$('machines'),box=live.cloneNode(false);
     const machine=el('div',undefined,'am-machine-card');machine.setAttribute('aria-current','true');pickable(machine,'local');
     const head=el('div',undefined,'am-machine-name');head.append(el('span',view?.computer_name||tr('Этот компьютер')));
-    const dot=el('span',undefined,'am-dot'+(online?' online':''));dot.title=online?tr('На связи'):tr('Нет связи');head.append(dot);machine.append(head);
+    const dot=el('span',undefined,'am-dot'+(online?' online':''));dot.title=online?tr('На связи'):tr('Нет связи');head.append(dot);
+    if(view?.pending_update==='updating'||view?.pending_update==='queued'){
+      const tip=view.pending_update==='updating'?tr('Обновляется…'):tr('ждёт обновления');
+      const b=el('span',undefined,'am-update-icon am-peer-update am-update-downloading');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);appendUpdateGlyphs(b);
+      head.append(b);
+    }
+    machine.append(head);
     const lines=agentLines(view?.agents||[],view?.coordinator?.connected?(view.coordinator.client||''):null,online);
     if(!lines.children.length)lines.append(el('p',online?tr('Агенты не подключены'):tr('Нет связи'),'am-small am-muted'));
     machine.append(lines);box.append(machine);
@@ -512,12 +524,12 @@
       if(busy){
         // While an update is asked for or under way, the icon stays, dimmed
         // and pulsing, and says so on hover (owner).
-        const tip=busy[1]==='am-status-run'?tr('Обновляется…'):tr('Обновление уже запрошено');
-        const b=el('span',undefined,'am-update-icon am-peer-update am-update-busy');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);b.append(svgIcon(['M12 4v11M7 10l5 5 5-5M5 20h14']));
+        const tip=busy[0];
+        const b=el('span',undefined,'am-update-icon am-peer-update am-update-downloading');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);appendUpdateGlyphs(b);
         name.append(b);
       }else if(fresh&&peer.version&&versionOlder(peer.version,newestVersion())){
         const newest=versionName(newestVersion()),label=tr('Обновить до ')+newest;
-        const b=el('button',undefined,'am-update-icon am-peer-update');b.type='button';b.title=label;b.setAttribute('aria-label',label);b.append(svgIcon(['M12 4v11M7 10l5 5 5-5M5 20h14']));
+        const b=el('button',undefined,'am-update-icon am-peer-update');b.type='button';b.title=label;b.setAttribute('aria-label',label);appendUpdateGlyphs(b);
         b.addEventListener('click',event=>{event.stopPropagation();askConfirm(tr('Обновить ')+(peer.name||tr('компьютер'))+tr(' до ')+newest+'?',tr('Программа на том компьютере обновится и перезапустится. Задачи и история сохранятся.')+(peer.host?' '+tr('На нём работает сервер сети: пока он перезапускается, компьютеры не видят друг друга. Если там попросят подтверждение, сервер не вернётся, пока кто-нибудь не ответит у того компьютера.'):''),tr('Обновить'),()=>requestUpdate(peer),true);});
         b.addEventListener('keydown',event=>event.stopPropagation());
         name.append(b);
@@ -745,9 +757,9 @@
   // command under it. Agents are set up once; the link is per folder.
   function renderCoordinatorRow(){
     const box=$('coord-box');if(!box||!view?.project)return;
-    const tip=tr('Координатор — ваш чат в Claude Code, Codex или Cursor, открытый в папке проекта. Он раздаёт задачи исполнителям и собирает отчёты. Новый проект подключается сам; кнопка нужна, если это не получилось.');
-    const heading=el('p',undefined,'am-small');heading.append(el('span',tr('Координатор')));
-    const q=el('span','?','am-q');q.title=tip;q.setAttribute('aria-label',tip);q.tabIndex=0;heading.append(q);
+    const heading=el('div',undefined,'am-coord-head');
+    heading.append(el('h3',tr('MCP-плагин')));
+    heading.append(el('p',tr('Подключение к графическому редактору'),'am-small am-muted'));
     const steps=el('div',undefined,'am-steps');
     steps.append(coordinatorAgentRow('claude',view.coordinator_link||{state:'unknown'}));
     steps.append(coordinatorAgentRow('codex',view.codex_link||{state:'unknown'}));
@@ -1005,7 +1017,7 @@
         const c=workerGroup(it.at);c.append(richText(it.text,'am-disposition'));
         if(!it.verified)c.append(delivery(tr('Не опубликовано: запуск не прошёл проверку'),'am-status-bad'));
         else if(it.kind==='report'&&it.audience==='held')c.append(delivery(tr('Промежуточный отчёт: исполнитель продолжает с вашим сообщением'),'am-status-wait'));
-        else if(it.kind==='report')c.append(delivery(tr('Отчёт отправлен координатору, сессия закрыта'),'am-status-good'));
+        else if(it.kind==='report')c.append(delivery(tr('Отчёт отправлен координатору, сессия закрыта'),'am-delivery-close'));
         else if(it.audience==='owner')c.append(delivery(tr('Вопрос вам, координатор его не видит'),'am-status-wait'));
         else c.append(delivery(tr('Вопрос координатору'),'am-status-wait'));
         group=null;continue;
@@ -1113,6 +1125,16 @@
   // are grey and numbered.
   const checkPath=['M21 12a9 9 0 1 1-3-6.7L21 8','M21 3v5h-5'];
   const gearPath=['M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z'];
+  // The update mark: a down arrow, or a spinning ring once a download starts.
+  function appendUpdateGlyphs(node){
+    const arrow=svgIcon(['M12 4v11M7 10l5 5 5-5M5 20h14']);
+    arrow.classList.add('am-update-arrow');
+    const ring=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    ring.setAttribute('viewBox','0 0 24 24');ring.setAttribute('aria-hidden','true');ring.classList.add('am-update-ring');
+    const c=document.createElementNS('http://www.w3.org/2000/svg','path');
+    c.setAttribute('d','M6.4 8.8 A6.5 6.5 0 0 1 17.6 8.8');
+    ring.append(c);node.append(arrow,ring);
+  }
   function svgIcon(paths,circle){
     const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');svg.setAttribute('focusable','false');
     if(circle){const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx','12');c.setAttribute('cy','12');c.setAttribute('r','3');svg.append(c);}
@@ -2107,11 +2129,12 @@
     $('app-update-version').hidden=true;$('app-update-button').hidden=!shown;
     $('app-installed-version').textContent=versionText(installed);
     updateTip(version,waiting);
+    $('app-update-button').classList.toggle('am-update-downloading',waiting);
     $('app-update-button').disabled=waiting;
   };
   // Windows and Linux: the program updates itself from the window (D-048).
-  // The update is downloaded and verified in the background; only an update
-  // ready to install is shown.
+  // While the check downloads, the icon is the ring; the arrow appears when
+  // a release is ready to install.
   let selfUpdate=null,selfUpdateBusy=false,selfUpdateTimer=0;
   function renderSelfUpdate(){
     const s=selfUpdate;if(!s)return;
@@ -2120,14 +2143,17 @@
     $('app-installed-version').title=installed?tr('Версия ')+versionName(installed).slice(1):'';
     const version=typeof s.version==='string'?s.version:'';
     if(version&&s.state==='available')knownUpdate=version;
-    const done=s.state==='installed',shown=(s.state==='available'&&!!version)||selfUpdateBusy||done||!!s.message;
-    // Only the update icon while an update waits (owner, T-056, T-066); a line
-    // appears only for an error or after the update.
+    const downloading=selfUpdateBusy||s.state==='checking'||s.state==='installing';
+    const done=s.state==='installed',shown=(s.state==='available'&&!!version)||downloading||done||!!s.message;
+    // The arrow while an update waits (owner, T-056, T-066); the ring while
+    // it is downloading or being installed. A line appears only for an error
+    // or after the update.
     $('app-update-version').hidden=!s.message&&!done;$('app-update-button').hidden=!shown||done;
     $('app-installed-version').textContent=versionText(installed);
     $('app-update-version').textContent=s.message||(done?tr('Обновлено. Окно откроется заново.'):'');
-    updateTip(version,selfUpdateBusy);
-    $('app-update-button').disabled=selfUpdateBusy;
+    updateTip(version,downloading);
+    $('app-update-button').classList.toggle('am-update-downloading',downloading);
+    $('app-update-button').disabled=downloading;
   }
   async function loadSelfUpdate(){
     if(window.webkit?.messageHandlers?.updates||selfUpdateBusy)return;

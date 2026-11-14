@@ -781,6 +781,11 @@ func startLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, origin *net
 	if info, err := os.Stat(folder); err != nil || !info.IsDir() {
 		return "", fmt.Errorf("%w: the project folder is missing on this computer", ErrRejected)
 	}
+	if pending, err := hasPendingUpdate(tx); err != nil {
+		return "", err
+	} else if pending {
+		return "", fmt.Errorf("%w: this computer is waiting to install a Messenger update and takes no new tasks", ErrRejected)
+	}
 	var agent ComputerAgent
 	var models string
 	var fullAccess int
@@ -2227,6 +2232,9 @@ type ComputerSummary struct {
 	// Version is the Messenger version the computer runs (T-158); empty
 	// for another computer that did not report it.
 	Version string `json:"messenger_version,omitempty"`
+	// UpdatePending: the computer is waiting to install a Messenger update
+	// and takes no new tasks (T-155).
+	UpdatePending bool `json:"update_pending,omitempty"`
 }
 
 // ProjectAgents lists the computers for a project: this one, then the other
@@ -2245,11 +2253,19 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 			return err
 		}
 		c = ComputerSummary{Computer: computer, Name: name, This: true, Online: true, Agents: []AgentSummary{}, Version: buildinfo.Version}
+		if pending, err := hasPendingUpdate(tx); err != nil {
+			return err
+		} else {
+			c.UpdatePending = pending
+		}
 		err = tx.QueryRow(`SELECT folder FROM project_folders WHERE project=? AND computer=?`, project, computer).Scan(&c.Folder)
 		if errors.Is(err, sql.ErrNoRows) {
 			c.Note = "no folder for this project on this computer; it refuses the project's tasks"
 		} else if err != nil {
 			return err
+		}
+		if c.UpdatePending {
+			c.Note = strings.TrimSpace("waiting to install a Messenger update: it takes no new tasks. " + c.Note)
 		}
 		rows, err := tx.Query(`SELECT a.provider,a.profile,
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='running'),
@@ -2288,7 +2304,7 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 		return nil, err
 	}
 	for _, p := range peers {
-		o := ComputerSummary{Computer: p.ID, Name: p.Name, Online: p.Age >= 0 && p.Age <= PeerFresh, Agents: []AgentSummary{}, Version: p.Version,
+		o := ComputerSummary{Computer: p.ID, Name: p.Name, Online: p.Age >= 0 && p.Age <= PeerFresh, Agents: []AgentSummary{}, Version: p.Version, UpdatePending: p.UpdatePending,
 			Note: "another computer of the network: it runs the task only if its owner allows tasks from other computers and it has this project's folder; otherwise the task fails with its reason"}
 		if r := p.Ready; r != nil {
 			has := false
@@ -2305,6 +2321,9 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 			default:
 				o.Note = ""
 			}
+		}
+		if o.UpdatePending {
+			o.Note = strings.TrimSpace("waiting to install a Messenger update: it takes no new tasks. " + o.Note)
 		}
 		for _, a := range p.Agents {
 			models := a.Models
@@ -2345,7 +2364,7 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 func idleComputers(list []ComputerSummary) []string {
 	var out []string
 	for _, c := range list {
-		if !c.Online || c.Reconnecting || (c.This && c.Folder == "") ||
+		if !c.Online || c.Reconnecting || c.UpdatePending || (c.This && c.Folder == "") ||
 			(c.AcceptsTasks != nil && !*c.AcceptsTasks) || (c.HasProject != nil && !*c.HasProject) || len(c.Agents) == 0 {
 			continue
 		}

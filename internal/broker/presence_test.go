@@ -287,6 +287,43 @@ func TestPresenceOutbox(t *testing.T) {
 	}
 }
 
+// T-155: a computer waiting to update is shown to the others; an older host
+// that refuses the field still gets the rest of the report.
+func TestPresenceUpdatePending(t *testing.T) {
+	host := newService(t, t.TempDir())
+	if err := host.Enable(ScopeLocal, freePort(t)); err != nil {
+		t.Fatal(err)
+	}
+	code, err := host.Invite(host.Status().Host.Addresses[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	member := newService(t, t.TempDir())
+	if err := member.Connect(ctx(t), code.Code, "Ноутбук"); err != nil {
+		t.Fatal(err)
+	}
+	member.SetPresence(func() (Presence, error) {
+		return Presence{Agents: []PresenceAgent{{Agent: "codex"}}, Version: "0.0.0-preview.73", UpdatePending: true}, nil
+	})
+	host.SetPresence(func() (Presence, error) { return Presence{Agents: []PresenceAgent{}}, nil })
+	host.ReportPresence(ctx(t))
+	member.ReportPresence(ctx(t))
+	if peers := host.Status().Peers; len(peers) != 1 || !peers[0].UpdatePending {
+		t.Fatalf("host sees %+v", peers)
+	}
+
+	olderHost = func(p Presence) bool { return p.UpdatePending }
+	t.Cleanup(func() { olderHost = nil })
+	member.ReportPresence(ctx(t))
+	peers := host.Status().Peers
+	if len(peers) != 1 || peers[0].UpdatePending || peers[0].Version != "0.0.0-preview.73" {
+		t.Fatalf("older host sees %+v", peers)
+	}
+	if ms := member.Status().Member; !ms.Reachable || ms.Error != "" {
+		t.Fatalf("member after fallback %+v", ms)
+	}
+}
+
 // An older server must not lose the whole computer because it cannot parse
 // effort selections. The next report restores them after the server upgrades.
 func TestPresenceEffortWithOlderHost(t *testing.T) {
