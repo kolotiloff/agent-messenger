@@ -1,16 +1,16 @@
 # Plan to the first release
 
-Written November 6, 2026; the status was last updated on November 13. This is the sequence of work on top of the original [MVP](MVP.md), the [architecture](PLAN.md), the [window](APP.md) requirements and [broker deployment](DEPLOYMENT.md). No release date is set: transitions are decided by checks, not by the percentage of code written.
+Written November 6, 2026; the status was last updated on November 14. This is the sequence of work on top of the original [MVP](MVP.md), the [architecture](PLAN.md), the [window](APP.md) requirements and [broker deployment](DEPLOYMENT.md). No release date is set: transitions are decided by checks, not by the percentage of code written.
 
 ## Current status
 
-Updated 2026-11-13. The details of each release are in [HANDOFF.md](HANDOFF.md) and [TASKS.md](TASKS.md); this section is the overview.
+Updated 2026-11-14. The details of each release are in [HANDOFF.md](HANDOFF.md) and [TASKS.md](TASKS.md); this section is the overview.
 
-The program is a technical preview used every day on the owner's Mac, Windows and Linux computers. Releases are numbered 0.N (tag `v0.0.0-preview.N`); 0.66 is the newest published one.
+The program is a technical preview used every day on the owner's Mac, Windows and Linux computers. Releases are numbered 0.N (tag `v0.0.0-preview.N`); 0.70 is the newest published one.
 
 Done since the plan below was written:
 
-- **Task model** ([TASK_MODEL.md](TASK_MODEL.md), D-021 to D-024): the owner talks to a coordinator in a Claude Code chat; each task runs as its own worker session of Claude Code, Codex or Cursor and reports back. The persistent session paths of stages 2 and 3 were replaced by this model.
+- **Task model** ([TASK_MODEL.md](TASK_MODEL.md), D-021 to D-024): the owner talks to a coordinator in a Claude Code, Codex or Cursor chat; each task runs as its own worker session of Claude Code, Codex or Cursor and reports back. The persistent session paths of stages 2 and 3 were replaced by this model.
 - **Network of computers** ([BROKER.md](BROKER.md)): the server runs inside the client on any computer of the network; invitations by code, TLS with a pinned certificate, tasks, answers, notes, logs and updates between computers.
 - **Windows and Linux** ([WINDOWS_LINUX.md](WINDOWS_LINUX.md)): ready downloads for x64 and ARM64, the program's own window, installation for the current user, job objects on Windows.
 - **Updates** ([UPDATES.md](UPDATES.md)) on all three systems from signed GitHub releases; the window restarts an older background client; Windows and Linux computers can be updated from another computer.

@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-14 — Codex (T-154/T-161/T-162 release 0.70)
+
+- Owner explicitly requested publication. Merged PR #101 at `4b7c687eda006e5556536fd18ddbb35d9bcd2670` after required CI checks passed (the informational Windows suite was still running).
+- Published [0.70](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.70) through [release run 43584251128](https://github.com/kolotiloff/agent-messenger/actions/runs/43584251128). All 21 public assets, five signed update feeds/archive signatures, source revision and checksums verified. Full PR CI and another local `scripts/check.sh` passed. No owner installation or real-model acceptance; T-161/T-162 retain those checks. Release record branch: `codex/t154-t161-t162-release-70`.
+
 ## 2026-11-14 — Codex (T-154 cards, T-161 waiting, T-162 Cursor coordinator)
 
 - T-154: fixed row/action geometry, retained values during diagnostics, per-provider DOM preservation and discovery/check on return from installation. Browser behavior and layout checked with fictional data in light/dark at 1100/600 px. No models or working Messenger state used.
