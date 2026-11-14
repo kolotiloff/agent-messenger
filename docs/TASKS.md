@@ -90,6 +90,10 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 ## Next
 
+| ID | Task | Owner | Branch / notes |
+|---|---|---|---|
+| T-172 | Mac: the connecting screen at every start and after an update showed «Повторить подключение», «Выбрать каталог данных…» and a note, though nothing had failed (owner, 2026-11-14). Now only a spinner while connecting; reason, retry and note only on a failure; the data-directory choice only in «Файл». | agent + owner | `claude/great-knuth-52qwv1`, not released (goes into the next release). Not compiled or run here (Linux, no Swift): Mac CI builds it; the owner checks the start and an update on the Mac. |
+
 Order of the task model (D-021), following the review's first slice ([RETHINK_REVIEW_V3.md](RETHINK_REVIEW_V3.md) section 5).
 
 | ID | Task | Owner | Notes |

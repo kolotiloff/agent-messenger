@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-14 — Claude Code (T-172 Mac connecting screen)
+
+- Owner asked why the Mac window shows «Выбрать каталог данных…» and a retry button at every start. It was the connecting screen from early test builds. Now: a spinner only; reason, retry and note only on a failure; the data-directory choice stays in «Файл». Not compiled here (no Swift on Linux); Mac CI and the owner's Mac run verify it. Not released.
+
 ## 2026-11-14 — Codex (T-168–T-171 release 0.72)
 
 - Released [0.72](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.72), source `f3bd2d45e9f18890419e09996bb7a97bb3b009bd`, [run](https://github.com/kolotiloff/agent-messenger/actions/runs/43600787465). PR #105 and PR #106 checks passed; exact checked #106 head `baf18d23021164c4babc4b96f381c1a15a5f6543`.
