@@ -4,6 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-14 — Claude Code (merged #108–#113; T-178 Mac connecting screen)
 
+- T-177: `network_lost` / `network_back` coordinator events (once per change, per project, per network). Core test; not tried between real computers.
 - T-172: runs record last output, the end of the CLI's turn and, while the process stays, its group's processes by name (Linux /proc, macOS ps, Windows job list). Shown in the task header and `tasks`; journal line once. No closing (Q-030). Verified with a fake worker; real Windows/macOS paths unverified.
 - Merged PRs #108–#113 in order, resolving doc conflicts and two code conflicts (update icon uses the ring and T-155's text; the `update_pending` fallback runs before model names are stripped, like T-173).
 - T-178: the Mac connecting screen at every start showed «Выбрать каталог данных…» and a retry button. Now a spinner only; reason, retry and note only on a failure; the data-directory choice stays in «Файл». Not compiled here (no Swift on Linux); Mac CI and the owner's Mac verify it. Not released.

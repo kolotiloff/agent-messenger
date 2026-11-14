@@ -85,6 +85,11 @@ func (s *Supervisor) runNetwork(ctx context.Context) {
 		// Row 30: a task the other computer has not accepted in time is
 		// reported to the coordinator once; nothing is retried.
 		_, _ = s.store.NoteUnaccepted(time.Now())
+		// T-177: one event when contact with every other computer is
+		// lost, and one when it is back.
+		if kind, err := s.store.NoteNetworkContact(time.Now()); err == nil && kind != "" {
+			journal.Printf("network: %s", kind)
+		}
 		select {
 		case <-ctx.Done():
 			return
