@@ -10,6 +10,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Updated 2026-11-14 by Cursor.
 
+- On `cursor/report-closed-text-bfd1`, not released: the line «Отчёт отправлен координатору, сессия закрыта» under a finished report is ordinary grey text, the same size as the message. The Mac window was not opened here.
+
 - On `cursor/update-download-spinner-bfd1`, not released: the update icon stays an arrow while a release is ready to install. While this computer downloads or installs, and while another computer's update is under way, that circle shows a spinning ring. The other computer does not report how far the download is. The Mac app itself was not opened here.
 
 - On `cursor/mcp-plugin-heading-bfd1`, not released: the project page section that linked Claude Code, Codex and Cursor no longer says «Координатор?». It is a section «MCP-плагин» with the hint «Подключение к графическому редактору». The three editors and their statuses are unchanged. T-155 (`update_messenger`) is a separate PR.

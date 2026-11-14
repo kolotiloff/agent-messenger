@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-14 — Cursor (closing line of a task)
+
+- «Отчёт отправлен координатору, сессия закрыта» is ordinary grey text, the same size as the message, not the small italic line. Not released. Branch `cursor/report-closed-text-bfd1`.
+
 ## 2026-11-14 — Cursor (update icon while downloading)
 
 - The update arrow stays while a release is ready. While this computer downloads or installs, and while another computer's update is under way, the same circle shows a spinning ring. A remote computer does not report progress. Not released. Branch `cursor/update-download-spinner-bfd1`.
