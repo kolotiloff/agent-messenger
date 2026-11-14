@@ -168,8 +168,114 @@ func TestConnectCoordinatorRunsClaudeInTheProjectFolder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if link := view.(windowView).CoordinatorLink; link == nil || link.State != adapters.LinkConnected {
+	wv := view.(windowView)
+	if link := wv.CoordinatorLink; link == nil || link.State != adapters.LinkConnected {
 		t.Fatalf("view: %+v", link)
+	}
+	if link := wv.CodexLink; link == nil || link.State != linkNoCodex {
+		t.Fatalf("codex link: %+v", link)
+	}
+}
+
+func TestConnectCodexWritesTheProjectConfig(t *testing.T) {
+	f := newLinkFixture(t, false)
+	if err := f.sup.store.SetComputerAgent("codex", f.messenger, "", "worker"); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.sup.connectCodexCoordinator(f.project); got.State != adapters.LinkConnected {
+		t.Fatalf("%+v", got)
+	}
+	if len(f.calls(t)) != 0 {
+		t.Fatal("Codex connect ran a program")
+	}
+	path := filepath.Join(f.folder, ".codex", "config.toml")
+	raw, err := os.ReadFile(path)
+	if err != nil || !strings.Contains(string(raw), f.messenger) || !strings.Contains(string(raw), "tool_timeout_sec = 180") || strings.Contains(string(raw), "required") {
+		t.Fatalf("%v %s", err, raw)
+	}
+	if got := f.sup.connectCodexCoordinator(f.project); got.State != adapters.LinkConnected {
+		t.Fatalf("second: %+v", got)
+	}
+	other := "model = \"keep\"\n[mcp_servers.messenger]\ncommand = \"/not/ours\"\nargs = [\"no\"]\n"
+	if err := os.WriteFile(path, []byte(other), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.sup.connectCodexCoordinator(f.project); got.State != adapters.LinkOther {
+		t.Fatalf("other: %+v", got)
+	}
+	if after, _ := os.ReadFile(path); string(after) != other {
+		t.Fatalf("another entry changed:\n%s", after)
+	}
+}
+
+func TestConnectCodexNeedsCodex(t *testing.T) {
+	f := newLinkFixture(t, false)
+	if got := f.sup.connectCodexCoordinator(f.project); got.State != linkNoCodex {
+		t.Fatalf("%+v", got)
+	}
+	if _, err := os.Stat(filepath.Join(f.folder, ".codex", "config.toml")); !os.IsNotExist(err) {
+		t.Fatal("wrote a Codex config without Codex")
+	}
+}
+
+func TestConnectCodexLeavesATurnedOffEntry(t *testing.T) {
+	f := newLinkFixture(t, false)
+	if err := f.sup.store.SetComputerAgent("codex", f.messenger, "", "worker"); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(f.folder, ".codex", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := "[mcp_servers.messenger]\ncommand = \"" + f.messenger + "\"\nargs = [\"--root\", \"" + f.sup.root + "\", \"coordinator\", \"--project\", \"Game\"]\nenabled = false\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.sup.connectCodexCoordinator(f.project); got.State != adapters.LinkOff {
+		t.Fatalf("%+v", got)
+	}
+	if after, _ := os.ReadFile(path); string(after) != body {
+		t.Fatal("a turned-off entry was enabled")
+	}
+}
+
+func TestWindowRepairsAStaleCodexEntryOnce(t *testing.T) {
+	f := newLinkFixture(t, false)
+	if err := f.sup.store.SetComputerAgent("codex", f.messenger, "", "worker"); err != nil {
+		t.Fatal(err)
+	}
+	program := filepath.Join(t.TempDir(), "messenger")
+	if err := os.WriteFile(program, []byte("program"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteProgramPath(f.sup.root, program); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(f.folder, ".codex", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	old := filepath.Join(f.sup.root, "old-messenger")
+	body := "keep = 1\n[mcp_servers.messenger]\ncommand = \"" + old + "\"\nargs = [\"--root\", \"" + f.sup.root + "\", \"coordinator\", \"--project\", \"Game\"]\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.sup.CodexCoordinatorLinkState(f.project); got.State != adapters.LinkStale {
+		t.Fatalf("before: %+v", got)
+	}
+	if _, err := f.sup.WindowView(f.project); err != nil {
+		t.Fatal(err)
+	}
+	f.sup.bg.Wait()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "keep = 1") || !strings.Contains(string(raw), program) || strings.Contains(string(raw), old) {
+		t.Fatalf("repair:\n%s", raw)
+	}
+	if len(f.calls(t)) != 0 {
+		t.Fatal("the repair ran a program")
 	}
 }
 

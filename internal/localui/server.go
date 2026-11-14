@@ -218,6 +218,7 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 		}
 		if r.URL.Path == "/api/coordinator-connect" {
 			// One `claude mcp add` run, bounded at 30 s by the client.
+			// Codex only writes a file and returns inside the same wait.
 			deadline = 45 * time.Second
 		}
 		if r.URL.Path == "/api/restart-client" {
@@ -598,11 +599,18 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 	case "/api/coordinator-connect":
 		var in struct {
 			Project string `json:"project"`
+			Agent   string `json:"agent,omitempty"`
 		}
 		if decoder.Decode(&in) != nil || !core.ValidProjectName(in.Project) {
 			return control.Request{}, false
 		}
-		return control.Request{Cmd: "coordinator-connect", Alias: in.Project}, true
+		if in.Agent == "" {
+			in.Agent = "claude"
+		}
+		if in.Agent != "claude" && in.Agent != "codex" {
+			return control.Request{}, false
+		}
+		return control.Request{Cmd: "coordinator-connect", Alias: in.Project, Provider: in.Agent}, true
 	case "/api/task-answer":
 		var in struct {
 			Task     string `json:"task"`

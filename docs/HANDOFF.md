@@ -8,8 +8,9 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
-Updated 2026-11-14 by Claude Code.
+Updated 2026-11-14 by Cursor.
 
+- T-160 (D-123): Codex can be the project's coordinator. The «Проект» row connects Claude as before and writes only `mcp_servers.messenger` into the folder's `.codex/config.toml` for Codex. Not released. Not checked with a real Codex chat.
 - 0.67 released. On `claude/docs-refresh` for 0.68 (the owner said release it): T-151 docs check, T-152 welcome page and the coordinator row on «Проект», window tweaks (dialogs close on an outside click, settings layout, sidebar icons, feedback export), T-158 part (`messenger_version` in `list_agents`).
 - Coordinator feedback export of 2026-11-14 (19 remarks) read: new items recorded as T-157 (hand tasks to a coordinator on another computer), T-158 (versions and release notes for the coordinator), T-159 (a remote computer that died: needs 0.67 on the executor for `worker: none` and closing by cancel; `continue_task` for a remote interrupted task is missing). The 13:37 remark (remote progress silent for 2 h) is what T-149 in 0.67 shows as `worker_output_at`; the coordinator was still on 0.66.
 - Next: T-154 cards without jumps, T-153 install in a terminal, T-155 `update_messenger`, T-156 full remote task view, T-157, T-159.

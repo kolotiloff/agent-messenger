@@ -14,10 +14,12 @@ import (
 	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
 
-// Coordinator connection from the window (T-039, D-050). The window asks the
-// client to run Claude's own `claude mcp add --scope local` in the project
-// folder, so the owner never types a command. The result is read back from
-// Claude's settings; an unclear result is shown, never retried.
+// Coordinator connection from the window (T-039, D-050, T-160, D-123). For
+// Claude the window asks the client to run `claude mcp add --scope local` in
+// the project folder. For Codex it writes only the messenger table in the
+// project's .codex/config.toml and does not run the Codex CLI. The result is
+// read back from that agent's own config; an unclear result is shown, never
+// retried.
 
 // coordinatorAddTimeout bounds one `claude mcp add` run.
 const coordinatorAddTimeout = 30 * time.Second
@@ -27,6 +29,7 @@ const coordinatorAddTimeout = 30 * time.Second
 const (
 	linkNoFolder = "no_folder" // the project has no folder on this computer
 	linkNoClaude = "no_claude" // Claude Code is not connected under «Агенты»
+	linkNoCodex  = "no_codex"  // Codex is not connected under «Агенты»
 	linkFailed   = "failed"    // the last attempt did not leave the entry
 )
 
@@ -39,7 +42,7 @@ type CoordinatorLinkView struct {
 var coordinatorConnect sync.Mutex
 
 type coordinatorTarget struct {
-	folder, cli, messenger, config string
+	folder, cli, codexCLI, messenger, config string
 }
 
 func (s *Supervisor) coordinatorTarget(project string) (coordinatorTarget, CoordinatorLinkView, bool) {
@@ -52,8 +55,11 @@ func (s *Supervisor) coordinatorTarget(project string) (coordinatorTarget, Coord
 	}
 	t := coordinatorTarget{folder: v.Folder}
 	for _, a := range v.Agents {
-		if a.Agent == "claude" {
+		switch a.Agent {
+		case "claude":
 			t.cli = a.CLI
+		case "codex":
+			t.codexCLI = a.CLI
 		}
 	}
 	t.messenger, err = CoordinatorProgram(s.root)
@@ -90,10 +96,17 @@ func (s *Supervisor) CoordinatorLinkState(project string) CoordinatorLinkView {
 	return s.readCoordinatorLink(project, t)
 }
 
-// ConnectCoordinator is the window's «Подключить к Claude» (control
-// command coordinator-connect).
-func (s *Supervisor) ConnectCoordinator(project string) (any, error) {
-	return s.connectCoordinator(project), nil
+// ConnectCoordinator is the window's «Подключить» (control command
+// coordinator-connect). agent is "claude" (the default) or "codex".
+func (s *Supervisor) ConnectCoordinator(project, agent string) (any, error) {
+	switch agent {
+	case "", "claude":
+		return s.connectCoordinator(project), nil
+	case "codex":
+		return s.connectCodexCoordinator(project), nil
+	default:
+		return CoordinatorLinkView{State: linkFailed, Detail: "Координатором может быть Claude Code или Codex."}, nil
+	}
 }
 
 // connectCoordinator connects the project's folder in Claude. It does
@@ -152,15 +165,74 @@ func (s *Supervisor) connectCoordinator(project string) CoordinatorLinkView {
 	return CoordinatorLinkView{State: linkFailed, Detail: detail}
 }
 
+func (s *Supervisor) readCodexLink(project string, t coordinatorTarget) CoordinatorLinkView {
+	state, err := adapters.CodexCoordinatorLink(adapters.CodexProjectConfig(t.folder), t.messenger, s.root, project)
+	view := CoordinatorLinkView{State: state}
+	if err != nil {
+		view.Detail = err.Error()
+	}
+	if state == adapters.LinkMissing && t.codexCLI == "" {
+		view.State = linkNoCodex
+	}
+	return view
+}
+
+// CodexCoordinatorLinkState reports whether the project folder's Codex
+// config starts this Messenger. It changes nothing.
+func (s *Supervisor) CodexCoordinatorLinkState(project string) CoordinatorLinkView {
+	t, view, ok := s.coordinatorTarget(project)
+	if !ok {
+		return view
+	}
+	return s.readCodexLink(project, t)
+}
+
+// connectCodexCoordinator writes the messenger table into the project
+// folder's .codex/config.toml (D-123). It does not run Codex.
+func (s *Supervisor) connectCodexCoordinator(project string) CoordinatorLinkView {
+	coordinatorConnect.Lock()
+	defer coordinatorConnect.Unlock()
+	t, view, ok := s.coordinatorTarget(project)
+	if !ok {
+		return view
+	}
+	before := s.readCodexLink(project, t)
+	if before.State != adapters.LinkMissing && before.State != adapters.LinkStale {
+		return before
+	}
+	// A registered Codex program is required before writing, as Claude is
+	// required before its own command runs. A missing file with no program
+	// is already no_codex; a stale file is left as it is.
+	if t.codexCLI == "" {
+		if before.State == adapters.LinkMissing {
+			return CoordinatorLinkView{State: linkNoCodex}
+		}
+		return before
+	}
+	if err := adapters.EnsureCodexCoordinator(adapters.CodexProjectConfig(t.folder), t.messenger, s.root, project); err != nil {
+		detail := err.Error()
+		if len(detail) > 600 {
+			detail = detail[:600] + "…"
+		}
+		return CoordinatorLinkView{State: linkFailed, Detail: detail}
+	}
+	after := s.readCodexLink(project, t)
+	if after.State != adapters.LinkConnected {
+		return CoordinatorLinkView{State: linkFailed, Detail: "Codex не записал подключение."}
+	}
+	return after
+}
+
 // staleRepairs remembers the projects whose stale coordinator entry this
 // client already tried to replace: one try per project and client start, so
 // a failure is not repeated by itself.
 var staleRepairs sync.Map
 
 // repairStaleCoordinator replaces, in the background, the project's
-// coordinator entry when it starts an earlier program file (T-117). A chat
-// that is open keeps its running program until it reconnects; new chats
-// and reconnects start the program file.
+// coordinator entry when it starts an earlier program file (T-117, T-160).
+// Claude and Codex are each tried once per client start. A chat that is
+// open keeps its running program until it reconnects; new chats and
+// reconnects start the program file.
 func (s *Supervisor) repairStaleCoordinator(project string) {
 	if _, tried := staleRepairs.LoadOrStore(s.root+"\x00"+project, true); tried {
 		return
@@ -169,9 +241,14 @@ func (s *Supervisor) repairStaleCoordinator(project string) {
 	go func() {
 		defer s.bg.Done()
 		t, _, ok := s.coordinatorTarget(project)
-		if !ok || t.cli == "" || s.readCoordinatorLink(project, t).State != adapters.LinkStale {
+		if !ok {
 			return
 		}
-		s.connectCoordinator(project)
+		if t.cli != "" && s.readCoordinatorLink(project, t).State == adapters.LinkStale {
+			s.connectCoordinator(project)
+		}
+		if t.codexCLI != "" && s.readCodexLink(project, t).State == adapters.LinkStale {
+			s.connectCodexCoordinator(project)
+		}
 	}()
 }

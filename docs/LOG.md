@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-14 — Cursor (T-160 Codex coordinator)
+
+- Codex can be the coordinator (D-123). The window writes the messenger table into the project folder's `.codex/config.toml` and leaves every other line, a foreign entry, a turned-off entry and an unreadable file alone. Claude's connection is unchanged. Verified with fake config files and the window route. Not verified with a real Codex chat. Not released.
+
 ## 2026-11-14 — Claude Code (docs check, T-152 window, 0.68)
 
 - Docs checked against the program (T-151). T-152 reworked with the owner over several rounds: welcome page, the coordinator as one row of «Проект» (this computer only), dialogs close on an outside click, settings and sidebar tidy-ups, feedback export without a jump. T-158 part: `messenger_version` in `list_agents`. Feedback export of 11-14 read; new T-157, T-158, T-159. Owner asked to release before going to sleep.
