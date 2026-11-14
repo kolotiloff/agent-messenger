@@ -6,6 +6,11 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 - On «Проект», the «Координатор?» mark is a section: «MCP-плагин», with the hint «Подключение к графическому редактору», then Claude Code, Codex and Cursor as before. Not released. Branch `cursor/mcp-plugin-heading-bfd1`.
 
+## 2026-11-14 — Cursor (T-155 update_messenger)
+
+- T-155 (D-133) on `cursor/t155-update-messenger-bfd1`: the coordinator tool `update_messenger` queues a Windows/Linux Messenger update until live work ends; the computer takes no new tasks and shows «ждёт обновления». A Mac refuses with the app-button text. Window remote-update uses the same queue. Result as `messenger_update` and a notice; nothing retried.
+- Verified: core, supervisor (queued remote path and local queue), MCP, broker presence fallback, `check.sh`. Not verified: real install between computers, Mac app path, the window on the Mac. Not released.
+
 ## 2026-11-14 — Codex (T-168–T-171 release 0.72)
 
 - Released [0.72](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.72), source `f3bd2d45e9f18890419e09996bb7a97bb3b009bd`, [run](https://github.com/kolotiloff/agent-messenger/actions/runs/43600787465). PR #105 and PR #106 checks passed; exact checked #106 head `baf18d23021164c4babc4b96f381c1a15a5f6543`.
