@@ -935,6 +935,8 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 			return applyUpdateReply(tx, from, b)
 		case "output":
 			return applyOutput(tx, from, b)
+		case "image":
+			return applyImage(tx, from, b)
 		}
 		return nil
 	})

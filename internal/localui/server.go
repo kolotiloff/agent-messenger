@@ -134,7 +134,7 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("X-Frame-Options", "DENY")
-		w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
 		if r.Host != host {
 			http.Error(w, "invalid host", http.StatusForbidden)
 			return
@@ -482,6 +482,13 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 				http.Error(w, "invalid computer", 400)
 				return
 			}
+		case "/api/task-image":
+			req.Cmd = "task-image"
+			req.MessageID = r.URL.Query().Get("id")
+			if req.MessageID == "" || len(req.MessageID) > 64 {
+				http.Error(w, "invalid picture", 400)
+				return
+			}
 		case "/api/task":
 			req.Cmd = "task-feed"
 			req.MessageID = r.URL.Query().Get("id")
@@ -540,8 +547,27 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			writeRaw(w, response.Overview)
 		case "timeline":
 			writeRaw(w, response.Timeline)
+		case "task-image":
+			writeImage(w, response.Overview)
 		}
 	})
+}
+
+// writeImage serves a worker's picture (T-175) as itself, only when it is
+// one of the accepted picture types.
+func writeImage(w http.ResponseWriter, raw json.RawMessage) {
+	var img struct {
+		Type string `json:"type"`
+		Data []byte `json:"data"`
+	}
+	if json.Unmarshal(raw, &img) != nil || !core.TaskImageTypes[img.Type] || len(img.Data) == 0 {
+		http.Error(w, "invalid picture", 502)
+		return
+	}
+	w.Header().Set("Content-Type", img.Type)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Cache-Control", "private, max-age=3600")
+	_, _ = w.Write(img.Data)
 }
 
 func writeRaw(w http.ResponseWriter, raw json.RawMessage) {

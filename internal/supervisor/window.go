@@ -93,6 +93,18 @@ func (s *Supervisor) WindowView(project string) (any, error) {
 // TaskFeed returns one task's feed.
 func (s *Supervisor) TaskFeed(id string) (any, error) { return s.store.TaskFeed(id) }
 
+// TaskImage is a worker's picture for the window (T-175).
+func (s *Supervisor) TaskImage(id string) (any, error) {
+	kind, data, err := s.store.TaskImageData(id)
+	if err != nil {
+		return nil, err
+	}
+	return struct {
+		Type string `json:"type"`
+		Data []byte `json:"data"`
+	}{kind, data}, nil
+}
+
 // CreateProject creates a project with its folder on this computer.
 func (s *Supervisor) CreateProject(name, folder string) error {
 	return s.store.CreateProject(name, folder)

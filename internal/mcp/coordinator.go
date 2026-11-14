@@ -3,6 +3,7 @@ package mcp
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -73,6 +74,7 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - A new chat starts from the current state, not from the history: first call tasks, which gives the open tasks, their open questions and the event cursor, then wait with after = that cursor. Never wait from 0 in a new chat: it replays every old event of the project. Agreements of an earlier coordinator chat that are not in the project's rules or files are not known here; ask the owner when it matters.
 - wait returns the events of this project's tasks after the cursor: a report, a question for you, a failure, an interruption, a block or a cancellation; with none, it blocks until one comes or timeout_seconds pass (default 60, at most 120). Always pass after = the cursor from the previous wait. When it returns events, act on them (answer questions with answer, tell the owner about reports). If it says more: true, more events are ready: call wait again at once with the new cursor.
 - start_task takes an optional model. Select the exact value from that agent's models in list_agents; model_options explains the standard selections and suggested work (small edits, everyday coding, complex work, hard investigations). This also applies to Unity: scope and difficulty decide, not the project label. A value such as gpt-6-astra[effort=high] is a Messenger selection: copy it unchanged into model; Messenger passes the base model and the separate CLI reasoning setting. Cursor uses its published CLI ID directly. These are configured options, not proof of account access; do not retry or switch automatically on rejection. Leave model out for the CLI default. Never invent IDs or append H/Medium to a model. Tell the owner when you chose a non-default model and why. Requires Messenger 0.72 on the executing computer for effort selections.
+- A report or question that ends with «[N picture(s) attached: read them with task_images]» has pictures from the worker (a screenshot, a chart): look at them with task_images before you judge the result.
 - A report is the worker's short summary. Its full last message is kept too: when a report or failure ends with «[Messenger] The worker's full final message has N characters», read it with task_output before asking the worker again; it is lost nowhere, even if the worker deleted its file.
 - answer answers a worker's question (pass question_id and a unique op_id); the worker continues in the same session.
 - A worker may ask the owner instead of you, when the project's rules allow it. wait then returns an owner_question event with the question, and owner_answered with the owner's answer once given; the task shows waiting_owner meanwhile. The owner usually answers in the window. When the owner answers it to you in this chat, or asks you to answer for them, call answer with that question; the window shows that you gave the answer. Do not answer it on your own.
@@ -281,8 +283,13 @@ func serveCoordinatorIn(store *core.Store, project, watch, dataRoot string, in i
 					c.respond(id, coordinatorResult(err.Error(), true), nil)
 					return
 				}
-				raw, _ := json.Marshal(result)
-				reply := coordinatorResult(string(raw), false)
+				var reply map[string]any
+				if pics, ok := result.(imagesResult); ok {
+					reply = pics.reply()
+				} else {
+					raw, _ := json.Marshal(result)
+					reply = coordinatorResult(string(raw), false)
+				}
 				if !isWaitCall(params) {
 					if notice := c.unreadNotice(); notice != "" {
 						reply["content"] = append(reply["content"].([]map[string]any), map[string]any{"type": "text", "text": notice})
@@ -379,6 +386,10 @@ func coordinatorTools() []map[string]any {
 				"op_id":   str("unique id of this operation"),
 				"text":    map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxTaskText},
 			}, "task_id", "op_id", "text")},
+		{"name": "task_images", "description": "See the pictures a worker attached to its reports and questions (a screenshot, a chart), newest first, up to 4 per call. A report or question says when it has pictures. For a task of another computer, the pictures it sent along.",
+			"inputSchema": obj(map[string]any{
+				"task_id": str("task id"),
+			}, "task_id")},
 		{"name": "task_output", "description": "Read the worker's full last message of a task, kept whole even when its report is short (up to 60000 characters; 20000 per call). A report or failure says when there is more to read. run 0 or left out is the latest run; pass offset = next_offset to read on.",
 			"inputSchema": obj(map[string]any{
 				"task_id": str("task id"),
@@ -511,6 +522,17 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 			return nil, err
 		}
 		return map[string]any{"answered": true, "next": "The worker continues; call wait for its next report or question.", "waiting": c.waitingInstructions()}, nil
+	case "task_images":
+		var a struct {
+			TaskID string `json:"task_id"`
+		}
+		if err := strict(&a); err != nil {
+			return nil, err
+		}
+		if err := c.ownTask(a.TaskID); err != nil {
+			return nil, err
+		}
+		return c.taskImages(a.TaskID)
 	case "task_output":
 		var a struct {
 			TaskID string `json:"task_id"`
@@ -1065,4 +1087,38 @@ func (c *coordinator) taskMessages(id string, last int) (any, error) {
 		result["remote"] = "This task ran on another computer: its worker's own texts stay there; these are the lines it forwarded."
 	}
 	return result, nil
+}
+
+// imagesResult is a tool result with pictures (T-175): MCP gives them to
+// the coordinator's model as images, not as text.
+type imagesResult struct {
+	info   map[string]any
+	images []map[string]any
+}
+
+func (r imagesResult) reply() map[string]any {
+	raw, _ := json.Marshal(r.info)
+	content := []map[string]any{{"type": "text", "text": string(raw)}}
+	content = append(content, r.images...)
+	return map[string]any{"content": content, "isError": false}
+}
+
+// taskImages returns a task's latest pictures.
+func (c *coordinator) taskImages(task string) (any, error) {
+	list, err := c.store.TaskImages(task, core.MaxTaskImages)
+	if err != nil {
+		return nil, err
+	}
+	out := imagesResult{info: map[string]any{"task_id": task, "pictures": list}}
+	if len(list) == 0 {
+		out.info["note"] = "this task has no pictures"
+	}
+	for _, img := range list {
+		kind, data, err := c.store.TaskImageData(img.ID)
+		if err != nil {
+			return nil, err
+		}
+		out.images = append(out.images, map[string]any{"type": "image", "mimeType": kind, "data": base64.StdEncoding.EncodeToString(data)})
+	}
+	return out, nil
 }

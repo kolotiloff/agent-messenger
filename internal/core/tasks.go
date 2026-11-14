@@ -1381,7 +1381,18 @@ func (s *Store) ReadTask(run, receipt string, includeTask bool) (TaskBrief, erro
 // It is published only when the run is verified (FinishTaskRun). A second
 // disposition is refused; repeating the identical one is a no-op.
 func (s *Store) RecordDisposition(run, receipt, kind, text string) error {
+	return s.RecordDispositionImages(run, receipt, kind, text, nil)
+}
+
+// RecordDispositionImages records a report or question with the pictures
+// the worker attached (T-175). They are kept with the run and published
+// with it.
+func (s *Store) RecordDispositionImages(run, receipt, kind, text string, images []TaskImageFile) error {
 	text = strings.TrimSpace(text)
+	types, err := checkTaskImages(images)
+	if err != nil {
+		return err
+	}
 	if kind != DispositionReport && kind != DispositionAsk && kind != DispositionAskOwner {
 		return fmt.Errorf("%w: unknown disposition", ErrRejected)
 	}
@@ -1406,8 +1417,10 @@ func (s *Store) RecordDisposition(run, receipt, kind, text string) error {
 			}
 			return fmt.Errorf("%w: this run already ended with %s; only one report or question per run", ErrRejected, r.Disposition)
 		}
-		_, err = tx.Exec(`UPDATE task_runs SET disposition=?,disposition_text=? WHERE id=?`, kind, text, run)
-		return err
+		if _, err = tx.Exec(`UPDATE task_runs SET disposition=?,disposition_text=? WHERE id=?`, kind, text, run); err != nil {
+			return err
+		}
+		return insertTaskImages(tx, r.TaskID, run, images, types)
 	})
 }
 
@@ -1568,6 +1581,12 @@ func publishDisposition(tx *sql.Tx, t Task, r TaskRun) error {
 		if text, err = withUsageNote(tx, t.ID, text); err != nil {
 			return err
 		}
+		if text, err = imagesNote(tx, r.ID, text); err != nil {
+			return err
+		}
+		if err := forwardImages(tx, t.ID, r.ID); err != nil {
+			return err
+		}
 		return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "report", text, "")
 	case DispositionAsk, DispositionAskOwner:
 		audience, state := AudienceCoordinator, "waiting_coordinator"
@@ -1588,7 +1607,14 @@ func publishDisposition(tx *sql.Tx, t Task, r TaskRun) error {
 		if err := setTaskState(tx, t.ID, state, "waiting for an answer"); err != nil {
 			return err
 		}
-		return insertTaskEvent(tx, t.Project, t.ID, audience, "question", r.DispositionText, id)
+		text, err := imagesNote(tx, r.ID, r.DispositionText)
+		if err != nil {
+			return err
+		}
+		if err := forwardImages(tx, t.ID, r.ID); err != nil {
+			return err
+		}
+		return insertTaskEvent(tx, t.Project, t.ID, audience, "question", text, id)
 	}
 	return fmt.Errorf("%w: unknown disposition", ErrRejected)
 }

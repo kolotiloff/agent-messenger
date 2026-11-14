@@ -958,6 +958,28 @@
     catch(e){showError(e);}
     finally{stopping=false;$('task-stop').disabled=false;}
   }
+  // T-175: the worker's pictures. The page asks for them with its key and
+  // shows them from memory; a click opens one at full width.
+  const pictureURLs=new Map();
+  async function loadPicture(id){
+    if(pictureURLs.has(id))return pictureURLs.get(id);
+    try{
+      const response=await fetch('/api/task-image?id='+encodeURIComponent(id),{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(15000)});
+      if(!response.ok)return '';
+      const url=URL.createObjectURL(await response.blob());pictureURLs.set(id,url);return url;
+    }catch(_){return '';}
+  }
+  function pictures(list){
+    const box=el('div',undefined,'am-pictures');
+    for(const p of list){
+      const img=document.createElement('img');img.className='am-picture';img.alt=p.name;img.title=p.name;
+      img.addEventListener('click',()=>img.classList.toggle('am-picture-open'));
+      const known=pictureURLs.get(p.id);
+      if(known)img.src=known;else loadPicture(p.id).then(url=>{if(url)img.src=url;});
+      box.append(img);
+    }
+    return box;
+  }
   // T-172: a run of this computer whose worker went quiet, or wrote its
   // final message while its process kept running. Only described: the run
   // ends on an observed exit, never on this (D-021, Q-030).
@@ -1032,6 +1054,7 @@
       if(it.kind==='tool'){addTool(workerGroup(it.at),it,index);continue;}
       if(it.kind==='report'||it.kind==='question'){
         const c=workerGroup(it.at);c.append(richText(it.text,'am-disposition'));
+        if(it.images?.length)c.append(pictures(it.images));
         if(!it.verified)c.append(delivery(tr('Не опубликовано: запуск не прошёл проверку'),'am-status-bad'));
         else if(it.kind==='report'&&it.audience==='held')c.append(delivery(tr('Промежуточный отчёт: исполнитель продолжает с вашим сообщением'),'am-status-wait'));
         else if(it.kind==='report')c.append(delivery(tr('Отчёт отправлен координатору, сессия закрыта'),'am-delivery-close'));

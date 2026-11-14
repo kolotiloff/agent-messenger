@@ -472,6 +472,9 @@ type FeedItem struct {
 	Verified bool   `json:"verified"`
 	Audience string `json:"audience,omitempty"`
 	State    string `json:"state,omitempty"`
+	// Images are the pictures the worker attached to this report or
+	// question (T-175).
+	Images []TaskImage `json:"images,omitempty"`
 }
 
 // TaskFeed is a task with its feed.
@@ -571,7 +574,11 @@ func (s *Store) TaskFeed(id string) (TaskFeed, error) {
 				if kind == "report" && i+1 < len(list) && list[i+1].kind == "note" {
 					audience = "held"
 				}
-				f.Items = append(f.Items, FeedItem{Kind: kind, Author: "worker", Text: r.text, At: at, Run: r.ordinal, Verified: r.state == "finished", Audience: audience, State: r.state})
+				images, err := queryImages(tx, `SELECT id,name,type,length(data) FROM task_images WHERE run_id=? ORDER BY seq`, r.id)
+				if err != nil {
+					return err
+				}
+				f.Items = append(f.Items, FeedItem{Kind: kind, Author: "worker", Text: r.text, At: at, Run: r.ordinal, Verified: r.state == "finished", Audience: audience, State: r.state, Images: images})
 			}
 			switch r.state {
 			case "failed", "blocked", "interrupted", "cancelled":
@@ -628,19 +635,44 @@ func (s *Store) remoteFeed(f *TaskFeed) error {
 }
 
 func (s *Store) remoteEvents(f *TaskFeed) error {
+	// T-175: pictures sent along belong to the report or question that
+	// followed them.
+	pics := map[int][]TaskImage{}
+	picRows, err := s.db.Query(`SELECT event_seq,id,name,type,length(data) FROM task_images WHERE task_id=? AND run_id='' ORDER BY seq`, f.Task.ID)
+	if err != nil {
+		return err
+	}
+	for picRows.Next() {
+		var n int
+		var img TaskImage
+		if err := picRows.Scan(&n, &img.ID, &img.Name, &img.Type, &img.Size); err != nil {
+			picRows.Close()
+			return err
+		}
+		pics[n] = append(pics[n], img)
+	}
+	picRows.Close()
+	if err := picRows.Err(); err != nil {
+		return err
+	}
 	rows, err := s.db.Query(`SELECT audience,kind,text,created_at FROM task_events WHERE task_id=? ORDER BY seq`, f.Task.ID)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
+	disposed := 0
 	for rows.Next() {
 		var audience, kind, text, at string
 		if err := rows.Scan(&audience, &kind, &text, &at); err != nil {
 			return err
 		}
 		switch kind {
+		case "question", "report", "late_report":
+			disposed++
+		}
+		switch kind {
 		case "question":
-			f.Items = append(f.Items, FeedItem{Kind: "question", Author: "worker", Text: text, At: at, Verified: true, Audience: audience, State: "finished"})
+			f.Items = append(f.Items, FeedItem{Kind: "question", Author: "worker", Text: text, At: at, Verified: true, Audience: audience, State: "finished", Images: pics[disposed]})
 		case "answered":
 			by := AudienceCoordinator
 			if audience == AudienceOwner {
@@ -650,7 +682,7 @@ func (s *Store) remoteEvents(f *TaskFeed) error {
 		case "accepted":
 			f.Items = append(f.Items, FeedItem{Kind: "accepted", Author: "messenger", Text: f.Task.Remote.Name, At: at, Verified: true})
 		case "report", "late_report":
-			f.Items = append(f.Items, FeedItem{Kind: "report", Author: "worker", Text: text, At: at, Verified: true, State: "finished"})
+			f.Items = append(f.Items, FeedItem{Kind: "report", Author: "worker", Text: text, At: at, Verified: true, State: "finished", Images: pics[disposed]})
 		case "failed", "blocked", "interrupted", "cancelled":
 			f.Items = append(f.Items, FeedItem{Kind: "outcome", Author: "messenger", Text: text, At: at, State: kind, Verified: true})
 		}
