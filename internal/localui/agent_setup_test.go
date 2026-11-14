@@ -50,7 +50,7 @@ func TestAgentSetupReceiptAndRegistration(t *testing.T) {
 		return st
 	}
 	st := begin()
-	if !st.OK || st.State != "running" || launched != 1 || registered != 0 {
+	if !st.OK || st.State != "unknown" || launched != 1 || registered != 0 {
 		t.Fatal(st, launched, registered)
 	}
 	if second := begin(); second.ID != st.ID || launched != 1 {
@@ -118,6 +118,110 @@ func TestAgentSetupUnknownIsNotRetried(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "result"), []byte("found\nrelative-path\n"), 0600)
 	if s.status("claude", "find").State != "failed" {
 		t.Fatal("relative path accepted")
+	}
+}
+
+func TestSetupFindRecoversMissingInstallReceipt(t *testing.T) {
+	for _, uncertain := range []bool{false, true} {
+		t.Run(map[bool]string{false: "confirmed", true: "lost-reply"}[uncertain], func(t *testing.T) {
+			root := t.TempDir()
+			cli := filepath.Join(root, "codex.exe")
+			os.WriteFile(cli, []byte("fake; never executed"), 0700)
+			s := &agentSetup{root: root}
+			installDir := s.dir("codex", "install")
+			os.MkdirAll(installDir, 0700)
+			os.WriteFile(filepath.Join(installDir, "id"), []byte("old-install"), 0600)
+			launched, registered := 0, 0
+			old := startTerminalFunc
+			startTerminalFunc = func(argv, env []string) error { launched++; return nil }
+			t.Cleanup(func() { startTerminalFunc = old })
+			call := func(_ context.Context, r control.Request) (control.Response, error) {
+				if r.Cmd == "window-view" {
+					return control.Response{OK: true, Overview: json.RawMessage(`{}`)}, nil
+				}
+				registered++
+				if uncertain {
+					return control.Response{}, errors.New("lost reply")
+				}
+				return control.Response{OK: true}, nil
+			}
+			h := newDesktopHandler(actionHost, "secret", call, func(context.Context) any { return nil }, nil, Desktop{setupRoot: root})
+			postAction(h, "agent-install", `{"provider":"codex","action":"install"}`)
+			if launched != 0 || s.status("codex", "install").State != "unknown" {
+				t.Fatal("missing receipt was retried or called running")
+			}
+			w := postAction(h, "agent-find", `{"provider":"codex","action":"find"}`)
+			var find setupState
+			json.Unmarshal(w.Body.Bytes(), &find)
+			if launched != 1 || find.ID == "" {
+				t.Fatal(w.Body.String())
+			}
+			os.WriteFile(filepath.Join(s.dir("codex", "find"), "result"), []byte("found\n"+cli+"\n"), 0600)
+			body, _ := json.Marshal(setupInput{Provider: "codex", Action: "find", ID: find.ID})
+			postAction(h, "agent-setup-finish", string(body))
+			want := "recovered"
+			if uncertain {
+				want = "unknown"
+			}
+			// A restarted window reads the same result. Recovery never asserts
+			// that the original installer finished or retries a lost registration.
+			s = &agentSetup{root: root}
+			if got := s.status("codex", "install").State; got != want {
+				t.Fatalf("install state %s want %s", got, want)
+			}
+			postAction(h, "agent-setup-finish", string(body))
+			if !uncertain {
+				// A late installer receipt cannot register again after recovery.
+				os.WriteFile(filepath.Join(installDir, "result"), []byte("found\n"+cli+"\n"), 0600)
+				postAction(h, "agent-setup-finish", `{"provider":"codex","action":"install","id":"old-install"}`)
+				postAction(h, "agent-install", `{"provider":"codex","action":"install"}`)
+			}
+			if registered != 1 || launched != 1 {
+				t.Fatal("repeated setup", registered, launched)
+			}
+		})
+	}
+}
+
+func TestSetupClosedTerminalRecordsInterruption(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX terminal hangup")
+	}
+	dir := t.TempDir()
+	home := filepath.Join(dir, "home")
+	bin := filepath.Join(dir, "fake-tools")
+	os.MkdirAll(bin, 0700)
+	// Only this fake child signals its own wrapper. No real terminal or CLI.
+	installer := `mkdir -p "$HOME/.local/bin"
+printf '#!/bin/sh\nexit 0\n' > "$HOME/.local/bin/codex"
+chmod +x "$HOME/.local/bin/codex"
+kill -HUP "$PPID"
+`
+	os.WriteFile(filepath.Join(dir, "fake-installer"), []byte(installer), 0600)
+	os.WriteFile(filepath.Join(bin, "curl"), []byte("#!/bin/sh\ncp \"$AM_TEST_INSTALLER\" \"$4\"\n"), 0700)
+	script, _ := setupScript("darwin", "codex", "install", dir)
+	script = strings.ReplaceAll(script, "/opt/homebrew/bin /usr/local/bin", shellLine([]string{filepath.Join(dir, "no-global-tools")}, nil))
+	path := filepath.Join(dir, "setup.sh")
+	os.WriteFile(path, []byte(script), 0600)
+	cmd := exec.Command("/bin/sh", path)
+	cmd.Env = append(os.Environ(), "HOME="+home, "PATH="+bin+":/usr/bin:/bin", "AM_TEST_INSTALLER="+filepath.Join(dir, "fake-installer"))
+	if out, err := cmd.CombinedOutput(); err == nil {
+		t.Fatal("hangup returned success", string(out))
+	}
+	raw, _ := os.ReadFile(filepath.Join(dir, "result"))
+	if string(raw) != "interrupted\n\n" {
+		t.Fatalf("hangup receipt %q", raw)
+	}
+	script, _ = setupScript("darwin", "codex", "find", dir)
+	os.WriteFile(path, []byte(script), 0600)
+	cmd = exec.Command("/bin/sh", path)
+	cmd.Env = append(os.Environ(), "HOME="+home, "PATH=/usr/bin:/bin")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatal(err, string(out))
+	}
+	raw, _ = os.ReadFile(filepath.Join(dir, "result"))
+	if string(raw) != "found\n"+filepath.Join(home, ".local", "bin", "codex")+"\n" {
+		t.Fatalf("recovery receipt %q", raw)
 	}
 }
 

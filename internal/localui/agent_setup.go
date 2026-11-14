@@ -60,7 +60,13 @@ func (s *agentSetup) status(provider, action string) setupState {
 		return st
 	}
 	st.ID = string(id)
-	st.State = "running"
+	// Launching a terminal is not evidence that its script is still running.
+	// This also handles receipts left by older versions or a closed terminal.
+	st.State = "unknown"
+	if b, err := os.ReadFile(filepath.Join(dir, "recovered")); err == nil && string(b) == st.ID {
+		st.State = "recovered"
+		return st
+	}
 	raw, err := os.ReadFile(filepath.Join(dir, "result"))
 	if err != nil {
 		return st
@@ -70,6 +76,9 @@ func (s *agentSetup) status(provider, action string) setupState {
 		return st
 	}
 	kind, path, _ := strings.Cut(strings.TrimSuffix(string(raw), "\n"), "\n")
+	if kind == "interrupted" {
+		return st
+	}
 	if kind != "found" {
 		st.State = "failed"
 		return st
@@ -143,11 +152,19 @@ func (s *agentSetup) serve(w http.ResponseWriter, r *http.Request, dec *json.Dec
 		response, err = call(r.Context(), control.Request{Cmd: "agent-set", Provider: in.Provider, CLI: st.CLI, Environment: profile})
 		if err == nil && response.OK {
 			_ = os.WriteFile(filepath.Join(dir, "connected"), []byte(st.ID), 0600)
+			if in.Action == "find" {
+				// Finding and registering the CLI resolves the setup UI, not the
+				// installer's unknown exit. Keep its evidence and never relaunch it.
+				install := s.status(in.Provider, "install")
+				if install.ID != "" && (install.State == "unknown" || install.State == "found" || install.State == "failed") {
+					_ = os.WriteFile(filepath.Join(s.dir(in.Provider, "install"), "recovered"), []byte(install.ID), 0600)
+				}
+			}
 		}
 		writeJSON(w, s.status(in.Provider, in.Action))
 		return
 	}
-	if st.State == "running" || st.State == "unknown" || st.State == "found" || st.State == "unconfirmed" {
+	if st.State == "running" || st.State == "unknown" || st.State == "found" || st.State == "unconfirmed" || st.State == "recovered" {
 		writeJSON(w, st)
 		return
 	}
@@ -248,6 +265,11 @@ try {
 am_dir=` + q(dir) + `
 umask 077
 finish_setup() { printf '%s\n%s\n' "$1" "$2" > "$am_dir/result.tmp" && mv "$am_dir/result.tmp" "$am_dir/result"; }
+setup_interrupted() { trap '' HUP INT TERM; if [ ! -f "$am_dir/result" ]; then finish_setup interrupted ''; fi; }
+trap setup_interrupted EXIT
+trap 'setup_interrupted; exit 129' HUP
+trap 'setup_interrupted; exit 130' INT
+trap 'setup_interrupted; exit 143' TERM
 find_agent() {
  for am_name in ` + names + `; do
   am_path=$(command -v "$am_name" 2>/dev/null) || am_path=''

@@ -2,6 +2,12 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-14 — Codex (T-168/T-169 setup recovery and Cursor sidebar)
+
+- Owner reported a closed Codex installation terminal on another Mac leaving 0.71 waiting. Implemented honest unknown status, an explicit Find action and durable recovery after confirmed CLI registration; preserve evidence and prevent late output from registering again. POSIX wrappers record hangup/interruption (D-130).
+- Owner also reported a temporary Cursor/VS Code sidebar row. The coordinator name classifier recognized only Claude/Codex; Cursor now merges into the existing Cursor row (D-064). Raw unknown clients have a chat tooltip.
+- Work on `codex/t168-setup-recovery`, not released. Full local race checks, final localui tests and Chromium/WebKit fixtures passed. PR CI/publication next; no real installer, model or working chat was run.
+
 ## 2026-11-14 — Codex (T-153/T-163–T-167 release 0.71)
 
 - Owner explicitly requested the combined release. Merged [PR #103](https://github.com/kolotiloff/agent-messenger/pull/103), exact checked head `14212a16d4e5a47ccfc7f0680eb6c8aa46f0bf25`, at `daae5642bf80fc6193a05fa143678ecf0bcca1cc` after mandatory checks passed.
