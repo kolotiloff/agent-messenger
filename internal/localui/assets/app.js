@@ -958,6 +958,22 @@
     catch(e){showError(e);}
     finally{stopping=false;$('task-stop').disabled=false;}
   }
+  // T-172: a run of this computer whose worker went quiet, or wrote its
+  // final message while its process kept running. Only described: the run
+  // ends on an observed exit, never on this (D-021, Q-030).
+  function quietLine(t){
+    const q=t.quiet;if(!q||t.state!=='running')return null;
+    if(q.final_at){
+      const p=el('p',undefined,'am-small');
+      p.append(el('span',tr('Итог написан в ')+clock(q.final_at)+tr(', но процесс исполнителя не завершился'),'am-status-wait'));
+      const left=(q.processes||[]).map(x=>(x.name||'?')+' ('+x.pid+')'+(x.worker?tr(' — сам исполнитель'):''));
+      p.append(el('span','. '+(left.length?tr('Ещё работают: ')+left.join(', ')+'. ':'')+tr('Закройте лишнее на этом компьютере или остановите задачу.'),'am-muted'));
+      return p;
+    }
+    const at=Date.parse(q.output_at||'');if(!at)return null;
+    const minutes=Math.floor((Date.now()-at)/60000);if(minutes<10)return null;
+    return el('p',tr('Исполнитель ничего не пишет уже ')+minutes+tr(' мин.'),'am-small am-muted');
+  }
   function renderFeed(){
     const t=feed.task,thread=$('thread'),head=$('task-head');
     const signature=JSON.stringify(feed);if(signature===feedSignature)return;
@@ -971,6 +987,7 @@
     if(statusTip)line.append(el('span',', '+statusTip,'am-muted'));
     if(t.usage){const used=el('span',', '+usageShort(t.usage),'am-muted');used.title=usageLong(t.usage);line.append(used);}
     title.append(line);
+    const quiet=quietLine(t);if(quiet)title.append(quiet);
     const headRow=el('div',undefined,'am-task-head-row');headRow.append(title);
     head.replaceChildren(headRow);
     const [coordProvider,coordLabel]=coordinatorName();

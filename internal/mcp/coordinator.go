@@ -84,6 +84,7 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - idle_computers in list_agents names the online computers that can take this project's tasks and run no task now: the free machines, without waiting for an event.
 - network_note in list_agents means this computer's client has not heard from the server for minutes: online and other computers' task states are out of date. Tell the owner; do not start or cancel tasks on other computers because of them.
 - worker on a running task of another computer says what that computer reported a few seconds ago: running means its worker process is alive, and worker_output_at is when it last wrote anything (a long gap means it is thinking or waiting on a long command, not that it is gone); none means no worker process runs the task there now, so it ended and its report or outcome is on the way or lost: wait a few minutes, then tell the owner. It is missing when that computer runs Messenger before 0.67.
+- final_message_at on a running task of this computer means its worker wrote its final message then, but its process has not ended, so the task is not finished: notes to it wait, and a lock it holds stays held. processes lists what still runs in its group (worker marks the worker CLI itself; anything else was left by the worker, such as a diff window or a server). Messenger never closes such a run by itself. Do not start the same work again; tell the owner which processes are left so they can close them on that computer, or cancel the task.
 - late_report: a task that was closed here (cancelled) sent its report or failure afterwards; the text follows. Its work may already be in the project, so check before giving the same work again; the task stays closed. Tell the owner.
 - outbox_delayed_minutes on a computer in list_agents, and computer_outbox_delayed_minutes on its tasks in tasks, mean that computer is in contact but has not been able to send its messages for that many minutes: its acceptances, progress and reports are late, not lost, and come when they go out. Do not cancel or start its tasks again because of it; tell the owner, who may restart Messenger on that computer.
 - answer_refused: the other computer did not accept your answer, and the question is open again (the task waits again); answer it once more if the reason allows, or tell the owner.
@@ -753,6 +754,11 @@ type coordinatorTask struct {
 	// and when it last wrote output, as that computer last reported.
 	Worker         string `json:"worker,omitempty"`
 	WorkerOutputAt string `json:"worker_output_at,omitempty"`
+	// T-172: on a running task of this computer, when its worker wrote its
+	// final message although its process has not ended, and the processes
+	// still in its group.
+	FinalMessageAt string            `json:"final_message_at,omitempty"`
+	Processes      []core.RunProcess `json:"processes,omitempty"`
 }
 
 // closedTaskStates are left out of the default tasks list (T-032).
@@ -832,6 +838,16 @@ func (c *coordinator) tasks(state string, limit int, ifVersion string) (any, err
 			if r != nil && !r.From && !r.Lost {
 				item.OutboxDelayed = r.Delayed
 				item.Worker, item.WorkerOutputAt = r.Worker, r.WorkerOutputAt
+			}
+			if r == nil && t.State == "running" {
+				q, err := c.store.TaskRunQuiet(t.ID)
+				if err != nil {
+					return nil, err
+				}
+				if q != nil {
+					item.Worker, item.WorkerOutputAt = "running", q.OutputAt
+					item.FinalMessageAt, item.Processes = q.FinalAt, q.Processes
+				}
 			}
 		}
 		out = append(out, item)

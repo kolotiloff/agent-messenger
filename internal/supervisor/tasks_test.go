@@ -538,6 +538,53 @@ func TestTaskWithLeftoverProcessIsBlocked(t *testing.T) {
 	h.stop()
 }
 
+func TestRunAfterFinalMessageIsDescribedNotClosed(t *testing.T) {
+	old := taskLingerAfter
+	taskLingerAfter = 100 * time.Millisecond
+	t.Cleanup(func() { taskLingerAfter = old })
+	h := newTaskHarness(t, "final-then-stay", AdapterLauncher{AllowTasks: true})
+	id := h.startTask("op-1", "claude", "x")
+	var q *core.RunQuiet
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		var err error
+		if q, err = h.st.TaskRunQuiet(id); err != nil {
+			t.Fatal(err)
+		}
+		if q != nil && q.FinalAt != "" && len(q.Processes) > 0 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if q == nil || q.FinalAt == "" || q.OutputAt == "" || len(q.Processes) == 0 {
+		t.Fatalf("quiet run not described: %+v", q)
+	}
+	worker := false
+	for _, p := range q.Processes {
+		worker = worker || p.Worker
+	}
+	if !worker {
+		t.Fatalf("the worker itself is not marked: %+v", q.Processes)
+	}
+	// The final message alone never ends the run (D-021, Q-030).
+	if task, err := h.st.TaskByID(id); err != nil || task.State != "running" {
+		t.Fatalf("run closed on the final message: %+v %v", task, err)
+	}
+	view, err := h.st.TaskFeed(id)
+	if err != nil || view.Task.Quiet == nil || view.Task.Quiet.FinalAt == "" {
+		t.Fatalf("window view lacks the quiet run: %+v %v", view.Task.Quiet, err)
+	}
+	if _, err := h.st.CancelTask(id); err != nil {
+		t.Fatal(err)
+	}
+	h.waitState(id, "cancelled")
+	if q, err := h.st.TaskRunQuiet(id); err != nil || q != nil {
+		t.Fatalf("a closed run is still described: %+v %v", q, err)
+	}
+	waitNoTaskReservations(t)
+	h.stop()
+}
+
 func TestCancelStopsARunningTask(t *testing.T) {
 	h := newTaskHarness(t, "slow", AdapterLauncher{AllowTasks: true})
 	id := h.startTask("op-1", "claude", "x")

@@ -132,6 +132,10 @@ type WindowTask struct {
 	// FullAccess: the worker runs with «Любые команды» (T-115). Only for
 	// tasks that run on this computer.
 	FullAccess bool `json:"full_access,omitempty"`
+	// Quiet describes the live run of a running task of this computer:
+	// its last output and, when its final message is out but the run has
+	// not ended, the processes still running (T-172).
+	Quiet *RunQuiet `json:"quiet,omitempty"`
 }
 
 // RemoteComputer is the other computer of a task (T-037).
@@ -433,6 +437,8 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 				if w.WaitsForLock, err = s.waitingLock(t.ID); err != nil {
 					return v, err
 				}
+			} else if w.Quiet, err = s.TaskRunQuiet(t.ID); err != nil {
+				return v, err
 			}
 		}
 		if w.StartedAt, err = s.startedAt(t.ID); err != nil {
@@ -487,6 +493,9 @@ func (s *Store) TaskFeed(id string) (TaskFeed, error) {
 	}
 	if t.State == "running" {
 		if f.Task.PendingLaunch, err = s.pendingLaunch(t.ID); err != nil {
+			return f, err
+		}
+		if f.Task.Quiet, err = s.TaskRunQuiet(t.ID); err != nil {
 			return f, err
 		}
 	}
