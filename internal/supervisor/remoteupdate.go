@@ -13,18 +13,20 @@ import (
 	"github.com/kolotiloff/agent-messenger/internal/core"
 )
 
-// Updating this computer at another computer's request (T-078, D-100). The
-// client answers a request at once: it refuses while any task is not
-// finished, on a Mac (Sparkle updates it in its own app), when it does not
-// know the program file the owner installed, or while another update is
-// going on. Otherwise it answers "updating" and starts the update helper
-// from the program file: the helper installs the newest signed update with
-// the same updater the window uses and restarts the background client from
-// the installed program. The helper writes its result to a file; whichever
-// client runs then (the old one or the new one) sends it and removes the
-// file. Nothing is retried on its own: a helper that never reported is
-// answered as failed after updateMarkerAge. The helper never touches
-// active-runs.json or a reservation.
+// Updating this computer at another computer's request (T-078, D-100,
+// T-155, D-133). The client answers a request at once: it refuses on a Mac
+// (Sparkle updates it in its own app), when it does not know the program
+// file the owner installed, or while another update is going on. Running
+// tasks are never interrupted: while live work remains the request is
+// queued, this computer takes no new tasks, and the helper starts as soon
+// as none runs. Otherwise it answers "updating" and starts the update
+// helper from the program file: the helper installs the newest signed
+// update with the same updater the window uses and restarts the background
+// client from the installed program. The helper writes its result to a
+// file; whichever client runs then (the old one or the new one) sends it
+// and removes the file. Nothing is retried on its own: a helper that never
+// reported is answered as failed after updateMarkerAge. The helper never
+// touches active-runs.json or a reservation.
 
 const (
 	// ProgramFile, in the client's data folder, names the program file the
@@ -62,7 +64,7 @@ type UpdateStarter func(program string, job RemoteUpdate) error
 
 // Refusals of a request to update this computer.
 const (
-	updateRefusedMac         = "Этот Mac обновляется в самой программе: откройте Messenger на нём и установите обновление там."
+	updateRefusedMac         = "На Mac обновление ставится кнопкой в самой программе: откройте Messenger на этом компьютере и нажмите «Обновиться»."
 	updateRefusedOS          = "Обновление по сети не поддерживается на этой системе."
 	updateRefusedUnsupported = "Этот фоновый клиент не поддерживает обновление по сети: откройте окно программы на том компьютере и повторите."
 	updateRefusedProgram     = "Откройте окно программы на том компьютере один раз и повторите."
@@ -225,7 +227,10 @@ func readUpdateFile(path string) (RemoteUpdate, bool) {
 		return RemoteUpdate{}, false
 	}
 	var r RemoteUpdate
-	if json.Unmarshal(raw, &r) != nil || r.Broker == "" || r.Peer == "" || r.ID == "" {
+	if json.Unmarshal(raw, &r) != nil || r.ID == "" {
+		return RemoteUpdate{}, false
+	}
+	if (r.Broker == "") != (r.Peer == "") {
 		return RemoteUpdate{}, false
 	}
 	return r, true
@@ -243,7 +248,8 @@ func (s *Supervisor) updateBusy() bool {
 }
 
 // answerUpdateRequests answers the other computers' requests to update
-// this computer. It returns a problem for the window, or "".
+// this computer and starts a queued update once live work has ended. It
+// returns a problem for the window, or "".
 func (s *Supervisor) answerUpdateRequests(broker string) string {
 	if p := s.sendUpdateResult(); p != "" {
 		return p
@@ -253,59 +259,177 @@ func (s *Supervisor) answerUpdateRequests(broker string) string {
 		return "запросы обновления не читаются: " + err.Error()
 	}
 	for _, r := range reqs {
-		refusal := s.updateRefusal()
-		if refusal != "" {
-			if err := s.store.ReplyNetUpdate(r, core.UpdateRefused, "", refusal); err != nil {
-				return "ответ на запрос обновления не записан: " + err.Error()
-			}
-			continue
+		if p := s.acceptUpdateRequest(r); p != "" {
+			return p
 		}
-		program := ProgramPath(s.root)
-		if program == "" {
-			if err := s.store.ReplyNetUpdate(r, core.UpdateRefused, "", updateRefusedProgram); err != nil {
-				return "ответ на запрос обновления не записан: " + err.Error()
-			}
-			continue
+	}
+	return s.startQueuedUpdate()
+}
+
+// acceptUpdateRequest records a request: a hard refusal, a queue until live
+// work ends, or an immediate start.
+func (s *Supervisor) acceptUpdateRequest(r core.NetUpdateRequest) string {
+	if refusal := s.updateHardRefusal(); refusal != "" {
+		if err := s.store.ReplyNetUpdate(r, core.UpdateRefused, "", refusal); err != nil {
+			return "ответ на запрос обновления не записан: " + err.Error()
 		}
-		job := RemoteUpdate{Broker: r.Broker, Peer: r.Peer, ID: r.ID}
-		raw, _ := json.Marshal(job)
-		marker := filepath.Join(s.root, remoteUpdateMarker)
-		f, err := os.OpenFile(marker, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		return ""
+	}
+	program := ProgramPath(s.root)
+	if program == "" {
+		if err := s.store.ReplyNetUpdate(r, core.UpdateRefused, "", updateRefusedProgram); err != nil {
+			return "ответ на запрос обновления не записан: " + err.Error()
+		}
+		return ""
+	}
+	if s.updateBusy() {
+		if err := s.store.ReplyNetUpdate(r, core.UpdateRefused, "", updateRefusedBusy); err != nil {
+			return "ответ на запрос обновления не записан: " + err.Error()
+		}
+		return ""
+	}
+	if err := s.store.RememberPendingUpdate(r); err != nil {
+		if err := s.store.ReplyNetUpdate(r, core.UpdateRefused, "", updateRefusedBusy); err != nil {
+			return "ответ на запрос обновления не записан: " + err.Error()
+		}
+		return ""
+	}
+	n, err := s.store.LiveWork()
+	if err != nil {
+		if err := s.store.ReplyNetUpdate(r, core.UpdateFailed, "", "задачи на компьютере не читаются: "+err.Error()); err != nil {
+			return "ответ на запрос обновления не записан: " + err.Error()
+		}
+		_ = s.store.ClearPendingUpdate(r.ID)
+		return ""
+	}
+	if n > 0 {
+		tasks, _ := s.store.LiveWorkTasks(3)
+		if err := s.store.ReplyNetUpdate(r, core.UpdateQueued, "", updateQueuedText(n, tasks)); err != nil {
+			return "ответ на запрос обновления не записан: " + err.Error()
+		}
+		return ""
+	}
+	return s.launchPendingUpdate(r, program, true)
+}
+
+func updateQueuedText(n int, tasks []core.ActiveTask) string {
+	return fmt.Sprintf("На компьютере идут задачи (%d). Программа обновится, когда они закончатся; до тех пор он не берёт новых задач.", n) + updateTaskList(n, tasks)
+}
+
+func updateTaskList(n int, tasks []core.ActiveTask) string {
+	if len(tasks) == 0 {
+		return ""
+	}
+	names := make([]string, 0, len(tasks))
+	for _, t := range tasks {
+		title := []rune(t.Title)
+		if len(title) > 60 {
+			title = append(title[:59], '…')
+		}
+		names = append(names, "«"+string(title)+"» ("+activeStateName(t.State)+")")
+	}
+	text := " " + strings.Join(names, ", ")
+	if n > len(tasks) {
+		text += fmt.Sprintf(" и ещё %d", n-len(tasks))
+	}
+	return text + "."
+}
+
+func (s *Supervisor) launchPendingUpdate(r core.NetUpdateRequest, program string, first bool) string {
+	job := RemoteUpdate{Broker: r.Broker, Peer: r.Peer, ID: r.ID}
+	raw, _ := json.Marshal(job)
+	marker := filepath.Join(s.root, remoteUpdateMarker)
+	f, err := os.OpenFile(marker, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		if err := s.store.ReplyNetUpdate(r, core.UpdateRefused, "", updateRefusedBusy); err != nil {
+			return "ответ на запрос обновления не записан: " + err.Error()
+		}
+		return ""
+	}
+	_, werr := f.Write(raw)
+	if cerr := f.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr != nil {
+		_ = os.Remove(marker)
+		if err := s.store.ReplyNetUpdate(r, core.UpdateFailed, "", "обновление не начато: "+werr.Error()); err != nil {
+			return "ответ на запрос обновления не записан: " + err.Error()
+		}
+		_ = s.store.ClearPendingUpdate(r.ID)
+		return ""
+	}
+	if r.Broker != "" {
+		var err error
+		if first {
+			err = s.store.ReplyNetUpdate(r, core.UpdateUpdating, "", "")
+		} else {
+			err = s.store.SendUpdateReply(r, core.UpdateUpdating, "", "")
+		}
 		if err != nil {
-			if err := s.store.ReplyNetUpdate(r, core.UpdateRefused, "", updateRefusedBusy); err != nil {
-				return "ответ на запрос обновления не записан: " + err.Error()
-			}
-			continue
-		}
-		_, werr := f.Write(raw)
-		if cerr := f.Close(); werr == nil {
-			werr = cerr
-		}
-		if werr != nil {
-			_ = os.Remove(marker)
-			if err := s.store.ReplyNetUpdate(r, core.UpdateFailed, "", "обновление не начато: "+werr.Error()); err != nil {
-				return "ответ на запрос обновления не записан: " + err.Error()
-			}
-			continue
-		}
-		// The answer is recorded before the helper starts, so the final
-		// result always comes after it.
-		if err := s.store.ReplyNetUpdate(r, core.UpdateUpdating, "", ""); err != nil {
 			_ = os.Remove(marker)
 			return "ответ на запрос обновления не записан: " + err.Error()
 		}
-		if err := s.startUpdate(program, job); err != nil {
-			_ = os.Remove(marker)
-			if err := s.store.FinishNetUpdate(r.Broker, r.Peer, r.ID, core.UpdateFailed, "", "помощник обновления не запустился: "+err.Error()); err != nil {
+	} else if r.Project != "" {
+		_ = s.store.RecordMessengerUpdate(r.Project, core.UpdateUpdating, "", "")
+	}
+	if err := s.startUpdate(program, job); err != nil {
+		_ = os.Remove(marker)
+		if r.Broker == "" {
+			if err := s.store.FinishPendingUpdate(r.ID, core.UpdateFailed, "", "помощник обновления не запустился: "+err.Error()); err != nil {
 				return "результат обновления не записан: " + err.Error()
 			}
+			return ""
+		}
+		_ = s.store.ClearPendingUpdate(r.ID)
+		if err := s.store.FinishNetUpdate(r.Broker, r.Peer, r.ID, core.UpdateFailed, "", "помощник обновления не запустился: "+err.Error()); err != nil {
+			return "результат обновления не записан: " + err.Error()
 		}
 	}
 	return ""
 }
 
-// updateRefusal is the reason this computer cannot be updated now, or "".
-func (s *Supervisor) updateRefusal() string {
+func (s *Supervisor) startQueuedUpdate() string {
+	p, ok, err := s.store.PendingUpdate()
+	if err != nil {
+		return "очередь обновления не читается: " + err.Error()
+	}
+	if !ok || s.updateBusy() {
+		return ""
+	}
+	if n, err := s.store.LiveWork(); err != nil {
+		return "задачи на компьютере не читаются: " + err.Error()
+	} else if n > 0 {
+		return ""
+	}
+	if refusal := s.updateHardRefusal(); refusal != "" {
+		if p.Broker == "" {
+			_ = s.store.FinishPendingUpdate(p.ID, core.UpdateRefused, "", refusal)
+			return ""
+		}
+		_ = s.store.ClearPendingUpdate(p.ID)
+		if err := s.store.FinishNetUpdate(p.Broker, p.Peer, p.ID, core.UpdateRefused, "", refusal); err != nil {
+			return "результат обновления не записан: " + err.Error()
+		}
+		return ""
+	}
+	program := ProgramPath(s.root)
+	if program == "" {
+		if p.Broker == "" {
+			_ = s.store.FinishPendingUpdate(p.ID, core.UpdateRefused, "", updateRefusedProgram)
+			return ""
+		}
+		_ = s.store.ClearPendingUpdate(p.ID)
+		if err := s.store.FinishNetUpdate(p.Broker, p.Peer, p.ID, core.UpdateRefused, "", updateRefusedProgram); err != nil {
+			return "результат обновления не записан: " + err.Error()
+		}
+		return ""
+	}
+	return s.launchPendingUpdate(core.NetUpdateRequest{Broker: p.Broker, Peer: p.Peer, ID: p.ID, Project: p.Project}, program, false)
+}
+
+// updateHardRefusal is the reason this computer cannot be updated at all,
+// or "". Live work is not a refusal: the request is queued.
+func (s *Supervisor) updateHardRefusal() string {
 	switch {
 	case updateOS == "darwin":
 		return updateRefusedMac
@@ -314,10 +438,18 @@ func (s *Supervisor) updateRefusal() string {
 	case s.startUpdate == nil:
 		return updateRefusedUnsupported
 	}
-	if n, err := s.store.ActiveWork(); err != nil {
+	return ""
+}
+
+// updateRefusal is the reason this computer cannot start installing now.
+func (s *Supervisor) updateRefusal() string {
+	if refusal := s.updateHardRefusal(); refusal != "" {
+		return refusal
+	}
+	if n, err := s.store.LiveWork(); err != nil {
 		return "задачи на компьютере не читаются: " + err.Error()
 	} else if n > 0 {
-		tasks, _ := s.store.ActiveWorkTasks(3)
+		tasks, _ := s.store.LiveWorkTasks(3)
 		return updateRefusedTasks(n, tasks)
 	}
 	if s.updateBusy() {
@@ -334,8 +466,15 @@ func (s *Supervisor) sendUpdateResult() string {
 	if _, err := os.Lstat(resultPath); err == nil {
 		r, ok := readUpdateFile(resultPath)
 		if ok && r.State != core.UpdateUpdating {
-			if err := s.store.FinishNetUpdate(r.Broker, r.Peer, r.ID, r.State, r.Version, r.Text); err != nil && !errors.Is(err, core.ErrRejected) {
-				return "результат обновления не отправлен: " + err.Error()
+			var send error
+			if r.Broker == "" {
+				send = s.store.FinishPendingUpdate(r.ID, r.State, r.Version, r.Text)
+			} else {
+				send = s.store.FinishNetUpdate(r.Broker, r.Peer, r.ID, r.State, r.Version, r.Text)
+				_ = s.store.ClearPendingUpdate(r.ID)
+			}
+			if send != nil && !errors.Is(send, core.ErrRejected) {
+				return "результат обновления не отправлен: " + send.Error()
 			}
 		}
 		_ = os.Remove(resultPath)
@@ -350,8 +489,15 @@ func (s *Supervisor) sendUpdateResult() string {
 	}
 	if m, ok := readUpdateFile(marker); ok {
 		why := "помощник обновления не сообщил результат; проверьте версию программы на том компьютере"
-		if err := s.store.FinishNetUpdate(m.Broker, m.Peer, m.ID, core.UpdateFailed, "", why); err != nil && !errors.Is(err, core.ErrRejected) {
-			return "результат обновления не отправлен: " + err.Error()
+		var send error
+		if m.Broker == "" {
+			send = s.store.FinishPendingUpdate(m.ID, core.UpdateFailed, "", why)
+		} else {
+			send = s.store.FinishNetUpdate(m.Broker, m.Peer, m.ID, core.UpdateFailed, "", why)
+			_ = s.store.ClearPendingUpdate(m.ID)
+		}
+		if send != nil && !errors.Is(send, core.ErrRejected) {
+			return "результат обновления не отправлен: " + send.Error()
 		}
 	}
 	_ = os.Remove(marker)

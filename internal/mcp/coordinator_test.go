@@ -232,7 +232,7 @@ func TestCoordinatorHandshakeAndTools(t *testing.T) {
 	for _, tool := range resp["result"].(map[string]any)["tools"].([]any) {
 		names = append(names, tool.(map[string]any)["name"].(string))
 	}
-	if strings.Join(names, ",") != "list_agents,start_task,wait,tasks,answer,continue_task,note_task,task_output,task_messages,cancel,report_feedback,export_feedback,get_log" {
+	if strings.Join(names, ",") != "list_agents,start_task,wait,tasks,answer,continue_task,note_task,task_output,task_messages,cancel,report_feedback,export_feedback,get_log,update_messenger" {
 		t.Fatalf("tools %v", names)
 	}
 	var agents struct {
@@ -243,6 +243,67 @@ func TestCoordinatorHandshakeAndTools(t *testing.T) {
 	}
 	if text, ok := c.tool("start_task", map[string]any{"op_id": "o1", "agent": "claude", "text": "x", "path": "/etc"}, nil); ok {
 		t.Fatalf("unknown argument accepted: %s", text)
+	}
+}
+
+// T-155: update_messenger queues this computer, refuses new tasks, tells a
+// Mac to use the button in its app, and never retries.
+func TestCoordinatorUpdateMessenger(t *testing.T) {
+	st := newCoordinatorStore(t)
+	c := startCoordinator(t, st, "Game")
+	oldOS := coordinatorOS
+	t.Cleanup(func() { coordinatorOS = oldOS })
+
+	coordinatorOS = "darwin"
+	var mac map[string]any
+	if text, ok := c.tool("update_messenger", map[string]any{}, &mac); !ok || mac["state"] != core.UpdateRefused || !strings.Contains(fmt.Sprint(mac["text"]), "Обновиться") {
+		t.Fatalf("mac %+v %s", mac, text)
+	}
+	if pending, _ := st.HasPendingUpdate(); pending {
+		t.Fatal("mac queued an update")
+	}
+
+	id, _, err := st.StartTask(core.StartTaskRequest{Project: "Game", OpID: "o-done", Provider: "claude", Text: "Fix the menu"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	finishRun(t, st, id, core.DispositionReport, "Menu fixed")
+
+	coordinatorOS = "linux"
+	var queued map[string]any
+	if text, ok := c.tool("update_messenger", map[string]any{}, &queued); !ok || queued["state"] != core.UpdateQueued {
+		t.Fatalf("queued %+v %s", queued, text)
+	}
+	if pending, err := st.HasPendingUpdate(); err != nil || !pending {
+		t.Fatalf("pending %v %v", pending, err)
+	}
+	if text, ok := c.tool("start_task", map[string]any{"op_id": "o-new", "agent": "codex", "text": "another task"}, nil); ok || !strings.Contains(text, "update") {
+		t.Fatalf("new task while waiting: %s", text)
+	}
+	if text, ok := c.tool("continue_task", map[string]any{"task_id": id, "op_id": "c1", "text": "Also the map"}, nil); !ok {
+		t.Fatalf("continue refused while waiting: %s", text)
+	}
+	if text, ok := c.tool("update_messenger", map[string]any{}, nil); ok || !strings.Contains(text, "уже") {
+		t.Fatalf("duplicate update: %s", text)
+	}
+	var agents struct {
+		Computers []core.ComputerSummary `json:"computers"`
+	}
+	if _, ok := c.tool("list_agents", map[string]any{}, &agents); !ok || len(agents.Computers) == 0 || !agents.Computers[0].UpdatePending {
+		t.Fatalf("list_agents %+v", agents)
+	}
+	events, _, err := st.TaskEvents("Game", core.AudienceCoordinator, 0, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, e := range events {
+		if e.Kind == core.MessengerUpdateEvent && e.TaskID == "" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("no messenger_update %+v", events)
 	}
 }
 
