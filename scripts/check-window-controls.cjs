@@ -46,7 +46,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
             return route.fulfill({json:state});
           }
           if (pathname === '/api/agent-trust') trusted=true;
-          if (pathname === '/api/agent-login') return route.fulfill({status:501,json:{ok:false,detail:'Fixture terminal failed',command:'fictional-cli login',hint:'fixture launcher error'}});
+          if (pathname === '/api/agent-login') {
+            if(route.request().postDataJSON().provider==='cursor')return route.fulfill({status:400,json:{ok:false,detail:'Каталог профиля агента недоступен: /fictional/missing-profile. Проверьте путь к профилю в настройках агента.'}});
+            return route.fulfill({status:501,json:{ok:false,detail:'Fixture terminal failed',command:'fictional-cli login',hint:'fixture launcher error'}});
+          }
           if (pathname === '/api/coordinator-connect') connected = true;
         }
         const fixtures = {
@@ -200,6 +203,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.locator('#toasts').getByText('Fixture terminal failed',{exact:true}).waitFor();
       assert(await page.locator('#toasts button').first().isVisible());
       await page.locator('#toasts .am-toast-close').click();
+      await page.locator('article[data-provider=cursor]').getByRole('button',{name:'Войти',exact:true}).click();
+      await page.locator('#toasts').getByText('Каталог профиля агента недоступен: /fictional/missing-profile. Проверьте путь к профилю в настройках агента.',{exact:true}).waitFor();
+      assert.equal(await page.locator('#toasts').getByText('Проверьте введённые данные.',{exact:true}).count(),0);
+      await page.locator('#toasts .am-toast-close').click();
       assert.equal(await codex.getByRole('button',{name:'Доверять',exact:true}).evaluate(n=>n.getBoundingClientRect().height),28);
       await codex.getByRole('button',{name:'Доверять',exact:true}).click();
       assert((await page.locator('#confirm-text').textContent()).includes('/fictional/project'));
@@ -207,6 +214,8 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await codex.getByRole('button',{name:'Доверять',exact:true}).waitFor({state:'detached',timeout:10000});
       assert.deepEqual(writes.filter(w=>w.path==='/api/agent-trust').map(w=>w.body),[{provider:'codex',project:'Welcome test',folder:'/fictional/project'}]);
       await codex.getByRole('button',{name:'Настройки',exact:true}).click();
+      assert.equal(await page.locator('#agent-models').inputValue(),''); // An explicitly empty list stays empty.
+      assert((await page.locator('#agent-models-note').textContent()).includes('[effort=high]'));
       if(process.env.SCREENSHOT_DIR&&!native) await page.screenshot({animations:'disabled',path:path.join(process.env.SCREENSHOT_DIR,'600-dark-agent-settings.png')});
       assert.equal(await page.locator('#agent-cli-find').evaluate(n=>n.getBoundingClientRect().height),32);
       await page.locator('#agent-cli-find').click();

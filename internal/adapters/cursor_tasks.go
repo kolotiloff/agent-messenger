@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/kolotiloff/agent-messenger/internal/modelcatalog"
 )
 
 // Cursor task runs (T-012, D-049).
@@ -28,9 +30,14 @@ const TaskEnvVariable = "AGENT_MESSENGER_TASK"
 // worker can never start or answer tasks.
 const WorkerRunVariable = "AGENT_MESSENGER_WORKER_RUN"
 
-// TaskEnv returns the extra environment of a worker run: only a Cursor run
-// needs one.
+// TaskEnv returns worker-specific settings without editing the owner's profile.
 func TaskEnv(s TaskRunSpec) []string {
+	if s.Provider == "claude" {
+		_, effort, err := modelcatalog.Resolve(s.Provider, s.Model)
+		if err == nil && effort != "" {
+			return []string{"CLAUDE_CODE_EFFORT_LEVEL=" + effort}
+		}
+	}
 	if s.Provider != "cursor" {
 		return nil
 	}

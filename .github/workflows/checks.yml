@@ -116,6 +116,13 @@ jobs:
         run: |
           go test -count=1 -timeout=3m ./internal/localui -run '^(TestWindowsSetupFind|TestWindowsTerminalCreatesInteractiveChild|TestAgentSetupReceiptAndRegistration|TestAgentSetupUnknownIsNotRetried|TestSetupFindRecoversMissingInstallReceipt|TestTrustUsesRegisteredCLIAndExactFolder|TestAgentLoginAndInstallRoutes)$'
           go test -count=1 -timeout=3m ./internal/broker -run '^(TestDiscoverySurvivesLostFirstDatagram|TestDiscoveryCancellation|TestUnavailableDiscoveryDoesNotOfferShortCode)$'
+      - name: First login with a missing default profile (no real agents)
+        run: go test -count=1 ./internal/diagnostics -run '^TestLoginAllowsMissingDefaultProfile$'
+      - name: Model selections and effort arguments (no real models)
+        run: |
+          go test -count=1 ./internal/adapters -run '^TestExplicitModelEffortArgs$'
+          go test -count=1 ./internal/core -run '^Test(DefaultModelUpgradePreservesChoicesAndTasks|EffortSelectionIsRecordedAndExplained)$'
+          go test -count=1 ./internal/broker -run '^TestPresenceEffortWithOlderHost$'
       - name: Whole suite on Windows (information only; many tests use POSIX shell fake CLIs)
         continue-on-error: true
         run: go test -count=1 -timeout=15m ./... 2>&1 | tail -n 200

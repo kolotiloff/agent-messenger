@@ -61,3 +61,9 @@ On a Mac, passive discovery for the window additionally checks `~/.local/bin`, `
 The agent card's Install button runs the official CLI installer in a visible terminal. Find in agent settings looks through that terminal's PATH, including custom prefixes, and connects/checks the returned executable. Choose file remains available. No terminal result means the outcome is unknown; Messenger does not automatically reinstall. Uninstall opens the official removal instructions.
 
 Sign-in opens the CLI's own account flow. If terminal startup cannot be confirmed, the window reports it with a manual command. Trust on an agent card opens its CLI in the selected project folder so the owner can confirm there; no graphical agent app is required. Messenger does not automatically answer trust or account prompts.
+
+## Reporting a failed sign-in
+
+The feedback export contains saved remarks and attached images, not runtime logs. Messenger's journal is `events.log` (previous segment: `events.1.log`); launcher output may be in the newest non-empty `background-*.log` in the data directory. On Windows the default data directory is `%LOCALAPPDATA%\AgentMessenger`; on macOS it is `~/Library/Application Support/AgentMessenger`. Include the failure time and Messenger version. Share only relevant log files, not the whole data directory or CLI credentials.
+
+The login CLI runs in its own terminal; its output is not recorded by Messenger. Keep that terminal open and capture the error text, omitting sign-in URLs, codes and credentials. A successful Messenger terminal launch alone does not prove successful account authorization.

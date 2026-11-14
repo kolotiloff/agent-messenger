@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 
 	"github.com/kolotiloff/agent-messenger/internal/adapters"
 	"github.com/kolotiloff/agent-messenger/internal/core"
@@ -52,11 +54,14 @@ func LogoutCommand(provider, cli, environment string) (argv []string, env []stri
 
 func agentCommand(table map[string][]string, provider, cli, environment string) (argv []string, env []string, err error) {
 	args, ok := table[provider]
-	if !ok || !filepath.IsAbs(cli) {
-		return nil, nil, fmt.Errorf("unknown agent or relative program path")
+	if !ok {
+		return nil, nil, fmt.Errorf("Неизвестный агент. Выберите Claude Code, Codex или Cursor.")
+	}
+	if !filepath.IsAbs(cli) {
+		return nil, nil, fmt.Errorf("Не указан полный путь к CLI. Найдите программу в настройках агента.")
 	}
 	if info, err := os.Stat(cli); err != nil || info.IsDir() {
-		return nil, nil, fmt.Errorf("program not found")
+		return nil, nil, fmt.Errorf("Программа агента недоступна: %s. Нажмите «Найти» в настройках агента.", cli)
 	}
 	program := []string{cli}
 	if provider == "cursor" {
@@ -66,7 +71,19 @@ func agentCommand(table map[string][]string, provider, cli, environment string) 
 	if environment != "" {
 		canonical, err := core.CanonicalEnvironment(environment)
 		if err != nil {
-			return nil, nil, err
+			// Discovery offers the default profile even before the first login.
+			// Let the CLI create its own default storage; never create or switch
+			// an explicit custom profile on a failed validation.
+			def, defErr := DefaultProfile(provider)
+			same := filepath.Clean(environment) == filepath.Clean(def)
+			if runtime.GOOS == "windows" {
+				same = strings.EqualFold(filepath.Clean(environment), filepath.Clean(def))
+			}
+			_, statErr := os.Lstat(environment)
+			if defErr == nil && def != "" && same && os.IsNotExist(statErr) {
+				return append(program, args...), env, nil
+			}
+			return nil, nil, fmt.Errorf("Каталог профиля агента недоступен: %s. Проверьте путь к профилю в настройках агента.", environment)
 		}
 		// Only the profile variable, when it is needed: the rest of the
 		// environment is the terminal's own.

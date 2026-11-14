@@ -24,7 +24,7 @@ func TestPresenceRoster(t *testing.T) {
 		return Presence{Name: "Mac Studio", Agents: []PresenceAgent{{Agent: "claude", Running: 1}, {Agent: "codex"}}, Coordinator: "claude-code"}, nil
 	})
 	member.SetPresence(func() (Presence, error) {
-		return Presence{Agents: []PresenceAgent{{Agent: "codex", Waiting: 2, Models: []string{"gpt-5.5", "gpt-5.5-mini"}}}}, nil
+		return Presence{Agents: []PresenceAgent{{Agent: "codex", Waiting: 2, Models: []string{"gpt-6-astra[effort=medium]", "gpt-6-astra[effort=high]"}}}}, nil
 	})
 	host.ReportPresence(ctx(t))
 	member.ReportPresence(ctx(t))
@@ -40,7 +40,7 @@ func TestPresenceRoster(t *testing.T) {
 		t.Fatalf("a report is a successful check: %+v", ms)
 	}
 	peers = host.Status().Peers
-	if len(peers) != 1 || peers[0].Host || peers[0].Name != "Ноутбук" || len(peers[0].Agents) != 1 || peers[0].Agents[0].Waiting != 2 || !reflect.DeepEqual(peers[0].Agents[0].Models, []string{"gpt-5.5", "gpt-5.5-mini"}) {
+	if len(peers) != 1 || peers[0].Host || peers[0].Name != "Ноутбук" || len(peers[0].Agents) != 1 || peers[0].Agents[0].Waiting != 2 || !reflect.DeepEqual(peers[0].Agents[0].Models, []string{"gpt-6-astra[effort=medium]", "gpt-6-astra[effort=high]"}) {
 		t.Fatalf("host sees %+v", peers)
 	}
 
@@ -68,6 +68,7 @@ func TestPresenceRoster(t *testing.T) {
 	for _, body := range []any{
 		map[string]any{"agents": []map[string]any{{"agent": "Not A Name"}}},
 		map[string]any{"agents": []map[string]any{{"agent": "codex", "models": []string{"--yolo"}}}},
+		map[string]any{"agents": []map[string]any{{"agent": "codex", "models": []string{"x[effort=high,flag=true]"}}}},
 		map[string]any{"agents": []map[string]any{{"agent": "codex", "running": -1}}},
 		map[string]any{"agents": []map[string]any{{"agent": "codex"}, {"agent": "codex"}}},
 		map[string]any{"agents": []any{}, "extra": true},
@@ -283,5 +284,54 @@ func TestPresenceOutbox(t *testing.T) {
 		if (Presence{Agents: []PresenceAgent{}, Workers: &bad}).valid() {
 			t.Errorf("workers %d passed", len(bad.Runs))
 		}
+	}
+}
+
+// An older server must not lose the whole computer because it cannot parse
+// effort selections. The next report restores them after the server upgrades.
+func TestPresenceEffortWithOlderHost(t *testing.T) {
+	host := newService(t, t.TempDir())
+	if err := host.Enable(ScopeLocal, freePort(t)); err != nil {
+		t.Fatal(err)
+	}
+	code, err := host.Invite(host.Status().Host.Addresses[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	member := newService(t, t.TempDir())
+	if err := member.Connect(ctx(t), code.Code, "Laptop"); err != nil {
+		t.Fatal(err)
+	}
+	original := []PresenceAgent{{Agent: "codex", Running: 1, Models: []string{"gpt-6-astra[effort=high]", "gpt-6-luna"}}}
+	member.SetPresence(func() (Presence, error) {
+		return Presence{Agents: original, Version: "0.0.0-preview.72", Ready: &PresenceReady{Accept: true, Projects: []string{"Game"}}}, nil
+	})
+	olderHost = func(p Presence) bool {
+		for _, a := range p.Agents {
+			for _, m := range a.Models {
+				if strings.Contains(m, "=") {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	t.Cleanup(func() { olderHost = nil })
+	member.ReportPresence(ctx(t))
+	peers := host.Status().Peers
+	if len(peers) != 1 || len(peers[0].Agents) != 1 || !reflect.DeepEqual(peers[0].Agents[0].Models, []string{"gpt-6-luna"}) || peers[0].Agents[0].Running != 1 || peers[0].Ready == nil || peers[0].Version == "" {
+		t.Fatalf("lost presence: %+v", peers)
+	}
+	if ms := member.Status().Member; !ms.Reachable {
+		t.Fatalf("member unreachable: %+v", ms)
+	}
+	if original[0].Models[0] != "gpt-6-astra[effort=high]" {
+		t.Fatal("mutated source settings")
+	}
+	olderHost = nil
+	member.ReportPresence(ctx(t))
+	peers = host.Status().Peers
+	if !reflect.DeepEqual(peers[0].Agents[0].Models, original[0].Models) {
+		t.Fatalf("new server lost efforts: %+v", peers)
 	}
 }

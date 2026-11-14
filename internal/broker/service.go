@@ -731,6 +731,29 @@ func (s *Service) ReportPresence(ctx context.Context) {
 		p.Ready = nil
 	}
 	peers, err := Report(call, *c, p)
+	if errors.Is(err, errPresenceRefused) {
+		// T-171: pre-0.72 hosts reject effort selectors. Preserve presence and
+		// plain IDs, but never advertise a different model/effort as equivalent.
+		// Retry only an explicit schema refusal, not an unknown network result.
+		legacy := p
+		legacy.Agents = append([]PresenceAgent(nil), p.Agents...)
+		changed := false
+		for i, a := range legacy.Agents {
+			var models []string
+			for _, m := range a.Models {
+				if strings.Contains(m, "[effort=") {
+					changed = true
+				} else {
+					models = append(models, m)
+				}
+			}
+			legacy.Agents[i].Models = models
+		}
+		if changed {
+			p = legacy
+			peers, err = Report(call, *c, p)
+		}
+	}
 	if errors.Is(err, errPresenceRefused) && (p.Outbox != nil || p.Workers != nil) {
 		// A host before 0.67 refuses the fields (T-150, T-149).
 		s.mu.Lock()
