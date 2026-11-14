@@ -27,6 +27,15 @@ type netState struct {
 	round   int
 }
 
+func firstProblem(parts ...string) string {
+	for _, p := range parts {
+		if p != "" {
+			return p
+		}
+	}
+	return ""
+}
+
 func (s *Supervisor) networkProblem() string {
 	s.net.mu.Lock()
 	defer s.net.mu.Unlock()
@@ -87,6 +96,7 @@ func (s *Supervisor) runNetwork(ctx context.Context) {
 // start, answer or cancel.
 func (s *Supervisor) networkRound(ctx context.Context) {
 	if s.server == nil {
+		s.setNetworkProblem(firstProblem(s.sendUpdateResult(), s.startQueuedUpdate()))
 		return
 	}
 	n, ok := s.server.Network()
@@ -107,13 +117,13 @@ func (s *Supervisor) networkRound(ctx context.Context) {
 		if changed {
 			_ = s.store.SetNetwork("", "", nil)
 		}
-		s.setNetworkProblem("")
+		s.setNetworkProblem(firstProblem(s.sendUpdateResult(), s.startQueuedUpdate()))
 		return
 	}
 	if refresh {
 		var peers []core.NetPeer
 		for _, p := range s.server.Status().Peers {
-			np := core.NetPeer{ID: p.ID, Name: p.Name, Host: p.Host, Age: p.Age, Version: p.Version, Computer: p.Computer}
+			np := core.NetPeer{ID: p.ID, Name: p.Name, Host: p.Host, Age: p.Age, Version: p.Version, Computer: p.Computer, UpdatePending: p.UpdatePending}
 			if r := p.Ready; r != nil {
 				np.Ready = &core.NetReady{Accept: r.Accept, Projects: r.Projects}
 			}

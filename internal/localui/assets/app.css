@@ -732,6 +732,7 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-chain-node { flex:1 1 0; min-width:0; display:flex; flex-direction:column; gap:var(--am-gap-line); padding:var(--am-space-3); border:1px solid var(--am-line); border-radius:var(--am-radius-m); background:var(--am-panel); }
 #am-concept .am-chain-arrow { align-self:center; color:var(--am-muted); }
 #am-concept .am-coord-box { display:flex; flex-direction:column; gap:var(--am-space-1); }
+#am-concept .am-coord-head { display:flex; flex-direction:column; gap:var(--am-gap-line); margin-bottom:var(--am-space-1); }
 #am-concept .am-coord-box details button { margin-top:var(--am-space-2); }
 #am-concept .am-connect-body { display:flex; flex-direction:column; align-items:flex-start; gap:var(--am-space-2); }
 #am-concept .am-connect-body p { margin:0; }
