@@ -8,6 +8,10 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-14 by Cursor.
+
+- On `cursor/mcp-plugin-heading-bfd1`, not released: the project page section that linked Claude Code, Codex and Cursor no longer says «Координатор?». It is a section «MCP-плагин» with the hint «Подключение к графическому редактору». The three editors and their statuses are unchanged. T-155 (`update_messenger`) is a separate PR.
+
 Updated 2026-11-14 by Codex.
 
 - **0.72 is released** ([release](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.72), [PR #106](https://github.com/kolotiloff/agent-messenger/pull/106), source `f3bd2d45e9f18890419e09996bb7a97bb3b009bd`, [release run](https://github.com/kolotiloff/agent-messenger/actions/runs/43600787465)). All 21 public assets and five signed update feeds/archives verified, including source revision, signatures, sizes and checksums. No installation on the owner's computers was performed.

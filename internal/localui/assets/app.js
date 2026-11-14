@@ -745,9 +745,9 @@
   // command under it. Agents are set up once; the link is per folder.
   function renderCoordinatorRow(){
     const box=$('coord-box');if(!box||!view?.project)return;
-    const tip=tr('Координатор — ваш чат в Claude Code, Codex или Cursor, открытый в папке проекта. Он раздаёт задачи исполнителям и собирает отчёты. Новый проект подключается сам; кнопка нужна, если это не получилось.');
-    const heading=el('p',undefined,'am-small');heading.append(el('span',tr('Координатор')));
-    const q=el('span','?','am-q');q.title=tip;q.setAttribute('aria-label',tip);q.tabIndex=0;heading.append(q);
+    const heading=el('div',undefined,'am-coord-head');
+    heading.append(el('h3',tr('MCP-плагин')));
+    heading.append(el('p',tr('Подключение к графическому редактору'),'am-small am-muted'));
     const steps=el('div',undefined,'am-steps');
     steps.append(coordinatorAgentRow('claude',view.coordinator_link||{state:'unknown'}));
     steps.append(coordinatorAgentRow('codex',view.codex_link||{state:'unknown'}));
