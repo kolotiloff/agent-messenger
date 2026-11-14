@@ -513,11 +513,11 @@
         // While an update is asked for or under way, the icon stays, dimmed
         // and pulsing, and says so on hover (owner).
         const tip=busy[1]==='am-status-run'?tr('Обновляется…'):tr('Обновление уже запрошено');
-        const b=el('span',undefined,'am-update-icon am-peer-update am-update-busy');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);b.append(svgIcon(['M12 4v11M7 10l5 5 5-5M5 20h14']));
+        const b=el('span',undefined,'am-update-icon am-peer-update am-update-downloading');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);appendUpdateGlyphs(b);
         name.append(b);
       }else if(fresh&&peer.version&&versionOlder(peer.version,newestVersion())){
         const newest=versionName(newestVersion()),label=tr('Обновить до ')+newest;
-        const b=el('button',undefined,'am-update-icon am-peer-update');b.type='button';b.title=label;b.setAttribute('aria-label',label);b.append(svgIcon(['M12 4v11M7 10l5 5 5-5M5 20h14']));
+        const b=el('button',undefined,'am-update-icon am-peer-update');b.type='button';b.title=label;b.setAttribute('aria-label',label);appendUpdateGlyphs(b);
         b.addEventListener('click',event=>{event.stopPropagation();askConfirm(tr('Обновить ')+(peer.name||tr('компьютер'))+tr(' до ')+newest+'?',tr('Программа на том компьютере обновится и перезапустится. Задачи и история сохранятся.')+(peer.host?' '+tr('На нём работает сервер сети: пока он перезапускается, компьютеры не видят друг друга. Если там попросят подтверждение, сервер не вернётся, пока кто-нибудь не ответит у того компьютера.'):''),tr('Обновить'),()=>requestUpdate(peer),true);});
         b.addEventListener('keydown',event=>event.stopPropagation());
         name.append(b);
@@ -1113,6 +1113,16 @@
   // are grey and numbered.
   const checkPath=['M21 12a9 9 0 1 1-3-6.7L21 8','M21 3v5h-5'];
   const gearPath=['M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z'];
+  // The update mark: a down arrow, or a spinning ring once a download starts.
+  function appendUpdateGlyphs(node){
+    const arrow=svgIcon(['M12 4v11M7 10l5 5 5-5M5 20h14']);
+    arrow.classList.add('am-update-arrow');
+    const ring=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    ring.setAttribute('viewBox','0 0 24 24');ring.setAttribute('aria-hidden','true');ring.classList.add('am-update-ring');
+    const c=document.createElementNS('http://www.w3.org/2000/svg','path');
+    c.setAttribute('d','M6.4 8.8 A6.5 6.5 0 0 1 17.6 8.8');
+    ring.append(c);node.append(arrow,ring);
+  }
   function svgIcon(paths,circle){
     const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');svg.setAttribute('focusable','false');
     if(circle){const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx','12');c.setAttribute('cy','12');c.setAttribute('r','3');svg.append(c);}
@@ -2107,11 +2117,12 @@
     $('app-update-version').hidden=true;$('app-update-button').hidden=!shown;
     $('app-installed-version').textContent=versionText(installed);
     updateTip(version,waiting);
+    $('app-update-button').classList.toggle('am-update-downloading',waiting);
     $('app-update-button').disabled=waiting;
   };
   // Windows and Linux: the program updates itself from the window (D-048).
-  // The update is downloaded and verified in the background; only an update
-  // ready to install is shown.
+  // While the check downloads, the icon is the ring; the arrow appears when
+  // a release is ready to install.
   let selfUpdate=null,selfUpdateBusy=false,selfUpdateTimer=0;
   function renderSelfUpdate(){
     const s=selfUpdate;if(!s)return;
@@ -2120,14 +2131,17 @@
     $('app-installed-version').title=installed?tr('Версия ')+versionName(installed).slice(1):'';
     const version=typeof s.version==='string'?s.version:'';
     if(version&&s.state==='available')knownUpdate=version;
-    const done=s.state==='installed',shown=(s.state==='available'&&!!version)||selfUpdateBusy||done||!!s.message;
-    // Only the update icon while an update waits (owner, T-056, T-066); a line
-    // appears only for an error or after the update.
+    const downloading=selfUpdateBusy||s.state==='checking'||s.state==='installing';
+    const done=s.state==='installed',shown=(s.state==='available'&&!!version)||downloading||done||!!s.message;
+    // The arrow while an update waits (owner, T-056, T-066); the ring while
+    // it is downloading or being installed. A line appears only for an error
+    // or after the update.
     $('app-update-version').hidden=!s.message&&!done;$('app-update-button').hidden=!shown||done;
     $('app-installed-version').textContent=versionText(installed);
     $('app-update-version').textContent=s.message||(done?tr('Обновлено. Окно откроется заново.'):'');
-    updateTip(version,selfUpdateBusy);
-    $('app-update-button').disabled=selfUpdateBusy;
+    updateTip(version,downloading);
+    $('app-update-button').classList.toggle('am-update-downloading',downloading);
+    $('app-update-button').disabled=downloading;
   }
   async function loadSelfUpdate(){
     if(window.webkit?.messageHandlers?.updates||selfUpdateBusy)return;

@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-14 — Cursor (update icon while downloading)
+
+- The update arrow stays while a release is ready. While this computer downloads or installs, and while another computer's update is under way, the same circle shows a spinning ring. A remote computer does not report progress. Not released. Branch `cursor/update-download-spinner-bfd1`.
+
 ## 2026-11-14 — Codex (T-168–T-171 release 0.72)
 
 - Released [0.72](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.72), source `f3bd2d45e9f18890419e09996bb7a97bb3b009bd`, [run](https://github.com/kolotiloff/agent-messenger/actions/runs/43600787465). PR #105 and PR #106 checks passed; exact checked #106 head `baf18d23021164c4babc4b96f381c1a15a5f6543`.
