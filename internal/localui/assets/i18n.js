@@ -13,7 +13,8 @@
 
   // Static texts of index.html
   'Откройте папку проекта в Claude Code, Codex или Cursor, начните новый чат и спросите: «Каких агентов ты видишь?»':'Open the project folder in Claude Code, Codex or Cursor, start a new chat and ask which agents it can see.',
-  'Координатор — ваш чат в Claude Code, Codex или Cursor, открытый в папке проекта. Он раздаёт задачи исполнителям и собирает отчёты. Новый проект подключается сам; кнопка нужна, если это не получилось.':'The coordinator is your Claude Code, Codex or Cursor chat in the project folder. It assigns tasks and collects reports. New projects connect automatically; use the button if that did not work.',
+  'MCP-плагин':'MCP plugin',
+  'Подключение к графическому редактору':'Connection to the graphical editor',
   'Cursor: добавьте messenger в .cursor/mcp.json, сохранив остальные записи':'Cursor: add messenger to .cursor/mcp.json, keeping the other entries',
   'Записано. Откройте новый чат Cursor в этой папке и разрешите подключение Messenger':'Saved. Open a new Cursor chat in this folder and approve the Messenger connection',
   'В настройках Cursor этой папки уже есть другое подключение «messenger». Messenger его не меняет':'This folder already has a different messenger connection in Cursor. Messenger leaves it unchanged',

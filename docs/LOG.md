@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-14 — Cursor (project page heading)
+
+- On «Проект», the «Координатор?» mark is a section: «MCP-плагин», with the hint «Подключение к графическому редактору», then Claude Code, Codex and Cursor as before. Not released. Branch `cursor/mcp-plugin-heading-bfd1`.
+
 ## 2026-11-14 — Cursor (T-155 update_messenger)
 
 - T-155 (D-133) on `cursor/t155-update-messenger-bfd1`: the coordinator tool `update_messenger` queues a Windows/Linux Messenger update until live work ends; the computer takes no new tasks and shows «ждёт обновления». A Mac refuses with the app-button text. Window remote-update uses the same queue. Result as `messenger_update` and a notice; nothing retried.

@@ -8,6 +8,10 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-14 by Cursor.
+
+- On `cursor/mcp-plugin-heading-bfd1`, not released: the project page section that linked Claude Code, Codex and Cursor no longer says «Координатор?». It is a section «MCP-плагин» with the hint «Подключение к графическому редактору». The three editors and their statuses are unchanged. T-155 (`update_messenger`) is a separate PR.
+
 Updated 2026-11-14 by Cursor (T-155).
 
 - T-155 (D-133) on `cursor/t155-update-messenger-bfd1`, not released. `update_messenger` asks a Windows or Linux computer (this one or another of the network) to install the newest Messenger, the program only. Running tasks are never interrupted: the computer answers queued, takes no new tasks, shows «ждёт обновления», and installs as soon as none runs. A Mac answers that its update needs the button in its app. Result: `messenger_update` event and a window notice. Nothing is retried. The window's update icon uses the same queue (the leftover of T-128). Verified: core, supervisor, MCP, broker presence fallback, `check.sh`. Not verified: a real install between computers, the Mac app-button path, the window on the Mac. Next after this PR: T-156.
