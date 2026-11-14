@@ -691,3 +691,10 @@ func TestReleaseAbsentOutbox(t *testing.T) {
 		t.Fatalf("outbox %+v", pending)
 	}
 }
+
+func TestNetDescribeRefusalReason(t *testing.T) {
+	desc, _ := NetDescribe([]byte(`{"kind":"refused","task":"task-94272a3f26ba57b1","reason":"the project folder is missing on this computer"}`))
+	if desc != "refused task-94272a3f26ba57b1 because: the project folder is missing on this computer" {
+		t.Fatal(desc)
+	}
+}

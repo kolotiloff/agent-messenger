@@ -1286,6 +1286,10 @@ func NetDescribe(body []byte) (desc string, progress bool) {
 	if b.Failure != "" {
 		parts = append(parts, "reason "+clip(b.Failure, 40))
 	}
+	// A refusal says why, so the journal of either computer explains it.
+	if b.Reason != "" && strings.HasSuffix(b.Kind, "refused") {
+		parts = append(parts, "because: "+clip(b.Reason, 300))
+	}
 	return strings.Join(parts, " "), b.Kind == "progress"
 }
 
