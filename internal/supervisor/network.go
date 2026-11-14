@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,6 +26,18 @@ type netState struct {
 	problem string
 	broker  string
 	round   int
+	// fullNoted are mailboxes already reported as full, so the journal does
+	// not repeat the same line every round (T-174).
+	fullNoted map[string]bool
+}
+
+func firstProblem(parts ...string) string {
+	for _, p := range parts {
+		if p != "" {
+			return p
+		}
+	}
+	return ""
 }
 
 func (s *Supervisor) networkProblem() string {
@@ -87,6 +100,7 @@ func (s *Supervisor) runNetwork(ctx context.Context) {
 // start, answer or cancel.
 func (s *Supervisor) networkRound(ctx context.Context) {
 	if s.server == nil {
+		s.setNetworkProblem(firstProblem(s.sendUpdateResult(), s.startQueuedUpdate()))
 		return
 	}
 	n, ok := s.server.Network()
@@ -107,13 +121,13 @@ func (s *Supervisor) networkRound(ctx context.Context) {
 		if changed {
 			_ = s.store.SetNetwork("", "", nil)
 		}
-		s.setNetworkProblem("")
+		s.setNetworkProblem(firstProblem(s.sendUpdateResult(), s.startQueuedUpdate()))
 		return
 	}
 	if refresh {
 		var peers []core.NetPeer
 		for _, p := range s.server.Status().Peers {
-			np := core.NetPeer{ID: p.ID, Name: p.Name, Host: p.Host, Age: p.Age, Version: p.Version, Computer: p.Computer}
+			np := core.NetPeer{ID: p.ID, Name: p.Name, Host: p.Host, Age: p.Age, Version: p.Version, Computer: p.Computer, UpdatePending: p.UpdatePending}
 			if r := p.Ready; r != nil {
 				np.Ready = &core.NetReady{Accept: r.Accept, Projects: r.Projects}
 			}
@@ -206,6 +220,13 @@ func (s *Supervisor) shareTasks(ctx context.Context, n broker.Network) string {
 }
 
 func (s *Supervisor) sendOutbox(ctx context.Context, n broker.Network) string {
+	// A mailbox aimed at a computer that has left is not kept forever, and
+	// it does not stop this computer from reporting its agents (T-173, T-174).
+	if retired, recipients, err := s.store.ReleaseAbsentOutbox(time.Now()); err != nil {
+		return "очередь к отсутствующему компьютеру не снята: " + err.Error()
+	} else if retired > 0 {
+		journal.Printf("network: %d messages to %s are no longer sent: that computer is not in the network", retired, strings.Join(recipients, ", "))
+	}
 	// A computer whose mailbox is full waits; messages to the others still
 	// go, each recipient's in order (audit 2026-11-09). Its messages are
 	// left out of the next batch, so however many wait for it, they never
@@ -232,6 +253,9 @@ func (s *Supervisor) sendOutbox(ctx context.Context, n broker.Network) string {
 				if !progress {
 					journal.Printf("sent to %s: %s", s.peerName(m.To), desc)
 				}
+				s.net.mu.Lock()
+				delete(s.net.fullNoted, m.To)
+				s.net.mu.Unlock()
 				err = s.store.NetSent(m.Seq)
 			case errors.Is(err, broker.ErrRecipient), errors.Is(err, broker.ErrBadMessage):
 				// Sending it again now cannot help: a reply about another
@@ -242,7 +266,16 @@ func (s *Supervisor) sendOutbox(ctx context.Context, n broker.Network) string {
 			case errors.Is(err, broker.ErrNetworkChanged):
 				return ""
 			case errors.Is(err, broker.ErrMailboxFull):
-				journal.Printf("mailbox of %s is full; its messages wait, first: %s", s.peerName(m.To), desc)
+				s.net.mu.Lock()
+				if s.net.fullNoted == nil {
+					s.net.fullNoted = map[string]bool{}
+				}
+				first := !s.net.fullNoted[m.To]
+				s.net.fullNoted[m.To] = true
+				s.net.mu.Unlock()
+				if first {
+					journal.Printf("mailbox of %s is full; its messages wait, first: %s", s.peerName(m.To), desc)
+				}
 				full = append(full, m.To)
 				fullNow = true
 				problem = "задачи не отправлены: " + err.Error()

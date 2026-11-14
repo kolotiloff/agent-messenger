@@ -287,6 +287,43 @@ func TestPresenceOutbox(t *testing.T) {
 	}
 }
 
+// T-155: a computer waiting to update is shown to the others; an older host
+// that refuses the field still gets the rest of the report.
+func TestPresenceUpdatePending(t *testing.T) {
+	host := newService(t, t.TempDir())
+	if err := host.Enable(ScopeLocal, freePort(t)); err != nil {
+		t.Fatal(err)
+	}
+	code, err := host.Invite(host.Status().Host.Addresses[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	member := newService(t, t.TempDir())
+	if err := member.Connect(ctx(t), code.Code, "Ноутбук"); err != nil {
+		t.Fatal(err)
+	}
+	member.SetPresence(func() (Presence, error) {
+		return Presence{Agents: []PresenceAgent{{Agent: "codex"}}, Version: "0.0.0-preview.73", UpdatePending: true}, nil
+	})
+	host.SetPresence(func() (Presence, error) { return Presence{Agents: []PresenceAgent{}}, nil })
+	host.ReportPresence(ctx(t))
+	member.ReportPresence(ctx(t))
+	if peers := host.Status().Peers; len(peers) != 1 || !peers[0].UpdatePending {
+		t.Fatalf("host sees %+v", peers)
+	}
+
+	olderHost = func(p Presence) bool { return p.UpdatePending }
+	t.Cleanup(func() { olderHost = nil })
+	member.ReportPresence(ctx(t))
+	peers := host.Status().Peers
+	if len(peers) != 1 || peers[0].UpdatePending || peers[0].Version != "0.0.0-preview.73" {
+		t.Fatalf("older host sees %+v", peers)
+	}
+	if ms := member.Status().Member; !ms.Reachable || ms.Error != "" {
+		t.Fatalf("member after fallback %+v", ms)
+	}
+}
+
 // An older server must not lose the whole computer because it cannot parse
 // effort selections. The next report restores them after the server upgrades.
 func TestPresenceEffortWithOlderHost(t *testing.T) {
@@ -333,5 +370,45 @@ func TestPresenceEffortWithOlderHost(t *testing.T) {
 	peers = host.Status().Peers
 	if !reflect.DeepEqual(peers[0].Agents[0].Models, original[0].Models) {
 		t.Fatalf("new server lost efforts: %+v", peers)
+	}
+}
+
+// T-173: a host that refuses a new field still receives the model list.
+// Effort names are removed only when the host rejects those names themselves.
+func TestPresenceKeepsModelsWhenAnotherFieldIsRefused(t *testing.T) {
+	host := newService(t, t.TempDir())
+	if err := host.Enable(ScopeLocal, freePort(t)); err != nil {
+		t.Fatal(err)
+	}
+	code, err := host.Invite(host.Status().Host.Addresses[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	member := newService(t, t.TempDir())
+	if err := member.Connect(ctx(t), code.Code, "Laptop"); err != nil {
+		t.Fatal(err)
+	}
+	models := []string{"gpt-6-astra[effort=high]", "gpt-6-luna"}
+	member.SetPresence(func() (Presence, error) {
+		return Presence{Agents: []PresenceAgent{{Agent: "codex", Models: models}}, Version: "0.0.0-preview.72", Outbox: &PresenceOutbox{Waiting: 4, OldestAge: 30}}, nil
+	})
+	olderHost = func(p Presence) bool { return p.Outbox != nil }
+	t.Cleanup(func() { olderHost = nil })
+	member.ReportPresence(ctx(t))
+	peers := host.Status().Peers
+	if len(peers) != 1 || len(peers[0].Agents) != 1 || !reflect.DeepEqual(peers[0].Agents[0].Models, models) || peers[0].Outbox != nil {
+		t.Fatalf("models dropped with the refused field: %+v", peers)
+	}
+}
+
+func TestPresencePublishesTheModelListThatFits(t *testing.T) {
+	var models []string
+	for i := 0; i < maxPresenceModels+3; i++ {
+		models = append(models, "model-"+string(rune('a'+i)))
+	}
+	p := Presence{Agents: []PresenceAgent{{Agent: "codex", Models: append([]string{"bad model"}, models...)}}}
+	p.publishable()
+	if len(p.Agents[0].Models) != maxPresenceModels || p.Agents[0].Models[0] != "model-a" {
+		t.Fatalf("published %+v", p.Agents[0].Models)
 	}
 }

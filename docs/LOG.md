@@ -2,9 +2,35 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
-## 2026-11-14 — Claude Code (T-172 Mac connecting screen)
+## 2026-11-14 — Claude Code (merged #108–#113; T-178 Mac connecting screen)
 
-- Owner asked why the Mac window shows «Выбрать каталог данных…» and a retry button at every start. It was the connecting screen from early test builds. Now: a spinner only; reason, retry and note only on a failure; the data-directory choice stays in «Файл». Not compiled here (no Swift on Linux); Mac CI and the owner's Mac run verify it. Not released.
+- Merged PRs #108–#113 in order, resolving doc conflicts and two code conflicts (update icon uses the ring and T-155's text; the `update_pending` fallback runs before model names are stripped, like T-173).
+- T-178: the Mac connecting screen at every start showed «Выбрать каталог данных…» and a retry button. Now a spinner only; reason, retry and note only on a failure; the data-directory choice stays in «Файл». Not compiled here (no Swift on Linux); Mac CI and the owner's Mac verify it. Not released.
+
+## 2026-11-14 — Cursor (T-173, T-174)
+
+- Ноут-Linux on 0.72: the model lists were in its settings and a task with an effort started, but `list_agents` elsewhere showed them empty. The journal also repeated that a mailbox to a computer not in the project was full. Presence no longer drops the model names because another field was refused, and mail to a computer that has left is retired after the reconnect grace. A listed computer's full mailbox still waits. Not checked on the owner's computers.
+
+## 2026-11-14 — Cursor (coordinator journal)
+
+- Read the issue list and the Mac feedback export of 2026-11-14 (35 remarks). Did not copy the journals into the repo. Already shipped and left as they are: T-171, T-152 (export button), T-138, T-150, T-149, T-148, T-161 (D-124), Q-027. Recorded what is still asked: T-172 (Q-030), T-173, T-174, T-175, T-176, T-177. T-157, T-158 and T-159 were already in TASKS. Server failover stays deferred.
+
+## 2026-11-14 — Cursor (closing line of a task)
+
+- «Отчёт отправлен координатору, сессия закрыта» is ordinary grey text, the same size as the message, not the small italic line. Not released. Branch `cursor/report-closed-text-bfd1`.
+
+## 2026-11-14 — Cursor (update icon while downloading)
+
+- The update arrow stays while a release is ready. While this computer downloads or installs, and while another computer's update is under way, the same circle shows a spinning ring. A remote computer does not report progress. Not released. Branch `cursor/update-download-spinner-bfd1`.
+
+## 2026-11-14 — Cursor (project page heading)
+
+- On «Проект», the «Координатор?» mark is a section: «MCP-плагин», with the hint «Подключение к графическому редактору», then Claude Code, Codex and Cursor as before. Not released. Branch `cursor/mcp-plugin-heading-bfd1`.
+
+## 2026-11-14 — Cursor (T-155 update_messenger)
+
+- T-155 (D-133) on `cursor/t155-update-messenger-bfd1`: the coordinator tool `update_messenger` queues a Windows/Linux Messenger update until live work ends; the computer takes no new tasks and shows «ждёт обновления». A Mac refuses with the app-button text. Window remote-update uses the same queue. Result as `messenger_update` and a notice; nothing retried.
+- Verified: core, supervisor (queued remote path and local queue), MCP, broker presence fallback, `check.sh`. Not verified: real install between computers, Mac app path, the window on the Mac. Not released.
 
 ## 2026-11-14 — Codex (T-168–T-171 release 0.72)
 

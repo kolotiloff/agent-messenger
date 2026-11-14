@@ -14,7 +14,7 @@ The package has an ad-hoc signature: Developer ID and notarization are not done 
 
 On opening, the shell finds the previous database via the existing protective registry, or uses the normal user directory when there are no reservations. Several different directories, a corrupted registry or a missing saved database lead to a refusal. Reservations are not deleted or restored automatically. If the running client uses a different directory without recorded reservations, choose it via the menu «Файл → Выбрать каталог данных…»; there is no search for a "last session".
 
-While the window connects to its client (at every start and after an update) it shows only a spinner. The reason, «Повторить подключение» and a short note appear only when connecting failed (T-172); the data-directory choice is no longer on that screen, only in the «Файл» menu.
+While the window connects to its client (at every start and after an update) it shows only a spinner. The reason, «Повторить подключение» and a short note appear only when connecting failed (T-178); the data-directory choice is no longer on that screen, only in the «Файл» menu.
 
 The application connects to an already running client. If there is none, it starts one background client, which runs tasks at once (D-029). The global lock protects this path too. The window itself does not invoke a CLI and does not sign in on the user's behalf.
 
