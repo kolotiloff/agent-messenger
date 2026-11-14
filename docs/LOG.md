@@ -4,7 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-14 — Cursor (T-160 Codex coordinator)
 
-- Codex can be the coordinator (D-123). The window writes the messenger table into the project folder's `.codex/config.toml` and leaves every other line, a foreign entry, a turned-off entry and an unreadable file alone. Claude's connection is unchanged. Verified with fake config files and the window route. Not verified with a real Codex chat. Not released.
+- Codex can be the coordinator (D-123, PR #100, `4c8af3e`). The window writes the messenger table into the project folder's `.codex/config.toml` and leaves every other line, a foreign entry, a turned-off entry and an unreadable file alone. Claude's connection is unchanged. Verified: `scripts/check.sh`. Not verified with a real Codex chat. Not released.
 
 ## 2026-11-14 — Claude Code (docs check, T-152 window, 0.68)
 
