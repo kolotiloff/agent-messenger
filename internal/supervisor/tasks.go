@@ -488,7 +488,10 @@ func journalDetail(detail string, err error) string {
 // taskLingerAfter is how long a worker may stay up after its final message
 // before its group's processes are recorded, and how often they are
 // recorded again while it stays (T-172).
-var taskLingerAfter = time.Minute
+// It is atomic so tests can shorten it while watches run.
+var taskLingerAfter atomic.Int64
+
+func init() { taskLingerAfter.Store(int64(time.Minute)) }
 
 // watchLinger records which processes keep a run going after the worker's
 // final message. It only describes the run: by D-021 and Q-030 the run still
@@ -499,7 +502,7 @@ func (s *Supervisor) watchLinger(runID, task string, pid, pgid int, done <-chan 
 		select {
 		case <-done:
 			return
-		case <-time.After(taskLingerAfter):
+		case <-time.After(time.Duration(taskLingerAfter.Load())):
 		}
 		members, err := platform.GroupMembers(pgid)
 		if err != nil {

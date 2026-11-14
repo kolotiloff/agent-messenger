@@ -539,9 +539,8 @@ func TestTaskWithLeftoverProcessIsBlocked(t *testing.T) {
 }
 
 func TestRunAfterFinalMessageIsDescribedNotClosed(t *testing.T) {
-	old := taskLingerAfter
-	taskLingerAfter = 100 * time.Millisecond
-	t.Cleanup(func() { taskLingerAfter = old })
+	old := taskLingerAfter.Swap(int64(100 * time.Millisecond))
+	t.Cleanup(func() { taskLingerAfter.Store(old) })
 	h := newTaskHarness(t, "final-then-stay", AdapterLauncher{AllowTasks: true})
 	id := h.startTask("op-1", "claude", "x")
 	var q *core.RunQuiet
