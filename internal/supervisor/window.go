@@ -31,6 +31,7 @@ type windowView struct {
 	// project folder. CodexLink is the same for Codex (T-160).
 	CoordinatorLink *CoordinatorLinkView `json:"coordinator_link,omitempty"`
 	CodexLink       *CoordinatorLinkView `json:"codex_link,omitempty"`
+	CursorLink      *CoordinatorLinkView `json:"cursor_link,omitempty"`
 	// FeedbackCount is how many remarks the feedback journal holds (T-135).
 	FeedbackCount int `json:"feedback_count"`
 }
@@ -65,6 +66,8 @@ func (s *Supervisor) WindowView(project string) (any, error) {
 		codex := s.CodexCoordinatorLinkState(v.Project)
 		out.CoordinatorLink = &claude
 		out.CodexLink = &codex
+		cursor := s.CursorCoordinatorLinkState(v.Project)
+		out.CursorLink = &cursor
 	}
 	return out, nil
 }

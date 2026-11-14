@@ -14,14 +14,20 @@ How work is planned and split is decided with the owner under this project's own
 - `list_agents` shows the computers, the project folder on each, and their agents with running and waiting task counts. A computer without the project's folder refuses the project's tasks.
 - `start_task(op_id, agent, text, title?, model?)` starts a task in a new worker session. Make `op_id` unique per task. Reuse it only to retry the same call after a lost response; Messenger then returns the same task instead of starting a second one. Write the task so a fresh session can do it: the goal, the files or documents to read, and what to report.
 - `start_task` also takes an optional `model`. Leave it out to use the agent's default model; see "Choosing a model" below.
-- `wait(after, timeout_seconds?)` blocks until something happens in this project: a report, a question for you, a failure, an interruption, a block or a cancellation. Always pass `after` = the `cursor` from the previous `wait` (0 the first time).
+- `wait(after, timeout_seconds?)` blocks until something happens in this project: a report, a question for you, a failure, an interruption, a block or a cancellation. Always pass `after` = the `cursor` from the previous `wait`. In a new chat, first call `tasks` and use its current cursor instead of replaying history from 0.
   - When it returns events, act on them, then call `wait` again with the new cursor.
   - When it returns `more: true`, further events are ready: act on these, then call `wait` again at once with the new cursor. One call returns a bounded batch.
   - When it times out with no events, call `wait` again without comment.
-  - Waiting costs no tokens.
+  - No tokens are generated while the tool is blocked; handling its result and calling again uses tokens.
 - `tasks(state?, limit?, if_version?)` lists the project's open tasks (not done, failed or cancelled), newest first, with any open question for you, the current cursor and a `version`. `state: "all"` lists every task; a state name lists only that state. Pass `if_version` from the previous call to get `unchanged: true` instead of the same list. You rarely need `tasks`: `wait` already tells you what happened.
 - `answer(task_id, question_id, op_id, text)` answers a worker's question. The worker continues in the same session.
 - `cancel(task_id)` cancels a task.
+
+## Waiting for workers
+
+Follow the server's `waiting` instructions. In Codex and Cursor, keep the turn active with `wait(after, timeout_seconds: 30)` while following the work the owner requested. Act on events and repeat after an empty timeout; use commentary for progress. A running shell session or a detached `coordinator-watch` does not mean the idle chat will resume when it finishes. Do not end the turn merely because workers are still running. If monitoring must stop, say so; saved events can be read on the next turn.
+
+Claude Code may use the returned `watch` command with its shell's background-task completion notifications, then end the turn and resume on that notification. Without that capability, use active wait. On an owner message, read pending events with `wait` (one-second timeout) first. Stop monitoring when superseded, when the owner asks to stop, or when the requested work is complete.
 
 ## Choosing a model
 

@@ -8,6 +8,15 @@
   try{if(localStorage.getItem('messenger-lang')==='en')lang='en';}catch(_){}
   const EN={
   // Static texts of index.html
+  'Откройте папку проекта в Claude Code, Codex или Cursor, начните новый чат и спросите: «Каких агентов ты видишь?»':'Open the project folder in Claude Code, Codex or Cursor, start a new chat and ask which agents it can see.',
+  'Координатор — ваш чат в Claude Code, Codex или Cursor, открытый в папке проекта. Он раздаёт задачи исполнителям и собирает отчёты. Новый проект подключается сам; кнопка нужна, если это не получилось.':'The coordinator is your Claude Code, Codex or Cursor chat in the project folder. It assigns tasks and collects reports. New projects connect automatically; use the button if that did not work.',
+  'Cursor: добавьте messenger в .cursor/mcp.json, сохранив остальные записи':'Cursor: add messenger to .cursor/mcp.json, keeping the other entries',
+  'Записано. Откройте новый чат Cursor в этой папке и разрешите подключение Messenger':'Saved. Open a new Cursor chat in this folder and approve the Messenger connection',
+  'В настройках Cursor этой папки уже есть другое подключение «messenger». Messenger его не меняет':'This folder already has a different messenger connection in Cursor. Messenger leaves it unchanged',
+  'Подключение «messenger» в Cursor выключено. Messenger его не включает':'The messenger connection in Cursor is disabled. Messenger leaves it disabled',
+  'Не удалось прочитать настройки Cursor':'Could not read Cursor settings',
+  'Чат в Claude Code, Codex или Cursor. Раздаёт задачи и собирает отчёты.':'A Claude Code, Codex or Cursor chat. Assigns tasks and collects reports.',
+  'Подключите Claude Code, Codex или Cursor координатором, чтобы давать задачи с этого компьютера':'Connect Claude Code, Codex or Cursor as coordinator to assign tasks from this computer',
   'Локальный клиент, альфа':'Local client, alpha',
   'Проект':'Project',
   'Нет проектов':'No projects',

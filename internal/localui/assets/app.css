@@ -87,6 +87,9 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-control:32px;
   --am-control-compact:28px;
   --am-control-chip:24px;
+  --am-agent-action-width:88px;
+  --am-agent-step-height:56px;
+  --am-agent-mark-width:22px;
   --am-chart-height:120px;
   --am-bar-thin:6px;
   --am-switch-width:36px;
@@ -643,6 +646,13 @@ body.am-native #am-concept .am-panel-toggle { margin-left:auto; }
 #am-concept button.am-agent-tasks { width:100%; margin-top:auto; }
 #am-concept .am-steps + button.am-agent-tasks { margin-top:var(--am-space-3); }
 #am-concept .am-agent-card { justify-content:flex-start; }
+/* T-154: keep both text columns and row positions stable across checks,
+   sign-in actions and installation. Full clipped text is available as a tip. */
+#am-concept .am-agent-card:not(.am-agent-remote) .am-step { grid-template-columns:var(--am-agent-mark-width) minmax(0,1fr) var(--am-agent-action-width); height:var(--am-agent-step-height); min-height:var(--am-agent-step-height); }
+#am-concept .am-agent-card:not(.am-agent-remote) .am-step:nth-child(n+3) .am-step-text { grid-column:2 / -1; }
+#am-concept .am-agent-card:not(.am-agent-remote) .am-step:nth-child(n+3) > span:last-child { display:none; }
+#am-concept .am-agent-card:not(.am-agent-remote) .am-step-title { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#am-concept .am-agent-card:not(.am-agent-remote) .am-step > button { width:var(--am-agent-action-width); height:var(--am-control-compact); }
 #am-concept .am-agent-off .am-steps, #am-concept .am-agent-off .am-agent-tasks { opacity:.5; }
 #am-concept .am-agent-off .am-provider-heading { color:var(--am-muted); }
 #am-concept .am-field-sep { padding-top:var(--am-space-4); border-top:1px solid var(--am-line); }

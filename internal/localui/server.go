@@ -607,7 +607,7 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 		if in.Agent == "" {
 			in.Agent = "claude"
 		}
-		if in.Agent != "claude" && in.Agent != "codex" {
+		if in.Agent != "claude" && in.Agent != "codex" && in.Agent != "cursor" {
 			return control.Request{}, false
 		}
 		return control.Request{Cmd: "coordinator-connect", Alias: in.Project, Provider: in.Agent}, true

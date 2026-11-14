@@ -357,3 +357,44 @@ func TestConnectCoordinatorReportsAndNeverRetries(t *testing.T) {
 		})
 	}
 }
+
+func TestConnectCursorWritesOnlyProjectConfig(t *testing.T) {
+	f := newLinkFixture(t, false)
+	if got := f.sup.CursorCoordinatorLinkState(f.project); got.State != linkNoCursor {
+		t.Fatal(got)
+	}
+	if got := f.sup.connectCursorCoordinator(f.project); got.State != linkNoCursor {
+		t.Fatal(got)
+	}
+	if _, err := os.Stat(adapters.CursorProjectConfig(f.folder)); !os.IsNotExist(err) {
+		t.Fatal("wrote without registered Cursor", err)
+	}
+	if err := f.sup.store.SetComputerAgent("cursor", f.messenger, "", "worker"); err != nil {
+		t.Fatal(err)
+	}
+	result, err := f.sup.ConnectCoordinator(f.project, "cursor")
+	if err != nil || result.(CoordinatorLinkView).State != adapters.LinkConnected {
+		t.Fatal(result, err)
+	}
+	view, err := f.sup.WindowView(f.project)
+	if err != nil || view.(windowView).CursorLink.State != adapters.LinkConnected {
+		t.Fatal(view, err)
+	}
+	if len(f.calls(t)) != 0 {
+		t.Fatal("Cursor connection ran a CLI")
+	}
+	if _, err := os.Stat(filepath.Join(f.home, ".cursor", "mcp.json")); !os.IsNotExist(err) {
+		t.Fatal("changed global Cursor config", err)
+	}
+	path := adapters.CursorProjectConfig(f.folder)
+	foreign := `{"mcpServers":{"messenger":{"command":"other","args":["different"]}}}`
+	if err := os.WriteFile(path, []byte(foreign), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.sup.connectCursorCoordinator(f.project); got.State != adapters.LinkOther {
+		t.Fatal(got)
+	}
+	if raw, _ := os.ReadFile(path); string(raw) != foreign {
+		t.Fatal("changed foreign entry")
+	}
+}

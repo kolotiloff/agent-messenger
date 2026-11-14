@@ -29,6 +29,7 @@ const coordinatorAddTimeout = 30 * time.Second
 const (
 	linkNoFolder = "no_folder" // the project has no folder on this computer
 	linkNoClaude = "no_claude" // Claude Code is not connected under «Агенты»
+	linkNoCursor = "no_cursor" // Cursor is not connected under «Агенты»
 	linkNoCodex  = "no_codex"  // Codex is not connected under «Агенты»
 	linkFailed   = "failed"    // the last attempt did not leave the entry
 )
@@ -42,7 +43,7 @@ type CoordinatorLinkView struct {
 var coordinatorConnect sync.Mutex
 
 type coordinatorTarget struct {
-	folder, cli, codexCLI, messenger, config string
+	folder, cli, codexCLI, cursorCLI, messenger, config string
 }
 
 func (s *Supervisor) coordinatorTarget(project string) (coordinatorTarget, CoordinatorLinkView, bool) {
@@ -60,6 +61,8 @@ func (s *Supervisor) coordinatorTarget(project string) (coordinatorTarget, Coord
 			t.cli = a.CLI
 		case "codex":
 			t.codexCLI = a.CLI
+		case "cursor":
+			t.cursorCLI = a.CLI
 		}
 	}
 	t.messenger, err = CoordinatorProgram(s.root)
@@ -97,15 +100,17 @@ func (s *Supervisor) CoordinatorLinkState(project string) CoordinatorLinkView {
 }
 
 // ConnectCoordinator is the window's «Подключить» (control command
-// coordinator-connect). agent is "claude" (the default) or "codex".
+// coordinator-connect). agent is "claude" (the default), "codex" or "cursor".
 func (s *Supervisor) ConnectCoordinator(project, agent string) (any, error) {
 	switch agent {
 	case "", "claude":
 		return s.connectCoordinator(project), nil
 	case "codex":
 		return s.connectCodexCoordinator(project), nil
+	case "cursor":
+		return s.connectCursorCoordinator(project), nil
 	default:
-		return CoordinatorLinkView{State: linkFailed, Detail: "Координатором может быть Claude Code или Codex."}, nil
+		return CoordinatorLinkView{State: linkFailed, Detail: "Координатором может быть Claude Code, Codex или Cursor."}, nil
 	}
 }
 
@@ -223,6 +228,64 @@ func (s *Supervisor) connectCodexCoordinator(project string) CoordinatorLinkView
 	return after
 }
 
+func (s *Supervisor) readCursorLink(project string, t coordinatorTarget) CoordinatorLinkView {
+	state, err := adapters.CursorCoordinatorLink(adapters.CursorProjectConfig(t.folder), t.messenger, s.root, project)
+	view := CoordinatorLinkView{State: state}
+	if err != nil {
+		view.Detail = err.Error()
+	}
+	if state == adapters.LinkMissing && t.cursorCLI == "" {
+		view.State = linkNoCursor
+	}
+	return view
+}
+
+// CursorCoordinatorLinkState reports whether the project folder's Cursor
+// config starts this Messenger. It changes nothing.
+func (s *Supervisor) CursorCoordinatorLinkState(project string) CoordinatorLinkView {
+	t, view, ok := s.coordinatorTarget(project)
+	if !ok {
+		return view
+	}
+	return s.readCursorLink(project, t)
+}
+
+// connectCursorCoordinator writes the messenger entry into the project
+// folder's .cursor/mcp.json (D-125). It does not run Cursor.
+func (s *Supervisor) connectCursorCoordinator(project string) CoordinatorLinkView {
+	coordinatorConnect.Lock()
+	defer coordinatorConnect.Unlock()
+	t, view, ok := s.coordinatorTarget(project)
+	if !ok {
+		return view
+	}
+	before := s.readCursorLink(project, t)
+	if before.State != adapters.LinkMissing && before.State != adapters.LinkStale {
+		return before
+	}
+	// A registered Cursor program is required before writing, as Claude is
+	// required before its own command runs. A missing file with no program
+	// is already no_cursor; a stale file is left as it is.
+	if t.cursorCLI == "" {
+		if before.State == adapters.LinkMissing {
+			return CoordinatorLinkView{State: linkNoCursor}
+		}
+		return before
+	}
+	if err := adapters.EnsureCursorCoordinator(adapters.CursorProjectConfig(t.folder), t.messenger, s.root, project); err != nil {
+		detail := err.Error()
+		if len(detail) > 600 {
+			detail = detail[:600] + "…"
+		}
+		return CoordinatorLinkView{State: linkFailed, Detail: detail}
+	}
+	after := s.readCursorLink(project, t)
+	if after.State != adapters.LinkConnected {
+		return CoordinatorLinkView{State: linkFailed, Detail: "Cursor не записал подключение."}
+	}
+	return after
+}
+
 // staleRepairs remembers the projects whose stale coordinator entry this
 // client already tried to replace: one try per project and client start, so
 // a failure is not repeated by itself.
@@ -230,7 +293,7 @@ var staleRepairs sync.Map
 
 // repairStaleCoordinator replaces, in the background, the project's
 // coordinator entry when it starts an earlier program file (T-117, T-160).
-// Claude and Codex are each tried once per client start. A chat that is
+// Claude, Codex and Cursor are each tried once per client start. A chat that is
 // open keeps its running program until it reconnects; new chats and
 // reconnects start the program file.
 func (s *Supervisor) repairStaleCoordinator(project string) {
@@ -249,6 +312,9 @@ func (s *Supervisor) repairStaleCoordinator(project string) {
 		}
 		if t.codexCLI != "" && s.readCodexLink(project, t).State == adapters.LinkStale {
 			s.connectCodexCoordinator(project)
+		}
+		if t.cursorCLI != "" && s.readCursorLink(project, t).State == adapters.LinkStale {
+			s.connectCursorCoordinator(project)
 		}
 	}()
 }

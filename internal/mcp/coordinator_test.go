@@ -57,11 +57,16 @@ func newCoordinatorStore(t *testing.T) *core.Store {
 
 func startCoordinator(t *testing.T, st *core.Store, project string) *coordClient {
 	t.Helper()
+	return startCoordinatorWithWatch(t, st, project, "")
+}
+
+func startCoordinatorWithWatch(t *testing.T, st *core.Store, project, watch string) *coordClient {
+	t.Helper()
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
 	c := &coordClient{t: t, in: inW, frames: make(chan map[string]any, 100), done: make(chan error, 1)}
 	go func() {
-		c.done <- ServeCoordinator(st, project, inR, outW)
+		c.done <- serveCoordinator(st, project, watch, inR, outW)
 		outW.Close()
 	}()
 	go func() {

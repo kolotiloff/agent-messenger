@@ -25,7 +25,7 @@ One coordinator agent hands tasks to worker agents (Claude Code, Codex, Cursor A
 
 ## What it does
 
-- **Coordinator and workers.** You talk to a coordinator in Claude Code. It starts tasks with `start_task`; each task runs as its own worker session of Claude Code, Codex or Cursor in the project folder, and reports back. While it is idle, a background watch wakes its chat when a worker reports or asks something; it can also write to a running worker, on any computer.
+- **Coordinator and workers.** You talk to a coordinator in Claude Code or Codex (0.69). Cursor connection is implemented on the development branch for the next release. It starts tasks with `start_task`; each task runs as its own worker session of Claude Code, Codex or Cursor in the project folder, and reports back. Claude Code can use background-task notifications. Codex must keep its turn active and call `wait` to receive worker events; a detached shell watch did not wake an idle Codex chat in the owner's test. Corrected waiting instructions for Codex and Cursor are prepared for the next release. The coordinator can also write to a running worker on any computer.
 - **Several computers.** One computer runs the server, the others join it with a short code. The coordinator sees every computer's agents, their models and limits, and can start a task on any of them. Tasks keep their computer when the server moves to another machine.
 - **One window for everything.** Every task of every computer with its live progress, tokens and time. You answer a worker's question, write to a running worker, stop a task or close a stuck one. Interrupted tasks and tasks whose computer was lost gather under «Требуют решения»; a computer whose replies are held back says for how long.
 - **Safe by default.** A task is finished only when its worker has visibly ended; an unclear result is never retried on its own. «Любые команды» (any commands without asking) is a switch per computer, off by default.
@@ -36,11 +36,11 @@ One coordinator agent hands tasks to worker agents (Claude Code, Codex, Cursor A
 
 1. [Download and start](docs/DOWNLOAD.md) the app on each computer.
 2. **Агенты:** connect the agents installed there.
-3. **Новый проект…:** a name and the project folder. Messenger connects the coordinator to Claude Code for that folder by itself.
+3. **Новый проект…:** a name and the project folder. Messenger connects registered Claude Code and Codex coordinators for that folder by itself; the next release adds Cursor.
 4. Open the project folder in Claude Code, start a new chat and ask «Каких агентов ты видишь?». Then give it work.
 5. For more computers: **Сервер** → start the server on one of them and invite the others with the code.
 
-A web chat on claude.ai does not see Messenger: the coordinator runs in Claude Code on a computer where Messenger runs.
+A web chat on claude.ai does not see Messenger: the coordinator runs in a local agent chat on a computer where Messenger runs.
 
 ## Status
 
