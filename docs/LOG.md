@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-14 — Cursor (coordinator journal)
+
+- Read the issue list and the Mac feedback export of 2026-11-14 (35 remarks). Did not copy the journals into the repo. Already shipped and left as they are: T-171, T-152 (export button), T-138, T-150, T-149, T-148, T-161 (D-124), Q-027. Recorded what is still asked: T-172 (Q-030), T-173, T-174, T-175, T-176, T-177. T-157, T-158 and T-159 were already in TASKS. Server failover stays deferred.
+
 ## 2026-11-14 — Codex (T-168–T-171 release 0.72)
 
 - Released [0.72](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.72), source `f3bd2d45e9f18890419e09996bb7a97bb3b009bd`, [run](https://github.com/kolotiloff/agent-messenger/actions/runs/43600787465). PR #105 and PR #106 checks passed; exact checked #106 head `baf18d23021164c4babc4b96f381c1a15a5f6543`.
