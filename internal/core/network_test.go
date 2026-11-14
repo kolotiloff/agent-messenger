@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 const testBroker = "brk-00000000000000aa"
@@ -650,5 +651,43 @@ func TestRefusedAnswerOpensTheQuestionAgain(t *testing.T) {
 	}
 	if task, _ = p.a.st.TaskByID(id); task.State != "blocked" {
 		t.Fatalf("after an answered refusal %+v", task)
+	}
+}
+
+// T-174: messages to a computer that is not in the network are retired once
+// they have waited out the reconnect grace. A listed computer keeps its
+// mail, and a message that is still young is kept too.
+func TestReleaseAbsentOutbox(t *testing.T) {
+	p := newNetPair(t)
+	id, _, err := p.a.st.StartTask(StartTaskRequest{Project: "Game", OpID: "live", Computer: "dev-b", Provider: "codex", Text: "stay"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().UTC().Add(-reconnectGrace - time.Minute).Format(time.RFC3339Nano)
+	young := time.Now().UTC().Add(-time.Minute).Format(time.RFC3339Nano)
+	insert := func(op, to, kind, at string) {
+		t.Helper()
+		if _, err := p.a.st.db.Exec(`INSERT INTO net_outbox(broker,recipient,op_id,kind,task_id,body,created_at) VALUES (?,?,?,?,?,?,?)`,
+			testBroker, to, op, kind, id, `{"kind":"`+kind+`"}`, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	insert("progress.old", "dev-28b4", "progress", old)
+	insert("progress.young", "dev-28b4", "progress", young)
+	insert("progress.listed", "dev-b", "progress", old)
+	n, recipients, err := p.a.st.ReleaseAbsentOutbox(time.Now())
+	if err != nil || n != 1 || len(recipients) != 1 || recipients[0] != "dev-28b4" {
+		t.Fatalf("released %d %v %v", n, recipients, err)
+	}
+	pending, err := p.a.st.NetPending(testBroker, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	left := map[string]bool{}
+	for _, m := range pending {
+		left[m.OpID] = true
+	}
+	if left["progress.old"] || !left["progress.young"] || !left["progress.listed"] || !left["start."+id] {
+		t.Fatalf("outbox %+v", pending)
 	}
 }

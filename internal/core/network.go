@@ -742,6 +742,57 @@ func (s *Store) NetSent(seq int64) error {
 	return err
 }
 
+// ReleaseAbsentOutbox retires messages aimed at a computer that is not in
+// the network, once they have waited out the reconnect grace (T-174). A
+// computer that is listed and reporting keeps its messages, even when its
+// mailbox is full (T-137). Replies that must not be lost are parked; the
+// rest are dropped. Nothing is retried.
+func (s *Store) ReleaseAbsentOutbox(now time.Time) (int, []string, error) {
+	cutoff := now.UTC().Add(-reconnectGrace).Format(time.RFC3339Nano)
+	var seqs []int64
+	err := s.tx(func(tx *sql.Tx) error {
+		broker, err := metaValue(tx, "net_broker")
+		if err != nil || broker == "" {
+			return err
+		}
+		rows, err := tx.Query(`SELECT seq FROM net_outbox WHERE broker=? AND created_at<=?
+ AND NOT EXISTS (SELECT 1 FROM net_peers p WHERE p.peer=net_outbox.recipient AND p.missing_since='' AND p.age>=0 AND p.age<=?)
+ AND NOT EXISTS (SELECT 1 FROM net_peers p WHERE p.peer=net_outbox.recipient AND p.missing_since<>'' AND p.missing_since>?)`,
+			broker, cutoff, PeerFresh, cutoff)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var seq int64
+			if err := rows.Scan(&seq); err != nil {
+				return err
+			}
+			seqs = append(seqs, seq)
+		}
+		return rows.Err()
+	})
+	if err != nil || len(seqs) == 0 {
+		return 0, nil, err
+	}
+	seen := map[string]bool{}
+	var recipients []string
+	n := 0
+	for _, seq := range seqs {
+		var to string
+		_ = s.db.QueryRow(`SELECT recipient FROM net_outbox WHERE seq=?`, seq).Scan(&to)
+		if err := s.NetUndeliverable(seq); err != nil {
+			return n, recipients, err
+		}
+		n++
+		if to != "" && !seen[to] {
+			seen[to] = true
+			recipients = append(recipients, to)
+		}
+	}
+	return n, recipients, nil
+}
+
 // NetUndeliverable handles a message the broker refused because its
 // recipient is not in the network any more. A start that never left fails
 // its task; an answer or cancel that never arrived blocks it.

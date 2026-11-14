@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-14 — Cursor (T-173, T-174)
+
+- Ноут-Linux on 0.72: the model lists were in its settings and a task with an effort started, but `list_agents` elsewhere showed them empty. The journal also repeated that a mailbox to a computer not in the project was full. Presence no longer drops the model names because another field was refused, and mail to a computer that has left is retired after the reconnect grace. A listed computer's full mailbox still waits. Not checked on the owner's computers.
+
 ## 2026-11-14 — Cursor (coordinator journal)
 
 - Read the issue list and the Mac feedback export of 2026-11-14 (35 remarks). Did not copy the journals into the repo. Already shipped and left as they are: T-171, T-152 (export button), T-138, T-150, T-149, T-148, T-161 (D-124), Q-027. Recorded what is still asked: T-172 (Q-030), T-173, T-174, T-175, T-176, T-177. T-157, T-158 and T-159 were already in TASKS. Server failover stays deferred.
