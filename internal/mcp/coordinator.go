@@ -56,14 +56,19 @@ var (
 	coordinatorLogWait = 20 * time.Second
 )
 
+// T-161: a background shell session is not a promise to resume an idle chat.
+const activeWaitInstructions = `Waiting mode: active wait. Background command completion is not a verified wake-up mechanism for this client (including Codex and Cursor). While the owner wants you to follow running workers, keep this turn active: call wait with your last cursor and timeout_seconds 30, handle events, then wait again. An empty timeout is not completion. Use commentary for progress and respond to owner messages between calls. Do not end your turn merely because workers are still running or a shell command returned a session id. If the owner stops monitoring or you must end the turn, say that automatic monitoring stops; events remain saved for the next wait. On the owner's next message, read wait with your last cursor and timeout_seconds 1 first. Stop waiting if superseded or no work remains that the owner asked you to follow.
+`
+
+const backgroundWaitInstructions = `Waiting mode: background watch for Claude Code. Once tasks are started or answered, run the watch command with the shell tool's background-task notification mechanism, then end your turn. A plain detached process is not enough. When notified, call wait with your last cursor and timeout_seconds 1, handle events, then start the watch again with the new cursor. If background completion notifications are unavailable, keep your turn active with wait (timeout_seconds 30) instead. After an owner message, read wait first. Stop watching if superseded or the owner stops monitoring.
+`
+
 const coordinatorInstructions = `Agent Messenger: start tasks for worker agents in this project and wait for their reports.
 - list_agents shows this project's computers, their project folder and agents: this computer and the other computers of its network. A task for another computer is sent to it and runs there; it fails with the reason if that computer does not take tasks from other computers or has no folder for the project. Another computer shows accepts_tasks and has_project when it reported them; do not send a task where either is false, and tell the owner instead. Questions, reports and outcomes come back through wait as usual.
 - start_task starts one task in a new worker session. Give every task a unique op_id and reuse it only to retry the same call after a lost response.
 - One chat is the project's coordinator at a time: the newest chat that waits or acts. If wait answers superseded: true, another chat took over; stop, do not call wait again, and tell the owner, unless they ask you to take over again.
 - A new chat starts from the current state, not from the history: first call tasks, which gives the open tasks, their open questions and the event cursor, then wait with after = that cursor. Never wait from 0 in a new chat: it replays every old event of the project. Agreements of an earlier coordinator chat that are not in the project's rules or files are not known here; ask the owner when it matters.
 - wait returns the events of this project's tasks after the cursor: a report, a question for you, a failure, an interruption, a block or a cancellation; with none, it blocks until one comes or timeout_seconds pass (default 60, at most 120). Always pass after = the cursor from the previous wait. When it returns events, act on them (answer questions with answer, tell the owner about reports). If it says more: true, more events are ready: call wait again at once with the new cursor.
-- Do not hold your turn in wait while workers run: the owner's messages reach you only between your turns, so a chat that waits again and again cannot hear them. Instead, once tasks are started or answered, run the background watch command (given at the top of these instructions and in every wait and tasks result as watch) with your shell tool in the background, so your turn can end; tell the owner in a line what is running and end your turn. The command exits when an event arrives, or after 30 minutes with none, and you are woken with its output. Then call wait with your cursor and timeout_seconds 1 to read the events, act on them, start the watch again with the new cursor and end your turn. If it exited with no events, start it again with the same cursor. Use tasks to see the state of open tasks at any time. Only if you have no background shell, wait with the default timeout and answer the owner between waits.
-- When you wake up because of the owner (a new message or an interrupted wait), first call wait with your last cursor and timeout_seconds 1 to see what workers sent meanwhile, then answer the owner, then make sure a watch runs. When another tool's answer ends with a «Messenger: … new events» note, events are waiting for you: read them with wait after this step.
 - start_task takes an optional model. Leave it out for the agent's default. For Claude use opus for hard work (design, tricky bugs, large refactors), sonnet for ordinary coding, haiku for small mechanical work. For Codex and Cursor pass only a name from that agent's models in list_agents (the owner lists them in the window); if the list is empty, leave model out. Never guess a name: an unknown model fails the run. Tell the owner when you chose a non-default model and why.
 - A report is the worker's short summary. Its full last message is kept too: when a report or failure ends with «[Messenger] The worker's full final message has N characters», read it with task_output before asking the worker again; it is lost nowhere, even if the worker deleted its file.
 - answer answers a worker's question (pass question_id and a unique op_id); the worker continues in the same session.
@@ -100,6 +105,8 @@ type coordinator struct {
 	project string
 	// watch is the background watch command with CURSOR in it, or "".
 	watch string
+	// backgroundWatch is enabled only for the known Claude Code client.
+	backgroundWatch bool
 	// dataRoot is the data directory, where an export goes when there is
 	// no Downloads folder.
 	dataRoot string
@@ -231,12 +238,15 @@ func serveCoordinatorIn(store *core.Store, project, watch, dataRoot string, in i
 			if p.ProtocolVersion == "" {
 				p.ProtocolVersion = "2025-06-18"
 			}
+			c.mu.Lock()
+			c.backgroundWatch = strings.EqualFold(p.ClientInfo.Name, "claude-code")
+			c.mu.Unlock()
 			_ = c.store.TouchCoordinatorClient(c.project, p.ClientInfo.Name)
 			c.respond(req.ID, map[string]any{
 				"protocolVersion": p.ProtocolVersion,
 				"capabilities":    map[string]any{"tools": map[string]any{"listChanged": true}},
 				"serverInfo":      map[string]any{"name": "agent-messenger", "version": "0.2.0"},
-				"instructions":    watchNote(watch) + coordinatorInstructions + "\nProject: " + c.project,
+				"instructions":    c.waitingInstructions() + coordinatorInstructions + "\nProject: " + c.project,
 			}, nil)
 		case req.Method == "ping":
 			c.respond(req.ID, map[string]any{}, nil)
@@ -333,7 +343,7 @@ func coordinatorTools() []map[string]any {
 				"model":    map[string]any{"type": "string", "maxLength": 80, "description": "optional model for the worker, such as opus, sonnet or haiku for claude, or, for Codex and Cursor, a name from the agent's models in list_agents; leave it out to use the agent's default. Never guess a name: an unknown model fails the run."},
 				"lock":     map[string]any{"type": "string", "maxLength": core.MaxTaskLock, "description": "optional name of a resource only one worker on that computer may use at a time, such as unity-editor; the task waits to start while an earlier unfinished task with the same lock is on that computer"},
 			}, "op_id", "agent", "text")},
-		{"name": "wait", "description": "Return the events of this project's tasks after the cursor; with none, block until one arrives or timeout_seconds pass (default 60, at most 120). Costs no tokens while blocked, but the owner's messages cannot reach you meanwhile: between tasks, end your turn with the background watch running instead. Always pass after. Returns a bounded batch; more: true means further events are ready, so call wait again at once with the new cursor.",
+		{"name": "wait", "description": "Return the events of this project's tasks after the cursor; with none, block until one arrives or timeout_seconds pass (default 60, at most 120). Costs no tokens while blocked. Follow the returned waiting instructions: a background shell session alone does not wake an idle chat. Always pass after. Returns a bounded batch; more: true means further events are ready, so call wait again at once with the new cursor.",
 			"inputSchema": obj(map[string]any{
 				"after":           map[string]any{"type": "integer", "minimum": 0, "description": "cursor from the previous wait"},
 				"timeout_seconds": map[string]any{"type": "integer", "minimum": 1, "maximum": coordinatorMaxWait},
@@ -437,7 +447,7 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 		if err != nil {
 			return nil, err
 		}
-		out := map[string]any{"task_id": id, "created": created, "next": "Call wait to receive its report."}
+		out := map[string]any{"task_id": id, "created": created, "next": "Call wait to receive its report.", "waiting": c.waitingInstructions()}
 		if l, err := c.store.AgentLimitFor(c.project, a.Computer, a.Agent); err == nil {
 			if note := core.LimitNote(l); note != "" {
 				out["limit_note"] = note
@@ -490,7 +500,7 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 		if err := c.store.AnswerTask(a.TaskID, a.QuestionID, a.OpID, a.Text, core.AudienceCoordinator); err != nil {
 			return nil, err
 		}
-		return map[string]any{"answered": true, "next": "The worker continues; call wait for its next report or question."}, nil
+		return map[string]any{"answered": true, "next": "The worker continues; call wait for its next report or question.", "waiting": c.waitingInstructions()}, nil
 	case "task_output":
 		var a struct {
 			TaskID string `json:"task_id"`
@@ -531,7 +541,7 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 		if err := c.store.ContinueTaskChecked(a.TaskID, a.OpID, a.Text, core.AudienceCoordinator, core.CheckWorkerGone); err != nil {
 			return nil, err
 		}
-		return map[string]any{"continued": true, "next": "The worker resumes its conversation; call wait for its report or question."}, nil
+		return map[string]any{"continued": true, "next": "The worker resumes its conversation; call wait for its report or question.", "waiting": c.waitingInstructions()}, nil
 	case "note_task":
 		var a struct {
 			TaskID string `json:"task_id"`
@@ -910,11 +920,28 @@ func watchNote(watch string) string {
 	return "Background watch command (put your cursor in place of CURSOR; run it in the background with your shell tool): " + watch + "\n"
 }
 
-// withWatch adds the watch command for cursor to a wait or tasks result,
-// so a client that cut the instructions short still has it (row 28).
+// waitingInstructions is client-specific; initialize may be repeated while
+// a tool call runs, so the mode uses the same lock as other connection state.
+func (c *coordinator) waitingInstructions() string {
+	c.mu.Lock()
+	background := c.backgroundWatch
+	c.mu.Unlock()
+	if background && c.watch != "" {
+		return watchNote(c.watch) + backgroundWaitInstructions
+	}
+	return activeWaitInstructions
+}
+
+// Repeat the mode in results, since clients can truncate initialize instructions.
 func (c *coordinator) withWatch(result map[string]any, cursor int64) map[string]any {
-	if c.watch != "" {
+	c.mu.Lock()
+	background := c.backgroundWatch
+	c.mu.Unlock()
+	if background && c.watch != "" {
 		result["watch"] = strings.ReplaceAll(c.watch, "CURSOR", strconv.FormatInt(cursor, 10))
+		result["waiting"] = backgroundWaitInstructions
+	} else {
+		result["waiting"] = activeWaitInstructions
 	}
 	return result
 }

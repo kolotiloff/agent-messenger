@@ -2,6 +2,14 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-14 — Codex (T-154 cards, T-161 waiting, T-162 Cursor coordinator)
+
+- T-154: fixed row/action geometry, retained values during diagnostics, per-provider DOM preservation and discovery/check on return from installation. Browser behavior and layout checked with fictional data in light/dark at 1100/600 px. No models or working Messenger state used.
+- T-161/D-124: inspected the owner's reported coordinator chat read-only. Events were delivered, but a finished background shell watch did not resume Codex after its turn ended. Corrected client-specific waiting instructions; active wait for Codex/unknown clients, background task notifications for Claude Code only. No new idle-chat wake mechanism; real Codex acceptance still needed.
+- T-162/D-125: added Cursor project connection and window rows, preserving existing config and forwarding the worker guard. Fake protocol client received a question while waiting and a report after its answer; real Cursor acceptance pending.
+- Verified: macOS `scripts/check.sh`, all four cross-compilation targets (Windows completed after a dependency download failure), and browser fixture scenarios.
+- Owner confirmed 0.69 released. Changes on `codex/t154-stable-agent-cards` await review and a later functional release; [verification report](reports/2026-11-14-t154-t161.md).
+
 ## 2026-11-14 — Cursor (T-160 Codex coordinator)
 
 - Codex can be the coordinator (D-123, PR #100, `4c8af3e`). The window writes the messenger table into the project folder's `.codex/config.toml` and leaves every other line, a foreign entry, a turned-off entry and an unreadable file alone. Claude's connection is unchanged. Verified: `scripts/check.sh`. Not verified with a real Codex chat. Not released.

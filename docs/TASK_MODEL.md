@@ -96,6 +96,8 @@ claude mcp add --scope local messenger -- "/Applications/Agent Messenger.app/Con
 
 A Codex chat in the same folder can be the coordinator too (D-123, T-160). Codex has no project-scoped `mcp add`; that command writes the user config, which every project would share. Messenger writes only the `[mcp_servers.messenger]` table into `.codex/config.toml` in the project folder, which Codex reads after the owner trusts the folder. The table starts this program with the same arguments, asks Codex to approve its tools (`default_tools_approval_mode = "approve"`) and allows 180 seconds for one call, because `wait` may block for 120 and Codex stops a tool at 60. It does not set `required`. Messenger writes that table only when it is missing or is its own entry for an older program file, and it does not run the Codex CLI to do it. A worker Codex in that folder loads the same file; its process has `AGENT_MESSENGER_WORKER_RUN`, so the server lists no tools.
 
+Cursor can also coordinate (D-125, T-162). The «Проект» page writes the `messenger` stdio entry into the project's `.cursor/mcp.json`, shared by Cursor's editor and CLI. Other settings and servers, including `messenger_task`, are preserved. A different or disabled entry, malformed/duplicate JSON, oversized files and symlinks are left alone. This does not edit the global config or Cursor's approval lists. Open a new Cursor chat in the folder and approve the Messenger connection when asked; for the CLI, `agent mcp enable messenger` approves that server. The saved configuration forwards the worker guard, so a worker in the same folder gets no coordinator tools. Real Cursor chat acceptance is pending.
+
 `messenger coordinator --project NAME` is a stdio MCP server. It opens the data directory's database and writes task records. It never launches a worker itself; the running client launches the workers (`--allow-tasks`). The skill [skills/messenger-coordinator/SKILL.md](../skills/messenger-coordinator/SKILL.md) explains the tools and nothing else (D-022).
 
 | Tool | Effect |
@@ -120,13 +122,17 @@ How `wait` behaves (the contract of the [T-023 pilot](reports/2026-11-06-wait-pi
 - A cancelled call is not answered and loses nothing.
 - When the client sent a progress token, a progress notification goes out every 60 s.
 
-**Background watch (T-120).** A chat blocked in `wait` cannot hear the owner. So the coordinator runs this command in the background with its shell tool and ends its turn:
+**Waiting depends on the client (T-120, T-161, D-124).** Claude Code (`clientInfo.name: claude-code`) can run this command with its shell tool's background-task completion notifications, then end its turn:
 
 ```sh
 messenger --root DIR coordinator-watch --project NAME --after CURSOR [--minutes 30]
 ```
 
-It exits when a coordinator event of the project arrives after the cursor, or after 30 minutes with none (the most allowed). The chat is woken with its output, reads the events with `wait` and starts the watch again with the new cursor. The watch only looks: it never moves the cursor. The server instructions and every `wait` and `tasks` result give the exact command line.
+It exits when a coordinator event of the project arrives after the cursor, or after 30 minutes with none (the most allowed). Claude Code receives its background-task completion notification, reads events with `wait`, then starts the watch again with the new cursor. The watch only looks: it never moves the cursor. The server gives the command only to that client.
+
+Codex, Cursor and unrecognized clients receive active-wait instructions: while following workers, keep the turn active, call `wait` with the last cursor and a 30-second timeout, handle events, and wait again. Respond to owner messages between calls; stop when superseded, the owner stops monitoring, or the requested work is finished. A background `exec_command` session does not establish a wake-up mechanism after a Codex turn ends. If the turn must end, explicitly tell the owner monitoring stops; events remain saved for the next `wait`. This is an instruction correction, not a new idle-chat notification integration.
+
+The mode is repeated in `waiting` on `tasks`, `wait`, `start_task`, `answer` and `continue_task` results. The owner's observed Codex case delivered the worker events correctly, but the completed background watch did not resume the idle chat. No real-model acceptance of the corrected instructions has been performed.
 
 Events the coordinator caused itself (`started`, its own `answered`) do not wake it. The owner's exchange with a worker reaches it only as read-only copies (`owner_question`, `owner_answered`) and `owner_note`. Other tools' answers end with a «Messenger: … new events» note when events are waiting.
 

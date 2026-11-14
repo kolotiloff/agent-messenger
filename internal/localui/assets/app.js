@@ -725,8 +725,8 @@
   }
   async function connectReadyCoordinators(){
     const ready=id=>(view?.agents||[]).some(a=>a.agent===id&&a.cli);
-    const link=id=>id==='codex'?view?.codex_link:view?.coordinator_link;
-    for(const agent of ['claude','codex']){
+    const link=id=>coordinatorLink(id);
+    for(const agent of ['claude','codex','cursor']){
       if(!ready(agent))continue;
       const state=link(agent)?.state;
       if(state==='connected'||state==='no_folder'||state==='other'||state==='off')continue;
@@ -738,12 +738,13 @@
   // command under it. Agents are set up once; the link is per folder.
   function renderCoordinatorRow(){
     const box=$('coord-box');if(!box||!view?.project)return;
-    const tip=tr('Координатор — ваш чат в Claude Code или Codex, открытый в папке проекта. Он раздаёт задачи исполнителям и собирает отчёты. Новый проект подключается сам; кнопка нужна, если это не получилось.');
+    const tip=tr('Координатор — ваш чат в Claude Code, Codex или Cursor, открытый в папке проекта. Он раздаёт задачи исполнителям и собирает отчёты. Новый проект подключается сам; кнопка нужна, если это не получилось.');
     const heading=el('p',undefined,'am-small');heading.append(el('span',tr('Координатор')));
     const q=el('span','?','am-q');q.title=tip;q.setAttribute('aria-label',tip);q.tabIndex=0;heading.append(q);
     const steps=el('div',undefined,'am-steps');
     steps.append(coordinatorAgentRow('claude',view.coordinator_link||{state:'unknown'}));
     steps.append(coordinatorAgentRow('codex',view.codex_link||{state:'unknown'}));
+    steps.append(coordinatorAgentRow('cursor',view.cursor_link||{state:'unknown'}));
     const manual=el('details',undefined,'am-tool');manual.append(el('summary',tr('Подключить вручную через Терминал')));
     const claudeCmd='cd '+shellQuote(view.folder)+' && claude mcp add --scope local messenger -- '+shellQuote(view.messenger)+' --root '+shellQuote(view.data_root)+' coordinator --project '+shellQuote(view.project);
     const codexToml='[mcp_servers.messenger]\ncommand = '+JSON.stringify(view.messenger)+'\nargs = ["--root", '+JSON.stringify(view.data_root)+', "coordinator", "--project", '+JSON.stringify(view.project)+']\ndefault_tools_approval_mode = "approve"\ntool_timeout_sec = 180\n';
@@ -752,39 +753,41 @@
       copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(text);copy.textContent=tr('Скопировано');}catch(_){copy.textContent=tr('Скопируйте вручную');}setTimeout(()=>copy.textContent=tr('Скопировать команду'),2000);});
       const wrap=el('div');wrap.append(el('p',title,'am-small am-muted'),el('pre',text,'am-command'),copy);return wrap;
     };
-    manual.append(block('Claude Code',claudeCmd),block('Codex',codexToml));
-    manual.hidden=!view.folder||(coordinatorAgentOn('claude')&&coordinatorAgentOn('codex'));
+    const cursorJSON=JSON.stringify({mcpServers:{messenger:{type:'stdio',command:view.messenger,args:['--root',view.data_root,'coordinator','--project',view.project],env:{AGENT_MESSENGER_WORKER_RUN:'${env:AGENT_MESSENGER_WORKER_RUN}'}}}},null,2);
+    manual.append(block('Claude Code',claudeCmd),block('Codex (.codex/config.toml)',codexToml),block(tr('Cursor: добавьте messenger в .cursor/mcp.json, сохранив остальные записи'),cursorJSON));
+    manual.hidden=!view.folder||(['claude','codex','cursor'].every(coordinatorAgentOn));
     const body=el('div',undefined,'am-coord-box am-field-sep');body.id='coord-box';body.append(heading,steps,manual);
     if(box.querySelector('details')?.open)manual.open=true;
     if(box.innerHTML!==body.innerHTML)box.replaceWith(body);
   }
+  function coordinatorLink(agent){return agent==='cursor'?view?.cursor_link:agent==='codex'?view?.codex_link:view?.coordinator_link;}
   function coordinatorAgentOn(agent){
-    const link=agent==='codex'?view?.codex_link:view?.coordinator_link;
+    const link=coordinatorLink(agent);
     return link?.state==='connected';
   }
   function coordinatorAgentRow(agent,link){
     const title=names[agent]||agent;
     const connect=[tr('Подключить'),()=>connectCoordinator(agent)];
     const failure=linkFailure?.project===view.project&&linkFailure?.agent===agent?linkFailure:null;
-    const missing=agent==='codex'?'no_codex':'no_claude';
+    const missing='no_'+agent;
     if(linkBusy===agent)return stepRow(1,title,tr('Подключаем…'),null);
     if(link.state==='connected'){
-      let sub=tr('Подключён. Откройте папку проекта в новом чате');
+      let sub=agent==='cursor'?tr('Записано. Откройте новый чат Cursor в этой папке и разрешите подключение Messenger'):tr('Подключён. Откройте папку проекта в новом чате');
       if(agent==='codex'&&(view.agents||[]).some(a=>a.agent==='codex'&&a.trust?.state==='not_trusted'))sub=tr('Записано. Codex прочитает его, когда папка станет доверенной: откройте её в Codex и подтвердите.');
       return stepRow('ok',title,sub,null);
     }
     if(failure)return stepRow('no',title,tr('Не получилось: ')+failure.detail,[tr('Повторить'),()=>connectCoordinator(agent)]);
     if(link.state===missing)return stepRow(1,title,tr('Сначала настройте его во вкладке «Агенты»'),[tr('Агенты'),()=>show('agents')]);
     if(link.state==='no_folder')return stepRow(1,title,tr('Сначала укажите папку проекта'),null);
-    if(link.state==='other')return stepRow('no',title,agent==='codex'?tr('В настройках Codex этой папки уже есть другое подключение «messenger». Messenger его не меняет'):tr('В Claude у этой папки уже есть другое подключение «messenger». Messenger его не меняет'),connect);
-    if(link.state==='off')return stepRow('no',title,tr('Подключение «messenger» в Codex выключено. Messenger его не включает'),null);
-    if(link.state==='unknown')return stepRow('no',title,(agent==='codex'?tr('Не удалось прочитать настройки Codex'):tr('Не удалось прочитать настройки Claude'))+(link.detail?': '+link.detail:''),connect);
+    if(link.state==='other')return stepRow('no',title,agent==='cursor'?tr('В настройках Cursor этой папки уже есть другое подключение «messenger». Messenger его не меняет'):agent==='codex'?tr('В настройках Codex этой папки уже есть другое подключение «messenger». Messenger его не меняет'):tr('В Claude у этой папки уже есть другое подключение «messenger». Messenger его не меняет'),connect);
+    if(link.state==='off')return stepRow('no',title,agent==='cursor'?tr('Подключение «messenger» в Cursor выключено. Messenger его не включает'):tr('Подключение «messenger» в Codex выключено. Messenger его не включает'),null);
+    if(link.state==='unknown')return stepRow('no',title,(agent==='cursor'?tr('Не удалось прочитать настройки Cursor'):agent==='codex'?tr('Не удалось прочитать настройки Codex'):tr('Не удалось прочитать настройки Claude'))+(link.detail?': '+link.detail:''),connect);
     return stepRow(1,title,tr('Не подключён'),connect);
   }
   // Whether this computer's Claude Code is the project's coordinator. Other
   // computers are not shown: any computer may have its own (owner, T-152).
   function coordinatorPlace(){
-    return view?.coordinator?.connected||coordinatorAgentOn('claude')||coordinatorAgentOn('codex');
+    return view?.coordinator?.connected||coordinatorAgentOn('claude')||coordinatorAgentOn('codex')||coordinatorAgentOn('cursor');
   }
   // The task pane with no task yet (T-152): what the program does, drawn as
   // a short chain, and the first steps with their state on this computer.
@@ -797,7 +800,7 @@
     const chain=el('div',undefined,'am-chain');
     const node=(title,sub)=>{const n=el('div',undefined,'am-chain-node');n.append(el('strong',title),el('span',sub,'am-small am-muted'));return n;};
     const arrow=()=>{const a=el('span','→','am-chain-arrow');a.setAttribute('aria-hidden','true');return a;};
-    chain.append(node(tr('Вы'),tr('Пишете координатору, что нужно сделать.')),arrow(),node(tr('Координатор'),tr('Чат в Claude Code или Codex. Раздаёт задачи и собирает отчёты.')),arrow(),node(tr('Исполнители'),tr('Claude Code, Codex и Cursor на ваших компьютерах.')));
+    chain.append(node(tr('Вы'),tr('Пишете координатору, что нужно сделать.')),arrow(),node(tr('Координатор'),tr('Чат в Claude Code, Codex или Cursor. Раздаёт задачи и собирает отчёты.')),arrow(),node(tr('Исполнители'),tr('Claude Code, Codex и Cursor на ваших компьютерах.')));
     box.append(el('h3',tr('Как это работает')),chain);
     const steps=el('div',undefined,'am-steps am-welcome-steps');
     let number=0;
@@ -810,16 +813,16 @@
     };
     const agents=(view.agents||[]).length;
     step(agents>0,tr('Агенты на этом компьютере'),agents?tr('Подключено: ')+agents:tr('Установите и подключите хотя бы одного'),agents?'':tr('Агенты'),()=>show('agents'));
-    const place=coordinatorPlace(),hasAny=(view.agents||[]).some(a=>(a.agent==='claude'||a.agent==='codex')&&a.cli),folderOk=view.coordinator_link?.state!=='no_folder';
-    const who=[coordinatorAgentOn('claude')&&'Claude Code',coordinatorAgentOn('codex')&&'Codex'].filter(Boolean).join(', ');
+    const place=coordinatorPlace(),hasAny=(view.agents||[]).some(a=>(['claude','codex','cursor'].includes(a.agent))&&a.cli),folderOk=view.coordinator_link?.state!=='no_folder';
+    const who=[coordinatorAgentOn('claude')&&'Claude Code',coordinatorAgentOn('codex')&&'Codex',coordinatorAgentOn('cursor')&&'Cursor'].filter(Boolean).join(', ');
     const failed=linkFailure?.project===view.project?linkFailure:null;
-    const codexBare=coordinatorAgentOn('codex')&&!coordinatorAgentOn('claude')&&(view.agents||[]).some(a=>a.agent==='codex'&&a.trust?.state==='not_trusted');
-    const coordSub=codexBare?tr('Записано. Codex прочитает его, когда папка станет доверенной: откройте её в Codex и подтвердите.'):place?(who?tr('Подключён: ')+who:tr('Подключён на этом компьютере')):(failed?tr('Не получилось: ')+failed.detail:tr('Подключите Claude Code или Codex координатором, чтобы давать задачи с этого компьютера'));
+    const codexBare=coordinatorAgentOn('codex')&&!coordinatorAgentOn('claude')&&!coordinatorAgentOn('cursor')&&(view.agents||[]).some(a=>a.agent==='codex'&&a.trust?.state==='not_trusted');
+    const coordSub=codexBare?tr('Записано. Codex прочитает его, когда папка станет доверенной: откройте её в Codex и подтвердите.'):place?(who?tr('Подключён: ')+who:tr('Подключён на этом компьютере')):(failed?tr('Не получилось: ')+failed.detail:tr('Подключите Claude Code, Codex или Cursor координатором, чтобы давать задачи с этого компьютера'));
     step(!!place&&!codexBare,tr('Координатор'),coordSub,place||codexBare?'':(hasAny&&folderOk&&!linkBusy)?tr('Подключить'):hasAny?tr('Проект'):tr('Агенты'),()=>(hasAny&&folderOk&&!linkBusy)?connectReadyCoordinators():show(hasAny?'project':'agents'));
     const peers=(server?.peers||[]).length;
     step(peers>0,tr('Другие компьютеры'),peers?tr('В сети: ')+peers:tr('Необязательно: объедините компьютеры через сервер'),peers?'':tr('Сервер'),()=>show('server'));
     box.append(el('h3',tr('С чего начать')),steps);
-    if(place&&!codexBare)box.append(el('p',tr('Откройте папку проекта в Claude Code или Codex, начните новый чат и спросите: «Каких агентов ты видишь?»'),'am-small am-muted'));
+    if(place&&!codexBare)box.append(el('p',tr('Откройте папку проекта в Claude Code, Codex или Cursor, начните новый чат и спросите: «Каких агентов ты видишь?»'),'am-small am-muted'));
     return box;
   }
   function renderThread(){
@@ -1153,6 +1156,11 @@
       const missing=!a&&found?.state==='not_found';
       const on=!!a&&!a.paused;
       const card=el('article',undefined,'am-card am-agent-card'+(on||!cli?'':' am-agent-off'));
+      card.dataset.provider=provider;
+      // Paths also identify the action handlers, even when the visible text is unchanged.
+      card.dataset.selection=JSON.stringify([cli,profile]);
+      const busy=checking.has(provider);
+      card.setAttribute('aria-busy',String(busy));
       const head=el('div',undefined,'am-agent-head');
       const heading=el('h3',undefined,'am-provider-heading');heading.append(providerIcon(provider),el('span',names[provider]));
       const sw=el('button',undefined,'am-switch');sw.type='button';sw.setAttribute('role','switch');sw.setAttribute('aria-checked',String(on));
@@ -1160,21 +1168,22 @@
       sw.title=on?tr('Messenger даёт задачи ')+names[provider]+tr(' на этом компьютере'):cli?tr('Включить: Messenger будет давать задачи ')+names[provider]:tr('Сначала установите ')+names[provider]+' CLI';
       sw.disabled=!a&&!cli;
       sw.addEventListener('click',async()=>{sw.disabled=true;try{await setAgentOn(provider,!on);}finally{sw.disabled=false;}});
-      head.append(heading,iconButton(tr('Проверить снова'),checkPath,false,()=>{if(cli)checkCard(provider);else loadDiscovery();}),iconButton(tr('Настройки'),gearPath,true,()=>openAgentSetup(provider)),sw);
+      const recheck=iconButton(busy?tr('Проверяем'):tr('Проверить снова'),checkPath,false,()=>{if(cli)checkCard(provider);else loadDiscovery();});
+      recheck.disabled=busy;
+      head.append(heading,recheck,iconButton(tr('Настройки'),gearPath,true,()=>openAgentSetup(provider)),sw);
       card.append(head);
       const steps=el('div',undefined,'am-steps');
       // mark: 'ok', 'no', a step number, or a node (the limit ring).
       const step=(mark,title,sub,action,tip)=>steps.append(stepRow(mark,title,sub,action,tip));
       const check=agentChecks.get(provider),auth=check?.authentication?.state;
-      const busy=checking.has(provider);
       // 1. The program.
       const programNote=rowNote.get(provider+':program');
       if(programNote)step(1,names[provider]+' CLI',programNote);
       else if(missing)step('no',names[provider]+tr(' CLI не установлен'),tr('Не найден на этом компьютере'),[tr('Установить'),()=>installAgent(provider)]);
       else if(cli){
         // T-139: a CLI newer than the one this release was checked with.
-        const newer=!busy&&check?.tested==='newer';
-        let sub=busy?tr('Проверяем'):check?.version?.value||'';
+        const newer=check?.tested==='newer';
+        let sub=check?.version?.value||(busy?tr('Проверяем'):'');
         if(newer){
           const box=document.createDocumentFragment(),mark=el('span',' · '+tr('не проверена'),'am-status-wait');
           mark.title=tr('Messenger проверен с версией ')+check.tested_version+tr('. Новая версия обычно работает, но если задачи этого агента начнут падать, причина может быть в ней.');
@@ -1187,7 +1196,7 @@
       const authNote=rowNote.get(provider+':auth');
       if(!cli)step(2,tr('Вход в аккаунт'),tr('После установки'));
       else if(authNote)step(2,tr('Вход в аккаунт'),authNote);
-      else if(busy)step(2,tr('Вход в аккаунт'),tr('Проверяем'));
+      else if(busy&&!check)step(2,tr('Вход в аккаунт'),tr('Проверяем'));
       else if(auth==='authenticated'){
         const method=check.authentication.value==='chatgpt'?tr('Аккаунт ChatGPT'):check.authentication.value==='api_key'?tr('Ключ API'):'';
         step('ok',tr('Вход выполнен'),method,[tr('Выйти'),()=>logoutFromCard(provider,cli,profile)]);
@@ -1199,8 +1208,6 @@
       if(a&&trust&&trust!=='trusted')step('no',tr('Не доверяет папке проекта'),trust==='not_trusted'?tr('Откройте папку в агенте и подтвердите доверие'):tr('Не удалось определить'),null,a.trust?.hint||tr('Откройте папку проекта в этой программе и подтвердите доверие.'));
       else if(a?.last_done)step('ok',tr('Работает с Messenger'),tr('Последняя задача ')+dayClock(a.last_done));
       else step(3,tr('Работает с Messenger'),missing?tr('Проверится после установки'):tr('Проверится на первой задаче'));
-      // The coordinator of the open project is this Claude in another role
-      // (T-152): its connection is a row of the Claude card.
       // 4. The limit the agent reported during its last task (T-044).
       const l=a?.limit,level=limitLevel(l);
       const today=a?.today_tokens?tr('сегодня ')+tokensText(a.today_tokens)+tr(' токенов'):'';
@@ -1213,6 +1220,7 @@
         step(limitRing(l),title,sub?sub[0].toUpperCase()+sub.slice(1):(l.observed_at?tr('По данным задачи в ')+clock(l.observed_at):''));
       }else step(limitRing(null),tr('Лимит'),today?today[0].toUpperCase()+today.slice(1):tr('Появится после задачи исполнителя на этом компьютере'));
       card.append(steps);
+      if(busy)steps.querySelectorAll('button').forEach(button=>button.disabled=true);
       const running=a?.project_running||0,todayTasks=a?.project_today||0;
       const tasks=el('button',undefined,'am-agent-tasks');tasks.type='button';
       if(running||todayTasks){
@@ -1225,7 +1233,13 @@
       }else{tasks.textContent=tr('Задачи');tasks.disabled=true;}
       card.append(tasks);cards.append(card);
     }
-    swapChildren(live,cards);
+    // A check on one provider must not replace the other providers' cards.
+    for(const [index,card] of [...cards.children].entries()){
+      const previous=live.children[index];
+      if(previous?.outerHTML===card.outerHTML)continue;
+      if(previous)previous.replaceWith(card);else live.append(card);
+    }
+    while(live.children.length>3)live.lastElementChild.remove();
     renderAccessBar();
   }
   // Another computer's agents, as its reports show them: view only (T-076).
@@ -1420,7 +1434,22 @@
     }catch(error){notice(el('p',tr('Окно не смогло показать данные: ')+error.message));}
     finally{refreshing=false;}
   }
-  async function loadDiscovery(){try{const d=await api('/api/discovery',8000);discovery=d.agents||[];discoveryLoaded=true;renderAgents();autoCheck();}catch(_){}}
+  let discovering=false;
+  async function loadDiscovery(){
+    if(discovering)return;discovering=true;
+    const previous=new Map(['claude','codex','cursor'].map(provider=>[provider,JSON.stringify(agentPaths(provider))]));
+    try{
+      const d=await api('/api/discovery',8000);discovery=d.agents||[];discoveryLoaded=true;
+      for(const provider of ['claude','codex','cursor']){
+        const selection=agentPaths(provider);
+        if(selection.cli&&installOpened.has(provider)){installOpened.delete(provider);rowNote.delete(provider+':program');}
+        if(autoChecked&&selection.cli&&previous.get(provider)!==JSON.stringify(selection)){
+          agentChecks.delete(provider);checkCard(provider,true);
+        }
+      }
+      renderAgents();autoCheck();
+    }catch(_){}finally{discovering=false;}
+  }
   function show(next){
     tab=next;root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab);renderNotices();
     root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
@@ -1733,6 +1762,7 @@
     const text=el('div',undefined,'am-step-text'+(typeof mark==='number'?' am-step-later':''));
     const line=el('p',undefined,'am-step-title');
     if(title instanceof Node)line.append(title);else line.textContent=title;
+    line.title=line.textContent;
     if(tip){const q=el('span','?','am-q');q.title=tip;q.setAttribute('aria-label',tip);q.tabIndex=0;line.append(q);}
     text.append(line);
     if(sub instanceof Node){const s=el('p',undefined,'am-step-sub');s.append(sub);text.append(s);}
@@ -1795,13 +1825,14 @@
   // A row note shows for a while, then the row offers its action again.
   function noteRow(key,text,ms){rowNote.set(key,text);renderAgents();if(ms)setTimeout(()=>{if(rowNote.get(key)===text){rowNote.delete(key);renderAgents();}},ms);}
   async function installAgent(provider){
+    installOpened.set(provider,Date.now());
     noteRow(provider+':program',tr('Открываем страницу…'));
     try{await postAPI('/api/agent-install',{provider});noteRow(provider+':program',tr('Страница установки открыта'),8000);}
-    catch(error){rowNote.delete(provider+':program');renderAgents();showError(error);}
+    catch(error){installOpened.delete(provider);rowNote.delete(provider+':program');renderAgents();showError(error);}
   }
   // After «Войти» or «Выйти» the window checks the agent again when the owner
   // comes back to it, so the card shows the new state without a click.
-  const authOpened=new Map();
+  const authOpened=new Map(),installOpened=new Map();
   async function loginFromCard(provider,cli,environment){
     noteRow(provider+':auth',tr('Открываем вход…'));
     try{await postAPI('/api/agent-login',{provider,cli,environment});authOpened.set(provider,Date.now());noteRow(provider+':auth',tr('Окно входа открыто'),15000);}
@@ -1813,7 +1844,9 @@
     });
   }
   window.addEventListener('focus',()=>{
-    for(const [provider,at] of authOpened){if(Date.now()-at<10*60*1000&&!checking.has(provider))checkCard(provider,true);else authOpened.delete(provider);}
+    for(const [provider,at] of authOpened){if(Date.now()-at>=10*60*1000)authOpened.delete(provider);else if(!checking.has(provider))checkCard(provider,true);}
+    for(const [provider,at] of installOpened){if(Date.now()-at>=10*60*1000)installOpened.delete(provider);}
+    if(installOpened.size)loadDiscovery();
   });
 
   let setupProvider='';
@@ -1850,9 +1883,11 @@
   // A card check needs only the program: an empty profile is the agent's
   // standard one (T-056). A quiet check shows no error; the card offers «Войти».
   async function checkCard(provider,quiet){
+    if(checking.has(provider))return;
     const selection=agentPaths(provider);if(!selection.cli)return;
+    rowNote.delete(provider+':auth');
     checking.add(provider);renderAgents();
-    try{rowNote.delete(provider+':auth');await runCheck(selection);}catch(error){agentChecks.delete(provider);if(!quiet)showError(error);}
+    try{await runCheck(selection);}catch(error){agentChecks.set(provider,{authentication:{state:'unknown'}});if(!quiet)showError(error);}
     finally{checking.delete(provider);renderAgents();}
   }
   // The window checks the agents by itself once it knows them, so the cards

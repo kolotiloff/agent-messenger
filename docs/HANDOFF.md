@@ -8,6 +8,14 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-14 by Codex.
+
+- 0.69 is released (owner's confirmation); the T-160 "not released" note below is historical.
+- On `codex/t154-stable-agent-cards`, not released: T-154 stable agent rows and action slots, previous results kept while checking, unchanged provider cards retained, discovery and a diagnostic after returning from installation. Browser checks with fictional data passed at 1100/600 px in both themes (56 px rows, 28 px actions); native shell and real installation not exercised.
+- T-161 (D-124): the Codex coordinator's background watch did receive events but did not resume the idle chat (read-only review of the reported chat). Removed the unconditional wake-up promise: Claude Code keeps background notifications; Codex/unknown clients get active-wait instructions, also in tool results. This does not add idle-chat notifications. Real-model acceptance remains outstanding.
+- T-162 (D-125): Cursor is now offered as a coordinator on «Проект» and the welcome page. Connection writes the project's `.cursor/mcp.json` entry, preserves other settings and requires the owner's normal Cursor approval. Active-wait guidance is covered by protocol question/report tests. No real Cursor chat acceptance yet.
+- Verified: macOS `scripts/check.sh`, binary/test cross-compilation for macOS arm64/amd64, Linux amd64 and Windows amd64, and browser fixtures. See the [T-154/T-161/T-162 report](reports/2026-11-14-t154-t161.md) and task entries. Next planned feature: T-153, then T-155 and T-156.
+
 Updated 2026-11-14 by Cursor.
 
 - T-160 (D-123, PR #100, `4c8af3e`): Codex can be the project's coordinator. The «Проект» row connects Claude as before and writes only `mcp_servers.messenger` into the folder's `.codex/config.toml` for Codex. Not released. Not checked with a real Codex chat.
