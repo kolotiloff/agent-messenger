@@ -281,6 +281,20 @@ type rosterResponse struct {
 	Peers    []Peer `json:"peers"`
 }
 
+// publishable keeps a report the server can store. A long or unreadable
+// model list must not drop the whole report: the names that fit are sent.
+func (p *Presence) publishable() {
+	for i := range p.Agents {
+		var models []string
+		for _, m := range p.Agents[i].Models {
+			if validModelSelection(m) && len(models) < maxPresenceModels {
+				models = append(models, m)
+			}
+		}
+		p.Agents[i].Models = models
+	}
+}
+
 func (p Presence) valid() bool {
 	if len(p.Agents) > maxPresenceAgents || len(p.Coordinator) > 64 || (p.Name != "" && !validDeviceName(p.Name)) || !p.Ready.valid() || !p.Usage.valid() || len(p.UsageSeen) > maxUsageSeen || (p.Version != "" && !versionName.MatchString(p.Version)) || (p.Computer != "" && !versionName.MatchString(p.Computer)) || !p.Outbox.valid() || !p.Workers.valid() {
 		return false

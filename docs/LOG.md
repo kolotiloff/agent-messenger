@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-14 — Cursor (T-173, T-174)
+
+- Ноут-Linux on 0.72: the model lists were in its settings and a task with an effort started, but `list_agents` elsewhere showed them empty. The journal also repeated that a mailbox to a computer not in the project was full. Presence no longer drops the model names because another field was refused, and mail to a computer that has left is retired after the reconnect grace. A listed computer's full mailbox still waits. Not checked on the owner's computers.
+
 ## 2026-11-14 — Codex (T-168–T-171 release 0.72)
 
 - Released [0.72](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.72), source `f3bd2d45e9f18890419e09996bb7a97bb3b009bd`, [run](https://github.com/kolotiloff/agent-messenger/actions/runs/43600787465). PR #105 and PR #106 checks passed; exact checked #106 head `baf18d23021164c4babc4b96f381c1a15a5f6543`.
