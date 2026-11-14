@@ -388,9 +388,12 @@
   // The update under way for a card's icon: asked for or updating.
   function updateLine(peer){
     const u=(server?.updates||[]).find(x=>x.computer===peer.id);
-    if(!u||u.stale||!(Date.now()-Date.parse(u.updated_at)<24*3600*1000))return null;
-    if(u.state==='waiting')return [tr('Обновление запрошено…'),'am-status-wait'];
-    if(u.state==='updating')return [tr('Обновляется…'),'am-status-run'];
+    if(u&&!u.stale&&Date.now()-Date.parse(u.updated_at)<24*3600*1000){
+      if(u.state==='waiting')return [tr('Обновление запрошено…'),'am-status-wait'];
+      if(u.state==='queued')return [tr('ждёт обновления'),'am-status-wait'];
+      if(u.state==='updating')return [tr('Обновляется…'),'am-status-run'];
+    }
+    if(peer.update_pending)return [tr('ждёт обновления'),'am-status-wait'];
     return null;
   }
   // T-128: notices above the reply box. A good one fades after a few seconds
@@ -413,16 +416,19 @@
     // T-129: the background program was started inside an agent's sandbox.
     if(clientInfo?.sandbox)addNotice('sandbox-'+(clientInfo.client_version||''),'bad',tr('Messenger запущен из песочницы агента'),tr('Исполнители унаследуют её: без сети и без части папок, даже с «Любыми командами». Закройте Messenger полностью и откройте его снова сами, не из агента.'));
     const names=Object.fromEntries((server?.peers||[]).map(p=>[p.id,p.name]));
-    for(const u of server?.updates||[]){
-      const at=Date.parse(u.updated_at),name=names[u.computer]||tr('Компьютер');
-      if(!(Date.now()-at<24*3600*1000))continue;
+    const showUpdate=(u,name)=>{
+      const at=Date.parse(u.updated_at);
+      if(!(Date.now()-at<24*3600*1000))return;
       const key='update-'+u.request_id+'-'+(u.stale?'stale':u.state);
       if(u.stale)addNotice(key,'bad',name+tr(' не ответил об обновлении'),tr('Проверьте, что программа там запущена, и попросите ещё раз.'));
       else if(u.state==='done'&&at>=noticeSince-60000){
         const same=/последн/i.test(u.text||'');
         addNotice(key,same?'info':'good',same?name+tr(': уже последняя версия'):name+tr(' обновлён до ')+versionName(u.version||''),same?'':u.text||'');
-      }else if(u.state==='refused'||u.state==='failed')addNotice(key,'bad',name+tr(' не обновлён'),capital(u.text||''));
-    }
+      }else if(u.state==='queued'&&at>=noticeSince-60000)addNotice(key,'info',name+tr(' ждёт обновления'),u.text||tr('Программа обновится, когда задачи закончатся; до тех пор компьютер не берёт новых задач.'));
+      else if(u.state==='refused'||u.state==='failed')addNotice(key,'bad',name+tr(' не обновлён'),capital(u.text||''));
+    };
+    for(const u of server?.updates||[])showUpdate(u,names[u.computer]||tr('Компьютер'));
+    if(view?.local_update)showUpdate(view.local_update,view.computer_name||tr('Этот компьютер'));
   }
   const noticeIcons={good:'<path d="M8 12.5l2.7 2.7L16 9.8"/>',info:'<path d="M12 11v5M12 8h.01"/>',bad:'<path d="M12 7.5v5.5M12 16.5h.01"/>'};
   function renderNotices(){
@@ -490,7 +496,13 @@
     const live=$('machines'),box=live.cloneNode(false);
     const machine=el('div',undefined,'am-machine-card');machine.setAttribute('aria-current','true');pickable(machine,'local');
     const head=el('div',undefined,'am-machine-name');head.append(el('span',view?.computer_name||tr('Этот компьютер')));
-    const dot=el('span',undefined,'am-dot'+(online?' online':''));dot.title=online?tr('На связи'):tr('Нет связи');head.append(dot);machine.append(head);
+    const dot=el('span',undefined,'am-dot'+(online?' online':''));dot.title=online?tr('На связи'):tr('Нет связи');head.append(dot);
+    if(view?.pending_update==='updating'||view?.pending_update==='queued'){
+      const tip=view.pending_update==='updating'?tr('Обновляется…'):tr('ждёт обновления');
+      const b=el('span',undefined,'am-update-icon am-peer-update am-update-downloading');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);appendUpdateGlyphs(b);
+      head.append(b);
+    }
+    machine.append(head);
     const lines=agentLines(view?.agents||[],view?.coordinator?.connected?(view.coordinator.client||''):null,online);
     if(!lines.children.length)lines.append(el('p',online?tr('Агенты не подключены'):tr('Нет связи'),'am-small am-muted'));
     machine.append(lines);box.append(machine);
@@ -512,7 +524,7 @@
       if(busy){
         // While an update is asked for or under way, the icon stays, dimmed
         // and pulsing, and says so on hover (owner).
-        const tip=busy[1]==='am-status-run'?tr('Обновляется…'):tr('Обновление уже запрошено');
+        const tip=busy[0];
         const b=el('span',undefined,'am-update-icon am-peer-update am-update-downloading');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);appendUpdateGlyphs(b);
         name.append(b);
       }else if(fresh&&peer.version&&versionOlder(peer.version,newestVersion())){
@@ -745,9 +757,9 @@
   // command under it. Agents are set up once; the link is per folder.
   function renderCoordinatorRow(){
     const box=$('coord-box');if(!box||!view?.project)return;
-    const tip=tr('Координатор — ваш чат в Claude Code, Codex или Cursor, открытый в папке проекта. Он раздаёт задачи исполнителям и собирает отчёты. Новый проект подключается сам; кнопка нужна, если это не получилось.');
-    const heading=el('p',undefined,'am-small');heading.append(el('span',tr('Координатор')));
-    const q=el('span','?','am-q');q.title=tip;q.setAttribute('aria-label',tip);q.tabIndex=0;heading.append(q);
+    const heading=el('div',undefined,'am-coord-head');
+    heading.append(el('h3',tr('MCP-плагин')));
+    heading.append(el('p',tr('Подключение к графическому редактору'),'am-small am-muted'));
     const steps=el('div',undefined,'am-steps');
     steps.append(coordinatorAgentRow('claude',view.coordinator_link||{state:'unknown'}));
     steps.append(coordinatorAgentRow('codex',view.codex_link||{state:'unknown'}));

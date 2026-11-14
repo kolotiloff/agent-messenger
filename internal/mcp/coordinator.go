@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -54,6 +55,8 @@ var (
 	coordinatorProgress = 60 * time.Second
 	// coordinatorLogWait is how long get_log waits for the other computer.
 	coordinatorLogWait = 20 * time.Second
+	// coordinatorOS is this computer's system, so tests can ask as Linux.
+	coordinatorOS = runtime.GOOS
 )
 
 // T-161: a background shell session is not a promise to resume an idle chat.
@@ -92,6 +95,7 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - Work reaches the project only through the worker's own commit; workers are told to commit before they report. A report is a short message (at most 20000 characters reach you), so never ask for the full text of an audit or a long document instead of a commit: it will not fit, and the work still is not in the project. A worker that could not commit (files locked by another agent, its copy behind the server) asks you instead of finishing, and its task stays open. Decide what lets the commit happen: if another task holds the files, you may answer later, after that task is done, telling the worker to update and commit; otherwise tell it what to do or tell the owner. Do not tell it to finish without committing: a finished task of another computer cannot be continued.
 - Feedback about Messenger itself: whenever Messenger does something wrong or unclear (an error you cannot explain, a lost or late event, a refusal that makes no sense, a missing feature you needed, or the owner complains about the program), record it at once with report_feedback: what happened, what you expected, the task and computer. Do not wait to be asked. When the owner asks for the feedback, the remarks or the journal, call export_feedback and give them the file's path; it holds the owner's remarks from the window (the bug icon) and yours.
 - get_log reads the end of another computer's Messenger journal, for debugging Messenger itself (a task that never arrived, a refusal you cannot explain): each worker run launched and ended with its exit and error, and each message sent to or received from another computer with its kind and task id, or why it was not sent. That computer answers only if its owner turned on «Отдавать журнал по сети»; otherwise the reply says so. Session ids, codes and keys are removed. If no answer came in time, call get_log again with request_id. Do not use it to watch workers: wait does that.
+- update_messenger asks a Windows or Linux computer (this one, or another of the network from list_agents) to install the newest Messenger, the program only. Running tasks are never interrupted: the computer answers queued, takes no new tasks, and installs as soon as none runs. A Mac answers that its update needs the button in its app. The result comes as a messenger_update event; nothing is retried. Do not call it again for the same computer while it is queued or updating. list_agents shows update_pending on a computer that is waiting.
 - full_access on a task of this computer means its worker may run any command (the owner's «Любые команды» switch on «Агенты»). Without it a command that needs approval is refused, and nobody can approve it: tell the owner to turn that switch on and then continue the task. For tasks from other computers it is «И для задач с других компьютеров» under it on «Агенты».
 - contact_lost on an open task of another computer means this computer has no contact with it (offline, left the network, or the network was made again); computer_last_seen is when it last reported. Its outcome there is unknown: do not start it again by yourself; tell the owner, and when that computer is back the task goes on reporting.
 - To tell a working task from a stuck one, call tasks: an open task shows the worker's last action and when it was (last_activity, last_activity_at; for another computer's task, the last progress line it forwarded). A long quiet time is a reason to tell the owner, not to cancel or start the task again by yourself. tokens is what the task used so far. Every report and failure ends with a «[Messenger] Tokens of this task so far» line (new input, cache write, cache read, output); use it to compare costs instead of asking the worker to add up its log.
@@ -125,7 +129,7 @@ type coordinator struct {
 }
 
 // acting tools make this chat the project's coordinator (T-090).
-var actingTools = map[string]bool{"wait": true, "start_task": true, "answer": true, "continue_task": true, "note_task": true, "cancel": true}
+var actingTools = map[string]bool{"wait": true, "start_task": true, "answer": true, "continue_task": true, "note_task": true, "cancel": true, "update_messenger": true}
 
 // claim makes this chat the active coordinator of its project.
 func (c *coordinator) claim() {
@@ -398,6 +402,10 @@ func coordinatorTools() []map[string]any {
 				"lines":      map[string]any{"type": "integer", "minimum": 1, "maximum": core.MaxLogLines, "description": fmt.Sprintf("how many last lines; default %d", core.DefaultLogLines)},
 				"request_id": str("request_id from an earlier get_log that had no answer yet"),
 			})},
+		{"name": "update_messenger", "description": "Ask a Windows or Linux computer to install the newest Messenger (the program only) as soon as no task runs there. Until then it takes no new tasks. A Mac answers that its update needs the button in its app. The result comes as a messenger_update event; nothing is retried.",
+			"inputSchema": obj(map[string]any{
+				"computer": str("computer id from list_agents: this computer (the default) or another computer of the network"),
+			})},
 	}
 }
 
@@ -604,8 +612,49 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 			return nil, err
 		}
 		return c.getLog(ctx, a.Computer, a.Lines, a.RequestID)
+	case "update_messenger":
+		var a struct {
+			Computer string `json:"computer"`
+		}
+		if err := strict(&a); err != nil {
+			return nil, err
+		}
+		return c.updateMessenger(a.Computer)
 	}
 	return nil, fmt.Errorf("unknown tool %q", p.Name)
+}
+
+func (c *coordinator) updateMessenger(computer string) (any, error) {
+	self, err := c.store.ComputerID()
+	if err != nil {
+		return nil, err
+	}
+	if computer == "" {
+		computer = self
+	}
+	if computer == self && coordinatorOS == "darwin" {
+		return map[string]any{
+			"computer": computer,
+			"state":    core.UpdateRefused,
+			"text":     "This Mac updates with the button in its app: open Messenger here and press «Обновиться». Nothing is retried.",
+			"next":     "Tell the owner. Do not call update_messenger again for this computer.",
+		}, nil
+	}
+	id, err := c.store.RequestNetUpdate(computer, c.project)
+	if err != nil {
+		return nil, err
+	}
+	state := core.UpdateWaiting
+	if computer == self {
+		state = core.UpdateQueued
+	}
+	return map[string]any{
+		"request_id": id,
+		"computer":   computer,
+		"state":      state,
+		"next":       "The computer installs the newest Messenger when no task runs there; until then it takes no new tasks. Call wait for the messenger_update event. Nothing is retried.",
+		"waiting":    c.waitingInstructions(),
+	}, nil
 }
 
 // getLog asks another computer for its log, or looks up an earlier request,

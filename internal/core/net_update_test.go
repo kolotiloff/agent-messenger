@@ -26,7 +26,7 @@ func newUpdatePair(t *testing.T) *netPair {
 	t.Helper()
 	p := newNetPair(t)
 	// An older computer reports no version and is not asked.
-	if _, err := p.a.st.RequestNetUpdate("dev-b"); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "вручную") {
+	if _, err := p.a.st.RequestNetUpdate("dev-b", ""); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "вручную") {
 		t.Fatalf("computer without a version: %v", err)
 	}
 	if err := p.a.st.SetNetwork(testBroker, HostPeerID, []NetPeer{{ID: "dev-b", Name: "Ноутбук", Age: 1, Version: "0.0.0-preview.56"}}); err != nil {
@@ -37,10 +37,10 @@ func newUpdatePair(t *testing.T) *netPair {
 
 func TestNetUpdateRequestAndReplies(t *testing.T) {
 	p := newUpdatePair(t)
-	if _, err := p.a.st.RequestNetUpdate("dev-x"); !errors.Is(err, ErrRejected) {
+	if _, err := p.a.st.RequestNetUpdate("dev-x", ""); !errors.Is(err, ErrRejected) {
 		t.Fatalf("unknown computer: %v", err)
 	}
-	id, err := p.a.st.RequestNetUpdate("dev-b")
+	id, err := p.a.st.RequestNetUpdate("dev-b", "")
 	if err != nil || !netRef.MatchString(id) {
 		t.Fatalf("request %q %v", id, err)
 	}
@@ -48,7 +48,7 @@ func TestNetUpdateRequestAndReplies(t *testing.T) {
 		t.Fatalf("waiting %+v", u)
 	}
 	// A second request waits for the answer to the first.
-	if _, err := p.a.st.RequestNetUpdate("dev-b"); !errors.Is(err, ErrRejected) {
+	if _, err := p.a.st.RequestNetUpdate("dev-b", ""); !errors.Is(err, ErrRejected) {
 		t.Fatalf("duplicate request: %v", err)
 	}
 	p.carry(t, true)
@@ -81,7 +81,7 @@ func TestNetUpdateRequestAndReplies(t *testing.T) {
 	}
 
 	// A refusal comes back with its reason; a new request may follow.
-	id2, err := p.a.st.RequestNetUpdate("dev-b")
+	id2, err := p.a.st.RequestNetUpdate("dev-b", "")
 	if err != nil || id2 == id {
 		t.Fatalf("second request %q %v", id2, err)
 	}
@@ -97,7 +97,7 @@ func TestNetUpdateRequestAndReplies(t *testing.T) {
 
 	// Replies from another computer, for an old request or with an unknown
 	// state change nothing.
-	id3, _ := p.a.st.RequestNetUpdate("dev-b")
+	id3, _ := p.a.st.RequestNetUpdate("dev-b", "")
 	for i, m := range []NetIncoming{
 		{From: "dev-z", Body: []byte(`{"kind":"update","task":"` + id3 + `","state":"done"}`)},
 		{From: "dev-b", Body: []byte(`{"kind":"update","task":"` + id + `","state":"failed"}`)},
@@ -119,7 +119,7 @@ func TestNetUpdateRequestAndReplies(t *testing.T) {
 	if u := netUpdate(t, p.a.st, "dev-b"); !u.Stale {
 		t.Fatalf("not stale %+v", u)
 	}
-	if _, err := p.a.st.RequestNetUpdate("dev-b"); err != nil {
+	if _, err := p.a.st.RequestNetUpdate("dev-b", ""); err != nil {
 		t.Fatalf("request after a stale one: %v", err)
 	}
 }
@@ -130,13 +130,13 @@ func TestNetUpdateRefusals(t *testing.T) {
 	if err := p.a.st.SetNetwork(testBroker, HostPeerID, []NetPeer{{ID: "dev-b", Name: "Ноутбук", Age: PeerFresh + 10, Version: "0.0.0-preview.56"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := p.a.st.RequestNetUpdate("dev-b"); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "не на связи") {
+	if _, err := p.a.st.RequestNetUpdate("dev-b", ""); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "не на связи") {
 		t.Fatalf("offline computer: %v", err)
 	}
 	if err := p.a.st.SetNetwork("", "", nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := p.a.st.RequestNetUpdate("dev-b"); !errors.Is(err, ErrRejected) {
+	if _, err := p.a.st.RequestNetUpdate("dev-b", ""); !errors.Is(err, ErrRejected) {
 		t.Fatalf("no network: %v", err)
 	}
 	// A final result with a bad id or state is refused; one for another
@@ -156,7 +156,7 @@ func TestNetUpdateRefusals(t *testing.T) {
 
 func TestNetUpdateUndeliverable(t *testing.T) {
 	p := newUpdatePair(t)
-	id, _ := p.a.st.RequestNetUpdate("dev-b")
+	id, _ := p.a.st.RequestNetUpdate("dev-b", "")
 	pending, _ := p.a.st.NetPending(testBroker, 10)
 	if len(pending) != 1 {
 		t.Fatalf("pending %+v", pending)
@@ -178,11 +178,92 @@ func TestActiveWork(t *testing.T) {
 	if n, _ := f.st.ActiveWork(); n != 1 {
 		t.Fatalf("running task not counted: %d", n)
 	}
+	if n, _ := f.st.LiveWork(); n != 1 {
+		t.Fatalf("running task not live: %d", n)
+	}
 	if _, err := f.st.CancelTask(id); err != nil {
 		t.Fatal(err)
 	}
 	if n, _ := f.st.ActiveWork(); n != 0 {
 		t.Fatalf("cancelled task counted: %d", n)
+	}
+}
+
+// T-155: an interrupted or blocked task stays in ActiveWork but does not
+// hold an update. A queued update of this computer refuses a new start.
+func TestLiveWorkAndLocalUpdate(t *testing.T) {
+	f := newTaskFixture(t)
+	id := f.start(t, "op-1", "claude", "работа")
+	f.launch(t, id, f.sessionOf(t, id))
+	interrupt(t, f.st, id)
+	if n, _ := f.st.ActiveWork(); n != 1 {
+		t.Fatalf("interrupted not active: %d", n)
+	}
+	if n, _ := f.st.LiveWork(); n != 0 {
+		t.Fatalf("interrupted held the update: %d", n)
+	}
+
+	upd, err := f.st.RequestNetUpdate("", "Game")
+	if err != nil || upd == "" {
+		t.Fatalf("local update %q %v", upd, err)
+	}
+	if pending, err := f.st.HasPendingUpdate(); err != nil || !pending {
+		t.Fatalf("pending %v %v", pending, err)
+	}
+	if u, ok, err := f.st.LocalUpdate(); err != nil || !ok || u.State != UpdateQueued || u.ID != upd {
+		t.Fatalf("local row %+v %v %v", u, ok, err)
+	}
+	if _, _, err := f.st.StartTask(StartTaskRequest{Project: "Game", OpID: "op-new", Provider: "codex", Text: "ещё"}); err == nil || !strings.Contains(err.Error(), "update") {
+		t.Fatalf("new task accepted: %v", err)
+	}
+	if _, err := f.st.RequestNetUpdate("", "Game"); !errors.Is(err, ErrRejected) {
+		t.Fatalf("duplicate local update: %v", err)
+	}
+	events, _, err := f.st.TaskEvents("Game", AudienceCoordinator, 0, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, e := range events {
+		if e.Kind == MessengerUpdateEvent && e.TaskID == "" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("no messenger_update %+v", events)
+	}
+	out, err := f.st.ProjectAgents("Game")
+	if err != nil {
+		t.Fatal(err)
+	}
+	computers := out["computers"].([]ComputerSummary)
+	if len(computers) == 0 || !computers[0].This || !computers[0].UpdatePending {
+		t.Fatalf("this computer not waiting %+v", computers)
+	}
+	if _, ok := out["idle_computers"]; ok {
+		t.Fatalf("waiting computer is idle: %v", out["idle_computers"])
+	}
+	if err := f.st.FinishPendingUpdate(upd, UpdateDone, "0.0.0-preview.57", ""); err != nil {
+		t.Fatal(err)
+	}
+	if pending, _ := f.st.HasPendingUpdate(); pending {
+		t.Fatal("pending after done")
+	}
+	if u, ok, _ := f.st.LocalUpdate(); !ok || u.State != UpdateDone || u.Version != "0.0.0-preview.57" {
+		t.Fatalf("done row %+v", u)
+	}
+}
+
+func TestNetUpdateRefusesAWaitingPeer(t *testing.T) {
+	p := newUpdatePair(t)
+	if err := p.a.st.SetNetwork(testBroker, HostPeerID, []NetPeer{{ID: "dev-b", Name: "Ноутбук", Age: 1, Version: "0.0.0-preview.56", UpdatePending: true, Agents: []NetAgent{{Agent: "codex"}}}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.a.st.RequestNetUpdate("dev-b", ""); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "ждёт") {
+		t.Fatalf("waiting peer: %v", err)
+	}
+	if _, _, err := p.a.st.StartTask(StartTaskRequest{Project: "Game", OpID: "op-b", Provider: "codex", Text: "x", Computer: "dev-b"}); err == nil || !strings.Contains(err.Error(), "update") {
+		t.Fatalf("remote start to waiting peer: %v", err)
 	}
 }
 
