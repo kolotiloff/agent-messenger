@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 )
 
@@ -146,13 +145,11 @@ func writeCodexConfig(path string, data, previous []byte) error {
 		os.Remove(tmp)
 		return err
 	}
+	// Rename replaces the file on every system (on Windows with
+	// MOVEFILE_REPLACE_EXISTING). When it fails, for example because Codex
+	// holds the file open, the owner's file stays as it was: it is never
+	// removed first, which could lose it if the second step failed too.
 	if err := os.Rename(tmp, path); err != nil {
-		if runtime.GOOS == "windows" {
-			_ = os.Remove(path)
-			if err2 := os.Rename(tmp, path); err2 == nil {
-				return nil
-			}
-		}
 		os.Remove(tmp)
 		return err
 	}
