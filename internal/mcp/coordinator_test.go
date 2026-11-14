@@ -232,7 +232,7 @@ func TestCoordinatorHandshakeAndTools(t *testing.T) {
 	for _, tool := range resp["result"].(map[string]any)["tools"].([]any) {
 		names = append(names, tool.(map[string]any)["name"].(string))
 	}
-	if strings.Join(names, ",") != "list_agents,start_task,wait,tasks,answer,continue_task,note_task,task_output,task_messages,cancel,report_feedback,export_feedback,get_log,update_messenger" {
+	if strings.Join(names, ",") != "list_agents,start_task,wait,tasks,answer,continue_task,note_task,task_images,task_output,task_messages,cancel,report_feedback,export_feedback,get_log,update_messenger" {
 		t.Fatalf("tools %v", names)
 	}
 	var agents struct {

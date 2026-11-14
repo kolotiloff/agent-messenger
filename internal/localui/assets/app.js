@@ -958,6 +958,44 @@
     catch(e){showError(e);}
     finally{stopping=false;$('task-stop').disabled=false;}
   }
+  // T-175: the worker's pictures. The page asks for them with its key and
+  // shows them from memory; a click opens one at full width.
+  const pictureURLs=new Map();
+  async function loadPicture(id){
+    if(pictureURLs.has(id))return pictureURLs.get(id);
+    try{
+      const response=await fetch('/api/task-image?id='+encodeURIComponent(id),{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(15000)});
+      if(!response.ok)return '';
+      const url=URL.createObjectURL(await response.blob());pictureURLs.set(id,url);return url;
+    }catch(_){return '';}
+  }
+  function pictures(list){
+    const box=el('div',undefined,'am-pictures');
+    for(const p of list){
+      const img=document.createElement('img');img.className='am-picture';img.alt=p.name;img.title=p.name;
+      img.addEventListener('click',()=>img.classList.toggle('am-picture-open'));
+      const known=pictureURLs.get(p.id);
+      if(known)img.src=known;else loadPicture(p.id).then(url=>{if(url)img.src=url;});
+      box.append(img);
+    }
+    return box;
+  }
+  // T-172: a run of this computer whose worker went quiet, or wrote its
+  // final message while its process kept running. Only described: the run
+  // ends on an observed exit, never on this (D-021, Q-030).
+  function quietLine(t){
+    const q=t.quiet;if(!q||t.state!=='running')return null;
+    if(q.final_at){
+      const p=el('p',undefined,'am-small');
+      p.append(el('span',tr('Итог написан в ')+clock(q.final_at)+tr(', но процесс исполнителя не завершился'),'am-status-wait'));
+      const left=(q.processes||[]).map(x=>(x.name||'?')+' ('+x.pid+')'+(x.worker?tr(' — сам исполнитель'):''));
+      p.append(el('span','. '+(left.length?tr('Ещё работают: ')+left.join(', ')+'. ':'')+tr('Закройте лишнее на этом компьютере или остановите задачу.'),'am-muted'));
+      return p;
+    }
+    const at=Date.parse(q.output_at||'');if(!at)return null;
+    const minutes=Math.floor((Date.now()-at)/60000);if(minutes<10)return null;
+    return el('p',tr('Исполнитель ничего не пишет уже ')+minutes+tr(' мин.'),'am-small am-muted');
+  }
   function renderFeed(){
     const t=feed.task,thread=$('thread'),head=$('task-head');
     const signature=JSON.stringify(feed);if(signature===feedSignature)return;
@@ -971,6 +1009,7 @@
     if(statusTip)line.append(el('span',', '+statusTip,'am-muted'));
     if(t.usage){const used=el('span',', '+usageShort(t.usage),'am-muted');used.title=usageLong(t.usage);line.append(used);}
     title.append(line);
+    const quiet=quietLine(t);if(quiet)title.append(quiet);
     const headRow=el('div',undefined,'am-task-head-row');headRow.append(title);
     head.replaceChildren(headRow);
     const [coordProvider,coordLabel]=coordinatorName();
@@ -1015,6 +1054,7 @@
       if(it.kind==='tool'){addTool(workerGroup(it.at),it,index);continue;}
       if(it.kind==='report'||it.kind==='question'){
         const c=workerGroup(it.at);c.append(richText(it.text,'am-disposition'));
+        if(it.images?.length)c.append(pictures(it.images));
         if(!it.verified)c.append(delivery(tr('Не опубликовано: запуск не прошёл проверку'),'am-status-bad'));
         else if(it.kind==='report'&&it.audience==='held')c.append(delivery(tr('Промежуточный отчёт: исполнитель продолжает с вашим сообщением'),'am-status-wait'));
         else if(it.kind==='report')c.append(delivery(tr('Отчёт отправлен координатору, сессия закрыта'),'am-delivery-close'));

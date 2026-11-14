@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -230,6 +231,8 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	started = true
 	journal.Printf("run %s of %s: worker started, process %d", runID, task.ID, obs.PID)
 	live := s.tasks.started(runID, task.ID)
+	lingerDone := make(chan struct{})
+	defer close(lingerDone)
 
 	type readOutcome struct {
 		result adapters.TaskEventResult
@@ -240,12 +243,26 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 		var result adapters.TaskEventResult
 		reader := bufio.NewReader(stdout)
 		bound := false
+		var outputNoted time.Time
+		finalNoted := false
 		for {
 			line, err := reader.ReadBytes('\n')
 			if len(line) > 0 {
 				live.lastOutput.Store(time.Now().UnixNano())
+				if time.Since(outputNoted) >= core.RunOutputStep() {
+					outputNoted = time.Now()
+					_ = s.store.NoteRunOutput(runID)
+				}
 				model := result.Model
 				adapters.ParseTaskEvent(task.Provider, line, &result)
+				if result.Completed && !finalNoted {
+					// T-172: the worker's turn ended. If its process does not
+					// end too, say what keeps it; nothing is closed here.
+					finalNoted = true
+					_ = s.store.NoteRunOutput(runID)
+					_ = s.store.NoteRunFinal(runID)
+					go s.watchLinger(runID, task.ID, obs.PID, obs.PGID, lingerDone)
+				}
 				if result.Model != model {
 					_ = s.store.SetTaskRunModel(runID, result.Model)
 				}
@@ -466,4 +483,48 @@ func journalDetail(detail string, err error) string {
 		out += "; not recorded: " + err.Error()
 	}
 	return out
+}
+
+// taskLingerAfter is how long a worker may stay up after its final message
+// before its group's processes are recorded, and how often they are
+// recorded again while it stays (T-172).
+// It is atomic so tests can shorten it while watches run.
+var taskLingerAfter atomic.Int64
+
+func init() { taskLingerAfter.Store(int64(time.Minute)) }
+
+// watchLinger records which processes keep a run going after the worker's
+// final message. It only describes the run: by D-021 and Q-030 the run still
+// ends only on an observed exit and an empty group.
+func (s *Supervisor) watchLinger(runID, task string, pid, pgid int, done <-chan struct{}) {
+	logged := false
+	for {
+		select {
+		case <-done:
+			return
+		case <-time.After(time.Duration(taskLingerAfter.Load())):
+		}
+		members, err := platform.GroupMembers(pgid)
+		if err != nil {
+			continue
+		}
+		procs := make([]core.RunProcess, 0, len(members))
+		names := ""
+		for _, m := range members {
+			procs = append(procs, core.RunProcess{PID: m.PID, Name: m.Name, Worker: m.PID == pid})
+			if len(names) < 300 {
+				names += fmt.Sprintf(" %s(%d)", m.Name, m.PID)
+			}
+		}
+		select {
+		case <-done:
+			return
+		default:
+		}
+		_ = s.store.NoteRunProcesses(runID, procs)
+		if !logged {
+			logged = true
+			journal.Printf("run %s of %s: final message written, worker still running; group:%s", runID, task, names)
+		}
+	}
 }

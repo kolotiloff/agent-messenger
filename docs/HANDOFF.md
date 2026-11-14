@@ -8,6 +8,15 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-14 by Claude Code.
+
+- Next, in the owner's order: T-176 (planned tasks, large), then T-157 (needs the owner's answer on how the giver role moves), T-158 (newest release and its notes for the coordinator), T-159 (`continue_task` for an interrupted task of another computer). Branch `claude/great-knuth-52qwv1` has no PR yet; open one with the exact head SHA when the owner asks.
+- T-175 (D-134) on the same branch, not released: workers attach pictures to `report`/`ask`/`ask_owner` (`images`); the window shows them, the coordinator reads them with `task_images`; they travel to the computer that gave the task.
+- T-177 on the same branch, not released: one `network_lost` coordinator event per project when contact with every other computer is lost, `network_back` when it returns. Nothing else changes; server failover stays deferred.
+- T-172 on the same branch, not released: a run whose worker wrote its final message but did not end is described (time of the final message, processes of its group, quiet minutes) in the task header and in `tasks`; it is never closed on that (Q-030 still open).
+- PRs #108–#113 merged into `main` (conflicts were only in HANDOFF/LOG, plus the update icon in `app.js` and the presence fallback order in `broker/service.go`; full `check.sh` passed on the #113 merge).
+- T-178 on `claude/great-knuth-52qwv1`, not released: the Mac connecting screen shows only a spinner; retry, reason and note only after a failure; «Выбрать каталог данных…» only in the «Файл» menu. Not compiled here; Mac CI and the owner's Mac check it. Goes into the next release with other tweaks. (Its first commit was titled T-172 before #112 gave that ID to another task.)
+
 Updated 2026-11-14 by Cursor.
 
 - T-173 and T-174 on `cursor/t173-t174-models-mailbox-bfd1`, not released. Ноут-Linux on 0.72 kept its model lists; the Mac's `list_agents` showed them empty, and the journal repeated that the mailbox of a computer not in the project was full. A presence report now keeps the model names when some other field is refused, and messages to a computer that has left are retired after the reconnect grace. A listed computer's full mailbox is unchanged. Not checked between the owner's computers.

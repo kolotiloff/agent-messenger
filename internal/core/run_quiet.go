@@ -1,0 +1,99 @@
+package core
+
+import (
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"time"
+)
+
+// T-172: a worker can write its final message and still not end: a child
+// it left (a diff window, a server) or the CLI itself stays up and keeps the
+// process group. The run then stays running, notes wait for its end, and
+// nobody can tell why. These records only describe such a run. They never
+// close it: by D-021 a run ends only on an observed exit, an empty group and
+// a revoked receipt (Q-030 keeps the cautious answer).
+
+// RunProcess is one process of a running worker's group.
+type RunProcess struct {
+	PID  int    `json:"pid"`
+	Name string `json:"name"`
+	// Worker: the worker CLI process Messenger started.
+	Worker bool `json:"worker,omitempty"`
+}
+
+// RunQuiet is what is known about a running task's live run.
+type RunQuiet struct {
+	// OutputAt is when the worker last wrote output, to the nearest
+	// runOutputStep.
+	OutputAt string `json:"output_at,omitempty"`
+	// FinalAt is when the worker wrote its final message (its CLI said the
+	// turn ended) while its process kept running.
+	FinalAt string `json:"final_at,omitempty"`
+	// Processes are the processes of its group, seen at ProcessesAt, once
+	// the final message is out and the run still has not ended.
+	Processes   []RunProcess `json:"processes,omitempty"`
+	ProcessesAt string       `json:"processes_at,omitempty"`
+}
+
+// runOutputStep is how often the last-output time is written while a
+// worker writes, so a talkative worker does not write on every line.
+const runOutputStep = 30 * time.Second
+
+// maxRunProcesses bounds the recorded processes of one run.
+const maxRunProcesses = 16
+
+// RunOutputStep is runOutputStep for the supervisor.
+func RunOutputStep() time.Duration { return runOutputStep }
+
+// NoteRunOutput records that a running worker wrote output now.
+func (s *Store) NoteRunOutput(run string) error {
+	_, err := s.db.Exec(`UPDATE task_runs SET output_at=? WHERE id=? AND state='running'`, now(), run)
+	return err
+}
+
+// NoteRunFinal records the worker's final message, once per run.
+func (s *Store) NoteRunFinal(run string) error {
+	_, err := s.db.Exec(`UPDATE task_runs SET final_at=COALESCE(final_at,?) WHERE id=? AND state='running'`, now(), run)
+	return err
+}
+
+// NoteRunProcesses records the processes still in a running worker's group.
+func (s *Store) NoteRunProcesses(run string, procs []RunProcess) error {
+	if len(procs) > maxRunProcesses {
+		procs = procs[:maxRunProcesses]
+	}
+	clean := make([]RunProcess, 0, len(procs))
+	for _, p := range procs {
+		clean = append(clean, RunProcess{PID: p.PID, Name: clip(p.Name, 80), Worker: p.Worker})
+	}
+	raw, err := json.Marshal(clean)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`UPDATE task_runs SET processes=?, processes_at=? WHERE id=? AND state='running'`, string(raw), now(), run)
+	return err
+}
+
+// TaskRunQuiet describes the running run of a task of this computer, or nil
+// when it has none or nothing is recorded about it yet.
+func (s *Store) TaskRunQuiet(task string) (*RunQuiet, error) {
+	var output, final, procs, procsAt sql.NullString
+	err := s.db.QueryRow(`SELECT output_at,final_at,processes,processes_at FROM task_runs WHERE task_id=? AND state='running' ORDER BY ordinal DESC LIMIT 1`, task).Scan(&output, &final, &procs, &procsAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	q := &RunQuiet{OutputAt: output.String, FinalAt: final.String}
+	if final.String != "" && procs.String != "" {
+		if json.Unmarshal([]byte(procs.String), &q.Processes) == nil {
+			q.ProcessesAt = procsAt.String
+		}
+	}
+	if q.OutputAt == "" && q.FinalAt == "" {
+		return nil, nil
+	}
+	return q, nil
+}

@@ -3,6 +3,7 @@ package mcp
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -73,6 +74,7 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - A new chat starts from the current state, not from the history: first call tasks, which gives the open tasks, their open questions and the event cursor, then wait with after = that cursor. Never wait from 0 in a new chat: it replays every old event of the project. Agreements of an earlier coordinator chat that are not in the project's rules or files are not known here; ask the owner when it matters.
 - wait returns the events of this project's tasks after the cursor: a report, a question for you, a failure, an interruption, a block or a cancellation; with none, it blocks until one comes or timeout_seconds pass (default 60, at most 120). Always pass after = the cursor from the previous wait. When it returns events, act on them (answer questions with answer, tell the owner about reports). If it says more: true, more events are ready: call wait again at once with the new cursor.
 - start_task takes an optional model. Select the exact value from that agent's models in list_agents; model_options explains the standard selections and suggested work (small edits, everyday coding, complex work, hard investigations). This also applies to Unity: scope and difficulty decide, not the project label. A value such as gpt-6-astra[effort=high] is a Messenger selection: copy it unchanged into model; Messenger passes the base model and the separate CLI reasoning setting. Cursor uses its published CLI ID directly. These are configured options, not proof of account access; do not retry or switch automatically on rejection. Leave model out for the CLI default. Never invent IDs or append H/Medium to a model. Tell the owner when you chose a non-default model and why. Requires Messenger 0.72 on the executing computer for effort selections.
+- A report or question that ends with «[N picture(s) attached: read them with task_images]» has pictures from the worker (a screenshot, a chart): look at them with task_images before you judge the result.
 - A report is the worker's short summary. Its full last message is kept too: when a report or failure ends with «[Messenger] The worker's full final message has N characters», read it with task_output before asking the worker again; it is lost nowhere, even if the worker deleted its file.
 - answer answers a worker's question (pass question_id and a unique op_id); the worker continues in the same session.
 - A worker may ask the owner instead of you, when the project's rules allow it. wait then returns an owner_question event with the question, and owner_answered with the owner's answer once given; the task shows waiting_owner meanwhile. The owner usually answers in the window. When the owner answers it to you in this chat, or asks you to answer for them, call answer with that question; the window shows that you gave the answer. Do not answer it on your own.
@@ -82,8 +84,10 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - not_accepted: a task sent to another computer was not accepted within 5 minutes; the event gives the likely reason (offline, not in the network, an earlier network). Nothing is retried. When the reason says the computer is online and its agent is busy, the task may be running there with its replies lost: do not start it again; ask the owner to look at that computer. Tell the owner; cancelling it closes it here at once, and a new start_task is the owner's call.
 - idle_computers in a wait result names the computers where a task just stopped and nothing of this project runs now: give them the next task if the plan has one, or tell the owner.
 - idle_computers in list_agents names the online computers that can take this project's tasks and run no task now: the free machines, without waiting for an event.
+- network_lost: this computer lost contact with every other computer of the network at once (usually the server's computer stopped). Open tasks there may still run; their outcome is unknown until contact is back. Nothing is retried or cancelled. Do not start the same work again or cancel those tasks because of it; tell the owner, who can start Messenger on the server computer again. network_back follows once contact returns: then read tasks before deciding anything.
 - network_note in list_agents means this computer's client has not heard from the server for minutes: online and other computers' task states are out of date. Tell the owner; do not start or cancel tasks on other computers because of them.
 - worker on a running task of another computer says what that computer reported a few seconds ago: running means its worker process is alive, and worker_output_at is when it last wrote anything (a long gap means it is thinking or waiting on a long command, not that it is gone); none means no worker process runs the task there now, so it ended and its report or outcome is on the way or lost: wait a few minutes, then tell the owner. It is missing when that computer runs Messenger before 0.67.
+- final_message_at on a running task of this computer means its worker wrote its final message then, but its process has not ended, so the task is not finished: notes to it wait, and a lock it holds stays held. processes lists what still runs in its group (worker marks the worker CLI itself; anything else was left by the worker, such as a diff window or a server). Messenger never closes such a run by itself. Do not start the same work again; tell the owner which processes are left so they can close them on that computer, or cancel the task.
 - late_report: a task that was closed here (cancelled) sent its report or failure afterwards; the text follows. Its work may already be in the project, so check before giving the same work again; the task stays closed. Tell the owner.
 - outbox_delayed_minutes on a computer in list_agents, and computer_outbox_delayed_minutes on its tasks in tasks, mean that computer is in contact but has not been able to send its messages for that many minutes: its acceptances, progress and reports are late, not lost, and come when they go out. Do not cancel or start its tasks again because of it; tell the owner, who may restart Messenger on that computer.
 - answer_refused: the other computer did not accept your answer, and the question is open again (the task waits again); answer it once more if the reason allows, or tell the owner.
@@ -279,8 +283,13 @@ func serveCoordinatorIn(store *core.Store, project, watch, dataRoot string, in i
 					c.respond(id, coordinatorResult(err.Error(), true), nil)
 					return
 				}
-				raw, _ := json.Marshal(result)
-				reply := coordinatorResult(string(raw), false)
+				var reply map[string]any
+				if pics, ok := result.(imagesResult); ok {
+					reply = pics.reply()
+				} else {
+					raw, _ := json.Marshal(result)
+					reply = coordinatorResult(string(raw), false)
+				}
 				if !isWaitCall(params) {
 					if notice := c.unreadNotice(); notice != "" {
 						reply["content"] = append(reply["content"].([]map[string]any), map[string]any{"type": "text", "text": notice})
@@ -377,6 +386,10 @@ func coordinatorTools() []map[string]any {
 				"op_id":   str("unique id of this operation"),
 				"text":    map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxTaskText},
 			}, "task_id", "op_id", "text")},
+		{"name": "task_images", "description": "See the pictures a worker attached to its reports and questions (a screenshot, a chart), newest first, up to 4 per call. A report or question says when it has pictures. For a task of another computer, the pictures it sent along.",
+			"inputSchema": obj(map[string]any{
+				"task_id": str("task id"),
+			}, "task_id")},
 		{"name": "task_output", "description": "Read the worker's full last message of a task, kept whole even when its report is short (up to 60000 characters; 20000 per call). A report or failure says when there is more to read. run 0 or left out is the latest run; pass offset = next_offset to read on.",
 			"inputSchema": obj(map[string]any{
 				"task_id": str("task id"),
@@ -509,6 +522,17 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 			return nil, err
 		}
 		return map[string]any{"answered": true, "next": "The worker continues; call wait for its next report or question.", "waiting": c.waitingInstructions()}, nil
+	case "task_images":
+		var a struct {
+			TaskID string `json:"task_id"`
+		}
+		if err := strict(&a); err != nil {
+			return nil, err
+		}
+		if err := c.ownTask(a.TaskID); err != nil {
+			return nil, err
+		}
+		return c.taskImages(a.TaskID)
 	case "task_output":
 		var a struct {
 			TaskID string `json:"task_id"`
@@ -753,6 +777,11 @@ type coordinatorTask struct {
 	// and when it last wrote output, as that computer last reported.
 	Worker         string `json:"worker,omitempty"`
 	WorkerOutputAt string `json:"worker_output_at,omitempty"`
+	// T-172: on a running task of this computer, when its worker wrote its
+	// final message although its process has not ended, and the processes
+	// still in its group.
+	FinalMessageAt string            `json:"final_message_at,omitempty"`
+	Processes      []core.RunProcess `json:"processes,omitempty"`
 }
 
 // closedTaskStates are left out of the default tasks list (T-032).
@@ -832,6 +861,16 @@ func (c *coordinator) tasks(state string, limit int, ifVersion string) (any, err
 			if r != nil && !r.From && !r.Lost {
 				item.OutboxDelayed = r.Delayed
 				item.Worker, item.WorkerOutputAt = r.Worker, r.WorkerOutputAt
+			}
+			if r == nil && t.State == "running" {
+				q, err := c.store.TaskRunQuiet(t.ID)
+				if err != nil {
+					return nil, err
+				}
+				if q != nil {
+					item.Worker, item.WorkerOutputAt = "running", q.OutputAt
+					item.FinalMessageAt, item.Processes = q.FinalAt, q.Processes
+				}
 			}
 		}
 		out = append(out, item)
@@ -1048,4 +1087,38 @@ func (c *coordinator) taskMessages(id string, last int) (any, error) {
 		result["remote"] = "This task ran on another computer: its worker's own texts stay there; these are the lines it forwarded."
 	}
 	return result, nil
+}
+
+// imagesResult is a tool result with pictures (T-175): MCP gives them to
+// the coordinator's model as images, not as text.
+type imagesResult struct {
+	info   map[string]any
+	images []map[string]any
+}
+
+func (r imagesResult) reply() map[string]any {
+	raw, _ := json.Marshal(r.info)
+	content := []map[string]any{{"type": "text", "text": string(raw)}}
+	content = append(content, r.images...)
+	return map[string]any{"content": content, "isError": false}
+}
+
+// taskImages returns a task's latest pictures.
+func (c *coordinator) taskImages(task string) (any, error) {
+	list, err := c.store.TaskImages(task, core.MaxTaskImages)
+	if err != nil {
+		return nil, err
+	}
+	out := imagesResult{info: map[string]any{"task_id": task, "pictures": list}}
+	if len(list) == 0 {
+		out.info["note"] = "this task has no pictures"
+	}
+	for _, img := range list {
+		kind, data, err := c.store.TaskImageData(img.ID)
+		if err != nil {
+			return nil, err
+		}
+		out.images = append(out.images, map[string]any{"type": "image", "mimeType": kind, "data": base64.StdEncoding.EncodeToString(data)})
+	}
+	return out, nil
 }

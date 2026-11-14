@@ -239,6 +239,23 @@ func dispatch(handler Handler, request Request) Response {
 			return Response{Error: "timeline unavailable"}
 		}
 		return Response{OK: true, Timeline: raw}
+	case "task-image":
+		// T-175: a worker's picture for the window.
+		reader, ok := handler.(interface {
+			TaskImage(string) (any, error)
+		})
+		if !ok {
+			return Response{Error: "pictures unsupported; update the background client"}
+		}
+		value, err := reader.TaskImage(request.MessageID)
+		if err != nil {
+			return Response{Error: err.Error()}
+		}
+		raw, err := json.Marshal(value)
+		if err != nil {
+			return Response{Error: "picture unavailable"}
+		}
+		return Response{OK: true, Overview: raw}
 	case "window-view", "task-feed":
 		reader, ok := handler.(interface {
 			WindowView(string) (any, error)

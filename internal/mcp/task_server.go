@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/kolotiloff/agent-messenger/internal/adapters"
 	"github.com/kolotiloff/agent-messenger/internal/core"
@@ -21,9 +23,11 @@ const taskInstructions = "Agent Messenger worker tools for one task. Call read_t
 	"End the run with exactly one of report, ask or ask_owner, then stop."
 
 func taskTools() []map[string]any {
+	images := map[string]any{"type": "array", "maxItems": core.MaxTaskImages, "items": map[string]any{"type": "string", "maxLength": 300},
+		"description": "optional paths of pictures to show (PNG, JPEG, GIF or WebP, up to 5 MB each), such as a screenshot; relative paths are in the project folder"}
 	text := func(desc string) map[string]any {
 		return map[string]any{"type": "object", "additionalProperties": false, "required": []string{"text"},
-			"properties": map[string]any{"text": map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxDispositionText, "description": desc}}}
+			"properties": map[string]any{"text": map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxDispositionText, "description": desc}, "images": images}}
 	}
 	return []map[string]any{
 		{"name": "read_task", "description": "Read your task: its text, project and folder. On a resumed run it returns your question and its answer instead of the task text, which this conversation already has; pass include_task: true to get the text again. owner_notes is what the owner wrote to you while you worked: take it into account.",
@@ -37,6 +41,7 @@ func taskTools() []map[string]any {
 					"changes": map[string]any{"type": "string", "maxLength": 500, "description": "the change you made: commit, changeset or branch; leave out when nothing changed"},
 					"tests":   map[string]any{"type": "string", "maxLength": 500, "description": "the tests or checks you ran and their result, one line"},
 					"files":   map[string]any{"type": "array", "maxItems": core.MaxReportFiles, "items": map[string]any{"type": "string", "maxLength": 300}, "description": "paths of files the coordinator should read, such as a detailed report"},
+					"images":  images,
 				}}},
 		{"name": "ask", "description": "Ask the coordinator a question you cannot resolve yourself. Ends this run; the task resumes with the answer.",
 			"inputSchema": text("the question")},
@@ -129,19 +134,29 @@ func callTaskTool(store *core.Store, run, receipt string, params map[string]any)
 	case core.DispositionReport:
 		var parts core.ReportParts
 		var text string
+		var pics []core.TaskImageFile
+		if pics, err = taskImageArgs(store, run, args); err != nil {
+			break
+		}
+		delete(args, "images")
 		if text, err = reportText(args, &parts); err != nil {
 			break
 		}
-		if err = store.RecordDisposition(run, receipt, name, text); err == nil {
+		if err = store.RecordDispositionImages(run, receipt, name, text, pics); err == nil {
 			value = map[string]any{"recorded": name, "next": "Stop now. Messenger publishes this after it verifies the run."}
 		}
 	case core.DispositionAsk, core.DispositionAskOwner:
-		text, ok := args["text"].(string)
-		if !ok || len(args) != 1 {
-			err = fmt.Errorf("%s takes only text", name)
+		var pics []core.TaskImageFile
+		if pics, err = taskImageArgs(store, run, args); err != nil {
 			break
 		}
-		if err = store.RecordDisposition(run, receipt, name, text); err == nil {
+		delete(args, "images")
+		text, ok := args["text"].(string)
+		if !ok || len(args) != 1 {
+			err = fmt.Errorf("%s takes text and optional images", name)
+			break
+		}
+		if err = store.RecordDispositionImages(run, receipt, name, text, pics); err == nil {
 			value = map[string]any{"recorded": name, "next": "Stop now. Messenger publishes this after it verifies the run."}
 		}
 	default:
@@ -178,7 +193,7 @@ func reportText(args map[string]any, parts *core.ReportParts) (string, error) {
 			}
 		}
 		if !ok {
-			return "", errors.New("report takes text and optional changes, tests (strings) and files (a list of paths)")
+			return "", errors.New("report takes text and optional changes, tests (strings), files and images (lists of paths)")
 		}
 	}
 	return parts.Compose()
@@ -222,4 +237,48 @@ func TaskMain(args []string) error {
 		return errors.New("task-mcp requires --db, --run and --receipt")
 	}
 	return ServeTask(db, run, receipt, os.Stdin, os.Stdout)
+}
+
+// taskImageArgs reads the pictures a worker names (T-175). Relative paths
+// are in the task's folder. Only regular files are read, and the store
+// keeps only what is a picture by its content.
+func taskImageArgs(store *core.Store, run string, args map[string]any) ([]core.TaskImageFile, error) {
+	raw, present := args["images"]
+	if !present {
+		return nil, nil
+	}
+	list, ok := raw.([]any)
+	if !ok || len(list) > core.MaxTaskImages {
+		return nil, fmt.Errorf("images is a list of at most %d paths", core.MaxTaskImages)
+	}
+	folder, err := store.RunFolder(run)
+	if err != nil {
+		return nil, err
+	}
+	var out []core.TaskImageFile
+	for _, item := range list {
+		path, ok := item.(string)
+		if !ok || strings.TrimSpace(path) == "" {
+			return nil, errors.New("images is a list of paths")
+		}
+		if !filepath.IsAbs(path) {
+			if folder == "" {
+				return nil, fmt.Errorf("%s: give the full path", path)
+			}
+			path = filepath.Join(folder, path)
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			return nil, fmt.Errorf("picture %s: %v", path, err)
+		}
+		if !info.Mode().IsRegular() || info.Size() > core.MaxTaskImage {
+			return nil, fmt.Errorf("picture %s must be a file of at most %d MB", path, core.MaxTaskImage>>20)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("picture %s: %v", path, err)
+		}
+		out = append(out, core.TaskImageFile{Name: filepath.Base(path), Data: data})
+	}
+	return out, nil
 }

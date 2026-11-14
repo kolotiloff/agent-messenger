@@ -33,6 +33,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     var web: WKWebView!
     var statusView: NSStackView!
     var statusLabel: NSTextField!
+    var statusSpinner: NSProgressIndicator!
+    var retryButton: NSButton!
+    var statusNote: NSTextField!
     var child: Process?
     var input: Pipe?
     var origin: URL?
@@ -86,15 +89,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         web.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(web)
         NSLayoutConstraint.activate([web.leadingAnchor.constraint(equalTo: content.leadingAnchor), web.trailingAnchor.constraint(equalTo: content.trailingAnchor), web.topAnchor.constraint(equalTo: content.topAnchor), web.bottomAnchor.constraint(equalTo: content.bottomAnchor)])
-        statusLabel = NSTextField(wrappingLabelWithString: "Подключаемся к Messenger…")
+        // While the window connects it shows only a spinner. The retry button
+        // and the note appear only when connecting failed; choosing another
+        // data directory stays in the File menu for the rare case it is needed.
+        statusSpinner = NSProgressIndicator()
+        statusSpinner.style = .spinning
+        statusSpinner.controlSize = .regular
+        statusLabel = NSTextField(wrappingLabelWithString: "")
         statusLabel.font = .systemFont(ofSize: 17)
         statusLabel.alignment = .center
-        let retry = NSButton(title: "Повторить подключение", target: self, action: #selector(connect))
-        let choose = NSButton(title: "Выбрать каталог данных…", target: self, action: #selector(chooseData))
-        let note = NSTextField(wrappingLabelWithString: "Открытие окна не запускает модели. Закрытие окна сохраняет фоновый клиент и очередь.")
-        note.alignment = .center
-        note.textColor = .secondaryLabelColor
-        statusView = NSStackView(views: [statusLabel, retry, choose, note])
+        retryButton = NSButton(title: "Повторить подключение", target: self, action: #selector(connect))
+        statusNote = NSTextField(wrappingLabelWithString: "Фоновый клиент, задачи и очередь сохраняются.")
+        statusNote.alignment = .center
+        statusNote.textColor = .secondaryLabelColor
+        statusView = NSStackView(views: [statusSpinner, statusLabel, retryButton, statusNote])
         statusView.orientation = .vertical
         statusView.spacing = 18
         statusView.translatesAutoresizingMaskIntoConstraints = false
@@ -160,11 +168,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         updates.endpoint = nil
         web?.stopLoading()
     }
-    func message(_ text: String) { statusLabel.stringValue = text; statusView.isHidden = false; web.isHidden = true }
+    // A failure: the reason, a retry button and a short note.
+    func message(_ text: String) {
+        statusSpinner.stopAnimation(nil); statusSpinner.isHidden = true
+        statusLabel.stringValue = text; statusLabel.isHidden = false
+        retryButton.isHidden = false; statusNote.isHidden = false
+        statusView.isHidden = false; web.isHidden = true
+    }
+    // Normal start or restart: only a spinner, no buttons or texts.
+    func showConnecting() {
+        statusLabel.isHidden = true; retryButton.isHidden = true; statusNote.isHidden = true
+        statusSpinner.isHidden = false; statusSpinner.startAnimation(nil)
+        statusView.isHidden = false; web.isHidden = true
+    }
     @objc func connect() {
         stopUI()
         let version = generation
-        message("Подключаемся к Messenger…")
+        showConnecting()
         guard let executable = Bundle.main.url(forResource: "messenger", withExtension: nil) else { message("В приложении отсутствует клиент. Заново распакуйте проверенную сборку."); return }
         let process = Process(); process.executableURL = executable
         var args: [String] = []
@@ -178,7 +198,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             let detail = String(data: data.prefix(8192), encoding: .utf8) ?? ""
             DispatchQueue.main.async {
                 guard let self = self, self.generation == version else { return }
-                self.message("Соединение с окном завершено. Фоновый клиент и письма сохраняются.\n\n" + (detail.isEmpty ? "Повторите подключение или выберите прежний каталог данных." : detail))
+                self.message("Соединение с окном завершено. Фоновый клиент и письма сохраняются.\n\n" + (detail.isEmpty ? "Повторите подключение." : detail))
             }
         }
         child = process; input = lifetime
@@ -219,7 +239,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
               navigationAction.targetFrame?.isMainFrame == true else { decisionHandler(.cancel); return }
         decisionHandler(.allow)
     }
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { statusView.isHidden = true; web.isHidden = false; showUpdateStatus() }
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { statusSpinner.stopAnimation(nil); statusView.isHidden = true; web.isHidden = false; showUpdateStatus() }
     func showUpdateStatus() {
         let status: [String: Any] = ["version": updates.availableVersion ?? "", "installedVersion": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "", "channel": "github", "detail": updates.fetchStatus, "checking": updates.fetching || updates.waitingForDownload]
         guard let data = try? JSONSerialization.data(withJSONObject: status), let json = String(data: data, encoding: .utf8) else { return }

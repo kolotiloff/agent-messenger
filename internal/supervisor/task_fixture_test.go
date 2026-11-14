@@ -248,6 +248,12 @@ func taskWorkerFixture(mode string) int {
 		}
 	case "slow":
 		time.Sleep(30 * time.Second)
+	case "final-then-stay":
+		// T-172: the turn ends, the CLI stays up.
+		tool("report", map[string]any{"text": "done, still up"})
+		finish()
+		time.Sleep(30 * time.Second)
+		return 0
 	case "sleep":
 		// A leftover child of "leave-child" on Windows.
 		time.Sleep(30 * time.Second)
