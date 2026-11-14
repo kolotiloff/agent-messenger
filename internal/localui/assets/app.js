@@ -324,6 +324,7 @@
   function coordinatorName(client=view?.coordinator?.client){
     const c=(client||'').toLowerCase();
     if(c.includes('codex'))return ['codex','Codex'];
+    if(c.includes('cursor'))return ['cursor','Cursor'];
     if(c.includes('claude')||!c||c==='coordinator')return ['claude','Claude'];
     return ['',client];
   }
@@ -465,7 +466,7 @@
       lines.append(line);
     }
     if(coordinatorClient!==null&&!coordProvider){
-      const line=el('div',undefined,'am-agent-line am-agent-'+(live?'idle':'offline'));line.append(el('span',coordLabel));lines.append(line);
+      const line=el('div',undefined,'am-agent-line am-agent-'+(live?'idle':'offline'));line.title=tr('Чат с инструментами Messenger');line.append(el('span',coordLabel));lines.append(line);
     }
     return lines;
   }
@@ -1187,7 +1188,7 @@
       const check=agentChecks.get(provider),auth=check?.authentication?.state;
       // 1. The program.
       const programNote=rowNote.get(provider+':program');
-      if(programNote)step(1,names[provider]+' CLI',programNote);
+      if(programNote)step(1,names[provider]+' CLI',programNote,setupRecoverable.has(provider)?[tr('Найти'),()=>installAgent(provider,'find')]:undefined);
       else if(missing)step('no',names[provider]+tr(' CLI не установлен'),tr('Не найден на этом компьютере'),[tr('Установить'),()=>installAgent(provider)]);
       else if(cli){
         // T-139: a CLI newer than the one this release was checked with.
@@ -1830,16 +1831,16 @@
       project='';remember('messenger-project','');selectedTask='';selectedShared=null;feed=null;feedSignature='';viewSignature='';projectPageFor='';await refresh();
     });
   }
-  // «Установить» opens the agent's official page; «Войти» opens a terminal
-  // with the agent's own sign-in (D-057).
+  // Installation and sign-in use the agent's own terminal commands.
   // A row note shows for a while, then the row offers its action again.
   function noteRow(key,text,ms){rowNote.set(key,text);renderAgents();if(ms)setTimeout(()=>{if(rowNote.get(key)===text){rowNote.delete(key);renderAgents();}},ms);}
   async function installAgent(provider,action='install'){
+    setupRecoverable.delete(provider);
     noteRow(provider+':program',tr('Открываем терминал…'));
-    try{await postAPI(action==='find'?'/api/agent-find':'/api/agent-install',{provider,action});await pollSetup();}
+    try{const state=await postAPI(action==='find'?'/api/agent-find':'/api/agent-install',{provider,action});setupSeen.delete(state.id);await pollSetup();}
     catch(error){rowNote.delete(provider+':program');renderAgents();showError(error);}
   }
-  const setupSeen=new Map(),setupFinishing=new Set();let setupPolling=false;
+  const setupSeen=new Map(),setupFinishing=new Set(),setupRecoverable=new Set();let setupPolling=false;
   async function pollSetup(){
     if(setupPolling)return;setupPolling=true;
     try{
@@ -1852,8 +1853,12 @@
           catch(error){showError(error);}
         }
         if(setupSeen.get(id)===state.state)continue;setupSeen.set(id,state.state);
-        if(state.state==='running')noteRow(provider+':program',tr('Ожидаем завершения в терминале. Если окно закрыто, результат неизвестен.'));
+        if(state.state==='running'||state.state==='unknown'){
+          if(state.action==='install')setupRecoverable.add(provider);
+          noteRow(provider+':program',state.action==='install'?tr('Нет подтверждения из терминала. Если он закрыт, нажмите «Найти».'):tr('Поиск не подтверждён. Проверьте терминал или выберите файл CLI в настройках.'));
+        }
         else if(state.state==='connected'){
+          setupRecoverable.delete(provider);
           rowNote.delete(provider+':program');viewSignature='';await refresh();await loadDiscovery();checkCard(provider,true);
           if(setupProvider===provider&&$('agent-setup').open)$('agent-cli').value=state.cli;
         }else if(state.state==='failed')noteRow(provider+':program',tr('Установка или поиск не завершились. Проверьте терминал; можно выбрать файл CLI в настройках.'),15000);

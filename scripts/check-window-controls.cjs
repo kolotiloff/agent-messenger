@@ -34,11 +34,16 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           if (pathname === '/api/project-create') created = true;
           if (pathname === '/api/agent-install' || pathname === '/api/agent-find') {
             const input=route.request().postDataJSON();
-            setupStates=[{ok:true,...input,id:'fake-'+input.provider+'-'+input.action,state:'running'}];
+            const state={ok:true,...input,id:'fake-'+input.provider+'-'+input.action,state:'unknown'};
+            setupStates=setupStates.filter(s=>s.provider!==input.provider||s.action!==input.action);
+            setupStates.push(state);
+            return route.fulfill({json:state});
           }
           if (pathname === '/api/agent-setup-finish') {
-            installed=true;setupStates[0].state='connected';
-            return route.fulfill({json:setupStates[0]});
+            const state=setupStates.find(s=>s.id===route.request().postDataJSON().id);
+            installed=true;state.state='connected';
+            if(state.action==='find')setupStates.filter(s=>s.provider===state.provider&&s.action==='install').forEach(s=>s.state='recovered');
+            return route.fulfill({json:state});
           }
           if (pathname === '/api/agent-trust') trusted=true;
           if (pathname === '/api/agent-login') return route.fulfill({status:501,json:{ok:false,detail:'Fixture terminal failed',command:'fictional-cli login',hint:'fixture launcher error'}});
@@ -48,12 +53,13 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           '/api/window': {projects: created ? [{name: 'Welcome test'}] : [], project: created ? 'Welcome test' : '',
             folder: created ? '/fictional/project' : '', messenger: '/fictional/messenger', data_root: '/fictional/data',
             agents: [...(registered ? [{agent: 'cursor', cli: '/fictional/cursor', models: []}] : []), ...(installed ? [{agent:'codex',cli:'/fictional/codex',models:[],trust:{state:trusted?'trusted':'not_trusted'}}] : [])], tasks: [],
+            coordinator: {connected, client: 'cursor-vscode'},
             cursor_link: {state: connected ? 'connected' : created ? 'missing' : 'no_folder'},
             computer_name: 'Theme test', tasks_enabled: true},
           '/api/agent-setup-status': setupStates,
           '/api/discovery': {agents: ['claude','codex','cursor'].map(provider => ({provider, state: 'not_found'}))},
           '/api/client-info': {client: 'running', outdated: false},
-          '/api/server': {host: {running: false, enabled: false, addresses: []}, member: {connected: false}, peers: [], accept: true},
+          '/api/server': {host: {running: false, enabled: false, addresses: []}, member: {connected: false}, peers: connected ? [{id:'fixture-peer',name:'Peer fixture',age:0,agents:[{agent:'cursor'}],coordinator:'cursor-vscode'}] : [], accept: true},
           '/api/self-update': {current: '0.0.0-preview.test'},
         };
         if (pathname.startsWith('/api/')) return route.fulfill({json: fixtures[pathname] || {ok: true}});
@@ -162,18 +168,33 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         [{path: '/api/project-create', body: {name: 'Welcome test', folder: '/fictional/project'}}]);
       assert.deepEqual(writes.filter(write => write.path === '/api/coordinator-connect'),
         [{path: '/api/coordinator-connect', body: {project: 'Welcome test', agent: 'cursor'}}]);
+      await page.locator('[data-tab=server]').click();
+      await page.locator('#machines [data-peer="fixture-peer"] .am-agent-line').waitFor({state:'attached'});
+      assert.equal(await page.locator('#machines [aria-current="true"] .am-agent-line').count(),1);
+      assert.equal(await page.locator('#machines [data-peer="fixture-peer"] .am-agent-line').count(),1);
+      assert.equal(await page.locator('#machines .am-agent-line').first().innerText(),'Cursor');
+      assert.equal(await page.locator('#machines').getByText('cursor-vscode',{exact:true}).count(),0);
+      await page.locator('[data-tab=tasks]').click();
       assert(await page.locator('#task-panel').isVisible(), 'the task panel returns after creating a project');
       await page.locator('#list-toggle').click();
       assert.equal(await page.locator('#task-panel').isVisible(), false);
       await page.locator('[data-tab=agents]').click();
       const codex=page.locator('[data-provider=codex]');
       await codex.getByRole('button',{name:'Установить',exact:true}).click();
-      await codex.getByText('Ожидаем завершения в терминале. Если окно закрыто, результат неизвестен.',{exact:true}).waitFor();
+      await codex.getByText('Нет подтверждения из терминала. Если он закрыт, нажмите «Найти».',{exact:true}).waitFor();
       assert.deepEqual(writes.filter(w=>w.path==='/api/agent-install').map(w=>w.body),[{provider:'codex',action:'install'}]);
       assert.equal(writes.filter(w=>w.path==='/api/agent-page').length,0);
-      setupStates[0].state='found';setupStates[0].cli='/fictional/codex';
+      // Recover a missing install receipt through an explicit search, never reinstall.
+      await codex.locator('.am-steps').getByRole('button',{name:'Найти',exact:true}).click();
+      await codex.getByText('Поиск не подтверждён. Проверьте терминал или выберите файл CLI в настройках.',{exact:true}).waitFor();
+      assert.equal(writes.filter(w=>w.path==='/api/agent-install').length,1);
+      const foundSetup=setupStates.find(s=>s.action==='find');
+      foundSetup.state='found';foundSetup.cli='/fictional/codex';
       await codex.getByText('Codex CLI установлен',{exact:true}).waitFor({timeout:10000});
       assert.equal(writes.filter(w=>w.path==='/api/agent-setup-finish').length,1);
+      await page.reload();
+      await page.locator('[data-tab=agents]').click();
+      await codex.getByText('Codex CLI установлен',{exact:true}).waitFor({timeout:10000});
       await codex.getByRole('button',{name:'Войти',exact:true}).click();
       assert.deepEqual(writes.filter(w=>w.path==='/api/agent-login').map(w=>w.body),[{provider:'codex',cli:'/fictional/codex',environment:''}]);
       await page.locator('#toasts').getByText('Fixture terminal failed',{exact:true}).waitFor();
@@ -189,8 +210,8 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       if(process.env.SCREENSHOT_DIR&&!native) await page.screenshot({animations:'disabled',path:path.join(process.env.SCREENSHOT_DIR,'600-dark-agent-settings.png')});
       assert.equal(await page.locator('#agent-cli-find').evaluate(n=>n.getBoundingClientRect().height),32);
       await page.locator('#agent-cli-find').click();
-      await codex.getByText('Ожидаем завершения в терминале. Если окно закрыто, результат неизвестен.',{exact:true}).waitFor();
-      assert.deepEqual(writes.filter(w=>w.path==='/api/agent-find').map(w=>w.body),[{provider:'codex',action:'find'}]);
+      await codex.getByText('Поиск не подтверждён. Проверьте терминал или выберите файл CLI в настройках.',{exact:true}).waitFor();
+      assert.deepEqual(writes.filter(w=>w.path==='/api/agent-find').map(w=>w.body),[{provider:'codex',action:'find'},{provider:'codex',action:'find'}]);
       assert.deepEqual(errors, []);
       console.log(JSON.stringify({engine, nativeBridgeFixture: native, themes: ['light','dark','system'], widths: [1100,600], result: 'passed'}));
       await context.close();

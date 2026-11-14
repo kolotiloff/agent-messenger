@@ -114,7 +114,7 @@ jobs:
         run: bash scripts/check-windows.sh
       - name: Windows setup and LAN discovery regressions (no real agents)
         run: |
-          go test -count=1 -timeout=3m ./internal/localui -run '^(TestWindowsSetupFind|TestWindowsTerminalCreatesInteractiveChild|TestAgentSetupReceiptAndRegistration|TestAgentSetupUnknownIsNotRetried|TestTrustUsesRegisteredCLIAndExactFolder|TestAgentLoginAndInstallRoutes)$'
+          go test -count=1 -timeout=3m ./internal/localui -run '^(TestWindowsSetupFind|TestWindowsTerminalCreatesInteractiveChild|TestAgentSetupReceiptAndRegistration|TestAgentSetupUnknownIsNotRetried|TestSetupFindRecoversMissingInstallReceipt|TestTrustUsesRegisteredCLIAndExactFolder|TestAgentLoginAndInstallRoutes)$'
           go test -count=1 -timeout=3m ./internal/broker -run '^(TestDiscoverySurvivesLostFirstDatagram|TestDiscoveryCancellation|TestUnavailableDiscoveryDoesNotOfferShortCode)$'
       - name: Whole suite on Windows (information only; many tests use POSIX shell fake CLIs)
         continue-on-error: true
