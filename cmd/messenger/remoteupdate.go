@@ -19,7 +19,7 @@ import (
 	"github.com/kolotiloff/agent-messenger/internal/updatefeed"
 )
 
-// Updating this computer at another computer's request (T-078, D-100). The
+// Updating this computer at another computer's request (T-078, D-100, T-155). The
 // background client starts the hidden `_remote-update` command from the
 // program file the owner installed. It installs the newest signed update
 // with the window's updater, restarts the background client from the
@@ -76,7 +76,7 @@ func runRemoteUpdate(root string, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if fs.NArg() != 0 || *brokerID == "" || *peer == "" || *id == "" {
+	if fs.NArg() != 0 || *id == "" || (*brokerID == "") != (*peer == "") {
 		return errors.New("_remote-update is started by the client only")
 	}
 	job := supervisor.RemoteUpdate{Broker: *brokerID, Peer: *peer, ID: *id}
@@ -131,7 +131,7 @@ func newRemoteUpdate(root string) (*remoteUpdate, error) {
 				return 0, err
 			}
 			defer store.Close()
-			return store.ActiveWork()
+			return store.LiveWork()
 		},
 		clientVersion: func(ctx context.Context) (string, error) {
 			c, stop := context.WithTimeout(ctx, 3*time.Second)

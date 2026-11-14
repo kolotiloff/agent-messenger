@@ -93,7 +93,7 @@ func (s *Supervisor) Server(_ context.Context, action string, payload json.RawMe
 	case "update":
 		// Another computer of the network installs the newest signed
 		// update (T-078); its answer arrives through the mailbox.
-		if _, err := s.store.RequestNetUpdate(in.Device); err != nil {
+		if _, err := s.store.RequestNetUpdate(in.Device, ""); err != nil {
 			return nil, err
 		}
 	default:
@@ -134,6 +134,9 @@ func (s *Supervisor) presence() (broker.Presence, error) {
 		return broker.Presence{}, err
 	}
 	p := broker.Presence{Agents: []broker.PresenceAgent{}, Coordinator: clipName(coordinator), Version: buildinfo.Version}
+	if pending, err := s.store.HasPendingUpdate(); err == nil {
+		p.UpdatePending = pending
+	}
 	for _, a := range agents {
 		pa := broker.PresenceAgent{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting}
 		if len(a.Models) > 0 {

@@ -241,6 +241,10 @@ type Presence struct {
 	// Workers are the running workers of other computers' tasks (T-149),
 	// with the same fallback as Outbox.
 	Workers *PresenceWorkers `json:"workers,omitempty"`
+	// UpdatePending: this computer is waiting to install a Messenger
+	// update and takes no new tasks (T-155). A host that does not know
+	// the field refuses the report; the client then reports without it.
+	UpdatePending bool `json:"update_pending,omitempty"`
 }
 
 // Peer is one computer of the broker as others see it.
@@ -272,6 +276,9 @@ type Peer struct {
 	// Workers is what it ran for other computers at its last report
 	// (T-149); nil if it did not say.
 	Workers *PresenceWorkers `json:"workers,omitempty"`
+	// UpdatePending: the computer is waiting to install a Messenger update
+	// (T-155); false if it did not say.
+	UpdatePending bool `json:"update_pending,omitempty"`
 }
 
 // rosterResponse answers a presence report.
@@ -433,7 +440,7 @@ func fill(peer *Peer, report, at string, now time.Time) {
 	if p.Name != "" {
 		peer.Name = p.Name
 	}
-	peer.Coordinator, peer.Ready, peer.Usage, peer.Version, peer.Computer, peer.Outbox, peer.Workers = p.Coordinator, p.Ready, p.Usage, p.Version, p.Computer, p.Outbox, p.Workers
+	peer.Coordinator, peer.Ready, peer.Usage, peer.Version, peer.Computer, peer.Outbox, peer.Workers, peer.UpdatePending = p.Coordinator, p.Ready, p.Usage, p.Version, p.Computer, p.Outbox, p.Workers, p.UpdatePending
 	if p.Agents != nil {
 		peer.Agents = p.Agents
 	}

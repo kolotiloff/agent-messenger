@@ -109,6 +109,9 @@ type NetPeer struct {
 	// Version is the program version the computer reported (T-078); empty
 	// for an older version.
 	Version string
+	// UpdatePending: the computer is waiting to install a Messenger update
+	// and takes no new tasks (T-155). False when it did not say.
+	UpdatePending bool
 	// Computer is the computer's own lasting id (T-132): it stays the same
 	// when the computer joins another network, where its peer id is new.
 	// Empty for a computer before 0.61.
@@ -389,7 +392,7 @@ func (s *Store) SetNetwork(broker, self string, peers []NetPeer) error {
 				w, _ := json.Marshal(p.Workers)
 				workers = string(w)
 			}
-			if _, err := tx.Exec(`INSERT INTO net_peers(peer,name,host,age,agents,ready,usage,updated_at,missing_since,version,computer,outbox,workers) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, p.ID, p.Name, boolInt(p.Host), p.Age, string(raw), ready, usage, at, missing[p.ID], clip(p.Version, 64), validComputer(p.Computer), outbox, workers); err != nil {
+			if _, err := tx.Exec(`INSERT INTO net_peers(peer,name,host,age,agents,ready,usage,updated_at,missing_since,version,computer,outbox,workers,update_pending) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, p.ID, p.Name, boolInt(p.Host), p.Age, string(raw), ready, usage, at, missing[p.ID], clip(p.Version, 64), validComputer(p.Computer), outbox, workers, boolInt(p.UpdatePending)); err != nil {
 				return err
 			}
 		}
@@ -424,7 +427,7 @@ func (s *Store) NetPeers() ([]NetPeer, error) {
 }
 
 func netPeers(tx *sql.Tx) ([]NetPeer, error) {
-	rows, err := tx.Query(`SELECT peer,name,host,age,agents,ready,usage,updated_at,missing_since!='',version,computer,outbox,workers FROM net_peers ORDER BY host DESC, name, peer`)
+	rows, err := tx.Query(`SELECT peer,name,host,age,agents,ready,usage,updated_at,missing_since!='',version,computer,outbox,workers,update_pending FROM net_peers ORDER BY host DESC, name, peer`)
 	if err != nil {
 		return nil, err
 	}
@@ -432,12 +435,12 @@ func netPeers(tx *sql.Tx) ([]NetPeer, error) {
 	out := []NetPeer{}
 	for rows.Next() {
 		var p NetPeer
-		var host int
+		var host, pending int
 		var agents, ready, usage, at, outbox, workers string
-		if err := rows.Scan(&p.ID, &p.Name, &host, &p.Age, &agents, &ready, &usage, &at, &p.Reconnecting, &p.Version, &p.Computer, &outbox, &workers); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &host, &p.Age, &agents, &ready, &usage, &at, &p.Reconnecting, &p.Version, &p.Computer, &outbox, &workers, &pending); err != nil {
 			return nil, err
 		}
-		p.Host = host != 0
+		p.Host, p.UpdatePending = host != 0, pending != 0
 		_ = json.Unmarshal([]byte(agents), &p.Agents)
 		if ready != "" {
 			var r NetReady
@@ -570,6 +573,9 @@ func startRemoteTask(tx *sql.Tx, r StartTaskRequest) (string, error) {
 	}
 	if !has {
 		return "", fmt.Errorf("%w: agent %s is not set up on %s", ErrRejected, r.Provider, peer.Name)
+	}
+	if peer.UpdatePending {
+		return "", fmt.Errorf("%w: computer «%s» is waiting to install a Messenger update and takes no new tasks", ErrRejected, peer.Name)
 	}
 	id, err := randomID()
 	if err != nil {
@@ -873,7 +879,7 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 		case "log":
 			return applyLogReply(tx, from, b)
 		case "update_request":
-			return applyUpdateRequest(tx, from)
+			return applyUpdateRequest(tx, from, b)
 		case "update":
 			return applyUpdateReply(tx, from, b)
 		case "output":
@@ -935,6 +941,11 @@ func applyStart(tx *sql.Tx, from netLink, b netBody) error {
 	}
 	if accept == "0" {
 		return reply("refused", netBody{Reason: "this computer does not run tasks of other computers; its owner can turn this on in the Server tab"})
+	}
+	if pending, err := hasPendingUpdate(tx); err != nil {
+		return err
+	} else if pending {
+		return reply("refused", netBody{Reason: "this computer is waiting to install a Messenger update and takes no new tasks"})
 	}
 	r := StartTaskRequest{Project: b.Project, OpID: mirrorOp(from), Provider: b.Agent, Title: b.Title, Text: strings.TrimSpace(b.Text), Model: strings.TrimSpace(b.Model), Rules: strings.TrimSpace(b.Rules)}
 	lock, lockOK := normalizeLock(b.Lock)
