@@ -28,8 +28,9 @@ type windowView struct {
 	Messenger string `json:"messenger"`
 	DataRoot  string `json:"data_root"`
 	// CoordinatorLink says whether Claude has the coordinator for the
-	// project folder; filled only while no coordinator chat is connected.
+	// project folder. CodexLink is the same for Codex (T-160).
 	CoordinatorLink *CoordinatorLinkView `json:"coordinator_link,omitempty"`
+	CodexLink       *CoordinatorLinkView `json:"codex_link,omitempty"`
 	// FeedbackCount is how many remarks the feedback journal holds (T-135).
 	FeedbackCount int `json:"feedback_count"`
 }
@@ -60,10 +61,10 @@ func (s *Supervisor) WindowView(project string) (any, error) {
 	out.FeedbackCount, _ = s.store.FeedbackCount()
 	if v.Project != "" {
 		s.repairStaleCoordinator(v.Project)
-	}
-	if v.Project != "" && !v.Coordinator.Connected {
-		link := s.CoordinatorLinkState(v.Project)
-		out.CoordinatorLink = &link
+		claude := s.CoordinatorLinkState(v.Project)
+		codex := s.CodexCoordinatorLinkState(v.Project)
+		out.CoordinatorLink = &claude
+		out.CodexLink = &codex
 	}
 	return out, nil
 }

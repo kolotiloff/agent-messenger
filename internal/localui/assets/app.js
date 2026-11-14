@@ -712,48 +712,79 @@
   // Coordinator connection (T-039): the client runs Claude's own
   // `claude mcp add` in the project folder; the owner never opens a terminal.
   let linkBusy='',linkFailure=null;
-  async function connectCoordinator(name){
-    if(linkBusy)return;
-    linkBusy=name;linkFailure=null;if(view?.project===name){renderThread();renderCoordinatorRow();}
+  async function connectCoordinator(agent){
+    const name=view?.project;if(!name||linkBusy)return;
+    linkBusy=agent;
+    if(linkFailure?.project===name&&linkFailure?.agent===agent)linkFailure=null;
+    renderThread();renderCoordinatorRow();
     try{
-      const r=await postAPI('/api/coordinator-connect',{project:name},40000);
-      if(r.result?.state==='failed')linkFailure={project:name,detail:r.result.detail||''};
-    }catch(error){linkFailure={project:name,detail:error.message};}
+      const r=await postAPI('/api/coordinator-connect',{project:name,agent},40000);
+      if(r.result?.state==='failed')linkFailure={project:name,agent,detail:r.result.detail||''};
+    }catch(error){linkFailure={project:name,agent,detail:error.message};}
     finally{linkBusy='';viewSignature='';await refresh();}
+  }
+  async function connectReadyCoordinators(){
+    const ready=id=>(view?.agents||[]).some(a=>a.agent===id&&a.cli);
+    const link=id=>id==='codex'?view?.codex_link:view?.coordinator_link;
+    for(const agent of ['claude','codex']){
+      if(!ready(agent))continue;
+      const state=link(agent)?.state;
+      if(state==='connected'||state==='no_folder'||state==='other'||state==='off')continue;
+      await connectCoordinator(agent);
+    }
   }
   // The coordinator of the project on this computer (T-152): Claude's link
   // for the project folder, as one row of the «Проект» page, and the manual
   // command under it. Agents are set up once; the link is per folder.
   function renderCoordinatorRow(){
     const box=$('coord-box');if(!box||!view?.project)return;
-    const link=view.coordinator_link||{state:'unknown'},failure=linkFailure?.project===view.project?linkFailure:null;
-    const connect=[tr('Подключить'),()=>connectCoordinator(view.project)];
-    const title=tr('Координатор');
-    const tip=tr('Координатор — ваш чат в Claude Code (в приложении Claude или в терминале), открытый в папке проекта. Он раздаёт задачи исполнителям и собирает отчёты. Новый проект подключается сам; кнопка нужна, если это не получилось.');
-    let row;
-    if(linkBusy===view.project)row=stepRow(1,title,tr('Подключаем…'),null,tip);
-    else if(coordinatorPlace())row=stepRow('ok',title,tr('Подключён к Claude Code. Откройте папку проекта в новом чате'),null,tip);
-    else if(failure)row=stepRow('no',title,tr('Не получилось: ')+failure.detail,[tr('Повторить'),()=>connectCoordinator(view.project)],tip);
-    else if(link.state==='no_claude')row=stepRow(1,title,tr('Сначала настройте Claude Code во вкладке «Агенты»'),[tr('Агенты'),()=>show('agents')],tip);
-    else if(link.state==='no_folder')row=stepRow(1,title,tr('Сначала укажите папку проекта'),null,tip);
-    else if(link.state==='other')row=stepRow('no',title,tr('В Claude у этой папки уже есть другое подключение «messenger». Messenger его не меняет'),connect,tip);
-    else if(link.state==='unknown')row=stepRow('no',title,tr('Не удалось прочитать настройки Claude')+(link.detail?': '+link.detail:''),connect,tip);
-    else row=stepRow(1,title,tr('Не подключён'),connect,tip);
-    const steps=el('div',undefined,'am-steps');steps.append(row);
+    const tip=tr('Координатор — ваш чат в Claude Code или Codex, открытый в папке проекта. Он раздаёт задачи исполнителям и собирает отчёты. Новый проект подключается сам; кнопка нужна, если это не получилось.');
+    const heading=el('p',undefined,'am-small');heading.append(el('span',tr('Координатор')));
+    const q=el('span','?','am-q');q.title=tip;q.setAttribute('aria-label',tip);q.tabIndex=0;heading.append(q);
+    const steps=el('div',undefined,'am-steps');
+    steps.append(coordinatorAgentRow('claude',view.coordinator_link||{state:'unknown'}));
+    steps.append(coordinatorAgentRow('codex',view.codex_link||{state:'unknown'}));
     const manual=el('details',undefined,'am-tool');manual.append(el('summary',tr('Подключить вручную через Терминал')));
-    const command='cd '+shellQuote(view.folder)+' && claude mcp add --scope local messenger -- '+shellQuote(view.messenger)+' --root '+shellQuote(view.data_root)+' coordinator --project '+shellQuote(view.project);
-    const copy=el('button',tr('Скопировать команду'));copy.type='button';
-    copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(command);copy.textContent=tr('Скопировано');}catch(_){copy.textContent=tr('Скопируйте вручную');}setTimeout(()=>copy.textContent=tr('Скопировать команду'),2000);});
-    manual.append(el('pre',command,'am-command'),copy);
-    manual.hidden=link.state==='no_folder'||coordinatorPlace();
-    const body=el('div',undefined,'am-coord-box am-field-sep');body.id='coord-box';body.append(steps,manual);
+    const claudeCmd='cd '+shellQuote(view.folder)+' && claude mcp add --scope local messenger -- '+shellQuote(view.messenger)+' --root '+shellQuote(view.data_root)+' coordinator --project '+shellQuote(view.project);
+    const codexToml='[mcp_servers.messenger]\ncommand = '+JSON.stringify(view.messenger)+'\nargs = ["--root", '+JSON.stringify(view.data_root)+', "coordinator", "--project", '+JSON.stringify(view.project)+']\ndefault_tools_approval_mode = "approve"\ntool_timeout_sec = 180\n';
+    const block=(title,text)=>{
+      const copy=el('button',tr('Скопировать команду'));copy.type='button';
+      copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(text);copy.textContent=tr('Скопировано');}catch(_){copy.textContent=tr('Скопируйте вручную');}setTimeout(()=>copy.textContent=tr('Скопировать команду'),2000);});
+      const wrap=el('div');wrap.append(el('p',title,'am-small am-muted'),el('pre',text,'am-command'),copy);return wrap;
+    };
+    manual.append(block('Claude Code',claudeCmd),block('Codex',codexToml));
+    manual.hidden=!view.folder||(coordinatorAgentOn('claude')&&coordinatorAgentOn('codex'));
+    const body=el('div',undefined,'am-coord-box am-field-sep');body.id='coord-box';body.append(heading,steps,manual);
     if(box.querySelector('details')?.open)manual.open=true;
     if(box.innerHTML!==body.innerHTML)box.replaceWith(body);
+  }
+  function coordinatorAgentOn(agent){
+    const link=agent==='codex'?view?.codex_link:view?.coordinator_link;
+    return link?.state==='connected';
+  }
+  function coordinatorAgentRow(agent,link){
+    const title=names[agent]||agent;
+    const connect=[tr('Подключить'),()=>connectCoordinator(agent)];
+    const failure=linkFailure?.project===view.project&&linkFailure?.agent===agent?linkFailure:null;
+    const missing=agent==='codex'?'no_codex':'no_claude';
+    if(linkBusy===agent)return stepRow(1,title,tr('Подключаем…'),null);
+    if(link.state==='connected'){
+      let sub=tr('Подключён. Откройте папку проекта в новом чате');
+      if(agent==='codex'&&(view.agents||[]).some(a=>a.agent==='codex'&&a.trust?.state==='not_trusted'))sub=tr('Записано. Codex прочитает его, когда папка станет доверенной: откройте её в Codex и подтвердите.');
+      return stepRow('ok',title,sub,null);
+    }
+    if(failure)return stepRow('no',title,tr('Не получилось: ')+failure.detail,[tr('Повторить'),()=>connectCoordinator(agent)]);
+    if(link.state===missing)return stepRow(1,title,tr('Сначала настройте его во вкладке «Агенты»'),[tr('Агенты'),()=>show('agents')]);
+    if(link.state==='no_folder')return stepRow(1,title,tr('Сначала укажите папку проекта'),null);
+    if(link.state==='other')return stepRow('no',title,agent==='codex'?tr('В настройках Codex этой папки уже есть другое подключение «messenger». Messenger его не меняет'):tr('В Claude у этой папки уже есть другое подключение «messenger». Messenger его не меняет'),connect);
+    if(link.state==='off')return stepRow('no',title,tr('Подключение «messenger» в Codex выключено. Messenger его не включает'),null);
+    if(link.state==='unknown')return stepRow('no',title,(agent==='codex'?tr('Не удалось прочитать настройки Codex'):tr('Не удалось прочитать настройки Claude'))+(link.detail?': '+link.detail:''),connect);
+    return stepRow(1,title,tr('Не подключён'),connect);
   }
   // Whether this computer's Claude Code is the project's coordinator. Other
   // computers are not shown: any computer may have its own (owner, T-152).
   function coordinatorPlace(){
-    return view?.coordinator?.connected||view?.coordinator_link?.state==='connected';
+    return view?.coordinator?.connected||coordinatorAgentOn('claude')||coordinatorAgentOn('codex');
   }
   // The task pane with no task yet (T-152): what the program does, drawn as
   // a short chain, and the first steps with their state on this computer.
@@ -766,7 +797,7 @@
     const chain=el('div',undefined,'am-chain');
     const node=(title,sub)=>{const n=el('div',undefined,'am-chain-node');n.append(el('strong',title),el('span',sub,'am-small am-muted'));return n;};
     const arrow=()=>{const a=el('span','→','am-chain-arrow');a.setAttribute('aria-hidden','true');return a;};
-    chain.append(node(tr('Вы'),tr('Пишете координатору, что нужно сделать.')),arrow(),node(tr('Координатор'),tr('Чат в Claude Code. Раздаёт задачи и собирает отчёты.')),arrow(),node(tr('Исполнители'),tr('Claude Code, Codex и Cursor на ваших компьютерах.')));
+    chain.append(node(tr('Вы'),tr('Пишете координатору, что нужно сделать.')),arrow(),node(tr('Координатор'),tr('Чат в Claude Code или Codex. Раздаёт задачи и собирает отчёты.')),arrow(),node(tr('Исполнители'),tr('Claude Code, Codex и Cursor на ваших компьютерах.')));
     box.append(el('h3',tr('Как это работает')),chain);
     const steps=el('div',undefined,'am-steps am-welcome-steps');
     let number=0;
@@ -779,12 +810,16 @@
     };
     const agents=(view.agents||[]).length;
     step(agents>0,tr('Агенты на этом компьютере'),agents?tr('Подключено: ')+agents:tr('Установите и подключите хотя бы одного'),agents?'':tr('Агенты'),()=>show('agents'));
-    const place=coordinatorPlace(),hasClaude=(view.agents||[]).some(a=>a.agent==='claude'&&a.cli),claudeReady=hasClaude&&view.coordinator_link?.state!=='no_folder'&&linkBusy!==view.project;
-    step(!!place,tr('Координатор'),place?tr('Подключён к Claude на этом компьютере'):(linkFailure?.project===view.project?tr('Не получилось: ')+linkFailure.detail:tr('Подключите Claude Code координатором, чтобы давать задачи с этого компьютера')),place?'':claudeReady?tr('Подключить'):hasClaude?tr('Проект'):tr('Агенты'),()=>claudeReady?connectCoordinator(view.project):show(hasClaude?'project':'agents'));
+    const place=coordinatorPlace(),hasAny=(view.agents||[]).some(a=>(a.agent==='claude'||a.agent==='codex')&&a.cli),folderOk=view.coordinator_link?.state!=='no_folder';
+    const who=[coordinatorAgentOn('claude')&&'Claude Code',coordinatorAgentOn('codex')&&'Codex'].filter(Boolean).join(', ');
+    const failed=linkFailure?.project===view.project?linkFailure:null;
+    const codexBare=coordinatorAgentOn('codex')&&!coordinatorAgentOn('claude')&&(view.agents||[]).some(a=>a.agent==='codex'&&a.trust?.state==='not_trusted');
+    const coordSub=codexBare?tr('Записано. Codex прочитает его, когда папка станет доверенной: откройте её в Codex и подтвердите.'):place?(who?tr('Подключён: ')+who:tr('Подключён на этом компьютере')):(failed?tr('Не получилось: ')+failed.detail:tr('Подключите Claude Code или Codex координатором, чтобы давать задачи с этого компьютера'));
+    step(!!place&&!codexBare,tr('Координатор'),coordSub,place||codexBare?'':(hasAny&&folderOk&&!linkBusy)?tr('Подключить'):hasAny?tr('Проект'):tr('Агенты'),()=>(hasAny&&folderOk&&!linkBusy)?connectReadyCoordinators():show(hasAny?'project':'agents'));
     const peers=(server?.peers||[]).length;
     step(peers>0,tr('Другие компьютеры'),peers?tr('В сети: ')+peers:tr('Необязательно: объедините компьютеры через сервер'),peers?'':tr('Сервер'),()=>show('server'));
     box.append(el('h3',tr('С чего начать')),steps);
-    if(place)box.append(el('p',tr('Откройте папку проекта в Claude Code, начните новый чат и спросите: «Каких агентов ты видишь?»'),'am-small am-muted'));
+    if(place&&!codexBare)box.append(el('p',tr('Откройте папку проекта в Claude Code или Codex, начните новый чат и спросите: «Каких агентов ты видишь?»'),'am-small am-muted'));
     return box;
   }
   function renderThread(){
@@ -1679,7 +1714,7 @@
       project=name;remember('messenger-project',name);
       $('project-dialog').close();viewSignature='';await refresh();
       // Connect the coordinator right away; the result is shown, not retried.
-      if(view?.project===name&&!view.coordinator?.connected&&view.coordinator_link?.state!=='connected')connectCoordinator(name);
+      if(view?.project===name)await connectReadyCoordinators();
     }catch(error){$('project-status').textContent=error.message;}
     finally{$('project-save').disabled=false;}
   }

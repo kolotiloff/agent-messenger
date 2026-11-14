@@ -60,6 +60,9 @@ const (
 	// of an earlier version (T-117). It is replaced.
 	LinkStale   = "stale"
 	LinkUnknown = "unknown" // the settings file could not be read
+	// LinkOff is this Messenger's own entry with enabled = false. The owner
+	// turned it off; Messenger does not turn it back on.
+	LinkOff = "off"
 )
 
 // CoordinatorLink reads Claude's settings file and reports whether the

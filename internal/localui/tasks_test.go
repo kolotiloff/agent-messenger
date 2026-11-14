@@ -107,6 +107,7 @@ func TestTaskWindowRoutes(t *testing.T) {
 		{"/api/project-remove", `{"name":"a/b"}`},
 		{"/api/coordinator-connect", `{"project":"a/b"}`},
 		{"/api/coordinator-connect", `{"project":"Game","cli":"/bin/sh"}`},
+		{"/api/coordinator-connect", `{"project":"Game","agent":"cursor"}`},
 	} {
 		if code, _ := do("POST", bad.path, bad.body); code != 400 {
 			t.Fatalf("%s %s accepted: %d", bad.path, bad.body, code)
@@ -142,8 +143,11 @@ func TestTaskWindowRoutes(t *testing.T) {
 	if code, _ := do("POST", "/api/agent-remove", `{"provider":"cursor"}`); code != 200 || got[len(got)-1].Cmd != "agent-remove" || got[len(got)-1].Provider != "cursor" {
 		t.Fatalf("agent remove %d %+v", code, got[len(got)-1])
 	}
-	if code, _ := do("POST", "/api/coordinator-connect", `{"project":"Моя игра"}`); code != 200 || got[len(got)-1].Cmd != "coordinator-connect" || got[len(got)-1].Alias != "Моя игра" {
+	if code, _ := do("POST", "/api/coordinator-connect", `{"project":"Моя игра"}`); code != 200 || got[len(got)-1].Cmd != "coordinator-connect" || got[len(got)-1].Alias != "Моя игра" || got[len(got)-1].Provider != "claude" {
 		t.Fatalf("coordinator connect %d %+v", code, got[len(got)-1])
+	}
+	if code, _ := do("POST", "/api/coordinator-connect", `{"project":"Моя игра","agent":"codex"}`); code != 200 || got[len(got)-1].Provider != "codex" {
+		t.Fatalf("codex coordinator %d %+v", code, got[len(got)-1])
 	}
 	reject = true
 	if code, body := do("POST", "/api/task-answer", `{"task":"task-1","question":"q-1","op_id":"op-2","text":"late"}`); code != 409 || !strings.Contains(body, "no longer open") {

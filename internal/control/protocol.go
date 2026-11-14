@@ -280,12 +280,12 @@ func dispatch(handler Handler, request Request) Response {
 		return Response{OK: true, Overview: raw}
 	case "coordinator-connect":
 		h, ok := handler.(interface {
-			ConnectCoordinator(string) (any, error)
+			ConnectCoordinator(string, string) (any, error)
 		})
 		if !ok {
 			return Response{Error: "coordinator connection unsupported; update the background client"}
 		}
-		value, err := h.ConnectCoordinator(request.Alias)
+		value, err := h.ConnectCoordinator(request.Alias, request.Provider)
 		if err != nil {
 			return Response{Error: err.Error()}
 		}
