@@ -278,10 +278,16 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept button.am-update-icon:hover:not(:disabled) { background:color-mix(in srgb,var(--am-run) 34%,transparent); }
 #am-concept button.am-update-icon:disabled { opacity:.6; cursor:default; }
 #am-concept button.am-update-icon[hidden] { display:none; }
-/* An update asked for or under way: the same icon, dimmed and pulsing (owner) */
-#am-concept .am-update-icon.am-update-busy { flex-shrink:0; width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background:var(--am-soft); color:var(--am-muted); cursor:default; animation:am-update-pulse 1.6s ease-in-out infinite; }
-@keyframes am-update-pulse { 50% { opacity:.4; } }
-@media (prefers-reduced-motion:reduce) { #am-concept .am-update-icon.am-update-busy { animation:none; } }
+/* While an update is downloading or installing, the arrow becomes a ring
+   on the same blue circle (owner). A remote computer has no progress, so
+   the ring only says the update is under way. */
+#am-concept .am-update-ring { display:none; }
+#am-concept .am-update-icon.am-update-downloading { flex-shrink:0; width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background:var(--am-run); color:#fff; cursor:default; }
+#am-concept .am-update-ring path { fill:none; stroke:currentColor; stroke-width:2.5; stroke-linecap:round; }
+#am-concept .am-update-icon.am-update-downloading .am-update-arrow { display:none; }
+#am-concept .am-update-icon.am-update-downloading .am-update-ring { display:block; width:16px; height:16px; transform-origin:center; animation:am-spin .8s linear infinite; }
+#am-concept button.am-update-icon.am-update-downloading:disabled { opacity:1; cursor:default; }
+@media (prefers-reduced-motion:reduce) { #am-concept .am-update-icon.am-update-downloading .am-update-ring { animation:none; } }
 #am-concept .am-update-icon svg { width:13px; height:13px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
 
 /* Main pane and tabs */
@@ -365,6 +371,9 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-outgoing .am-meta { justify-content:flex-end; }
 #am-concept .am-outgoing .am-message-content { padding:var(--am-space-3) var(--am-space-4); border-radius:var(--am-radius-l); background:var(--am-bubble); }
 #am-concept .am-delivery { margin-top:var(--am-space-1); font-size:var(--am-text-xs); font-style:italic; color:var(--am-muted); }
+/* The closing line of a finished task is ordinary text, still grey, so it
+   can be read (owner). */
+#am-concept .am-delivery.am-delivery-close { margin-top:var(--am-space-2); font-size:var(--am-text-m); font-style:normal; line-height:1.5; color:var(--am-muted); }
 #am-concept .am-outgoing .am-delivery { text-align:right; }
 #am-concept .am-rich p { margin:0 0 var(--am-space-2); }
 #am-concept .am-rich p:last-child { margin-bottom:0; }
@@ -729,6 +738,7 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-chain-node { flex:1 1 0; min-width:0; display:flex; flex-direction:column; gap:var(--am-gap-line); padding:var(--am-space-3); border:1px solid var(--am-line); border-radius:var(--am-radius-m); background:var(--am-panel); }
 #am-concept .am-chain-arrow { align-self:center; color:var(--am-muted); }
 #am-concept .am-coord-box { display:flex; flex-direction:column; gap:var(--am-space-1); }
+#am-concept .am-coord-head { display:flex; flex-direction:column; gap:var(--am-gap-line); margin-bottom:var(--am-space-1); }
 #am-concept .am-coord-box details button { margin-top:var(--am-space-2); }
 #am-concept .am-connect-body { display:flex; flex-direction:column; align-items:flex-start; gap:var(--am-space-2); }
 #am-concept .am-connect-body p { margin:0; }

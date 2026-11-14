@@ -16,6 +16,7 @@ func TestIdleComputersInListAgents(t *testing.T) {
 		{Name: "no-folder", Online: true, AcceptsTasks: &yes, HasProject: &no, Agents: []AgentSummary{{Agent: "codex"}}},
 		{Name: "reconnecting", Online: true, Reconnecting: true, Agents: []AgentSummary{{Agent: "codex"}}},
 		{Name: "no-agents", Online: true, Agents: []AgentSummary{}},
+		{Name: "waiting-update", Online: true, UpdatePending: true, Agents: []AgentSummary{{Agent: "codex"}}},
 		{Name: "free", Online: true, AcceptsTasks: &yes, HasProject: &yes, Agents: []AgentSummary{{Agent: "codex"}}},
 	}
 	if got := idleComputers(list); !slices.Equal(got, []string{"Mac", "free"}) {

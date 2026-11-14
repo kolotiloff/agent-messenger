@@ -12,6 +12,17 @@ Updated 2026-11-14 by Cursor.
 
 - Read the coordinator's issue list and the Mac feedback export of 2026-11-14 (35 remarks, through 0.72). Already done and not reopened: effort on the model (T-171, 0.72); the export button no longer jumps (T-152); a stale «exhausted» limit clears (T-138); a late report and a delayed outbox are shown (T-150); a remote worker and notes to it (T-149); note text says a note waits for the run (T-148); Codex does not wake an idle chat (T-161, D-124); a separate folder per worker was declined (Q-027). Still open, now with task ids: T-172 a finished run that never ends, T-173 model lists cleared by the 0.72 update, T-174 the same full-mailbox line every few seconds, T-175 pictures in reports, T-176 planned tasks, T-177 one event when every computer is lost. Server failover stays deferred (owner, 2026-11-13). T-157, T-158 and T-159 were already open; the journal confirms T-159's lock. Q-030 asks before anyone closes a run that still has child processes.
 
+- On `cursor/report-closed-text-bfd1`, not released: the line «Отчёт отправлен координатору, сессия закрыта» under a finished report is ordinary grey text, the same size as the message. The Mac window was not opened here.
+
+- On `cursor/update-download-spinner-bfd1`, not released: the update icon stays an arrow while a release is ready to install. While this computer downloads or installs, and while another computer's update is under way, that circle shows a spinning ring. The other computer does not report how far the download is. The Mac app itself was not opened here.
+
+- On `cursor/mcp-plugin-heading-bfd1`, not released: the project page section that linked Claude Code, Codex and Cursor no longer says «Координатор?». It is a section «MCP-плагин» with the hint «Подключение к графическому редактору». The three editors and their statuses are unchanged. T-155 (`update_messenger`) is a separate PR.
+
+Updated 2026-11-14 by Cursor (T-155).
+
+- T-155 (D-133) on `cursor/t155-update-messenger-bfd1`, not released. `update_messenger` asks a Windows or Linux computer (this one or another of the network) to install the newest Messenger, the program only. Running tasks are never interrupted: the computer answers queued, takes no new tasks, shows «ждёт обновления», and installs as soon as none runs. A Mac answers that its update needs the button in its app. Result: `messenger_update` event and a window notice. Nothing is retried. The window's update icon uses the same queue (the leftover of T-128). Verified: core, supervisor, MCP, broker presence fallback, `check.sh`. Not verified: a real install between computers, the Mac app-button path, the window on the Mac. Next after this PR: T-156.
+- **0.72 is released** (see below). Next planned features were T-155 and T-156; T-155 is this branch.
+
 Updated 2026-11-14 by Codex.
 
 - **0.72 is released** ([release](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.72), [PR #106](https://github.com/kolotiloff/agent-messenger/pull/106), source `f3bd2d45e9f18890419e09996bb7a97bb3b009bd`, [release run](https://github.com/kolotiloff/agent-messenger/actions/runs/43600787465)). All 21 public assets and five signed update feeds/archives verified, including source revision, signatures, sizes and checksums. No installation on the owner's computers was performed.

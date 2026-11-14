@@ -407,7 +407,7 @@ func TestUpdateOfAnotherComputer(t *testing.T) {
 	}
 	ask := func() core.NetUpdate {
 		t.Helper()
-		if _, err := a.store.RequestNetUpdate(peer); err != nil {
+		if _, err := a.store.RequestNetUpdate(peer, ""); err != nil {
 			t.Fatal(err)
 		}
 		round()
@@ -439,24 +439,50 @@ func TestUpdateOfAnotherComputer(t *testing.T) {
 	if fi, err := os.Stat(filepath.Join(b.root, ProgramFile)); err != nil || (runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600) {
 		t.Fatalf("program file %v %v", fi, err)
 	}
-	// A task that is not finished holds the update back.
+	// A running task queues the update; the computer takes no new tasks.
 	task, _, err := b.store.StartTask(core.StartTaskRequest{Project: "Game", OpID: "op-1", Provider: "codex", Text: "работа"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u := ask(); u.State != core.UpdateRefused || !strings.Contains(u.Text, "идут задачи (1)") || !strings.Contains(u.Text, "«работа» (") {
-		t.Fatalf("running task %+v", u)
+	if u := ask(); u.State != core.UpdateQueued || !strings.Contains(u.Text, "идут задачи (1)") || !strings.Contains(u.Text, "«работа»") {
+		t.Fatalf("queued %+v", u)
+	}
+	if len(started) != 0 {
+		t.Fatalf("helper started while a task ran: %+v", started)
+	}
+	if _, _, err := b.store.StartTask(core.StartTaskRequest{Project: "Game", OpID: "op-new", Provider: "codex", Text: "ещё"}); err == nil || !strings.Contains(err.Error(), "update") {
+		t.Fatalf("new task accepted while queued: %v", err)
+	}
+	if pending, err := b.store.HasPendingUpdate(); err != nil || !pending {
+		t.Fatalf("pending %v %v", pending, err)
 	}
 	if _, err := b.store.CancelTask(task); err != nil {
 		t.Fatal(err)
 	}
+	round()
+	if u := status(); u.State != core.UpdateUpdating {
+		t.Fatalf("started after tasks %+v", u)
+	}
+	if len(started) != 1 {
+		t.Fatalf("helper after queue: %d", len(started))
+	}
+	job0 := started[0]
+	job0.State, job0.Version = core.UpdateDone, "0.0.0-preview.57"
+	if err := FinishRemoteUpdate(b.root, job0); err != nil {
+		t.Fatal(err)
+	}
+	round()
+	if u := status(); u.State != core.UpdateDone {
+		t.Fatalf("queued update done %+v", u)
+	}
+
 	// A Mac updates in its own app.
 	updateOS = "darwin"
 	if u := ask(); u.State != core.UpdateRefused || u.Text != updateRefusedMac {
 		t.Fatalf("mac %+v", u)
 	}
 	updateOS = "linux"
-	if len(started) != 0 {
+	if len(started) != 1 {
 		t.Fatalf("helper started on a refusal: %+v", started)
 	}
 
@@ -464,14 +490,14 @@ func TestUpdateOfAnotherComputer(t *testing.T) {
 	if u := ask(); u.State != core.UpdateUpdating {
 		t.Fatalf("updating %+v", u)
 	}
-	if len(started) != 1 || programs[0] != program || started[0].Peer != "host" || started[0].ID != status().ID {
+	if len(started) != 2 || programs[1] != program || started[1].Peer != "host" || started[1].ID != status().ID {
 		t.Fatalf("helper %+v %v", started, programs)
 	}
 	if _, err := os.Stat(filepath.Join(b.root, remoteUpdateMarker)); err != nil {
 		t.Fatalf("no marker: %v", err)
 	}
 	// The helper's result is sent by the client and its files removed.
-	job := started[0]
+	job := started[1]
 	job.State, job.Version = core.UpdateDone, "0.0.0-preview.57"
 	if err := FinishRemoteUpdate(b.root, job); err != nil {
 		t.Fatal(err)
@@ -491,7 +517,7 @@ func TestUpdateOfAnotherComputer(t *testing.T) {
 	if u := ask(); u.State != core.UpdateFailed || !strings.Contains(u.Text, "no such file") {
 		t.Fatalf("start failed %+v", u)
 	}
-	if len(started) != 2 {
+	if len(started) != 3 {
 		t.Fatalf("helper retried: %d", len(started))
 	}
 	if _, err := os.Stat(filepath.Join(b.root, remoteUpdateMarker)); !os.IsNotExist(err) {
@@ -515,8 +541,66 @@ func TestUpdateOfAnotherComputer(t *testing.T) {
 	if u := status(); u.State != core.UpdateFailed || !strings.Contains(u.Text, "не сообщил результат") {
 		t.Fatalf("silent helper %+v", u)
 	}
-	if len(started) != 3 {
+	if len(started) != 4 {
 		t.Fatalf("helper retried: %d", len(started))
+	}
+}
+
+// T-155: this computer queues its own update until live work ends, even
+// when it is not in a network.
+func TestLocalQueuedUpdate(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	oldOS := updateOS
+	updateOS = "linux"
+	t.Cleanup(func() { updateOS = oldOS })
+	s, _ := netComputer(t, ctx, "solo")
+	s.server = nil
+	program := filepath.Join(s.root, "messenger")
+	if err := os.WriteFile(program, []byte("program"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteProgramPath(s.root, program); err != nil {
+		t.Fatal(err)
+	}
+	var started []RemoteUpdate
+	s.startUpdate = func(_ string, job RemoteUpdate) error {
+		started = append(started, job)
+		return nil
+	}
+	task, _, err := s.store.StartTask(core.StartTaskRequest{Project: "Game", OpID: "op-1", Provider: "codex", Text: "работа"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := s.store.RequestNetUpdate("", "Game")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.networkRound(ctx)
+	if len(started) != 0 {
+		t.Fatalf("helper started while a task ran: %+v", started)
+	}
+	if _, _, err := s.store.StartTask(core.StartTaskRequest{Project: "Game", OpID: "op-new", Provider: "codex", Text: "ещё"}); err == nil {
+		t.Fatal("new task accepted while queued")
+	}
+	if _, err := s.store.CancelTask(task); err != nil {
+		t.Fatal(err)
+	}
+	s.networkRound(ctx)
+	if len(started) != 1 || started[0].ID != id || started[0].Broker != "" || started[0].Peer != "" {
+		t.Fatalf("helper %+v", started)
+	}
+	job := started[0]
+	job.State, job.Version = core.UpdateDone, "0.0.0-preview.57"
+	if err := FinishRemoteUpdate(s.root, job); err != nil {
+		t.Fatal(err)
+	}
+	s.networkRound(ctx)
+	if pending, _ := s.store.HasPendingUpdate(); pending {
+		t.Fatal("pending after done")
+	}
+	if u, ok, _ := s.store.LocalUpdate(); !ok || u.State != core.UpdateDone || u.Version != "0.0.0-preview.57" {
+		t.Fatalf("local result %+v", u)
 	}
 }
 

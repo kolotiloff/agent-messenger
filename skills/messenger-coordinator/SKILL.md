@@ -22,6 +22,7 @@ How work is planned and split is decided with the owner under this project's own
 - `tasks(state?, limit?, if_version?)` lists the project's open tasks (not done, failed or cancelled), newest first, with any open question for you, the current cursor and a `version`. `state: "all"` lists every task; a state name lists only that state. Pass `if_version` from the previous call to get `unchanged: true` instead of the same list. You rarely need `tasks`: `wait` already tells you what happened.
 - `answer(task_id, question_id, op_id, text)` answers a worker's question. The worker continues in the same session.
 - `cancel(task_id)` cancels a task.
+- `update_messenger(computer?)` asks a Windows or Linux computer (this one, or another from `list_agents`) to install the newest Messenger, the program only. Running tasks are never interrupted: the computer answers queued, takes no new tasks, and installs as soon as none runs. A Mac answers that its update needs the button in its app. Call `wait` for the `messenger_update` event; nothing is retried. Do not call it again for the same computer while it is queued or updating.
 
 ## Waiting for workers
 
