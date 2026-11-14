@@ -2,6 +2,12 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-14 — Codex (T-153/T-163–T-167 release 0.71)
+
+- Owner explicitly requested the combined release. Merged [PR #103](https://github.com/kolotiloff/agent-messenger/pull/103), exact checked head `14212a16d4e5a47ccfc7f0680eb6c8aa46f0bf25`, at `daae5642bf80fc6193a05fa143678ecf0bcca1cc` after mandatory checks passed.
+- [Release 0.71](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.71) published through [run 43591866974](https://github.com/kolotiloff/agent-messenger/actions/runs/43591866974); all 21 public assets, five signed update feeds/archives and checksums verified. Local full race/cross-build/browser checks and PR CI passed. Real clean-machine installation, login and two-Windows-machine LAN acceptance remain outstanding.
+- Inspected the reported Cursor connection read-only: the project's messenger source was Disabled in Cursor, although its configuration and executable existed. Showed the owner the Enable switch; no working-chat test, permission change or real model call. Release record on `codex/t153-t167-release-71`.
+
 ## 2026-11-14 — Codex (T-153/T-165/T-166/T-167 combined follow-up)
 
 - Owner added installation/find, CLI folder trust, silent sign-in and failed six-digit pairing between two Windows computers, then explicitly asked to finish and release together with T-163/T-164.

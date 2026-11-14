@@ -35,8 +35,8 @@ One coordinator agent hands tasks to worker agents (Claude Code, Codex, Cursor A
 ## Getting started
 
 1. [Download and start](docs/DOWNLOAD.md) the app on each computer.
-2. **Агенты:** connect the agents installed there.
-3. **Новый проект…:** a name and the project folder. Messenger connects registered Claude Code, Codex and Cursor coordinators for that folder by itself; approve the Messenger tools in the chosen client.
+2. **Агенты:** install or find each CLI from its card/settings, then sign in. A visible terminal runs the agent's own setup; a graphical agent app is not required.
+3. **Новый проект…:** a name and the project folder. Messenger connects registered Claude Code, Codex and Cursor coordinators for that folder by itself; approve the Messenger tools in the chosen client. In Cursor, enable the project's `messenger` source under Customize -> MCPs.
 4. Open the project folder in Claude Code, Codex or Cursor, start a new chat and ask «Каких агентов ты видишь?». Then give it work.
 5. For more computers: **Сервер** → start the server on one of them and invite the others with the code.
 
