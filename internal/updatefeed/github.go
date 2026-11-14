@@ -111,6 +111,11 @@ func updateHTTPClient() *http.Client {
 	}}
 }
 func remoteGet(ctx context.Context, client *http.Client, address, accept string, max int64) ([]byte, error) {
+	return remoteGetCounted(ctx, client, address, accept, max, nil)
+}
+
+// remoteGetCounted is remoteGet that also feeds the received bytes to count.
+func remoteGetCounted(ctx context.Context, client *http.Client, address, accept string, max int64, count io.Writer) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
 	if err != nil || !allowedUpdateURL(req.URL) {
 		return nil, errors.New("update address refused")
@@ -132,7 +137,11 @@ func remoteGet(ctx context.Context, client *http.Client, address, accept string,
 	if response.ContentLength > max {
 		return nil, errors.New("update exceeds size limit")
 	}
-	data, err := io.ReadAll(io.LimitReader(response.Body, max+1))
+	var body io.Reader = io.LimitReader(response.Body, max+1)
+	if count != nil {
+		body = io.TeeReader(body, count)
+	}
+	data, err := io.ReadAll(body)
 	if err != nil {
 		return nil, errors.New("update download interrupted")
 	}
@@ -242,7 +251,12 @@ func (c Channel) syncGitHub(ctx context.Context, minimumBuild int, client *http.
 		}
 		// The size is bounded both by signed metadata and the response reader.
 		// Download completes and is verified before any active channel file changes.
-		data, err := download(archive, m.Length)
+		progress := c.newProgress(m.Version, m.Length)
+		data, err := remoteGetCounted(ctx, client, archive.URL, "application/octet-stream", m.Length, progress)
+		progress.end()
+		if err == nil && int64(len(data)) != archive.Size {
+			err = errors.New("release asset length mismatch")
+		}
 		if err != nil {
 			return result, err
 		}

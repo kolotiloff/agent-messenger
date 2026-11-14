@@ -128,6 +128,9 @@ func TestGitHubDownloadCommitAndFailurePreservePreviousPackage(t *testing.T) {
 			})
 			result, err := c.syncGitHub(context.Background(), 6, client)
 			success := scenario == "valid" || scenario == "redirect"
+			if _, ok := c.Progress(); ok {
+				t.Fatal("download progress left after the sync")
+			}
 			if success {
 				if err != nil || !result.Updated {
 					t.Fatal(result, err)

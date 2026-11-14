@@ -2343,7 +2343,7 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 			case !accept:
 				o.Note = "its owner turned off tasks from other computers: a task started there fails"
 			case !has:
-				o.Note = "it has no folder for this project: a task started there fails"
+				o.Note = "it has no project named exactly like this one with a folder (projects are matched by their exact name on every computer): a task started there fails"
 			default:
 				o.Note = ""
 			}

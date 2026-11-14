@@ -4,6 +4,9 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-14 — Claude Code (merged #108–#113; T-178 Mac connecting screen)
 
+- T-179: reviewed another agent's 0.73 work (T-155, T-173/T-174, update ring, MCP-plugin label, grey line). Fixed: mail to an asleep but listed computer was retired after 15 min (a waiting task failed); the update icon now fills a ring from `download.progress` instead of spinning in another colour; refusals give their reason in the journal; the Windows task-list toggle sits beside the window buttons. T-180: the window says project names must match exactly (another network's tasks were refused for a different name). Not released; real downloads not tried.
+- Released 0.73 from `main` 8bb64e2 via PR #114 (release run 43641508174, 21 assets). CI on #114 caught a data race in the T-172 test; fixed before merge. Not installed on the owner's computers.
+
 - T-175 (D-134): worker pictures with reports and questions, window thumbnails, coordinator `task_images` (MCP images), sent between computers (large ones shrunk to JPEG ≤ 180 KB). Core, MCP and browser-fixture checks; no real worker yet.
 - T-177: `network_lost` / `network_back` coordinator events (once per change, per project, per network). Core test; not tried between real computers.
 - T-172: runs record last output, the end of the CLI's turn and, while the process stays, its group's processes by name (Linux /proc, macOS ps, Windows job list). Shown in the task header and `tasks`; journal line once. No closing (Q-030). Verified with a fake worker; real Windows/macOS paths unverified.

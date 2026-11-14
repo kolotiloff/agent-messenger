@@ -499,7 +499,7 @@
     const dot=el('span',undefined,'am-dot'+(online?' online':''));dot.title=online?tr('На связи'):tr('Нет связи');head.append(dot);
     if(view?.pending_update==='updating'||view?.pending_update==='queued'){
       const tip=view.pending_update==='updating'?tr('Обновляется…'):tr('ждёт обновления');
-      const b=el('span',undefined,'am-update-icon am-peer-update am-update-downloading');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);appendUpdateGlyphs(b);
+      const b=el('span',undefined,'am-update-icon am-peer-update am-update-wait');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);appendUpdateGlyphs(b);
       head.append(b);
     }
     machine.append(head);
@@ -522,10 +522,12 @@
       // owner confirms in a popup.
       const busy=updateLine(peer);
       if(busy){
-        // While an update is asked for or under way, the icon stays, dimmed
-        // and pulsing, and says so on hover (owner).
+        // While an update is asked for, waits for tasks or is under way, the
+        // arrow stays, dimmed and still, and says so on hover: another
+        // computer reports no progress, and a spinning mark looked like a
+        // download that may wait for hours (owner, 2026-11-14).
         const tip=busy[0];
-        const b=el('span',undefined,'am-update-icon am-peer-update am-update-downloading');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);appendUpdateGlyphs(b);
+        const b=el('span',undefined,'am-update-icon am-peer-update am-update-wait');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);appendUpdateGlyphs(b);
         name.append(b);
       }else if(fresh&&peer.version&&versionOlder(peer.version,newestVersion())){
         const newest=versionName(newestVersion()),label=tr('Обновить до ')+newest;
@@ -1165,16 +1167,8 @@
   // are grey and numbered.
   const checkPath=['M21 12a9 9 0 1 1-3-6.7L21 8','M21 3v5h-5'];
   const gearPath=['M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z'];
-  // The update mark: a down arrow, or a spinning ring once a download starts.
-  function appendUpdateGlyphs(node){
-    const arrow=svgIcon(['M12 4v11M7 10l5 5 5-5M5 20h14']);
-    arrow.classList.add('am-update-arrow');
-    const ring=document.createElementNS('http://www.w3.org/2000/svg','svg');
-    ring.setAttribute('viewBox','0 0 24 24');ring.setAttribute('aria-hidden','true');ring.classList.add('am-update-ring');
-    const c=document.createElementNS('http://www.w3.org/2000/svg','path');
-    c.setAttribute('d','M6.4 8.8 A6.5 6.5 0 0 1 17.6 8.8');
-    ring.append(c);node.append(arrow,ring);
-  }
+  // The update mark: a down arrow.
+  function appendUpdateGlyphs(node){node.append(svgIcon(['M12 4v11M7 10l5 5 5-5M5 20h14']));}
   function svgIcon(paths,circle){
     const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');svg.setAttribute('focusable','false');
     if(circle){const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx','12');c.setAttribute('cy','12');c.setAttribute('r','3');svg.append(c);}
@@ -1853,8 +1847,9 @@
     if(fresh||document.activeElement!==$('project-page-name'))$('project-page-name').value=view.project_title||name;
     // Other computers and the coordinator chat know the project by the name it
     // was created with; a rename shows it so the owner can match them (T-065).
-    const renamed=!!view.project_title&&view.project_title!==name;$('project-page-key').hidden=!renamed;
-    $('project-page-key').textContent=renamed?tr('Для других компьютеров и координатора проект по-прежнему называется «')+name+'».':'';
+    // Tasks reach another computer's project only by this exact name.
+    const renamed=!!view.project_title&&view.project_title!==name;$('project-page-key').hidden=false;
+    $('project-page-key').textContent=(renamed?tr('Для других компьютеров и координатора проект по-прежнему называется «')+name+'». ':'')+tr('На других компьютерах сети у проекта должно быть точно такое же название «')+name+tr('»: задачу принимает проект с тем же названием.');
     if(fresh||document.activeElement!==$('project-page-folder'))$('project-page-folder').value=view.folder||'';
     if(fresh||(document.activeElement!==$('project-page-rules')&&!rulesTimer))$('project-page-rules').value=view.worker_rules||'';
     renderCoordinatorRow();
@@ -2150,28 +2145,57 @@
   // The update icon says in its tooltip which version came out (T-066).
   function updateTip(version,busy){
     const name=versionName(version);
-    const text=busy?tr('Обновление загружается'):name?tr('Вышла ')+name+tr('. Нажмите, чтобы обновить'):tr('Обновить');
+    let text=busy==='installing'?tr('Обновление устанавливается'):busy?tr('Обновление загружается'):name?tr('Вышла ')+name+tr('. Нажмите, чтобы обновить'):tr('Обновить');
+    if(updateProgress)text=tr('Загружается обновление')+(updateProgress.version?' '+versionName(updateProgress.version):'')+': '+Math.floor(100*updateProgress.done/updateProgress.total)+'%';
     $('app-update-button').title=text;$('app-update-button').setAttribute('aria-label',text);
   }
+  // While an update downloads, a ring around the same arrow fills from 0 to
+  // 100% (owner, 2026-11-14). The download writes its progress wherever it
+  // runs (the background check, or the Mac app's fetch helper); the window
+  // asks for it often while it lasts and rarely otherwise.
+  let updateProgress=null,progressTimer=0;
+  function showUpdateProgress(){
+    const b=$('app-update-button'),p=updateProgress;
+    b.classList.toggle('am-update-loading',!!p);
+    if(p)b.style.setProperty('--am-update-p',String(Math.min(1,Math.max(0,p.done/p.total))));
+    else b.style.removeProperty('--am-update-p');
+  }
+  async function pollUpdateProgress(){
+    clearTimeout(progressTimer);
+    let next=null;
+    try{const r=await api('/api/update-progress');if(r?.downloading&&r.total>0)next={version:String(r.version||''),done:Number(r.done)||0,total:Number(r.total)};}catch(_){}
+    const changed=!!next!==!!updateProgress;
+    updateProgress=next;
+    if(changed){if(window.webkit?.messageHandlers?.updates)renderMacUpdate();else if(selfUpdate)renderSelfUpdate();else showUpdateProgress();}
+    else{showUpdateProgress();if(next)updateTip(next.version,true);}
+    // A download that just ended may have made an update ready: ask again.
+    if(changed&&!next&&!window.webkit?.messageHandlers?.updates)loadSelfUpdate();
+    progressTimer=setTimeout(pollUpdateProgress,next?400:document.hidden?15000:2500);
+  }
+  let macUpdate=null;
   window.messengerUpdateStatus = status => {
     if(!window.webkit?.messageHandlers?.updates)return;
+    macUpdate=status||{};renderMacUpdate();
+    if(macUpdate.checking)pollUpdateProgress();
+  };
+  function renderMacUpdate(){
+    const status=macUpdate||{};
     const version=typeof status?.version==='string'?status.version:'';
     const installed=typeof status?.installedVersion==='string'?status.installedVersion:'';
     $('app-installed-version').hidden=!installed;
     $('app-installed-version').title=installed?tr('Версия ')+versionName(installed).slice(1):'';
-    const detail=typeof status?.detail==='string'?status.detail:'';
-    const waiting=detail===tr('Обновление загружается в фоне');
-    // Only an available update is shown, as the blue icon next to the version.
-    // Background checks and their failures stay quiet; the app checks again
-    // by itself.
-    const shown=!!version||waiting;
+    // Only an available update or one downloading is shown, as the blue
+    // icon next to the version. Background checks and their failures stay
+    // quiet; the app checks again by itself.
+    const loading=!!updateProgress;
+    const shown=!!version||loading;
     if(version)knownUpdate=version;
     $('app-update-version').hidden=true;$('app-update-button').hidden=!shown;
     $('app-installed-version').textContent=versionText(installed);
-    updateTip(version,waiting);
-    $('app-update-button').classList.toggle('am-update-downloading',waiting);
-    $('app-update-button').disabled=waiting;
-  };
+    updateTip(version,loading);
+    showUpdateProgress();
+    $('app-update-button').disabled=loading;
+  }
   // Windows and Linux: the program updates itself from the window (D-048).
   // While the check downloads, the icon is the ring; the arrow appears when
   // a release is ready to install.
@@ -2183,17 +2207,18 @@
     $('app-installed-version').title=installed?tr('Версия ')+versionName(installed).slice(1):'';
     const version=typeof s.version==='string'?s.version:'';
     if(version&&s.state==='available')knownUpdate=version;
-    const downloading=selfUpdateBusy||s.state==='checking'||s.state==='installing';
-    const done=s.state==='installed',shown=(s.state==='available'&&!!version)||downloading||done||!!s.message;
-    // The arrow while an update waits (owner, T-056, T-066); the ring while
-    // it is downloading or being installed. A line appears only for an error
-    // or after the update.
+    // A check that only asks GitHub shows nothing; a download fills the ring
+    // around the arrow; installing dims the arrow.
+    const installing=selfUpdateBusy||s.state==='installing',loading=!!updateProgress;
+    const done=s.state==='installed',shown=(s.state==='available'&&!!version)||installing||loading||done||!!s.message;
+    // The arrow while an update waits (owner, T-056, T-066). A line appears
+    // only for an error or after the update.
     $('app-update-version').hidden=!s.message&&!done;$('app-update-button').hidden=!shown||done;
     $('app-installed-version').textContent=versionText(installed);
     $('app-update-version').textContent=s.message||(done?tr('Обновлено. Окно откроется заново.'):'');
-    updateTip(version,downloading);
-    $('app-update-button').classList.toggle('am-update-downloading',downloading);
-    $('app-update-button').disabled=downloading;
+    updateTip(version,installing?'installing':loading);
+    showUpdateProgress();
+    $('app-update-button').disabled=installing||loading;
   }
   async function loadSelfUpdate(){
     if(window.webkit?.messageHandlers?.updates||selfUpdateBusy)return;
@@ -2212,6 +2237,7 @@
     else installSelfUpdate();
   });
   if(!window.webkit?.messageHandlers?.updates){selfUpdateTimer=setInterval(loadSelfUpdate,60000);loadSelfUpdate();}
+  pollUpdateProgress();
   root.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>show(b.dataset.tab)));
   $('list-toggle').addEventListener('click',()=>{
     const expanded=$('list-toggle').getAttribute('aria-expanded')!=='true';

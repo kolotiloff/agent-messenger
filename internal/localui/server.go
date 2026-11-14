@@ -187,6 +187,17 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			http.Error(w, "access denied", http.StatusUnauthorized)
 			return
 		}
+		if r.URL.Path == "/api/update-progress" {
+			// How much of an update has downloaded, for the update icon.
+			out := map[string]any{"ok": true, "downloading": false}
+			if channel != nil {
+				if p, ok := channel.Progress(); ok {
+					out = map[string]any{"ok": true, "downloading": true, "version": p.Version, "done": p.Done, "total": p.Total}
+				}
+			}
+			writeJSON(w, out)
+			return
+		}
 		if strings.HasPrefix(r.URL.Path, "/api/updates/") {
 			if channel == nil {
 				http.NotFound(w, r)

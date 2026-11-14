@@ -691,3 +691,34 @@ func TestReleaseAbsentOutbox(t *testing.T) {
 		t.Fatalf("outbox %+v", pending)
 	}
 }
+
+func TestNetDescribeRefusalReason(t *testing.T) {
+	desc, _ := NetDescribe([]byte(`{"kind":"refused","task":"task-94272a3f26ba57b1","reason":"the project folder is missing on this computer"}`))
+	if desc != "refused task-94272a3f26ba57b1 because: the project folder is missing on this computer" {
+		t.Fatal(desc)
+	}
+}
+
+// A computer the server still lists but that has not reported for longer
+// than the reconnect grace (asleep) keeps its mail: its task is not failed.
+func TestReleaseAbsentOutboxKeepsAsleepComputer(t *testing.T) {
+	p := newNetPair(t)
+	id, _, err := p.a.st.StartTask(StartTaskRequest{Project: "Game", OpID: "asleep", Computer: "dev-b", Provider: "codex", Text: "stay"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	agents := []NetAgent{{Agent: "codex"}}
+	if err := p.a.st.SetNetwork(testBroker, HostPeerID, []NetPeer{{ID: "dev-b", Name: "Ноутбук", Age: 1200, Agents: agents}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.a.st.db.Exec(`UPDATE net_outbox SET created_at=?`, time.Now().UTC().Add(-reconnectGrace-time.Minute).Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	if n, _, err := p.a.st.ReleaseAbsentOutbox(time.Now()); err != nil || n != 0 {
+		t.Fatalf("released %d %v", n, err)
+	}
+	var state string
+	if err := p.a.st.db.QueryRow(`SELECT state FROM tasks WHERE id=?`, id).Scan(&state); err != nil || state != "running" {
+		t.Fatalf("task %s %v", state, err)
+	}
+}

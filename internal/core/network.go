@@ -745,8 +745,10 @@ func (s *Store) NetSent(seq int64) error {
 // ReleaseAbsentOutbox retires messages aimed at a computer that is not in
 // the network, once they have waited out the reconnect grace (T-174). A
 // computer that is listed and reporting keeps its messages, even when its
-// mailbox is full (T-137). Replies that must not be lost are parked; the
-// rest are dropped. Nothing is retried.
+// mailbox is full (T-137), and so does one the server still lists that has
+// not reported for a while (asleep, or its program stopped): it is still in
+// the network. Replies that must not be lost are parked; the rest are
+// dropped. Nothing is retried.
 func (s *Store) ReleaseAbsentOutbox(now time.Time) (int, []string, error) {
 	cutoff := now.UTC().Add(-reconnectGrace).Format(time.RFC3339Nano)
 	var seqs []int64
@@ -756,9 +758,9 @@ func (s *Store) ReleaseAbsentOutbox(now time.Time) (int, []string, error) {
 			return err
 		}
 		rows, err := tx.Query(`SELECT seq FROM net_outbox WHERE broker=? AND created_at<=?
- AND NOT EXISTS (SELECT 1 FROM net_peers p WHERE p.peer=net_outbox.recipient AND p.missing_since='' AND p.age>=0 AND p.age<=?)
+ AND NOT EXISTS (SELECT 1 FROM net_peers p WHERE p.peer=net_outbox.recipient AND p.missing_since='')
  AND NOT EXISTS (SELECT 1 FROM net_peers p WHERE p.peer=net_outbox.recipient AND p.missing_since<>'' AND p.missing_since>?)`,
-			broker, cutoff, PeerFresh, cutoff)
+			broker, cutoff, cutoff)
 		if err != nil {
 			return err
 		}
@@ -1022,7 +1024,7 @@ func applyStart(tx *sql.Tx, from netLink, b netBody) error {
 			return err
 		}
 		if projects == 0 {
-			return fmt.Errorf("%w: this computer has no project %q", ErrRejected, r.Project)
+			return fmt.Errorf("%w: this computer has no project named exactly %q; projects are matched by their exact name, so the owner creates or renames the project here to exactly this name", ErrRejected, r.Project)
 		}
 		computer, err := localComputer(tx)
 		if err != nil {
@@ -1285,6 +1287,10 @@ func NetDescribe(body []byte) (desc string, progress bool) {
 	}
 	if b.Failure != "" {
 		parts = append(parts, "reason "+clip(b.Failure, 40))
+	}
+	// A refusal says why, so the journal of either computer explains it.
+	if b.Reason != "" && strings.HasSuffix(b.Kind, "refused") {
+		parts = append(parts, "because: "+clip(b.Reason, 300))
 	}
 	return strings.Join(parts, " "), b.Kind == "progress"
 }
