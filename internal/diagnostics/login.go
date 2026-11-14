@@ -74,3 +74,9 @@ func agentCommand(table map[string][]string, provider, cli, environment string) 
 	}
 	return append(program, args...), env, nil
 }
+
+// InteractiveCommand opens a new CLI at its own trust prompt, with no task or
+// model prompt. The owner confirms in that terminal; Messenger does not reply.
+func InteractiveCommand(provider, cli, environment string) ([]string, []string, error) {
+	return agentCommand(map[string][]string{"claude": {}, "codex": {}, "cursor": {}}, provider, cli, environment)
+}

@@ -2,6 +2,18 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-14 — Codex (T-153/T-165/T-166/T-167 combined follow-up)
+
+- Owner added installation/find, CLI folder trust, silent sign-in and failed six-digit pairing between two Windows computers, then explicitly asked to finish and release together with T-163/T-164.
+- Implemented terminal installation with durable results and one registration attempt; own-CLI trust confirmation; independent Windows interactive console, Linux login-shell PATH and visible launcher uncertainty; repeated public discovery requests and explicit unavailable-UDP fallback. The frontend was also dropping structured terminal errors; it now displays them with a copyable command. Exact acquaintance-machine failures remain unconfirmed.
+- Fake installer, launch/registration, trust and browser interaction checks pass; local full race/cross-build/browser checks pass; PR CI and release pending. See [report](reports/2026-11-14-t153-t165-t167.md).
+
+## 2026-11-14 — Codex (T-163 theme selection, T-164 first-run welcome)
+
+- Reproduced the reported 0.70 settings bug using actual clicks: a popover outside the modal dialog was visible but inert. Theme and language menus now remain inside their owning dialog. The earlier T-154 visual check changed the theme programmatically and did not test option selection.
+- Removed the project gate that showed only «Создайте проект» on first launch. The existing welcome page now includes project creation before coordinator setup; the empty task pane is hidden until there is a project (D-126).
+- Added repeatable Chromium/WebKit checks and a CI job for real pointer/keyboard selection, system theme, persistence, bridge messages and first-project setup, using only fictional HTTP data. Screenshots at 1100/600 px in both themes checked. Native installed-app acceptance not performed. Local full repository checks passed. Not released.
+
 ## 2026-11-14 — Codex (T-154/T-161/T-162 release 0.70)
 
 - Owner explicitly requested publication. Merged PR #101 at `4b7c687eda006e5556536fd18ddbb35d9bcd2670` after required CI checks passed (the informational Windows suite was still running).

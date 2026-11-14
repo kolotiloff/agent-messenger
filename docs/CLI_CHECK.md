@@ -55,3 +55,9 @@ Each command gets up to 8 seconds, waiting for inherited pipes up to 500 ms. On 
 Results are not written automatically into `doctor`: it keeps `not_checked`. In the window («Агенты»), each connected agent's card is checked once when the window opens; the card's «Проверить снова» icon repeats the check, and its «Настройки» gear holds the program path, profile and models. Changing the fields resets the previous result. The report is kept only in the current window and does not count as a check of another session.
 
 On a Mac, passive discovery for the window additionally checks `~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`: an app launched from the Dock usually does not inherit the terminal's PATH. Candidates are not executed until explicitly clicked. Over HTTP only fixed diagnostic commands are available, without passing arbitrary arguments; the local Origin and the window key are checked. One check runs at a time per window server.
+
+## Window setup
+
+The agent card's Install button runs the official CLI installer in a visible terminal. Find in agent settings looks through that terminal's PATH, including custom prefixes, and connects/checks the returned executable. Choose file remains available. No terminal result means the outcome is unknown; Messenger does not automatically reinstall. Uninstall opens the official removal instructions.
+
+Sign-in opens the CLI's own account flow. If terminal startup cannot be confirmed, the window reports it with a manual command. Trust on an agent card opens its CLI in the selected project folder so the owner can confirm there; no graphical agent app is required. Messenger does not automatically answer trust or account prompts.

@@ -10,8 +10,9 @@ The `.github/workflows/checks.yml` workflow runs on pull requests, on changes to
 | macOS 15, Go 1.22.2 | Native checks of compatibility with the baseline Go version |
 | macOS 15, current stable Go | Native checks; two preview archives, SHA-256, clean install, refusal to update a live client, update of a stopped client with a non-empty queue and outgoing prepared/queued messages; no automatic sending and no duplicate after the update |
 | Ubuntu 24.04, current stable Go | Compatibility of code and tests with the current stable Go version; the actual version is recorded in the log |
-| Windows Server 2025, current stable Go | `scripts/check-windows.sh`: vet, the lock, job objects, the background client and task runs with fake workers (required); the whole suite runs after it for information only, since many tests use POSIX fake CLIs |
+| Windows Server 2025, current stable Go | `scripts/check-windows.sh`: vet, the lock, job objects, the background client and task runs with fake workers (required); setup receipt/PowerShell discovery/terminal plan and UDP discovery regressions are also required; the whole suite runs after them for information only, since many tests use POSIX fake CLIs |
 | Windows and Linux downloads (Ubuntu) | Builds the four downloads as the release does, signs the update archives with a throwaway key and checks them, installs and starts the Linux download |
+| Window controls (Ubuntu, Chromium and WebKit) | Fictional HTTP fixtures only: pointer/keyboard theme and language selection inside settings, saved/system themes, appearance bridge messages first-project welcome, install/find/login and trust actions (`scripts/check-window-controls.cjs`) |
 | Windows download on Windows | Runs the client from the built `.exe`, then installs it for the user and removes it, keeping the data (T-053) |
 
 GitHub checks do not replace experience on the user's computers, the availability of their CLIs, logins, sleep/wake and the operation of a network broker. Confirming that a specific SHA is ready requires all jobs to succeed for exactly that SHA.
@@ -41,6 +42,15 @@ bash scripts/check-builds.sh
 You can set `GO_BIN=/absolute/path/to/go`. The first script does not change formatting but reports differences; it checks dependencies and runs native race tests. On Mac it uses the external linker for compatibility with the already verified Go 1.22.2. A short temporary directory is needed because of Unix socket path length limits; only the directory the script itself created is deleted.
 
 The second script compiles every test package but does not run it under a foreign OS. It does not substitute a fake successful run result.
+
+Browser controls (Node >= 20 and Playwright 1.62.1 with Chromium/WebKit installed):
+
+```sh
+BROWSER_ENGINE=chromium node scripts/check-window-controls.cjs
+BROWSER_ENGINE=webkit node scripts/check-window-controls.cjs
+```
+
+`PLAYWRIGHT_MODULE` may point to a separately installed Playwright module; `BROWSER_EXECUTABLE` may point to an existing browser. `SCREENSHOT_DIR` saves tasks/agents/server/dialog/menu screenshots in both themes at 1100/600 px. The checks route all requests to fictional data, use fresh browser contexts, and never start Messenger, a worker or a real model. The appearance bridge is a stub, not native shell acceptance. CI installs the pinned test dependency in the runner's temporary directory; the product has no Node dependency.
 
 Checking two Mac archives:
 

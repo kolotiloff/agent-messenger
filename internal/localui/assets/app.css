@@ -403,6 +403,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 @keyframes am-notice-timer { from { transform:scaleX(1); } to { transform:scaleX(0); } }
 @media (prefers-reduced-motion:reduce) { #am-concept .am-notice-timer { animation:none; } }
 #am-concept .am-toasts { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:var(--am-gap-control); padding-top:var(--am-space-3); }
+#am-concept .am-main > .am-toasts { flex:none; padding-inline:var(--am-pane-inset); }
 #am-concept .am-toast { display:inline-flex; align-items:center; gap:var(--am-gap-control); max-width:min(560px,100%); padding:var(--am-space-1) var(--am-space-1) var(--am-space-1) var(--am-space-3); border:1px solid var(--am-line); border-radius:var(--am-radius-m); background:var(--am-composer); color:var(--am-text); line-height:1.35; box-shadow:var(--am-shadow-s); }
 #am-concept .am-toast-text { min-width:0; overflow-wrap:anywhere; }
 #am-concept .am-toast button { flex:none; min-height:var(--am-control-chip); padding:var(--am-text-nudge) var(--am-space-2) 0; font-size:var(--am-text-s); white-space:nowrap; }
@@ -649,7 +650,7 @@ body.am-native #am-concept .am-panel-toggle { margin-left:auto; }
 /* T-154: keep both text columns and row positions stable across checks,
    sign-in actions and installation. Full clipped text is available as a tip. */
 #am-concept .am-agent-card:not(.am-agent-remote) .am-step { grid-template-columns:var(--am-agent-mark-width) minmax(0,1fr) var(--am-agent-action-width); height:var(--am-agent-step-height); min-height:var(--am-agent-step-height); }
-#am-concept .am-agent-card:not(.am-agent-remote) .am-step:nth-child(n+3) .am-step-text { grid-column:2 / -1; }
+#am-concept .am-agent-card:not(.am-agent-remote) .am-step:nth-child(n+3):not(:has(> button)) .am-step-text { grid-column:2 / -1; }
 #am-concept .am-agent-card:not(.am-agent-remote) .am-step:nth-child(n+3) > span:last-child { display:none; }
 #am-concept .am-agent-card:not(.am-agent-remote) .am-step-title { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 #am-concept .am-agent-card:not(.am-agent-remote) .am-step > button { width:var(--am-agent-action-width); height:var(--am-control-compact); }

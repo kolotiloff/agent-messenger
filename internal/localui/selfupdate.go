@@ -29,6 +29,7 @@ type SelfUpdate struct {
 
 // Desktop is what the window launcher enables besides the page itself.
 type Desktop struct {
+	setupRoot  string // Set only by RunWindow, or an isolated test.
 	Channel    *updatefeed.Channel
 	Restart    Restarter
 	SelfUpdate *SelfUpdate

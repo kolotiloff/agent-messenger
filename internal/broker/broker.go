@@ -351,8 +351,9 @@ type InviteCode struct {
 	ExpiresAt string `json:"expires_at"`
 	// Short is the 6-digit code for a computer on the local network
 	// (T-052); it ends earlier, at ShortExpiresAt.
-	Short          string `json:"short,omitempty"`
-	ShortExpiresAt string `json:"short_expires_at,omitempty"`
+	Short            string `json:"short,omitempty"`
+	ShortExpiresAt   string `json:"short_expires_at,omitempty"`
+	ShortUnavailable string `json:"short_unavailable,omitempty"`
 }
 
 // Invite creates a one-time invitation for a device that will reach the

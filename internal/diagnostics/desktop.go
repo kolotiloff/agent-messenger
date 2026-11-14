@@ -6,10 +6,36 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strings"
 
 	"github.com/kolotiloff/agent-messenger/internal/adapters"
 	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
+
+// ResolveTerminalCLI validates the path reported by the owner's terminal.
+// Windows command shims are resolved to programs we can launch directly.
+func ResolveTerminalCLI(provider, path string) string {
+	if !filepath.IsAbs(path) || strings.ContainsAny(path, "\x00\r\n") {
+		return ""
+	}
+	if info, err := os.Stat(path); err == nil && platform.IsExecutable(path, info) {
+		return path
+	}
+	if runtime.GOOS != "windows" {
+		return ""
+	}
+	r := Report{Agents: []Agent{{Provider: provider}}}
+	if provider == "codex" {
+		r = npmCodexCandidate(r, filepath.Dir(path))
+	}
+	if provider == "cursor" {
+		r = cursorNodeCandidate(r, filepath.Join(filepath.Dir(path), "versions"))
+		if local := os.Getenv("LocalAppData"); filepath.IsAbs(local) {
+			r = cursorNodeCandidate(r, filepath.Join(local, "cursor-agent", "versions"))
+		}
+	}
+	return r.Agents[0].CLI.Path
+}
 
 // exeSuffix is the file extension of a program started directly. On Windows
 // PATH lookup would otherwise also find .cmd scripts, which Messenger does

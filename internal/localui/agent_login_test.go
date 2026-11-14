@@ -3,8 +3,10 @@ package localui
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -40,7 +42,7 @@ func TestTerminalCommands(t *testing.T) {
 	}
 	t.Setenv("PATH", dir)
 	linux, err := terminalCommand("linux", argv, env)
-	if err != nil || linux.Path != term || linux.Args[len(linux.Args)-1] != `exec sh -c "$AM_LOGIN; printf '\nГотово. Нажмите Enter, чтобы закрыть окно.'; read _"` {
+	if err != nil || linux.Path != term || linux.Args[len(linux.Args)-1] != `exec "$AM_TERMINAL_SHELL" -lic "$AM_LOGIN; printf '\nГотово. Нажмите Enter, чтобы закрыть окно.'; read am_terminal_close"` {
 		t.Fatalf("linux %v %v", linux, err)
 	}
 	t.Setenv("PATH", t.TempDir())
@@ -80,7 +82,7 @@ func TestAgentLoginAndInstallRoutes(t *testing.T) {
 		h.ServeHTTP(w, r)
 		return w.Code, w.Body.String()
 	}
-	if code, _ := post("/api/agent-install", `{"provider":"codex"}`); code != 200 || len(opened) != 1 || !strings.HasPrefix(opened[0], "https://") {
+	if code, _ := post("/api/agent-page", `{"provider":"codex"}`); code != 200 || len(opened) != 1 || !strings.HasPrefix(opened[0], "https://") {
 		t.Fatalf("install %d %v", code, opened)
 	}
 	body, _ := json.Marshal(map[string]string{"provider": "codex", "cli": cli})
@@ -94,8 +96,8 @@ func TestAgentLoginAndInstallRoutes(t *testing.T) {
 	started = started[:1]
 	for _, bad := range []struct{ path, body string }{
 		{"/api/agent-logout", `{"provider":"gemini","cli":"/bin/sh"}`},
-		{"/api/agent-install", `{"provider":"gemini"}`},
-		{"/api/agent-install", `{"provider":"codex","url":"https://example.com"}`},
+		{"/api/agent-page", `{"provider":"gemini"}`},
+		{"/api/agent-page", `{"provider":"codex","url":"https://example.com"}`},
 		{"/api/agent-login", `{"provider":"codex","cli":"codex"}`},
 		{"/api/agent-login", `{"provider":"codex","cli":"/no/such/codex"}`},
 	} {
@@ -105,5 +107,32 @@ func TestAgentLoginAndInstallRoutes(t *testing.T) {
 	}
 	if len(opened) != 1 || len(started) != 1 {
 		t.Fatalf("a refused request ran something: %v %v", opened, started)
+	}
+}
+
+func TestTerminalLaunchReportsImmediateFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX fake launcher")
+	}
+	cmd := exec.Command("/bin/sh", "-c", "printf 'fixture terminal unavailable' >&2; exit 7")
+	err := launchTerminal(cmd, true)
+	if !errors.Is(err, errTerminalUnconfirmed) || !strings.Contains(err.Error(), "fixture terminal unavailable") {
+		t.Fatal(err)
+	}
+	if err := launchTerminal(exec.Command("/bin/sh", "-c", "exit 0"), true); err != nil {
+		t.Fatal(err)
+	}
+}
+func TestWindowsTerminalCreatesInteractiveChild(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows path semantics")
+	}
+	cmd, err := terminalCommand("windows", []string{`C:\Program Files\agent.exe`, "login"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	line := strings.Join(cmd.Args, " ")
+	if !strings.Contains(line, "Start-Process") || strings.Contains(line, "-NoNewWindow") || !strings.Contains(line, "-EncodedCommand") {
+		t.Fatal("no independent interactive console", line)
 	}
 }
