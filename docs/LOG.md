@@ -2,6 +2,12 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-14 — Codex (T-168–T-171 release 0.72)
+
+- Released [0.72](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.72), source `f3bd2d45e9f18890419e09996bb7a97bb3b009bd`, [run](https://github.com/kolotiloff/agent-messenger/actions/runs/43600787465). PR #105 and PR #106 checks passed; exact checked #106 head `baf18d23021164c4babc4b96f381c1a15a5f6543`.
+- Verified all 21 public assets and five signed manifests/archives, revision, version/build, sizes and checksums. No installation on the owner's computers, real model, installer or account login was run.
+- Includes explicit install recovery, Cursor sidebar names, first-login profile validation and current worker model/effort choices. Custom lists and recorded tasks stay unchanged. Windows account acceptance remains with the owner.
+
 ## 2026-11-14 — Codex (T-171 model selections, preparing 0.72)
 
 - Researched current official Codex/Claude/Cursor documentation and Cursor's metadata-only model list. Added exact model/effort choices, native argv mapping, task guidance and migration preserving custom settings.
