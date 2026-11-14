@@ -218,3 +218,103 @@ func TestModelRefusalNamesALikelyTypo(t *testing.T) {
 		}
 	}
 }
+
+func TestDefaultModelUpgradePreservesChoicesAndTasks(t *testing.T) {
+	for provider, old := range map[string]string{
+		"claude": "opus\nsonnet\nhaiku",
+		"codex":  "gpt-6-luna\ngpt-6.1-terra\ngpt-6.1-sol\ngpt-6-astra",
+		"cursor": "composer-2.5-fast\ngrok-4.7-high-fast\nclaude-opus-5-thinking-high",
+	} {
+		for _, scenario := range []string{"old", "custom", "empty"} {
+			t.Run(provider+"/"+scenario, func(t *testing.T) {
+				f := newTaskFixture(t)
+				agents, err := f.st.ComputerAgents()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := f.st.SetComputerAgent("cursor", agents[0].CLI, "", "messenger-only"); err != nil {
+					t.Fatal(err)
+				}
+				value := old
+				if scenario == "custom" {
+					value = "gpt-6-astra\ngpt-6-luna"
+				}
+				if scenario == "empty" {
+					value = ""
+				}
+				if _, err := f.st.db.Exec(`UPDATE computer_agents SET models=? WHERE provider=?`, value, provider); err != nil {
+					t.Fatal(err)
+				}
+				task, _, err := f.st.StartTask(StartTaskRequest{Project: "Game", OpID: "before", Provider: "claude", Text: "x", Model: "opus"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := f.st.db.Exec(`DELETE FROM meta WHERE key='default_models_t171'`); err != nil {
+					t.Fatal(err)
+				}
+				if err := refreshDefaultModels(f.st.db); err != nil {
+					t.Fatal(err)
+				}
+				var got string
+				if err := f.st.db.QueryRow(`SELECT models FROM computer_agents WHERE provider=?`, provider).Scan(&got); err != nil {
+					t.Fatal(err)
+				}
+				want := value
+				if scenario == "old" {
+					want = strings.Join(map[string][]string{"claude": DefaultClaudeModels, "codex": DefaultCodexModels, "cursor": DefaultCursorModels}[provider], "\n")
+				}
+				if got != want {
+					t.Fatalf("models %q want %q", got, want)
+				}
+				recorded, err := f.st.TaskByID(task)
+				if err != nil || recorded.Model != "opus" {
+					t.Fatalf("rewrote recorded task: %+v %v", recorded, err)
+				}
+				// An owner restoring an old list after the upgrade keeps that choice.
+				if _, err := f.st.db.Exec(`UPDATE computer_agents SET models=? WHERE provider=?`, old, provider); err != nil {
+					t.Fatal(err)
+				}
+				if err := refreshDefaultModels(f.st.db); err != nil {
+					t.Fatal(err)
+				}
+				if err := f.st.db.QueryRow(`SELECT models FROM computer_agents WHERE provider=?`, provider).Scan(&got); err != nil {
+					t.Fatal(err)
+				}
+				if got != old {
+					t.Fatal("migration repeated")
+				}
+			})
+		}
+	}
+
+}
+
+func TestEffortSelectionIsRecordedAndExplained(t *testing.T) {
+	f := newTaskFixture(t)
+	model := "gpt-6-astra[effort=high]"
+	task, _, err := f.st.StartTask(StartTaskRequest{Project: "Game", OpID: "effort", Provider: "codex", Text: "Fix the Unity import pipeline", Model: model})
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorded, err := f.st.TaskByID(task)
+	if err != nil || recorded.Model != model {
+		t.Fatalf("selection lost: %+v %v", recorded, err)
+	}
+	list, err := f.st.ProjectAgents("Game")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, c := range list["computers"].([]ComputerSummary) {
+		for _, a := range c.Agents {
+			for _, o := range a.ModelOptions {
+				if a.Agent == "codex" && o.Model == model && o.Purpose != "" {
+					found = true
+				}
+			}
+		}
+	}
+	if !found {
+		t.Fatal("coordinator lacks model guidance")
+	}
+}

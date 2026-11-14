@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/kolotiloff/agent-messenger/internal/buildinfo"
+	"github.com/kolotiloff/agent-messenger/internal/modelcatalog"
 	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
 
@@ -699,13 +700,8 @@ type StartTaskRequest struct {
 	Lock string
 }
 
-// taskModelPattern accepts model names such as "opus", "claude-sonnet-5-5",
-// "gpt-5.1-codex" or "sonnet[1m]". It never starts with "-", so a model can
-// not be read as a CLI flag, and has no quotes, spaces or "=".
-var taskModelPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/\[\]-]{0,79}$`)
-
-// ValidTaskModel reports whether name may be passed to a worker CLI.
-func ValidTaskModel(name string) bool { return name == "" || taskModelPattern.MatchString(name) }
+// ValidTaskModel accepts a CLI model ID or an explicit Messenger effort selection.
+func ValidTaskModel(name string) bool { _, _, err := modelcatalog.Split(name); return err == nil }
 
 // StartTask records a task and its first run's launch intent in one
 // transaction, before anything is launched. The task runs in the project's
@@ -723,7 +719,7 @@ func (s *Store) StartTask(r StartTaskRequest) (string, bool, error) {
 	}
 	r.Model = strings.TrimSpace(r.Model)
 	if !ValidTaskModel(r.Model) {
-		return "", false, fmt.Errorf("%w: model must be a plain model name such as opus or gpt-5.1-codex", ErrRejected)
+		return "", false, fmt.Errorf("%w: model must be a CLI ID or a selection such as gpt-6-astra[effort=high]", ErrRejected)
 	}
 	lock, ok := normalizeLock(r.Lock)
 	if !ok {
@@ -2183,7 +2179,8 @@ type AgentSummary struct {
 	Waiting int `json:"waiting"`
 	// Models are the names the owner listed; for Codex and Cursor only
 	// these may be passed to start_task (T-043).
-	Models []string `json:"models"`
+	Models       []string              `json:"models"`
+	ModelOptions []modelcatalog.Option `json:"model_options,omitempty"`
 	// Limit is the last usage-limit state the agent reported (T-044).
 	Limit *AgentLimit `json:"limit,omitempty"`
 	// FullAccess: the owner allowed this agent any command (T-054). Only
@@ -2197,6 +2194,7 @@ type AgentSummary struct {
 
 // explain fills the notes of an agent with no models or no limit (T-093).
 func (a *AgentSummary) explain() {
+	a.ModelOptions = modelcatalog.Describe(a.Agent, a.Models)
 	if len(a.Models) == 0 && a.Agent != "claude" {
 		a.ModelsNote = "the owner listed no models for this agent on that computer (window, agent settings): leave model out to use the agent's own default"
 	}
@@ -2270,6 +2268,7 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 			}
 			a.Models = splitModels(models)
 			a.Limit = limitView(parseAgentLimit(limit), time.Now())
+			a.explain()
 			c.Agents = append(c.Agents, a)
 		}
 		return rows.Err()
@@ -2382,17 +2381,44 @@ func (s *Store) networkStale(at time.Time) (string, error) {
 	return fmt.Sprintf("this computer has not heard from the server for %d minutes (its Messenger is not running, or the link to the server is down), so online and the states of other computers' tasks are out of date; tell the owner", int(at.Sub(when)/time.Minute)), nil
 }
 
-// DefaultClaudeModels are the short model names Claude Code itself accepts;
-// each always means the newest model of that line. Strongest first.
-var DefaultClaudeModels = []string{"opus", "sonnet", "haiku"}
-
-// DefaultCodexModels and DefaultCursorModels are the names the owner chose
-// as the starting lists (T-098, D-101); the owner can change them on the
-// agent's card.
+// Default model selections are researched starting points (T-171), not entitlements.
 var (
-	DefaultCodexModels  = []string{"gpt-6-luna", "gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-astra"}
-	DefaultCursorModels = []string{"composer-2.5-fast", "grok-4.7-high-fast", "claude-opus-5-thinking-high"}
+	DefaultClaudeModels = modelcatalog.Defaults("claude")
+	DefaultCodexModels  = modelcatalog.Defaults("codex")
+	DefaultCursorModels = modelcatalog.Defaults("cursor")
 )
+
+// refreshDefaultModels upgrades only unchanged old starter lists, once.
+// Customized and intentionally empty lists, and recorded tasks, remain untouched.
+func refreshDefaultModels(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var done string
+	err = tx.QueryRow(`SELECT value FROM meta WHERE key='default_models_t171'`).Scan(&done)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	old := map[string]string{
+		"claude": "opus\nsonnet\nhaiku",
+		"codex":  "gpt-6-luna\ngpt-6.1-terra\ngpt-6.1-sol\ngpt-6-astra",
+		"cursor": "composer-2.5-fast\ngrok-4.7-high-fast\nclaude-opus-5-thinking-high",
+	}
+	for provider, previous := range old {
+		if _, err := tx.Exec(`UPDATE computer_agents SET models=? WHERE provider=? AND models=?`, strings.Join(modelcatalog.Defaults(provider), "\n"), provider, previous); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(`INSERT INTO meta(key,value) VALUES ('default_models_t171','1')`); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
 
 // fillDefaultModels gives agents that were set up before T-098 with an
 // empty model list the starting list once (T-109, owner's request). A list
@@ -2514,8 +2540,8 @@ func (s *Store) SetAgentModels(provider string, models []string) error {
 		if m == "" || seen[m] {
 			continue
 		}
-		if !ValidTaskModel(m) {
-			return fmt.Errorf("%w: %q is not a plain model name", ErrRejected, m)
+		if _, _, err := modelcatalog.Resolve(provider, m); err != nil {
+			return fmt.Errorf("%w: %q is not a valid model selection", ErrRejected, m)
 		}
 		seen[m] = true
 		clean = append(clean, m)
@@ -2553,6 +2579,9 @@ func splitModels(s string) []string {
 // takes its own names (opus, sonnet, haiku) and full model names; Codex and
 // Cursor take only a listed name, because an unknown one fails the run.
 func modelAllowed(provider, model string, listed []string) error {
+	if _, _, err := modelcatalog.Resolve(provider, model); err != nil {
+		return fmt.Errorf("%w: %v", ErrRejected, err)
+	}
 	if model == "" || provider == "claude" {
 		return nil
 	}

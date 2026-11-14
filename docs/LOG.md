@@ -2,6 +2,17 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-14 — Codex (T-171 model selections, preparing 0.72)
+
+- Researched current official Codex/Claude/Cursor documentation and Cursor's metadata-only model list. Added exact model/effort choices, native argv mapping, task guidance and migration preserving custom settings.
+- Owner expanded the ongoing 0.72 release scope. No real model calls. Final full macOS race checks, focused migration/argv/presence tests and Chromium/WebKit passed. PR CI and publication pending.
+
+## 2026-11-14 — Codex (T-170 first login, preparing 0.72)
+
+- Owner requested the new version and clarified the Cursor login issue is on Windows. The remembered message matches the frontend's generic HTTP-400 hint.
+- Reproduced a local blocker before terminal launch: discovery passes a default profile path that does not exist until first login, but command construction rejected it. Allow that missing default path, retain strict custom-profile validation, and return specific path errors (D-131). No real account login or model run.
+- PR #105 (T-168/T-169) merged after all CI jobs passed. T-170 is on `codex/t170-first-login`; browser checks passed, full checks/PR/release pending. Target combined release 0.72.
+
 ## 2026-11-14 — Codex (T-168/T-169 setup recovery and Cursor sidebar)
 
 - Owner reported a closed Codex installation terminal on another Mac leaving 0.71 waiting. Implemented honest unknown status, an explicit Find action and durable recovery after confirmed CLI registration; preserve evidence and prevent late output from registering again. POSIX wrappers record hangup/interruption (D-130).

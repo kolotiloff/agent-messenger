@@ -61,6 +61,9 @@ func hasEnv(env []string, item string) bool {
 }
 
 func TestAgentLoginAndInstallRoutes(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	var opened, started []string
 	oldOpen, oldStart := openURLFunc, startTerminalFunc
 	openURLFunc = func(u string) error { opened = append(opened, u); return nil }
@@ -107,6 +110,19 @@ func TestAgentLoginAndInstallRoutes(t *testing.T) {
 	}
 	if len(opened) != 1 || len(started) != 1 {
 		t.Fatalf("a refused request ran something: %v %v", opened, started)
+	}
+	body, _ = json.Marshal(map[string]string{"provider": "cursor", "cli": cli, "environment": filepath.Join(home, ".cursor")})
+	if code, out := post("/api/agent-login", string(body)); code != 200 || len(started) != 2 {
+		t.Fatalf("fresh Cursor profile blocked login: %d %s", code, out)
+	}
+	missing := filepath.Join(home, "missing-custom-profile")
+	body, _ = json.Marshal(map[string]string{"provider": "cursor", "cli": cli, "environment": missing})
+	code, out := post("/api/agent-login", string(body))
+	var failure struct {
+		Detail string `json:"detail"`
+	}
+	if json.Unmarshal([]byte(out), &failure) != nil || code != 400 || !strings.Contains(failure.Detail, missing) || len(started) != 2 {
+		t.Fatalf("missing actionable profile error: %d %s", code, out)
 	}
 }
 

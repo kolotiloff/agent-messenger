@@ -206,7 +206,8 @@ func serveAgentLogin(w http.ResponseWriter, decoder *json.Decoder, logout bool) 
 	}
 	argv, env, err := command(in.Provider, in.CLI, in.Environment)
 	if err != nil {
-		http.Error(w, "invalid request", 400)
+		w.WriteHeader(http.StatusBadRequest)
+		writeJSON(w, map[string]any{"ok": false, "detail": err.Error()})
 		return
 	}
 	if err := startTerminalFunc(argv, env); err != nil {

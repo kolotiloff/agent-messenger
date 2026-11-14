@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/kolotiloff/agent-messenger/internal/modelcatalog"
 )
 
 // Worker profiles (D-023). "worker" runs like a session the owner opened in
@@ -71,11 +73,6 @@ type TaskRunSpec struct {
 	FullAccess bool
 }
 
-// taskModelPattern matches core.ValidTaskModel: a model name never starts
-// with "-" and has no spaces, quotes or "=", so it can not become a flag or
-// break the Codex config override.
-var taskModelPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/\[\]-]{0,79}$`)
-
 func taskMCPArgs(s TaskRunSpec) []string {
 	return []string{"task-mcp", "--db", s.DB, "--run", s.RunID, "--receipt", s.Receipt}
 }
@@ -90,8 +87,8 @@ func TaskArgs(s TaskRunSpec) ([]string, error) {
 	if s.Profile != ProfileWorker && s.Profile != ProfileMessengerOnly {
 		return nil, errors.New("unknown worker profile")
 	}
-	if s.Model != "" && !taskModelPattern.MatchString(s.Model) {
-		return nil, errors.New("invalid model name")
+	if _, _, err := modelcatalog.Resolve(s.Provider, s.Model); err != nil {
+		return nil, err
 	}
 	switch s.Provider {
 	case "claude":
@@ -132,7 +129,11 @@ func claudeTaskArgs(s TaskRunSpec) ([]string, error) {
 		args = append(args, "--permission-mode", mode)
 	}
 	if s.Model != "" {
-		args = append(args, "--model", s.Model)
+		model, effort, _ := modelcatalog.Resolve(s.Provider, s.Model)
+		args = append(args, "--model", model)
+		if effort != "" {
+			args = append(args, "--effort", effort)
+		}
 	}
 	args = append(args, "--allowedTools", strings.Join(allowed, ","))
 	if s.Resume {
@@ -182,8 +183,13 @@ func codexTaskArgs(s TaskRunSpec) ([]string, error) {
 		args = append(args, "-c", "mcp_servers."+TaskServerName+"."+key+"="+string(encoded))
 	}
 	if s.Model != "" {
-		encoded, _ := json.Marshal(s.Model)
+		model, effort, _ := modelcatalog.Resolve(s.Provider, s.Model)
+		encoded, _ := json.Marshal(model)
 		args = append(args, "-c", "model="+string(encoded))
+		if effort != "" {
+			encoded, _ = json.Marshal(effort)
+			args = append(args, "-c", "model_reasoning_effort="+string(encoded))
+		}
 	}
 	if s.Resume {
 		args = append(args, "resume", s.Session, taskPrompt(s.Profile))

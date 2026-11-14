@@ -204,3 +204,63 @@ func TestClaudeReportsItsModel(t *testing.T) {
 		t.Fatalf("model %q", r.Model)
 	}
 }
+
+// T-171: the stored selection must launch the intended model AND effort,
+// both for a new task and for its exact-session continuation.
+func TestExplicitModelEffortArgs(t *testing.T) {
+	for _, provider := range []string{"claude", "codex", "cursor"} {
+		for _, resume := range []bool{false, true} {
+			session := ""
+			if provider == "claude" || resume {
+				session = testUUID
+			}
+			spec := taskSpec(provider, ProfileWorker, session, resume)
+			switch provider {
+			case "claude":
+				spec.Model = "claude-fable-5-2[effort=high]"
+			case "codex":
+				spec.Model = "gpt-6-astra[effort=medium]"
+			case "cursor":
+				spec.Model = "grok-4.7-high"
+			}
+			args, err := TaskArgs(spec)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := joined(args)
+			if strings.Contains(got, "[effort=") {
+				t.Fatalf("selection leaked as model ID: %v", args)
+			}
+			want := []string{"--model\x00grok-4.7-high"}
+			if provider == "claude" {
+				if env := TaskEnv(spec); len(env) != 1 || env[0] != "CLAUDE_CODE_EFFORT_LEVEL=high" {
+					t.Fatalf("effort environment: %v", env)
+				}
+				want = []string{"--model\x00claude-fable-5-2", "--effort\x00high"}
+			}
+			if provider == "codex" {
+				want = []string{`model="gpt-6-astra"`, `model_reasoning_effort="medium"`}
+			}
+			for _, part := range want {
+				if !strings.Contains(got, part) {
+					t.Fatalf("missing %q: %v", part, args)
+				}
+			}
+			if resume && !strings.Contains(got, session) {
+				t.Fatal("lost exact session")
+			}
+		}
+	}
+	for _, bad := range []string{"gpt-6-astra[effort=H]", "x[effort=high,fast=true]", "x[effort=high]--yolo", "x[effort=high]\n", "x[effort=high][effort=low]"} {
+		s := taskSpec("codex", ProfileWorker, "", false)
+		s.Model = bad
+		if _, err := TaskArgs(s); err == nil {
+			t.Fatalf("accepted %q", bad)
+		}
+	}
+	s := taskSpec("cursor", ProfileWorker, "", false)
+	s.Model = "grok-4.7[effort=high]"
+	if _, err := TaskArgs(s); err == nil {
+		t.Fatal("Cursor accepted a Messenger effort suffix")
+	}
+}

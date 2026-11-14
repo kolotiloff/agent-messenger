@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/kolotiloff/agent-messenger/internal/modelcatalog"
 )
 
 // olderHost, when set by a test, makes the broker refuse reports the way a
@@ -37,9 +39,6 @@ const (
 
 // PresenceInterval is how often a computer reports its agents.
 const PresenceInterval = 15 * time.Second
-
-// modelName matches core.ValidTaskModel's names.
-var modelName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/\[\]-]{0,79}$`)
 
 var agentName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 
@@ -304,7 +303,7 @@ func (p Presence) valid() bool {
 			return false
 		}
 		for _, m := range a.Models {
-			if !modelName.MatchString(m) {
+			if !validModelSelection(m) {
 				return false
 			}
 		}
@@ -542,4 +541,9 @@ func (b *Broker) handlePresence(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, rosterResponse{BrokerID: b.id, DeviceID: d.ID, Peers: peers})
+}
+
+func validModelSelection(value string) bool {
+	_, _, err := modelcatalog.Split(value)
+	return value != "" && err == nil
 }

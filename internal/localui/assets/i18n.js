@@ -7,6 +7,10 @@
   let lang='ru';
   try{if(localStorage.getItem('messenger-lang')==='en')lang='en';}catch(_){}
   const EN={
+  'Через запятую. От быстрых правок к сложным задачам. Доступ зависит от аккаунта.':'Comma-separated, from quick edits to difficult work. Access depends on the account.',
+  'Имена из agent --list-models; High требует подходящего тарифа.':'IDs from agent --list-models; High requires a supporting plan.',
+  'Уровень: [effort=medium] или [effort=high]. Messenger передаст его отдельным параметром.':'Effort: [effort=medium] or [effort=high]. Messenger passes it as a separate CLI setting.',
+
   // Static texts of index.html
   'Откройте папку проекта в Claude Code, Codex или Cursor, начните новый чат и спросите: «Каких агентов ты видишь?»':'Open the project folder in Claude Code, Codex or Cursor, start a new chat and ask which agents it can see.',
   'Координатор — ваш чат в Claude Code, Codex или Cursor, открытый в папке проекта. Он раздаёт задачи исполнителям и собирает отчёты. Новый проект подключается сам; кнопка нужна, если это не получилось.':'The coordinator is your Claude Code, Codex or Cursor chat in the project folder. It assigns tasks and collects reports. New projects connect automatically; use the button if that did not work.',
