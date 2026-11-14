@@ -45,6 +45,7 @@ type HostStatus struct {
 	// expired, so the window can hide a code once it is spent.
 	OpenInvitations []string `json:"open_invitations"`
 	Error           string   `json:"error,omitempty"`
+	DiscoveryError  string   `json:"discovery_error,omitempty"`
 }
 
 // MemberStatus is what the window shows about this device's connection. It
@@ -114,15 +115,16 @@ type Service struct {
 	// usageSkip is the same for usage. usageSent is the version of this
 	// computer's usage that usageTo (broker/device) last accepted, at
 	// usageAt; usageCopies holds the other computers' usage from there.
-	usageSkip   time.Time
-	usageSent   string
-	usageAt     time.Time
-	usageTo     string
-	usageCopies map[string]PresenceUsageReport
-	broker      *Broker
-	stop        context.CancelFunc
-	done        chan struct{}
-	hostErr     string
+	usageSkip    time.Time
+	usageSent    string
+	usageAt      time.Time
+	usageTo      string
+	usageCopies  map[string]PresenceUsageReport
+	broker       *Broker
+	stop         context.CancelFunc
+	done         chan struct{}
+	hostErr      string
+	discoveryErr string
 
 	member *Connection
 	// former are this computer's own devices from earlier connections.
@@ -223,6 +225,7 @@ func (s *Service) startLocked() error {
 	ctx, cancel := context.WithCancel(s.base)
 	done := make(chan struct{})
 	s.broker, s.stop, s.done, s.hostErr = b, cancel, done, ""
+	s.discoveryErr = ""
 	// Discovery for short invitations (T-052). If the port is taken, only
 	// the long code works; nothing else depends on it.
 	discoveryAt := net.JoinHostPort("127.0.0.1", strconv.Itoa(DiscoveryPort))
@@ -234,6 +237,8 @@ func (s *Service) startLocked() error {
 		go serveDiscovery(ctx, pc, func() (discoverAnswer, bool) {
 			return discoverAnswer{V: 1, Broker: b.id, Port: port}, b.ShortActive()
 		})
+	} else {
+		s.discoveryErr = fmt.Sprintf("Поиск по шести цифрам недоступен: порт UDP %d занят или запрещён. Используйте длинный код.", DiscoveryPort)
 	}
 	go func() {
 		// Serve returns after every request has ended; only then are the
@@ -378,7 +383,13 @@ func (s *Service) Invite(address string) (InviteCode, error) {
 	if !allowed {
 		return InviteCode{}, errors.New("выберите один из адресов этого сервера")
 	}
-	return s.broker.Invite(address)
+	code, err := s.broker.Invite(address)
+	if s.discoveryErr != "" {
+		code.Short = ""
+		code.ShortExpiresAt = ""
+		code.ShortUnavailable = s.discoveryErr
+	}
+	return code, err
 }
 
 // Revoke revokes a device of the hosted broker.
@@ -559,7 +570,7 @@ func (s *Service) MemberName() string {
 func (s *Service) Status() Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	h := HostStatus{Enabled: s.settings.Enabled, Running: s.broker != nil, Scope: s.settings.Scope, Port: s.settings.Port, Devices: []Device{}, OpenInvitations: []string{}, Error: s.hostErr}
+	h := HostStatus{Enabled: s.settings.Enabled, Running: s.broker != nil, Scope: s.settings.Scope, Port: s.settings.Port, Devices: []Device{}, OpenInvitations: []string{}, Error: s.hostErr, DiscoveryError: s.discoveryErr}
 	if s.broker != nil {
 		h.Addresses = s.addressesLocked()
 		h.BrokerID, h.Fingerprint = s.broker.ID(), s.broker.Fingerprint()

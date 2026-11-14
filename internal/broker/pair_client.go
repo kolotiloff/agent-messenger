@@ -22,7 +22,7 @@ var (
 	// ErrShortGone means the host has no usable short invitation.
 	ErrShortGone = errors.New("код больше не действует: он использован, устарел или было три ошибки. Создайте новое приглашение")
 	// ErrNoHost means no host answered on the local network.
-	ErrNoHost = errors.New("сервер в локальной сети не найден. Проверьте, что оба компьютера в одной сети и на сервере открыто приглашение, или вставьте длинный код")
+	ErrNoHost = errors.New("сервер не ответил на поиск по шести цифрам. На сервере должны быть выбраны «Локальная сеть» и открыто новое приглашение. На Windows проверьте разрешение Messenger в брандмауэре (UDP 47100 для поиска). Гостевая Wi-Fi-сеть или VPN могут блокировать поиск. Попробуйте длинный код")
 )
 
 // observingClient accepts any certificate and remembers its fingerprint.

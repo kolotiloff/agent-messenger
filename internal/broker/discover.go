@@ -86,22 +86,53 @@ func Discover(ctx context.Context, wait time.Duration) ([]string, error) {
 		return nil, err
 	}
 	defer conn.Close()
-	for _, target := range discoveryTargets() {
-		if addr, err := net.ResolveUDPAddr("udp4", target); err == nil {
-			_, _ = conn.WriteTo([]byte(discoverQuestion), addr)
+	return discoverWithTargets(ctx, conn, discoveryTargets(), wait)
+}
+
+func discoverWithTargets(ctx context.Context, conn net.PacketConn, targets []string, wait time.Duration) ([]string, error) {
+	stop := context.AfterFunc(ctx, func() { _ = conn.SetReadDeadline(time.Now()) })
+	defer stop()
+	send := func() {
+		for _, target := range targets {
+			if addr, err := net.ResolveUDPAddr("udp4", target); err == nil {
+				_, _ = conn.WriteTo([]byte(discoverQuestion), addr)
+			}
 		}
 	}
+	send()
+
 	deadline := time.Now().Add(wait)
 	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
 		deadline = d
 	}
-	_ = conn.SetReadDeadline(deadline)
+	nextSend := time.Now().Add(400 * time.Millisecond)
 	var found candidates
 	buf := make([]byte, 512)
 	for {
+		if ctx.Err() != nil {
+			return found.out, ctx.Err()
+		}
+		until := nextSend
+		if deadline.Before(until) {
+			until = deadline
+		}
+		_ = conn.SetReadDeadline(until)
 		n, from, err := conn.ReadFrom(buf)
 		if err != nil {
-			return found.out, nil
+			if ctx.Err() != nil {
+				return found.out, ctx.Err()
+			}
+			if e, ok := err.(net.Error); ok && e.Timeout() {
+				if !time.Now().Before(deadline) {
+					return found.out, nil
+				}
+				// Repeating only a public discovery question neither registers
+				// a device nor consumes a short-code attempt.
+				send()
+				nextSend = time.Now().Add(400 * time.Millisecond)
+				continue
+			}
+			return found.out, err
 		}
 		var a discoverAnswer
 		if json.Unmarshal(buf[:n], &a) != nil {

@@ -72,6 +72,7 @@ func RunWindow(ctx context.Context, root string, port int, out io.Writer, deskto
 	call := func(ctx context.Context, r control.Request) (control.Response, error) {
 		return control.CallContext(ctx, root, r)
 	}
+	desktop.setupRoot = root
 	h := newDesktopHandler(host, token, call, func(ctx context.Context) any {
 		r := diagnostics.CollectDesktop(ctx, root)
 		// Only selected installation/profile paths reach this authenticated local
@@ -125,6 +126,7 @@ func newHandlerWithChecks(host, token string, call caller, discover func(context
 
 func newDesktopHandler(host, token string, call caller, discover func(context.Context) any, checker cliChecker, desktop Desktop) http.Handler {
 	channel, restart, self := desktop.Channel, desktop.Restart, desktop.SelfUpdate
+	setup := &agentSetup{root: desktop.setupRoot}
 	busy := make(chan struct{}, 1)
 	restarting := make(chan struct{}, 1)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -145,7 +147,7 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			http.Error(w, "cross-site request refused", http.StatusForbidden)
 			return
 		}
-		mutation := r.URL.Path == "/api/enqueue" || r.URL.Path == "/api/pause" || r.URL.Path == "/api/resume" || r.URL.Path == "/api/outbox/ack" || r.URL.Path == "/api/check-cli" || r.URL.Path == "/api/setup-claude" || r.URL.Path == "/api/setup-codex" || r.URL.Path == "/api/authorize-setup" || r.URL.Path == "/api/restart-client" || r.URL.Path == "/api/pick" || r.URL.Path == "/api/agent-login" || r.URL.Path == "/api/agent-logout" || r.URL.Path == "/api/agent-install" || taskMutation(r.URL.Path) ||
+		mutation := r.URL.Path == "/api/enqueue" || r.URL.Path == "/api/pause" || r.URL.Path == "/api/resume" || r.URL.Path == "/api/outbox/ack" || r.URL.Path == "/api/check-cli" || r.URL.Path == "/api/setup-claude" || r.URL.Path == "/api/setup-codex" || r.URL.Path == "/api/authorize-setup" || r.URL.Path == "/api/restart-client" || r.URL.Path == "/api/pick" || r.URL.Path == "/api/agent-login" || r.URL.Path == "/api/agent-logout" || r.URL.Path == "/api/agent-install" || r.URL.Path == "/api/agent-find" || r.URL.Path == "/api/agent-setup-finish" || r.URL.Path == "/api/agent-page" || r.URL.Path == "/api/agent-trust" || taskMutation(r.URL.Path) ||
 			(r.URL.Path == "/api/self-update" && r.Method != http.MethodGet)
 		method := http.MethodGet
 		if mutation {
@@ -194,6 +196,9 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			return
 		}
 		deadline := 3 * time.Second
+		if r.URL.Path == "/api/agent-login" || r.URL.Path == "/api/agent-logout" || r.URL.Path == "/api/agent-trust" || r.URL.Path == "/api/agent-install" || r.URL.Path == "/api/agent-find" {
+			deadline = 5 * time.Second
+		}
 		if r.URL.Path == "/api/check-cli" {
 			deadline = 20 * time.Second
 		}
@@ -269,8 +274,16 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 				serveAgentLogin(w, decoder, r.URL.Path == "/api/agent-logout")
 				return
 			}
-			if r.URL.Path == "/api/agent-install" {
-				serveAgentInstall(w, decoder)
+			if r.URL.Path == "/api/agent-page" {
+				serveAgentPage(w, decoder)
+				return
+			}
+			if r.URL.Path == "/api/agent-install" || r.URL.Path == "/api/agent-find" || r.URL.Path == "/api/agent-setup-finish" {
+				setup.serve(w, r.WithContext(ctx), decoder, call, r.URL.Path == "/api/agent-setup-finish")
+				return
+			}
+			if r.URL.Path == "/api/agent-trust" {
+				serveAgentTrust(w, r.WithContext(ctx), decoder, call)
 				return
 			}
 			if r.URL.Path == "/api/restart-client" {
@@ -424,6 +437,10 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 				return
 			}
 			writeJSON(w, map[string]any{"ok": true, "action": req.Cmd})
+			return
+		}
+		if r.URL.Path == "/api/agent-setup-status" {
+			writeJSON(w, setup.list())
 			return
 		}
 		if r.URL.Path == "/api/discovery" {

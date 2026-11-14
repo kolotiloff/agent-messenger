@@ -357,3 +357,25 @@ Only the known `claude-code` MCP client receives background-watch guidance and t
 Only a missing entry or an existing entry with the same coordinator arguments and an older program path is written. Unknown settings, other servers and additional options in an existing owned entry are preserved as JSON values. Foreign or disabled entries are not replaced. Invalid JSON, duplicate keys in edited objects, files over 1 MB, non-regular files and symlinks of the config or `.cursor` directory are refused. A concurrent edit detected before replacement is not overwritten. Cursor's own approval and disabled-server lists are untouched; the window says the configuration is saved and asks the owner to approve Messenger in Cursor. It does not claim that saving the file proves the chat has connected.
 
 Cursor receives D-124's active-wait guidance. Protocol tests show its waiting call receives a worker question and the later report; they do not prove a model follows instructions or that an idle Cursor chat wakes itself. The owner will perform the real chat acceptance.
+
+
+## D-126 — Welcome appears before project creation (T-164)
+
+2026-11-14, Codex, owner's correction: the first installation must show the welcome introduction, not only «Создайте проект». Reuse the existing welcome page before the first project and while an existing project has no selected task. Its first step creates a project; the coordinator step remains unavailable until a project exists. The empty task pane and its toggle are hidden before project creation so they do not consume the welcome area or cover its actions at narrow widths. Once a project exists, the task pane follows its usual expanded/collapsed state. No project, model session or coordinator connection is started merely by showing the welcome page.
+
+
+## D-127 — Install and find CLIs through the owner's terminal (T-153)
+
+2026-11-14, Codex, owner's repeated request. Replace the install-page action with the official standalone installers for Claude Code, Codex and Cursor on macOS/Linux/Windows, in a visible terminal. A CLI already found there is connected without reinstalling it. Find uses the same terminal PATH without downloading anything. Validate the returned absolute executable path; resolve known Windows npm/Cursor shims to their underlying executables. Preserve a registered agent's profile. On confirmed completion, register once and run the existing version/sign-in diagnostic. This does not sign in or start a model.
+
+Store private, per-attempt scripts and atomic result receipts under the product data directory. Reopening the window resumes reading results, not installation. A durable claim prevents repeated registration after an unclear reply. No receipt means waiting/unknown, never success or an automatic retry; manual file selection remains available. Keep uninstall on a separate official-page endpoint (Q-022). Sources and limitations are in the acceptance report.
+
+## D-128 — Folder trust uses the agent's CLI confirmation (T-165)
+
+2026-11-14, Codex, owner has computers without graphical agent apps. The local agent card offers Trust for the selected project's folder. Show the exact folder and explain that project settings and commands become available, then open the registered CLI there with its registered profile and no model prompt. The CLI itself asks for trust; Messenger never edits trust files or answers the prompt. Refuse a changed folder or unregistered agent. Refresh trust on return to the window. This is a new interactive terminal session, not a working chat or a background worker.
+
+## D-129 — Report terminal launch uncertainty and LAN discovery failures (T-166/T-167)
+
+2026-11-14, Codex, owner reported a silent sign-in button and failed six-digit joining between two Windows computers. The exact failures on those computers are not reproduced. Windows opens its interactive PowerShell child via Start-Process so a GUI Go process's null standard handles are not passed into the login CLI. macOS/Windows launchers are awaited briefly; immediate launcher errors are visible, and an unfinished launcher is reported as unconfirmed. Linux uses the owner's interactive login shell to include nvm/custom PATH. An unconfirmed installation launch is not marked failed or restarted automatically.
+
+LAN discovery repeats only its public UDP question within the existing bounded search. It never repeats registration or code proof. A busy/unavailable UDP discovery port is shown explicitly and the host offers only its usable long invitation. No-host guidance identifies LAN scope, a fresh invitation, Windows firewall UDP 47100 and Wi-Fi/VPN isolation; it does not alter firewall rules or bypass certificate/code checks. Real Windows-machine acceptance remains necessary.

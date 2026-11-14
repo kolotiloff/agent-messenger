@@ -15,7 +15,9 @@
     const value=document.createElement('span');value.className='am-select-value';
     const chevron=document.createElement('span');chevron.className='am-select-chevron';chevron.setAttribute('aria-hidden','true');trigger.append(value,chevron);
     const menu=document.createElement('div');menu.id=select.id+'-menu';menu.className='am-select-menu';menu.setAttribute('popover','auto');menu.setAttribute('role','listbox');menu.setAttribute('aria-label',label);menu.tabIndex=-1;
-    trigger.setAttribute('aria-controls',menu.id);select.after(trigger);root.append(menu);select.hidden=true;
+    // A modal dialog makes outside nodes inert, even top-layer popovers.
+    // Keep its menus inside the dialog so pointer and keyboard input reach them.
+    trigger.setAttribute('aria-controls',menu.id);select.after(trigger);(select.closest('dialog')||root).append(menu);select.hidden=true;
     select.labels[0]?.addEventListener('click',event=>{event.preventDefault();trigger.focus();});
     let options=[];
     const isOpen=()=>menu.matches(':popover-open');
@@ -154,7 +156,11 @@
   function showError(error){actionError=error?{text:error.message,command:error.command||'',hint:error.hint||''}:null;renderToasts();}
   // A small chip above the input field, like a chat's status chips.
   function renderToasts(){
-    const box=$('toasts');box.replaceChildren();box.hidden=!actionError;if(!actionError)return;
+    const box=$('toasts');
+    // An agent action must not report its error inside the hidden Tasks tab.
+    if(tab==='tasks')$('notices').after(box);
+    else root.querySelector('.am-main').insertBefore(box,root.querySelector('[data-screen]'));
+    box.replaceChildren();box.hidden=!actionError;if(!actionError)return;
     const chip=el('div',undefined,'am-toast');chip.append(el('span',actionError.text,'am-toast-text'));if(actionError.hint)chip.title=actionError.hint;
     if(actionError.command){
       const command=actionError.command,copy=el('button',tr('Скопировать команду'));copy.type='button';copy.title=command;
@@ -184,7 +190,7 @@
     let result={};try{result=await response.json();}catch(_){}
     if(response.ok&&result.ok===true)return result;
     if(result.state==='client_outdated')throw outdatedMessage();
-    if(response.status===409&&result.detail)throw Error(result.detail);
+    if(result.detail){const error=Error(result.detail);error.command=result.command;error.hint=result.hint;throw error;}
     if(response.status===400)throw Error(tr('Проверьте введённые данные.'));
     throw Error(tr('Действие не подтверждено. Проверьте состояние и повторите.'));
   }
@@ -773,7 +779,7 @@
     if(linkBusy===agent)return stepRow(1,title,tr('Подключаем…'),null);
     if(link.state==='connected'){
       let sub=agent==='cursor'?tr('Записано. Откройте новый чат Cursor в этой папке и разрешите подключение Messenger'):tr('Подключён. Откройте папку проекта в новом чате');
-      if(agent==='codex'&&(view.agents||[]).some(a=>a.agent==='codex'&&a.trust?.state==='not_trusted'))sub=tr('Записано. Codex прочитает его, когда папка станет доверенной: откройте её в Codex и подтвердите.');
+      if(agent==='codex'&&(view.agents||[]).some(a=>a.agent==='codex'&&a.trust?.state==='not_trusted'))sub=tr('Записано. Подтвердите доверие папке кнопкой «Доверять» на карточке Codex во вкладке «Агенты».');
       return stepRow('ok',title,sub,null);
     }
     if(failure)return stepRow('no',title,tr('Не получилось: ')+failure.detail,[tr('Повторить'),()=>connectCoordinator(agent)]);
@@ -789,8 +795,8 @@
   function coordinatorPlace(){
     return view?.coordinator?.connected||coordinatorAgentOn('claude')||coordinatorAgentOn('codex')||coordinatorAgentOn('cursor');
   }
-  // The task pane with no task yet (T-152): what the program does, drawn as
-  // a short chain, and the first steps with their state on this computer.
+  // The task pane before the first project or task (T-152, T-164): explain
+  // the program first, then show setup steps with their current state.
   function welcome(){
     const box=el('div',undefined,'am-settings am-welcome');
     const intro=el('div',undefined,'am-welcome-intro');
@@ -811,14 +817,16 @@
       if(label){const b=el('button',label);b.type='button';b.addEventListener('click',go);row.append(b);}else row.append(el('span'));
       steps.append(row);
     };
+    const hasProject=!!view.project;
+    step(hasProject,tr('Проект'),hasProject?view.project:tr('Проект связывает чат-координатора, папку проекта на этом компьютере и задачи.'),hasProject?'':tr('Новый проект'),()=>openProjectDialog());
     const agents=(view.agents||[]).length;
     step(agents>0,tr('Агенты на этом компьютере'),agents?tr('Подключено: ')+agents:tr('Установите и подключите хотя бы одного'),agents?'':tr('Агенты'),()=>show('agents'));
-    const place=coordinatorPlace(),hasAny=(view.agents||[]).some(a=>(['claude','codex','cursor'].includes(a.agent))&&a.cli),folderOk=view.coordinator_link?.state!=='no_folder';
+    const place=hasProject&&coordinatorPlace(),hasAny=(view.agents||[]).some(a=>(['claude','codex','cursor'].includes(a.agent))&&a.cli),folderOk=hasProject&&!!view.folder;
     const who=[coordinatorAgentOn('claude')&&'Claude Code',coordinatorAgentOn('codex')&&'Codex',coordinatorAgentOn('cursor')&&'Cursor'].filter(Boolean).join(', ');
     const failed=linkFailure?.project===view.project?linkFailure:null;
     const codexBare=coordinatorAgentOn('codex')&&!coordinatorAgentOn('claude')&&!coordinatorAgentOn('cursor')&&(view.agents||[]).some(a=>a.agent==='codex'&&a.trust?.state==='not_trusted');
-    const coordSub=codexBare?tr('Записано. Codex прочитает его, когда папка станет доверенной: откройте её в Codex и подтвердите.'):place?(who?tr('Подключён: ')+who:tr('Подключён на этом компьютере')):(failed?tr('Не получилось: ')+failed.detail:tr('Подключите Claude Code, Codex или Cursor координатором, чтобы давать задачи с этого компьютера'));
-    step(!!place&&!codexBare,tr('Координатор'),coordSub,place||codexBare?'':(hasAny&&folderOk&&!linkBusy)?tr('Подключить'):hasAny?tr('Проект'):tr('Агенты'),()=>(hasAny&&folderOk&&!linkBusy)?connectReadyCoordinators():show(hasAny?'project':'agents'));
+    const coordSub=!hasProject?tr('Сначала создайте проект'):codexBare?tr('Записано. Подтвердите доверие папке кнопкой «Доверять» на карточке Codex во вкладке «Агенты».'):place?(who?tr('Подключён: ')+who:tr('Подключён на этом компьютере')):(failed?tr('Не получилось: ')+failed.detail:tr('Подключите Claude Code, Codex или Cursor координатором, чтобы давать задачи с этого компьютера'));
+    step(!!place&&!codexBare,tr('Координатор'),coordSub,!hasProject||place||codexBare?'':(hasAny&&folderOk&&!linkBusy)?tr('Подключить'):hasAny?tr('Проект'):tr('Агенты'),()=>(hasAny&&folderOk&&!linkBusy)?connectReadyCoordinators():show(hasAny?'project':'agents'));
     const peers=(server?.peers||[]).length;
     step(peers>0,tr('Другие компьютеры'),peers?tr('В сети: ')+peers:tr('Необязательно: объедините компьютеры через сервер'),peers?'':tr('Сервер'),()=>show('server'));
     box.append(el('h3',tr('С чего начать')),steps);
@@ -827,13 +835,14 @@
   }
   function renderThread(){
     const thread=$('thread'),head=$('task-head');
+    const panelOpen=!!view?.project&&$('list-toggle').getAttribute('aria-expanded')==='true';
+    $('task-panel').hidden=!panelOpen;$('task-layout').classList.toggle('am-queue-collapsed',!panelOpen);
+    $('list-toggle').hidden=tab!=='tasks'||!view?.project;
     $('compose').hidden=true;$('lost-bar').hidden=true;feedSignature='';$('to-bottom').hidden=true;
     if(!view){head.replaceChildren();return;}
     if(!view.project){
       head.replaceChildren();
-      const box=el('div',undefined,'am-settings am-connect');box.append(el('h3',tr('Создайте проект')),el('p',tr('Проект связывает чат-координатора, папку проекта на этом компьютере и задачи.')));
-      const b=el('button',tr('Новый проект'),'am-primary');b.type='button';b.addEventListener('click',()=>openProjectDialog(false));box.append(b);
-      thread.replaceChildren(box);return;
+      thread.replaceChildren(welcome());return;
     }
     const shared=sharedSelection();
     if(shared){renderSharedTask(shared.t,shared.p);return;}
@@ -1142,7 +1151,7 @@
   }
   function uninstallAgent(provider){
     askConfirm(tr('Удалить ')+names[provider]+' CLI?',tr('Откроется официальная страница агента. Удалите его командой оттуда. Настройки Messenger сохранятся.'),tr('Открыть'),async()=>{
-      await postAPI('/api/agent-install',{provider});
+      await postAPI('/api/agent-page',{provider});
     });
   }
   function renderAgents(){
@@ -1168,7 +1177,7 @@
       sw.title=on?tr('Messenger даёт задачи ')+names[provider]+tr(' на этом компьютере'):cli?tr('Включить: Messenger будет давать задачи ')+names[provider]:tr('Сначала установите ')+names[provider]+' CLI';
       sw.disabled=!a&&!cli;
       sw.addEventListener('click',async()=>{sw.disabled=true;try{await setAgentOn(provider,!on);}finally{sw.disabled=false;}});
-      const recheck=iconButton(busy?tr('Проверяем'):tr('Проверить снова'),checkPath,false,()=>{if(cli)checkCard(provider);else loadDiscovery();});
+      const recheck=iconButton(busy?tr('Проверяем'):cli?tr('Проверить снова'):tr('Найти'),checkPath,false,()=>{if(cli)checkCard(provider);else installAgent(provider,'find');});
       recheck.disabled=busy;
       head.append(heading,recheck,iconButton(tr('Настройки'),gearPath,true,()=>openAgentSetup(provider)),sw);
       card.append(head);
@@ -1205,7 +1214,7 @@
       else step(2,tr('Вход в аккаунт'),check?tr('Не удалось проверить'):tr('Ещё не проверен'),[tr('Войти'),()=>loginFromCard(provider,cli,profile)]);
       // 3. Work with Messenger: set only by what a task showed (D-070).
       const trust=a?.trust?.state;
-      if(a&&trust&&trust!=='trusted')step('no',tr('Не доверяет папке проекта'),trust==='not_trusted'?tr('Откройте папку в агенте и подтвердите доверие'):tr('Не удалось определить'),null,a.trust?.hint||tr('Откройте папку проекта в этой программе и подтвердите доверие.'));
+      if(a&&view?.folder&&trust&&trust!=='trusted')step('no',tr('Не доверяет папке проекта'),tr('Подтвердите доверие в терминале'),[tr('Доверять'),()=>trustFolder(provider)],a.trust?.hint);
       else if(a?.last_done)step('ok',tr('Работает с Messenger'),tr('Последняя задача ')+dayClock(a.last_done));
       else step(3,tr('Работает с Messenger'),missing?tr('Проверится после установки'):tr('Проверится на первой задаче'));
       // 4. The limit the agent reported during its last task (T-044).
@@ -1442,7 +1451,6 @@
       const d=await api('/api/discovery',8000);discovery=d.agents||[];discoveryLoaded=true;
       for(const provider of ['claude','codex','cursor']){
         const selection=agentPaths(provider);
-        if(selection.cli&&installOpened.has(provider)){installOpened.delete(provider);rowNote.delete(provider+':program');}
         if(autoChecked&&selection.cli&&previous.get(provider)!==JSON.stringify(selection)){
           agentChecks.delete(provider);checkCard(provider,true);
         }
@@ -1451,9 +1459,9 @@
     }catch(_){}finally{discovering=false;}
   }
   function show(next){
-    tab=next;root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab);renderNotices();
+    tab=next;root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab);renderNotices();renderToasts();
     root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
-    $('list-toggle').hidden=tab!=='tasks';if(tab==='server')loadServer();if(tab==='stats')loadStats();if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сервер'),stats:tr('Статистика')}[tab];
+    $('list-toggle').hidden=tab!=='tasks'||!view?.project;if(tab==='server')loadServer();if(tab==='stats')loadStats();if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сервер'),stats:tr('Статистика')}[tab];
   }
 
 
@@ -1661,7 +1669,9 @@
     note('host','');invitation=code;
     $('invite-code').textContent=code.code;copyState('');
     // The 6-digit code for a computer on the same network (T-052).
-    $('invite-short').hidden=!code.short;
+    $('invite-short').hidden=!code.short&&!code.short_unavailable;
+    $('invite-short-code').hidden=!code.short;
+    if(code.short_unavailable)$('invite-short-note').textContent=code.short_unavailable;
     if(code.short)$('invite-short-code').textContent=code.short.slice(0,3)+' '+code.short.slice(3);
     clearInterval(inviteTimer);
     const tick=()=>{
@@ -1824,15 +1834,43 @@
   // with the agent's own sign-in (D-057).
   // A row note shows for a while, then the row offers its action again.
   function noteRow(key,text,ms){rowNote.set(key,text);renderAgents();if(ms)setTimeout(()=>{if(rowNote.get(key)===text){rowNote.delete(key);renderAgents();}},ms);}
-  async function installAgent(provider){
-    installOpened.set(provider,Date.now());
-    noteRow(provider+':program',tr('Открываем страницу…'));
-    try{await postAPI('/api/agent-install',{provider});noteRow(provider+':program',tr('Страница установки открыта'),8000);}
-    catch(error){installOpened.delete(provider);rowNote.delete(provider+':program');renderAgents();showError(error);}
+  async function installAgent(provider,action='install'){
+    noteRow(provider+':program',tr('Открываем терминал…'));
+    try{await postAPI(action==='find'?'/api/agent-find':'/api/agent-install',{provider,action});await pollSetup();}
+    catch(error){rowNote.delete(provider+':program');renderAgents();showError(error);}
+  }
+  const setupSeen=new Map(),setupFinishing=new Set();let setupPolling=false;
+  async function pollSetup(){
+    if(setupPolling)return;setupPolling=true;
+    try{
+      const states=await api('/api/agent-setup-status');if(!Array.isArray(states))return;
+      for(let state of states){
+        const {provider,id}=state;if(!id||state.state==='idle')continue;
+        if(state.state==='found'&&!setupFinishing.has(id)){
+          setupFinishing.add(id);
+          try{state=await postAPI('/api/agent-setup-finish',{provider,action:state.action,id});}
+          catch(error){showError(error);}
+        }
+        if(setupSeen.get(id)===state.state)continue;setupSeen.set(id,state.state);
+        if(state.state==='running')noteRow(provider+':program',tr('Ожидаем завершения в терминале. Если окно закрыто, результат неизвестен.'));
+        else if(state.state==='connected'){
+          rowNote.delete(provider+':program');viewSignature='';await refresh();await loadDiscovery();checkCard(provider,true);
+          if(setupProvider===provider&&$('agent-setup').open)$('agent-cli').value=state.cli;
+        }else if(state.state==='failed')noteRow(provider+':program',tr('Установка или поиск не завершились. Проверьте терминал; можно выбрать файл CLI в настройках.'),15000);
+        else if(state.state==='unconfirmed')noteRow(provider+':program',tr('Подключение не подтверждено. Проверьте настройки агента.'),15000);
+      }
+    }catch(_){}finally{setupPolling=false;}
+  }
+  function trustFolder(provider){
+    const folder=view?.folder,selectedProject=view?.project;
+    if(!folder||!selectedProject)return;
+    askConfirm(tr('Доверять папке'),folder+'\n\n'+tr('Откроется CLI в терминале. Подтвердите доверие там: агент сможет читать настройки и выполнять команды проекта. Графическое приложение не требуется.'),tr('Открыть терминал'),async()=>{
+      await postAPI('/api/agent-trust',{provider,project:selectedProject,folder});
+    },true);
   }
   // After «Войти» or «Выйти» the window checks the agent again when the owner
   // comes back to it, so the card shows the new state without a click.
-  const authOpened=new Map(),installOpened=new Map();
+  const authOpened=new Map();
   async function loginFromCard(provider,cli,environment){
     noteRow(provider+':auth',tr('Открываем вход…'));
     try{await postAPI('/api/agent-login',{provider,cli,environment});authOpened.set(provider,Date.now());noteRow(provider+':auth',tr('Окно входа открыто'),15000);}
@@ -1845,8 +1883,7 @@
   }
   window.addEventListener('focus',()=>{
     for(const [provider,at] of authOpened){if(Date.now()-at>=10*60*1000)authOpened.delete(provider);else if(!checking.has(provider))checkCard(provider,true);}
-    for(const [provider,at] of installOpened){if(Date.now()-at>=10*60*1000)installOpened.delete(provider);}
-    if(installOpened.size)loadDiscovery();
+    pollSetup();viewSignature='';refresh();
   });
 
   let setupProvider='';
@@ -2199,6 +2236,7 @@
   $('project-page-pick').addEventListener('click',()=>{folderTarget='project-page-folder';if(window.webkit?.messageHandlers?.folder)window.webkit.messageHandlers.folder.postMessage('pick');else pick('project-page-folder','folder','project-page-status');});
   framelessWindow();
   macTitlebar();
+  $('agent-cli-find').addEventListener('click',()=>{const provider=setupProvider;$('agent-setup').close();installAgent(provider,'find');});
   $('agent-cli-pick').addEventListener('click',()=>pick('agent-cli','file','agent-save-status'));
   $('agent-profile-pick').addEventListener('click',()=>pick('agent-profile','folder','agent-save-status'));
   $('restart-dialog').addEventListener('cancel',event=>event.preventDefault());
@@ -2253,7 +2291,7 @@
   $('theme-select').addEventListener('change',()=>applyTheme($('theme-select').value,true));
   // The language applies on reload: every text is drawn again in it (T-059).
   $('lang-select').addEventListener('change',()=>{try{localStorage.setItem('messenger-lang',$('lang-select').value);}catch(_){}location.reload();});
-  const gutterObserver=new ResizeObserver(entries=>{
+  const gutterObserver=new ResizeObserver(entries=>{requestAnimationFrame(()=>{
     for(const {target} of entries){
       if(!target.getClientRects().length)continue;
       const style=getComputedStyle(target);
@@ -2261,13 +2299,13 @@
       const value=gutter+'px';
       if(target.style.getPropertyValue('--am-gutter')!==value)target.style.setProperty('--am-gutter',value);
     }
-  });
+  });});
   root.querySelectorAll('.am-screen,.am-thread,.am-queue-list,.am-dialog-body,.am-machines').forEach(element=>gutterObserver.observe(element));
   const chatBody=root.querySelector('.am-chat-body'),chatFooter=root.querySelector('.am-chat-footer');
   $('thread').addEventListener('scroll',toBottomState,{passive:true});
   $('to-bottom').addEventListener('click',()=>{const t=$('thread');t.scrollTo({top:t.scrollHeight,behavior:'smooth'});});
   // A taller reply box must not pull the owner off the end of the feed.
-  new ResizeObserver(()=>{chatBody.style.setProperty('--am-footer-height',chatFooter.getBoundingClientRect().height+'px');const t=$('thread');if(feedPinned)t.scrollTop=t.scrollHeight;}).observe(chatFooter);
-  show('tasks');refresh();loadDiscovery();
+  new ResizeObserver(()=>requestAnimationFrame(()=>{chatBody.style.setProperty('--am-footer-height',chatFooter.getBoundingClientRect().height+'px');const t=$('thread');if(feedPinned)t.scrollTop=t.scrollHeight;})).observe(chatFooter);
+  show('tasks');refresh();loadDiscovery();pollSetup();setInterval(pollSetup,2000);
   setInterval(refresh,2000);setInterval(loadDiscovery,60000);setInterval(()=>{if(tab==='stats')loadStats();},15000);
 })();
