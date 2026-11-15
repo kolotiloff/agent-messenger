@@ -4,6 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-15 — Claude Code (T-181, T-158, T-159)
 
+- Owner installed 0.77's server on a new Debian VPS with one command; all 5 computers joined over the internet.
 - Released 0.77 from `main` 6709058 via PR #118 (release run 43724921881).
 - T-036 (D-138): `install-server.sh` release asset and `messenger server run/enable/invite/status/disable/revoke`; «сервер» label in the computer list and `server: true` in `list_agents`. Tried in a container (commands, installer with a stand-in systemd); not on a real VPS.
 - T-182 (D-137): «Интернет» scope for the hosted broker. Public peers are let in with their own limits (32 slots in all, 8 per source); the owner's external address is the first invitation address; six-digit pairing answers only local sources. Broker tests and the window check; released in 0.76 (PR #117, `main` a10535f, release run 43704189375, 21 assets), not tried between networks.

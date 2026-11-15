@@ -44,7 +44,7 @@ After that: `agent-messenger-server invite` (a new invitation), `agent-messenger
 
 `server run` is the client in the foreground for a service: it starts paused, runs no tasks or models, stops on SIGTERM, and refuses update requests from other computers (the installer updates it). The installer refuses to start while another Messenger client of the same user runs (for example one started with `start`), and says how to stop it.
 
-Checked in a Linux container: the `server` commands against a running `server run` (enable with and without an address, invite, status, restart keeps the settings, a second client refused), and the installer end to end against a local copy of the release files with a stand-in `systemctl` (fresh install, update, another client running). Not checked on a real VPS or with real systemd.
+Checked in a Linux container: the `server` commands against a running `server run` (enable with and without an address, invite, status, restart keeps the settings, a second client refused), and the installer end to end against a local copy of the release files with a stand-in `systemctl` (fresh install, update, another client running). On 2026-11-15 the owner installed it on a new Debian VPS with real systemd and joined five computers (Mac, Windows, Linux) over the internet.
 
 Without the internet scope, computers in different homes still work together when they share a VPN that gives them private addresses (10.x, 172.16–31.x, 192.168.x, or IPv6 fc00::/7): to the broker they are one private network, so "local network" accepts them (D-040).
 
