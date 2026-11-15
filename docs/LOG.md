@@ -4,6 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-15 — Claude Code (T-181, T-158, T-159)
 
+- T-186: shared tasks carry where they run; «Агент на ПК — от ДАЛ» labels; agent removal in a terminal; «Убрать все» for finished tasks. Window check extended (frameless block, clear-done).
 - T-185: the computer list no longer shows a disabled agent through its old coordinator chat.
 - T-183 (D-139): remote update of the VPS service, `server rename`, 44 px caption row on Windows. Remote update tried end to end in a container against the real signed 0.77.
 - Owner installed 0.77's server on a new Debian VPS with one command; all 5 computers joined over the internet.

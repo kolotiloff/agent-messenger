@@ -39,6 +39,11 @@ type SharedTask struct {
 	// Report is the beginning of the worker's report.
 	Report string `json:"report,omitempty"`
 	Tokens int64  `json:"tokens,omitempty"`
+	// RunsOnPeer and RunsOn name the computer the task was sent to, as the
+	// giver knows it (its ID in the network and its name); empty when it
+	// runs on the giver (T-186). Older computers leave them out.
+	RunsOnPeer string `json:"runs_on_peer,omitempty"`
+	RunsOn     string `json:"runs_on,omitempty"`
 }
 
 // PeerTasks is another computer's latest list. Age is how many seconds ago
@@ -68,6 +73,9 @@ func validSharedTasks(tasks []SharedTask) bool {
 		return false
 	}
 	for _, t := range tasks {
+		if len(t.RunsOnPeer) > 64 || !utf8.ValidString(t.RunsOn) || utf8.RuneCountInString(t.RunsOn) > MaxDeviceName {
+			return false
+		}
 		if t.ID == "" || len(t.ID) > 64 || !validDeviceName(t.Project) || !agentName.MatchString(t.Agent) || !sharedState.MatchString(t.State) || t.Tokens < 0 {
 			return false
 		}

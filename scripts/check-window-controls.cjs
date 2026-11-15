@@ -275,10 +275,18 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const context = await browser.newContext({viewport: {width: 1100, height: 600}, colorScheme: 'light'});
       const page = await context.newPage();
       page.setDefaultTimeout(5000);
+const hides = [];
       await page.addInitScript(() => { window.amDesktop = 'windows'; window.amFrameless = true; window.amWindow = () => {}; });
       await page.route('**/*', async route => {
         const pathname = new URL(route.request().url()).pathname;
-        if (pathname === '/api/window') return route.fulfill({json: {projects: [{name: 'Frame'}], project: 'Frame', folder: '/fictional/frame', agents: [], coordinator: {connected: false}, computer_name: 'Frame test', tasks_enabled: true}});
+        if (pathname === '/api/window') return route.fulfill({json: {projects: [{name: 'Frame'}], project: 'Frame', folder: '/fictional/frame', agents: [], coordinator: {connected: false}, computer_name: 'Frame test', tasks_enabled: true,
+          shared: [{peer: 'host', name: 'Giver', age: 1, tasks: [
+            {id: 'sent', project: 'Frame', title: 'Sent task', agent: 'cursor', state: 'running', created_at: '2026-11-15T10:00:00Z', runs_on_peer: 'dev-1', runs_on: 'Old name'},
+            {id: 'own', project: 'Frame', title: 'Own task', agent: 'codex', state: 'running', created_at: '2026-11-15T09:00:00Z'},
+            {id: 'old-1', project: 'Frame', title: 'Old 1', agent: 'codex', state: 'done', created_at: '2026-11-14T09:00:00Z', finished_at: '2026-11-14T09:30:00Z'},
+            {id: 'old-2', project: 'Frame', title: 'Old 2', agent: 'codex', state: 'failed', created_at: '2026-11-14T08:00:00Z', finished_at: '2026-11-14T08:30:00Z'}]}]}});
+        if (pathname === '/api/server') return route.fulfill({json: {host: {running: false, enabled: false, addresses: []}, member: {connected: true}, peers: [{id: 'host', name: 'Giver', age: 0, agents: []}, {id: 'dev-1', name: 'Runner', age: 0, agents: []}], updates: [], accept: true}});
+        if (route.request().method() === 'POST') hides.push(route.request().postDataJSON());
         if (pathname.startsWith('/api/')) return route.fulfill({json: {ok: true}});
         const file = pathname === '/' ? 'index.html' : pathname.slice(1);
         const type = file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : file.endsWith('.svg') ? 'image/svg+xml' : 'text/html';
@@ -291,7 +299,16 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const button = await page.locator('.am-window-btn').first().boundingBox();
       assert(tab.y >= 8 && toggle.y >= 8, `tab row too close to the top: tab ${tab.y}, toggle ${toggle.y}`);
       assert(Math.abs((toggle.y + toggle.height / 2) - (button.y + button.height / 2)) <= 1, 'toggle off the window buttons');
+      // T-186: another computer's task says where it runs, and who gave it
+      // when that is another computer.
+      const sharedLabels = await page.locator('.am-task-shared .am-task-agent > span:not(.am-task-when)').allInnerTexts();
+      assert.deepEqual(sharedLabels.filter(Boolean), ['Cursor на Runner — от Giver', 'Codex на Giver', 'Codex на Giver', 'Codex на Giver']);
       if (process.env.SCREENSHOT_DIR) await page.screenshot({path: path.join(process.env.SCREENSHOT_DIR, 'frameless.png')});
+      // Owner, 2026-11-15: one button removes every finished task from the list.
+      await page.locator('.am-task-section', {hasText: 'Завершённые'}).locator('.am-task-section-action').click();
+      await page.locator('#confirm-go').click();
+      await page.waitForFunction(() => !document.querySelector('#confirm-dialog').open);
+      assert.deepEqual(hides, [{peer: 'host', task: 'old-1'}, {peer: 'host', task: 'old-2'}]);
       console.log(JSON.stringify({engine, frameless: true, result: 'passed'}));
       await context.close();
     }
