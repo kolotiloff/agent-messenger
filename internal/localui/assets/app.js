@@ -461,7 +461,10 @@
     const lines=el('div',undefined,'am-machine-agents');
     const [coordProvider,coordLabel]=coordinatorClient!==null?coordinatorName(coordinatorClient):['',''];
     const providers=agents.map(a=>a.agent);
-    if(coordProvider&&!providers.includes(coordProvider))providers.unshift(coordProvider);
+    // Only agents the owner keeps enabled are listed: a chat of an agent
+    // that was paused or removed once used Messenger's tools, but listing
+    // it showed the agent as if it were still there (owner, 2026-11-15).
+    // A coordinator chat of a program that is not an agent stays listed.
     for(const provider of providers){
       const a=agents.find(x=>x.agent===provider);
       // Blue means a task is running (T-060). A chat that once used
