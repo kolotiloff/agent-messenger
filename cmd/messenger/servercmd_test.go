@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"net"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -24,11 +25,23 @@ func TestServerCommandArguments(t *testing.T) {
 	for _, args := range [][]string{
 		{}, {"nope"}, {"run", "x"}, {"status", "x"}, {"disable", "x"},
 		{"enable", "--internet", "--lan"}, {"enable", "--lan", "--public", "1.2.3.4"}, {"enable", "extra"},
-		{"revoke"}, {"invite", "extra"},
+		{"revoke"}, {"invite", "extra"}, {"rename"}, {"rename", "--name", "  "},
 	} {
 		var out bytes.Buffer
 		if err := runServerCommand(root, args, &out); err == nil {
 			t.Errorf("server %s: no error", strings.Join(args, " "))
 		}
+	}
+}
+
+// T-036: only a client that systemd runs can restart after an update.
+func TestServiceUpdateStarterNeedsSystemd(t *testing.T) {
+	t.Setenv("INVOCATION_ID", "")
+	if serviceUpdateStarter(t.TempDir()) != nil {
+		t.Fatal("update accepted outside systemd")
+	}
+	t.Setenv("INVOCATION_ID", "0123456789abcdef")
+	if (serviceUpdateStarter(t.TempDir()) != nil) != (runtime.GOOS == "linux") {
+		t.Fatal("service update starter")
 	}
 }

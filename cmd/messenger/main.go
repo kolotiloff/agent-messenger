@@ -517,6 +517,7 @@ func usage() {
   messenger --root КАТАЛОГ server invite [--address АДРЕС]
   messenger --root КАТАЛОГ server status | disable
   messenger --root КАТАЛОГ server revoke --device ID
+  messenger --root КАТАЛОГ server rename --name ИМЯ
   messenger --root КАТАЛОГ overview
   messenger --root КАТАЛОГ ui [--port 0]
   messenger --root КАТАЛОГ timeline --alias ИМЯ [--limit 50] [--before ID_ПИСЬМА]

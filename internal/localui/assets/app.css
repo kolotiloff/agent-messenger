@@ -75,7 +75,9 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-pad-compact:var(--am-space-2) var(--am-space-3);
   /* Height of the Mac title bar the page runs under (T-082) */
   --am-mac-titlebar:28px;
-  --am-caption-height:32px;
+  /* Tall enough that the tab row keeps a gap above it while it stays
+     centred on the window buttons (owner, 2026-11-15). */
+  --am-caption-height:44px;
   --am-pane-inset:var(--am-space-4);
 
   /* Radii */

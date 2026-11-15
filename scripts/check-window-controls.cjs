@@ -265,6 +265,33 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       console.log(JSON.stringify({engine, nativeBridgeFixture: native, themes: ['light','dark','system'], widths: [1100,600], result: 'passed'}));
       await context.close();
     }
+    // Windows without a title bar: the tab row and the task list toggle keep
+    // a gap above them and stay centred on the window buttons (owner,
+    // 2026-11-15: they were pressed against the top edge).
+    {
+      const context = await browser.newContext({viewport: {width: 1100, height: 600}, colorScheme: 'light'});
+      const page = await context.newPage();
+      page.setDefaultTimeout(5000);
+      await page.addInitScript(() => { window.amDesktop = 'windows'; window.amFrameless = true; window.amWindow = () => {}; });
+      await page.route('**/*', async route => {
+        const pathname = new URL(route.request().url()).pathname;
+        if (pathname === '/api/window') return route.fulfill({json: {projects: [{name: 'Frame'}], project: 'Frame', folder: '/fictional/frame', agents: [], coordinator: {connected: false}, computer_name: 'Frame test', tasks_enabled: true}});
+        if (pathname.startsWith('/api/')) return route.fulfill({json: {ok: true}});
+        const file = pathname === '/' ? 'index.html' : pathname.slice(1);
+        const type = file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : file.endsWith('.svg') ? 'image/svg+xml' : 'text/html';
+        try { return route.fulfill({body: await fs.readFile(path.join(assets, file)), contentType: type}); } catch (_) { return route.fulfill({status: 404}); }
+      });
+      await page.goto('http://127.0.0.1:9/#fixture-token');
+      await page.locator('#list-toggle').waitFor({state: 'visible'});
+      const tab = await page.locator('.am-tab').first().boundingBox();
+      const toggle = await page.locator('#list-toggle').boundingBox();
+      const button = await page.locator('.am-window-btn').first().boundingBox();
+      assert(tab.y >= 8 && toggle.y >= 8, `tab row too close to the top: tab ${tab.y}, toggle ${toggle.y}`);
+      assert(Math.abs((toggle.y + toggle.height / 2) - (button.y + button.height / 2)) <= 1, 'toggle off the window buttons');
+      if (process.env.SCREENSHOT_DIR) await page.screenshot({path: path.join(process.env.SCREENSHOT_DIR, 'frameless.png')});
+      console.log(JSON.stringify({engine, frameless: true, result: 'passed'}));
+      await context.close();
+    }
   } finally {
     await browser.close();
   }
