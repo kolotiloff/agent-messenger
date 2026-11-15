@@ -4,6 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-15 — Claude Code (T-181, T-158, T-159)
 
+- T-182 (D-137): «Интернет» scope for the hosted broker. Public peers are let in with their own limits (32 slots in all, 8 per source); the owner's external address is the first invitation address; six-digit pairing answers only local sources. Broker tests and the window check; not released, not tried between networks.
 - Released 0.75 from `main` fd34136 via PR #116 (release run 43694772945, 21 assets). The window check now ignores WebKit's report of a background request cut off by a reload.
 - T-158 (D-136): `list_agents` gives `newest_release` with notes from this computer's update channel and `update_available` per computer. T-159 (D-135): `continue_task` for an interrupted task of another computer, closed there only when its worker is certainly gone. Tests in `mcp` and `core`; released in 0.75, not tried between real computers. T-160 confirmed by the owner.
 - T-181: the chat footer had its own height cap and scroll, so several update notices scrolled inside the chat and the scrollbars overlapped them. Removed it; at most 3 notices, a new one pushes out the oldest; long text cut to 3 lines. Browser fixture check added to `check-window-controls.cjs`. Released in 0.75.

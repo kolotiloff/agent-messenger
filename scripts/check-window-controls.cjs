@@ -228,6 +228,20 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.locator('#agent-cli-find').click();
       await codex.getByText('Поиск не подтверждён. Проверьте терминал или выберите файл CLI в настройках.',{exact:true}).waitFor();
       assert.deepEqual(writes.filter(w=>w.path==='/api/agent-find').map(w=>w.body),[{provider:'codex',action:'find'},{provider:'codex',action:'find'}]);
+      // T-182: the internet scope asks for the external address and sends it.
+      await page.locator('[data-tab=server]').click();
+      assert.equal(await page.locator('#host-public-box').isHidden(), true);
+      await page.locator('#host-scope').evaluate(n => {n.value = 'internet'; n.dispatchEvent(new Event('change', {bubbles: true}));});
+      assert.equal(await page.locator('#host-public-box').isVisible(), true);
+      await page.locator('#host-enable').click();
+      await page.locator('#host-status').getByText('Укажите внешний адрес: белый IP или домен этого компьютера.', {exact: true}).waitFor();
+      assert.equal(writes.filter(w => w.path === '/api/server-action' && w.body.action === 'enable').length, 0);
+      await page.locator('#host-public').fill('203.0.113.7');
+      await page.locator('#host-enable').click();
+      await page.waitForTimeout(300);
+      assert.deepEqual(writes.filter(w => w.path === '/api/server-action' && w.body.action === 'enable').map(w => w.body),
+        [{action: 'enable', scope: 'internet', port: 47100, public_address: '203.0.113.7'}]);
+      if(process.env.SCREENSHOT_DIR&&!native) await page.screenshot({animations:'disabled',path:path.join(process.env.SCREENSHOT_DIR,'server-internet.png')});
       // T-181: notices have no scroll of their own; a new one pushes out the oldest.
       updates = [1,2,3,4,5].map(i => ({request_id:'fixture-update-'+i, computer:'fixture-peer', state:'refused',
         text:'fixture refusal '+i+' '+'long reason '.repeat(40), updated_at:new Date(Date.now()-(10-i)*1000).toISOString()}));

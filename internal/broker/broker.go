@@ -63,6 +63,15 @@ const maxConnections = 64
 // every slot. This computer itself is not limited per source.
 const maxConnectionsPerSource = 16
 
+// In the internet scope (T-182, D-137) peers from public addresses are let
+// in, but they may hold at most maxPublicConnections of the slots in all and
+// maxConnectionsPerPublicSource each, so scanners and floods from the
+// internet cannot take the slots this computer and its local network need.
+const (
+	maxPublicConnections          = 32
+	maxConnectionsPerPublicSource = 8
+)
+
 // maxFailedRegistrations bounds wrong registration attempts per minute from
 // one source; past it the broker answers 429 to that source without
 // touching the database. Other sources are not affected, so junk from one
@@ -490,9 +499,20 @@ func (b *Broker) Revoke(id string) error {
 	return b.forget(id)
 }
 
-// Listen takes the broker's serving lock and opens a TLS listener. Only one
-// process serves a broker's data at a time.
+// Listen takes the broker's serving lock and opens a TLS listener for this
+// computer and private networks. Only one process serves a broker's data at
+// a time.
 func (b *Broker) Listen(addr string) (net.Listener, error) {
+	return b.listen(addr, false)
+}
+
+// ListenPublic is Listen that also lets in peers from public addresses
+// within their own limits (the internet scope, T-182).
+func (b *Broker) ListenPublic(addr string) (net.Listener, error) {
+	return b.listen(addr, true)
+}
+
+func (b *Broker) listen(addr string, public bool) (net.Listener, error) {
 	if b.lock == nil {
 		lock, err := platform.Acquire(filepath.Join(b.dir, "serve.lock"))
 		if err != nil {
@@ -507,7 +527,9 @@ func (b *Broker) Listen(addr string) (net.Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	return tls.NewListener(newGuardedListener(ln), &tls.Config{Certificates: []tls.Certificate{b.cert}, MinVersion: tls.VersionTLS13}), nil
+	guarded := newGuardedListener(ln)
+	guarded.public = public
+	return tls.NewListener(guarded, &tls.Config{Certificates: []tls.Certificate{b.cert}, MinVersion: tls.VersionTLS13}), nil
 }
 
 // newGuardedListener wraps ln with the peer check and connection limits.
@@ -518,13 +540,16 @@ func newGuardedListener(ln net.Listener) *guardedListener {
 // guardedListener accepts only peers on this computer or a private network
 // and bounds open connections, in all and per source. "Local network"
 // listens on every interface, so a peer from a public address (a public
-// IPv6 address, for example) is dropped before TLS.
+// IPv6 address, for example) is dropped before TLS. With public set (the
+// internet scope) such a peer is let in under the public limits.
 type guardedListener struct {
 	net.Listener
-	slots chan struct{}
+	slots  chan struct{}
+	public bool
 
-	mu        sync.Mutex
-	perSource map[string]int
+	mu         sync.Mutex
+	perSource  map[string]int
+	publicOpen int
 }
 
 func (l *guardedListener) Accept() (net.Conn, error) {
@@ -536,7 +561,8 @@ func (l *guardedListener) Accept() (net.Conn, error) {
 			return nil, err
 		}
 		ip, ok := peerIP(conn.RemoteAddr())
-		if !ok || !(ip.IsLoopback() || ip.IsPrivate()) {
+		local := ok && (ip.IsLoopback() || ip.IsPrivate())
+		if !ok || (!local && (!l.public || !publicPeer(ip))) {
 			conn.Close()
 			<-l.slots
 			continue
@@ -545,19 +571,29 @@ func (l *guardedListener) Accept() (net.Conn, error) {
 			return &slotConn{Conn: conn, release: func() { <-l.slots }}, nil
 		}
 		source := sourceOf(ip)
+		perSource := maxConnectionsPerSource
+		if !local {
+			perSource = maxConnectionsPerPublicSource
+		}
 		l.mu.Lock()
-		if l.perSource[source] >= maxConnectionsPerSource {
+		if l.perSource[source] >= perSource || (!local && l.publicOpen >= maxPublicConnections) {
 			l.mu.Unlock()
 			conn.Close()
 			<-l.slots
 			continue
 		}
 		l.perSource[source]++
+		if !local {
+			l.publicOpen++
+		}
 		l.mu.Unlock()
 		return &slotConn{Conn: conn, release: func() {
 			l.mu.Lock()
 			if l.perSource[source]--; l.perSource[source] <= 0 {
 				delete(l.perSource, source)
+			}
+			if !local {
+				l.publicOpen--
 			}
 			l.mu.Unlock()
 			<-l.slots
@@ -580,6 +616,30 @@ func peerIP(addr net.Addr) (net.IP, bool) {
 		ip = v4
 	}
 	return ip, ip != nil
+}
+
+// publicPeer reports whether ip is an ordinary internet address a peer may
+// come from in the internet scope: not unspecified, multicast, link-local
+// or otherwise special.
+func publicPeer(ip net.IP) bool {
+	return ip.IsGlobalUnicast() && !ip.IsPrivate() && !ip.IsLoopback()
+}
+
+// localRequest reports whether an HTTP request came from this computer or a
+// private network.
+func localRequest(r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return false
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	if v4 := ip.To4(); v4 != nil {
+		ip = v4
+	}
+	return ip.IsLoopback() || ip.IsPrivate()
 }
 
 // localPeer reports whether addr is this computer or a private network.

@@ -692,12 +692,13 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 			Scope   string `json:"scope,omitempty"`
 			Port    int    `json:"port,omitempty"`
 			Address string `json:"address,omitempty"`
+			Public  string `json:"public_address,omitempty"`
 			Device  string `json:"device,omitempty"`
 			Code    string `json:"code,omitempty"`
 			Name    string `json:"name,omitempty"`
 			On      bool   `json:"on,omitempty"`
 		}
-		if decoder.Decode(&in) != nil || !serverActions[in.Action] || len(in.Scope) > 16 || in.Port < 0 || in.Port > 65535 || len(in.Address) > 255 || len(in.Device) > 64 || len(in.Code) > 2048 || len(in.Name) > 256 {
+		if decoder.Decode(&in) != nil || !serverActions[in.Action] || len(in.Scope) > 16 || in.Port < 0 || in.Port > 65535 || len(in.Address) > 255 || len(in.Public) > 255 || len(in.Device) > 64 || len(in.Code) > 2048 || len(in.Name) > 256 {
 			return control.Request{}, false
 		}
 		action := in.Action
