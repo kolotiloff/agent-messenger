@@ -44,6 +44,16 @@ A browser download does not keep the "may run" mark of a file, hence `chmod +x` 
 
 Data: `$XDG_DATA_HOME/agent-messenger` or `~/.local/share/agent-messenger`. To stop the background client: `./AgentMessenger-Linux-x64 shutdown`. Later versions arrive in the window («Доступно обновление» → «Обновиться»), as on Windows; a program installed with `install` is updated there as well ([updates](UPDATES.md#windows-and-linux)).
 
+## Server on a Linux VPS
+
+One command as root installs the network server as a service and prints an invitation; running it again updates it ([details](BROKER.md)):
+
+```bash
+curl -fsSL https://github.com/kolotiloff/agent-messenger/releases/latest/download/install-server.sh | sh
+```
+
+`agent-messenger-server invite` gives a new invitation, `agent-messenger-server status` shows the state and the connected computers.
+
 ## Agents
 
 - **Claude Code**: the usual installation (`claude.exe` on Windows, usually in `%USERPROFILE%\.local\bin`; `claude` on Linux and Mac).

@@ -69,7 +69,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           '/api/agent-setup-status': setupStates,
           '/api/discovery': {agents: ['claude','codex','cursor'].map(provider => ({provider, state: 'not_found'}))},
           '/api/client-info': {client: 'running', outdated: false},
-          '/api/server': {host: {running: false, enabled: false, addresses: []}, member: {connected: false}, peers: connected ? [{id:'fixture-peer',name:'Peer fixture',age:0,agents:[{agent:'cursor'}],coordinator:'cursor-vscode'}] : [], updates, accept: true},
+          '/api/server': {host: {running: false, enabled: false, addresses: []}, member: {connected: false}, peers: connected ? [{id:'fixture-peer',name:'Peer fixture',host:true,age:0,agents:[{agent:'cursor'}],coordinator:'cursor-vscode'}] : [], updates, accept: true},
           '/api/self-update': {current: '0.0.0-preview.test'},
         };
         if (pathname.startsWith('/api/')) return route.fulfill({json: fixtures[pathname] || {ok: true}});
@@ -184,6 +184,9 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await page.locator('#machines [data-peer="fixture-peer"] .am-agent-line').count(),1);
       assert.equal(await page.locator('#machines .am-agent-line').first().innerText(),'Cursor');
       assert.equal(await page.locator('#machines').getByText('cursor-vscode',{exact:true}).count(),0);
+      // T-036: the computer that runs the server is labelled; this one is not.
+      assert.equal(await page.locator('#machines [data-peer="fixture-peer"] .am-machine-role').innerText(),'сервер');
+      assert.equal(await page.locator('#machines [aria-current="true"] .am-machine-role').count(),0);
       await page.locator('[data-tab=tasks]').click();
       assert(await page.locator('#task-panel').isVisible(), 'the task panel returns after creating a project');
       await page.locator('#list-toggle').click();

@@ -290,6 +290,8 @@
   'Расход сообщает сам компьютер, когда он меняется. В самых затратных задачах — только отправленные туда с этого компьютера.':'The computer reports its usage itself when it changes. The costliest tasks list only those sent there from this computer.',
   'Показать задачи этого компьютера':'Show tasks of this computer',
   'Этот компьютер':'This computer',
+  'сервер':'server',
+  'На этом компьютере работает сервер сети':'This computer runs the network server',
   'На связи':'Online',
   'Агенты не подключены':'No agents connected',
   'Отозвать устройство? Вернуть его можно только новым приглашением.':'Revoke the device? Only a new invitation brings it back.',
