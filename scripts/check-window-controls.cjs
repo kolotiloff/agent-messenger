@@ -275,7 +275,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const context = await browser.newContext({viewport: {width: 1100, height: 600}, colorScheme: 'light'});
       const page = await context.newPage();
       page.setDefaultTimeout(5000);
-const hides = [];
+      const hides = [];
       await page.addInitScript(() => { window.amDesktop = 'windows'; window.amFrameless = true; window.amWindow = () => {}; });
       await page.route('**/*', async route => {
         const pathname = new URL(route.request().url()).pathname;
@@ -286,13 +286,13 @@ const hides = [];
             {id: 'old-1', project: 'Frame', title: 'Old 1', agent: 'codex', state: 'done', created_at: '2026-11-14T09:00:00Z', finished_at: '2026-11-14T09:30:00Z'},
             {id: 'old-2', project: 'Frame', title: 'Old 2', agent: 'codex', state: 'failed', created_at: '2026-11-14T08:00:00Z', finished_at: '2026-11-14T08:30:00Z'}]}]}});
         if (pathname === '/api/server') return route.fulfill({json: {host: {running: false, enabled: false, addresses: []}, member: {connected: true}, peers: [{id: 'host', name: 'Giver', age: 0, agents: []}, {id: 'dev-1', name: 'Runner', age: 0, agents: []}], updates: [], accept: true}});
-        if (route.request().method() === 'POST') hides.push(route.request().postDataJSON());
+        if (pathname === '/api/task-hide') hides.push(route.request().postDataJSON());
         if (pathname.startsWith('/api/')) return route.fulfill({json: {ok: true}});
         const file = pathname === '/' ? 'index.html' : pathname.slice(1);
         const type = file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : file.endsWith('.svg') ? 'image/svg+xml' : 'text/html';
         try { return route.fulfill({body: await fs.readFile(path.join(assets, file)), contentType: type}); } catch (_) { return route.fulfill({status: 404}); }
       });
-      await page.goto('http://127.0.0.1:9/#fixture-token');
+      await page.goto('http://messenger.test/#fixture-token');
       await page.locator('#list-toggle').waitFor({state: 'visible'});
       const tab = await page.locator('.am-tab').first().boundingBox();
       const toggle = await page.locator('#list-toggle').boundingBox();
