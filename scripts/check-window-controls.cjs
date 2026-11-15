@@ -22,7 +22,13 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       let setupStates = [], installed = false;
       let updates = [];
       const writes = [];
-      page.on('pageerror', error => errors.push(error.message));
+      // WebKit reports a background request that a reload cut off as a page
+      // error ("… due to access control checks"); the app catches it, so it
+      // is not counted. Every other page error fails the check.
+      page.on('pageerror', error => {
+        if (engine === 'webkit' && /\/api\/[a-z-]+ due to access control checks\.$/.test(error.message)) return;
+        errors.push(error.message);
+      });
       if (native) await page.addInitScript(() => {
         window.messengerInitialTheme = 'light';
         window.themeMessages = [];
