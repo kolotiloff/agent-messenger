@@ -47,6 +47,13 @@ func (f *fakeSelfUpdater) Apply(context.Context) (selfupdate.Status, error) {
 	return f.state, nil
 }
 
+func (f *fakeSelfUpdater) Update(ctx context.Context) (selfupdate.Status, error) {
+	f.mu.Lock()
+	f.state = selfupdate.Status{State: "downloading", Version: "0.0.0-preview.34"}
+	f.mu.Unlock()
+	return f.Apply(ctx)
+}
+
 func selfUpdateHandler(u *SelfUpdate) func(method, body string) *httptest.ResponseRecorder {
 	h := newDesktopHandler(actionHost, "secret", nil, nil, diagnostics.CheckCLI, Desktop{SelfUpdate: u})
 	return func(method, body string) *httptest.ResponseRecorder {
@@ -109,6 +116,40 @@ func TestSelfUpdateCheckInstallAndRelaunch(t *testing.T) {
 	fake.fail = false
 	if w := call("POST", `{"action":"install"}`); w.Code != 200 {
 		t.Fatalf("install %d %s", w.Code, w.Body)
+	}
+	select {
+	case <-relaunched:
+	case <-time.After(5 * time.Second):
+		t.Fatal("not relaunched")
+	}
+}
+
+// The window's one button downloads and installs in the background, then
+// restarts the window; a failure leaves it as it was (owner, 2026-11-15).
+func TestSelfUpdateOneButton(t *testing.T) {
+	fake := &fakeSelfUpdater{state: selfupdate.Status{State: "found", Version: "0.0.0-preview.34"}, fail: true}
+	relaunched := make(chan struct{}, 1)
+	call := selfUpdateHandler(&SelfUpdate{Updater: fake, Relaunch: func() { relaunched <- struct{}{} }})
+	if w := call("POST", `{"action":"update"}`); w.Code != 200 {
+		t.Fatalf("update %d %s", w.Code, w.Body)
+	}
+	select {
+	case <-relaunched:
+		t.Fatal("relaunched after a failed update")
+	case <-time.After(1500 * time.Millisecond):
+	}
+	fake.mu.Lock()
+	fake.fail = false
+	fake.state = selfupdate.Status{State: "installing"}
+	fake.mu.Unlock()
+	if w := call("POST", `{"action":"update"}`); w.Code != 409 {
+		t.Fatalf("second update while installing %d", w.Code)
+	}
+	fake.mu.Lock()
+	fake.state = selfupdate.Status{State: "found", Version: "0.0.0-preview.34"}
+	fake.mu.Unlock()
+	if w := call("POST", `{"action":"update"}`); w.Code != 200 {
+		t.Fatalf("update %d %s", w.Code, w.Body)
 	}
 	select {
 	case <-relaunched:

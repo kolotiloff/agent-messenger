@@ -276,6 +276,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const page = await context.newPage();
       page.setDefaultTimeout(5000);
       const hides = [];
+      // The update offered, downloading, installing, restarting (owner,
+      // 2026-11-15: one button and one dialog).
+      const update = {state: 'found', version: '0.0.0-preview.99'};
+      const updates = [];
       await page.addInitScript(() => { window.amDesktop = 'windows'; window.amFrameless = true; window.amWindow = () => {}; });
       await page.route('**/*', async route => {
         const pathname = new URL(route.request().url()).pathname;
@@ -287,6 +291,11 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
             {id: 'old-2', project: 'Frame', title: 'Old 2', agent: 'codex', state: 'failed', created_at: '2026-11-14T08:00:00Z', finished_at: '2026-11-14T08:30:00Z'}]}]}});
         if (pathname === '/api/server') return route.fulfill({json: {host: {running: false, enabled: false, addresses: []}, member: {connected: true}, peers: [{id: 'host', name: 'Giver', age: 0, agents: []}, {id: 'dev-1', name: 'Runner', age: 0, agents: []}], updates: [], accept: true}});
         if (pathname === '/api/task-hide') hides.push(route.request().postDataJSON());
+        if (pathname === '/api/self-update') {
+          if (route.request().method() === 'POST') { updates.push(route.request().postDataJSON()); update.state = 'downloading'; return route.fulfill({json: {ok: true, state: 'downloading'}}); }
+          return route.fulfill({json: {ok: true, installed_version: '0.0.0-preview.98', ...update}});
+        }
+        if (pathname === '/api/update-progress') return route.fulfill({json: update.state === 'downloading' && update.done ? {downloading: true, version: update.version, done: update.done, total: 100} : {downloading: false}});
         if (pathname.startsWith('/api/')) return route.fulfill({json: {ok: true}});
         const file = pathname === '/' ? 'index.html' : pathname.slice(1);
         const type = file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : file.endsWith('.svg') ? 'image/svg+xml' : 'text/html';
@@ -309,6 +318,34 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.locator('#confirm-go').click();
       await page.waitForFunction(() => !document.querySelector('#confirm-dialog').open);
       assert.deepEqual(hides, [{peer: 'host', task: 'old-1'}, {peer: 'host', task: 'old-2'}]);
+      // One update button: the dialog follows the download, the install and
+      // the restart; a failed install says so and offers to try again.
+      const updateButton = page.locator('#app-update-button');
+      await updateButton.waitFor({state: 'visible'});
+      assert(!(await updateButton.evaluate(b => b.classList.contains('am-update-loading'))), 'a found update shows a download ring');
+      await updateButton.click();
+      await page.locator('#update-dialog').waitFor({state: 'visible'});
+      assert.deepEqual(updates, [{action: 'update'}]);
+      update.done = 40;
+      await page.waitForFunction(() => document.querySelector('#update-step').textContent === 'Загрузка… 40%');
+      assert.equal(await page.locator('#update-title').innerText(), 'Обновление v0.99');
+      update.state = 'installing';
+      await page.waitForFunction(() => document.querySelector('#update-step').textContent === 'Установка…');
+      update.state = 'available';
+      await page.locator('#update-error').waitFor({state: 'visible'});
+      assert.equal(await page.locator('#update-error').innerText(), 'Обновление не установлено. Программа осталась прежней.');
+      await page.keyboard.press('Escape');
+      await page.locator('#update-dialog').waitFor({state: 'hidden'});
+      await updateButton.click();
+      await page.locator('#update-dialog').waitFor({state: 'visible'});
+      update.state = 'downloading';
+      await page.keyboard.press('Escape');
+      assert(await page.locator('#update-dialog').isVisible(), 'the update dialog closed while downloading');
+      update.state = 'installed';
+      await page.waitForFunction(() => document.querySelector('#update-step').textContent === 'Перезапуск…');
+      assert(await page.locator('#update-actions').isHidden(), 'buttons shown while restarting');
+      assert.equal(updates.length, 2);
+      if (process.env.SCREENSHOT_DIR) await page.screenshot({path: path.join(process.env.SCREENSHOT_DIR, 'update-dialog.png')});
       console.log(JSON.stringify({engine, frameless: true, result: 'passed'}));
       await context.close();
     }

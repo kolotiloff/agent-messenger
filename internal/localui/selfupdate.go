@@ -18,6 +18,7 @@ type SelfUpdater interface {
 	Status() selfupdate.Status
 	Check(context.Context) selfupdate.Status
 	Apply(context.Context) (selfupdate.Status, error)
+	Update(context.Context) (selfupdate.Status, error)
 }
 
 // SelfUpdate is the window's part of the update: the updater and what to do
@@ -35,6 +36,10 @@ type Desktop struct {
 	SelfUpdate *SelfUpdate
 }
 
+// selfUpdateDownloadDeadline bounds the window's one-button update: the
+// download of the archive, then the install.
+const selfUpdateDownloadDeadline = 20 * time.Minute
+
 // selfUpdateDeadline covers running the new program's `version` (20 s at
 // most) and writing it next to the old one.
 const selfUpdateDeadline = 60 * time.Second
@@ -45,7 +50,10 @@ func selfUpdateStatus(u *SelfUpdate) map[string]any {
 }
 
 // serveSelfUpdate answers POST /api/self-update. "check" starts a check in
-// the background and returns at once; "install" verifies the downloaded
+// the background and returns at once; "update" downloads and installs in the
+// background and returns at once, and the window follows it through the
+// status and the download progress, then the window restarts (owner,
+// 2026-11-15); "install" verifies the downloaded
 // update again, puts it in place and then asks the launcher to restart the
 // window. A failed install leaves the old program as it was.
 func serveSelfUpdate(w http.ResponseWriter, r *http.Request, decoder *json.Decoder, u *SelfUpdate) {
@@ -56,7 +64,7 @@ func serveSelfUpdate(w http.ResponseWriter, r *http.Request, decoder *json.Decod
 	var input struct {
 		Action string `json:"action"`
 	}
-	if err := decoder.Decode(&input); err != nil || decoder.Decode(new(any)) != io.EOF || (input.Action != "check" && input.Action != "install") {
+	if err := decoder.Decode(&input); err != nil || decoder.Decode(new(any)) != io.EOF || (input.Action != "check" && input.Action != "install" && input.Action != "update") {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
@@ -67,6 +75,23 @@ func serveSelfUpdate(w http.ResponseWriter, r *http.Request, decoder *json.Decod
 			u.Updater.Check(ctx)
 		}()
 		writeJSON(w, map[string]any{"ok": true, "state": "checking"})
+		return
+	}
+	if input.Action == "update" {
+		if st := u.Updater.Status().State; st == "checking" || st == "downloading" || st == "installing" || st == "installed" || st == "unsupported" {
+			reject(w, http.StatusConflict, st, "Обновление уже идёт или здесь недоступно.")
+			return
+		}
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), selfUpdateDownloadDeadline)
+			defer cancel()
+			if _, err := u.Updater.Update(ctx); err == nil && u.Relaunch != nil {
+				// Let the window show the restart before it closes.
+				time.Sleep(time.Second)
+				u.Relaunch()
+			}
+		}()
+		writeJSON(w, map[string]any{"ok": true, "state": "downloading"})
 		return
 	}
 	s, err := u.Updater.Apply(r.Context())

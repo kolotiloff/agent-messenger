@@ -35,7 +35,9 @@ const maxProgram = 256 << 20
 
 // Status is what the window shows.
 type Status struct {
-	// State: unsupported, idle, checking, available, installing, installed, failed.
+	// State: unsupported, idle, checking, found (a newer release is known but
+	// not downloaded), available (downloaded and verified), downloading (the
+	// owner's update fetches it), installing, installed, failed.
 	State   string `json:"state"`
 	Version string `json:"version,omitempty"`
 	Error   string `json:"error,omitempty"`
@@ -49,6 +51,9 @@ type Updater struct {
 	// Sync downloads newer signed metadata and archive into Channel, or does
 	// nothing. Replaced in tests.
 	Sync func(ctx context.Context) error
+	// Find returns the version of a newer signed release without
+	// downloading it, or "". nil means Look downloads like Check.
+	Find func(ctx context.Context) (string, error)
 	// Install puts a verified program into an installation made by
 	// `messenger install`; nil means the program is a plain file.
 	Install func(program string, info buildinfo.Info) (string, error)
@@ -106,7 +111,7 @@ func (u *Updater) Check(ctx context.Context) Status {
 		u.mu.Unlock()
 		return u.Status()
 	}
-	if u.status.State == "checking" || u.status.State == "installing" || u.status.State == "installed" {
+	if u.busy() {
 		s := u.status
 		u.mu.Unlock()
 		return s
@@ -132,6 +137,100 @@ func (u *Updater) Check(ctx context.Context) Status {
 	}
 	u.status = u.idle()
 	return u.status
+}
+
+// busy: a check, download or install is under way, or one finished and
+// waits for the restart. The caller holds mu.
+func (u *Updater) busy() bool {
+	switch u.status.State {
+	case "checking", "downloading", "installing", "installed":
+		return true
+	}
+	return false
+}
+
+// Look asks GitHub whether a newer signed release exists, without
+// downloading it: the window offers it, and the owner's click downloads and
+// installs it (owner, 2026-11-15). An update already downloaded stays
+// available. A failed look changes nothing the window shows.
+func (u *Updater) Look(ctx context.Context) Status {
+	if u.Find == nil {
+		return u.Check(ctx)
+	}
+	u.mu.Lock()
+	if !u.supported() {
+		u.status = Status{State: "unsupported"}
+		u.mu.Unlock()
+		return u.Status()
+	}
+	if u.busy() {
+		s := u.status
+		u.mu.Unlock()
+		return s
+	}
+	if s := u.idle(); s.State == "available" {
+		u.status = s
+		u.mu.Unlock()
+		return s
+	}
+	u.mu.Unlock()
+	version, err := u.Find(ctx)
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.busy() {
+		return u.status
+	}
+	if err == nil && version != "" && Build(version) > u.Running {
+		u.status = Status{State: "found", Version: version}
+	} else if err == nil {
+		u.status = u.idle()
+	}
+	if u.status.State == "" {
+		u.status = u.idle()
+	}
+	return u.status
+}
+
+// Update downloads the newest signed release, if it is not downloaded yet,
+// and installs it: the window's one button (owner, 2026-11-15). While it
+// downloads, the state is downloading and the channel reports the progress.
+func (u *Updater) Update(ctx context.Context) (Status, error) {
+	u.mu.Lock()
+	if !u.supported() {
+		u.mu.Unlock()
+		return Status{State: "unsupported"}, errors.New("обновление здесь не поддерживается")
+	}
+	if u.busy() {
+		s := u.status
+		u.mu.Unlock()
+		if s.State == "installed" {
+			return s, nil
+		}
+		return s, errors.New("обновление уже проверяется или устанавливается")
+	}
+	version := u.status.Version
+	if s := u.idle(); s.State != "available" {
+		u.status = Status{State: "downloading", Version: version}
+		u.mu.Unlock()
+		err := u.Sync(ctx)
+		u.mu.Lock()
+		if s := u.idle(); s.State != "available" {
+			u.status = Status{State: "failed", Version: version, Error: "не удалось скачать обновление"}
+			if err == nil {
+				err = errors.New("новая версия не найдена")
+			}
+			var limit updatefeed.RateLimitError
+			if errors.As(err, &limit) {
+				u.status.Error = "GitHub временно ограничил проверки с этого адреса"
+			}
+			s := u.status
+			u.mu.Unlock()
+			return s, err
+		}
+	}
+	u.status = u.idle()
+	u.mu.Unlock()
+	return u.Apply(ctx)
 }
 
 // Apply verifies the downloaded update again and replaces the program. It

@@ -126,7 +126,20 @@ func TestGitHubDownloadCommitAndFailurePreservePreviousPackage(t *testing.T) {
 				}
 				return &http.Response{StatusCode: status, Header: headers, Body: io.NopCloser(bytes.NewReader(data)), ContentLength: int64(len(data)), Request: req}, nil
 			})
-			result, err := c.syncGitHub(context.Background(), 6, client)
+			if scenario == "valid" {
+				// Finding the release downloads nothing and changes nothing.
+				found, err := c.syncGitHub(context.Background(), 6, client, false)
+				if err != nil || found.State != "found" || found.Version != m.Version || found.Updated {
+					t.Fatal(found, err)
+				}
+				if got, e := c.Load(); e == nil && got.Build == 7 {
+					t.Fatal("a find published the update")
+				}
+				if _, e := os.Stat(filepath.Join(c.Directory, m.SHA256+".zip")); e == nil {
+					t.Fatal("a find downloaded the archive")
+				}
+			}
+			result, err := c.syncGitHub(context.Background(), 6, client, true)
 			success := scenario == "valid" || scenario == "redirect"
 			if _, ok := c.Progress(); ok {
 				t.Fatal("download progress left after the sync")
@@ -193,7 +206,7 @@ func TestGitHubDownloadLockRefusesConcurrentWriter(t *testing.T) {
 	defer lock.Release()
 	client := updateHTTPClient()
 	client.Transport = transportFunc(func(*http.Request) (*http.Response, error) { t.Fatal("network reached while locked"); return nil, nil })
-	if _, err = c.syncGitHub(context.Background(), 0, client); !errors.Is(err, ErrDownloadBusy) {
+	if _, err = c.syncGitHub(context.Background(), 0, client, true); !errors.Is(err, ErrDownloadBusy) {
 		t.Fatalf("parallel update must return typed busy status, got %v", err)
 	}
 }
@@ -216,7 +229,7 @@ func TestInvalidDownloadLockIsNotReportedAsBusy(t *testing.T) {
 		t.Fatal("network reached without a lock")
 		return nil, nil
 	})
-	if _, err := c.syncGitHub(context.Background(), 0, client); err == nil || errors.Is(err, ErrDownloadBusy) {
+	if _, err := c.syncGitHub(context.Background(), 0, client, true); err == nil || errors.Is(err, ErrDownloadBusy) {
 		t.Fatalf("invalid lock must fail, not suggest waiting: %v", err)
 	}
 }
