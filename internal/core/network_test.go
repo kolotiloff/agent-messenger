@@ -722,3 +722,28 @@ func TestReleaseAbsentOutboxKeepsAsleepComputer(t *testing.T) {
 		t.Fatalf("task %s %v", state, err)
 	}
 }
+
+// T-186: the giver's shared list says where a sent task runs, so a third
+// computer shows the same place as the giver.
+func TestSharedTaskSaysWhereItRuns(t *testing.T) {
+	p := newNetPair(t)
+	id := p.startRemote(t, "where", "codex", "Build")
+	local, _, err := p.a.st.StartTask(StartTaskRequest{Project: "Game", OpID: "here", Provider: "codex", Text: "Local"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mine, err := p.a.st.SharedTasks(time.Now().Add(-time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]NetTask{}
+	for _, task := range mine {
+		got[task.ID] = task
+	}
+	if r := got[id]; r.RunsOnPeer != "dev-b" || r.RunsOn == "" {
+		t.Fatalf("sent task %+v", r)
+	}
+	if l := got[local]; l.RunsOnPeer != "" || l.RunsOn != "" {
+		t.Fatalf("local task %+v", l)
+	}
+}

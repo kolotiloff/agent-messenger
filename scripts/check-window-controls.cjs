@@ -69,7 +69,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           '/api/agent-setup-status': setupStates,
           '/api/discovery': {agents: ['claude','codex','cursor'].map(provider => ({provider, state: 'not_found'}))},
           '/api/client-info': {client: 'running', outdated: false},
-          '/api/server': {host: {running: false, enabled: false, addresses: []}, member: {connected: false}, peers: connected ? [{id:'fixture-peer',name:'Peer fixture',host:true,age:0,agents:[{agent:'cursor'}],coordinator:'cursor-vscode'}] : [], updates, accept: true},
+          '/api/server': {host: {running: false, enabled: false, addresses: []}, member: {connected: false}, peers: connected ? [{id:'fixture-peer',name:'Peer fixture',host:true,age:0,agents:[{agent:'cursor'}],coordinator:'cursor-vscode'},{id:'fixture-peer-2',name:'Paused agent fixture',age:0,agents:[],coordinator:'claude-code'}] : [], updates, accept: true},
           '/api/self-update': {current: '0.0.0-preview.test'},
         };
         if (pathname.startsWith('/api/')) return route.fulfill({json: fixtures[pathname] || {ok: true}});
@@ -184,6 +184,9 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await page.locator('#machines [data-peer="fixture-peer"] .am-agent-line').count(),1);
       assert.equal(await page.locator('#machines .am-agent-line').first().innerText(),'Cursor');
       assert.equal(await page.locator('#machines').getByText('cursor-vscode',{exact:true}).count(),0);
+      // An agent paused or removed on a computer is not listed there, even
+      // when a chat of it once used Messenger's tools (owner, 2026-11-15).
+      assert.equal(await page.locator('#machines [data-peer="fixture-peer-2"] .am-agent-line').count(),0);
       // T-036: the computer that runs the server is labelled; this one is not.
       assert.equal(await page.locator('#machines [data-peer="fixture-peer"] .am-machine-role').innerText(),'сервер');
       assert.equal(await page.locator('#machines [aria-current="true"] .am-machine-role').count(),0);
@@ -263,6 +266,50 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       updates = [];
       assert.deepEqual(errors, []);
       console.log(JSON.stringify({engine, nativeBridgeFixture: native, themes: ['light','dark','system'], widths: [1100,600], result: 'passed'}));
+      await context.close();
+    }
+    // Windows without a title bar: the tab row and the task list toggle keep
+    // a gap above them and stay centred on the window buttons (owner,
+    // 2026-11-15: they were pressed against the top edge).
+    {
+      const context = await browser.newContext({viewport: {width: 1100, height: 600}, colorScheme: 'light'});
+      const page = await context.newPage();
+      page.setDefaultTimeout(5000);
+      const hides = [];
+      await page.addInitScript(() => { window.amDesktop = 'windows'; window.amFrameless = true; window.amWindow = () => {}; });
+      await page.route('**/*', async route => {
+        const pathname = new URL(route.request().url()).pathname;
+        if (pathname === '/api/window') return route.fulfill({json: {projects: [{name: 'Frame'}], project: 'Frame', folder: '/fictional/frame', agents: [], coordinator: {connected: false}, computer_name: 'Frame test', tasks_enabled: true,
+          shared: [{peer: 'host', name: 'Giver', age: 1, tasks: [
+            {id: 'sent', project: 'Frame', title: 'Sent task', agent: 'cursor', state: 'running', created_at: '2026-11-15T10:00:00Z', runs_on_peer: 'dev-1', runs_on: 'Old name'},
+            {id: 'own', project: 'Frame', title: 'Own task', agent: 'codex', state: 'running', created_at: '2026-11-15T09:00:00Z'},
+            {id: 'old-1', project: 'Frame', title: 'Old 1', agent: 'codex', state: 'done', created_at: '2026-11-14T09:00:00Z', finished_at: '2026-11-14T09:30:00Z'},
+            {id: 'old-2', project: 'Frame', title: 'Old 2', agent: 'codex', state: 'failed', created_at: '2026-11-14T08:00:00Z', finished_at: '2026-11-14T08:30:00Z'}]}]}});
+        if (pathname === '/api/server') return route.fulfill({json: {host: {running: false, enabled: false, addresses: []}, member: {connected: true}, peers: [{id: 'host', name: 'Giver', age: 0, agents: []}, {id: 'dev-1', name: 'Runner', age: 0, agents: []}], updates: [], accept: true}});
+        if (pathname === '/api/task-hide') hides.push(route.request().postDataJSON());
+        if (pathname.startsWith('/api/')) return route.fulfill({json: {ok: true}});
+        const file = pathname === '/' ? 'index.html' : pathname.slice(1);
+        const type = file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : file.endsWith('.svg') ? 'image/svg+xml' : 'text/html';
+        try { return route.fulfill({body: await fs.readFile(path.join(assets, file)), contentType: type}); } catch (_) { return route.fulfill({status: 404}); }
+      });
+      await page.goto('http://messenger.test/#fixture-token');
+      await page.locator('#list-toggle').waitFor({state: 'visible'});
+      const tab = await page.locator('.am-tab').first().boundingBox();
+      const toggle = await page.locator('#list-toggle').boundingBox();
+      const button = await page.locator('.am-window-btn').first().boundingBox();
+      assert(tab.y >= 8 && toggle.y >= 8, `tab row too close to the top: tab ${tab.y}, toggle ${toggle.y}`);
+      assert(Math.abs((toggle.y + toggle.height / 2) - (button.y + button.height / 2)) <= 1, 'toggle off the window buttons');
+      // T-186: another computer's task says where it runs, and who gave it
+      // when that is another computer.
+      const sharedLabels = await page.locator('.am-task-shared .am-task-agent > span:not(.am-task-when)').allInnerTexts();
+      assert.deepEqual(sharedLabels.filter(Boolean), ['Cursor на Runner — от Giver', 'Codex на Giver', 'Codex на Giver', 'Codex на Giver']);
+      if (process.env.SCREENSHOT_DIR) await page.screenshot({path: path.join(process.env.SCREENSHOT_DIR, 'frameless.png')});
+      // Owner, 2026-11-15: one button removes every finished task from the list.
+      await page.locator('.am-task-section', {hasText: 'Завершённые'}).locator('.am-task-section-action').click();
+      await page.locator('#confirm-go').click();
+      await page.waitForFunction(() => !document.querySelector('#confirm-dialog').open);
+      assert.deepEqual(hides, [{peer: 'host', task: 'old-1'}, {peer: 'host', task: 'old-2'}]);
+      console.log(JSON.stringify({engine, frameless: true, result: 'passed'}));
       await context.close();
     }
   } finally {

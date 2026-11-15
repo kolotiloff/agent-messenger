@@ -48,6 +48,9 @@ type NetTask struct {
 	FinishedAt string `json:"finished_at,omitempty"`
 	Report     string `json:"report,omitempty"`
 	Tokens     int64  `json:"tokens,omitempty"`
+	// RunsOnPeer and RunsOn: the computer the task was sent to (T-186).
+	RunsOnPeer string `json:"runs_on_peer,omitempty"`
+	RunsOn     string `json:"runs_on,omitempty"`
 }
 
 // NetPeerTasks is another computer's shared list. Age is in seconds.
@@ -79,7 +82,26 @@ func (s *Store) SharedTasks(since time.Time) ([]NetTask, error) {
 		t.Title, t.Report = clip(t.Title, MaxSharedTitle), clip(t.Report, MaxSharedReport)
 		out = append(out, t)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	// Where each task runs, so every computer shows the same place for it
+	// instead of the giver's name (T-186).
+	err = s.tx(func(tx *sql.Tx) error {
+		for i := range out {
+			link, err := taskLink(tx, out[i].ID)
+			if err != nil {
+				return err
+			}
+			if link.remote != nil {
+				out[i].RunsOnPeer = clip(link.remote.peer, 64)
+				out[i].RunsOn = clip(peerName(tx, link.remote.peer), MaxComputerName)
+			}
+		}
+		return nil
+	})
+	return out, err
 }
 
 // SetNetTasks replaces the other computers' lists.

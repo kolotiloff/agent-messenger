@@ -9,7 +9,10 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -30,7 +33,7 @@ const serverCallTimeout = 25 * time.Second
 
 func runServerCommand(root string, args []string, out io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("укажите действие: run, enable, invite, status, disable или revoke")
+		return errors.New("укажите действие: run, enable, invite, status, rename, disable или revoke")
 	}
 	switch args[0] {
 	case "run":
@@ -137,6 +140,21 @@ func runServerCommand(root string, args []string, out io.Writer) error {
 		fmt.Fprintln(out, "Сервер остановлен.")
 		printServerStatus(out, status)
 		return nil
+	case "rename":
+		fs := flag.NewFlagSet("server rename", flag.ContinueOnError)
+		fs.SetOutput(out)
+		name := fs.String("name", "", "имя этого компьютера в сети")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if strings.TrimSpace(*name) == "" || fs.NArg() != 0 {
+			return errors.New("укажите --name ИМЯ (в кавычках, если есть пробелы)")
+		}
+		if _, err := serverCall(root, "rename", map[string]any{"name": strings.TrimSpace(*name)}); err != nil {
+			return err
+		}
+		fmt.Fprintln(out, "Имя изменено: "+strings.TrimSpace(*name)+". Другие компьютеры увидят его в течение минуты.")
+		return nil
 	case "revoke":
 		fs := flag.NewFlagSet("server revoke", flag.ContinueOnError)
 		fs.SetOutput(out)
@@ -159,17 +177,54 @@ func runServerCommand(root string, args []string, out io.Writer) error {
 }
 
 // runServerService runs the client in the foreground until SIGTERM or
-// Ctrl+C, for a system service. It runs no tasks and no models, and it
-// refuses update requests from the network: the service is updated by
-// running the installer again.
+// Ctrl+C, for a system service. It runs no tasks and no models. Under
+// systemd it accepts update requests from the network like any computer:
+// the helper installs the signed update and asks systemd to restart the
+// service. Started by hand, it refuses them.
 func runServerService(root string) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	err := supervisor.RunWithOptions(ctx, root, supervisor.AdapterLauncher{}, supervisor.RunOptions{StartPaused: true})
+	// The update helper starts the program file the service runs.
+	recordProgram(root)
+	err := supervisor.RunWithOptions(ctx, root, supervisor.AdapterLauncher{}, supervisor.RunOptions{StartPaused: true, StartUpdate: serviceUpdateStarter(root)})
 	if errors.Is(err, platform.ErrAlreadyRunning) {
 		return errors.New("клиент Messenger уже запущен у этого пользователя; остановите его командой shutdown с его --root и повторите")
 	}
 	return err
+}
+
+// serverUnit is the systemd unit install-server.sh creates.
+const serverUnit = "agent-messenger"
+
+// serviceUpdateStarter starts the update helper for the service client, or
+// is nil when the client does not run under systemd (it could not be
+// restarted after the update).
+func serviceUpdateStarter(root string) supervisor.UpdateStarter {
+	if runtime.GOOS != "linux" || os.Getenv("INVOCATION_ID") == "" {
+		return nil
+	}
+	return func(program string, job supervisor.RemoteUpdate) error {
+		absolute, err := filepath.Abs(root)
+		if err != nil {
+			return err
+		}
+		log, err := os.CreateTemp(absolute, "remote-update-*.log")
+		if err != nil {
+			return err
+		}
+		defer log.Close()
+		return startDetached(program, []string{"--root", absolute, "_remote-update", "--service", serverUnit, "--broker", job.Broker, "--peer", job.Peer, "--id", job.ID}, log)
+	}
+}
+
+// restartService asks systemd to restart unit without waiting: the restart
+// ends the calling helper as well.
+func restartService(unit string) error {
+	out, err := exec.Command("systemctl", "restart", "--no-block", unit).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%v %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 type serverStatus struct {

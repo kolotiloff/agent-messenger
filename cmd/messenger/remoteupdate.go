@@ -73,6 +73,7 @@ func runRemoteUpdate(root string, args []string) error {
 	brokerID := fs.String("broker", "", "network")
 	peer := fs.String("peer", "", "computer that asked")
 	id := fs.String("id", "", "request id")
+	service := fs.String("service", "", "systemd unit the client runs as (T-036)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -83,13 +84,26 @@ func runRemoteUpdate(root string, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), remoteUpdateLimit)
 	defer cancel()
 	u, err := newRemoteUpdate(root)
+	restart := false
+	if err == nil && *service != "" {
+		// A service client is restarted by systemd, and only after the
+		// result is written: the restart stops this helper too.
+		u.restart = func(context.Context, string) error { restart = true; return nil }
+	}
 	if err != nil {
 		job.State, job.Text = core.UpdateFailed, "обновление не начато: "+err.Error()
 	} else {
 		job.State, job.Version, job.Text = u.run(ctx)
 	}
 	fmt.Printf("remote update %s: %s %s %s\n", job.ID, job.State, job.Version, job.Text)
-	return supervisor.FinishRemoteUpdate(root, job)
+	if err := supervisor.FinishRemoteUpdate(root, job); err != nil || !restart {
+		return err
+	}
+	if err := restartService(*service); err != nil {
+		job.State, job.Text = core.UpdateFailed, "программа обновлена до "+job.Version+", но служба не перезапущена: "+err.Error()+"; на сервере: systemctl restart "+*service
+		return supervisor.FinishRemoteUpdate(root, job)
+	}
+	return nil
 }
 
 // remoteUpdate is one update of this computer; its steps are replaced in

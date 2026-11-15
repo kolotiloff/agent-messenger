@@ -461,7 +461,10 @@
     const lines=el('div',undefined,'am-machine-agents');
     const [coordProvider,coordLabel]=coordinatorClient!==null?coordinatorName(coordinatorClient):['',''];
     const providers=agents.map(a=>a.agent);
-    if(coordProvider&&!providers.includes(coordProvider))providers.unshift(coordProvider);
+    // Only agents the owner keeps enabled are listed: a chat of an agent
+    // that was paused or removed once used Messenger's tools, but listing
+    // it showed the agent as if it were still there (owner, 2026-11-15).
+    // A coordinator chat of a program that is not an agent stays listed.
     for(const provider of providers){
       const a=agents.find(x=>x.agent===provider);
       // Blue means a task is running (T-060). A chat that once used
@@ -577,6 +580,13 @@
   }
   // The computer that runs a task: this one, or the other one it was sent to.
   function taskComputer(t){return t.remote&&!t.remote.from?t.remote.id:'local';}
+  // Where another computer's task runs (T-186): the computer it was sent
+  // to, or the giver itself.
+  // «— от Mac»: the computer that gave a task running elsewhere (owner,
+  // 2026-11-15).
+  function fromTag(name){return el('span',tr(' — от ')+name,'am-task-from');}
+  function sharedRunsOn(t,p){return t.runs_on_peer||p.peer;}
+  function sharedComputer(t,p){return t.runs_on_peer?((server?.peers||[]).find(x=>x.id===t.runs_on_peer)?.name||t.runs_on||t.runs_on_peer):p.name;}
   // A click on a computer in the sidebar shows only its tasks; a second click,
   // the chip's cross or a click on empty sidebar space shows all again (T-056).
   let computerFilter='';
@@ -614,8 +624,10 @@
     const [active,done]=visibleTasks(),agentFilter=$('agent-filter').value;
     const items=[...active.map(t=>({t})),...done.map(t=>({t}))];
     for(const p of view?.shared||[]){
-      if(computerFilter&&computerFilter!==p.peer)continue;
-      for(const t of p.tasks)if(!agentFilter||t.agent===agentFilter)items.push({t,peer:p});
+      for(const t of p.tasks){
+        if(computerFilter&&computerFilter!==sharedRunsOn(t,p))continue;
+        if(!agentFilter||t.agent===agentFilter)items.push({t,peer:p});
+      }
     }
     items.sort((x,y)=>String(y.t.created_at).localeCompare(String(x.t.created_at)));
     const groups={active:[],attention:[],done:[]};
@@ -661,6 +673,17 @@
       if(failed.length)showError(new Error(tr('Не закрылись: ')+failed.length+'. '+failed[0]));
     });
   }
+  function askClearDone(items){
+    askConfirm(tr('Убрать все завершённые задачи?'),tr('Из списка на этом компьютере пропадут завершённые задачи: ')+items.length+tr('. Задачи этого компьютера пропадут и у других компьютеров; задачи других компьютеров останутся у них.'),tr('Убрать все'),async()=>{
+      const failed=[];
+      for(const it of items){
+        try{await postAPI('/api/task-hide',{peer:it.peer?.peer||'',task:it.t.id});}
+        catch(e){failed.push(e.message);}
+      }
+      viewSignature='';await refresh();
+      if(failed.length)showError(new Error(tr('Не убрались: ')+failed.length+'. '+failed[0]));
+    });
+  }
   // Owner, 2026-11-12: choosing a computer opens its newest active task, or
   // its newest task; with no computer chosen, the top task of the list.
   // On refresh (quiet) the caller loads the conversation itself, and an
@@ -691,6 +714,7 @@
       // T-119: every own task says where it runs; this computer's name stands out.
       const here=!(t.remote&&!t.remote.from),label=el('span',(names[t.agent]||t.agent)+tr(' на '));
       label.append(el('span',here?(view.computer_name||tr('этом компьютере')):t.remote.name,here?'am-task-here':''));
+      if(t.remote?.from)label.append(fromTag(t.remote.name));
       const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),label);
       if(t.remote)agent.title=t.remote.from?tr('Задачу дал компьютер «')+t.remote.name+'»':tr('Выполняется на компьютере «')+t.remote.name+'»';
       const when=taskWhen(t);if(when){const w=el('span',when,'am-task-when');w.title=taskWhenTitle(t);agent.append(w);}
@@ -710,7 +734,11 @@
       // T-111: another computer's task opens as a read-only card.
       row.addEventListener('click',()=>{selectedShared={peer:p.peer,id:t.id};selectedTask='';feed=null;feedSignature='';renderTaskList();renderThread();});
       row.addEventListener('contextmenu',e=>taskMenu(e,t,p));
-      const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),el('span',(names[t.agent]||t.agent)+tr(' от «')+p.name+'»'));
+      // T-186: like an own task, it says where it runs; the giver is in the
+      // tooltip. An older giver does not say, so it shows the giver's name.
+      const label=el('span',(names[t.agent]||t.agent)+tr(' на '));label.append(el('span',sharedComputer(t,p)));
+      if(t.runs_on_peer)label.append(fromTag(p.name));
+      const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),label);agent.title=tr('Задачу дал компьютер «')+p.name+'»';
       const sharedWhen=taskWhen(t);if(sharedWhen){const w=el('span',sharedWhen,'am-task-when');w.title=taskWhenTitle(t);agent.append(w);}
       const [text,cls,tip]=sharedStatus(t,p);
       const words=el('span');words.append(statusPiece(text,!!t.tokens));
@@ -738,7 +766,14 @@
       closeAll.addEventListener('click',()=>askCloseAll(groups.attention.filter(closable)));
     }
     section(tr('Требуют решения'),groups.attention,closeAll);
-    section(tr('Завершённые'),groups.done);
+    // Owner, 2026-11-15: one button removes every finished task from this
+    // list, as «Удалить» does one by one. Tasks stay in the database.
+    let clearDone=null;
+    if(groups.done.length>1){
+      clearDone=el('button',tr('Убрать все'),'am-task-section-action');clearDone.type='button';
+      clearDone.addEventListener('click',()=>askClearDone(groups.done));
+    }
+    section(tr('Завершённые'),groups.done,clearDone);
     if(!box.children.length)box.append(el('p',view?.project?(computerFilter||$('agent-filter').value?tr('Здесь задач нет'):tr('Задач пока нет. Когда координатор раздаст первые, они появятся здесь.')):'','am-small am-muted'));
     swapChildren(live,box);
   }
@@ -891,7 +926,7 @@
   function renderSharedTask(t,p){
     const thread=$('thread'),head=$('task-head');
     const title=el('div',undefined,'am-task-head');title.append(el('h3',t.title));
-    title.append(el('p',(names[t.agent]||t.agent)+tr(', задачу дал компьютер «')+p.name+'»','am-small am-muted'));
+    title.append(el('p',(names[t.agent]||t.agent)+tr(' на «')+sharedComputer(t,p)+tr('», задачу дал компьютер «')+p.name+'»','am-small am-muted'));
     const [statusText,statusCls,statusTip]=sharedStatus(t,p);
     const when=t.finished_at?', '+clock(t.created_at)+'–'+clock(t.finished_at):tr(', начата в ')+clock(t.created_at);
     const line=el('p',undefined,'am-small');line.append(el('span',statusText,statusCls),el('span',when,'am-muted'));
@@ -1219,8 +1254,11 @@
     catch(error){showError(error);}
   }
   function uninstallAgent(provider){
-    askConfirm(tr('Удалить ')+names[provider]+' CLI?',tr('Откроется официальная страница агента. Удалите его командой оттуда. Настройки Messenger сохранятся.'),tr('Открыть'),async()=>{
-      await postAPI('/api/agent-page',{provider});
+    // Like installing, removing runs in a terminal: it shows what it will
+    // remove and asks there (owner, 2026-11-15: no web pages).
+    askConfirm(tr('Удалить ')+names[provider]+' CLI?',tr('Откроется терминал: он покажет, что будет удалено, и спросит подтверждение. Вход в агент и настройки Messenger сохранятся.'),tr('Открыть терминал'),async()=>{
+      try{await postAPI('/api/agent-uninstall',{provider});noteRow(provider+':auth',tr('Терминал удаления открыт'),15000);}
+      catch(error){showError(error);}
     });
   }
   function renderAgents(){

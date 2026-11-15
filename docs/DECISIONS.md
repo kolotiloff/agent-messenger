@@ -422,3 +422,12 @@ Amends D-100: a request to install the newest signed Messenger (the program only
 - `agent-messenger-server invite|status|enable|disable|revoke` (a wrapper for `messenger --root /var/lib/agent-messenger server …`) does the rest; the same `server` commands work with any `--root`. They are the window's server actions over the control socket, with the same rules.
 - The installer does not stop another Messenger client of the same user (one started with `start`): it names it and asks the owner to stop it with `shutdown`.
 - The owner first asked for a "server only" mode that hides the computer from the list, then decided against it: the server stays an ordinary computer (with agents it takes tasks, without them it does nothing). Instead, the computer that runs the server is labelled «сервер» in the window's computer list, and `list_agents` marks it with `server: true`.
+
+## D-139 — The VPS server updates from the window like any computer (T-183)
+
+2026-11-15, Claude Code, owner's request: update the server "by the button, from any computer". In 0.77 the service client refused update requests from the network.
+
+- Under systemd (`INVOCATION_ID` set) `server run` records its program file and accepts update requests as every Windows and Linux computer does (T-078, D-100): the same checks (no live tasks, one update at a time), the same signed update channel. The helper is started with `--service agent-messenger`: it installs the update over `/opt/agent-messenger/messenger`, writes the result first, then asks `systemctl restart --no-block agent-messenger`, which also ends the helper. The restarted client sends the result. If systemctl fails, the result is rewritten as failed with the command to run on the server.
+- Started by hand (no systemd), `server run` still refuses: nothing would start it again.
+- Risk accepted: an update that does not start leaves the server down until the owner runs the installer again over SSH. The update is the same signed program every computer installs.
+- `server rename --name ИМЯ` sets the name the server computer reports to the others (the window's «rename» action); by default it is the VPS host name.

@@ -4,6 +4,11 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-15 — Claude Code (T-181, T-158, T-159)
 
+- T-186: shared tasks carry where they run; «Агент на ПК — от ДАЛ» labels; agent removal in a terminal; «Убрать все» for finished tasks. Window check extended (frameless block, clear-done).
+- T-185: the computer list no longer shows a disabled agent through its old coordinator chat.
+- T-183 (D-139): remote update of the VPS service, `server rename`, 44 px caption row on Windows. Remote update tried end to end in a container against the real signed 0.77.
+- Owner installed 0.77's server on a new Debian VPS with one command; all 5 computers joined over the internet.
+- Released 0.77 from `main` 6709058 via PR #118 (release run 43724921881).
 - T-036 (D-138): `install-server.sh` release asset and `messenger server run/enable/invite/status/disable/revoke`; «сервер» label in the computer list and `server: true` in `list_agents`. Tried in a container (commands, installer with a stand-in systemd); not on a real VPS.
 - T-182 (D-137): «Интернет» scope for the hosted broker. Public peers are let in with their own limits (32 slots in all, 8 per source); the owner's external address is the first invitation address; six-digit pairing answers only local sources. Broker tests and the window check; released in 0.76 (PR #117, `main` a10535f, release run 43704189375, 21 assets), not tried between networks.
 - Released 0.75 from `main` fd34136 via PR #116 (release run 43694772945, 21 assets). The window check now ignores WebKit's report of a background request cut off by a reload.
