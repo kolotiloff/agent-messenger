@@ -232,7 +232,7 @@ func TestCoordinatorHandshakeAndTools(t *testing.T) {
 	for _, tool := range resp["result"].(map[string]any)["tools"].([]any) {
 		names = append(names, tool.(map[string]any)["name"].(string))
 	}
-	if strings.Join(names, ",") != "list_agents,start_task,wait,tasks,answer,continue_task,note_task,task_images,task_output,task_messages,cancel,report_feedback,export_feedback,get_log,update_messenger" {
+	if strings.Join(names, ",") != "list_agents,start_task,wait,tasks,answer,continue_task,note_task,task_images,task_output,task_messages,cancel,report_feedback,export_feedback,clear_feedback,get_log,update_messenger" {
 		t.Fatalf("tools %v", names)
 	}
 	var agents struct {
@@ -887,6 +887,36 @@ func TestSecondCoordinatorChatTakesOver(t *testing.T) {
 	}
 }
 
+// Owner, 2026-11-16: the same chat restarted after an update gets a new id,
+// but the process of the chat before is gone, so nobody is told about
+// another chat. An old chat whose process was not recorded still counts.
+func TestRestartedCoordinatorChatIsNotATakeover(t *testing.T) {
+	st := newCoordinatorStore(t)
+	self := selfProcess()
+	if self.PID == 0 {
+		t.Skip("process list unreadable here")
+	}
+	gone := self
+	gone.StartToken = "a process that ended"
+	if _, _, err := st.ClaimCoordinator("Game", "chat-before-restart", gone); err != nil {
+		t.Fatal(err)
+	}
+	c := startCoordinator(t, st, "Game")
+	c.send(1, "initialize", map[string]any{})
+	c.expect(1, 2*time.Second)
+	c.send(2, "tools/call", map[string]any{"name": "wait", "arguments": map[string]any{"after": 0, "timeout_seconds": 1}})
+	resp, _ := c.expect(2, 5*time.Second)
+	if raw, _ := json.Marshal(resp); strings.Contains(string(raw), "this chat is now the coordinator") {
+		t.Fatalf("a restarted chat was told about another chat: %s", raw)
+	}
+	if chat, _ := st.CoordinatorChat("Game"); chat == "chat-before-restart" || chat == "" {
+		t.Fatalf("active chat %q", chat)
+	}
+	if !chatProcessMayRun(platform.Observation{}) || !chatProcessMayRun(self) || chatProcessMayRun(gone) {
+		t.Fatal("process check")
+	}
+}
+
 // T-135: the coordinator records remarks about Messenger and exports the
 // journal, its own remarks and the owner's, as one file.
 func TestCoordinatorFeedback(t *testing.T) {
@@ -919,5 +949,17 @@ func TestCoordinatorFeedback(t *testing.T) {
 	}
 	if text, ok := c.tool("export_feedback", map[string]any{}, &out); !ok || out.Remarks != 2 || filepath.Dir(out.Path) != filepath.Join(home, "Downloads") {
 		t.Fatalf("export_feedback %s", text)
+	}
+	// Owner, 2026-11-16: once passed on, the exported remarks are cleared;
+	// one written after the export stays.
+	if _, err := st.AddFeedback(core.AudienceOwner, "Game", "after the export", "", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	var cleared struct{ Deleted, Left int }
+	if text, ok := c.tool("clear_feedback", map[string]any{}, &cleared); !ok || cleared.Deleted != 2 || cleared.Left != 1 {
+		t.Fatalf("clear_feedback %s", text)
+	}
+	if !strings.Contains(coordinatorInstructions, "clear_feedback") {
+		t.Fatal("instructions do not tell about clearing")
 	}
 }

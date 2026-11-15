@@ -316,6 +316,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-fb-saved[hidden], #am-concept #fb-status:empty { display:none; }
 #am-concept .am-fb-saved p { overflow-wrap:anywhere; }
 #am-concept .am-fb-saved .am-code-wrap { margin-top:var(--am-space-1); }
+#am-concept .am-fb-clear-row { display:flex; align-items:center; justify-content:space-between; gap:var(--am-gap-content); margin-top:var(--am-space-2); }
+#am-concept .am-fb-clear-row > button { flex:none; }
 #am-concept .am-fb-saved .am-code-block { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 #am-concept .am-panel-toggle svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.5; }
 /* An open task list fills the icon's right pane instead of giving the

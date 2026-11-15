@@ -113,7 +113,8 @@ Cursor can also coordinate (D-125, T-162). The «Проект» page writes the 
 | `task_messages(task_id, last?)` | The last messages of a task's feed, as the window shows them (default 20, at most 100; T-112). Read only. |
 | `cancel(task_id)` | `CancelTask`. |
 | `report_feedback(text)` | Records a remark about Messenger in this computer's feedback journal (D-117). Nothing is sent anywhere. |
-| `export_feedback()` | Writes the whole feedback journal to one zip file and returns its path. |
+| `export_feedback()` | Writes the remarks no earlier export had (all of them when none is new) to one zip file, marks them exported and returns its path. |
+| `clear_feedback()` | Deletes the exported remarks, keeping any written after the export. Only when the owner asks, after passing the file on. |
 | `get_log(computer?, lines?, request_id?)` | Asks another computer of the network for the end of its Messenger log (D-083). It answers only when its owner turned on «Отдавать журнал по сети». Waits up to 20 s; otherwise call again with `request_id`. |
 | `update_messenger(computer?)` | Asks a Windows or Linux computer (this one, or another of the network) to install the newest Messenger, the program only (T-155, D-133). Running tasks are never interrupted: the computer answers `queued`, takes no new tasks, and installs as soon as none runs. A Mac answers that its update needs the button in its app. Each answer is a `messenger_update` event (empty `task_id`); nothing is retried. |
 

@@ -1806,7 +1806,19 @@
   // Feedback about the program (T-135): text and a picture stay on this
   // computer; the export writes them all into one file.
   let fbImage=null;
-  function fbExportLabel(){const n=view?.feedback_count||0;$('fb-export').textContent=tr('Выгрузить все отзывы')+(n?' ('+n+')':'');$('fb-export').disabled=!n;}
+  // An export takes only the remarks no earlier export had; all of them
+  // when none is new (owner, 2026-11-16).
+  function fbExportLabel(){const n=view?.feedback_count||0,fresh=view?.feedback_new??n;$('fb-export').textContent=(fresh?tr('Выгрузить новые отзывы')+' ('+fresh+')':tr('Выгрузить все отзывы')+(n?' ('+n+')':''));$('fb-export').disabled=!n;}
+  // Once the file is passed on, the exported remarks can go (owner,
+  // 2026-11-16); a remark written after the export stays.
+  function clearFeedback(){
+    askConfirm(tr('Очистить журнал отзывов?'),tr('Выгруженные отзывы удалятся с этого компьютера. Файл, который вы сохранили, останется.'),tr('Очистить'),async()=>{
+      const r=await postAPI('/api/feedback-clear',{},15000);
+      if(view){view.feedback_count=r.result?.left||0;view.feedback_new=r.result?.left||0;}
+      $('fb-saved').hidden=true;fbExportLabel();
+      $('fb-status').textContent=tr('Журнал очищен')+(r.result?.left?'. '+tr('Новых отзывов осталось: ')+r.result.left:'');
+    });
+  }
   function openFeedback(){
     $('fb-status').textContent='';$('fb-saved').hidden=true;fbExportLabel();$('fb-dialog').showModal();$('fb-text').focus();
   }
@@ -1833,7 +1845,7 @@
     $('fb-save').disabled=true;$('fb-status').textContent=tr('Сохраняем…');
     try{
       await postAPI('/api/feedback',{project:view?.project||'',text,image:fbImage?.data||'',image_type:fbImage?.type||''},15000);
-      $('fb-text').value='';fbClear();if(view)view.feedback_count=(view.feedback_count||0)+1;fbExportLabel();
+      $('fb-text').value='';fbClear();if(view){view.feedback_count=(view.feedback_count||0)+1;view.feedback_new=(view.feedback_new||0)+1;}fbExportLabel();
       $('fb-status').textContent=tr('Отзыв сохранён. Спасибо!');
     }catch(e){$('fb-status').textContent=e.message;}
     finally{$('fb-save').disabled=false;}
@@ -1844,6 +1856,7 @@
     $('fb-export').disabled=true;$('fb-status').textContent='';
     try{
       const r=await postAPI('/api/feedback-export',{},15000);
+      if(view)view.feedback_new=0;
       const cut=Math.max(r.result.path.lastIndexOf('/'),r.result.path.lastIndexOf('\\'));$('fb-dir').textContent=tr('Файл сохранён в папке ')+r.result.path.slice(0,cut>0?cut:0)+':';$('fb-path').textContent=r.result.path.slice(cut+1);$('fb-path').title=r.result.path;$('fb-copy').dataset.path=r.result.path;$('fb-copy').removeAttribute('data-copied');$('fb-saved').hidden=false;$('fb-status').textContent='';
     }catch(e){$('fb-status').textContent=e.message;}
     finally{fbExportLabel();}
@@ -2403,6 +2416,7 @@
   $('fb-close').addEventListener('click',()=>$('fb-dialog').close());
   $('fb-save').addEventListener('click',saveFeedback);
   $('fb-export').addEventListener('click',exportFeedback);
+  $('fb-clear').addEventListener('click',clearFeedback);
   $('fb-pick').addEventListener('click',()=>$('fb-file').click());
   $('fb-file').addEventListener('change',e=>{fbTake(e.target.files[0]);e.target.value='';});
   $('fb-shot-remove').addEventListener('click',fbClear);

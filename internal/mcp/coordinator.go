@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/kolotiloff/agent-messenger/internal/platform"
 	"io"
 	"os"
 	"path/filepath"
@@ -98,7 +99,7 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - To follow up on a finished task in the same worker conversation (it keeps its context), use continue_task instead of a new start_task. It works for done and failed tasks of this computer, a task stopped by a usage limit included (after its reset time): read task_messages first and say in your text what is already done, such as «continue; item 1 is already committed». An interrupted task of this computer (the client restarted while it ran) can be continued too, only after Messenger checks that its worker is gone; if it may still run, continue_task says so and the task stays as it is: tell the owner. A done or failed task of another computer of this network can be continued the same way when that computer runs Messenger 0.60 or newer, and an interrupted one (that computer died or restarted while it ran) when it runs 0.75 or newer: that computer closes the interrupted run only when its worker is certainly gone. If it refuses (older version, not in the network, no conversation), you get continue_refused with the reason: then start a new task that names what is already done.
 - Messenger already tells every worker to keep its report to a few lines, to put long details in a file and to follow the owner's rules for this project. A report ends with labelled lines when the worker gave them: «Изменения:» (commit or changeset), «Тесты:» and «Файлы:» (paths to read when needed). Do not ask workers for a «taken» line or a limit line: the task's state shows when it was accepted, and limits come from list_agents.
 - Work reaches the project only through the worker's own commit; workers are told to commit before they report. A report is a short message (at most 20000 characters reach you), so never ask for the full text of an audit or a long document instead of a commit: it will not fit, and the work still is not in the project. A worker that could not commit (files locked by another agent, its copy behind the server) asks you instead of finishing, and its task stays open. Decide what lets the commit happen: if another task holds the files, you may answer later, after that task is done, telling the worker to update and commit; otherwise tell it what to do or tell the owner. Do not tell it to finish without committing: a finished task of another computer cannot be continued.
-- Feedback about Messenger itself: whenever Messenger does something wrong or unclear (an error you cannot explain, a lost or late event, a refusal that makes no sense, a missing feature you needed, or the owner complains about the program), record it at once with report_feedback: what happened, what you expected, the task and computer. Do not wait to be asked. When the owner asks for the feedback, the remarks or the journal, call export_feedback and give them the file's path; it holds the owner's remarks from the window (the bug icon) and yours.
+- Feedback about Messenger itself: whenever Messenger does something wrong or unclear (an error you cannot explain, a lost or late event, a refusal that makes no sense, a missing feature you needed, or the owner complains about the program), record it at once with report_feedback: what happened, what you expected, the task and computer. Do not wait to be asked. When the owner asks for the feedback, the remarks or the journal, call export_feedback and give them the file's path; it holds the owner's remarks from the window (the bug icon) and yours that were in no earlier export (all of them when none is new). When the owner says they passed the file on and asks to clear the journal, call clear_feedback: it deletes the exported remarks and keeps any written after the export. Never clear it on your own.
 - get_log reads the end of another computer's Messenger journal, for debugging Messenger itself (a task that never arrived, a refusal you cannot explain): each worker run launched and ended with its exit and error, and each message sent to or received from another computer with its kind and task id, or why it was not sent. That computer answers only if its owner turned on «Отдавать журнал по сети»; otherwise the reply says so. Session ids, codes and keys are removed. If no answer came in time, call get_log again with request_id. Do not use it to watch workers: wait does that.
 - newest_release in list_agents is the newest Messenger release this computer has downloaded, with its notes; update_available marks a computer that runs an older one. Before reporting a problem in Messenger, check whether those notes already cover it, and tell the owner when a computer that needs the fix has update_available. It is what this computer last downloaded, not a live check; left out when it has none.
 - server: true in list_agents marks the computer that runs the network's server. It takes tasks like any other computer when it has agents; while it restarts or is off, the computers do not reach each other.
@@ -133,6 +134,8 @@ type coordinator struct {
 	// replaced another chat of the project (T-090).
 	chat     string
 	tookOver string
+	// self is the process serving this chat, recorded with the claim.
+	self platform.Observation
 	// release reads the newest signed release this computer has
 	// downloaded (T-158); nil reads the update channel in dataRoot.
 	release func() (updatefeed.Manifest, error)
@@ -141,14 +144,54 @@ type coordinator struct {
 // acting tools make this chat the project's coordinator (T-090).
 var actingTools = map[string]bool{"wait": true, "start_task": true, "answer": true, "continue_task": true, "note_task": true, "cancel": true, "update_messenger": true}
 
-// claim makes this chat the active coordinator of its project.
+// claim makes this chat the active coordinator of its project. The new chat
+// is told it replaced another only while that chat's process still runs:
+// the same chat restarted (a new process after a restart or an update of
+// the agent) is gone and is not another chat (owner, 2026-11-16).
 func (c *coordinator) claim() {
-	old, err := c.store.ClaimCoordinator(c.project, c.chat)
-	if err == nil && old != "" {
+	old, oldProc, err := c.store.ClaimCoordinator(c.project, c.chat, c.self)
+	if err == nil && old != "" && chatProcessMayRun(oldProc) {
 		c.mu.Lock()
 		c.tookOver = "Messenger: this chat is now the coordinator of the project; another coordinator chat was active before and is told to stop. If the owner did not mean to replace it, tell them."
 		c.mu.Unlock()
 	}
+}
+
+// chatProcessMayRun: the process that served a chat may still run. Unknown
+// (not recorded, or the process list unreadable) counts as running, so a
+// real second chat is never hidden.
+func chatProcessMayRun(p platform.Observation) bool {
+	if p.PID <= 0 || p.StartToken == "" || p.BootID == "" {
+		return true
+	}
+	boot, live, err := platform.Snapshot()
+	if err != nil {
+		return true
+	}
+	if boot != p.BootID {
+		return false
+	}
+	for _, proc := range live {
+		if proc.PID == p.PID && proc.StartToken == p.StartToken {
+			return true
+		}
+	}
+	return false
+}
+
+// selfProcess is this program's process as the snapshot shows it, or empty.
+func selfProcess() platform.Observation {
+	boot, live, err := platform.Snapshot()
+	if err != nil {
+		return platform.Observation{}
+	}
+	pid := os.Getpid()
+	for _, proc := range live {
+		if proc.PID == pid {
+			return platform.Observation{PID: pid, PGID: proc.PGID, StartToken: proc.StartToken, BootID: boot}
+		}
+	}
+	return platform.Observation{}
 }
 
 // supersededNote is the wait answer of a chat another chat replaced.
@@ -214,7 +257,7 @@ func serveCoordinatorIn(store *core.Store, project, watch, dataRoot string, in i
 			return err
 		}
 	}
-	c := &coordinator{store: store, project: project, watch: watch, dataRoot: dataRoot, w: out, pending: map[string]context.CancelFunc{}, chat: chat}
+	c := &coordinator{store: store, project: project, watch: watch, dataRoot: dataRoot, w: out, pending: map[string]context.CancelFunc{}, chat: chat, self: selfProcess()}
 	var wg sync.WaitGroup
 	defer wg.Wait()
 	scanner := bufio.NewScanner(in)
@@ -413,7 +456,9 @@ func coordinatorTools() []map[string]any {
 			"inputSchema": obj(map[string]any{
 				"text": map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxFeedbackText, "description": "what happened, what you expected, and the task or computer it concerns"},
 			}, "text")},
-		{"name": "export_feedback", "description": "Write every remark of this computer's feedback journal (the owner's from the window and yours) into one zip file and return its path, for the owner to pass on to the program's developer.",
+		{"name": "export_feedback", "description": "Write the remarks of this computer's feedback journal (the owner's from the window and yours) that were in no earlier export into one zip file and return its path, for the owner to pass on to the program's developer. With no new remark it writes all of them again.",
+			"inputSchema": obj(map[string]any{})},
+		{"name": "clear_feedback", "description": "Delete the remarks of this computer's feedback journal that already went into an export; remarks written after the last export stay. Only when the owner asks, after they passed the exported file on.",
 			"inputSchema": obj(map[string]any{})},
 		{"name": "get_log", "description": "Ask another computer of the network for the last lines of its Messenger log, to debug Messenger itself. It answers only if its owner allowed it. Waits up to 20 seconds; if the answer has not come, call again with request_id.",
 			"inputSchema": obj(map[string]any{
@@ -631,11 +676,28 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 		if err := strict(&struct{}{}); err != nil {
 			return nil, err
 		}
-		path, n, err := c.store.ExportFeedback(core.FeedbackDir(c.dataRoot), time.Now())
+		path, n, fresh, err := c.store.ExportFeedback(core.FeedbackDir(c.dataRoot), time.Now())
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"path": path, "remarks": n, "next": "Tell the owner where the file is; they pass it on to the program's developer. The journal is kept; nothing was deleted."}, nil
+		which := "Every remark is in it: none was new since the last export."
+		if fresh {
+			which = "It holds only the remarks that were in no earlier export."
+		}
+		return map[string]any{"path": path, "remarks": n, "only_new": fresh, "next": which + " Tell the owner where the file is; they pass it on to the program's developer. The journal is kept; nothing was deleted."}, nil
+	case "clear_feedback":
+		if err := strict(&struct{}{}); err != nil {
+			return nil, err
+		}
+		deleted, left, err := c.store.ClearExportedFeedback()
+		if err != nil {
+			return nil, err
+		}
+		next := "Tell the owner the exported remarks were deleted."
+		if left > 0 {
+			next += " The remarks written after the last export stay; export_feedback writes them."
+		}
+		return map[string]any{"deleted": deleted, "left": left, "next": next}, nil
 	case "get_log":
 		var a struct {
 			Computer  string `json:"computer"`
