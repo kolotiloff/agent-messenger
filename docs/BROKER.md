@@ -32,6 +32,14 @@ Status on 2026-11-13 (0.66 released, 0.67 in preparation): the background client
 - A VPN that hands out 100.64.0.0/10 addresses works with the internet scope (those addresses count as public there).
 - Not verified between real computers in different networks; the router, provider and firewall are outside the program.
 
+**On a Linux VPS without a screen** (owner's setup, 2026-11-15). The same program runs the server; the window is opened through an SSH tunnel:
+
+1. On the VPS: download `AgentMessenger-Linux-x64` from the release, `chmod +x`, then `./AgentMessenger-Linux-x64 --root /root/agent-messenger start` (the background client; it runs no tasks without `--allow-tasks`, and the server runs inside it).
+2. From the owner's computer: `ssh -L 47200:127.0.0.1:47200 root@VPS`, and in that session `./AgentMessenger-Linux-x64 --root /root/agent-messenger ui --port 47200`. It prints a `http://127.0.0.1:47200/#…` link; open it in a browser on the owner's computer.
+3. In that window: «Сервер» → «Интернет», the VPS address as the external address, «Запустить сервер», then invitations as usual. The window can be closed afterwards; the server keeps running in the background client.
+
+Checked in a Linux container with a test data directory: `start`, `ui`, enabling the internet scope and an invitation for the external address through the window API. Not checked on a real VPS. The background client does not start again after the VPS restarts unless a service is set up for it.
+
 Without the internet scope, computers in different homes still work together when they share a VPN that gives them private addresses (10.x, 172.16–31.x, 192.168.x, or IPv6 fc00::/7): to the broker they are one private network, so "local network" accepts them (D-040).
 
 - The VPN keeps outsiders away from the broker. Inside the VPN a computer still needs an invitation or the short code, and all traffic is TLS with the broker's pinned fingerprint, so the VPN server only carries encrypted data.
