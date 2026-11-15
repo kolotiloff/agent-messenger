@@ -65,6 +65,49 @@ type PresenceLimit struct {
 	Window      string   `json:"window,omitempty"`
 	ResetsAt    string   `json:"resets_at,omitempty"`
 	ObservedAt  string   `json:"observed_at"`
+	// Source and Windows: see core.AgentLimit (T-191). A host before 0.80
+	// refuses a report that carries them; the client then reports without
+	// them.
+	Source  string                `json:"source,omitempty"`
+	Windows []PresenceLimitWindow `json:"windows,omitempty"`
+}
+
+// PresenceLimitWindow mirrors core.LimitWindow.
+type PresenceLimitWindow struct {
+	Window      string  `json:"window,omitempty"`
+	UsedPercent float64 `json:"used_percent"`
+	ResetsAt    string  `json:"resets_at,omitempty"`
+}
+
+// extended says whether the limit carries fields a host before 0.80 refuses.
+func (l *PresenceLimit) extended() bool {
+	return l != nil && (l.Source != "" || len(l.Windows) > 0)
+}
+
+func extendedLimits(agents []PresenceAgent) bool {
+	for _, a := range agents {
+		if a.Limit.extended() {
+			return true
+		}
+	}
+	return false
+}
+
+// plainLimits is a copy of agents whose limits leave out the fields a host
+// before 0.80 refuses.
+func plainLimits(agents []PresenceAgent) []PresenceAgent {
+	if !extendedLimits(agents) {
+		return agents
+	}
+	out := append([]PresenceAgent(nil), agents...)
+	for i, a := range out {
+		if a.Limit.extended() {
+			l := *a.Limit
+			l.Source, l.Windows = "", nil
+			out[i].Limit = &l
+		}
+	}
+	return out
 }
 
 func (l *PresenceLimit) valid() bool {
@@ -73,6 +116,17 @@ func (l *PresenceLimit) valid() bool {
 	}
 	if l.State != "ok" && l.State != "warning" && l.State != "exhausted" || len(l.Window) > 32 || l.ObservedAt == "" {
 		return false
+	}
+	if l.Source != "" && l.Source != "check" || len(l.Windows) > 4 {
+		return false
+	}
+	for _, w := range l.Windows {
+		if len(w.Window) > 32 || w.UsedPercent < 0 || w.UsedPercent > 1000 {
+			return false
+		}
+		if _, err := time.Parse(time.RFC3339, w.ResetsAt); w.ResetsAt != "" && err != nil {
+			return false
+		}
 	}
 	if l.UsedPercent != nil && (*l.UsedPercent < 0 || *l.UsedPercent > 1000) {
 		return false

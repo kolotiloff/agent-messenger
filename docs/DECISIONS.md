@@ -454,3 +454,12 @@ Amends D-100: a request to install the newest signed Messenger (the program only
 
 - The active chat's record keeps the process serving it (pid, start token, boot id). A new chat that takes over is told about another chat only while that process still runs on this computer. A gone process means the same chat restarted (or an old chat ended): it takes over quietly. D-099 is otherwise unchanged: the newest acting chat is the coordinator, and a live old chat's wait still ends with `superseded`.
 - When the process was not recorded (a record from an earlier version) or the process list cannot be read, the note is given as before, so a real second chat is never hidden.
+
+## D-143 — Codex usage limits are read from the account every 10 minutes (T-191)
+
+2026-11-15, Claude Code, owner's request: the coordinator must spread an overnight queue by how much of each agent's limit is left, without the owner typing numbers in.
+
+- The background program starts `codex app-server` with the owner's normal Codex profile and sign-in every 10 minutes (first one minute after start), sends `initialize`, `initialized` and `account/rateLimits/read`, and stops the process with its group. No thread is created and no model is called; tools, plugins and MCP servers are turned off on the command line. A paused agent is not checked. A failed read keeps the last stored limit, writes one journal line and is tried again only at the next round.
+- Both windows (about five hours and weekly) are stored with their percent and reset time; the window used the most leads. 90% or more is «warning», 100% (or a reached limit) «exhausted». The limit carries `source: "check"` and `windows` in `list_agents` and goes to the other computers in presence; a host before 0.80 refuses those two fields and gets the plain limit instead.
+- The check is not a CLI run on a session: it takes no reservation in `active-runs.json`. Tests use a fake reader and a fake app-server; the real check happens only in the background program.
+- Claude's task stream gives only status and reset time, and its percent is shown only to interactive sessions; Cursor has no known way. Both stay as before until a source is found.

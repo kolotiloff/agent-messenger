@@ -26,6 +26,32 @@ type AgentLimit struct {
 	// ResetPassed is set when the limit is listed after its reset time
 	// (T-081): the state above is then likely out of date. Never stored.
 	ResetPassed bool `json:"reset_passed,omitempty"`
+	// Source is "check" when Messenger asked the agent's program for its
+	// account limits outside a task (T-191); empty is a task run.
+	Source string `json:"source,omitempty"`
+	// Windows are all the windows a check read, such as a five-hour and a
+	// weekly one. The fields above repeat the one used the most.
+	Windows []LimitWindow `json:"windows,omitempty"`
+}
+
+// LimitWindow is one usage window of an account (T-191).
+type LimitWindow struct {
+	Window      string  `json:"window,omitempty"`
+	UsedPercent float64 `json:"used_percent"`
+	ResetsAt    string  `json:"resets_at,omitempty"`
+	// ResetPassed: see AgentLimit.ResetPassed. Never stored.
+	ResetPassed bool `json:"reset_passed,omitempty"`
+}
+
+// LimitSourceCheck marks a limit Messenger read outside a task (T-191).
+const LimitSourceCheck = "check"
+
+// maxLimitWindows bounds AgentLimit.Windows.
+const maxLimitWindows = 4
+
+func resetPassed(resets string, at time.Time) bool {
+	t, err := time.Parse(time.RFC3339, resets)
+	return resets != "" && err == nil && !t.After(at)
 }
 
 // limitView is a copy of l for the coordinator, with ResetPassed set.
@@ -34,9 +60,13 @@ func limitView(l *AgentLimit, at time.Time) *AgentLimit {
 		return nil
 	}
 	c := *l
-	c.ResetPassed = false
-	if t, err := time.Parse(time.RFC3339, c.ResetsAt); c.ResetsAt != "" && err == nil && !t.After(at) {
-		c.ResetPassed = true
+	c.ResetPassed = resetPassed(c.ResetsAt, at)
+	if len(l.Windows) > 0 {
+		c.Windows = make([]LimitWindow, len(l.Windows))
+		for i, w := range l.Windows {
+			w.ResetPassed = resetPassed(w.ResetsAt, at)
+			c.Windows[i] = w
+		}
 	}
 	return &c
 }
@@ -52,11 +82,19 @@ func LimitNote(l *AgentLimit) string {
 	if l.ResetsAt != "" {
 		resets = ", resets at " + l.ResetsAt
 	}
+	said := "this agent reported"
+	if l.Source == LimitSourceCheck {
+		said = "Messenger checked this agent's account and found"
+	}
+	used := ""
+	if l.UsedPercent != nil {
+		used = fmt.Sprintf(" (%.0f%% used)", *l.UsedPercent)
+	}
 	switch l.State {
 	case "exhausted":
-		return "this agent reported its usage limit exhausted at " + l.ObservedAt + resets + ": the task will likely fail until then. Tell the owner, or start it on another agent or computer."
+		return said + " its usage limit exhausted" + used + " at " + l.ObservedAt + resets + ": the task will likely fail until then. Tell the owner, or start it on another agent or computer."
 	case "warning":
-		return "this agent reported it is close to its usage limit at " + l.ObservedAt + resets + ". Tell the owner if the task is long."
+		return said + " it is close to its usage limit" + used + " at " + l.ObservedAt + resets + ". Tell the owner if the task is long."
 	}
 	return ""
 }
@@ -85,8 +123,16 @@ func (s *Store) AgentLimitFor(project, computer, provider string) (*AgentLimit, 
 var agentLimitStates = map[string]bool{"ok": true, "warning": true, "exhausted": true}
 
 func (l AgentLimit) valid() bool {
-	if !agentLimitStates[l.State] || len(l.Window) > 32 || len(l.Reported) > 512 {
+	if !agentLimitStates[l.State] || len(l.Window) > 32 || len(l.Reported) > 512 || (l.Source != "" && l.Source != LimitSourceCheck) || len(l.Windows) > maxLimitWindows {
 		return false
+	}
+	for _, w := range l.Windows {
+		if len(w.Window) > 32 || w.UsedPercent < 0 || w.UsedPercent > 1000 {
+			return false
+		}
+		if _, err := time.Parse(time.RFC3339, w.ResetsAt); w.ResetsAt != "" && err != nil {
+			return false
+		}
 	}
 	if l.UsedPercent != nil && (*l.UsedPercent < 0 || *l.UsedPercent > 1000) {
 		return false

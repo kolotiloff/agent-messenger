@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -87,5 +88,37 @@ func TestCompletedRunClearsExhausted(t *testing.T) {
 	}
 	if err := f.st.AgentLimitCleared("claude", at); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// T-191: a checked limit keeps every window; list_agents marks each window
+// whose reset time has passed.
+func TestCheckedLimitWindows(t *testing.T) {
+	f := newTaskFixture(t)
+	used := 95.0
+	l := AgentLimit{State: "warning", UsedPercent: &used, Window: "7d", ResetsAt: "2099-01-01T00:00:00Z", Source: LimitSourceCheck,
+		Windows: []LimitWindow{{Window: "5h", UsedPercent: 40, ResetsAt: "2020-01-01T00:00:00Z"}, {Window: "7d", UsedPercent: 95, ResetsAt: "2099-01-01T00:00:00Z"}}}
+	if err := f.st.RecordAgentLimit("codex", l); err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.st.AgentLimitFor("Game", "", "codex")
+	if err != nil || got == nil {
+		t.Fatalf("limit %+v %v", got, err)
+	}
+	if got.Source != LimitSourceCheck || len(got.Windows) != 2 || !got.Windows[0].ResetPassed || got.Windows[1].ResetPassed || got.ResetPassed {
+		t.Fatalf("checked limit %+v", got)
+	}
+	if note := LimitNote(got); !strings.Contains(note, "Messenger checked") || !strings.Contains(note, "95% used") {
+		t.Fatalf("note %q", note)
+	}
+	for _, bad := range []AgentLimit{
+		{State: "ok", Source: "guess"},
+		{State: "ok", Windows: []LimitWindow{{UsedPercent: -1}}},
+		{State: "ok", Windows: []LimitWindow{{UsedPercent: 1, ResetsAt: "soon"}}},
+		{State: "ok", Windows: make([]LimitWindow, maxLimitWindows+1)},
+	} {
+		if err := f.st.RecordAgentLimit("codex", bad); !errors.Is(err, ErrRejected) {
+			t.Fatalf("%+v accepted: %v", bad, err)
+		}
 	}
 }

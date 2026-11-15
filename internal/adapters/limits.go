@@ -27,6 +27,15 @@ type LimitState struct {
 	// Reported is what the agent sent about the limit, its plain fields
 	// only, so its units can be learned from real runs (T-080).
 	Reported string
+	// Windows are all the windows a limit check read (T-191).
+	Windows []LimitWindow
+}
+
+// LimitWindow is one usage window of an account (T-191).
+type LimitWindow struct {
+	Window      string
+	UsedPercent float64
+	ResetAt     time.Time
 }
 
 // maxReported bounds Reported.

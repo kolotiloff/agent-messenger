@@ -124,6 +124,8 @@ type Service struct {
 	outboxSkip time.Time
 	// updatePendingSkip is the same for a queued Messenger update (T-155).
 	updatePendingSkip time.Time
+	// limitSkip is the same for the checked limit fields (T-191).
+	limitSkip time.Time
 	// usageSkip is the same for usage. usageSent is the version of this
 	// computer's usage that usageTo (broker/device) last accepted, at
 	// usageAt; usageCopies holds the other computers' usage from there.
@@ -789,6 +791,9 @@ func (s *Service) ReportPresence(ctx context.Context) {
 	if time.Now().Before(s.updatePendingSkip) {
 		p.UpdatePending = false
 	}
+	if time.Now().Before(s.limitSkip) {
+		p.Agents = plainLimits(p.Agents)
+	}
 	if s.usageTo != to {
 		s.usageTo, s.usageSent, s.usageCopies = to, "", nil
 	}
@@ -825,6 +830,15 @@ func (s *Service) ReportPresence(ctx context.Context) {
 		s.updatePendingSkip = time.Now().Add(readyRetry)
 		s.mu.Unlock()
 		p.UpdatePending = false
+		peers, err = Report(call, *c, p)
+	}
+	if errors.Is(err, errPresenceRefused) && extendedLimits(p.Agents) {
+		// A host before 0.80 refuses the checked limit fields (T-191).
+		// Dropped before the model names for the same reason (T-173).
+		s.mu.Lock()
+		s.limitSkip = time.Now().Add(readyRetry)
+		s.mu.Unlock()
+		p.Agents = plainLimits(p.Agents)
 		peers, err = Report(call, *c, p)
 	}
 	if errors.Is(err, errPresenceRefused) {

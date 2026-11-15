@@ -154,7 +154,10 @@ func (s *Supervisor) networkRound(ctx context.Context) {
 			for _, a := range p.Agents {
 				na := core.NetAgent{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting, Models: a.Models}
 				if l := a.Limit; l != nil {
-					na.Limit = &core.AgentLimit{State: l.State, UsedPercent: l.UsedPercent, Window: l.Window, ResetsAt: l.ResetsAt, ObservedAt: l.ObservedAt}
+					na.Limit = &core.AgentLimit{State: l.State, UsedPercent: l.UsedPercent, Window: l.Window, ResetsAt: l.ResetsAt, ObservedAt: l.ObservedAt, Source: l.Source}
+					for _, w := range l.Windows {
+						na.Limit.Windows = append(na.Limit.Windows, core.LimitWindow{Window: w.Window, UsedPercent: w.UsedPercent, ResetsAt: w.ResetsAt})
+					}
 				}
 				np.Agents = append(np.Agents, na)
 			}

@@ -144,7 +144,10 @@ func (s *Supervisor) presence() (broker.Presence, error) {
 			pa.Models = a.Models
 		}
 		if l := a.Limit; l != nil {
-			pa.Limit = &broker.PresenceLimit{State: l.State, UsedPercent: l.UsedPercent, Window: l.Window, ResetsAt: l.ResetsAt, ObservedAt: l.ObservedAt}
+			pa.Limit = &broker.PresenceLimit{State: l.State, UsedPercent: l.UsedPercent, Window: l.Window, ResetsAt: l.ResetsAt, ObservedAt: l.ObservedAt, Source: l.Source}
+			for _, w := range l.Windows {
+				pa.Limit.Windows = append(pa.Limit.Windows, broker.PresenceLimitWindow{Window: w.Window, UsedPercent: w.UsedPercent, ResetsAt: w.ResetsAt})
+			}
 		}
 		p.Agents = append(p.Agents, pa)
 	}
