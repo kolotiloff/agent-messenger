@@ -402,15 +402,20 @@
   // are shown as good news; problems of the last day are kept.
   const notices=[],noticeSince=Date.now();
   function closedNotices(){try{return JSON.parse(localStorage.getItem('messenger-notices-closed')||'{}')||{};}catch(_){return {};}}
+  // T-181: no scroll of their own; at most noticeLimit are shown and a new
+  // one pushes out the oldest, which then counts as closed.
+  const noticeLimit=3;
   function closeNotice(key){
-    const i=notices.findIndex(n=>n.key===key);if(i>=0)notices.splice(i,1);
+    const i=notices.findIndex(n=>n.key===key);if(i>=0){clearTimeout(notices[i].timer);notices.splice(i,1);}
     const closed=closedNotices(),cut=Date.now()-2*24*3600*1000;closed[key]=Date.now();
     for(const k of Object.keys(closed))if(closed[k]<cut)delete closed[k];
     remember('messenger-notices-closed',JSON.stringify(closed));renderNotices();
   }
   function addNotice(key,kind,title,text){
     if(notices.some(n=>n.key===key)||closedNotices()[key])return;
-    notices.push({key,kind,title,text:text||''});renderNotices();
+    notices.push({key,kind,title,text:text||''});
+    while(notices.length>noticeLimit)closeNotice(notices[0].key);
+    renderNotices();
   }
   function collectNotices(){
     // T-129: the background program was started inside an agent's sandbox.
@@ -438,7 +443,7 @@
       const card=el('div',undefined,'am-notice am-notice-'+n.kind);card.dataset.key=n.key;
       const icon=document.createElementNS('http://www.w3.org/2000/svg','svg');icon.setAttribute('viewBox','0 0 24 24');icon.setAttribute('aria-hidden','true');icon.classList.add('am-notice-icon');
       icon.innerHTML='<circle cx="12" cy="12" r="9"/>'+noticeIcons[n.kind];
-      const body=el('div',undefined,'am-notice-body');body.append(el('span',n.title,'am-notice-title'));if(n.text)body.append(el('span',n.text,'am-small am-muted'));
+      const body=el('div',undefined,'am-notice-body');body.append(el('span',n.title,'am-notice-title'));if(n.text){body.append(el('span',n.text,'am-small am-muted am-notice-text'));card.title=n.text;}
       const close=el('button','×','am-toast-close');close.type='button';close.setAttribute('aria-label',tr('Закрыть'));close.addEventListener('click',()=>closeNotice(n.key));
       card.append(icon,body,close);
       if(n.kind!=='bad'){

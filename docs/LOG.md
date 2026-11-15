@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-15 — Claude Code (T-181)
+
+- T-181: the chat footer had its own height cap and scroll, so several update notices scrolled inside the chat and the scrollbars overlapped them. Removed it; at most 3 notices, a new one pushes out the oldest; long text cut to 3 lines. Browser fixture check added to `check-window-controls.cjs`. Not released.
+
 ## 2026-11-14 — Claude Code (merged #108–#113; T-178 Mac connecting screen)
 
 - Released 0.74 from `main` 825fb76 via PR #115 (release run 43648585334): T-179, T-180. Recorded T-181.
