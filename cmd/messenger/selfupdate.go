@@ -15,7 +15,8 @@ import (
 	"github.com/kolotiloff/agent-messenger/internal/updatefeed"
 )
 
-// selfUpdateEvery is how often the window looks for a new signed release.
+// selfUpdateEvery is how often the window looks for a new signed release. It
+// only looks: the archive is downloaded when the owner presses the button.
 // GitHub allows 60 checks an hour per address, shared by every computer
 // behind it, so the window checks rarely (owner, 2026-11-09).
 const selfUpdateEvery = 30 * time.Minute
@@ -58,7 +59,7 @@ func windowSelfUpdate(ctx context.Context, home string, stop context.CancelFunc,
 		go func() {
 			for {
 				check, cancel := context.WithTimeout(ctx, 5*time.Minute)
-				u.Check(check)
+				u.Look(check)
 				cancel()
 				select {
 				case <-ctx.Done():
@@ -88,6 +89,13 @@ func newUpdater(home, executable string) *selfupdate.Updater {
 		Sync: func(ctx context.Context) error {
 			_, err := channel.SyncGitHub(ctx, running)
 			return err
+		},
+		Find: func(ctx context.Context) (string, error) {
+			r, err := channel.FindGitHub(ctx, running)
+			if r.State != "found" {
+				return "", err
+			}
+			return r.Version, err
 		},
 	}
 	if prefix := distribution.InstallPrefix(executable); prefix != "" && runtime.GOOS != "windows" {

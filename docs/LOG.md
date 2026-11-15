@@ -4,6 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-15 — Claude Code (T-181, T-158, T-159)
 
+- T-187 (D-140): update found in the background, downloaded and installed by one button in a dialog. T-188: task list toggle icon. Owner updated the VPS to 0.78 over SSH.
 - Released 0.78 from `main` 875b8ce via PR #119 (release run 43747998585); Linux x64 asset downloaded from releases/latest, checksum and `version` checked.
 - T-186: shared tasks carry where they run; «Агент на ПК — от ДАЛ» labels; agent removal in a terminal; «Убрать все» for finished tasks. Window check extended (frameless block, clear-done).
 - T-185: the computer list no longer shows a disabled agent through its old coordinator chat.

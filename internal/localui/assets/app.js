@@ -2220,7 +2220,8 @@
     const changed=!!next!==!!updateProgress;
     updateProgress=next;
     if(changed){if(window.webkit?.messageHandlers?.updates)renderMacUpdate();else if(selfUpdate)renderSelfUpdate();else showUpdateProgress();}
-    else{showUpdateProgress();if(next)updateTip(next.version,true);}
+    else if(window.webkit?.messageHandlers?.updates){showUpdateProgress();if(next)updateTip(next.version,true);}
+    else renderUpdateDialog();
     // A download that just ended may have made an update ready: ask again.
     if(changed&&!next&&!window.webkit?.messageHandlers?.updates)loadSelfUpdate();
     progressTimer=setTimeout(pollUpdateProgress,next?400:document.hidden?15000:2500);
@@ -2237,11 +2238,12 @@
     const installed=typeof status?.installedVersion==='string'?status.installedVersion:'';
     $('app-installed-version').hidden=!installed;
     $('app-installed-version').title=installed?tr('Версия ')+versionName(installed).slice(1):'';
-    // Only an available update or one downloading is shown, as the blue
-    // icon next to the version. Background checks and their failures stay
-    // quiet; the app checks again by itself.
-    const loading=!!updateProgress;
-    const shown=!!version||loading;
+    // Only an update ready to install is shown, as the blue icon next to
+    // the version: a download in the background stays quiet, so the icon
+    // does not appear once for the download and again for the install
+    // (owner, 2026-11-15). Background checks and their failures stay quiet.
+    const loading=!!updateProgress&&!!version;
+    const shown=!!version;
     if(version)knownUpdate=version;
     $('app-update-version').hidden=true;$('app-update-button').hidden=!shown;
     $('app-installed-version').textContent=versionText(installed);
@@ -2262,32 +2264,83 @@
     if(version&&s.state==='available')knownUpdate=version;
     // A check that only asks GitHub shows nothing; a download fills the ring
     // around the arrow; installing dims the arrow.
-    const installing=selfUpdateBusy||s.state==='installing',loading=!!updateProgress;
-    const done=s.state==='installed',shown=(s.state==='available'&&!!version)||installing||loading||done||!!s.message;
+    // The archive downloads only when the owner presses the button, so the
+    // icon has no ring of its own: the update dialog shows the progress.
+    const offered=(s.state==='available'||s.state==='found')&&!!version;
+    if(offered)knownUpdate=version;
+    const installing=selfUpdateBusy||s.state==='installing'||s.state==='downloading',loading=false;
+    const done=s.state==='installed',shown=offered||installing||done||!!s.message;
     // The arrow while an update waits (owner, T-056, T-066). A line appears
     // only for an error or after the update.
     $('app-update-version').hidden=!s.message&&!done;$('app-update-button').hidden=!shown||done;
     $('app-installed-version').textContent=versionText(installed);
     $('app-update-version').textContent=s.message||(done?tr('Обновлено. Окно откроется заново.'):'');
     updateTip(version,installing?'installing':loading);
-    showUpdateProgress();
+    $('app-update-button').classList.remove('am-update-loading');
     $('app-update-button').disabled=installing||loading;
+    renderUpdateDialog();
   }
   async function loadSelfUpdate(){
     if(window.webkit?.messageHandlers?.updates||selfUpdateBusy)return;
     try{const s=await api('/api/self-update');selfUpdate={...s,message:selfUpdate?.message||''};renderSelfUpdate();}
     catch(_){if(!selfUpdate&&selfUpdateTimer){clearInterval(selfUpdateTimer);selfUpdateTimer=0;}}
   }
-  async function installSelfUpdate(){
-    if(selfUpdateBusy)return;
-    selfUpdateBusy=true;if(selfUpdate)selfUpdate.message='';renderSelfUpdate();
-    try{const r=await postAPI('/api/self-update',{action:'install'},65000);selfUpdate={...selfUpdate,state:r.state,version:r.version,message:''};}
-    catch(error){if(selfUpdate)selfUpdate.message=error.message;}
-    finally{selfUpdateBusy=false;renderSelfUpdate();}
+  // Windows and Linux: one button downloads, installs and restarts, and a
+  // dialog shows each step (owner, 2026-11-15: a download first and the same
+  // icon again after it was confusing).
+  let updateRun=null,updateRunTimer=0;
+  function renderUpdateDialog(){
+    if(!updateRun)return;
+    const s=selfUpdate||{},p=updateProgress,state=s.state||'';
+    if(s.version)updateRun.version=s.version;
+    if(state==='downloading'||state==='installing'||state==='installed')updateRun.busy=true;
+    // Back to offered after the run began: the install failed and the old
+    // program stayed. Seen twice, so the instant between download and
+    // install is not mistaken for it.
+    if(!updateRun.error&&updateRun.busy&&(state==='failed'||state==='found'||state==='available'||state==='idle')){
+      updateRun.back=(updateRun.back||0)+1;
+      if(state==='failed'||updateRun.back>=2)updateRun.error=s.error||tr('Обновление не установлено. Программа осталась прежней.');
+    }else if(state!=='failed')updateRun.back=0;
+    $('update-title').textContent=tr('Обновление')+(updateRun.version?' '+versionName(updateRun.version):'');
+    let step,share;
+    if(updateRun.error){step=tr('Не удалось обновить');share=0;}
+    else if(state==='installed'){step=tr('Перезапуск…');share=1;}
+    else if(state==='installing'){step=tr('Установка…');share=1;}
+    else if(p&&p.total>0){share=Math.min(1,p.done/p.total);step=tr('Загрузка…')+' '+Math.floor(100*share)+'%';}
+    else{step=tr('Загрузка…');share=0;}
+    $('update-step').textContent=step;
+    $('update-bar-fill').style.setProperty('--am-update-share',String(share));
+    $('update-error').textContent=updateRun.error||'';$('update-error').hidden=!updateRun.error;
+    $('update-actions').hidden=!updateRun.error;
+    if(updateRun.error){clearTimeout(updateRunTimer);updateRunTimer=0;}
   }
+  async function followUpdate(){
+    clearTimeout(updateRunTimer);
+    if(!updateRun||updateRun.error)return;
+    try{const s=await api('/api/self-update');selfUpdate={...s,message:''};renderSelfUpdate();}catch(_){}
+    if(!updateRun||updateRun.error)return;
+    pollUpdateProgress();
+    updateRunTimer=setTimeout(followUpdate,500);
+  }
+  async function startUpdate(){
+    if(!updateRun)updateRun={version:selfUpdate?.version||''};
+    Object.assign(updateRun,{error:'',busy:false,back:0});
+    if(!$('update-dialog').open)$('update-dialog').showModal();
+    renderUpdateDialog();
+    try{
+      const r=await postAPI('/api/self-update',{action:'update'},15000);
+      if(selfUpdate)selfUpdate.state=r.state||'downloading';
+      updateRun.busy=true;
+    }catch(error){updateRun.error=error.message;renderUpdateDialog();return;}
+    renderSelfUpdate();followUpdate();
+  }
+  $('update-retry').addEventListener('click',startUpdate);
+  $('update-close').addEventListener('click',()=>{updateRun=null;clearTimeout(updateRunTimer);$('update-dialog').close();loadSelfUpdate();});
+  // The download and the install are not cancelled halfway.
+  $('update-dialog').addEventListener('cancel',event=>{if(!updateRun?.error)event.preventDefault();else{updateRun=null;}});
   $('app-update-button').addEventListener('click',()=>{
     if(window.webkit?.messageHandlers?.updates)window.webkit.messageHandlers.updates.postMessage('check');
-    else installSelfUpdate();
+    else startUpdate();
   });
   if(!window.webkit?.messageHandlers?.updates){selfUpdateTimer=setInterval(loadSelfUpdate,60000);loadSelfUpdate();}
   pollUpdateProgress();

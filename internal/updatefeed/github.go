@@ -170,9 +170,17 @@ func uniqueAsset(assets []releaseAsset, tag, name string, max int64) (releaseAss
 }
 
 func (c Channel) SyncGitHub(ctx context.Context, minimumBuild int) (SyncResult, error) {
-	return c.syncGitHub(ctx, minimumBuild, updateHTTPClient())
+	return c.syncGitHub(ctx, minimumBuild, updateHTTPClient(), true)
 }
-func (c Channel) syncGitHub(ctx context.Context, minimumBuild int, client *http.Client) (SyncResult, error) {
+
+// FindGitHub looks for a newer signed release without downloading its
+// archive: the window offers the update first and downloads it when the
+// owner asks (owner, 2026-11-15). A found release has State "found"; the
+// channel is not changed.
+func (c Channel) FindGitHub(ctx context.Context, minimumBuild int) (SyncResult, error) {
+	return c.syncGitHub(ctx, minimumBuild, updateHTTPClient(), false)
+}
+func (c Channel) syncGitHub(ctx context.Context, minimumBuild int, client *http.Client, fetch bool) (SyncResult, error) {
 	var result SyncResult
 	if minimumBuild < 0 {
 		return result, errors.New("invalid installed build")
@@ -180,14 +188,18 @@ func (c Channel) syncGitHub(ctx context.Context, minimumBuild int, client *http.
 	if err := os.MkdirAll(c.Directory, 0700); err != nil {
 		return result, err
 	}
-	lock, err := platform.Acquire(filepath.Join(c.Directory, "download.lock"))
-	if err != nil {
-		if errors.Is(err, platform.ErrAlreadyRunning) {
-			return result, ErrDownloadBusy
+	// Only a download takes the channel: a find writes nothing and must not
+	// keep a remote update from downloading.
+	if fetch {
+		lock, err := platform.Acquire(filepath.Join(c.Directory, "download.lock"))
+		if err != nil {
+			if errors.Is(err, platform.ErrAlreadyRunning) {
+				return result, ErrDownloadBusy
+			}
+			return result, errors.New("update channel lock unavailable")
 		}
-		return result, errors.New("update channel lock unavailable")
+		defer lock.Release()
 	}
-	defer lock.Release()
 	current, currentErr := c.Load()
 	if currentErr != nil && !errors.Is(currentErr, os.ErrNotExist) {
 		return result, errors.New("existing update metadata invalid; channel unchanged")
@@ -248,6 +260,9 @@ func (c Channel) syncGitHub(ctx context.Context, minimumBuild int, client *http.
 		archive, found, err := uniqueAsset(r.Assets, r.Tag, m.SHA256+".zip", MaxArchive)
 		if err != nil || !found || archive.Size != m.Length {
 			return result, errors.New("signed archive missing or wrong size")
+		}
+		if !fetch {
+			return SyncResult{Version: m.Version, State: "found"}, nil
 		}
 		// The size is bounded both by signed metadata and the response reader.
 		// Download completes and is verified before any active channel file changes.

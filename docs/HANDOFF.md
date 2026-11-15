@@ -10,6 +10,7 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Updated 2026-11-15 by Claude Code.
 
+- T-187 (D-140) and T-188 on `claude/great-knuth-52qwv1`, going into 0.79: one update button with a download/install/restart dialog (Windows/Linux; Mac shows the icon only when ready), and the task list toggle without a double background.
 - 0.78 released (PR #119, `main` 875b8ce, run 43747998585) with T-183, T-185, T-186. Next: the owner updates the VPS once over SSH with the installer; then the update button and T-184 (tray).
 - T-186, in 0.78: shared tasks say which computer runs them (`runs_on_peer`, needs a 0.78 broker: the VPS must be updated once over SSH with the installer, 0.77 cannot update remotely); rows read «Cursor на ПК-1 — от Mac». Agent removal opens a terminal script (y/N, keeps sign-in); «Убрать все» clears finished tasks. The PowerShell removal script was not run here; check on Windows.
 - T-185, in 0.78: a paused or removed agent is no longer listed for a computer just because its chat once used Messenger's tools as the coordinator (the likely cause of ПК-2 still showing a disabled agent).

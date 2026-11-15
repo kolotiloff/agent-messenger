@@ -269,3 +269,61 @@ func TestBuild(t *testing.T) {
 		t.Fatal("build numbers")
 	}
 }
+
+// The window's flow (owner, 2026-11-15): Look only finds the release, the
+// one button downloads and installs it.
+func TestLookFindsAndUpdateDownloadsAndInstalls(t *testing.T) {
+	f := newFixture(t)
+	u := f.updater(32)
+	synced := 0
+	u.Sync = func(context.Context) error {
+		synced++
+		if s := u.Status(); s.State != "downloading" || s.Version != "0.0.0-preview.33" {
+			t.Fatalf("while downloading %+v", s)
+		}
+		m := f.publish(33, f.archive(ProgramName(runtime.GOOS), f.program), f.key)
+		f.reports(m.Version, revision)
+		return nil
+	}
+	u.Find = func(context.Context) (string, error) { return "", errors.New("offline") }
+	if s := u.Look(context.Background()); s.State != "idle" {
+		t.Fatalf("failed look %+v", s)
+	}
+	u.Find = func(context.Context) (string, error) { return "0.0.0-preview.32", nil }
+	if s := u.Look(context.Background()); s.State != "idle" {
+		t.Fatalf("same version %+v", s)
+	}
+	u.Find = func(context.Context) (string, error) { return "0.0.0-preview.33", nil }
+	if s := u.Look(context.Background()); s.State != "found" || s.Version != "0.0.0-preview.33" || synced != 0 {
+		t.Fatalf("look %+v, synced %d", s, synced)
+	}
+	// A failed look keeps what was found.
+	u.Find = func(context.Context) (string, error) { return "", errors.New("offline") }
+	if s := u.Look(context.Background()); s.State != "found" {
+		t.Fatalf("found lost %+v", s)
+	}
+	f.unchanged()
+	s, err := u.Update(context.Background())
+	if err != nil || s.State != "installed" || synced != 1 {
+		t.Fatalf("update %+v %v, synced %d", s, err, synced)
+	}
+	if raw, _ := os.ReadFile(f.exe); !bytes.Equal(raw, f.program) {
+		t.Fatal("the new program is not in place")
+	}
+}
+
+func TestUpdateLeavesTheProgramWhenTheDownloadFails(t *testing.T) {
+	f := newFixture(t)
+	u := f.updater(32)
+	u.Sync = func(context.Context) error { return errors.New("offline") }
+	if s, err := u.Update(context.Background()); err == nil || s.State != "failed" || s.Error == "" {
+		t.Fatalf("update %+v %v", s, err)
+	}
+	f.unchanged()
+	// An update downloaded before is installed without another download.
+	m := f.publish(33, f.archive(ProgramName(runtime.GOOS), f.program), f.key)
+	f.reports(m.Version, revision)
+	if s, err := u.Update(context.Background()); err != nil || s.State != "installed" {
+		t.Fatalf("update %+v %v", s, err)
+	}
+}

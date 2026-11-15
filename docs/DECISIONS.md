@@ -431,3 +431,12 @@ Amends D-100: a request to install the newest signed Messenger (the program only
 - Started by hand (no systemd), `server run` still refuses: nothing would start it again.
 - Risk accepted: an update that does not start leaves the server down until the owner runs the installer again over SSH. The update is the same signed program every computer installs.
 - `server rename --name ИМЯ` sets the name the server computer reports to the others (the window's «rename» action); by default it is the VPS host name.
+
+## D-140 — The window offers an update and one button downloads, installs and restarts (T-187)
+
+2026-11-15, Claude Code, owner's request: the window downloaded an update by itself (a ring around the icon), then showed the same icon again to install it, which looked like the update had to be done twice. The owner asked for one icon, and a dialog with the download, the install and the restart.
+
+- Windows and Linux: the window's check every 30 minutes only finds a newer signed release (`FindGitHub`: the signed manifest is fetched and verified, the archive is not downloaded and the channel is not changed, and the download lock is not taken, so a remote update is never held up). A found release shows the icon. Its click (`/api/self-update` action `update`) downloads the archive, verifies it and installs it as before, then restarts the window; a dialog shows «Загрузка… N%», «Установка…», «Перезапуск…». A failed download or install says so in the dialog, leaves the program as it was and offers «Повторить». The dialog is not closed halfway.
+- An update already downloaded (for example by an earlier version) is installed without another download.
+- Remote updates (T-078, D-139) still download through `Check`; nothing changed there.
+- Mac: Sparkle still installs, with its own confirmation window. The window no longer shows the icon while the background download runs, only once the update is ready, so the icon appears once. The Mac flow is not otherwise changed in this step.
