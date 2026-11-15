@@ -2264,6 +2264,9 @@ type ComputerSummary struct {
 	// UpdateAvailable: a newer release than Version exists (T-158). The
 	// coordinator's server sets it from this computer's update channel.
 	UpdateAvailable bool `json:"update_available,omitempty"`
+	// Server: this computer runs the network's server (T-036). It is still
+	// an ordinary computer: its agents take tasks like any other's.
+	Server bool `json:"server,omitempty"`
 }
 
 // ProjectAgents lists the computers for a project: this one, then the other
@@ -2282,6 +2285,12 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 			return err
 		}
 		c = ComputerSummary{Computer: computer, Name: name, This: true, Online: true, Agents: []AgentSummary{}, Version: buildinfo.Version}
+		// The hosting computer is "host" in its own network (broker.HostPeer).
+		var self string
+		if err := tx.QueryRow(`SELECT COALESCE((SELECT value FROM meta WHERE key='net_self'),'')`).Scan(&self); err != nil {
+			return err
+		}
+		c.Server = self == "host"
 		if pending, err := hasPendingUpdate(tx); err != nil {
 			return err
 		} else {
@@ -2333,7 +2342,7 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 		return nil, err
 	}
 	for _, p := range peers {
-		o := ComputerSummary{Computer: p.ID, Name: p.Name, Online: p.Age >= 0 && p.Age <= PeerFresh, Agents: []AgentSummary{}, Version: p.Version, UpdatePending: p.UpdatePending,
+		o := ComputerSummary{Computer: p.ID, Name: p.Name, Online: p.Age >= 0 && p.Age <= PeerFresh, Agents: []AgentSummary{}, Version: p.Version, UpdatePending: p.UpdatePending, Server: p.Host,
 			Note: "another computer of the network: it runs the task only if its owner allows tasks from other computers and it has this project's folder; otherwise the task fails with its reason"}
 		if r := p.Ready; r != nil {
 			has := false

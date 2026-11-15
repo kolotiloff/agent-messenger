@@ -361,6 +361,8 @@ func run(root string, args []string) error {
 		}
 		printResponse(response)
 		return nil
+	case "server":
+		return runServerCommand(root, args[1:], os.Stdout)
 	case "help":
 		usage()
 		return nil
@@ -510,6 +512,11 @@ func usage() {
   messenger recover-missing-root --confirm preserve-uncertain
   messenger --root КАТАЛОГ register-session --provider claude|codex|cursor --environment КАТАЛОГ --conversation-id ID --alias ИМЯ --cli ФАЙЛ [--workspace КАТАЛОГ]
   messenger --root КАТАЛОГ status
+  messenger --root КАТАЛОГ server run      (клиент в терминале, для службы на сервере без экрана)
+  messenger --root КАТАЛОГ server enable [--internet [--public АДРЕС] | --lan] [--port 47100]
+  messenger --root КАТАЛОГ server invite [--address АДРЕС]
+  messenger --root КАТАЛОГ server status | disable
+  messenger --root КАТАЛОГ server revoke --device ID
   messenger --root КАТАЛОГ overview
   messenger --root КАТАЛОГ ui [--port 0]
   messenger --root КАТАЛОГ timeline --alias ИМЯ [--limit 50] [--before ID_ПИСЬМА]

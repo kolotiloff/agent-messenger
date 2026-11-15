@@ -39,3 +39,31 @@ func TestProjectAgentsShowReadiness(t *testing.T) {
 		t.Fatalf("this computer %+v", here)
 	}
 }
+
+// T-036: the computer that runs the server is marked for the coordinator,
+// whether it is this computer or another one.
+func TestProjectAgentsMarkServer(t *testing.T) {
+	f := newTaskFixture(t)
+	if err := f.st.SetNetwork("brk-1", "host", []NetPeer{{ID: "dev-a", Name: "A", Age: 1}}); err != nil {
+		t.Fatal(err)
+	}
+	list, err := f.st.ProjectAgents("Game")
+	if err != nil {
+		t.Fatal(err)
+	}
+	computers := list["computers"].([]ComputerSummary)
+	if !computers[0].This || !computers[0].Server || computers[1].Server {
+		t.Fatalf("hosting: %+v", computers)
+	}
+	if err := f.st.SetNetwork("brk-1", "dev-me", []NetPeer{{ID: "host", Name: "VPS", Host: true, Age: 1}}); err != nil {
+		t.Fatal(err)
+	}
+	list, err = f.st.ProjectAgents("Game")
+	if err != nil {
+		t.Fatal(err)
+	}
+	computers = list["computers"].([]ComputerSummary)
+	if computers[0].Server || !computers[1].Server {
+		t.Fatalf("member: %+v", computers)
+	}
+}

@@ -181,7 +181,7 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 | T-013 | Developer ID signing and notarization of the Mac app. | owner | blocked: Q-003 |
 | T-014 | Intel Mac build and acceptance. | agent + owner | |
 | T-017 | Coordinator role handover. Stage 6. | agent | |
-| T-036 | Standalone broker for a VPS and its setup wizard. Optional (D-040): only for computers in different networks. | agent + owner | was part of T-015 |
+| T-036 | Standalone broker for a VPS and its setup wizard. Optional (D-040): only for computers in different networks. | agent + owner | In 0.77 (D-138): one-command installer `install-server.sh` (systemd service, internet scope, invitation printed), `messenger server run/enable/invite/status/disable/revoke`; the server computer is labelled «сервер» in the window and `server: true` in `list_agents`. Checked in a Linux container with a stand-in systemd; not yet on a real VPS. |
 
 ## Done
 

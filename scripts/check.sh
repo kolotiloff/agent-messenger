@@ -13,6 +13,7 @@ if [[ -n "$unformatted" ]]; then
   printf 'Go files need formatting:\n%s\n' "$unformatted" >&2
   exit 1
 fi
+sh -n scripts/install-server.sh
 "$go_bin" mod verify
 "$go_bin" vet ./...
 # The timeout catches a hung test. The supervisor package alone runs close to

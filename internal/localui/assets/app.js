@@ -496,11 +496,17 @@
   function swapChildren(live,next){
     if(next.innerHTML!==live.innerHTML)live.replaceChildren(...next.childNodes);
   }
+  function serverTag(){
+    const tag=el('span',tr('сервер'),'am-small am-muted am-machine-role');tag.title=tr('На этом компьютере работает сервер сети');
+    return tag;
+  }
   function renderMachines(){
     collectNotices();
     const live=$('machines'),box=live.cloneNode(false);
     const machine=el('div',undefined,'am-machine-card');machine.setAttribute('aria-current','true');pickable(machine,'local');
     const head=el('div',undefined,'am-machine-name');head.append(el('span',view?.computer_name||tr('Этот компьютер')));
+    // The computer that runs the network's server is labelled as such.
+    if(server?.host?.running&&server.host.scope!=='local')head.append(serverTag());
     const dot=el('span',undefined,'am-dot'+(online?' online':''));dot.title=online?tr('На связи'):tr('Нет связи');head.append(dot);
     if(view?.pending_update==='updating'||view?.pending_update==='queued'){
       const tip=view.pending_update==='updating'?tr('Обновляется…'):tr('ждёт обновления');
@@ -521,6 +527,7 @@
       const name=el('div',undefined,'am-machine-name');
       const pdot=el('span',undefined,'am-dot'+(fresh?' online':''));pdot.title=fresh?tr('На связи'):tr('Нет связи');
       name.append(el('span',peer.name));
+      if(peer.host)name.append(serverTag());
       if(peer.version)name.append(el('span',versionName(peer.version),'am-small am-muted am-machine-version'));
       name.append(pdot);
       // T-128: an older computer gets the update icon next to its dot; the

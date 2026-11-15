@@ -32,13 +32,19 @@ Status on 2026-11-13 (0.66 released, 0.67 in preparation): the background client
 - A VPN that hands out 100.64.0.0/10 addresses works with the internet scope (those addresses count as public there).
 - Not verified between real computers in different networks; the router, provider and firewall are outside the program.
 
-**On a Linux VPS without a screen** (owner's setup, 2026-11-15). The same program runs the server; the window is opened through an SSH tunnel:
+**On a Linux VPS** (T-036, D-138). One command as root installs or updates the server:
 
-1. On the VPS: download `AgentMessenger-Linux-x64` from the release, `chmod +x`, then `./AgentMessenger-Linux-x64 --root /root/agent-messenger start` (the background client; it runs no tasks without `--allow-tasks`, and the server runs inside it).
-2. From the owner's computer: `ssh -L 47200:127.0.0.1:47200 root@VPS`, and in that session `./AgentMessenger-Linux-x64 --root /root/agent-messenger ui --port 47200`. It prints a `http://127.0.0.1:47200/#…` link; open it in a browser on the owner's computer.
-3. In that window: «Сервер» → «Интернет», the VPS address as the external address, «Запустить сервер», then invitations as usual. The window can be closed afterwards; the server keeps running in the background client.
+```bash
+curl -fsSL https://github.com/kolotiloff/agent-messenger/releases/latest/download/install-server.sh | sh
+```
 
-Checked in a Linux container with a test data directory: `start`, `ui`, enabling the internet scope and an invitation for the external address through the window API. Not checked on a real VPS. The background client does not start again after the VPS restarts unless a service is set up for it.
+It downloads the Linux program of the same release and checks its SHA-256, installs it as `/opt/agent-messenger/messenger` with data in `/var/lib/agent-messenger`, runs it as the systemd service `agent-messenger` (`messenger server run`), turns on the internet scope with the public address of the computer's network card, opens the port in ufw or firewalld if they are active, and prints an invitation. `AM_PUBLIC`, `AM_PORT` and `AM_VERSION` override the address, the port and the release. Running it again updates the program; the data and the devices stay. A firewall in the hosting provider's panel is not touched: open TCP 47100 there.
+
+After that: `agent-messenger-server invite` (a new invitation), `agent-messenger-server status` (state and devices), `agent-messenger-server revoke --device ID`, `agent-messenger-server disable`. The same commands exist as `messenger --root DIR server …` for any data directory; `server enable --internet [--public ADDR] [--port N]` or `--lan`.
+
+`server run` is the client in the foreground for a service: it starts paused, runs no tasks or models, stops on SIGTERM, and refuses update requests from other computers (the installer updates it). The installer refuses to start while another Messenger client of the same user runs (for example one started with `start`), and says how to stop it.
+
+Checked in a Linux container: the `server` commands against a running `server run` (enable with and without an address, invite, status, restart keeps the settings, a second client refused), and the installer end to end against a local copy of the release files with a stand-in `systemctl` (fresh install, update, another client running). Not checked on a real VPS or with real systemd.
 
 Without the internet scope, computers in different homes still work together when they share a VPN that gives them private addresses (10.x, 172.16–31.x, 192.168.x, or IPv6 fc00::/7): to the broker they are one private network, so "local network" accepts them (D-040).
 
@@ -71,7 +77,7 @@ Files are written to a fresh temporary file, flushed to disk and renamed. A dama
 
 ## Not built yet
 
-- A standalone broker for a VPS and the VPS setup wizard (D-035). Optional: one local network needs no VPS (D-040).
+- A broker process separate from the client (D-035). On a VPS the client runs as the server instead (D-138).
 - Keeping the device key in the OS secure storage (Q-013).
 - A reachability check from another computer. "Работает" means the broker listens; it does not prove that another computer can reach it (firewall, VPN, router).
 
