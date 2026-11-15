@@ -116,3 +116,71 @@ func TestRemoteTaskContinueRefused(t *testing.T) {
 		t.Fatalf("refused %+v %+v", task, events)
 	}
 }
+
+// T-159 (D-108): the coordinator continues an interrupted task of another
+// computer. That computer closes the interrupted run only when its worker is
+// certainly gone; otherwise it refuses and the task stays interrupted.
+func TestRemoteInterruptedTaskContinue(t *testing.T) {
+	p := newNetPair(t)
+	agents := []NetAgent{{Agent: "codex"}}
+	setPeerVersion := func(v string) {
+		t.Helper()
+		if err := p.a.st.SetNetwork(testBroker, HostPeerID, []NetPeer{{ID: "dev-b", Name: "Ноутбук", Age: 1, Agents: agents, Version: v}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	setPeerVersion("0.0.0-preview.75")
+	id := p.startRemote(t, "op1", "codex", "Build level 1")
+	p.carry(t, true)
+	p.carry(t, false)
+	m := p.mirror(t, id)
+	session := "019a0000-0000-7000-8000-0000000000d1"
+	p.b.launch(t, m.ID, session)
+	interrupt(t, p.b.st, m.ID)
+	if _, err := p.a.st.db.Exec(`UPDATE tasks SET state='interrupted' WHERE id=?`, id); err != nil {
+		t.Fatal(err)
+	}
+
+	// An older computer would not close the run: refused here, nothing sent.
+	setPeerVersion("0.0.0-preview.74")
+	if err := p.a.st.ContinueTask(id, "c0", "go on", AudienceCoordinator); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "interrupted") {
+		t.Fatalf("older computer: %v", err)
+	}
+	setPeerVersion("0.0.0-preview.75")
+
+	// The worker may still run there: refused, the task stays interrupted.
+	p.b.st.SetWorkerCheck(stillThere)
+	if err := p.a.st.ContinueTask(id, "c1", "go on", AudienceCoordinator); err != nil {
+		t.Fatal(err)
+	}
+	p.carry(t, true)
+	if task, _ := p.b.st.TaskByID(m.ID); task.State != "interrupted" {
+		t.Fatalf("continued with a live worker: %s", task.State)
+	}
+	p.carry(t, false)
+	task, _ := p.a.st.TaskByID(id)
+	events := p.a.events(t, AudienceCoordinator, 0)
+	if task.State != "interrupted" || events[len(events)-1].Kind != "continue_refused" || !strings.Contains(events[len(events)-1].Text, "may still run") {
+		t.Fatalf("refused %+v %s", task, kinds(events))
+	}
+
+	// Gone there: the same conversation resumes with the follow-up.
+	p.b.st.SetWorkerCheck(goneOK)
+	if err := p.a.st.ContinueTask(id, "c2", "go on", AudienceCoordinator); err != nil {
+		t.Fatal(err)
+	}
+	p.carry(t, true)
+	r := p.b.launch(t, m.ID, session)
+	brief, err := p.b.st.ReadTask(r.ID, r.Receipt, false)
+	if err != nil || r.Kind != "continue" || brief.FollowUp != "go on" {
+		t.Fatalf("brief %+v %+v %v", r, brief, err)
+	}
+	p.b.dispose(t, r, DispositionReport, "Level 1 is built")
+	if _, err := p.b.st.FinishTaskRun(r.ID, cleanExit); err != nil {
+		t.Fatal(err)
+	}
+	p.carry(t, false)
+	if task, _ := p.a.st.TaskByID(id); task.State != "done" {
+		t.Fatalf("after the follow-up %+v", task)
+	}
+}

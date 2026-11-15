@@ -920,7 +920,7 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 		case "answer":
 			return applyAnswer(tx, from, m.OpID, b)
 		case "continue":
-			return applyContinue(tx, from, b)
+			return applyContinue(tx, from, b, s.gone)
 		case "note":
 			return applyNote(tx, from, b)
 		case "cancel":
