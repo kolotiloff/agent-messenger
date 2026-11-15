@@ -13,16 +13,28 @@ import (
 // worker conversation, or answers continue_refused with its reason. Only a
 // done or failed task of the same network is continued, and only on a
 // computer whose version reads the message: an older one would drop it and
-// the task would look busy forever.
+// the task would look busy forever. An interrupted task is continued too
+// (T-159, D-108): that computer closes the interrupted run only when its
+// worker is certainly gone, and refuses otherwise.
 
 // netContinueSince is the first build that reads a "continue" message.
 const netContinueSince = 60
+
+// netContinueInterruptedSince is the first build that continues an
+// interrupted task on request from another computer (T-159).
+const netContinueInterruptedSince = 75
 
 var previewBuild = regexp.MustCompile(`^0\.0\.0-preview\.(\d+)$`)
 
 // peerReadsContinue says whether a computer's reported version reads
 // "continue" messages. A version this code cannot read is assumed newer.
 func peerReadsContinue(version string) bool {
+	return peerBuildAtLeast(version, netContinueSince)
+}
+
+// peerBuildAtLeast says whether a reported version is at least build since.
+// An empty version is older; one this code cannot read is assumed newer.
+func peerBuildAtLeast(version string, since int) bool {
 	if version == "" {
 		return false
 	}
@@ -31,7 +43,7 @@ func peerReadsContinue(version string) bool {
 		return true
 	}
 	n, err := strconv.Atoi(m[1])
-	return err == nil && n >= netContinueSince
+	return err == nil && n >= since
 }
 
 // continueRemoteTask sends the coordinator's follow-up to the computer that
@@ -52,8 +64,8 @@ func continueRemoteTask(tx *sql.Tx, task string, remote netLink, opID, text stri
 	if err != nil {
 		return err
 	}
-	if t.State != "done" && t.State != "failed" {
-		return fmt.Errorf("%w: only a finished task (done or failed) of another computer can be continued; this one is %s", ErrRejected, t.State)
+	if t.State != "done" && t.State != "failed" && t.State != "interrupted" {
+		return fmt.Errorf("%w: only a finished task (done or failed) or an interrupted one of another computer can be continued; this one is %s", ErrRejected, t.State)
 	}
 	broker, err := metaValue(tx, "net_broker")
 	if err != nil {
@@ -68,6 +80,9 @@ func continueRemoteTask(tx *sql.Tx, task string, remote netLink, opID, text stri
 	}
 	if !peerReadsContinue(peer.Version) {
 		return fmt.Errorf("%w: %s runs an older Messenger that cannot continue a task; update it, or start a new task that names what is already done", ErrRejected, peer.Name)
+	}
+	if t.State == "interrupted" && !peerBuildAtLeast(peer.Version, netContinueInterruptedSince) {
+		return fmt.Errorf("%w: %s runs an older Messenger that cannot continue an interrupted task; update it, cancel the task, or start a new task that names what is already done", ErrRejected, peer.Name)
 	}
 	if err := setMeta(tx, key, task+"\n"+text); err != nil {
 		return err
@@ -88,13 +103,15 @@ func continueRemoteTask(tx *sql.Tx, task string, remote netLink, opID, text stri
 }
 
 // applyContinue resumes the mirror of another computer's task.
-func applyContinue(tx *sql.Tx, from netLink, b netBody) error {
+// An interrupted run is closed only when gone confirms its worker is gone
+// (D-108); without gone it is refused, as before.
+func applyContinue(tx *sql.Tx, from netLink, b netBody, gone WorkerGone) error {
 	t, ok, err := mirrorTask(tx, from)
 	if err != nil || !ok {
 		return err
 	}
 	err = savepoint(tx, func() error {
-		return continueTaskTx(tx, t.ID, "net:"+from.broker+":"+from.peer+":"+b.OpID, b.Text, nil, true)
+		return continueTaskTx(tx, t.ID, "net:"+from.broker+":"+from.peer+":"+b.OpID, b.Text, gone, true)
 	})
 	if errors.Is(err, ErrRejected) {
 		return enqueueNet(tx, from.broker, from.peer, "continue-refused."+b.OpID, t.ID, netBody{Kind: "continue_refused", Task: from.task, Reason: refusalText(err)})
@@ -112,7 +129,7 @@ func continueNotRun(tx *sql.Tx, t Task, why string) error {
 	if err != nil {
 		return err
 	}
-	if prev != "done" && prev != "failed" {
+	if prev != "done" && prev != "failed" && prev != "interrupted" {
 		prev = "failed"
 	}
 	if err := setTaskState(tx, t.ID, prev, why); err != nil {

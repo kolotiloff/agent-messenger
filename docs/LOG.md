@@ -2,8 +2,14 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-15 — Claude Code (T-181, T-158, T-159)
+
+- T-158 (D-136): `list_agents` gives `newest_release` with notes from this computer's update channel and `update_available` per computer. T-159 (D-135): `continue_task` for an interrupted task of another computer, closed there only when its worker is certainly gone. Tests in `mcp` and `core`; not released, not tried between real computers. T-160 confirmed by the owner.
+- T-181: the chat footer had its own height cap and scroll, so several update notices scrolled inside the chat and the scrollbars overlapped them. Removed it; at most 3 notices, a new one pushes out the oldest; long text cut to 3 lines. Browser fixture check added to `check-window-controls.cjs`. Not released.
+
 ## 2026-11-14 — Claude Code (merged #108–#113; T-178 Mac connecting screen)
 
+- Released 0.74 from `main` 825fb76 via PR #115 (release run 43648585334): T-179, T-180. Recorded T-181.
 - T-179: reviewed another agent's 0.73 work (T-155, T-173/T-174, update ring, MCP-plugin label, grey line). Fixed: mail to an asleep but listed computer was retired after 15 min (a waiting task failed); the update icon now fills a ring from `download.progress` instead of spinning in another colour; refusals give their reason in the journal; the Windows task-list toggle sits beside the window buttons. T-180: the window says project names must match exactly (another network's tasks were refused for a different name). Not released; real downloads not tried.
 - Released 0.73 from `main` 8bb64e2 via PR #114 (release run 43641508174, 21 assets). CI on #114 caught a data race in the T-172 test; fixed before merge. Not installed on the owner's computers.
 

@@ -20,6 +20,7 @@ import (
 	"github.com/kolotiloff/agent-messenger/internal/adapters"
 	"github.com/kolotiloff/agent-messenger/internal/buildinfo"
 	"github.com/kolotiloff/agent-messenger/internal/core"
+	"github.com/kolotiloff/agent-messenger/internal/updatefeed"
 )
 
 // The coordinator's MCP server (T-025). One server serves one project: the
@@ -94,11 +95,12 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - A computer marked reconnecting was in the network a moment ago and has not reported since a restart: a task for it is accepted and waits on the server until it is back. models_note and limit_note explain an empty models list or a missing limit.
 - list_agents shows each agent's limit when it reported one: state ok, warning (close to the limit) or exhausted, used_percent when the agent gave it, resets_at and observed_at. It is what the agent said at the end of its last run, not a live reading; reset_passed means its reset time has passed, so it is likely available again; a run that completed on that computer since clears exhausted to ok. A limit is shared by every use of the same account, this chat included. Before choosing where to start a task, look at the limits: prefer an agent whose limit is not exhausted, and tell the owner when the one they asked for is close to or at its limit, before or instead of starting it. start_task adds limit_note when the chosen agent's last limit is close or exhausted.
 - To add something to a task that is still running (a forgotten detail, a change of plan), use note_task, on this computer or another one of the network that runs Messenger 0.67 or newer; if that computer does not take it, you get note_refused with the reason; it does not stop the worker. Do not use it to hurry a worker or to repeat the task.
-- To follow up on a finished task in the same worker conversation (it keeps its context), use continue_task instead of a new start_task. It works for done and failed tasks of this computer, a task stopped by a usage limit included (after its reset time): read task_messages first and say in your text what is already done, such as «continue; item 1 is already committed». An interrupted task of this computer (the client restarted while it ran) can be continued too, only after Messenger checks that its worker is gone; if it may still run, continue_task says so and the task stays as it is: tell the owner. A done or failed task of another computer of this network can be continued the same way when that computer runs Messenger 0.60 or newer; if it refuses (older version, not in the network, no conversation), you get continue_refused with the reason: then start a new task that names what is already done.
+- To follow up on a finished task in the same worker conversation (it keeps its context), use continue_task instead of a new start_task. It works for done and failed tasks of this computer, a task stopped by a usage limit included (after its reset time): read task_messages first and say in your text what is already done, such as «continue; item 1 is already committed». An interrupted task of this computer (the client restarted while it ran) can be continued too, only after Messenger checks that its worker is gone; if it may still run, continue_task says so and the task stays as it is: tell the owner. A done or failed task of another computer of this network can be continued the same way when that computer runs Messenger 0.60 or newer, and an interrupted one (that computer died or restarted while it ran) when it runs 0.75 or newer: that computer closes the interrupted run only when its worker is certainly gone. If it refuses (older version, not in the network, no conversation), you get continue_refused with the reason: then start a new task that names what is already done.
 - Messenger already tells every worker to keep its report to a few lines, to put long details in a file and to follow the owner's rules for this project. A report ends with labelled lines when the worker gave them: «Изменения:» (commit or changeset), «Тесты:» and «Файлы:» (paths to read when needed). Do not ask workers for a «taken» line or a limit line: the task's state shows when it was accepted, and limits come from list_agents.
 - Work reaches the project only through the worker's own commit; workers are told to commit before they report. A report is a short message (at most 20000 characters reach you), so never ask for the full text of an audit or a long document instead of a commit: it will not fit, and the work still is not in the project. A worker that could not commit (files locked by another agent, its copy behind the server) asks you instead of finishing, and its task stays open. Decide what lets the commit happen: if another task holds the files, you may answer later, after that task is done, telling the worker to update and commit; otherwise tell it what to do or tell the owner. Do not tell it to finish without committing: a finished task of another computer cannot be continued.
 - Feedback about Messenger itself: whenever Messenger does something wrong or unclear (an error you cannot explain, a lost or late event, a refusal that makes no sense, a missing feature you needed, or the owner complains about the program), record it at once with report_feedback: what happened, what you expected, the task and computer. Do not wait to be asked. When the owner asks for the feedback, the remarks or the journal, call export_feedback and give them the file's path; it holds the owner's remarks from the window (the bug icon) and yours.
 - get_log reads the end of another computer's Messenger journal, for debugging Messenger itself (a task that never arrived, a refusal you cannot explain): each worker run launched and ended with its exit and error, and each message sent to or received from another computer with its kind and task id, or why it was not sent. That computer answers only if its owner turned on «Отдавать журнал по сети»; otherwise the reply says so. Session ids, codes and keys are removed. If no answer came in time, call get_log again with request_id. Do not use it to watch workers: wait does that.
+- newest_release in list_agents is the newest Messenger release this computer has downloaded, with its notes; update_available marks a computer that runs an older one. Before reporting a problem in Messenger, check whether those notes already cover it, and tell the owner when a computer that needs the fix has update_available. It is what this computer last downloaded, not a live check; left out when it has none.
 - update_messenger asks a Windows or Linux computer (this one, or another of the network from list_agents) to install the newest Messenger, the program only. Running tasks are never interrupted: the computer answers queued, takes no new tasks, and installs as soon as none runs. A Mac answers that its update needs the button in its app. The result comes as a messenger_update event; nothing is retried. Do not call it again for the same computer while it is queued or updating. list_agents shows update_pending on a computer that is waiting.
 - full_access on a task of this computer means its worker may run any command (the owner's «Любые команды» switch on «Агенты»). Without it a command that needs approval is refused, and nobody can approve it: tell the owner to turn that switch on and then continue the task. For tasks from other computers it is «И для задач с других компьютеров» under it on «Агенты».
 - contact_lost on an open task of another computer means this computer has no contact with it (offline, left the network, or the network was made again); computer_last_seen is when it last reported. Its outcome there is unknown: do not start it again by yourself; tell the owner, and when that computer is back the task goes on reporting.
@@ -130,6 +132,9 @@ type coordinator struct {
 	// replaced another chat of the project (T-090).
 	chat     string
 	tookOver string
+	// release reads the newest signed release this computer has
+	// downloaded (T-158); nil reads the update channel in dataRoot.
+	release func() (updatefeed.Manifest, error)
 }
 
 // acting tools make this chat the project's coordinator (T-090).
@@ -344,7 +349,7 @@ func coordinatorTools() []map[string]any {
 	}
 	str := func(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
 	return []map[string]any{
-		{"name": "list_agents", "description": "List this project's computers (this one and the other computers of its network), the project folder on this one, and their agents with how many tasks they run, the model names the owner listed for them and their last reported usage limit. Another computer also shows accepts_tasks and has_project (this project's folder) when it reported them. messenger_version is the Messenger version each computer runs (left out when an older computer did not report it); check it before reporting a problem a newer version may already fix.",
+		{"name": "list_agents", "description": "List this project's computers (this one and the other computers of its network), the project folder on this one, and their agents with how many tasks they run, the model names the owner listed for them and their last reported usage limit. Another computer also shows accepts_tasks and has_project (this project's folder) when it reported them. messenger_version is the Messenger version each computer runs (left out when an older computer did not report it); check it before reporting a problem a newer version may already fix. newest_release is the newest Messenger release this computer has downloaded, with its notes; update_available marks a computer that runs an older version.",
 			"inputSchema": obj(map[string]any{})},
 		{"name": "start_task", "description": "Start a task in a new worker session of the chosen agent, in this project's folder on the computer. Returns the task id. Repeating a call with the same op_id returns the same task.",
 			"inputSchema": obj(map[string]any{
@@ -374,7 +379,7 @@ func coordinatorTools() []map[string]any {
 				"op_id":       str("unique id of this operation"),
 				"text":        map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxTaskText},
 			}, "task_id", "question_id", "op_id", "text")},
-		{"name": "continue_task", "description": "Give a finished task (done or failed), here or on another computer of the network, or an interrupted task of this computer a follow-up (an interrupted one only once its worker is certainly gone): the same worker conversation resumes with your text, so it keeps its context and needs no new briefing. If the agent no longer has that conversation, the run fails; then start a new task. Repeating with the same op_id is safe.",
+		{"name": "continue_task", "description": "Give a finished task (done or failed), here or on another computer of the network, or an interrupted task here or on another computer a follow-up (an interrupted one only once the computer that ran it confirms its worker is certainly gone): the same worker conversation resumes with your text, so it keeps its context and needs no new briefing. If the agent no longer has that conversation, the run fails; then start a new task. Repeating with the same op_id is safe.",
 			"inputSchema": obj(map[string]any{
 				"task_id": str("task id"),
 				"op_id":   str("unique id of this operation"),
@@ -450,7 +455,11 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 	}
 	switch p.Name {
 	case "list_agents":
-		return c.store.ProjectAgents(c.project)
+		out, err := c.store.ProjectAgents(c.project)
+		if err == nil {
+			c.addNewestRelease(out)
+		}
+		return out, err
 	case "start_task":
 		var a struct {
 			OpID     string `json:"op_id"`
@@ -1121,4 +1130,55 @@ func (c *coordinator) taskImages(task string) (any, error) {
 		out.images = append(out.images, map[string]any{"type": "image", "mimeType": kind, "data": base64.StdEncoding.EncodeToString(data)})
 	}
 	return out, nil
+}
+
+// releaseNotesMax bounds the release notes list_agents gives.
+const releaseNotesMax = 4000
+
+// addNewestRelease adds to a list_agents answer the newest Messenger release
+// this computer has downloaded and verified, with its notes, and marks each
+// computer that runs an older version (T-158). Nothing is fetched here: the
+// program's own update check fills the channel. Without a readable signed
+// release the answer stays as it was.
+func (c *coordinator) addNewestRelease(out map[string]any) {
+	read := c.release
+	if read == nil {
+		if c.dataRoot == "" {
+			return
+		}
+		read = updatefeed.Channel{Directory: filepath.Join(c.dataRoot, "updates"), PublicKey: buildinfo.UpdatePublicKey}.Load
+	}
+	m, err := read()
+	if err != nil || m.Build <= 0 || m.Version == "" {
+		return
+	}
+	notes := strings.TrimSpace(m.Notes)
+	if utf8.RuneCountInString(notes) > releaseNotesMax {
+		notes = string([]rune(notes)[:releaseNotesMax]) + "…"
+	}
+	newest := map[string]any{"version": updatefeed.ShortVersion(m.Version), "full_version": m.Version}
+	if notes != "" {
+		newest["notes"] = notes
+	}
+	out["newest_release"] = newest
+	list, _ := out["computers"].([]core.ComputerSummary)
+	for i := range list {
+		if v := list[i].Version; v != "" && releaseBuild(v) > 0 && releaseBuild(v) < m.Build {
+			list[i].UpdateAvailable = true
+		}
+	}
+}
+
+// releaseBuild is the preview number of a version such as 0.0.0-preview.74
+// or 0.74; 0 when it has none.
+func releaseBuild(version string) int {
+	i := strings.LastIndex(version, ".")
+	if i < 0 {
+		return 0
+	}
+	n, err := strconv.Atoi(version[i+1:])
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
 }

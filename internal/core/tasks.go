@@ -2261,6 +2261,9 @@ type ComputerSummary struct {
 	// UpdatePending: the computer is waiting to install a Messenger update
 	// and takes no new tasks (T-155).
 	UpdatePending bool `json:"update_pending,omitempty"`
+	// UpdateAvailable: a newer release than Version exists (T-158). The
+	// coordinator's server sets it from this computer's update channel.
+	UpdateAvailable bool `json:"update_available,omitempty"`
 }
 
 // ProjectAgents lists the computers for a project: this one, then the other

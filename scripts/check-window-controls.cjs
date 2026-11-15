@@ -20,8 +20,15 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const errors = [];
       let created = false, registered = false, connected = false, trusted = false;
       let setupStates = [], installed = false;
+      let updates = [];
       const writes = [];
-      page.on('pageerror', error => errors.push(error.message));
+      // WebKit reports a background request that a reload cut off as a page
+      // error ("… due to access control checks"); the app catches it, so it
+      // is not counted. Every other page error fails the check.
+      page.on('pageerror', error => {
+        if (engine === 'webkit' && /\/api\/[a-z-]+ due to access control checks\.$/.test(error.message)) return;
+        errors.push(error.message);
+      });
       if (native) await page.addInitScript(() => {
         window.messengerInitialTheme = 'light';
         window.themeMessages = [];
@@ -62,7 +69,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           '/api/agent-setup-status': setupStates,
           '/api/discovery': {agents: ['claude','codex','cursor'].map(provider => ({provider, state: 'not_found'}))},
           '/api/client-info': {client: 'running', outdated: false},
-          '/api/server': {host: {running: false, enabled: false, addresses: []}, member: {connected: false}, peers: connected ? [{id:'fixture-peer',name:'Peer fixture',age:0,agents:[{agent:'cursor'}],coordinator:'cursor-vscode'}] : [], accept: true},
+          '/api/server': {host: {running: false, enabled: false, addresses: []}, member: {connected: false}, peers: connected ? [{id:'fixture-peer',name:'Peer fixture',age:0,agents:[{agent:'cursor'}],coordinator:'cursor-vscode'}] : [], updates, accept: true},
           '/api/self-update': {current: '0.0.0-preview.test'},
         };
         if (pathname.startsWith('/api/')) return route.fulfill({json: fixtures[pathname] || {ok: true}});
@@ -221,6 +228,22 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.locator('#agent-cli-find').click();
       await codex.getByText('Поиск не подтверждён. Проверьте терминал или выберите файл CLI в настройках.',{exact:true}).waitFor();
       assert.deepEqual(writes.filter(w=>w.path==='/api/agent-find').map(w=>w.body),[{provider:'codex',action:'find'},{provider:'codex',action:'find'}]);
+      // T-181: notices have no scroll of their own; a new one pushes out the oldest.
+      updates = [1,2,3,4,5].map(i => ({request_id:'fixture-update-'+i, computer:'fixture-peer', state:'refused',
+        text:'fixture refusal '+i+' '+'long reason '.repeat(40), updated_at:new Date(Date.now()-(10-i)*1000).toISOString()}));
+      await page.setViewportSize({width:1100,height:850});
+      await page.reload();
+      await page.locator('[data-tab=tasks]').click();
+      await page.locator('#notices .am-notice').nth(2).waitFor({timeout:10000});
+      assert.equal(await page.locator('#notices .am-notice').count(), 3);
+      assert.deepEqual(await page.locator('#notices .am-notice').evaluateAll(n => n.map(c => c.dataset.key)),
+        ['update-fixture-update-3-refused','update-fixture-update-4-refused','update-fixture-update-5-refused']);
+      assert.equal(await page.locator('.am-chat-footer').evaluate(n => getComputedStyle(n).overflowY), 'visible');
+      assert.equal(await page.locator('#notices').evaluate(n => n.scrollHeight <= n.clientHeight), true);
+      if(process.env.SCREENSHOT_DIR&&!native) await page.screenshot({animations:'disabled',path:path.join(process.env.SCREENSHOT_DIR,'notices.png')});
+      await page.locator('#notices .am-toast-close').first().click();
+      assert.equal(await page.locator('#notices .am-notice').count(), 2);
+      updates = [];
       assert.deepEqual(errors, []);
       console.log(JSON.stringify({engine, nativeBridgeFixture: native, themes: ['light','dark','system'], widths: [1100,600], result: 'passed'}));
       await context.close();
