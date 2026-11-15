@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,10 +19,13 @@ import (
 const DefaultPort = 47100
 
 // Scopes of a hosted broker: "local" listens on 127.0.0.1 only, "lan" on all
-// interfaces. Access beyond this computer is always the owner's choice.
+// interfaces for this computer and private networks, "internet" on all
+// interfaces for public addresses too (T-182, D-137). Access beyond this
+// computer is always the owner's choice.
 const (
-	ScopeLocal = "local"
-	ScopeLAN   = "lan"
+	ScopeLocal    = "local"
+	ScopeLAN      = "lan"
+	ScopeInternet = "internet"
 )
 
 // Settings is the hosted broker's saved configuration.
@@ -29,18 +33,24 @@ type Settings struct {
 	Enabled bool   `json:"enabled"`
 	Scope   string `json:"scope"`
 	Port    int    `json:"port"`
+	// PublicAddress is the address other computers reach this one by from
+	// the internet (host:port), given by the owner for the internet scope:
+	// the program cannot know the router's address or its forwarded port.
+	PublicAddress string `json:"public_address,omitempty"`
 }
 
 // HostStatus is what the window shows about the broker on this computer.
 type HostStatus struct {
-	Enabled     bool     `json:"enabled"`
-	Running     bool     `json:"running"`
-	Scope       string   `json:"scope"`
-	Port        int      `json:"port"`
-	Addresses   []string `json:"addresses"`
-	BrokerID    string   `json:"broker_id,omitempty"`
-	Fingerprint string   `json:"fingerprint,omitempty"`
-	Devices     []Device `json:"devices"`
+	Enabled   bool     `json:"enabled"`
+	Running   bool     `json:"running"`
+	Scope     string   `json:"scope"`
+	Port      int      `json:"port"`
+	Addresses []string `json:"addresses"`
+	// PublicAddress: see Settings.PublicAddress.
+	PublicAddress string   `json:"public_address,omitempty"`
+	BrokerID      string   `json:"broker_id,omitempty"`
+	Fingerprint   string   `json:"fingerprint,omitempty"`
+	Devices       []Device `json:"devices"`
 	// OpenInvitations are the IDs of invitations not used yet and not
 	// expired, so the window can hide a code once it is spent.
 	OpenInvitations []string `json:"open_invitations"`
@@ -186,8 +196,46 @@ func NewService(ctx context.Context, root string) *Service {
 func (s *Service) settingsPath() string   { return filepath.Join(s.root, "broker", "settings.json") }
 func (s *Service) connectionPath() string { return filepath.Join(s.root, "server-connection.json") }
 
-func validScope(scope string) bool { return scope == ScopeLocal || scope == ScopeLAN }
-func validPort(port int) bool      { return port >= 1024 && port <= 65535 }
+func validScope(scope string) bool {
+	return scope == ScopeLocal || scope == ScopeLAN || scope == ScopeInternet
+}
+
+// listensWide says whether a scope listens on every interface.
+func listensWide(scope string) bool { return scope == ScopeLAN || scope == ScopeInternet }
+
+var publicHostName = regexp.MustCompile(`^(?i:[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.(?i:[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?))*$`)
+
+// PublicAddress checks the owner's external address for the internet scope:
+// an IP address or a domain name, with a port or, without one, the server's
+// port. It returns host:port.
+func PublicAddress(address string, port int) (string, error) {
+	bad := errors.New("внешний адрес: IP-адрес или домен, при необходимости с портом через двоеточие, например 203.0.113.7:47100")
+	address = strings.TrimSpace(address)
+	if address == "" || len(address) > 253 || strings.ContainsAny(address, "/?#@ \t") {
+		return "", bad
+	}
+	host, p, err := net.SplitHostPort(address)
+	if err != nil {
+		host, p = strings.Trim(address, "[]"), strconv.Itoa(port)
+	}
+	if n, err := strconv.Atoi(p); err != nil || n < 1 || n > 65535 {
+		return "", bad
+	}
+	if ip := net.ParseIP(host); ip == nil {
+		if !publicHostName.MatchString(host) || !strings.Contains(host, ".") {
+			return "", bad
+		}
+	} else if ip.IsLoopback() || ip.IsUnspecified() || ip.IsMulticast() {
+		return "", bad
+	}
+	out := net.JoinHostPort(host, p)
+	if validAddress(out) != nil {
+		return "", bad
+	}
+	return out, nil
+}
+
+func validPort(port int) bool { return port >= 1024 && port <= 65535 }
 
 // Start starts the hosted broker if the owner enabled it. A failure is kept
 // for the window; it does not stop the client.
@@ -212,10 +260,15 @@ func (s *Service) startLocked() error {
 		return err
 	}
 	listen := net.JoinHostPort("127.0.0.1", strconv.Itoa(s.settings.Port))
-	if s.settings.Scope == ScopeLAN {
+	if listensWide(s.settings.Scope) {
 		listen = net.JoinHostPort("", strconv.Itoa(s.settings.Port))
 	}
-	ln, err := b.Listen(listen)
+	var ln net.Listener
+	if s.settings.Scope == ScopeInternet {
+		ln, err = b.ListenPublic(listen)
+	} else {
+		ln, err = b.Listen(listen)
+	}
 	if err != nil {
 		b.Close()
 		var op *net.OpError
@@ -231,7 +284,7 @@ func (s *Service) startLocked() error {
 	// Discovery for short invitations (T-052). If the port is taken, only
 	// the long code works; nothing else depends on it.
 	discoveryAt := net.JoinHostPort("127.0.0.1", strconv.Itoa(DiscoveryPort))
-	if s.settings.Scope == ScopeLAN {
+	if listensWide(s.settings.Scope) {
 		discoveryAt = net.JoinHostPort("", strconv.Itoa(DiscoveryPort))
 	}
 	if pc, err := net.ListenPacket("udp4", discoveryAt); err == nil {
@@ -279,14 +332,28 @@ func (s *Service) stopLocked() {
 // Enable saves the settings and (re)starts the hosted broker with them. The
 // settings are saved only if the broker started.
 func (s *Service) Enable(scope string, port int) error {
+	return s.EnableWith(Settings{Scope: scope, Port: port})
+}
+
+// EnableWith is Enable with every setting, the external address of the
+// internet scope included.
+func (s *Service) EnableWith(want Settings) error {
+	scope, port := want.Scope, want.Port
 	if !validScope(scope) {
-		return errors.New("доступ: только этот компьютер или локальная сеть")
+		return errors.New("доступ: только этот компьютер, локальная сеть или интернет")
 	}
 	if port == 0 {
 		port = DefaultPort
 	}
 	if !validPort(port) {
 		return errors.New("порт должен быть от 1024 до 65535")
+	}
+	public := ""
+	if scope == ScopeInternet {
+		var err error
+		if public, err = PublicAddress(want.PublicAddress, port); err != nil {
+			return err
+		}
 	}
 	s.op.Lock()
 	defer s.op.Unlock()
@@ -299,7 +366,7 @@ func (s *Service) Enable(scope string, port int) error {
 	}
 	previous := s.settings
 	s.stopLocked()
-	s.settings = Settings{Enabled: true, Scope: scope, Port: port}
+	s.settings = Settings{Enabled: true, Scope: scope, Port: port, PublicAddress: public}
 	if err := s.startLocked(); err != nil {
 		s.settings = previous
 		if previous.Enabled {
@@ -356,10 +423,13 @@ func (s *Service) Close() {
 // addressesLocked lists the addresses other devices may use.
 func (s *Service) addressesLocked() []string {
 	port := strconv.Itoa(s.settings.Port)
-	if s.settings.Scope != ScopeLAN {
+	if !listensWide(s.settings.Scope) {
 		return []string{net.JoinHostPort("127.0.0.1", port)}
 	}
 	out := []string{}
+	if s.settings.Scope == ScopeInternet && s.settings.PublicAddress != "" {
+		out = append(out, s.settings.PublicAddress)
+	}
 	addrs, _ := s.interfaces()
 	for _, a := range addrs {
 		ipnet, ok := a.(*net.IPNet)
@@ -572,7 +642,7 @@ func (s *Service) MemberName() string {
 func (s *Service) Status() Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	h := HostStatus{Enabled: s.settings.Enabled, Running: s.broker != nil, Scope: s.settings.Scope, Port: s.settings.Port, Devices: []Device{}, OpenInvitations: []string{}, Error: s.hostErr, DiscoveryError: s.discoveryErr}
+	h := HostStatus{Enabled: s.settings.Enabled, Running: s.broker != nil, Scope: s.settings.Scope, Port: s.settings.Port, PublicAddress: s.settings.PublicAddress, Devices: []Device{}, OpenInvitations: []string{}, Error: s.hostErr, DiscoveryError: s.discoveryErr}
 	if s.broker != nil {
 		h.Addresses = s.addressesLocked()
 		h.BrokerID, h.Fingerprint = s.broker.ID(), s.broker.Fingerprint()

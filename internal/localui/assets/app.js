@@ -1618,7 +1618,8 @@
   function renderHostToggle(){
     if(!server)return;const running=server.host.running;
     swap($('host-disable'),$('host-enable'),running);
-    $('host-scope').disabled=running;$('host-port').disabled=running;
+    $('host-scope').disabled=running;$('host-port').disabled=running;$('host-public').disabled=running;
+    $('host-public-box').hidden=$('host-scope').value!=='internet';
     const accept=!!server.accept;$('accept-toggle').setAttribute('aria-checked',String(accept));
     $('log-share-toggle').setAttribute('aria-checked',String(!!server.log_share));
   }
@@ -1655,9 +1656,9 @@
     badge($('host-badge'),h.running?tr('Работает'):h.enabled?tr('Не запустился'):tr('Остановлен'),h.running?'good':h.enabled?'bad':'');
     // Explanations live in the status tooltip so the card does not change
     // height; only a problem the owner must fix stays visible.
-    $('host-badge').title=!h.running?tr('Другие устройства смогут подключаться к этому компьютеру по одноразовому приглашению.'):tr('Принимает устройства: ')+(h.scope==='lan'?tr('в локальной сети'):tr('только с этого компьютера'))+tr(', порт ')+h.port+'.';
+    $('host-badge').title=!h.running?tr('Другие устройства смогут подключаться к этому компьютеру по одноразовому приглашению.'):tr('Принимает устройства: ')+(h.scope==='internet'?tr('из интернета и локальной сети'):h.scope==='lan'?tr('в локальной сети'):tr('только с этого компьютера'))+tr(', порт ')+h.port+'.';
     $('host-state').textContent=h.enabled&&m.connected?tr('Запущен свой сервер и есть подключение к другому. Задачи идут только через свой сервер. Остановите сервер или отключитесь от другого.'):h.running&&!h.addresses.length?tr('У компьютера нет адреса в локальной сети. Подключитесь к сети или выберите «Только этот компьютер».'):'';
-    if(!serverEdited){$('host-scope').value=h.scope||'local';$('host-port').value=h.port||47100;}
+    if(!serverEdited){$('host-scope').value=h.scope||'local';$('host-port').value=h.port||47100;$('host-public').value=h.public_address||'';$('host-public-box').hidden=$('host-scope').value!=='internet';}
     $('host-running').hidden=!h.running;
     const select=$('host-address'),current=select.value;
     if(Array.from(select.options).map(o=>o.value).join()!==h.addresses.join()){
@@ -1718,10 +1719,12 @@
   async function enableServer(){
     const port=Number($('host-port').value);
     if(!Number.isInteger(port)||port<1024||port>65535){note('host',tr('Порт должен быть от 1024 до 65535.'),true);return;}
-    const scope=$('host-scope').value;
-    if(await serverAction({action:'enable',scope,port},'host','')){
+    const scope=$('host-scope').value,publicAddress=$('host-public').value.trim();
+    if(scope==='internet'&&!publicAddress){note('host',tr('Укажите внешний адрес: белый IP или домен этого компьютера.'),true);$('host-public').focus();return;}
+    if(await serverAction(scope==='internet'?{action:'enable',scope,port,public_address:publicAddress}:{action:'enable',scope,port},'host','')){
       serverEdited=false;hideInvitation();
-      if(scope==='lan')note('host',server.host.addresses.length?tr('Сервер запущен и слушает локальную сеть. Доступ с другого компьютера зависит от брандмауэра.'):tr('Сервер запущен, но адреса в локальной сети у компьютера нет.'),false,true);
+      if(scope==='internet')note('host',tr('Сервер запущен и принимает подключения из интернета по адресу ')+(server.host.public_address||publicAddress)+tr('. Проверьте, что порт на роутере ведёт на этот компьютер и его пропускает брандмауэр.'),false,true);
+      else if(scope==='lan')note('host',server.host.addresses.length?tr('Сервер запущен и слушает локальную сеть. Доступ с другого компьютера зависит от брандмауэра.'):tr('Сервер запущен, но адреса в локальной сети у компьютера нет.'),false,true);
       renderServer();
     }
   }
@@ -2351,7 +2354,8 @@
   $('agent-profile').addEventListener('change',saveAgentPaths);
   $('agent-models').addEventListener('change',saveAgentModels);
   $('agent-models').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();saveAgentModels();}});
-  $('host-scope').addEventListener('change',()=>{serverEdited=true;});
+  $('host-scope').addEventListener('change',()=>{serverEdited=true;$('host-public-box').hidden=$('host-scope').value!=='internet';});
+  $('host-public').addEventListener('input',()=>{serverEdited=true;});
   $('host-port').addEventListener('input',()=>{serverEdited=true;});
   $('host-enable').addEventListener('click',enableServer);
   $('host-disable').addEventListener('click',()=>serverAction({action:'disable'},'host','').then(r=>{if(r){serverEdited=false;hideInvitation();renderServer();}}));

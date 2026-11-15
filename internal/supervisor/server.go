@@ -27,6 +27,7 @@ func (s *Supervisor) Server(_ context.Context, action string, payload json.RawMe
 		Scope   string `json:"scope"`
 		Port    int    `json:"port"`
 		Address string `json:"address"`
+		Public  string `json:"public_address"`
 		Device  string `json:"device"`
 		Code    string `json:"code"`
 		Name    string `json:"name"`
@@ -42,7 +43,7 @@ func (s *Supervisor) Server(_ context.Context, action string, payload json.RawMe
 	switch action {
 	case "status":
 	case "enable":
-		if err := s.server.Enable(in.Scope, in.Port); err != nil {
+		if err := s.server.EnableWith(broker.Settings{Scope: in.Scope, Port: in.Port, PublicAddress: in.Public}); err != nil {
 			return nil, err
 		}
 	case "disable":

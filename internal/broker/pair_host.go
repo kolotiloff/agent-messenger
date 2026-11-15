@@ -92,6 +92,13 @@ func (b *Broker) handlePairStart(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method", http.StatusMethodNotAllowed)
 		return
 	}
+	// The six-digit code is for the local network only (T-182): from the
+	// internet a short code could be guessed, so only the long invitation
+	// works there.
+	if !localRequest(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "local network only"})
+		return
+	}
 	var in pairStartRequest
 	if !decodeSmall(r, &in) || len(in.Msg) != 32 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
@@ -128,6 +135,13 @@ func (b *Broker) handlePairStart(w http.ResponseWriter, r *http.Request) {
 func (b *Broker) handlePairFinish(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method", http.StatusMethodNotAllowed)
+		return
+	}
+	// The six-digit code is for the local network only (T-182): from the
+	// internet a short code could be guessed, so only the long invitation
+	// works there.
+	if !localRequest(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "local network only"})
 		return
 	}
 	var in pairFinishRequest
