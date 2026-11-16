@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"path/filepath"
 	"slices"
 	"testing"
 	"time"
@@ -87,7 +88,7 @@ func TestReadCodexLimitsSendsOnlyTheRead(t *testing.T) {
 }
 
 func TestCodexLimitArgsKeepTheOwnersSignIn(t *testing.T) {
-	args, err := CodexLimitArgs("/usr/local/bin/codex")
+	args, err := CodexLimitArgs(filepath.Join(t.TempDir(), "codex"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -28,11 +28,22 @@ func TestCodexLimitCheck(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := &Supervisor{store: st, root: root}
+	// The stored path is canonical (on macOS /tmp is /private/tmp).
+	registered, err := st.ComputerAgents()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cliPath := ""
+	for _, a := range registered {
+		if a.Provider == "codex" {
+			cliPath = a.CLI
+		}
+	}
 	calls := 0
 	reset := time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC)
 	read := func(ctx context.Context, cli, environment, dir string) (adapters.LimitState, error) {
 		calls++
-		if cli != exe || dir != root {
+		if cli != cliPath || dir != root {
 			t.Errorf("read %q in %q", cli, dir)
 		}
 		return adapters.LimitState{State: adapters.LimitWarning, UsedPercent: 91, HasPercent: true, Window: "7d", ResetAt: reset,
