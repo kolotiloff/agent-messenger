@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-16 — Claude Code (0.80)
+
+- Released 0.80 from `main` 9c36dd3 via PR #121 (release run 43917733249) with T-189, T-190, T-191. First CI run caught two platform-only test issues in the new T-191 tests (macOS /private/tmp path, Windows absolute path); fixed in the tests. Recorded T-192 and T-193 from the owner's remarks.
+
 ## 2026-11-15 — Claude Code (T-181, T-158, T-159)
 
 - T-191 (D-143): Codex usage limits read through `codex app-server` `account/rateLimits/read` every 10 minutes, without a model call; both windows stored, carried in presence (older hosts get the plain limit), coordinator told to spread work by what is left. Unit tests with a fake app-server; no real Codex call made here.
