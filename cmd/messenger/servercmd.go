@@ -186,7 +186,7 @@ func runServerService(root string) error {
 	defer cancel()
 	// The update helper starts the program file the service runs.
 	recordProgram(root)
-	err := supervisor.RunWithOptions(ctx, root, supervisor.AdapterLauncher{}, supervisor.RunOptions{StartPaused: true, StartUpdate: serviceUpdateStarter(root)})
+	err := supervisor.RunWithOptions(ctx, root, supervisor.AdapterLauncher{}, supervisor.RunOptions{StartPaused: true, CheckLimits: true, StartUpdate: serviceUpdateStarter(root)})
 	if errors.Is(err, platform.ErrAlreadyRunning) {
 		return errors.New("клиент Messenger уже запущен у этого пользователя; остановите его командой shutdown с его --root и повторите")
 	}

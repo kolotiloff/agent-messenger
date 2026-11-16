@@ -120,6 +120,9 @@ type RunOptions struct {
 	// StartUpdate starts the update helper when another computer of the
 	// network asks this one to update (T-078); nil refuses such requests.
 	StartUpdate UpdateStarter
+	// CheckLimits reads the Codex account limits every few minutes
+	// (T-191). Only the real program turns it on; tests never start Codex.
+	CheckLimits bool
 }
 
 func RunWithOptions(parent context.Context, root string, launcher Launcher, options RunOptions) error {
@@ -228,6 +231,13 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 		defer wg.Done()
 		sup.loop(ctx)
 	}()
+	if options.CheckLimits {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sup.checkLimits(ctx, readCodexLimits)
+		}()
+	}
 	err = control.Serve(ln, sup)
 	cancel()
 	wg.Wait()

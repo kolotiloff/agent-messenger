@@ -263,6 +263,8 @@ type ComputerAgent struct {
 	Computer, Provider, CLI, Environment, Profile string
 	// Models are the model names the owner listed for this agent (T-043).
 	Models []string
+	// Paused: the owner turned the agent off on its card (T-061).
+	Paused bool
 }
 
 func randomID() (string, error) {
@@ -614,7 +616,7 @@ func (s *Store) ComputerAgents() ([]ComputerAgent, error) {
 		if err != nil {
 			return err
 		}
-		rows, err := tx.Query(`SELECT computer,provider,cli_path,environment,profile,models FROM computer_agents WHERE computer=? ORDER BY provider`, computer)
+		rows, err := tx.Query(`SELECT computer,provider,cli_path,environment,profile,models,paused FROM computer_agents WHERE computer=? ORDER BY provider`, computer)
 		if err != nil {
 			return err
 		}
@@ -622,7 +624,7 @@ func (s *Store) ComputerAgents() ([]ComputerAgent, error) {
 		for rows.Next() {
 			var a ComputerAgent
 			var models string
-			if err := rows.Scan(&a.Computer, &a.Provider, &a.CLI, &a.Environment, &a.Profile, &models); err != nil {
+			if err := rows.Scan(&a.Computer, &a.Provider, &a.CLI, &a.Environment, &a.Profile, &models, &a.Paused); err != nil {
 				return err
 			}
 			a.Models = splitModels(models)
@@ -2161,23 +2163,29 @@ func (s *Store) TouchCoordinator(project string) error {
 }
 
 // ClaimCoordinator makes chat the project's active coordinator chat (T-090)
-// and returns the chat it replaced, or "". The newest chat that acts is the
-// coordinator; the one before is told so by its wait.
-func (s *Store) ClaimCoordinator(project, chat string) (string, error) {
+// and returns the chat it replaced, or "", with the process that served that
+// chat as recorded (empty when not recorded). The newest chat that acts is
+// the coordinator; the one before is told so by its wait. self is the
+// process serving chat.
+func (s *Store) ClaimCoordinator(project, chat string, self platform.Observation) (string, platform.Observation, error) {
 	var old string
+	var oldProc platform.Observation
 	err := s.tx(func(tx *sql.Tx) error {
-		err := tx.QueryRow(`SELECT chat FROM coordinator_chats WHERE project=?`, project).Scan(&old)
+		err := tx.QueryRow(`SELECT chat,pid,start_token,boot_id FROM coordinator_chats WHERE project=?`, project).Scan(&old, &oldProc.PID, &oldProc.StartToken, &oldProc.BootID)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
 		if old == chat {
-			old = ""
-			return nil
+			old, oldProc = "", platform.Observation{}
+			// A chat recorded before its process was (an update) adds it.
+			_, err = tx.Exec(`UPDATE coordinator_chats SET pid=?,start_token=?,boot_id=? WHERE project=? AND chat=? AND pid=0`, self.PID, clip(self.StartToken, 128), clip(self.BootID, 128), project, chat)
+			return err
 		}
-		_, err = tx.Exec(`INSERT INTO coordinator_chats(project,chat,since) VALUES (?,?,?) ON CONFLICT(project) DO UPDATE SET chat=excluded.chat,since=excluded.since`, project, chat, now())
+		_, err = tx.Exec(`INSERT INTO coordinator_chats(project,chat,since,pid,start_token,boot_id) VALUES (?,?,?,?,?,?) ON CONFLICT(project) DO UPDATE SET chat=excluded.chat,since=excluded.since,pid=excluded.pid,start_token=excluded.start_token,boot_id=excluded.boot_id`,
+			project, chat, now(), self.PID, clip(self.StartToken, 128), clip(self.BootID, 128))
 		return err
 	})
-	return old, err
+	return old, oldProc, err
 }
 
 // CoordinatorChat returns the project's active coordinator chat, or "".
@@ -2232,7 +2240,7 @@ func (a *AgentSummary) explain() {
 	if a.Limit == nil {
 		a.LimitNote = "no limit reported yet: it appears after a worker task of this agent on that computer"
 		if a.Agent == "codex" {
-			a.LimitNote = "Codex does not report its limit in worker runs; ask the owner if it matters"
+			a.LimitNote = "Codex limit not checked yet on that computer: Messenger 0.80 or newer reads it from the Codex account every 10 minutes, without a model call"
 		}
 	}
 }

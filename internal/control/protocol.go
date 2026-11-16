@@ -379,6 +379,17 @@ func dispatch(handler Handler, request Request) Response {
 		}
 		raw, _ := json.Marshal(map[string]any{"path": path, "remarks": n})
 		return Response{OK: true, Overview: raw}
+	case "feedback-clear":
+		h, ok := handler.(interface{ ClearFeedback() (int, int, error) })
+		if !ok {
+			return Response{Error: "clearing feedback unsupported; update the background client"}
+		}
+		deleted, left, err := h.ClearFeedback()
+		if err != nil {
+			return Response{Error: err.Error()}
+		}
+		raw, _ := json.Marshal(map[string]any{"deleted": deleted, "left": left})
+		return Response{OK: true, Overview: raw}
 	case "task-hide":
 		h, ok := handler.(interface{ HideNetTask(string, string) error })
 		if !ok {

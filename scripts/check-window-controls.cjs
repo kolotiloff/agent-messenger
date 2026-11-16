@@ -280,10 +280,13 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       // 2026-11-15: one button and one dialog).
       const update = {state: 'found', version: '0.0.0-preview.99'};
       const updates = [];
+      const clears = [];
       await page.addInitScript(() => { window.amDesktop = 'windows'; window.amFrameless = true; window.amWindow = () => {}; });
       await page.route('**/*', async route => {
         const pathname = new URL(route.request().url()).pathname;
-        if (pathname === '/api/window') return route.fulfill({json: {projects: [{name: 'Frame'}], project: 'Frame', folder: '/fictional/frame', agents: [], coordinator: {connected: false}, computer_name: 'Frame test', tasks_enabled: true,
+        if (pathname === '/api/feedback-export') return route.fulfill({json: {ok: true, result: {path: '/fictional/Downloads/feedback.zip', remarks: 2}}});
+        if (pathname === '/api/feedback-clear') { clears.push(true); return route.fulfill({json: {ok: true, result: {deleted: 2, left: 0}}}); }
+        if (pathname === '/api/window') return route.fulfill({json: {projects: [{name: 'Frame'}], project: 'Frame', folder: '/fictional/frame', agents: [], coordinator: {connected: false}, computer_name: 'Frame test', tasks_enabled: true, feedback_count: 5, feedback_new: 2,
           shared: [{peer: 'host', name: 'Giver', age: 1, tasks: [
             {id: 'sent', project: 'Frame', title: 'Sent task', agent: 'cursor', state: 'running', created_at: '2026-11-15T10:00:00Z', runs_on_peer: 'dev-1', runs_on: 'Old name'},
             {id: 'own', project: 'Frame', title: 'Own task', agent: 'codex', state: 'running', created_at: '2026-11-15T09:00:00Z'},
@@ -318,6 +321,18 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.locator('#confirm-go').click();
       await page.waitForFunction(() => !document.querySelector('#confirm-dialog').open);
       assert.deepEqual(hides, [{peer: 'host', task: 'old-1'}, {peer: 'host', task: 'old-2'}]);
+      // Feedback: the export takes the new remarks, and the exported ones can
+      // be cleared once passed on (owner, 2026-11-16).
+      await page.locator('#fb-open').click();
+      assert.equal(await page.locator('#fb-export').innerText(), 'Выгрузить новые отзывы (2)');
+      await page.locator('#fb-export').click();
+      await page.locator('#fb-clear').waitFor({state: 'visible'});
+      await page.locator('#fb-clear').click();
+      await page.locator('#confirm-go').click();
+      await page.waitForFunction(() => document.querySelector('#fb-status').textContent === 'Журнал очищен');
+      assert.equal(clears.length, 1);
+      assert.equal(await page.locator('#fb-export').isDisabled(), true);
+      await page.locator('#fb-close').click();
       // One update button: the dialog follows the download, the install and
       // the restart; a failed install says so and offers to try again.
       const updateButton = page.locator('#app-update-button');

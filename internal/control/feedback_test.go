@@ -19,6 +19,8 @@ func (h *feedbackHandler) AddFeedback(project, text, kind string, image []byte) 
 
 func (h *feedbackHandler) ExportFeedback() (string, int, error) { return "/x/feedback.zip", 3, nil }
 
+func (h *feedbackHandler) ClearFeedback() (int, int, error) { return 3, 1, nil }
+
 // T-135: a remark from the window reaches the client with its picture, and
 // an export answers with the file's path.
 func TestFeedbackCommands(t *testing.T) {
@@ -37,5 +39,10 @@ func TestFeedbackCommands(t *testing.T) {
 	}
 	if !r.OK || json.Unmarshal(r.Overview, &out) != nil || out.Path != "/x/feedback.zip" || out.Remarks != 3 {
 		t.Fatalf("export %+v", r)
+	}
+	r = dispatch(h, Request{Cmd: "feedback-clear"})
+	var cleared struct{ Deleted, Left int }
+	if !r.OK || json.Unmarshal(r.Overview, &cleared) != nil || cleared.Deleted != 3 || cleared.Left != 1 {
+		t.Fatalf("clear %+v", r)
 	}
 }

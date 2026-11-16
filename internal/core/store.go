@@ -153,6 +153,11 @@ func Open(path string) (*Store, error) {
 	for _, c := range [][3]string{
 		{"replies", "held", "INTEGER NOT NULL DEFAULT 0"},
 		{"coordinator_connections", "client", "TEXT"},
+		// The process serving the active coordinator chat, so a takeover can
+		// tell a chat that is still running from one that is gone.
+		{"coordinator_chats", "pid", "INTEGER NOT NULL DEFAULT 0"},
+		{"coordinator_chats", "start_token", "TEXT NOT NULL DEFAULT ''"},
+		{"coordinator_chats", "boot_id", "TEXT NOT NULL DEFAULT ''"},
 		{"task_runs", "launched_at", "TEXT"},
 		{"tasks", "model", "TEXT"},
 		{"tasks", "ran_model", "TEXT"},
@@ -198,6 +203,8 @@ func Open(path string) (*Store, error) {
 		networkTaskColumns[0], networkTaskColumns[1], networkTaskColumns[2],
 		networkTaskColumns[3], networkTaskColumns[4], networkTaskColumns[5],
 		networkTaskColumns[6],
+		// When a remark went into an export (owner, 2026-11-16).
+		{"feedback", "exported_at", "TEXT NOT NULL DEFAULT ''"},
 	} {
 		if err := ensureColumn(db, c[0], c[1], c[2]); err != nil {
 			db.Close()

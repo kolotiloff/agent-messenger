@@ -412,3 +412,57 @@ func TestPresencePublishesTheModelListThatFits(t *testing.T) {
 		t.Fatalf("published %+v", p.Agents[0].Models)
 	}
 }
+
+// T-191: a checked limit reaches the others with its windows; an older host
+// that refuses them still gets the plain limit and the model names.
+func TestPresenceCheckedLimit(t *testing.T) {
+	host := newService(t, t.TempDir())
+	if err := host.Enable(ScopeLocal, freePort(t)); err != nil {
+		t.Fatal(err)
+	}
+	code, err := host.Invite(host.Status().Host.Addresses[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	member := newService(t, t.TempDir())
+	if err := member.Connect(ctx(t), code.Code, "Ноутбук"); err != nil {
+		t.Fatal(err)
+	}
+	used := 64.0
+	limit := &PresenceLimit{State: "ok", UsedPercent: &used, Window: "7d", ObservedAt: "2026-11-15T10:00:00Z", Source: "check",
+		Windows: []PresenceLimitWindow{{Window: "5h", UsedPercent: 20, ResetsAt: "2026-11-15T12:00:00Z"}, {Window: "7d", UsedPercent: 64}}}
+	member.SetPresence(func() (Presence, error) {
+		return Presence{Agents: []PresenceAgent{{Agent: "codex", Models: []string{"gpt-5"}, Limit: limit}}}, nil
+	})
+	host.SetPresence(func() (Presence, error) { return Presence{Agents: []PresenceAgent{}}, nil })
+	host.ReportPresence(ctx(t))
+	member.ReportPresence(ctx(t))
+	if peers := host.Status().Peers; len(peers) != 1 || !reflect.DeepEqual(peers[0].Agents[0].Limit, limit) {
+		t.Fatalf("host sees %+v", peers)
+	}
+
+	olderHost = func(p Presence) bool { return extendedLimits(p.Agents) }
+	t.Cleanup(func() { olderHost = nil })
+	member.ReportPresence(ctx(t))
+	peers := host.Status().Peers
+	if len(peers) != 1 || len(peers[0].Agents) != 1 {
+		t.Fatalf("older host sees %+v", peers)
+	}
+	got := peers[0].Agents[0]
+	if got.Limit == nil || got.Limit.Source != "" || got.Limit.Windows != nil || *got.Limit.UsedPercent != 64 || !reflect.DeepEqual(got.Models, []string{"gpt-5"}) {
+		t.Fatalf("older host sees %+v", got)
+	}
+	if limit.Source != "check" || len(limit.Windows) != 2 {
+		t.Fatal("the fallback changed the reported limit")
+	}
+	if ms := member.Status().Member; !ms.Reachable || ms.Error != "" {
+		t.Fatalf("member after fallback %+v", ms)
+	}
+
+	for _, bad := range []PresenceLimit{{Source: "guess"}, {Windows: []PresenceLimitWindow{{UsedPercent: -1}}}, {Windows: make([]PresenceLimitWindow, 5)}} {
+		bad.State, bad.ObservedAt = "ok", "2026-11-15T10:00:00Z"
+		if bad.valid() {
+			t.Errorf("limit %+v passed", bad)
+		}
+	}
+}

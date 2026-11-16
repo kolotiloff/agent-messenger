@@ -608,7 +608,7 @@ var serverActions = map[string]bool{"enable": true, "disable": true, "invite": t
 
 func taskMutation(path string) bool {
 	switch path {
-	case "/api/project-create", "/api/project-folder", "/api/task-answer", "/api/task-note", "/api/agent-set", "/api/agent-models", "/api/agent-access", "/api/agent-pause", "/api/agent-remove", "/api/task-cancel", "/api/task-hide", "/api/server-action", "/api/coordinator-connect", "/api/project-rules", "/api/project-title", "/api/project-remove", "/api/feedback", "/api/feedback-export":
+	case "/api/project-create", "/api/project-folder", "/api/task-answer", "/api/task-note", "/api/agent-set", "/api/agent-models", "/api/agent-access", "/api/agent-pause", "/api/agent-remove", "/api/task-cancel", "/api/task-hide", "/api/server-action", "/api/coordinator-connect", "/api/project-rules", "/api/project-title", "/api/project-remove", "/api/feedback", "/api/feedback-export", "/api/feedback-clear":
 		return true
 	}
 	return false
@@ -733,6 +733,11 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 			return control.Request{}, false
 		}
 		return control.Request{Cmd: "feedback-export"}, true
+	case "/api/feedback-clear":
+		if decoder.Decode(&struct{}{}) != nil {
+			return control.Request{}, false
+		}
+		return control.Request{Cmd: "feedback-clear"}, true
 	case "/api/task-hide":
 		var in struct {
 			Peer string `json:"peer"`

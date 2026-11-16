@@ -35,6 +35,9 @@ type windowView struct {
 	CursorLink      *CoordinatorLinkView `json:"cursor_link,omitempty"`
 	// FeedbackCount is how many remarks the feedback journal holds (T-135).
 	FeedbackCount int `json:"feedback_count"`
+	// FeedbackNew is how many of them were in no export yet: the next export
+	// takes only those (owner, 2026-11-16).
+	FeedbackNew int `json:"feedback_new"`
 	// PendingUpdate is this computer's queued or installing Messenger
 	// update (T-155): "queued" or "updating".
 	PendingUpdate string `json:"pending_update,omitempty"`
@@ -66,7 +69,7 @@ func (s *Supervisor) WindowView(project string) (any, error) {
 	out.Paused, _ = s.store.Paused()
 	out.Messenger, _ = workerProgram()
 	out.DataRoot = s.root
-	out.FeedbackCount, _ = s.store.FeedbackCount()
+	out.FeedbackCount, out.FeedbackNew, _ = s.store.FeedbackCount()
 	if pending, ok, err := s.store.PendingUpdate(); err == nil && ok {
 		out.PendingUpdate = core.UpdateQueued
 		if s.updateBusy() && pending.ID != "" {
@@ -209,7 +212,13 @@ func (s *Supervisor) AddFeedback(project, text, imageType string, image []byte) 
 	return err
 }
 
+// ClearFeedback deletes the remarks already exported (owner, 2026-11-16).
+func (s *Supervisor) ClearFeedback() (int, int, error) {
+	return s.store.ClearExportedFeedback()
+}
+
 // ExportFeedback writes the feedback journal into one zip file (T-135).
 func (s *Supervisor) ExportFeedback() (string, int, error) {
-	return s.store.ExportFeedback(core.FeedbackDir(s.root), time.Now())
+	path, n, _, err := s.store.ExportFeedback(core.FeedbackDir(s.root), time.Now())
+	return path, n, err
 }

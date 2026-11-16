@@ -4,6 +4,10 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-15 — Claude Code (T-181, T-158, T-159)
 
+- T-191 (D-143): Codex usage limits read through `codex app-server` `account/rateLimits/read` every 10 minutes, without a model call; both windows stored, carried in presence (older hosts get the plain limit), coordinator told to spread work by what is left. Unit tests with a fake app-server; no real Codex call made here.
+
+- Read the Mac feedback export of 11-16 (38 remarks, 2 new). T-190 (D-142): no false takeover note after a restart. T-191 recorded (usage percent). T-189 (D-141): export only new remarks, «Очистить журнал» and `clear_feedback`.
+- Released 0.79 from `main` e7f22f0 via PR #120 (release run 43756475974); Linux x64 asset checked (checksum, `version`). First Windows test attempt hit an unrelated SQLITE_BUSY flake in `TestTaskOutputIsReadToTheEnd`; the rerun passed.
 - T-187 (D-140): update found in the background, downloaded and installed by one button in a dialog. T-188: task list toggle icon. Owner updated the VPS to 0.78 over SSH.
 - Released 0.78 from `main` 875b8ce via PR #119 (release run 43747998585); Linux x64 asset downloaded from releases/latest, checksum and `version` checked.
 - T-186: shared tasks carry where they run; «Агент на ПК — от ДАЛ» labels; agent removal in a terminal; «Убрать все» for finished tasks. Window check extended (frameless block, clear-done).

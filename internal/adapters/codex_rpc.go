@@ -14,9 +14,10 @@ import (
 	"time"
 )
 
-// Setup-phase methods. None of them starts a model turn. turn/start is not
+// Setup-phase methods, and the account limits read (T-191). None of them
+// starts a model turn. turn/start is not
 // reachable through this client.
-var codexSetupMethods = map[string]bool{"initialize": true, "config/read": true, "thread/start": true}
+var codexSetupMethods = map[string]bool{"initialize": true, "config/read": true, "thread/start": true, "account/rateLimits/read": true}
 
 // Notifications the client may send during setup.
 var codexSetupNotifications = map[string]bool{"initialized": true}

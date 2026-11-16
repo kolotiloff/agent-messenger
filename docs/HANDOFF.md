@@ -8,10 +8,11 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
-Updated 2026-11-15 by Claude Code.
+Updated 2026-11-15 by Claude Code (T-191).
 
-- T-187 (D-140) and T-188 on `claude/great-knuth-52qwv1`, going into 0.79: one update button with a download/install/restart dialog (Windows/Linux; Mac shows the icon only when ready), and the task list toggle without a double background.
-- 0.78 released (PR #119, `main` 875b8ce, run 43747998585) with T-183, T-185, T-186. Next: the owner updates the VPS once over SSH with the installer; then the update button and T-184 (tray).
+- T-189 (D-141), T-190 (D-142) on `claude/great-knuth-52qwv1`, held for 0.80 (owner, 2026-11-16: do not release for one change, collect more first): feedback export takes only new remarks and the journal can be cleared; a restarted coordinator chat is no longer told about another chat. T-191 (D-143): Codex limits read from the account every 10 minutes in percent (both windows), shown in `list_agents` and to the other computers; the coordinator is told to spread work by what is left. Not yet tried against a real Codex account: check on the Mac after 0.80 (journal line «codex limits not read» means it failed; `list_agents` shows `source: "check"` when it works). Claude/Cursor percent: no source found.
+- 0.79 released (PR #120, `main` e7f22f0, run 43756475974) with T-187 (D-140) and T-188: one update button with a download/install/restart dialog (Windows/Linux; Mac shows the icon only when ready), and the task list toggle without a double background.
+- 0.78 released (PR #119, `main` 875b8ce, run 43747998585) with T-183, T-185, T-186. The owner updated the VPS to 0.78 over SSH; the first real button update of the VPS is 0.78 → 0.79. Next: T-184 (tray); the update dialog for the Mac (Sparkle still shows its own window).
 - T-186, in 0.78: shared tasks say which computer runs them (`runs_on_peer`, needs a 0.78 broker: the VPS must be updated once over SSH with the installer, 0.77 cannot update remotely); rows read «Cursor на ПК-1 — от Mac». Agent removal opens a terminal script (y/N, keeps sign-in); «Убрать все» clears finished tasks. The PowerShell removal script was not run here; check on Windows.
 - T-185, in 0.78: a paused or removed agent is no longer listed for a computer just because its chat once used Messenger's tools as the coordinator (the likely cause of ПК-2 still showing a disabled agent).
 - T-183 (D-139), in 0.78: the VPS server takes update requests from the window under systemd (helper installs, writes the result, then `systemctl restart --no-block`); `agent-messenger-server rename --name ИМЯ`; the Windows frameless caption row is 44 px so the tabs and the task-list toggle have a gap above them. The owner's VPS runs 0.77, which refuses remote updates: it must be updated to 0.78 once over SSH with the installer; after that the window's arrow works.
