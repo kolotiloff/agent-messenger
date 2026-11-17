@@ -4,6 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-17 — Claude Code (T-194)
 
+- Logo at the top of the README; `docs/assets/social-preview.png` for the repository's social preview (the owner uploads it in Settings, the API cannot set it).
 - Released 0.81 from `main` 204b319 via PR #122 (release run 44040632883), merged without waiting for the PR checks at the owner's request (icon and docs only; the release runs its own checks). The Mac still showed the old icon after the update; icon cache suspected.
 - Drew six bright icon variants; the owner chose А (yellow, dark bubble with eyes). Replaced the icon in the SVG, the Windows resources (regenerated, pixels compared with the SVG) and the Mac icon script (not run here).
 

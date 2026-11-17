@@ -1,4 +1,6 @@
-# Agent Messenger
+<p align="center"><img src="docs/assets/logo.svg" alt="Agent Messenger" width="128" height="128"></p>
+
+<h1 align="center">Agent Messenger</h1>
 
 One coordinator agent hands tasks to worker agents (Claude Code, Codex, Cursor Agent CLI) on your own computers: Mac, Windows and Linux, joined into one network. You watch every task in one window, answer the workers' questions and step in when needed.
 
