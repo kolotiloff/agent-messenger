@@ -36,20 +36,36 @@ func roundRect(x, y, w, h, r float64) func(float64, float64) bool {
 	}
 }
 
-// triangle is the speech bubble's tail: (132,322), (132,387), (208,322).
-func triangle(px, py float64) bool {
-	if px < 132 || py < 322 {
+// tail is the speech bubble's tail: (158,362), (236,362), (158,426).
+func tail(px, py float64) bool {
+	if px < 158 || py < 362 || py > 426 {
 		return false
 	}
-	// Below the edge from (132,387) to (208,322).
-	return (py-387)*(208-132)-(px-132)*(322-387) <= 0
+	return px <= 236-(py-362)*78/64
 }
 
+func circle(cx, cy, r float64) func(float64, float64) bool {
+	return func(px, py float64) bool {
+		dx, dy := px-cx, py-cy
+		return dx*dx+dy*dy <= r*r
+	}
+}
+
+var (
+	yellow = color.NRGBA{0xFF, 0xC5, 0x31, 0xFF}
+	ink    = color.NRGBA{0x1B, 0x1B, 0x2F, 0xFF}
+	white  = color.NRGBA{0xFF, 0xFF, 0xFF, 0xFF}
+)
+
+// shapes are drawn in order; a later one covers an earlier one.
 var shapes = []shape{
-	{roundRect(24, 24, 464, 464, 104), color.NRGBA{0x1F, 0x24, 0x30, 0xFF}},
-	{roundRect(94, 128, 260, 207, 44), color.NRGBA{0x85, 0xA8, 0xF0, 0xFF}},
-	{triangle, color.NRGBA{0x85, 0xA8, 0xF0, 0xFF}},
-	{roundRect(235, 269, 182, 143, 32), color.NRGBA{0xF2, 0xF2, 0xF2, 0xFF}},
+	{roundRect(24, 24, 464, 464, 104), yellow},
+	{roundRect(80, 120, 352, 242, 56), ink},
+	{tail, ink},
+	{circle(200, 236, 34), white},
+	{circle(312, 236, 34), white},
+	{circle(210, 244, 14), ink},
+	{circle(322, 244, 14), ink},
 }
 
 func draw(size int) *image.NRGBA {

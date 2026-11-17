@@ -8,8 +8,9 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
-Updated 2026-11-16 by Claude Code.
+Updated 2026-11-17 by Claude Code.
 
+- T-194 (D-144) on `claude/great-knuth-52qwv1`, not released: the new yellow icon with an eyed bubble. Goes out with T-192/T-193.
 - **0.80 is released** (PR #121, `main` 9c36dd3, release run 43917733249) with T-189, T-190, T-191. Next, from the owner's remarks of 11-16: T-192 (project list closes itself on refresh), T-193 (agent states of other computers lag the task list). Then T-184 (tray), the Mac update dialog. After installing 0.80 on the Mac, check that `list_agents` shows Codex with `source: "check"`.
 - T-189 (D-141), T-190 (D-142) on `claude/great-knuth-52qwv1`, released in 0.80: feedback export takes only new remarks and the journal can be cleared; a restarted coordinator chat is no longer told about another chat. T-191 (D-143): Codex limits read from the account every 10 minutes in percent (both windows), shown in `list_agents` and to the other computers; the coordinator is told to spread work by what is left. Not yet tried against a real Codex account: check on the Mac after 0.80 (journal line «codex limits not read» means it failed; `list_agents` shows `source: "check"` when it works). Claude/Cursor percent: no source found.
 - 0.79 released (PR #120, `main` e7f22f0, run 43756475974) with T-187 (D-140) and T-188: one update button with a download/install/restart dialog (Windows/Linux; Mac shows the icon only when ready), and the task list toggle without a double background.
