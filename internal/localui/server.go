@@ -53,6 +53,39 @@ func RunDesktop(ctx context.Context, root string, port int, out io.Writer, chann
 	return RunWindow(ctx, root, port, out, Desktop{Channel: channel, Restart: restart})
 }
 
+// windowPortFile keeps the port the window last used (T-196).
+const windowPortFile = "window-port"
+
+// listenWindow listens on 127.0.0.1. With port 0 it first tries the port
+// the window had last time: the page's own storage (theme, language,
+// closed notices, drafts) belongs to its address, so a new port each start
+// lost them, and the theme fell back to the system's (T-196). When that
+// port is taken, any free port is used and remembered.
+func listenWindow(root string, port int) (net.Listener, error) {
+	listen := func(p int) (net.Listener, error) {
+		return net.Listen("tcp4", net.JoinHostPort("127.0.0.1", strconv.Itoa(p)))
+	}
+	if port != 0 || root == "" {
+		return listen(port)
+	}
+	path := filepath.Join(root, windowPortFile)
+	if raw, err := os.ReadFile(path); err == nil {
+		if last, err := strconv.Atoi(strings.TrimSpace(string(raw))); err == nil && last >= 1024 && last <= 65535 {
+			if ln, err := listen(last); err == nil {
+				return ln, nil
+			}
+		}
+	}
+	ln, err := listen(0)
+	if err != nil {
+		return nil, err
+	}
+	if addr, ok := ln.Addr().(*net.TCPAddr); ok {
+		_ = os.WriteFile(path, []byte(strconv.Itoa(addr.Port)+"\n"), 0o600)
+	}
+	return ln, nil
+}
+
 // RunWindow serves the window with what its launcher enables.
 func RunWindow(ctx context.Context, root string, port int, out io.Writer, desktop Desktop) error {
 	if port < 0 || port > 65535 {
@@ -63,7 +96,7 @@ func RunWindow(ctx context.Context, root string, port int, out io.Writer, deskto
 		return err
 	}
 	token := hex.EncodeToString(secret)
-	ln, err := net.Listen("tcp4", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
+	ln, err := listenWindow(root, port)
 	if err != nil {
 		return err
 	}
