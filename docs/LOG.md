@@ -4,6 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-17 — Claude Code (T-194)
 
+- T-197 recorded: on the Linux laptop GNOME kept starting 0.62 from a stale menu entry that 0.62 kept rewriting to itself; fixed by hand on the laptop (entry removed and written again).
 - T-196: the theme was lost on Windows/Linux after a restart because the window took a new port (new page storage) each time; it now reuses its last port. Recorded T-195 (welcome shown after setup).
 - Logo at the top of the README; `docs/assets/social-preview.png` for the repository's social preview (the owner uploads it in Settings, the API cannot set it).
 - Released 0.81 from `main` 204b319 via PR #122 (release run 44040632883), merged without waiting for the PR checks at the owner's request (icon and docs only; the release runs its own checks). The Mac still showed the old icon after the update; icon cache suspected.
