@@ -463,3 +463,7 @@ Amends D-100: a request to install the newest signed Messenger (the program only
 - Both windows (about five hours and weekly) are stored with their percent and reset time; the window used the most leads. 90% or more is «warning», 100% (or a reached limit) «exhausted». The limit carries `source: "check"` and `windows` in `list_agents` and goes to the other computers in presence; a host before 0.80 refuses those two fields and gets the plain limit instead.
 - The check is not a CLI run on a session: it takes no reservation in `active-runs.json`. Tests use a fake reader and a fake app-server; the real check happens only in the background program.
 - Claude's task stream gives only status and reset time, and its percent is shown only to interactive sessions; Cursor has no known way. Both stay as before until a source is found.
+
+## D-144 — A bright program icon: a dark speech bubble with eyes on yellow (T-194)
+
+2026-11-17, Claude Code, owner's choice («самый первый вариант»): of six bright variants (agent with eyes, relay arrows, terminal prompt, network nodes, two bubbles, typing dots) the owner chose the yellow square with a dark speech bubble with two eyes. The shapes are the same in `internal/localui/assets/icon.svg`, `scripts/gen-icon` (Windows resources) and `desktop/macos/icon.swift`: a 464 px yellow `#FFC531` square with 104 px corners, a `#1B1B2F` bubble with a tail at the bottom left, white eyes with dark pupils looking right.
