@@ -96,6 +96,7 @@
   'Самые затратные задачи':'Most expensive tasks',
   'Последние задачи':'Latest tasks',
   'Все модели':'All models',
+  'Модель: ':'Model: ',
   'Модель':'Model',
   'С выбранной моделью считаются только задачи, которые знает этот компьютер: другие компьютеры сообщают расход по агентам, без моделей.':'With a model chosen, only the tasks this computer knows are counted: other computers report usage per agent, without models.',
   'Фильтр не применён: обновите фоновый клиент.':'The filter was not applied: update the background client.',

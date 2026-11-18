@@ -737,6 +737,19 @@
     if(selectedTask===it.t.id&&!selectedShared)return;
     selectedTask=it.t.id;selectedShared=null;feed=null;feedSignature='';renderTaskList();if(!quiet)loadFeed();
   }
+  // A model's short name for the task list (T-202): «gpt-6.2-sol[effort=low]»
+  // reads «Sol 6.2 Low», «claude-opus-5-5[effort=medium]» «Opus 5.5 Medium».
+  // Anything else is shown as it is.
+  function modelName(value){
+    const m=String(value).match(/^(.*?)(?:\[effort=([a-z]+)\])?$/);
+    let base=m[1];const effort=m[2]?' '+capital(m[2]):'';
+    const cap=s=>s?s[0].toUpperCase()+s.slice(1):s;
+    let g=base.match(/^gpt-(\d+(?:\.\d+)?)-([a-z]+)$/i);
+    if(g)return cap(g[2])+' '+g[1]+effort;
+    g=base.match(/^claude-([a-z]+)-(\d+)-(\d+)$/i);
+    if(g)return cap(g[1])+' '+g[2]+'.'+g[3]+effort;
+    return base+effort;
+  }
   function renderTaskList(){
     const live=$('task-list'),box=live.cloneNode(false);
     computerChip($('computer-chip'));
@@ -753,9 +766,11 @@
     // Another computer's task is read-only and says which computer gave it.
     const ownRow=t=>{
       const row=el('button',undefined,'am-task');row.type='button';row.setAttribute('aria-pressed',String(t.id===selectedTask));
-      // T-119: every own task says where it runs; this computer's name stands out.
-      const here=!(t.remote&&!t.remote.from),label=el('span',(names[t.agent]||t.agent)+tr(' на '));
-      label.append(el('span',here?(view.computer_name||tr('этом компьютере')):t.remote.name,here?'am-task-here':''));
+      // T-202 (owner, 2026-11-18): a task of this computer no longer says
+      // «на Мак»; another computer's task still names that computer (T-119).
+      // The model it runs on follows the status below.
+      const here=!(t.remote&&!t.remote.from),label=el('span',names[t.agent]||t.agent);
+      if(!here)label.append(tr(' на '),el('span',t.remote.name));
       if(t.remote?.from)label.append(fromTag(t.remote.name));
       const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),label);
       if(t.remote)agent.title=t.remote.from?tr('Задачу дал компьютер «')+t.remote.name+'»':tr('Выполняется на компьютере «')+t.remote.name+'»';
@@ -763,8 +778,10 @@
       const [text,cls,tip]=taskStatus(t);
       const status=el('span',undefined,'am-task-status '+cls);if(tip)status.title=tip;
       if(t.state==='waiting_owner')status.append(el('span',undefined,'am-dot am-dot-wait'));
-      const words=el('span');status.append(words);words.append(statusPiece(text,!!t.usage));
-      if(t.usage){const used=el('span',usageShort(t.usage),'am-task-usage');used.title=usageLong(t.usage);words.append(used);}
+      const model=t.ran_model||t.model;
+      const words=el('span');status.append(words);words.append(statusPiece(text,!!t.usage||!!model));
+      if(t.usage){const used=el('span',usageShort(t.usage),'am-task-usage');used.title=usageLong(t.usage);if(model)used.append(el('span',',','am-task-comma'));words.append(used);}
+      if(model){const m=el('span',modelName(model),'am-task-usage am-task-model');m.title=tr('Модель: ')+model;words.append(m);}
       row.append(agent,el('span',t.title,'am-task-title'),status);
       row.addEventListener('click',()=>{selectedTask=t.id;selectedShared=null;feedSignature='';renderTaskList();loadFeed();});
       row.addEventListener('contextmenu',e=>taskMenu(e,t,null));
