@@ -1,15 +1,16 @@
 # Worker models and effort
 
-Researched 2026-11-14, T-171. These are starting selections, not a live account inventory or a Unity benchmark. Choose by task scope; verify the result with the project's own tests. Availability depends on the account, provider deployment and CLI version. A refusal never causes an automatic model switch or retry.
+Updated 2026-11-18 for T-195/T-196. These are starting selections, not a live account inventory or a Unity benchmark. Choose by task scope; verify the result with the project's own tests. Availability depends on the account, provider deployment and CLI version. A refusal never causes an automatic model switch or retry.
 
 Pass the exact value from `list_agents.computers[].agents[].models` as `start_task.model`. `model_options` explains recognized selections. Omit `model` to use the CLI's own default. Messenger stores the complete selection with the task and uses it on exact-session continuations too.
 
 | Agent | Intended work | Messenger selection | CLI model arguments |
 | --- | --- | --- | --- |
 | Codex | Small focused edits | `gpt-6-luna[effort=high]` | `-c 'model="gpt-6-luna"' -c 'model_reasoning_effort="high"'` |
-| Codex | Everyday implementation/tests | `gpt-6.1-sol[effort=medium]` | `-c 'model="gpt-6.1-sol"' -c 'model_reasoning_effort="medium"'` |
-| Codex | Complex features/debugging | `gpt-6-astra[effort=medium]` | `-c 'model="gpt-6-astra"' -c 'model_reasoning_effort="medium"'` |
-| Codex | Hard architecture/investigation | `gpt-6-astra[effort=high]` | `-c 'model="gpt-6-astra"' -c 'model_reasoning_effort="high"'` |
+| Codex | Everyday implementation/tests | `gpt-6.2-sol[effort=medium]` | `-c 'model="gpt-6.2-sol"' -c 'model_reasoning_effort="medium"'` |
+| Codex | Multi-step implementation and deeper review | `gpt-6.2-sol[effort=high]` | `-c 'model="gpt-6.2-sol"' -c 'model_reasoning_effort="high"'` |
+| Codex | Complex features/debugging | `gpt-6.2-astra[effort=medium]` | `-c 'model="gpt-6.2-astra"' -c 'model_reasoning_effort="medium"'` |
+| Codex | Hard architecture/investigation | `gpt-6.2-astra[effort=high]` | `-c 'model="gpt-6.2-astra"' -c 'model_reasoning_effort="high"'` |
 | Claude | Mechanical edits | `claude-haiku-5-5[effort=low]` | `--model claude-haiku-5-5 --effort low` |
 | Claude | Everyday implementation/tests | `claude-sonnet-5-5[effort=medium]` | `--model claude-sonnet-5-5 --effort medium` |
 | Claude | Complex features/debugging | `claude-opus-5-5[effort=medium]` | `--model claude-opus-5-5 --effort medium` |
@@ -25,7 +26,9 @@ Cursor uses its published IDs directly. The installed CLI's read-only `agent --l
 
 For Unity, a small serialized-field correction can use the first option; ordinary gameplay/editor code the second; a difficult import or state bug the third; a cross-system architecture investigation the fourth. These are workflow suggestions, not measured rankings. The coordinator should pick the least expensive adequate option and explain a non-default choice.
 
-Existing exact starter lists from 0.71 are upgraded once. Custom lists and intentionally empty lists stay unchanged, as do recorded tasks and running sessions. Owners can edit the list in the agent settings.
+Existing exact starter lists from 0.71 are upgraded once. Custom lists and intentionally empty lists stay unchanged, as do recorded tasks and running sessions. Owners can edit the list in the agent settings. The 0.81 Codex starter list is replaced once with the 6.2 list above (T-195).
+
+In 0.82, an owner can ask their coordinator to replace one agent's computer-wide list using `set_agent_models`. Pass `agent`, `models` (the entire ordered list) and the target `computer` ID from `list_agents`. Omit `computer` for local changes. To update several computers, make a separate call per computer and confirm each result. On a remote computer, the agent must be enabled, the computer must share the coordinator's project and accept remote tasks. The request expires after two minutes. Wait for `agent_models_updated`: a queued request only confirms submission. The target refuses a change if its model list differs from what it last reported to the sender. An explicit empty array clears the list.
 
 ## Sources
 

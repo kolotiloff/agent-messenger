@@ -178,6 +178,19 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         [{path: '/api/project-create', body: {name: 'Welcome test', folder: '/fictional/project'}}]);
       assert.deepEqual(writes.filter(write => write.path === '/api/coordinator-connect'),
         [{path: '/api/coordinator-connect', body: {project: 'Welcome test', agent: 'cursor'}}]);
+      await page.setViewportSize({width:1100,height:850});
+      const projects = page.locator('[aria-controls="project-select-menu"]');
+      await projects.click();
+      const projectMenu = page.locator('#project-select-menu');
+      await projectMenu.waitFor({state:'visible'});
+      await Promise.all([
+        page.waitForResponse(response => new URL(response.url()).pathname==='/api/window'),
+        page.evaluate(() => window.messengerRefresh()),
+      ]);
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      assert(await projectMenu.isVisible(), 'refreshing the same projects should keep the menu open');
+      await page.keyboard.press('Escape');
+      await page.setViewportSize({width:600,height:850});
       await page.locator('[data-tab=server]').click();
       await page.locator('#machines [data-peer="fixture-peer"] .am-agent-line').waitFor({state:'attached'});
       assert.equal(await page.locator('#machines [aria-current="true"] .am-agent-line').count(),1);

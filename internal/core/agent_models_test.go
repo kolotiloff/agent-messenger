@@ -291,7 +291,7 @@ func TestDefaultModelUpgradePreservesChoicesAndTasks(t *testing.T) {
 
 func TestEffortSelectionIsRecordedAndExplained(t *testing.T) {
 	f := newTaskFixture(t)
-	model := "gpt-6-astra[effort=high]"
+	model := "gpt-6.2-astra[effort=high]"
 	task, _, err := f.st.StartTask(StartTaskRequest{Project: "Game", OpID: "effort", Provider: "codex", Text: "Fix the Unity import pipeline", Model: model})
 	if err != nil {
 		t.Fatal(err)

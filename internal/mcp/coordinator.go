@@ -103,6 +103,7 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - get_log reads the end of another computer's Messenger journal, for debugging Messenger itself (a task that never arrived, a refusal you cannot explain): each worker run launched and ended with its exit and error, and each message sent to or received from another computer with its kind and task id, or why it was not sent. That computer answers only if its owner turned on «Отдавать журнал по сети»; otherwise the reply says so. Session ids, codes and keys are removed. If no answer came in time, call get_log again with request_id. Do not use it to watch workers: wait does that.
 - newest_release in list_agents is the newest Messenger release this computer has downloaded, with its notes; update_available marks a computer that runs an older one. Before reporting a problem in Messenger, check whether those notes already cover it, and tell the owner when a computer that needs the fix has update_available. It is what this computer last downloaded, not a live check; left out when it has none.
 - server: true in list_agents marks the computer that runs the network's server. It takes tasks like any other computer when it has agents; while it restarts or is off, the computers do not reach each other.
+- set_agent_models replaces one agent's full model list on a chosen computer only when the owner asks. The list is computer-wide. Copy the exact IDs and effort selections. An empty array clears it. A remote request is queued, and agent_models_updated confirms application or refusal. Do not resend on an unknown result.
 - update_messenger asks a Windows or Linux computer (this one, or another of the network from list_agents) to install the newest Messenger, the program only. Running tasks are never interrupted: the computer answers queued, takes no new tasks, and installs as soon as none runs. A Mac answers that its update needs the button in its app. The result comes as a messenger_update event; nothing is retried. Do not call it again for the same computer while it is queued or updating. list_agents shows update_pending on a computer that is waiting.
 - full_access on a task of this computer means its worker may run any command (the owner's «Любые команды» switch on «Агенты»). Without it a command that needs approval is refused, and nobody can approve it: tell the owner to turn that switch on and then continue the task. For tasks from other computers it is «И для задач с других компьютеров» under it on «Агенты».
 - contact_lost on an open task of another computer means this computer has no contact with it (offline, left the network, or the network was made again); computer_last_seen is when it last reported. Its outcome there is unknown: do not start it again by yourself; tell the owner, and when that computer is back the task goes on reporting.
@@ -142,7 +143,7 @@ type coordinator struct {
 }
 
 // acting tools make this chat the project's coordinator (T-090).
-var actingTools = map[string]bool{"wait": true, "start_task": true, "answer": true, "continue_task": true, "note_task": true, "cancel": true, "update_messenger": true}
+var actingTools = map[string]bool{"wait": true, "start_task": true, "answer": true, "continue_task": true, "note_task": true, "cancel": true, "update_messenger": true, "set_agent_models": true}
 
 // claim makes this chat the active coordinator of its project. The new chat
 // is told it replaced another only while that chat's process still runs:
@@ -466,6 +467,12 @@ func coordinatorTools() []map[string]any {
 				"lines":      map[string]any{"type": "integer", "minimum": 1, "maximum": core.MaxLogLines, "description": fmt.Sprintf("how many last lines; default %d", core.DefaultLogLines)},
 				"request_id": str("request_id from an earlier get_log that had no answer yet"),
 			})},
+		{"name": "set_agent_models", "description": "Replace the entire computer-wide model list for one agent, only at the owner's request. Remote changes require a shared project, an online computer that accepts remote tasks, and Messenger 0.82 or newer. Wait for agent_models_updated to confirm a queued change.",
+			"inputSchema": obj(map[string]any{
+				"computer": str("computer id from list_agents, or omit for this computer"),
+				"agent":    map[string]any{"type": "string", "enum": []string{"claude", "codex", "cursor"}},
+				"models":   map[string]any{"type": "array", "maxItems": core.MaxAgentModels, "items": map[string]any{"type": "string", "maxLength": 80}, "description": "complete replacement list, in order; [] intentionally clears it"},
+			}, "agent", "models")},
 		{"name": "update_messenger", "description": "Ask a Windows or Linux computer to install the newest Messenger (the program only) as soon as no task runs there. Until then it takes no new tasks. A Mac answers that its update needs the button in its app. The result comes as a messenger_update event; nothing is retried.",
 			"inputSchema": obj(map[string]any{
 				"computer": str("computer id from list_agents: this computer (the default) or another computer of the network"),
@@ -708,6 +715,23 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 			return nil, err
 		}
 		return c.getLog(ctx, a.Computer, a.Lines, a.RequestID)
+	case "set_agent_models":
+		var a struct {
+			Computer string   `json:"computer"`
+			Agent    string   `json:"agent"`
+			Models   []string `json:"models"`
+		}
+		if err := strict(&a); err != nil {
+			return nil, err
+		}
+		id, err := c.store.RequestAgentModels(c.project, a.Computer, a.Agent, a.Models)
+		if err != nil {
+			return nil, err
+		}
+		if id == "" {
+			return map[string]any{"state": "applied"}, nil
+		}
+		return map[string]any{"state": "queued", "request_id": id, "next": "Wait for agent_models_updated. A queued request is not confirmation."}, nil
 	case "update_messenger":
 		var a struct {
 			Computer string `json:"computer"`

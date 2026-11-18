@@ -2453,33 +2453,41 @@ var (
 	DefaultCursorModels = modelcatalog.Defaults("cursor")
 )
 
+const previousCodexDefaults = "gpt-6-luna[effort=high]\ngpt-6.1-sol[effort=medium]\ngpt-6-astra[effort=medium]\ngpt-6-astra[effort=high]"
+
 // refreshDefaultModels upgrades only unchanged old starter lists, once.
 // Customized and intentionally empty lists, and recorded tasks, remain untouched.
 func refreshDefaultModels(db *sql.DB) error {
+	if err := migrateModelDefaults(db, "default_models_t171", map[string]string{
+		"claude": "opus\nsonnet\nhaiku",
+		"codex":  "gpt-6-luna\ngpt-6.1-terra\ngpt-6.1-sol\ngpt-6-astra",
+		"cursor": "composer-2.5-fast\ngrok-4.7-high-fast\nclaude-opus-5-thinking-high",
+	}); err != nil {
+		return err
+	}
+	return migrateModelDefaults(db, "default_models_t195", map[string]string{"codex": previousCodexDefaults})
+}
+
+func migrateModelDefaults(db *sql.DB, key string, old map[string]string) error {
 	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 	var done string
-	err = tx.QueryRow(`SELECT value FROM meta WHERE key='default_models_t171'`).Scan(&done)
+	err = tx.QueryRow(`SELECT value FROM meta WHERE key=?`, key).Scan(&done)
 	if err == nil {
 		return nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
-	old := map[string]string{
-		"claude": "opus\nsonnet\nhaiku",
-		"codex":  "gpt-6-luna\ngpt-6.1-terra\ngpt-6.1-sol\ngpt-6-astra",
-		"cursor": "composer-2.5-fast\ngrok-4.7-high-fast\nclaude-opus-5-thinking-high",
-	}
 	for provider, previous := range old {
 		if _, err := tx.Exec(`UPDATE computer_agents SET models=? WHERE provider=? AND models=?`, strings.Join(modelcatalog.Defaults(provider), "\n"), provider, previous); err != nil {
 			return err
 		}
 	}
-	if _, err := tx.Exec(`INSERT INTO meta(key,value) VALUES ('default_models_t171','1')`); err != nil {
+	if _, err := tx.Exec(`INSERT INTO meta(key,value) VALUES (?,'1')`, key); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -2598,6 +2606,17 @@ const MaxAgentModels = 12
 // this computer (T-043). Blank and repeated names are dropped; an empty list
 // clears it.
 func (s *Store) SetAgentModels(provider string, models []string) error {
+	clean, err := normalizeAgentModels(provider, models)
+	if err != nil {
+		return err
+	}
+	return s.tx(func(tx *sql.Tx) error { return setAgentModels(tx, provider, clean) })
+}
+
+func normalizeAgentModels(provider string, models []string) (string, error) {
+	if !TaskProviders[provider] {
+		return "", fmt.Errorf("%w: unknown agent %q", ErrRejected, provider)
+	}
 	clean := []string{}
 	seen := map[string]bool{}
 	for _, m := range models {
@@ -2606,28 +2625,30 @@ func (s *Store) SetAgentModels(provider string, models []string) error {
 			continue
 		}
 		if _, _, err := modelcatalog.Resolve(provider, m); err != nil {
-			return fmt.Errorf("%w: %q is not a valid model selection", ErrRejected, m)
+			return "", fmt.Errorf("%w: %q is not a valid model selection", ErrRejected, m)
 		}
 		seen[m] = true
 		clean = append(clean, m)
 	}
 	if len(clean) > MaxAgentModels {
-		return fmt.Errorf("%w: at most %d models per agent", ErrRejected, MaxAgentModels)
+		return "", fmt.Errorf("%w: at most %d models per agent", ErrRejected, MaxAgentModels)
 	}
-	return s.tx(func(tx *sql.Tx) error {
-		computer, err := localComputer(tx)
-		if err != nil {
-			return err
-		}
-		res, err := tx.Exec(`UPDATE computer_agents SET models=?,updated_at=? WHERE computer=? AND provider=?`, strings.Join(clean, "\n"), now(), computer, provider)
-		if err != nil {
-			return err
-		}
-		if n, _ := res.RowsAffected(); n == 0 {
-			return fmt.Errorf("%w: agent %s is not set up on this computer", ErrRejected, provider)
-		}
-		return nil
-	})
+	return strings.Join(clean, "\n"), nil
+}
+
+func setAgentModels(tx *sql.Tx, provider, models string) error {
+	computer, err := localComputer(tx)
+	if err != nil {
+		return err
+	}
+	res, err := tx.Exec(`UPDATE computer_agents SET models=?,updated_at=? WHERE computer=? AND provider=?`, models, now(), computer, provider)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("%w: agent %s is not set up on this computer", ErrRejected, provider)
+	}
+	return nil
 }
 
 func splitModels(s string) []string {

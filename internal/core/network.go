@@ -822,6 +822,12 @@ func (s *Store) NetUndeliverable(seq int64) error {
 		if kind == "log_request" || kind == "log" {
 			return logUndeliverable(tx, kind, task)
 		}
+		if kind == "models_request" {
+			return finishModelChange(tx, netLink{broker: msgBroker, peer: to, task: task}, "refused", "computer left the network")
+		}
+		if kind == "models_result" {
+			return nil
+		}
 		if kind == "update_request" || kind == "update" {
 			return updateUndeliverable(tx, kind, task)
 		}
@@ -931,6 +937,10 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 			return applyLogRequest(tx, from, b)
 		case "log":
 			return applyLogReply(tx, from, b)
+		case "models_request":
+			return applyModelChange(tx, from, b)
+		case "models_result":
+			return finishModelChange(tx, from, b.State, b.Text)
 		case "update_request":
 			return applyUpdateRequest(tx, from, b)
 		case "update":

@@ -467,3 +467,7 @@ Amends D-100: a request to install the newest signed Messenger (the program only
 ## D-144 — A bright program icon: a dark speech bubble with eyes on yellow (T-194)
 
 2026-11-17, Claude Code, owner's choice («самый первый вариант»): of six bright variants (agent with eyes, relay arrows, terminal prompt, network nodes, two bubbles, typing dots) the owner chose the yellow square with a dark speech bubble with two eyes. The shapes are the same in `internal/localui/assets/icon.svg`, `scripts/gen-icon` (Windows resources) and `desktop/macos/icon.swift`: a 464 px yellow `#FFC531` square with 104 px corners, a `#1B1B2F` bubble with a tail at the bottom left, white eyes with dark pupils looking right.
+
+## D-145 — Model lists can be replaced by the coordinator (T-196)
+
+2026-11-18, Codex, at the owner's request. `set_agent_models` replaces a computer-wide list for one agent. A remote request must name an online 0.82 computer that has the project and accepts remote tasks. It expires after two minutes and checks the previous list against the target's saved list to preserve newer edits. The authenticated target replies with success or refusal, delivered as a coordinator event. The caller reports an unknown result if no confirmation arrives. No automatic command retry or worker restart.

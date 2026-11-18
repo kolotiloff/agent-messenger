@@ -147,6 +147,10 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	if err != nil {
 		return // paused, cancelled or no longer pending: nothing was launched
 	}
+	if s.server != nil {
+		s.server.NotifyPresence()
+		defer s.server.NotifyPresence()
+	}
 	journal.Printf("run %s of %s: launching %s (model %q, %s run)", runID, task.ID, task.Provider, task.Model, run.Kind)
 	exe, err := workerProgram()
 	if err != nil {
