@@ -29,7 +29,7 @@ For Unity, a small serialized-field correction can use the first option; ordinar
 
 Existing exact starter lists from 0.71 are upgraded once. Custom lists and intentionally empty lists stay unchanged, as do recorded tasks and running sessions. Owners can edit the list in the agent settings. The 0.81 Codex starter list is replaced once with the 6.2 list above (T-195).
 
-In 0.82, an owner can ask their coordinator to replace one agent's computer-wide list using `set_agent_models`. Pass `agent`, `models` (the entire ordered list) and the target `computer` ID from `list_agents`. Omit `computer` for local changes. To update several computers, make a separate call per computer and confirm each result. On a remote computer, the agent must be enabled, the computer must share the coordinator's project and accept remote tasks. The request expires after two minutes. Wait for `agent_models_updated`: a queued request only confirms submission. The target refuses a change if its model list differs from what it last reported to the sender. An explicit empty array clears the list.
+From 0.82, edit the list on the coordinator computer under Agents → the provider's settings → Models for the coordinator. A CLI can be installed only on the executors. For each updated executor, `list_agents` shows the choices configured on the coordinator computer. `start_task` sends the chosen model and effort with that task, and the executor checks the selection's syntax and passes it to its own CLI. Each executor's account still needs access to the selected model. Older executors keep their existing local-list checks until updated; their reported lists are shown separately during the transition.
 
 ## Sources
 

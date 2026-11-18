@@ -593,14 +593,9 @@ func (s *Store) SetComputerAgent(provider, cli, environment, profile string) err
 		}
 		// Starting model lists, so the coordinator sees them from the start
 		// (T-061, T-098). A list the owner saved is never replaced here.
-		models := ""
-		switch provider {
-		case "claude":
-			models = strings.Join(DefaultClaudeModels, "\n")
-		case "codex":
-			models = strings.Join(DefaultCodexModels, "\n")
-		case "cursor":
-			models = strings.Join(DefaultCursorModels, "\n")
+		models, err := coordinatorModelList(tx, computer, provider)
+		if err != nil {
+			return err
 		}
 		_, err = tx.Exec(`INSERT INTO computer_agents(computer,provider,cli_path,environment,profile,updated_at,full_access,models) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(computer,provider) DO UPDATE SET cli_path=excluded.cli_path,environment=excluded.environment,profile=excluded.profile,updated_at=excluded.updated_at`,
 			computer, provider, cli, environment, profile, now(), full, models)
@@ -762,7 +757,7 @@ func (s *Store) StartTask(r StartTaskRequest) (string, bool, error) {
 		if r.Computer != computer {
 			id, err = startRemoteTask(tx, r)
 		} else {
-			id, err = startLocalTask(tx, r, computer, nil)
+			id, err = startLocalTask(tx, r, computer, nil, false)
 		}
 		created = err == nil
 		return err
@@ -772,7 +767,7 @@ func (s *Store) StartTask(r StartTaskRequest) (string, bool, error) {
 
 // startLocalTask records a task of this computer and its first run's launch
 // intent. origin is set for a task another computer started (T-037).
-func startLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, origin *netLink) (string, error) {
+func startLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, origin *netLink, coordinatorModel bool) (string, error) {
 	var folder string
 	if err := tx.QueryRow(`SELECT folder FROM project_folders WHERE project=? AND computer=?`, r.Project, computer).Scan(&folder); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -801,7 +796,11 @@ func startLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, origin *net
 	if paused != 0 {
 		return "", errAgentPaused(r.Provider)
 	}
-	if err := modelAllowed(r.Provider, r.Model, splitModels(models)); err != nil {
+	if coordinatorModel {
+		if _, _, err := modelcatalog.Resolve(r.Provider, r.Model); err != nil {
+			return "", fmt.Errorf("%w: %v", ErrRejected, err)
+		}
+	} else if err := modelAllowed(r.Provider, r.Model, splitModels(models)); err != nil {
 		return "", err
 	}
 	id, err := randomID()
@@ -2283,12 +2282,17 @@ type ComputerSummary struct {
 // computer that is only known when it answers.
 func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 	var c ComputerSummary
+	var catalog map[string][]string
 	err := s.tx(func(tx *sql.Tx) error {
 		computer, err := localComputer(tx)
 		if err != nil {
 			return err
 		}
 		name, err := computerName(tx)
+		if err != nil {
+			return err
+		}
+		catalog, err = coordinatorModelLists(tx, computer)
 		if err != nil {
 			return err
 		}
@@ -2373,6 +2377,9 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 		}
 		for _, a := range p.Agents {
 			models := a.Models
+			if usesCoordinatorModels(p.Version) {
+				models = catalog[a.Agent]
+			}
 			if models == nil {
 				models = []string{}
 			}
@@ -2641,14 +2648,34 @@ func setAgentModels(tx *sql.Tx, provider, models string) error {
 	if err != nil {
 		return err
 	}
-	res, err := tx.Exec(`UPDATE computer_agents SET models=?,updated_at=? WHERE computer=? AND provider=?`, models, now(), computer, provider)
-	if err != nil {
+	if _, err := tx.Exec(`UPDATE computer_agents SET models=?,updated_at=? WHERE computer=? AND provider=?`,
+		models, now(), computer, provider); err != nil {
 		return err
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return fmt.Errorf("%w: agent %s is not set up on this computer", ErrRejected, provider)
+	return setMeta(tx, "coordinator_models:"+provider, models)
+}
+
+// An agent can be configured for coordination even when its CLI is only
+// installed on other computers. Existing local agent lists take precedence.
+func coordinatorModelList(tx *sql.Tx, computer, provider string) (string, error) {
+	var models string
+	err := tx.QueryRow(`SELECT COALESCE(
+		(SELECT models FROM computer_agents WHERE computer=? AND provider=?),
+		(SELECT value FROM meta WHERE key=?), ?)`,
+		computer, provider, "coordinator_models:"+provider, strings.Join(modelcatalog.Defaults(provider), "\n")).Scan(&models)
+	return models, err
+}
+
+func coordinatorModelLists(tx *sql.Tx, computer string) (map[string][]string, error) {
+	lists := make(map[string][]string, len(TaskProviders))
+	for provider := range TaskProviders {
+		models, err := coordinatorModelList(tx, computer, provider)
+		if err != nil {
+			return nil, err
+		}
+		lists[provider] = splitModels(models)
 	}
-	return nil
+	return lists, nil
 }
 
 func splitModels(s string) []string {

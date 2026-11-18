@@ -75,7 +75,7 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - One chat is the project's coordinator at a time: the newest chat that waits or acts. If wait answers superseded: true, another chat took over; stop, do not call wait again, and tell the owner, unless they ask you to take over again.
 - A new chat starts from the current state, not from the history: first call tasks, which gives the open tasks, their open questions and the event cursor, then wait with after = that cursor. Never wait from 0 in a new chat: it replays every old event of the project. Agreements of an earlier coordinator chat that are not in the project's rules or files are not known here; ask the owner when it matters.
 - wait returns the events of this project's tasks after the cursor: a report, a question for you, a failure, an interruption, a block or a cancellation; with none, it blocks until one comes or timeout_seconds pass (default 60, at most 120). Always pass after = the cursor from the previous wait. When it returns events, act on them (answer questions with answer, tell the owner about reports). If it says more: true, more events are ready: call wait again at once with the new cursor.
-- start_task takes an optional model. Select the exact value from that agent's models in list_agents; model_options explains the standard selections and suggested work (small edits, everyday coding, complex work, hard investigations). This also applies to Unity: scope and difficulty decide, not the project label. A value such as gpt-6-astra[effort=high] is a Messenger selection: copy it unchanged into model; Messenger passes the base model and the separate CLI reasoning setting. Cursor uses its published CLI ID directly. These are configured options, not proof of account access; do not retry or switch automatically on rejection. Leave model out for the CLI default. Never invent IDs or append H/Medium to a model. Tell the owner when you chose a non-default model and why. Requires Messenger 0.72 on the executing computer for effort selections.
+- start_task takes an optional model. Select the exact value from that agent's models in list_agents; model_options explains the standard selections and suggested work (small edits, everyday coding, complex work, hard investigations). This also applies to Unity: scope and difficulty decide, not the project label. A value such as gpt-6.2-astra[effort=high] is a Messenger selection: copy it unchanged into model; Messenger passes the base model and the separate CLI reasoning setting. Cursor uses its published CLI ID directly. These are configured options, not proof of account access; do not retry or switch automatically on rejection. Leave model out for the CLI default. Never invent IDs or append H/Medium to a model. Tell the owner when you chose a non-default model and why. On executors running 0.82 or newer, these lists come from the coordinator computer. Older executors still use the lists they report. The executor must have CLI account access to the selection.
 - A report or question that ends with «[N picture(s) attached: read them with task_images]» has pictures from the worker (a screenshot, a chart): look at them with task_images before you judge the result.
 - A report is the worker's short summary. Its full last message is kept too: when a report or failure ends with «[Messenger] The worker's full final message has N characters», read it with task_output before asking the worker again; it is lost nowhere, even if the worker deleted its file.
 - answer answers a worker's question (pass question_id and a unique op_id); the worker continues in the same session.
@@ -103,7 +103,6 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - get_log reads the end of another computer's Messenger journal, for debugging Messenger itself (a task that never arrived, a refusal you cannot explain): each worker run launched and ended with its exit and error, and each message sent to or received from another computer with its kind and task id, or why it was not sent. That computer answers only if its owner turned on «Отдавать журнал по сети»; otherwise the reply says so. Session ids, codes and keys are removed. If no answer came in time, call get_log again with request_id. Do not use it to watch workers: wait does that.
 - newest_release in list_agents is the newest Messenger release this computer has downloaded, with its notes; update_available marks a computer that runs an older one. Before reporting a problem in Messenger, check whether those notes already cover it, and tell the owner when a computer that needs the fix has update_available. It is what this computer last downloaded, not a live check; left out when it has none.
 - server: true in list_agents marks the computer that runs the network's server. It takes tasks like any other computer when it has agents; while it restarts or is off, the computers do not reach each other.
-- set_agent_models replaces one agent's full model list on a chosen computer only when the owner asks. The list is computer-wide. Copy the exact IDs and effort selections. An empty array clears it. A remote request is queued, and agent_models_updated confirms application or refusal. Do not resend on an unknown result.
 - update_messenger asks a Windows or Linux computer (this one, or another of the network from list_agents) to install the newest Messenger, the program only. Running tasks are never interrupted: the computer answers queued, takes no new tasks, and installs as soon as none runs. A Mac answers that its update needs the button in its app. The result comes as a messenger_update event; nothing is retried. Do not call it again for the same computer while it is queued or updating. list_agents shows update_pending on a computer that is waiting.
 - full_access on a task of this computer means its worker may run any command (the owner's «Любые команды» switch on «Агенты»). Without it a command that needs approval is refused, and nobody can approve it: tell the owner to turn that switch on and then continue the task. For tasks from other computers it is «И для задач с других компьютеров» under it on «Агенты».
 - contact_lost on an open task of another computer means this computer has no contact with it (offline, left the network, or the network was made again); computer_last_seen is when it last reported. Its outcome there is unknown: do not start it again by yourself; tell the owner, and when that computer is back the task goes on reporting.
@@ -143,7 +142,7 @@ type coordinator struct {
 }
 
 // acting tools make this chat the project's coordinator (T-090).
-var actingTools = map[string]bool{"wait": true, "start_task": true, "answer": true, "continue_task": true, "note_task": true, "cancel": true, "update_messenger": true, "set_agent_models": true}
+var actingTools = map[string]bool{"wait": true, "start_task": true, "answer": true, "continue_task": true, "note_task": true, "cancel": true, "update_messenger": true}
 
 // claim makes this chat the active coordinator of its project. The new chat
 // is told it replaced another only while that chat's process still runs:
@@ -403,7 +402,7 @@ func coordinatorTools() []map[string]any {
 				"text":     map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxTaskText, "description": "the task: what to do and what to report"},
 				"title":    map[string]any{"type": "string", "maxLength": core.MaxTaskTitle, "description": "short title shown in the window"},
 				"computer": str("computer id from list_agents: this computer (the default) or another computer of the network"),
-				"model":    map[string]any{"type": "string", "maxLength": 80, "description": "Exact selection from the agent's models in list_agents; model_options gives task guidance. Copy effort selections unchanged, e.g. gpt-6-astra[effort=high]. Leave out for the CLI default. Never guess a model or retry after rejection."},
+				"model":    map[string]any{"type": "string", "maxLength": 80, "description": "Exact selection from the agent's models in list_agents; model_options gives task guidance. Copy effort selections unchanged, e.g. gpt-6.2-astra[effort=high]. Leave out for the CLI default. Never guess a model or retry after rejection."},
 				"lock":     map[string]any{"type": "string", "maxLength": core.MaxTaskLock, "description": "optional name of a resource only one worker on that computer may use at a time, such as unity-editor; the task waits to start while an earlier unfinished task with the same lock is on that computer"},
 			}, "op_id", "agent", "text")},
 		{"name": "wait", "description": "Return the events of this project's tasks after the cursor; with none, block until one arrives or timeout_seconds pass (default 60, at most 120). Costs no tokens while blocked. Follow the returned waiting instructions: a background shell session alone does not wake an idle chat. Always pass after. Returns a bounded batch; more: true means further events are ready, so call wait again at once with the new cursor.",
@@ -467,12 +466,6 @@ func coordinatorTools() []map[string]any {
 				"lines":      map[string]any{"type": "integer", "minimum": 1, "maximum": core.MaxLogLines, "description": fmt.Sprintf("how many last lines; default %d", core.DefaultLogLines)},
 				"request_id": str("request_id from an earlier get_log that had no answer yet"),
 			})},
-		{"name": "set_agent_models", "description": "Replace the entire computer-wide model list for one agent, only at the owner's request. Remote changes require a shared project, an online computer that accepts remote tasks, and Messenger 0.82 or newer. Wait for agent_models_updated to confirm a queued change.",
-			"inputSchema": obj(map[string]any{
-				"computer": str("computer id from list_agents, or omit for this computer"),
-				"agent":    map[string]any{"type": "string", "enum": []string{"claude", "codex", "cursor"}},
-				"models":   map[string]any{"type": "array", "maxItems": core.MaxAgentModels, "items": map[string]any{"type": "string", "maxLength": 80}, "description": "complete replacement list, in order; [] intentionally clears it"},
-			}, "agent", "models")},
 		{"name": "update_messenger", "description": "Ask a Windows or Linux computer to install the newest Messenger (the program only) as soon as no task runs there. Until then it takes no new tasks. A Mac answers that its update needs the button in its app. The result comes as a messenger_update event; nothing is retried.",
 			"inputSchema": obj(map[string]any{
 				"computer": str("computer id from list_agents: this computer (the default) or another computer of the network"),
@@ -715,23 +708,6 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 			return nil, err
 		}
 		return c.getLog(ctx, a.Computer, a.Lines, a.RequestID)
-	case "set_agent_models":
-		var a struct {
-			Computer string   `json:"computer"`
-			Agent    string   `json:"agent"`
-			Models   []string `json:"models"`
-		}
-		if err := strict(&a); err != nil {
-			return nil, err
-		}
-		id, err := c.store.RequestAgentModels(c.project, a.Computer, a.Agent, a.Models)
-		if err != nil {
-			return nil, err
-		}
-		if id == "" {
-			return map[string]any{"state": "applied"}, nil
-		}
-		return map[string]any{"state": "queued", "request_id": id, "next": "Wait for agent_models_updated. A queued request is not confirmation."}, nil
 	case "update_messenger":
 		var a struct {
 			Computer string `json:"computer"`

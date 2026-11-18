@@ -323,8 +323,9 @@ type WindowView struct {
 		Client    string `json:"client,omitempty"`
 		LastSeen  string `json:"last_seen,omitempty"`
 	} `json:"coordinator"`
-	Agents []WindowAgent `json:"agents"`
-	Tasks  []WindowTask  `json:"tasks"`
+	CoordinatorModels map[string][]string `json:"coordinator_models"`
+	Agents            []WindowAgent       `json:"agents"`
+	Tasks             []WindowTask        `json:"tasks"`
 	// Shared are the other computers' tasks of this project (T-047).
 	Shared []NetPeerTasks `json:"shared"`
 	// Pending counts this project's runs that are recorded but not launched.
@@ -359,6 +360,10 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 			return err
 		}
 		v.Computer = computer
+		v.CoordinatorModels, err = coordinatorModelLists(tx, computer)
+		if err != nil {
+			return err
+		}
 		if found {
 			if err := tx.QueryRow(`SELECT worker_rules FROM projects WHERE name=?`, v.Project).Scan(&v.WorkerRules); err != nil {
 				return err

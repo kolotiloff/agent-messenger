@@ -95,8 +95,12 @@ func TestAgentModels(t *testing.T) {
 			t.Fatalf("%s accepted: %v", name, err)
 		}
 	}
-	if err := f.st.SetAgentModels("cursor", []string{"x"}); !errors.Is(err, ErrRejected) {
-		t.Fatalf("agent that is not set up: %v", err)
+	if err := f.st.SetAgentModels("cursor", []string{"grok-4.7-medium"}); err != nil {
+		t.Fatalf("configure a coordinator list without a local agent: %v", err)
+	}
+	view, err := f.st.WindowView("Game", "2000-01-01")
+	if err != nil || !reflect.DeepEqual(view.CoordinatorModels["cursor"], []string{"grok-4.7-medium"}) {
+		t.Fatalf("window catalog: %v %v", view.CoordinatorModels, err)
 	}
 }
 
@@ -316,5 +320,75 @@ func TestEffortSelectionIsRecordedAndExplained(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("coordinator lacks model guidance")
+	}
+}
+func TestCodexDefaultsUpgradeFrom81(t *testing.T) {
+	f := newTaskFixture(t)
+	if err := f.st.SetAgentModels("codex", splitModels(previousCodexDefaults)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.st.db.Exec(`DELETE FROM meta WHERE key='default_models_t195'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := refreshDefaultModels(f.st.db); err != nil {
+		t.Fatal(err)
+	}
+	var got string
+	if err := f.st.db.QueryRow(`SELECT models FROM computer_agents WHERE provider='codex'`).Scan(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got != strings.Join(DefaultCodexModels, "\n") {
+		t.Fatalf("old list survived: %q", got)
+	}
+}
+
+func TestCoordinatorModelUsedByRemoteWorker(t *testing.T) {
+	origin := newTaskFixture(t).st
+	worker := newTaskFixture(t).st
+	selection := "gpt-6.2-sol[effort=low]"
+	if err := origin.SetAgentModels("codex", []string{selection}); err != nil {
+		t.Fatal(err)
+	}
+	if err := worker.SetAgentModels("codex", []string{"gpt-6-astra"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := origin.SetNetwork("broker", "origin", []NetPeer{{
+		ID: "worker", Name: "Worker", Version: "0.0.0-preview.82",
+		Agents: []NetAgent{{Agent: "codex", Models: []string{"gpt-6-astra"}}},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	summary, err := origin.ProjectAgents("Game")
+	if err != nil {
+		t.Fatal(err)
+	}
+	peers := summary["computers"].([]ComputerSummary)
+	if len(peers) != 2 || len(peers[1].Agents) != 1 || !reflect.DeepEqual(peers[1].Agents[0].Models, []string{selection}) {
+		t.Fatalf("coordinator should see its own list on the worker: %+v", peers)
+	}
+	request := StartTaskRequest{Project: "Game", Computer: "worker", Provider: "codex", OpID: "wrong", Text: "Fix", Model: "gpt-6-astra"}
+	if _, _, err := origin.StartTask(request); !errors.Is(err, ErrRejected) {
+		t.Fatalf("model outside the coordinator list accepted: %v", err)
+	}
+	request.OpID, request.Model = "right", selection
+	id, _, err := origin.StartTask(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending, err := origin.NetPending("broker", 10)
+	if err != nil || len(pending) != 1 {
+		t.Fatalf("outbox %v %v", pending, err)
+	}
+	wire := pending[0]
+	if err := worker.ApplyNet("broker", NetIncoming{Seq: 1, From: "origin", OpID: wire.OpID, Body: wire.Body}); err != nil {
+		t.Fatal(err)
+	}
+	var recorded string
+	if err := worker.db.QueryRow(`SELECT model FROM tasks WHERE origin_task=?`, id).Scan(&recorded); err != nil || recorded != selection {
+		t.Fatalf("worker did not record coordinator selection: %q %v", recorded, err)
+	}
+	var listed string
+	if err := worker.db.QueryRow(`SELECT models FROM computer_agents WHERE provider='codex'`).Scan(&listed); err != nil || listed != "gpt-6-astra" {
+		t.Fatalf("worker's own catalog changed: %q %v", listed, err)
 	}
 }

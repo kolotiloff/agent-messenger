@@ -319,15 +319,11 @@ func (s *Supervisor) readInbox(ctx context.Context, n broker.Network) string {
 			return "сообщения сети не получены: " + err.Error()
 		}
 		for _, m := range messages {
-			desc, progress := core.NetDescribe(m.Body)
-			if !progress {
+			if desc, progress := core.NetDescribe(m.Body); !progress {
 				journal.Printf("received from %s: %s", s.peerName(m.From), desc)
 			}
 			if err := s.store.ApplyNet(n.BrokerID, core.NetIncoming{Seq: m.Seq, From: m.From, OpID: m.OpID, Body: m.Body}); err != nil {
 				return "сообщение сети не применено: " + err.Error()
-			}
-			if strings.HasPrefix(desc, "models_request ") {
-				s.server.NotifyPresence()
 			}
 		}
 		if len(messages) < broker.InboxBatch {
