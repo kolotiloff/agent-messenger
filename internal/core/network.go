@@ -605,6 +605,17 @@ func (s *Store) SetNetFullAccess(on bool) error {
 
 // ---- origin side ----
 
+// netModelSettingsSince is the first build that reads a model selection with
+// settings, such as claude-opus-5-5[effort=medium] (T-170, T-211).
+const netModelSettingsSince = 72
+
+func peerVersionText(version string) string {
+	if version == "" {
+		return "of an unknown older version"
+	}
+	return version
+}
+
 // usesCoordinatorModels marks the first release that accepts the model
 // selected by the coordinator without consulting an executor-side list.
 func usesCoordinatorModels(version string) bool {
@@ -653,6 +664,10 @@ func startRemoteTask(tx *sql.Tx, r StartTaskRequest) (string, error) {
 	}
 	if peer.UpdatePending {
 		return "", fmt.Errorf("%w: computer «%s» is waiting to install a Messenger update and takes no new tasks", ErrRejected, peer.Name)
+	}
+	if strings.Contains(r.Model, "[") && !peerBuildAtLeast(peer.Version, netModelSettingsSince) {
+		// T-211: an older computer refuses such a name as invalid.
+		return "", fmt.Errorf("%w: computer «%s» runs Messenger %s, which reads model settings such as [effort=…] only from build %d; update it with update_messenger first, or name the model without settings", ErrRejected, peer.Name, peerVersionText(peer.Version), netModelSettingsSince)
 	}
 	id, err := randomID()
 	if err != nil {

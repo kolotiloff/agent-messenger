@@ -44,6 +44,11 @@ func recordProgram(root string) {
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return
 	}
+	// T-209: an older copy still running never points back at itself once a
+	// newer installed version was recorded.
+	if recorded := supervisor.ProgramPath(root); recorded != "" && olderWindowProgram(executable, recorded, filepath.Base(filepath.Dir(recorded))) {
+		return
+	}
 	_ = supervisor.WriteProgramPath(root, executable)
 }
 

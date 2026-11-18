@@ -108,3 +108,35 @@ func TestContinueRefusesUnclearTasks(t *testing.T) {
 		t.Fatalf("unknown task: %v", err)
 	}
 }
+
+// T-212: the first run failed before it read the task, so the follow-up run
+// gets the full task text with the follow-up.
+func TestContinueAfterAnUnreadFirstRunGivesTheTask(t *testing.T) {
+	f := newTaskFixture(t)
+	id := f.start(t, "op", "codex", "Fix the menu")
+	r := f.launch(t, id, "019a0000-0000-7000-8000-000000000001")
+	if _, err := f.st.FinishTaskRun(r.ID, RunEvidence{ExitObserved: true, ExitCode: 1, GroupEmpty: true, Reason: "usage_limit"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.ContinueTask(id, "c1", "Go on", AudienceCoordinator); err != nil {
+		t.Fatal(err)
+	}
+	runs, _ := f.st.NextTaskRunIntents(10)
+	if len(runs) != 1 {
+		t.Fatalf("runs %v", runs)
+	}
+	r2, _, err := f.st.BeginTaskRun(runs[0], "res2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.RecordTaskRunProcess(r2.ID, taskObs); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.BindTaskSession(r2.ID, "019a0000-0000-7000-8000-000000000001"); err != nil {
+		t.Fatal(err)
+	}
+	brief, err := f.st.ReadTask(r2.ID, r2.Receipt, false)
+	if err != nil || brief.Task != "Fix the menu" || brief.FollowUp != "Go on" || brief.Note != unreadTaskNote {
+		t.Fatalf("brief %+v %v", brief, err)
+	}
+}

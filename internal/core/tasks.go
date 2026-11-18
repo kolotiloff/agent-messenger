@@ -1331,6 +1331,10 @@ type TaskBrief struct {
 // continuedTaskNote tells a continued worker what this run is.
 const continuedTaskNote = "This run continues the same conversation after you finished the task. Do what follow_up asks; the task text is the one from your first read_task."
 
+// unreadTaskNote replaces continuedTaskNote when no earlier run read the task
+// (T-212).
+const unreadTaskNote = "This run continues a task whose earlier run ended before it read the task, so task holds the full task text. Do the task, taking follow_up into account."
+
 // ownerNoteTaskNote tells a worker why its run goes on after its report.
 const ownerNoteTaskNote = "This run continues the same conversation. The owner (or the coordinator, where a note starts with «From the coordinator») wrote to you while you worked (owner_notes), " +
 	"so your report (held_report) was not sent yet. Take what the owner wrote into account, then end the run as before " +
@@ -1358,6 +1362,14 @@ func (s *Store) ReadTask(run, receipt string, includeTask bool) (TaskBrief, erro
 		if err := tx.QueryRow(`SELECT rules FROM tasks WHERE id=?`, t.ID).Scan(&b.Rules); err != nil {
 			return err
 		}
+		// T-212: when no earlier run read the task (the first one failed
+		// before it could), the conversation lacks it: give it in full.
+		var readBefore int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM task_runs WHERE task_id=? AND ordinal<? AND read_seen=1`, t.ID, r.Ordinal).Scan(&readBefore); err != nil {
+			return err
+		}
+		unread := r.Ordinal > 1 && readBefore == 0
+		includeTask = includeTask || unread
 		if r.Kind == "answer" {
 			if !includeTask {
 				b.Task, b.Note = "", resumedTaskNote
@@ -1370,6 +1382,9 @@ func (s *Store) ReadTask(run, receipt string, includeTask bool) (TaskBrief, erro
 				b.Task = ""
 			}
 			b.Note, b.FollowUp = continuedTaskNote, r.Input
+			if unread {
+				b.Note = unreadTaskNote
+			}
 		}
 		if r.Kind == "note" {
 			if !includeTask {

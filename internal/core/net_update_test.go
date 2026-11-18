@@ -325,3 +325,19 @@ func TestNetUpdateResultClearsStalePendingFlag(t *testing.T) {
 		t.Fatalf("old result %+v", peers)
 	}
 }
+
+// T-211: an older computer would refuse a model with settings as invalid;
+// the coordinator says why before sending.
+func TestRemoteStartRefusesModelSettingsForAnOldPeer(t *testing.T) {
+	p := newUpdatePair(t)
+	if err := p.a.st.SetNetwork(testBroker, HostPeerID, []NetPeer{{ID: "dev-b", Name: "Ноутбук", Age: 1, Version: "0.0.0-preview.62", Agents: []NetAgent{{Agent: "claude"}}}}); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := p.a.st.StartTask(StartTaskRequest{Project: "Game", OpID: "op-b", Provider: "claude", Model: "claude-opus-5-5[effort=medium]", Text: "x", Computer: "dev-b"})
+	if !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "0.0.0-preview.62") || !strings.Contains(err.Error(), "update_messenger") {
+		t.Fatalf("old peer: %v", err)
+	}
+	if _, _, err := p.a.st.StartTask(StartTaskRequest{Project: "Game", OpID: "op-c", Provider: "claude", Model: "claude-opus-5-5", Text: "x", Computer: "dev-b"}); err != nil {
+		t.Fatalf("plain model to old peer: %v", err)
+	}
+}

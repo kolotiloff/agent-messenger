@@ -4,6 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-18 — Claude Code (T-198)
 
+- Owner answered Q-030 (b): D-147, T-205. The cause was `Wait` waiting for the error output a leftover child inherited; now limited after the exit. Also T-212, T-209, and parts of T-211 and T-208. Owner: release when done, don't wait.
 - T-207: connecting an agent stored the file its command link pointed at, so the Mac kept the old Codex after `codex update`; the link is now stored, and old rows switch to a known link that still points at the stored file. T-214: statistics default to the latest tasks; no repeated heading. Q-030 asked again (needed for T-205).
 - T-204, T-203 and T-210 fixed on the branch (stale update flag on the coordinator; stall limit instead of a total limit for update downloads; long op id of a window answer over the network). T-213 done on the branch: `update-find`; the Mac only looks in the background and downloads on the button.
 - Read the Mac feedback export of 11-18 (50 remarks; new since 11-16: nine). Recorded T-204 to T-212; the worker Claude percent remark joins T-191. The Mac could not fetch 0.84 on a 33 KB/s link: T-203.
