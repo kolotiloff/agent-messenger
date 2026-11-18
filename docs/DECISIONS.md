@@ -471,3 +471,10 @@ Amends D-100: a request to install the newest signed Messenger (the program only
 ## D-145 — The coordinator computer supplies the model list (T-196)
 
 2026-11-18, Codex, owner's correction. The coordinator configures its lists in the existing agent settings, including for providers installed only on other computers. For 0.82 executors, the coordinator advertises its own model choices in `list_agents` for that executor. It sends the chosen model in the existing task message with a flag marking coordinator selection. The executor validates syntax/provider and preserves its usual admission and launch checks. Its own CLI and account resolve the model and effort. Earlier executors and legacy task messages retain local-list behavior. No remote settings command is shipped.
+
+## D-146 — The tray, one window per computer, and no Sparkle windows (T-184, T-199)
+
+- Closing the window hides it in the tray (Windows notification area, Linux tray where the desktop has one, Mac menu bar). «Выйти» in the tray menu closes only the window, as closing it did before: the background client and its tasks keep running. Without a tray on Linux, closing closes as before.
+- A second launch on Windows or Linux brings the open window forward instead of opening a second one (Windows: the window's class and title; Linux: `window.sock` in the data folder). The window is destroyed before the program reopens after an update, so the new copy does not find the old one.
+- On a Mac the app is Sparkle's user driver: Sparkle still verifies, installs and relaunches, but shows no window; the page's update dialog shows the steps, as on Windows and Linux. Nothing is retried; an error ends the run and the old program stays.
+

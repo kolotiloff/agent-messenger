@@ -55,6 +55,9 @@ type rect struct{ left, top, right, bottom int32 }
 // to the page. A maximised window would hang its top over the screen edge by
 // the frame's width, so then the page starts that much lower.
 func framelessProc(hwnd, msg, wp, lp uintptr) uintptr {
+	if ret, handled := trayProc(hwnd, msg, wp, lp); handled {
+		return ret
+	}
 	if msg == wmNCCalcSize && wp == nccalcsizeParamsW {
 		// lp points at memory Windows owns, not at a Go object.
 		r := *(**rect)(unsafe.Pointer(&lp))

@@ -66,9 +66,28 @@ func TestUsageStats(t *testing.T) {
 			t.Fatalf("project %+v", task)
 		}
 	}
+	// T-197: the same tasks, newest first, with their token parts.
+	b := s.Top[0].ID
+	now := time.Now().UTC()
+	for i, id := range []string{remote, a, b} { // remote newest, then a, then b
+		at := now.Add(-time.Duration(i+1) * time.Minute).Format(time.RFC3339Nano)
+		if _, err := f.st.db.Exec(`UPDATE tasks SET finished_at=? WHERE id=?`, at, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s, err = f.st.UsageStats(since, time.Local, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Recent) != 3 || s.Recent[0].ID != remote || s.Recent[1].ID != a || s.Recent[2].ID != b || s.Top[0].ID != b {
+		t.Fatalf("recent %+v top %+v", s.Recent, s.Top)
+	}
+	if r := s.Recent[1]; r.Input != 1000 || r.Cached != 800 || r.Output != 100 || r.Tokens != 1100 {
+		t.Fatalf("parts %+v", r)
+	}
 	// A period with nothing in it.
 	empty, err := f.st.UsageStats(time.Now().Add(time.Hour), time.Local, "")
-	if err != nil || empty.Total.Tasks != 0 || len(empty.Agents) != 0 || len(empty.Top) != 0 {
+	if err != nil || empty.Total.Tasks != 0 || len(empty.Agents) != 0 || len(empty.Top) != 0 || len(empty.Recent) != 0 {
 		t.Fatalf("empty %+v %v", empty, err)
 	}
 }

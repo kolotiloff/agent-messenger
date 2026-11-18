@@ -513,19 +513,27 @@
     collectNotices();
     const live=$('machines'),box=live.cloneNode(false);
     const machine=el('div',undefined,'am-machine-card');machine.setAttribute('aria-current','true');pickable(machine,'local');
-    const head=el('div',undefined,'am-machine-name');head.append(el('span',view?.computer_name||tr('Этот компьютер')));
+    // Every card is laid out the same (owner, 2026-11-18, T-198): the dot
+    // before the name, the version in the top right corner, the update icon
+    // in the bottom right corner. This computer's version and update button
+    // are the window's own elements, moved into its card (placeLocalParts).
+    const head=el('div',undefined,'am-machine-name');
+    const dot=el('span',undefined,'am-dot'+(online?' online':''));dot.title=online?tr('На связи'):tr('Нет связи');head.append(dot);
+    head.append(el('span',view?.computer_name||tr('Этот компьютер')));
     // The computer that runs the network's server is labelled as such.
     if(server?.host?.running&&server.host.scope!=='local')head.append(serverTag());
-    const dot=el('span',undefined,'am-dot'+(online?' online':''));dot.title=online?tr('На связи'):tr('Нет связи');head.append(dot);
-    if(view?.pending_update==='updating'||view?.pending_update==='queued'){
-      const tip=view.pending_update==='updating'?tr('Обновляется…'):tr('ждёт обновления');
-      const b=el('span',undefined,'am-update-icon am-peer-update am-update-wait');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);appendUpdateGlyphs(b);
-      head.append(b);
-    }
+    head.append(el('div',undefined,'am-machine-version am-local-version'));
     machine.append(head);
     const lines=agentLines(view?.agents||[],view?.coordinator?.connected?(view.coordinator.client||''):null,online);
     if(!lines.children.length)lines.append(el('p',online?tr('Агенты не подключены'):tr('Нет связи'),'am-small am-muted'));
-    machine.append(lines);box.append(machine);
+    machine.append(lines);
+    const corner=el('div',undefined,'am-card-update am-local-update');
+    if(view?.pending_update==='updating'||view?.pending_update==='queued'){
+      const tip=view.pending_update==='updating'?tr('Обновляется…'):tr('ждёт обновления');
+      const b=el('span',undefined,'am-update-icon am-peer-update am-update-wait');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);appendUpdateGlyphs(b);
+      corner.append(b);
+    }
+    machine.append(corner);box.append(machine);
     // The other computers of this computer's network, with their agents.
     // Only the computer that runs the server can revoke one, from the
     // right-click menu.
@@ -535,10 +543,10 @@
       const card=el('div',undefined,'am-machine-card am-peer-card');card.dataset.peer=peer.id;if(peer.host)card.dataset.host='';pickable(card,peer.id);
       const name=el('div',undefined,'am-machine-name');
       const pdot=el('span',undefined,'am-dot'+(fresh?' online':''));pdot.title=fresh?tr('На связи'):tr('Нет связи');
-      name.append(el('span',peer.name));
+      name.append(pdot,el('span',peer.name));
       if(peer.host)name.append(serverTag());
-      if(peer.version)name.append(el('span',versionName(peer.version),'am-small am-muted am-machine-version'));
-      name.append(pdot);
+      if(peer.version)name.append(el('span',versionName(peer.version),'am-version am-machine-version'));
+      const corner=el('div',undefined,'am-card-update');
       // T-128: an older computer gets the update icon next to its dot; the
       // owner confirms in a popup.
       const busy=updateLine(peer);
@@ -549,13 +557,13 @@
         // download that may wait for hours (owner, 2026-11-14).
         const tip=busy[0];
         const b=el('span',undefined,'am-update-icon am-peer-update am-update-wait');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);appendUpdateGlyphs(b);
-        name.append(b);
+        corner.append(b);
       }else if(fresh&&peer.version&&versionOlder(peer.version,newestVersion())){
         const newest=versionName(newestVersion()),label=tr('Обновить до ')+newest;
         const b=el('button',undefined,'am-update-icon am-peer-update');b.type='button';b.title=label;b.setAttribute('aria-label',label);appendUpdateGlyphs(b);
         b.addEventListener('click',event=>{event.stopPropagation();askConfirm(tr('Обновить ')+(peer.name||tr('компьютер'))+tr(' до ')+newest+'?',tr('Программа на том компьютере обновится и перезапустится. Задачи и история сохранятся.')+(peer.host?' '+tr('На нём работает сервер сети: пока он перезапускается, компьютеры не видят друг друга. Если там попросят подтверждение, сервер не вернётся, пока кто-нибудь не ответит у того компьютера.'):''),tr('Обновить'),()=>requestUpdate(peer),true);});
         b.addEventListener('keydown',event=>event.stopPropagation());
-        name.append(b);
+        corner.append(b);
       }
       card.append(name);
       if(revokeAsk===peer.id&&hosted.has(peer.id)){
@@ -574,6 +582,7 @@
       }else{
         card.append(el('p',peer.last_seen?tr('Был на связи ')+stamp(peer.last_seen):tr('Ещё не выходил на связь'),'am-small am-muted'));
       }
+      if(corner.children.length)card.append(corner);
       const can={revoke:hosted.has(peer.id)};
       if(can.revoke){
         card.classList.add('am-device-card');card.tabIndex=0;card.dataset.key='revoke-'+peer.id;card.title=tr('Правая кнопка мыши — действия');
@@ -582,8 +591,30 @@
       }
       box.append(card);
     }
-    swapChildren(live,box);
+    // The moved elements are left out of the comparison, so an unchanged
+    // list keeps its nodes; before a rebuild they go back to the bottom row,
+    // or they would leave the page with the old card.
+    const copy=live.cloneNode(true);
+    for(const id of localParts)copy.querySelector('#'+id)?.remove();
+    if(copy.innerHTML!==box.innerHTML){parkLocalParts();live.replaceChildren(...box.childNodes);}
+    placeLocalParts();
   }
+  // This computer's version and update button live in its card; in a narrow
+  // window the computer list is hidden and they stay in the bottom row.
+  const localParts=['app-installed-version','app-update-button'];
+  const narrowSidebar=matchMedia('(max-width:620px)');
+  function parkLocalParts(){
+    const row=document.querySelector('.am-version-row');
+    row.prepend(...localParts.map(id=>$(id)).filter(node=>node.parentNode!==row));
+  }
+  function placeLocalParts(){
+    const card=$('machines').querySelector('[aria-current="true"]');
+    if(narrowSidebar.matches||!card){parkLocalParts();return;}
+    const version=card.querySelector('.am-local-version'),corner=card.querySelector('.am-local-update');
+    if($('app-installed-version').parentNode!==version)version.append($('app-installed-version'));
+    if($('app-update-button').parentNode!==corner)corner.append($('app-update-button'));
+  }
+  narrowSidebar.addEventListener('change',placeLocalParts);
   // The computer that runs a task: this one, or the other one it was sent to.
   function taskComputer(t){return t.remote&&!t.remote.from?t.remote.id:'local';}
   // Where another computer's task runs (T-186): the computer it was sent
@@ -1582,6 +1613,7 @@
   // tokens, no dollars (D-074). One hue for every bar: the bars show size,
   // not identity, and the names stand next to them.
   let statsPeriod=['day','week','month'].includes(recall('messenger-stats-period'))?recall('messenger-stats-period'):'week',stats=null,statsGen=0;
+  let statsSort=recall('messenger-stats-sort')==='recent'?'recent':'tokens';
   const periodWords={day:tr('сегодня'),week:tr('за 7 дней'),month:tr('за 30 дней')};
   function tasksWord(n){const a=n%10,b=n%100;if(amLang==='en')return n+(n===1?' task':' tasks');return n+' '+(a===1&&b!==11?'задача':a>=2&&a<=4&&(b<12||b>14)?'задачи':'задач');}
   function tokensWord(n){const a=n%10,b=n%100;if(amLang==='en')return n===1?'token':'tokens';return a===1&&b!==11?'токен':a>=2&&a<=4&&(b<12||b>14)?'токена':'токенов';}
@@ -1637,14 +1669,19 @@
     statsDays($('stats-days'),statsPeriod==='day'?[]:stats.days);
     statsBars($('stats-agents'),stats.agents,t.tokens,true);
     statsBars($('stats-computers'),stats.computers,t.tokens);
+    // T-197: the most expensive tasks or the latest finished ones, in the
+    // same period and computer scope.
+    root.querySelectorAll('[data-stats-sort]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.statsSort===statsSort)));
+    $('stats-top-title').textContent=statsSort==='recent'?tr('Последние задачи'):tr('Самые затратные задачи');
+    const list=statsSort==='recent'?(stats.recent||[]):stats.top;
     const top=$('stats-top');top.replaceChildren();
-    if(!stats.top.length)top.append(el('p',tr('Пока пусто'),'am-small am-muted'));
-    for(const task of stats.top){
+    if(!list.length)top.append(el('p',tr('Пока пусто'),'am-small am-muted'));
+    for(const task of list){
       const row=el('button',undefined,'am-stats-task');row.type='button';
       const words=el('span',undefined,'am-stats-task-text');
-      words.append(el('span',task.title||tr('Без названия'),'am-stats-task-title'),el('span',[task.project,shortNames[task.agent]||task.agent,task.computer].filter(Boolean).join(', '),'am-small am-muted'));
+      words.append(el('span',task.title||tr('Без названия'),'am-stats-task-title'),el('span',[statsSort==='recent'?stamp(task.at):'',task.project,shortNames[task.agent]||task.agent,task.computer].filter(Boolean).join(', '),'am-small am-muted'));
       row.append(words,el('span',tokensText(task.tokens),'am-stats-value'));
-      row.title=tr('Открыть задачу');
+      row.title=(typeof task.input_tokens==='number'?usageLong(task)+'\n':'')+tr('Открыть задачу');
       row.addEventListener('click',()=>{
         if(task.project&&task.project!==project){project=task.project;remember('messenger-project',project);viewSignature='';}
         selectedTask=task.id;selectedShared=null;feed=null;feedSignature='';show('tasks');refresh();
@@ -1652,6 +1689,7 @@
       top.append(row);
     }
   }
+  root.querySelectorAll('[data-stats-sort]').forEach(b=>b.addEventListener('click',()=>{statsSort=b.dataset.statsSort;remember('messenger-stats-sort',statsSort);renderStats();}));
   root.querySelectorAll('[data-period]').forEach(b=>b.addEventListener('click',()=>{statsPeriod=b.dataset.period;remember('messenger-stats-period',statsPeriod);stats=null;renderStats();loadStats();}));
 
   // Server tab: the broker hosted by this client and this computer's
@@ -2314,6 +2352,7 @@
   let updateRun=null,updateRunTimer=0;
   function renderUpdateDialog(){
     if(!updateRun)return;
+    if(updateRun.mac){renderMacRun();return;}
     const s=selfUpdate||{},p=updateProgress,state=s.state||'';
     if(s.version)updateRun.version=s.version;
     if(state==='downloading'||state==='installing'||state==='installed')updateRun.busy=true;
@@ -2357,12 +2396,49 @@
     }catch(error){updateRun.error=error.message;renderUpdateDialog();return;}
     renderSelfUpdate();followUpdate();
   }
-  $('update-retry').addEventListener('click',startUpdate);
+  // A Mac: the app's updater does the same steps and reports each one
+  // (T-199); Sparkle shows no window of its own.
+  function renderMacRun(){
+    const r=updateRun;
+    $('update-title').textContent=tr('Обновление')+(r.version?' '+versionName(r.version):'');
+    let step,share;
+    if(r.error){step=tr('Не удалось обновить');share=0;}
+    else if(r.phase==='restarting'){step=tr('Перезапуск…');share=1;}
+    else if(r.phase==='installing'){step=tr('Установка…');share=1;}
+    else if(r.total>0){share=Math.min(1,r.done/r.total);step=tr('Загрузка…')+' '+Math.floor(100*share)+'%';}
+    else{step=tr('Загрузка…');share=0;}
+    $('update-step').textContent=step;
+    $('update-bar-fill').style.setProperty('--am-update-share',String(share));
+    $('update-error').textContent=r.error||'';$('update-error').hidden=!r.error;
+    $('update-actions').hidden=!r.error;
+  }
+  // Without any word from the app for two minutes the dialog says so and
+  // can be closed; nothing is retried.
+  function macRunQuiet(){
+    clearTimeout(updateRunTimer);
+    updateRunTimer=setTimeout(()=>{if(updateRun?.mac&&!updateRun.error&&updateRun.phase!=='restarting'){updateRun.error=tr('Обновление не ответило. Программа осталась прежней.');renderMacRun();}},120000);
+  }
+  window.messengerUpdateRun=state=>{
+    if(!updateRun?.mac||!state)return;
+    if(typeof state.version==='string'&&state.version)updateRun.version=state.version;
+    updateRun.phase=String(state.phase||'');
+    updateRun.done=Number(state.done)||0;updateRun.total=Number(state.total)||0;
+    updateRun.error=updateRun.phase==='error'?String(state.error||tr('Обновление не установлено. Программа осталась прежней.')):'';
+    if(updateRun.error)clearTimeout(updateRunTimer);else macRunQuiet();
+    renderMacRun();
+  };
+  function startMacUpdate(){
+    updateRun={mac:true,version:macUpdate?.version||'',phase:'downloading',done:0,total:0,error:''};
+    if(!$('update-dialog').open)$('update-dialog').showModal();
+    renderMacRun();macRunQuiet();
+    window.webkit.messageHandlers.updates.postMessage('install');
+  }
+  $('update-retry').addEventListener('click',()=>updateRun?.mac?startMacUpdate():startUpdate());
   $('update-close').addEventListener('click',()=>{updateRun=null;clearTimeout(updateRunTimer);$('update-dialog').close();loadSelfUpdate();});
   // The download and the install are not cancelled halfway.
   $('update-dialog').addEventListener('cancel',event=>{if(!updateRun?.error)event.preventDefault();else{updateRun=null;}});
   $('app-update-button').addEventListener('click',()=>{
-    if(window.webkit?.messageHandlers?.updates)window.webkit.messageHandlers.updates.postMessage('check');
+    if(window.webkit?.messageHandlers?.updates)startMacUpdate();
     else startUpdate();
   });
   if(!window.webkit?.messageHandlers?.updates){selfUpdateTimer=setInterval(loadSelfUpdate,60000);loadSelfUpdate();}

@@ -21,6 +21,11 @@ import (
 func showWindow(ctx context.Context, cancel context.CancelFunc, home string, page windowPage, out io.Writer) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
+	// A copy already open, perhaps hidden in the notification area (T-184),
+	// comes forward instead of a second window.
+	if showOpenWindow() {
+		return
+	}
 	w := webview2.NewWithOptions(webview2.WebViewOptions{
 		DataPath:  filepath.Join(home, "window"),
 		AutoFocus: true,
@@ -46,6 +51,7 @@ func showWindow(ctx context.Context, cancel context.CancelFunc, home string, pag
 	_ = w.Bind("amWindow", func(action string) { w.Dispatch(func() { windowAction(hwnd, action) }) })
 	colorTitleBar(hwnd, systemDark())
 	makeFrameless(hwnd)
+	addTray(hwnd)
 	w.Navigate(page.address)
 	// An update or Ctrl+C closes the window too. Terminate posts WM_QUIT to
 	// the calling thread's queue, so it must run on the window's thread:
@@ -54,6 +60,8 @@ func showWindow(ctx context.Context, cancel context.CancelFunc, home string, pag
 	stop := context.AfterFunc(ctx, func() { w.Dispatch(w.Terminate) })
 	defer stop()
 	w.Run()
+	// Gone before the program ends or opens again after an update.
+	closeWindowNow(hwnd)
 }
 
 var (
