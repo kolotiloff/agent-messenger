@@ -54,6 +54,7 @@ type UsageTask struct {
 	Computer string `json:"computer"`
 	At       string `json:"at"`
 	Tokens   int64  `json:"tokens"`
+	Model    string `json:"model,omitempty"`
 	// The parts of Tokens, shown on hover (T-197).
 	Input  int64 `json:"input_tokens"`
 	Cached int64 `json:"cached_tokens"`
@@ -84,6 +85,19 @@ type UsageStats struct {
 	Top       []UsageTask  `json:"top"`
 	// Recent are the tasks that finished last, newest first (T-197).
 	Recent []UsageTask `json:"recent"`
+	// The filters the page was counted with (T-201), and the models of the
+	// tasks this computer knows in the period, for the model list.
+	Agent  string       `json:"agent,omitempty"`
+	Model  string       `json:"model,omitempty"`
+	Models []UsageGroup `json:"models"`
+}
+
+// UsageFilter limits the statistics to one agent and one model (T-201).
+// Other computers report their days per agent only, so with a model only
+// the tasks this computer knows are counted.
+type UsageFilter struct {
+	Agent string
+	Model string
 }
 
 // MaxUsageTop is how many of the largest tasks the page lists.
@@ -98,7 +112,12 @@ const MaxUsageTop = 10
 // oldest first, including days without tasks; the largest tasks are the
 // ones this computer knows.
 func (s *Store) UsageStats(since time.Time, loc *time.Location, computer string) (UsageStats, error) {
-	out := UsageStats{Since: since.UTC().Format(time.RFC3339Nano), Agents: []UsageGroup{}, Computers: []UsageGroup{}, Days: []UsageDay{}, Top: []UsageTask{}, Recent: []UsageTask{}}
+	return s.UsageStatsFiltered(since, loc, computer, UsageFilter{})
+}
+
+// UsageStatsFiltered is UsageStats for one agent or model (T-201).
+func (s *Store) UsageStatsFiltered(since time.Time, loc *time.Location, computer string, filter UsageFilter) (UsageStats, error) {
+	out := UsageStats{Since: since.UTC().Format(time.RFC3339Nano), Agents: []UsageGroup{}, Computers: []UsageGroup{}, Days: []UsageDay{}, Top: []UsageTask{}, Recent: []UsageTask{}, Models: []UsageGroup{}, Agent: filter.Agent, Model: filter.Model}
 	err := s.tx(func(tx *sql.Tx) error {
 		local, err := localComputer(tx)
 		if err != nil {
@@ -157,8 +176,10 @@ func (s *Store) UsageStats(since time.Time, loc *time.Location, computer string)
 				d.addN(tasks, in, cached, outTokens)
 			}
 		}
+		models := map[string]*UsageGroup{}
 		rows, err := tx.Query(`SELECT t.id,t.title,t.project,t.provider,COALESCE(t.remote_peer,''),COALESCE(p.name,''),
- COALESCE(t.finished_at,t.updated_at),t.usage_input,t.usage_cached,t.usage_output
+ COALESCE(t.finished_at,t.updated_at),t.usage_input,t.usage_cached,t.usage_output,
+ COALESCE(NULLIF(t.ran_model,''),NULLIF(t.model,''),'')
  FROM tasks t LEFT JOIN net_peers p ON p.peer=t.remote_peer
  WHERE t.usage_seen=1 AND COALESCE(t.finished_at,t.updated_at)>=?`, out.Since)
 		if err != nil {
@@ -169,8 +190,11 @@ func (s *Store) UsageStats(since time.Time, loc *time.Location, computer string)
 			var task UsageTask
 			var peer, peerName string
 			var in, cached, outTokens int64
-			if err := rows.Scan(&task.ID, &task.Title, &task.Project, &task.Agent, &peer, &peerName, &task.At, &in, &cached, &outTokens); err != nil {
+			if err := rows.Scan(&task.ID, &task.Title, &task.Project, &task.Agent, &peer, &peerName, &task.At, &in, &cached, &outTokens, &task.Model); err != nil {
 				return err
+			}
+			if filter.Agent != "" && task.Agent != filter.Agent {
+				continue
 			}
 			task.Tokens = in + outTokens
 			task.Input, task.Cached, task.Output = in, cached, outTokens
@@ -181,9 +205,22 @@ func (s *Store) UsageStats(since time.Time, loc *time.Location, computer string)
 			if !wanted(key) {
 				continue
 			}
+			// The model list counts every known task of the agent, whatever
+			// model is chosen, so another model can be picked.
+			if task.Model != "" {
+				m := models[task.Model]
+				if m == nil {
+					m = &UsageGroup{Key: task.Model, Name: task.Model}
+					models[task.Model] = m
+				}
+				m.addN(1, in, cached, outTokens)
+			}
+			if filter.Model != "" && task.Model != filter.Model {
+				continue
+			}
 			task.Computer = name
 			out.Top = append(out.Top, task)
-			if _, ok := reported[peer]; peer != "" && ok {
+			if _, ok := reported[peer]; peer != "" && ok && filter.Model == "" {
 				continue // counted from that computer's own report
 			}
 			day := ""
@@ -197,11 +234,13 @@ func (s *Store) UsageStats(since time.Time, loc *time.Location, computer string)
 		}
 		firstDay := since.In(loc).Format("2006-01-02")
 		for _, p := range peers {
-			if p.Usage == nil || !wanted(p.ID) {
+			// The reports carry no model: with a model chosen, the tasks
+			// above stand for that computer.
+			if p.Usage == nil || !wanted(p.ID) || filter.Model != "" {
 				continue
 			}
 			for _, u := range p.Usage {
-				if u.Day < firstDay || u.Tasks <= 0 {
+				if u.Day < firstDay || u.Tasks <= 0 || (filter.Agent != "" && u.Agent != filter.Agent) {
 					continue
 				}
 				count(p.ID, p.Name, false, u.Agent, u.Day, u.Tasks, u.Input, u.Cached, u.Output)
@@ -221,8 +260,12 @@ func (s *Store) UsageStats(since time.Time, loc *time.Location, computer string)
 				return g[i].Key < g[j].Key
 			})
 		}
+		for _, m := range models {
+			out.Models = append(out.Models, *m)
+		}
 		byTokens(out.Agents)
 		byTokens(out.Computers)
+		byTokens(out.Models)
 		sort.Slice(out.Top, func(i, j int) bool {
 			if out.Top[i].Tokens != out.Top[j].Tokens {
 				return out.Top[i].Tokens > out.Top[j].Tokens

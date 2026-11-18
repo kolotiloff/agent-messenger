@@ -85,6 +85,21 @@ func TestUsageStats(t *testing.T) {
 	if r := s.Recent[1]; r.Input != 1000 || r.Cached != 800 || r.Output != 100 || r.Tokens != 1100 {
 		t.Fatalf("parts %+v", r)
 	}
+	// T-201: one agent, then one model of it.
+	if _, err := f.st.db.Exec(`UPDATE tasks SET model='gpt-6.2-sol[effort=low]' WHERE id=?`, b); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.st.db.Exec(`UPDATE tasks SET model='gpt-6.2-sol[effort=low]',ran_model='gpt-6.2-astra' WHERE id=?`, remote); err != nil {
+		t.Fatal(err)
+	}
+	codex, err := f.st.UsageStatsFiltered(since, time.Local, "", UsageFilter{Agent: "codex"})
+	if err != nil || codex.Total.Tokens != 5830 || len(codex.Agents) != 1 || len(codex.Top) != 2 || codex.Agent != "codex" || len(codex.Models) != 2 {
+		t.Fatalf("codex %+v %v", codex, err)
+	}
+	sol, err := f.st.UsageStatsFiltered(since, time.Local, "", UsageFilter{Agent: "codex", Model: "gpt-6.2-sol[effort=low]"})
+	if err != nil || sol.Total.Tokens != 5500 || len(sol.Top) != 1 || sol.Top[0].ID != b || sol.Top[0].Model != "gpt-6.2-sol[effort=low]" || len(sol.Models) != 2 {
+		t.Fatalf("sol %+v %v", sol, err)
+	}
 	// A period with nothing in it.
 	empty, err := f.st.UsageStats(time.Now().Add(time.Hour), time.Local, "")
 	if err != nil || empty.Total.Tasks != 0 || len(empty.Agents) != 0 || len(empty.Top) != 0 || len(empty.Recent) != 0 {

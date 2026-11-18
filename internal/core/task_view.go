@@ -431,6 +431,8 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 			continue
 		}
 		w := WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt, FailureReason: t.FailureReason, FailureReset: t.FailureReset, FullAccess: t.FullAccess}
+		// The row shows the model the worker started on (T-202).
+		w.RanModel = s.ranModel(t.ID)
 		if t.OpenQuestion != nil && t.OpenQuestion.Audience == AudienceOwner {
 			w.OwnerQuestion = t.OpenQuestion
 		}

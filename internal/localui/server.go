@@ -497,6 +497,17 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 				http.Error(w, "invalid computer", 400)
 				return
 			}
+			// One agent and one model (T-201).
+			req.Provider = r.URL.Query().Get("agent")
+			if req.Provider != "" && req.Provider != "claude" && req.Provider != "codex" && req.Provider != "cursor" {
+				http.Error(w, "invalid agent", 400)
+				return
+			}
+			req.Model = r.URL.Query().Get("model")
+			if len(req.Model) > 128 || strings.ContainsAny(req.Model, "\x00\r\n") {
+				http.Error(w, "invalid model", 400)
+				return
+			}
 		case "/api/task-image":
 			req.Cmd = "task-image"
 			req.MessageID = r.URL.Query().Get("id")

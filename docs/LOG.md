@@ -4,6 +4,9 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-18 — Claude Code (T-198)
 
+- T-202: task rows show the model after the status; the computer name stays (owner's choice).
+- T-201: statistics by agent and model; the model counts only tasks known here, since other computers report per agent.
+- T-200: the owner's Mac listed its paused agents in the left panel; this computer's card now leaves them out like the other computers do.
 - Released [0.83](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.83) from `1ab2415` via PR #127 (release run 44332389459); 22 assets, five update feeds and the Linux x64 checksum checked.
 - Owner asked to do the nearest tasks too: T-197 statistics sort, T-184 tray (Windows, Linux, Mac), T-199 Mac update dialog (Sparkle user driver). Linux tray tried under Xvfb with stalonetray.
 - Checked the 0.82 release (run, 22 assets). Owner asked for one layout of the computer cards: dot before the name, version top right, update bottom right, also for this computer. Done on `claude/eager-volta-6sbjsa`; checked in Chromium with fictional data.

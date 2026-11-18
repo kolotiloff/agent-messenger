@@ -524,7 +524,12 @@
     if(server?.host?.running&&server.host.scope!=='local')head.append(serverTag());
     head.append(el('div',undefined,'am-machine-version am-local-version'));
     machine.append(head);
-    const lines=agentLines(view?.agents||[],view?.coordinator?.connected?(view.coordinator.client||''):null,online);
+    // A paused agent is left out, as other computers leave it out of what
+    // they report (owner, 2026-11-18: two of three agents were off and the
+    // Mac still listed all three). One still running a task stays until it
+    // ends.
+    const shownAgents=(view?.agents||[]).filter(a=>!a.paused||a.running>0||a.waiting_owner>0);
+    const lines=agentLines(shownAgents,view?.coordinator?.connected?(view.coordinator.client||''):null,online);
     if(!lines.children.length)lines.append(el('p',online?tr('Агенты не подключены'):tr('Нет связи'),'am-small am-muted'));
     machine.append(lines);
     const corner=el('div',undefined,'am-card-update am-local-update');
@@ -732,6 +737,19 @@
     if(selectedTask===it.t.id&&!selectedShared)return;
     selectedTask=it.t.id;selectedShared=null;feed=null;feedSignature='';renderTaskList();if(!quiet)loadFeed();
   }
+  // A model's short name for the task list (T-202): «gpt-6.2-sol[effort=low]»
+  // reads «Sol 6.2 Low», «claude-opus-5-5[effort=medium]» «Opus 5.5 Medium».
+  // Anything else is shown as it is.
+  function modelName(value){
+    const m=String(value).match(/^(.*?)(?:\[effort=([a-z]+)\])?$/);
+    let base=m[1];const effort=m[2]?' '+capital(m[2]):'';
+    const cap=s=>s?s[0].toUpperCase()+s.slice(1):s;
+    let g=base.match(/^gpt-(\d+(?:\.\d+)?)-([a-z]+)$/i);
+    if(g)return cap(g[2])+' '+g[1]+effort;
+    g=base.match(/^claude-([a-z]+)-(\d+)-(\d+)$/i);
+    if(g)return cap(g[1])+' '+g[2]+'.'+g[3]+effort;
+    return base+effort;
+  }
   function renderTaskList(){
     const live=$('task-list'),box=live.cloneNode(false);
     computerChip($('computer-chip'));
@@ -748,7 +766,8 @@
     // Another computer's task is read-only and says which computer gave it.
     const ownRow=t=>{
       const row=el('button',undefined,'am-task');row.type='button';row.setAttribute('aria-pressed',String(t.id===selectedTask));
-      // T-119: every own task says where it runs; this computer's name stands out.
+      // T-119: every own task says where it runs; this computer's name
+      // stands out. The model it runs on follows the status below (T-202).
       const here=!(t.remote&&!t.remote.from),label=el('span',(names[t.agent]||t.agent)+tr(' на '));
       label.append(el('span',here?(view.computer_name||tr('этом компьютере')):t.remote.name,here?'am-task-here':''));
       if(t.remote?.from)label.append(fromTag(t.remote.name));
@@ -758,8 +777,10 @@
       const [text,cls,tip]=taskStatus(t);
       const status=el('span',undefined,'am-task-status '+cls);if(tip)status.title=tip;
       if(t.state==='waiting_owner')status.append(el('span',undefined,'am-dot am-dot-wait'));
-      const words=el('span');status.append(words);words.append(statusPiece(text,!!t.usage));
-      if(t.usage){const used=el('span',usageShort(t.usage),'am-task-usage');used.title=usageLong(t.usage);words.append(used);}
+      const model=t.ran_model||t.model;
+      const words=el('span');status.append(words);words.append(statusPiece(text,!!t.usage||!!model));
+      if(t.usage){const used=el('span',usageShort(t.usage),'am-task-usage');used.title=usageLong(t.usage);if(model)used.append(el('span',',','am-task-comma'));words.append(used);}
+      if(model){const m=el('span',modelName(model),'am-task-usage am-task-model');m.title=tr('Модель: ')+model;words.append(m);}
       row.append(agent,el('span',t.title,'am-task-title'),status);
       row.addEventListener('click',()=>{selectedTask=t.id;selectedShared=null;feedSignature='';renderTaskList();loadFeed();});
       row.addEventListener('contextmenu',e=>taskMenu(e,t,null));
@@ -1614,13 +1635,15 @@
   // not identity, and the names stand next to them.
   let statsPeriod=['day','week','month'].includes(recall('messenger-stats-period'))?recall('messenger-stats-period'):'week',stats=null,statsGen=0;
   let statsSort=recall('messenger-stats-sort')==='recent'?'recent':'tokens';
+  // T-201: one agent and one of its models; the model is not remembered.
+  let statsAgent=['claude','codex','cursor'].includes(recall('messenger-stats-agent'))?recall('messenger-stats-agent'):'',statsModel='';
   const periodWords={day:tr('сегодня'),week:tr('за 7 дней'),month:tr('за 30 дней')};
   function tasksWord(n){const a=n%10,b=n%100;if(amLang==='en')return n+(n===1?' task':' tasks');return n+' '+(a===1&&b!==11?'задача':a>=2&&a<=4&&(b<12||b>14)?'задачи':'задач');}
   function tokensWord(n){const a=n%10,b=n%100;if(amLang==='en')return n===1?'token':'tokens';return a===1&&b!==11?'токен':a>=2&&a<=4&&(b<12||b>14)?'токена':'токенов';}
   function tokensFull(n){return n.toLocaleString(amLocale)+' '+tokensWord(n);}
   async function loadStats(){
     const gen=++statsGen;
-    try{const s=await api('/api/usage-stats?period='+statsPeriod+(computerFilter?'&computer='+encodeURIComponent(computerFilter):''),8000);if(gen===statsGen){stats=s;renderStats();}}
+    try{const s=await api('/api/usage-stats?period='+statsPeriod+(computerFilter?'&computer='+encodeURIComponent(computerFilter):'')+(statsAgent?'&agent='+statsAgent:'')+(statsModel?'&model='+encodeURIComponent(statsModel):''),8000);if(gen===statsGen){stats=s;renderStats();}}
     catch(error){if(gen===statsGen){$('stats-total-title').textContent=tr('Статистика недоступна');$('stats-total-note').textContent=error.message;}}
   }
   function statsBars(box,groups,total,agents){
@@ -1662,7 +1685,21 @@
     computerChip($('stats-computer-chip'));
     $('stats-computers-card').hidden=!!computerFilter;
     $('stats-foot').textContent=!computerFilter?tr('Считаются все компьютеры сети: каждый сообщает расход своих задач по отчётам агентов. Задача попадает в день, когда закончилась.'):computerFilter==='local'?tr('Задачи, которые выполнялись на этом компьютере. Задача попадает в день, когда закончилась.'):tr('Расход сообщает сам компьютер, когда он меняется. В самых затратных задачах — только отправленные туда с этого компьютера.');
+    $('stats-agent').value=statsAgent;
+    if(stats){
+      // Rebuilt only when the list changed: a rebuild closes an open menu (T-192).
+      const models=[['',tr('Все модели')],...(stats.models||[]).map(m=>[m.key,m.name||m.key])];
+      if(statsModel&&!models.some(([v])=>v===statsModel))models.push([statsModel,statsModel]);
+      const select=$('stats-model');
+      if(select.options.length!==models.length||models.some(([v,l],i)=>select.options[i].value!==v||select.options[i].textContent!==l))select.replaceChildren(...models.map(([v,l])=>{const o=el('option',l);o.value=v;return o;}));
+      select.value=statsModel;
+    }
+    syncSelects();
     if(!stats)return;
+    // An older background client counts everything; say so.
+    const unfiltered=(stats.agent||'')!==statsAgent||(stats.model||'')!==statsModel;
+    if(unfiltered)$('stats-foot').textContent=tr('Фильтр не применён: обновите фоновый клиент.');
+    else if(statsModel)$('stats-foot').textContent+=' '+tr('С выбранной моделью считаются только задачи, которые знает этот компьютер: другие компьютеры сообщают расход по агентам, без моделей.');
     const t=stats.total;
     $('stats-total-title').textContent=t.tasks?tokensFull(t.tokens)+' '+periodWords[statsPeriod]:tr('Нет задач с расходом ')+periodWords[statsPeriod];
     $('stats-total-note').textContent=t.tasks?tasksWord(t.tasks)+tr(', на входе ')+t.input_tokens.toLocaleString(amLocale)+(t.cached_tokens?tr(' (из кэша ')+t.cached_tokens.toLocaleString(amLocale)+')':'')+tr(', на выходе ')+t.output_tokens.toLocaleString(amLocale):tr('Агент сообщает расход, когда задача заканчивается.');
@@ -1679,7 +1716,7 @@
     for(const task of list){
       const row=el('button',undefined,'am-stats-task');row.type='button';
       const words=el('span',undefined,'am-stats-task-text');
-      words.append(el('span',task.title||tr('Без названия'),'am-stats-task-title'),el('span',[statsSort==='recent'?stamp(task.at):'',task.project,shortNames[task.agent]||task.agent,task.computer].filter(Boolean).join(', '),'am-small am-muted'));
+      words.append(el('span',task.title||tr('Без названия'),'am-stats-task-title'),el('span',[statsSort==='recent'?stamp(task.at):'',task.project,shortNames[task.agent]||task.agent,statsModel?'':task.model,task.computer].filter(Boolean).join(', '),'am-small am-muted'));
       row.append(words,el('span',tokensText(task.tokens),'am-stats-value'));
       row.title=(typeof task.input_tokens==='number'?usageLong(task)+'\n':'')+tr('Открыть задачу');
       row.addEventListener('click',()=>{
@@ -1689,6 +1726,8 @@
       top.append(row);
     }
   }
+  $('stats-agent').addEventListener('change',()=>{statsAgent=$('stats-agent').value;remember('messenger-stats-agent',statsAgent);statsModel='';stats=null;renderStats();loadStats();});
+  $('stats-model').addEventListener('change',()=>{statsModel=$('stats-model').value;stats=null;renderStats();loadStats();});
   root.querySelectorAll('[data-stats-sort]').forEach(b=>b.addEventListener('click',()=>{statsSort=b.dataset.statsSort;remember('messenger-stats-sort',statsSort);renderStats();}));
   root.querySelectorAll('[data-period]').forEach(b=>b.addEventListener('click',()=>{statsPeriod=b.dataset.period;remember('messenger-stats-period',statsPeriod);stats=null;renderStats();loadStats();}));
 
@@ -2588,7 +2627,7 @@
   loadServer();
   let initialTheme=window.messengerInitialTheme;
   if(!initialTheme)try{initialTheme=localStorage.getItem('messenger-theme');}catch(_){}
-  $('lang-select').value=amLang;enhanceSelect($('lang-select'));enhanceSelect($('theme-select'));enhanceSelect($('project-select'));enhanceSelect($('agent-filter'));enhanceSelect($('host-scope'));enhanceSelect($('host-address'));
+  $('lang-select').value=amLang;enhanceSelect($('lang-select'));enhanceSelect($('theme-select'));enhanceSelect($('project-select'));enhanceSelect($('agent-filter'));enhanceSelect($('stats-agent'));enhanceSelect($('stats-model'));enhanceSelect($('host-scope'));enhanceSelect($('host-address'));
   centreControlText();
   applyTheme(initialTheme||'system');
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{if(document.documentElement.dataset.theme==='system')applyTheme('system');});
