@@ -524,7 +524,12 @@
     if(server?.host?.running&&server.host.scope!=='local')head.append(serverTag());
     head.append(el('div',undefined,'am-machine-version am-local-version'));
     machine.append(head);
-    const lines=agentLines(view?.agents||[],view?.coordinator?.connected?(view.coordinator.client||''):null,online);
+    // A paused agent is left out, as other computers leave it out of what
+    // they report (owner, 2026-11-18: two of three agents were off and the
+    // Mac still listed all three). One still running a task stays until it
+    // ends.
+    const shownAgents=(view?.agents||[]).filter(a=>!a.paused||a.running>0||a.waiting_owner>0);
+    const lines=agentLines(shownAgents,view?.coordinator?.connected?(view.coordinator.client||''):null,online);
     if(!lines.children.length)lines.append(el('p',online?tr('Агенты не подключены'):tr('Нет связи'),'am-small am-muted'));
     machine.append(lines);
     const corner=el('div',undefined,'am-card-update am-local-update');
