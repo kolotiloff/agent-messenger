@@ -510,7 +510,8 @@
     const head=el('div',undefined,'am-machine-name');head.append(el('span',view?.computer_name||tr('Этот компьютер')));
     // The computer that runs the network's server is labelled as such.
     if(server?.host?.running&&server.host.scope!=='local')head.append(serverTag());
-    const dot=el('span',undefined,'am-dot'+(online?' online':''));dot.title=online?tr('На связи'):tr('Нет связи');head.append(dot);
+    // T-202: the contact dot stands left of the name (owner, 2026-11-18).
+    const dot=el('span',undefined,'am-dot'+(online?' online':''));dot.title=online?tr('На связи'):tr('Нет связи');head.prepend(dot);
     // T-200: this computer's version and update arrow stand in its card, as
     // for the other computers, not at the bottom of the panel (owner,
     // 2026-11-18). The bottom nodes keep the state; the card mirrors them.
@@ -519,12 +520,12 @@
     if(view?.pending_update==='updating'||view?.pending_update==='queued'){
       const tip=view.pending_update==='updating'?tr('Обновляется…'):tr('ждёт обновления');
       const b=el('span',undefined,'am-update-icon am-peer-update am-update-wait');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);appendUpdateGlyphs(b);
-      head.insertBefore(b,dot);
+      head.append(b);
     }else if(ownUpdate&&!ownUpdate.hidden){
       const b=ownUpdate.cloneNode(true);b.removeAttribute('id');b.classList.add('am-peer-update','am-own-update');
       b.addEventListener('click',event=>{event.stopPropagation();ownUpdate.click();});
       b.addEventListener('keydown',event=>event.stopPropagation());
-      head.insertBefore(b,dot);
+      head.append(b);
     }
     machine.append(head);
     const lines=agentLines(view?.agents||[],view?.coordinator?.connected?(view.coordinator.client||''):null,online);
@@ -545,10 +546,9 @@
       const pdot=el('span',undefined,'am-dot'+(fresh?' online':''));pdot.title=fresh?tr('На связи'):tr('Нет связи');
       name.append(el('span',peer.name));
       if(peer.host)name.append(serverTag());
-      name.append(pdot);
+      name.prepend(pdot);
       // T-128: an older computer gets the update icon next to its dot; the
-      // owner confirms in a popup. It stands left of the dot, so the dots of
-      // all computers stay in one column (owner, 2026-11-18).
+      // owner confirms in a popup. It stands at the card's right edge.
       const busy=updateLine(peer);
       if(busy){
         // While an update is asked for, waits for tasks or is under way, the
@@ -557,13 +557,13 @@
         // download that may wait for hours (owner, 2026-11-14).
         const tip=busy[0];
         const b=el('span',undefined,'am-update-icon am-peer-update am-update-wait');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);appendUpdateGlyphs(b);
-        name.insertBefore(b,pdot);
+        name.append(b);
       }else if(fresh&&peer.version&&versionOlder(peer.version,newestVersion())){
         const newest=versionName(newestVersion()),label=tr('Обновить до ')+newest;
         const b=el('button',undefined,'am-update-icon am-peer-update');b.type='button';b.title=label;b.setAttribute('aria-label',label);appendUpdateGlyphs(b);
         b.addEventListener('click',event=>{event.stopPropagation();askConfirm(tr('Обновить ')+(peer.name||tr('компьютер'))+tr(' до ')+newest+'?',tr('Программа на том компьютере обновится и перезапустится. Задачи и история сохранятся.')+(peer.host?' '+tr('На нём работает сервер сети: пока он перезапускается, компьютеры не видят друг друга. Если там попросят подтверждение, сервер не вернётся, пока кто-нибудь не ответит у того компьютера.'):''),tr('Обновить'),()=>requestUpdate(peer),true);});
         b.addEventListener('keydown',event=>event.stopPropagation());
-        name.insertBefore(b,pdot);
+        name.append(b);
       }
       card.append(name);
       if(revokeAsk===peer.id&&hosted.has(peer.id)){

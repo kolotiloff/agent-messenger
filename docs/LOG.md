@@ -4,6 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-17 — Claude Code (T-194)
 
+- T-202: the contact dot moved left of the computer's name.
 - T-201: computer versions moved to the bottom right corner of their cards.
 - T-200: this computer's version and update arrow moved into its card at the top of the left panel.
 - T-199: the update arrow moved left of the computer's dot; dots larger. T-198 (limit rings in the left panel) dropped by the owner after a preview; Claude's `utilization` is now read as a percent.
