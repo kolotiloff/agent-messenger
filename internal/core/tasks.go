@@ -571,11 +571,15 @@ func (s *Store) SetComputerAgent(provider, cli, environment, profile string) err
 	if profile != "worker" && profile != "messenger-only" {
 		return fmt.Errorf("%w: unknown profile", ErrRejected)
 	}
-	cli, err := canonicalCLI(cli)
-	if err != nil {
+	if _, err := canonicalCLI(cli); err != nil {
 		return fmt.Errorf("%w: the agent program must be an absolute path to an executable", ErrRejected)
 	}
+	// The path is kept as given, a link included: an agent's own update
+	// moves its link to a new release, and the next task must follow it.
+	// The resolved file stayed on the old release (T-207).
+	cli = filepath.Clean(cli)
 	if environment != "" {
+		var err error
 		if environment, err = CanonicalEnvironment(environment); err != nil {
 			return err
 		}
@@ -795,6 +799,14 @@ func startLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, origin *net
 	}
 	if paused != 0 {
 		return "", errAgentPaused(r.Provider)
+	}
+	if link := agentLinkFor(r.Provider, agent.CLI); link != "" {
+		// An agent registered before T-207 kept the resolved file of its
+		// link; while the link still points there, keep the link instead.
+		agent.CLI = link
+		if _, err := tx.Exec(`UPDATE computer_agents SET cli_path=? WHERE computer=? AND provider=?`, link, computer, r.Provider); err != nil {
+			return "", err
+		}
 	}
 	if coordinatorModel {
 		if _, _, err := modelcatalog.Resolve(r.Provider, r.Model); err != nil {

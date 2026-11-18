@@ -1634,7 +1634,9 @@
   // tokens, no dollars (D-074). One hue for every bar: the bars show size,
   // not identity, and the names stand next to them.
   let statsPeriod=['day','week','month'].includes(recall('messenger-stats-period'))?recall('messenger-stats-period'):'week',stats=null,statsGen=0;
-  let statsSort=recall('messenger-stats-sort')==='recent'?'recent':'tokens';
+  // T-214: the latest tasks come first; the heading stays «Задачи» and the
+  // tabs say which order is shown.
+  let statsSort=recall('messenger-stats-sort')==='tokens'?'tokens':'recent';
   // T-201: one agent and one of its models; the model is not remembered.
   let statsAgent=['claude','codex','cursor'].includes(recall('messenger-stats-agent'))?recall('messenger-stats-agent'):'',statsModel='';
   const periodWords={day:tr('сегодня'),week:tr('за 7 дней'),month:tr('за 30 дней')};
@@ -1709,7 +1711,6 @@
     // T-197: the most expensive tasks or the latest finished ones, in the
     // same period and computer scope.
     root.querySelectorAll('[data-stats-sort]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.statsSort===statsSort)));
-    $('stats-top-title').textContent=statsSort==='recent'?tr('Последние задачи'):tr('Самые затратные задачи');
     const list=statsSort==='recent'?(stats.recent||[]):stats.top;
     const top=$('stats-top');top.replaceChildren();
     if(!list.length)top.append(el('p',tr('Пока пусто'),'am-small am-muted'));
