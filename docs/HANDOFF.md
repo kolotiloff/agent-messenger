@@ -10,7 +10,7 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Updated 2026-11-18 by Claude Code.
 
-- T-201 and T-202 on the same branch, not released: statistics filtered by agent and model; the task list shows the model instead of «на <this computer>». 0.84 will hold T-200 to T-202.
+- T-201 and T-202 on the same branch, not released: statistics filtered by agent and model; the task list shows the model after the status. 0.84 will hold T-200 to T-202.
 - T-200 on `claude/eager-volta-6sbjsa`, not released: this computer's card no longer lists paused agents (the owner's Mac showed all three with two off).
 - **0.83 is released** ([release](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.83), [PR #127](https://github.com/kolotiloff/agent-messenger/pull/127), source `1ab24150114f9556e516f582b41509efc2cf8eed`, [release run](https://github.com/kolotiloff/agent-messenger/actions/runs/44332389459)) with T-198 (computer cards), T-197 (statistics sort), T-184 (tray, D-146) and T-199 (Mac update in the page's dialog, D-146). 22 assets published; the five update feeds name build 83 and this revision; the Linux x64 program matches the checksum and reports the revision. All PR checks passed, including the Mac native build. Not tried on the owner's computers: the Windows tray, the Mac menu bar icon; the new Mac update dialog first shows on 0.83 → 0.84.
 

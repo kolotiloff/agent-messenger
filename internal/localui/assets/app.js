@@ -766,11 +766,10 @@
     // Another computer's task is read-only and says which computer gave it.
     const ownRow=t=>{
       const row=el('button',undefined,'am-task');row.type='button';row.setAttribute('aria-pressed',String(t.id===selectedTask));
-      // T-202 (owner, 2026-11-18): a task of this computer no longer says
-      // «на Мак»; another computer's task still names that computer (T-119).
-      // The model it runs on follows the status below.
-      const here=!(t.remote&&!t.remote.from),label=el('span',names[t.agent]||t.agent);
-      if(!here)label.append(tr(' на '),el('span',t.remote.name));
+      // T-119: every own task says where it runs; this computer's name
+      // stands out. The model it runs on follows the status below (T-202).
+      const here=!(t.remote&&!t.remote.from),label=el('span',(names[t.agent]||t.agent)+tr(' на '));
+      label.append(el('span',here?(view.computer_name||tr('этом компьютере')):t.remote.name,here?'am-task-here':''));
       if(t.remote?.from)label.append(fromTag(t.remote.name));
       const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),label);
       if(t.remote)agent.title=t.remote.from?tr('Задачу дал компьютер «')+t.remote.name+'»':tr('Выполняется на компьютере «')+t.remote.name+'»';
