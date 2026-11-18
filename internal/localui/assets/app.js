@@ -2319,6 +2319,9 @@
     try{const r=await api('/api/update-progress');if(r?.downloading&&r.total>0)next={version:String(r.version||''),done:Number(r.done)||0,total:Number(r.total)};}catch(_){}
     const changed=!!next!==!!updateProgress;
     updateProgress=next;
+    // The Mac downloads from GitHub before Sparkle installs: the run shows
+    // that download (T-213), and progress keeps it from looking stuck.
+    if(next&&updateRun?.mac&&!updateRun.error&&updateRun.phase==='downloading'){updateRun.done=next.done;updateRun.total=next.total;if(next.version)updateRun.version=next.version;macRunQuiet();renderMacRun();}
     if(changed){if(window.webkit?.messageHandlers?.updates)renderMacUpdate();else if(selfUpdate)renderSelfUpdate();else showUpdateProgress();}
     else if(window.webkit?.messageHandlers?.updates){showUpdateProgress();if(next)updateTip(next.version,true);}
     else renderUpdateDialog();
@@ -2458,7 +2461,9 @@
     updateRunTimer=setTimeout(()=>{if(updateRun?.mac&&!updateRun.error&&updateRun.phase!=='restarting'){updateRun.error=tr('Обновление не ответило. Программа осталась прежней.');renderMacRun();}},120000);
   }
   window.messengerUpdateRun=state=>{
-    if(!updateRun?.mac||!state)return;
+    if(!state)return;
+    // The menu's «Обновить» starts a run without the page's button (T-213).
+    if(!updateRun?.mac){if(state.phase==='error')return;updateRun={mac:true,version:'',phase:'downloading',done:0,total:0,error:''};if(!$('update-dialog').open)$('update-dialog').showModal();}
     if(typeof state.version==='string'&&state.version)updateRun.version=state.version;
     updateRun.phase=String(state.phase||'');
     updateRun.done=Number(state.done)||0;updateRun.total=Number(state.total)||0;

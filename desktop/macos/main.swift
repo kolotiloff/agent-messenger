@@ -271,7 +271,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { statusSpinner.stopAnimation(nil); statusView.isHidden = true; web.isHidden = false; showUpdateStatus() }
     func showUpdateStatus() {
-        let status: [String: Any] = ["version": updates.availableVersion ?? "", "installedVersion": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "", "channel": "github", "detail": updates.fetchStatus, "checking": updates.fetching || updates.waitingForDownload]
+        let status: [String: Any] = ["version": updates.shownVersion ?? "", "installedVersion": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "", "channel": "github", "detail": updates.fetchStatus, "checking": updates.fetching || updates.waitingForDownload]
         guard let data = try? JSONSerialization.data(withJSONObject: status), let json = String(data: data, encoding: .utf8) else { return }
         web?.evaluateJavaScript("window.messengerUpdateStatus && window.messengerUpdateStatus(" + json + ")", completionHandler: nil)
     }
