@@ -4,6 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-18 — Claude Code (T-198)
 
+- Read the Mac feedback export of 11-18 (50 remarks; new since 11-16: nine). Recorded T-204 to T-212; the worker Claude percent remark joins T-191. The Mac could not fetch 0.84 on a 33 KB/s link: T-203.
 - Released [0.84](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.84) from `5d04fd6` via PR #129 (release run 44349253768, third attempt: the first two got no Mac runner); 22 assets, five update feeds and the Linux x64 checksum checked.
 - T-202: task rows show the model after the status; the computer name stays (owner's choice).
 - T-201: statistics by agent and model; the model counts only tasks known here, since other computers report per agent.
