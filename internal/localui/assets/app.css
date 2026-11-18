@@ -250,14 +250,17 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-machines { display:flex; flex-direction:column; gap:var(--am-space-1); min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; margin-right:calc(-1 * var(--am-space-3)); padding-right:calc(var(--am-space-3) - var(--am-gutter, 0px)); }
 #am-concept .am-machine-card { display:flex; flex-direction:column; align-items:stretch; gap:var(--am-gap-control); padding:var(--am-pad-compact); border:1px solid var(--am-line); border-radius:var(--am-radius-s); background:var(--am-soft); }
 #am-concept .am-machine-name { display:flex; align-items:center; gap:var(--am-space-1); font-weight:500; }
-#am-concept .am-machine-name .am-peer-update { margin-left:auto; }
 /* T-200: this computer's version and update arrow are shown in its card. */
 #am-concept .am-side-bottom #app-installed-version, #am-concept .am-side-bottom #app-update-button { display:none; }
 #am-concept .am-machine-role { font-weight:400; }
-/* T-201: the version in the card's bottom right corner; the line above it keeps room for it. */
+/* T-201: the version at the right end of the name line; the update arrow in the card's
+   bottom right corner, and the line above it keeps room for it. The dot sits on the
+   visual middle of the name, a little above the middle of its line box. */
 #am-concept .am-machine-card { position:relative; }
-#am-concept .am-machine-version { position:absolute; right:var(--am-space-3); bottom:var(--am-space-2); font-size:var(--am-text-xs); line-height:1.4; color:var(--am-muted); }
-#am-concept .am-machine-card:has(> .am-machine-version) > :nth-last-child(2) { padding-right:calc(var(--am-space-6) * 2); }
+#am-concept .am-machine-version { margin-left:auto; font-size:var(--am-text-xs); font-weight:400; color:var(--am-muted); white-space:nowrap; }
+#am-concept .am-machine-card > .am-peer-update { position:absolute; right:var(--am-space-3); bottom:var(--am-space-2); }
+#am-concept .am-machine-card:has(> .am-peer-update) > :nth-last-child(2) { padding-right:calc(var(--am-space-6) * 2); }
+#am-concept .am-machine-name .am-dot { position:relative; top:-0.1em; }
 #am-concept .am-machine-agents { display:flex; flex-direction:column; gap:var(--am-space-1); }
 #am-concept .am-agent-line { display:flex; align-items:center; gap:var(--am-space-1); min-width:0; font-size:var(--am-text-s); }
 #am-concept .am-agent-line .am-muted { margin-left:auto; }

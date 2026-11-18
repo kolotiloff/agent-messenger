@@ -516,24 +516,25 @@
     // for the other computers, not at the bottom of the panel (owner,
     // 2026-11-18). The bottom nodes keep the state; the card mirrors them.
     const own=$('app-installed-version'),ownUpdate=$('app-update-button');
-
+    // T-201: the version at the right end of the name line, the update arrow
+    // in the card's bottom right corner (owner, 2026-11-18).
+    if(own&&!own.hidden&&own.textContent){const v=el('span',own.textContent,'am-machine-version');v.title=own.title;head.append(v);}
+    let ownArrow=null;
     if(view?.pending_update==='updating'||view?.pending_update==='queued'){
       const tip=view.pending_update==='updating'?tr('Обновляется…'):tr('ждёт обновления');
       const b=el('span',undefined,'am-update-icon am-peer-update am-update-wait');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);appendUpdateGlyphs(b);
-      head.append(b);
+      ownArrow=b;
     }else if(ownUpdate&&!ownUpdate.hidden){
       const b=ownUpdate.cloneNode(true);b.removeAttribute('id');b.classList.add('am-peer-update','am-own-update');
       b.addEventListener('click',event=>{event.stopPropagation();ownUpdate.click();});
       b.addEventListener('keydown',event=>event.stopPropagation());
-      head.append(b);
+      ownArrow=b;
     }
     machine.append(head);
     const lines=agentLines(view?.agents||[],view?.coordinator?.connected?(view.coordinator.client||''):null,online);
     if(!lines.children.length)lines.append(el('p',online?tr('Агенты не подключены'):tr('Нет связи'),'am-small am-muted'));
     machine.append(lines);
-    // T-201: the version sits in the card's bottom right corner, so it does
-    // not move with the length of the computer's name (owner, 2026-11-18).
-    if(own&&!own.hidden&&own.textContent){const v=el('span',own.textContent,'am-machine-version');v.title=own.title;machine.append(v);}
+    if(ownArrow)machine.append(ownArrow);
     box.append(machine);
     // The other computers of this computer's network, with their agents.
     // Only the computer that runs the server can revoke one, from the
@@ -549,6 +550,7 @@
       name.prepend(pdot);
       // T-128: an older computer gets the update icon next to its dot; the
       // owner confirms in a popup. It stands at the card's right edge.
+      let arrow=null;
       const busy=updateLine(peer);
       if(busy){
         // While an update is asked for, waits for tasks or is under way, the
@@ -557,13 +559,13 @@
         // download that may wait for hours (owner, 2026-11-14).
         const tip=busy[0];
         const b=el('span',undefined,'am-update-icon am-peer-update am-update-wait');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);appendUpdateGlyphs(b);
-        name.append(b);
+        arrow=b;
       }else if(fresh&&peer.version&&versionOlder(peer.version,newestVersion())){
         const newest=versionName(newestVersion()),label=tr('Обновить до ')+newest;
         const b=el('button',undefined,'am-update-icon am-peer-update');b.type='button';b.title=label;b.setAttribute('aria-label',label);appendUpdateGlyphs(b);
         b.addEventListener('click',event=>{event.stopPropagation();askConfirm(tr('Обновить ')+(peer.name||tr('компьютер'))+tr(' до ')+newest+'?',tr('Программа на том компьютере обновится и перезапустится. Задачи и история сохранятся.')+(peer.host?' '+tr('На нём работает сервер сети: пока он перезапускается, компьютеры не видят друг друга. Если там попросят подтверждение, сервер не вернётся, пока кто-нибудь не ответит у того компьютера.'):''),tr('Обновить'),()=>requestUpdate(peer),true);});
         b.addEventListener('keydown',event=>event.stopPropagation());
-        name.append(b);
+        arrow=b;
       }
       card.append(name);
       if(revokeAsk===peer.id&&hosted.has(peer.id)){
@@ -582,7 +584,8 @@
       }else{
         card.append(el('p',peer.last_seen?tr('Был на связи ')+stamp(peer.last_seen):tr('Ещё не выходил на связь'),'am-small am-muted'));
       }
-      if(peer.version){const v=el('span',versionName(peer.version),'am-machine-version');v.title=tr('Версия ')+versionName(peer.version).slice(1);card.append(v);}
+      if(peer.version){const v=el('span',versionName(peer.version),'am-machine-version');v.title=tr('Версия ')+versionName(peer.version).slice(1);name.append(v);}
+      if(arrow)card.append(arrow);
       const can={revoke:hosted.has(peer.id)};
       if(can.revoke){
         card.classList.add('am-device-card');card.tabIndex=0;card.dataset.key='revoke-'+peer.id;card.title=tr('Правая кнопка мыши — действия');
