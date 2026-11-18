@@ -478,3 +478,10 @@ Amends D-100: a request to install the newest signed Messenger (the program only
 - A second launch on Windows or Linux brings the open window forward instead of opening a second one (Windows: the window's class and title; Linux: `window.sock` in the data folder). The window is destroyed before the program reopens after an update, so the new copy does not find the old one.
 - On a Mac the app is Sparkle's user driver: Sparkle still verifies, installs and relaunches, but shows no window; the page's update dialog shows the steps, as on Windows and Linux. Nothing is retried; an error ends the run and the old program stays.
 
+## D-147 — A run closes after its report once the worker's own process exited (T-205, Q-030)
+
+2026-11-18, Claude Code, owner's answer to Q-030: (b).
+- A task run whose worker recorded its report or question, and whose own process (the launched CLI) was observed to exit, is closed even when processes it started still run in its group after the group was signalled. Their names and process ids go into the run's detail and a `leftover` log event; Messenger does not stop them further. The reservation is retired as for a clean run.
+- If the worker's own process is still there, nothing changes (T-172: the run is described, not closed). Without a recorded report or question, or when the group's members cannot be listed, the run stays blocked as before (D-021). A cancelled run with leftovers stays blocked too.
+- Cause found on the way: Messenger waited for the end of the worker's error output, which a leftover child inherited, so `Wait` never returned after the worker exited. Waiting for that output is now limited to a few seconds after the exit (`WaitDelay`), and output a leftover keeps open after a completed turn is no failure.
+

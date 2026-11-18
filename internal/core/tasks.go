@@ -1459,6 +1459,10 @@ type RunEvidence struct {
 	// Usage is what the run spent, when its provider reported it (T-058).
 	// It only informs the owner.
 	Usage *TaskUsage
+	// Leftover names what still runs in the run's group after the worker's
+	// own process exited and the group was signalled (D-147). Set only when
+	// those processes were listed and the worker is not among them.
+	Leftover string
 }
 
 // FinishTaskRun verifies a run in one transaction: it revokes the receipt,
@@ -1466,7 +1470,9 @@ type RunEvidence struct {
 // 0, an empty group and exactly one disposition are all present. A cleanly
 // observed but invalid run fails the task; unclear evidence blocks it. It
 // returns the run's final state; "finished", "failed" and "cancelled" mean the
-// process group was observed empty, so the caller may retire the reservation.
+// process group was observed empty, or the worker's own exit was observed
+// after its report and only named leftovers remain (D-147), so the caller may
+// retire the reservation.
 func (s *Store) FinishTaskRun(run string, ev RunEvidence) (string, error) {
 	var final string
 	err := s.tx(func(tx *sql.Tx) error {
@@ -1485,8 +1491,16 @@ func (s *Store) FinishTaskRun(run string, ev RunEvidence) (string, error) {
 			boolInt(ev.ExitObserved), sql.NullInt64{Int64: int64(ev.ExitCode), Valid: ev.ExitObserved}, boolInt(ev.GroupEmpty), boolInt(ev.ProviderOK), now(), run); err != nil {
 			return err
 		}
-		clean := ev.ExitObserved && ev.GroupEmpty
+		// D-147 (Q-030): once the worker recorded its report or question and
+		// its own process exited, processes it left behind do not keep the
+		// run open; they are named instead.
+		leftover := ev.ExitObserved && !ev.GroupEmpty && !ev.Cancelled && ev.Leftover != "" && r.Disposition != ""
+		clean := ev.ExitObserved && (ev.GroupEmpty || leftover)
 		valid := clean && bound == 1 && ev.ExitCode == 0 && ev.ProviderOK && r.Disposition != ""
+		group := "empty group"
+		if leftover {
+			group = "worker exited, left running: " + ev.Leftover
+		}
 		var detail string
 		switch {
 		case !clean:
@@ -1497,7 +1511,10 @@ func (s *Store) FinishTaskRun(run string, ev RunEvidence) (string, error) {
 			detail = "cancelled; the process exited"
 		case valid:
 			final = "finished"
-			detail = "verified: identity, completion, exit 0, empty group, one " + r.Disposition
+			detail = "verified: identity, completion, exit 0, " + group + ", one " + r.Disposition
+		case leftover:
+			final = "failed"
+			detail = failedRunWhy(ev, bound == 1, r.Disposition) + fmt.Sprintf(" (exit %d, identity %t, provider %t, disposition %q, %s)", ev.ExitCode, bound == 1, ev.ProviderOK, r.Disposition, group)
 		default:
 			final = "failed"
 			detail = failedRunWhy(ev, bound == 1, r.Disposition) + fmt.Sprintf(" (exit %d, identity %t, provider %t, disposition %q)", ev.ExitCode, bound == 1, ev.ProviderOK, r.Disposition)
@@ -1510,6 +1527,11 @@ func (s *Store) FinishTaskRun(run string, ev RunEvidence) (string, error) {
 		}
 		if err := setRunState(tx, run, final, detail, "running", "launching"); err != nil {
 			return err
+		}
+		if leftover {
+			if err := insertTaskEvent(tx, t.Project, t.ID, AudienceLog, "leftover", "the worker exited; still running on this computer: "+ev.Leftover, ""); err != nil {
+				return err
+			}
 		}
 		// T-058: add what the run spent before any event goes out, so a
 		// task of another computer reports the new total with it.
