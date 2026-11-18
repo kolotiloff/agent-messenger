@@ -7,6 +7,7 @@ Pass the exact value from `list_agents.computers[].agents[].models` as `start_ta
 | Agent | Intended work | Messenger selection | CLI model arguments |
 | --- | --- | --- | --- |
 | Codex | Small focused edits | `gpt-6-luna[effort=high]` | `-c 'model="gpt-6-luna"' -c 'model_reasoning_effort="high"'` |
+| Codex | Small, well-scoped coding changes | `gpt-6.2-sol[effort=low]` | `-c 'model="gpt-6.2-sol"' -c 'model_reasoning_effort="low"'` |
 | Codex | Everyday implementation/tests | `gpt-6.2-sol[effort=medium]` | `-c 'model="gpt-6.2-sol"' -c 'model_reasoning_effort="medium"'` |
 | Codex | Multi-step implementation and deeper review | `gpt-6.2-sol[effort=high]` | `-c 'model="gpt-6.2-sol"' -c 'model_reasoning_effort="high"'` |
 | Codex | Complex features/debugging | `gpt-6.2-astra[effort=medium]` | `-c 'model="gpt-6.2-astra"' -c 'model_reasoning_effort="medium"'` |

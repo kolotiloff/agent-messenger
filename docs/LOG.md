@@ -4,7 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-18 — Codex (T-192, T-193, T-195, T-196)
 
-- Prepared the next preview: GPT-6.2 Codex starter models, coordinator command for model lists, project menu stability and early worker presence.
+- Prepared the next preview: GPT-6.2 Codex starter models including Sol Low, coordinator command for model lists, project menu stability and early worker presence.
 - Full local race suite, migration and remote-command checks, and both window engines passed. PR CI and release pending.
 
 ## 2026-11-17 — Claude Code (T-194)

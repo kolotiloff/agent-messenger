@@ -2023,7 +2023,7 @@
   let setupProvider='';
   // Starting lists, the same as the store's (T-061, T-098); shown for an
   // agent whose list is still empty and saved with the dialog.
-  const defaultModels={claude:['claude-haiku-5-5[effort=low]','claude-sonnet-5-5[effort=medium]','claude-opus-5-5[effort=medium]','claude-fable-5-2[effort=high]'],codex:['gpt-6-luna[effort=high]','gpt-6.2-sol[effort=medium]','gpt-6.2-sol[effort=high]','gpt-6.2-astra[effort=medium]','gpt-6.2-astra[effort=high]'],cursor:['composer-2.5','cursor-grok-4.6-medium','grok-4.7-medium','grok-4.7-high']};
+  const defaultModels={claude:['claude-haiku-5-5[effort=low]','claude-sonnet-5-5[effort=medium]','claude-opus-5-5[effort=medium]','claude-fable-5-2[effort=high]'],codex:['gpt-6-luna[effort=high]','gpt-6.2-sol[effort=low]','gpt-6.2-sol[effort=medium]','gpt-6.2-sol[effort=high]','gpt-6.2-astra[effort=medium]','gpt-6.2-astra[effort=high]'],cursor:['composer-2.5','cursor-grok-4.6-medium','grok-4.7-medium','grok-4.7-high']};
   function openAgentSetup(provider){
     setupProvider=provider;const a=(view?.agents||[]).find(x=>x.agent===provider),found=discovery.find(d=>d.provider===provider);
     $('agent-setup-title').textContent=tr('Настройки: ')+names[provider];

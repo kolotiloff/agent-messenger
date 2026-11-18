@@ -10,7 +10,7 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Updated 2026-11-18 by Codex.
 
-- Preparing 0.82 on `codex/t195-codex-models`: T-195 (Codex 6.2 defaults with Luna retained), T-196 (coordinator model replacement), T-192 (stable project menu), T-193 (early presence on worker start/end). Tray and the Mac update dialog follow. Full macOS `scripts/check.sh`, focused migration/remote-command tests and Chromium/WebKit window checks passed. PR CI and release pending.
+- Preparing 0.82 on `codex/t195-codex-models`: T-195 (Codex 6.2 defaults with Sol Low and Luna retained), T-196 (coordinator model replacement), T-192 (stable project menu), T-193 (early presence on worker start/end). Tray and the Mac update dialog follow. Full macOS `scripts/check.sh`, focused migration/remote-command tests and Chromium/WebKit window checks passed. The owner asked to consider coordinator-only model lists before releasing. Sol Low was added to the starter list. PR CI and release pending.
 
 - **0.81 is released** (PR #122, `main` 204b319, release run 44040632883) with T-194 (D-144), the yellow icon with an eyed bubble. The owner updated the Mac to 0.81 and still saw the old icon: likely the macOS icon cache (Sparkle replaced the bundle in place); told to `touch` the app, run `lsregister -f` and restart the Dock. Not yet confirmed. Next: T-192, T-193.
 - **0.80 is released** (PR #121, `main` 9c36dd3, release run 43917733249) with T-189, T-190, T-191. Next, from the owner's remarks of 11-16: T-192 (project list closes itself on refresh), T-193 (agent states of other computers lag the task list). Then T-184 (tray), the Mac update dialog. After installing 0.80 on the Mac, check that `list_agents` shows Codex with `source: "check"`.

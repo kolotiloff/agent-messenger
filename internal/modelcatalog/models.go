@@ -42,6 +42,7 @@ type Option struct {
 var catalog = map[string][]Option{
 	"codex": {
 		{"gpt-6-luna[effort=high]", "GPT-6 Luna High", "Small, focused edits and routine checks"},
+		{"gpt-6.2-sol[effort=low]", "GPT-6.2 Sol Low", "Small, well-scoped coding changes"},
 		{"gpt-6.2-sol[effort=medium]", "GPT-6.2 Sol Medium", "Everyday implementation and tests"},
 		{"gpt-6.2-sol[effort=high]", "GPT-6.2 Sol High", "Multi-step implementation and deeper review"},
 		{"gpt-6.2-astra[effort=medium]", "GPT-6.2 Astra Medium", "Complex features, debugging and refactoring"},
