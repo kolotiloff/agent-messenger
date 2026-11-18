@@ -10,6 +10,10 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Updated 2026-11-18 by Claude Code.
 
+- **0.83 is released** ([release](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.83), [PR #127](https://github.com/kolotiloff/agent-messenger/pull/127), source `1ab24150114f9556e516f582b41509efc2cf8eed`, [release run](https://github.com/kolotiloff/agent-messenger/actions/runs/44332389459)) with T-198 (computer cards), T-197 (statistics sort), T-184 (tray, D-146) and T-199 (Mac update in the page's dialog, D-146). 22 assets published; the five update feeds name build 83 and this revision; the Linux x64 program matches the checksum and reports the revision. All PR checks passed, including the Mac native build. Not tried on the owner's computers: the Windows tray, the Mac menu bar icon; the new Mac update dialog first shows on 0.83 → 0.84.
+
+Updated 2026-11-18 by Claude Code.
+
 - Same branch, for 0.83 with T-198: T-197 (statistics «Затратные / Последние»), T-184 (tray on all three systems, one window per computer, D-146), T-199 (the Mac update in the page's dialog, no Sparkle windows, D-146). Windows code cross-built only; Linux tray run under Xvfb; Mac Swift compiled by CI only. After installing 0.83 on the Mac, the first update with the new dialog is 0.83 → 0.84.
 - T-198 on `claude/eager-volta-6sbjsa`, not released: computer cards in the left panel have the dot before the name (centred on the capitals), the version top right and the update icon bottom right, the same for this computer; the version and update button left the bottom of the sidebar. Chromium check and screenshots with fictional data only. Goes into the next release with T-197.
 
