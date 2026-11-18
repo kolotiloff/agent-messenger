@@ -3,9 +3,14 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"net"
+	"os"
+	"path/filepath"
 	"runtime"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/ebitengine/purego"
@@ -72,6 +77,20 @@ type gtkAPI struct {
 	defaultSeat    func(display uintptr) uintptr
 	seatPointer    func(seat uintptr) uintptr
 	devicePosition func(device, screen uintptr, x, y *int32)
+	// The tray icon (T-184). GtkStatusIcon shows only where the desktop
+	// has a tray; without one closing the window closes it, as before.
+	hide           func(widget uintptr)
+	present        func(window uintptr)
+	statusIconNew  func(name string) uintptr
+	statusTooltip  func(icon uintptr, text string)
+	statusEmbedded func(icon uintptr) bool
+	statusVisible  func(icon uintptr, visible bool)
+	menuNew        func() uintptr
+	menuItemNew    func(label string) uintptr
+	separatorNew   func() uintptr
+	menuAppend     func(shell, child uintptr)
+	menuPopup      func(menu, event uintptr)
+	tray           bool
 }
 
 // loadGTK opens GTK 3 and WebKitGTK. It reports false when either is
@@ -147,6 +166,26 @@ func loadGTK() (*gtkAPI, bool) {
 	bind(&g.defaultSeat, gtk, "gdk_display_get_default_seat")
 	bind(&g.seatPointer, gtk, "gdk_seat_get_pointer")
 	bind(&g.devicePosition, gtk, "gdk_device_get_position")
+	bind(&g.hide, gtk, "gtk_widget_hide")
+	bind(&g.present, gtk, "gtk_window_present")
+	// The tray is optional: without these the window works as before.
+	g.tray = true
+	optional := func(fn any, name string) {
+		if _, err := purego.Dlsym(gtk, name); err != nil {
+			g.tray = false
+			return
+		}
+		purego.RegisterLibFunc(fn, gtk, name)
+	}
+	optional(&g.statusIconNew, "gtk_status_icon_new_from_icon_name")
+	optional(&g.statusTooltip, "gtk_status_icon_set_tooltip_text")
+	optional(&g.statusEmbedded, "gtk_status_icon_is_embedded")
+	optional(&g.statusVisible, "gtk_status_icon_set_visible")
+	optional(&g.menuNew, "gtk_menu_new")
+	optional(&g.menuItemNew, "gtk_menu_item_new_with_label")
+	optional(&g.separatorNew, "gtk_separator_menu_item_new")
+	optional(&g.menuAppend, "gtk_menu_shell_append")
+	optional(&g.menuPopup, "gtk_menu_popup_at_pointer")
 	return g, ok
 }
 
@@ -184,16 +223,34 @@ var (
 		quit      uintptr
 		theme     uintptr
 		action    uintptr
+		// T-184: the tray icon, its menu and the window's close.
+		icon     uintptr
+		menu     uintptr
+		quitting bool
+		deleted  uintptr
+		show     uintptr
+		activate uintptr
+		popup    uintptr
+		menuOpen uintptr
+		menuQuit uintptr
 	}
 )
 
 // showGTKWindow shows the page in a WebKitGTK window and returns when the
 // window closes or ctx ends. It reports false, having shown nothing, when
 // the libraries or a display are missing.
-func showGTKWindow(ctx context.Context, page windowPage) bool {
+func showGTKWindow(ctx context.Context, home string, page windowPage) bool {
 	g, ok := loadGTK()
 	if !ok || !g.initCheck(0, 0) {
 		return false
+	}
+	// One window: a copy already open, perhaps hidden in the tray (T-184),
+	// is asked to come forward instead.
+	socket := filepath.Join(home, "window.sock")
+	if conn, err := net.DialTimeout("unix", socket, time.Second); err == nil {
+		_, _ = conn.Write([]byte("show\n"))
+		_ = conn.Close()
+		return true
 	}
 	// Callbacks cannot be freed, and the window opens once per process.
 	gtkOnce.Do(func() {
@@ -222,6 +279,39 @@ func showGTKWindow(ctx context.Context, page windowPage) bool {
 			gtkWindowAction(g, gtkState.window, action)
 			return 0
 		})
+		// Closing hides the window while the tray shows its icon.
+		gtkState.deleted = purego.NewCallback(func(widget, event, data uintptr) uintptr {
+			g := gtkState.api
+			if gtkState.icon != 0 && !gtkState.quitting && !gtkState.closing && g.statusEmbedded(gtkState.icon) {
+				g.hide(widget)
+				return 1
+			}
+			return 0
+		})
+		gtkState.show = purego.NewCallback(func(data uintptr) uintptr {
+			if gtkState.window != 0 {
+				gtkState.api.present(gtkState.window)
+			}
+			return 0
+		})
+		gtkState.activate = purego.NewCallback(func(icon, data uintptr) uintptr {
+			gtkState.api.present(gtkState.window)
+			return 0
+		})
+		gtkState.popup = purego.NewCallback(func(icon, button, time, data uintptr) uintptr {
+			gtkState.api.menuPopup(gtkState.menu, 0)
+			return 0
+		})
+		gtkState.menuOpen = purego.NewCallback(func(item, data uintptr) uintptr {
+			gtkState.api.present(gtkState.window)
+			return 0
+		})
+		gtkState.menuQuit = purego.NewCallback(func(item, data uintptr) uintptr {
+			// Only the window closes; the client keeps running.
+			gtkState.quitting = true
+			gtkState.api.mainQuit()
+			return 0
+		})
 	})
 	gtkState.api = g
 	gtkState.closing = false
@@ -246,6 +336,14 @@ func showGTKWindow(ctx context.Context, page windowPage) bool {
 	g.addScript(manager, g.userScriptNew(gtkPageScript, webkitTopFrame, webkitDocumentStart, 0, 0))
 	g.containerAdd(win, view)
 	g.signalConnect(win, "destroy", gtkState.destroyed, 0, 0, 0)
+	g.signalConnect(win, "delete-event", gtkState.deleted, 0, 0, 0)
+	gtkState.quitting = false
+	if g.tray {
+		addGTKTray(g)
+	}
+	if listener, err := listenForShow(socket, g); err == nil {
+		defer listener.Close()
+	}
 	// The page's key goes straight to the engine, never into a command line.
 	g.loadURI(view, page.address)
 	g.showAll(win)
@@ -254,11 +352,66 @@ func showGTKWindow(ctx context.Context, page windowPage) bool {
 	stop := context.AfterFunc(ctx, func() { g.idleAdd(gtkState.quit, 0) })
 	defer stop()
 	g.main()
-	if ctx.Err() != nil {
+	if gtkState.icon != 0 {
+		g.statusVisible(gtkState.icon, false)
+	}
+	if ctx.Err() != nil || gtkState.quitting {
 		gtkState.closing = true
 		g.destroy(win)
 	}
 	return true
+}
+
+// addGTKTray puts the program's icon in the tray with «Открыть окно» and
+// «Выйти». The icon is made once per process.
+func addGTKTray(g *gtkAPI) {
+	if gtkState.icon != 0 {
+		g.statusVisible(gtkState.icon, true)
+		return
+	}
+	icon := g.statusIconNew("agent-messenger")
+	if icon == 0 {
+		return
+	}
+	g.statusTooltip(icon, "Agent Messenger")
+	g.signalConnect(icon, "activate", gtkState.activate, 0, 0, 0)
+	g.signalConnect(icon, "popup-menu", gtkState.popup, 0, 0, 0)
+	menu := g.menuNew()
+	open := g.menuItemNew("Открыть окно")
+	quit := g.menuItemNew("Выйти")
+	g.signalConnect(open, "activate", gtkState.menuOpen, 0, 0, 0)
+	g.signalConnect(quit, "activate", gtkState.menuQuit, 0, 0, 0)
+	g.menuAppend(menu, open)
+	g.menuAppend(menu, g.separatorNew())
+	g.menuAppend(menu, quit)
+	g.showAll(menu)
+	gtkState.icon, gtkState.menu = icon, menu
+}
+
+// listenForShow answers a second copy of the program: it brings this
+// window forward. A socket left by a copy that ended is replaced.
+func listenForShow(socket string, g *gtkAPI) (net.Listener, error) {
+	_ = os.Remove(socket)
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		return nil, err
+	}
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+			line, _ := bufio.NewReader(conn).ReadString('\n')
+			_ = conn.Close()
+			if line == "show\n" {
+				// g_idle_add is the one call that is safe from another thread.
+				g.idleAdd(gtkState.show, 0)
+			}
+		}
+	}()
+	return listener, nil
 }
 
 // setGTKDark sets GTK's dark-theme preference, which colours the title bar.

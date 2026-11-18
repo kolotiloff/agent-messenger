@@ -54,6 +54,10 @@ type UsageTask struct {
 	Computer string `json:"computer"`
 	At       string `json:"at"`
 	Tokens   int64  `json:"tokens"`
+	// The parts of Tokens, shown on hover (T-197).
+	Input  int64 `json:"input_tokens"`
+	Cached int64 `json:"cached_tokens"`
+	Output int64 `json:"output_tokens"`
 }
 
 // UsageDayAgent is what one agent's tasks that ran on one computer spent
@@ -78,6 +82,8 @@ type UsageStats struct {
 	Computers []UsageGroup `json:"computers"`
 	Days      []UsageDay   `json:"days"`
 	Top       []UsageTask  `json:"top"`
+	// Recent are the tasks that finished last, newest first (T-197).
+	Recent []UsageTask `json:"recent"`
 }
 
 // MaxUsageTop is how many of the largest tasks the page lists.
@@ -92,7 +98,7 @@ const MaxUsageTop = 10
 // oldest first, including days without tasks; the largest tasks are the
 // ones this computer knows.
 func (s *Store) UsageStats(since time.Time, loc *time.Location, computer string) (UsageStats, error) {
-	out := UsageStats{Since: since.UTC().Format(time.RFC3339Nano), Agents: []UsageGroup{}, Computers: []UsageGroup{}, Days: []UsageDay{}, Top: []UsageTask{}}
+	out := UsageStats{Since: since.UTC().Format(time.RFC3339Nano), Agents: []UsageGroup{}, Computers: []UsageGroup{}, Days: []UsageDay{}, Top: []UsageTask{}, Recent: []UsageTask{}}
 	err := s.tx(func(tx *sql.Tx) error {
 		local, err := localComputer(tx)
 		if err != nil {
@@ -167,6 +173,7 @@ func (s *Store) UsageStats(since time.Time, loc *time.Location, computer string)
 				return err
 			}
 			task.Tokens = in + outTokens
+			task.Input, task.Cached, task.Output = in, cached, outTokens
 			key, name, this := local, localName, true
 			if peer != "" {
 				key, name, this = peer, peerName, false
@@ -222,8 +229,22 @@ func (s *Store) UsageStats(since time.Time, loc *time.Location, computer string)
 			}
 			return out.Top[i].ID < out.Top[j].ID
 		})
+		out.Recent = append(out.Recent, out.Top...)
+		// Times are RFC 3339 in UTC from the same clock, so they compare as
+		// text once parsed; an unreadable one sorts last.
+		when := func(t UsageTask) time.Time { at, _ := time.Parse(time.RFC3339Nano, t.At); return at }
+		sort.SliceStable(out.Recent, func(i, j int) bool {
+			a, b := when(out.Recent[i]), when(out.Recent[j])
+			if !a.Equal(b) {
+				return a.After(b)
+			}
+			return out.Recent[i].ID < out.Recent[j].ID
+		})
 		if len(out.Top) > MaxUsageTop {
 			out.Top = out.Top[:MaxUsageTop]
+		}
+		if len(out.Recent) > MaxUsageTop {
+			out.Recent = out.Recent[:MaxUsageTop]
 		}
 		start := since.In(loc)
 		first := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, loc)

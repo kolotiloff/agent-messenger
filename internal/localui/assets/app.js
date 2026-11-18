@@ -1613,6 +1613,7 @@
   // tokens, no dollars (D-074). One hue for every bar: the bars show size,
   // not identity, and the names stand next to them.
   let statsPeriod=['day','week','month'].includes(recall('messenger-stats-period'))?recall('messenger-stats-period'):'week',stats=null,statsGen=0;
+  let statsSort=recall('messenger-stats-sort')==='recent'?'recent':'tokens';
   const periodWords={day:tr('сегодня'),week:tr('за 7 дней'),month:tr('за 30 дней')};
   function tasksWord(n){const a=n%10,b=n%100;if(amLang==='en')return n+(n===1?' task':' tasks');return n+' '+(a===1&&b!==11?'задача':a>=2&&a<=4&&(b<12||b>14)?'задачи':'задач');}
   function tokensWord(n){const a=n%10,b=n%100;if(amLang==='en')return n===1?'token':'tokens';return a===1&&b!==11?'токен':a>=2&&a<=4&&(b<12||b>14)?'токена':'токенов';}
@@ -1668,14 +1669,19 @@
     statsDays($('stats-days'),statsPeriod==='day'?[]:stats.days);
     statsBars($('stats-agents'),stats.agents,t.tokens,true);
     statsBars($('stats-computers'),stats.computers,t.tokens);
+    // T-197: the most expensive tasks or the latest finished ones, in the
+    // same period and computer scope.
+    root.querySelectorAll('[data-stats-sort]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.statsSort===statsSort)));
+    $('stats-top-title').textContent=statsSort==='recent'?tr('Последние задачи'):tr('Самые затратные задачи');
+    const list=statsSort==='recent'?(stats.recent||[]):stats.top;
     const top=$('stats-top');top.replaceChildren();
-    if(!stats.top.length)top.append(el('p',tr('Пока пусто'),'am-small am-muted'));
-    for(const task of stats.top){
+    if(!list.length)top.append(el('p',tr('Пока пусто'),'am-small am-muted'));
+    for(const task of list){
       const row=el('button',undefined,'am-stats-task');row.type='button';
       const words=el('span',undefined,'am-stats-task-text');
-      words.append(el('span',task.title||tr('Без названия'),'am-stats-task-title'),el('span',[task.project,shortNames[task.agent]||task.agent,task.computer].filter(Boolean).join(', '),'am-small am-muted'));
+      words.append(el('span',task.title||tr('Без названия'),'am-stats-task-title'),el('span',[statsSort==='recent'?stamp(task.at):'',task.project,shortNames[task.agent]||task.agent,task.computer].filter(Boolean).join(', '),'am-small am-muted'));
       row.append(words,el('span',tokensText(task.tokens),'am-stats-value'));
-      row.title=tr('Открыть задачу');
+      row.title=(typeof task.input_tokens==='number'?usageLong(task)+'\n':'')+tr('Открыть задачу');
       row.addEventListener('click',()=>{
         if(task.project&&task.project!==project){project=task.project;remember('messenger-project',project);viewSignature='';}
         selectedTask=task.id;selectedShared=null;feed=null;feedSignature='';show('tasks');refresh();
@@ -1683,6 +1689,7 @@
       top.append(row);
     }
   }
+  root.querySelectorAll('[data-stats-sort]').forEach(b=>b.addEventListener('click',()=>{statsSort=b.dataset.statsSort;remember('messenger-stats-sort',statsSort);renderStats();}));
   root.querySelectorAll('[data-period]').forEach(b=>b.addEventListener('click',()=>{statsPeriod=b.dataset.period;remember('messenger-stats-period',statsPeriod);stats=null;renderStats();loadStats();}));
 
   // Server tab: the broker hosted by this client and this computer's
@@ -2345,6 +2352,7 @@
   let updateRun=null,updateRunTimer=0;
   function renderUpdateDialog(){
     if(!updateRun)return;
+    if(updateRun.mac){renderMacRun();return;}
     const s=selfUpdate||{},p=updateProgress,state=s.state||'';
     if(s.version)updateRun.version=s.version;
     if(state==='downloading'||state==='installing'||state==='installed')updateRun.busy=true;
@@ -2388,12 +2396,49 @@
     }catch(error){updateRun.error=error.message;renderUpdateDialog();return;}
     renderSelfUpdate();followUpdate();
   }
-  $('update-retry').addEventListener('click',startUpdate);
+  // A Mac: the app's updater does the same steps and reports each one
+  // (T-199); Sparkle shows no window of its own.
+  function renderMacRun(){
+    const r=updateRun;
+    $('update-title').textContent=tr('Обновление')+(r.version?' '+versionName(r.version):'');
+    let step,share;
+    if(r.error){step=tr('Не удалось обновить');share=0;}
+    else if(r.phase==='restarting'){step=tr('Перезапуск…');share=1;}
+    else if(r.phase==='installing'){step=tr('Установка…');share=1;}
+    else if(r.total>0){share=Math.min(1,r.done/r.total);step=tr('Загрузка…')+' '+Math.floor(100*share)+'%';}
+    else{step=tr('Загрузка…');share=0;}
+    $('update-step').textContent=step;
+    $('update-bar-fill').style.setProperty('--am-update-share',String(share));
+    $('update-error').textContent=r.error||'';$('update-error').hidden=!r.error;
+    $('update-actions').hidden=!r.error;
+  }
+  // Without any word from the app for two minutes the dialog says so and
+  // can be closed; nothing is retried.
+  function macRunQuiet(){
+    clearTimeout(updateRunTimer);
+    updateRunTimer=setTimeout(()=>{if(updateRun?.mac&&!updateRun.error&&updateRun.phase!=='restarting'){updateRun.error=tr('Обновление не ответило. Программа осталась прежней.');renderMacRun();}},120000);
+  }
+  window.messengerUpdateRun=state=>{
+    if(!updateRun?.mac||!state)return;
+    if(typeof state.version==='string'&&state.version)updateRun.version=state.version;
+    updateRun.phase=String(state.phase||'');
+    updateRun.done=Number(state.done)||0;updateRun.total=Number(state.total)||0;
+    updateRun.error=updateRun.phase==='error'?String(state.error||tr('Обновление не установлено. Программа осталась прежней.')):'';
+    if(updateRun.error)clearTimeout(updateRunTimer);else macRunQuiet();
+    renderMacRun();
+  };
+  function startMacUpdate(){
+    updateRun={mac:true,version:macUpdate?.version||'',phase:'downloading',done:0,total:0,error:''};
+    if(!$('update-dialog').open)$('update-dialog').showModal();
+    renderMacRun();macRunQuiet();
+    window.webkit.messageHandlers.updates.postMessage('install');
+  }
+  $('update-retry').addEventListener('click',()=>updateRun?.mac?startMacUpdate():startUpdate());
   $('update-close').addEventListener('click',()=>{updateRun=null;clearTimeout(updateRunTimer);$('update-dialog').close();loadSelfUpdate();});
   // The download and the install are not cancelled halfway.
   $('update-dialog').addEventListener('cancel',event=>{if(!updateRun?.error)event.preventDefault();else{updateRun=null;}});
   $('app-update-button').addEventListener('click',()=>{
-    if(window.webkit?.messageHandlers?.updates)window.webkit.messageHandlers.updates.postMessage('check');
+    if(window.webkit?.messageHandlers?.updates)startMacUpdate();
     else startUpdate();
   });
   if(!window.webkit?.messageHandlers?.updates){selfUpdateTimer=setInterval(loadSelfUpdate,60000);loadSelfUpdate();}

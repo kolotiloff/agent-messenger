@@ -4,12 +4,25 @@ import Darwin
 
 // Sparkle owns download verification, installation and relaunch. The feed is
 // served by our authenticated loopback bridge from signed local metadata.
-final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverDelegate {
+// Sparkle's own windows are not shown (owner, 2026-11-18): this class is its
+// user driver, and the page shows the same dialog as on Windows and Linux,
+// with the download, the install and the restart (T-199).
+final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     weak var window: NSWindow?
     var endpoint: URL?
-    var controller: SPUStandardUpdaterController!
+    var updater: SPUUpdater!
     var availableVersion: String?
     var onStatus: ((String?) -> Void)?
+    // The page's dialog: what Sparkle does now, sent to the page.
+    var onRun: (([String: Any]) -> Void)?
+    // The owner pressed the update icon; until the run ends every step goes
+    // to the dialog instead of an alert.
+    var running = false
+    var received: UInt64 = 0
+    var expected: UInt64 = 0
+    // A found update waits here until the owner presses the icon: the
+    // session stays open, like Sparkle's gentle reminders.
+    var pendingChoice: ((SPUUserUpdateChoice) -> Void)?
     var started = false
     var fetching = false
     var fetchStatus = ""
@@ -28,7 +41,7 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverD
 
     override init() {
         super.init()
-        controller = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: self, userDriverDelegate: self)
+        updater = SPUUpdater(hostBundle: Bundle.main, applicationBundle: Bundle.main, userDriver: self, delegate: self)
     }
     func attach(menu: NSMenu) {
         checkItem = menu.addItem(withTitle: "Проверить обновления…", action: #selector(check), keyEquivalent: "")
@@ -42,9 +55,9 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverD
     func connect(_ url: URL, window: NSWindow) {
         self.window = window
         endpoint = url
-        controller.updater.httpHeaders = ["Authorization": "Bearer " + (url.fragment ?? "")]
+        updater.httpHeaders = ["Authorization": "Bearer " + (url.fragment ?? "")]
         if !started {
-            controller.startUpdater()
+            do { try updater.start() } catch { fetchStatus = "Обновления не запустились"; onStatus?(availableVersion); return }
             started = true
             startWatchingLocalChannel()
             fetchTimer = Timer.scheduledTimer(withTimeInterval: 1800, repeats: true) { [weak self] _ in
@@ -52,11 +65,11 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverD
             }
             fetchTimer?.tolerance = 15
             checkAutomaticallyIfDue()
-            if controller.updater.automaticallyChecksForUpdates && !controller.updater.sessionInProgress {
-                controller.updater.checkForUpdatesInBackground()
+            if updater.automaticallyChecksForUpdates && !updater.sessionInProgress {
+                updater.checkForUpdatesInBackground()
             }
         }
-        automaticItem?.state = controller.updater.automaticallyChecksForUpdates ? .on : .off
+        automaticItem?.state = updater.automaticallyChecksForUpdates ? .on : .off
     }
     func manifestData() -> Data? {
         let name = FileManager.default.fileExists(atPath: channelDirectory.appendingPathComponent("current.json").path) ? "current.json" : "manifest.json"
@@ -79,13 +92,13 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverD
         watchWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self = self, self.started, self.endpoint != nil,
-                  self.controller.updater.automaticallyChecksForUpdates,
-                  !self.controller.updater.sessionInProgress,
+                  self.updater.automaticallyChecksForUpdates,
+                  !self.updater.sessionInProgress,
                   let data = self.manifestData(), data != self.lastManifest else { return }
             self.lastManifest = data
             // Local publication is an event, not model polling. The bridge verifies
             // the signed metadata; Sparkle verifies the archive before install.
-            self.controller.updater.checkForUpdatesInBackground()
+            self.updater.checkForUpdatesInBackground()
         }
         watchWork = work; DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: work)
     }
@@ -97,23 +110,60 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverD
             alert.informativeText = "Сначала подключите окно к локальному клиенту. Ни очередь, ни сессии не изменены."
             alert.runModal(); return
         }
-        // A gentle background reminder keeps the Sparkle session open. Bring
-        // that verified update forward instead of blocking on sessionInProgress.
-        if availableVersion != nil, controller.updater.canCheckForUpdates {
+        // A found update keeps the Sparkle session open. Bring that verified
+        // update forward instead of blocking on sessionInProgress.
+        if let reply = pendingChoice {
+            pendingChoice = nil
+            if running { startRun(); reply(.install) } else { offer(reply) }
+        } else if availableVersion != nil, updater.canCheckForUpdates {
             busyRetry?.cancel(); waitingForDownload = false; busySince = nil
-            controller.checkForUpdates(nil)
+            updater.checkForUpdates()
         } else {
             fetchRemote(manual: true)
         }
     }
+    // The page's update icon: download, install and restart, shown in the
+    // page's dialog. Nothing is retried on its own.
+    func install() {
+        running = true
+        sendRun(["phase": "downloading"])
+        check()
+    }
+    func startRun() {
+        received = 0; expected = 0
+        sendRun(["phase": "downloading"])
+    }
+    func sendRun(_ state: [String: Any]) {
+        var state = state
+        if let version = availableVersion { state["version"] = version }
+        onRun?(state)
+    }
+    func failRun(_ text: String) {
+        running = false
+        sendRun(["phase": "error", "error": text])
+    }
+    // The menu's «Проверить обновления…» found one: ask before installing.
+    func offer(_ reply: @escaping (SPUUserUpdateChoice) -> Void) {
+        let alert = NSAlert()
+        alert.messageText = "Вышла версия " + (availableVersion ?? "")
+        alert.informativeText = "Программа загрузит обновление, установит его и перезапустится. Задачи и история сохранятся."
+        alert.addButton(withTitle: "Обновить")
+        alert.addButton(withTitle: "Позже")
+        let answer = { [weak self] (response: NSApplication.ModalResponse) in
+            guard let self = self else { return }
+            if response == .alertFirstButtonReturn { self.running = true; self.startRun(); reply(.install) }
+            else { self.pendingChoice = reply }
+        }
+        if let window = window, window.isVisible { alert.beginSheetModal(for: window, completionHandler: answer) } else { answer(alert.runModal()) }
+    }
     // Focus changes share the same throttle as the timer; waiting never calls a model.
     func checkAutomaticallyIfDue() {
-        guard started, endpoint != nil, controller.updater.automaticallyChecksForUpdates,
+        guard started, endpoint != nil, updater.automaticallyChecksForUpdates,
               ProcessInfo.processInfo.systemUptime - lastRemoteCheck >= 1800 else { return }
         fetchRemote(manual: false)
     }
     func fetchRemote(manual: Bool) {
-        guard !fetching, endpoint != nil, !controller.updater.sessionInProgress,
+        guard !fetching, endpoint != nil, !updater.sessionInProgress,
               let executable = Bundle.main.url(forResource: "messenger", withExtension: nil) else { return }
         busyRetry?.cancel(); waitingForDownload = false
         lastRemoteCheck = ProcessInfo.processInfo.systemUptime
@@ -147,7 +197,7 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverD
                         guard let self = self else { return }
                         self.waitingForDownload = false
                         self.onStatus?(self.availableVersion)
-                        if (manual || self.controller.updater.automaticallyChecksForUpdates) && !self.controller.updater.sessionInProgress { self.fetchRemote(manual: manual) }
+                        if (manual || self.updater.automaticallyChecksForUpdates) && !self.updater.sessionInProgress { self.fetchRemote(manual: manual) }
                     }
                     self.busyRetry = retry
                     DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: retry)
@@ -179,9 +229,9 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverD
                     if manual { self.remoteMessage("Обновлений пока нет", "Установленная версия не старше опубликованной подписанной сборки.") }
                     return
                 }
-                guard self.endpoint != nil, !self.controller.updater.sessionInProgress else { return }
-                if manual { self.controller.checkForUpdates(nil) }
-                else if self.controller.updater.automaticallyChecksForUpdates { self.controller.updater.checkForUpdatesInBackground() }
+                guard self.endpoint != nil, !self.updater.sessionInProgress else { return }
+                if manual { self.updater.checkForUpdates() }
+                else if self.updater.automaticallyChecksForUpdates { self.updater.checkForUpdatesInBackground() }
             }
         }
         fetchProcess = process
@@ -189,12 +239,13 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverD
         catch { fetching = false; fetchProcess = nil; fetchStatus = "Проверка не запустилась"; onStatus?(availableVersion) }
     }
     func remoteMessage(_ title: String, _ text: String) {
+        if running { failRun(title + ". " + text); return }
         let alert = NSAlert(); alert.messageText = title; alert.informativeText = text
         if let window = window { alert.beginSheetModal(for: window) } else { alert.runModal() }
     }
     @objc func toggleAutomatic() {
-        controller.updater.automaticallyChecksForUpdates.toggle()
-        automaticItem?.state = controller.updater.automaticallyChecksForUpdates ? .on : .off
+        updater.automaticallyChecksForUpdates.toggle()
+        automaticItem?.state = updater.automaticallyChecksForUpdates ? .on : .off
     }
     func feedURLString(for updater: SPUUpdater) -> String? {
         guard let endpoint = endpoint else { return nil }
@@ -211,15 +262,52 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverD
             throw NSError(domain: "AgentMessenger.Update", code: 2, userInfo: [NSLocalizedDescriptionKey: "Пакет не принадлежит проверенному локальному каналу."])
         }
     }
-    var supportsGentleScheduledUpdateReminders: Bool { true }
-    func standardUserDriverShouldHandleShowingScheduledUpdate(_ update: SUAppcastItem, andInImmediateFocus immediateFocus: Bool) -> Bool { false }
-    func standardUserDriverWillHandleShowingUpdate(_ handleShowingUpdate: Bool, forUpdate update: SUAppcastItem, state: SPUUserUpdateState) {
-        availableVersion = update.displayVersionString
-        onStatus?(availableVersion)
+    func updater(_ updater: SPUUpdater, shouldDownloadReleaseNotesForUpdate updateItem: SUAppcastItem) -> Bool { false }
+
+    // SPUUserDriver: what Sparkle would show, sent to the page instead.
+    func show(_ request: SPUUpdatePermissionRequest, reply: @escaping (SUUpdatePermissionResponse) -> Void) {
+        // The menu's «Проверять обновления автоматически» changes it later.
+        reply(SUUpdatePermissionResponse(automaticUpdateChecks: true, sendSystemProfile: false))
     }
-    func standardUserDriverWillFinishUpdateSession() {
+    func showUserInitiatedUpdateCheck(cancellation: @escaping () -> Void) {}
+    func showUpdateFound(with appcastItem: SUAppcastItem, state: SPUUserUpdateState, reply: @escaping (SPUUserUpdateChoice) -> Void) {
+        availableVersion = appcastItem.displayVersionString
+        onStatus?(availableVersion)
+        if running { startRun(); reply(.install) }
+        else if state.userInitiated { offer(reply) }
+        else { pendingChoice = reply }
+    }
+    func showUpdateReleaseNotes(with downloadData: SPUDownloadData) {}
+    func showUpdateReleaseNotesFailedToDownloadWithError(_ error: Error) {}
+    func showUpdateNotFoundWithError(_ error: Error, acknowledgement: @escaping () -> Void) {
+        acknowledgement()
+        remoteMessage("Обновлений пока нет", "Установленная версия не старше опубликованной подписанной сборки.")
+    }
+    func showUpdaterError(_ error: Error, acknowledgement: @escaping () -> Void) {
+        acknowledgement()
+        remoteMessage("Обновление не установлено", error.localizedDescription + " Программа осталась прежней.")
+    }
+    func showDownloadInitiated(cancellation: @escaping () -> Void) { received = 0; expected = 0 }
+    func showDownloadDidReceiveExpectedContentLength(_ expectedContentLength: UInt64) { expected = expectedContentLength }
+    func showDownloadDidReceiveData(ofLength length: UInt64) {
+        received += length
+        if running { sendRun(["phase": "downloading", "done": received, "total": expected]) }
+    }
+    func showDownloadDidStartExtractingUpdate() { if running { sendRun(["phase": "installing"]) } }
+    func showExtractionReceivedProgress(_ progress: Double) {}
+    func showReady(toInstallAndRelaunch reply: @escaping (SPUUserUpdateChoice) -> Void) {
+        if running { sendRun(["phase": "restarting"]); reply(.install) } else { pendingChoice = reply }
+    }
+    func showInstallingUpdate(withApplicationTerminated applicationTerminated: Bool, retryTerminatingApplication: @escaping () -> Void) {
+        if running { sendRun(["phase": "restarting"]) }
+    }
+    func showUpdateInstalledAndRelaunched(_ relaunched: Bool, acknowledgement: @escaping () -> Void) { acknowledgement() }
+    func showUpdateInFocus() { window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
+    func dismissUpdateInstallation() {
+        // The session ended. A run that did not restart the program failed;
+        // the old program stays.
+        if running { failRun("Обновление не установлено. Программа осталась прежней.") }
+        pendingChoice = nil
         availableVersion = nil; onStatus?(nil)
     }
-    func updater(_ updater: SPUUpdater, shouldDownloadReleaseNotesForUpdate updateItem: SUAppcastItem) -> Bool { false }
-    func standardUserDriverShouldShowVersionHistory(for item: SUAppcastItem) -> Bool { false }
 }

@@ -4,6 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-18 — Claude Code (T-198)
 
+- Owner asked to do the nearest tasks too: T-197 statistics sort, T-184 tray (Windows, Linux, Mac), T-199 Mac update dialog (Sparkle user driver). Linux tray tried under Xvfb with stalonetray.
 - Checked the 0.82 release (run, 22 assets). Owner asked for one layout of the computer cards: dot before the name, version top right, update bottom right, also for this computer. Done on `claude/eager-volta-6sbjsa`; checked in Chromium with fictional data.
 
 ## 2026-11-18 — Codex (T-192, T-193, T-195, T-196)

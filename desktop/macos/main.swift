@@ -28,7 +28,7 @@ final class TitlebarWebView: WKWebView {
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     var window: NSWindow!
     var web: WKWebView!
     var statusView: NSStackView!
@@ -42,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     var generation = 0
     var lockFD: Int32 = -1
     let updates = DesktopUpdater()
+    var statusItem: NSStatusItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // LaunchServices normally reuses the app. flock also covers open -n and
@@ -70,6 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let safeTheme = ["system", "light", "dark"].contains(savedTheme) ? savedTheme : "system"
         addPageScripts(config.userContentController, theme: safeTheme)
         updates.onStatus = { [weak self] _ in self?.showUpdateStatus() }
+        updates.onRun = { [weak self] state in self?.showUpdateRun(state) }
         web = TitlebarWebView(frame: .zero, configuration: config)
         web.navigationDelegate = self
         web.uiDelegate = self
@@ -82,6 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         window.titleVisibility = .hidden
         window.minSize = NSSize(width: 780, height: 600)
         window.isReleasedWhenClosed = false
+        window.delegate = self
         window.setFrameAutosaveName("AgentMessengerMainWindow")
         window.center()
         let content = NSView()
@@ -108,8 +111,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         statusView.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(statusView)
         NSLayoutConstraint.activate([statusView.centerXAnchor.constraint(equalTo: content.centerXAnchor), statusView.centerYAnchor.constraint(equalTo: content.centerYAnchor), statusView.widthAnchor.constraint(equalToConstant: 560)])
+        buildStatusItem()
         showWindow()
         connect()
+    }
+    // T-184: the icon in the menu bar. Closing the window hides it there:
+    // the Dock icon goes away and the program keeps running; the icon opens
+    // the window again or quits.
+    func buildStatusItem() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        if let image = NSImage(systemSymbolName: "bubble.left.fill", accessibilityDescription: "Agent Messenger") {
+            image.isTemplate = true
+            item.button?.image = image
+        } else {
+            item.button?.title = "AM"
+        }
+        item.button?.toolTip = "Agent Messenger"
+        let menu = NSMenu()
+        let open = menu.addItem(withTitle: "Открыть окно", action: #selector(showWindow), keyEquivalent: ""); open.target = self
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "Закрыть приложение", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
+        item.menu = menu
+        statusItem = item
+    }
+    func windowWillClose(_ notification: Notification) {
+        guard (notification.object as? NSWindow) === window else { return }
+        NSApp.setActivationPolicy(.accessory)
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
@@ -149,7 +176,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         guard origin != nil, !web.isHidden else { return }
         web.evaluateJavaScript("window.messengerRefresh && window.messengerRefresh()", completionHandler: nil)
     }
-    @objc func showWindow() { window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
+    @objc func showWindow() {
+        if NSApp.activationPolicy() != .regular { NSApp.setActivationPolicy(.regular) }
+        window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+    }
     @objc func chooseData() {
         let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
         panel.allowsMultipleSelection = false; panel.canCreateDirectories = false
@@ -245,6 +275,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         guard let data = try? JSONSerialization.data(withJSONObject: status), let json = String(data: data, encoding: .utf8) else { return }
         web?.evaluateJavaScript("window.messengerUpdateStatus && window.messengerUpdateStatus(" + json + ")", completionHandler: nil)
     }
+    // The update dialog of the page follows Sparkle's steps (T-199).
+    func showUpdateRun(_ state: [String: Any]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: state), let json = String(data: data, encoding: .utf8) else { return }
+        web?.evaluateJavaScript("window.messengerUpdateRun && window.messengerUpdateRun(" + json + ")", completionHandler: nil)
+    }
     // The project folder is chosen in a standard panel; only its path goes to the page.
     func pickProjectFolder() {
         let panel = NSOpenPanel()
@@ -273,6 +308,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
               let page = message.frameInfo.request.url, let origin = origin,
               page.scheme == origin.scheme, page.host == origin.host, page.port == origin.port, page.path == "/" else { return }
         if message.name == "updates", message.body as? String == "check" { updates.check() }
+        if message.name == "updates", message.body as? String == "install" { updates.install() }
         if message.name == "folder", message.body as? String == "pick" { pickProjectFolder() }
         // Quits only the app; the background client and its reservations stay.
         if message.name == "app", message.body as? String == "quit" { NSApp.terminate(nil) }

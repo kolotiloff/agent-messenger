@@ -10,6 +10,7 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Updated 2026-11-18 by Claude Code.
 
+- Same branch, for 0.83 with T-198: T-197 (statistics «Затратные / Последние»), T-184 (tray on all three systems, one window per computer, D-146), T-199 (the Mac update in the page's dialog, no Sparkle windows, D-146). Windows code cross-built only; Linux tray run under Xvfb; Mac Swift compiled by CI only. After installing 0.83 on the Mac, the first update with the new dialog is 0.83 → 0.84.
 - T-198 on `claude/eager-volta-6sbjsa`, not released: computer cards in the left panel have the dot before the name (centred on the capitals), the version top right and the update icon bottom right, the same for this computer; the version and update button left the bottom of the sidebar. Chromium check and screenshots with fictional data only. Goes into the next release with T-197.
 
 Updated 2026-11-18 by Codex.

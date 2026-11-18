@@ -13,7 +13,7 @@ func TestGTKWindowWithoutWebKit(t *testing.T) {
 	saved := webkitLibraries
 	webkitLibraries = []string{"libwebkit-missing-for-test.so.0"}
 	defer func() { webkitLibraries = saved }()
-	if showGTKWindow(context.Background(), windowPage{address: "http://127.0.0.1:1/"}) {
+	if showGTKWindow(context.Background(), t.TempDir(), windowPage{address: "http://127.0.0.1:1/"}) {
 		t.Fatal("a window without WebKitGTK")
 	}
 }

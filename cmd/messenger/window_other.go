@@ -30,7 +30,7 @@ var appBrowsers = []string{"google-chrome", "google-chrome-stable", "chromium", 
 func showWindow(ctx context.Context, cancel context.CancelFunc, home string, page windowPage, out io.Writer) {
 	if runtime.GOOS == "linux" {
 		installMenuEntry()
-		if showGTKWindow(ctx, page) {
+		if showGTKWindow(ctx, home, page) {
 			return
 		}
 		// Each window has a profile of its own: a browser started with a
