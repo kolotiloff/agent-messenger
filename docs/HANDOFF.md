@@ -8,6 +8,10 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-18 by Claude Code.
+
+- T-198 on `claude/eager-volta-6sbjsa`, not released: computer cards in the left panel have the dot before the name (centred on the capitals), the version top right and the update icon bottom right, the same for this computer; the version and update button left the bottom of the sidebar. Chromium check and screenshots with fictional data only. Goes into the next release with T-197.
+
 Updated 2026-11-18 by Codex.
 
 - **0.82 is released** ([release](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.82), [PR #125](https://github.com/kolotiloff/agent-messenger/pull/125), source `f1f5c6132a4b24f4792791b3c8a5969d6ee1d420`, [release run](https://github.com/kolotiloff/agent-messenger/actions/runs/44295419912)). Verified 22 published assets and five signed update feeds and archives. T-195 adds Sol 6.2 Low/Medium/High and Astra 6.2 Medium/High alongside Luna High. T-196 uses the coordinator's local model lists for updated workers. T-192 keeps the project menu open on refresh. T-193 sends worker presence when a run starts or ends. Final local race checks, Chromium/WebKit fixtures and [PR checks](https://github.com/kolotiloff/agent-messenger/actions/runs/44293474608) passed. No production model invocation or multi-computer acceptance run. Next: statistics sort by highest tokens or most recent, T-184 tray and the Mac update dialog.
