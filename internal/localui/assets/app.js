@@ -514,7 +514,7 @@
     if(view?.pending_update==='updating'||view?.pending_update==='queued'){
       const tip=view.pending_update==='updating'?tr('Обновляется…'):tr('ждёт обновления');
       const b=el('span',undefined,'am-update-icon am-peer-update am-update-wait');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);appendUpdateGlyphs(b);
-      head.append(b);
+      head.insertBefore(b,dot);
     }
     machine.append(head);
     const lines=agentLines(view?.agents||[],view?.coordinator?.connected?(view.coordinator.client||''):null,online);
@@ -534,7 +534,8 @@
       if(peer.version)name.append(el('span',versionName(peer.version),'am-small am-muted am-machine-version'));
       name.append(pdot);
       // T-128: an older computer gets the update icon next to its dot; the
-      // owner confirms in a popup.
+      // owner confirms in a popup. It stands left of the dot, so the dots of
+      // all computers stay in one column (owner, 2026-11-18).
       const busy=updateLine(peer);
       if(busy){
         // While an update is asked for, waits for tasks or is under way, the
@@ -543,13 +544,13 @@
         // download that may wait for hours (owner, 2026-11-14).
         const tip=busy[0];
         const b=el('span',undefined,'am-update-icon am-peer-update am-update-wait');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);appendUpdateGlyphs(b);
-        name.append(b);
+        name.insertBefore(b,pdot);
       }else if(fresh&&peer.version&&versionOlder(peer.version,newestVersion())){
         const newest=versionName(newestVersion()),label=tr('Обновить до ')+newest;
         const b=el('button',undefined,'am-update-icon am-peer-update');b.type='button';b.title=label;b.setAttribute('aria-label',label);appendUpdateGlyphs(b);
         b.addEventListener('click',event=>{event.stopPropagation();askConfirm(tr('Обновить ')+(peer.name||tr('компьютер'))+tr(' до ')+newest+'?',tr('Программа на том компьютере обновится и перезапустится. Задачи и история сохранятся.')+(peer.host?' '+tr('На нём работает сервер сети: пока он перезапускается, компьютеры не видят друг друга. Если там попросят подтверждение, сервер не вернётся, пока кто-нибудь не ответит у того компьютера.'):''),tr('Обновить'),()=>requestUpdate(peer),true);});
         b.addEventListener('keydown',event=>event.stopPropagation());
-        name.append(b);
+        name.insertBefore(b,pdot);
       }
       card.append(name);
       if(revokeAsk===peer.id&&hosted.has(peer.id)){

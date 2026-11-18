@@ -93,11 +93,20 @@ func (r *TaskEventResult) noteLimit(l LimitState) {
 }
 
 // claudeLimit reads Claude's rate_limit_event. Claude states the status and
-// the reset time; a share used is not taken from it.
+// the reset time; some events also carry "utilization", the share used
+// (T-198). It is read as a fraction (0.83 is 83%) when it is at most 1 and
+// as a percent up to 100 otherwise; the units are not yet confirmed on real
+// runs, so Reported keeps the raw value.
 func claudeLimit(info map[string]any) (LimitState, bool) {
 	status, _ := info["status"].(string)
 	l := LimitState{ResetAt: unixReset(info["resetsAt"]), Reported: reported(info)}
 	l.Window, _ = info["rateLimitType"].(string)
+	if u, ok := info["utilization"].(float64); ok && u >= 0 && u <= 100 {
+		if u <= 1 {
+			u *= 100
+		}
+		l.UsedPercent, l.HasPercent = u, true
+	}
 	switch status {
 	case "allowed":
 		l.State = LimitOK

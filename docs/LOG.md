@@ -4,6 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-17 — Claude Code (T-194)
 
+- T-199: the update arrow moved left of the computer's dot; dots larger. T-198 (limit rings in the left panel) dropped by the owner after a preview; Claude's `utilization` is now read as a percent.
 - T-197 recorded: on the Linux laptop GNOME kept starting 0.62 from a stale menu entry that 0.62 kept rewriting to itself; fixed by hand on the laptop (entry removed and written again).
 - T-196: the theme was lost on Windows/Linux after a restart because the window took a new port (new page storage) each time; it now reuses its last port. Recorded T-195 (welcome shown after setup).
 - Logo at the top of the README; `docs/assets/social-preview.png` for the repository's social preview (the owner uploads it in Settings, the API cannot set it).

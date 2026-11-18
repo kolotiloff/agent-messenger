@@ -52,7 +52,7 @@ func TestLimitKeepsWhatTheAgentReported(t *testing.T) {
 	var r TaskEventResult
 	ParseTaskEvent("claude", []byte(`{"type":"rate_limit_event","session_id":"s","rate_limit_info":{"status":"allowed_warning","resetsAt":1762900000,"rateLimitType":"seven_day","utilization":0.83,"isUsingOverage":false,"nested":{"a":1}}}`), &r)
 	want := `{"isUsingOverage":false,"rateLimitType":"seven_day","resetsAt":1762900000,"status":"allowed_warning","utilization":0.83}`
-	if r.Limit == nil || r.Limit.Reported != want || r.Limit.HasPercent {
+	if r.Limit == nil || r.Limit.Reported != want || !r.Limit.HasPercent || r.Limit.UsedPercent != 83 {
 		t.Fatalf("reported %+v", r.Limit)
 	}
 	long := map[string]any{"status": strings.Repeat("x", 300)}
