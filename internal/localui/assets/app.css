@@ -722,6 +722,9 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-stats-periods { display:flex; gap:var(--am-space-1); }
 /* T-076: the period tabs and the chosen computer share one row. */
 #am-concept .am-stats-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:var(--am-gap-control); }
+/* T-201: the agent and model lists next to the period. */
+#am-concept .am-stats-filters { display:flex; flex-wrap:wrap; align-items:center; gap:var(--am-gap-control); margin-right:auto; }
+#am-concept .am-stats-filters .am-select-trigger { max-width:16em; }
 #am-concept .am-stats-head .am-filter-chip, #am-concept [data-screen="agents"] > .am-filter-chip { margin-top:0; max-width:320px; }
 #am-concept [data-screen="agents"] > .am-filter-chip { margin-bottom:var(--am-gap-section); }
 #am-concept .am-peer-agents-note { grid-column:1/-1; margin:0; }

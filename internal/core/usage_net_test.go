@@ -75,6 +75,19 @@ func TestUsageStatsAcrossTheNetwork(t *testing.T) {
 	if len(all.Top) != 3 {
 		t.Fatalf("top %+v", all.Top)
 	}
+	// T-201: an agent counts the other computers' reports of it; a model
+	// counts only the tasks known here, since reports carry no model.
+	codex, err := f.st.UsageStatsFiltered(since, time.Local, "", UsageFilter{Agent: "codex"})
+	if err != nil || codex.Total.Tokens != 220+30 || codex.Total.Tasks != 3 {
+		t.Fatalf("codex %+v %v", codex.Total, err)
+	}
+	if _, err := f.st.db.Exec(`UPDATE tasks SET model='m1' WHERE id IN (?,?)`, onA, onB); err != nil {
+		t.Fatal(err)
+	}
+	m1, err := f.st.UsageStatsFiltered(since, time.Local, "", UsageFilter{Agent: "codex", Model: "m1"})
+	if err != nil || m1.Total.Tokens != 50+30 || m1.Total.Tasks != 2 || len(m1.Top) != 2 {
+		t.Fatalf("m1 %+v %v", m1.Total, err)
+	}
 	// One computer only.
 	a, err := f.st.UsageStats(since, time.Local, "peer-a")
 	if err != nil || a.Total.Tokens != 220 || a.Total.Tasks != 2 || len(a.Computers) != 1 || len(a.Top) != 1 || a.Top[0].ID != onA || a.Computer != "PC-1" {

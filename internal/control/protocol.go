@@ -26,14 +26,16 @@ const SocketName = "control.sock"
 const MaxRequestBytes = 4 << 20
 
 type Request struct {
-	Cmd            string `json:"cmd"`
-	Alias          string `json:"alias,omitempty"`
-	MessageID      string `json:"message_id,omitempty"`
-	Sender         string `json:"sender,omitempty"`
-	Text           string `json:"text,omitempty"`
-	Action         string `json:"action,omitempty"`
-	Confirmation   string `json:"confirmation,omitempty"`
-	Provider       string `json:"provider,omitempty"`
+	Cmd          string `json:"cmd"`
+	Alias        string `json:"alias,omitempty"`
+	MessageID    string `json:"message_id,omitempty"`
+	Sender       string `json:"sender,omitempty"`
+	Text         string `json:"text,omitempty"`
+	Action       string `json:"action,omitempty"`
+	Confirmation string `json:"confirmation,omitempty"`
+	Provider     string `json:"provider,omitempty"`
+	// Model limits the statistics to one model (T-201).
+	Model          string `json:"model,omitempty"`
 	Environment    string `json:"environment,omitempty"`
 	ConversationID string `json:"conversation_id,omitempty"`
 	CLI            string `json:"cli,omitempty"`
@@ -280,13 +282,19 @@ func dispatch(handler Handler, request Request) Response {
 		}
 		return Response{OK: true, Overview: raw}
 	case "usage-stats":
-		h, ok := handler.(interface {
+		var value any
+		var err error
+		if h, ok := handler.(interface {
+			UsageStatsFiltered(period, computer, agent, model string) (any, error)
+		}); ok {
+			value, err = h.UsageStatsFiltered(request.Alias, request.Text, request.Provider, request.Model)
+		} else if h, ok := handler.(interface {
 			UsageStats(period, computer string) (any, error)
-		})
-		if !ok {
+		}); ok {
+			value, err = h.UsageStats(request.Alias, request.Text)
+		} else {
 			return Response{Error: "statistics unsupported; update the background client"}
 		}
-		value, err := h.UsageStats(request.Alias, request.Text)
 		if err != nil {
 			return Response{Error: err.Error()}
 		}
