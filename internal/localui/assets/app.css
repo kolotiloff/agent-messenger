@@ -256,7 +256,11 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-machine-name .am-peer-update ~ .am-dot { margin-left:var(--am-space-1); }
 /* T-200: this computer's version and update arrow are shown in its card. */
 #am-concept .am-side-bottom #app-installed-version, #am-concept .am-side-bottom #app-update-button { display:none; }
-#am-concept .am-machine-version, #am-concept .am-machine-role { font-weight:400; }
+#am-concept .am-machine-role { font-weight:400; }
+/* T-201: the version in the card's bottom right corner; the line above it keeps room for it. */
+#am-concept .am-machine-card { position:relative; }
+#am-concept .am-machine-version { position:absolute; right:var(--am-space-3); bottom:var(--am-space-2); font-size:var(--am-text-xs); line-height:1.4; color:var(--am-muted); }
+#am-concept .am-machine-card:has(> .am-machine-version) > :nth-last-child(2) { padding-right:calc(var(--am-space-6) * 2); }
 #am-concept .am-machine-agents { display:flex; flex-direction:column; gap:var(--am-space-1); }
 #am-concept .am-agent-line { display:flex; align-items:center; gap:var(--am-space-1); min-width:0; font-size:var(--am-text-s); }
 #am-concept .am-agent-line .am-muted { margin-left:auto; }

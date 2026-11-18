@@ -515,7 +515,7 @@
     // for the other computers, not at the bottom of the panel (owner,
     // 2026-11-18). The bottom nodes keep the state; the card mirrors them.
     const own=$('app-installed-version'),ownUpdate=$('app-update-button');
-    if(own&&!own.hidden&&own.textContent){const v=el('span',own.textContent,'am-small am-muted am-machine-version');v.title=own.title;head.insertBefore(v,dot);}
+
     if(view?.pending_update==='updating'||view?.pending_update==='queued'){
       const tip=view.pending_update==='updating'?tr('Обновляется…'):tr('ждёт обновления');
       const b=el('span',undefined,'am-update-icon am-peer-update am-update-wait');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);appendUpdateGlyphs(b);
@@ -529,7 +529,11 @@
     machine.append(head);
     const lines=agentLines(view?.agents||[],view?.coordinator?.connected?(view.coordinator.client||''):null,online);
     if(!lines.children.length)lines.append(el('p',online?tr('Агенты не подключены'):tr('Нет связи'),'am-small am-muted'));
-    machine.append(lines);box.append(machine);
+    machine.append(lines);
+    // T-201: the version sits in the card's bottom right corner, so it does
+    // not move with the length of the computer's name (owner, 2026-11-18).
+    if(own&&!own.hidden&&own.textContent){const v=el('span',own.textContent,'am-machine-version');v.title=own.title;machine.append(v);}
+    box.append(machine);
     // The other computers of this computer's network, with their agents.
     // Only the computer that runs the server can revoke one, from the
     // right-click menu.
@@ -541,7 +545,6 @@
       const pdot=el('span',undefined,'am-dot'+(fresh?' online':''));pdot.title=fresh?tr('На связи'):tr('Нет связи');
       name.append(el('span',peer.name));
       if(peer.host)name.append(serverTag());
-      if(peer.version)name.append(el('span',versionName(peer.version),'am-small am-muted am-machine-version'));
       name.append(pdot);
       // T-128: an older computer gets the update icon next to its dot; the
       // owner confirms in a popup. It stands left of the dot, so the dots of
@@ -579,6 +582,7 @@
       }else{
         card.append(el('p',peer.last_seen?tr('Был на связи ')+stamp(peer.last_seen):tr('Ещё не выходил на связь'),'am-small am-muted'));
       }
+      if(peer.version){const v=el('span',versionName(peer.version),'am-machine-version');v.title=tr('Версия ')+versionName(peer.version).slice(1);card.append(v);}
       const can={revoke:hosted.has(peer.id)};
       if(can.revoke){
         card.classList.add('am-device-card');card.tabIndex=0;card.dataset.key='revoke-'+peer.id;card.title=tr('Правая кнопка мыши — действия');
