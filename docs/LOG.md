@@ -5,7 +5,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 ## 2026-11-18 — Codex (T-192, T-193, T-195, T-196)
 
 - Prepared the next preview: GPT-6.2 Codex starter models including Sol Low, one model list per provider on the coordinator computer, project menu stability and early worker presence.
-- The owner chose central lists instead of a remote settings command. Final tests and release pending.
+- The owner chose central lists instead of a remote settings command. Released [0.82](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.82) from `f1f5c6132a4b24f4792791b3c8a5969d6ee1d420`, [run](https://github.com/kolotiloff/agent-messenger/actions/runs/44295419912). All 22 published assets checked including five signed updates. Full local, browser and [PR CI](https://github.com/kolotiloff/agent-messenger/actions/runs/44293474608) checks passed.
 
 ## 2026-11-17 — Claude Code (T-194)
 
