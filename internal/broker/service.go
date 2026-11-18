@@ -151,9 +151,10 @@ type Service struct {
 
 	// presence reports this computer's agents; peers is the member's last
 	// list of computers from its broker.
-	presence func() (Presence, error)
-	peers    []Peer
-	peersAt  time.Time
+	presence     func() (Presence, error)
+	presenceWake chan struct{}
+	peers        []Peer
+	peersAt      time.Time
 
 	// interfaces lists this computer's addresses; replaced in tests.
 	interfaces func() ([]net.Addr, error)
@@ -163,7 +164,7 @@ type Service struct {
 // never fails: an unreadable file is shown in the window instead, so server
 // settings can never keep the client from starting.
 func NewService(ctx context.Context, root string) *Service {
-	s := &Service{root: root, base: ctx, settings: Settings{Scope: ScopeLocal, Port: DefaultPort}, interfaces: net.InterfaceAddrs}
+	s := &Service{root: root, base: ctx, settings: Settings{Scope: ScopeLocal, Port: DefaultPort}, interfaces: net.InterfaceAddrs, presenceWake: make(chan struct{}, 1)}
 	raw, err := os.ReadFile(s.settingsPath())
 	if err == nil {
 		var saved Settings
@@ -716,6 +717,14 @@ func (s *Service) SetPresence(fn func() (Presence, error)) {
 	s.mu.Unlock()
 }
 
+// NotifyPresence asks the reporting loop to publish current state soon.
+func (s *Service) NotifyPresence() {
+	select {
+	case s.presenceWake <- struct{}{}:
+	default:
+	}
+}
+
 // RunPresence reports this computer's agents every PresenceInterval until
 // ctx ends: to the hosted broker directly, and to the broker this computer
 // joined. Reporting is a status update that the next round replaces, so a
@@ -729,6 +738,7 @@ func (s *Service) RunPresence(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+		case <-s.presenceWake:
 		}
 	}
 }

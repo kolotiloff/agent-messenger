@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -180,25 +181,26 @@ func taskLink(tx *sql.Tx, task string) (taskLinks, error) {
 
 // netBody is the content of a message. Task is always the origin's task ID.
 type netBody struct {
-	Kind     string `json:"kind"`
-	Task     string `json:"task"`
-	Project  string `json:"project,omitempty"`
-	Agent    string `json:"agent,omitempty"`
-	Title    string `json:"title,omitempty"`
-	Text     string `json:"text,omitempty"`
-	Model    string `json:"model,omitempty"`
-	Folder   string `json:"folder,omitempty"`
-	Mirror   string `json:"mirror,omitempty"`
-	Reason   string `json:"reason,omitempty"`
-	State    string `json:"state,omitempty"`
-	Detail   string `json:"detail,omitempty"`
-	Audience string `json:"audience,omitempty"`
-	Event    string `json:"event,omitempty"`
-	Question string `json:"question,omitempty"`
-	OpID     string `json:"op_id,omitempty"`
-	By       string `json:"by,omitempty"`
-	Failure  string `json:"failure_reason,omitempty"`
-	Reset    string `json:"failure_reset,omitempty"`
+	Kind             string `json:"kind"`
+	Task             string `json:"task"`
+	Project          string `json:"project,omitempty"`
+	Agent            string `json:"agent,omitempty"`
+	Title            string `json:"title,omitempty"`
+	Text             string `json:"text,omitempty"`
+	Model            string `json:"model,omitempty"`
+	CoordinatorModel bool   `json:"coordinator_model,omitempty"`
+	Folder           string `json:"folder,omitempty"`
+	Mirror           string `json:"mirror,omitempty"`
+	Reason           string `json:"reason,omitempty"`
+	State            string `json:"state,omitempty"`
+	Detail           string `json:"detail,omitempty"`
+	Audience         string `json:"audience,omitempty"`
+	Event            string `json:"event,omitempty"`
+	Question         string `json:"question,omitempty"`
+	OpID             string `json:"op_id,omitempty"`
+	By               string `json:"by,omitempty"`
+	Failure          string `json:"failure_reason,omitempty"`
+	Reset            string `json:"failure_reset,omitempty"`
 	// Rules are the starting computer's worker rules (T-050). A computer
 	// before preview.38 ignores them.
 	Rules string `json:"rules,omitempty"`
@@ -550,6 +552,14 @@ func (s *Store) SetNetFullAccess(on bool) error {
 
 // ---- origin side ----
 
+// usesCoordinatorModels marks the first release that accepts the model
+// selected by the coordinator without consulting an executor-side list.
+func usesCoordinatorModels(version string) bool {
+	const prefix = "0.0.0-preview."
+	build, err := strconv.Atoi(strings.TrimPrefix(version, prefix))
+	return version == "dev" || (strings.HasPrefix(version, prefix) && err == nil && build >= 82)
+}
+
 // startRemoteTask records a task for another computer of the network and
 // queues its start. Nothing runs here.
 func startRemoteTask(tx *sql.Tx, r StartTaskRequest) (string, error) {
@@ -574,6 +584,20 @@ func startRemoteTask(tx *sql.Tx, r StartTaskRequest) (string, error) {
 	if !has {
 		return "", fmt.Errorf("%w: agent %s is not set up on %s", ErrRejected, r.Provider, peer.Name)
 	}
+	centralModels := usesCoordinatorModels(peer.Version)
+	if centralModels {
+		self, err := localComputer(tx)
+		if err != nil {
+			return "", err
+		}
+		models, err := coordinatorModelList(tx, self, r.Provider)
+		if err != nil {
+			return "", err
+		}
+		if err := modelAllowed(r.Provider, r.Model, splitModels(models)); err != nil {
+			return "", err
+		}
+	}
 	if peer.UpdatePending {
 		return "", fmt.Errorf("%w: computer «%s» is waiting to install a Messenger update and takes no new tasks", ErrRejected, peer.Name)
 	}
@@ -594,7 +618,7 @@ func startRemoteTask(tx *sql.Tx, r StartTaskRequest) (string, error) {
 	if err := insertTaskEvent(tx, r.Project, id, AudienceLog, "started", title, ""); err != nil {
 		return "", err
 	}
-	return id, enqueueNet(tx, broker, r.Computer, "start."+id, id, netBody{Kind: "start", Task: id, Project: r.Project, Agent: r.Provider, Title: title, Text: r.Text, Model: r.Model, Rules: r.Rules, Lock: r.Lock})
+	return id, enqueueNet(tx, broker, r.Computer, "start."+id, id, netBody{Kind: "start", Task: id, Project: r.Project, Agent: r.Provider, Title: title, Text: r.Text, Model: r.Model, CoordinatorModel: centralModels, Rules: r.Rules, Lock: r.Lock})
 }
 
 // answerRemoteTask sends an answer to the computer that runs the task.
@@ -1030,7 +1054,7 @@ func applyStart(tx *sql.Tx, from netLink, b netBody) error {
 		if err != nil {
 			return err
 		}
-		id, err = startLocalTask(tx, r, computer, &from)
+		id, err = startLocalTask(tx, r, computer, &from, b.CoordinatorModel)
 		return err
 	})
 	if errors.Is(err, ErrRejected) {

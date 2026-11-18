@@ -335,12 +335,18 @@
     return ['idle',tr('Свободен')];
   }
   function renderProjects(){
-    const select=$('project-select');select.replaceChildren();
-    for(const p of view?.projects||[]){const o=el('option',p.title||p.name);o.value=p.name;select.append(o);}
-    const add=el('option',tr('Новый проект'));add.value='__new';select.append(add);
+    const select=$('project-select');
+    const options=(view?.projects||[]).map(p=>[p.name,p.title||p.name]);
+    options.push(['__new',tr('Новый проект')]);
+    if(select.options.length!==options.length||options.some(([value,label],i)=>select.options[i].value!==value||select.options[i].textContent!==label)){
+      select.replaceChildren(...options.map(([value,label])=>{
+        const option=el('option',label);option.value=value;return option;
+      }));
+    }
     select.value=view?.project||'__new';
     if(!view?.project&&select.options.length>1)select.selectedIndex=0;
-    select.disabled=!view;syncSelects();
+    if(select.disabled!==!view)select.disabled=!view;
+    syncSelects();
   }
   // Right-click menu on another computer of the network. Revoking cannot be
   // undone, so its item only opens a confirmation inside the card. Updating
@@ -2017,15 +2023,19 @@
   let setupProvider='';
   // Starting lists, the same as the store's (T-061, T-098); shown for an
   // agent whose list is still empty and saved with the dialog.
-  const defaultModels={claude:['claude-haiku-5-5[effort=low]','claude-sonnet-5-5[effort=medium]','claude-opus-5-5[effort=medium]','claude-fable-5-2[effort=high]'],codex:['gpt-6-luna[effort=high]','gpt-6.1-sol[effort=medium]','gpt-6-astra[effort=medium]','gpt-6-astra[effort=high]'],cursor:['composer-2.5','cursor-grok-4.6-medium','grok-4.7-medium','grok-4.7-high']};
+  const defaultModels={claude:['claude-haiku-5-5[effort=low]','claude-sonnet-5-5[effort=medium]','claude-opus-5-5[effort=medium]','claude-fable-5-2[effort=high]'],codex:['gpt-6-luna[effort=high]','gpt-6.2-sol[effort=low]','gpt-6.2-sol[effort=medium]','gpt-6.2-sol[effort=high]','gpt-6.2-astra[effort=medium]','gpt-6.2-astra[effort=high]'],cursor:['composer-2.5','cursor-grok-4.6-medium','grok-4.7-medium','grok-4.7-high']};
+  function configuredModels(provider){
+    const agent=(view?.agents||[]).find(a=>a.agent===provider);
+    return view?.coordinator_models?.[provider]??(agent?agent.models||[]:defaultModels[provider]||[]);
+  }
   function openAgentSetup(provider){
     setupProvider=provider;const a=(view?.agents||[]).find(x=>x.agent===provider),found=discovery.find(d=>d.provider===provider);
     $('agent-setup-title').textContent=tr('Настройки: ')+names[provider];
     $('agent-setup-note').hidden=provider!=='cursor';
     $('agent-cli').value=a?.cli||found?.cli||'';$('agent-profile').value=a?.environment||found?.environment||'';
-    const models=a?(a.models||[]):defaultModels[provider]||[];
-    $('agent-models').value=models.join(', ');$('agent-models').disabled=!a;
-    $('agent-models').placeholder=a?tr('Пусто: задачи идут на модель по умолчанию'):tr('Сначала включите агента на карточке');
+    const models=configuredModels(provider);
+    $('agent-models').value=models.join(', ');$('agent-models').disabled=!view;
+    $('agent-models').placeholder=tr('Пусто: задачи идут на модель по умолчанию');
     $('agent-models-note').textContent=tr('Через запятую. От быстрых правок к сложным задачам. Доступ зависит от аккаунта.')+' '+(provider==='cursor'?tr('Имена из agent --list-models; High требует подходящего тарифа.'):tr('Уровень: [effort=medium] или [effort=high]. Messenger передаст его отдельным параметром.'));
     setStatus('agent-save-status','');
     if(!$('agent-setup').open)$('agent-setup').showModal();
@@ -2087,9 +2097,9 @@
     catch(error){setStatus('agent-save-status',error.message);}
   }
   async function saveAgentModels(){
-    const a=(view?.agents||[]).find(x=>x.agent===setupProvider);if(!a)return;
+    if(!view||!setupProvider)return;
     const models=$('agent-models').value.split(/[,\n]/).map(m=>m.trim()).filter(Boolean);
-    if(models.join('\n')===(a.models||[]).join('\n'))return;
+    if(models.join('\n')===configuredModels(setupProvider).join('\n'))return;
     setStatus('agent-save-status','');
     try{await postAPI('/api/agent-models',{provider:setupProvider,models});viewSignature='';await refresh();}
     catch(error){setStatus('agent-save-status',error.message);return;}

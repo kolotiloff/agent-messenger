@@ -1,12 +1,12 @@
 # Plan to the first release
 
-Written November 6, 2026; the status was last updated on November 14. This is the sequence of work on top of the original [MVP](MVP.md), the [architecture](PLAN.md), the [window](APP.md) requirements and [broker deployment](DEPLOYMENT.md). No release date is set: transitions are decided by checks, not by the percentage of code written.
+Written November 6, 2026; the status was last updated on November 18. This is the sequence of work on top of the original [MVP](MVP.md), the [architecture](PLAN.md), the [window](APP.md) requirements and [broker deployment](DEPLOYMENT.md). No release date is set: transitions are decided by checks, not by the percentage of code written.
 
 ## Current status
 
-Updated 2026-11-14. The details of each release are in [HANDOFF.md](HANDOFF.md) and [TASKS.md](TASKS.md); this section is the overview.
+Updated 2026-11-18. The details of each release are in [HANDOFF.md](HANDOFF.md) and [TASKS.md](TASKS.md); this section is the overview.
 
-The program is a technical preview used every day on the owner's Mac, Windows and Linux computers. Releases are numbered 0.N (tag `v0.0.0-preview.N`); 0.72 is the newest published one.
+The program is a technical preview used every day on the owner's Mac, Windows and Linux computers. Releases are numbered 0.N (tag `v0.0.0-preview.N`); 0.81 is the newest published one.
 
 Done since the plan below was written:
 
@@ -17,7 +17,7 @@ Done since the plan below was written:
 - **Window**: tasks of all computers with progress and tokens, answers and notes to workers, closing stuck tasks, agents with their models and limits, statistics, feedback journal.
 - **CI** on Linux, macOS and Windows, with the downloads built and installed; a daily watch of the worker CLIs.
 
-Not done yet: Developer ID signing and notarization on Mac and code signing on Windows (T-013), an Intel Mac build (T-014), backup and rollback (T-011), coordinator role handover (T-017), a standalone server for a VPS (T-036), a standby server computer, pictures from workers in reports, a phone view (T-147).
+Not done yet: Developer ID signing and notarization on Mac and code signing on Windows (T-013), an Intel Mac build (T-014), backup and rollback (T-011), coordinator role handover (T-017), a standby server computer, a phone view (T-147).
 
 The stage table below is the plan of November 6 and is kept for its exit conditions; several stages were reached in a different order or replaced by the task model.
 

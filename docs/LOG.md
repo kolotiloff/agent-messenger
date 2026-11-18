@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-18 — Codex (T-192, T-193, T-195, T-196)
+
+- Prepared the next preview: GPT-6.2 Codex starter models including Sol Low, one model list per provider on the coordinator computer, project menu stability and early worker presence.
+- The owner chose central lists instead of a remote settings command. Final tests and release pending.
+
 ## 2026-11-17 — Claude Code (T-194)
 
 - Logo at the top of the README; `docs/assets/social-preview.png` for the repository's social preview (the owner uploads it in Settings, the API cannot set it).
