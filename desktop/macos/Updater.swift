@@ -159,10 +159,20 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     // Focus changes share the same throttle as the timer; waiting never calls a model.
     func checkAutomaticallyIfDue() {
         guard started, endpoint != nil, updater.automaticallyChecksForUpdates,
-              ProcessInfo.processInfo.systemUptime - lastRemoteCheck >= 1800 else { return }
+              ProcessInfo.processInfo.systemUptime - lastRemoteCheck >= 1800 - 60 else { return }
         fetchRemote(manual: false)
     }
     func fetchRemote(manual: Bool) {
+        // A manual check always ends with a message (T-203): it never just
+        // returns because a check or a Sparkle session is still open.
+        if manual && fetching {
+            remoteMessage("Обновление уже загружается", "Загрузка с GitHub ещё идёт. На медленной связи она может занять несколько минут; когда пакет будет проверен, появится значок обновления.")
+            return
+        }
+        if manual && updater.sessionInProgress {
+            remoteMessage("Проверка обновлений ещё идёт", "Предыдущая проверка не закончилась. Повторите через минуту. Программа не изменена.")
+            return
+        }
         guard !fetching, endpoint != nil, !updater.sessionInProgress,
               let executable = Bundle.main.url(forResource: "messenger", withExtension: nil) else { return }
         busyRetry?.cancel(); waitingForDownload = false
@@ -188,6 +198,7 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
                     guard now - self.busySince! < 300 else {
                         self.fetchStatus = "Загрузка ещё выполняется, повторить"
                         self.onStatus?(self.availableVersion)
+                        if manual { self.remoteMessage("Обновление уже загружается", "Другая загрузка обновления ещё идёт. Повторите проверку позже. Программа не изменена.") }
                         return
                     }
                     self.waitingForDownload = true

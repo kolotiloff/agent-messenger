@@ -747,3 +747,42 @@ func TestSharedTaskSaysWhereItRuns(t *testing.T) {
 		t.Fatalf("local task %+v", l)
 	}
 }
+
+// T-210: the window's op id ("window-<question>-<uuid>") is wrapped twice on
+// the way to the computer that runs the task and passed 128 characters
+// there; the owner's answer was refused.
+func TestRemoteAnswerWithLongWindowOpID(t *testing.T) {
+	p := newNetPair(t)
+	if err := p.b.st.SetNetAccept(true); err != nil {
+		t.Fatal(err)
+	}
+	id := p.startRemote(t, "op", "codex", "Ask")
+	p.carry(t, true)
+	p.carry(t, false)
+	m := p.mirror(t, id)
+	r := p.b.launch(t, m.ID, "019a0000-0000-7000-8000-0000000000d2")
+	p.b.dispose(t, r, DispositionAsk, "Which?")
+	if _, err := p.b.st.FinishTaskRun(r.ID, cleanExit); err != nil {
+		t.Fatal(err)
+	}
+	p.carry(t, false)
+	task, _ := p.a.st.TaskByID(id)
+	if task.OpenQuestion == nil {
+		t.Fatalf("no question %+v", task)
+	}
+	op := "window-" + task.OpenQuestion.ID + "-" + strings.Repeat("0123456789abcdef", 6)
+	if len(op) > 128 {
+		t.Fatalf("test op id %d characters", len(op))
+	}
+	if err := p.a.st.AnswerTask(id, task.OpenQuestion.ID, op, "This one", AudienceCoordinator); err != nil {
+		t.Fatal(err)
+	}
+	p.carry(t, true)
+	p.carry(t, false)
+	if mm, _ := p.b.st.TaskByID(m.ID); mm.State != "running" && mm.State != "queued" {
+		t.Fatalf("answer not taken there %+v", mm)
+	}
+	if task, _ = p.a.st.TaskByID(id); task.State == "blocked" || task.OpenQuestion != nil {
+		t.Fatalf("answer refused %+v", task)
+	}
+}

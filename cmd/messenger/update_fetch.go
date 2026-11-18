@@ -30,7 +30,9 @@ func runUpdateFetch(root string, args []string) error {
 	if index >= 0 {
 		build, _ = strconv.Atoi(version[index+1:])
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	// Each transfer has its own limits: a stalled one ends after a minute
+	// without data, a slow one may go on (T-203).
+	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
 	defer cancel()
 	channel := updatefeed.Channel{Directory: filepath.Join(home, "updates"), PublicKey: buildinfo.UpdatePublicKey}
 	result, err := channel.SyncGitHub(ctx, build)

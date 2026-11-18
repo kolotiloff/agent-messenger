@@ -1635,9 +1635,16 @@ func (s *Store) AnswerTask(task, question, opID, text, by string) error {
 // the owner comes first, and the coordinator learns of it. The coordinator
 // may answer a question to the owner, usually with the owner's own words
 // from its chat (T-130).
+// maxNetOpID bounds an op id built for a message from another computer.
+const maxNetOpID = 1024
+
 func answerTask(tx *sql.Tx, task, question, opID, text, by string, fromNetwork, ownerOver bool) error {
 	text = strings.TrimSpace(text)
-	if opID == "" || len(opID) > 128 || text == "" || utf8.RuneCountInString(text) > MaxTaskText {
+	// An answer from the computer that started the task carries an op id
+	// built here from the network, the computer and the message: with the
+	// window's own id it passed 128 characters and the owner's answer was
+	// refused (T-210). Only a local caller's id is limited.
+	if opID == "" || (len(opID) > 128 && !fromNetwork) || len(opID) > maxNetOpID || text == "" || utf8.RuneCountInString(text) > MaxTaskText {
 		return fmt.Errorf("%w: answer needs an operation id and 1..%d characters", ErrRejected, MaxTaskText)
 	}
 	if by != AudienceCoordinator && by != AudienceOwner {
