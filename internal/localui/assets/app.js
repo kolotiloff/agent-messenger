@@ -511,9 +511,19 @@
     // The computer that runs the network's server is labelled as such.
     if(server?.host?.running&&server.host.scope!=='local')head.append(serverTag());
     const dot=el('span',undefined,'am-dot'+(online?' online':''));dot.title=online?tr('На связи'):tr('Нет связи');head.append(dot);
+    // T-200: this computer's version and update arrow stand in its card, as
+    // for the other computers, not at the bottom of the panel (owner,
+    // 2026-11-18). The bottom nodes keep the state; the card mirrors them.
+    const own=$('app-installed-version'),ownUpdate=$('app-update-button');
+    if(own&&!own.hidden&&own.textContent){const v=el('span',own.textContent,'am-small am-muted am-machine-version');v.title=own.title;head.insertBefore(v,dot);}
     if(view?.pending_update==='updating'||view?.pending_update==='queued'){
       const tip=view.pending_update==='updating'?tr('Обновляется…'):tr('ждёт обновления');
       const b=el('span',undefined,'am-update-icon am-peer-update am-update-wait');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);appendUpdateGlyphs(b);
+      head.insertBefore(b,dot);
+    }else if(ownUpdate&&!ownUpdate.hidden){
+      const b=ownUpdate.cloneNode(true);b.removeAttribute('id');b.classList.add('am-peer-update','am-own-update');
+      b.addEventListener('click',event=>{event.stopPropagation();ownUpdate.click();});
+      b.addEventListener('keydown',event=>event.stopPropagation());
       head.insertBefore(b,dot);
     }
     machine.append(head);
@@ -2264,6 +2274,7 @@
     updateTip(version,loading);
     showUpdateProgress();
     $('app-update-button').disabled=loading;
+    renderMachines();
   }
   // Windows and Linux: the program updates itself from the window (D-048).
   // While the check downloads, the icon is the ring; the arrow appears when
@@ -2293,6 +2304,7 @@
     $('app-update-button').classList.remove('am-update-loading');
     $('app-update-button').disabled=installing||loading;
     renderUpdateDialog();
+    renderMachines();
   }
   async function loadSelfUpdate(){
     if(window.webkit?.messageHandlers?.updates||selfUpdateBusy)return;

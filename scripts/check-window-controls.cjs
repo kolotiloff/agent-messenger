@@ -334,8 +334,9 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await page.locator('#fb-export').isDisabled(), true);
       await page.locator('#fb-close').click();
       // One update button: the dialog follows the download, the install and
-      // the restart; a failed install says so and offers to try again.
-      const updateButton = page.locator('#app-update-button');
+      // the restart; a failed install says so and offers to try again. The
+      // arrow stands in this computer's card (T-200).
+      const updateButton = page.locator('.am-machine-card[aria-current] .am-own-update');
       await updateButton.waitFor({state: 'visible'});
       assert(!(await updateButton.evaluate(b => b.classList.contains('am-update-loading'))), 'a found update shows a download ring');
       await updateButton.click();
