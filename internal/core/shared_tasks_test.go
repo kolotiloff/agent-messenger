@@ -30,7 +30,7 @@ func TestSharedTasks(t *testing.T) {
 	if _, err := f.st.db.Exec(`UPDATE tasks SET created_at='2000-01-01T00:00:00Z' WHERE id=?`, old); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.st.db.Exec(`UPDATE tasks SET created_at='2026-11-08T10:00:00Z' WHERE id=?`, done); err != nil {
+	if _, err := f.st.db.Exec(`UPDATE tasks SET created_at='2026-11-08T10:00:00Z',model='gpt-6.2-sol[effort=medium]',ran_model='gpt-6.2-sol[effort=high]' WHERE id=?`, done); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.st.db.Exec(`UPDATE tasks SET created_at='2026-11-08T11:00:00Z' WHERE id=?`, running); err != nil {
@@ -44,7 +44,7 @@ func TestSharedTasks(t *testing.T) {
 	if len(mine) != 2 || mine[0].ID != running || mine[1].ID != done {
 		t.Fatalf("shared %+v", mine)
 	}
-	if m := mine[1]; m.Project != "Game" || m.Agent != "codex" || m.State != "done" || m.Tokens != 1200 || m.FinishedAt == "" || len([]rune(m.Report)) != MaxSharedReport {
+	if m := mine[1]; m.Project != "Game" || m.Agent != "codex" || m.State != "done" || m.Tokens != 1200 || m.StartedAt == "" || m.Model != "gpt-6.2-sol[effort=high]" || m.FinishedAt == "" || len([]rune(m.Report)) != MaxSharedReport {
 		t.Fatalf("done task %+v", m)
 	}
 	if m := mine[0]; m.State != "running" || m.Report != "" || m.Title != "Build" {

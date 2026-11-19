@@ -68,6 +68,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-space-4:16px;
   --am-space-6:24px;
   --am-gap-line:2px;
+  --am-computer-update-size:18px;
+  --am-computer-meta-gap:6px;
   --am-gap-control:var(--am-space-2);
   --am-gap-content:var(--am-space-3);
   --am-gap-section:var(--am-space-4);
@@ -250,25 +252,25 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-machines { display:flex; flex-direction:column; gap:var(--am-space-1); min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; margin-right:calc(-1 * var(--am-space-3)); padding-right:calc(var(--am-space-3) - var(--am-gutter, 0px)); }
 #am-concept .am-machine-card { display:flex; flex-direction:column; align-items:stretch; gap:var(--am-gap-control); padding:var(--am-pad-compact); border:1px solid var(--am-line); border-radius:var(--am-radius-s); background:var(--am-soft); }
 #am-concept .am-machine-name { display:flex; align-items:center; gap:var(--am-space-1); font-weight:500; }
-/* T-198: the dot before the name, the version in the top right corner and
-   the update icon in the bottom right corner, on every computer's card. */
-#am-concept .am-machine-card { position:relative; }
+/* The dot precedes the name, with update and version aligned at right. */
 /* The row centres its items on the height of their lines, and a line keeps
    room below the letters, so the dot sat lower than their middle. The text
    is trimmed to its capitals and the dot centres on them; the row keeps the
    height of one line. */
 #am-concept .am-machine-name { min-height:1lh; }
-#am-concept .am-machine-name > :not(.am-dot) { text-box:trim-both cap alphabetic; }
+#am-concept .am-machine-name > span:not(.am-dot) { text-box:trim-both cap alphabetic; }
 #am-concept .am-machine-version, #am-concept .am-machine-role { font-weight:400; }
-#am-concept .am-machine-version { margin-left:auto; white-space:nowrap; }
+#am-concept .am-machine-meta { margin-left:auto; display:flex; align-items:center; gap:var(--am-computer-meta-gap); flex:none; }
+#am-concept .am-machine-name > span:nth-child(2) { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#am-concept .am-machine-version { white-space:nowrap; }
 #am-concept .am-machine-version .am-version { margin:0; }
-#am-concept .am-card-update { position:absolute; right:var(--am-space-3); bottom:var(--am-space-2); display:flex; }
+#am-concept .am-card-update { display:flex; }
 #am-concept .am-card-update:not(:has(> :not([hidden]))) { display:none; }
-#am-concept .am-machine-card:has(.am-card-update > :not([hidden])) > :not(.am-machine-name, .am-card-update) { padding-right:calc(22px + var(--am-space-2)); }
 #am-concept .am-machine-agents { display:flex; flex-direction:column; gap:var(--am-space-1); }
 #am-concept .am-agent-line { display:flex; align-items:center; gap:var(--am-space-1); min-width:0; font-size:var(--am-text-s); }
 #am-concept .am-agent-line .am-muted { margin-left:auto; }
-#am-concept .am-agent-status { white-space:nowrap; }
+#am-concept .am-agent-model { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--am-muted); }
+#am-concept .am-agent-status { margin-left:auto; flex:none; white-space:nowrap; }
 #am-concept .am-agent-run .am-agent-status { color:var(--am-run); }
 #am-concept .am-agent-wait .am-agent-status { color:var(--am-wait); }
 #am-concept .am-agent-line.am-agent-offline { color:var(--am-disabled-text); }
@@ -783,3 +785,5 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-connect-body details { align-self:stretch; }
 #am-concept .am-connect-body details button { margin-top:var(--am-space-2); }
 @media (max-width: 720px) { #am-concept .am-chain { flex-direction:column; } #am-concept .am-chain-arrow { transform:rotate(90deg); } }
+
+#am-concept .am-card-update .am-update-icon { width:var(--am-computer-update-size); height:var(--am-computer-update-size); }
