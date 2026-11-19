@@ -485,3 +485,6 @@ Amends D-100: a request to install the newest signed Messenger (the program only
 - If the worker's own process is still there, nothing changes (T-172: the run is described, not closed). Without a recorded report or question, or when the group's members cannot be listed, the run stays blocked as before (D-021). A cancelled run with leftovers stays blocked too.
 - Cause found on the way: Messenger waited for the end of the worker's error output, which a leftover child inherited, so `Wait` never returned after the worker exited. Waiting for that output is now limited to a few seconds after the exit (`WaitDelay`), and output a leftover keeps open after a completed turn is no failure.
 
+## D-148 — Larger window text (T-219)
+
+2026-11-19, owner request for more readable text. The embedded window uses 15 px / 21 px for chat and composer text, and 14 px for the base UI and sidebar agent names. Secondary text and metadata use 13 and 12 px. Existing families and control sizes are retained. See [UI_STYLE.md](UI_STYLE.md).
