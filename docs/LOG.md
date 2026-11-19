@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-19 — Codex (T-224)
+
+- Enabled owner notes for running tasks given here and executed on a network peer. The sender shows the note as queued and the original coordinator receives one event. The worker receives the note in the same conversation after its current run. Checked the window action and a two-store fixture.
+
 ## 2026-11-19 — Codex (T-222)
 
 - Refreshed the README and About, platform download and first-open steps, coordinator and network setup, and the update guide. Captured current light, dark and first-launch screenshots from fictional browser fixtures using the 0.86 window assets.

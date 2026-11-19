@@ -488,3 +488,7 @@ Amends D-100: a request to install the newest signed Messenger (the program only
 ## D-148 — Larger window text (T-219)
 
 2026-11-19, owner request for more readable text. The embedded window uses 15 px / 21 px for chat and composer text, and 14 px for the base UI and sidebar agent names. Secondary text and metadata use 13 and 12 px. Existing families and control sizes are retained. See [UI_STYLE.md](UI_STYLE.md).
+
+## D-150 — Owner notes to a running worker on another computer (T-224)
+
+2026-11-19, owner request. Extend D-096 and D-122 to owner notes from the computer that gave the task. The existing network note message is idempotent and accepts an optional owner marker; a receiver before this change still queues it as a coordinator note. The sender records the author and notifies the original coordinator once that it queued the note. The worker applies the same state checks and reads the note when its current run ends. A peer that no longer accepts the note reports a refusal.

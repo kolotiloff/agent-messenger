@@ -15,7 +15,7 @@ import (
 // answer. A task that stops keeps its waiting notes as undelivered: nothing
 // sends them again by itself.
 
-// AddOwnerNote records the owner's note to a working task of this computer.
+// AddOwnerNote records the owner's note to a working task given by this computer.
 // opID makes it idempotent. A worker that asked the coordinator has ended
 // its step and waits: the owner's message answers that question at once,
 // instead of waiting for the coordinator (T-125).
@@ -38,7 +38,7 @@ func (s *Store) addNote(task, project, opID, text, author string) error {
 	return s.tx(func(tx *sql.Tx) error { return addNoteTx(tx, task, project, opID, text, author, false) })
 }
 
-// addNoteTx records a note. viaNet is a coordinator's note that another
+// addNoteTx records a note. viaNet is a note that another
 // computer sent for the mirror of its task (T-149); its op id is built
 // here and may be longer.
 func addNoteTx(tx *sql.Tx, task, project, opID, text, author string, viaNet bool) error {
@@ -80,10 +80,7 @@ func addNoteTx(tx *sql.Tx, task, project, opID, text, author string, viaNet bool
 			return err
 		}
 		if link.remote != nil {
-			if author != AudienceCoordinator {
-				return fmt.Errorf("%w: a task of another computer takes messages from the coordinator only", ErrRejected)
-			}
-			return noteRemoteTask(tx, t, *link.remote, opID, text)
+			return noteRemoteTask(tx, t, *link.remote, opID, text, author)
 		}
 		if link.origin != nil && !viaNet {
 			return fmt.Errorf("%w: this task came from another computer; its coordinator writes to it", ErrRejected)
@@ -94,7 +91,7 @@ func addNoteTx(tx *sql.Tx, task, project, opID, text, author string, viaNet bool
 			}
 			return fmt.Errorf("%w: the worker asked you a question; answer it instead", ErrRejected)
 		}
-		if author == AudienceCoordinator && t.State == "waiting_coordinator" && !t.CancelRequested {
+		if (author == AudienceCoordinator || viaNet) && t.State == "waiting_coordinator" && !t.CancelRequested {
 			return fmt.Errorf("%w: the worker asked you a question; answer it with answer", ErrRejected)
 		}
 		if t.State == "waiting_coordinator" && !t.CancelRequested {
@@ -124,12 +121,16 @@ func addNoteTx(tx *sql.Tx, task, project, opID, text, author string, viaNet bool
 		if _, err := tx.Exec(`INSERT INTO task_owner_notes(id,task_id,op_id,text,state,created_at,author) VALUES (?,?,?,?,'pending',?,?)`, "note-"+id[:16], task, opID, text, now(), author); err != nil {
 			return err
 		}
-		if author == AudienceCoordinator {
+		if author == AudienceCoordinator || viaNet {
 			return nil
 		}
-		return insertTaskEvent(tx, t.Project, task, AudienceCoordinator, "owner_note",
-			"The owner wrote to this worker; it reads this only when its current run ends (a worker CLI takes no input while it works) and then continues the same task:\n"+text, "")
+		return ownerNoteEvent(tx, t, text)
 	}
+}
+
+func ownerNoteEvent(tx *sql.Tx, t Task, text string) error {
+	return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "owner_note",
+		"The owner wrote to this worker; it reads this only when its current run ends (a worker CLI takes no input while it works) and then continues the same task:\n"+text, "")
 }
 
 // holdForOwnerNotes keeps a run's report back when the owner wrote while it
