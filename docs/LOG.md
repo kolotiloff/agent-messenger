@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-19 — Claude Code (T-215)
+
+- Owner asked for the open tasks and the last release: 0.85 is published (PR #130). Recorded T-215 from the owner's screenshot: the statistics task rows get one format in both tabs. No code changed.
+
 ## 2026-11-18 — Claude Code (T-198)
 
 - Owner answered Q-030 (b): D-147, T-205. The cause was `Wait` waiting for the error output a leftover child inherited; now limited after the exit. Also T-212, T-209, and parts of T-211 and T-208. Owner: release when done, don't wait.
