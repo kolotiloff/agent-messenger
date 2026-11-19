@@ -1,6 +1,6 @@
 # Download and start
 
-The buttons in the [README](../README.md) always download the newest release. Every release has the same file names:
+Download Agent Messenger from [GitHub Releases](https://github.com/kolotiloff/agent-messenger/releases/latest). The buttons in the [README](../README.md) always point to the current packages. A GitHub account is not required. Choose the file for your operating system and processor.
 
 | File | For |
 |---|---|
@@ -10,39 +10,41 @@ The buttons in the [README](../README.md) always download the newest release. Ev
 | `AgentMessenger-Linux-x64` | Linux on Intel or AMD |
 | `AgentMessenger-Linux-ARM64` | Linux on ARM |
 | `AgentMessenger-Windows-Linux-SHA256.txt` | SHA-256 of the four Windows and Linux files |
-| `update-<os>-<arch>.json`, `.sig`, `<sha256>.zip` | Signed updates the programs download by themselves; not for manual download |
+| `install-server.sh` | Optional Linux server installer for a VPS |
+| `update-<os>-<arch>.json`, `.sig`, `<sha256>.zip` | Signed update files used by the app |
 
-Only the Mac app comes in a zip: a Mac app is a folder, and a browser cannot download a folder. Safari unpacks the zip by itself. The same zip is also published under its checksum as a name; the app's own updater uses that one.
+On Mac, check **About This Mac** for an Apple chip. Intel Macs do not have a build. On Windows, check **Settings → System → About → System type** for x64 or ARM64. On Linux, `uname -m` reports `x86_64` for x64 and `aarch64` for ARM64.
 
 ## Mac
 
-1. Download `AgentMessenger-Mac.zip`. Safari unpacks it into `Agent Messenger.app`; otherwise double-click the zip.
-2. Move `Agent Messenger.app` to `~/Applications` and open it. The app is not notarized yet, so the first time macOS may ask to confirm the opening in System Settings → Privacy & Security.
-3. Later versions arrive in the app («Доступно обновление»). More: [MAC_APP.md](MAC_APP.md).
+1. Download `AgentMessenger-Mac.zip` and unzip it. If your browser already unpacked it, look for `Agent Messenger.app` in Downloads.
+2. Move the app to your Applications folder, for example `~/Applications`, and open it from there.
+3. If macOS says it cannot verify the developer or check the app for malicious software, dismiss the message. Open **System Settings → Privacy & Security**, scroll down to **Security**, and look for the message about Agent Messenger and **Open Anyway** («Открыть всё равно»). It appears after you have tried opening the app. Click it for the official download and confirm in the next dialog. If it is absent, try opening the app once from its final location and return to that panel. [Apple's first-open instructions](https://support.apple.com/en-us/102445)
+
+The technical preview is ad-hoc signed and is not notarized by Apple. Data lives in `~/Library/Application Support/AgentMessenger`. Use the update arrow next to this computer's version for later releases, or use **Agent Messenger → Проверить обновления…** in the menu. [Mac app](MAC_APP.md)
 
 ## Windows
 
 1. Download `AgentMessenger-Windows-x64.exe` (or `-ARM64.exe` on ARM).
-2. Double-click it. The program is not signed, so SmartScreen may warn: «Подробнее» → «Выполнить в любом случае».
+2. Double-click it. If SmartScreen blocks the official download, open **More info** («Подробнее») and choose **Run anyway** («Выполнить в любом случае») when Windows offers the option.
 3. On the first start the program installs itself for the current user, without administrator rights (D-082): it copies itself to `%LOCALAPPDATA%\Programs\Agent Messenger`, adds «Agent Messenger» to the Start menu and to Settings → «Приложения». Then the installed copy opens. The downloaded file is no longer needed. Starting an older download opens the installed newer version instead.
-4. Agent Messenger opens in a window of its own (Windows' built-in WebView2 engine, D-054); the console window that Windows opens closes. Closing the window closes only the window; the background client and its tasks keep running. To come back, start it from the Start menu. On a computer without WebView2 the page opens in the browser instead. On the computer that runs the server, Windows Firewall asks «Разрешить доступ» once; the client always runs from the same file, so updates do not ask again (D-118).
+4. Agent Messenger uses WebView2 for its window and opens in the browser if WebView2 is unavailable. Closing the desktop window hides it in the notification area while the background client and its tasks keep running. Reopen it from the notification area or Start menu.
 5. To remove it: Settings → «Приложения» → Agent Messenger → «Удалить». Removal is refused while tasks run. It stops the background client and removes the program, the shortcut and the entry. The data stays.
 
-Data: `%LOCALAPPDATA%\AgentMessenger` (tasks, history, settings, `active-runs.json`); removing the program never deletes it. Later versions arrive in the window («Доступно обновление» → «Обновиться»); the program replaces its own file and opens the window again ([updates](UPDATES.md#windows-and-linux)).
+Data lives in `%LOCALAPPDATA%\AgentMessenger` and stays when you uninstall the app. Use the arrow next to this computer's version to update. [Updates](UPDATES.md#windows-and-linux)
 
 ## Linux
 
-```bash
-chmod +x AgentMessenger-Linux-x64
-```
+In the download folder, mark the file executable and open the app:
 
 ```bash
+chmod +x AgentMessenger-Linux-x64
 ./AgentMessenger-Linux-x64 open
 ```
 
-A browser download does not keep the "may run" mark of a file, hence `chmod +x` once. `./AgentMessenger-Linux-x64 install` optionally puts the program in `~/.local/bin` as `messenger`. On a computer with such an installation, opening a newer downloaded file updates the installation and opens from it. The window opens on its own with the system's WebKitGTK (`libwebkit2gtk-4.1` or `-4.0`, present on most desktops; D-078); after the first start Agent Messenger is in the application menu. Without WebKitGTK it opens through Chrome, Chromium, Edge or Brave without tabs or an address bar (D-054), then in the default browser, or the program prints the path of a file to open.
+For ARM use `AgentMessenger-Linux-ARM64` in both commands. The optional `./AgentMessenger-Linux-x64 install` command puts `messenger` in `~/.local/bin`. The app opens a desktop window with WebKitGTK 4.1 or 4.0. Without it, Messenger tries a browser window.
 
-Data: `$XDG_DATA_HOME/agent-messenger` or `~/.local/share/agent-messenger`. To stop the background client: `./AgentMessenger-Linux-x64 shutdown`. Later versions arrive in the window («Доступно обновление» → «Обновиться»), as on Windows; a program installed with `install` is updated there as well ([updates](UPDATES.md#windows-and-linux)).
+Data lives in `$XDG_DATA_HOME/agent-messenger` or `~/.local/share/agent-messenger`. Use the arrow next to this computer's version for updates. When running the downloaded file directly, keep it in a directory you can write to. To stop the background client, run the same binary with `shutdown` in place of `open`. [Linux details](WINDOWS_LINUX.md)
 
 ## Server on a Linux VPS
 
@@ -54,22 +56,30 @@ curl -fsSL https://github.com/kolotiloff/agent-messenger/releases/latest/downloa
 
 `agent-messenger-server invite` gives a new invitation, `agent-messenger-server status` shows the state and the connected computers.
 
-## Agents
-
-- **Claude Code**: the usual installation (`claude.exe` on Windows, usually in `%USERPROFILE%\.local\bin`; `claude` on Linux and Mac).
-- **Codex**: on Windows the npm installation works; the program finds the `codex.exe` inside the npm package. `.cmd` and `.bat` files are not started (D-044).
-- **Cursor**: `cursor-agent` on Mac and Linux (usually in `~/.local/bin`). Before the first Cursor task Messenger adds one entry, `messenger_task`, to `~/.cursor/mcp.json`; other entries stay as they are (D-049). On Windows Messenger runs Cursor's own `node.exe` with its `index.js` from the newest version in `%LOCALAPPDATA%\cursor-agent`.
-
 ## First steps
 
-1. **Агенты:** connect Claude Code (and Codex or Cursor if you use them).
-2. **Новый проект…:** a name and the project folder. Messenger then adds the project to Claude's settings by itself; no Terminal is needed (D-050). The window says «Claude подключён к проекту».
-3. Open the project folder in Claude Code (the Claude app, Code tab, this computer; or `claude` in that folder) and start a **new** chat. Ask «Каких агентов ты видишь?», then give it work.
+![Agent Messenger's welcome screen with steps for creating a project, configuring agents and connecting computers](assets/first-launch.png)
 
-A web chat on claude.ai or the Chat tab does not see Messenger: the coordinator runs only in Claude Code on the computer where Messenger runs.
+1. On the welcome screen, choose **Новый проект…** (New project), enter a name and select its folder. On other computers use exactly the same project name and select the local folder there.
+2. Under **Агенты** (Agents), choose **Установить** (Install) to run the provider's installer in a terminal, or **Найти** (Find) if the CLI is already installed. Wait for the terminal to finish. If it was closed and Messenger could not confirm installation, use **Найти** to check for the CLI. The agent's graphical app is optional for running workers.
+3. Use **Войти** (Sign in) on the agent card and complete the provider's sign-in. If Codex asks to trust the project folder, use **Доверять** on its card and confirm the exact folder in the terminal.
+4. Under **Проект → MCP-плагин** (Project → MCP plug-in), check the connection for Claude Code, Codex or Cursor. Use **Подключить** (Connect) if needed. Open a **new local chat** in that same folder and ask “Which agents can you see?” Approve the Messenger tool access when your coordinator prompts.
+
+For Cursor, enable the project's `messenger` connection in its MCP settings if the new chat cannot see the tools. The `messenger_task` connection is for workers. If the tools are missing, reopen the project chat after enabling the source. The coordinator needs access to local project tools. Claude Code can use background notifications while waiting. Codex and Cursor receive updates by keeping a turn active and calling `wait`.
+
+## Connect more computers
+
+1. On the host, open **Сервер** (Server), choose **Локальная сеть** (Local network) and press **Запустить сервер**.
+2. Click **Пригласить устройство**. On the other computer, paste the six-digit code into **Сервер → Подключение к серверу** (Server → Connect to server). Use a fresh invitation for each computer.
+3. If two computers cannot find each other by six digits, try the long `am1:…` invitation with a server address the other computer can reach. Six-digit discovery needs UDP 47100 on the local network, and the connection itself uses the chosen TCP port (47100 by default). Check Windows Firewall on the server computer and make sure the systems are on the intended network. Guest Wi-Fi isolation can block discovery.
+4. On each worker computer, set its project folder and check **Принимать задачи других компьютеров** (Accept tasks from other computers).
+
+For computers in different networks, use a reachable address in **Интернет** (Internet) mode and the long invitation, or a shared VPN. A home router or a VPS firewall may need an inbound TCP rule for the server port. [Network and invitation details](BROKER.md#computers-in-different-places)
 
 ## Check a download (optional)
 
 ```bash
 sha256sum -c AgentMessenger-Windows-Linux-SHA256.txt --ignore-missing
 ```
+
+On Windows, run `Get-FileHash .\AgentMessenger-Windows-x64.exe -Algorithm SHA256` in PowerShell and compare it to the matching line in the checksum file. Use the ARM64 file name for that download.
