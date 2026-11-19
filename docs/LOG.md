@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-19 — Codex (T-218)
+
+- Moved the connected server card action beside the connection details. Added it to [PR #132](https://github.com/kolotiloff/agent-messenger/pull/132) for the 0.86 preview requested by the owner.
+
 ## 2026-11-19 — Codex (T-215–T-217)
 
 - Implemented the two statistics formats as one, the finished task wording and the approved B1 layout for local and remote computers. Shared tasks provide optional model and start metadata with fallback for brokers that explicitly reject the new fields. Verified the UI using fictional data in Chromium. Ready for review; no release.

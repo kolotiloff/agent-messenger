@@ -555,6 +555,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-sub { display:flex; flex-direction:column; gap:var(--am-gap-content); min-width:0; }
 #am-concept .am-server-grid { display:grid; grid-template-columns:minmax(0,1fr) 120px auto; align-items:end; gap:var(--am-gap-content); }
 #am-concept .am-invite-row { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:end; gap:var(--am-gap-content); }
+#am-concept .am-member-joined { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:var(--am-gap-content); }
 /* Both buttons sit in one cell; the hidden one still sizes it. */
 #am-concept .am-swap { display:grid; }
 #am-concept .am-swap > button { grid-area:1/1; }

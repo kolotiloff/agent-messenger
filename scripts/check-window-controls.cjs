@@ -307,7 +307,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
             {id: 'own', project: 'Frame', title: 'Own task', agent: 'codex', state: 'running', created_at: '2026-11-15T09:00:00Z'},
             {id: 'old-1', project: 'Frame', title: 'Old 1', agent: 'codex', state: 'done', created_at: '2026-11-14T09:00:00Z', finished_at: '2026-11-14T09:30:00Z'},
             {id: 'old-2', project: 'Frame', title: 'Old 2', agent: 'codex', state: 'failed', created_at: '2026-11-14T08:00:00Z', finished_at: '2026-11-14T08:30:00Z'}]}]}});
-        if (pathname === '/api/server') return route.fulfill({json: {host: {running: false, enabled: false, addresses: []}, member: {connected: true}, peers: [{id: 'host', name: 'Giver', age: 0, agents: []}, {id: 'dev-1', name: 'Runner', age: 0, version:'0.0.0-preview.97', agents: [{agent:'cursor',running:1}]}], updates: [], accept: true}});
+        if (pathname === '/api/server') return route.fulfill({json: {host: {running: false, enabled: false, addresses: []}, member: {connected: true, reachable: true, address:'203.0.113.7:47100', connected_at:began}, peers: [{id: 'host', name: 'Giver', age: 0, agents: []}, {id: 'dev-1', name: 'Runner', age: 0, version:'0.0.0-preview.97', agents: [{agent:'cursor',running:1}]}], updates: [], accept: true}});
         if (pathname === '/api/usage-stats') return route.fulfill({json:{total:{tasks:1,tokens:12,input_tokens:8,output_tokens:4},agents:[],computers:[],days:[],recent:[stat],top:[stat]}});
         if (pathname === '/api/task-hide') hides.push(route.request().postDataJSON());
         if (pathname === '/api/self-update') {
@@ -338,6 +338,23 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await runner.locator('.am-agent-status').textContent(),'3 мин');
       assert.equal(await runner.locator('.am-machine-name .am-card-update').count(),1);
       assert.equal(await page.locator('.am-machine-name #app-update-button').count(),1);
+      const disconnect = page.locator('#member-disconnect');
+      await disconnect.waitFor({state: 'visible'});
+      for (const width of [1100, 600]) {
+        await page.setViewportSize({width, height: 850});
+        const details = await page.locator('#member-details').boundingBox();
+        const action = await disconnect.boundingBox();
+        const badge = await page.locator('#member-badge').boundingBox();
+        assert(action.x >= details.x + details.width, 'disconnect action overlaps the connection details');
+        assert(Math.abs(action.y + action.height / 2 - (details.y + details.height / 2)) <= 1, 'disconnect action is on a separate row');
+        assert(Math.abs(action.x + action.width - (badge.x + badge.width)) <= 1, 'disconnect action is off the right edge of the status');
+      }
+      await page.setViewportSize({width: 1100, height: 600});
+      if (process.env.SCREENSHOT_DIR) {
+        await page.emulateMedia({colorScheme:'dark'});
+        await page.locator('[aria-labelledby=member-title]').screenshot({path: path.join(process.env.SCREENSHOT_DIR,'server-connected.png')});
+        await page.emulateMedia({colorScheme:'light'});
+      }
       await page.locator('[data-tab=stats]').click();
       const detail = page.locator('#stats-top .am-stats-task-text .am-muted');
       await detail.waitFor();
