@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-19 — Codex (T-220, T-221)
+
+- Stopped the 0.86 run before publication to fix clipped computer names. The chat and task header now reuse the task list model formatter. Both regressions are covered by fictional browser fixtures.
+
 ## 2026-11-19 — Codex (T-219)
 
 - Increased the window typography with existing font families. Used Chromium to check window controls and capture both themes on fictional task data.

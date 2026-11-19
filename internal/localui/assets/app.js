@@ -767,7 +767,7 @@
     if(selectedTask===it.t.id&&!selectedShared)return;
     selectedTask=it.t.id;selectedShared=null;feed=null;feedSignature='';renderTaskList();if(!quiet)loadFeed();
   }
-  // A model's short name for the task list (T-202): «gpt-6.2-sol[effort=low]»
+  // A model's display name (T-202): «gpt-6.2-sol[effort=low]»
   // reads «Sol 6.2 Low», «claude-opus-5-5[effort=medium]» «Opus 5.5 Medium».
   // Anything else is shown as it is.
   function modelName(value){
@@ -1139,7 +1139,9 @@
     const count=(feed.items||[]).length,fresh=feedShown!==t.id,atBottom=fresh||feedStick||feedPinned,grew=!fresh&&!atBottom&&count>feedCount;feedShown=t.id;feedStick=false;feedCount=count;feedSignature=signature;
     const title=el('div',undefined,'am-task-head');title.append(el('h3',t.title));
     const where=t.remote&&!t.remote.from?tr(' на компьютере «')+t.remote.name+'»':tr(' на ')+(view.computer_name||tr('этом компьютере'))+(t.remote?.from?tr(', по заданию компьютера «')+t.remote.name+'»':'');
-    title.append(el('p',(names[t.agent]||t.agent)+((t.ran_model||t.model)?' ('+(t.ran_model||t.model)+')':'')+where+tr(', папка ')+(t.folder||tr('ещё не известна'))+(t.remote&&!t.remote.from?'':t.full_access?tr(', любые команды разрешены'):tr(', без «Любых команд»')),'am-small am-muted'));
+    const model=t.ran_model||t.model;
+    const displayModel=model?modelName(model):'';
+    title.append(el('p',(names[t.agent]||t.agent)+(displayModel?' ('+displayModel+')':'')+where+tr(', папка ')+(t.folder||tr('ещё не известна'))+(t.remote&&!t.remote.from?'':t.full_access?tr(', любые команды разрешены'):tr(', без «Любых команд»')),'am-small am-muted'));
     const [statusText,statusCls,statusTip]=taskStatus(t);
     const when=t.finished_at?', '+clock(t.created_at)+'–'+clock(t.finished_at):tr(', начата в ')+clock(t.created_at);
     const line=el('p',undefined,'am-small');line.append(el('span',statusText,statusCls),el('span',when,'am-muted'));
@@ -1173,7 +1175,7 @@
       const body=el('div',undefined,'am-message-body');const meta=el('div',undefined,'am-meta');
       meta.append(el('strong',names[t.agent]||t.agent));
       // The model the CLI said it runs on, else the one the coordinator asked for (T-108).
-      const model=t.ran_model||t.model;if(model){const m=el('span',model,'am-meta-model');m.title=t.ran_model?tr('Модель, на которой исполнитель запущен'):tr('Модель, которую указал координатор');meta.append(m);}
+      if(displayModel){const m=el('span',displayModel,'am-meta-model');m.title=t.ran_model?tr('Модель, на которой исполнитель запущен'):tr('Модель, которую указал координатор');meta.append(m);}
       meta.append(roleTag(tr('исполнитель')),el('time',clock(at)));
       const content=el('div',undefined,'am-message-content');meta.prepend(avatar);body.append(meta,content);row.append(body);g.append(row);out.push(g);group=content;return content;
     };
