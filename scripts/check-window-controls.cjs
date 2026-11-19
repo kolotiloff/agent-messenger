@@ -310,7 +310,14 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
             {id: 'old-2', project: 'Frame', title: 'Old 2', agent: 'codex', state: 'failed', created_at: '2026-11-14T08:00:00Z', finished_at: '2026-11-14T08:30:00Z'}]}]}});
         if (pathname === '/api/server') return route.fulfill({json: {host: {running: false, enabled: false, addresses: []}, member: {connected: true, reachable: true, address:'203.0.113.7:47100', connected_at:began}, peers: [{id: 'host', name: 'Giver', age: 0, agents: []}, {id: 'dev-1', name: 'Runner', age: 0, version:'0.0.0-preview.97', agents: [{agent:'cursor',running:1}]}], updates: [], accept: true}});
         if (pathname === '/api/usage-stats') return route.fulfill({json:{total:{tasks:1,tokens:12,input_tokens:8,output_tokens:4},agents:[],computers:[],days:[],recent:[stat],top:[stat]}});
-        if (pathname === '/api/task') return route.fulfill({json:{task:localTask,items:[{kind:'text',text:'Fixture reply',at:began}]}});
+        if (pathname === '/api/task') return route.fulfill({json:{task:localTask,items:[
+          {kind:'text',text:'Fixture reply',at:began},
+          {kind:'tool',title:'Команда',text:"rg --files | rg 'RuntimePanelUtils\\.cs$'",at:began},
+          {kind:'tool',title:'Команда',text:"cm cat FreeCamera.cs#cs:3474 | rg -n -C 2 'Mouse|UIOwnsKeys'",at:began},
+          {kind:'tool',title:'Bash',text:'cm cat Tools/40_tune.steps#cs:3474',description:'Прочитать шаги ручной проверки',at:began},
+          {kind:'tool',title:'Команда',text:'ls Assets/Infantry/Client',at:began},
+          {kind:'tool',title:'Команда',text:"python3 - <<'PY'\nprint('test')\nPY",at:began}
+        ]}});
         if (pathname === '/api/task-hide') hides.push(route.request().postDataJSON());
         if (pathname === '/api/self-update') {
           if (route.request().method() === 'POST') { updates.push(route.request().postDataJSON()); update.state = 'downloading'; return route.fulfill({json: {ok: true, state: 'downloading'}}); }
@@ -373,6 +380,15 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.locator('#thread .am-meta-model').waitFor();
       assert.equal(await page.locator('#thread .am-meta-model').textContent(),'Sol 6.2 Medium');
       assert.match(await page.locator('#task-head').innerText(),/Codex \(Sol 6\.2 Medium\)/);
+      const actionGroup=page.locator('#thread .am-tool-group');
+      await actionGroup.locator(':scope > summary').click();
+      assert.equal(await actionGroup.locator('.am-tool-group-title').innerText(),'5 действий');
+      assert.equal(await actionGroup.locator('.am-tool-breakdown').innerText(),'2 поиска, чтение файла, просмотр папки и запуск скрипта');
+      const labels=actionGroup.locator('.am-action-label');
+      assert.deepEqual(await labels.allInnerTexts(),['Найти файл RuntimePanelUtils.cs','Найти упоминания Mouse и UIOwnsKeys в файле FreeCamera.cs','Прочитать шаги ручной проверки','Посмотреть файлы в папке Infantry/Client','Запустить скрипт Python']);
+      assert.equal(await labels.locator('svg').count(),5);
+      await labels.nth(1).click();
+      assert.equal(await actionGroup.locator('details[open] pre').innerText(),"cm cat FreeCamera.cs#cs:3474 | rg -n -C 2 'Mouse|UIOwnsKeys'");
       if (process.env.SCREENSHOT_DIR) await page.screenshot({path: path.join(process.env.SCREENSHOT_DIR, 'frameless.png')});
       // Owner, 2026-11-15: one button removes every finished task from the list.
       await page.locator('.am-task-section', {hasText: 'Завершённые'}).locator('.am-task-section-action').click();

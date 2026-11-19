@@ -369,9 +369,10 @@ func ParseTaskEvent(provider string, line []byte, r *TaskEventResult) {
 // FeedEntry is one item of a worker's event stream kept for the window: the
 // worker's own text, or one tool action shown as a collapsible line.
 type FeedEntry struct {
-	Kind  string // "text" or "tool"
-	Title string
-	Text  string
+	Kind        string // "text" or "tool"
+	Title       string
+	Text        string
+	Description string
 }
 
 func toolSummary(input map[string]any) string {
@@ -420,7 +421,8 @@ func TaskFeedEntries(provider string, line []byte) []FeedEntry {
 					continue
 				}
 				input, _ := block["input"].(map[string]any)
-				out = append(out, FeedEntry{Kind: "tool", Title: name, Text: toolSummary(input)})
+				description, _ := input["description"].(string)
+				out = append(out, FeedEntry{Kind: "tool", Title: name, Text: toolSummary(input), Description: description})
 			}
 		}
 	case "codex":
@@ -435,7 +437,8 @@ func TaskFeedEntries(provider string, line []byte) []FeedEntry {
 			}
 		case "command_execution":
 			command, _ := item["command"].(string)
-			out = append(out, FeedEntry{Kind: "tool", Title: "Команда", Text: command})
+			description, _ := item["description"].(string)
+			out = append(out, FeedEntry{Kind: "tool", Title: "Команда", Text: command, Description: description})
 		case "file_change":
 			var paths []string
 			changes, _ := item["changes"].([]any)

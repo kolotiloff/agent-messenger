@@ -275,7 +275,7 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 					_ = s.store.SetTaskRunModel(runID, result.Model)
 				}
 				for _, item := range adapters.TaskFeedEntries(task.Provider, line) {
-					_ = s.store.AppendTaskRunItem(runID, item.Kind, item.Title, item.Text)
+					_ = s.store.AppendTaskRunItem(runID, item.Kind, item.Title, item.Text, item.Description)
 				}
 				if !bound && result.Session != "" {
 					bound = true

@@ -92,6 +92,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
+| T-225 | Give actions in task history readable captions, icons and a separate breakdown below the count (owner, 2026-11-19). | window + agent | Implemented on `codex/t225-readable-actions` (D-151). Preserves the original disclosure arrows. |
 | T-222 | Refresh the GitHub project page, platform installation and troubleshooting, and screenshots for the current release (owner, 2026-11-19). | docs | Implemented on `codex/t222-refresh-download-guide`. Screenshots show the 0.86 UI using fictional data. |
 | T-221 | Use the common display model name in the task header and conversation, e.g. «Sol 6.2 Medium» (owner, 2026-11-19). | window | Released in [0.86](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.86) via [PR #134](https://github.com/kolotiloff/agent-messenger/pull/134). The reported model takes precedence, and the sidebar uses compact effort labels. |
 | T-220 | Computer names were cut vertically in the window preview (owner, 2026-11-19). | window | Released in [0.86](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.86) via [PR #134](https://github.com/kolotiloff/agent-messenger/pull/134). Computer names retain full line height. |

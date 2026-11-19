@@ -488,3 +488,7 @@ Amends D-100: a request to install the newest signed Messenger (the program only
 ## D-148 — Larger window text (T-219)
 
 2026-11-19, owner request for more readable text. The embedded window uses 15 px / 21 px for chat and composer text, and 14 px for the base UI and sidebar agent names. Secondary text and metadata use 13 and 12 px. Existing families and control sizes are retained. See [UI_STYLE.md](UI_STYLE.md).
+
+## D-151 — Readable action captions in task history (T-225)
+
+2026-11-19, owner approved short captions with type icons and the existing right-hand disclosure arrows. The group count sits above the category breakdown. Use the provider description when supplied. Old history and actions without descriptions get conservative captions based on the recorded tool or command. Expanding an action shows the saved text.

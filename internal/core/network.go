@@ -186,6 +186,7 @@ type netBody struct {
 	Project          string `json:"project,omitempty"`
 	Agent            string `json:"agent,omitempty"`
 	Title            string `json:"title,omitempty"`
+	Description      string `json:"description,omitempty"`
 	Text             string `json:"text,omitempty"`
 	Model            string `json:"model,omitempty"`
 	CoordinatorModel bool   `json:"coordinator_model,omitempty"`
@@ -1205,7 +1206,7 @@ func applyReport(tx *sql.Tx, from netLink, b netBody) error {
 		if n >= maxRunItems {
 			return nil
 		}
-		_, err := tx.Exec(`INSERT INTO remote_task_items(task_id,seq,kind,title,text,created_at) VALUES (?,?,?,?,?,?)`, t.ID, n+1, b.Event, clip(b.Title, 200), clip(b.Text, maxForwardedItemText), now())
+		_, err := tx.Exec(`INSERT INTO remote_task_items(task_id,seq,kind,title,text,description,created_at) VALUES (?,?,?,?,?,?,?)`, t.ID, n+1, b.Event, clip(b.Title, 200), clip(b.Text, maxForwardedItemText), clip(strings.Join(strings.Fields(b.Description), " "), 200), now())
 		return err
 	case "accepted":
 		if _, err := tx.Exec(`UPDATE tasks SET folder=?,remote_task=?,detail=?,updated_at=?,version=version+1 WHERE id=?`, clip(b.Folder, 4096), clip(b.Mirror, 64), "accepted by "+name, now(), t.ID); err != nil {
