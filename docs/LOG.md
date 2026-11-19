@@ -2,6 +2,18 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-19 — Codex (T-218)
+
+- Moved the connected server card action beside the connection details. Added it to [PR #132](https://github.com/kolotiloff/agent-messenger/pull/132) for the 0.86 preview requested by the owner.
+
+## 2026-11-19 — Codex (T-215–T-217)
+
+- Implemented the two statistics formats as one, the finished task wording and the approved B1 layout for local and remote computers. Shared tasks provide optional model and start metadata with fallback for brokers that explicitly reject the new fields. Verified the UI using fictional data in Chromium. Ready for review; no release.
+
+## 2026-11-19 — Claude Code (T-215)
+
+- Owner asked for the open tasks and the last release: 0.85 is published (PR #130). Recorded T-215 from the owner's screenshot: the statistics task rows get one format in both tabs; T-216: «Работал» instead of «Готово за» in finished task rows; T-217: model and busy time in the left panel (owner chose «В1» from mockups: model grey, time at the right edge). No code changed.
+
 ## 2026-11-18 — Claude Code (T-198)
 
 - Owner answered Q-030 (b): D-147, T-205. The cause was `Wait` waiting for the error output a leftover child inherited; now limited after the exit. Also T-212, T-209, and parts of T-211 and T-208. Owner: release when done, don't wait.

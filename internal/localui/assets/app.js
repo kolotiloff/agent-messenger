@@ -282,7 +282,7 @@
       case 'running':return t.pending_launch?[t.waits_for_lock?tr('Ждёт ресурс «')+t.waits_for_lock+'»':tr('Ждёт запуска'),'am-status-wait']:[tr('Работает ')+minutes(from),'am-status-run'];
       case 'waiting_owner':return [tr('Ждёт вашего ответа'),'am-status-wait'];
       case 'waiting_coordinator':return [tr('Ждёт ответа координатора'),'am-status-run'];
-      case 'done':return [tr('Готово за ')+minutes(from,end),'am-muted'];
+      case 'done':return [tr('Работал ')+minutes(from,end),'am-muted'];
       case 'failed':return failureStatus(t)||[tr('Ошибка через ')+minutes(from,end),'am-status-bad'];
       case 'interrupted':return [tr('Прервана через ')+minutes(from,end),'am-status-bad'];
       case 'blocked':return [tr('Заблокирована через ')+minutes(from,end),'am-status-bad'];
@@ -463,7 +463,22 @@
   document.addEventListener('visibilitychange',renderNotices);
   // One line per agent program, with its state (D-064: no coordinator mark).
   // live is false when the computer cannot be reached.
-  function agentLines(agents,coordinatorClient,live){
+  function busyTasksByComputer(){
+    const byComputer=new Map();
+    function add(t,computer){
+      if(!activeStates.includes(t.state)||t.pending_launch||t.remote?.unaccepted||t.remote?.lost||t.remote?.silent)return;
+      const key=computer+'\0'+t.agent;
+      if(!byComputer.has(key))byComputer.set(key,[]);
+      byComputer.get(key).push(t);
+    }
+    for(const task of view?.tasks||[])add(task,taskComputer(task));
+    for(const peer of view?.shared||[]){
+      if(!peerFresh(peer))continue;
+      for(const task of peer.tasks||[])add(task,sharedRunsOn(task,peer));
+    }
+    return byComputer;
+  }
+  function agentLines(agents,coordinatorClient,live,computer,busyTasks){
     const lines=el('div',undefined,'am-machine-agents');
     const [coordProvider,coordLabel]=coordinatorClient!==null?coordinatorName(coordinatorClient):['',''];
     const providers=agents.map(a=>a.agent);
@@ -482,7 +497,22 @@
       const line=el('div',undefined,'am-agent-line am-agent-'+state);line.dataset.provider=provider;
       line.title=(names[provider]||provider)+(a?': '+text:'');
       line.append(el('span',shortNames[provider]||provider));
-      if(state==='run'||state==='wait'){const n=a?.running||0;line.append(el('span',state==='wait'?tr('ждёт ответа'):tr('работает')+(n>1?' ('+n+')':''),'am-agent-status'));}
+      if(state==='run'||state==='wait'){
+        const tasks=(busyTasks.get(computer+'\0'+provider)||[]).filter(t=>state==='run'?t.state==='running':t.state!=='running');
+        const dates=tasks.map(t=>t.started_at||t.created_at).filter(at=>Number.isFinite(Date.parse(at)));
+        const first=dates.reduce((old,at)=>!old||Date.parse(at)<Date.parse(old)?at:old,'');
+        const models=[...new Set(tasks.map(t=>t.ran_model||t.model).filter(Boolean))];
+        if(models.length){
+          const label=el('span',models.map(m=>modelName(m).replace(/ Medium$/,' Med')).join(', '),'am-agent-model');
+          label.title=models.join(', ');line.append(label);
+        }
+        const count=state==='wait'?a.waiting_owner:a.running;
+        const status=first?(count>1?'('+count+') ':'')+minutes(first):
+          (state==='wait'?tr('ждёт ответа'):tr('работает')+(count>1?' ('+count+')':''));
+        line.append(el('span',status,'am-agent-status'));
+      }else if(!live){
+        line.append(el('span',tr('нет связи'),'am-agent-status'));
+      }
       lines.append(line);
     }
     if(coordinatorClient!==null&&!coordProvider){
@@ -511,25 +541,24 @@
   }
   function renderMachines(){
     collectNotices();
-    const live=$('machines'),box=live.cloneNode(false);
+    const live=$('machines'),box=live.cloneNode(false),busyTasks=busyTasksByComputer();
     const machine=el('div',undefined,'am-machine-card');machine.setAttribute('aria-current','true');pickable(machine,'local');
     // Every card is laid out the same (owner, 2026-11-18, T-198): the dot
-    // before the name, the version in the top right corner, the update icon
-    // in the bottom right corner. This computer's version and update button
+    // before the name, with the update icon and version at the top right. This computer's version and update button
     // are the window's own elements, moved into its card (placeLocalParts).
     const head=el('div',undefined,'am-machine-name');
     const dot=el('span',undefined,'am-dot'+(online?' online':''));dot.title=online?tr('На связи'):tr('Нет связи');head.append(dot);
     head.append(el('span',view?.computer_name||tr('Этот компьютер')));
     // The computer that runs the network's server is labelled as such.
     if(server?.host?.running&&server.host.scope!=='local')head.append(serverTag());
-    head.append(el('div',undefined,'am-machine-version am-local-version'));
+    const version=el('div',undefined,'am-machine-version am-local-version');
     machine.append(head);
     // A paused agent is left out, as other computers leave it out of what
     // they report (owner, 2026-11-18: two of three agents were off and the
     // Mac still listed all three). One still running a task stays until it
     // ends.
     const shownAgents=(view?.agents||[]).filter(a=>!a.paused||a.running>0||a.waiting_owner>0);
-    const lines=agentLines(shownAgents,view?.coordinator?.connected?(view.coordinator.client||''):null,online);
+    const lines=agentLines(shownAgents,view?.coordinator?.connected?(view.coordinator.client||''):null,online,'local',busyTasks);
     if(!lines.children.length)lines.append(el('p',online?tr('Агенты не подключены'):tr('Нет связи'),'am-small am-muted'));
     machine.append(lines);
     const corner=el('div',undefined,'am-card-update am-local-update');
@@ -538,7 +567,7 @@
       const b=el('span',undefined,'am-update-icon am-peer-update am-update-wait');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);appendUpdateGlyphs(b);
       corner.append(b);
     }
-    machine.append(corner);box.append(machine);
+    const localMeta=el('div',undefined,'am-machine-meta');localMeta.append(corner,version);head.append(localMeta);box.append(machine);
     // The other computers of this computer's network, with their agents.
     // Only the computer that runs the server can revoke one, from the
     // right-click menu.
@@ -550,7 +579,7 @@
       const pdot=el('span',undefined,'am-dot'+(fresh?' online':''));pdot.title=fresh?tr('На связи'):tr('Нет связи');
       name.append(pdot,el('span',peer.name));
       if(peer.host)name.append(serverTag());
-      if(peer.version)name.append(el('span',versionName(peer.version),'am-version am-machine-version'));
+      const meta=el('div',undefined,'am-machine-meta');
       const corner=el('div',undefined,'am-card-update');
       // T-128: an older computer gets the update icon next to its dot; the
       // owner confirms in a popup.
@@ -570,7 +599,9 @@
         b.addEventListener('keydown',event=>event.stopPropagation());
         corner.append(b);
       }
-      card.append(name);
+      if(corner.children.length)meta.append(corner);
+      if(peer.version)meta.append(el('span',versionName(peer.version),'am-version am-machine-version'));
+      name.append(meta);card.append(name);
       if(revokeAsk===peer.id&&hosted.has(peer.id)){
         card.append(el('p',tr('Отозвать устройство? Вернуть его можно только новым приглашением.'),'am-small am-muted'));
         const actions=el('div',undefined,'am-actions am-device-confirm');
@@ -581,13 +612,12 @@
         actions.append(no,yes);card.append(actions);box.append(card);continue;
       }
       if(fresh){
-        const plines=agentLines(peer.agents||[],peer.coordinator?peer.coordinator:null,true);
+        const plines=agentLines(peer.agents||[],peer.coordinator?peer.coordinator:null,true,peer.id,busyTasks);
         if(!plines.children.length)plines.append(el('p',tr('Агенты не подключены'),'am-small am-muted'));
         card.append(plines);
       }else{
         card.append(el('p',peer.last_seen?tr('Был на связи ')+stamp(peer.last_seen):tr('Ещё не выходил на связь'),'am-small am-muted'));
       }
-      if(corner.children.length)card.append(corner);
       const can={revoke:hosted.has(peer.id)};
       if(can.revoke){
         card.classList.add('am-device-card');card.tabIndex=0;card.dataset.key='revoke-'+peer.id;card.title=tr('Правая кнопка мыши — действия');
@@ -1717,7 +1747,10 @@
     for(const task of list){
       const row=el('button',undefined,'am-stats-task');row.type='button';
       const words=el('span',undefined,'am-stats-task-text');
-      words.append(el('span',task.title||tr('Без названия'),'am-stats-task-title'),el('span',[statsSort==='recent'?stamp(task.at):'',task.project,shortNames[task.agent]||task.agent,statsModel?'':task.model,task.computer].filter(Boolean).join(', '),'am-small am-muted'));
+      const date=new Date(task.at);
+      const when=Number.isNaN(date.getTime())?'':date.toLocaleDateString(amLocale,{day:'numeric',month:'long'})+' '+date.toLocaleTimeString(amLocale,{hour:'numeric',minute:'2-digit',hourCycle:'h23'}).replace(/^0/,'');
+      const detail=[when,task.project,shortNames[task.agent]||task.agent,task.model&&modelName(task.model),task.computer&&tr('на ')+task.computer].filter(Boolean).join(' ');
+      words.append(el('span',task.title||tr('Без названия'),'am-stats-task-title'),el('span',detail,'am-small am-muted'));
       row.append(words,el('span',tokensText(task.tokens),'am-stats-value'));
       row.title=(typeof task.input_tokens==='number'?usageLong(task)+'\n':'')+tr('Открыть задачу');
       row.addEventListener('click',()=>{

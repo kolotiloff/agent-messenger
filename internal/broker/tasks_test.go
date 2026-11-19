@@ -1,7 +1,13 @@
 package broker
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -62,5 +68,38 @@ func TestSharedTaskLists(t *testing.T) {
 	others, _ = host.ShareTasks(ctx(t), hostNet, nil)
 	if len(others) != 1 || len(others[0].Tasks) != 1 || others[0].Tasks[0].ID != "t-2" {
 		t.Fatalf("a refused list changed the stored one: %+v", others)
+	}
+}
+
+func TestSharedTaskDetailsWithLegacyBroker(t *testing.T) {
+	const brokerID = "brk-0000000000000000"
+	const deviceID = "dev-0000000000000000"
+	var calls atomic.Int32
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		var input struct {
+			Tasks []struct {
+				ID, Project, Title, Agent, State string
+				CreatedAt                        string `json:"created_at"`
+			}
+		}
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&input); err != nil || len(input.Tasks) != 1 || input.Tasks[0].ID != "task-1" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, http.StatusOK, sharedResponse{BrokerID: brokerID, DeviceID: deviceID})
+	}))
+	defer server.Close()
+	fingerprint := sha256.Sum256(server.Certificate().Raw)
+	conn := Connection{Address: strings.TrimPrefix(server.URL, "https://"), Fingerprint: hex.EncodeToString(fingerprint[:]), BrokerID: brokerID, DeviceID: deviceID}
+	tasks := []SharedTask{{ID: "task-1", Project: "Game", Title: "Work", Agent: "codex", State: "running",
+		CreatedAt: "2026-11-19T09:19:00Z", StartedAt: "2026-11-19T09:20:00Z", Model: "gpt-6.2-sol[effort=medium]"}}
+	if _, err := PostSharedTasks(ctx(t), conn, tasks); err != nil || calls.Load() != 2 {
+		t.Fatalf("legacy broker fallback: %d posts, %v", calls.Load(), err)
+	}
+	if tasks[0].Model == "" || tasks[0].StartedAt == "" {
+		t.Fatal("fallback modified the caller's snapshot")
 	}
 }

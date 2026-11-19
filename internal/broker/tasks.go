@@ -35,6 +35,8 @@ type SharedTask struct {
 	Agent      string `json:"agent"`
 	State      string `json:"state"`
 	CreatedAt  string `json:"created_at"`
+	StartedAt  string `json:"started_at,omitempty"`
+	Model      string `json:"model,omitempty"`
 	FinishedAt string `json:"finished_at,omitempty"`
 	// Report is the beginning of the worker's report.
 	Report string `json:"report,omitempty"`
@@ -85,10 +87,15 @@ func validSharedTasks(tasks []SharedTask) bool {
 		if _, err := time.Parse(time.RFC3339Nano, t.CreatedAt); err != nil {
 			return false
 		}
-		if t.FinishedAt != "" {
-			if _, err := time.Parse(time.RFC3339Nano, t.FinishedAt); err != nil {
-				return false
+		for _, at := range []string{t.StartedAt, t.FinishedAt} {
+			if at != "" {
+				if _, err := time.Parse(time.RFC3339Nano, at); err != nil {
+					return false
+				}
 			}
+		}
+		if t.Model != "" && !validModelSelection(t.Model) {
+			return false
 		}
 	}
 	return true
@@ -189,7 +196,26 @@ func PostSharedTasks(ctx context.Context, c Connection, tasks []SharedTask) ([]P
 		tasks = []SharedTask{}
 	}
 	var out sharedResponse
-	code, err := call(ctx, pinnedClient(c.Fingerprint), http.MethodPost, c.Address, "/v1/tasks", c.DeviceKey, sharedRequest{Tasks: tasks}, &out)
+	client := pinnedClient(c.Fingerprint)
+	code, err := call(ctx, client, http.MethodPost, c.Address, "/v1/tasks", c.DeviceKey, sharedRequest{Tasks: tasks}, &out)
+	if err == nil && code == http.StatusBadRequest && validSharedTasks(tasks) {
+		// Older brokers strictly decode the list. After an explicit refusal,
+		// submit the same snapshot without the new optional fields.
+		var legacy []SharedTask
+		for _, t := range tasks {
+			if t.Model != "" || t.StartedAt != "" {
+				legacy = append([]SharedTask(nil), tasks...)
+				break
+			}
+		}
+		if legacy != nil {
+			for i := range legacy {
+				legacy[i].Model, legacy[i].StartedAt = "", ""
+			}
+			out = sharedResponse{}
+			code, err = call(ctx, client, http.MethodPost, c.Address, "/v1/tasks", c.DeviceKey, sharedRequest{Tasks: legacy}, &out)
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
