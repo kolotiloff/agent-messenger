@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-19 — Codex (T-222)
+
+- Refreshed the README and About, platform download and first-open steps, coordinator and network setup, and the update guide. Captured current light, dark and first-launch screenshots from fictional browser fixtures using the 0.86 window assets.
+
 ## 2026-11-19 — Codex (T-215–T-221 release)
 
 - Published [0.86](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.86) from `55e31e2b54d01cad088c2675786b1f1879e81b82` in [run 44499053023](https://github.com/kolotiloff/agent-messenger/actions/runs/44499053023). GitHub uploaded all 22 assets. Verified the five update manifests against the app’s public key and matched their revisions and archive sizes.

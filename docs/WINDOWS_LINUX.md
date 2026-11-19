@@ -44,11 +44,11 @@ The single-instance lock uses `LockFileEx`; the background client starts with pr
 
 ## Updates (D-048)
 
-From preview.33 the window updates the program from the same signed channel as the Mac app: every 30 minutes it looks for `update-<os>-<arch>.json` in the newest releases, checks its Ed25519 signature and downloads the signed archive. «Обновиться» checks the archive's checksum and signature again, unpacks the one `messenger` / `messenger.exe` inside next to the program, runs its `version` and requires the exact signed version, revision, system and architecture, and only then replaces the program file. On Windows the running file is renamed to `<name>.old` (a running program cannot be overwritten) and removed at a later start; on Linux the new file is renamed over the old one. A program installed with `messenger install` gets the new version as another installation instead. The window then closes and opens again from the new program. The window then restarts an older background client by itself; when tasks run it asks first (D-091, T-123), as on the Mac. Any failed check leaves the old program as it was. Details: [UPDATES.md](UPDATES.md#windows-and-linux).
+The window checks for new versions from the same signed channel as the Mac app every 30 minutes. Press the update arrow next to this computer's version to download and install. The window verifies the archive and the unpacked program's version and platform before replacing the executable and reopening the window. On Windows the previous executable is renamed and removed at a later start. Linux swaps it in place, or adds a new version to an existing `messenger install`. Before restarting an older background client with running tasks, the window asks what to do. [Update details](UPDATES.md#windows-and-linux)
 
 On Windows the background client always runs from `runtimes\messenger.exe` in the data folder, whatever the version (D-118). Windows Firewall remembers the permission by that path, so it asks «Разрешить доступ» once, not after every update; this matters for a computer that hosts the server and is updated from another one.
 
-A Windows or Linux computer can also be updated from another computer of the network: an update icon on its card in the left panel appears when its version is older ([UPDATES.md](UPDATES.md#from-another-computer-of-the-network-t-078-d-100)).
+A Windows or Linux computer can also be updated from another computer of the network: an update icon on its card in the left panel appears when its version is older. [Remote updates](UPDATES.md#from-another-computer-of-the-network-t-078-d-100-t-155-d-133)
 
 ## Not there yet
 

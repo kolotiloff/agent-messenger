@@ -8,7 +8,7 @@ On Mac, Sparkle 2.10.1 replaces the app and the embedded interface, then reopens
 
 ## Delivery
 
-When the window opens, then every 30 minutes, and when the app is activated (with an overall limit of one automatic request per 30 minutes), if automatic checking is enabled, the built-in `update-fetch` command checks the 20 most recent GitHub Releases. An available version is indicated by the «Доступно обновление» ("Update available") button at the bottom left. A manual check is in the app menu. When there is no update, there is no permanent large button. Drafts are skipped; preview releases are allowed. The first published release with metadata for the current OS and architecture defines the channel. File names: `update-darwin-arm64.json`, `update-darwin-arm64.json.sig` and `<sha256>.zip` (for Intel, `darwin-amd64`). A release with an incomplete or corrupted set is rejected, not masked by an older release.
+The Mac app checks GitHub Releases in the background, up to once every 30 minutes, and on a manual check from the app menu. When it finds a newer compatible release, the update arrow appears next to this computer's version. Press it to download and install through the window's update dialog. The Mac feed uses `update-darwin-arm64.json`, its `.sig` file and an archive named by its SHA-256. A release with an incomplete or corrupted set is rejected. The Windows and Linux windows follow the same check-then-download pattern.
 
 Only the release list uses the GitHub API (`api.github.com`), once per check. The files are downloaded from the release's own download address (`github.com/kolotiloff/agent-messenger/releases/download/<tag>/<name>`, which redirects to GitHub's file host); an asset whose address is anything else is refused. These downloads do not count against GitHub's limit of 60 API requests an hour per address. Before 2026-11-09 each check made three API requests, and the owner's computers behind one address used the limit up, so a manual check failed (T-103). When GitHub still refuses for that limit, the check says so with the time to try again («GitHub временно ограничил проверки…»; `update-fetch` returns `state: rate_limited` with `retry_at`) instead of a download failure.
 
@@ -38,7 +38,7 @@ An update icon on another computer's card in the left panel, shown when that com
 
 ## Releasing from GitHub Actions
 
-The **Release Mac preview** workflow (`.github/workflows/release.yml`) builds, signs and publishes a preview from `main`. Run it by hand under Actions → Release Mac preview → Run workflow, with a version such as `0.0.0-preview.20` and release notes.
+The **Release preview** workflow (`.github/workflows/release.yml`) builds, signs and publishes a preview from `main`. Run it under **Actions → Release preview → Run workflow** with the version (for example, `0.0.0-preview.86`) and release notes.
 
 People see the short version: the release title, the Mac app («О программе», `CFBundleShortVersionString`), the Mac update dialog and the window say «0.58» for `0.0.0-preview.58` (owner, 2026-11-09, D-105). The tag, the manifests and the program's own `version` keep the full form, because every installed program checks it before it accepts an update; changing it would need a release that accepts both forms first, and all computers updated to it.
 
