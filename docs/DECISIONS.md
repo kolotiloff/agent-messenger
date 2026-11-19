@@ -488,3 +488,7 @@ Amends D-100: a request to install the newest signed Messenger (the program only
 ## D-148 — Larger window text (T-219)
 
 2026-11-19, owner request for more readable text. The embedded window uses 15 px / 21 px for chat and composer text, and 14 px for the base UI and sidebar agent names. Secondary text and metadata use 13 and 12 px. Existing families and control sizes are retained. See [UI_STYLE.md](UI_STYLE.md).
+
+## D-149 — Visible task event and finish times (T-223)
+
+2026-11-19, owner request. Display recorded times next to report closure, questions and outcomes. Use the stored finish time in the right-hand task list when the task ended. Active rows keep their creation time (T-121); a completed row without a known finish time has no date. Local task history has the per-run timestamps. Remote events in a local thread carry the time this computer recorded them.

@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-19 — Codex (T-223)
+
+- Added visible time next to the report closure, question and outcome lines and used stored finish times on completed task rows. Active rows retain creation times. Added browser regression assertions using existing fixture data.
+
 ## 2026-11-19 — Codex (T-222)
 
 - Refreshed the README and About, platform download and first-open steps, coordinator and network setup, and the update guide. Captured current light, dark and first-launch screenshots from fictional browser fixtures using the 0.86 window assets.

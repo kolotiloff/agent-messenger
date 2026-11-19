@@ -482,6 +482,7 @@
   'Принято на компьютере «':'Accepted on computer «',
   'Не опубликовано: запуск не прошёл проверку':'Not published: the launch failed its check',
   'Отчёт отправлен координатору, сессия закрыта':'Report sent to the coordinator, session closed',
+  'Время события на этом компьютере':'Event time as recorded on this computer',
   'Вопрос вам, координатор его не видит':'Question for you; the coordinator does not see it',
   'Вопрос координатору':'Question for the coordinator',
   'Задача не выполнена':'Task not done',

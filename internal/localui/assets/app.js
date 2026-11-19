@@ -223,17 +223,31 @@
   }
   function clock(at){const d=new Date(at);return isNaN(d.getTime())?'':d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});}
   const activeStates=['running','waiting_owner','waiting_coordinator'];
-  // T-121: the row shows only when the task was created: «сегодня 21:49»,
-  // «вчера 18:05», or the date alone for older ones. The status line below
-  // already says how long it took; the tooltip has the full times.
+  // Relative dates print the time when recent, or whenever an event ended.
   function sameDay(a,b){return a.toDateString()===b.toDateString();}
   function longDay(d){return d.toLocaleDateString(amLocale,d.getFullYear()===new Date().getFullYear()?{day:'numeric',month:'long'}:{day:'numeric',month:'long',year:'numeric'});}
-  function taskWhen(t){
-    const d=new Date(t.created_at);if(isNaN(d.getTime()))return '';
+  function relativeWhen(at,includeClock){
+    const d=new Date(at);if(!at||isNaN(d.getTime()))return '';
     const today=new Date(),yesterday=new Date();yesterday.setDate(today.getDate()-1);
-    if(sameDay(d,today))return tr('сегодня ')+clock(t.created_at);
-    if(sameDay(d,yesterday))return tr('вчера ')+clock(t.created_at);
-    return d.toLocaleDateString(amLocale,d.getFullYear()===today.getFullYear()?{day:'numeric',month:'short'}:{day:'numeric',month:'short',year:'numeric'});
+    if(sameDay(d,today))return tr('сегодня ')+clock(at);
+    if(sameDay(d,yesterday))return tr('вчера ')+clock(at);
+    const date=d.toLocaleDateString(amLocale,d.getFullYear()===today.getFullYear()?{day:'numeric',month:'short'}:{day:'numeric',month:'short',year:'numeric'});
+    return date+(includeClock?' '+clock(at):'');
+  }
+  function appendTaskWhen(agent,t){
+    const ended=finishedStates.includes(t.state)||(!activeStates.includes(t.state)&&!!t.finished_at);
+    const at=ended?t.finished_at:t.created_at,label=relativeWhen(at,ended);
+    if(!label)return;
+    const time=el('time',label,'am-task-when');
+    time.dateTime=at;time.title=taskWhenTitle(t);agent.append(time);
+  }
+  function appendEventTime(line,at,remote){
+    const label=relativeWhen(at,true);
+    if(!label)return;
+    const time=el('time',label);
+    time.dateTime=at;
+    if(remote)time.title=tr('Время события на этом компьютере');
+    line.append(' · ',time);
   }
   function taskWhenTitle(t){
     const d=new Date(t.created_at);if(isNaN(d.getTime()))return '';
@@ -803,7 +817,7 @@
       if(t.remote?.from)label.append(fromTag(t.remote.name));
       const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),label);
       if(t.remote)agent.title=t.remote.from?tr('Задачу дал компьютер «')+t.remote.name+'»':tr('Выполняется на компьютере «')+t.remote.name+'»';
-      const when=taskWhen(t);if(when){const w=el('span',when,'am-task-when');w.title=taskWhenTitle(t);agent.append(w);}
+      appendTaskWhen(agent,t);
       const [text,cls,tip]=taskStatus(t);
       const status=el('span',undefined,'am-task-status '+cls);if(tip)status.title=tip;
       if(t.state==='waiting_owner')status.append(el('span',undefined,'am-dot am-dot-wait'));
@@ -827,7 +841,7 @@
       const label=el('span',(names[t.agent]||t.agent)+tr(' на '));label.append(el('span',sharedComputer(t,p)));
       if(t.runs_on_peer)label.append(fromTag(p.name));
       const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),label);agent.title=tr('Задачу дал компьютер «')+p.name+'»';
-      const sharedWhen=taskWhen(t);if(sharedWhen){const w=el('span',sharedWhen,'am-task-when');w.title=taskWhenTitle(t);agent.append(w);}
+      appendTaskWhen(agent,t);
       const [text,cls,tip]=sharedStatus(t,p);
       const words=el('span');words.append(statusPiece(text,!!t.tokens));
       if(t.tokens)words.append(el('span',tokensText(t.tokens)+tr(' токенов'),'am-task-usage'));
@@ -1194,16 +1208,20 @@
       if(it.kind==='report'||it.kind==='question'){
         const c=workerGroup(it.at);c.append(richText(it.text,'am-disposition'));
         if(it.images?.length)c.append(pictures(it.images));
-        if(!it.verified)c.append(delivery(tr('Не опубликовано: запуск не прошёл проверку'),'am-status-bad'));
-        else if(it.kind==='report'&&it.audience==='held')c.append(delivery(tr('Промежуточный отчёт: исполнитель продолжает с вашим сообщением'),'am-status-wait'));
-        else if(it.kind==='report')c.append(delivery(tr('Отчёт отправлен координатору, сессия закрыта'),'am-delivery-close'));
-        else if(it.audience==='owner')c.append(delivery(tr('Вопрос вам, координатор его не видит'),'am-status-wait'));
-        else c.append(delivery(tr('Вопрос координатору'),'am-status-wait'));
+        let note;
+        if(!it.verified)note=delivery(tr('Не опубликовано: запуск не прошёл проверку'),'am-status-bad');
+        else if(it.kind==='report'&&it.audience==='held')note=delivery(tr('Промежуточный отчёт: исполнитель продолжает с вашим сообщением'),'am-status-wait');
+        else if(it.kind==='report')note=delivery(tr('Отчёт отправлен координатору, сессия закрыта'),'am-delivery-close');
+        else if(it.audience==='owner')note=delivery(tr('Вопрос вам, координатор его не видит'),'am-status-wait');
+        else note=delivery(tr('Вопрос координатору'),'am-status-wait');
+        if(it.verified)appendEventTime(note,it.at,t.remote&&!t.remote.from);
+        c.append(note);
         group=null;continue;
       }
       if(it.kind==='outcome'){
         group=null;const text={failed:t.remote&&!t.remote.from?tr('Задача не выполнена'):tr('Запуск завершился с ошибкой'),blocked:t.remote&&!t.remote.from?tr('Задача заблокирована: результат на другом компьютере неизвестен'):tr('Задача заблокирована: процесс не завершился полностью'),interrupted:tr('Клиент перезапустился во время работы; результат неизвестен'),cancelled:tr('Задача отменена')}[it.state]||it.state;
-        const note=el('div',undefined,'am-outcome '+(it.state==='cancelled'?'am-muted':'am-status-bad'));note.append(el('p',text));
+        const note=el('div',undefined,'am-outcome '+(it.state==='cancelled'?'am-muted':'am-status-bad')),line=el('p',text);
+        appendEventTime(line,it.at,t.remote&&!t.remote.from);note.append(line);
         const why=t.remote&&!t.remote.from?refusalText(it.text,t.remote.name)||failureText(it.text):failureText(it.text);if(why)note.append(el('p',why));
         if(it.text)note.append(el('p',it.text,'am-small am-muted'));
         const g=el('article',undefined,'am-message-group');g.append(note);out.push(g);
