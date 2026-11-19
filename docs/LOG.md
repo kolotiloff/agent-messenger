@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-19 — Codex (T-219)
+
+- Increased the window typography with existing font families. Used Chromium to check window controls and capture both themes on fictional task data.
+
 ## 2026-11-19 — Codex (T-218)
 
 - Moved the connected server card action beside the connection details. Added it to [PR #132](https://github.com/kolotiloff/agent-messenger/pull/132) for the 0.86 preview requested by the owner.
