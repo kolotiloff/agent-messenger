@@ -293,6 +293,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       // 2026-11-15: one button and one dialog).
       const began = new Date(Date.now() - 3 * 60 * 1000).toISOString();
       const stat = {id:'old-1',title:'Old 1',at:'2026-11-19T09:20:00',project:'Frame',agent:'codex',model:'gpt-6.2-sol[effort=medium]',computer:'Runner',tokens:12};
+      const localTask = {id:'local-task',title:'Local task',project:'Frame',agent:'codex',state:'running',created_at:began,started_at:began,model:'gpt-6.2-sol[effort=low]',ran_model:'gpt-6.2-sol[effort=medium]'};
       const update = {state: 'found', version: '0.0.0-preview.99'};
       const updates = [];
       const clears = [];
@@ -301,7 +302,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         const pathname = new URL(route.request().url()).pathname;
         if (pathname === '/api/feedback-export') return route.fulfill({json: {ok: true, result: {path: '/fictional/Downloads/feedback.zip', remarks: 2}}});
         if (pathname === '/api/feedback-clear') { clears.push(true); return route.fulfill({json: {ok: true, result: {deleted: 2, left: 0}}}); }
-        if (pathname === '/api/window') return route.fulfill({json: {projects: [{name: 'Frame'}], project: 'Frame', folder: '/fictional/frame', agents: [], coordinator: {connected: false}, computer_name: 'Frame test', tasks_enabled: true, feedback_count: 5, feedback_new: 2,
+        if (pathname === '/api/window') return route.fulfill({json: {projects: [{name: 'Frame'}], project: 'Frame', folder: '/fictional/frame', agents: [], coordinator: {connected: false}, computer_name: 'Ёж и Йога', tasks_enabled: true, feedback_count: 5, feedback_new: 2, tasks:[localTask],
           shared: [{peer: 'host', name: 'Giver', age: 1, tasks: [
             {id: 'sent', project: 'Frame', title: 'Sent task', agent: 'cursor', state: 'running', created_at: began, started_at: began, model: 'composer-2.5[effort=medium]', runs_on_peer: 'dev-1', runs_on: 'Old name'},
             {id: 'own', project: 'Frame', title: 'Own task', agent: 'codex', state: 'running', created_at: '2026-11-15T09:00:00Z'},
@@ -309,6 +310,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
             {id: 'old-2', project: 'Frame', title: 'Old 2', agent: 'codex', state: 'failed', created_at: '2026-11-14T08:00:00Z', finished_at: '2026-11-14T08:30:00Z'}]}]}});
         if (pathname === '/api/server') return route.fulfill({json: {host: {running: false, enabled: false, addresses: []}, member: {connected: true, reachable: true, address:'203.0.113.7:47100', connected_at:began}, peers: [{id: 'host', name: 'Giver', age: 0, agents: []}, {id: 'dev-1', name: 'Runner', age: 0, version:'0.0.0-preview.97', agents: [{agent:'cursor',running:1}]}], updates: [], accept: true}});
         if (pathname === '/api/usage-stats') return route.fulfill({json:{total:{tasks:1,tokens:12,input_tokens:8,output_tokens:4},agents:[],computers:[],days:[],recent:[stat],top:[stat]}});
+        if (pathname === '/api/task') return route.fulfill({json:{task:localTask,items:[{kind:'text',text:'Fixture reply',at:began}]}});
         if (pathname === '/api/task-hide') hides.push(route.request().postDataJSON());
         if (pathname === '/api/self-update') {
           if (route.request().method() === 'POST') { updates.push(route.request().postDataJSON()); update.state = 'downloading'; return route.fulfill({json: {ok: true, state: 'downloading'}}); }
@@ -338,6 +340,11 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await runner.locator('.am-agent-status').textContent(),'3 мин');
       assert.equal(await runner.locator('.am-machine-name .am-card-update').count(),1);
       assert.equal(await page.locator('.am-machine-name #app-update-button').count(),1);
+      for (const computer of [page.locator('.am-machine-card[aria-current=true]'),runner]) {
+        const name = computer.locator('.am-machine-name > span:nth-child(2)');
+        assert(await name.evaluate(node => node.getBoundingClientRect().height >= parseFloat(getComputedStyle(node).lineHeight)-0.5),
+          'computer name must keep the full line height');
+      }
       const disconnect = page.locator('#member-disconnect');
       await disconnect.waitFor({state: 'visible'});
       for (const width of [1100, 600]) {
@@ -362,6 +369,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.locator('[data-stats-sort=tokens]').click();
       assert.equal(await detail.textContent(),'19 ноября 9:20 Frame Codex Sol 6.2 Medium на Runner');
       await page.locator('[data-tab=tasks]').click();
+      await page.locator('.am-task-title',{hasText:localTask.title}).click();
+      await page.locator('#thread .am-meta-model').waitFor();
+      assert.equal(await page.locator('#thread .am-meta-model').textContent(),'Sol 6.2 Medium');
+      assert.match(await page.locator('#task-head').innerText(),/Codex \(Sol 6\.2 Medium\)/);
       if (process.env.SCREENSHOT_DIR) await page.screenshot({path: path.join(process.env.SCREENSHOT_DIR, 'frameless.png')});
       // Owner, 2026-11-15: one button removes every finished task from the list.
       await page.locator('.am-task-section', {hasText: 'Завершённые'}).locator('.am-task-section-action').click();
