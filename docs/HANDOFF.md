@@ -8,6 +8,11 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-19 by Claude Code.
+
+- **0.85 is released** ([release](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.85), [PR #130](https://github.com/kolotiloff/agent-messenger/pull/130), source `5e49856a6a6d78524b9f7e7d28a2833a85852f61`), 22 assets published. Seen on the release page only; not checked on the owner's computers. The note below about T-203…T-214 being unreleased is out of date.
+- Recorded T-215 (one line format for the statistics task rows) T-216 («Работал 3 мин» instead of «Готово за 3 мин») and T-217 (model and busy time of agents in the left panel, owner chose layout В1), not started.
+
 Updated 2026-11-18 by Claude Code.
 
 - On `claude/eager-volta-6sbjsa`, not released: T-204 (the coordinator no longer refuses a just-updated computer until its next presence) and T-203 (update downloads end only when stalled, not after 4 minutes; the Mac's manual check always answers). The owner's Mac could not fetch 0.84 on a 36 KB/s link; it installs by hand. T-210 (window answers over the network) and T-213 (the Mac only looks for updates in the background and downloads on the button, as Windows and Linux) on the same branch, and T-207 (agents follow their command link after `codex update`; on the Mac Codex is connected again once in its card) and T-214 (statistics open on the latest tasks, the card is «Задачи» with the tabs «Последние» and «Самые затратные»). Also T-205 (D-147, owner chose Q-030 (b): a run closes after its report once the worker's own process exited; leftovers are named), T-212 (a follow-up after an unread first run gets the task text), T-211 partly (no model settings to computers older than build 72), T-209 (Linux: a newer window closes an older one in the tray), T-208 partly (Windows: a job name kept only by this client's own empty job is freed). Owner said to release when done without waiting. Open: T-206 (network drops, needs the server log), the rest of T-208 and T-211. A Mac on 0.83 or 0.84 installs 0.85 by hand on a slow link.
