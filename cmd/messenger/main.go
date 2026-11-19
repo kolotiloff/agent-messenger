@@ -60,6 +60,12 @@ func main() {
 		}
 		return
 	}
+	if args[0] == "update-find" {
+		if err := runUpdateFind(root, args[1:]); err != nil {
+			fail(err)
+		}
+		return
+	}
 	if args[0] == "update-fetch" {
 		if err := runUpdateFetch(root, args[1:]); err != nil {
 			fail(err)

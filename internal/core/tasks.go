@@ -571,11 +571,15 @@ func (s *Store) SetComputerAgent(provider, cli, environment, profile string) err
 	if profile != "worker" && profile != "messenger-only" {
 		return fmt.Errorf("%w: unknown profile", ErrRejected)
 	}
-	cli, err := canonicalCLI(cli)
-	if err != nil {
+	if _, err := canonicalCLI(cli); err != nil {
 		return fmt.Errorf("%w: the agent program must be an absolute path to an executable", ErrRejected)
 	}
+	// The path is kept as given, a link included: an agent's own update
+	// moves its link to a new release, and the next task must follow it.
+	// The resolved file stayed on the old release (T-207).
+	cli = filepath.Clean(cli)
 	if environment != "" {
+		var err error
 		if environment, err = CanonicalEnvironment(environment); err != nil {
 			return err
 		}
@@ -795,6 +799,14 @@ func startLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, origin *net
 	}
 	if paused != 0 {
 		return "", errAgentPaused(r.Provider)
+	}
+	if link := agentLinkFor(r.Provider, agent.CLI); link != "" {
+		// An agent registered before T-207 kept the resolved file of its
+		// link; while the link still points there, keep the link instead.
+		agent.CLI = link
+		if _, err := tx.Exec(`UPDATE computer_agents SET cli_path=? WHERE computer=? AND provider=?`, link, computer, r.Provider); err != nil {
+			return "", err
+		}
 	}
 	if coordinatorModel {
 		if _, _, err := modelcatalog.Resolve(r.Provider, r.Model); err != nil {
@@ -1319,6 +1331,10 @@ type TaskBrief struct {
 // continuedTaskNote tells a continued worker what this run is.
 const continuedTaskNote = "This run continues the same conversation after you finished the task. Do what follow_up asks; the task text is the one from your first read_task."
 
+// unreadTaskNote replaces continuedTaskNote when no earlier run read the task
+// (T-212).
+const unreadTaskNote = "This run continues a task whose earlier run ended before it read the task, so task holds the full task text. Do the task, taking follow_up into account."
+
 // ownerNoteTaskNote tells a worker why its run goes on after its report.
 const ownerNoteTaskNote = "This run continues the same conversation. The owner (or the coordinator, where a note starts with «From the coordinator») wrote to you while you worked (owner_notes), " +
 	"so your report (held_report) was not sent yet. Take what the owner wrote into account, then end the run as before " +
@@ -1346,6 +1362,14 @@ func (s *Store) ReadTask(run, receipt string, includeTask bool) (TaskBrief, erro
 		if err := tx.QueryRow(`SELECT rules FROM tasks WHERE id=?`, t.ID).Scan(&b.Rules); err != nil {
 			return err
 		}
+		// T-212: when no earlier run read the task (the first one failed
+		// before it could), the conversation lacks it: give it in full.
+		var readBefore int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM task_runs WHERE task_id=? AND ordinal<? AND read_seen=1`, t.ID, r.Ordinal).Scan(&readBefore); err != nil {
+			return err
+		}
+		unread := r.Ordinal > 1 && readBefore == 0
+		includeTask = includeTask || unread
 		if r.Kind == "answer" {
 			if !includeTask {
 				b.Task, b.Note = "", resumedTaskNote
@@ -1358,6 +1382,9 @@ func (s *Store) ReadTask(run, receipt string, includeTask bool) (TaskBrief, erro
 				b.Task = ""
 			}
 			b.Note, b.FollowUp = continuedTaskNote, r.Input
+			if unread {
+				b.Note = unreadTaskNote
+			}
 		}
 		if r.Kind == "note" {
 			if !includeTask {
@@ -1447,6 +1474,10 @@ type RunEvidence struct {
 	// Usage is what the run spent, when its provider reported it (T-058).
 	// It only informs the owner.
 	Usage *TaskUsage
+	// Leftover names what still runs in the run's group after the worker's
+	// own process exited and the group was signalled (D-147). Set only when
+	// those processes were listed and the worker is not among them.
+	Leftover string
 }
 
 // FinishTaskRun verifies a run in one transaction: it revokes the receipt,
@@ -1454,7 +1485,9 @@ type RunEvidence struct {
 // 0, an empty group and exactly one disposition are all present. A cleanly
 // observed but invalid run fails the task; unclear evidence blocks it. It
 // returns the run's final state; "finished", "failed" and "cancelled" mean the
-// process group was observed empty, so the caller may retire the reservation.
+// process group was observed empty, or the worker's own exit was observed
+// after its report and only named leftovers remain (D-147), so the caller may
+// retire the reservation.
 func (s *Store) FinishTaskRun(run string, ev RunEvidence) (string, error) {
 	var final string
 	err := s.tx(func(tx *sql.Tx) error {
@@ -1473,8 +1506,16 @@ func (s *Store) FinishTaskRun(run string, ev RunEvidence) (string, error) {
 			boolInt(ev.ExitObserved), sql.NullInt64{Int64: int64(ev.ExitCode), Valid: ev.ExitObserved}, boolInt(ev.GroupEmpty), boolInt(ev.ProviderOK), now(), run); err != nil {
 			return err
 		}
-		clean := ev.ExitObserved && ev.GroupEmpty
+		// D-147 (Q-030): once the worker recorded its report or question and
+		// its own process exited, processes it left behind do not keep the
+		// run open; they are named instead.
+		leftover := ev.ExitObserved && !ev.GroupEmpty && !ev.Cancelled && ev.Leftover != "" && r.Disposition != ""
+		clean := ev.ExitObserved && (ev.GroupEmpty || leftover)
 		valid := clean && bound == 1 && ev.ExitCode == 0 && ev.ProviderOK && r.Disposition != ""
+		group := "empty group"
+		if leftover {
+			group = "worker exited, left running: " + ev.Leftover
+		}
 		var detail string
 		switch {
 		case !clean:
@@ -1485,7 +1526,10 @@ func (s *Store) FinishTaskRun(run string, ev RunEvidence) (string, error) {
 			detail = "cancelled; the process exited"
 		case valid:
 			final = "finished"
-			detail = "verified: identity, completion, exit 0, empty group, one " + r.Disposition
+			detail = "verified: identity, completion, exit 0, " + group + ", one " + r.Disposition
+		case leftover:
+			final = "failed"
+			detail = failedRunWhy(ev, bound == 1, r.Disposition) + fmt.Sprintf(" (exit %d, identity %t, provider %t, disposition %q, %s)", ev.ExitCode, bound == 1, ev.ProviderOK, r.Disposition, group)
 		default:
 			final = "failed"
 			detail = failedRunWhy(ev, bound == 1, r.Disposition) + fmt.Sprintf(" (exit %d, identity %t, provider %t, disposition %q)", ev.ExitCode, bound == 1, ev.ProviderOK, r.Disposition)
@@ -1498,6 +1542,11 @@ func (s *Store) FinishTaskRun(run string, ev RunEvidence) (string, error) {
 		}
 		if err := setRunState(tx, run, final, detail, "running", "launching"); err != nil {
 			return err
+		}
+		if leftover {
+			if err := insertTaskEvent(tx, t.Project, t.ID, AudienceLog, "leftover", "the worker exited; still running on this computer: "+ev.Leftover, ""); err != nil {
+				return err
+			}
 		}
 		// T-058: add what the run spent before any event goes out, so a
 		// task of another computer reports the new total with it.
@@ -1635,9 +1684,16 @@ func (s *Store) AnswerTask(task, question, opID, text, by string) error {
 // the owner comes first, and the coordinator learns of it. The coordinator
 // may answer a question to the owner, usually with the owner's own words
 // from its chat (T-130).
+// maxNetOpID bounds an op id built for a message from another computer.
+const maxNetOpID = 1024
+
 func answerTask(tx *sql.Tx, task, question, opID, text, by string, fromNetwork, ownerOver bool) error {
 	text = strings.TrimSpace(text)
-	if opID == "" || len(opID) > 128 || text == "" || utf8.RuneCountInString(text) > MaxTaskText {
+	// An answer from the computer that started the task carries an op id
+	// built here from the network, the computer and the message: with the
+	// window's own id it passed 128 characters and the owner's answer was
+	// refused (T-210). Only a local caller's id is limited.
+	if opID == "" || (len(opID) > 128 && !fromNetwork) || len(opID) > maxNetOpID || text == "" || utf8.RuneCountInString(text) > MaxTaskText {
 		return fmt.Errorf("%w: answer needs an operation id and 1..%d characters", ErrRejected, MaxTaskText)
 	}
 	if by != AudienceCoordinator && by != AudienceOwner {

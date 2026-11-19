@@ -248,9 +248,21 @@ func showGTKWindow(ctx context.Context, home string, page windowPage) bool {
 	// is asked to come forward instead.
 	socket := filepath.Join(home, "window.sock")
 	if conn, err := net.DialTimeout("unix", socket, time.Second); err == nil {
-		_, _ = conn.Write([]byte("show\n"))
+		// T-209: a window of an older installed version gives way.
+		pid, stale := staleWindowProcess(conn)
+		if !stale {
+			_, _ = conn.Write([]byte("show\n"))
+			_ = conn.Close()
+			return true
+		}
 		_ = conn.Close()
-		return true
+		if !closeStaleWindow(pid, socket) {
+			if conn, err := net.DialTimeout("unix", socket, time.Second); err == nil {
+				_, _ = conn.Write([]byte("show\n"))
+				_ = conn.Close()
+			}
+			return true
+		}
 	}
 	// Callbacks cannot be freed, and the window opens once per process.
 	gtkOnce.Do(func() {

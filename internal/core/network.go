@@ -472,7 +472,60 @@ func netPeers(tx *sql.Tx) ([]NetPeer, error) {
 		}
 		out = append(out, p)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	return out, finishedUpdates(tx, out)
+}
+
+// updateResultFresh is how long a final update result outweighs the
+// "waiting to install" flag of the computer's last presence (T-204).
+const updateResultFresh = 10 * time.Minute
+
+// finishedUpdates clears the update flag of a computer whose final update
+// result came after its last presence: the computer drops the flag before it
+// sends the result, but its next presence comes only with a later network
+// round, and until then new tasks were refused (T-204). A done result also
+// gives the installed version.
+func finishedUpdates(tx *sql.Tx, peers []NetPeer) error {
+	pending := false
+	for _, p := range peers {
+		pending = pending || p.UpdatePending
+	}
+	if !pending {
+		return nil
+	}
+	rows, err := tx.Query(`SELECT peer,state,version,updated_at FROM net_updates WHERE state IN (?,?,?)`, UpdateDone, UpdateRefused, UpdateFailed)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	type result struct{ state, version string }
+	final := map[string]result{}
+	for rows.Next() {
+		var peer, state, version, at string
+		if err := rows.Scan(&peer, &state, &version, &at); err != nil {
+			return err
+		}
+		if when, err := time.Parse(time.RFC3339Nano, at); err == nil && time.Since(when) < updateResultFresh {
+			final[peer] = result{state, version}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for i := range peers {
+		r, ok := final[peers[i].ID]
+		if !ok || !peers[i].UpdatePending {
+			continue
+		}
+		peers[i].UpdatePending = false
+		if r.state == UpdateDone && r.version != "" {
+			peers[i].Version = r.version
+		}
+	}
+	return nil
 }
 
 func netPeer(tx *sql.Tx, id string) (NetPeer, bool, error) {
@@ -552,6 +605,17 @@ func (s *Store) SetNetFullAccess(on bool) error {
 
 // ---- origin side ----
 
+// netModelSettingsSince is the first build that reads a model selection with
+// settings, such as claude-opus-5-5[effort=medium] (T-170, T-211).
+const netModelSettingsSince = 72
+
+func peerVersionText(version string) string {
+	if version == "" {
+		return "of an unknown older version"
+	}
+	return version
+}
+
 // usesCoordinatorModels marks the first release that accepts the model
 // selected by the coordinator without consulting an executor-side list.
 func usesCoordinatorModels(version string) bool {
@@ -600,6 +664,10 @@ func startRemoteTask(tx *sql.Tx, r StartTaskRequest) (string, error) {
 	}
 	if peer.UpdatePending {
 		return "", fmt.Errorf("%w: computer «%s» is waiting to install a Messenger update and takes no new tasks", ErrRejected, peer.Name)
+	}
+	if strings.Contains(r.Model, "[") && !peerBuildAtLeast(peer.Version, netModelSettingsSince) {
+		// T-211: an older computer refuses such a name as invalid.
+		return "", fmt.Errorf("%w: computer «%s» runs Messenger %s, which reads model settings such as [effort=…] only from build %d; update it with update_messenger first, or name the model without settings", ErrRejected, peer.Name, peerVersionText(peer.Version), netModelSettingsSince)
 	}
 	id, err := randomID()
 	if err != nil {

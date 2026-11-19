@@ -12,6 +12,10 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     var endpoint: URL?
     var updater: SPUUpdater!
     var availableVersion: String?
+    // A newer release found on GitHub but not downloaded (T-213): the icon
+    // shows it, and the download starts when the owner presses it.
+    var remoteVersion: String?
+    var shownVersion: String? { availableVersion ?? remoteVersion }
     var onStatus: ((String?) -> Void)?
     // The page's dialog: what Sparkle does now, sent to the page.
     var onRun: (([String: Any]) -> Void)?
@@ -57,7 +61,7 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
         endpoint = url
         updater.httpHeaders = ["Authorization": "Bearer " + (url.fragment ?? "")]
         if !started {
-            do { try updater.start() } catch { fetchStatus = "Обновления не запустились"; onStatus?(availableVersion); return }
+            do { try updater.start() } catch { fetchStatus = "Обновления не запустились"; onStatus?(shownVersion); return }
             started = true
             startWatchingLocalChannel()
             fetchTimer = Timer.scheduledTimer(withTimeInterval: 1800, repeats: true) { [weak self] _ in
@@ -119,7 +123,7 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
             busyRetry?.cancel(); waitingForDownload = false; busySince = nil
             updater.checkForUpdates()
         } else {
-            fetchRemote(manual: true)
+            findRemote(manual: true)
         }
     }
     // The page's update icon: download, install and restart, shown in the
@@ -127,7 +131,17 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     func install() {
         running = true
         sendRun(["phase": "downloading"])
-        check()
+        busySince = nil
+        guard endpoint != nil, started else { failRun("Обновления пока недоступны. Программа осталась прежней."); return }
+        if let reply = pendingChoice {
+            pendingChoice = nil; startRun(); reply(.install)
+        } else if availableVersion != nil, updater.canCheckForUpdates {
+            updater.checkForUpdates()
+        } else {
+            // Only now the package comes from GitHub, with its progress in
+            // the page's dialog (T-213).
+            fetchRemote(manual: true)
+        }
     }
     func startRun() {
         received = 0; expected = 0
@@ -135,7 +149,7 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     }
     func sendRun(_ state: [String: Any]) {
         var state = state
-        if let version = availableVersion { state["version"] = version }
+        if let version = shownVersion { state["version"] = version }
         onRun?(state)
     }
     func failRun(_ text: String) {
@@ -145,7 +159,7 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     // The menu's «Проверить обновления…» found one: ask before installing.
     func offer(_ reply: @escaping (SPUUserUpdateChoice) -> Void) {
         let alert = NSAlert()
-        alert.messageText = "Вышла версия " + (availableVersion ?? "")
+        alert.messageText = "Вышла версия " + (shownVersion ?? "")
         alert.informativeText = "Программа загрузит обновление, установит его и перезапустится. Задачи и история сохранятся."
         alert.addButton(withTitle: "Обновить")
         alert.addButton(withTitle: "Позже")
@@ -159,15 +173,94 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     // Focus changes share the same throttle as the timer; waiting never calls a model.
     func checkAutomaticallyIfDue() {
         guard started, endpoint != nil, updater.automaticallyChecksForUpdates,
-              ProcessInfo.processInfo.systemUptime - lastRemoteCheck >= 1800 else { return }
-        fetchRemote(manual: false)
+              ProcessInfo.processInfo.systemUptime - lastRemoteCheck >= 1800 - 60 else { return }
+        findRemote(manual: false)
+    }
+    // findRemote asks GitHub whether a newer signed release exists and
+    // downloads nothing (T-213). A found release shows the icon; the menu's
+    // check offers it at once.
+    func findRemote(manual: Bool) {
+        if manual && fetching {
+            remoteMessage("Проверка обновлений ещё идёт", "Дождитесь её окончания. Программа не изменена.")
+            return
+        }
+        guard !fetching, endpoint != nil,
+              let executable = Bundle.main.url(forResource: "messenger", withExtension: nil) else { return }
+        lastRemoteCheck = ProcessInfo.processInfo.systemUptime
+        fetching = true; fetchStatus = "Проверяем GitHub…"; onStatus?(shownVersion)
+        let process = Process(); process.executableURL = executable; process.arguments = ["update-find"]
+        process.environment = ["HOME": FileManager.default.homeDirectoryForCurrentUser.path, "PATH": "/usr/bin:/bin"]
+        let output = Pipe(), errors = Pipe()
+        process.standardInput = FileHandle.nullDevice; process.standardOutput = output; process.standardError = errors
+        process.terminationHandler = { [weak self] child in
+            let data = output.fileHandleForReading.readDataToEndOfFile()
+            _ = errors.fileHandleForReading.readDataToEndOfFile()
+            let result = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                self.fetching = false; self.fetchProcess = nil; self.fetchStatus = ""
+                let state = child.terminationStatus == 0 ? (result?["state"] as? String ?? "") : ""
+                switch state {
+                case "found":
+                    self.remoteVersion = result?["version"] as? String
+                    self.onStatus?(self.shownVersion)
+                    if manual, self.availableVersion == nil { self.offerDownload() }
+                case "current":
+                    self.remoteVersion = nil; self.onStatus?(self.shownVersion)
+                    // A package downloaded earlier is installed from the local channel.
+                    if self.manifestData() != nil, !self.updater.sessionInProgress {
+                        if manual { self.updater.checkForUpdates() } else if self.updater.automaticallyChecksForUpdates { self.updater.checkForUpdatesInBackground() }
+                    } else if manual {
+                        self.remoteMessage("Обновлений пока нет", "Установленная версия не старше опубликованной подписанной сборки.")
+                    }
+                case "rate_limited":
+                    var when = ""
+                    if let at = result?["retry_at"] as? String, let date = ISO8601DateFormatter().date(from: at) {
+                        let f = DateFormatter(); f.dateFormat = "HH:mm"; when = " после " + f.string(from: date)
+                    }
+                    self.fetchStatus = "GitHub ограничил проверки, повторить" + when; self.onStatus?(self.shownVersion)
+                    if manual { self.remoteMessage("GitHub временно ограничил проверки", "С этого адреса было слишком много проверок обновлений. Повторите" + (when.isEmpty ? " позже" : when) + ". Программа не изменена.") }
+                case "no_release":
+                    if manual { self.remoteMessage("Пакет ещё не опубликован", "В GitHub Releases пока нет подписанной сборки для этого компьютера.") }
+                default:
+                    self.fetchStatus = "Не удалось проверить обновления, повторить"; self.onStatus?(self.shownVersion)
+                    if manual { self.remoteMessage("Не удалось проверить обновления", "GitHub не ответил или ответ не прошёл проверку подписи. Повторите позже. Программа не изменена.") }
+                }
+            }
+        }
+        fetchProcess = process
+        do { try process.run(); try? output.fileHandleForWriting.close(); try? errors.fileHandleForWriting.close() }
+        catch { fetching = false; fetchProcess = nil; fetchStatus = "Проверка не запустилась"; onStatus?(shownVersion) }
+    }
+    // The menu's check found a release that is not downloaded yet.
+    func offerDownload() {
+        let alert = NSAlert()
+        alert.messageText = "Вышла версия " + (shownVersion ?? "")
+        alert.informativeText = "Программа загрузит обновление с GitHub, установит его и перезапустится. Задачи и история сохранятся."
+        alert.addButton(withTitle: "Обновить")
+        alert.addButton(withTitle: "Позже")
+        let answer = { [weak self] (response: NSApplication.ModalResponse) in
+            guard let self = self, response == .alertFirstButtonReturn else { return }
+            self.install()
+        }
+        if let window = window, window.isVisible { alert.beginSheetModal(for: window, completionHandler: answer) } else { answer(alert.runModal()) }
     }
     func fetchRemote(manual: Bool) {
+        // A manual check always ends with a message (T-203): it never just
+        // returns because a check or a Sparkle session is still open.
+        if manual && fetching {
+            remoteMessage("Обновление уже загружается", "Загрузка с GitHub ещё идёт. На медленной связи она может занять несколько минут; когда пакет будет проверен, появится значок обновления.")
+            return
+        }
+        if manual && updater.sessionInProgress {
+            remoteMessage("Проверка обновлений ещё идёт", "Предыдущая проверка не закончилась. Повторите через минуту. Программа не изменена.")
+            return
+        }
         guard !fetching, endpoint != nil, !updater.sessionInProgress,
               let executable = Bundle.main.url(forResource: "messenger", withExtension: nil) else { return }
         busyRetry?.cancel(); waitingForDownload = false
         lastRemoteCheck = ProcessInfo.processInfo.systemUptime
-        fetching = true; fetchStatus = "Проверяем GitHub…"; onStatus?(availableVersion)
+        fetching = true; fetchStatus = "Проверяем GitHub…"; onStatus?(shownVersion)
         let process = Process(); process.executableURL = executable; process.arguments = ["update-fetch"]
         // No shell, GitHub token, provider settings or permission flags.
         process.environment = ["HOME": FileManager.default.homeDirectoryForCurrentUser.path, "PATH": "/usr/bin:/bin"]
@@ -187,16 +280,17 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
                     if self.busySince == nil { self.busySince = now }
                     guard now - self.busySince! < 300 else {
                         self.fetchStatus = "Загрузка ещё выполняется, повторить"
-                        self.onStatus?(self.availableVersion)
+                        self.onStatus?(self.shownVersion)
+                        if manual { self.remoteMessage("Обновление уже загружается", "Другая загрузка обновления ещё идёт. Повторите проверку позже. Программа не изменена.") }
                         return
                     }
                     self.waitingForDownload = true
                     self.fetchStatus = "Обновление загружается в фоне"
-                    self.onStatus?(self.availableVersion)
+                    self.onStatus?(self.shownVersion)
                     let retry = DispatchWorkItem { [weak self] in
                         guard let self = self else { return }
                         self.waitingForDownload = false
-                        self.onStatus?(self.availableVersion)
+                        self.onStatus?(self.shownVersion)
                         if (manual || self.updater.automaticallyChecksForUpdates) && !self.updater.sessionInProgress { self.fetchRemote(manual: manual) }
                     }
                     self.busyRetry = retry
@@ -210,21 +304,21 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
                     if let at = result?["retry_at"] as? String, let date = ISO8601DateFormatter().date(from: at) {
                         let f = DateFormatter(); f.dateFormat = "HH:mm"; when = " после " + f.string(from: date)
                     }
-                    self.fetchStatus = "GitHub ограничил проверки, повторить" + when; self.onStatus?(self.availableVersion)
+                    self.fetchStatus = "GitHub ограничил проверки, повторить" + when; self.onStatus?(self.shownVersion)
                     if manual { self.remoteMessage("GitHub временно ограничил проверки", "С этого адреса сегодня было слишком много проверок обновлений. Повторите" + (when.isEmpty ? " позже" : when) + ". Программа и сохранённый пакет не изменены.") }
                     return
                 }
                 if child.terminationStatus != 0 {
-                    self.fetchStatus = "Не удалось получить обновление, повторить"; self.onStatus?(self.availableVersion)
+                    self.fetchStatus = "Не удалось получить обновление, повторить"; self.onStatus?(self.shownVersion)
                     if manual { self.remoteMessage("Не удалось получить обновление", "Загрузка или проверка пакета не завершилась. Повторите позже. Сохранённый пакет и работающий клиент не изменены; неподписанные пакеты не принимаются.") }
                     return
                 }
                 if result?["state"] as? String == "no_release" {
-                    self.fetchStatus = "На GitHub ещё нет сборки"; self.onStatus?(self.availableVersion)
+                    self.fetchStatus = "На GitHub ещё нет сборки"; self.onStatus?(self.shownVersion)
                     if manual { self.remoteMessage("Пакет ещё не опубликован", "В GitHub Releases пока нет подписанной сборки для этого компьютера.") }
                     return
                 }
-                self.fetchStatus = ""; self.onStatus?(self.availableVersion)
+                self.fetchStatus = ""; self.onStatus?(self.shownVersion)
                 if result?["state"] as? String == "current", self.manifestData() == nil {
                     if manual { self.remoteMessage("Обновлений пока нет", "Установленная версия не старше опубликованной подписанной сборки.") }
                     return
@@ -236,7 +330,7 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
         }
         fetchProcess = process
         do { try process.run(); try? output.fileHandleForWriting.close(); try? errors.fileHandleForWriting.close() }
-        catch { fetching = false; fetchProcess = nil; fetchStatus = "Проверка не запустилась"; onStatus?(availableVersion) }
+        catch { fetching = false; fetchProcess = nil; fetchStatus = "Проверка не запустилась"; onStatus?(shownVersion) }
     }
     func remoteMessage(_ title: String, _ text: String) {
         if running { failRun(title + ". " + text); return }
@@ -272,7 +366,8 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     func showUserInitiatedUpdateCheck(cancellation: @escaping () -> Void) {}
     func showUpdateFound(with appcastItem: SUAppcastItem, state: SPUUserUpdateState, reply: @escaping (SPUUserUpdateChoice) -> Void) {
         availableVersion = appcastItem.displayVersionString
-        onStatus?(availableVersion)
+        remoteVersion = nil
+        onStatus?(shownVersion)
         if running { startRun(); reply(.install) }
         else if state.userInitiated { offer(reply) }
         else { pendingChoice = reply }
@@ -308,6 +403,6 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
         // the old program stays.
         if running { failRun("Обновление не установлено. Программа осталась прежней.") }
         pendingChoice = nil
-        availableVersion = nil; onStatus?(nil)
+        availableVersion = nil; onStatus?(shownVersion)
     }
 }

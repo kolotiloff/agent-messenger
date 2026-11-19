@@ -104,11 +104,28 @@ func joinJob(pid int) error {
 		return fmt.Errorf("job object: %w", lastErr)
 	}
 	job := windows.Handle(r)
-	// A job of that name still has processes of an earlier run whose first
-	// process had this ID. Never share it.
-	if errors.Is(lastErr, windows.ERROR_ALREADY_EXISTS) {
+	if errors.Is(lastErr, windows.ERROR_ALREADY_EXISTS) && releaseEmptiedJob(pid) {
+		// T-208: only this client's own handle kept the name of an earlier
+		// run's job, and that job is empty. With the handle closed the name
+		// is gone; ask again for a new job.
 		windows.CloseHandle(job)
-		return errors.New("a job of an earlier run with this process ID still exists")
+		r, _, lastErr = procCreateJobObject.Call(0, uintptr(unsafe.Pointer(name)))
+		if r == 0 {
+			return fmt.Errorf("job object: %w", lastErr)
+		}
+		job = windows.Handle(r)
+	}
+	// A job of that name still has processes of an earlier run whose first
+	// process had this ID, or another program holds it. Never share it.
+	if errors.Is(lastErr, windows.ERROR_ALREADY_EXISTS) {
+		// Say what the job holds, so a report tells a leftover process from
+		// a handle kept by another program.
+		why := "its processes could not be counted"
+		if active, err := jobActive(job); err == nil {
+			why = fmt.Sprintf("%d processes in it", active)
+		}
+		windows.CloseHandle(job)
+		return fmt.Errorf("a job of an earlier run with this process ID still exists (%s)", why)
 	}
 	process, err := windows.OpenProcess(windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE, false, uint32(pid))
 	if err != nil {
@@ -132,6 +149,25 @@ func joinJob(pid int) error {
 	// If resuming fails, the caller kills the process; the job then empties
 	// and GroupEmpty closes the handle.
 	return resumeProcess(pid)
+}
+
+// releaseEmptiedJob closes this client's handle of an earlier job with the
+// same ID when that job has no process left, as GroupEmpty would on its next
+// check (T-208). It reports whether it closed one.
+func releaseEmptiedJob(pgid int) bool {
+	jobs.Lock()
+	defer jobs.Unlock()
+	old, ok := jobs.open[pgid]
+	if !ok {
+		return false
+	}
+	if active, err := jobActive(old); err != nil || active != 0 {
+		return false
+	}
+	windows.CloseHandle(old)
+	delete(jobs.open, pgid)
+	jobs.emptied[pgid] = true
+	return true
 }
 
 // resumeProcess resumes the only thread of a process created suspended.

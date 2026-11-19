@@ -15,11 +15,25 @@ import (
 	"github.com/kolotiloff/agent-messenger/internal/updatefeed"
 )
 
+// runUpdateFind only looks for a newer signed release and downloads no
+// package: the Mac shows the update icon from it, and downloads when the
+// owner presses it, as on Windows and Linux (T-213).
+func runUpdateFind(root string, args []string) error {
+	if root != "" || len(args) != 0 {
+		return errors.New("update-find takes no arguments or client root")
+	}
+	return runUpdateChannel(false)
+}
+
 // This command cannot reach supervisor/control or provider launch code.
 func runUpdateFetch(root string, args []string) error {
 	if root != "" || len(args) != 0 {
 		return errors.New("update-fetch takes no arguments or client root")
 	}
+	return runUpdateChannel(true)
+}
+
+func runUpdateChannel(fetch bool) error {
 	home, err := platform.DefaultRoot()
 	if err != nil {
 		return err
@@ -30,10 +44,17 @@ func runUpdateFetch(root string, args []string) error {
 	if index >= 0 {
 		build, _ = strconv.Atoi(version[index+1:])
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	// Each transfer has its own limits: a stalled one ends after a minute
+	// without data, a slow one may go on (T-203).
+	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
 	defer cancel()
 	channel := updatefeed.Channel{Directory: filepath.Join(home, "updates"), PublicKey: buildinfo.UpdatePublicKey}
-	result, err := channel.SyncGitHub(ctx, build)
+	var result updatefeed.SyncResult
+	if fetch {
+		result, err = channel.SyncGitHub(ctx, build)
+	} else {
+		result, err = channel.FindGitHub(ctx, build)
+	}
 	if errors.Is(err, updatefeed.ErrDownloadBusy) {
 		return json.NewEncoder(os.Stdout).Encode(updatefeed.SyncResult{State: "busy"})
 	}

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -180,6 +181,9 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	// failed before the CLI reported anything (coordinator, 2026-11-12).
 	stderr := &tailBuffer{max: stderrTail}
 	cmd.Stderr = stderr
+	// D-147: a process the worker left behind inherits the error output.
+	// Without a limit Wait would wait for it too, after the worker exited.
+	cmd.WaitDelay = taskOutputGrace
 	if err := platform.SetNewGroup(cmd); err != nil {
 		s.runNotStarted(runID, task.ID, err.Error())
 		return
@@ -343,6 +347,11 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	}
 	_ = stdout.Close()
 	result, readErr := read.result, read.err
+	if readErr != nil && result.Completed && waitErr == nil {
+		// D-147: the worker's turn ended and its own process exited; a
+		// process it left keeps the output open, which is no failure.
+		readErr = nil
+	}
 	ev := core.RunEvidence{ExitObserved: waitErr == nil, ExitCode: exitCode, Cancelled: cancelled, LastText: result.LastText, FinalText: result.FinalText}
 	if u := result.Usage; u != nil {
 		ev.Usage = &core.TaskUsage{InputTokens: u.Input, CachedTokens: u.Cached, OutputTokens: u.Output, CacheWriteTokens: u.CacheWrite}
@@ -408,6 +417,9 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 			break
 		}
 		time.Sleep(50 * time.Millisecond)
+	}
+	if !ev.GroupEmpty && ev.ExitObserved {
+		ev.Leftover = leftoverNames(obs.PID, obs.PGID)
 	}
 	final, err := s.store.FinishTaskRun(runID, ev)
 	journal.Printf("run %s of %s: ended %s (exit %d observed %t, empty group %t, provider %t, reason %q, cancelled %t)%s", runID, task.ID, final, ev.ExitCode, ev.ExitObserved, ev.GroupEmpty, ev.ProviderOK, ev.Reason, ev.Cancelled, journalDetail(ev.Detail, err))
@@ -500,6 +512,28 @@ func init() { taskLingerAfter.Store(int64(time.Minute)) }
 // watchLinger records which processes keep a run going after the worker's
 // final message. It only describes the run: by D-021 and Q-030 the run still
 // ends only on an observed exit and an empty group.
+// leftoverNames lists what still runs in a run's group after its worker
+// exited (D-147). It is empty when the list is unclear: it could not be read,
+// it is empty, or the worker's own process is still among them.
+func leftoverNames(pid, pgid int) string {
+	members, err := groupMembers(pgid)
+	if err != nil || len(members) == 0 {
+		return ""
+	}
+	names := make([]string, 0, len(members))
+	for _, m := range members {
+		if m.PID == pid {
+			return ""
+		}
+		names = append(names, fmt.Sprintf("%s (%d)", m.Name, m.PID))
+	}
+	out := strings.Join(names, ", ")
+	if len(out) > 300 {
+		out = out[:300] + "…"
+	}
+	return out
+}
+
 func (s *Supervisor) watchLinger(runID, task string, pid, pgid int, done <-chan struct{}) {
 	logged := false
 	for {

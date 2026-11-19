@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/kolotiloff/agent-messenger/internal/platform"
@@ -100,8 +101,21 @@ func allowedUpdateURL(u *url.URL) bool {
 	}
 	return false
 }
+
+// A slow link is not a broken one (T-203): a Mac at about 35 KB/s needed six
+// minutes for its 13 MB package and every attempt stopped at the old
+// four-minute limit. A transfer fails only when no byte arrives for
+// downloadStall, or after downloadLimit in all.
+var (
+	downloadStall = time.Minute
+	downloadLimit = 45 * time.Minute
+)
+
 func updateHTTPClient() *http.Client {
-	return &http.Client{Timeout: 4 * time.Minute, CheckRedirect: func(req *http.Request, via []*http.Request) error {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSHandshakeTimeout = 30 * time.Second
+	transport.ResponseHeaderTimeout = downloadStall
+	return &http.Client{Transport: transport, CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 4 || !allowedUpdateURL(req.URL) {
 			return errors.New("update redirect refused")
 		}
@@ -116,6 +130,12 @@ func remoteGet(ctx context.Context, client *http.Client, address, accept string,
 
 // remoteGetCounted is remoteGet that also feeds the received bytes to count.
 func remoteGetCounted(ctx context.Context, client *http.Client, address, accept string, max int64, count io.Writer) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, downloadLimit)
+	defer cancel()
+	// The watchdog ends a transfer that stopped, not one that is slow.
+	var stalled atomic.Bool
+	watchdog := time.AfterFunc(downloadStall, func() { stalled.Store(true); cancel() })
+	defer watchdog.Stop()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
 	if err != nil || !allowedUpdateURL(req.URL) {
 		return nil, errors.New("update address refused")
@@ -137,18 +157,35 @@ func remoteGetCounted(ctx context.Context, client *http.Client, address, accept 
 	if response.ContentLength > max {
 		return nil, errors.New("update exceeds size limit")
 	}
-	var body io.Reader = io.LimitReader(response.Body, max+1)
+	var body io.Reader = &progressReader{r: io.LimitReader(response.Body, max+1), moved: func() { watchdog.Reset(downloadStall) }}
 	if count != nil {
 		body = io.TeeReader(body, count)
 	}
 	data, err := io.ReadAll(body)
 	if err != nil {
+		if stalled.Load() {
+			return nil, fmt.Errorf("update download stalled: nothing arrived for %s", downloadStall)
+		}
 		return nil, errors.New("update download interrupted")
 	}
 	if int64(len(data)) > max {
 		return nil, errors.New("update exceeds size limit")
 	}
 	return data, nil
+}
+
+// progressReader calls moved whenever bytes arrive.
+type progressReader struct {
+	r     io.Reader
+	moved func()
+}
+
+func (p *progressReader) Read(b []byte) (int, error) {
+	n, err := p.r.Read(b)
+	if n > 0 {
+		p.moved()
+	}
+	return n, err
 }
 
 // uniqueAsset finds the one asset with this name. Its download address must

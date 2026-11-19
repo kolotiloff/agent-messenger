@@ -258,9 +258,14 @@ func taskWorkerFixture(mode string) int {
 		// A leftover child of "leave-child" on Windows.
 		time.Sleep(30 * time.Second)
 		return 0
-	case "leave-child":
-		tool("report", map[string]any{"text": "done, but a child stays"})
+	case "leave-child", "leave-child-silent":
+		if mode == "leave-child" {
+			tool("report", map[string]any{"text": "done, but a child stays"})
+		}
 		child := exec.Command("/bin/sh", "-c", `trap "" TERM; sleep 30`)
+		// D-147: the child keeps the worker's output and error output open,
+		// as a diff window or a server started by an agent does.
+		child.Stdout, child.Stderr = os.Stdout, os.Stderr
 		if runtime.GOOS == "windows" {
 			self, _ := os.Executable()
 			child = exec.Command(self)

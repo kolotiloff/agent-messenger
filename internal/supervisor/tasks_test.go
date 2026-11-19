@@ -502,11 +502,13 @@ func TestTaskUsageLimitIsExplainedNotRetried(t *testing.T) {
 	}
 }
 
-func TestTaskWithLeftoverProcessIsBlocked(t *testing.T) {
-	old := taskGroupWait
-	taskGroupWait = 500 * time.Millisecond
-	t.Cleanup(func() { taskGroupWait = old })
-	h := newTaskHarness(t, "leave-child", AdapterLauncher{AllowTasks: true})
+// leftoverHarness runs a worker that starts a child ignoring the polite
+// stop and keeping the worker's output open, then exits.
+func leftoverHarness(t *testing.T, mode string) *taskHarness {
+	oldWait, oldGrace := taskGroupWait, taskOutputGrace
+	taskGroupWait, taskOutputGrace = 500*time.Millisecond, 500*time.Millisecond
+	t.Cleanup(func() { taskGroupWait, taskOutputGrace = oldWait, oldGrace })
+	h := newTaskHarness(t, mode, AdapterLauncher{AllowTasks: true})
 	t.Cleanup(func() {
 		if raw, err := os.ReadFile(filepath.Join(h.logDir, "child.pid")); err == nil {
 			if pid, err := strconv.Atoi(string(raw)); err == nil {
@@ -516,22 +518,52 @@ func TestTaskWithLeftoverProcessIsBlocked(t *testing.T) {
 			}
 		}
 	})
+	return h
+}
+
+// D-147 (Q-030): the worker reported and its own process exited; the child
+// it left does not keep the run open, and it is named.
+func TestTaskWithLeftoverProcessClosesAfterItsReport(t *testing.T) {
+	h := leftoverHarness(t, "leave-child")
+	id := h.startTask("op-1", "claude", "x")
+	h.waitState(id, "done")
+	waitNoTaskReservations(t)
+	if runtime.GOOS != "windows" {
+		// On Windows the job's hard stop ends the child too (D-043).
+		events, _, err := h.st.TaskEvents("Game", core.AudienceLog, 0, 100)
+		if err != nil {
+			t.Fatal(err)
+		}
+		named := false
+		for _, e := range events {
+			named = named || (e.Kind == "leftover" && strings.Contains(e.Text, "sleep"))
+		}
+		if !named {
+			t.Fatalf("leftover not named: %+v", events)
+		}
+	}
+	reported := false
+	for _, e := range coordinatorEvents(t, h.st) {
+		reported = reported || e.Kind == "report"
+	}
+	if !reported {
+		t.Fatal("report not published")
+	}
+	h.stop()
+}
+
+// Without a report or question a leftover still keeps the run blocked.
+func TestTaskWithLeftoverProcessAndNoReportIsBlocked(t *testing.T) {
+	h := leftoverHarness(t, "leave-child-silent")
 	id := h.startTask("op-1", "claude", "x")
 	if runtime.GOOS == "windows" {
-		// D-043: the job's stop is a hard stop, so the child that ignored
-		// the polite stop on Unix is ended too and the job is empty: the run
-		// is verified. Nothing of the run is left behind.
-		h.waitState(id, "done")
+		// The job is empty after its hard stop: the run fails without a report.
+		h.waitState(id, "failed")
 		waitNoTaskReservations(t)
 		h.stop()
 		return
 	}
 	h.waitState(id, "blocked")
-	for _, e := range coordinatorEvents(t, h.st) {
-		if e.Kind == "report" {
-			t.Fatal("report of a blocked run published")
-		}
-	}
 	if r := taskReservations(t); len(r) != 1 {
 		t.Fatalf("blocked run must keep its reservation: %+v", r)
 	}

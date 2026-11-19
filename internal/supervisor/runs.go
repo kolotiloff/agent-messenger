@@ -26,6 +26,9 @@ var beforeRenameHook func() error
 var ownsObservation = platform.OwnsObservation
 var groupEmpty = platform.GroupEmpty
 
+// groupMembers lists a run's group; tests replace it.
+var groupMembers = platform.GroupMembers
+
 type recordedRun struct {
 	StreamRunID    string                 `json:"stream_run_id,omitempty"`
 	CodexSetupID   string                 `json:"codex_setup_id,omitempty"`

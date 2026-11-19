@@ -233,3 +233,53 @@ func TestInvalidDownloadLockIsNotReportedAsBusy(t *testing.T) {
 		t.Fatalf("invalid lock must fail, not suggest waiting: %v", err)
 	}
 }
+
+// trickle sends one byte per step and then, if stop, blocks until the
+// request is cancelled.
+type trickle struct {
+	ctx  context.Context
+	data []byte
+	step time.Duration
+	stop bool
+}
+
+func (t *trickle) Read(b []byte) (int, error) {
+	if len(t.data) == 0 {
+		if !t.stop {
+			return 0, io.EOF
+		}
+		<-t.ctx.Done()
+		return 0, t.ctx.Err()
+	}
+	select {
+	case <-time.After(t.step):
+	case <-t.ctx.Done():
+		return 0, t.ctx.Err()
+	}
+	b[0] = t.data[0]
+	t.data = t.data[1:]
+	return 1, nil
+}
+func (t *trickle) Close() error { return nil }
+
+// T-203: a slow transfer that keeps moving is not cut off; a stalled one is.
+func TestDownloadEndsOnlyWhenStalled(t *testing.T) {
+	oldStall, oldLimit := downloadStall, downloadLimit
+	downloadStall, downloadLimit = 150*time.Millisecond, time.Minute
+	defer func() { downloadStall, downloadLimit = oldStall, oldLimit }()
+	address := releaseDownload + "v0.0.0-preview.9/archive.zip"
+	for _, stop := range []bool{false, true} {
+		client := &http.Client{Transport: transportFunc(func(r *http.Request) (*http.Response, error) {
+			body := &trickle{ctx: r.Context(), data: []byte("0123456789"), step: 50 * time.Millisecond, stop: stop}
+			return &http.Response{StatusCode: http.StatusOK, ContentLength: -1, Body: body, Header: http.Header{}, Request: r}, nil
+		})}
+		// Ten bytes take 500 ms: longer than the stall limit, each byte within it.
+		data, err := remoteGet(context.Background(), client, address, "application/octet-stream", 100)
+		if !stop && (err != nil || string(data) != "0123456789") {
+			t.Fatalf("slow download: %q %v", data, err)
+		}
+		if stop && (err == nil || !strings.Contains(err.Error(), "stalled")) {
+			t.Fatalf("stalled download: %q %v", data, err)
+		}
+	}
+}

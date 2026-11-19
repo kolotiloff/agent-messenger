@@ -277,3 +277,67 @@ func TestNetPeerVersion(t *testing.T) {
 		t.Fatalf("peers %+v %v", peers, err)
 	}
 }
+
+// T-204: the computer drops its flag when it sends the result, but its next
+// presence comes a round later. The final result clears the flag at once.
+func TestNetUpdateResultClearsStalePendingFlag(t *testing.T) {
+	p := newUpdatePair(t)
+	id, err := p.a.st.RequestNetUpdate("dev-b", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.carry(t, true)
+	reqs, err := p.b.st.NetUpdateRequests(testBroker)
+	if err != nil || len(reqs) != 1 {
+		t.Fatalf("requests %+v %v", reqs, err)
+	}
+	if err := p.b.st.ReplyNetUpdate(reqs[0], UpdateQueued, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	p.carry(t, false)
+	stale := []NetPeer{{ID: "dev-b", Name: "Ноутбук", Age: 1, Version: "0.0.0-preview.56", UpdatePending: true, Agents: []NetAgent{{Agent: "codex"}}}}
+	if err := p.a.st.SetNetwork(testBroker, HostPeerID, stale); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := p.a.st.StartTask(StartTaskRequest{Project: "Game", OpID: "op-wait", Provider: "codex", Text: "x", Computer: "dev-b"}); err == nil || !strings.Contains(err.Error(), "update") {
+		t.Fatalf("queued update must refuse tasks: %v", err)
+	}
+	if err := p.b.st.FinishNetUpdate(testBroker, HostPeerID, id, UpdateDone, "0.0.0-preview.57", ""); err != nil {
+		t.Fatal(err)
+	}
+	p.carry(t, false)
+	// The server still hands out the old presence.
+	if err := p.a.st.SetNetwork(testBroker, HostPeerID, stale); err != nil {
+		t.Fatal(err)
+	}
+	peers, err := p.a.st.NetPeers()
+	if err != nil || len(peers) != 1 || peers[0].UpdatePending || peers[0].Version != "0.0.0-preview.57" {
+		t.Fatalf("after done %+v %v", peers, err)
+	}
+	if _, _, err := p.a.st.StartTask(StartTaskRequest{Project: "Game", OpID: "op-done", Provider: "codex", Text: "x", Computer: "dev-b"}); err != nil && strings.Contains(err.Error(), "update") {
+		t.Fatalf("updated computer still refused: %v", err)
+	}
+	// A result older than the window no longer outweighs the presence.
+	if _, err := p.a.st.db.Exec(`UPDATE net_updates SET updated_at=? WHERE peer='dev-b'`, time.Now().Add(-updateResultFresh-time.Minute).UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	if peers, _ := p.a.st.NetPeers(); len(peers) != 1 || !peers[0].UpdatePending {
+		t.Fatalf("old result %+v", peers)
+	}
+}
+
+// T-211: an older computer would refuse a model with settings as invalid;
+// the coordinator says why before sending.
+func TestRemoteStartRefusesModelSettingsForAnOldPeer(t *testing.T) {
+	p := newUpdatePair(t)
+	if err := p.a.st.SetNetwork(testBroker, HostPeerID, []NetPeer{{ID: "dev-b", Name: "Ноутбук", Age: 1, Version: "0.0.0-preview.62", Agents: []NetAgent{{Agent: "claude"}}}}); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := p.a.st.StartTask(StartTaskRequest{Project: "Game", OpID: "op-b", Provider: "claude", Model: "claude-opus-5-5[effort=medium]", Text: "x", Computer: "dev-b"})
+	if !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "0.0.0-preview.62") || !strings.Contains(err.Error(), "update_messenger") {
+		t.Fatalf("old peer: %v", err)
+	}
+	if _, _, err := p.a.st.StartTask(StartTaskRequest{Project: "Game", OpID: "op-c", Provider: "claude", Model: "claude-opus-5-5", Text: "x", Computer: "dev-b"}); err != nil {
+		t.Fatalf("plain model to old peer: %v", err)
+	}
+}

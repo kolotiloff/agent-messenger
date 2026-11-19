@@ -1634,7 +1634,9 @@
   // tokens, no dollars (D-074). One hue for every bar: the bars show size,
   // not identity, and the names stand next to them.
   let statsPeriod=['day','week','month'].includes(recall('messenger-stats-period'))?recall('messenger-stats-period'):'week',stats=null,statsGen=0;
-  let statsSort=recall('messenger-stats-sort')==='recent'?'recent':'tokens';
+  // T-214: the latest tasks come first; the heading stays «Задачи» and the
+  // tabs say which order is shown.
+  let statsSort=recall('messenger-stats-sort')==='tokens'?'tokens':'recent';
   // T-201: one agent and one of its models; the model is not remembered.
   let statsAgent=['claude','codex','cursor'].includes(recall('messenger-stats-agent'))?recall('messenger-stats-agent'):'',statsModel='';
   const periodWords={day:tr('сегодня'),week:tr('за 7 дней'),month:tr('за 30 дней')};
@@ -1709,7 +1711,6 @@
     // T-197: the most expensive tasks or the latest finished ones, in the
     // same period and computer scope.
     root.querySelectorAll('[data-stats-sort]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.statsSort===statsSort)));
-    $('stats-top-title').textContent=statsSort==='recent'?tr('Последние задачи'):tr('Самые затратные задачи');
     const list=statsSort==='recent'?(stats.recent||[]):stats.top;
     const top=$('stats-top');top.replaceChildren();
     if(!list.length)top.append(el('p',tr('Пока пусто'),'am-small am-muted'));
@@ -2319,6 +2320,9 @@
     try{const r=await api('/api/update-progress');if(r?.downloading&&r.total>0)next={version:String(r.version||''),done:Number(r.done)||0,total:Number(r.total)};}catch(_){}
     const changed=!!next!==!!updateProgress;
     updateProgress=next;
+    // The Mac downloads from GitHub before Sparkle installs: the run shows
+    // that download (T-213), and progress keeps it from looking stuck.
+    if(next&&updateRun?.mac&&!updateRun.error&&updateRun.phase==='downloading'){updateRun.done=next.done;updateRun.total=next.total;if(next.version)updateRun.version=next.version;macRunQuiet();renderMacRun();}
     if(changed){if(window.webkit?.messageHandlers?.updates)renderMacUpdate();else if(selfUpdate)renderSelfUpdate();else showUpdateProgress();}
     else if(window.webkit?.messageHandlers?.updates){showUpdateProgress();if(next)updateTip(next.version,true);}
     else renderUpdateDialog();
@@ -2458,7 +2462,9 @@
     updateRunTimer=setTimeout(()=>{if(updateRun?.mac&&!updateRun.error&&updateRun.phase!=='restarting'){updateRun.error=tr('Обновление не ответило. Программа осталась прежней.');renderMacRun();}},120000);
   }
   window.messengerUpdateRun=state=>{
-    if(!updateRun?.mac||!state)return;
+    if(!state)return;
+    // The menu's «Обновить» starts a run without the page's button (T-213).
+    if(!updateRun?.mac){if(state.phase==='error')return;updateRun={mac:true,version:'',phase:'downloading',done:0,total:0,error:''};if(!$('update-dialog').open)$('update-dialog').showModal();}
     if(typeof state.version==='string'&&state.version)updateRun.version=state.version;
     updateRun.phase=String(state.phase||'');
     updateRun.done=Number(state.done)||0;updateRun.total=Number(state.total)||0;

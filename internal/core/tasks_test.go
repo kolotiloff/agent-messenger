@@ -324,12 +324,18 @@ func TestTaskRunOutcomes(t *testing.T) {
 		name, disposition string
 		ev                RunEvidence
 		final, task       string
+		events            string
 	}{
-		{"exit 1", DispositionReport, RunEvidence{ExitObserved: true, ExitCode: 1, GroupEmpty: true, ProviderOK: true}, "failed", "failed"},
-		{"provider error", DispositionReport, RunEvidence{ExitObserved: true, GroupEmpty: true}, "failed", "failed"},
-		{"no disposition", "", cleanExit, "failed", "failed"},
-		{"group not empty", DispositionReport, RunEvidence{ExitObserved: true, GroupEmpty: false, ProviderOK: true}, "blocked", "blocked"},
-		{"exit not observed", DispositionReport, RunEvidence{GroupEmpty: true, ProviderOK: true}, "blocked", "blocked"},
+		{"exit 1", DispositionReport, RunEvidence{ExitObserved: true, ExitCode: 1, GroupEmpty: true, ProviderOK: true}, "failed", "failed", ""},
+		{"provider error", DispositionReport, RunEvidence{ExitObserved: true, GroupEmpty: true}, "failed", "failed", ""},
+		{"no disposition", "", cleanExit, "failed", "failed", ""},
+		{"group not empty", DispositionReport, RunEvidence{ExitObserved: true, GroupEmpty: false, ProviderOK: true}, "blocked", "blocked", ""},
+		{"exit not observed", DispositionReport, RunEvidence{GroupEmpty: true, ProviderOK: true}, "blocked", "blocked", ""},
+		{"leftover after report", DispositionReport, RunEvidence{ExitObserved: true, ProviderOK: true, Leftover: "node(41)"}, "finished", "done", "report"},
+		{"leftover after question", DispositionAsk, RunEvidence{ExitObserved: true, ProviderOK: true, Leftover: "node(41)"}, "finished", "waiting_coordinator", "question"},
+		{"leftover without disposition", "", RunEvidence{ExitObserved: true, ProviderOK: true, Leftover: "node(41)"}, "blocked", "blocked", ""},
+		{"leftover without exit", DispositionReport, RunEvidence{ProviderOK: true, Leftover: "node(41)"}, "blocked", "blocked", ""},
+		{"leftover after exit 1", DispositionReport, RunEvidence{ExitObserved: true, ExitCode: 1, ProviderOK: true, Leftover: "node(41)"}, "failed", "failed", ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -348,7 +354,11 @@ func TestTaskRunOutcomes(t *testing.T) {
 				t.Fatalf("task %s", task.State)
 			}
 			events := f.events(t, AudienceCoordinator, 0)
-			if kinds(events) != c.task {
+			want := c.task
+			if c.events != "" {
+				want = c.events
+			}
+			if kinds(events) != want {
 				t.Fatalf("events %s", kinds(events))
 			}
 			if c.final == "failed" && c.disposition != "" && !strings.Contains(events[0].Text, "Unverified text from the worker:\npartial work") {
