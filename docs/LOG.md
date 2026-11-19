@@ -4,7 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-19 — Claude Code (T-215)
 
-- Owner asked for the open tasks and the last release: 0.85 is published (PR #130). Recorded T-215 from the owner's screenshot: the statistics task rows get one format in both tabs; T-216: «Работал» instead of «Готово за» in finished task rows. No code changed.
+- Owner asked for the open tasks and the last release: 0.85 is published (PR #130). Recorded T-215 from the owner's screenshot: the statistics task rows get one format in both tabs; T-216: «Работал» instead of «Готово за» in finished task rows; T-217: model and busy time in the left panel (owner chose «В1» from mockups: model grey, time at the right edge). No code changed.
 
 ## 2026-11-18 — Claude Code (T-198)
 

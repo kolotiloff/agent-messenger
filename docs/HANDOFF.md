@@ -11,7 +11,7 @@ The owner asked the agent to finish the program without them ("доделай б
 Updated 2026-11-19 by Claude Code.
 
 - **0.85 is released** ([release](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.85), [PR #130](https://github.com/kolotiloff/agent-messenger/pull/130), source `5e49856a6a6d78524b9f7e7d28a2833a85852f61`), 22 assets published. Seen on the release page only; not checked on the owner's computers. The note below about T-203…T-214 being unreleased is out of date.
-- Recorded T-215 (one line format for the statistics task rows) and T-216 («Работал 3 мин» instead of «Готово за 3 мин»), not started.
+- Recorded T-215 (one line format for the statistics task rows) T-216 («Работал 3 мин» instead of «Готово за 3 мин») and T-217 (model and busy time of agents in the left panel, owner chose layout В1), not started.
 
 Updated 2026-11-18 by Claude Code.
 
