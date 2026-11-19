@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-19 — Claude Code (release 0.85)
+
+- Released [0.85](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.85) from `5e49856` via PR #130 (release run 44432670621); 22 assets, five feeds at build 85, Linux x64 checksum and `version` checked. "Window controls" CI was cancelled three times at the browser install (slow mirror); it passed locally in Chromium.
+
 ## 2026-11-18 — Claude Code (T-198)
 
 - Owner answered Q-030 (b): D-147, T-205. The cause was `Wait` waiting for the error output a leftover child inherited; now limited after the exit. Also T-212, T-209, and parts of T-211 and T-208. Owner: release when done, don't wait.
