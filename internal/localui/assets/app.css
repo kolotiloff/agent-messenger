@@ -286,9 +286,9 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 }
 @media (prefers-reduced-motion:no-preference) and (forced-colors:none) {
   @supports (background-clip:text) {
-    #am-concept .am-agent-running-label {
+    #am-concept :is(.am-agent-running-label,.am-tool-running-label) {
       color:transparent;
-      background:linear-gradient(100deg,var(--am-agent-running-text) 40%,var(--am-agent-running-highlight) 50%,var(--am-agent-running-text) 60%) 100% 0 / 260% 100% no-repeat;
+      background:linear-gradient(100deg,var(--am-sweep-text,var(--am-agent-running-text)) 40%,var(--am-sweep-highlight,var(--am-agent-running-highlight)) 50%,var(--am-sweep-text,var(--am-agent-running-text)) 60%) 100% 0 / 260% 100% no-repeat;
       background-clip:text;
       animation:am-agent-running-sweep 3s linear infinite;
     }
@@ -438,6 +438,10 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept :is(.am-tool > summary, .am-tool-group > summary):is(:hover,:focus-visible) { color:var(--am-text); }
 #am-concept .am-tool-group > .am-tool { margin-left:var(--am-space-3); }
 #am-concept .am-tool-group-title { color:var(--am-muted); font-size:var(--am-text-m); font-weight:500; }
+#am-concept .am-tool-running-label {
+  --am-sweep-text:var(--am-muted);
+  --am-sweep-highlight:color-mix(in srgb,var(--am-text) 55%,var(--am-muted));
+}
 #am-concept .am-tool-timer { margin-inline-start:var(--am-space-2); color:var(--am-muted); font-variant-numeric:tabular-nums; }
 #am-concept .am-action-entry { padding-block:var(--am-space-1); }
 #am-concept .am-action-label { overflow-wrap:anywhere; }

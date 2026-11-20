@@ -1355,7 +1355,7 @@
             ?tr('Выполнено {commands}').replace('{commands}',actionCount(lines.length,[tr('команда'),tr('команды'),tr('команд')]))
             :actionCount(lines.length,[tr('действие'),tr('действия'),tr('действий')]);
           const heading=el('span',undefined,'am-tool-group-title');
-          heading.append(el('span',label));
+          heading.append(el('span',label,start?'am-tool-running-label':''));
           if(start){
             const timer=el('span',commandElapsed(start),'am-tool-timer');
             timer.dataset.commandStart=start;

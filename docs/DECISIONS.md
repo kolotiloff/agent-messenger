@@ -527,4 +527,4 @@ Amends D-100: a request to install the newest signed Messenger (the program only
 
 ## D-158 — Keep live command timing on the latest worker group (T-232)
 
-2026-11-20, owner reported a timer on an earlier command group after the worker posted a new message. Only the latest worker action group can show a live timer. A later completion event can still give an earlier group its verified completed-command count. A previous group with an unmatched command start displays an action count. Command group headings and their timers use muted text.
+2026-11-20, owner reported a timer on an earlier command group after the worker posted a new message. Only the latest worker action group can show a live timer. A later completion event can still give an earlier group its verified completed-command count. A previous group with an unmatched command start displays an action count. Command group headings and their timers use muted text. The running label uses a neutral sweep with the sidebar animation's timing. It remains static with reduced motion or forced colors. The elapsed time and earlier headings remain static.

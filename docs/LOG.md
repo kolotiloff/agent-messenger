@@ -4,7 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-20 — Codex (T-232)
 
-- Stopped older command-group timers when a newer worker action arrives. Made command-group headings muted. The first 0.89 build was cancelled before publishing.
+- Stopped older command-group timers when a newer worker action arrives. Made command-group headings muted and used a neutral sweep on the live label. The first 0.89 build was cancelled before publishing.
 
 ## 2026-11-20 — Codex (T-231)
 
