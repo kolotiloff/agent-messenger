@@ -19,6 +19,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       page.setDefaultTimeout(5000);
       const errors = [];
       let created = false, registered = false, connected = false, trusted = false;
+      let coordinatorActive = false;
       let setupStates = [], installed = false;
       let updates = [];
       const writes = [];
@@ -63,7 +64,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           '/api/window': {projects: created ? [{name: 'Welcome test'}] : [], project: created ? 'Welcome test' : '',
             folder: created ? '/fictional/project' : '', messenger: '/fictional/messenger', data_root: '/fictional/data',
             agents: [...(registered ? [{agent: 'cursor', cli: '/fictional/cursor', models: []}] : []), ...(installed ? [{agent:'codex',cli:'/fictional/codex',models:[],trust:{state:trusted?'trusted':'not_trusted'}}] : [])], tasks: [],
-            coordinator: {connected, client: 'cursor-vscode'},
+            coordinator: {connected, client: 'cursor-vscode', active: coordinatorActive},
             cursor_link: {state: connected ? 'connected' : created ? 'missing' : 'no_folder'},
             computer_name: 'Theme test', tasks_enabled: true},
           '/api/agent-setup-status': setupStates,
@@ -203,6 +204,16 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       // T-036: the computer that runs the server is labelled; this one is not.
       assert.equal(await page.locator('#machines [data-peer="fixture-peer"] .am-machine-role').innerText(),'сервер');
       assert.equal(await page.locator('#machines [aria-current="true"] .am-machine-role').count(),0);
+      await page.setViewportSize({width:1100,height:850});
+      const coordinatorLabel = page.locator('#machines [aria-current="true"] .am-machine-role').filter({hasText:/^координатор$/});
+      coordinatorActive = true;
+      await page.evaluate(() => window.messengerRefresh());
+      await coordinatorLabel.waitFor();
+      assert.equal(await page.locator('#machines [data-peer] .am-machine-role').count(),1);
+      coordinatorActive = false;
+      await page.evaluate(() => window.messengerRefresh());
+      await coordinatorLabel.waitFor({state:'detached'});
+      await page.setViewportSize({width:600,height:850});
       await page.locator('[data-tab=tasks]').click();
       assert(await page.locator('#task-panel').isVisible(), 'the task panel returns after creating a project');
       await page.locator('#list-toggle').click();
@@ -300,6 +311,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const stat = {id:'old-1',title:'Old 1',at:'2026-11-19T09:20:00',project:'Frame',agent:'codex',model:'gpt-6.2-sol[effort=medium]',computer:'Runner',tokens:12};
       const localTask = {id:'local-task',title:'Local task',project:'Frame',agent:'codex',state:'running',created_at:began,started_at:began,model:'gpt-6.2-sol[effort=low]',ran_model:'gpt-6.2-sol[effort=medium]'};
       const remoteTask = {...localTask,id:'remote-task',title:'Remote task',created_at:new Date(Date.now()-8*60*1000).toISOString(),model:'',ran_model:'',remote:{id:'dev-1',name:'Runner',worker:'none'}};
+      const waitingTask = {...remoteTask,id:'waiting-task',title:'Waiting for a reply',agent:'claude',state:'waiting_owner',model:'claude-sonnet-5-5[effort=medium]'};
       let remoteRow = remoteTask;
       let runnerAgents = [{agent:'cursor',running:1},{agent:'claude',waiting_owner:1},{agent:'codex',running:1,waiting_owner:1}];
       let runnerWorkers = [];
@@ -312,7 +324,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         const pathname = new URL(route.request().url()).pathname;
         if (pathname === '/api/feedback-export') return route.fulfill({json: {ok: true, result: {path: '/fictional/Downloads/feedback.zip', remarks: 2}}});
         if (pathname === '/api/feedback-clear') { clears.push(true); return route.fulfill({json: {ok: true, result: {deleted: 2, left: 0}}}); }
-        if (pathname === '/api/window') return route.fulfill({json: {projects: [{name: 'Frame'}], project: 'Frame', folder: '/fictional/frame', agents: [], coordinator: {connected: false}, computer_name: 'Ёж и Йога', tasks_enabled: true, feedback_count: 5, feedback_new: 2, tasks:[localTask,remoteRow],
+        if (pathname === '/api/window') return route.fulfill({json: {projects: [{name: 'Frame'}], project: 'Frame', folder: '/fictional/frame', agents: [], coordinator: {connected: false}, computer_name: 'Ёж и Йога', tasks_enabled: true, feedback_count: 5, feedback_new: 2, tasks:[localTask,remoteRow,waitingTask],
           shared: [{peer: 'host', name: 'Giver', age: 1, tasks: [
             {id: 'sent', project: 'Frame', title: 'Sent task', agent: 'cursor', state: 'running', created_at: began, started_at: began, model: 'composer-2.5[effort=medium]', runs_on_peer: 'dev-1', runs_on: 'Old name'},
             {id: 'own', project: 'Frame', title: 'Own task', agent: 'codex', state: 'running', created_at: '2026-11-15T09:00:00Z'},
@@ -373,9 +385,19 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.match(await completedTime.innerText(),/\d{1,2}:\d{2}/);
       assert.equal(await page.locator('.am-task',{hasText:localTask.title}).locator('.am-task-when').getAttribute('datetime'),began);
       const taskRow=page.locator('.am-task',{hasText:localTask.title});
-      const taskParts=taskRow.locator('.am-task-agent,.am-task-title,.am-task-status,.am-task-model,.am-task-when');
-      assert.deepEqual(await taskParts.evaluateAll(nodes=>nodes.map(node=>getComputedStyle(node).fontSize)),Array(5).fill('12px'));
-      assert.equal(await taskRow.locator('.am-task-title').evaluate(node=>getComputedStyle(node).fontWeight),'500');
+      const taskParts=taskRow.locator('.am-task-agent,.am-task-status,.am-task-model,.am-task-when');
+      assert.deepEqual(await taskParts.evaluateAll(nodes=>nodes.map(node=>getComputedStyle(node).fontSize)),Array(4).fill('12px'));
+      const type=locator=>locator.evaluate(node=>{
+        const {fontFamily,fontSize,fontWeight,lineHeight}=getComputedStyle(node);
+        return {fontFamily,fontSize,fontWeight,lineHeight};
+      });
+      const computerTitle=await type(page.locator('.am-machine-card[aria-current=true] .am-machine-name > span:nth-child(2)'));
+      assert.deepEqual(await type(taskRow.locator('.am-task-title')),computerTitle);
+      assert.equal(computerTitle.fontSize,'14px');
+      assert.equal(computerTitle.fontWeight,'500');
+      const waitingTaskStatus=page.locator('.am-task',{hasText:waitingTask.title}).locator('.am-task-status');
+      assert.match(await waitingTaskStatus.innerText(),/Ждёт вашего ответа,\s*Sonnet 5\.5 Medium/);
+      assert.equal(await waitingTaskStatus.locator('.am-dot').count(),0);
       await page.locator('[data-tab=server]').click();
       const runner=page.locator('[data-peer="dev-1"]');
       const running=runner.locator('.am-agent-run[data-provider=cursor]');
@@ -387,7 +409,13 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await runner.locator('.am-agent-wait').count(),1);
       assert.equal(await runner.locator('.am-agent-idle').count(),0);
       assert.equal(await runner.locator('.am-agent-running-label').count(),2);
-      assert.equal(await runner.locator('[data-provider=claude] .am-agent-status').textContent(),'ждёт ответа');
+      const waiting=runner.locator('.am-agent-wait[data-provider=claude]');
+      const waitingStatus=waiting.locator('.am-agent-status');
+      assert.equal(await waiting.locator('.am-agent-model').textContent(),'Sonnet 5.5 Med');
+      assert.equal(await waitingStatus.textContent(),'ждёт ответа');
+      assert.equal(await waitingStatus.evaluate(node=>getComputedStyle(node,'::before').content),'", "');
+      const waitingLabelBox=await waiting.locator('span').first().boundingBox(),waitingStatusBox=await waitingStatus.boundingBox();
+      assert(Math.abs(waitingStatusBox.x-waitingLabelBox.x-waitingLabelBox.width)<1,'waiting status must sit directly beside the model');
       const overlappingAgent=runner.locator('.am-agent-run[data-provider=codex]');
       assert.equal(await overlappingAgent.locator('.am-agent-model').textContent(),'модель не указана');
       assert.equal(await overlappingAgent.locator('.am-agent-status').textContent(),'(2) 3 мин');
@@ -423,15 +451,19 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.locator('[data-tab=tasks]').click();
       const runningTaskStatus=taskRow.locator('.am-task-status.am-status-run');
       await runningTaskStatus.waitFor({state:'visible'});
-      for (const [theme,arrow,muted,runningColor] of [
-        ['light','rgb(129, 83, 5)','rgb(107, 107, 107)','rgb(40, 123, 215)'],
-        ['dark','rgb(242, 198, 91)','rgb(160, 160, 160)','rgb(103, 170, 249)']
+      for (const [theme,arrow,muted,runningColor,waitingColor] of [
+        ['light','rgb(129, 83, 5)','rgb(107, 107, 107)','rgb(40, 123, 215)','rgb(201, 138, 0)'],
+        ['dark','rgb(242, 198, 91)','rgb(160, 160, 160)','rgb(103, 170, 249)','rgb(242, 201, 76)']
       ]) {
         await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;},theme);
         assert.equal(await runningTaskStatus.evaluate(node=>getComputedStyle(node).color),runningColor);
         assert.equal(await runningLabel.evaluate(node=>getComputedStyle(node).color),runningColor);
         assert.equal(await runningLabel.locator('.am-agent-model').evaluate(node=>getComputedStyle(node).color),runningColor);
         assert.equal(await runningTimer.evaluate(node=>getComputedStyle(node).color),muted);
+        for(const part of [waiting.locator('span').first(),waiting.locator('.am-agent-model'),waitingStatus]){
+          assert.equal(await part.evaluate(node=>getComputedStyle(node).color),waitingColor);
+        }
+        assert.equal(await waitingStatus.evaluate(node=>getComputedStyle(node,'::before').color),waitingColor);
         await page.mouse.move(0,0);
         const style=await peerUpdate.evaluate(node=>{
           const css=getComputedStyle(node);
@@ -448,6 +480,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await peerUpdate.locator('svg').click();
       await page.locator('#confirm-dialog').waitFor({state:'visible'});
       assert.equal(await page.locator('#confirm-title').innerText(),'Обновить Runner до v0.99?');
+      assert.deepEqual(await type(page.locator('#confirm-title')),await type(page.locator('#member-title')));
       await page.locator('#confirm-cancel').click();
       for (const computer of [page.locator('.am-machine-card[aria-current=true]'),runner]) {
         const name = computer.locator('.am-machine-name > span:nth-child(2)');
@@ -475,6 +508,13 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const detail = page.locator('#stats-top .am-stats-task-text .am-muted');
       await detail.waitFor();
       assert.equal(await detail.textContent(),'19 ноября 9:20 Frame Codex Sol 6.2 Medium на Runner');
+      assert.deepEqual(await type(page.locator('#stats-top .am-stats-task-title').first()),computerTitle);
+      await page.locator('[data-tab=project]').click();
+      const rules=await type(page.locator('#project-page-rules'));
+      const projectName=await type(page.locator('#project-page-name'));
+      assert.equal(rules.fontFamily,projectName.fontFamily);
+      assert.equal(rules.fontSize,projectName.fontSize);
+      await page.locator('[data-tab=stats]').click();
       await page.locator('[data-stats-sort=tokens]').click();
       assert.equal(await detail.textContent(),'19 ноября 9:20 Frame Codex Sol 6.2 Medium на Runner');
       await page.locator('[data-tab=tasks]').click();

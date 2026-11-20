@@ -492,7 +492,7 @@
     }
   }
   document.addEventListener('visibilitychange',renderNotices);
-  // One line per agent program, with its state (D-064: no coordinator mark).
+  // One line per agent program, with its worker state.
   // live is false when the computer cannot be reached.
   function busyTasksByComputer(){
     const byComputer=new Map();
@@ -556,8 +556,7 @@
         if(models.length||tasks.length){
           const label=el('span',models.length?models.map(m=>modelName(m).replace(/ Medium$/,' Med')).join(', '):tr('модель не указана'),'am-agent-model');
           if(models.length)label.title=models.join(', ');
-          if(state==='run')identity.append(' ',label);
-          else line.append(label);
+          identity.append(' ',label);
         }
         const total=counts.running+counts.waiting_owner;
         const count=total>1?'('+total+')':'';
@@ -588,9 +587,12 @@
   function swapChildren(live,next){
     if(next.innerHTML!==live.innerHTML)live.replaceChildren(...next.childNodes);
   }
-  function serverTag(){
-    const tag=el('span',tr('сервер'),'am-small am-muted am-machine-role');tag.title=tr('На этом компьютере работает сервер сети');
+  function machineRole(label,tip){
+    const tag=el('span',label,'am-small am-muted am-machine-role');tag.title=tip;
     return tag;
+  }
+  function serverTag(){
+    return machineRole(tr('сервер'),tr('На этом компьютере работает сервер сети'));
   }
   function renderMachines(){
     collectNotices();
@@ -604,6 +606,7 @@
     head.append(el('span',view?.computer_name||tr('Этот компьютер')));
     // The computer that runs the network's server is labelled as such.
     if(server?.host?.running&&server.host.scope!=='local')head.append(serverTag());
+    if(view?.coordinator?.active)head.append(machineRole(tr('координатор'),tr('На этом компьютере открыт чат-координатор выбранного проекта')));
     const version=el('div',undefined,'am-machine-version am-local-version');
     machine.append(head);
     // A paused agent is left out, as other computers leave it out of what
@@ -860,7 +863,6 @@
       appendTaskWhen(agent,t);
       const [text,cls,tip,from]=taskStatus(t);
       const status=el('span',undefined,'am-task-status '+cls);if(tip)status.title=tip;
-      if(t.state==='waiting_owner')status.append(el('span',undefined,'am-dot am-dot-wait'));
       const model=t.ran_model||t.model;
       const words=el('span');status.append(words);words.append(statusPiece(text,!!t.usage||!!model,from));
       if(t.usage){const used=el('span',usageShort(t.usage),'am-task-usage');used.title=usageLong(t.usage);if(model)used.append(el('span',',','am-task-comma'));words.append(used);}

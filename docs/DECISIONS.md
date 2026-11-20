@@ -546,3 +546,15 @@ The owner also asked for a consistent size within each task card. Use 12 px thro
 ## D-162 — Show running work and reported worker models (T-236)
 
 2026-11-20, owner saw a yellow duration and missing model on cards of remote computers. Running work takes precedence in the sidebar when the agent also has a task waiting. The count includes running and waiting tasks. The timer reflects running work, and the tooltip gives the waiting count separately. A waiting-only row labels the wait explicitly. Forward a valid model reported by the worker to the computer that assigned the task. This is display metadata and never changes the requested model or task state. Older clients can ignore the message. If the worker did not report a model and the coordinator did not select one, show that the model was not specified on known task rows in the sidebar.
+
+## D-163 — Inline waiting status (T-237)
+
+2026-11-20, owner asked to align the sidebar waiting label with the running duration. Place it after the model with the same comma separator, and use the waiting color for the name, model, separator and status. The task card shows its wait text in the regular status position without a dot.
+
+## D-164 — Match typography for equivalent window elements (T-238)
+
+2026-11-20, owner asked to align computer and task names and review the window's typography. Use a shared 14 px medium style for computer and task names in the lists and statistics. Their metadata remains 12 px. Confirmation headings use the settings section style. Project instructions are prose and use the same system text as other plain-text fields.
+
+## D-165 — Label the live local coordinator (T-239)
+
+2026-11-20, owner approved the lowercase «координатор» label beside the computer name. The window shows it on this computer’s card while the active chat of the selected project (D-099) has a live local process. Reuse the server label style. Historical connections and peer presence do not establish this role. The label refines D-064 for this computer. A handover between local chats leaves network task routing unchanged.

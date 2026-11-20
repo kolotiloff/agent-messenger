@@ -305,6 +305,7 @@
   'Этот компьютер':'This computer',
   'сервер':'server',
   'На этом компьютере работает сервер сети':'This computer runs the network server',
+  'На этом компьютере открыт чат-координатор выбранного проекта':'This computer has an active coordinator chat for the selected project',
   'На связи':'Online',
   'Агенты не подключены':'No agents connected',
   'Отозвать устройство? Вернуть его можно только новым приглашением.':'Revoke the device? Only a new invitation brings it back.',
