@@ -492,7 +492,7 @@
     }
   }
   document.addEventListener('visibilitychange',renderNotices);
-  // One line per agent program, with its state (D-064: no coordinator mark).
+  // One line per agent program, with its worker state.
   // live is false when the computer cannot be reached.
   function busyTasksByComputer(){
     const byComputer=new Map();
@@ -587,9 +587,12 @@
   function swapChildren(live,next){
     if(next.innerHTML!==live.innerHTML)live.replaceChildren(...next.childNodes);
   }
-  function serverTag(){
-    const tag=el('span',tr('сервер'),'am-small am-muted am-machine-role');tag.title=tr('На этом компьютере работает сервер сети');
+  function machineRole(label,tip){
+    const tag=el('span',label,'am-small am-muted am-machine-role');tag.title=tip;
     return tag;
+  }
+  function serverTag(){
+    return machineRole(tr('сервер'),tr('На этом компьютере работает сервер сети'));
   }
   function renderMachines(){
     collectNotices();
@@ -603,6 +606,7 @@
     head.append(el('span',view?.computer_name||tr('Этот компьютер')));
     // The computer that runs the network's server is labelled as such.
     if(server?.host?.running&&server.host.scope!=='local')head.append(serverTag());
+    if(view?.coordinator?.active)head.append(machineRole(tr('координатор'),tr('На этом компьютере открыт чат-координатор выбранного проекта')));
     const version=el('div',undefined,'am-machine-version am-local-version');
     machine.append(head);
     // A paused agent is left out, as other computers leave it out of what

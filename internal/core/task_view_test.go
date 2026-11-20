@@ -1,6 +1,48 @@
 package core
 
-import "testing"
+import (
+	"os"
+	"testing"
+
+	"github.com/kolotiloff/agent-messenger/internal/platform"
+)
+
+func TestWindowShowsOnlyLiveCoordinatorOfSelectedProject(t *testing.T) {
+	f := newTaskFixture(t)
+	self, err := platform.ReadObservation(os.Getpid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.CreateProject("Other", t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.TouchCoordinatorClient("Game", "codex"); err != nil {
+		t.Fatal(err)
+	}
+	check := func(project string, active bool) {
+		t.Helper()
+		view, err := f.st.WindowView(project, "")
+		if err != nil || view.Coordinator.Active != active {
+			t.Fatalf("%s coordinator = %+v, want active=%t: %v", project, view.Coordinator, active, err)
+		}
+	}
+	check("Game", false)
+	stale := self
+	stale.StartToken += "-old"
+	if _, _, err := f.st.ClaimCoordinator("Game", "first", stale); err != nil {
+		t.Fatal(err)
+	}
+	check("Game", false)
+	if old, _, err := f.st.ClaimCoordinator("Game", "first", self); err != nil || old != "" {
+		t.Fatalf("relay restart replaced %q: %v", old, err)
+	}
+	check("Game", true)
+	check("Other", false)
+	if old, _, err := f.st.ClaimCoordinator("Game", "next", self); err != nil || old != "first" {
+		t.Fatalf("takeover replaced %q: %v", old, err)
+	}
+	check("Game", true)
+}
 
 func TestWindowViewAndTaskFeed(t *testing.T) {
 	f := newTaskFixture(t)

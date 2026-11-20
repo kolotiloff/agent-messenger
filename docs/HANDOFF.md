@@ -10,6 +10,7 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Updated 2026-11-20 by Codex.
 
+- T-239 labels this computer «координатор» for the selected project while its active coordinator chat process is alive. This is the local chat role (T-090). Remote task events still return to the assigning computer. Pending review and release.
 - T-238 aligns computer and task titles with statistics, uses the regular section heading in confirmation dialogs, and gives project instructions the system text font. Pending review and release.
 - T-237 puts the sidebar waiting text immediately after the model, uses the waiting color for the whole agent row, and removes the waiting dot from task cards. Pending review and release.
 - **0.91 is released** ([release](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.91), [PR #152](https://github.com/kolotiloff/agent-messenger/pull/152), source `e49c54f43267903345bb753a8ee98bf147f0f6fb`, [release run](https://github.com/kolotiloff/agent-messenger/actions/runs/44800060649)). T-235 matches the sidebar activity color to the task list without animation. T-236 shows running work alongside waits, counts both, and forwards worker-reported models to the assigning computer. Checks: [release source](https://github.com/kolotiloff/agent-messenger/actions/runs/44799969990). Confirmed all 22 assets were uploaded and verified the five update manifests and archives against the app public key, release revision, sizes and SHA-256. No installed-app update or live-agent acceptance run.

@@ -10,6 +10,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
 
 // Read models for the window (T-029). They only read; nothing here launches
@@ -330,6 +332,7 @@ type WindowView struct {
 	Name        string `json:"computer_name"`
 	Coordinator struct {
 		Connected bool   `json:"connected"`
+		Active    bool   `json:"active,omitempty"`
 		Client    string `json:"client,omitempty"`
 		LastSeen  string `json:"last_seen,omitempty"`
 	} `json:"coordinator"`
@@ -366,6 +369,7 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 			found, v.Project, v.ProjectTitle, v.Folder = true, p.Name, p.Title, p.Folder
 		}
 	}
+	var coordinator platform.Observation
 	err = s.tx(func(tx *sql.Tx) error {
 		computer, err := localComputer(tx)
 		if err != nil {
@@ -416,7 +420,9 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 			return nil
 		}
 		var client sql.NullString
-		err = tx.QueryRow(`SELECT last_seen,client FROM coordinator_connections WHERE project=?`, project).Scan(&v.Coordinator.LastSeen, &client)
+		err = tx.QueryRow(`SELECT c.last_seen,c.client,COALESCE(a.pid,0),COALESCE(a.start_token,''),COALESCE(a.boot_id,'')
+ FROM coordinator_connections c LEFT JOIN coordinator_chats a ON a.project=c.project WHERE c.project=?`, project).
+			Scan(&v.Coordinator.LastSeen, &client, &coordinator.PID, &coordinator.StartToken, &coordinator.BootID)
 		if err == nil {
 			v.Coordinator.Connected, v.Coordinator.Client = true, client.String
 		} else if !errors.Is(err, sql.ErrNoRows) {
@@ -430,6 +436,11 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 	})
 	if err != nil || !found {
 		return v, err
+	}
+	// A saved connection alone does not mean its chat is still open.
+	if coordinator.PID > 0 && coordinator.StartToken != "" && coordinator.BootID != "" {
+		live, err := platform.ReadObservation(coordinator.PID)
+		v.Coordinator.Active = err == nil && live.StartToken == coordinator.StartToken && live.BootID == coordinator.BootID
 	}
 	const taskListLimit = 300
 	tasks, err := s.Tasks(project, taskListLimit)

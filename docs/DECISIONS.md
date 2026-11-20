@@ -554,3 +554,7 @@ The owner also asked for a consistent size within each task card. Use 12 px thro
 ## D-164 — Match typography for equivalent window elements (T-238)
 
 2026-11-20, owner asked to align computer and task names and review the window's typography. Use a shared 14 px medium style for computer and task names in the lists and statistics. Their metadata remains 12 px. Confirmation headings use the settings section style. Project instructions are prose and use the same system text as other plain-text fields.
+
+## D-165 — Label the live local coordinator (T-239)
+
+2026-11-20, owner approved the lowercase «координатор» label beside the computer name. The window shows it on this computer’s card while the active chat of the selected project (D-099) has a live local process. Reuse the server label style. Historical connections and peer presence do not establish this role. The label refines D-064 for this computer. A handover between local chats leaves network task routing unchanged.

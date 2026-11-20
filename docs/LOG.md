@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-20 — Codex (T-239)
+
+- Added the local computer's coordinator label for the selected project. The label follows the live chat serving the role, including after a relay replacement.
+
 ## 2026-11-20 — Codex (T-238)
 
 - Matched computer names and task titles in the list and statistics. Reused the section heading for confirmations and system text for project instructions.

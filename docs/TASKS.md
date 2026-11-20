@@ -15,6 +15,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
+| T-239 | Label this computer as the selected project's coordinator while its active chat is open (owner, 2026-11-20). | window | Implemented on `codex/t237-inline-waiting-status` (D-165). |
 | T-238 | Align the typography of computer and task titles and other equivalent window elements (owner, 2026-11-20). | window | Implemented on `codex/t237-inline-waiting-status` (D-164). |
 | T-237 | Put waiting text beside the model in the computer list and remove the waiting dot from task cards (owner, 2026-11-20). | window | Implemented on `codex/t237-inline-waiting-status` (D-163). |
 | T-236 | Keep running work visible beside waiting tasks and forward remote model reports (owner, 2026-11-20). | window + network | Released in [0.91](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.91) via [PR #152](https://github.com/kolotiloff/agent-messenger/pull/152) (D-162). |

@@ -19,6 +19,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       page.setDefaultTimeout(5000);
       const errors = [];
       let created = false, registered = false, connected = false, trusted = false;
+      let coordinatorActive = false;
       let setupStates = [], installed = false;
       let updates = [];
       const writes = [];
@@ -63,7 +64,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           '/api/window': {projects: created ? [{name: 'Welcome test'}] : [], project: created ? 'Welcome test' : '',
             folder: created ? '/fictional/project' : '', messenger: '/fictional/messenger', data_root: '/fictional/data',
             agents: [...(registered ? [{agent: 'cursor', cli: '/fictional/cursor', models: []}] : []), ...(installed ? [{agent:'codex',cli:'/fictional/codex',models:[],trust:{state:trusted?'trusted':'not_trusted'}}] : [])], tasks: [],
-            coordinator: {connected, client: 'cursor-vscode'},
+            coordinator: {connected, client: 'cursor-vscode', active: coordinatorActive},
             cursor_link: {state: connected ? 'connected' : created ? 'missing' : 'no_folder'},
             computer_name: 'Theme test', tasks_enabled: true},
           '/api/agent-setup-status': setupStates,
@@ -203,6 +204,16 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       // T-036: the computer that runs the server is labelled; this one is not.
       assert.equal(await page.locator('#machines [data-peer="fixture-peer"] .am-machine-role').innerText(),'сервер');
       assert.equal(await page.locator('#machines [aria-current="true"] .am-machine-role').count(),0);
+      await page.setViewportSize({width:1100,height:850});
+      const coordinatorLabel = page.locator('#machines [aria-current="true"] .am-machine-role').filter({hasText:/^координатор$/});
+      coordinatorActive = true;
+      await page.evaluate(() => window.messengerRefresh());
+      await coordinatorLabel.waitFor();
+      assert.equal(await page.locator('#machines [data-peer] .am-machine-role').count(),1);
+      coordinatorActive = false;
+      await page.evaluate(() => window.messengerRefresh());
+      await coordinatorLabel.waitFor({state:'detached'});
+      await page.setViewportSize({width:600,height:850});
       await page.locator('[data-tab=tasks]').click();
       assert(await page.locator('#task-panel').isVisible(), 'the task panel returns after creating a project');
       await page.locator('#list-toggle').click();
