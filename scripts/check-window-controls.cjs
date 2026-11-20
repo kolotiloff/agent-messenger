@@ -314,7 +314,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
             {id: 'own', project: 'Frame', title: 'Own task', agent: 'codex', state: 'running', created_at: '2026-11-15T09:00:00Z'},
             {id: 'old-1', project: 'Frame', title: 'Old 1', agent: 'codex', state: 'done', created_at: '2026-11-14T09:00:00Z', finished_at: ended},
             {id: 'old-2', project: 'Frame', title: 'Old 2', agent: 'codex', state: 'failed', created_at: '2026-11-14T08:00:00Z', finished_at: '2026-11-14T08:30:00Z'}]}]}});
-        if (pathname === '/api/server') return route.fulfill({json: {host: {running: false, enabled: false, addresses: []}, member: {connected: true, reachable: true, address:'203.0.113.7:47100', connected_at:began}, peers: [{id: 'host', name: 'Giver', age: 0, agents: []}, {id: 'dev-1', name: 'Runner', age: 0, version:'0.0.0-preview.97', agents: [{agent:'cursor',running:1}]}], updates: [], accept: true}});
+        if (pathname === '/api/server') return route.fulfill({json: {host: {running: false, enabled: false, addresses: []}, member: {connected: true, reachable: true, address:'203.0.113.7:47100', connected_at:began}, peers: [{id: 'host', name: 'Giver', age: 0, agents: []}, {id: 'dev-1', name: 'Runner', age: 0, version:'0.0.0-preview.97', agents: [{agent:'cursor',running:1},{agent:'claude',waiting_owner:1},{agent:'codex'}]}], updates: [], accept: true}});
         if (pathname === '/api/usage-stats') return route.fulfill({json:{total:{tasks:1,tokens:12,input_tokens:8,output_tokens:4},agents:[],computers:[],days:[],recent:[stat],top:[stat]}});
         if (pathname === '/api/task') {
           const remote = new URL(route.request().url()).searchParams.get('id') === remoteTask.id;
@@ -365,9 +365,21 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await page.locator('.am-task',{hasText:localTask.title}).locator('.am-task-when').getAttribute('datetime'),began);
       await page.locator('[data-tab=server]').click();
       const runner=page.locator('[data-peer="dev-1"]');
-      await runner.locator('.am-agent-model').waitFor();
-      assert.equal(await runner.locator('.am-agent-model').textContent(),'composer-2.5 Med');
-      assert.equal(await runner.locator('.am-agent-status').textContent(),'3 мин');
+      const running=runner.locator('.am-agent-run');
+      const runningLabel=running.locator('.am-agent-running-label');
+      const runningTimer=running.locator('.am-agent-status');
+      await runningLabel.waitFor();
+      assert.equal(await runningLabel.locator('.am-agent-model').textContent(),'composer-2.5 Med');
+      assert.equal(await runningTimer.textContent(),'3 мин');
+      assert.equal(await runner.locator('.am-agent-wait').count(),1);
+      assert.equal(await runner.locator('.am-agent-idle').count(),1);
+      assert.equal(await runner.locator('.am-agent-running-label').count(),1);
+      assert.equal(await runningLabel.evaluate(node=>getComputedStyle(node).animationName),'am-agent-running-sweep');
+      assert.equal(await runningTimer.evaluate(node=>getComputedStyle(node).animationName),'none');
+      assert.equal(await runningTimer.evaluate(node=>getComputedStyle(node).fontSize),await runningLabel.evaluate(node=>getComputedStyle(node).fontSize));
+      assert.notEqual(await runningTimer.evaluate(node=>getComputedStyle(node).backgroundColor),'rgba(0, 0, 0, 0)');
+      const labelBox=await runningLabel.boundingBox(),timerBox=await runningTimer.boundingBox();
+      assert(Math.abs(timerBox.x-labelBox.x-labelBox.width-4)<1,'timer is separated from the running label');
       assert.equal(await runner.locator('.am-machine-name .am-card-update').count(),1);
       assert.equal(await page.locator('.am-machine-name #app-update-button').count(),1);
       const peerUpdate=runner.getByRole('button',{name:'Обновить до v0.99'});
@@ -375,6 +387,8 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await peerVersion.textContent(),'v0.97');
       assert.equal(await peerUpdate.locator('.am-machine-version').count(),0);
       await page.emulateMedia({reducedMotion:'reduce'});
+      assert.equal(await runningLabel.evaluate(node=>getComputedStyle(node).animationName),'none');
+      assert.equal(await runningLabel.evaluate(node=>getComputedStyle(node).color),'rgb(23, 93, 167)');
       for (const [theme,arrow,muted] of [['light','rgb(129, 83, 5)','rgb(107, 107, 107)'],['dark','rgb(242, 198, 91)','rgb(160, 160, 160)']]) {
         await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;},theme);
         await page.mouse.move(0,0);

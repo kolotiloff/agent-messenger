@@ -10,6 +10,9 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Updated 2026-11-20 by Codex.
 
+- T-230 on `codex/t229-t230-sidebar-status` shows the confirmed version in the computer card and coordinator roster as soon as the update reply arrives. Pending review and release.
+- T-229 on `codex/t229-t230-sidebar-status` highlights the running agent and model in the sidebar and puts elapsed time on a soft blue background beside the model. Pending review and release.
+
 - **0.88 is released** ([release](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.88), [PR #145](https://github.com/kolotiloff/agent-messenger/pull/145), source `d81bbc4d2cd1cf28ea2bf076ca0852df09280e7f`, [release run](https://github.com/kolotiloff/agent-messenger/actions/runs/44708744170)). T-226 adds command group status and a live timer. T-227 adds on-demand CLI versions. T-228 gives the update a separate amber arrow. The combined macOS race suite and Chromium window fixtures passed. Verified all 22 uploaded assets and the signatures, revisions and referenced archive sizes of all five update manifests. No installed desktop update or live-agent acceptance run.
 
 - **0.87 is released** ([release](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.87), [PR #140](https://github.com/kolotiloff/agent-messenger/pull/140), source `7fd6c198363545ba218510fe04ffd8ecff8b43e5`, [release run](https://github.com/kolotiloff/agent-messenger/actions/runs/44647765968)). T-223 adds session event and task finish times. T-224 queues owner notes for remote workers. T-225 adds readable action captions, icons and grouped summaries. The combined macOS race suite and Chromium window fixtures passed. Verified all 22 uploaded assets and the signatures, revisions and referenced archive sizes of all five update manifests. No installed desktop update or live-agent acceptance run.

@@ -314,6 +314,26 @@ func TestNetUpdateResultClearsStalePendingFlag(t *testing.T) {
 	if err != nil || len(peers) != 1 || peers[0].UpdatePending || peers[0].Version != "0.0.0-preview.57" {
 		t.Fatalf("after done %+v %v", peers, err)
 	}
+	// A result also advances a version that never reported a pending flag.
+	stale[0].UpdatePending = false
+	if err := p.a.st.SetNetwork(testBroker, HostPeerID, stale); err != nil {
+		t.Fatal(err)
+	}
+	if peers, err := p.a.st.NetPeers(); err != nil || len(peers) != 1 || peers[0].Version != "0.0.0-preview.57" {
+		t.Fatalf("version without pending flag: %+v %v", peers, err)
+	}
+	newer := append([]NetPeer(nil), stale...)
+	newer[0].Version, newer[0].UpdatePending = "0.0.0-preview.58", true
+	if err := p.a.st.SetNetwork(testBroker, HostPeerID, newer); err != nil {
+		t.Fatal(err)
+	}
+	if peers, err := p.a.st.NetPeers(); err != nil || len(peers) != 1 || peers[0].Version != "0.0.0-preview.58" || !peers[0].UpdatePending {
+		t.Fatalf("newer presence regressed: %+v %v", peers, err)
+	}
+	stale[0].UpdatePending = true
+	if err := p.a.st.SetNetwork(testBroker, HostPeerID, stale); err != nil {
+		t.Fatal(err)
+	}
 	if _, _, err := p.a.st.StartTask(StartTaskRequest{Project: "Game", OpID: "op-done", Provider: "codex", Text: "x", Computer: "dev-b"}); err != nil && strings.Contains(err.Error(), "update") {
 		t.Fatalf("updated computer still refused: %v", err)
 	}

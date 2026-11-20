@@ -92,6 +92,8 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
+| T-230 | Show the confirmed computer version at the same time as the successful update notice (owner, 2026-11-20). | network + window | Implemented on `codex/t229-t230-sidebar-status` (D-156). |
+| T-229 | Highlight a running agent and put its elapsed time beside the model on a soft blue background (owner, 2026-11-20). | window | Implemented on `codex/t229-t230-sidebar-status` (D-155). |
 | T-228 | Use a separate amber update arrow with a round hover background on computer cards (owner, 2026-11-20). | window | Released in [0.88](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.88) via [PR #144](https://github.com/kolotiloff/agent-messenger/pull/144). |
 | T-227 | Let the coordinator query the installed CLI version of one agent on a chosen computer (owner, 2026-11-20). | agent + network | Released in [0.88](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.88) via [PR #143](https://github.com/kolotiloff/agent-messenger/pull/143). |
 | T-226 | Replace the action breakdown with a command status and same-size timer or a finished count (owner, 2026-11-20). | window + agent | Released in [0.88](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.88) via [PR #142](https://github.com/kolotiloff/agent-messenger/pull/142). |

@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -260,29 +262,74 @@ func (s *Store) LocalUpdate() (NetUpdate, bool, error) {
 // NetUpdates lists the last update request to each computer of the current
 // network.
 func (s *Store) NetUpdates() ([]NetUpdate, error) {
-	out := []NetUpdate{}
+	var updates []NetUpdate
 	err := s.tx(func(tx *sql.Tx) error {
-		broker, err := metaValue(tx, "net_broker")
-		if err != nil || broker == "" {
-			return err
-		}
-		rows, err := tx.Query(`SELECT peer,id,state,version,text,created_at,updated_at FROM net_updates WHERE broker=? ORDER BY peer`, broker)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var u NetUpdate
-			var created string
-			if err := rows.Scan(&u.Computer, &u.ID, &u.State, &u.Version, &u.Text, &created, &u.UpdatedAt); err != nil {
-				return err
-			}
-			u.Stale = u.State == UpdateWaiting && updateStale(created)
-			out = append(out, u)
-		}
-		return rows.Err()
+		var err error
+		updates, err = netUpdates(tx)
+		return err
 	})
-	return out, err
+	return updates, err
+}
+
+func netUpdates(tx *sql.Tx) ([]NetUpdate, error) {
+	out := []NetUpdate{}
+	rows, err := tx.Query(`SELECT peer,id,state,version,text,created_at,updated_at FROM net_updates
+ WHERE broker=(SELECT value FROM meta WHERE key='net_broker') ORDER BY peer`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var u NetUpdate
+		var created string
+		if err := rows.Scan(&u.Computer, &u.ID, &u.State, &u.Version, &u.Text, &created, &u.UpdatedAt); err != nil {
+			return nil, err
+		}
+		u.Stale = u.State == UpdateWaiting && updateStale(created)
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// updateResultFresh bounds how long an update result outweighs old presence.
+const updateResultFresh = 10 * time.Minute
+
+// PeerUpdateState reconciles a computer's version and pending flag with the
+// last result for that computer. The same result drives notices and the roster.
+func (u NetUpdate) PeerUpdateState(version string, pending bool, presenceAge int, now time.Time) (string, bool) {
+	if u.State != UpdateDone && u.State != UpdateFailed && u.State != UpdateRefused {
+		return version, pending
+	}
+	at, err := time.Parse(time.RFC3339Nano, u.UpdatedAt)
+	if err != nil || now.Sub(at) >= updateResultFresh {
+		return version, pending
+	}
+	before := presenceAge < 0 || now.Add(-time.Duration(presenceAge)*time.Second).Before(at)
+	if u.State == UpdateDone {
+		newBuild, oldBuild := updateBuild(u.Version), updateBuild(version)
+		switch {
+		case newBuild != 0 && oldBuild > newBuild:
+			return version, pending
+		case newBuild != 0 && (oldBuild < newBuild && oldBuild != 0 || version == "" || before && oldBuild == 0):
+			return u.Version, false
+		}
+	}
+	return version, pending && !before
+}
+
+func updateBuild(version string) int {
+	m := previewBuild.FindStringSubmatch(version)
+	if m == nil && strings.HasPrefix(version, "0.") {
+		m = previewBuild.FindStringSubmatch("0.0.0-preview." + strings.TrimPrefix(version, "0."))
+	}
+	if m == nil {
+		return 0
+	}
+	n, err := strconv.Atoi(m[1])
+	if err != nil {
+		return 0
+	}
+	return n
 }
 
 // NetUpdateRequests lists the other computers' requests to update this

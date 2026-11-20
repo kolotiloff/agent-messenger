@@ -124,6 +124,17 @@ func (s *Supervisor) Server(_ context.Context, action string, payload json.RawMe
 	if err != nil {
 		return nil, err
 	}
+	// Project the same replies used by notices onto the broker's presence
+	// snapshot so both change in this response, before the next report.
+	byPeer := make(map[string]core.NetUpdate, len(updates))
+	for _, update := range updates {
+		byPeer[update.Computer] = update
+	}
+	now := time.Now()
+	for i := range st.Peers {
+		peer := &st.Peers[i]
+		peer.Version, peer.UpdatePending = byPeer[peer.ID].PeerUpdateState(peer.Version, peer.UpdatePending, peer.Age, now)
+	}
 	return serverView{Status: st, NetFullAccess: full, Updates: updates}, nil
 }
 

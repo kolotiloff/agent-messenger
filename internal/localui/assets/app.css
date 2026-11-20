@@ -52,6 +52,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-good:light-dark(#237449,#8ccda6);
   --am-bad:light-dark(#b42318,#f28b82);
   --am-run:light-dark(#287bd7,#67aaf9);
+  --am-agent-running-text:light-dark(#175da7,#7cb7ff);
+  --am-agent-running-highlight:light-dark(#123d75,#d6ebff);
   --am-update-arrow:light-dark(#815305,#f2c65b);
   --am-update-hover:color-mix(in srgb,var(--am-update-arrow) 20%,transparent);
   /* Brighter than a warning brown so "waits for the owner" reads as yellow. */
@@ -272,7 +274,27 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-agent-model { flex:1 1 0; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--am-muted); }
 #am-concept .am-agent-status { margin-left:auto; flex:none; white-space:nowrap; }
 #am-concept .am-agent-line :is(.am-agent-model,.am-agent-status) { font-size:var(--am-text-s); }
-#am-concept .am-agent-run .am-agent-status { color:var(--am-run); }
+#am-concept .am-agent-run :is(.am-agent-model,.am-agent-status) { font-size:inherit; }
+#am-concept .am-agent-running-label { color:var(--am-agent-running-text); }
+#am-concept .am-agent-running-label .am-agent-model { color:inherit; }
+#am-concept .am-agent-run .am-agent-status {
+  margin-left:0;
+  padding-inline:var(--am-space-1);
+  border-radius:var(--am-radius-xs);
+  color:var(--am-agent-running-text);
+  background:color-mix(in srgb,var(--am-agent-running-text) 13%,transparent);
+}
+@media (prefers-reduced-motion:no-preference) and (forced-colors:none) {
+  @supports (background-clip:text) {
+    #am-concept .am-agent-running-label {
+      color:transparent;
+      background:linear-gradient(100deg,var(--am-agent-running-text) 40%,var(--am-agent-running-highlight) 50%,var(--am-agent-running-text) 60%) 100% 0 / 260% 100% no-repeat;
+      background-clip:text;
+      animation:am-agent-running-sweep 3s linear infinite;
+    }
+  }
+}
+@keyframes am-agent-running-sweep { to { background-position:0 0; } }
 #am-concept .am-agent-wait .am-agent-status { color:var(--am-wait); }
 #am-concept .am-agent-line.am-agent-offline { color:var(--am-disabled-text); }
 #am-concept .am-side-bottom { display:flex; flex-direction:column; gap:var(--am-gap-control); margin-top:auto; padding-top:var(--am-space-3); border-top:1px solid var(--am-line); flex-shrink:0; }

@@ -510,7 +510,8 @@
       // «ждёт ответа» in yellow. A free agent is just its name.
       const line=el('div',undefined,'am-agent-line am-agent-'+state);line.dataset.provider=provider;
       line.title=(names[provider]||provider)+(a?': '+text:'');
-      line.append(el('span',shortNames[provider]||provider));
+      const identity=el('span',shortNames[provider]||provider,state==='run'?'am-agent-running-label':'');
+      line.append(identity);
       if(state==='run'||state==='wait'){
         const tasks=(busyTasks.get(computer+'\0'+provider)||[]).filter(t=>state==='run'?t.state==='running':t.state!=='running');
         const dates=tasks.map(t=>t.started_at||t.created_at).filter(at=>Number.isFinite(Date.parse(at)));
@@ -518,7 +519,9 @@
         const models=[...new Set(tasks.map(t=>t.ran_model||t.model).filter(Boolean))];
         if(models.length){
           const label=el('span',models.map(m=>modelName(m).replace(/ Medium$/,' Med')).join(', '),'am-agent-model');
-          label.title=models.join(', ');line.append(label);
+          label.title=models.join(', ');
+          if(state==='run')identity.append(' ',label);
+          else line.append(label);
         }
         const count=state==='wait'?a.waiting_owner:a.running;
         const status=first?(count>1?'('+count+') ':'')+minutes(first):
