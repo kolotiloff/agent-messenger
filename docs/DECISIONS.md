@@ -538,3 +538,11 @@ Amends D-100: a request to install the newest signed Messenger (the program only
 2026-11-20, owner chose the compact preview and then selected the variant with a comma and muted time. Use the task list's agent label size for the sidebar's agent name, model and timing. Place the muted running duration after a comma and space when the model is shown, with no background. Preserve the blue highlight on the agent and model, and let long labels give way to the duration.
 
 The owner also asked for a consistent size within each task card. Use 12 px throughout the card and weight 500 for the task title.
+
+## D-161 — Static blue running labels in the computer list (T-235)
+
+2026-11-20, owner requested a static activity label. Use the task list's running status color for the sidebar's running agent and model in both themes. The elapsed time stays muted. The command status animation in the conversation follows D-158.
+
+## D-162 — Show running work and reported worker models (T-236)
+
+2026-11-20, owner saw a yellow duration and missing model on cards of remote computers. Running work takes precedence in the sidebar when the agent also has a task waiting. The count includes running and waiting tasks. The timer reflects running work, and the tooltip gives the waiting count separately. A waiting-only row labels the wait explicitly. Forward a valid model reported by the worker to the computer that assigned the task. This is display metadata and never changes the requested model or task state. Older clients can ignore the message. If the worker did not report a model and the coordinator did not select one, show that the model was not specified on known task rows in the sidebar.
