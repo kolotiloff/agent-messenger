@@ -4,7 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-20 — Codex (T-228)
 
-- Made the amber arrow and installed version one update button for the local and remote computers, using regular-weight text. The existing update flow stays in place.
+- Added a separate amber arrow beside the plain installed version. Its round background appears on hover and keyboard focus.
 
 ## 2026-11-20 — Codex (T-223 to T-225)
 

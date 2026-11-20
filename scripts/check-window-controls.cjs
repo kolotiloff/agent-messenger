@@ -363,23 +363,28 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await runner.locator('.am-machine-name .am-card-update').count(),1);
       assert.equal(await page.locator('.am-machine-name #app-update-button').count(),1);
       const peerUpdate=runner.getByRole('button',{name:'Обновить до v0.99'});
-      assert.equal(await peerUpdate.locator('.am-update-label').textContent(),'v0.97');
-      assert.equal(await runner.locator('.am-machine-version').count(),0);
-      for (const part of ['svg','.am-update-label']) {
-        await peerUpdate.locator(part).click();
-        await page.locator('#confirm-dialog').waitFor({state:'visible'});
-        assert.equal(await page.locator('#confirm-title').innerText(),'Обновить Runner до v0.99?');
-        await page.locator('#confirm-cancel').click();
-      }
-      for (const theme of ['light','dark']) {
-        await page.evaluate(theme => { document.documentElement.dataset.theme=theme; },theme);
+      const peerVersion=runner.locator('.am-machine-version');
+      assert.equal(await peerVersion.textContent(),'v0.97');
+      assert.equal(await peerUpdate.locator('.am-machine-version').count(),0);
+      await page.emulateMedia({reducedMotion:'reduce'});
+      for (const [theme,arrow,muted] of [['light','rgb(129, 83, 5)','rgb(107, 107, 107)'],['dark','rgb(242, 198, 91)','rgb(160, 160, 160)']]) {
+        await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;},theme);
+        await page.mouse.move(0,0);
         const style=await peerUpdate.evaluate(node=>{
           const css=getComputedStyle(node);
-          return {color:css.color,weight:css.fontWeight,background:css.backgroundColor};
+          return {color:css.color,background:css.backgroundColor};
         });
-        assert.deepEqual(style,{color:theme==='light'?'rgb(129, 83, 5)':'rgb(242, 198, 91)',weight:'400',background:'rgba(0, 0, 0, 0)'});
+        assert.deepEqual(style,{color:arrow,background:'rgba(0, 0, 0, 0)'});
+        assert.equal(await peerVersion.evaluate(node=>getComputedStyle(node).color),muted);
+        await peerUpdate.hover();
+        assert.notEqual(await peerUpdate.evaluate(node=>getComputedStyle(node).backgroundColor),style.background);
+        assert.equal(await peerUpdate.evaluate(node=>getComputedStyle(node).borderRadius),'50%');
       }
       await page.evaluate(()=>{document.documentElement.dataset.theme='light';});
+      await peerUpdate.locator('svg').click();
+      await page.locator('#confirm-dialog').waitFor({state:'visible'});
+      assert.equal(await page.locator('#confirm-title').innerText(),'Обновить Runner до v0.99?');
+      await page.locator('#confirm-cancel').click();
       for (const computer of [page.locator('.am-machine-card[aria-current=true]'),runner]) {
         const name = computer.locator('.am-machine-name > span:nth-child(2)');
         assert(await name.evaluate(node => node.getBoundingClientRect().height >= parseFloat(getComputedStyle(node).lineHeight)-0.5),
@@ -458,9 +463,8 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const updateButton = page.locator('#app-update-button');
       await updateButton.waitFor({state: 'visible'});
       assert(!(await updateButton.evaluate(b => b.classList.contains('am-update-loading'))), 'a found update shows a download ring');
-      assert.equal(await updateButton.locator('.am-update-label').textContent(),'v0.98');
-      assert(await page.locator('#app-installed-version').isHidden());
-      await updateButton.locator('.am-update-glyph').click();
+      assert.equal(await page.locator('#app-installed-version').innerText(),'v0.98');
+      await updateButton.click();
       await page.locator('#update-dialog').waitFor({state: 'visible'});
       assert.deepEqual(updates, [{action: 'update'}]);
       update.done = 40;
@@ -473,7 +477,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await page.locator('#update-error').innerText(), 'Обновление не установлено. Программа осталась прежней.');
       await page.keyboard.press('Escape');
       await page.locator('#update-dialog').waitFor({state: 'hidden'});
-      await updateButton.locator('.am-update-label').click();
+      await updateButton.click();
       await page.locator('#update-dialog').waitFor({state: 'visible'});
       update.state = 'downloading';
       await page.keyboard.press('Escape');

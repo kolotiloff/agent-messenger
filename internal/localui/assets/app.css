@@ -52,7 +52,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-good:light-dark(#237449,#8ccda6);
   --am-bad:light-dark(#b42318,#f28b82);
   --am-run:light-dark(#287bd7,#67aaf9);
-  --am-update-link:light-dark(#815305,#f2c65b);
+  --am-update-arrow:light-dark(#815305,#f2c65b);
+  --am-update-hover:color-mix(in srgb,var(--am-update-arrow) 20%,transparent);
   /* Brighter than a warning brown so "waits for the owner" reads as yellow. */
   --am-wait:light-dark(#c98a00,#f2c94c);
   --am-claude:#d97757;
@@ -262,7 +263,6 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-machine-name > span:nth-child(2) { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #am-concept .am-machine-version { white-space:nowrap; }
 #am-concept .am-machine-version .am-version { margin:0; }
-#am-concept .am-local-version:not(:has(> :not([hidden]))) { display:none; }
 #am-concept .am-card-update { display:flex; }
 #am-concept .am-card-update:not(:has(> :not([hidden]))) { display:none; }
 #am-concept .am-machine-agents { display:flex; flex-direction:column; gap:var(--am-space-1); }
@@ -286,23 +286,27 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-theme-setting > :last-child { flex:0 0 12em; }
 #am-concept .am-theme-setting .am-select-trigger { width:100%; }
 #am-concept .am-version { font-size:var(--am-text-xs); color:var(--am-muted); line-height:1.4; }
-/* The arrow and installed version share one hit target (T-228). */
+/* An available update is a separate amber arrow next to the version (T-228). */
 #am-concept .am-version-row { display:flex; align-items:center; justify-content:flex-end; gap:var(--am-space-1); min-width:0; }
+/* The round update icon is smaller than the icon buttons; its margins give it
+   the same box so the three icons sit at equal steps (owner, T-152). */
+#am-concept .am-version-row .am-update-icon { margin-inline:calc((var(--am-control-compact) - 22px) / 2); }
 #am-concept .am-version-row .am-version { margin:0; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-#am-concept .am-update-icon { flex-shrink:0; display:inline-flex; align-items:center; gap:var(--am-space-1); color:var(--am-update-link); }
-#am-concept button.am-update-icon { min-height:var(--am-computer-update-size); padding:0; background:transparent; color:var(--am-update-link); font-size:var(--am-text-xs); font-weight:400; line-height:1.4; white-space:nowrap; }
-#am-concept button.am-update-icon:is(:hover,:focus-visible,:active):not(:disabled) { background:transparent; }
-#am-concept button.am-update-icon:is(:hover,:focus-visible):not(:disabled) .am-update-label { text-decoration:underline; text-underline-offset:.2em; }
-#am-concept button.am-update-icon:disabled, #am-concept .am-update-icon.am-update-wait { opacity:.6; cursor:default; }
+#am-concept button.am-update-icon { flex-shrink:0; width:22px; height:22px; min-height:0; padding:0; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background:transparent; color:var(--am-update-arrow); }
+#am-concept button.am-update-icon:is(:hover,:focus-visible,:active):not(:disabled) { background:var(--am-update-hover); }
+#am-concept button.am-update-icon:disabled { opacity:.6; cursor:default; }
 #am-concept button.am-update-icon[hidden] { display:none; }
-/* The download ring surrounds only the arrow. */
-#am-concept .am-update-glyph { width:var(--am-computer-update-size); height:var(--am-computer-update-size); position:relative; display:grid; place-items:center; }
-#am-concept .am-update-icon svg { width:13px; height:13px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+/* While an update downloads, a ring around the same arrow fills from 0 to
+   100% (owner, 2026-11-14). Asked for, waiting for tasks or under way on
+   another computer: the same arrow, dimmed and still. */
+#am-concept button.am-update-icon { position:relative; }
 #am-concept .am-update-icon .am-update-progress { display:none; }
-#am-concept .am-update-icon.am-update-loading .am-update-progress { display:block; position:absolute; inset:0; width:100%; height:100%; transform:rotate(-90deg); pointer-events:none; }
+#am-concept button.am-update-icon.am-update-loading .am-update-progress { display:block; position:absolute; inset:0; width:100%; height:100%; transform:rotate(-90deg); pointer-events:none; }
 #am-concept .am-update-progress circle { fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-dasharray:100; stroke-dashoffset:calc(100 - 100 * var(--am-update-p, 0)); transition:stroke-dashoffset .35s linear; }
 #am-concept button.am-update-icon.am-update-loading:disabled { opacity:1; }
+#am-concept .am-update-icon.am-update-wait { flex-shrink:0; width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background:transparent; color:var(--am-update-arrow); opacity:.6; cursor:default; }
 @media (prefers-reduced-motion:reduce) { #am-concept .am-update-progress circle { transition:none; } }
+#am-concept .am-update-icon svg { width:13px; height:13px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
 
 /* Main pane and tabs */
 #am-concept .am-main { display:flex; flex-direction:column; gap:var(--am-gap-content); min-width:0; min-height:0; padding:var(--am-pane-inset) 0; overflow:hidden; }
@@ -785,3 +789,5 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-connect-body details { align-self:stretch; }
 #am-concept .am-connect-body details button { margin-top:var(--am-space-2); }
 @media (max-width: 720px) { #am-concept .am-chain { flex-direction:column; } #am-concept .am-chain-arrow { transform:rotate(90deg); } }
+
+#am-concept .am-card-update .am-update-icon { width:var(--am-computer-update-size); height:var(--am-computer-update-size); }
