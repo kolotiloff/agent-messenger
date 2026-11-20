@@ -4,7 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-20 — Codex (T-228)
 
-- Gave the computer card update icon a filled amber circle and a dark arrow in both themes. The update controls keep their existing layout and behavior.
+- Made the amber arrow and installed version one update button for the local and remote computers, using regular-weight text. The existing update flow stays in place.
 
 ## 2026-11-20 — Codex (T-223 to T-225)
 

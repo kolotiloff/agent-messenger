@@ -501,6 +501,6 @@ Amends D-100: a request to install the newest signed Messenger (the program only
 
 2026-11-19, owner approved short captions with type icons and the existing right-hand disclosure arrows. The group count sits above the category breakdown. Use the provider description when supplied. Old history and actions without descriptions get conservative captions based on the recorded tool or command. Expanding an action shows the saved text.
 
-## D-154 — Amber update indicator (T-228)
+## D-154 — Clickable version for available updates (T-228)
 
-2026-11-20, owner wanted the update icon to stand out on the computer cards. Its filled amber circle and dark arrow distinguish it from the blue running status in both themes. Keep the existing icon placement, geometry and interactions.
+2026-11-20, owner wanted the update icon to stand out on the computer cards. Keep the installed version at its regular weight. When an update is available, the arrow and version turn amber and form a single button; hovering or keyboard focus underlines the number. The current version stays plain text. Keep the normal update flow for both local and remote computers.

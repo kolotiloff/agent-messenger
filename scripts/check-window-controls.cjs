@@ -362,6 +362,24 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await runner.locator('.am-agent-status').textContent(),'3 мин');
       assert.equal(await runner.locator('.am-machine-name .am-card-update').count(),1);
       assert.equal(await page.locator('.am-machine-name #app-update-button').count(),1);
+      const peerUpdate=runner.getByRole('button',{name:'Обновить до v0.99'});
+      assert.equal(await peerUpdate.locator('.am-update-label').textContent(),'v0.97');
+      assert.equal(await runner.locator('.am-machine-version').count(),0);
+      for (const part of ['svg','.am-update-label']) {
+        await peerUpdate.locator(part).click();
+        await page.locator('#confirm-dialog').waitFor({state:'visible'});
+        assert.equal(await page.locator('#confirm-title').innerText(),'Обновить Runner до v0.99?');
+        await page.locator('#confirm-cancel').click();
+      }
+      for (const theme of ['light','dark']) {
+        await page.evaluate(theme => { document.documentElement.dataset.theme=theme; },theme);
+        const style=await peerUpdate.evaluate(node=>{
+          const css=getComputedStyle(node);
+          return {color:css.color,weight:css.fontWeight,background:css.backgroundColor};
+        });
+        assert.deepEqual(style,{color:theme==='light'?'rgb(129, 83, 5)':'rgb(242, 198, 91)',weight:'400',background:'rgba(0, 0, 0, 0)'});
+      }
+      await page.evaluate(()=>{document.documentElement.dataset.theme='light';});
       for (const computer of [page.locator('.am-machine-card[aria-current=true]'),runner]) {
         const name = computer.locator('.am-machine-name > span:nth-child(2)');
         assert(await name.evaluate(node => node.getBoundingClientRect().height >= parseFloat(getComputedStyle(node).lineHeight)-0.5),
@@ -440,7 +458,9 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const updateButton = page.locator('#app-update-button');
       await updateButton.waitFor({state: 'visible'});
       assert(!(await updateButton.evaluate(b => b.classList.contains('am-update-loading'))), 'a found update shows a download ring');
-      await updateButton.click();
+      assert.equal(await updateButton.locator('.am-update-label').textContent(),'v0.98');
+      assert(await page.locator('#app-installed-version').isHidden());
+      await updateButton.locator('.am-update-glyph').click();
       await page.locator('#update-dialog').waitFor({state: 'visible'});
       assert.deepEqual(updates, [{action: 'update'}]);
       update.done = 40;
@@ -453,7 +473,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await page.locator('#update-error').innerText(), 'Обновление не установлено. Программа осталась прежней.');
       await page.keyboard.press('Escape');
       await page.locator('#update-dialog').waitFor({state: 'hidden'});
-      await updateButton.click();
+      await updateButton.locator('.am-update-label').click();
       await page.locator('#update-dialog').waitFor({state: 'visible'});
       update.state = 'downloading';
       await page.keyboard.press('Escape');

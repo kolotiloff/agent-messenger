@@ -598,6 +598,7 @@
       // T-128: an older computer gets the update icon next to its dot; the
       // owner confirms in a popup.
       const busy=updateLine(peer);
+      const offersUpdate=!busy&&fresh&&peer.version&&versionOlder(peer.version,newestVersion());
       if(busy){
         // While an update is asked for, waits for tasks or is under way, the
         // arrow stays, dimmed and still, and says so on hover: another
@@ -606,15 +607,16 @@
         const tip=busy[0];
         const b=el('span',undefined,'am-update-icon am-peer-update am-update-wait');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);appendUpdateGlyphs(b);
         corner.append(b);
-      }else if(fresh&&peer.version&&versionOlder(peer.version,newestVersion())){
+      }else if(offersUpdate){
         const newest=versionName(newestVersion()),label=tr('Обновить до ')+newest;
         const b=el('button',undefined,'am-update-icon am-peer-update');b.type='button';b.title=label;b.setAttribute('aria-label',label);appendUpdateGlyphs(b);
+        b.append(el('span',versionName(peer.version),'am-update-label'));
         b.addEventListener('click',event=>{event.stopPropagation();askConfirm(tr('Обновить ')+(peer.name||tr('компьютер'))+tr(' до ')+newest+'?',tr('Программа на том компьютере обновится и перезапустится. Задачи и история сохранятся.')+(peer.host?' '+tr('На нём работает сервер сети: пока он перезапускается, компьютеры не видят друг друга. Если там попросят подтверждение, сервер не вернётся, пока кто-нибудь не ответит у того компьютера.'):''),tr('Обновить'),()=>requestUpdate(peer),true);});
         b.addEventListener('keydown',event=>event.stopPropagation());
         corner.append(b);
       }
       if(corner.children.length)meta.append(corner);
-      if(peer.version)meta.append(el('span',versionName(peer.version),'am-version am-machine-version'));
+      if(peer.version&&!offersUpdate)meta.append(el('span',versionName(peer.version),'am-version am-machine-version'));
       name.append(meta);card.append(name);
       if(revokeAsk===peer.id&&hosted.has(peer.id)){
         card.append(el('p',tr('Отозвать устройство? Вернуть его можно только новым приглашением.'),'am-small am-muted'));
@@ -2457,7 +2459,16 @@
     for(const v of [clientInfo?.window_version,clientInfo?.client_version,knownUpdate,...(server?.peers||[]).map(p=>p.version)])if(v&&(!best||versionOlder(best,v)))best=v;
     return best;
   }
-  // The update icon says in its tooltip which version came out (T-066).
+  function showLocalUpdateVersion(installed, offered){
+    const text=versionText(installed);
+    const version=$('app-installed-version');
+    version.textContent=text;
+    version.title=text?tr('Версия ')+text.slice(1):'';
+    version.hidden=!text||offered;
+    $('app-update-label').textContent=text||tr('Обновить');
+    $('app-update-button').hidden=!offered;
+  }
+  // The update control says which version came out (T-066).
   function updateTip(version,busy){
     const name=versionName(version);
     let text=busy==='installing'?tr('Обновление устанавливается'):busy?tr('Обновление загружается'):name?tr('Вышла ')+name+tr('. Нажмите, чтобы обновить'):tr('Обновить');
@@ -2501,17 +2512,15 @@
     const status=macUpdate||{};
     const version=typeof status?.version==='string'?status.version:'';
     const installed=typeof status?.installedVersion==='string'?status.installedVersion:'';
-    $('app-installed-version').hidden=!installed;
-    $('app-installed-version').title=installed?tr('Версия ')+versionName(installed).slice(1):'';
-    // Only an update ready to install is shown, as the blue icon next to
-    // the version: a download in the background stays quiet, so the icon
+    // Only a known update makes the version interactive. A download in
+    // the background stays quiet, so the control
     // does not appear once for the download and again for the install
     // (owner, 2026-11-15). Background checks and their failures stay quiet.
     const loading=!!updateProgress&&!!version;
     const shown=!!version;
     if(version)knownUpdate=version;
-    $('app-update-version').hidden=true;$('app-update-button').hidden=!shown;
-    $('app-installed-version').textContent=versionText(installed);
+    $('app-update-version').hidden=true;
+    showLocalUpdateVersion(installed,shown);
     updateTip(version,loading);
     showUpdateProgress();
     $('app-update-button').disabled=loading;
@@ -2523,8 +2532,6 @@
   function renderSelfUpdate(){
     const s=selfUpdate;if(!s)return;
     const installed=typeof s.installed_version==='string'?s.installed_version:'';
-    $('app-installed-version').hidden=!installed;
-    $('app-installed-version').title=installed?tr('Версия ')+versionName(installed).slice(1):'';
     const version=typeof s.version==='string'?s.version:'';
     if(version&&s.state==='available')knownUpdate=version;
     // A check that only asks GitHub shows nothing; a download fills the ring
@@ -2537,8 +2544,8 @@
     const done=s.state==='installed',shown=offered||installing||done||!!s.message;
     // The arrow while an update waits (owner, T-056, T-066). A line appears
     // only for an error or after the update.
-    $('app-update-version').hidden=!s.message&&!done;$('app-update-button').hidden=!shown||done;
-    $('app-installed-version').textContent=versionText(installed);
+    $('app-update-version').hidden=!s.message&&!done;
+    showLocalUpdateVersion(installed,shown&&!done);
     $('app-update-version').textContent=s.message||(done?tr('Обновлено. Окно откроется заново.'):'');
     updateTip(version,installing?'installing':loading);
     $('app-update-button').classList.remove('am-update-loading');
@@ -2643,7 +2650,8 @@
   $('update-close').addEventListener('click',()=>{updateRun=null;clearTimeout(updateRunTimer);$('update-dialog').close();loadSelfUpdate();});
   // The download and the install are not cancelled halfway.
   $('update-dialog').addEventListener('cancel',event=>{if(!updateRun?.error)event.preventDefault();else{updateRun=null;}});
-  $('app-update-button').addEventListener('click',()=>{
+  $('app-update-button').addEventListener('click',event=>{
+    event.stopPropagation();
     if(window.webkit?.messageHandlers?.updates)startMacUpdate();
     else startUpdate();
   });
