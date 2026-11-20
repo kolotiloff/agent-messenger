@@ -996,7 +996,7 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 			return applyNote(tx, from, b)
 		case "cancel":
 			return applyCancel(tx, from, s.gone)
-		case "accepted", "refused", "event", "answer_refused", "continue_refused", "note_refused", "progress":
+		case "accepted", "refused", "event", "answer_refused", "continue_refused", "note_refused", "progress", "ran_model":
 			return applyReport(tx, from, b)
 		case "log_request":
 			return applyLogRequest(tx, from, b)
@@ -1172,6 +1172,13 @@ func applyReport(tx *sql.Tx, from netLink, b netBody) error {
 		return nil
 	}
 	if err != nil {
+		return err
+	}
+	if b.Kind == "ran_model" {
+		if b.Model == "" || !ValidTaskModel(b.Model) {
+			return nil
+		}
+		_, err := tx.Exec(`UPDATE tasks SET ran_model=? WHERE id=?`, b.Model, t.ID)
 		return err
 	}
 	name := peerName(tx, from.peer)
@@ -1374,7 +1381,7 @@ func NetDescribe(body []byte) (desc string, progress bool) {
 // parkedKinds are the replies of the computer that runs another computer's
 // task. When their recipient is not in the network, they are parked, not
 // dropped (T-146).
-var parkedKinds = map[string]bool{"event": true, "accepted": true, "refused": true, "answer_refused": true, "continue_refused": true, "note_refused": true, "output": true}
+var parkedKinds = map[string]bool{"event": true, "accepted": true, "refused": true, "answer_refused": true, "continue_refused": true, "note_refused": true, "output": true, "ran_model": true}
 
 // parkedPrefix marks the broker of a parked message, so it is not sent
 // until its recipient is back.

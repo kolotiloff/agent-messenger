@@ -257,6 +257,7 @@
   'работает':'working',
   'Настройки программы':'App settings',
   'ждёт ответа':'waiting for an answer',
+  'модель не указана':'model not specified',
   'Скопируйте путь вручную: ':'Copy the path by hand: ',
   'Вниз, к новым сообщениям':'Down to new messages',
   'Удалить из списка':'Remove from list',

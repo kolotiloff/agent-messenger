@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-20 — Codex (T-236)
+
+- Kept running work blue when another task for the agent waits, counted both tasks, and delivered worker model reports to the assigning computer.
+
 ## 2026-11-20 — Codex (T-235)
 
 - Matched the sidebar activity label to the task list's blue and removed its animation.

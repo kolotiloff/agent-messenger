@@ -359,9 +359,9 @@
     if(c.includes('claude')||!c||c==='coordinator')return ['claude','Claude'];
     return ['',client];
   }
-  function agentState(a){
+  function agentState(a,preferRunning=false){
     if(!online)return ['offline',tr('Нет связи')];
-    if(a.waiting_owner>0)return ['wait',tr('Ждёт ответа')];
+    if(a.waiting_owner>0&&(!preferRunning||!a.running))return ['wait',tr('Ждёт ответа')];
     if(a.running>0)return ['run',a.running>1?tr('Работает (')+a.running+')':tr('Работает')];
     return ['idle',tr('Свободен')];
   }
@@ -541,11 +541,11 @@
       // Messenger's tools is listed but not lit: nothing tells whether it is
       // still open.
       const {running,waiting,counts}=agentActivity(a,computer,busyTasks.get(computer+'\0'+provider)||[],reportedRuns);
-      const [state,text]=live?agentState(counts):['offline',tr('Нет связи')];
+      const [state,text]=live?agentState(counts,true):['offline',tr('Нет связи')];
       // A busy agent says so to the right of its name: «работает» in blue,
       // «ждёт ответа» in yellow. A free agent is just its name.
       const line=el('div',undefined,'am-agent-line am-agent-'+state);line.dataset.provider=provider;
-      line.title=(names[provider]||provider)+(a?': '+text:'');
+      line.title=(names[provider]||provider)+(a?': '+text:'')+(state==='run'&&counts.waiting_owner>0?' · '+tr('Ждёт ответа')+' ('+counts.waiting_owner+')':'');
       const identity=el('span',shortNames[provider]||provider,state==='run'?'am-agent-running-label':'');
       line.append(identity);
       if(state==='run'||state==='wait'){
@@ -553,15 +553,16 @@
         const dates=tasks.map(taskStart).filter(at=>Number.isFinite(Date.parse(at)));
         const first=dates.reduce((old,at)=>!old||Date.parse(at)<Date.parse(old)?at:old,'');
         const models=[...new Set(tasks.map(t=>t.ran_model||t.model).filter(Boolean))];
-        if(models.length){
-          const label=el('span',models.map(m=>modelName(m).replace(/ Medium$/,' Med')).join(', '),'am-agent-model');
-          label.title=models.join(', ');
+        if(models.length||tasks.length){
+          const label=el('span',models.length?models.map(m=>modelName(m).replace(/ Medium$/,' Med')).join(', '):tr('модель не указана'),'am-agent-model');
+          if(models.length)label.title=models.join(', ');
           if(state==='run')identity.append(' ',label);
           else line.append(label);
         }
-        const count=state==='wait'?counts.waiting_owner:counts.running;
-        if(first)line.append(elapsedLabel(first,count>1?'('+count+') ':'','am-agent-status'));
-        else line.append(el('span',state==='wait'?tr('ждёт ответа'):tr('работает')+(count>1?' ('+count+')':''),'am-agent-status'));
+        const total=counts.running+counts.waiting_owner;
+        const count=total>1?'('+total+')':'';
+        if(state==='run'&&first)line.append(elapsedLabel(first,count?count+' ':'','am-agent-status'));
+        else line.append(el('span',(state==='wait'?tr('ждёт ответа'):tr('работает'))+(count?' '+count:''),'am-agent-status'));
       }else if(!live){
         line.append(el('span',tr('нет связи'),'am-agent-status'));
       }

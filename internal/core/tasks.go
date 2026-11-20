@@ -1230,8 +1230,35 @@ func (s *Store) SetTaskRunModel(run, model string) error {
 	if model == "" || len(model) > 120 {
 		return nil
 	}
-	_, err := s.db.Exec(`UPDATE tasks SET ran_model=? WHERE id=(SELECT task_id FROM task_runs WHERE id=?)`, model, run)
-	return err
+	return s.tx(func(tx *sql.Tx) error {
+		var task, previous string
+		err := tx.QueryRow(`SELECT t.id,COALESCE(t.ran_model,'') FROM task_runs r JOIN tasks t ON t.id=r.task_id WHERE r.id=?`, run).Scan(&task, &previous)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if previous == model {
+			return nil
+		}
+		if _, err := tx.Exec(`UPDATE tasks SET ran_model=? WHERE id=?`, model, task); err != nil {
+			return err
+		}
+		if !ValidTaskModel(model) {
+			return nil
+		}
+		link, err := taskLink(tx, task)
+		if err != nil || link.origin == nil {
+			return err
+		}
+		op, err := randomID()
+		if err != nil {
+			return err
+		}
+		origin := link.origin
+		return enqueueNet(tx, origin.broker, origin.peer, "ran_model."+op, task, netBody{Kind: "ran_model", Task: origin.task, Model: model})
+	})
 }
 
 // BindTaskSession checks the conversation ID the CLI reported. A Claude task

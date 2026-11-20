@@ -299,9 +299,9 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const ended = '2026-11-14T09:30:00Z';
       const stat = {id:'old-1',title:'Old 1',at:'2026-11-19T09:20:00',project:'Frame',agent:'codex',model:'gpt-6.2-sol[effort=medium]',computer:'Runner',tokens:12};
       const localTask = {id:'local-task',title:'Local task',project:'Frame',agent:'codex',state:'running',created_at:began,started_at:began,model:'gpt-6.2-sol[effort=low]',ran_model:'gpt-6.2-sol[effort=medium]'};
-      const remoteTask = {...localTask,id:'remote-task',title:'Remote task',created_at:new Date(Date.now()-8*60*1000).toISOString(),remote:{id:'dev-1',name:'Runner',worker:'none'}};
+      const remoteTask = {...localTask,id:'remote-task',title:'Remote task',created_at:new Date(Date.now()-8*60*1000).toISOString(),model:'',ran_model:'',remote:{id:'dev-1',name:'Runner',worker:'none'}};
       let remoteRow = remoteTask;
-      let runnerAgents = [{agent:'cursor',running:1},{agent:'claude',waiting_owner:1},{agent:'codex'}];
+      let runnerAgents = [{agent:'cursor',running:1},{agent:'claude',waiting_owner:1},{agent:'codex',running:1,waiting_owner:1}];
       let runnerWorkers = [];
       const ownerNotes = [];
       const update = {state: 'found', version: '0.0.0-preview.99'};
@@ -387,6 +387,11 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await runner.locator('.am-agent-wait').count(),1);
       assert.equal(await runner.locator('.am-agent-idle').count(),0);
       assert.equal(await runner.locator('.am-agent-running-label').count(),2);
+      assert.equal(await runner.locator('[data-provider=claude] .am-agent-status').textContent(),'ждёт ответа');
+      const overlappingAgent=runner.locator('.am-agent-run[data-provider=codex]');
+      assert.equal(await overlappingAgent.locator('.am-agent-model').textContent(),'модель не указана');
+      assert.equal(await overlappingAgent.locator('.am-agent-status').textContent(),'(2) 3 мин');
+      assert.match(await overlappingAgent.getAttribute('title'),/Ждёт ответа/);
       assert.equal(await runningLabel.evaluate(node=>getComputedStyle(node).animationName),'none');
       assert.equal(await runningTimer.evaluate(node=>getComputedStyle(node).animationName),'none');
       const rowFontSize=await page.locator('.am-task-agent').first().evaluate(node=>getComputedStyle(node).fontSize);
@@ -540,8 +545,8 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const remoteList=page.locator('.am-task',{hasText:remoteTask.title});
       const remoteHead=page.locator('#task-head');
       assert.equal(await remoteList.locator('.am-task-when').getAttribute('datetime'),began);
-      // The feed can still say the old model. All three surfaces take the
-      // model and state from the task row, and tick without a new payload.
+      // The feed may not yet have a model. All three surfaces take the model
+      // and state from the task row, and tick without a new payload.
       remoteRow={...remoteTask,ran_model:'gpt-6.2-astra[effort=high]'};
       await remoteHead.getByText(/Astra 6\.2 High/).waitFor();
       assert.equal(await remoteList.locator('.am-task-model').textContent(),'Astra 6.2 High');
@@ -556,7 +561,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         const row=[...document.querySelectorAll('.am-task')].find(node=>node.textContent.includes('Remote task'));
         const right=row?.querySelector('[data-elapsed-from]');
         const center=document.querySelector('#task-head [data-elapsed-from]');
-        return sidebar?.textContent==='4 мин'&&right?.textContent==='Работает 4 мин'&&center?.textContent===right.textContent;
+        return sidebar?.textContent==='(2) 4 мин'&&right?.textContent==='Работает 4 мин'&&center?.textContent===right.textContent;
       });
       assert.equal(await page.evaluate(()=>window.elapsedSample===document.querySelector('#thread .am-rich')),true);
       // Keep the broker and feed stale while the task row records completion.
