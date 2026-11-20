@@ -293,6 +293,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       // 2026-11-15: one button and one dialog).
       const began = new Date(Date.now() - 3 * 60 * 1000).toISOString();
       let commandFinished = false;
+      let laterActivity = false;
       let mixedActions = false;
       const commandStarted = new Date(Date.now() - 72 * 1000).toISOString();
       const ended = '2026-11-14T09:30:00Z';
@@ -334,8 +335,13 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
               {kind:'tool',title:'Команда',text:'ls Assets/Infantry/Client',at:began},
               {kind:'tool',title:'Команда',text:"python3 - <<'PY'\nprint('test')\nPY",at:began},
             );
-            if (commandFinished) items.push({kind:'command_end',title:'fixture-command',at:began});
             if (mixedActions) items.push({kind:'tool',title:'read',text:'ProjectSettings.asset',at:began});
+            if (laterActivity) items.push(
+              {kind:'text',text:'Moving on to regression tests',at:began},
+              {kind:'command_start',title:'second-command',at:commandStarted},
+              {kind:'tool',title:'Bash',text:'go test ./...',at:began}
+            );
+            if (commandFinished) items.push({kind:'command_end',title:'fixture-command',at:began});
           }
           return route.fulfill({json:{task:remote?remoteTask:localTask,items}});
         }
@@ -447,17 +453,36 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await closedTime.getAttribute('datetime'),ended);
       assert.match(await closedTime.innerText(),/\d{1,2}:\d{2}/);
       assert.equal(await page.locator('#thread .am-outcome time').getAttribute('datetime'),began);
-      const actionGroup=page.locator('#thread .am-tool-group');
+      const toolGroups=page.locator('#thread .am-tool-group');
+      const actionGroup=toolGroups.first();
       await actionGroup.locator(':scope > summary').click();
       const timer=actionGroup.locator('.am-tool-timer');
       assert.match(await timer.innerText(),/^1 мин \d{1,2} с$/);
       const label=actionGroup.getByText('Выполняются команды',{exact:true});
       const fontSize=locator=>locator.evaluate(node=>getComputedStyle(node).fontSize);
+      const color=locator=>locator.evaluate(node=>getComputedStyle(node).color);
+      const animation=locator=>locator.evaluate(node=>getComputedStyle(node).animationName);
       assert.equal(await fontSize(timer),await fontSize(label));
+      await page.emulateMedia({reducedMotion:'no-preference'});
+      assert.equal(await animation(label),'am-agent-running-sweep');
+      assert.equal(await animation(timer),'none');
+      await page.emulateMedia({reducedMotion:'reduce'});
+      assert.equal(await animation(label),'none');
+      assert.equal(await color(timer),await color(label));
       const startText=await timer.innerText();
       await page.waitForFunction(text=>document.querySelector('.am-tool-timer')?.textContent!==text,startText);
+      laterActivity=true;
+      await actionGroup.getByText('5 действий',{exact:true}).waitFor();
+      assert.equal(await timer.count(),0);
+      await toolGroups.nth(1).getByText('Выполняются команды',{exact:true}).waitFor();
+      assert.equal(await page.locator('#thread .am-tool-timer').count(),1);
       commandFinished=true;
-      await actionGroup.getByText('Выполнено 5 команд',{exact:true}).waitFor();
+      const finishedLabel=actionGroup.getByText('Выполнено 5 команд',{exact:true});
+      await finishedLabel.waitFor();
+      assert.equal(await color(finishedLabel),await color(toolGroups.nth(1).locator('.am-tool-timer')));
+      await page.emulateMedia({reducedMotion:'no-preference'});
+      assert.equal(await animation(finishedLabel),'none');
+      await page.emulateMedia({reducedMotion:'reduce'});
       assert.equal(await timer.count(),0);
       assert.equal(await actionGroup.getAttribute('open'),'');
       assert.equal(await actionGroup.locator('.am-tool-breakdown').count(),0);
@@ -471,6 +496,17 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       if (process.env.SCREENSHOT_DIR) await page.screenshot({path: path.join(process.env.SCREENSHOT_DIR, 'frameless.png')});
       await page.locator('.am-task-title',{hasText:remoteTask.title}).click();
       const reply = page.locator('#answer-text');
+      const chatType=locator=>locator.evaluate(node=>{
+        const {fontSize,fontWeight,lineHeight}=getComputedStyle(node);
+        return [fontSize,fontWeight,lineHeight];
+      });
+      const chatBody=page.locator('#thread .am-message-content').last();
+      for(const width of [1100,600]){
+        await page.setViewportSize({width,height:600});
+        assert.deepEqual(await chatType(chatBody),['14px','400','21px']);
+        assert.deepEqual(await chatType(reply),await chatType(chatBody));
+      }
+      await page.setViewportSize({width:1100,height:600});
       await reply.fill('Use blue');
       await page.locator('#answer-send').click();
       await page.getByText('Поставлено в очередь для исполнителя',{exact:true}).waitFor();

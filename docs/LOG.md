@@ -2,6 +2,14 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-20 — Codex (T-233)
+
+- Reduced the chat body and input to 14 px regular text and kept a 21 px line height. Checked both at wide and narrow window widths.
+
+## 2026-11-20 — Codex (T-232)
+
+- Stopped older command-group timers when a newer worker action arrives. Made command-group headings muted and used a neutral sweep on the live label. The first 0.89 build was cancelled before publishing.
+
 ## 2026-11-20 — Codex (T-231)
 
 - Aligned the task header and known sidebar activity with the list, and updated running durations even with no new messages. The Chromium fixture passed with an older conversation response and stale remote presence. Included in [PR #147](https://github.com/kolotiloff/agent-messenger/pull/147).

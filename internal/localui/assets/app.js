@@ -1323,10 +1323,22 @@
     for(const [index,it] of feed.items.entries()){
       if(it.kind==='command_start'){pending.set(it.title,index);unfinished.add(index);}
       if(it.kind==='command_end'){unfinished.delete(pending.get(it.title));pending.delete(it.title);}
-      if(['answer','report','question','outcome'].includes(it.kind))pending.clear();
+      if(['task','answer','report','question','outcome'].includes(it.kind))pending.clear();
     }
     const running=t.state==='running'&&!t.pending_launch&&!t.remote?.lost&&!t.remote?.silent&&online;
-    const live=new Set(running?pending.values():[]);
+    // Only the latest worker action group can show a timer. Keep matching
+    // late command ends so an earlier group can still show its finished count.
+    let liveFrom=feed.items.length;
+    if(running&&pending.size){
+      for(let i=feed.items.length-1;i>=0;i--){
+        const {kind}=feed.items[i];
+        if(kind==='command_end')continue;
+        if(kind==='tool'||kind==='command_start'){liveFrom=i;continue;}
+        if(liveFrom===feed.items.length&&(kind==='note'||kind==='accepted'))continue;
+        break;
+      }
+    }
+    const live=new Set([...pending.values()].filter(index=>index>=liveFrom));
     // Lifecycle entries supply the heading only. Tool rows still come from the
     // provider's original feed, in the same order and with the same content.
     const collectTools=key=>tools??={key,lines:[],commandsOnly:true,unfinished:false,start:0};
@@ -1343,7 +1355,7 @@
             ?tr('Выполнено {commands}').replace('{commands}',actionCount(lines.length,[tr('команда'),tr('команды'),tr('команд')]))
             :actionCount(lines.length,[tr('действие'),tr('действия'),tr('действий')]);
           const heading=el('span',undefined,'am-tool-group-title');
-          heading.append(el('span',label,start?'am-status-run':''));
+          heading.append(el('span',label,start?'am-tool-running-label':''));
           if(start){
             const timer=el('span',commandElapsed(start),'am-tool-timer');
             timer.dataset.commandStart=start;

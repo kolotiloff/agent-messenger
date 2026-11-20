@@ -112,7 +112,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-text-xs:12px;
   --am-text-s:13px;
   --am-text-m:14px;
-  --am-text-chat:15px;
+  --am-text-chat:14px;
   --am-line-chat:21px;
   --am-text-l:16px;
   --am-text-xl:18px;
@@ -286,9 +286,9 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 }
 @media (prefers-reduced-motion:no-preference) and (forced-colors:none) {
   @supports (background-clip:text) {
-    #am-concept .am-agent-running-label {
+    #am-concept :is(.am-agent-running-label,.am-tool-running-label) {
       color:transparent;
-      background:linear-gradient(100deg,var(--am-agent-running-text) 40%,var(--am-agent-running-highlight) 50%,var(--am-agent-running-text) 60%) 100% 0 / 260% 100% no-repeat;
+      background:linear-gradient(100deg,var(--am-sweep-text,var(--am-agent-running-text)) 40%,var(--am-sweep-highlight,var(--am-agent-running-highlight)) 50%,var(--am-sweep-text,var(--am-agent-running-text)) 60%) 100% 0 / 260% 100% no-repeat;
       background-clip:text;
       animation:am-agent-running-sweep 3s linear infinite;
     }
@@ -406,7 +406,12 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-meta time { color:var(--am-muted); font-size:var(--am-text-xs); }
 #am-concept .am-meta-model { color:var(--am-muted); font-size:var(--am-text-s); min-width:0; overflow-wrap:anywhere; }
 #am-concept .am-role { padding:0 var(--am-space-1); border-radius:var(--am-radius-xs); background:var(--am-soft); color:var(--am-muted); font-size:var(--am-text-xs); font-weight:400; }
-#am-concept :is(.am-message-content,.am-compose textarea) { font-size:var(--am-text-chat); line-height:var(--am-line-chat); }
+#am-concept :is(.am-message-content,.am-compose textarea) {
+  font-size:var(--am-text-chat);
+  font-weight:400;
+  line-height:var(--am-line-chat);
+  -webkit-font-smoothing:antialiased;
+}
 #am-concept .am-avatar { display:flex; align-items:center; justify-content:center; width:24px; height:28px; flex-shrink:0; }
 /* The agent's icon sits in the name line, so its text starts at the pane's
    edge like the rest of the window, not one column further in (owner). */
@@ -437,7 +442,11 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept :is(.am-tool[open] > summary, .am-tool-group[open] .am-tool-group-title)::after { transform:translateY(-3px) rotate(45deg); }
 #am-concept :is(.am-tool > summary, .am-tool-group > summary):is(:hover,:focus-visible) { color:var(--am-text); }
 #am-concept .am-tool-group > .am-tool { margin-left:var(--am-space-3); }
-#am-concept .am-tool-group-title { color:var(--am-text); font-size:var(--am-text-m); font-weight:500; }
+#am-concept .am-tool-group-title { color:var(--am-muted); font-size:var(--am-text-m); font-weight:500; }
+#am-concept .am-tool-running-label {
+  --am-sweep-text:var(--am-muted);
+  --am-sweep-highlight:color-mix(in srgb,var(--am-text) 55%,var(--am-muted));
+}
 #am-concept .am-tool-timer { margin-inline-start:var(--am-space-2); color:var(--am-muted); font-variant-numeric:tabular-nums; }
 #am-concept .am-action-entry { padding-block:var(--am-space-1); }
 #am-concept .am-action-label { overflow-wrap:anywhere; }

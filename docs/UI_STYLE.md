@@ -30,7 +30,7 @@ Buttons that belong together go in one container: `.am-actions` (a row) or `.am-
 ## Sizes
 
 - Controls: `--am-control` 32 (buttons, fields, select fields, send and stop), the size of buttons in the Claude app; `--am-control-compact` 28 (tabs, square icon buttons, the task filter); `--am-control-chip` 24 (buttons inside an error chip).
-- Text: 12 labels and meta, 13 secondary text, 14 body, 16 titles (`h3`), 18 page titles (`h2`). Chat content and its input use 15 px with a 21 px line height. Sidebar agent names use 14 px; their model and status use 13 px.
+- Text: 12 labels and meta, 13 secondary text, 14 body, 16 titles (`h3`), 18 page titles (`h2`). Chat content and its input use 14 px regular system text with a 21 px line height. Sidebar agent names use 14 px; their model and status use 13 px.
 - Colors and shadows are tokens too (`--am-shadow-s` for chips and the composer, `--am-shadow-l` for menus and dialogs).
 
 ## Components

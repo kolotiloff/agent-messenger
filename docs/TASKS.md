@@ -92,6 +92,8 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
+| T-233 | Make conversation text and input lighter and slightly smaller (owner, 2026-11-20). | window | Implemented on `codex/t232-command-status` (D-159). |
+| T-232 | Stop the live command timer on earlier action groups when the worker moves on, and use muted headings and time (owner, 2026-11-20). | window | Implemented on `codex/t232-command-status` (D-158). |
 | T-231 | Keep task status, model and elapsed time aligned across the sidebar, task list and open conversation (owner, 2026-11-20). | window | Implemented on `codex/t229-t230-sidebar-status` (D-157). |
 | T-230 | Show the confirmed computer version at the same time as the successful update notice (owner, 2026-11-20). | network + window | Implemented on `codex/t229-t230-sidebar-status` (D-156). |
 | T-229 | Highlight a running agent and put its elapsed time beside the model on a soft blue background (owner, 2026-11-20). | window | Implemented on `codex/t229-t230-sidebar-status` (D-155). |
