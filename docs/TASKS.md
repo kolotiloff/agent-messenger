@@ -15,6 +15,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
+| T-237 | Put waiting text beside the model in the computer list and remove the waiting dot from task cards (owner, 2026-11-20). | window | Implemented on `codex/t237-inline-waiting-status` (D-163). |
 | T-236 | Keep running work visible beside waiting tasks and forward remote model reports (owner, 2026-11-20). | window + network | Released in [0.91](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.91) via [PR #152](https://github.com/kolotiloff/agent-messenger/pull/152) (D-162). |
 | T-235 | Replace the animated sidebar activity label with the task list's solid blue (owner, 2026-11-20). | window | Released in [0.91](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.91) via [PR #152](https://github.com/kolotiloff/agent-messenger/pull/152) (D-161). |
 | T-041 | Agents on Windows: «Проверить версию и вход» works there (D-051); Codex (newer npm layout) and Cursor (D-052) are found and started on Windows; «Выбрать…» buttons for paths (D-053); the program's own window on Windows and Linux (D-054). Shipped in preview.35 (PR #62). Left: the owner's test on Windows. | agent + owner | `claude/t041-windows-agents` |

@@ -39,7 +39,7 @@ Buttons that belong together go in one container: `.am-actions` (a row) or `.am-
 - `.am-field` is a label with a field under it.
 - Notes about a screen (what works, what does not yet) go in a side column, not between the cards: `.am-server-layout` with `.am-server-aside`. In a window narrower than 1000 px the column moves above the cards.
 - `.am-icon-btn` is a square compact button; `.am-primary` the main action; `.am-danger` a destructive action.
-- Status texts: `.am-status-good/-bad/-run/-wait`; dots: `.am-dot-run/-wait/-idle/-offline`.
+- Status texts: `.am-status-good/-bad/-run/-wait`; dots: `.am-dot-run/-idle/-offline`.
 
 ## Checking a change
 

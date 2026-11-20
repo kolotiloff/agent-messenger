@@ -546,3 +546,7 @@ The owner also asked for a consistent size within each task card. Use 12 px thro
 ## D-162 — Show running work and reported worker models (T-236)
 
 2026-11-20, owner saw a yellow duration and missing model on cards of remote computers. Running work takes precedence in the sidebar when the agent also has a task waiting. The count includes running and waiting tasks. The timer reflects running work, and the tooltip gives the waiting count separately. A waiting-only row labels the wait explicitly. Forward a valid model reported by the worker to the computer that assigned the task. This is display metadata and never changes the requested model or task state. Older clients can ignore the message. If the worker did not report a model and the coordinator did not select one, show that the model was not specified on known task rows in the sidebar.
+
+## D-163 — Inline waiting status (T-237)
+
+2026-11-20, owner asked to align the sidebar waiting label with the running duration. Place it after the model with the same comma separator, keeping the waiting color. The task card shows its wait text in the regular status position without a dot.

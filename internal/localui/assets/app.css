@@ -235,7 +235,6 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--am-muted); flex-shrink:0; }
 #am-concept .am-dot.online { background:var(--am-good); }
 #am-concept .am-dot-run { background:var(--am-run); }
-#am-concept .am-dot-wait { background:var(--am-wait); }
 #am-concept .am-dot-idle { background:transparent; border:1.5px solid var(--am-muted); }
 #am-concept .am-dot-offline { background:var(--am-disabled-text); }
 #am-concept .am-provider-heading { display:flex; align-items:center; gap:var(--am-gap-control); }
@@ -269,17 +268,15 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-agent-line { display:flex; align-items:baseline; gap:var(--am-space-1); min-width:0; font-size:var(--am-text-xs); }
 #am-concept .am-agent-line > span:first-child { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #am-concept .am-agent-line .am-muted { margin-left:auto; }
-#am-concept .am-agent-model { flex:1 1 0; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--am-muted); }
+#am-concept .am-agent-model { color:var(--am-muted); }
 #am-concept .am-agent-status { margin-left:auto; flex:none; white-space:nowrap; }
-#am-concept .am-agent-run { gap:0; }
+#am-concept :is(.am-agent-run,.am-agent-wait) { gap:0; }
 #am-concept .am-agent-running-label { color:var(--am-run); }
 #am-concept .am-agent-running-label .am-agent-model { color:inherit; }
-#am-concept .am-agent-run .am-agent-status {
-  margin-left:0;
-  color:var(--am-muted);
-}
-#am-concept .am-agent-run .am-agent-status::before { content:" "; white-space:pre; }
-#am-concept .am-agent-run:has(.am-agent-model) .am-agent-status::before { content:", "; }
+#am-concept :is(.am-agent-run,.am-agent-wait) .am-agent-status { margin-left:0; }
+#am-concept :is(.am-agent-run,.am-agent-wait) .am-agent-status::before { content:" "; white-space:pre; color:var(--am-muted); }
+#am-concept :is(.am-agent-run,.am-agent-wait):has(.am-agent-model) .am-agent-status::before { content:", "; }
+#am-concept .am-agent-run .am-agent-status { color:var(--am-muted); }
 #am-concept .am-agent-wait .am-agent-status { color:var(--am-wait); }
 #am-concept .am-agent-line.am-agent-offline { color:var(--am-disabled-text); }
 #am-concept .am-side-bottom { display:flex; flex-direction:column; gap:var(--am-gap-control); margin-top:auto; padding-top:var(--am-space-3); border-top:1px solid var(--am-line); flex-shrink:0; }

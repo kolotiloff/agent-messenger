@@ -556,8 +556,7 @@
         if(models.length||tasks.length){
           const label=el('span',models.length?models.map(m=>modelName(m).replace(/ Medium$/,' Med')).join(', '):tr('модель не указана'),'am-agent-model');
           if(models.length)label.title=models.join(', ');
-          if(state==='run')identity.append(' ',label);
-          else line.append(label);
+          identity.append(' ',label);
         }
         const total=counts.running+counts.waiting_owner;
         const count=total>1?'('+total+')':'';
@@ -860,7 +859,6 @@
       appendTaskWhen(agent,t);
       const [text,cls,tip,from]=taskStatus(t);
       const status=el('span',undefined,'am-task-status '+cls);if(tip)status.title=tip;
-      if(t.state==='waiting_owner')status.append(el('span',undefined,'am-dot am-dot-wait'));
       const model=t.ran_model||t.model;
       const words=el('span');status.append(words);words.append(statusPiece(text,!!t.usage||!!model,from));
       if(t.usage){const used=el('span',usageShort(t.usage),'am-task-usage');used.title=usageLong(t.usage);if(model)used.append(el('span',',','am-task-comma'));words.append(used);}

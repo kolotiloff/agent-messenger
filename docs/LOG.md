@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-20 — Codex (T-237)
+
+- Used the same inline placement for the sidebar waiting label and running duration. Removed the waiting dot in the task list.
+
 ## 2026-11-20 — Codex (T-235 and T-236)
 
 - Published [0.91](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.91) from `e49c54f` and verified all five signed update manifests and archives.

@@ -300,6 +300,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const stat = {id:'old-1',title:'Old 1',at:'2026-11-19T09:20:00',project:'Frame',agent:'codex',model:'gpt-6.2-sol[effort=medium]',computer:'Runner',tokens:12};
       const localTask = {id:'local-task',title:'Local task',project:'Frame',agent:'codex',state:'running',created_at:began,started_at:began,model:'gpt-6.2-sol[effort=low]',ran_model:'gpt-6.2-sol[effort=medium]'};
       const remoteTask = {...localTask,id:'remote-task',title:'Remote task',created_at:new Date(Date.now()-8*60*1000).toISOString(),model:'',ran_model:'',remote:{id:'dev-1',name:'Runner',worker:'none'}};
+      const waitingTask = {...remoteTask,id:'waiting-task',title:'Waiting for a reply',agent:'claude',state:'waiting_owner',model:'claude-sonnet-5-5[effort=medium]'};
       let remoteRow = remoteTask;
       let runnerAgents = [{agent:'cursor',running:1},{agent:'claude',waiting_owner:1},{agent:'codex',running:1,waiting_owner:1}];
       let runnerWorkers = [];
@@ -312,7 +313,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         const pathname = new URL(route.request().url()).pathname;
         if (pathname === '/api/feedback-export') return route.fulfill({json: {ok: true, result: {path: '/fictional/Downloads/feedback.zip', remarks: 2}}});
         if (pathname === '/api/feedback-clear') { clears.push(true); return route.fulfill({json: {ok: true, result: {deleted: 2, left: 0}}}); }
-        if (pathname === '/api/window') return route.fulfill({json: {projects: [{name: 'Frame'}], project: 'Frame', folder: '/fictional/frame', agents: [], coordinator: {connected: false}, computer_name: 'Ёж и Йога', tasks_enabled: true, feedback_count: 5, feedback_new: 2, tasks:[localTask,remoteRow],
+        if (pathname === '/api/window') return route.fulfill({json: {projects: [{name: 'Frame'}], project: 'Frame', folder: '/fictional/frame', agents: [], coordinator: {connected: false}, computer_name: 'Ёж и Йога', tasks_enabled: true, feedback_count: 5, feedback_new: 2, tasks:[localTask,remoteRow,waitingTask],
           shared: [{peer: 'host', name: 'Giver', age: 1, tasks: [
             {id: 'sent', project: 'Frame', title: 'Sent task', agent: 'cursor', state: 'running', created_at: began, started_at: began, model: 'composer-2.5[effort=medium]', runs_on_peer: 'dev-1', runs_on: 'Old name'},
             {id: 'own', project: 'Frame', title: 'Own task', agent: 'codex', state: 'running', created_at: '2026-11-15T09:00:00Z'},
@@ -376,6 +377,9 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const taskParts=taskRow.locator('.am-task-agent,.am-task-title,.am-task-status,.am-task-model,.am-task-when');
       assert.deepEqual(await taskParts.evaluateAll(nodes=>nodes.map(node=>getComputedStyle(node).fontSize)),Array(5).fill('12px'));
       assert.equal(await taskRow.locator('.am-task-title').evaluate(node=>getComputedStyle(node).fontWeight),'500');
+      const waitingTaskStatus=page.locator('.am-task',{hasText:waitingTask.title}).locator('.am-task-status');
+      assert.match(await waitingTaskStatus.innerText(),/Ждёт вашего ответа,\s*Sonnet 5\.5 Medium/);
+      assert.equal(await waitingTaskStatus.locator('.am-dot').count(),0);
       await page.locator('[data-tab=server]').click();
       const runner=page.locator('[data-peer="dev-1"]');
       const running=runner.locator('.am-agent-run[data-provider=cursor]');
@@ -387,7 +391,13 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await runner.locator('.am-agent-wait').count(),1);
       assert.equal(await runner.locator('.am-agent-idle').count(),0);
       assert.equal(await runner.locator('.am-agent-running-label').count(),2);
-      assert.equal(await runner.locator('[data-provider=claude] .am-agent-status').textContent(),'ждёт ответа');
+      const waiting=runner.locator('.am-agent-wait[data-provider=claude]');
+      const waitingStatus=waiting.locator('.am-agent-status');
+      assert.equal(await waiting.locator('.am-agent-model').textContent(),'Sonnet 5.5 Med');
+      assert.equal(await waitingStatus.textContent(),'ждёт ответа');
+      assert.equal(await waitingStatus.evaluate(node=>getComputedStyle(node,'::before').content),'", "');
+      const waitingLabelBox=await waiting.locator('span').first().boundingBox(),waitingStatusBox=await waitingStatus.boundingBox();
+      assert(Math.abs(waitingStatusBox.x-waitingLabelBox.x-waitingLabelBox.width)<1,'waiting status must sit directly beside the model');
       const overlappingAgent=runner.locator('.am-agent-run[data-provider=codex]');
       assert.equal(await overlappingAgent.locator('.am-agent-model').textContent(),'модель не указана');
       assert.equal(await overlappingAgent.locator('.am-agent-status').textContent(),'(2) 3 мин');
