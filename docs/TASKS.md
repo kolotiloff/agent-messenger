@@ -92,7 +92,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
-| T-234 | Unify text size in the task cards and sidebar agent rows, and simplify elapsed timing (owner, 2026-11-20). | window | Implemented on `codex/t234-compact-agent-row` (D-160). |
+| T-234 | Unify text size in the task cards and sidebar agent rows, and simplify elapsed timing (owner, 2026-11-20). | window | Released in [0.90](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.90) via [PR #150](https://github.com/kolotiloff/agent-messenger/pull/150) (D-160). |
 | T-233 | Make conversation text and input lighter and slightly smaller (owner, 2026-11-20). | window | Released in [0.89](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.89) via [PR #148](https://github.com/kolotiloff/agent-messenger/pull/148) (D-159). |
 | T-232 | Stop the live command timer on earlier action groups when the worker moves on, and use muted headings and time (owner, 2026-11-20). | window | Released in [0.89](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.89) via [PR #148](https://github.com/kolotiloff/agent-messenger/pull/148) (D-158). |
 | T-231 | Keep task status, model and elapsed time aligned across the sidebar, task list and open conversation (owner, 2026-11-20). | window | Released in [0.89](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.89) via [PR #147](https://github.com/kolotiloff/agent-messenger/pull/147) (D-157). |
