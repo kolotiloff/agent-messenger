@@ -520,3 +520,7 @@ Amends D-100: a request to install the newest signed Messenger (the program only
 ## D-156 — Reconcile the computer version with an update result (T-230)
 
 2026-11-20, owner saw a success notice while the same computer still showed its earlier version. Project the matching, recent successful result onto the broker's presence snapshot before sending the window response. The coordinator's roster uses the same reconciliation. A newer reported version wins. Failed and refused replies cannot change the version.
+
+## D-157 — Use the project task row across the window (T-231)
+
+2026-11-20, owner asked for timely task updates across the window. The project view supplies the task state, model and start time to the list and open conversation. The conversation fetch supplies history. The sidebar uses the same project rows for known work and preserves the local counts for other projects. A confirmed outcome takes a remote task out of a stale reported running count when the report identifies that worker. Unmatched remote activity still follows presence. Elapsed labels share a clock tick without redrawing the conversation.

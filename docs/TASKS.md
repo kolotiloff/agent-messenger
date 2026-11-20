@@ -92,6 +92,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
+| T-231 | Keep task status, model and elapsed time aligned across the sidebar, task list and open conversation (owner, 2026-11-20). | window | Implemented on `codex/t229-t230-sidebar-status` (D-157). |
 | T-230 | Show the confirmed computer version at the same time as the successful update notice (owner, 2026-11-20). | network + window | Implemented on `codex/t229-t230-sidebar-status` (D-156). |
 | T-229 | Highlight a running agent and put its elapsed time beside the model on a soft blue background (owner, 2026-11-20). | window | Implemented on `codex/t229-t230-sidebar-status` (D-155). |
 | T-228 | Use a separate amber update arrow with a round hover background on computer cards (owner, 2026-11-20). | window | Released in [0.88](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.88) via [PR #144](https://github.com/kolotiloff/agent-messenger/pull/144). |

@@ -298,7 +298,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const ended = '2026-11-14T09:30:00Z';
       const stat = {id:'old-1',title:'Old 1',at:'2026-11-19T09:20:00',project:'Frame',agent:'codex',model:'gpt-6.2-sol[effort=medium]',computer:'Runner',tokens:12};
       const localTask = {id:'local-task',title:'Local task',project:'Frame',agent:'codex',state:'running',created_at:began,started_at:began,model:'gpt-6.2-sol[effort=low]',ran_model:'gpt-6.2-sol[effort=medium]'};
-      const remoteTask = {...localTask,id:'remote-task',title:'Remote task',remote:{peer:'dev-1',name:'Runner',worker:'none'}};
+      const remoteTask = {...localTask,id:'remote-task',title:'Remote task',created_at:new Date(Date.now()-8*60*1000).toISOString(),remote:{id:'dev-1',name:'Runner',worker:'none'}};
+      let remoteRow = remoteTask;
+      let runnerAgents = [{agent:'cursor',running:1},{agent:'claude',waiting_owner:1},{agent:'codex'}];
+      let runnerWorkers = [];
       const ownerNotes = [];
       const update = {state: 'found', version: '0.0.0-preview.99'};
       const updates = [];
@@ -308,13 +311,13 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         const pathname = new URL(route.request().url()).pathname;
         if (pathname === '/api/feedback-export') return route.fulfill({json: {ok: true, result: {path: '/fictional/Downloads/feedback.zip', remarks: 2}}});
         if (pathname === '/api/feedback-clear') { clears.push(true); return route.fulfill({json: {ok: true, result: {deleted: 2, left: 0}}}); }
-        if (pathname === '/api/window') return route.fulfill({json: {projects: [{name: 'Frame'}], project: 'Frame', folder: '/fictional/frame', agents: [], coordinator: {connected: false}, computer_name: 'Ёж и Йога', tasks_enabled: true, feedback_count: 5, feedback_new: 2, tasks:[localTask,remoteTask],
+        if (pathname === '/api/window') return route.fulfill({json: {projects: [{name: 'Frame'}], project: 'Frame', folder: '/fictional/frame', agents: [], coordinator: {connected: false}, computer_name: 'Ёж и Йога', tasks_enabled: true, feedback_count: 5, feedback_new: 2, tasks:[localTask,remoteRow],
           shared: [{peer: 'host', name: 'Giver', age: 1, tasks: [
             {id: 'sent', project: 'Frame', title: 'Sent task', agent: 'cursor', state: 'running', created_at: began, started_at: began, model: 'composer-2.5[effort=medium]', runs_on_peer: 'dev-1', runs_on: 'Old name'},
             {id: 'own', project: 'Frame', title: 'Own task', agent: 'codex', state: 'running', created_at: '2026-11-15T09:00:00Z'},
             {id: 'old-1', project: 'Frame', title: 'Old 1', agent: 'codex', state: 'done', created_at: '2026-11-14T09:00:00Z', finished_at: ended},
             {id: 'old-2', project: 'Frame', title: 'Old 2', agent: 'codex', state: 'failed', created_at: '2026-11-14T08:00:00Z', finished_at: '2026-11-14T08:30:00Z'}]}]}});
-        if (pathname === '/api/server') return route.fulfill({json: {host: {running: false, enabled: false, addresses: []}, member: {connected: true, reachable: true, address:'203.0.113.7:47100', connected_at:began}, peers: [{id: 'host', name: 'Giver', age: 0, agents: []}, {id: 'dev-1', name: 'Runner', age: 0, version:'0.0.0-preview.97', agents: [{agent:'cursor',running:1},{agent:'claude',waiting_owner:1},{agent:'codex'}]}], updates: [], accept: true}});
+        if (pathname === '/api/server') return route.fulfill({json: {host: {running: false, enabled: false, addresses: []}, member: {connected: true, reachable: true, address:'203.0.113.7:47100', connected_at:began}, peers: [{id: 'host', name: 'Giver', age: 0, agents: []}, {id: 'dev-1', name: 'Runner', age: 0, version:'0.0.0-preview.97', agents: runnerAgents, workers:{runs:runnerWorkers}}], updates: [], accept: true}});
         if (pathname === '/api/usage-stats') return route.fulfill({json:{total:{tasks:1,tokens:12,input_tokens:8,output_tokens:4},agents:[],computers:[],days:[],recent:[stat],top:[stat]}});
         if (pathname === '/api/task') {
           const remote = new URL(route.request().url()).searchParams.get('id') === remoteTask.id;
@@ -365,15 +368,15 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await page.locator('.am-task',{hasText:localTask.title}).locator('.am-task-when').getAttribute('datetime'),began);
       await page.locator('[data-tab=server]').click();
       const runner=page.locator('[data-peer="dev-1"]');
-      const running=runner.locator('.am-agent-run');
+      const running=runner.locator('.am-agent-run[data-provider=cursor]');
       const runningLabel=running.locator('.am-agent-running-label');
       const runningTimer=running.locator('.am-agent-status');
       await runningLabel.waitFor();
       assert.equal(await runningLabel.locator('.am-agent-model').textContent(),'composer-2.5 Med');
       assert.equal(await runningTimer.textContent(),'3 мин');
       assert.equal(await runner.locator('.am-agent-wait').count(),1);
-      assert.equal(await runner.locator('.am-agent-idle').count(),1);
-      assert.equal(await runner.locator('.am-agent-running-label').count(),1);
+      assert.equal(await runner.locator('.am-agent-idle').count(),0);
+      assert.equal(await runner.locator('.am-agent-running-label').count(),2);
       assert.equal(await runningLabel.evaluate(node=>getComputedStyle(node).animationName),'am-agent-running-sweep');
       assert.equal(await runningTimer.evaluate(node=>getComputedStyle(node).animationName),'none');
       assert.equal(await runningTimer.evaluate(node=>getComputedStyle(node).fontSize),await runningLabel.evaluate(node=>getComputedStyle(node).fontSize));
@@ -475,6 +478,42 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(ownerNotes[0].task,remoteTask.id);
       assert.equal(ownerNotes[0].text,'Use blue');
       assert.match(ownerNotes[0].op_id,/^window-remote-task-/);
+      const remoteAgent=runner.locator('[data-provider=codex]');
+      const remoteList=page.locator('.am-task',{hasText:remoteTask.title});
+      const remoteHead=page.locator('#task-head');
+      assert.equal(await remoteList.locator('.am-task-when').getAttribute('datetime'),began);
+      // The feed can still say the old model. All three surfaces take the
+      // model and state from the task row, and tick without a new payload.
+      remoteRow={...remoteTask,ran_model:'gpt-6.2-astra[effort=high]'};
+      await remoteHead.getByText(/Astra 6\.2 High/).waitFor();
+      assert.equal(await remoteList.locator('.am-task-model').textContent(),'Astra 6.2 High');
+      assert.equal(await remoteAgent.locator('.am-agent-model').textContent(),'Astra 6.2 High');
+      await page.evaluate(() => {
+        const now=Date.now.bind(Date);
+        window.elapsedSample=document.querySelector('#thread .am-rich');
+        Date.now=()=>now()+60_000;
+      });
+      await page.waitForFunction(() => {
+        const sidebar=document.querySelector('[data-peer=dev-1] [data-provider=codex] [data-elapsed-from]');
+        const row=[...document.querySelectorAll('.am-task')].find(node=>node.textContent.includes('Remote task'));
+        const right=row?.querySelector('[data-elapsed-from]');
+        const center=document.querySelector('#task-head [data-elapsed-from]');
+        return sidebar?.textContent==='4 мин'&&right?.textContent==='Работает 4 мин'&&center?.textContent===right.textContent;
+      });
+      assert.equal(await page.evaluate(()=>window.elapsedSample===document.querySelector('#thread .am-rich')),true);
+      // Keep the broker and feed stale while the task row records completion.
+      runnerAgents=[...runnerAgents.slice(0,2),{agent:'codex',running:1}];
+      runnerWorkers=[{task:remoteTask.id,output_age:0}];
+      await Promise.all([page.waitForResponse(response=>new URL(response.url()).pathname==='/api/server'),page.locator('[data-tab=server]').click()]);
+      await page.locator('[data-tab=tasks]').click();
+      remoteRow={...remoteRow,state:'done',finished_at:new Date(Date.now()).toISOString()};
+      await remoteHead.getByText(/Работал/).waitFor();
+      assert.match(await remoteList.innerText(),/Работал/);
+      assert.equal(await remoteAgent.locator('.am-agent-status').count(),0);
+      assert.equal(await remoteHead.locator('[data-elapsed-from]').count(),0);
+      assert.equal(await remoteList.locator('[data-elapsed-from]').count(),0);
+      remoteRow=remoteTask;
+      await remoteHead.getByText(/Работает/).waitFor();
       // Owner, 2026-11-15: one button removes every finished task from the list.
       await page.locator('.am-task-section', {hasText: 'Завершённые'}).locator('.am-task-section-action').click();
       await page.locator('#confirm-go').click();

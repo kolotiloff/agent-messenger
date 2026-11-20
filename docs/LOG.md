@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-20 — Codex (T-231)
+
+- Aligned the task header and known sidebar activity with the list, and updated running durations even with no new messages. The Chromium fixture passed with an older conversation response and stale remote presence. Included in [PR #147](https://github.com/kolotiloff/agent-messenger/pull/147).
+
 ## 2026-11-20 — Codex (T-230)
 
 - Reconciled the computer card and coordinator roster with the confirmed update reply. The two-computer fixture checks that the update notice and card agree while the broker still reports the earlier version.

@@ -37,6 +37,7 @@
   'Написать исполнителю…':'Write to the worker…',
   'вчера ':'yesterday ',
   'Создана ':'Created ',
+  'Начата ':'Started ',
   'Завершена':'Finished',
   'Завершилась ошибкой':'Failed',
   'Прервана':'Interrupted',
