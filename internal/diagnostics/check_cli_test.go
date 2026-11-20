@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/kolotiloff/agent-messenger/internal/cliprobe"
 )
 
 func checkFixture(t *testing.T) (string, string) {
@@ -27,18 +29,18 @@ func TestCheckCLIExactCommandsAndProfile(t *testing.T) {
 	for _, tc := range []struct {
 		provider, version, variable string
 		args                        []string
-		output                      probeOutput
+		output                      cliprobe.Output
 	}{
-		{"claude", "2.1.318 (Claude Code)", "CLAUDE_CONFIG_DIR", []string{"auth", "status", "--json"}, probeOutput{stdout: []byte(`{"loggedIn":true,"email":"PRIVATE_EMAIL","orgId":"PRIVATE_ORG"}`)}},
-		{"codex", "codex-cli 0.155.1", "CODEX_HOME", []string{"login", "status"}, probeOutput{stderr: []byte("Logged in using ChatGPT\n")}},
-		{"cursor", "2026.11.05-86047df", "CURSOR_CONFIG_DIR", []string{"status", "--format", "json"}, probeOutput{stdout: []byte(`{"isAuthenticated":true,"userInfo":{"email":"PRIVATE_EMAIL"}}`)}},
+		{"claude", "2.1.318 (Claude Code)", "CLAUDE_CONFIG_DIR", []string{"auth", "status", "--json"}, cliprobe.Output{Stdout: []byte(`{"loggedIn":true,"email":"PRIVATE_EMAIL","orgId":"PRIVATE_ORG"}`)}},
+		{"codex", "codex-cli 0.155.1", "CODEX_HOME", []string{"login", "status"}, cliprobe.Output{Stderr: []byte("Logged in using ChatGPT\n")}},
+		{"cursor", "2026.11.05-86047df", "CURSOR_CONFIG_DIR", []string{"status", "--format", "json"}, cliprobe.Output{Stdout: []byte(`{"isAuthenticated":true,"userInfo":{"email":"PRIVATE_EMAIL"}}`)}},
 	} {
 		t.Run(tc.provider, func(t *testing.T) {
 			cli, profile := checkFixture(t)
 			t.Setenv(tc.variable, "/wrong/inherited/profile")
 			calls := 0
 			var cwd string
-			runner := func(ctx context.Context, path, dir string, env, args []string) probeOutput {
+			runner := func(ctx context.Context, path, dir string, env, args []string) cliprobe.Output {
 				calls++
 				cwd = dir
 				resolved, _ := filepath.EvalSymlinks(cli)
@@ -62,7 +64,7 @@ func TestCheckCLIExactCommandsAndProfile(t *testing.T) {
 					if !reflect.DeepEqual(args, []string{"--version"}) {
 						t.Fatal(args)
 					}
-					return probeOutput{stdout: []byte(tc.version)}
+					return cliprobe.Output{Stdout: []byte(tc.version)}
 				}
 				if !reflect.DeepEqual(args, tc.args) {
 					t.Fatal(args)
@@ -86,14 +88,14 @@ func TestCheckCLIExactCommandsAndProfile(t *testing.T) {
 
 func TestCheckCLIStopsBeforeAuthForUnknownVersionOrFailure(t *testing.T) {
 	cli, profile := checkFixture(t)
-	for _, version := range []probeOutput{
-		{stdout: []byte("PRIVATE_TOKEN")},
-		{stdout: []byte("2.1.318 (Claude Code)"), exit: 1},
-		{stdout: []byte("2.1.318 (Claude Code)"), failure: "output_limit"},
-		{failure: "timeout_or_cancelled"},
+	for _, version := range []cliprobe.Output{
+		{Stdout: []byte("PRIVATE_TOKEN")},
+		{Stdout: []byte("2.1.318 (Claude Code)"), Exit: 1},
+		{Stdout: []byte("2.1.318 (Claude Code)"), Failure: "output_limit"},
+		{Failure: "timeout_or_cancelled"},
 	} {
 		calls := 0
-		r, err := checkCLI(context.Background(), "claude", cli, profile, "darwin", func(context.Context, string, string, []string, []string) probeOutput { calls++; return version })
+		r, err := checkCLI(context.Background(), "claude", cli, profile, "darwin", func(context.Context, string, string, []string, []string) cliprobe.Output { calls++; return version })
 		if err != nil || calls != 1 || r.Authentication.State != "not_checked" {
 			t.Fatal(r, err, calls)
 		}
@@ -106,9 +108,9 @@ func TestCheckCLIStopsBeforeAuthForUnknownVersionOrFailure(t *testing.T) {
 
 func TestCheckCLIRejectsImplicitPathsAndUnsupportedPlatform(t *testing.T) {
 	cli, profile := checkFixture(t)
-	runner := func(context.Context, string, string, []string, []string) probeOutput {
+	runner := func(context.Context, string, string, []string, []string) cliprobe.Output {
 		t.Fatal("should not run CLI")
-		return probeOutput{}
+		return cliprobe.Output{}
 	}
 	for _, args := range [][3]string{{"claude", "claude", profile}, {"claude", cli, "relative"}, {"other", cli, profile}, {"claude", cli, filepath.Join(profile, "missing")}} {
 		if _, err := checkCLI(context.Background(), args[0], args[1], args[2], "darwin", runner); err == nil {
@@ -123,12 +125,12 @@ func TestCheckCLIOnEveryPlatformAndNewerVersion(t *testing.T) {
 	cli, profile := checkFixture(t)
 	for _, goos := range []string{"windows", "linux", "darwin"} {
 		var calls [][]string
-		r, err := checkCLI(context.Background(), "claude", cli, profile, goos, func(_ context.Context, _ string, _ string, _ []string, args []string) probeOutput {
+		r, err := checkCLI(context.Background(), "claude", cli, profile, goos, func(_ context.Context, _ string, _ string, _ []string, args []string) cliprobe.Output {
 			calls = append(calls, args)
 			if args[0] == "--version" {
-				return probeOutput{stdout: []byte("2.1.999 (Claude Code)\n")}
+				return cliprobe.Output{Stdout: []byte("2.1.999 (Claude Code)\n")}
 			}
-			return probeOutput{stdout: []byte(`{"loggedIn":true}`)}
+			return cliprobe.Output{Stdout: []byte(`{"loggedIn":true}`)}
 		})
 		if err != nil || len(calls) != 2 || r.Version.Value != "2.1.999" || r.Authentication.State != "authenticated" || r.OS != goos {
 			t.Fatal(goos, r, err, calls)
@@ -139,21 +141,21 @@ func TestCheckCLIOnEveryPlatformAndNewerVersion(t *testing.T) {
 func TestAuthenticationRequiresPositiveEvidenceAndNeverLeaksSecrets(t *testing.T) {
 	for _, tc := range []struct {
 		provider string
-		output   probeOutput
+		output   cliprobe.Output
 		state    string
 	}{
-		{"claude", probeOutput{stdout: []byte(`{"loggedIn":false}`), exit: 1}, "not_authenticated"},
-		{"claude", probeOutput{stdout: []byte(`{"loggedIn":true}`), exit: 1}, "unknown"},
-		{"claude", probeOutput{stdout: []byte(`{}`)}, "unknown"},
-		{"claude", probeOutput{stdout: []byte(`{"loggedIn":"true"}`)}, "unknown"},
-		{"claude", probeOutput{stdout: []byte(`{"loggedIn":null}`)}, "unknown"},
-		{"claude", probeOutput{stdout: []byte(`{"loggedIn":true}`), failure: "timeout_or_cancelled"}, "unknown"},
-		{"cursor", probeOutput{stdout: []byte(`{"isAuthenticated":false}`), exit: 1}, "unknown"},
-		{"codex", probeOutput{stderr: []byte("Logged in using an API key - PRIVATE_KEY")}, "authenticated"},
-		{"codex", probeOutput{stderr: []byte("Logged in using ChatGPT\nPRIVATE_WARNING")}, "unknown"},
-		{"codex", probeOutput{stderr: []byte("Not logged in"), exit: 1}, "not_authenticated"},
-		{"codex", probeOutput{stderr: []byte("Logged in using ChatGPT\n")}, "authenticated"},
-		{"codex", probeOutput{stderr: []byte("PRIVATE_NETWORK_ERROR"), exit: 1}, "unknown"},
+		{"claude", cliprobe.Output{Stdout: []byte(`{"loggedIn":false}`), Exit: 1}, "not_authenticated"},
+		{"claude", cliprobe.Output{Stdout: []byte(`{"loggedIn":true}`), Exit: 1}, "unknown"},
+		{"claude", cliprobe.Output{Stdout: []byte(`{}`)}, "unknown"},
+		{"claude", cliprobe.Output{Stdout: []byte(`{"loggedIn":"true"}`)}, "unknown"},
+		{"claude", cliprobe.Output{Stdout: []byte(`{"loggedIn":null}`)}, "unknown"},
+		{"claude", cliprobe.Output{Stdout: []byte(`{"loggedIn":true}`), Failure: "timeout_or_cancelled"}, "unknown"},
+		{"cursor", cliprobe.Output{Stdout: []byte(`{"isAuthenticated":false}`), Exit: 1}, "unknown"},
+		{"codex", cliprobe.Output{Stderr: []byte("Logged in using an API key - PRIVATE_KEY")}, "authenticated"},
+		{"codex", cliprobe.Output{Stderr: []byte("Logged in using ChatGPT\nPRIVATE_WARNING")}, "unknown"},
+		{"codex", cliprobe.Output{Stderr: []byte("Not logged in"), Exit: 1}, "not_authenticated"},
+		{"codex", cliprobe.Output{Stderr: []byte("Logged in using ChatGPT\n")}, "authenticated"},
+		{"codex", cliprobe.Output{Stderr: []byte("PRIVATE_NETWORK_ERROR"), Exit: 1}, "unknown"},
 	} {
 		r := parseAuthentication(tc.provider, tc.output)
 		if r.State != tc.state {
@@ -162,7 +164,7 @@ func TestAuthenticationRequiresPositiveEvidenceAndNeverLeaksSecrets(t *testing.T
 		// The card names the sign-in method for Codex (T-061).
 		if tc.provider == "codex" && r.State == "authenticated" {
 			want := "api_key"
-			if strings.Contains(string(tc.output.stderr), "ChatGPT") {
+			if strings.Contains(string(tc.output.Stderr), "ChatGPT") {
 				want = "chatgpt"
 			}
 			if r.Value != want {
@@ -179,12 +181,12 @@ func TestAuthenticationRequiresPositiveEvidenceAndNeverLeaksSecrets(t *testing.T
 func TestCheckCLIRejectsExecutableReplacement(t *testing.T) {
 	cli, profile := checkFixture(t)
 	calls := 0
-	r, err := checkCLI(context.Background(), "claude", cli, profile, "darwin", func(context.Context, string, string, []string, []string) probeOutput {
+	r, err := checkCLI(context.Background(), "claude", cli, profile, "darwin", func(context.Context, string, string, []string, []string) cliprobe.Output {
 		calls++
 		if err := os.WriteFile(cli, []byte("changed size and content"), 0o700); err != nil {
 			t.Fatal(err)
 		}
-		return probeOutput{stdout: []byte("2.1.318 (Claude Code)")}
+		return cliprobe.Output{Stdout: []byte("2.1.318 (Claude Code)")}
 	})
 	if err != nil || calls != 1 || r.Authentication.Reason != "executable_changed" {
 		t.Fatal(r, err, calls)
@@ -203,16 +205,16 @@ func TestProbeRunnerLimitsOutputAndTime(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 	defer cancel()
 	start := time.Now()
-	out := runProbe(ctx, script, dir, os.Environ(), nil)
-	if time.Since(start) > 3*time.Second || len(out.stdout) > 65536 || out.failure != "timeout_or_cancelled" {
-		t.Fatal("unbounded probe", len(out.stdout), out.failure)
+	out := cliprobe.Run(ctx, script, dir, os.Environ(), nil)
+	if time.Since(start) > 3*time.Second || len(out.Stdout) > 65536 || out.Failure != "timeout_or_cancelled" {
+		t.Fatal("unbounded probe", len(out.Stdout), out.Failure)
 	}
 	if err := os.WriteFile(script, []byte("#!/bin/sh\ni=0; while [ $i -lt 3000 ]; do printf '0123456789012345678901234567890123456789'; i=$((i+1)); done\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	out = runProbe(context.Background(), script, dir, os.Environ(), nil)
-	if out.failure != "output_limit" || len(out.stdout) != 65536 {
-		t.Fatal(fmt.Sprint("output bound failed: ", len(out.stdout), out.failure))
+	out = cliprobe.Run(context.Background(), script, dir, os.Environ(), nil)
+	if out.Failure != "output_limit" || len(out.Stdout) != 65536 {
+		t.Fatal(fmt.Sprint("output bound failed: ", len(out.Stdout), out.Failure))
 	}
 }
 
@@ -231,12 +233,12 @@ func TestCheckCLICursorNode(t *testing.T) {
 	}
 	node, _ := filepath.EvalSymlinks(filepath.Join(dir, "node.exe"))
 	var seen [][]string
-	r, err := checkCLI(context.Background(), "cursor", node, profile, "windows", func(_ context.Context, cli, _ string, _ []string, args []string) probeOutput {
+	r, err := checkCLI(context.Background(), "cursor", node, profile, "windows", func(_ context.Context, cli, _ string, _ []string, args []string) cliprobe.Output {
 		seen = append(seen, append([]string{cli}, args...))
 		if args[1] == "--version" {
-			return probeOutput{stdout: []byte("2026.11.05-86047df\n")}
+			return cliprobe.Output{Stdout: []byte("2026.11.05-86047df\n")}
 		}
-		return probeOutput{stdout: []byte(`{"isAuthenticated":true}`)}
+		return cliprobe.Output{Stdout: []byte(`{"isAuthenticated":true}`)}
 	})
 	index := filepath.Join(filepath.Dir(node), "index.js")
 	if err != nil || len(seen) != 2 || seen[0][0] != node || seen[0][1] != index || seen[1][2] != "status" || r.Authentication.State != "authenticated" {

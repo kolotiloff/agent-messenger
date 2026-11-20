@@ -216,7 +216,8 @@ type netBody struct {
 	// ignores it.
 	Lock string `json:"lock,omitempty"`
 	// Lines is how many log lines a log request asks for (T-057).
-	Lines int `json:"lines,omitempty"`
+	Lines     int    `json:"lines,omitempty"`
+	CheckedAt string `json:"checked_at,omitempty"`
 }
 
 // netOpID is the broker's rule for an operation id. An id built from
@@ -915,6 +916,9 @@ func (s *Store) NetUndeliverable(seq int64) error {
 		if kind == "log_request" || kind == "log" {
 			return logUndeliverable(tx, kind, task)
 		}
+		if kind == "agent_version_request" || kind == "agent_version" {
+			return agentVersionUndeliverable(tx, kind, task)
+		}
 		if kind == "update_request" || kind == "update" {
 			return updateUndeliverable(tx, kind, task)
 		}
@@ -1024,6 +1028,10 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 			return applyLogRequest(tx, from, b)
 		case "log":
 			return applyLogReply(tx, from, b)
+		case "agent_version_request":
+			return applyAgentVersionRequest(tx, from, b)
+		case "agent_version":
+			return applyAgentVersionReply(tx, from, b)
 		case "update_request":
 			return applyUpdateRequest(tx, from, b)
 		case "update":
@@ -1196,17 +1204,18 @@ func applyReport(tx *sql.Tx, from netLink, b netBody) error {
 	switch b.Kind {
 	case "progress":
 		// A line of the worker's progress, for the window only (D-055).
-		if b.Event != "text" && b.Event != "tool" {
+		activity := isCommandActivity(b.Event)
+		if b.Event != "text" && b.Event != "tool" && !activity {
 			return nil
 		}
-		var n int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM remote_task_items WHERE task_id=?`, t.ID).Scan(&n); err != nil {
+		var seq, n int
+		if err := tx.QueryRow(`SELECT COALESCE(MAX(seq),0), COUNT(CASE WHEN kind IN ('text','tool') THEN 1 END) FROM remote_task_items WHERE task_id=?`, t.ID).Scan(&seq, &n); err != nil {
 			return err
 		}
-		if n >= maxRunItems {
+		if (!activity && n >= maxRunItems) || (activity && seq-n >= 2*maxRunItems) {
 			return nil
 		}
-		_, err := tx.Exec(`INSERT INTO remote_task_items(task_id,seq,kind,title,text,description,created_at) VALUES (?,?,?,?,?,?,?)`, t.ID, n+1, b.Event, clip(b.Title, 200), clip(b.Text, maxForwardedItemText), clip(strings.Join(strings.Fields(b.Description), " "), 200), now())
+		_, err := tx.Exec(`INSERT INTO remote_task_items(task_id,seq,kind,title,text,description,created_at) VALUES (?,?,?,?,?,?,?)`, t.ID, seq+1, b.Event, clip(b.Title, 200), clip(b.Text, maxForwardedItemText), clip(strings.Join(strings.Fields(b.Description), " "), 200), now())
 		return err
 	case "accepted":
 		if _, err := tx.Exec(`UPDATE tasks SET folder=?,remote_task=?,detail=?,updated_at=?,version=version+1 WHERE id=?`, clip(b.Folder, 4096), clip(b.Mirror, 64), "accepted by "+name, now(), t.ID); err != nil {

@@ -369,10 +369,17 @@ func ParseTaskEvent(provider string, line []byte, r *TaskEventResult) {
 // FeedEntry is one item of a worker's event stream kept for the window: the
 // worker's own text, or one tool action shown as a collapsible line.
 type FeedEntry struct {
-	Kind        string // "text" or "tool"
+	Kind        string // "text", "tool", "command_start" or "command_end"
 	Title       string
 	Text        string
 	Description string
+}
+
+func appendCommandEvent(out []FeedEntry, kind string, id any) []FeedEntry {
+	if key, ok := id.(string); ok && key != "" {
+		return append(out, FeedEntry{Kind: kind, Title: key})
+	}
+	return out
 }
 
 func toolSummary(input map[string]any) string {
@@ -401,11 +408,20 @@ func TaskFeedEntries(provider string, line []byte) []FeedEntry {
 	case "cursor":
 		return cursorFeedEntries(e)
 	case "claude":
+		message, _ := e["message"].(map[string]any)
+		content, _ := message["content"].([]any)
+		if e["type"] == "user" {
+			for _, c := range content {
+				block, _ := c.(map[string]any)
+				if block["type"] == "tool_result" {
+					out = appendCommandEvent(out, "command_end", block["tool_use_id"])
+				}
+			}
+			return out
+		}
 		if e["type"] != "assistant" {
 			return nil
 		}
-		message, _ := e["message"].(map[string]any)
-		content, _ := message["content"].([]any)
 		for _, c := range content {
 			block, _ := c.(map[string]any)
 			switch block["type"] {
@@ -422,14 +438,20 @@ func TaskFeedEntries(provider string, line []byte) []FeedEntry {
 				}
 				input, _ := block["input"].(map[string]any)
 				description, _ := input["description"].(string)
+				if name == "Bash" {
+					out = appendCommandEvent(out, "command_start", block["id"])
+				}
 				out = append(out, FeedEntry{Kind: "tool", Title: name, Text: toolSummary(input), Description: description})
 			}
 		}
 	case "codex":
+		item, _ := e["item"].(map[string]any)
+		if e["type"] == "item.started" && item["type"] == "command_execution" {
+			return appendCommandEvent(out, "command_start", item["id"])
+		}
 		if e["type"] != "item.completed" {
 			return nil
 		}
-		item, _ := e["item"].(map[string]any)
 		switch item["type"] {
 		case "agent_message":
 			if text, _ := item["text"].(string); strings.TrimSpace(text) != "" {
@@ -439,6 +461,7 @@ func TaskFeedEntries(provider string, line []byte) []FeedEntry {
 			command, _ := item["command"].(string)
 			description, _ := item["description"].(string)
 			out = append(out, FeedEntry{Kind: "tool", Title: "Команда", Text: command, Description: description})
+			out = appendCommandEvent(out, "command_end", item["id"])
 		case "file_change":
 			var paths []string
 			changes, _ := item["changes"].([]any)

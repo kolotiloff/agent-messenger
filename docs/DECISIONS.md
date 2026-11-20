@@ -500,3 +500,15 @@ Amends D-100: a request to install the newest signed Messenger (the program only
 ## D-151 — Readable action captions in task history (T-225)
 
 2026-11-19, owner approved short captions with type icons and the existing right-hand disclosure arrows. The group count sits above the category breakdown. Use the provider description when supplied. Old history and actions without descriptions get conservative captions based on the recorded tool or command. Expanding an action shows the saved text.
+
+## D-152 — One-line command group headings (T-226)
+
+2026-11-20, owner chose status and elapsed time in the same size in the group heading. Count completed shell commands, or show the action count in a mixed group. The window shows live time only from a recorded shell start; remote time begins when the starter receives that event. The timing entries do not consume the visible feed allowance or appear in coordinator messages. Keep the existing tool rows, icons, command text and disclosure arrows.
+
+## D-153 — On-demand agent CLI versions for the coordinator (T-227)
+
+2026-11-20, owner asked for a separate coordinator command. `agent_version` runs the registered CLI's fixed `--version` command in a neutral folder on the selected computer. It neither opens a worker session nor checks account access, and returns only a validated CLI version, check time and result state. Remote requests use the existing network mailbox. Each request is claimed once. When the tool returns `waiting`, use the request ID to read its answer. Older remote clients ignore the new request.
+
+## D-154 — Separate update arrow (T-228)
+
+2026-11-20, owner chose a separate amber arrow with a round hover and keyboard-focus background. The installed version remains plain, muted text. Keep the local and remote update flows.

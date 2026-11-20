@@ -253,6 +253,7 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 		bound := false
 		var outputNoted time.Time
 		finalNoted := false
+		activeCommands := make(map[string]bool)
 		for {
 			line, err := reader.ReadBytes('\n')
 			if len(line) > 0 {
@@ -275,6 +276,20 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 					_ = s.store.SetTaskRunModel(runID, result.Model)
 				}
 				for _, item := range adapters.TaskFeedEntries(task.Provider, line) {
+					switch item.Kind {
+					case "command_start":
+						if activeCommands[item.Title] {
+							continue
+						}
+						activeCommands[item.Title] = true
+						item.Title = runID + "/" + item.Title
+					case "command_end":
+						if !activeCommands[item.Title] {
+							continue
+						}
+						delete(activeCommands, item.Title)
+						item.Title = runID + "/" + item.Title
+					}
 					_ = s.store.AppendTaskRunItem(runID, item.Kind, item.Title, item.Text, item.Description)
 				}
 				if !bound && result.Session != "" {
