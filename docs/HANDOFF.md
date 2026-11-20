@@ -10,6 +10,7 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Updated 2026-11-20 by Codex.
 
+- T-232 limits the live command timer to the latest worker action group and uses muted text for every group heading. The first 0.89 release run was cancelled before publishing so the fix can ship in the same update.
 - T-231 on `codex/t229-t230-sidebar-status` makes the selected task's header and sidebar activity use the same task row as the list. Known running durations tick together even during a quiet chat. Pending review and release.
 - T-230 on `codex/t229-t230-sidebar-status` shows the confirmed version in the computer card and coordinator roster as soon as the update reply arrives. Pending review and release.
 - T-229 on `codex/t229-t230-sidebar-status` highlights the running agent and model in the sidebar and puts elapsed time on a soft blue background beside the model. Pending review and release.

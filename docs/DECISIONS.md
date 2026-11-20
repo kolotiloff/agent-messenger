@@ -524,3 +524,7 @@ Amends D-100: a request to install the newest signed Messenger (the program only
 ## D-157 — Use the project task row across the window (T-231)
 
 2026-11-20, owner asked for timely task updates across the window. The project view supplies the task state, model and start time to the list and open conversation. The conversation fetch supplies history. The sidebar uses the same project rows for known work and preserves the local counts for other projects. A confirmed outcome takes a remote task out of a stale reported running count when the report identifies that worker. Unmatched remote activity still follows presence. Elapsed labels share a clock tick without redrawing the conversation.
+
+## D-158 — Keep live command timing on the latest worker group (T-232)
+
+2026-11-20, owner reported a timer on an earlier command group after the worker posted a new message. Only the latest worker action group can show a live timer. A later completion event can still give an earlier group its verified completed-command count. A previous group with an unmatched command start displays an action count. Command group headings and their timers use muted text.
