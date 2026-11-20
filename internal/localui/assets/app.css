@@ -112,7 +112,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-text-xs:12px;
   --am-text-s:13px;
   --am-text-m:14px;
-  --am-text-chat:15px;
+  --am-text-chat:14px;
   --am-line-chat:21px;
   --am-text-l:16px;
   --am-text-xl:18px;
@@ -406,7 +406,12 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-meta time { color:var(--am-muted); font-size:var(--am-text-xs); }
 #am-concept .am-meta-model { color:var(--am-muted); font-size:var(--am-text-s); min-width:0; overflow-wrap:anywhere; }
 #am-concept .am-role { padding:0 var(--am-space-1); border-radius:var(--am-radius-xs); background:var(--am-soft); color:var(--am-muted); font-size:var(--am-text-xs); font-weight:400; }
-#am-concept :is(.am-message-content,.am-compose textarea) { font-size:var(--am-text-chat); line-height:var(--am-line-chat); }
+#am-concept :is(.am-message-content,.am-compose textarea) {
+  font-size:var(--am-text-chat);
+  font-weight:400;
+  line-height:var(--am-line-chat);
+  -webkit-font-smoothing:antialiased;
+}
 #am-concept .am-avatar { display:flex; align-items:center; justify-content:center; width:24px; height:28px; flex-shrink:0; }
 /* The agent's icon sits in the name line, so its text starts at the pane's
    edge like the rest of the window, not one column further in (owner). */

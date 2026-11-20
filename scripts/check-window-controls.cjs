@@ -496,6 +496,17 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       if (process.env.SCREENSHOT_DIR) await page.screenshot({path: path.join(process.env.SCREENSHOT_DIR, 'frameless.png')});
       await page.locator('.am-task-title',{hasText:remoteTask.title}).click();
       const reply = page.locator('#answer-text');
+      const chatType=locator=>locator.evaluate(node=>{
+        const {fontSize,fontWeight,lineHeight}=getComputedStyle(node);
+        return [fontSize,fontWeight,lineHeight];
+      });
+      const chatBody=page.locator('#thread .am-message-content').last();
+      for(const width of [1100,600]){
+        await page.setViewportSize({width,height:600});
+        assert.deepEqual(await chatType(chatBody),['14px','400','21px']);
+        assert.deepEqual(await chatType(reply),await chatType(chatBody));
+      }
+      await page.setViewportSize({width:1100,height:600});
       await reply.fill('Use blue');
       await page.locator('#answer-send').click();
       await page.getByText('Поставлено в очередь для исполнителя',{exact:true}).waitFor();
