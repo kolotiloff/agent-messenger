@@ -419,10 +419,16 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await peerUpdate.locator('.am-machine-version').count(),0);
       await page.emulateMedia({reducedMotion:'reduce'});
       assert.equal(await runningLabel.evaluate(node=>getComputedStyle(node).animationName),'none');
+      // WebKit can retain the previous color scheme in a hidden screen.
+      await page.locator('[data-tab=tasks]').click();
       const runningTaskStatus=taskRow.locator('.am-task-status.am-status-run');
-      for (const [theme,arrow,muted] of [['light','rgb(129, 83, 5)','rgb(107, 107, 107)'],['dark','rgb(242, 198, 91)','rgb(160, 160, 160)']]) {
+      await runningTaskStatus.waitFor({state:'visible'});
+      for (const [theme,arrow,muted,runningColor] of [
+        ['light','rgb(129, 83, 5)','rgb(107, 107, 107)','rgb(40, 123, 215)'],
+        ['dark','rgb(242, 198, 91)','rgb(160, 160, 160)','rgb(103, 170, 249)']
+      ]) {
         await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;},theme);
-        const runningColor=await runningTaskStatus.evaluate(node=>getComputedStyle(node).color);
+        assert.equal(await runningTaskStatus.evaluate(node=>getComputedStyle(node).color),runningColor);
         assert.equal(await runningLabel.evaluate(node=>getComputedStyle(node).color),runningColor);
         assert.equal(await runningLabel.locator('.am-agent-model').evaluate(node=>getComputedStyle(node).color),runningColor);
         assert.equal(await runningTimer.evaluate(node=>getComputedStyle(node).color),muted);
@@ -438,6 +444,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         assert.equal(await peerUpdate.evaluate(node=>getComputedStyle(node).borderRadius),'50%');
       }
       await page.evaluate(()=>{document.documentElement.dataset.theme='light';});
+      await page.locator('[data-tab=server]').click();
       await peerUpdate.locator('svg').click();
       await page.locator('#confirm-dialog').waitFor({state:'visible'});
       assert.equal(await page.locator('#confirm-title').innerText(),'Обновить Runner до v0.99?');
