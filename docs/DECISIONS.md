@@ -512,3 +512,15 @@ Amends D-100: a request to install the newest signed Messenger (the program only
 ## D-154 — Separate update arrow (T-228)
 
 2026-11-20, owner chose a separate amber arrow with a round hover and keyboard-focus background. The installed version remains plain, muted text. Keep the local and remote update flows.
+
+## D-155 — Running agent label and elapsed time in the sidebar (T-229)
+
+2026-11-20, owner chose the soft background option. A running agent's name and model share a blue highlight that travels across the text. The elapsed time sits beside the model at the same type size, on a quiet blue background. With reduced motion or forced colors, the label is static. Use the existing running state for both local and remote agents.
+
+## D-156 — Reconcile the computer version with an update result (T-230)
+
+2026-11-20, owner saw a success notice while the same computer still showed its earlier version. Project the matching, recent successful result onto the broker's presence snapshot before sending the window response. The coordinator's roster uses the same reconciliation. A newer reported version wins. Failed and refused replies cannot change the version.
+
+## D-157 — Use the project task row across the window (T-231)
+
+2026-11-20, owner asked for timely task updates across the window. The project view supplies the task state, model and start time to the list and open conversation. The conversation fetch supplies history. The sidebar uses the same project rows for known work and preserves the local counts for other projects. A confirmed outcome takes a remote task out of a stale reported running count when the report identifies that worker. Unmatched remote activity still follows presence. Elapsed labels share a clock tick without redrawing the conversation.

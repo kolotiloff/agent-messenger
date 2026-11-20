@@ -300,6 +300,7 @@ type WindowAgent struct {
 	// TasksToday counts this project's tasks of this agent started today
 	// (local time of the client), for the agent card.
 	ProjectRunning int `json:"project_running"`
+	ProjectWaiting int `json:"project_waiting"`
 	ProjectToday   int `json:"project_today"`
 	// Models are the names the owner listed for the coordinator (T-043).
 	Models []string `json:"models"`
@@ -335,6 +336,8 @@ type WindowView struct {
 	CoordinatorModels map[string][]string `json:"coordinator_models"`
 	Agents            []WindowAgent       `json:"agents"`
 	Tasks             []WindowTask        `json:"tasks"`
+	// TaskListLimitReached means that older tasks may be absent from Tasks.
+	TaskListLimitReached bool `json:"task_list_limit_reached,omitempty"`
 	// Shared are the other computers' tasks of this project (T-047).
 	Shared []NetPeerTasks `json:"shared"`
 	// Pending counts this project's runs that are recorded but not launched.
@@ -385,18 +388,19 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='running'),
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='waiting_owner'),
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='running' AND t.project=?),
+ (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='waiting_owner' AND t.project=?),
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.project=? AND t.created_at>=?),
  a.models, a.limit_state, a.full_access, a.paused,
  (SELECT COALESCE(SUM(t.usage_input+t.usage_output),0) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.created_at>=?),
  (SELECT COALESCE(MAX(t.finished_at),'') FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='done')
- FROM computer_agents a WHERE a.computer=? ORDER BY a.provider`, project, project, today, today, computer)
+ FROM computer_agents a WHERE a.computer=? ORDER BY a.provider`, project, project, project, today, today, computer)
 		if err != nil {
 			return err
 		}
 		for rows.Next() {
 			var a WindowAgent
 			var models, limit string
-			if err := rows.Scan(&a.Agent, &a.CLI, &a.Profile, &a.Env, &a.Running, &a.Waiting, &a.ProjectRunning, &a.ProjectToday, &models, &limit, &a.FullAccess, &a.Paused, &a.TodayTokens, &a.LastDone); err != nil {
+			if err := rows.Scan(&a.Agent, &a.CLI, &a.Profile, &a.Env, &a.Running, &a.Waiting, &a.ProjectRunning, &a.ProjectWaiting, &a.ProjectToday, &models, &limit, &a.FullAccess, &a.Paused, &a.TodayTokens, &a.LastDone); err != nil {
 				rows.Close()
 				return err
 			}
@@ -427,10 +431,12 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 	if err != nil || !found {
 		return v, err
 	}
-	tasks, err := s.Tasks(project, 300)
+	const taskListLimit = 300
+	tasks, err := s.Tasks(project, taskListLimit)
 	if err != nil {
 		return v, err
 	}
+	v.TaskListLimitReached = len(tasks) == taskListLimit
 	hidden, err := s.hiddenTasks(project)
 	if err != nil {
 		return v, err

@@ -478,54 +478,28 @@ func netPeers(tx *sql.Tx) ([]NetPeer, error) {
 		return nil, err
 	}
 	rows.Close()
-	return out, finishedUpdates(tx, out)
+	if err := reconcilePeerUpdates(tx, out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
-// updateResultFresh is how long a final update result outweighs the
-// "waiting to install" flag of the computer's last presence (T-204).
-const updateResultFresh = 10 * time.Minute
-
-// finishedUpdates clears the update flag of a computer whose final update
-// result came after its last presence: the computer drops the flag before it
-// sends the result, but its next presence comes only with a later network
-// round, and until then new tasks were refused (T-204). A done result also
-// gives the installed version.
-func finishedUpdates(tx *sql.Tx, peers []NetPeer) error {
-	pending := false
-	for _, p := range peers {
-		pending = pending || p.UpdatePending
-	}
-	if !pending {
+func reconcilePeerUpdates(tx *sql.Tx, peers []NetPeer) error {
+	if len(peers) == 0 {
 		return nil
 	}
-	rows, err := tx.Query(`SELECT peer,state,version,updated_at FROM net_updates WHERE state IN (?,?,?)`, UpdateDone, UpdateRefused, UpdateFailed)
+	updates, err := netUpdates(tx)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
-	type result struct{ state, version string }
-	final := map[string]result{}
-	for rows.Next() {
-		var peer, state, version, at string
-		if err := rows.Scan(&peer, &state, &version, &at); err != nil {
-			return err
-		}
-		if when, err := time.Parse(time.RFC3339Nano, at); err == nil && time.Since(when) < updateResultFresh {
-			final[peer] = result{state, version}
-		}
+	byPeer := make(map[string]NetUpdate, len(updates))
+	for _, update := range updates {
+		byPeer[update.Computer] = update
 	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
+	now := time.Now()
 	for i := range peers {
-		r, ok := final[peers[i].ID]
-		if !ok || !peers[i].UpdatePending {
-			continue
-		}
-		peers[i].UpdatePending = false
-		if r.state == UpdateDone && r.version != "" {
-			peers[i].Version = r.version
-		}
+		peer := &peers[i]
+		peer.Version, peer.UpdatePending = byPeer[peer.ID].PeerUpdateState(peer.Version, peer.UpdatePending, peer.Age, now)
 	}
 	return nil
 }

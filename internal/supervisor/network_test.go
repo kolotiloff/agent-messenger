@@ -468,12 +468,30 @@ func TestUpdateOfAnotherComputer(t *testing.T) {
 	}
 	job0 := started[0]
 	job0.State, job0.Version = core.UpdateDone, "0.0.0-preview.57"
+	// The broker still has the earlier version when the result arrives.
+	b.server.SetPresence(func() (broker.Presence, error) {
+		p, err := b.presence()
+		p.Version, p.UpdatePending = "0.0.0-preview.56", false
+		return p, err
+	})
+	b.server.ReportPresence(ctx)
 	if err := FinishRemoteUpdate(b.root, job0); err != nil {
 		t.Fatal(err)
 	}
 	round()
 	if u := status(); u.State != core.UpdateDone {
 		t.Fatalf("queued update done %+v", u)
+	}
+	if peers := a.server.Status().Peers; len(peers) != 1 || peers[0].Version != "0.0.0-preview.56" {
+		t.Fatalf("expected the cached presence to stay old: %+v", peers)
+	}
+	window, err := a.Server(ctx, "status", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := window.(serverView)
+	if len(v.Updates) != 1 || v.Updates[0].State != core.UpdateDone || len(v.Peers) != 1 || v.Peers[0].Version != v.Updates[0].Version || v.Peers[0].UpdatePending {
+		t.Fatalf("update notice and card do not agree: %+v", v)
 	}
 
 	// A Mac updates in its own app.
