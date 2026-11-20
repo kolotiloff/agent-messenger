@@ -4,7 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-20 — Codex (T-234)
 
-- Made the sidebar agent rows and task card text the same size. Removed the elapsed-time background and kept the time alongside the running model.
+- Made the sidebar agent rows and task card text the same size. Put the muted running duration after a comma, with no background.
 
 ## 2026-11-20 — Codex (T-229 to T-233)
 

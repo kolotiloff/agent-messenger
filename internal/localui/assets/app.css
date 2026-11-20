@@ -278,9 +278,10 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-agent-running-label .am-agent-model { color:inherit; }
 #am-concept .am-agent-run .am-agent-status {
   margin-left:0;
-  color:var(--am-agent-running-text);
+  color:var(--am-muted);
 }
 #am-concept .am-agent-run .am-agent-status::before { content:" "; white-space:pre; }
+#am-concept .am-agent-run:has(.am-agent-model) .am-agent-status::before { content:", "; }
 @media (prefers-reduced-motion:no-preference) and (forced-colors:none) {
   @supports (background-clip:text) {
     #am-concept :is(.am-agent-running-label,.am-tool-running-label) {

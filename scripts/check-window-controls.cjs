@@ -394,9 +394,9 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         assert.equal(await item.evaluate(node=>getComputedStyle(node).fontSize),rowFontSize);
       }
       assert.equal(await runningTimer.evaluate(node=>getComputedStyle(node).backgroundColor),'rgba(0, 0, 0, 0)');
-      assert.equal(await runningTimer.evaluate(node=>getComputedStyle(node,'::before').content),'" "');
+      assert.equal(await runningTimer.evaluate(node=>getComputedStyle(node,'::before').content),'", "');
       const labelBox=await runningLabel.boundingBox(),timerBox=await runningTimer.boundingBox();
-      assert(Math.abs(timerBox.x-labelBox.x-labelBox.width)<1,'timer has a gap beyond its leading space');
+      assert(Math.abs(timerBox.x-labelBox.x-labelBox.width)<1,'timer separator must sit directly beside the model');
       assert(await running.evaluate(node=>{
         const label=node.querySelector('.am-agent-running-label'),timer=node.querySelector('.am-agent-status');
         const fullWidth=timer.getBoundingClientRect().width;
@@ -417,6 +417,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await runningLabel.evaluate(node=>getComputedStyle(node).color),'rgb(23, 93, 167)');
       for (const [theme,arrow,muted] of [['light','rgb(129, 83, 5)','rgb(107, 107, 107)'],['dark','rgb(242, 198, 91)','rgb(160, 160, 160)']]) {
         await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;},theme);
+        assert.equal(await runningTimer.evaluate(node=>getComputedStyle(node).color),muted);
         await page.mouse.move(0,0);
         const style=await peerUpdate.evaluate(node=>{
           const css=getComputedStyle(node);

@@ -535,6 +535,6 @@ Amends D-100: a request to install the newest signed Messenger (the program only
 
 ## D-160 — Compact agent rows in the computer list (T-234)
 
-2026-11-20, owner chose the compact preview. Use the task list's agent label size for the sidebar's agent name, model and timing. Place the running duration after a single space with no background, preserve the blue activity cues, and let long model labels give way to the duration.
+2026-11-20, owner chose the compact preview and then selected the variant with a comma and muted time. Use the task list's agent label size for the sidebar's agent name, model and timing. Place the muted running duration after a comma and space when the model is shown, with no background. Preserve the blue highlight on the agent and model, and let long labels give way to the duration.
 
 The owner also asked for a consistent size within each task card. Use 12 px throughout the card and weight 500 for the task title.
