@@ -532,3 +532,9 @@ Amends D-100: a request to install the newest signed Messenger (the program only
 ## D-159 — Lighter conversation typography (T-233)
 
 2026-11-20, owner found the conversation text visually heavy. Use the existing system font at 14 px regular weight with a 21 px line height for the message body and input. Use grayscale text smoothing where supported. The rest of the window keeps its type scale.
+
+## D-160 — Compact agent rows in the computer list (T-234)
+
+2026-11-20, owner chose the compact preview. Use the task list's agent label size for the sidebar's agent name, model and timing. Place the running duration after a single space with no background, preserve the blue activity cues, and let long model labels give way to the duration.
+
+The owner also asked for a consistent size within each task card. Use 12 px throughout the card and weight 500 for the task title.

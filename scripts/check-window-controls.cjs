@@ -372,6 +372,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await completedTime.getAttribute('datetime'),ended);
       assert.match(await completedTime.innerText(),/\d{1,2}:\d{2}/);
       assert.equal(await page.locator('.am-task',{hasText:localTask.title}).locator('.am-task-when').getAttribute('datetime'),began);
+      const taskRow=page.locator('.am-task',{hasText:localTask.title});
+      const taskParts=taskRow.locator('.am-task-agent,.am-task-title,.am-task-status,.am-task-model,.am-task-when');
+      assert.deepEqual(await taskParts.evaluateAll(nodes=>nodes.map(node=>getComputedStyle(node).fontSize)),Array(5).fill('12px'));
+      assert.equal(await taskRow.locator('.am-task-title').evaluate(node=>getComputedStyle(node).fontWeight),'500');
       await page.locator('[data-tab=server]').click();
       const runner=page.locator('[data-peer="dev-1"]');
       const running=runner.locator('.am-agent-run[data-provider=cursor]');
@@ -385,10 +389,23 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await runner.locator('.am-agent-running-label').count(),2);
       assert.equal(await runningLabel.evaluate(node=>getComputedStyle(node).animationName),'am-agent-running-sweep');
       assert.equal(await runningTimer.evaluate(node=>getComputedStyle(node).animationName),'none');
-      assert.equal(await runningTimer.evaluate(node=>getComputedStyle(node).fontSize),await runningLabel.evaluate(node=>getComputedStyle(node).fontSize));
-      assert.notEqual(await runningTimer.evaluate(node=>getComputedStyle(node).backgroundColor),'rgba(0, 0, 0, 0)');
+      const rowFontSize=await page.locator('.am-task-agent').first().evaluate(node=>getComputedStyle(node).fontSize);
+      for(const item of [runningLabel,runningLabel.locator('.am-agent-model'),runningTimer]){
+        assert.equal(await item.evaluate(node=>getComputedStyle(node).fontSize),rowFontSize);
+      }
+      assert.equal(await runningTimer.evaluate(node=>getComputedStyle(node).backgroundColor),'rgba(0, 0, 0, 0)');
+      assert.equal(await runningTimer.evaluate(node=>getComputedStyle(node,'::before').content),'" "');
       const labelBox=await runningLabel.boundingBox(),timerBox=await runningTimer.boundingBox();
-      assert(Math.abs(timerBox.x-labelBox.x-labelBox.width-4)<1,'timer is separated from the running label');
+      assert(Math.abs(timerBox.x-labelBox.x-labelBox.width)<1,'timer has a gap beyond its leading space');
+      assert(await running.evaluate(node=>{
+        const label=node.querySelector('.am-agent-running-label'),timer=node.querySelector('.am-agent-status');
+        const fullWidth=timer.getBoundingClientRect().width;
+        node.style.width='100px';
+        const fits=label.scrollWidth>label.clientWidth&&Math.abs(timer.getBoundingClientRect().width-fullWidth)<1&&
+          timer.getBoundingClientRect().right<=node.getBoundingClientRect().right+1;
+        node.style.removeProperty('width');
+        return fits;
+      }),'a long agent label must give way to the timer');
       assert.equal(await runner.locator('.am-machine-name .am-card-update').count(),1);
       assert.equal(await page.locator('.am-machine-name #app-update-button').count(),1);
       const peerUpdate=runner.getByRole('button',{name:'Обновить до v0.99'});
@@ -496,6 +513,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       if (process.env.SCREENSHOT_DIR) await page.screenshot({path: path.join(process.env.SCREENSHOT_DIR, 'frameless.png')});
       await page.locator('.am-task-title',{hasText:remoteTask.title}).click();
       const reply = page.locator('#answer-text');
+      await reply.waitFor({state:'visible'});
       const chatType=locator=>locator.evaluate(node=>{
         const {fontSize,fontWeight,lineHeight}=getComputedStyle(node);
         return [fontSize,fontWeight,lineHeight];
