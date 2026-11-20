@@ -25,7 +25,7 @@ func TestTaskMessagesOfAnInterruptedTask(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, text := range []string{"first item committed", strings.Repeat("x", 5000), "working on the second item"} {
-		if err := st.AppendTaskRunItem(run, "text", "", text); err != nil {
+		if err := st.AppendTaskRunItem(run, "text", "", text, ""); err != nil {
 			t.Fatal(err)
 		}
 	}

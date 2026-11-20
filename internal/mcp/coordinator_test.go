@@ -678,7 +678,7 @@ func TestCoordinatorTasksShowActivity(t *testing.T) {
 	if err != nil || len(runs) != 1 {
 		t.Fatalf("runs %v %v", runs, err)
 	}
-	if err := st.AppendTaskRunItem(runs[0], "tool", "Bash", "go test ./..."); err != nil {
+	if err := st.AppendTaskRunItem(runs[0], "tool", "Bash", "go test ./...", ""); err != nil {
 		t.Fatal(err)
 	}
 	var list struct {

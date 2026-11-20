@@ -159,6 +159,8 @@ func Open(path string) (*Store, error) {
 		{"coordinator_chats", "start_token", "TEXT NOT NULL DEFAULT ''"},
 		{"coordinator_chats", "boot_id", "TEXT NOT NULL DEFAULT ''"},
 		{"task_runs", "launched_at", "TEXT"},
+		{"task_run_items", "description", "TEXT NOT NULL DEFAULT ''"},
+		{"remote_task_items", "description", "TEXT NOT NULL DEFAULT ''"},
 		{"tasks", "model", "TEXT"},
 		{"tasks", "ran_model", "TEXT"},
 		{"computer_agents", "models", "TEXT NOT NULL DEFAULT ''"},

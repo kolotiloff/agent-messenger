@@ -273,7 +273,8 @@ func cursorFeedEntries(e map[string]any) []FeedEntry {
 			return []FeedEntry{{Kind: "tool", Title: server + "." + tool}}
 		case "shellToolCall":
 			command, _ := args["command"].(string)
-			return []FeedEntry{{Kind: "tool", Title: "Команда", Text: command}}
+			description, _ := args["description"].(string)
+			return []FeedEntry{{Kind: "tool", Title: "Команда", Text: command, Description: description}}
 		}
 		return []FeedEntry{{Kind: "tool", Title: strings.TrimSuffix(key, "ToolCall"), Text: toolSummary(args)}}
 	}

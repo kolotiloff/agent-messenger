@@ -114,8 +114,8 @@ func TestParseTaskEvents(t *testing.T) {
 }
 
 func TestTaskFeedEntries(t *testing.T) {
-	got := TaskFeedEntries("claude", []byte(`{"type":"assistant","message":{"content":[{"type":"text","text":"Reading the code"},{"type":"tool_use","name":"Bash","input":{"command":"go test ./..."}},{"type":"tool_use","name":"mcp__messenger_task__report","input":{"text":"x"}},{"type":"tool_use","name":"ToolSearch","input":{"query":"messenger"}}]}}`))
-	if len(got) != 2 || got[0].Kind != "text" || got[1].Title != "Bash" || got[1].Text != "go test ./..." {
+	got := TaskFeedEntries("claude", []byte(`{"type":"assistant","message":{"content":[{"type":"text","text":"Reading the code"},{"type":"tool_use","name":"Bash","input":{"command":"go test ./...","description":"Run the Go suite"}},{"type":"tool_use","name":"mcp__messenger_task__report","input":{"text":"x"}},{"type":"tool_use","name":"ToolSearch","input":{"query":"messenger"}}]}}`))
+	if len(got) != 2 || got[0].Kind != "text" || got[1].Title != "Bash" || got[1].Text != "go test ./..." || got[1].Description != "Run the Go suite" {
 		t.Fatalf("claude %+v", got)
 	}
 	got = TaskFeedEntries("codex", []byte(`{"type":"item.completed","item":{"type":"command_execution","command":"ls","exit_code":0}}`))
