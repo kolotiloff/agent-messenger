@@ -5,6 +5,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 ## 2026-11-20 — Codex (T-223 to T-225)
 
 - Combined session timestamps, queued owner notes for remote workers and readable action labels for 0.87. Unified the window fixture so it exercises all three changes together.
+- Published [0.87](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.87) from `7fd6c19` and verified all five signed manifests.
 
 ## 2026-11-19 — Codex (T-222)
 
