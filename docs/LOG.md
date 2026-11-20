@@ -5,6 +5,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 ## 2026-11-20 — Codex (T-226 to T-228)
 
 - Combined the command group status, on-demand agent versions and separate amber update arrow for 0.88.
+- Published [0.88](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.88) from `d81bbc4` and verified all five signed manifests.
 
 ## 2026-11-20 — Codex (T-223 to T-225)
 
