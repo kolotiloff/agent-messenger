@@ -15,6 +15,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
+| T-235 | Replace the animated sidebar activity label with the task list's solid blue (owner, 2026-11-20). | window | Implemented on `codex/t235-static-agent-label` (D-161). |
 | T-041 | Agents on Windows: «Проверить версию и вход» works there (D-051); Codex (newer npm layout) and Cursor (D-052) are found and started on Windows; «Выбрать…» buttons for paths (D-053); the program's own window on Windows and Linux (D-054). Shipped in preview.35 (PR #62). Left: the owner's test on Windows. | agent + owner | `claude/t041-windows-agents` |
 | T-042 | Tasks between computers, from the owner's Mac → Windows test: the starting computer shows «Принято» and the worker's progress (D-055); a known refusal is explained in Russian; grouped tool actions, computer name, accept by default (D-056), Codex trust forms, login and install buttons (D-057), Windows title bar. Left: the owner's test of preview.36. | agent + owner | `claude/t041-sparkle-retry` |
 | T-043 | Models per agent: the owner lists the model names an agent accepts on its card; `list_agents` returns them (also for the other computers of the network), and Codex and Cursor take only a listed model, so the coordinator never guesses a name (D-058). Left: the owner's test. | agent + owner | `claude/t043-agent-models` |

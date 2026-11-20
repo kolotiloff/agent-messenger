@@ -538,3 +538,7 @@ Amends D-100: a request to install the newest signed Messenger (the program only
 2026-11-20, owner chose the compact preview and then selected the variant with a comma and muted time. Use the task list's agent label size for the sidebar's agent name, model and timing. Place the muted running duration after a comma and space when the model is shown, with no background. Preserve the blue highlight on the agent and model, and let long labels give way to the duration.
 
 The owner also asked for a consistent size within each task card. Use 12 px throughout the card and weight 500 for the task title.
+
+## D-161 — Static blue running labels in the computer list (T-235)
+
+2026-11-20, owner requested a static activity label. Use the task list's running status color for the sidebar's running agent and model in both themes. The elapsed time stays muted. The command status animation in the conversation follows D-158.

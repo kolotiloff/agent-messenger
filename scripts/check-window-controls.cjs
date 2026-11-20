@@ -387,7 +387,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await runner.locator('.am-agent-wait').count(),1);
       assert.equal(await runner.locator('.am-agent-idle').count(),0);
       assert.equal(await runner.locator('.am-agent-running-label').count(),2);
-      assert.equal(await runningLabel.evaluate(node=>getComputedStyle(node).animationName),'am-agent-running-sweep');
+      assert.equal(await runningLabel.evaluate(node=>getComputedStyle(node).animationName),'none');
       assert.equal(await runningTimer.evaluate(node=>getComputedStyle(node).animationName),'none');
       const rowFontSize=await page.locator('.am-task-agent').first().evaluate(node=>getComputedStyle(node).fontSize);
       for(const item of [runningLabel,runningLabel.locator('.am-agent-model'),runningTimer]){
@@ -414,9 +414,12 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await peerUpdate.locator('.am-machine-version').count(),0);
       await page.emulateMedia({reducedMotion:'reduce'});
       assert.equal(await runningLabel.evaluate(node=>getComputedStyle(node).animationName),'none');
-      assert.equal(await runningLabel.evaluate(node=>getComputedStyle(node).color),'rgb(23, 93, 167)');
+      const runningTaskStatus=taskRow.locator('.am-task-status.am-status-run');
       for (const [theme,arrow,muted] of [['light','rgb(129, 83, 5)','rgb(107, 107, 107)'],['dark','rgb(242, 198, 91)','rgb(160, 160, 160)']]) {
         await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;},theme);
+        const runningColor=await runningTaskStatus.evaluate(node=>getComputedStyle(node).color);
+        assert.equal(await runningLabel.evaluate(node=>getComputedStyle(node).color),runningColor);
+        assert.equal(await runningLabel.locator('.am-agent-model').evaluate(node=>getComputedStyle(node).color),runningColor);
         assert.equal(await runningTimer.evaluate(node=>getComputedStyle(node).color),muted);
         await page.mouse.move(0,0);
         const style=await peerUpdate.evaluate(node=>{
@@ -482,7 +485,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const animation=locator=>locator.evaluate(node=>getComputedStyle(node).animationName);
       assert.equal(await fontSize(timer),await fontSize(label));
       await page.emulateMedia({reducedMotion:'no-preference'});
-      assert.equal(await animation(label),'am-agent-running-sweep');
+      assert.equal(await animation(label),'am-tool-running-sweep');
       assert.equal(await animation(timer),'none');
       await page.emulateMedia({reducedMotion:'reduce'});
       assert.equal(await animation(label),'none');
