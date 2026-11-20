@@ -5,6 +5,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 ## 2026-11-20 — Codex (T-234)
 
 - Made the sidebar agent rows and task card text the same size. Put the muted running duration after a comma, with no background.
+- Published [0.90](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.90) from `cd92102` and verified all five signed update manifests and archives.
 
 ## 2026-11-20 — Codex (T-229 to T-233)
 
