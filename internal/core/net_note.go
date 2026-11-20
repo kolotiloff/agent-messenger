@@ -7,7 +7,7 @@ import (
 	"strconv"
 )
 
-// Notes to a worker on another computer (T-149). The coordinator's note
+// Notes to a worker on another computer (T-149). The note
 // travels as a "note" message; that computer keeps it for the mirror task
 // like a local note, so the worker reads it when its current run ends. A
 // refusal there comes back as note_refused. Only a computer whose version
@@ -30,10 +30,10 @@ func peerAtLeast(version string, build int) bool {
 	return err == nil && n >= build
 }
 
-// noteRemoteTask sends the coordinator's note to the computer that runs the
+// noteRemoteTask sends a note to the computer that runs the
 // task. The note is kept here too, marked sent, for the window and for a
 // repeated call with the same op id.
-func noteRemoteTask(tx *sql.Tx, t Task, remote netLink, opID, text string) error {
+func noteRemoteTask(tx *sql.Tx, t Task, remote netLink, opID, text, author string) error {
 	switch {
 	case t.CancelRequested:
 		return fmt.Errorf("%w: the task is being cancelled", ErrRejected)
@@ -62,21 +62,35 @@ func noteRemoteTask(tx *sql.Tx, t Task, remote netLink, opID, text string) error
 	if err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`INSERT INTO task_owner_notes(id,task_id,op_id,text,state,created_at,author) VALUES (?,?,?,?,'sent',?,?)`, "note-"+id[:16], t.ID, opID, text, now(), AudienceCoordinator); err != nil {
+	if _, err := tx.Exec(`INSERT INTO task_owner_notes(id,task_id,op_id,text,state,created_at,author) VALUES (?,?,?,?,'sent',?,?)`, "note-"+id[:16], t.ID, opID, text, now(), author); err != nil {
 		return err
 	}
-	return enqueueNet(tx, remote.broker, remote.peer, "note."+opID, t.ID, netBody{Kind: "note", Task: t.ID, OpID: opID, Text: text})
+	msg := netBody{Kind: "note", Task: t.ID, OpID: opID, Text: text}
+	if author == AudienceOwner {
+		msg.By = AudienceOwner
+	}
+	if err := enqueueNet(tx, remote.broker, remote.peer, "note."+opID, t.ID, msg); err != nil {
+		return err
+	}
+	if author == AudienceOwner {
+		return ownerNoteEvent(tx, t, text)
+	}
+	return nil
 }
 
-// applyNote keeps another computer's coordinator note for the mirror of its
+// applyNote keeps another computer's note for the mirror of its
 // task, or tells that computer why not.
 func applyNote(tx *sql.Tx, from netLink, b netBody) error {
 	t, ok, err := mirrorTask(tx, from)
 	if err != nil || !ok {
 		return err
 	}
+	author := AudienceCoordinator
+	if b.By == AudienceOwner {
+		author = AudienceOwner
+	}
 	err = savepoint(tx, func() error {
-		return addNoteTx(tx, t.ID, "", "net:"+from.broker+":"+from.peer+":"+b.OpID, b.Text, AudienceCoordinator, true)
+		return addNoteTx(tx, t.ID, "", "net:"+from.broker+":"+from.peer+":"+b.OpID, b.Text, author, true)
 	})
 	if errors.Is(err, ErrRejected) {
 		return enqueueNet(tx, from.broker, from.peer, "note-refused."+b.OpID, t.ID, netBody{Kind: "note_refused", Task: from.task, OpID: b.OpID, Reason: refusalText(err)})

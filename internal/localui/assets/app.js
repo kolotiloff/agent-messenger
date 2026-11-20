@@ -223,17 +223,31 @@
   }
   function clock(at){const d=new Date(at);return isNaN(d.getTime())?'':d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});}
   const activeStates=['running','waiting_owner','waiting_coordinator'];
-  // T-121: the row shows only when the task was created: «сегодня 21:49»,
-  // «вчера 18:05», or the date alone for older ones. The status line below
-  // already says how long it took; the tooltip has the full times.
+  // Relative dates print the time when recent, or whenever an event ended.
   function sameDay(a,b){return a.toDateString()===b.toDateString();}
   function longDay(d){return d.toLocaleDateString(amLocale,d.getFullYear()===new Date().getFullYear()?{day:'numeric',month:'long'}:{day:'numeric',month:'long',year:'numeric'});}
-  function taskWhen(t){
-    const d=new Date(t.created_at);if(isNaN(d.getTime()))return '';
+  function relativeWhen(at,includeClock){
+    const d=new Date(at);if(!at||isNaN(d.getTime()))return '';
     const today=new Date(),yesterday=new Date();yesterday.setDate(today.getDate()-1);
-    if(sameDay(d,today))return tr('сегодня ')+clock(t.created_at);
-    if(sameDay(d,yesterday))return tr('вчера ')+clock(t.created_at);
-    return d.toLocaleDateString(amLocale,d.getFullYear()===today.getFullYear()?{day:'numeric',month:'short'}:{day:'numeric',month:'short',year:'numeric'});
+    if(sameDay(d,today))return tr('сегодня ')+clock(at);
+    if(sameDay(d,yesterday))return tr('вчера ')+clock(at);
+    const date=d.toLocaleDateString(amLocale,d.getFullYear()===today.getFullYear()?{day:'numeric',month:'short'}:{day:'numeric',month:'short',year:'numeric'});
+    return date+(includeClock?' '+clock(at):'');
+  }
+  function appendTaskWhen(agent,t){
+    const ended=finishedStates.includes(t.state)||(!activeStates.includes(t.state)&&!!t.finished_at);
+    const at=ended?t.finished_at:t.created_at,label=relativeWhen(at,ended);
+    if(!label)return;
+    const time=el('time',label,'am-task-when');
+    time.dateTime=at;time.title=taskWhenTitle(t);agent.append(time);
+  }
+  function appendEventTime(line,at,remote){
+    const label=relativeWhen(at,true);
+    if(!label)return;
+    const time=el('time',label);
+    time.dateTime=at;
+    if(remote)time.title=tr('Время события на этом компьютере');
+    line.append(' · ',time);
   }
   function taskWhenTitle(t){
     const d=new Date(t.created_at);if(isNaN(d.getTime()))return '';
@@ -803,7 +817,7 @@
       if(t.remote?.from)label.append(fromTag(t.remote.name));
       const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),label);
       if(t.remote)agent.title=t.remote.from?tr('Задачу дал компьютер «')+t.remote.name+'»':tr('Выполняется на компьютере «')+t.remote.name+'»';
-      const when=taskWhen(t);if(when){const w=el('span',when,'am-task-when');w.title=taskWhenTitle(t);agent.append(w);}
+      appendTaskWhen(agent,t);
       const [text,cls,tip]=taskStatus(t);
       const status=el('span',undefined,'am-task-status '+cls);if(tip)status.title=tip;
       if(t.state==='waiting_owner')status.append(el('span',undefined,'am-dot am-dot-wait'));
@@ -827,7 +841,7 @@
       const label=el('span',(names[t.agent]||t.agent)+tr(' на '));label.append(el('span',sharedComputer(t,p)));
       if(t.runs_on_peer)label.append(fromTag(p.name));
       const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),label);agent.title=tr('Задачу дал компьютер «')+p.name+'»';
-      const sharedWhen=taskWhen(t);if(sharedWhen){const w=el('span',sharedWhen,'am-task-when');w.title=taskWhenTitle(t);agent.append(w);}
+      appendTaskWhen(agent,t);
       const [text,cls,tip]=sharedStatus(t,p);
       const words=el('span');words.append(statusPiece(text,!!t.tokens));
       if(t.tokens)words.append(el('span',tokensText(t.tokens)+tr(' токенов'),'am-task-usage'));
@@ -1054,8 +1068,6 @@
     });
     return box;
   }
-  // A tool action as one line: its kind and, shortened, what it acted on.
-  const toolNames={Bash:tr('Команда'),Read:tr('Чтение'),Edit:tr('Правка'),MultiEdit:tr('Правка'),Write:tr('Запись'),Grep:tr('Поиск'),Glob:tr('Поиск файлов'),WebFetch:tr('Загрузка страницы'),WebSearch:tr('Поиск в интернете'),Task:tr('Подзадача'),TodoWrite:tr('План')};
   // The command itself, without the shell that runs it.
   function commandText(line){
     const m=line.match(/^"?[^"]*(?:powershell|pwsh)(?:\.exe)?"?\s+-Command\s+([\s\S]*)$/i)||line.match(/^"?\S*\/(?:ba|z)?sh"?\s+-l?c\s+([\s\S]*)$/);
@@ -1063,15 +1075,111 @@
     const c=m[1].trim(),q=c[0];
     return (q==="'"||q==='"')&&c.endsWith(q)&&c.length>1?c.slice(1,-1):c;
   }
-  function toolName(it){return toolNames[it.title]||it.title||tr('Действие');}
-  function toolLine(it){
-    const name=toolName(it);
-    const first=commandText((it.text||'').split('\n')[0]);
-    const short=first.length>90?first.slice(0,89)+'…':first;
-    const d=el('details',undefined,'am-tool');const s=el('summary');s.append(el('span',name,'am-tool-name'));
-    if(short)s.append(el('span',' '+short,'am-tool-arg'));
-    d.append(s);if(it.text&&(it.text!==first||first.length>90))d.append(el('pre',it.text));else if(it.text)d.classList.add('am-tool-flat');
-    return d;
+  const actionKinds={
+    search:{count:[tr('поиск'),tr('поиска'),tr('поисков')],icon:['M15 15l5 5M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0']},
+    read:{count:[tr('чтение файла'),tr('чтения файлов'),tr('чтений файлов')],icon:['M4 4h5a3 3 0 0 1 3 3v13a4 4 0 0 0-4-2H4zM20 4h-5a3 3 0 0 0-3 3v13a4 4 0 0 1 4-2h4z']},
+    folder:{count:[tr('просмотр папки'),tr('просмотра папок'),tr('просмотров папок')],icon:['M3 7h7l2 2h9v10H3z']},
+    edit:{count:[tr('изменение файлов'),tr('изменения файлов'),tr('изменений файлов')],icon:['M4 20l4-1L20 7l-3-3L5 16zM15 6l3 3']},
+    script:{count:[tr('запуск скрипта'),tr('запуска скриптов'),tr('запусков скриптов')],icon:['M4 5h16v14H4zM7 9l3 3-3 3m5 0h5']},
+    test:{count:[tr('проверка'),tr('проверки'),tr('проверок')],icon:['M4 12l5 5L20 6']},
+    tool:{count:[tr('вызов инструмента'),tr('вызова инструмента'),tr('вызовов инструментов')],icon:['M8 7l-5 5 5 5m8-10 5 5-5 5']},
+    command:{count:[tr('команда'),tr('команды'),tr('команд')],icon:['M4 5h16v14H4zM7 9l3 3-3 3m5 0h5']},
+  };
+  function actionFile(path){
+    return (path||'').replace(/#cs:\d+$/,'').split(/[\\/]/).filter(Boolean).pop()||'';
+  }
+  function actionTitle(prefix,target){
+    return prefix+(target?' '+target:'');
+  }
+  // Recognize a few common forms. Anything ambiguous keeps a neutral label.
+  // The text is display data only and is never evaluated.
+  function commandAction(raw){
+    const first=commandText(raw.trim()).split(/\r?\n/,1)[0].trim();
+    const words=(first.match(/'(?:[^']*)'|"(?:\\.|[^"\\])*"|&&|\|\||[|;&]|[^\s"'|;&]+/g)||[])
+      .map(word=>/^(?:'[^']*'|"(?:\\.|[^"\\])*")$/.test(word)?word.slice(1,-1):word);
+    const executable=actionFile(words[0]).replace(/\.exe$/i,'');
+    if(/^(?:python(?:3(?:\.\d+)?)?|node|ruby)$/i.test(executable)){
+      const lang=/^python/i.test(executable)?'Python':executable==='node'?'Node.js':'Ruby';
+      return ['script',tr('Запустить скрипт {language}').replace('{language}',lang)];
+    }
+    if((executable==='go'&&words[1]==='test')||(executable==='pytest')){
+      return ['test',tr('Запустить тесты')];
+    }
+    if(words.some(word=>['&&','||',';', '&'].includes(word))){
+      return ['command',actionTitle(tr('Выполнить команду'),executable)];
+    }
+    const pipe=words.indexOf('|'), reader=executable==='cm'&&words[1]==='cat';
+    if(executable==='rg'&&words[1]==='--files'){
+      const filter=pipe===2&&words[3]==='rg'&&words.length===5?words[4].replace(/\\\./g,'.').replace(/\$$/,''):'';
+      return ['search',/^[\w.-]+$/.test(filter)?actionTitle(tr('Найти файл'),filter):tr('Найти файлы')];
+    }
+    if((executable==='rg'&&pipe<0)||(reader&&words[pipe+1]==='rg'&&pipe===3)){
+      const args=words.slice(reader?pipe+2:1);
+      while(args[0]?.startsWith('-')){
+        const option=args.shift();
+        if(option==='--')break;
+        if(/^-(?:C|A|B|m|g)$/.test(option))args.shift();
+      }
+      const candidate=reader?words[2]:args[1];
+      const file=candidate?.startsWith('-')?'':actionFile(candidate);
+      const terms=args[0]?.split('|');
+      const shown=terms?.every(term=>/^[\p{L}\p{N}_ -]{1,32}$/u.test(term))&&terms.length<=3
+        ? new Intl.ListFormat(amLocale).format(terms):'';
+      if(shown)return ['search',actionTitle(tr('Найти упоминания'),shown)+(file?tr(' в файле ')+file:'')];
+      return ['search',file?actionTitle(tr('Найти совпадения в'),file):tr('Поиск по содержимому')];
+    }
+    if(pipe<0&&(reader||executable==='cat')){
+      const target=words.find((word,i)=>i>=(reader?2:1)&&!word.startsWith('-'))||'';
+      const revision=target.match(/#cs:(\d+)$/)?.[1];
+      const label=actionTitle(tr('Прочитать файл'),actionFile(target));
+      return ['read',revision?label+tr(' из версии ')+revision:label];
+    }
+    if(executable==='ls'&&pipe<0){
+      const path=words.find((word,i)=>i>0&&!word.startsWith('-'));
+      const folder=path?.split(/[\\/]/).filter(Boolean).slice(-2).join('/');
+      return ['folder',folder?actionTitle(tr('Посмотреть файлы в папке'),folder):tr('Посмотреть файлы в папке')];
+    }
+    return ['command',actionTitle(tr('Выполнить команду'),executable)];
+  }
+  function toolAction(it){
+    const name=(it.title||'').toLowerCase();
+    const raw=it.text||'';
+    const target=raw.split('\n',1)[0];
+    let kind,label;
+    // Names in old feed records include fixed Russian titles.
+    if(['bash',"команда",'shell'].includes(name)){
+      [kind,label]=commandAction(raw);
+    }else if(name==='read'||name==='readfile'){
+      kind='read';label=actionTitle(tr('Прочитать файл'),actionFile(target));
+    }else if(['edit','multiedit','write',"изменение файлов"].includes(name)){
+      kind='edit';label=actionTitle(tr('Изменить файл'),actionFile(target));
+      if(raw.includes('\n'))label=tr('Изменить файлы');
+    }else if(['grep','glob',"поиск в интернете",'websearch'].includes(name)){
+      kind='search';label=actionTitle(name==='glob'?tr('Найти файлы'):tr('Поиск по запросу'),target);
+    }else{
+      kind='tool';
+      if(name==='webfetch')label=actionTitle(tr('Открыть страницу'),target);
+      else if(name==='task')label=actionTitle(tr('Запустить подзадачу'),target);
+      else if(name==='todowrite')label=tr('Обновить план');
+      else label=it.title||tr('Вызвать инструмент');
+    }
+    const caption=it.description?.trim()||label;
+    return {kind,label:caption.length>120?caption.slice(0,119)+'…':caption};
+  }
+  function toolLine(it,action){
+    const icon=svgIcon(actionKinds[action.kind].icon);
+    icon.classList.add('am-action-icon');
+    const row=el(it.text?'details':'div',undefined,'am-tool am-action-entry');
+    const label=el(it.text?'summary':'div',undefined,'am-action-label');
+    label.append(icon,el('span',action.label,'am-tool-name'));
+    row.append(label);
+    if(it.text)row.append(el('pre',it.text));
+    return row;
+  }
+  function actionCount(count,forms,omitOne=false){
+    const form=new Intl.PluralRules(amLocale).select(count);
+    const word=forms[form==='one'?0:form==='few'?1:2];
+    return (omitOne&&count===1?'':count+' ')+word;
   }
   // Stop, like in a chat: a square button in the input field, or Esc.
   let stopping=false;
@@ -1154,13 +1262,25 @@
     const [coordProvider,coordLabel]=coordinatorName();
     const opened=new Set([...thread.querySelectorAll('details[open][data-key]')].map(d=>d.dataset.key));
     const out=[];let group=null,tools=null;
-    // Actions in a row fold into one line (D-055 follow-up).
+    // Consecutive actions share a heading, with each command expandable.
     const addTool=(c,it,key)=>{
-      const line=toolLine(it);line.dataset.key='t'+key;
-      if(!tools||tools.host!==c||c.lastChild!==tools.node){c.append(line);tools={host:c,node:line,key,count:1,names:new Set([toolName(it)])};return;}
-      if(!tools.box){const box=el('details',undefined,'am-tool-group');box.dataset.key='g'+tools.key;tools.sum=el('summary');box.append(tools.sum);tools.node.replaceWith(box);box.append(tools.node);tools.box=box;tools.node=box;}
-      tools.box.append(line);tools.count++;tools.names.add(toolName(it));
-      tools.sum.textContent=tr('Действий: ')+tools.count+' — '+[...tools.names].join(', ');
+      const action=toolAction(it),line=toolLine(it,action);line.dataset.key='t'+key;
+      if(!tools||tools.host!==c||c.lastChild!==tools.node){
+        c.append(line);tools={host:c,node:line,key,count:1,kinds:new Map([[action.kind,1]])};return;
+      }
+      if(!tools.box){
+        const box=el('details',undefined,'am-tool-group');box.dataset.key='g'+tools.key;
+        const summary=el('summary');
+        tools.heading=el('span',undefined,'am-tool-group-title');
+        tools.breakdown=el('span',undefined,'am-tool-breakdown');
+        summary.append(tools.heading,tools.breakdown);box.append(summary);
+        tools.node.replaceWith(box);box.append(tools.node);tools.box=box;tools.node=box;
+      }
+      tools.box.append(line);tools.count++;
+      tools.kinds.set(action.kind,(tools.kinds.get(action.kind)||0)+1);
+      tools.heading.textContent=actionCount(tools.count,[tr('действие'),tr('действия'),tr('действий')]);
+      tools.breakdown.textContent=new Intl.ListFormat(amLocale).format(
+        [...tools.kinds].map(([kind,count])=>actionCount(count,actionKinds[kind].count,true)));
     };
     const outgoing=(author,provider,role,text,at)=>{
       group=null;const g=el('article',undefined,'am-message-group');const row=el('div',undefined,'am-message am-outgoing');
@@ -1183,7 +1303,7 @@
     for(const [index,it] of feed.items.entries()){
       if(it.kind!=='tool')tools=null;
       if(it.kind==='task'){outgoing(coordLabel,coordProvider,tr('координатор'),it.text,it.at);continue;}
-      if(it.kind==='note'){if(it.author==='coordinator')outgoing(coordLabel,coordProvider,tr('координатор'),it.text,it.at);else outgoing(tr('Вы'),'owner','',it.text,it.at);const c=out[out.length-1].querySelector('.am-message-content');c.append(delivery(...({pending:[tr('Исполнитель прочитает, только когда закончит текущий ход'),'am-status-wait'],delivered:[tr('Передано исполнителю'),'am-status-good'],sent:[tr('Отправлено на компьютер исполнителя'),'am-status-wait'],undelivered:[tr('Не передано: задача остановилась'),'am-status-bad']}[it.state]||[it.state,'am-muted'])));continue;}
+      if(it.kind==='note'){if(it.author==='coordinator')outgoing(coordLabel,coordProvider,tr('координатор'),it.text,it.at);else outgoing(tr('Вы'),'owner','',it.text,it.at);const c=out[out.length-1].querySelector('.am-message-content');c.append(delivery(...({pending:[tr('Исполнитель прочитает, только когда закончит текущий ход'),'am-status-wait'],delivered:[tr('Передано исполнителю'),'am-status-good'],sent:[it.author==='owner'?tr('Поставлено в очередь для исполнителя'):tr('Отправлено на компьютер исполнителя'),'am-status-wait'],undelivered:[tr('Не передано исполнителю'),'am-status-bad']}[it.state]||[it.state,'am-muted'])));continue;}
       if(it.kind==='answer'){if(it.author==='owner'){outgoing(tr('Вы'),'owner','',it.text,it.at);
         // A hint about this answer lives under it while the worker has not
         // gone on yet, so it never stays in another task (owner, 2026-11-09).
@@ -1194,16 +1314,20 @@
       if(it.kind==='report'||it.kind==='question'){
         const c=workerGroup(it.at);c.append(richText(it.text,'am-disposition'));
         if(it.images?.length)c.append(pictures(it.images));
-        if(!it.verified)c.append(delivery(tr('Не опубликовано: запуск не прошёл проверку'),'am-status-bad'));
-        else if(it.kind==='report'&&it.audience==='held')c.append(delivery(tr('Промежуточный отчёт: исполнитель продолжает с вашим сообщением'),'am-status-wait'));
-        else if(it.kind==='report')c.append(delivery(tr('Отчёт отправлен координатору, сессия закрыта'),'am-delivery-close'));
-        else if(it.audience==='owner')c.append(delivery(tr('Вопрос вам, координатор его не видит'),'am-status-wait'));
-        else c.append(delivery(tr('Вопрос координатору'),'am-status-wait'));
+        let note;
+        if(!it.verified)note=delivery(tr('Не опубликовано: запуск не прошёл проверку'),'am-status-bad');
+        else if(it.kind==='report'&&it.audience==='held')note=delivery(tr('Промежуточный отчёт: исполнитель продолжает с вашим сообщением'),'am-status-wait');
+        else if(it.kind==='report')note=delivery(tr('Отчёт отправлен координатору, сессия закрыта'),'am-delivery-close');
+        else if(it.audience==='owner')note=delivery(tr('Вопрос вам, координатор его не видит'),'am-status-wait');
+        else note=delivery(tr('Вопрос координатору'),'am-status-wait');
+        if(it.verified)appendEventTime(note,it.at,t.remote&&!t.remote.from);
+        c.append(note);
         group=null;continue;
       }
       if(it.kind==='outcome'){
         group=null;const text={failed:t.remote&&!t.remote.from?tr('Задача не выполнена'):tr('Запуск завершился с ошибкой'),blocked:t.remote&&!t.remote.from?tr('Задача заблокирована: результат на другом компьютере неизвестен'):tr('Задача заблокирована: процесс не завершился полностью'),interrupted:tr('Клиент перезапустился во время работы; результат неизвестен'),cancelled:tr('Задача отменена')}[it.state]||it.state;
-        const note=el('div',undefined,'am-outcome '+(it.state==='cancelled'?'am-muted':'am-status-bad'));note.append(el('p',text));
+        const note=el('div',undefined,'am-outcome '+(it.state==='cancelled'?'am-muted':'am-status-bad')),line=el('p',text);
+        appendEventTime(line,it.at,t.remote&&!t.remote.from);note.append(line);
         const why=t.remote&&!t.remote.from?refusalText(it.text,t.remote.name)||failureText(it.text):failureText(it.text);if(why)note.append(el('p',why));
         if(it.text)note.append(el('p',it.text,'am-small am-muted'));
         const g=el('article',undefined,'am-message-group');g.append(note);out.push(g);
@@ -1270,10 +1394,12 @@
   // The reply box is one line and grows only while its text does not fit;
   // the stop and send buttons stay at its bottom.
   function sizeAnswer(){const f=$('answer-text');f.style.height='';f.style.overflowY='';if(!f.value)return;const full=f.scrollHeight+(f.offsetHeight-f.clientHeight);f.style.height=Math.min(140,full)+'px';if(full>140)f.style.overflowY='auto';}
-  // T-085: the owner may write to a working worker of this computer; the
-  // message waits until the worker's current run ends: a worker CLI takes
-  // no input while it works (T-148).
-  function canNote(t){return !!t&&!t.remote&&!t.owner_question&&(t.state==='running'||t.state==='waiting_coordinator');}
+  // Owner notes follow a task given here, including one running on a peer.
+  function canNote(t){
+    if(!t||t.owner_question)return false;
+    if(!t.remote)return t.state==='running'||t.state==='waiting_coordinator';
+    return t.state==='running'&&!t.remote.from&&!t.remote.lost&&!t.remote.silent;
+  }
   function answerControls(){const t=feed?.task;$('answer-send').disabled=answering||!$('answer-text').value.trim()||!(t?.owner_question&&!t.remote?.from||canNote(t));}
   async function sendNote(){
     const t=feed?.task;if(!canNote(t)||answering)return;

@@ -79,9 +79,56 @@ func TestCoordinatorNoteReachesAnotherComputer(t *testing.T) {
 	if got := noteStates(t, p.a.st, id); got != "sent,undelivered" {
 		t.Fatalf("giver notes %s", got)
 	}
-	// The owner writes from the window only to this computer's workers.
-	if err := p.a.st.AddOwnerNote(id, "owner-1", "hi"); !errors.Is(err, ErrRejected) {
-		t.Fatalf("owner note to a remote task: %v", err)
+}
+
+func TestOwnerNoteWaitsForRemoteRun(t *testing.T) {
+	p := newNetPair(t)
+	id := p.startRemote(t, "start", "codex", "Long work")
+	p.carry(t, true)
+	m := p.mirror(t, id)
+	p.carry(t, false)
+
+	if err := p.a.st.AddOwnerNote(id, "owner-note", "Use blue"); !errors.Is(err, ErrRejected) {
+		t.Fatalf("peer without note support: %v", err)
+	}
+	if err := p.a.st.SetNetwork(testBroker, HostPeerID, []NetPeer{{ID: "dev-b", Name: "Ноутбук", Age: 1, Version: "0.0.0-preview.86"}}); err != nil {
+		t.Fatal(err)
+	}
+	const session = "019a0000-0000-7000-8000-0000000000b1"
+	run := p.b.launch(t, m.ID, session)
+	for range 2 {
+		if err := p.a.st.AddOwnerNote(id, "owner-note", "Use blue"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	feed, err := p.a.st.TaskFeed(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	notes := 0
+	for _, item := range feed.Items {
+		if item.Kind == "note" && item.Author == AudienceOwner && item.State == "sent" {
+			notes++
+		}
+	}
+	if notes != 1 {
+		t.Fatalf("queued owner notes: %d", notes)
+	}
+	if got := strings.Count(kinds(p.a.events(t, AudienceCoordinator, 0)), "owner_note"); got != 1 {
+		t.Fatalf("owner note events: %d", got)
+	}
+	p.carry(t, true)
+	if got := noteStates(t, p.b.st, m.ID); got != "pending" {
+		t.Fatalf("worker notes %s", got)
+	}
+	p.b.dispose(t, run, DispositionReport, "Work complete")
+	if _, err := p.b.st.FinishTaskRun(run.ID, cleanExit); err != nil {
+		t.Fatal(err)
+	}
+	next := p.b.launch(t, m.ID, session)
+	brief, err := p.b.st.ReadTask(next.ID, next.Receipt, false)
+	if err != nil || next.Kind != "note" || brief.OwnerNotes != "Use blue" || brief.HeldReport != "Work complete" {
+		t.Fatalf("continuation: %+v, %+v, %v", next, brief, err)
 	}
 }
 

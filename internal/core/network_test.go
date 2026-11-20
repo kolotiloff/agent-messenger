@@ -406,10 +406,10 @@ func TestRemoteTaskProgressReachesTheStarter(t *testing.T) {
 	p.carry(t, false)
 	m := p.mirror(t, id)
 	r := p.b.launch(t, m.ID, "019a0000-0000-7000-8000-0000000000b1")
-	if err := p.b.st.AppendTaskRunItem(r.ID, "text", "", "Reading the level files"); err != nil {
+	if err := p.b.st.AppendTaskRunItem(r.ID, "text", "", "Reading the level files", ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := p.b.st.AppendTaskRunItem(r.ID, "tool", "Команда", "ls levels"); err != nil {
+	if err := p.b.st.AppendTaskRunItem(r.ID, "tool", "Команда", "ls levels", "List level files"); err != nil {
 		t.Fatal(err)
 	}
 	sent := p.carry(t, false)
@@ -432,7 +432,7 @@ func TestRemoteTaskProgressReachesTheStarter(t *testing.T) {
 	if got := strings.Join(kinds, "|"); got != want {
 		t.Fatalf("feed\n got %s\nwant %s", got, want)
 	}
-	if f.Items[3].Title != "Команда" {
+	if f.Items[3].Title != "Команда" || f.Items[3].Description != "List level files" {
 		t.Fatalf("tool title %+v", f.Items[3])
 	}
 	// Progress is for the window only: the coordinator gets no event for it.
@@ -445,7 +445,7 @@ func TestRemoteTaskProgressReachesTheStarter(t *testing.T) {
 	before, _ := p.a.st.NetPending(testBroker, 100)
 	local := p.a.start(t, "op-local", "codex", "Local work")
 	lr := p.a.launch(t, local, "019a0000-0000-7000-8000-0000000000c1")
-	if err := p.a.st.AppendTaskRunItem(lr.ID, "text", "", "local line"); err != nil {
+	if err := p.a.st.AppendTaskRunItem(lr.ID, "text", "", "local line", ""); err != nil {
 		t.Fatal(err)
 	}
 	if after, _ := p.a.st.NetPending(testBroker, 100); len(after) != len(before) {

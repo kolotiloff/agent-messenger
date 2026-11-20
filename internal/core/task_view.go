@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS task_run_items (
  kind TEXT NOT NULL,
  title TEXT NOT NULL,
  text TEXT NOT NULL,
+ description TEXT NOT NULL DEFAULT '',
  created_at TEXT NOT NULL,
  PRIMARY KEY (run_id, seq)
 );
@@ -31,6 +32,7 @@ CREATE TABLE IF NOT EXISTS remote_task_items (
  kind TEXT NOT NULL,
  title TEXT NOT NULL,
  text TEXT NOT NULL,
+ description TEXT NOT NULL DEFAULT '',
  created_at TEXT NOT NULL,
  PRIMARY KEY (task_id, seq)
 );
@@ -55,10 +57,11 @@ func clip(text string, n int) string {
 // AppendTaskRunItem stores one sanitized item of a worker's event stream
 // (its text or a tool action) for the window. Items past the bound are
 // dropped; this never affects verification.
-func (s *Store) AppendTaskRunItem(run, kind, title, text string) error {
+func (s *Store) AppendTaskRunItem(run, kind, title, text, description string) error {
 	if kind != "text" && kind != "tool" {
 		return fmt.Errorf("%w: unknown item kind", ErrRejected)
 	}
+	description = clip(strings.Join(strings.Fields(description), " "), 200)
 	return s.tx(func(tx *sql.Tx) error {
 		var n int
 		if err := tx.QueryRow(`SELECT COUNT(*) FROM task_run_items WHERE run_id=?`, run).Scan(&n); err != nil {
@@ -67,7 +70,7 @@ func (s *Store) AppendTaskRunItem(run, kind, title, text string) error {
 		if n >= maxRunItems {
 			return nil
 		}
-		if _, err := tx.Exec(`INSERT INTO task_run_items(run_id,seq,kind,title,text,created_at) VALUES (?,?,?,?,?,?)`, run, n+1, kind, clip(title, 200), clip(text, maxRunItemText), now()); err != nil {
+		if _, err := tx.Exec(`INSERT INTO task_run_items(run_id,seq,kind,title,text,description,created_at) VALUES (?,?,?,?,?,?,?)`, run, n+1, kind, clip(title, 200), clip(text, maxRunItemText), description, now()); err != nil {
 			return err
 		}
 		if n >= maxForwardedItems {
@@ -84,7 +87,7 @@ func (s *Store) AppendTaskRunItem(run, kind, title, text string) error {
 			return err
 		}
 		return enqueueNet(tx, link.origin.broker, link.origin.peer, fmt.Sprintf("progress.%s.%d", run, n+1), task,
-			netBody{Kind: "progress", Task: link.origin.task, Event: kind, Title: clip(title, 200), Text: clip(text, maxForwardedItemText)})
+			netBody{Kind: "progress", Task: link.origin.task, Event: kind, Title: clip(title, 200), Text: clip(text, maxForwardedItemText), Description: description})
 	})
 }
 
@@ -469,11 +472,12 @@ type FeedItem struct {
 	// Kind: task, answer, note, text, tool, question, report, outcome.
 	Kind string `json:"kind"`
 	// Author: coordinator, owner, worker or messenger.
-	Author string `json:"author"`
-	Title  string `json:"title,omitempty"`
-	Text   string `json:"text"`
-	At     string `json:"at"`
-	Run    int    `json:"run,omitempty"`
+	Author      string `json:"author"`
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+	Text        string `json:"text"`
+	At          string `json:"at"`
+	Run         int    `json:"run,omitempty"`
 	// Verified is false for a worker's report or question that was not
 	// published because its run failed verification.
 	Verified bool   `json:"verified"`
@@ -551,13 +555,13 @@ func (s *Store) TaskFeed(id string) (TaskFeed, error) {
 			if r.kind == "answer" || r.kind == "continue" {
 				f.Items = append(f.Items, FeedItem{Kind: "answer", Author: r.by, Text: r.input, At: r.created, Run: r.ordinal, Verified: true})
 			}
-			items, err := tx.Query(`SELECT kind,title,text,created_at FROM task_run_items WHERE run_id=? ORDER BY seq`, r.id)
+			items, err := tx.Query(`SELECT kind,title,text,description,created_at FROM task_run_items WHERE run_id=? ORDER BY seq`, r.id)
 			if err != nil {
 				return err
 			}
 			for items.Next() {
 				var it FeedItem
-				if err := items.Scan(&it.Kind, &it.Title, &it.Text, &it.At); err != nil {
+				if err := items.Scan(&it.Kind, &it.Title, &it.Text, &it.Description, &it.At); err != nil {
 					items.Close()
 					return err
 				}
@@ -610,14 +614,14 @@ func (s *Store) remoteFeed(f *TaskFeed) error {
 	if err := s.remoteEvents(f); err != nil {
 		return err
 	}
-	rows, err := s.db.Query(`SELECT kind,title,text,created_at FROM remote_task_items WHERE task_id=? ORDER BY seq`, f.Task.ID)
+	rows, err := s.db.Query(`SELECT kind,title,text,description,created_at FROM remote_task_items WHERE task_id=? ORDER BY seq`, f.Task.ID)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		it := FeedItem{Author: "worker", Verified: true}
-		if err := rows.Scan(&it.Kind, &it.Title, &it.Text, &it.At); err != nil {
+		if err := rows.Scan(&it.Kind, &it.Title, &it.Text, &it.Description, &it.At); err != nil {
 			return err
 		}
 		f.Items = append(f.Items, it)

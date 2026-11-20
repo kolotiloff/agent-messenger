@@ -8,6 +8,10 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-20 by Codex.
+
+- The 0.87 release candidate brings together T-223 (session event and task finish times), T-224 (owner notes queued for remote workers) and T-225 (action captions, icons and grouped summaries). See [PR #137](https://github.com/kolotiloff/agent-messenger/pull/137), [PR #138](https://github.com/kolotiloff/agent-messenger/pull/138) and [PR #139](https://github.com/kolotiloff/agent-messenger/pull/139). Confirm publication on the [releases page](https://github.com/kolotiloff/agent-messenger/releases).
+
 Updated 2026-11-19 by Codex.
 
 - T-222 refreshes the public README, the platform install and update guides, and the light, dark and first-run screenshots from the 0.86 interface. Repository About now describes the current product. No program changes.

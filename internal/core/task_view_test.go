@@ -22,13 +22,13 @@ func TestWindowViewAndTaskFeed(t *testing.T) {
 	if v, _ = f.st.WindowView("Game", "2000-01-01T00:00:00Z"); v.Tasks[0].PendingLaunch || v.Tasks[0].StartedAt == "" || v.Tasks[0].StartedAt < v.Tasks[0].CreatedAt {
 		t.Fatalf("launched task %+v", v.Tasks[0])
 	}
-	if err := f.st.AppendTaskRunItem(r.ID, "text", "", "Looking at the menu"); err != nil {
+	if err := f.st.AppendTaskRunItem(r.ID, "text", "", "Looking at the menu", ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.st.AppendTaskRunItem(r.ID, "tool", "Bash", "go test ./..."); err != nil {
+	if err := f.st.AppendTaskRunItem(r.ID, "tool", "Bash", "go test ./...", ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.st.AppendTaskRunItem(r.ID, "other", "", "x"); err == nil {
+	if err := f.st.AppendTaskRunItem(r.ID, "other", "", "x", ""); err == nil {
 		t.Fatal("unknown item kind accepted")
 	}
 	f.dispose(t, r, DispositionAskOwner, "May I rename the save file?")

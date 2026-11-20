@@ -488,3 +488,15 @@ Amends D-100: a request to install the newest signed Messenger (the program only
 ## D-148 — Larger window text (T-219)
 
 2026-11-19, owner request for more readable text. The embedded window uses 15 px / 21 px for chat and composer text, and 14 px for the base UI and sidebar agent names. Secondary text and metadata use 13 and 12 px. Existing families and control sizes are retained. See [UI_STYLE.md](UI_STYLE.md).
+
+## D-149 — Visible task event and finish times (T-223)
+
+2026-11-19, owner request. Display recorded times next to report closure, questions and outcomes. Use the stored finish time in the right-hand task list when the task ended. Active rows keep their creation time (T-121); a completed row without a known finish time has no date. Local task history has the per-run timestamps. Remote events in a local thread carry the time this computer recorded them.
+
+## D-150 — Owner notes to a running worker on another computer (T-224)
+
+2026-11-19, owner request. Extend D-096 and D-122 to owner notes from the computer that gave the task. The existing network note message is idempotent and accepts an optional owner marker; a receiver before this change still queues it as a coordinator note. The sender records the author and notifies the original coordinator once that it queued the note. The worker applies the same state checks and reads the note when its current run ends. A peer that no longer accepts the note reports a refusal.
+
+## D-151 — Readable action captions in task history (T-225)
+
+2026-11-19, owner approved short captions with type icons and the existing right-hand disclosure arrows. The group count sits above the category breakdown. Use the provider description when supplied. Old history and actions without descriptions get conservative captions based on the recorded tool or command. Expanding an action shows the saved text.
