@@ -92,6 +92,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
+| T-228 | Make the update icon stand out from blue running status on computer cards (owner, 2026-11-20). | window | Implemented on `codex/t228-update-icon-color` (D-154). |
 | T-225 | Give actions in task history readable captions, icons and a separate breakdown below the count (owner, 2026-11-19). | window + agent | Released in [0.87](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.87) via [PR #139](https://github.com/kolotiloff/agent-messenger/pull/139). |
 | T-224 | Let the owner queue a message from the window for a running worker on another computer (owner, 2026-11-19). | agent + window | Released in [0.87](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.87) via [PR #138](https://github.com/kolotiloff/agent-messenger/pull/138). |
 | T-223 | Show when a session closes or has a recorded outcome, and show completion time for completed tasks in the right-hand list (owner, 2026-11-19). | window | Released in [0.87](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.87) via [PR #137](https://github.com/kolotiloff/agent-messenger/pull/137). |

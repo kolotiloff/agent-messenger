@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-20 — Codex (T-228)
+
+- Gave the computer card update icon a filled amber circle and a dark arrow in both themes. The update controls keep their existing layout and behavior.
+
 ## 2026-11-20 — Codex (T-223 to T-225)
 
 - Combined session timestamps, queued owner notes for remote workers and readable action labels for 0.87. Unified the window fixture so it exercises all three changes together.
