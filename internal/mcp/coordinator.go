@@ -75,6 +75,7 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - One chat is the project's coordinator at a time: the newest chat that waits or acts. If wait answers superseded: true, another chat took over; stop, do not call wait again, and tell the owner, unless they ask you to take over again.
 - A new chat starts from the current state, not from the history: first call tasks, which gives the open tasks, their open questions and the event cursor, then wait with after = that cursor. Never wait from 0 in a new chat: it replays every old event of the project. Agreements of an earlier coordinator chat that are not in the project's rules or files are not known here; ask the owner when it matters.
 - wait returns the events of this project's tasks after the cursor: a report, a question for you, a failure, an interruption, a block or a cancellation; with none, it blocks until one comes or timeout_seconds pass (default 60, at most 120). Always pass after = the cursor from the previous wait. When it returns events, act on them (answer questions with answer, tell the owner about reports). If it says more: true, more events are ready: call wait again at once with the new cursor.
+- agent_version checks one registered agent CLI on this computer or a computer ID from list_agents. It runs only the CLI version query, with no worker or model call. If it returns waiting, pass only the same request_id to read the answer without starting another check. A missing reply can mean the other computer has older Messenger or is unreachable.
 - start_task takes an optional model. Select the exact value from that agent's models in list_agents; model_options explains the standard selections and suggested work (small edits, everyday coding, complex work, hard investigations). This also applies to Unity: scope and difficulty decide, not the project label. A value such as gpt-6.2-astra[effort=high] is a Messenger selection: copy it unchanged into model; Messenger passes the base model and the separate CLI reasoning setting. Cursor uses its published CLI ID directly. These are configured options, not proof of account access; do not retry or switch automatically on rejection. Leave model out for the CLI default. Never invent IDs or append H/Medium to a model. Tell the owner when you chose a non-default model and why. On executors running 0.82 or newer, these lists come from the coordinator computer. Older executors still use the lists they report. The executor must have CLI account access to the selection.
 - A report or question that ends with «[N picture(s) attached: read them with task_images]» has pictures from the worker (a screenshot, a chart): look at them with task_images before you judge the result.
 - A report is the worker's short summary. Its full last message is kept too: when a report or failure ends with «[Messenger] The worker's full final message has N characters», read it with task_output before asking the worker again; it is lost nowhere, even if the worker deleted its file.
@@ -395,6 +396,12 @@ func coordinatorTools() []map[string]any {
 	return []map[string]any{
 		{"name": "list_agents", "description": "List this project's computers (this one and the other computers of its network), the project folder on this one, and their agents with how many tasks they run, the model names the owner listed for them and their last known usage limit (Codex: read from its account every 10 minutes, in percent per window). Another computer also shows accepts_tasks and has_project (this project's folder) when it reported them. messenger_version is the Messenger version each computer runs (left out when an older computer did not report it); check it before reporting a problem a newer version may already fix. newest_release is the newest Messenger release this computer has downloaded, with its notes; update_available marks a computer that runs an older version.",
 			"inputSchema": obj(map[string]any{})},
+		{"name": "agent_version", "description": "Check the installed CLI version of one registered Claude Code, Codex or Cursor agent. Defaults to this computer. On another computer, waits up to 20 seconds; if waiting, pass only the returned request_id to read the reply.",
+			"inputSchema": obj(map[string]any{
+				"agent":      map[string]any{"type": "string", "enum": []string{"claude", "codex", "cursor"}},
+				"computer":   str("computer id from list_agents; omit for this computer"),
+				"request_id": str("id of a waiting version request; use without agent or computer"),
+			})},
 		{"name": "start_task", "description": "Start a task in a new worker session of the chosen agent, in this project's folder on the computer. Returns the task id. Repeating a call with the same op_id returns the same task.",
 			"inputSchema": obj(map[string]any{
 				"op_id":    str("unique id of this operation, for safe retries"),
@@ -506,6 +513,16 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 			c.addNewestRelease(out)
 		}
 		return out, err
+	case "agent_version":
+		var a struct {
+			Agent     string `json:"agent"`
+			Computer  string `json:"computer"`
+			RequestID string `json:"request_id"`
+		}
+		if err := strict(&a); err != nil {
+			return nil, err
+		}
+		return c.agentVersion(ctx, a.Computer, a.Agent, a.RequestID)
 	case "start_task":
 		var a struct {
 			OpID     string `json:"op_id"`

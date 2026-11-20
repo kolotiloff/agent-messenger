@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-20 — Codex (T-227)
+
+- Added the coordinator's `agent_version` tool. Probes run on the selected computer with the registered executable, and replies contain only the version and result metadata. Fixture checks cover the local tool, a CLI symlink changing after an update, and the remote mailbox path.
+
 ## 2026-11-20 — Codex (T-223 to T-225)
 
 - Combined session timestamps, queued owner notes for remote workers and readable action labels for 0.87. Unified the window fixture so it exercises all three changes together.

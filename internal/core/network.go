@@ -216,7 +216,8 @@ type netBody struct {
 	// ignores it.
 	Lock string `json:"lock,omitempty"`
 	// Lines is how many log lines a log request asks for (T-057).
-	Lines int `json:"lines,omitempty"`
+	Lines     int    `json:"lines,omitempty"`
+	CheckedAt string `json:"checked_at,omitempty"`
 }
 
 // netOpID is the broker's rule for an operation id. An id built from
@@ -915,6 +916,9 @@ func (s *Store) NetUndeliverable(seq int64) error {
 		if kind == "log_request" || kind == "log" {
 			return logUndeliverable(tx, kind, task)
 		}
+		if kind == "agent_version_request" || kind == "agent_version" {
+			return agentVersionUndeliverable(tx, kind, task)
+		}
 		if kind == "update_request" || kind == "update" {
 			return updateUndeliverable(tx, kind, task)
 		}
@@ -1024,6 +1028,10 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 			return applyLogRequest(tx, from, b)
 		case "log":
 			return applyLogReply(tx, from, b)
+		case "agent_version_request":
+			return applyAgentVersionRequest(tx, from, b)
+		case "agent_version":
+			return applyAgentVersionReply(tx, from, b)
 		case "update_request":
 			return applyUpdateRequest(tx, from, b)
 		case "update":
