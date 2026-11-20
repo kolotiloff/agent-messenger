@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-20 — Codex (T-229 to T-233)
+
+- Published [0.89](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.89) from `8ff9acc` and verified all five signed update manifests and archives.
+
 ## 2026-11-20 — Codex (T-233)
 
 - Reduced the chat body and input to 14 px regular text and kept a 21 px line height. Checked both at wide and narrow window widths.
