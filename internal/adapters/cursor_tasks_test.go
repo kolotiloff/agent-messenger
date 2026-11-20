@@ -193,7 +193,13 @@ func TestCursorFeedEntries(t *testing.T) {
 	for _, line := range lines {
 		got = append(got, TaskFeedEntries("cursor", []byte(line))...)
 	}
-	want := []FeedEntry{{Kind: "text", Text: "Looking at the tests"}, {Kind: "tool", Title: "Команда", Text: "go test ./..."}, {Kind: "tool", Title: "read", Text: "main.go"}}
+	want := []FeedEntry{
+		{Kind: "text", Text: "Looking at the tests"},
+		{Kind: "command_start", Title: "1"},
+		{Kind: "tool", Title: "Команда", Text: "go test ./..."},
+		{Kind: "command_end", Title: "1"},
+		{Kind: "tool", Title: "read", Text: "main.go"},
+	}
 	if len(got) != len(want) {
 		t.Fatalf("%+v", got)
 	}

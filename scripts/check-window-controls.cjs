@@ -292,6 +292,9 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       // The update offered, downloading, installing, restarting (owner,
       // 2026-11-15: one button and one dialog).
       const began = new Date(Date.now() - 3 * 60 * 1000).toISOString();
+      let commandFinished = false;
+      let mixedActions = false;
+      const commandStarted = new Date(Date.now() - 72 * 1000).toISOString();
       const ended = '2026-11-14T09:30:00Z';
       const stat = {id:'old-1',title:'Old 1',at:'2026-11-19T09:20:00',project:'Frame',agent:'codex',model:'gpt-6.2-sol[effort=medium]',computer:'Runner',tokens:12};
       const localTask = {id:'local-task',title:'Local task',project:'Frame',agent:'codex',state:'running',created_at:began,started_at:began,model:'gpt-6.2-sol[effort=low]',ran_model:'gpt-6.2-sol[effort=medium]'};
@@ -317,15 +320,20 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           const remote = new URL(route.request().url()).searchParams.get('id') === remoteTask.id;
           const items = [{kind:'text',text:'Fixture reply',at:began}];
           if (remote) items.push(...ownerNotes.map(note=>({kind:'note',text:note.text,at:began,author:'owner',state:'sent'})));
-          else items.push(
-          {kind:'tool',title:'Команда',text:"rg --files | rg 'RuntimePanelUtils\\.cs$'",at:began},
-          {kind:'tool',title:'Команда',text:"cm cat FreeCamera.cs#cs:3474 | rg -n -C 2 'Mouse|UIOwnsKeys'",at:began},
-          {kind:'tool',title:'Bash',text:'cm cat Tools/40_tune.steps#cs:3474',description:'Прочитать шаги ручной проверки',at:began},
-          {kind:'tool',title:'Команда',text:'ls Assets/Infantry/Client',at:began},
-          {kind:'tool',title:'Команда',text:"python3 - <<'PY'\nprint('test')\nPY",at:began},
-            {kind:'report',text:'Previous run finished',at:ended,verified:true},
-            {kind:'outcome',text:'Previous run was interrupted',at:began,state:'interrupted',verified:true}
-          );
+          else {
+            items.push(
+              {kind:'report',text:'Previous run finished',at:ended,verified:true},
+              {kind:'outcome',text:'Previous run was interrupted',at:began,state:'interrupted',verified:true},
+              {kind:'command_start',title:'fixture-command',at:commandStarted},
+              {kind:'tool',title:'Команда',text:"rg --files | rg 'RuntimePanelUtils\\.cs$'",at:began},
+              {kind:'tool',title:'Команда',text:"cm cat FreeCamera.cs#cs:3474 | rg -n -C 2 'Mouse|UIOwnsKeys'",at:began},
+              {kind:'tool',title:'Bash',text:'cm cat Tools/40_tune.steps#cs:3474',description:'Прочитать шаги ручной проверки',at:began},
+              {kind:'tool',title:'Команда',text:'ls Assets/Infantry/Client',at:began},
+              {kind:'tool',title:'Команда',text:"python3 - <<'PY'\nprint('test')\nPY",at:began},
+            );
+            if (commandFinished) items.push({kind:'command_end',title:'fixture-command',at:began});
+            if (mixedActions) items.push({kind:'tool',title:'read',text:'ProjectSettings.asset',at:began});
+          }
           return route.fulfill({json:{task:remote?remoteTask:localTask,items}});
         }
         if (pathname === '/api/task-note') ownerNotes.push(route.request().postDataJSON());
@@ -401,13 +409,25 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await page.locator('#thread .am-outcome time').getAttribute('datetime'),began);
       const actionGroup=page.locator('#thread .am-tool-group');
       await actionGroup.locator(':scope > summary').click();
-      assert.equal(await actionGroup.locator('.am-tool-group-title').innerText(),'5 действий');
-      assert.equal(await actionGroup.locator('.am-tool-breakdown').innerText(),'2 поиска, чтение файла, просмотр папки и запуск скрипта');
+      const timer=actionGroup.locator('.am-tool-timer');
+      assert.match(await timer.innerText(),/^1 мин \d{1,2} с$/);
+      const label=actionGroup.getByText('Выполняются команды',{exact:true});
+      const fontSize=locator=>locator.evaluate(node=>getComputedStyle(node).fontSize);
+      assert.equal(await fontSize(timer),await fontSize(label));
+      const startText=await timer.innerText();
+      await page.waitForFunction(text=>document.querySelector('.am-tool-timer')?.textContent!==text,startText);
+      commandFinished=true;
+      await actionGroup.getByText('Выполнено 5 команд',{exact:true}).waitFor();
+      assert.equal(await timer.count(),0);
+      assert.equal(await actionGroup.getAttribute('open'),'');
+      assert.equal(await actionGroup.locator('.am-tool-breakdown').count(),0);
       const labels=actionGroup.locator('.am-action-label');
       assert.deepEqual(await labels.allInnerTexts(),['Найти файл RuntimePanelUtils.cs','Найти упоминания Mouse и UIOwnsKeys в файле FreeCamera.cs','Прочитать шаги ручной проверки','Посмотреть файлы в папке Infantry/Client','Запустить скрипт Python']);
       assert.equal(await labels.locator('svg').count(),5);
       await labels.nth(1).click();
       assert.equal(await actionGroup.locator('details[open] pre').innerText(),"cm cat FreeCamera.cs#cs:3474 | rg -n -C 2 'Mouse|UIOwnsKeys'");
+      mixedActions=true;
+      await actionGroup.getByText('6 действий',{exact:true}).waitFor();
       if (process.env.SCREENSHOT_DIR) await page.screenshot({path: path.join(process.env.SCREENSHOT_DIR, 'frameless.png')});
       await page.locator('.am-task-title',{hasText:remoteTask.title}).click();
       const reply = page.locator('#answer-text');

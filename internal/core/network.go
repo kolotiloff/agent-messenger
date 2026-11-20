@@ -1196,17 +1196,18 @@ func applyReport(tx *sql.Tx, from netLink, b netBody) error {
 	switch b.Kind {
 	case "progress":
 		// A line of the worker's progress, for the window only (D-055).
-		if b.Event != "text" && b.Event != "tool" {
+		activity := isCommandActivity(b.Event)
+		if b.Event != "text" && b.Event != "tool" && !activity {
 			return nil
 		}
-		var n int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM remote_task_items WHERE task_id=?`, t.ID).Scan(&n); err != nil {
+		var seq, n int
+		if err := tx.QueryRow(`SELECT COALESCE(MAX(seq),0), COUNT(CASE WHEN kind IN ('text','tool') THEN 1 END) FROM remote_task_items WHERE task_id=?`, t.ID).Scan(&seq, &n); err != nil {
 			return err
 		}
-		if n >= maxRunItems {
+		if (!activity && n >= maxRunItems) || (activity && seq-n >= 2*maxRunItems) {
 			return nil
 		}
-		_, err := tx.Exec(`INSERT INTO remote_task_items(task_id,seq,kind,title,text,description,created_at) VALUES (?,?,?,?,?,?,?)`, t.ID, n+1, b.Event, clip(b.Title, 200), clip(b.Text, maxForwardedItemText), clip(strings.Join(strings.Fields(b.Description), " "), 200), now())
+		_, err := tx.Exec(`INSERT INTO remote_task_items(task_id,seq,kind,title,text,description,created_at) VALUES (?,?,?,?,?,?,?)`, t.ID, seq+1, b.Event, clip(b.Title, 200), clip(b.Text, maxForwardedItemText), clip(strings.Join(strings.Fields(b.Description), " "), 200), now())
 		return err
 	case "accepted":
 		if _, err := tx.Exec(`UPDATE tasks SET folder=?,remote_task=?,detail=?,updated_at=?,version=version+1 WHERE id=?`, clip(b.Folder, 4096), clip(b.Mirror, 64), "accepted by "+name, now(), t.ID); err != nil {

@@ -409,12 +409,12 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-tool-group > summary { cursor:pointer; list-style:none; }
 /* Disclosure chevron after the text: right when closed, down when open (owner, 2026-11-12). */
 #am-concept :is(.am-tool > summary, .am-tool-group > summary)::-webkit-details-marker { display:none; }
-#am-concept :is(.am-tool > summary, .am-tool-group-title)::after { content:""; display:inline-block; width:6px; height:6px; margin-left:var(--am-space-2); border-right:1.5px solid currentColor; border-bottom:1.5px solid currentColor; vertical-align:middle; transform:translateY(-1px) rotate(-45deg); transition:transform .15s; }
+#am-concept :is(.am-tool > summary, .am-tool-group > summary .am-tool-group-title)::after { content:""; display:inline-block; width:6px; height:6px; margin-left:var(--am-space-2); border-right:1.5px solid currentColor; border-bottom:1.5px solid currentColor; vertical-align:middle; transform:translateY(-1px) rotate(-45deg); transition:transform .15s; }
 #am-concept :is(.am-tool[open] > summary, .am-tool-group[open] .am-tool-group-title)::after { transform:translateY(-3px) rotate(45deg); }
 #am-concept :is(.am-tool > summary, .am-tool-group > summary):is(:hover,:focus-visible) { color:var(--am-text); }
 #am-concept .am-tool-group > .am-tool { margin-left:var(--am-space-3); }
 #am-concept .am-tool-group-title { color:var(--am-text); font-size:var(--am-text-m); font-weight:500; }
-#am-concept .am-tool-breakdown { display:block; font-size:var(--am-text-xs); }
+#am-concept .am-tool-timer { margin-inline-start:var(--am-space-2); color:var(--am-muted); font-variant-numeric:tabular-nums; }
 #am-concept .am-action-entry { padding-block:var(--am-space-1); }
 #am-concept .am-action-label { overflow-wrap:anywhere; }
 #am-concept .am-action-icon { width:var(--am-space-4); height:var(--am-space-4); margin-right:var(--am-space-2); vertical-align:middle; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }

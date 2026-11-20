@@ -1129,7 +1129,12 @@ func (c *coordinator) taskMessages(id string, last int) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	items := feed.Items
+	items := feed.Items[:0]
+	for _, it := range feed.Items {
+		if it.Kind != "command_start" && it.Kind != "command_end" {
+			items = append(items, it)
+		}
+	}
 	total := len(items)
 	if len(items) > last {
 		items = items[len(items)-last:]

@@ -1076,14 +1076,14 @@
     return (q==="'"||q==='"')&&c.endsWith(q)&&c.length>1?c.slice(1,-1):c;
   }
   const actionKinds={
-    search:{count:[tr('поиск'),tr('поиска'),tr('поисков')],icon:['M15 15l5 5M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0']},
-    read:{count:[tr('чтение файла'),tr('чтения файлов'),tr('чтений файлов')],icon:['M4 4h5a3 3 0 0 1 3 3v13a4 4 0 0 0-4-2H4zM20 4h-5a3 3 0 0 0-3 3v13a4 4 0 0 1 4-2h4z']},
-    folder:{count:[tr('просмотр папки'),tr('просмотра папок'),tr('просмотров папок')],icon:['M3 7h7l2 2h9v10H3z']},
-    edit:{count:[tr('изменение файлов'),tr('изменения файлов'),tr('изменений файлов')],icon:['M4 20l4-1L20 7l-3-3L5 16zM15 6l3 3']},
-    script:{count:[tr('запуск скрипта'),tr('запуска скриптов'),tr('запусков скриптов')],icon:['M4 5h16v14H4zM7 9l3 3-3 3m5 0h5']},
-    test:{count:[tr('проверка'),tr('проверки'),tr('проверок')],icon:['M4 12l5 5L20 6']},
-    tool:{count:[tr('вызов инструмента'),tr('вызова инструмента'),tr('вызовов инструментов')],icon:['M8 7l-5 5 5 5m8-10 5 5-5 5']},
-    command:{count:[tr('команда'),tr('команды'),tr('команд')],icon:['M4 5h16v14H4zM7 9l3 3-3 3m5 0h5']},
+    search:{icon:['M15 15l5 5M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0']},
+    read:{icon:['M4 4h5a3 3 0 0 1 3 3v13a4 4 0 0 0-4-2H4zM20 4h-5a3 3 0 0 0-3 3v13a4 4 0 0 1 4-2h4z']},
+    folder:{icon:['M3 7h7l2 2h9v10H3z']},
+    edit:{icon:['M4 20l4-1L20 7l-3-3L5 16zM15 6l3 3']},
+    script:{icon:['M4 5h16v14H4zM7 9l3 3-3 3m5 0h5']},
+    test:{icon:['M4 12l5 5L20 6']},
+    tool:{icon:['M8 7l-5 5 5 5m8-10 5 5-5 5']},
+    command:{icon:['M4 5h16v14H4zM7 9l3 3-3 3m5 0h5']},
   };
   function actionFile(path){
     return (path||'').replace(/#cs:\d+$/,'').split(/[\\/]/).filter(Boolean).pop()||'';
@@ -1141,13 +1141,14 @@
     }
     return ['command',actionTitle(tr('Выполнить команду'),executable)];
   }
+  function isCommandTool(name){return ['bash',"команда",'shell'].includes(name);}
   function toolAction(it){
     const name=(it.title||'').toLowerCase();
     const raw=it.text||'';
     const target=raw.split('\n',1)[0];
     let kind,label;
     // Names in old feed records include fixed Russian titles.
-    if(['bash',"команда",'shell'].includes(name)){
+    if(isCommandTool(name)){
       [kind,label]=commandAction(raw);
     }else if(name==='read'||name==='readfile'){
       kind='read';label=actionTitle(tr('Прочитать файл'),actionFile(target));
@@ -1176,10 +1177,19 @@
     if(it.text)row.append(el('pre',it.text));
     return row;
   }
-  function actionCount(count,forms,omitOne=false){
+  function actionCount(count,forms){
     const form=new Intl.PluralRules(amLocale).select(count);
-    const word=forms[form==='one'?0:form==='few'?1:2];
-    return (omitOne&&count===1?'':count+' ')+word;
+    return count+' '+forms[form==='one'?0:form==='few'?1:2];
+  }
+  function commandElapsed(start){
+    const seconds=Math.max(0,Math.floor((Date.now()-start)/1000));
+    const minutes=Math.floor(seconds/60);
+    return (minutes?minutes+tr(' мин')+' ':'')+(seconds%60)+tr(' с');
+  }
+  function updateCommandTimers(){
+    for(const timer of $('thread').querySelectorAll('[data-command-start]')){
+      timer.textContent=commandElapsed(Number(timer.dataset.commandStart));
+    }
   }
   // Stop, like in a chat: a square button in the input field, or Esc.
   let stopping=false;
@@ -1244,7 +1254,7 @@
   function renderFeed(){
     const t=feed.task,thread=$('thread'),head=$('task-head');
     const signature=JSON.stringify(feed);if(signature===feedSignature)return;
-    const count=(feed.items||[]).length,fresh=feedShown!==t.id,atBottom=fresh||feedStick||feedPinned,grew=!fresh&&!atBottom&&count>feedCount;feedShown=t.id;feedStick=false;feedCount=count;feedSignature=signature;
+    const count=(feed.items||[]).filter(it=>it.kind!=='command_end').length,fresh=feedShown!==t.id,atBottom=fresh||feedStick||feedPinned,grew=!fresh&&!atBottom&&count>feedCount;feedShown=t.id;feedStick=false;feedCount=count;feedSignature=signature;
     const title=el('div',undefined,'am-task-head');title.append(el('h3',t.title));
     const where=t.remote&&!t.remote.from?tr(' на компьютере «')+t.remote.name+'»':tr(' на ')+(view.computer_name||tr('этом компьютере'))+(t.remote?.from?tr(', по заданию компьютера «')+t.remote.name+'»':'');
     const model=t.ran_model||t.model;
@@ -1262,25 +1272,40 @@
     const [coordProvider,coordLabel]=coordinatorName();
     const opened=new Set([...thread.querySelectorAll('details[open][data-key]')].map(d=>d.dataset.key));
     const out=[];let group=null,tools=null;
-    // Consecutive actions share a heading, with each command expandable.
-    const addTool=(c,it,key)=>{
-      const action=toolAction(it),line=toolLine(it,action);line.dataset.key='t'+key;
-      if(!tools||tools.host!==c||c.lastChild!==tools.node){
-        c.append(line);tools={host:c,node:line,key,count:1,kinds:new Map([[action.kind,1]])};return;
+    const pending=new Map(), unfinished=new Set();
+    for(const [index,it] of feed.items.entries()){
+      if(it.kind==='command_start'){pending.set(it.title,index);unfinished.add(index);}
+      if(it.kind==='command_end'){unfinished.delete(pending.get(it.title));pending.delete(it.title);}
+      if(['answer','report','question','outcome'].includes(it.kind))pending.clear();
+    }
+    const running=t.state==='running'&&!t.pending_launch&&!t.remote?.lost&&!t.remote?.silent&&online;
+    const live=new Set(running?pending.values():[]);
+    // Lifecycle entries supply the heading only. Tool rows still come from the
+    // provider's original feed, in the same order and with the same content.
+    const collectTools=key=>tools??={key,lines:[],commandsOnly:true,unfinished:false,start:0};
+    const flushTools=()=>{
+      if(tools?.lines.length||tools?.start){
+        const {key,lines,commandsOnly,unfinished,start}=tools;
+        const host=workerGroup(tools.at);
+        if(!start&&lines.length===1){host.append(lines[0]);}
+        else{
+          const box=el(lines.length?'details':'div',undefined,'am-tool-group');
+          box.dataset.key='g'+key;
+          const summary=el(lines.length?'summary':'div');
+          const label=start?tr('Выполняются команды'):commandsOnly&&!unfinished
+            ?tr('Выполнено {commands}').replace('{commands}',actionCount(lines.length,[tr('команда'),tr('команды'),tr('команд')]))
+            :actionCount(lines.length,[tr('действие'),tr('действия'),tr('действий')]);
+          const heading=el('span',undefined,'am-tool-group-title');
+          heading.append(el('span',label,start?'am-status-run':''));
+          if(start){
+            const timer=el('span',commandElapsed(start),'am-tool-timer');
+            timer.dataset.commandStart=start;
+            heading.append(timer);
+          }
+          summary.append(heading);box.append(summary,...lines);host.append(box);
+        }
       }
-      if(!tools.box){
-        const box=el('details',undefined,'am-tool-group');box.dataset.key='g'+tools.key;
-        const summary=el('summary');
-        tools.heading=el('span',undefined,'am-tool-group-title');
-        tools.breakdown=el('span',undefined,'am-tool-breakdown');
-        summary.append(tools.heading,tools.breakdown);box.append(summary);
-        tools.node.replaceWith(box);box.append(tools.node);tools.box=box;tools.node=box;
-      }
-      tools.box.append(line);tools.count++;
-      tools.kinds.set(action.kind,(tools.kinds.get(action.kind)||0)+1);
-      tools.heading.textContent=actionCount(tools.count,[tr('действие'),tr('действия'),tr('действий')]);
-      tools.breakdown.textContent=new Intl.ListFormat(amLocale).format(
-        [...tools.kinds].map(([kind,count])=>actionCount(count,actionKinds[kind].count,true)));
+      tools=null;
     };
     const outgoing=(author,provider,role,text,at)=>{
       group=null;const g=el('article',undefined,'am-message-group');const row=el('div',undefined,'am-message am-outgoing');
@@ -1301,7 +1326,18 @@
     };
     const delivery=(text,cls)=>el('div',text,'am-delivery '+cls);
     for(const [index,it] of feed.items.entries()){
-      if(it.kind!=='tool')tools=null;
+      if(it.kind==='command_end')continue;
+      if(it.kind==='command_start'){
+        const batch=collectTools(index);
+        if(unfinished.has(index))batch.unfinished=true;
+        const start=Date.parse(it.at||'');
+        if(live.has(index)&&start){
+          batch.start=batch.start?Math.min(batch.start,start):start;
+          batch.at??=it.at;
+        }
+        continue;
+      }
+      if(it.kind!=='tool')flushTools();
       if(it.kind==='task'){outgoing(coordLabel,coordProvider,tr('координатор'),it.text,it.at);continue;}
       if(it.kind==='note'){if(it.author==='coordinator')outgoing(coordLabel,coordProvider,tr('координатор'),it.text,it.at);else outgoing(tr('Вы'),'owner','',it.text,it.at);const c=out[out.length-1].querySelector('.am-message-content');c.append(delivery(...({pending:[tr('Исполнитель прочитает, только когда закончит текущий ход'),'am-status-wait'],delivered:[tr('Передано исполнителю'),'am-status-good'],sent:[it.author==='owner'?tr('Поставлено в очередь для исполнителя'):tr('Отправлено на компьютер исполнителя'),'am-status-wait'],undelivered:[tr('Не передано исполнителю'),'am-status-bad']}[it.state]||[it.state,'am-muted'])));continue;}
       if(it.kind==='answer'){if(it.author==='owner'){outgoing(tr('Вы'),'owner','',it.text,it.at);
@@ -1310,7 +1346,14 @@
         if(feed.items.slice(index+1).every(n=>n.kind==='answer'||n.kind==='note')&&activeStates.includes(feed.task.state))out[out.length-1].querySelector('.am-message-content').append(delivery(tr('Ответ записан. Исполнитель продолжит в той же сессии.'),'am-delivery-hint'));}else outgoing(coordLabel,coordProvider,tr('координатор'),it.text,it.at);continue;}
       if(it.kind==='accepted'){const c=out[out.length-1]?.querySelector('.am-message-content');if(c)c.append(delivery(tr('Принято на компьютере «')+it.text+'»','am-status-good'));group=null;continue;}
       if(it.kind==='text'){workerGroup(it.at).append(richText(it.text));continue;}
-      if(it.kind==='tool'){addTool(workerGroup(it.at),it,index);continue;}
+      if(it.kind==='tool'){
+        const batch=collectTools(index);
+        const line=toolLine(it,toolAction(it));line.dataset.key='t'+index;
+        batch.at??=it.at;
+        batch.lines.push(line);
+        batch.commandsOnly&&=isCommandTool((it.title||'').toLowerCase());
+        continue;
+      }
       if(it.kind==='report'||it.kind==='question'){
         const c=workerGroup(it.at);c.append(richText(it.text,'am-disposition'));
         if(it.images?.length)c.append(pictures(it.images));
@@ -1333,6 +1376,7 @@
         const g=el('article',undefined,'am-message-group');g.append(note);out.push(g);
       }
     }
+    flushTools();
     thread.replaceChildren(...out);
     for(const d of thread.querySelectorAll('details[data-key]'))if(opened.has(d.dataset.key))d.open=true;
     // A task another computer started is answered there.
@@ -2817,5 +2861,5 @@
   // A taller reply box must not pull the owner off the end of the feed.
   new ResizeObserver(()=>requestAnimationFrame(()=>{chatBody.style.setProperty('--am-footer-height',chatFooter.getBoundingClientRect().height+'px');const t=$('thread');if(feedPinned)t.scrollTop=t.scrollHeight;})).observe(chatFooter);
   show('tasks');refresh();loadDiscovery();pollSetup();setInterval(pollSetup,2000);
-  setInterval(refresh,2000);setInterval(loadDiscovery,60000);setInterval(()=>{if(tab==='stats')loadStats();},15000);
+  setInterval(updateCommandTimers,1000);setInterval(refresh,2000);setInterval(loadDiscovery,60000);setInterval(()=>{if(tab==='stats')loadStats();},15000);
 })();

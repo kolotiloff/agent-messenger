@@ -10,6 +10,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Updated 2026-11-20 by Codex.
 
+- T-226 on `codex/t226-command-status` changes action group headings to a running command status with elapsed time, a completed command count, or a plain count for mixed groups. The rows inside each group are retained. Pending review and release.
+
 - **0.87 is released** ([release](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.87), [PR #140](https://github.com/kolotiloff/agent-messenger/pull/140), source `7fd6c198363545ba218510fe04ffd8ecff8b43e5`, [release run](https://github.com/kolotiloff/agent-messenger/actions/runs/44647765968)). T-223 adds session event and task finish times. T-224 queues owner notes for remote workers. T-225 adds readable action captions, icons and grouped summaries. The combined macOS race suite and Chromium window fixtures passed. Verified all 22 uploaded assets and the signatures, revisions and referenced archive sizes of all five update manifests. No installed desktop update or live-agent acceptance run.
 
 Updated 2026-11-19 by Codex.

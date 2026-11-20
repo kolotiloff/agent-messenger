@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-20 — Codex (T-226)
+
+- Replaced the category breakdown in task history with a one-line group status. Added observed shell timing for Claude, Codex and Cursor, with the same font size for the heading and elapsed time. The browser fixture verifies timing, completion, mixed actions and the unchanged tool details.
+
 ## 2026-11-20 — Codex (T-223 to T-225)
 
 - Combined session timestamps, queued owner notes for remote workers and readable action labels for 0.87. Unified the window fixture so it exercises all three changes together.
