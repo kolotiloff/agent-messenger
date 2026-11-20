@@ -231,6 +231,11 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 		defer wg.Done()
 		sup.loop(ctx)
 	}()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		sup.runAgentVersionChecks(ctx)
+	}()
 	if options.CheckLimits {
 		wg.Add(1)
 		go func() {

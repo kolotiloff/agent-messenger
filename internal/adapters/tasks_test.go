@@ -114,12 +114,20 @@ func TestParseTaskEvents(t *testing.T) {
 }
 
 func TestTaskFeedEntries(t *testing.T) {
-	got := TaskFeedEntries("claude", []byte(`{"type":"assistant","message":{"content":[{"type":"text","text":"Reading the code"},{"type":"tool_use","name":"Bash","input":{"command":"go test ./...","description":"Run the Go suite"}},{"type":"tool_use","name":"mcp__messenger_task__report","input":{"text":"x"}},{"type":"tool_use","name":"ToolSearch","input":{"query":"messenger"}}]}}`))
-	if len(got) != 2 || got[0].Kind != "text" || got[1].Title != "Bash" || got[1].Text != "go test ./..." || got[1].Description != "Run the Go suite" {
+	got := TaskFeedEntries("claude", []byte(`{"type":"assistant","message":{"content":[{"type":"text","text":"Reading the code"},{"type":"tool_use","id":"bash-1","name":"Bash","input":{"command":"go test ./...","description":"Run the Go suite"}},{"type":"tool_use","name":"mcp__messenger_task__report","input":{"text":"x"}},{"type":"tool_use","name":"ToolSearch","input":{"query":"messenger"}}]}}`))
+	if len(got) != 3 || got[0].Kind != "text" || got[1] != (FeedEntry{Kind: "command_start", Title: "bash-1"}) || got[2].Title != "Bash" || got[2].Text != "go test ./..." || got[2].Description != "Run the Go suite" {
 		t.Fatalf("claude %+v", got)
 	}
-	got = TaskFeedEntries("codex", []byte(`{"type":"item.completed","item":{"type":"command_execution","command":"ls","exit_code":0}}`))
-	if len(got) != 1 || got[0].Text != "ls" {
+	got = TaskFeedEntries("claude", []byte(`{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"bash-1"}]}}`))
+	if len(got) != 1 || got[0] != (FeedEntry{Kind: "command_end", Title: "bash-1"}) {
+		t.Fatalf("claude result %+v", got)
+	}
+	got = TaskFeedEntries("codex", []byte(`{"type":"item.started","item":{"type":"command_execution","id":"cmd-1","command":"ls"}}`))
+	if len(got) != 1 || got[0] != (FeedEntry{Kind: "command_start", Title: "cmd-1"}) {
+		t.Fatalf("codex start %+v", got)
+	}
+	got = TaskFeedEntries("codex", []byte(`{"type":"item.completed","item":{"type":"command_execution","id":"cmd-1","command":"ls","exit_code":0}}`))
+	if len(got) != 2 || got[0].Text != "ls" || got[1] != (FeedEntry{Kind: "command_end", Title: "cmd-1"}) {
 		t.Fatalf("codex %+v", got)
 	}
 	if got := TaskFeedEntries("codex", []byte(`{"type":"item.completed","item":{"type":"mcp_tool_call","server":"messenger_task","tool":"report"}}`)); len(got) != 0 {

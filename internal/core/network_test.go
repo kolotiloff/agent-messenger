@@ -409,11 +409,17 @@ func TestRemoteTaskProgressReachesTheStarter(t *testing.T) {
 	if err := p.b.st.AppendTaskRunItem(r.ID, "text", "", "Reading the level files", ""); err != nil {
 		t.Fatal(err)
 	}
+	if err := p.b.st.AppendTaskRunItem(r.ID, "command_start", "cmd-1", "", ""); err != nil {
+		t.Fatal(err)
+	}
 	if err := p.b.st.AppendTaskRunItem(r.ID, "tool", "Команда", "ls levels", "List level files"); err != nil {
 		t.Fatal(err)
 	}
+	if err := p.b.st.AppendTaskRunItem(r.ID, "command_end", "cmd-1", "", ""); err != nil {
+		t.Fatal(err)
+	}
 	sent := p.carry(t, false)
-	if len(sent) != 2 {
+	if len(sent) != 4 {
 		t.Fatalf("progress messages %d", len(sent))
 	}
 	// A message read twice is applied once.
@@ -428,12 +434,15 @@ func TestRemoteTaskProgressReachesTheStarter(t *testing.T) {
 	for _, it := range f.Items {
 		kinds = append(kinds, it.Kind+":"+it.Text)
 	}
-	want := "task:Build level 1|accepted:Ноутбук|text:Reading the level files|tool:ls levels"
+	want := "task:Build level 1|accepted:Ноутбук|text:Reading the level files|command_start:|tool:ls levels|command_end:"
 	if got := strings.Join(kinds, "|"); got != want {
 		t.Fatalf("feed\n got %s\nwant %s", got, want)
 	}
-	if f.Items[3].Title != "Команда" || f.Items[3].Description != "List level files" {
-		t.Fatalf("tool title %+v", f.Items[3])
+	if f.Items[4].Title != "Команда" || f.Items[4].Description != "List level files" {
+		t.Fatalf("tool title %+v", f.Items[4])
+	}
+	if f.Items[3].Title != "cmd-1" || f.Items[5].Title != "cmd-1" {
+		t.Fatalf("command activity %+v %+v", f.Items[3], f.Items[5])
 	}
 	// Progress is for the window only: the coordinator gets no event for it.
 	for _, e := range p.a.events(t, AudienceCoordinator, 0) {

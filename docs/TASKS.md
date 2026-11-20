@@ -92,6 +92,9 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
+| T-228 | Use a separate amber update arrow with a round hover background on computer cards (owner, 2026-11-20). | window | Included in the 0.88 release candidate from [PR #144](https://github.com/kolotiloff/agent-messenger/pull/144). |
+| T-227 | Let the coordinator query the installed CLI version of one agent on a chosen computer (owner, 2026-11-20). | agent + network | Included in the 0.88 release candidate from [PR #143](https://github.com/kolotiloff/agent-messenger/pull/143). |
+| T-226 | Replace the action breakdown with a command status and same-size timer or a finished count (owner, 2026-11-20). | window + agent | Included in the 0.88 release candidate from [PR #142](https://github.com/kolotiloff/agent-messenger/pull/142). |
 | T-225 | Give actions in task history readable captions, icons and a separate breakdown below the count (owner, 2026-11-19). | window + agent | Released in [0.87](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.87) via [PR #139](https://github.com/kolotiloff/agent-messenger/pull/139). |
 | T-224 | Let the owner queue a message from the window for a running worker on another computer (owner, 2026-11-19). | agent + window | Released in [0.87](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.87) via [PR #138](https://github.com/kolotiloff/agent-messenger/pull/138). |
 | T-223 | Show when a session closes or has a recorded outcome, and show completion time for completed tasks in the right-hand list (owner, 2026-11-19). | window | Released in [0.87](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.87) via [PR #137](https://github.com/kolotiloff/agent-messenger/pull/137). |

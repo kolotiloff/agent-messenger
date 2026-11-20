@@ -54,26 +54,32 @@ func clip(text string, n int) string {
 	return string([]rune(text)[:n-1]) + "…"
 }
 
+func isCommandActivity(kind string) bool {
+	return kind == "command_start" || kind == "command_end"
+}
+
 // AppendTaskRunItem stores one sanitized item of a worker's event stream
 // (its text or a tool action) for the window. Items past the bound are
 // dropped; this never affects verification.
 func (s *Store) AppendTaskRunItem(run, kind, title, text, description string) error {
-	if kind != "text" && kind != "tool" {
+	activity := isCommandActivity(kind)
+	if kind != "text" && kind != "tool" && !activity {
 		return fmt.Errorf("%w: unknown item kind", ErrRejected)
 	}
 	description = clip(strings.Join(strings.Fields(description), " "), 200)
 	return s.tx(func(tx *sql.Tx) error {
-		var n int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM task_run_items WHERE run_id=?`, run).Scan(&n); err != nil {
+		var seq, n int
+		if err := tx.QueryRow(`SELECT COALESCE(MAX(seq),0), COUNT(CASE WHEN kind IN ('text','tool') THEN 1 END) FROM task_run_items WHERE run_id=?`, run).Scan(&seq, &n); err != nil {
 			return err
 		}
-		if n >= maxRunItems {
+		// Timing records have their own allowance and never displace visible items.
+		if (!activity && n >= maxRunItems) || (activity && seq-n >= 2*maxRunItems) {
 			return nil
 		}
-		if _, err := tx.Exec(`INSERT INTO task_run_items(run_id,seq,kind,title,text,description,created_at) VALUES (?,?,?,?,?,?,?)`, run, n+1, kind, clip(title, 200), clip(text, maxRunItemText), description, now()); err != nil {
+		if _, err := tx.Exec(`INSERT INTO task_run_items(run_id,seq,kind,title,text,description,created_at) VALUES (?,?,?,?,?,?,?)`, run, seq+1, kind, clip(title, 200), clip(text, maxRunItemText), description, now()); err != nil {
 			return err
 		}
-		if n >= maxForwardedItems {
+		if (!activity && n >= maxForwardedItems) || (activity && seq-n >= 2*maxForwardedItems) {
 			return nil
 		}
 		// A task another computer started shows its progress there too
@@ -86,7 +92,7 @@ func (s *Store) AppendTaskRunItem(run, kind, title, text, description string) er
 		if err != nil || link.origin == nil {
 			return err
 		}
-		return enqueueNet(tx, link.origin.broker, link.origin.peer, fmt.Sprintf("progress.%s.%d", run, n+1), task,
+		return enqueueNet(tx, link.origin.broker, link.origin.peer, fmt.Sprintf("progress.%s.%d", run, seq+1), task,
 			netBody{Kind: "progress", Task: link.origin.task, Event: kind, Title: clip(title, 200), Text: clip(text, maxForwardedItemText), Description: description})
 	})
 }
@@ -469,7 +475,7 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 // Claude app: messages to the worker, the worker's text and tool actions,
 // its questions and report, and the outcome.
 type FeedItem struct {
-	// Kind: task, answer, note, text, tool, question, report, outcome.
+	// Kind: task, answer, note, text, tool, command_start, command_end, question, report, outcome.
 	Kind string `json:"kind"`
 	// Author: coordinator, owner, worker or messenger.
 	Author      string `json:"author"`

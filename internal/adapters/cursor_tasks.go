@@ -256,10 +256,13 @@ func cursorFeedEntries(e map[string]any) []FeedEntry {
 		}
 		return out
 	case "tool_call":
+		key, call := cursorToolCall(e)
+		if e["subtype"] == "completed" && key == "shellToolCall" {
+			return appendCommandEvent(nil, "command_end", e["call_id"])
+		}
 		if e["subtype"] != "started" {
 			return nil
 		}
-		key, call := cursorToolCall(e)
 		args, _ := call["args"].(map[string]any)
 		switch key {
 		case "", "getMcpToolsToolCall":
@@ -274,7 +277,8 @@ func cursorFeedEntries(e map[string]any) []FeedEntry {
 		case "shellToolCall":
 			command, _ := args["command"].(string)
 			description, _ := args["description"].(string)
-			return []FeedEntry{{Kind: "tool", Title: "Команда", Text: command, Description: description}}
+			entries := appendCommandEvent(nil, "command_start", e["call_id"])
+			return append(entries, FeedEntry{Kind: "tool", Title: "Команда", Text: command, Description: description})
 		}
 		return []FeedEntry{{Kind: "tool", Title: strings.TrimSuffix(key, "ToolCall"), Text: toolSummary(args)}}
 	}
