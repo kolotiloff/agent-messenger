@@ -1,12 +1,12 @@
 # Plan to the first release
 
-Written November 6, 2026; the status was last updated on November 20. This is the sequence of work on top of the original [MVP](MVP.md), the [architecture](PLAN.md), the [window](APP.md) requirements and [broker deployment](DEPLOYMENT.md). No release date is set: transitions are decided by checks, not by the percentage of code written.
+Written November 6, 2026; the status was last updated on November 21. This is the sequence of work on top of the original [MVP](MVP.md), the [architecture](PLAN.md), the [window](APP.md) requirements and [broker deployment](DEPLOYMENT.md). No release date is set: transitions are decided by checks, not by the percentage of code written.
 
 ## Current status
 
-Updated 2026-11-20. The details of each release are in [HANDOFF.md](HANDOFF.md) and [TASKS.md](TASKS.md); this section is the overview.
+Updated 2026-11-21. The details of each release are in [HANDOFF.md](HANDOFF.md) and [TASKS.md](TASKS.md); this section is the overview.
 
-The program is a technical preview used every day on the owner's Mac, Windows and Linux computers. Releases are numbered 0.N (tag `v0.0.0-preview.N`); [0.91](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.91) is the newest published one.
+The program is a technical preview used every day on the owner's Mac, Windows and Linux computers. Releases are numbered 0.N (tag `v0.0.0-preview.N`); [0.92](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.92) is the newest published one.
 
 Done since the plan below was written:
 

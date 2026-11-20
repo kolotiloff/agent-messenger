@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-21 — Codex (T-237 to T-239)
+
+- Published [0.92](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.92) from `644d7b8` and verified the five manifest signatures and archive digests.
+
 ## 2026-11-20 — Codex (T-239)
 
 - Added the local computer's coordinator label for the selected project. The label follows the live chat serving the role, including after a relay replacement.
