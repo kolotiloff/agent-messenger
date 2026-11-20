@@ -139,6 +139,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept h2, #am-concept h3, #am-concept p { margin:0; }
 #am-concept h2 { font-size:var(--am-text-xl); font-weight:500; line-height:1.35; }
 #am-concept h3 { font-size:var(--am-text-l); font-weight:500; line-height:1.35; }
+#am-concept :is(.am-machine-name,.am-task-title,.am-stats-task-title) { font-size:var(--am-text-m); font-weight:500; line-height:1.5; }
 #am-concept .am-muted { color:var(--am-muted); }
 #am-concept .am-small { font-size:var(--am-text-s); }
 #am-concept .am-label { display:block; margin-bottom:var(--am-gap-control); font-size:var(--am-text-xs); letter-spacing:.06em; text-transform:uppercase; color:var(--am-muted); }
@@ -256,7 +257,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-machines { display:flex; flex-direction:column; gap:var(--am-space-1); min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; margin-right:calc(-1 * var(--am-space-3)); padding-right:calc(var(--am-space-3) - var(--am-gutter, 0px)); }
 #am-concept .am-machine-card { display:flex; flex-direction:column; align-items:stretch; gap:var(--am-gap-control); padding:var(--am-pad-compact); border:1px solid var(--am-line); border-radius:var(--am-radius-s); background:var(--am-soft); }
 /* Centre the dot in the full line box; leave room for accents and descenders. */
-#am-concept .am-machine-name { display:flex; align-items:center; gap:var(--am-space-1); font-weight:500; }
+#am-concept .am-machine-name { display:flex; align-items:center; gap:var(--am-space-1); }
 #am-concept .am-machine-version, #am-concept .am-machine-role { font-weight:400; }
 #am-concept .am-machine-meta { margin-left:auto; display:flex; align-items:center; gap:var(--am-computer-meta-gap); flex:none; }
 #am-concept .am-machine-name > span:nth-child(2) { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -323,7 +324,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-fb-open { flex-shrink:0; width:var(--am-control-compact); height:var(--am-control-compact); min-height:0; padding:0; color:var(--am-muted); }
 #am-concept .am-fb-open:hover { color:var(--am-text); }
 #am-concept .am-fb-open svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; }
-#am-concept .am-field textarea.am-fb-text { font:inherit; line-height:1.5; }
+#am-concept .am-field :is(textarea.am-fb-text,#project-page-rules) { font:inherit; line-height:1.5; }
 #am-concept .am-fb-shot { padding:var(--am-pad-compact); border:1px dashed var(--am-line); border-radius:var(--am-radius-m); }
 #am-concept .am-fb-shot.am-drop { border-color:currentColor; }
 #am-concept .am-fb-shot-empty, #am-concept .am-fb-shot-full { display:flex; align-items:center; gap:var(--am-gap-content); height:var(--am-control); }
@@ -524,7 +525,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-select-option .am-provider-icon { width:20px; height:20px; }
 #am-concept .am-task-agent .am-provider-icon { width:14px; height:14px; }
 #am-concept .am-task-agent .am-provider-icon svg { width:12px; height:12px; }
-#am-concept .am-task-title { display:block; min-width:0; max-width:100%; font-weight:500; color:var(--am-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#am-concept .am-task-title { display:block; min-width:0; max-width:100%; color:var(--am-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 /* The status line wraps instead of running past the edge; the token count moves as one piece (owner, T-105) */
 #am-concept .am-task-status { display:flex; align-items:center; gap:var(--am-space-1); white-space:normal; min-width:0; }
 #am-concept .am-task-status > span:last-child { display:inline-flex; flex-wrap:wrap; align-items:baseline; column-gap:var(--am-space-1); min-width:0; white-space:nowrap; }
@@ -615,8 +616,6 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
    the install and the restart. */
 #am-concept .am-update-bar { height:var(--am-space-1); border-radius:var(--am-space-1); background:var(--am-soft); overflow:hidden; }
 #am-concept .am-update-bar > span { display:block; width:calc(var(--am-update-share, 0) * 100%); height:100%; border-radius:inherit; background:var(--am-active); transition:width .3s ease; }
-#am-concept .am-alert h3 { margin:0; font-size:var(--am-text-l); font-weight:600; }
-#am-concept .am-alert p { margin:0; }
 #am-concept .am-alert-actions { justify-content:space-between; margin-top:var(--am-gap-section); }
 /* The main action is the last button: it stays on the right even when the
    buttons before it are hidden. */

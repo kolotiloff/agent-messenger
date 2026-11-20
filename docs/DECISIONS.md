@@ -550,3 +550,7 @@ The owner also asked for a consistent size within each task card. Use 12 px thro
 ## D-163 — Inline waiting status (T-237)
 
 2026-11-20, owner asked to align the sidebar waiting label with the running duration. Place it after the model with the same comma separator, and use the waiting color for the name, model, separator and status. The task card shows its wait text in the regular status position without a dot.
+
+## D-164 — Match typography for equivalent window elements (T-238)
+
+2026-11-20, owner asked to align computer and task names and review the window's typography. Use a shared 14 px medium style for computer and task names in the lists and statistics. Their metadata remains 12 px. Confirmation headings use the settings section style. Project instructions are prose and use the same system text as other plain-text fields.

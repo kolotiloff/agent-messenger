@@ -30,7 +30,7 @@ Buttons that belong together go in one container: `.am-actions` (a row) or `.am-
 ## Sizes
 
 - Controls: `--am-control` 32 (buttons, fields, select fields, send and stop), the size of buttons in the Claude app; `--am-control-compact` 28 (tabs, square icon buttons, the task filter); `--am-control-chip` 24 (buttons inside an error chip).
-- Text: 12 labels and meta, 13 secondary text, 14 body, 16 titles (`h3`), 18 page titles (`h2`). Chat content and its input use 14 px regular system text with a 21 px line height. Sidebar agent rows and task-list cards use 12 px. Task titles use weight 500.
+- Text: 12 labels and meta, 13 secondary text, 14 body, 16 section and dialog titles (`h3`), 18 page titles (`h2`). Computer names, task names in the list and statistics use 14 px, weight 500, with a 21 px line height. Sidebar agent rows and task card metadata use 12 px. Chat content and input use 14 px regular system text with a 21 px line height.
 - Colors and shadows are tokens too (`--am-shadow-s` for chips and the composer, `--am-shadow-l` for menus and dialogs).
 
 ## Components
@@ -45,6 +45,6 @@ Buttons that belong together go in one container: `.am-actions` (a row) or `.am-
 
 Take screenshots of the tasks, agents and server tabs, a dialog and a menu in both themes at 1100 and 600 px, and measure button and field heights: they must be 32, 28 or 24.
 
-Dialogs that ask for a decision (`.am-alert`) follow the Claude app: 16 px padding, a 15 px title, muted text, the leaving or destructive choice on the left and the main action on the right. A destructive button (`.am-danger`) has red text on a soft red fill.
+Dialogs that ask for a decision (`.am-alert`) use 16 px padding, the standard 16 px section heading, muted text, the leaving or destructive choice on the left and the main action on the right. A destructive button (`.am-danger`) has red text on a soft red fill.
 
 Text in a control is centred by eye, not by the line box: system fonts leave more room below the text than above it, so buttons, tabs, select fields and inputs get `--am-text-nudge` (4) as their top padding and none at the bottom. Measured: 11 px above the capitals and 11 below in a 32 px button.

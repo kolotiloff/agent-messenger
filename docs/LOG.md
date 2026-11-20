@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-20 — Codex (T-238)
+
+- Matched computer names and task titles in the list and statistics. Reused the section heading for confirmations and system text for project instructions.
+
 ## 2026-11-20 — Codex (T-237)
 
 - Used the same inline placement for the sidebar waiting label and running duration. Applied the waiting color to the entire waiting agent row and removed the waiting dot in the task list.
