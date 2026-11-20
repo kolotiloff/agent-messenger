@@ -433,15 +433,19 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.locator('[data-tab=tasks]').click();
       const runningTaskStatus=taskRow.locator('.am-task-status.am-status-run');
       await runningTaskStatus.waitFor({state:'visible'});
-      for (const [theme,arrow,muted,runningColor] of [
-        ['light','rgb(129, 83, 5)','rgb(107, 107, 107)','rgb(40, 123, 215)'],
-        ['dark','rgb(242, 198, 91)','rgb(160, 160, 160)','rgb(103, 170, 249)']
+      for (const [theme,arrow,muted,runningColor,waitingColor] of [
+        ['light','rgb(129, 83, 5)','rgb(107, 107, 107)','rgb(40, 123, 215)','rgb(201, 138, 0)'],
+        ['dark','rgb(242, 198, 91)','rgb(160, 160, 160)','rgb(103, 170, 249)','rgb(242, 201, 76)']
       ]) {
         await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;},theme);
         assert.equal(await runningTaskStatus.evaluate(node=>getComputedStyle(node).color),runningColor);
         assert.equal(await runningLabel.evaluate(node=>getComputedStyle(node).color),runningColor);
         assert.equal(await runningLabel.locator('.am-agent-model').evaluate(node=>getComputedStyle(node).color),runningColor);
         assert.equal(await runningTimer.evaluate(node=>getComputedStyle(node).color),muted);
+        for(const part of [waiting.locator('span').first(),waiting.locator('.am-agent-model'),waitingStatus]){
+          assert.equal(await part.evaluate(node=>getComputedStyle(node).color),waitingColor);
+        }
+        assert.equal(await waitingStatus.evaluate(node=>getComputedStyle(node,'::before').color),waitingColor);
         await page.mouse.move(0,0);
         const style=await peerUpdate.evaluate(node=>{
           const css=getComputedStyle(node);

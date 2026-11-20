@@ -549,4 +549,4 @@ The owner also asked for a consistent size within each task card. Use 12 px thro
 
 ## D-163 — Inline waiting status (T-237)
 
-2026-11-20, owner asked to align the sidebar waiting label with the running duration. Place it after the model with the same comma separator, keeping the waiting color. The task card shows its wait text in the regular status position without a dot.
+2026-11-20, owner asked to align the sidebar waiting label with the running duration. Place it after the model with the same comma separator, and use the waiting color for the name, model, separator and status. The task card shows its wait text in the regular status position without a dot.

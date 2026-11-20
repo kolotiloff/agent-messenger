@@ -4,7 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-20 — Codex (T-237)
 
-- Used the same inline placement for the sidebar waiting label and running duration. Removed the waiting dot in the task list.
+- Used the same inline placement for the sidebar waiting label and running duration. Applied the waiting color to the entire waiting agent row and removed the waiting dot in the task list.
 
 ## 2026-11-20 — Codex (T-235 and T-236)
 

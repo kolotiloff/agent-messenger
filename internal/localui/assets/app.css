@@ -272,12 +272,12 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-agent-status { margin-left:auto; flex:none; white-space:nowrap; }
 #am-concept :is(.am-agent-run,.am-agent-wait) { gap:0; }
 #am-concept .am-agent-running-label { color:var(--am-run); }
-#am-concept .am-agent-running-label .am-agent-model { color:inherit; }
+#am-concept :is(.am-agent-running-label,.am-agent-wait) .am-agent-model { color:inherit; }
 #am-concept :is(.am-agent-run,.am-agent-wait) .am-agent-status { margin-left:0; }
-#am-concept :is(.am-agent-run,.am-agent-wait) .am-agent-status::before { content:" "; white-space:pre; color:var(--am-muted); }
+#am-concept :is(.am-agent-run,.am-agent-wait) .am-agent-status::before { content:" "; white-space:pre; }
 #am-concept :is(.am-agent-run,.am-agent-wait):has(.am-agent-model) .am-agent-status::before { content:", "; }
 #am-concept .am-agent-run .am-agent-status { color:var(--am-muted); }
-#am-concept .am-agent-wait .am-agent-status { color:var(--am-wait); }
+#am-concept .am-agent-line.am-agent-wait { color:var(--am-wait); }
 #am-concept .am-agent-line.am-agent-offline { color:var(--am-disabled-text); }
 #am-concept .am-side-bottom { display:flex; flex-direction:column; gap:var(--am-gap-control); margin-top:auto; padding-top:var(--am-space-3); border-top:1px solid var(--am-line); flex-shrink:0; }
 #am-concept .am-side-bottom > button { width:100%; }
