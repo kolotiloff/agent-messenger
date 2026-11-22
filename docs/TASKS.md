@@ -245,7 +245,7 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 
 | ID | Task | PR |
 |---|---|---|
-| T-245 | Refresh the public GitHub overview and screenshots for 0.93 (owner, 2026-11-22). | Released in [0.93](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.93) via [PR #159](https://github.com/kolotiloff/agent-messenger/pull/159). |
+| T-245 | Refresh the public GitHub overview and screenshots for 0.93 (owner, 2026-11-22). | Released in [0.93](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.93) via [PR #159](https://github.com/kolotiloff/agent-messenger/pull/159). Follow-up shows the English interface and all three agents in the public screenshots. |
 | T-244 | Allow manual reordering of computer cards and remember the order (owner, 2026-11-22). | Released in [0.93](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.93) via [PR #159](https://github.com/kolotiloff/agent-messenger/pull/159) (D-169). |
 | T-243 | Show the assigning agent, its icon and its model when known in the task header (owner, 2026-11-22). | Released in [0.93](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.93) via [PR #159](https://github.com/kolotiloff/agent-messenger/pull/159) (D-168). |
 | T-242 | Distinguish recovered Codex reconnects from unconfirmed runs at model capacity (owner, 2026-11-22). | Released in [0.93](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.93) via [PR #159](https://github.com/kolotiloff/agent-messenger/pull/159) (D-167). |

@@ -20,10 +20,10 @@ One coordinator agent hands tasks to worker agents (Claude Code, Codex, Cursor A
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/window-dark.png">
-  <img src="docs/assets/window-light.png" alt="The Agent Messenger window: computers and their agents on the left, a running task in the middle, the task list on the right">
+  <img src="docs/assets/window-light.png" alt="Agent Messenger in English, with Claude Code, Codex and Cursor in the computers and tasks panels">
 </picture>
 
-<sub>The task window with fictional data. The settings button at the bottom left changes the theme and language.</sub>
+<sub>The English task window with Claude Code, Codex and Cursor, using fictional data. The settings button at the bottom left changes the theme and language.</sub>
 
 ## What it does
 
