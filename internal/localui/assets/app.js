@@ -1420,7 +1420,7 @@
         const c=workerGroup(it.at);c.append(richText(it.text,'am-disposition'));
         if(it.images?.length)c.append(pictures(it.images));
         let note;
-        if(!it.verified)note=delivery(tr('Не опубликовано: запуск не прошёл проверку'),'am-status-bad');
+        if(!it.verified)note=delivery(it.kind==='report'?tr('Отчёт сохранён без подтверждения запуска'):tr('Не опубликовано: запуск не прошёл проверку'),'am-status-bad');
         else if(it.kind==='report'&&it.audience==='held')note=delivery(tr('Промежуточный отчёт: исполнитель продолжает с вашим сообщением'),'am-status-wait');
         else if(it.kind==='report')note=delivery(tr('Отчёт отправлен координатору, сессия закрыта'),'am-delivery-close');
         else if(it.audience==='owner')note=delivery(tr('Вопрос вам, координатор его не видит'),'am-status-wait');
@@ -1430,7 +1430,10 @@
         group=null;continue;
       }
       if(it.kind==='outcome'){
-        group=null;const text={failed:t.remote&&!t.remote.from?tr('Задача не выполнена'):tr('Запуск завершился с ошибкой'),blocked:t.remote&&!t.remote.from?tr('Задача заблокирована: результат на другом компьютере неизвестен'):tr('Задача заблокирована: процесс не завершился полностью'),interrupted:tr('Клиент перезапустился во время работы; результат неизвестен'),cancelled:tr('Задача отменена')}[it.state]||it.state;
+        group=null;
+        const overloaded=it.state==='failed'&&capacityFailure(it.text);
+        const failedTitle=overloaded?tr('Завершение запуска не подтверждено'):t.remote&&!t.remote.from?tr('Задача не выполнена'):tr('Запуск завершился с ошибкой');
+        const text={failed:failedTitle,blocked:t.remote&&!t.remote.from?tr('Задача заблокирована: результат на другом компьютере неизвестен'):tr('Задача заблокирована: процесс не завершился полностью'),interrupted:tr('Клиент перезапустился во время работы; результат неизвестен'),cancelled:tr('Задача отменена')}[it.state]||it.state;
         const note=el('div',undefined,'am-outcome '+(it.state==='cancelled'?'am-muted':'am-status-bad')),line=el('p',text);
         appendEventTime(line,it.at,t.remote&&!t.remote.from);note.append(line);
         const why=t.remote&&!t.remote.from?refusalText(it.text,t.remote.name)||failureText(it.text):failureText(it.text);if(why)note.append(el('p',why));
@@ -1479,8 +1482,12 @@
     b.hidden=!show;if(!show)b.classList.remove('am-has-new');
   }
   // Why a run was not accepted (T-091), in the window's language.
+  function capacityFailure(text){
+    return /the model provider was overloaded before confirming the worker's turn|Codex (?:error|turn\.failed):[^\n]*Selected model is at capacity/i.test((text||'').split('\nUnverified text from the worker:',1)[0]);
+  }
   function failureText(text){
     text=text||'';const code=text.match(/stopped with an error \(exit code (\d+)\)/);
+    if(capacityFailure(text))return tr('Модель перегружена. Провайдер не подтвердил завершение хода.');
     if(/not signed in/.test(text))return tr('Агент не вошёл в аккаунт на этом компьютере. Войдите на вкладке «Агенты».');
     if(/stopped at a provider limit/.test(text))return tr('Агент упёрся в лимит.');
     if(/different conversation/.test(text))return tr('Агент ответил не в той сессии, которую запустил Messenger; результату нельзя доверять.');

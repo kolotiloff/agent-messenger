@@ -26,7 +26,8 @@ var (
 	// 12/10/2026." The date is month/day/year.
 	cursorCycleEnds = regexp.MustCompile(`(?i)reset[^.]*?\bon (\d{1,2})/(\d{1,2})/(\d{4})\b`)
 	// HTTP status codes count only as whole numbers.
-	statusCode = regexp.MustCompile(`\b(401|429|503|529)\b`)
+	statusCode     = regexp.MustCompile(`\b(401|429|503|529)\b`)
+	codexReconnect = regexp.MustCompile(`^Reconnecting(?:\.\.\.|…) [0-9]+/[0-9]+(?: \(.+\))?$`)
 )
 
 // classifyFailure reads a provider's error text. A text it does not
@@ -50,7 +51,7 @@ func classifyFailure(text string) string {
 		return ReasonUsageLimit
 	case has("rate limit", "rate_limit", "too many requests") || code == "429":
 		return ReasonRateLimit
-	case has("overloaded", "overload", "service unavailable") || code == "529" || code == "503":
+	case has("overloaded", "overload", "service unavailable", "selected model is at capacity") || code == "529" || code == "503":
 		return ReasonOverload
 	case has("not logged in", "please log in", "please run /login", "sign in again", "authentication", "unauthorized", "invalid api key", "oauth token") || code == "401":
 		return ReasonSignIn

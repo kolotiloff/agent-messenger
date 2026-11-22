@@ -558,3 +558,7 @@ The owner also asked for a consistent size within each task card. Use 12 px thro
 ## D-165 — Label the live local coordinator (T-239)
 
 2026-11-20, owner approved the lowercase «координатор» label beside the computer name. The window shows it on this computer’s card while the active chat of the selected project (D-099) has a live local process. Reuse the server label style. Historical connections and peer presence do not establish this role. The label refines D-064 for this computer. A handover between local chats leaves network task routing unchanged.
+
+## D-167 — A Codex reconnect is provisional (T-242)
+
+2026-11-22, owner reported a completed change whose saved report was attached to a run that Messenger could not confirm. A Codex error notification in the form `Reconnecting... N/M` is provisional. A later explicit `turn.completed` clears that notification. A terminal or unknown error still fails verification. Without completion the run keeps its actual failure state. Classify the model-capacity diagnostic as overload and show that the provider did not confirm completion. The saved report remains available as unverified text. Preserve D-021 and D-147 and never retry the run automatically.

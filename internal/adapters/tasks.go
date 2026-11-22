@@ -207,6 +207,8 @@ type TaskEventResult struct {
 	// Completed means the provider reported a successful end of the run.
 	Completed bool
 	Failure   string
+	// reconnectOnly marks an error notification reporting a retry in progress.
+	reconnectOnly bool
 	// Reason is the failure class (Reason* constants) and ResetAt the time
 	// the provider said its limit resets; both only explain the failure.
 	Reason  string
@@ -352,12 +354,25 @@ func ParseTaskEvent(provider string, line []byte, r *TaskEventResult) {
 			}
 		case "turn.completed":
 			codexUsage(e, r)
+			if r.reconnectOnly {
+				r.Failure, r.Reason, r.ResetAt = "", "", time.Time{}
+				r.reconnectOnly = false
+			}
 			if r.Failure == "" {
 				r.Completed = true
 			}
 		case "turn.failed", "error":
 			r.Completed = false
 			text := errorText(e)
+			if kind == "error" && codexReconnect.MatchString(text) {
+				if r.Failure == "" || r.reconnectOnly {
+					r.Failure = withErrorText("Codex "+kind, text)
+					r.reconnectOnly = true
+					r.noteFailure(text, taskNow())
+				}
+				break
+			}
+			r.reconnectOnly = false
 			r.Failure = withErrorText("Codex "+kind, text)
 			r.noteFailure(text, taskNow())
 		}

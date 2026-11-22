@@ -113,6 +113,34 @@ func TestParseTaskEvents(t *testing.T) {
 	}
 }
 
+func TestCodexReconnectNeedsConfirmedCompletion(t *testing.T) {
+	const reconnect = `{"type":"error","message":"Reconnecting... 4/5 (Selected model is at capacity. Please try a different model.)"}`
+	const terminal = `{"type":"turn.failed","error":{"message":"Stream disconnected"}}`
+	const completed = `{"type":"turn.completed","usage":{"input_tokens":12}}`
+	const fatal = `{"type":"error","message":"Unexpected protocol error"}`
+	for _, tc := range []struct {
+		name   string
+		lines  []string
+		ok     bool
+		reason string
+	}{
+		{"recovered", []string{reconnect, completed}, true, ""},
+		{"lost after reconnect", []string{reconnect}, false, ReasonOverload},
+		{"terminal failure", []string{reconnect, terminal, completed}, false, ReasonOverload},
+		{"fatal before reconnect", []string{fatal, reconnect, completed}, false, ReasonOther},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var got TaskEventResult
+			for _, line := range tc.lines {
+				ParseTaskEvent("codex", []byte(line), &got)
+			}
+			if got.Completed != tc.ok || (got.Failure == "") != tc.ok || got.Reason != tc.reason {
+				t.Fatalf("result %+v", got)
+			}
+		})
+	}
+}
+
 func TestTaskFeedEntries(t *testing.T) {
 	got := TaskFeedEntries("claude", []byte(`{"type":"assistant","message":{"content":[{"type":"text","text":"Reading the code"},{"type":"tool_use","id":"bash-1","name":"Bash","input":{"command":"go test ./...","description":"Run the Go suite"}},{"type":"tool_use","name":"mcp__messenger_task__report","input":{"text":"x"}},{"type":"tool_use","name":"ToolSearch","input":{"query":"messenger"}}]}}`))
 	if len(got) != 3 || got[0].Kind != "text" || got[1] != (FeedEntry{Kind: "command_start", Title: "bash-1"}) || got[2].Title != "Bash" || got[2].Text != "go test ./..." || got[2].Description != "Run the Go suite" {

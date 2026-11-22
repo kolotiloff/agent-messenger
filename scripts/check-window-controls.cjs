@@ -340,6 +340,8 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
             items.push(
               {kind:'report',text:'Previous run finished',at:ended,verified:true},
               {kind:'outcome',text:'Previous run was interrupted',at:began,state:'interrupted',verified:true},
+              {kind:'report',text:'Work summary saved',at:ended,verified:false},
+              {kind:'outcome',text:'the agent did not report a successful end; Codex error: Reconnecting... 4/5 (Selected model is at capacity. Please try a different model.)',at:began,state:'failed'},
               {kind:'command_start',title:'fixture-command',at:commandStarted},
               {kind:'tool',title:'Команда',text:"rg --files | rg 'RuntimePanelUtils\\.cs$'",at:began},
               {kind:'tool',title:'Команда',text:"cm cat FreeCamera.cs#cs:3474 | rg -n -C 2 'Mouse|UIOwnsKeys'",at:began},
@@ -525,7 +527,11 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const closedTime=page.locator('#thread .am-delivery-close time');
       assert.equal(await closedTime.getAttribute('datetime'),ended);
       assert.match(await closedTime.innerText(),/\d{1,2}:\d{2}/);
-      assert.equal(await page.locator('#thread .am-outcome time').getAttribute('datetime'),began);
+      assert.equal(await page.locator('#thread .am-outcome time').first().getAttribute('datetime'),began);
+      const overload = page.locator('#thread .am-outcome').last();
+      assert.match(await overload.innerText(),/Завершение запуска не подтверждено/);
+      assert.match(await overload.innerText(),/Модель перегружена/);
+      assert.equal(await page.locator('#thread').getByText('Отчёт сохранён без подтверждения запуска',{exact:true}).count(),1);
       const toolGroups=page.locator('#thread .am-tool-group');
       const actionGroup=toolGroups.first();
       await actionGroup.locator(':scope > summary').click();
