@@ -592,3 +592,7 @@ On Windows, the update relaunch and the installer's handoff to the installed app
 ## D-173 — Notify the coordinator when Codex is slow to exit (T-249)
 
 2026-11-22, two Windows workers still held their task locks long after their completed turns. If the recorded Codex worker process is observed alive after the one-minute grace period, publish one `worker_still_running` event per run through `wait`. Use the task's existing event route for remote tasks. The observation describes a delayed exit and can be followed by the ordinary verified result. The run remains subject to D-021 and D-147. The event does not mark its computer idle or trigger a cancel or retry.
+
+## D-174 — Mark the Mac update restart as planned (T-250)
+
+2026-11-23, owner reported that the coordinator announces network loss and recovery during a Mac update. The Mac window records a local `messenger_updating` notice immediately before asking the older background client to stop, after the existing confirmation checks. For the next two minutes, a loss of all peers on the same network is treated as part of this restart. If contact returns in that window, clear the planned outage without a loss or recovery alert. A prolonged outage still produces the original warning. Waiting coordinators can check that deadline while the background client is absent. The notice and grace period are local to the Mac undergoing the update.

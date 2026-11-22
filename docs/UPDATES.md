@@ -6,6 +6,8 @@ Updates on Mac, Windows and Linux, and updates of another computer of the networ
 
 On Mac, Sparkle 2.10.1 replaces the app and the embedded interface, then reopens it. New clients are started from an immutable copy of the binary outside the `.app`. When the window then sees an older background client, it asks it to restart once, by itself (D-091); the database, protective reservations and `active-runs.json` stay as they are. A client with running tasks refuses that restart, because a restart interrupts them and they are never repeated on their own. The window then says «Обновление ждёт задачи» and offers «Дождаться и перезапустить» (restart once the tasks end) or «Прервать и перезапустить» (T-123). Rollback to an older version is not offered. Unsaved input text may be lost when the window restarts.
 
+Immediately before it asks the older client to stop, the Mac window records one `messenger_updating` event for coordinators on that Mac. If contact with all peers drops during the next two minutes and recovers within that period, the normal loss/back pair is skipped. A prolonged outage reports the usual loss event.
+
 ## Delivery
 
 The Mac app checks GitHub Releases in the background, up to once every 30 minutes, and on a manual check from the app menu. When it finds a newer compatible release, the update arrow appears next to this computer's version. Press it to download and install through the window's update dialog. The Mac feed uses `update-darwin-arm64.json`, its `.sig` file and an archive named by its SHA-256. A release with an incomplete or corrupted set is rejected. The Windows and Linux windows follow the same check-then-download pattern.

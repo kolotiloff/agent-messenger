@@ -439,6 +439,24 @@ func TestCoordinatorStartIsIdempotentAndWaitReplays(t *testing.T) {
 	}
 }
 
+func TestCoordinatorWaitWakesForMacUpdateRestart(t *testing.T) {
+	st := newCoordinatorStore(t)
+	c := startCoordinator(t, st, "Game")
+	c.next++
+	waitID := c.next
+	c.send(waitID, "tools/call", map[string]any{"name": "wait", "arguments": map[string]any{"after": 0, "timeout_seconds": 30}})
+	c.none(waitID, 300*time.Millisecond)
+	if err := st.NoteMacUpdateRestart(time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	resp, _ := c.expect(waitID, 3*time.Second)
+	var w waitResult
+	decodeTool(t, resp, &w)
+	if w.TimedOut || len(w.Events) != 1 || w.Events[0].Kind != core.MacUpdateRestartEvent {
+		t.Fatalf("wait %+v", w)
+	}
+}
+
 func TestCoordinatorWaitWakesForCodexExitDelay(t *testing.T) {
 	st := newCoordinatorStore(t)
 	c := startCoordinator(t, st, "Game")
