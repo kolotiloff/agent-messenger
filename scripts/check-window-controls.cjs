@@ -550,7 +550,16 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       for (const header of await page.locator('.am-stats-sort').all()) {
         const quiet = await header.evaluate(button=>getComputedStyle(button).backgroundColor);
         await header.hover();
-        const {paddingTop,paddingRight,paddingBottom,paddingLeft,backgroundColor} = await header.evaluate(button=>getComputedStyle(button));
+        const {paddingTop,paddingRight,paddingBottom,paddingLeft,backgroundColor} = await header.evaluate(button => {
+          const style = getComputedStyle(button);
+          return {
+            paddingTop: style.paddingTop,
+            paddingRight: style.paddingRight,
+            paddingBottom: style.paddingBottom,
+            paddingLeft: style.paddingLeft,
+            backgroundColor: style.backgroundColor
+          };
+        });
         assert.equal(paddingLeft,paddingRight);
         assert.equal(paddingTop,paddingBottom);
         assert(parseFloat(paddingLeft)>0 && parseFloat(paddingTop)>0);

@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-22 — Codex (0.94 release)
+
+- Published [0.94](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.94) from `d0e3a4e` and verified the five signed update sets. Corrected the browser regression test to read computed padding and color inside the page before returning simple values. Both browsers passed.
+
 ## 2026-11-22 — Codex (0.94 candidate)
 
 - Combined the window update handoff, remote duration estimates, coordinator attribution and Codex exit-delay notice for release from main.
