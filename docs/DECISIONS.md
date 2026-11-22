@@ -592,3 +592,7 @@ On Windows, the update relaunch and the installer's handoff to the installed app
 ## D-173 — Notify the coordinator when Codex is slow to exit (T-249)
 
 2026-11-22, two Windows workers still held their task locks long after their completed turns. If the recorded Codex worker process is observed alive after the one-minute grace period, publish one `worker_still_running` event per run through `wait`. Use the task's existing event route for remote tasks. The observation describes a delayed exit and can be followed by the ordinary verified result. The run remains subject to D-021 and D-147. The event does not mark its computer idle or trigger a cancel or retry.
+
+## D-176 — Save the manual computer order across window relaunches (T-252)
+
+2026-11-23, owner reported that relaunching reset the computer order. A desktop window obtains a fresh loopback port each time, so the origin storage in D-169 cannot persist reliably. Save the order in the local data directory through the authenticated window endpoint. If an old origin's preference is still available, import it when no order has been saved there yet. Continue ranking by the lasting computer ID when known, and keep the preference local to this data directory across projects.

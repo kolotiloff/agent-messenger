@@ -182,10 +182,10 @@
     }
     return response.json();
   }
-  async function postAPI(path,body,timeout=6000){
+  async function postAPI(path,body,timeout=6000,keepalive=false){
     let response;
     // No answer means the result is unknown, not that nothing happened.
-    try{response=await fetch(path,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body),cache:'no-store',signal:AbortSignal.timeout(timeout)});}
+    try{response=await fetch(path,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body),cache:'no-store',signal:AbortSignal.timeout(timeout),keepalive});}
     catch(_){throw Error(tr('Ответ не получен, результат неизвестен. Проверьте состояние, прежде чем повторять.'));}
     let result={};try{result=await response.json();}catch(_){}
     if(response.ok&&result.ok===true)return result;
@@ -575,11 +575,28 @@
   // A computer of the network counts as reachable while its reports arrive:
   // it reports every 15 s, so three missed reports mean it is not.
   const peerFresh=peer=>peer.age>=0&&peer.age<=45;
-  let machineOrder=[];
+  let machineOrder=[],machineOrderLoaded=false,machineOrderSave=Promise.resolve();
   try{
     const saved=JSON.parse(recall('messenger-machine-order'));
     if(Array.isArray(saved))machineOrder=saved.filter(key=>typeof key==='string');
   }catch(_){}
+  function saveMachineOrder(){
+    const body={order:machineOrder};
+    machineOrderSave=machineOrderSave.then(()=>postAPI('/api/machine-order',body,6000,true))
+      .catch(error=>showError(error.message));
+  }
+  async function loadMachineOrder(){
+    try{
+      const saved=await api('/api/machine-order');
+      if(Array.isArray(saved.order)){
+        machineOrder=saved.order;
+      }else if(saved.order===null&&machineOrder.length){
+        // Import a legacy order when the old window origin still exists.
+        saveMachineOrder();
+      }
+    }catch(_){}
+    finally{machineOrderLoaded=true;renderMachines();}
+  }
   let draggedMachine='',machineDrop=null;
   const machineList=$('machines');
   function clearMachineDrop(){
@@ -592,7 +609,7 @@
     if(target<0)return;
     order.splice(target+Number(after),0,from);
     machineOrder=[...order,...machineOrder.filter(key=>!order.includes(key))];
-    remember('messenger-machine-order',JSON.stringify(machineOrder));
+    saveMachineOrder();
     renderMachines();
   }
   machineList.addEventListener('dragstart',event=>{
@@ -628,14 +645,14 @@
   });
   function pickable(card,id,orderKey=id){
     card.setAttribute('role','button');card.tabIndex=0;card.setAttribute('aria-pressed',String(computerFilter===id));
-    card.dataset.machineOrder=orderKey;card.draggable=true;
+    card.dataset.machineOrder=orderKey;card.draggable=machineOrderLoaded;
     card.setAttribute('aria-keyshortcuts','Alt+ArrowUp Alt+ArrowDown');
     card.title=computerFilter===id?tr('Показать все компьютеры'):tr('Показать только этот компьютер');
     card.addEventListener('click',event=>{if(!event.target.closest('button'))filterComputer(id);});
     card.addEventListener('keydown',event=>{
       if(event.target!==card)return;
       if(event.key==='Enter'||event.key===' '){event.preventDefault();filterComputer(id);}
-      if(!event.altKey||!['ArrowUp','ArrowDown'].includes(event.key))return;
+      if(!machineOrderLoaded||!event.altKey||!['ArrowUp','ArrowDown'].includes(event.key))return;
       event.preventDefault();
       const after=event.key==='ArrowDown',next=after?card.nextElementSibling:card.previousElementSibling;
       if(!next)return;
@@ -3037,6 +3054,6 @@
   $('to-bottom').addEventListener('click',()=>{const t=$('thread');t.scrollTo({top:t.scrollHeight,behavior:'smooth'});});
   // A taller reply box must not pull the owner off the end of the feed.
   new ResizeObserver(()=>requestAnimationFrame(()=>{chatBody.style.setProperty('--am-footer-height',chatFooter.getBoundingClientRect().height+'px');const t=$('thread');if(feedPinned)t.scrollTop=t.scrollHeight;})).observe(chatFooter);
-  show('tasks');refresh();loadDiscovery();pollSetup();setInterval(pollSetup,2000);
+  show('tasks');loadMachineOrder();refresh();loadDiscovery();pollSetup();setInterval(pollSetup,2000);
   setInterval(updateTimers,1000);setInterval(refresh,2000);setInterval(loadDiscovery,60000);setInterval(()=>{if(tab==='stats')loadStats();},15000);
 })();

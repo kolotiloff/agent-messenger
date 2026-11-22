@@ -15,6 +15,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
+| T-252 | Keep the manual computer order across Messenger restarts (owner, 2026-11-23). | window | Implemented on `codex/t252-persist-computer-order` (D-176). Pending release. |
 | T-239 | Label this computer as the selected project's coordinator while its active chat is open (owner, 2026-11-20). | window | Released in [0.92](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.92) via [PR #154](https://github.com/kolotiloff/agent-messenger/pull/154) (D-165). |
 | T-238 | Align the typography of computer and task titles and other equivalent window elements (owner, 2026-11-20). | window | Released in [0.92](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.92) via [PR #154](https://github.com/kolotiloff/agent-messenger/pull/154) (D-164). |
 | T-237 | Put waiting text beside the model in the computer list and remove the waiting dot from task cards (owner, 2026-11-20). | window | Released in [0.92](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.92) via [PR #154](https://github.com/kolotiloff/agent-messenger/pull/154) (D-163). |
