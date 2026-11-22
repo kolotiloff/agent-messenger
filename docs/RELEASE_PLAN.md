@@ -6,7 +6,7 @@ Written November 6, 2026; the status was last updated on November 21. This is th
 
 Updated 2026-11-21. The details of each release are in [HANDOFF.md](HANDOFF.md) and [TASKS.md](TASKS.md); this section is the overview.
 
-The program is a technical preview used every day on the owner's Mac, Windows and Linux computers. Releases are numbered 0.N (tag `v0.0.0-preview.N`); [0.92](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.92) is the newest published one.
+The program is a technical preview used every day on the owner's Mac, Windows and Linux computers. Releases are numbered 0.N (tag `v0.0.0-preview.N`); [0.93](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.93) is the newest published one.
 
 Done since the plan below was written:
 
