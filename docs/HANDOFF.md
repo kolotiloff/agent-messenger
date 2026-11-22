@@ -10,6 +10,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Updated 2026-11-22 by Codex.
 
+- T-247 restores an estimated elapsed time for a completed or failed remote task with saved progress and no worker-reported duration. Date and duration views include timed tasks without token reports. Exact worker durations and token totals keep their existing meaning.
+
 - T-246 gives the statistics sort buttons symmetric padding on hover and keyboard focus, while keeping the heading text aligned with its column. Prepared for the next release.
 
 - T-245 follow-up: the public screenshots now use the app's English interface and fictional tasks for Claude Code, Codex and Cursor. Both themes, the statistics view and the first-launch screen were captured in Chromium from 0.93.

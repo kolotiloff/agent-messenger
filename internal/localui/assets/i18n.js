@@ -108,6 +108,7 @@
   'Длительность':'Duration',
   'От первого запуска до завершения':'From first launch to completion',
   'Длительность неизвестна':'Duration is unknown',
+  'Примерно, по первому полученному действию и окончанию задачи':'Estimated from the first received activity and task completion',
   'Токены':'Tokens',
   'Обновите фоновый клиент, чтобы использовать эту сортировку.':'Update the background client to use this sort order.',
   'Расход сообщает сам компьютер, когда он меняется. В списке — только задачи, отправленные туда с этого компьютера.':'The computer reports usage when it changes. The list includes tasks sent there from this computer.',

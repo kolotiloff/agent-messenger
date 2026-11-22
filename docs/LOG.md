@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-22 — Codex (T-247)
+
+- Added a marked estimate to statistics records with received remote progress and a terminal outcome but no exact worker duration. Date and duration views now include timed tasks without token usage. The regression fixture exercises a three-hour remote task and the precedence of an exact duration.
+
 ## 2026-11-22 — Codex (T-246)
 
 - Added inset space to the statistics sort buttons and kept the labels in their original positions. The browser check covers symmetric insets and hover feedback for all three columns, and verifies both sort directions.

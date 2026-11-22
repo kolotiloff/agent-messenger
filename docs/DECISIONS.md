@@ -574,3 +574,7 @@ The owner also asked for a consistent size within each task card. Use 12 px thro
 ## D-169 — Keep a manual order for the computer list (T-244)
 
 2026-11-22, owner asked to rearrange computers by dragging their cards. Save the order in this window's local storage, across projects. Use the lasting computer ID where available. New computers follow the existing order. The keyboard can move the focused card with Alt and the up or down arrow. Clicking a card still filters by that computer.
+
+## D-171 — Use saved remote progress when elapsed time is missing (T-247)
+
+2026-11-22, owner reported a remote task that ran for about three hours but had no duration in statistics. The executor's exact elapsed time takes precedence. For a completed or failed remote task without it, estimate from the first worker activity received to the recorded completion, and mark the value with ≈ in the table. No estimate is made for local cancellations or records without worker activity. The date and duration views include timed tasks without reported usage; token rankings and totals use reported usage.
