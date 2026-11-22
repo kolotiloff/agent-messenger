@@ -213,6 +213,16 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       coordinatorActive = false;
       await page.evaluate(() => window.messengerRefresh());
       await coordinatorLabel.waitFor({state:'detached'});
+      const localCard=page.locator('#machines [aria-current="true"]');
+      const peerCard=page.locator('#machines [data-peer="fixture-peer"]');
+      await peerCard.dragTo(localCard,{sourcePosition:{x:50,y:12},targetPosition:{x:50,y:5}});
+      assert.equal(await page.locator('#machines > :first-child').getAttribute('data-peer'),'fixture-peer');
+      assert.equal(await peerCard.getAttribute('aria-pressed'),'false');
+      await page.reload();
+      await peerCard.waitFor();
+      assert.equal(await page.locator('#machines > :first-child').getAttribute('data-peer'),'fixture-peer');
+      await peerCard.press('Alt+ArrowDown');
+      assert.equal(await page.locator('#machines > :first-child').getAttribute('aria-current'),'true');
       await page.setViewportSize({width:600,height:850});
       await page.locator('[data-tab=tasks]').click();
       assert(await page.locator('#task-panel').isVisible(), 'the task panel returns after creating a project');
@@ -334,7 +344,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         if (pathname === '/api/usage-stats') return route.fulfill({json:{total:{tasks:1,tokens:12,input_tokens:8,output_tokens:4},agents:[],computers:[],days:[],recent:[stat],top:[stat]}});
         if (pathname === '/api/task') {
           const remote = new URL(route.request().url()).searchParams.get('id') === remoteTask.id;
-          const items = [{kind:'text',text:'Fixture reply',at:began}];
+          const items = [
+            {kind:'task',author:'coordinator',text:'Original task',at:began,sender_agent:'claude',sender_model:'claude-opus-5-5'},
+            {kind:'text',text:'Fixture reply',at:began},
+          ];
           if (remote) items.push(...ownerNotes.map(note=>({kind:'note',text:note.text,at:began,author:'owner',state:'sent'})));
           else {
             items.push(
@@ -446,7 +459,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await peerVersion.textContent(),'v0.97');
       assert.equal(await peerUpdate.locator('.am-machine-version').count(),0);
       await page.emulateMedia({reducedMotion:'reduce'});
-      assert.equal(await runningLabel.evaluate(node=>getComputedStyle(node).animationName),'none');
+      await page.waitForFunction(() => {
+        const label = document.querySelector('#machines [data-peer="dev-1"] [data-provider="cursor"] .am-agent-running-label');
+        return label && getComputedStyle(label).animationName === 'none';
+      });
       // WebKit can retain the previous color scheme in a hidden screen.
       await page.locator('[data-tab=tasks]').click();
       const runningTaskStatus=taskRow.locator('.am-task-status.am-status-run');
@@ -519,8 +535,11 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await detail.textContent(),'19 ноября 9:20 Frame Codex Sol 6.2 Medium на Runner');
       await page.locator('[data-tab=tasks]').click();
       await page.locator('.am-task-title',{hasText:localTask.title}).click();
-      await page.locator('#thread .am-meta-model').first().waitFor();
-      assert.equal(await page.locator('#thread .am-meta-model').first().textContent(),'Sol 6.2 Medium');
+      const sender = page.locator('#thread .am-outgoing .am-meta').first();
+      await sender.waitFor();
+      assert.equal(await sender.locator('strong').textContent(),'Claude');
+      assert.equal(await sender.locator('.am-meta-model').textContent(),'Opus 5.5');
+      assert.equal(await page.locator('#thread .am-message:not(.am-outgoing) .am-meta-model').first().textContent(),'Sol 6.2 Medium');
       assert.match(await page.locator('#task-head').innerText(),/Codex \(Sol 6\.2 Medium\)/);
       const closedTime=page.locator('#thread .am-delivery-close time');
       assert.equal(await closedTime.getAttribute('datetime'),ended);

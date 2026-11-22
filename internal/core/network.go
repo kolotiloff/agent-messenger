@@ -185,6 +185,8 @@ type netBody struct {
 	Task             string `json:"task"`
 	Project          string `json:"project,omitempty"`
 	Agent            string `json:"agent,omitempty"`
+	SenderAgent      string `json:"sender_agent,omitempty"`
+	SenderModel      string `json:"sender_model,omitempty"`
 	Title            string `json:"title,omitempty"`
 	Description      string `json:"description,omitempty"`
 	Text             string `json:"text,omitempty"`
@@ -652,8 +654,9 @@ func startRemoteTask(tx *sql.Tx, r StartTaskRequest) (string, error) {
 	id = "task-" + id[:16]
 	at := now()
 	title := taskTitle(r.Title, r.Text)
-	if _, err := tx.Exec(`INSERT INTO tasks(id,project,op_id,computer,provider,cli_path,environment,profile,folder,title,text,state,detail,created_at,updated_at,model,remote_broker,remote_peer,resource,remote_name) VALUES (?,?,?,?,?,'','','','',?,?,'running',?,?,?,?,?,?,?,?)`,
-		id, r.Project, r.OpID, r.Computer, r.Provider, title, r.Text, "sent to "+peer.Name+"; waiting for it to accept", at, at, r.Model, broker, r.Computer, r.Lock, peer.Name); err != nil {
+	sender, senderModel := taskSender(r.SenderAgent, r.SenderModel)
+	if _, err := tx.Exec(`INSERT INTO tasks(id,project,op_id,computer,provider,cli_path,environment,profile,folder,title,text,state,detail,created_at,updated_at,model,remote_broker,remote_peer,resource,remote_name,sender_agent,sender_model) VALUES (?,?,?,?,?,'','','','',?,?,'running',?,?,?,?,?,?,?,?,?,?)`,
+		id, r.Project, r.OpID, r.Computer, r.Provider, title, r.Text, "sent to "+peer.Name+"; waiting for it to accept", at, at, r.Model, broker, r.Computer, r.Lock, peer.Name, sender, senderModel); err != nil {
 		return "", err
 	}
 	if _, err := tx.Exec(`UPDATE tasks SET remote_computer=? WHERE id=?`, validComputer(peer.Computer), id); err != nil {
@@ -662,7 +665,7 @@ func startRemoteTask(tx *sql.Tx, r StartTaskRequest) (string, error) {
 	if err := insertTaskEvent(tx, r.Project, id, AudienceLog, "started", title, ""); err != nil {
 		return "", err
 	}
-	return id, enqueueNet(tx, broker, r.Computer, "start."+id, id, netBody{Kind: "start", Task: id, Project: r.Project, Agent: r.Provider, Title: title, Text: r.Text, Model: r.Model, CoordinatorModel: centralModels, Rules: r.Rules, Lock: r.Lock})
+	return id, enqueueNet(tx, broker, r.Computer, "start."+id, id, netBody{Kind: "start", Task: id, Project: r.Project, Agent: r.Provider, Title: title, Text: r.Text, Model: r.Model, CoordinatorModel: centralModels, Rules: r.Rules, Lock: r.Lock, SenderAgent: sender, SenderModel: senderModel})
 }
 
 // answerRemoteTask sends an answer to the computer that runs the task.
@@ -1077,7 +1080,7 @@ func applyStart(tx *sql.Tx, from netLink, b netBody) error {
 	} else if pending {
 		return reply("refused", netBody{Reason: "this computer is waiting to install a Messenger update and takes no new tasks"})
 	}
-	r := StartTaskRequest{Project: b.Project, OpID: mirrorOp(from), Provider: b.Agent, Title: b.Title, Text: strings.TrimSpace(b.Text), Model: strings.TrimSpace(b.Model), Rules: strings.TrimSpace(b.Rules)}
+	r := StartTaskRequest{Project: b.Project, OpID: mirrorOp(from), Provider: b.Agent, Title: b.Title, Text: strings.TrimSpace(b.Text), Model: strings.TrimSpace(b.Model), Rules: strings.TrimSpace(b.Rules), SenderAgent: b.SenderAgent, SenderModel: b.SenderModel}
 	lock, lockOK := normalizeLock(b.Lock)
 	r.Lock = lock
 	var id string

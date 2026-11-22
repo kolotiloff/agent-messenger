@@ -352,7 +352,7 @@
       viewSignature='';await refresh();
     });
   }
-  function coordinatorName(client=view?.coordinator?.client){
+  function coordinatorName(client){
     const c=(client||'').toLowerCase();
     if(c.includes('codex'))return ['codex','Codex'];
     if(c.includes('cursor'))return ['cursor','Cursor'];
@@ -575,11 +575,74 @@
   // A computer of the network counts as reachable while its reports arrive:
   // it reports every 15 s, so three missed reports mean it is not.
   const peerFresh=peer=>peer.age>=0&&peer.age<=45;
-  function pickable(card,id){
+  let machineOrder=[];
+  try{
+    const saved=JSON.parse(recall('messenger-machine-order'));
+    if(Array.isArray(saved))machineOrder=saved.filter(key=>typeof key==='string');
+  }catch(_){}
+  let draggedMachine='',machineDrop=null;
+  const machineList=$('machines');
+  function clearMachineDrop(){
+    if(machineDrop)delete machineDrop.card.dataset.dropEdge;
+    machineDrop=null;
+  }
+  function moveMachine(from,to,after){
+    const order=[...machineList.children].map(card=>card.dataset.machineOrder).filter(key=>key!==from);
+    const target=order.indexOf(to);
+    if(target<0)return;
+    order.splice(target+Number(after),0,from);
+    machineOrder=[...order,...machineOrder.filter(key=>!order.includes(key))];
+    remember('messenger-machine-order',JSON.stringify(machineOrder));
+    renderMachines();
+  }
+  machineList.addEventListener('dragstart',event=>{
+    const card=event.target.closest('[data-machine-order]');
+    if(!card)return;
+    draggedMachine=card.dataset.machineOrder;
+    event.dataTransfer.setData('text/plain',draggedMachine);
+    event.dataTransfer.effectAllowed='move';
+  });
+  machineList.addEventListener('dragover',event=>{
+    if(!draggedMachine)return;
+    const card=event.target.closest('[data-machine-order]');
+    clearMachineDrop();
+    if(!card||card.dataset.machineOrder===draggedMachine)return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect='move';
+    const rect=card.getBoundingClientRect(),after=event.clientY>=rect.top+rect.height/2;
+    card.dataset.dropEdge=after?'after':'before';
+    machineDrop={card,after};
+  });
+  machineList.addEventListener('dragleave',event=>{
+    if(!machineList.contains(event.relatedTarget))clearMachineDrop();
+  });
+  machineList.addEventListener('drop',event=>{
+    if(!draggedMachine||!machineDrop)return;
+    event.preventDefault();
+    const from=draggedMachine,{card,after}=machineDrop;
+    draggedMachine='';clearMachineDrop();
+    moveMachine(from,card.dataset.machineOrder,after);
+  });
+  machineList.addEventListener('dragend',()=>{
+    draggedMachine='';clearMachineDrop();renderMachines();
+  });
+  function pickable(card,id,orderKey=id){
     card.setAttribute('role','button');card.tabIndex=0;card.setAttribute('aria-pressed',String(computerFilter===id));
+    card.dataset.machineOrder=orderKey;card.draggable=true;
+    card.setAttribute('aria-keyshortcuts','Alt+ArrowUp Alt+ArrowDown');
     card.title=computerFilter===id?tr('Показать все компьютеры'):tr('Показать только этот компьютер');
     card.addEventListener('click',event=>{if(!event.target.closest('button'))filterComputer(id);});
-    card.addEventListener('keydown',event=>{if(event.target===card&&(event.key==='Enter'||event.key===' ')){event.preventDefault();filterComputer(id);}});
+    card.addEventListener('keydown',event=>{
+      if(event.target!==card)return;
+      if(event.key==='Enter'||event.key===' '){event.preventDefault();filterComputer(id);}
+      if(!event.altKey||!['ArrowUp','ArrowDown'].includes(event.key))return;
+      event.preventDefault();
+      const after=event.key==='ArrowDown',next=after?card.nextElementSibling:card.previousElementSibling;
+      if(!next)return;
+      const key=card.dataset.machineOrder;
+      moveMachine(key,next.dataset.machineOrder,after);
+      machineList.querySelector('[data-machine-order="'+CSS.escape(key)+'"]')?.focus();
+    });
   }
   // The window redraws every two seconds. A part whose content did not change
   // keeps its nodes: rebuilding them anyway reset hover, tooltips and
@@ -595,6 +658,7 @@
     return machineRole(tr('сервер'),tr('На этом компьютере работает сервер сети'));
   }
   function renderMachines(){
+    if(draggedMachine)return;
     collectNotices();
     const live=$('machines'),box=live.cloneNode(false),busyTasks=busyTasksByComputer();
     const machine=el('div',undefined,'am-machine-card');machine.setAttribute('aria-current','true');pickable(machine,'local');
@@ -630,7 +694,7 @@
     const hosted=new Set((server?.host?.devices||[]).filter(d=>!d.revoked_at).map(d=>d.id));
     for(const peer of server?.peers||[]){
       const fresh=peerFresh(peer);
-      const card=el('div',undefined,'am-machine-card am-peer-card');card.dataset.peer=peer.id;if(peer.host)card.dataset.host='';pickable(card,peer.id);
+      const card=el('div',undefined,'am-machine-card am-peer-card');card.dataset.peer=peer.id;if(peer.host)card.dataset.host='';pickable(card,peer.id,peer.computer||peer.id);
       const name=el('div',undefined,'am-machine-name');
       const pdot=el('span',undefined,'am-dot'+(fresh?' online':''));pdot.title=fresh?tr('На связи'):tr('Нет связи');
       name.append(pdot,el('span',peer.name));
@@ -683,6 +747,9 @@
       }
       box.append(card);
     }
+    const rank=new Map(machineOrder.map((key,index)=>[key,index]));
+    const ranks=card=>rank.get(card.dataset.machineOrder)??machineOrder.length;
+    box.append(...[...box.children].sort((a,b)=>ranks(a)-ranks(b)));
     // The moved elements are left out of the comparison, so an unchanged
     // list keeps its nodes; before a rebuild they go back to the bottom row,
     // or they would leave the page with the old card.
@@ -1319,7 +1386,6 @@
     const quiet=quietLine(t);if(quiet)title.append(quiet);
     const headRow=el('div',undefined,'am-task-head-row');headRow.append(title);
     head.replaceChildren(headRow);
-    const [coordProvider,coordLabel]=coordinatorName();
     const opened=new Set([...thread.querySelectorAll('details[open][data-key]')].map(d=>d.dataset.key));
     const out=[];let group=null,tools=null;
     const pending=new Map(), unfinished=new Set();
@@ -1369,11 +1435,15 @@
       }
       tools=null;
     };
-    const outgoing=(author,provider,role,text,at)=>{
+    const outgoing=(author,role,text,at,model)=>{
       group=null;const g=el('article',undefined,'am-message-group');const row=el('div',undefined,'am-message am-outgoing');
       const body=el('div',undefined,'am-message-body');const meta=el('div',undefined,'am-meta');
-      const who=el('strong',author);meta.append(who);if(role)meta.append(roleTag(role));meta.append(el('time',clock(at)));
+      const who=el('strong',author);meta.append(who);if(model)meta.append(el('span',modelName(model),'am-meta-model'));if(role)meta.append(roleTag(role));meta.append(el('time',clock(at)));
       const content=el('div',undefined,'am-message-content');content.append(richText(text));body.append(meta,content);row.append(body);g.append(row);out.push(g);
+    };
+    const outgoingCoordinator=it=>{
+      const sender=shortNames[it.sender_agent];
+      outgoing(sender||tr('Координатор'),sender?tr('координатор'):'',it.text,it.at,sender?it.sender_model:'');
     };
     const workerGroup=at=>{
       if(group)return group;
@@ -1400,12 +1470,12 @@
         continue;
       }
       if(it.kind!=='tool')flushTools();
-      if(it.kind==='task'){outgoing(coordLabel,coordProvider,tr('координатор'),it.text,it.at);continue;}
-      if(it.kind==='note'){if(it.author==='coordinator')outgoing(coordLabel,coordProvider,tr('координатор'),it.text,it.at);else outgoing(tr('Вы'),'owner','',it.text,it.at);const c=out[out.length-1].querySelector('.am-message-content');c.append(delivery(...({pending:[tr('Исполнитель прочитает, только когда закончит текущий ход'),'am-status-wait'],delivered:[tr('Передано исполнителю'),'am-status-good'],sent:[it.author==='owner'?tr('Поставлено в очередь для исполнителя'):tr('Отправлено на компьютер исполнителя'),'am-status-wait'],undelivered:[tr('Не передано исполнителю'),'am-status-bad']}[it.state]||[it.state,'am-muted'])));continue;}
-      if(it.kind==='answer'){if(it.author==='owner'){outgoing(tr('Вы'),'owner','',it.text,it.at);
+      if(it.kind==='task'){outgoingCoordinator(it);continue;}
+      if(it.kind==='note'){if(it.author==='coordinator')outgoingCoordinator(it);else outgoing(tr('Вы'),'',it.text,it.at);const c=out[out.length-1].querySelector('.am-message-content');c.append(delivery(...({pending:[tr('Исполнитель прочитает, только когда закончит текущий ход'),'am-status-wait'],delivered:[tr('Передано исполнителю'),'am-status-good'],sent:[it.author==='owner'?tr('Поставлено в очередь для исполнителя'):tr('Отправлено на компьютер исполнителя'),'am-status-wait'],undelivered:[tr('Не передано исполнителю'),'am-status-bad']}[it.state]||[it.state,'am-muted'])));continue;}
+      if(it.kind==='answer'){if(it.author==='owner'){outgoing(tr('Вы'),'',it.text,it.at);
         // A hint about this answer lives under it while the worker has not
         // gone on yet, so it never stays in another task (owner, 2026-11-09).
-        if(feed.items.slice(index+1).every(n=>n.kind==='answer'||n.kind==='note')&&activeStates.includes(t.state))out[out.length-1].querySelector('.am-message-content').append(delivery(tr('Ответ записан. Исполнитель продолжит в той же сессии.'),'am-delivery-hint'));}else outgoing(coordLabel,coordProvider,tr('координатор'),it.text,it.at);continue;}
+        if(feed.items.slice(index+1).every(n=>n.kind==='answer'||n.kind==='note')&&activeStates.includes(t.state))out[out.length-1].querySelector('.am-message-content').append(delivery(tr('Ответ записан. Исполнитель продолжит в той же сессии.'),'am-delivery-hint'));}else outgoingCoordinator(it);continue;}
       if(it.kind==='accepted'){const c=out[out.length-1]?.querySelector('.am-message-content');if(c)c.append(delivery(tr('Принято на компьютере «')+it.text+'»','am-status-good'));group=null;continue;}
       if(it.kind==='text'){workerGroup(it.at).append(richText(it.text));continue;}
       if(it.kind==='tool'){

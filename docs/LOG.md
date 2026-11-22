@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-22 — Codex (T-243 and T-244)
+
+- Record the assigning chat's agent and optional model with the original task, including its remote mirror. Use the generic coordinator label when no author information is recorded.
+- Added drag-and-drop and keyboard reordering for computer cards, saved in the local window.
+
 ## 2026-11-21 — Codex (T-237 to T-239)
 
 - Published [0.92](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.92) from `644d7b8` and verified the five manifest signatures and archive digests.

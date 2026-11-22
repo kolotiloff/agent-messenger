@@ -87,6 +87,24 @@ func (p *netPair) mirror(t *testing.T, origin string) Task {
 
 // D-056: a computer accepts tasks of its network until its owner turns that
 // off.
+func TestRemoteTaskKeepsTheAssigningChat(t *testing.T) {
+	p := newNetPair(t)
+	id, _, err := p.a.st.StartTask(StartTaskRequest{Project: "Game", OpID: "sender", Computer: "dev-b", Provider: "codex", Text: "Build", SenderAgent: "claude", SenderModel: "claude-opus-5-5"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.carry(t, true)
+	for _, source := range []struct {
+		st *Store
+		id string
+	}{{p.a.st, id}, {p.b.st, p.mirror(t, id).ID}} {
+		feed, err := source.st.TaskFeed(source.id)
+		if err != nil || len(feed.Items) == 0 || feed.Items[0].SenderAgent != "claude" || feed.Items[0].SenderModel != "claude-opus-5-5" {
+			t.Fatalf("feed %+v, err %v", feed, err)
+		}
+	}
+}
+
 func TestRemoteTaskIsAcceptedByDefault(t *testing.T) {
 	p := newNetPair(t)
 	if on, err := p.b.st.NetAccept(); err != nil || !on {

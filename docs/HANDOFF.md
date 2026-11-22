@@ -8,7 +8,10 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
-Updated 2026-11-21 by Codex.
+Updated 2026-11-22 by Codex.
+
+- T-243 records the original task's sending agent and its explicitly supplied coordinator model. Older messages and follow-ups without attribution show the generic coordinator label.
+- T-244 adds a saved manual computer-card order in the desktop window. Card selection and other actions still apply to the same computer. Both changes are pending review and release.
 
 - **0.92 is released** ([release](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.92), [PR #154](https://github.com/kolotiloff/agent-messenger/pull/154), source `644d7b8b092855eff7705c4dd637f1e61b9892ac`, [release run](https://github.com/kolotiloff/agent-messenger/actions/runs/44816188665)). T-237 places the amber waiting status inline and removes the extra dot in task cards. T-238 aligns title typography. T-239 labels this computer «координатор» for the selected project while its active coordinator chat is alive. Network routing still sends task events to the assigning computer. [CI](https://github.com/kolotiloff/agent-messenger/actions/runs/44813843278) passed. Confirmed all 22 assets were uploaded and verified the five update manifests against the app public key, release revision and the published archive sizes and SHA-256 digests. No installed-app update or live-agent acceptance run.
 - T-240 records the owner’s report of a 0.71 window on a computer advertised as 0.91. The Windows/Linux remote updater restarts the background client but leaves an existing window process running. The exact computer and launcher path are unconfirmed.

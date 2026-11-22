@@ -220,6 +220,7 @@ type Task struct {
 	// failure class the provider reported and its limit reset time (RFC 3339).
 	// They never cause a retry.
 	FailureReason, FailureReset string
+	SenderAgent, SenderModel    string
 	CancelRequested             bool
 	// FromNetwork marks a task another computer started (T-037). This
 	// computer runs it; only the other computer's coordinator manages it.
@@ -690,6 +691,8 @@ func taskTitle(title, text string) string {
 // new; the same OpID with different arguments is refused (D-022).
 type StartTaskRequest struct {
 	Project, OpID, Computer, Provider, Title, Text string
+	// Sender metadata describe the assigning chat, independently of the worker.
+	SenderAgent, SenderModel string
 	// Model is the worker's model; empty means the CLI's own default.
 	Model string
 	// Rules are the project's worker rules of the computer that started the
@@ -699,6 +702,13 @@ type StartTaskRequest struct {
 	// lock does not launch while an earlier open task with the same lock
 	// runs on the same computer. Empty means no lock.
 	Lock string
+}
+
+func taskSender(agent, model string) (string, string) {
+	if !TaskProviders[agent] {
+		return "", ""
+	}
+	return agent, clip(strings.Join(strings.Fields(model), " "), 80)
 }
 
 // ValidTaskModel accepts a CLI model ID or an explicit Messenger effort selection.
@@ -831,8 +841,9 @@ func startLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, origin *net
 		session = sql.NullString{String: uuid, Valid: true}
 	}
 	at := now()
-	if _, err := tx.Exec(`INSERT INTO tasks(id,project,op_id,computer,provider,cli_path,environment,profile,folder,title,text,state,session_id,created_at,updated_at,model) VALUES (?,?,?,?,?,?,?,?,?,?,?,'running',?,?,?,?)`,
-		id, r.Project, r.OpID, computer, r.Provider, agent.CLI, agent.Environment, agent.Profile, folder, taskTitle(r.Title, r.Text), r.Text, nullString(session), at, at, r.Model); err != nil {
+	sender, senderModel := taskSender(r.SenderAgent, r.SenderModel)
+	if _, err := tx.Exec(`INSERT INTO tasks(id,project,op_id,computer,provider,cli_path,environment,profile,folder,title,text,state,session_id,created_at,updated_at,model,sender_agent,sender_model) VALUES (?,?,?,?,?,?,?,?,?,?,?,'running',?,?,?,?,?,?)`,
+		id, r.Project, r.OpID, computer, r.Provider, agent.CLI, agent.Environment, agent.Profile, folder, taskTitle(r.Title, r.Text), r.Text, nullString(session), at, at, r.Model, sender, senderModel); err != nil {
 		return "", err
 	}
 	if fullAccess != 0 && origin != nil {
@@ -891,12 +902,12 @@ func insertTaskRun(tx *sql.Tx, task string, ordinal int, kind, input string) err
 	return err
 }
 
-const taskColumns = `id,project,computer,provider,profile,folder,title,text,state,COALESCE(session_id,''),detail,created_at,updated_at,COALESCE(finished_at,''),cli_path,environment,cancel_requested,version,COALESCE(model,''),COALESCE(failure_reason,''),COALESCE(failure_reset,''),origin_peer IS NOT NULL,full_access`
+const taskColumns = `id,project,computer,provider,profile,folder,title,text,state,COALESCE(session_id,''),detail,created_at,updated_at,COALESCE(finished_at,''),cli_path,environment,cancel_requested,version,COALESCE(model,''),COALESCE(failure_reason,''),COALESCE(failure_reset,''),origin_peer IS NOT NULL,full_access,sender_agent,sender_model`
 
 func scanTask(scan func(...any) error) (Task, error) {
 	var t Task
 	var cancel, origin, full int
-	err := scan(&t.ID, &t.Project, &t.Computer, &t.Provider, &t.Profile, &t.Folder, &t.Title, &t.Text, &t.State, &t.SessionID, &t.Detail, &t.CreatedAt, &t.UpdatedAt, &t.FinishedAt, &t.CLI, &t.Environment, &cancel, &t.Version, &t.Model, &t.FailureReason, &t.FailureReset, &origin, &full)
+	err := scan(&t.ID, &t.Project, &t.Computer, &t.Provider, &t.Profile, &t.Folder, &t.Title, &t.Text, &t.State, &t.SessionID, &t.Detail, &t.CreatedAt, &t.UpdatedAt, &t.FinishedAt, &t.CLI, &t.Environment, &cancel, &t.Version, &t.Model, &t.FailureReason, &t.FailureReset, &origin, &full, &t.SenderAgent, &t.SenderModel)
 	t.CancelRequested, t.FromNetwork, t.FullAccess = cancel != 0, origin != 0, full != 0
 	return t, err
 }
