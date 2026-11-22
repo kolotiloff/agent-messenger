@@ -2,6 +2,24 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-22 — Codex (T-245)
+
+- Combined T-241 to T-244 for 0.93 and refreshed the public README and four screenshots. The screenshot review caught an existing outgoing-avatar style that hid the assigning agent icon; removed it and checked that the icon is visible.
+
+## 2026-11-22 — Codex (T-243 and T-244)
+
+- Record the assigning chat's agent and optional model with the original task, including its remote mirror. Reuse the worker agent icon in the coordinator header. Use the generic coordinator label when no author information is recorded.
+- Added drag-and-drop and keyboard reordering for computer cards, saved in the local window.
+
+## 2026-11-22 — Codex (T-242)
+
+- Confirmed that the affected run had a saved report and an overload diagnostic. Updated the Codex worker parser and the window. Fake workers cover reconnect followed by success and exit zero without confirmed completion. The browser fixture checks the message for old saved failures.
+
+## 2026-11-22 — Codex (T-241)
+
+- Added duration and sortable date, duration and token headers to statistics. The store ranks the selected period before limiting the displayed list. A remote task uses the executing computer's elapsed time.
+- Regression checks cover all six orders, time-only tasks, the worker's duration reaching the assigning computer and visible sorting controls at desktop and compact widths.
+
 ## 2026-11-21 — Codex (T-237 to T-239)
 
 - Published [0.92](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.92) from `644d7b8` and verified the five manifest signatures and archive digests.

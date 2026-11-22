@@ -185,6 +185,8 @@ type netBody struct {
 	Task             string `json:"task"`
 	Project          string `json:"project,omitempty"`
 	Agent            string `json:"agent,omitempty"`
+	SenderAgent      string `json:"sender_agent,omitempty"`
+	SenderModel      string `json:"sender_model,omitempty"`
 	Title            string `json:"title,omitempty"`
 	Description      string `json:"description,omitempty"`
 	Text             string `json:"text,omitempty"`
@@ -208,6 +210,8 @@ type netBody struct {
 	// Usage is the running computer's total for the task (T-058). A
 	// computer before it ignores the field.
 	Usage *TaskUsage `json:"usage,omitempty"`
+	// DurationMS comes from the executing computer's own clock.
+	DurationMS *int64 `json:"duration_ms,omitempty"`
 	// Computer is the sender's lasting id (T-132), set on every message, so
 	// the receiver finds the tasks it shares with that computer after the
 	// network changed. A computer before 0.61 ignores it.
@@ -652,8 +656,9 @@ func startRemoteTask(tx *sql.Tx, r StartTaskRequest) (string, error) {
 	id = "task-" + id[:16]
 	at := now()
 	title := taskTitle(r.Title, r.Text)
-	if _, err := tx.Exec(`INSERT INTO tasks(id,project,op_id,computer,provider,cli_path,environment,profile,folder,title,text,state,detail,created_at,updated_at,model,remote_broker,remote_peer,resource,remote_name) VALUES (?,?,?,?,?,'','','','',?,?,'running',?,?,?,?,?,?,?,?)`,
-		id, r.Project, r.OpID, r.Computer, r.Provider, title, r.Text, "sent to "+peer.Name+"; waiting for it to accept", at, at, r.Model, broker, r.Computer, r.Lock, peer.Name); err != nil {
+	sender, senderModel := taskSender(r.SenderAgent, r.SenderModel)
+	if _, err := tx.Exec(`INSERT INTO tasks(id,project,op_id,computer,provider,cli_path,environment,profile,folder,title,text,state,detail,created_at,updated_at,model,remote_broker,remote_peer,resource,remote_name,sender_agent,sender_model) VALUES (?,?,?,?,?,'','','','',?,?,'running',?,?,?,?,?,?,?,?,?,?)`,
+		id, r.Project, r.OpID, r.Computer, r.Provider, title, r.Text, "sent to "+peer.Name+"; waiting for it to accept", at, at, r.Model, broker, r.Computer, r.Lock, peer.Name, sender, senderModel); err != nil {
 		return "", err
 	}
 	if _, err := tx.Exec(`UPDATE tasks SET remote_computer=? WHERE id=?`, validComputer(peer.Computer), id); err != nil {
@@ -662,7 +667,7 @@ func startRemoteTask(tx *sql.Tx, r StartTaskRequest) (string, error) {
 	if err := insertTaskEvent(tx, r.Project, id, AudienceLog, "started", title, ""); err != nil {
 		return "", err
 	}
-	return id, enqueueNet(tx, broker, r.Computer, "start."+id, id, netBody{Kind: "start", Task: id, Project: r.Project, Agent: r.Provider, Title: title, Text: r.Text, Model: r.Model, CoordinatorModel: centralModels, Rules: r.Rules, Lock: r.Lock})
+	return id, enqueueNet(tx, broker, r.Computer, "start."+id, id, netBody{Kind: "start", Task: id, Project: r.Project, Agent: r.Provider, Title: title, Text: r.Text, Model: r.Model, CoordinatorModel: centralModels, Rules: r.Rules, Lock: r.Lock, SenderAgent: sender, SenderModel: senderModel})
 }
 
 // answerRemoteTask sends an answer to the computer that runs the task.
@@ -727,6 +732,9 @@ func cancelRemoteTask(tx *sql.Tx, t Task, remote netLink) (string, error) {
 		if err := setTaskState(tx, t.ID, "cancelled", why); err != nil {
 			return "", err
 		}
+		if _, err := tx.Exec(`UPDATE tasks SET remote_duration_ms=NULL WHERE id=?`, t.ID); err != nil {
+			return "", err
+		}
 		if err := insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "cancelled", "the owner closed this task here; what happened on "+contact.Name+" is unknown", ""); err != nil {
 			return "", err
 		}
@@ -750,8 +758,8 @@ func cancelRemoteTask(tx *sql.Tx, t Task, remote netLink) (string, error) {
 // forwardTaskEvent queues an event of a task that another computer started.
 func forwardTaskEvent(tx *sql.Tx, o netLink, task, audience, kind, text, question string) error {
 	var state, detail string
-	var reason, reset sql.NullString
-	if err := tx.QueryRow(`SELECT state,detail,failure_reason,failure_reset FROM tasks WHERE id=?`, task).Scan(&state, &detail, &reason, &reset); err != nil {
+	var reason, reset, finished sql.NullString
+	if err := tx.QueryRow(`SELECT state,detail,failure_reason,failure_reset,finished_at FROM tasks WHERE id=?`, task).Scan(&state, &detail, &reason, &reset, &finished); err != nil {
 		return err
 	}
 	id, err := randomID()
@@ -762,7 +770,15 @@ func forwardTaskEvent(tx *sql.Tx, o netLink, task, audience, kind, text, questio
 	if err != nil {
 		return err
 	}
-	return enqueueNet(tx, o.broker, o.peer, "event."+id, task, netBody{Kind: "event", Task: o.task, State: state, Detail: clip(detail, 2000), Audience: audience, Event: kind, Text: text, Question: question, Failure: reason.String, Reset: reset.String, Usage: usage})
+	var duration *int64
+	if finished.Valid && (state == "done" || state == "failed" || state == "cancelled") {
+		started, err := taskStartedAt(tx, task)
+		if err != nil {
+			return err
+		}
+		duration = taskDurationMS(started, finished.String)
+	}
+	return enqueueNet(tx, o.broker, o.peer, "event."+id, task, netBody{Kind: "event", Task: o.task, State: state, Detail: clip(detail, 2000), Audience: audience, Event: kind, Text: text, Question: question, Failure: reason.String, Reset: reset.String, Usage: usage, DurationMS: duration})
 }
 
 // ---- sending ----
@@ -1077,7 +1093,7 @@ func applyStart(tx *sql.Tx, from netLink, b netBody) error {
 	} else if pending {
 		return reply("refused", netBody{Reason: "this computer is waiting to install a Messenger update and takes no new tasks"})
 	}
-	r := StartTaskRequest{Project: b.Project, OpID: mirrorOp(from), Provider: b.Agent, Title: b.Title, Text: strings.TrimSpace(b.Text), Model: strings.TrimSpace(b.Model), Rules: strings.TrimSpace(b.Rules)}
+	r := StartTaskRequest{Project: b.Project, OpID: mirrorOp(from), Provider: b.Agent, Title: b.Title, Text: strings.TrimSpace(b.Text), Model: strings.TrimSpace(b.Model), Rules: strings.TrimSpace(b.Rules), SenderAgent: b.SenderAgent, SenderModel: b.SenderModel}
 	lock, lockOK := normalizeLock(b.Lock)
 	r.Lock = lock
 	var id string
@@ -1308,6 +1324,15 @@ func applyReport(tx *sql.Tx, from netLink, b netBody) error {
 	}
 	if err := setTaskState(tx, t.ID, b.State, clip(b.Detail, 2000)); err != nil {
 		return err
+	}
+	if b.State == "done" || b.State == "failed" || b.State == "cancelled" {
+		duration := b.DurationMS
+		if duration != nil && (*duration < 0 || *duration > (1<<63-1)/int64(time.Millisecond)) {
+			duration = nil
+		}
+		if _, err := tx.Exec(`UPDATE tasks SET remote_duration_ms=? WHERE id=?`, duration, t.ID); err != nil {
+			return err
+		}
 	}
 	if b.Failure != "" && failureReasons[b.Failure] {
 		reset := sql.NullString{}

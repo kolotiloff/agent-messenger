@@ -558,3 +558,19 @@ The owner also asked for a consistent size within each task card. Use 12 px thro
 ## D-165 — Label the live local coordinator (T-239)
 
 2026-11-20, owner approved the lowercase «координатор» label beside the computer name. The window shows it on this computer’s card while the active chat of the selected project (D-099) has a live local process. Reuse the server label style. Historical connections and peer presence do not establish this role. The label refines D-064 for this computer. A handover between local chats leaves network task routing unchanged.
+
+## D-166 — Sort statistics from the column headers (T-241)
+
+2026-11-22, owner chose clickable date, duration and token headers. Default to newest first. Each header reverses the order on a second click. Rank the filtered period before taking ten rows. Duration is elapsed time from the first worker launch to the latest task completion, including pauses between runs. The executing computer sends the elapsed value on completion, so network delays and clock skew do not affect it. Leave missing timing blank and exclude it from duration ranks. A completed task with known timing can appear in the duration ranks even when the agent reported no usage. The token totals and existing date and token lists keep their usage-based scope.
+
+## D-167 — A Codex reconnect is provisional (T-242)
+
+2026-11-22, owner reported a completed change whose saved report was attached to a run that Messenger could not confirm. A Codex error notification in the form `Reconnecting... N/M` is provisional. A later explicit `turn.completed` clears that notification. A terminal or unknown error still fails verification. Without completion the run keeps its actual failure state. Classify the model-capacity diagnostic as overload and show that the provider did not confirm completion. The saved report remains available as unverified text. Preserve D-021 and D-147 and never retry the run automatically.
+
+## D-168 — Attribute the original task message to its sender (T-243)
+
+2026-11-22, owner saw a task from Claude labelled as Codex. The project connection record describes the last initialized client and cannot attribute messages. Record the assigning chat's provider at `start_task` and carry it with the task. The optional `coordinator_model` is supplied by the coordinator only when it knows the active model. The worker model is separate. Use the same provider icon as in the worker header when the sender is known. Show the generic coordinator label when the sender is unknown, including existing history and follow-ups with no attribution.
+
+## D-169 — Keep a manual order for the computer list (T-244)
+
+2026-11-22, owner asked to rearrange computers by dragging their cards. Save the order in this window's local storage, across projects. Use the lasting computer ID where available. New computers follow the existing order. The keyboard can move the focused card with Alt and the up or down arrow. Clicking a card still filters by that computer.

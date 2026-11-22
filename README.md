@@ -23,16 +23,21 @@ One coordinator agent hands tasks to worker agents (Claude Code, Codex, Cursor A
   <img src="docs/assets/window-light.png" alt="The Agent Messenger window: computers and their agents on the left, a running task in the middle, the task list on the right">
 </picture>
 
-<sub>The task window with fictional data. Use the gear at the bottom left to change the theme or switch from Russian to English.</sub>
+<sub>The task window with fictional data. The settings button at the bottom left changes the theme and language.</sub>
 
 ## What it does
 
 - **Coordinator and workers.** Use a local Claude Code, Codex or Cursor chat as the coordinator. It assigns work to separate worker sessions in the project folder. Claude Code can receive background-task notifications. Codex and Cursor use `wait` during an active turn to receive worker events.
-- **Several computers.** Host the server on one of your computers or a Linux VPS. Join on the same local network with six digits, or use a long invitation with the server's reachable address. The coordinator can see available agents and assign to a computer that accepts tasks and has a folder for the project.
-- **Tasks and replies.** See task progress, the model, elapsed time and token usage. Open full conversations for tasks tracked by this computer, reply or stop work, and browse read-only summaries of other computers' tasks. Workers can attach images to reports and questions.
+- **Several computers.** Host the server on one of your computers or a Linux VPS. Join on the same local network with six digits, or use a long invitation with the server's reachable address. The coordinator can assign tasks to a computer that accepts them and has a folder for the project. Drag computer cards to set the order in your window.
+- **Tasks and replies.** See task progress, the model, elapsed time and token usage. The conversation shows the assigning agent's name and icon when recorded, along with its model when supplied. Open full conversations for tasks tracked by this computer, message a worker during a run or stop work, and browse read-only summaries of other computers' tasks. Workers can attach images to reports and questions.
 - **Run controls.** Interrupted or uncertain tasks appear under «Требуют решения» and are never restarted automatically. The «Любые команды» option is off by default.
-- **Statistics and feedback.** Filter token usage by period, agent, model or computer. Browse the latest tasks or sort them by token use. The feedback button saves a note and an optional screenshot.
+- **Statistics and feedback.** Filter by period, agent, model or computer. The task table shows when each task finished, how long it ran and how many tokens it used. Click a column heading to sort and click again to reverse. The feedback button saves a note and an optional screenshot.
 - **Updates from the window.** The update arrow appears next to the version on the computer card. Windows and Linux can also be updated from another computer on the network.
+
+<details>
+  <summary>Statistics screenshot</summary>
+  <img src="docs/assets/statistics.png" alt="Agent Messenger statistics showing token usage and a table of tasks sorted by duration">
+</details>
 
 ## Getting started
 

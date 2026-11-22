@@ -120,6 +120,7 @@ type coordinator struct {
 	watch string
 	// backgroundWatch is enabled only for the known Claude Code client.
 	backgroundWatch bool
+	clientName      string
 	// dataRoot is the data directory, where an export goes when there is
 	// no Downloads folder.
 	dataRoot string
@@ -298,6 +299,7 @@ func serveCoordinatorIn(store *core.Store, project, watch, dataRoot string, in i
 			}
 			c.mu.Lock()
 			c.backgroundWatch = strings.EqualFold(p.ClientInfo.Name, "claude-code")
+			c.clientName = p.ClientInfo.Name
 			c.mu.Unlock()
 			_ = c.store.TouchCoordinatorClient(c.project, p.ClientInfo.Name)
 			c.respond(req.ID, map[string]any{
@@ -404,13 +406,14 @@ func coordinatorTools() []map[string]any {
 			})},
 		{"name": "start_task", "description": "Start a task in a new worker session of the chosen agent, in this project's folder on the computer. Returns the task id. Repeating a call with the same op_id returns the same task.",
 			"inputSchema": obj(map[string]any{
-				"op_id":    str("unique id of this operation, for safe retries"),
-				"agent":    map[string]any{"type": "string", "enum": []string{"claude", "codex", "cursor"}},
-				"text":     map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxTaskText, "description": "the task: what to do and what to report"},
-				"title":    map[string]any{"type": "string", "maxLength": core.MaxTaskTitle, "description": "short title shown in the window"},
-				"computer": str("computer id from list_agents: this computer (the default) or another computer of the network"),
-				"model":    map[string]any{"type": "string", "maxLength": 80, "description": "Exact selection from the agent's models in list_agents; model_options gives task guidance. Copy effort selections unchanged, e.g. gpt-6.2-astra[effort=high]. Leave out for the CLI default. Never guess a model or retry after rejection."},
-				"lock":     map[string]any{"type": "string", "maxLength": core.MaxTaskLock, "description": "optional name of a resource only one worker on that computer may use at a time, such as unity-editor; the task waits to start while an earlier unfinished task with the same lock is on that computer"},
+				"op_id":             str("unique id of this operation, for safe retries"),
+				"agent":             map[string]any{"type": "string", "enum": []string{"claude", "codex", "cursor"}},
+				"text":              map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxTaskText, "description": "the task: what to do and what to report"},
+				"title":             map[string]any{"type": "string", "maxLength": core.MaxTaskTitle, "description": "short title shown in the window"},
+				"computer":          str("computer id from list_agents: this computer (the default) or another computer of the network"),
+				"model":             map[string]any{"type": "string", "maxLength": 80, "description": "Exact selection from the agent's models in list_agents; model_options gives task guidance. Copy effort selections unchanged, e.g. gpt-6.2-astra[effort=high]. Leave out for the CLI default. Never guess a model or retry after rejection."},
+				"lock":              map[string]any{"type": "string", "maxLength": core.MaxTaskLock, "description": "optional name of a resource only one worker on that computer may use at a time, such as unity-editor; the task waits to start while an earlier unfinished task with the same lock is on that computer"},
+				"coordinator_model": map[string]any{"type": "string", "maxLength": 80, "description": "The model of your own coordinator chat, shown in its message header. Include it only when supplied by your client or the owner. Never infer it from the worker model."},
 			}, "op_id", "agent", "text")},
 		{"name": "wait", "description": "Return the events of this project's tasks after the cursor; with none, block until one arrives or timeout_seconds pass (default 60, at most 120). Costs no tokens while blocked. Follow the returned waiting instructions: a background shell session alone does not wake an idle chat. Always pass after. Returns a bounded batch; more: true means further events are ready, so call wait again at once with the new cursor.",
 			"inputSchema": obj(map[string]any{
@@ -525,18 +528,29 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 		return c.agentVersion(ctx, a.Computer, a.Agent, a.RequestID)
 	case "start_task":
 		var a struct {
-			OpID     string `json:"op_id"`
-			Agent    string `json:"agent"`
-			Text     string `json:"text"`
-			Title    string `json:"title"`
-			Computer string `json:"computer"`
-			Model    string `json:"model"`
-			Lock     string `json:"lock"`
+			OpID        string `json:"op_id"`
+			Agent       string `json:"agent"`
+			Text        string `json:"text"`
+			Title       string `json:"title"`
+			Computer    string `json:"computer"`
+			Model       string `json:"model"`
+			SenderModel string `json:"coordinator_model"`
+			Lock        string `json:"lock"`
 		}
 		if err := strict(&a); err != nil {
 			return nil, err
 		}
-		id, created, err := c.store.StartTask(core.StartTaskRequest{Project: c.project, OpID: a.OpID, Computer: a.Computer, Provider: a.Agent, Title: a.Title, Text: a.Text, Model: a.Model, Lock: a.Lock})
+		c.mu.Lock()
+		client := strings.ToLower(strings.TrimSpace(c.clientName))
+		c.mu.Unlock()
+		var sender string
+		for _, agent := range []string{"claude", "codex", "cursor"} {
+			if strings.Contains(client, agent) {
+				sender = agent
+				break
+			}
+		}
+		id, created, err := c.store.StartTask(core.StartTaskRequest{Project: c.project, OpID: a.OpID, Computer: a.Computer, Provider: a.Agent, Title: a.Title, Text: a.Text, Model: a.Model, Lock: a.Lock, SenderAgent: sender, SenderModel: a.SenderModel})
 		if err != nil {
 			return nil, err
 		}

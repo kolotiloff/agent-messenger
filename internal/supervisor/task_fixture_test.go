@@ -190,6 +190,12 @@ func taskWorkerFixture(mode string) int {
 	switch mode {
 	case "report", "wrong-session":
 		tool("report", map[string]any{"text": "done: " + brief.Task})
+	case "reconnect-report", "capacity-report":
+		tool("report", map[string]any{"text": "work summary"})
+		emit(map[string]any{"type": "error", "message": "Reconnecting... 4/5 (Selected model is at capacity. Please try a different model.)"})
+		if mode == "capacity-report" {
+			return 0
+		}
 	case "chatty":
 		// Many feed lines right before the exit: the last line must still
 		// be read after the process is gone.
