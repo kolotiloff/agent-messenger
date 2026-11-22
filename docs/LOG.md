@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-22 — Codex (T-241)
+
+- Added duration and sortable date, duration and token headers to statistics. The store ranks the selected period before limiting the displayed list. A remote task uses the executing computer's elapsed time.
+- Regression checks cover all six orders, time-only tasks, the worker's duration reaching the assigning computer and visible sorting controls at desktop and compact widths.
+
 ## 2026-11-21 — Codex (T-237 to T-239)
 
 - Published [0.92](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.92) from `644d7b8` and verified the five manifest signatures and archive digests.

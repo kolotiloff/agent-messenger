@@ -1901,15 +1901,23 @@
   // tokens, no dollars (D-074). One hue for every bar: the bars show size,
   // not identity, and the names stand next to them.
   let statsPeriod=['day','week','month'].includes(recall('messenger-stats-period'))?recall('messenger-stats-period'):'week',stats=null,statsGen=0;
-  // T-214: the latest tasks come first; the heading stays «Задачи» and the
-  // tabs say which order is shown.
-  let statsSort=recall('messenger-stats-sort')==='tokens'?'tokens':'recent';
+  const statsOrders=['recent','oldest','tokens','fewest','longest','shortest'];
+  let statsSort=recall('messenger-stats-sort');
+  if(!statsOrders.includes(statsSort))statsSort='recent';
   // T-201: one agent and one of its models; the model is not remembered.
   let statsAgent=['claude','codex','cursor'].includes(recall('messenger-stats-agent'))?recall('messenger-stats-agent'):'',statsModel='';
   const periodWords={day:tr('сегодня'),week:tr('за 7 дней'),month:tr('за 30 дней')};
   function tasksWord(n){const a=n%10,b=n%100;if(amLang==='en')return n+(n===1?' task':' tasks');return n+' '+(a===1&&b!==11?'задача':a>=2&&a<=4&&(b<12||b>14)?'задачи':'задач');}
   function tokensWord(n){const a=n%10,b=n%100;if(amLang==='en')return n===1?'token':'tokens';return a===1&&b!==11?'токен':a>=2&&a<=4&&(b<12||b>14)?'токена':'токенов';}
   function tokensFull(n){return n.toLocaleString(amLocale)+' '+tokensWord(n);}
+  function statsDuration(ms){
+    const seconds=Math.floor(ms/1000);
+    if(seconds<1)return '<1'+tr(' с');
+    if(seconds<60)return seconds+tr(' с');
+    const m=Math.floor(seconds/60),h=Math.floor(m/60);
+    if(!h)return m+tr(' мин');
+    return h+tr(' ч')+(m%60?' '+m%60+tr(' мин'):'');
+  }
   async function loadStats(){
     const gen=++statsGen;
     try{const s=await api('/api/usage-stats?period='+statsPeriod+(computerFilter?'&computer='+encodeURIComponent(computerFilter):'')+(statsAgent?'&agent='+statsAgent:'')+(statsModel?'&model='+encodeURIComponent(statsModel):''),8000);if(gen===statsGen){stats=s;renderStats();}}
@@ -1953,8 +1961,14 @@
     root.querySelectorAll('[data-period]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.period===statsPeriod)));
     computerChip($('stats-computer-chip'));
     $('stats-computers-card').hidden=!!computerFilter;
-    $('stats-foot').textContent=!computerFilter?tr('Считаются все компьютеры сети: каждый сообщает расход своих задач по отчётам агентов. Задача попадает в день, когда закончилась.'):computerFilter==='local'?tr('Задачи, которые выполнялись на этом компьютере. Задача попадает в день, когда закончилась.'):tr('Расход сообщает сам компьютер, когда он меняется. В самых затратных задачах — только отправленные туда с этого компьютера.');
+    $('stats-foot').textContent=!computerFilter?tr('Считаются все компьютеры сети: каждый сообщает расход своих задач по отчётам агентов. Задача попадает в день, когда закончилась.'):computerFilter==='local'?tr('Задачи, которые выполнялись на этом компьютере. Задача попадает в день, когда закончилась.'):tr('Расход сообщает сам компьютер, когда он меняется. В списке — только задачи, отправленные туда с этого компьютера.');
     $('stats-agent').value=statsAgent;
+    root.querySelectorAll('[data-stats-sort]').forEach(b=>{
+      const down=b.dataset.statsSort===statsSort,up=b.dataset.statsReverse===statsSort;
+      if(down||up)b.closest('th').setAttribute('aria-sort',down?'descending':'ascending');
+      else b.closest('th').removeAttribute('aria-sort');
+      b.querySelector('span').textContent=down?'↓':up?'↑':'';
+    });
     if(stats){
       // Rebuilt only when the list changed: a rebuild closes an open menu (T-192).
       const models=[['',tr('Все модели')],...(stats.models||[]).map(m=>[m.key,m.name||m.key])];
@@ -1975,21 +1989,30 @@
     statsDays($('stats-days'),statsPeriod==='day'?[]:stats.days);
     statsBars($('stats-agents'),stats.agents,t.tokens,true);
     statsBars($('stats-computers'),stats.computers,t.tokens);
-    // T-197: the most expensive tasks or the latest finished ones, in the
-    // same period and computer scope.
-    root.querySelectorAll('[data-stats-sort]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.statsSort===statsSort)));
-    const list=statsSort==='recent'?(stats.recent||[]):stats.top;
+    const list=statsSort==='recent'?(stats.recent||[]):statsSort==='tokens'?(stats.top||[]):stats.ranked?.[statsSort];
     const top=$('stats-top');top.replaceChildren();
-    if(!list.length)top.append(el('p',tr('Пока пусто'),'am-small am-muted'));
+    if(!list?.length){
+      const empty=el('td',list?tr('Пока пусто'):tr('Обновите фоновый клиент, чтобы использовать эту сортировку.'),'am-small am-muted');
+      empty.colSpan=4;
+      const row=el('tr');row.append(empty);top.append(row);return;
+    }
     for(const task of list){
-      const row=el('button',undefined,'am-stats-task');row.type='button';
-      const words=el('span',undefined,'am-stats-task-text');
+      const row=el('tr',undefined,'am-stats-task');
+      const words=el('button',undefined,'am-stats-task-text');words.type='button';
       const date=new Date(task.at);
-      const when=Number.isNaN(date.getTime())?'':date.toLocaleDateString(amLocale,{day:'numeric',month:'long'})+' '+date.toLocaleTimeString(amLocale,{hour:'numeric',minute:'2-digit',hourCycle:'h23'}).replace(/^0/,'');
-      const detail=[when,task.project,shortNames[task.agent]||task.agent,task.model&&modelName(task.model),task.computer&&tr('на ')+task.computer].filter(Boolean).join(' ');
+      const when=el('td',undefined,'am-small am-muted');
+      if(!Number.isNaN(date.getTime())){
+        const stamp=el('time',date.toLocaleDateString(amLocale,{day:'numeric',month:'short'})+' '+clock(task.at));
+        stamp.dateTime=task.at;when.append(stamp);
+      }
+      const detail=[task.project,shortNames[task.agent]||task.agent,task.model&&modelName(task.model),task.computer&&tr('на ')+task.computer].filter(Boolean).join(' ');
       words.append(el('span',task.title||tr('Без названия'),'am-stats-task-title'),el('span',detail,'am-small am-muted'));
-      row.append(words,el('span',tokensText(task.tokens),'am-stats-value'));
-      row.title=(typeof task.input_tokens==='number'?usageLong(task)+'\n':'')+tr('Открыть задачу');
+      const titleCell=el('td');titleCell.append(words);
+      const duration=el('td',Number.isFinite(task.duration_ms)?statsDuration(task.duration_ms):'—','am-stats-value am-muted');
+      duration.title=Number.isFinite(task.duration_ms)?tr('От первого запуска до завершения'):tr('Длительность неизвестна');
+      const tokens=el('td',task.usage_missing?'—':tokensText(task.tokens),'am-stats-value');
+      row.append(when,titleCell,duration,tokens);
+      words.title=(!task.usage_missing&&typeof task.input_tokens==='number'?usageLong(task)+'\n':'')+tr('Открыть задачу');
       row.addEventListener('click',()=>{
         if(task.project&&task.project!==project){project=task.project;remember('messenger-project',project);viewSignature='';}
         selectedTask=task.id;selectedShared=null;feed=null;feedSignature='';show('tasks');refresh();
@@ -1999,7 +2022,10 @@
   }
   $('stats-agent').addEventListener('change',()=>{statsAgent=$('stats-agent').value;remember('messenger-stats-agent',statsAgent);statsModel='';stats=null;renderStats();loadStats();});
   $('stats-model').addEventListener('change',()=>{statsModel=$('stats-model').value;stats=null;renderStats();loadStats();});
-  root.querySelectorAll('[data-stats-sort]').forEach(b=>b.addEventListener('click',()=>{statsSort=b.dataset.statsSort;remember('messenger-stats-sort',statsSort);renderStats();}));
+  root.querySelectorAll('[data-stats-sort]').forEach(b=>b.addEventListener('click',()=>{
+    statsSort=statsSort===b.dataset.statsSort?b.dataset.statsReverse:b.dataset.statsSort;
+    remember('messenger-stats-sort',statsSort);renderStats();
+  }));
   root.querySelectorAll('[data-period]').forEach(b=>b.addEventListener('click',()=>{statsPeriod=b.dataset.period;remember('messenger-stats-period',statsPeriod);stats=null;renderStats();loadStats();}));
 
   // Server tab: the broker hosted by this client and this computer's

@@ -558,3 +558,7 @@ The owner also asked for a consistent size within each task card. Use 12 px thro
 ## D-165 — Label the live local coordinator (T-239)
 
 2026-11-20, owner approved the lowercase «координатор» label beside the computer name. The window shows it on this computer’s card while the active chat of the selected project (D-099) has a live local process. Reuse the server label style. Historical connections and peer presence do not establish this role. The label refines D-064 for this computer. A handover between local chats leaves network task routing unchanged.
+
+## D-166 — Sort statistics from the column headers (T-241)
+
+2026-11-22, owner chose clickable date, duration and token headers. Default to newest first. Each header reverses the order on a second click. Rank the filtered period before taking ten rows. Duration is elapsed time from the first worker launch to the latest task completion, including pauses between runs. The executing computer sends the elapsed value on completion, so network delays and clock skew do not affect it. Leave missing timing blank and exclude it from duration ranks. A completed task with known timing can appear in the duration ranks even when the agent reported no usage. The token totals and existing date and token lists keep their usage-based scope.

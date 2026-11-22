@@ -240,6 +240,9 @@ func TestRemoteTaskQuestionAnswerReport(t *testing.T) {
 	if err := p.b.st.RecordDisposition(r2.ID, r2.Receipt, DispositionReport, "Level 2 is built"); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := p.b.st.db.Exec(`UPDATE task_runs SET launched_at=? WHERE id=?`, time.Now().UTC().Add(-3*time.Minute).Format(time.RFC3339Nano), r.ID); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := p.b.st.FinishTaskRun(r2.ID, cleanExit); err != nil {
 		t.Fatal(err)
 	}
@@ -247,6 +250,20 @@ func TestRemoteTaskQuestionAnswerReport(t *testing.T) {
 	task, _ = p.a.st.TaskByID(id)
 	if task.State != "done" || task.OpenQuestion != nil {
 		t.Fatalf("done %+v", task)
+	}
+	since := time.Now().Add(-time.Hour)
+	sender, err := p.a.st.UsageStats(since, time.Local, "dev-b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	worker, err := p.b.st.UsageStats(since, time.Local, "local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	from, to := sender.Ranked["longest"], worker.Ranked["longest"]
+	if len(from) != 1 || len(to) != 1 || from[0].ID != id || from[0].DurationMS == nil || to[0].DurationMS == nil ||
+		*from[0].DurationMS != *to[0].DurationMS || *from[0].DurationMS < 180000 {
+		t.Fatalf("worker duration: %+v, sender duration: %+v", to, from)
 	}
 	events := p.a.events(t, AudienceCoordinator, 0)
 	if kinds(events) != "owner_question,owner_answered,report" || events[2].Text != "Level 2 is built" || events[1].Text != "Level 2" {

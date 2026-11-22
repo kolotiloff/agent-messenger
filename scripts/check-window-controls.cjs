@@ -308,7 +308,9 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       let mixedActions = false;
       const commandStarted = new Date(Date.now() - 72 * 1000).toISOString();
       const ended = '2026-11-14T09:30:00Z';
-      const stat = {id:'old-1',title:'Old 1',at:'2026-11-19T09:20:00',project:'Frame',agent:'codex',model:'gpt-6.2-sol[effort=medium]',computer:'Runner',tokens:12};
+      const stat = {id:'old-1',title:'Проверить сборку проекта',at:'2026-11-19T09:20:00',project:'Frame',agent:'codex',model:'gpt-6.2-sol[effort=medium]',computer:'Runner',tokens:420000,duration_ms:42000};
+      const olderStat = {...stat,id:'old-2',title:'Проверить производительность сцены',at:'2026-11-18T10:10:00',tokens:18200000,duration_ms:8280000};
+      const untimedStat = {...stat,id:'old-3',title:'Уточнить настройки агента',at:'2026-11-18T09:00:00',tokens:3400000,duration_ms:undefined};
       const localTask = {id:'local-task',title:'Local task',project:'Frame',agent:'codex',state:'running',created_at:began,started_at:began,model:'gpt-6.2-sol[effort=low]',ran_model:'gpt-6.2-sol[effort=medium]'};
       const remoteTask = {...localTask,id:'remote-task',title:'Remote task',created_at:new Date(Date.now()-8*60*1000).toISOString(),model:'',ran_model:'',remote:{id:'dev-1',name:'Runner',worker:'none'}};
       const waitingTask = {...remoteTask,id:'waiting-task',title:'Waiting for a reply',agent:'claude',state:'waiting_owner',model:'claude-sonnet-5-5[effort=medium]'};
@@ -331,7 +333,11 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
             {id: 'old-1', project: 'Frame', title: 'Old 1', agent: 'codex', state: 'done', created_at: '2026-11-14T09:00:00Z', finished_at: ended},
             {id: 'old-2', project: 'Frame', title: 'Old 2', agent: 'codex', state: 'failed', created_at: '2026-11-14T08:00:00Z', finished_at: '2026-11-14T08:30:00Z'}]}]}});
         if (pathname === '/api/server') return route.fulfill({json: {host: {running: false, enabled: false, addresses: []}, member: {connected: true, reachable: true, address:'203.0.113.7:47100', connected_at:began}, peers: [{id: 'host', name: 'Giver', age: 0, agents: []}, {id: 'dev-1', name: 'Runner', age: 0, version:'0.0.0-preview.97', agents: runnerAgents, workers:{runs:runnerWorkers}}], updates: [], accept: true}});
-        if (pathname === '/api/usage-stats') return route.fulfill({json:{total:{tasks:1,tokens:12,input_tokens:8,output_tokens:4},agents:[],computers:[],days:[],recent:[stat],top:[stat]}});
+        if (pathname === '/api/usage-stats') return route.fulfill({json:{
+          total:{tasks:3,tokens:22020000,input_tokens:21100000,output_tokens:920000},agents:[],computers:[],days:[],
+          recent:[stat,olderStat,untimedStat],top:[olderStat,untimedStat,stat],
+          ranked:{oldest:[untimedStat,olderStat,stat],fewest:[stat,untimedStat,olderStat],longest:[olderStat,stat],shortest:[stat,olderStat]},
+        }});
         if (pathname === '/api/task') {
           const remote = new URL(route.request().url()).searchParams.get('id') === remoteTask.id;
           const items = [{kind:'text',text:'Fixture reply',at:began}];
@@ -505,9 +511,12 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         await page.emulateMedia({colorScheme:'light'});
       }
       await page.locator('[data-tab=stats]').click();
-      const detail = page.locator('#stats-top .am-stats-task-text .am-muted');
+      const detail = page.locator('#stats-top .am-stats-task-text .am-muted').first();
       await detail.waitFor();
-      assert.equal(await detail.textContent(),'19 ноября 9:20 Frame Codex Sol 6.2 Medium на Runner');
+      assert.equal(await detail.textContent(),'Frame Codex Sol 6.2 Medium на Runner');
+      assert.equal(await page.locator('#stats-top time').first().getAttribute('datetime'),stat.at);
+      assert.equal(await page.locator('#stats-top tr').first().locator('td').nth(2).textContent(),'42 с');
+      assert.equal(await page.locator('#stats-top tr').last().locator('td').nth(2).textContent(),'—');
       assert.deepEqual(await type(page.locator('#stats-top .am-stats-task-title').first()),computerTitle);
       await page.locator('[data-tab=project]').click();
       const rules=await type(page.locator('#project-page-rules'));
@@ -515,8 +524,32 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(rules.fontFamily,projectName.fontFamily);
       assert.equal(rules.fontSize,projectName.fontSize);
       await page.locator('[data-tab=stats]').click();
-      await page.locator('[data-stats-sort=tokens]').click();
-      assert.equal(await detail.textContent(),'19 ноября 9:20 Frame Codex Sol 6.2 Medium на Runner');
+      const sorted = page.locator('.am-stats-table th[aria-sort]');
+      const firstTitle = () => page.locator('#stats-top .am-stats-task-title').first().textContent();
+      for (const [column,direction,first] of [
+        ['recent','ascending',untimedStat],['recent','descending',stat],
+        ['tokens','descending',olderStat],['tokens','ascending',stat],
+        ['longest','descending',olderStat],['longest','ascending',stat],
+      ]) {
+        await page.locator('[data-stats-sort='+column+']').click();
+        assert.equal(await sorted.count(),1);
+        assert.equal(await sorted.getAttribute('aria-sort'),direction);
+        assert.equal(await firstTitle(),first.title);
+      }
+      await page.locator('[data-stats-sort=longest]').click();
+      if(process.env.SCREENSHOT_DIR){
+        await page.mouse.move(0,0);
+        const previous = await page.evaluate(()=>{
+          const prev=document.documentElement.dataset.theme;
+          document.documentElement.dataset.theme='dark';
+          return prev;
+        });
+        await page.locator('[aria-labelledby=stats-top-title].am-card').screenshot({path:path.join(process.env.SCREENSHOT_DIR,'stats-duration-dark.png')});
+        await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;},previous);
+      }
+      await page.setViewportSize({width:600,height:600});
+      assert(await page.locator('.am-stats-table-wrap').evaluate(box=>box.scrollWidth===box.clientWidth));
+      await page.setViewportSize({width:1100,height:600});
       await page.locator('[data-tab=tasks]').click();
       await page.locator('.am-task-title',{hasText:localTask.title}).click();
       await page.locator('#thread .am-meta-model').first().waitFor();
