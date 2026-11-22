@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-22 — Codex (T-241 to T-245)
+
+- Published [0.93](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.93) from `efd0e83` and verified the five manifest signatures and archive digests.
+
 ## 2026-11-22 — Codex (T-245)
 
 - Combined T-241 to T-244 for 0.93 and refreshed the public README and four screenshots. The screenshot review caught an existing outgoing-avatar style that hid the assigning agent icon; removed it and checked that the icon is visible.
