@@ -230,7 +230,7 @@ func taskWorkerFixture(mode string) int {
 	case "stderr-only":
 		// A CLI that stops before it reports anything in its own output
 		// (coordinator, 2026-11-12: Cursor exit code 1, no text).
-		fmt.Fprintln(os.Stderr, "progress noise\nError: model claude-opus-5-thinking-hig is not available; api_key=sk-abcdef0123456789abcdef0123456789")
+		fmt.Fprintln(os.Stderr, "progress noise\nError: model claude-opus-5-thinking-hig is not available; api_key=REDACTION_TEST_MARKER")
 		return 1
 	case "stderr-limit":
 		fmt.Fprintln(os.Stderr, "Error: You've hit your usage limit. Try again at 18:12.")
@@ -259,6 +259,11 @@ func taskWorkerFixture(mode string) int {
 		tool("report", map[string]any{"text": "done, still up"})
 		finish()
 		time.Sleep(30 * time.Second)
+		return 0
+	case "final-then-exit":
+		tool("report", map[string]any{"text": "finished"})
+		finish()
+		time.Sleep(2 * time.Second)
 		return 0
 	case "sleep":
 		// A leftover child of "leave-child" on Windows.

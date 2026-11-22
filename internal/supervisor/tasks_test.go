@@ -372,7 +372,7 @@ func TestTaskFailureKeepsCLIErrorOutput(t *testing.T) {
 				if e.Kind != "failed" {
 					continue
 				}
-				if strings.Contains(e.Text, "sk-abcdef") {
+				if strings.Contains(e.Text, "REDACTION_TEST_MARKER") {
 					t.Fatalf("a key reached the coordinator: %s", e.Text)
 				}
 				if strings.Contains(e.Text, "model claude-opus-5-thinking-hig is not available") {
@@ -478,7 +478,7 @@ func TestJournalRecordsRunsWithoutTaskText(t *testing.T) {
 	if err != nil || !strings.Contains(tail, id+": ended failed") {
 		t.Fatalf("log tail %q %v", tail, err)
 	}
-	if strings.Contains(redactLog(tail), "sk-abcdef") {
+	if strings.Contains(redactLog(tail), "REDACTION_TEST_MARKER") {
 		t.Fatal("a key in the shared log")
 	}
 	h.stop()
@@ -645,6 +645,50 @@ func TestRunAfterFinalMessageIsDescribedNotClosed(t *testing.T) {
 	h.waitState(id, "cancelled")
 	if q, err := h.st.TaskRunQuiet(id); err != nil || q != nil {
 		t.Fatalf("a closed run is still described: %+v %v", q, err)
+	}
+	waitNoTaskReservations(t)
+	h.stop()
+}
+
+func TestCodexExitDelayNotifiesOnceThenReports(t *testing.T) {
+	old := taskLingerAfter.Swap(int64(100 * time.Millisecond))
+	t.Cleanup(func() { taskLingerAfter.Store(old) })
+	h := newTaskHarness(t, "final-then-exit", AdapterLauncher{AllowTasks: true})
+	id := h.startTask("op-1", "codex", "x")
+	deadline := time.Now().Add(10 * time.Second)
+	var warningSeq int64
+	for warningSeq == 0 && time.Now().Before(deadline) {
+		for _, e := range coordinatorEvents(t, h.st) {
+			if e.Kind == core.TaskEventWorkerStillRunning && e.TaskID == id {
+				warningSeq = e.Seq
+				idle, err := h.st.IdleComputers("Game", []core.TaskEvent{e})
+				if err != nil || len(idle) != 0 {
+					t.Fatalf("exit warning freed computer: %v %v", idle, err)
+				}
+			}
+		}
+		if warningSeq == 0 {
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	if warningSeq == 0 {
+		t.Fatal("no exit warning")
+	}
+	h.waitState(id, "done")
+	warnings, reports := 0, 0
+	for _, e := range coordinatorEvents(t, h.st) {
+		switch e.Kind {
+		case core.TaskEventWorkerStillRunning:
+			warnings++
+		case "report":
+			if e.Seq <= warningSeq || e.Text != "finished" {
+				t.Fatalf("unexpected report: %+v", e)
+			}
+			reports++
+		}
+	}
+	if warnings != 1 || reports != 1 {
+		t.Fatalf("got %d warnings and %d reports", warnings, reports)
 	}
 	waitNoTaskReservations(t)
 	h.stop()

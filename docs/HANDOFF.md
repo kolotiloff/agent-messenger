@@ -10,6 +10,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Updated 2026-11-22 by Codex.
 
+- T-249 sends one `worker_still_running` event to the coordinator if Codex completed its turn at least a minute ago and the same worker process is still running. Remote events reach the computer that assigned the task. The task keeps its locks and can still finish with its report. Pending release.
+
 - T-246 gives the statistics sort buttons symmetric padding on hover and keyboard focus, while keeping the heading text aligned with its column. Prepared for the next release.
 
 - T-245 follow-up: the public screenshots now use the app's English interface and fictional tasks for Claude Code, Codex and Cursor. Both themes, the statistics view and the first-launch screen were captured in Chromium from 0.93.
