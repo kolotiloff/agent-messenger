@@ -544,6 +544,15 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.locator('[data-tab=stats]').click();
       const sorted = page.locator('.am-stats-table th[aria-sort]');
       const firstTitle = () => page.locator('#stats-top .am-stats-task-title').first().textContent();
+      for (const header of await page.locator('.am-stats-sort').all()) {
+        const quiet = await header.evaluate(button=>getComputedStyle(button).backgroundColor);
+        await header.hover();
+        const {paddingTop,paddingRight,paddingBottom,paddingLeft,backgroundColor} = await header.evaluate(button=>getComputedStyle(button));
+        assert.equal(paddingLeft,paddingRight);
+        assert.equal(paddingTop,paddingBottom);
+        assert(parseFloat(paddingLeft)>0 && parseFloat(paddingTop)>0);
+        assert.notEqual(backgroundColor,quiet);
+      }
       for (const [column,direction,first] of [
         ['recent','ascending',untimedStat],['recent','descending',stat],
         ['tokens','descending',olderStat],['tokens','ascending',stat],

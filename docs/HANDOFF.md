@@ -10,6 +10,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Updated 2026-11-22 by Codex.
 
+- T-246 gives the statistics sort buttons symmetric padding on hover and keyboard focus, while keeping the heading text aligned with its column. Prepared for the next release.
+
 - T-245 follow-up: the public screenshots now use the app's English interface and fictional tasks for Claude Code, Codex and Cursor. Both themes, the statistics view and the first-launch screen were captured in Chromium from 0.93.
 
 - **0.93 is released** ([release](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.93), [PR #159](https://github.com/kolotiloff/agent-messenger/pull/159), source `efd0e835689c65f4936c3848f1f01e0c20cdf882`, [release run](https://github.com/kolotiloff/agent-messenger/actions/runs/45026379107)). T-241 adds elapsed time and sortable statistics columns. T-242 distinguishes Codex reconnects from unconfirmed runs. T-243 shows the assigning agent, its icon and its model when supplied. T-244 saves the local computer-card order. T-245 refreshes the GitHub overview and screenshots. [CI](https://github.com/kolotiloff/agent-messenger/actions/runs/45025034516) passed. Confirmed 22 published assets and verified the five update manifest signatures, revisions, archive sizes and SHA-256 digests. No installed-app update or live-agent acceptance run.
