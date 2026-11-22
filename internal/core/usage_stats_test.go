@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -33,7 +34,7 @@ func TestUsageRanksBeforeLimitingTheList(t *testing.T) {
 		first int
 	}{
 		{"recent", s.Recent, 0},
-		{"oldest", s.Ranked["oldest"], lastWithUsage},
+		{"oldest", s.Ranked["oldest"], last},
 		{"tokens", s.Top, 0},
 		{"fewest", s.Ranked["fewest"], lastWithUsage},
 		{"longest", s.Ranked["longest"], last},
@@ -52,9 +53,57 @@ func TestUsageRanksBeforeLimitingTheList(t *testing.T) {
 	}
 }
 
+func TestUsageRecoversDurationForAnOlderRemoteResult(t *testing.T) {
+	p := newNetPair(t)
+	id := p.startRemote(t, "long-remote", "codex", "Long task")
+	p.carry(t, true)
+	p.carry(t, false)
+	apply := func(op string, b netBody) {
+		t.Helper()
+		b.Task = id
+		raw, err := json.Marshal(b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		p.seq++
+		if err := p.a.st.ApplyNet(testBroker, NetIncoming{Seq: p.seq, From: "dev-b", OpID: op, Body: raw}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	apply("long-progress", netBody{Kind: "progress", Event: "text", Text: "Working"})
+	start := time.Now().UTC().Add(-3 * time.Hour).Format(time.RFC3339Nano)
+	if _, err := p.a.st.db.Exec(`UPDATE remote_task_items SET created_at=? WHERE task_id=?`, start, id); err != nil {
+		t.Fatal(err)
+	}
+	result := netBody{Kind: "event", Event: "failed", Audience: AudienceCoordinator, State: "failed"}
+	apply("long-result", result)
+	verify := func(want time.Duration, estimated bool) {
+		t.Helper()
+		s, err := p.a.st.UsageStats(time.Now().Add(-time.Hour), time.Local, "dev-b")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, rows := range [][]UsageTask{s.Recent, s.Ranked["longest"]} {
+			if len(rows) != 1 || rows[0].ID != id || rows[0].DurationMS == nil || rows[0].DurationEstimated != estimated || !rows[0].UsageMissing {
+				t.Fatalf("expected timed task without token totals: %+v", rows)
+			}
+			if got := *rows[0].DurationMS; got < want.Milliseconds() || got > (want+time.Second).Milliseconds() {
+				t.Fatalf("duration %d ms, want %s", got, want)
+			}
+		}
+		if s.Total.Tasks != 0 || len(s.Top) != 0 {
+			t.Fatalf("duration changed token statistics: %+v", s.Total)
+		}
+	}
+	verify(3*time.Hour, true)
+	exact := (3*time.Hour + time.Minute).Milliseconds()
+	result.DurationMS = &exact
+	apply("long-result-exact", result)
+	verify(3*time.Hour+time.Minute, false)
+}
+
 // Token statistics (T-068): sums by agent, by computer, by day and the
-// largest tasks; tasks without reported usage and tasks before the period
-// are left out.
+// largest tasks. Token totals omit tasks without reported usage.
 func TestUsageStats(t *testing.T) {
 	f := newTaskFixture(t)
 	finish := func(op, agent, title string, in, cached, out int64) string {
@@ -76,7 +125,7 @@ func TestUsageStats(t *testing.T) {
 	}
 	a := finish("op-01", "claude", "Menu", 1000, 800, 100)
 	finish("op-02", "codex", "Build", 5000, 0, 500)
-	finish("op-03", "codex", "Nothing reported", 0, 0, 0)
+	withoutUsage := finish("op-03", "codex", "Nothing reported", 0, 0, 0)
 	old := finish("op-04", "claude", "Old", 9999, 0, 1)
 	remote := finish("op-05", "codex", "On the Mac", 300, 0, 30)
 	if _, err := f.st.db.Exec(`UPDATE tasks SET finished_at='2000-01-01T00:00:00Z' WHERE id=?`, old); err != nil {
@@ -126,10 +175,10 @@ func TestUsageStats(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(s.Recent) != 3 || s.Recent[0].ID != remote || s.Recent[1].ID != a || s.Recent[2].ID != b || s.Top[0].ID != b {
+	if len(s.Recent) != 4 || s.Recent[0].ID != withoutUsage || s.Recent[1].ID != remote || s.Recent[2].ID != a || s.Recent[3].ID != b || s.Top[0].ID != b {
 		t.Fatalf("recent %+v top %+v", s.Recent, s.Top)
 	}
-	if r := s.Recent[1]; r.Input != 1000 || r.Cached != 800 || r.Output != 100 || r.Tokens != 1100 {
+	if r := s.Recent[2]; r.Input != 1000 || r.Cached != 800 || r.Output != 100 || r.Tokens != 1100 {
 		t.Fatalf("parts %+v", r)
 	}
 	// T-201: one agent, then one model of it.

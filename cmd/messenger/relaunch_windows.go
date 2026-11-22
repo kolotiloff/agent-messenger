@@ -10,11 +10,11 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// startAgain starts the updated program with the same arguments in a new
-// console window; this one closes when the old program exits.
+// startAgain opens the updated desktop window with the same arguments.
+// Suppress the console without hiding the application's own window.
 func startAgain(program string) error {
 	cmd := exec.Command(program, os.Args[1:]...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NEW_CONSOLE}
+	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NO_WINDOW}
 	if err := cmd.Start(); err != nil {
 		return err
 	}

@@ -234,7 +234,7 @@ var netRef = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9:._-]{0,79}$`)
 
 // remoteEventKinds are the task events another computer may forward; any
 // other kind is ignored (audit 2026-11-09).
-var remoteEventKinds = map[string]bool{"report": true, "question": true, "failed": true, "blocked": true, "interrupted": true, "cancelled": true, "answered": true, "continued": true, "started": true, "accepted": true, "cancel_refused": true}
+var remoteEventKinds = map[string]bool{"report": true, "question": true, "failed": true, "blocked": true, "interrupted": true, "cancelled": true, "answered": true, "continued": true, "started": true, "accepted": true, "cancel_refused": true, TaskEventWorkerStillRunning: true}
 
 func safeNetOp(opID string) string {
 	if netOpID.MatchString(opID) {
@@ -671,7 +671,7 @@ func startRemoteTask(tx *sql.Tx, r StartTaskRequest) (string, error) {
 }
 
 // answerRemoteTask sends an answer to the computer that runs the task.
-func answerRemoteTask(tx *sql.Tx, t Task, remote netLink, question, opID, text, by string) error {
+func answerRemoteTask(tx *sql.Tx, t Task, remote netLink, question, opID, text, by string, sender MessageSender) error {
 	if _, err := tx.Exec(`UPDATE task_questions SET state='answered',answer=?,answer_op=?,answered_by=? WHERE id=?`, text, opID, by, question); err != nil {
 		return err
 	}
@@ -682,12 +682,12 @@ func answerRemoteTask(tx *sql.Tx, t Task, remote netLink, question, opID, text, 
 	if by == AudienceOwner {
 		answeredFor = AudienceOwner
 	}
-	if err := insertTaskEvent(tx, t.Project, t.ID, answeredFor, "answered", text, question); err != nil {
+	if err := insertTaskEvent(tx, t.Project, t.ID, answeredFor, "answered", text, question, sender); err != nil {
 		return err
 	}
 	// The op id names this answer, not only the question: a question that
 	// opens again after a refusal (row 26) gets a second answer.
-	return enqueueNet(tx, remote.broker, remote.peer, "answer."+question+"."+opID, t.ID, netBody{Kind: "answer", Task: t.ID, Question: question, OpID: opID, Text: text, By: by})
+	return enqueueNet(tx, remote.broker, remote.peer, "answer."+question+"."+opID, t.ID, netBody{Kind: "answer", Task: t.ID, Question: question, OpID: opID, Text: text, By: by, SenderAgent: sender.Agent, SenderModel: sender.Model})
 }
 
 // cancelRemoteTask asks the computer that runs the task to cancel it. A
@@ -1143,7 +1143,7 @@ func applyAnswer(tx *sql.Tx, from netLink, opID string, b netBody) error {
 		return err
 	}
 	err = savepoint(tx, func() error {
-		return answerTask(tx, t.ID, b.Question, "net:"+from.broker+":"+from.peer+":"+opID, b.Text, b.By, true, false)
+		return answerTask(tx, t.ID, b.Question, "net:"+from.broker+":"+from.peer+":"+opID, b.Text, b.By, true, false, MessageSender{Agent: b.SenderAgent, Model: b.SenderModel})
 	})
 	if errors.Is(err, ErrRejected) {
 		// State tells the asking computer whether the question is still open
@@ -1260,6 +1260,12 @@ func applyReport(tx *sql.Tx, from netLink, b netBody) error {
 	// An event of the run on the other computer.
 	if !taskStates[b.State] || (b.Audience != AudienceCoordinator && b.Audience != AudienceOwner) || !remoteEventKinds[b.Event] {
 		return nil
+	}
+	if b.Event == TaskEventWorkerStillRunning {
+		if b.State != "running" || t.State != "running" || t.CancelRequested || t.Provider != "codex" || b.Audience != AudienceCoordinator {
+			return nil
+		}
+		return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, b.Event, clip(b.Text, 2000), "")
 	}
 	// The owner closed it here (T-131): what that computer reports later is
 	// kept in the log and does not reopen the task.

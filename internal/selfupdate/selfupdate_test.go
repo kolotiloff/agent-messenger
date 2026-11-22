@@ -133,6 +133,38 @@ func (f *fixture) unchanged() {
 	}
 }
 
+func TestMatchesInstalledUpdate(t *testing.T) {
+	f := newFixture(t)
+	program := []byte("new program")
+	archive := f.archive(ProgramName(runtime.GOOS), program)
+	m := f.publish(33, archive, f.key)
+	u := f.updater(32)
+	if u.MatchesInstalledUpdate(f.exe, m.Version) {
+		t.Fatal("accepted old program of the same size")
+	}
+	installed := filepath.Join(filepath.Dir(f.exe), "new", filepath.Base(f.exe))
+	if err := os.MkdirAll(filepath.Dir(installed), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{f.exe, installed} {
+		if err := os.WriteFile(path, program, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if !u.MatchesInstalledUpdate(path, m.Version) {
+			t.Fatalf("rejected signed program %q", path)
+		}
+	}
+	if u.MatchesInstalledUpdate(installed, "0.0.0-preview.34") || f.updater(33).MatchesInstalledUpdate(installed, m.Version) {
+		t.Fatal("accepted a build other than the client's newer version")
+	}
+	if err := os.WriteFile(filepath.Join(f.channel.Directory, m.SHA256+".zip"), make([]byte, len(archive)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if u.MatchesInstalledUpdate(installed, m.Version) {
+		t.Fatal("accepted a program without its verified archive")
+	}
+}
+
 func TestApplyReplacesTheProgram(t *testing.T) {
 	f := newFixture(t)
 	m := f.publish(33, f.archive(ProgramName(runtime.GOOS), f.program), f.key)

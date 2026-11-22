@@ -818,7 +818,8 @@ func TestRemoteAnswerWithLongWindowOpID(t *testing.T) {
 	if len(op) > 128 {
 		t.Fatalf("test op id %d characters", len(op))
 	}
-	if err := p.a.st.AnswerTask(id, task.OpenQuestion.ID, op, "This one", AudienceCoordinator); err != nil {
+	sender := MessageSender{Agent: "codex", Model: "gpt-6.2-sol"}
+	if err := p.a.st.AnswerTask(id, task.OpenQuestion.ID, op, "This one", AudienceCoordinator, sender); err != nil {
 		t.Fatal(err)
 	}
 	p.carry(t, true)
@@ -829,4 +830,6 @@ func TestRemoteAnswerWithLongWindowOpID(t *testing.T) {
 	if task, _ = p.a.st.TaskByID(id); task.State == "blocked" || task.OpenQuestion != nil {
 		t.Fatalf("answer refused %+v", task)
 	}
+	assertTaskMessageSender(t, p.a.st, id, "answer", "This one", sender)
+	assertTaskMessageSender(t, p.b.st, m.ID, "answer", "This one", sender)
 }

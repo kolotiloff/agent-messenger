@@ -27,7 +27,8 @@ func TestCoordinatorNoteReachesAnotherComputer(t *testing.T) {
 	if err := p.a.st.SetNetwork(testBroker, HostPeerID, []NetPeer{{ID: "dev-b", Name: "Ноутбук", Age: 1, Agents: agents, Version: "0.0.0-preview.67"}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := p.a.st.AddCoordinatorNote("Game", id, "note-1", "Stop and report what is done"); err != nil {
+	sender := MessageSender{Agent: "claude"}
+	if err := p.a.st.AddCoordinatorNote("Game", id, "note-1", "Stop and report what is done", sender); err != nil {
 		t.Fatal(err)
 	}
 	// The same call again is safe; another text with the same id is not.
@@ -44,6 +45,8 @@ func TestCoordinatorNoteReachesAnotherComputer(t *testing.T) {
 	if got := noteStates(t, p.b.st, m.ID); got != "pending" {
 		t.Fatalf("worker note %s", got)
 	}
+	assertTaskMessageSender(t, p.a.st, id, "note", "Stop and report what is done", sender)
+	assertTaskMessageSender(t, p.b.st, m.ID, "note", "Stop and report what is done", sender)
 	var author, text string
 	if err := p.b.st.db.QueryRow(`SELECT author,text FROM task_owner_notes WHERE task_id=?`, m.ID).Scan(&author, &text); err != nil || author != AudienceCoordinator || text != "Stop and report what is done" {
 		t.Fatalf("worker note %q %q %v", author, text, err)
