@@ -131,7 +131,7 @@ func winRegister(p winPaths) {
 func winStart(p winPaths) error {
 	cmd := exec.Command(p.Exe)
 	cmd.Dir = p.Dir
-	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NEW_CONSOLE}
+	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NO_WINDOW}
 	if err := cmd.Start(); err != nil {
 		return err
 	}

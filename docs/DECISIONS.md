@@ -574,3 +574,9 @@ The owner also asked for a consistent size within each task card. Use 12 px thro
 ## D-169 — Keep a manual order for the computer list (T-244)
 
 2026-11-22, owner asked to rearrange computers by dragging their cards. Save the order in this window's local storage, across projects. Use the lasting computer ID where available. New computers follow the existing order. The keyboard can move the focused card with Alt and the up or down arrow. Clicking a card still filters by that computer.
+
+## D-170 — Reopen the window after a remote update (T-240)
+
+2026-11-22, owner requested that the window catch up after a remote update. On Windows and Linux the window observes the local background client, including when hidden in the tray. It reopens itself only after the client reports the newer version in the signed channel and the recorded program file matches that signed archive byte for byte. The existing window relaunch path closes the old desktop UI before starting the new program. This handoff does not stop or restart the background client. Older windows lack the check and must be exited and reopened once.
+
+On Windows, the update relaunch and the installer's handoff to the installed app use a process creation flag that suppresses the console. The native desktop window opens normally.

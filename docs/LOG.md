@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-22 — Codex (T-240)
+
+- Added a local window handoff after remote Windows/Linux updates. The window waits for the background client and checks the installed file against the signed update before reopening. Automated checks use a fixture. Native desktop acceptance is still pending.
+- Updated the Windows restart and installed-window launch flags to suppress the console window while allowing the desktop window to open.
+
 ## 2026-11-22 — Codex (T-246)
 
 - Added inset space to the statistics sort buttons and kept the labels in their original positions. The browser check covers symmetric insets and hover feedback for all three columns, and verifies both sort directions.
