@@ -48,7 +48,7 @@ func peerBuildAtLeast(version string, since int) bool {
 
 // continueRemoteTask sends the coordinator's follow-up to the computer that
 // ran the task. opID makes it idempotent.
-func continueRemoteTask(tx *sql.Tx, task string, remote netLink, opID, text string) error {
+func continueRemoteTask(tx *sql.Tx, task string, remote netLink, opID, text string, sender MessageSender) error {
 	key := "net_continue:" + opID
 	old, err := metaValue(tx, key)
 	if err != nil {
@@ -96,10 +96,10 @@ func continueRemoteTask(tx *sql.Tx, task string, remote netLink, opID, text stri
 	if _, err := tx.Exec(`UPDATE tasks SET finished_at=NULL,failure_reason=NULL,failure_reset=NULL WHERE id=?`, task); err != nil {
 		return err
 	}
-	if err := insertTaskEvent(tx, t.Project, task, AudienceLog, "continued", text, ""); err != nil {
+	if err := insertTaskEvent(tx, t.Project, task, AudienceLog, "continued", text, "", sender); err != nil {
 		return err
 	}
-	return enqueueNet(tx, remote.broker, remote.peer, "continue."+opID, task, netBody{Kind: "continue", Task: task, OpID: opID, Text: text})
+	return enqueueNet(tx, remote.broker, remote.peer, "continue."+opID, task, netBody{Kind: "continue", Task: task, OpID: opID, Text: text, SenderAgent: sender.Agent, SenderModel: sender.Model})
 }
 
 // applyContinue resumes the mirror of another computer's task.
@@ -111,7 +111,7 @@ func applyContinue(tx *sql.Tx, from netLink, b netBody, gone WorkerGone) error {
 		return err
 	}
 	err = savepoint(tx, func() error {
-		return continueTaskTx(tx, t.ID, "net:"+from.broker+":"+from.peer+":"+b.OpID, b.Text, gone, true)
+		return continueTaskTx(tx, t.ID, "net:"+from.broker+":"+from.peer+":"+b.OpID, b.Text, gone, true, MessageSender{Agent: b.SenderAgent, Model: b.SenderModel})
 	})
 	if errors.Is(err, ErrRejected) {
 		return enqueueNet(tx, from.broker, from.peer, "continue-refused."+b.OpID, t.ID, netBody{Kind: "continue_refused", Task: from.task, Reason: refusalText(err)})

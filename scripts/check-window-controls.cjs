@@ -352,6 +352,8 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           const remote = new URL(route.request().url()).searchParams.get('id') === remoteTask.id;
           const items = [
             {kind:'task',author:'coordinator',text:'Original task',at:began,sender_agent:'claude',sender_model:'claude-opus-5-5'},
+            {kind:'answer',author:'coordinator',text:'Follow-up from Cursor',at:began,sender_agent:'cursor'},
+            {kind:'answer',author:'coordinator',text:'Earlier follow-up from unknown sender',at:began},
             {kind:'text',text:'Fixture reply',at:began},
           ];
           if (remote) items.push(...ownerNotes.map(note=>({kind:'note',text:note.text,at:began,author:'owner',state:'sent'})));
@@ -585,6 +587,11 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await sender.locator('.am-avatar .am-provider-icon').getAttribute('data-provider'),'claude');
       assert.equal(await sender.locator('.am-avatar .am-provider-icon').isVisible(),true);
       assert.equal(await sender.locator('.am-meta-model').textContent(),'Opus 5.5');
+      const followUp = page.locator('#thread .am-outgoing').filter({hasText:'Follow-up from Cursor'});
+      assert.equal(await followUp.locator('strong').textContent(),'Cursor');
+      assert.equal(await followUp.locator('.am-avatar .am-provider-icon[data-provider=cursor]').isVisible(),true);
+      const unknownSender = page.locator('#thread .am-outgoing').filter({hasText:'Earlier follow-up from unknown sender'});
+      assert.equal(await unknownSender.locator('strong').textContent(),'Координатор');
       assert.equal(await page.locator('#thread .am-message:not(.am-outgoing) .am-meta-model').first().textContent(),'Sol 6.2 Medium');
       assert.match(await page.locator('#task-head').innerText(),/Codex \(Sol 6\.2 Medium\)/);
       const closedTime=page.locator('#thread .am-delivery-close time');

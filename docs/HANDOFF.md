@@ -10,6 +10,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Updated 2026-11-22 by Codex.
 
+- T-248 records the sender of coordinator follow-ups, answers and notes. The same attribution reaches the assigning and executing computers. Messages without saved sender information use the generic coordinator label.
+
 - T-246 gives the statistics sort buttons symmetric padding on hover and keyboard focus, while keeping the heading text aligned with its column. Prepared for the next release.
 
 - T-245 follow-up: the public screenshots now use the app's English interface and fictional tasks for Claude Code, Codex and Cursor. Both themes, the statistics view and the first-launch screen were captured in Chromium from 0.93.
