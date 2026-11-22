@@ -92,3 +92,67 @@ func TestNetworkContactLostAndBackOnce(t *testing.T) {
 		t.Fatalf("new network inherited the state: %q", k)
 	}
 }
+
+func TestNetworkContactDuringMacUpdate(t *testing.T) {
+	for _, scenario := range []string{"recovers", "overdue", "different network"} {
+		t.Run(scenario, func(t *testing.T) {
+			f := newTaskFixture(t)
+			at := time.Now()
+			setNetwork := func(broker string, age int) {
+				t.Helper()
+				if err := f.st.SetNetwork(broker, "mac", []NetPeer{{ID: "host", Name: "Server", Host: true, Age: age}}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			noteContact := func(at time.Time, want string) {
+				t.Helper()
+				if kind, err := f.st.NoteNetworkContact(at); err != nil || kind != want {
+					t.Fatalf("contact event = %q, want %q (%v)", kind, want, err)
+				}
+			}
+			setNetwork("b1", 3)
+			noteContact(at, "")
+			for _, when := range []time.Time{at, at.Add(time.Second)} {
+				if err := f.st.NoteMacUpdateRestart(when); err != nil {
+					t.Fatal(err)
+				}
+			}
+			events, _, err := f.st.TaskEvents("Game", AudienceCoordinator, 0, 50)
+			if err != nil || len(events) != 1 || events[0].Kind != MacUpdateRestartEvent {
+				t.Fatalf("expected one update notice: %+v %v", events, err)
+			}
+			if scenario == "different network" {
+				setNetwork("b2", 3)
+				noteContact(at.Add(time.Second), "")
+				setNetwork("b2", 90)
+				noteContact(at.Add(10*time.Second), NetworkLostEvent)
+				return
+			}
+			setNetwork("b1", 90)
+			noteContact(at.Add(time.Minute), "")
+			if ev := contactEvents(t, f.st, "Game"); len(ev) != 0 {
+				t.Fatalf("planned outage raised a network alert: %+v", ev)
+			}
+			if scenario == "recovers" {
+				setNetwork("b1", 3)
+				noteContact(at.Add(70*time.Second), "")
+				setNetwork("b1", 90)
+				noteContact(at.Add(90*time.Second), NetworkLostEvent)
+			} else {
+				// Only the coordinator is polling now, as when the client
+				// stopped without its replacement starting.
+				for _, when := range []time.Time{at.Add(110 * time.Second), at.Add(macUpdateRestartGrace), at.Add(3 * time.Minute)} {
+					if err := f.st.CheckExpiredMacUpdateRestart(when); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			ev := contactEvents(t, f.st, "Game")
+			if len(ev) != 1 || ev[0].Kind != NetworkLostEvent {
+				t.Fatalf("expected exactly one real loss event: %+v", ev)
+			}
+			setNetwork("b1", 3)
+			noteContact(at.Add(4*time.Minute), NetworkBackEvent)
+		})
+	}
+}

@@ -18,7 +18,7 @@ import (
 // runs this command in the background with its shell tool and ends its
 // turn. The command exits when an event of the project's tasks arrives after
 // the cursor; the chat is then woken with its output and reads the events
-// with wait. It only looks: it never moves the cursor or claims the chat.
+// with wait. The watch leaves the cursor and chat ownership alone.
 
 // CoordinatorWatchCommand is the subcommand of the background watch.
 const CoordinatorWatchCommand = "coordinator-watch"
@@ -62,12 +62,20 @@ func CoordinatorWatchMain(dbPath string, args []string, out io.Writer) error {
 	return watchCoordinator(ctx, store, *project, *after, out)
 }
 
+func waitingEvents(store *core.Store, project string, after int64) ([]core.TaskEvent, error) {
+	if err := store.CheckExpiredMacUpdateRestart(time.Now()); err != nil {
+		return nil, err
+	}
+	events, _, err := store.TaskEvents(project, core.AudienceCoordinator, after, coordinatorMaxReturned+1)
+	return events, err
+}
+
 func watchCoordinator(ctx context.Context, store *core.Store, project string, after int64, out io.Writer) error {
 	tick := time.NewTicker(coordinatorWatchPoll)
 	defer tick.Stop()
 	touched := time.Time{}
 	for {
-		events, _, err := store.TaskEvents(project, core.AudienceCoordinator, after, coordinatorMaxReturned+1)
+		events, err := waitingEvents(store, project, after)
 		if err != nil {
 			return err
 		}

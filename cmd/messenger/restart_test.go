@@ -74,14 +74,20 @@ func TestRestartClientReplacesTheOldClientAndKeepsItRunning(t *testing.T) {
 	old := serveFake(t, root, &fakeClient{})
 	var fresh *fakeClient
 	starts := 0
-	err := restartClient(context.Background(), root, func() error {
+	noticed := false
+	err := restartClientWithNotice(context.Background(), root, func() error {
 		starts++
-		if old.statusCalls.Load() == 0 || old.shutdowns.Load() != 1 {
+		if !noticed || old.statusCalls.Load() == 0 || old.shutdowns.Load() != 1 {
 			t.Error("started before the old client was asked to stop")
 		}
 		fresh = serveFake(t, root, &fakeClient{paused: true})
 		return nil
-	}, 100*time.Millisecond)
+	}, 100*time.Millisecond, func() {
+		if old.statusCalls.Load() == 0 || old.shutdowns.Load() != 0 {
+			t.Error("notice must come after status and before shutdown")
+		}
+		noticed = true
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
