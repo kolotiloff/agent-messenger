@@ -234,7 +234,7 @@ var netRef = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9:._-]{0,79}$`)
 
 // remoteEventKinds are the task events another computer may forward; any
 // other kind is ignored (audit 2026-11-09).
-var remoteEventKinds = map[string]bool{"report": true, "question": true, "failed": true, "blocked": true, "interrupted": true, "cancelled": true, "answered": true, "continued": true, "started": true, "accepted": true, "cancel_refused": true}
+var remoteEventKinds = map[string]bool{"report": true, "question": true, "failed": true, "blocked": true, "interrupted": true, "cancelled": true, "answered": true, "continued": true, "started": true, "accepted": true, "cancel_refused": true, TaskEventWorkerStillRunning: true}
 
 func safeNetOp(opID string) string {
 	if netOpID.MatchString(opID) {
@@ -1260,6 +1260,12 @@ func applyReport(tx *sql.Tx, from netLink, b netBody) error {
 	// An event of the run on the other computer.
 	if !taskStates[b.State] || (b.Audience != AudienceCoordinator && b.Audience != AudienceOwner) || !remoteEventKinds[b.Event] {
 		return nil
+	}
+	if b.Event == TaskEventWorkerStillRunning {
+		if b.State != "running" || t.State != "running" || t.CancelRequested || t.Provider != "codex" || b.Audience != AudienceCoordinator {
+			return nil
+		}
+		return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, b.Event, clip(b.Text, 2000), "")
 	}
 	// The owner closed it here (T-131): what that computer reports later is
 	// kept in the log and does not reopen the task.

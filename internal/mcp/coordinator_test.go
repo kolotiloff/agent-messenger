@@ -403,6 +403,45 @@ func TestCoordinatorStartIsIdempotentAndWaitReplays(t *testing.T) {
 	}
 }
 
+func TestCoordinatorWaitWakesForCodexExitDelay(t *testing.T) {
+	st := newCoordinatorStore(t)
+	c := startCoordinator(t, st, "Game")
+	task, _, err := st.StartTask(core.StartTaskRequest{Project: "Game", OpID: "op-1", Provider: "codex", Text: "Build the level"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runs, err := st.NextTaskRunIntents(1)
+	if err != nil || len(runs) != 1 {
+		t.Fatalf("pending runs: %v %v", runs, err)
+	}
+	run := runs[0]
+	if _, _, err := st.BeginTaskRun(run, "res"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.RecordTaskRunProcess(run, platform.Observation{PID: 9, PGID: 9, StartToken: "s", BootID: "b"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.NoteRunFinal(run); err != nil {
+		t.Fatal(err)
+	}
+	c.next++
+	waitID := c.next
+	c.send(waitID, "tools/call", map[string]any{"name": "wait", "arguments": map[string]any{"after": 0, "timeout_seconds": 30}})
+	c.none(waitID, 300*time.Millisecond)
+	if err := st.NotifyCodexStillRunning(run); err != nil {
+		t.Fatal(err)
+	}
+	resp, _ := c.expect(waitID, 3*time.Second)
+	var w struct {
+		waitResult
+		Idle []string `json:"idle_computers"`
+	}
+	decodeTool(t, resp, &w)
+	if w.TimedOut || len(w.Events) != 1 || w.Events[0].Kind != core.TaskEventWorkerStillRunning || w.Events[0].TaskID != task || len(w.Idle) != 0 {
+		t.Fatalf("wait %+v", w)
+	}
+}
+
 func TestCoordinatorWaitIsCancellableAndConcurrent(t *testing.T) {
 	old := coordinatorProgress
 	coordinatorProgress = 200 * time.Millisecond
