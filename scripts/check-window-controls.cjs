@@ -319,7 +319,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const commandStarted = new Date(Date.now() - 72 * 1000).toISOString();
       const ended = '2026-11-14T09:30:00Z';
       const stat = {id:'old-1',title:'Проверить сборку проекта',at:'2026-11-19T09:20:00',project:'Frame',agent:'codex',model:'gpt-6.2-sol[effort=medium]',computer:'Runner',tokens:420000,duration_ms:42000};
-      const olderStat = {...stat,id:'old-2',title:'Проверить производительность сцены',at:'2026-11-18T10:10:00',tokens:18200000,duration_ms:8280000};
+      const olderStat = {...stat,id:'old-2',title:'Проверить производительность сцены',at:'2026-11-18T10:10:00',tokens:18200000,duration_ms:10800000,duration_estimated:true};
       const untimedStat = {...stat,id:'old-3',title:'Уточнить настройки агента',at:'2026-11-18T09:00:00',tokens:3400000,duration_ms:undefined};
       const localTask = {id:'local-task',title:'Local task',project:'Frame',agent:'codex',state:'running',created_at:began,started_at:began,model:'gpt-6.2-sol[effort=low]',ran_model:'gpt-6.2-sol[effort=medium]'};
       const remoteTask = {...localTask,id:'remote-task',title:'Remote task',created_at:new Date(Date.now()-8*60*1000).toISOString(),model:'',ran_model:'',remote:{id:'dev-1',name:'Runner',worker:'none'}};
@@ -352,6 +352,8 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           const remote = new URL(route.request().url()).searchParams.get('id') === remoteTask.id;
           const items = [
             {kind:'task',author:'coordinator',text:'Original task',at:began,sender_agent:'claude',sender_model:'claude-opus-5-5'},
+            {kind:'answer',author:'coordinator',text:'Follow-up from Cursor',at:began,sender_agent:'cursor'},
+            {kind:'answer',author:'coordinator',text:'Earlier follow-up from unknown sender',at:began},
             {kind:'text',text:'Fixture reply',at:began},
           ];
           if (remote) items.push(...ownerNotes.map(note=>({kind:'note',text:note.text,at:began,author:'owner',state:'sent'})));
@@ -534,6 +536,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await detail.textContent(),'Frame Codex Sol 6.2 Medium на Runner');
       assert.equal(await page.locator('#stats-top time').first().getAttribute('datetime'),stat.at);
       assert.equal(await page.locator('#stats-top tr').first().locator('td').nth(2).textContent(),'42 с');
+      assert.equal(await page.locator('#stats-top tr').nth(1).locator('td').nth(2).textContent(),'≈ 3 ч');
       assert.equal(await page.locator('#stats-top tr').last().locator('td').nth(2).textContent(),'—');
       assert.deepEqual(await type(page.locator('#stats-top .am-stats-task-title').first()),computerTitle);
       await page.locator('[data-tab=project]').click();
@@ -585,6 +588,11 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await sender.locator('.am-avatar .am-provider-icon').getAttribute('data-provider'),'claude');
       assert.equal(await sender.locator('.am-avatar .am-provider-icon').isVisible(),true);
       assert.equal(await sender.locator('.am-meta-model').textContent(),'Opus 5.5');
+      const followUp = page.locator('#thread .am-outgoing').filter({hasText:'Follow-up from Cursor'});
+      assert.equal(await followUp.locator('strong').textContent(),'Cursor');
+      assert.equal(await followUp.locator('.am-avatar .am-provider-icon[data-provider=cursor]').isVisible(),true);
+      const unknownSender = page.locator('#thread .am-outgoing').filter({hasText:'Earlier follow-up from unknown sender'});
+      assert.equal(await unknownSender.locator('strong').textContent(),'Координатор');
       assert.equal(await page.locator('#thread .am-message:not(.am-outgoing) .am-meta-model').first().textContent(),'Sol 6.2 Medium');
       assert.match(await page.locator('#task-head').innerText(),/Codex \(Sol 6\.2 Medium\)/);
       const closedTime=page.locator('#thread .am-delivery-close time');

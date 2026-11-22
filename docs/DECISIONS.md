@@ -574,3 +574,21 @@ The owner also asked for a consistent size within each task card. Use 12 px thro
 ## D-169 — Keep a manual order for the computer list (T-244)
 
 2026-11-22, owner asked to rearrange computers by dragging their cards. Save the order in this window's local storage, across projects. Use the lasting computer ID where available. New computers follow the existing order. The keyboard can move the focused card with Alt and the up or down arrow. Clicking a card still filters by that computer.
+
+## D-170 — Reopen the window after a remote update (T-240)
+
+2026-11-22, owner requested that the window catch up after a remote update. On Windows and Linux the window observes the local background client, including when hidden in the tray. It reopens itself only after the client reports the newer version in the signed channel and the recorded program file matches that signed archive byte for byte. The existing window relaunch path closes the old desktop UI before starting the new program. This handoff does not stop or restart the background client. Older windows lack the check and must be exited and reopened once.
+
+On Windows, the update relaunch and the installer's handoff to the installed app use a process creation flag that suppresses the console. The native desktop window opens normally.
+
+## D-171 — Use saved remote progress when elapsed time is missing (T-247)
+
+2026-11-22, owner reported a remote task that ran for about three hours but had no duration in statistics. The executor's exact elapsed time takes precedence. For a completed or failed remote task without it, estimate from the first worker activity received to the recorded completion, and mark the value with ≈ in the table. No estimate is made for local cancellations or records without worker activity. The date and duration views include timed tasks without reported usage; token rankings and totals use reported usage.
+
+## D-172 — Attribute each coordinator message separately (T-248)
+
+2026-11-22, owner asked for the same sender name and icon on subsequent coordinator messages. The messaging tools record the calling chat's provider and its optional explicit model on each answer, continuation and note. Send this metadata with the existing remote messages, reuse the message header from D-168, and show the origin's recorded continuation in its task history. Older records and unrecognized clients keep the coordinator role label. The worker's conversation and the owner's own message attribution follow the existing rules.
+
+## D-173 — Notify the coordinator when Codex is slow to exit (T-249)
+
+2026-11-22, two Windows workers still held their task locks long after their completed turns. If the recorded Codex worker process is observed alive after the one-minute grace period, publish one `worker_still_running` event per run through `wait`. Use the task's existing event route for remote tasks. The observation describes a delayed exit and can be followed by the ordinary verified result. The run remains subject to D-021 and D-147. The event does not mark its computer idle or trigger a cancel or retry.

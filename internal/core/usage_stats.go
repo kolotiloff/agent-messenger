@@ -56,12 +56,13 @@ type UsageTask struct {
 	Tokens   int64  `json:"tokens"`
 	Model    string `json:"model,omitempty"`
 	// The parts of Tokens, shown on hover (T-197).
-	Input        int64  `json:"input_tokens"`
-	Cached       int64  `json:"cached_tokens"`
-	Output       int64  `json:"output_tokens"`
-	DurationMS   *int64 `json:"duration_ms,omitempty"`
-	UsageMissing bool   `json:"usage_missing,omitempty"`
-	atTime       time.Time
+	Input             int64  `json:"input_tokens"`
+	Cached            int64  `json:"cached_tokens"`
+	Output            int64  `json:"output_tokens"`
+	DurationMS        *int64 `json:"duration_ms,omitempty"`
+	DurationEstimated bool   `json:"duration_estimated,omitempty"`
+	UsageMissing      bool   `json:"usage_missing,omitempty"`
+	atTime            time.Time
 }
 
 // UsageDayAgent is what one agent's tasks that ran on one computer spent
@@ -199,13 +200,15 @@ func (s *Store) UsageStatsFiltered(since time.Time, loc *time.Location, computer
 			}
 		}
 		models := map[string]*UsageGroup{}
-		var used, timed []UsageTask
+		var used, dated, timed []UsageTask
 		rows, err := tx.Query(`SELECT t.id,t.title,t.project,t.provider,COALESCE(t.remote_peer,''),COALESCE(p.name,''),
  COALESCE(t.finished_at,t.updated_at),t.usage_input,t.usage_cached,t.usage_output,
  COALESCE(NULLIF(t.ran_model,''),NULLIF(t.model,''),''),t.usage_seen,
  CASE WHEN t.state IN ('done','failed','cancelled') THEN COALESCE(t.finished_at,'') ELSE '' END,
  COALESCE((SELECT MIN(r.launched_at) FROM task_runs r WHERE r.task_id=t.id),''),
- t.remote_duration_ms
+ t.remote_duration_ms,
+ CASE WHEN t.remote_peer IS NOT NULL AND t.remote_duration_ms IS NULL AND t.state IN ('done','failed')
+ THEN COALESCE((SELECT i.created_at FROM remote_task_items i WHERE i.task_id=t.id ORDER BY i.seq LIMIT 1),'') ELSE '' END
  FROM tasks t LEFT JOIN net_peers p ON p.peer=t.remote_peer
  WHERE COALESCE(t.finished_at,t.updated_at)>=?
  AND (t.usage_seen=1 OR (t.finished_at IS NOT NULL AND t.state IN ('done','failed','cancelled')))`, out.Since)
@@ -215,12 +218,12 @@ func (s *Store) UsageStatsFiltered(since time.Time, loc *time.Location, computer
 		defer rows.Close()
 		for rows.Next() {
 			var task UsageTask
-			var peer, peerName, finished, started string
+			var peer, peerName, finished, started, observedStart string
 			var in, cached, outTokens int64
 			var usageSeen bool
 			var remoteDuration sql.NullInt64
 			if err := rows.Scan(&task.ID, &task.Title, &task.Project, &task.Agent, &peer, &peerName, &task.At, &in, &cached, &outTokens,
-				&task.Model, &usageSeen, &finished, &started, &remoteDuration); err != nil {
+				&task.Model, &usageSeen, &finished, &started, &remoteDuration, &observedStart); err != nil {
 				return err
 			}
 			if filter.Agent != "" && task.Agent != filter.Agent {
@@ -240,6 +243,10 @@ func (s *Store) UsageStatsFiltered(since time.Time, loc *time.Location, computer
 					task.DurationMS = taskDurationMS(started, finished)
 				} else if remoteDuration.Valid {
 					task.DurationMS = &remoteDuration.Int64
+				} else if observedStart != "" {
+					// Older remote records may only have local receipt times.
+					task.DurationMS = taskDurationMS(observedStart, finished)
+					task.DurationEstimated = task.DurationMS != nil
 				}
 			}
 			if !usageSeen && task.DurationMS == nil {
@@ -262,13 +269,14 @@ func (s *Store) UsageStatsFiltered(since time.Time, loc *time.Location, computer
 			}
 			task.Computer = name
 			task.UsageMissing = !usageSeen
+			task.atTime, _ = time.Parse(time.RFC3339Nano, task.At)
+			dated = append(dated, task)
 			if task.DurationMS != nil {
 				timed = append(timed, task)
 			}
 			if !usageSeen {
 				continue
 			}
-			task.atTime, _ = time.Parse(time.RFC3339Nano, task.At)
 			used = append(used, task)
 			if _, ok := reported[peer]; peer != "" && ok && filter.Model == "" {
 				continue // counted from that computer's own report
@@ -346,9 +354,9 @@ func (s *Store) UsageStatsFiltered(since time.Time, loc *time.Location, computer
 		tokens := func(t UsageTask) int64 { return t.Tokens }
 		duration := func(t UsageTask) int64 { return *t.DurationMS }
 		out.Top = rankUsageTasks(used, byValue(tokens, true))
-		out.Recent = rankUsageTasks(used, byDate(true))
+		out.Recent = rankUsageTasks(dated, byDate(true))
 		out.Ranked = map[string][]UsageTask{
-			"oldest":   rankUsageTasks(used, byDate(false)),
+			"oldest":   rankUsageTasks(dated, byDate(false)),
 			"fewest":   rankUsageTasks(used, byValue(tokens, false)),
 			"longest":  rankUsageTasks(timed, byValue(duration, true)),
 			"shortest": rankUsageTasks(timed, byValue(duration, false)),

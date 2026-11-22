@@ -2090,8 +2090,12 @@
       const detail=[task.project,shortNames[task.agent]||task.agent,task.model&&modelName(task.model),task.computer&&tr('на ')+task.computer].filter(Boolean).join(' ');
       words.append(el('span',task.title||tr('Без названия'),'am-stats-task-title'),el('span',detail,'am-small am-muted'));
       const titleCell=el('td');titleCell.append(words);
-      const duration=el('td',Number.isFinite(task.duration_ms)?statsDuration(task.duration_ms):'—','am-stats-value am-muted');
-      duration.title=Number.isFinite(task.duration_ms)?tr('От первого запуска до завершения'):tr('Длительность неизвестна');
+      const duration=el('td','—','am-stats-value am-muted');
+      duration.title=tr('Длительность неизвестна');
+      if(Number.isFinite(task.duration_ms)){
+        duration.textContent=(task.duration_estimated?'≈ ':'')+statsDuration(task.duration_ms);
+        duration.title=task.duration_estimated?tr('Примерно, по первому полученному действию и окончанию задачи'):tr('От первого запуска до завершения');
+      }
       const tokens=el('td',task.usage_missing?'—':tokensText(task.tokens),'am-stats-value');
       row.append(when,titleCell,duration,tokens);
       words.title=(!task.usage_missing&&typeof task.input_tokens==='number'?usageLong(task)+'\n':'')+tr('Открыть задачу');

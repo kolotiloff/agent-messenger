@@ -63,7 +63,7 @@ func runOpen(root string, args []string, out io.Writer) error {
 	if runtime.GOOS == "darwin" {
 		desktop.Channel = &updatefeed.Channel{Directory: filepath.Join(home, "updates"), PublicKey: buildinfo.UpdatePublicKey}
 	} else {
-		desktop.SelfUpdate = windowSelfUpdate(ctx, home, cancel, &next)
+		desktop.SelfUpdate = windowSelfUpdate(ctx, root, home, cancel, &next)
 	}
 	opener := &windowOpener{root: root, out: out, ready: make(chan windowPage, 1)}
 	served := make(chan error, 1)

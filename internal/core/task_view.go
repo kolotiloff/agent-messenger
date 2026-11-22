@@ -558,19 +558,20 @@ func (s *Store) TaskFeed(id string) (TaskFeed, error) {
 	}
 	err = s.tx(func(tx *sql.Tx) error {
 		runs, err := tx.Query(`SELECT r.id,r.ordinal,r.kind,r.input,r.state,COALESCE(r.disposition,''),COALESCE(r.disposition_text,''),r.created_at,COALESCE(r.finished_at,''),r.detail,
- COALESCE((SELECT answered_by FROM task_questions q WHERE q.task_id=r.task_id AND q.answer=r.input AND q.state='answered' ORDER BY q.rowid DESC LIMIT 1),'coordinator')
+ CASE WHEN r.kind='answer' AND r.sender_agent='' THEN COALESCE((SELECT answered_by FROM task_questions q WHERE q.task_id=r.task_id AND q.answer=r.input AND q.state='answered' ORDER BY q.rowid DESC LIMIT 1),'coordinator') ELSE 'coordinator' END, r.sender_agent,r.sender_model
  FROM task_runs r WHERE r.task_id=? ORDER BY r.ordinal`, id)
 		if err != nil {
 			return err
 		}
 		type runRow struct {
 			id, kind, input, state, disposition, text, created, finished, detail, by string
+			senderAgent, senderModel                                                 string
 			ordinal                                                                  int
 		}
 		var list []runRow
 		for runs.Next() {
 			var r runRow
-			if err := runs.Scan(&r.id, &r.ordinal, &r.kind, &r.input, &r.state, &r.disposition, &r.text, &r.created, &r.finished, &r.detail, &r.by); err != nil {
+			if err := runs.Scan(&r.id, &r.ordinal, &r.kind, &r.input, &r.state, &r.disposition, &r.text, &r.created, &r.finished, &r.detail, &r.by, &r.senderAgent, &r.senderModel); err != nil {
 				runs.Close()
 				return err
 			}
@@ -582,7 +583,7 @@ func (s *Store) TaskFeed(id string) (TaskFeed, error) {
 		}
 		for i, r := range list {
 			if r.kind == "answer" || r.kind == "continue" {
-				f.Items = append(f.Items, FeedItem{Kind: "answer", Author: r.by, Text: r.input, At: r.created, Run: r.ordinal, Verified: true})
+				f.Items = append(f.Items, FeedItem{Kind: "answer", Author: r.by, Text: r.input, At: r.created, Run: r.ordinal, Verified: true, SenderAgent: r.senderAgent, SenderModel: r.senderModel})
 			}
 			items, err := tx.Query(`SELECT kind,title,text,description,created_at FROM task_run_items WHERE run_id=? ORDER BY seq`, r.id)
 			if err != nil {
@@ -695,15 +696,15 @@ func (s *Store) remoteEvents(f *TaskFeed) error {
 	if err := picRows.Err(); err != nil {
 		return err
 	}
-	rows, err := s.db.Query(`SELECT audience,kind,text,created_at FROM task_events WHERE task_id=? ORDER BY seq`, f.Task.ID)
+	rows, err := s.db.Query(`SELECT audience,kind,text,created_at,sender_agent,sender_model FROM task_events WHERE task_id=? ORDER BY seq`, f.Task.ID)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	disposed := 0
 	for rows.Next() {
-		var audience, kind, text, at string
-		if err := rows.Scan(&audience, &kind, &text, &at); err != nil {
+		var audience, kind, text, at, senderAgent, senderModel string
+		if err := rows.Scan(&audience, &kind, &text, &at, &senderAgent, &senderModel); err != nil {
 			return err
 		}
 		switch kind {
@@ -713,12 +714,12 @@ func (s *Store) remoteEvents(f *TaskFeed) error {
 		switch kind {
 		case "question":
 			f.Items = append(f.Items, FeedItem{Kind: "question", Author: "worker", Text: text, At: at, Verified: true, Audience: audience, State: "finished", Images: pics[disposed]})
-		case "answered":
+		case "answered", "continued":
 			by := AudienceCoordinator
 			if audience == AudienceOwner {
 				by = AudienceOwner
 			}
-			f.Items = append(f.Items, FeedItem{Kind: "answer", Author: by, Text: text, At: at, Verified: true})
+			f.Items = append(f.Items, FeedItem{Kind: "answer", Author: by, Text: text, At: at, Verified: true, SenderAgent: senderAgent, SenderModel: senderModel})
 		case "accepted":
 			f.Items = append(f.Items, FeedItem{Kind: "accepted", Author: "messenger", Text: f.Task.Remote.Name, At: at, Verified: true})
 		case "report", "late_report":

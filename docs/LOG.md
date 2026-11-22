@@ -2,6 +2,27 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-22 — Codex (0.94 candidate)
+
+- Combined the window update handoff, remote duration estimates, coordinator attribution and Codex exit-delay notice for release from main.
+
+## 2026-11-22 — Codex (T-249)
+
+- Added a coordinator event for the observed delay between Codex completing a turn and its process exiting. Checked that a waiting coordinator receives the event, a remote worker forwards it, and a subsequently verified exit still publishes its report. No live Windows or model test.
+
+## 2026-11-22 — Codex (T-248)
+
+- Record each coordinator's provider and optional model on follow-ups, answers and notes, including remote delivery. Show remote continuation text in the task history. Test coordinator changes, delivery to both computers and the label for older messages.
+
+## 2026-11-22 — Codex (T-247)
+
+- Added a marked estimate to statistics records with received remote progress and a terminal outcome but no exact worker duration. Date and duration views now include timed tasks without token usage. The regression fixture exercises a three-hour remote task and the precedence of an exact duration.
+
+## 2026-11-22 — Codex (T-240)
+
+- Added a local window handoff after remote Windows/Linux updates. The window waits for the background client and checks the installed file against the signed update before reopening. Automated checks use a fixture. Native desktop acceptance is still pending.
+- Updated the Windows restart and installed-window launch flags to suppress the console window while allowing the desktop window to open.
+
 ## 2026-11-22 — Codex (T-246)
 
 - Added inset space to the statistics sort buttons and kept the labels in their original positions. The browser check covers symmetric insets and hover feedback for all three columns, and verifies both sort directions.

@@ -4,8 +4,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 )
+
+const TaskEventWorkerStillRunning = "worker_still_running"
 
 // T-172: a worker can write its final message and still not end: a child
 // it left (a diff window, a server) or the CLI itself stays up and keeps the
@@ -56,6 +59,29 @@ func (s *Store) NoteRunOutput(run string) error {
 func (s *Store) NoteRunFinal(run string) error {
 	_, err := s.db.Exec(`UPDATE task_runs SET final_at=COALESCE(final_at,?) WHERE id=? AND state='running'`, now(), run)
 	return err
+}
+
+// NotifyCodexStillRunning is called once by the run's watcher after it
+// observes the same Codex process still alive after the exit grace period.
+func (s *Store) NotifyCodexStillRunning(run string) error {
+	return s.tx(func(tx *sql.Tx) error {
+		var task, project string
+		err := tx.QueryRow(`SELECT t.id,t.project FROM task_runs r JOIN tasks t ON t.id=r.task_id
+WHERE r.id=? AND r.state='running' AND r.final_at IS NOT NULL
+AND t.state='running' AND t.provider='codex' AND t.cancel_requested=0`, run).Scan(&task, &project)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		name, err := computerName(tx)
+		if err != nil {
+			return err
+		}
+		msg := fmt.Sprintf("Codex on %s finished its turn, but the worker process is still running. No report has been published and the task still holds its locks.", name)
+		return insertTaskEvent(tx, project, task, AudienceCoordinator, TaskEventWorkerStillRunning, msg, "")
+	})
 }
 
 // NoteRunProcesses records the processes still in a running worker's group.

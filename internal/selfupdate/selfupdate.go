@@ -270,6 +270,32 @@ func (u *Updater) Installed() string {
 	return u.installed
 }
 
+// MatchesInstalledUpdate checks that an already installed file is the
+// signed build reported by the background client. It never runs the file.
+func (u *Updater) MatchesInstalledUpdate(path, version string) bool {
+	m, err := u.Channel.Load()
+	if err != nil || m.Version != version || m.Build <= u.Running {
+		return false
+	}
+	program, err := u.program(m)
+	if err != nil {
+		return false
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() != int64(len(program)) {
+		return false
+	}
+	hash := sha256.New()
+	n, err := io.Copy(hash, io.LimitReader(file, int64(len(program))+1))
+	want := sha256.Sum256(program)
+	return err == nil && n == int64(len(program)) && bytes.Equal(hash.Sum(nil), want[:])
+}
+
 func (u *Updater) apply(ctx context.Context) (string, string, error) {
 	if !u.supported() {
 		return "", "", errors.New("обновление из окна недоступно в этой сборке")

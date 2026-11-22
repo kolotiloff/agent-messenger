@@ -33,7 +33,7 @@ func peerAtLeast(version string, build int) bool {
 // noteRemoteTask sends a note to the computer that runs the
 // task. The note is kept here too, marked sent, for the window and for a
 // repeated call with the same op id.
-func noteRemoteTask(tx *sql.Tx, t Task, remote netLink, opID, text, author string) error {
+func noteRemoteTask(tx *sql.Tx, t Task, remote netLink, opID, text, author string, sender MessageSender) error {
 	switch {
 	case t.CancelRequested:
 		return fmt.Errorf("%w: the task is being cancelled", ErrRejected)
@@ -62,10 +62,10 @@ func noteRemoteTask(tx *sql.Tx, t Task, remote netLink, opID, text, author strin
 	if err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`INSERT INTO task_owner_notes(id,task_id,op_id,text,state,created_at,author) VALUES (?,?,?,?,'sent',?,?)`, "note-"+id[:16], t.ID, opID, text, now(), author); err != nil {
+	if _, err := tx.Exec(`INSERT INTO task_owner_notes(id,task_id,op_id,text,state,created_at,author,sender_agent,sender_model) VALUES (?,?,?,?,'sent',?,?,?,?)`, "note-"+id[:16], t.ID, opID, text, now(), author, sender.Agent, sender.Model); err != nil {
 		return err
 	}
-	msg := netBody{Kind: "note", Task: t.ID, OpID: opID, Text: text}
+	msg := netBody{Kind: "note", Task: t.ID, OpID: opID, Text: text, SenderAgent: sender.Agent, SenderModel: sender.Model}
 	if author == AudienceOwner {
 		msg.By = AudienceOwner
 	}
@@ -90,7 +90,7 @@ func applyNote(tx *sql.Tx, from netLink, b netBody) error {
 		author = AudienceOwner
 	}
 	err = savepoint(tx, func() error {
-		return addNoteTx(tx, t.ID, "", "net:"+from.broker+":"+from.peer+":"+b.OpID, b.Text, author, true)
+		return addNoteTx(tx, t.ID, "", "net:"+from.broker+":"+from.peer+":"+b.OpID, b.Text, author, true, MessageSender{Agent: b.SenderAgent, Model: b.SenderModel})
 	})
 	if errors.Is(err, ErrRejected) {
 		return enqueueNet(tx, from.broker, from.peer, "note-refused."+b.OpID, t.ID, netBody{Kind: "note_refused", Task: from.task, OpID: b.OpID, Reason: refusalText(err)})

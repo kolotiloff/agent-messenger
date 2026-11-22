@@ -270,7 +270,7 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 					finalNoted = true
 					_ = s.store.NoteRunOutput(runID)
 					_ = s.store.NoteRunFinal(runID)
-					go s.watchLinger(runID, task.ID, obs.PID, obs.PGID, lingerDone)
+					go s.watchLinger(runID, task.ID, task.Provider, obs, lingerDone)
 				}
 				if result.Model != model {
 					_ = s.store.SetTaskRunModel(runID, result.Model)
@@ -549,22 +549,25 @@ func leftoverNames(pid, pgid int) string {
 	return out
 }
 
-func (s *Supervisor) watchLinger(runID, task string, pid, pgid int, done <-chan struct{}) {
-	logged := false
+func (s *Supervisor) watchLinger(runID, task, provider string, obs platform.Observation, done <-chan struct{}) {
+	logged, notified := false, false
 	for {
 		select {
 		case <-done:
 			return
 		case <-time.After(time.Duration(taskLingerAfter.Load())):
 		}
-		members, err := platform.GroupMembers(pgid)
+		members, err := platform.GroupMembers(obs.PGID)
 		if err != nil {
 			continue
 		}
 		procs := make([]core.RunProcess, 0, len(members))
 		names := ""
+		workerPresent := false
 		for _, m := range members {
-			procs = append(procs, core.RunProcess{PID: m.PID, Name: m.Name, Worker: m.PID == pid})
+			worker := m.PID == obs.PID
+			workerPresent = workerPresent || worker
+			procs = append(procs, core.RunProcess{PID: m.PID, Name: m.Name, Worker: worker})
 			if len(names) < 300 {
 				names += fmt.Sprintf(" %s(%d)", m.Name, m.PID)
 			}
@@ -578,6 +581,16 @@ func (s *Supervisor) watchLinger(runID, task string, pid, pgid int, done <-chan 
 		if !logged {
 			logged = true
 			journal.Printf("run %s of %s: final message written, worker still running; group:%s", runID, task, names)
+		}
+		if provider == "codex" && !notified && workerPresent {
+			current, err := platform.ReadObservation(obs.PID)
+			if err == nil && current == obs {
+				if err := s.store.NotifyCodexStillRunning(runID); err != nil {
+					journal.Printf("run %s of %s: cannot record worker exit delay: %v", runID, task, err)
+				} else {
+					notified = true
+				}
+			}
 		}
 	}
 }
