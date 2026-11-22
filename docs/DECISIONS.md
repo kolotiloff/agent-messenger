@@ -592,3 +592,7 @@ On Windows, the update relaunch and the installer's handoff to the installed app
 ## D-173 — Notify the coordinator when Codex is slow to exit (T-249)
 
 2026-11-22, two Windows workers still held their task locks long after their completed turns. If the recorded Codex worker process is observed alive after the one-minute grace period, publish one `worker_still_running` event per run through `wait`. Use the task's existing event route for remote tasks. The observation describes a delayed exit and can be followed by the ordinary verified result. The run remains subject to D-021 and D-147. The event does not mark its computer idle or trigger a cancel or retry.
+
+## D-175 — Align Disconnect with the bottom of the connection details (T-251)
+
+2026-11-23, owner requested a clearer placement for Disconnect. The connected server card aligns the button with the bottom of its details and the right edge of its status badge. The button stays beside the lower connection row and keeps its usual hit area.

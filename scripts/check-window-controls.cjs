@@ -521,7 +521,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         const action = await disconnect.boundingBox();
         const badge = await page.locator('#member-badge').boundingBox();
         assert(action.x >= details.x + details.width, 'disconnect action overlaps the connection details');
-        assert(Math.abs(action.y + action.height / 2 - (details.y + details.height / 2)) <= 1, 'disconnect action is on a separate row');
+        assert(Math.abs(action.y + action.height - (details.y + details.height)) <= 1, 'disconnect action is not aligned with the bottom of the connection details');
         assert(Math.abs(action.x + action.width - (badge.x + badge.width)) <= 1, 'disconnect action is off the right edge of the status');
       }
       await page.setViewportSize({width: 1100, height: 600});
