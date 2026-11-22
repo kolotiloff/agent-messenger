@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-22 — Codex (T-246)
+
+- Added inset space to the statistics sort buttons and kept the labels in their original positions. The browser check covers symmetric insets and hover feedback for all three columns, and verifies both sort directions.
+
 ## 2026-11-22 — Codex (T-245 follow-up)
 
 - Captured new English screenshots for the public README and download guide. Both themes show Claude Code, Codex and Cursor with fictional tasks. Also captured the English statistics table and welcome screen.
