@@ -177,6 +177,7 @@ func Open(path string) (*Store, error) {
 		{"tasks", "usage_cache_write", "INTEGER NOT NULL DEFAULT 0"},
 		{"tasks", "usage_output", "INTEGER NOT NULL DEFAULT 0"},
 		{"tasks", "usage_cost", "REAL"},
+		{"tasks", "remote_duration_ms", "INTEGER"},
 		{"requests", "in_reply_to", "TEXT"},
 		{"projects", "worker_rules", "TEXT NOT NULL DEFAULT ''"},
 		{"projects", "title", "TEXT NOT NULL DEFAULT ''"},

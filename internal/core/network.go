@@ -208,6 +208,8 @@ type netBody struct {
 	// Usage is the running computer's total for the task (T-058). A
 	// computer before it ignores the field.
 	Usage *TaskUsage `json:"usage,omitempty"`
+	// DurationMS comes from the executing computer's own clock.
+	DurationMS *int64 `json:"duration_ms,omitempty"`
 	// Computer is the sender's lasting id (T-132), set on every message, so
 	// the receiver finds the tasks it shares with that computer after the
 	// network changed. A computer before 0.61 ignores it.
@@ -727,6 +729,9 @@ func cancelRemoteTask(tx *sql.Tx, t Task, remote netLink) (string, error) {
 		if err := setTaskState(tx, t.ID, "cancelled", why); err != nil {
 			return "", err
 		}
+		if _, err := tx.Exec(`UPDATE tasks SET remote_duration_ms=NULL WHERE id=?`, t.ID); err != nil {
+			return "", err
+		}
 		if err := insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "cancelled", "the owner closed this task here; what happened on "+contact.Name+" is unknown", ""); err != nil {
 			return "", err
 		}
@@ -750,8 +755,8 @@ func cancelRemoteTask(tx *sql.Tx, t Task, remote netLink) (string, error) {
 // forwardTaskEvent queues an event of a task that another computer started.
 func forwardTaskEvent(tx *sql.Tx, o netLink, task, audience, kind, text, question string) error {
 	var state, detail string
-	var reason, reset sql.NullString
-	if err := tx.QueryRow(`SELECT state,detail,failure_reason,failure_reset FROM tasks WHERE id=?`, task).Scan(&state, &detail, &reason, &reset); err != nil {
+	var reason, reset, finished sql.NullString
+	if err := tx.QueryRow(`SELECT state,detail,failure_reason,failure_reset,finished_at FROM tasks WHERE id=?`, task).Scan(&state, &detail, &reason, &reset, &finished); err != nil {
 		return err
 	}
 	id, err := randomID()
@@ -762,7 +767,15 @@ func forwardTaskEvent(tx *sql.Tx, o netLink, task, audience, kind, text, questio
 	if err != nil {
 		return err
 	}
-	return enqueueNet(tx, o.broker, o.peer, "event."+id, task, netBody{Kind: "event", Task: o.task, State: state, Detail: clip(detail, 2000), Audience: audience, Event: kind, Text: text, Question: question, Failure: reason.String, Reset: reset.String, Usage: usage})
+	var duration *int64
+	if finished.Valid && (state == "done" || state == "failed" || state == "cancelled") {
+		started, err := taskStartedAt(tx, task)
+		if err != nil {
+			return err
+		}
+		duration = taskDurationMS(started, finished.String)
+	}
+	return enqueueNet(tx, o.broker, o.peer, "event."+id, task, netBody{Kind: "event", Task: o.task, State: state, Detail: clip(detail, 2000), Audience: audience, Event: kind, Text: text, Question: question, Failure: reason.String, Reset: reset.String, Usage: usage, DurationMS: duration})
 }
 
 // ---- sending ----
@@ -1308,6 +1321,15 @@ func applyReport(tx *sql.Tx, from netLink, b netBody) error {
 	}
 	if err := setTaskState(tx, t.ID, b.State, clip(b.Detail, 2000)); err != nil {
 		return err
+	}
+	if b.State == "done" || b.State == "failed" || b.State == "cancelled" {
+		duration := b.DurationMS
+		if duration != nil && (*duration < 0 || *duration > (1<<63-1)/int64(time.Millisecond)) {
+			duration = nil
+		}
+		if _, err := tx.Exec(`UPDATE tasks SET remote_duration_ms=? WHERE id=?`, duration, t.ID); err != nil {
+			return err
+		}
 	}
 	if b.Failure != "" && failureReasons[b.Failure] {
 		reset := sql.NullString{}

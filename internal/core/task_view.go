@@ -276,8 +276,12 @@ func (s *Store) ranModel(task string) string {
 }
 
 func (s *Store) startedAt(task string) (string, error) {
+	return taskStartedAt(s.db, task)
+}
+
+func taskStartedAt(q interface{ QueryRow(string, ...any) *sql.Row }, task string) (string, error) {
 	var at sql.NullString
-	err := s.db.QueryRow(`SELECT MIN(launched_at) FROM task_runs WHERE task_id=?`, task).Scan(&at)
+	err := q.QueryRow(`SELECT MIN(launched_at) FROM task_runs WHERE task_id=?`, task).Scan(&at)
 	return at.String, err
 }
 
