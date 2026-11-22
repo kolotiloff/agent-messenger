@@ -162,6 +162,8 @@ func Open(path string) (*Store, error) {
 		{"task_run_items", "description", "TEXT NOT NULL DEFAULT ''"},
 		{"remote_task_items", "description", "TEXT NOT NULL DEFAULT ''"},
 		{"tasks", "model", "TEXT"},
+		{"tasks", "sender_agent", "TEXT NOT NULL DEFAULT ''"},
+		{"tasks", "sender_model", "TEXT NOT NULL DEFAULT ''"},
 		{"tasks", "ran_model", "TEXT"},
 		{"computer_agents", "models", "TEXT NOT NULL DEFAULT ''"},
 		{"computer_agents", "limit_state", "TEXT NOT NULL DEFAULT ''"},

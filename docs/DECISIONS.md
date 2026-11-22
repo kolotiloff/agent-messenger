@@ -558,3 +558,11 @@ The owner also asked for a consistent size within each task card. Use 12 px thro
 ## D-165 — Label the live local coordinator (T-239)
 
 2026-11-20, owner approved the lowercase «координатор» label beside the computer name. The window shows it on this computer’s card while the active chat of the selected project (D-099) has a live local process. Reuse the server label style. Historical connections and peer presence do not establish this role. The label refines D-064 for this computer. A handover between local chats leaves network task routing unchanged.
+
+## D-168 — Attribute the original task message to its sender (T-243)
+
+2026-11-22, owner saw a task from Claude labelled as Codex. The project connection record describes the last initialized client and cannot attribute messages. Record the assigning chat's provider at `start_task` and carry it with the task. The optional `coordinator_model` is supplied by the coordinator only when it knows the active model. The worker model is separate. Use the same provider icon as in the worker header when the sender is known. Show the generic coordinator label when the sender is unknown, including existing history and follow-ups with no attribution.
+
+## D-169 — Keep a manual order for the computer list (T-244)
+
+2026-11-22, owner asked to rearrange computers by dragging their cards. Save the order in this window's local storage, across projects. Use the lasting computer ID where available. New computers follow the existing order. The keyboard can move the focused card with Alt and the up or down arrow. Clicking a card still filters by that computer.

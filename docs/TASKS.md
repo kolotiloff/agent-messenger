@@ -15,6 +15,8 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
+| T-244 | Allow manual reordering of computer cards and remember the order (owner, 2026-11-22). | window | Implemented on `codex/t243-t244-sidebar-and-sender` (D-169). |
+| T-243 | Show the assigning agent, its icon and its model when known in the task header (owner, 2026-11-22). | window + network | Implemented on `codex/t243-t244-sidebar-and-sender` (D-168). |
 | T-240 | Reconcile the open desktop window with a remote update on Windows and Linux. The owner saw 0.71 in the open window while the network showed 0.91. | updates | Investigate the affected launcher, then verify that an open window notices a newer background client and updates safely. |
 | T-239 | Label this computer as the selected project's coordinator while its active chat is open (owner, 2026-11-20). | window | Released in [0.92](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.92) via [PR #154](https://github.com/kolotiloff/agent-messenger/pull/154) (D-165). |
 | T-238 | Align the typography of computer and task titles and other equivalent window elements (owner, 2026-11-20). | window | Released in [0.92](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.92) via [PR #154](https://github.com/kolotiloff/agent-messenger/pull/154) (D-164). |
