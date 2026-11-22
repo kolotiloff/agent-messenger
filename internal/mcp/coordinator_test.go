@@ -342,6 +342,42 @@ func TestTaskFeedKeepsTheAssigningChat(t *testing.T) {
 	if err != nil || len(feed.Items) == 0 || feed.Items[0].SenderAgent != "claude" || feed.Items[0].SenderModel != "claude-opus-5-5" || feed.Task.Agent != "codex" {
 		t.Fatalf("feed %+v, err %v", feed, err)
 	}
+	if result, ok := codex.tool("note_task", map[string]any{"task_id": started.TaskID, "op_id": "sender-note", "text": "Note from Codex"}, nil); !ok {
+		t.Fatal(result)
+	}
+	finishRun(t, st, started.TaskID, core.DispositionAsk, "Which option?")
+	task, err := st.TaskByID(started.TaskID)
+	if err != nil || task.OpenQuestion == nil {
+		t.Fatalf("worker question missing: %v", err)
+	}
+	if result, ok := codex.tool("answer", map[string]any{"task_id": started.TaskID, "question_id": task.OpenQuestion.ID, "op_id": "sender-answer", "text": "Answer from Codex", "coordinator_model": "gpt-6.2-sol"}, nil); !ok {
+		t.Fatal(result)
+	}
+	finishRun(t, st, started.TaskID, core.DispositionReport, "Done")
+	if result, ok := claude.tool("continue_task", map[string]any{"task_id": started.TaskID, "op_id": "sender-continue", "text": "Follow-up from Claude"}, nil); !ok {
+		t.Fatal(result)
+	}
+	feed, err = st.TaskFeed(started.TaskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]core.MessageSender{
+		"Work":                  {Agent: "claude", Model: "claude-opus-5-5"},
+		"Note from Codex":       {Agent: "codex"},
+		"Answer from Codex":     {Agent: "codex", Model: "gpt-6.2-sol"},
+		"Follow-up from Claude": {Agent: "claude"},
+	}
+	for _, item := range feed.Items {
+		if sender, ok := want[item.Text]; ok {
+			if item.Author != core.AudienceCoordinator || item.SenderAgent != sender.Agent || item.SenderModel != sender.Model {
+				t.Fatalf("wrong author for %q: %+v", item.Text, item)
+			}
+			delete(want, item.Text)
+		}
+	}
+	if len(want) != 0 {
+		t.Fatalf("messages missing from the feed: %v", want)
+	}
 }
 
 func TestCoordinatorStartIsIdempotentAndWaitReplays(t *testing.T) {

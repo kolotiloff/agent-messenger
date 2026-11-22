@@ -40,7 +40,8 @@ func TestRemoteTaskContinue(t *testing.T) {
 		t.Fatalf("older computer: %v", err)
 	}
 	setPeerVersion("0.0.0-preview.60")
-	if err := p.a.st.ContinueTask(id, "c1", "Add level 2", AudienceCoordinator); err != nil {
+	sender := MessageSender{Agent: "cursor", Model: "composer-2.5"}
+	if err := p.a.st.ContinueTaskChecked(id, "c1", "Add level 2", AudienceCoordinator, nil, sender); err != nil {
 		t.Fatal(err)
 	}
 	// Repeating after a lost response sends nothing new.
@@ -58,6 +59,8 @@ func TestRemoteTaskContinue(t *testing.T) {
 	if err := p.b.st.ApplyNet(testBroker, sent[0]); err != nil {
 		t.Fatal(err)
 	}
+	assertTaskMessageSender(t, p.a.st, id, "answer", "Add level 2", sender)
+	assertTaskMessageSender(t, p.b.st, m.ID, "answer", "Add level 2", sender)
 	r2 := p.b.launch(t, m.ID, "019a0000-0000-7000-8000-0000000000b1")
 	brief, err := p.b.st.ReadTask(r2.ID, r2.Receipt, false)
 	if err != nil || r2.Kind != "continue" || brief.FollowUp != "Add level 2" {
@@ -75,6 +78,26 @@ func TestRemoteTaskContinue(t *testing.T) {
 	}
 	if err := p.b.st.ContinueTask(m.ID, "c-b", "x", AudienceCoordinator); !errors.Is(err, ErrRejected) {
 		t.Fatalf("b's coordinator continued a's task: %v", err)
+	}
+}
+
+func assertTaskMessageSender(t *testing.T, st *Store, task, kind, text string, sender MessageSender) {
+	t.Helper()
+	feed, err := st.TaskFeed(task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, item := range feed.Items {
+		if item.Kind == kind && item.Text == text {
+			if item.Author != AudienceCoordinator || item.SenderAgent != sender.Agent || item.SenderModel != sender.Model {
+				t.Fatalf("wrong author for %q: %+v", text, item)
+			}
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("found %d copies of %q", count, text)
 	}
 }
 

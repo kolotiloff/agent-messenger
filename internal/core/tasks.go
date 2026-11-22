@@ -635,7 +635,7 @@ func (s *Store) ComputerAgents() ([]ComputerAgent, error) {
 	return out, err
 }
 
-func insertTaskEvent(tx *sql.Tx, project, task, audience, kind, text, question string) error {
+func insertTaskEvent(tx *sql.Tx, project, task, audience, kind, text, question string, senders ...MessageSender) error {
 	link, err := taskLink(tx, task)
 	if err != nil {
 		return err
@@ -647,8 +647,9 @@ func insertTaskEvent(tx *sql.Tx, project, task, audience, kind, text, question s
 	if link.origin != nil {
 		audience = AudienceLog
 	}
-	if _, err := tx.Exec(`INSERT INTO task_events(project,task_id,audience,kind,text,question_id,created_at) VALUES (?,?,?,?,?,?,?)`,
-		project, task, audience, kind, text, nullString(sql.NullString{String: question, Valid: question != ""}), now()); err != nil {
+	sender := coordinatorSender(AudienceCoordinator, senders)
+	if _, err := tx.Exec(`INSERT INTO task_events(project,task_id,audience,kind,text,question_id,created_at,sender_agent,sender_model) VALUES (?,?,?,?,?,?,?,?,?)`,
+		project, task, audience, kind, text, nullString(sql.NullString{String: question, Valid: question != ""}), now(), sender.Agent, sender.Model); err != nil {
 		return err
 	}
 	// The coordinator also learns of a worker's question to the owner and
@@ -702,6 +703,19 @@ type StartTaskRequest struct {
 	// lock does not launch while an earlier open task with the same lock
 	// runs on the same computer. Empty means no lock.
 	Lock string
+}
+
+// MessageSender identifies the coordinator chat that wrote one task message.
+type MessageSender struct {
+	Agent, Model string
+}
+
+func coordinatorSender(by string, senders []MessageSender) MessageSender {
+	if by != AudienceCoordinator || len(senders) == 0 {
+		return MessageSender{}
+	}
+	agent, model := taskSender(senders[0].Agent, senders[0].Model)
+	return MessageSender{Agent: agent, Model: model}
 }
 
 func taskSender(agent, model string) (string, string) {
@@ -881,7 +895,7 @@ func startLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, origin *net
 	return id, insertTaskEvent(tx, r.Project, id, AudienceLog, "started", taskTitle(r.Title, r.Text), "")
 }
 
-func insertTaskRun(tx *sql.Tx, task string, ordinal int, kind, input string) error {
+func insertTaskRun(tx *sql.Tx, task string, ordinal int, kind, input string, senders ...MessageSender) error {
 	id, err := randomID()
 	if err != nil {
 		return err
@@ -891,7 +905,8 @@ func insertTaskRun(tx *sql.Tx, task string, ordinal int, kind, input string) err
 		return err
 	}
 	run := "run-" + id[:16]
-	if _, err = tx.Exec(`INSERT INTO task_runs(id,task_id,ordinal,kind,input,receipt,state,created_at) VALUES (?,?,?,?,?,?,'intent',?)`, run, task, ordinal, kind, input, receipt, now()); err != nil {
+	sender := coordinatorSender(AudienceCoordinator, senders)
+	if _, err = tx.Exec(`INSERT INTO task_runs(id,task_id,ordinal,kind,input,receipt,state,created_at,sender_agent,sender_model) VALUES (?,?,?,?,?,?,'intent',?,?,?)`, run, task, ordinal, kind, input, receipt, now(), sender.Agent, sender.Model); err != nil {
 		return err
 	}
 	// T-085: what the owner wrote while the task worked goes with the next
@@ -1714,8 +1729,10 @@ func publishDisposition(tx *sql.Tx, t Task, r TaskRun) error {
 // idempotent: repeating the same answer returns without a second run. The
 // question must be the newest open one and addressed to by (coordinator or
 // owner); a late or stale answer is refused.
-func (s *Store) AnswerTask(task, question, opID, text, by string) error {
-	return s.tx(func(tx *sql.Tx) error { return answerTask(tx, task, question, opID, text, by, false, false) })
+func (s *Store) AnswerTask(task, question, opID, text, by string, senders ...MessageSender) error {
+	return s.tx(func(tx *sql.Tx) error {
+		return answerTask(tx, task, question, opID, text, by, false, false, senders...)
+	})
 }
 
 // answerTask answers in tx. fromNetwork is set when the computer that
@@ -1727,7 +1744,8 @@ func (s *Store) AnswerTask(task, question, opID, text, by string) error {
 // maxNetOpID bounds an op id built for a message from another computer.
 const maxNetOpID = 1024
 
-func answerTask(tx *sql.Tx, task, question, opID, text, by string, fromNetwork, ownerOver bool) error {
+func answerTask(tx *sql.Tx, task, question, opID, text, by string, fromNetwork, ownerOver bool, senders ...MessageSender) error {
+	sender := coordinatorSender(by, senders)
 	text = strings.TrimSpace(text)
 	// An answer from the computer that started the task carries an op id
 	// built here from the network, the computer and the message: with the
@@ -1790,7 +1808,7 @@ func answerTask(tx *sql.Tx, task, question, opID, text, by string, fromNetwork, 
 			return fmt.Errorf("%w: this operation id was used for another answer", ErrRejected)
 		}
 		if link.remote != nil {
-			return answerRemoteTask(tx, t, *link.remote, question, opID, text, by)
+			return answerRemoteTask(tx, t, *link.remote, question, opID, text, by, sender)
 		}
 		if t.SessionID == "" {
 			return fmt.Errorf("%w: no recorded conversation to resume", ErrRejected)
@@ -1802,7 +1820,7 @@ func answerTask(tx *sql.Tx, task, question, opID, text, by string, fromNetwork, 
 		if _, err := tx.Exec(`UPDATE task_questions SET state='answered',answer=?,answer_op=?,answered_by=? WHERE id=?`, text, opID, by, question); err != nil {
 			return err
 		}
-		if err := insertTaskRun(tx, task, ordinal+1, "answer", text); err != nil {
+		if err := insertTaskRun(tx, task, ordinal+1, "answer", text, sender); err != nil {
 			return err
 		}
 		if err := setTaskState(tx, task, "running", "answered; the same conversation resumes"); err != nil {
@@ -1812,7 +1830,7 @@ func answerTask(tx *sql.Tx, task, question, opID, text, by string, fromNetwork, 
 		if by == AudienceOwner {
 			answeredFor = AudienceOwner
 		}
-		return insertTaskEvent(tx, t.Project, task, answeredFor, "answered", text, question)
+		return insertTaskEvent(tx, t.Project, task, answeredFor, "answered", text, question, sender)
 	}
 }
 
@@ -1834,7 +1852,7 @@ type WorkerGone func(platform.Observation) (string, error)
 // interrupted run of the task, that its worker is gone. Those runs are then
 // closed as failed, their reservations stay as they are, and the same
 // conversation goes on. Anything unclear leaves the task as it was.
-func (s *Store) ContinueTaskChecked(task, opID, text, by string, gone WorkerGone) error {
+func (s *Store) ContinueTaskChecked(task, opID, text, by string, gone WorkerGone, senders ...MessageSender) error {
 	text = strings.TrimSpace(text)
 	if opID == "" || len(opID) > 128 || text == "" || utf8.RuneCountInString(text) > MaxTaskText {
 		return fmt.Errorf("%w: continue needs an operation id and 1..%d characters", ErrRejected, MaxTaskText)
@@ -1848,15 +1866,15 @@ func (s *Store) ContinueTaskChecked(task, opID, text, by string, gone WorkerGone
 			return err
 		}
 		if link.remote != nil {
-			return continueRemoteTask(tx, task, *link.remote, opID, text)
+			return continueRemoteTask(tx, task, *link.remote, opID, text, coordinatorSender(by, senders))
 		}
-		return continueTaskTx(tx, task, opID, text, gone, false)
+		return continueTaskTx(tx, task, opID, text, gone, false, coordinatorSender(by, senders))
 	})
 }
 
 // continueTaskTx continues a task that runs on this computer. fromNet is
 // set when the computer that started it asked (T-113).
-func continueTaskTx(tx *sql.Tx, task, opID, text string, gone WorkerGone, fromNet bool) error {
+func continueTaskTx(tx *sql.Tx, task, opID, text string, gone WorkerGone, fromNet bool, sender MessageSender) error {
 	var oldTask, oldInput string
 	err := tx.QueryRow(`SELECT task_id,input FROM task_runs WHERE op_id=?`, opID).Scan(&oldTask, &oldInput)
 	if err == nil {
@@ -1912,7 +1930,7 @@ func continueTaskTx(tx *sql.Tx, task, opID, text string, gone WorkerGone, fromNe
 	if err := tx.QueryRow(`SELECT MAX(ordinal) FROM task_runs WHERE task_id=?`, task).Scan(&ordinal); err != nil {
 		return err
 	}
-	if err := insertTaskRun(tx, task, ordinal+1, "continue", text); err != nil {
+	if err := insertTaskRun(tx, task, ordinal+1, "continue", text, sender); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`UPDATE task_runs SET op_id=? WHERE task_id=? AND ordinal=?`, opID, task, ordinal+1); err != nil {
@@ -1924,7 +1942,7 @@ func continueTaskTx(tx *sql.Tx, task, opID, text string, gone WorkerGone, fromNe
 	if _, err := tx.Exec(`UPDATE tasks SET finished_at=NULL WHERE id=?`, task); err != nil {
 		return err
 	}
-	return insertTaskEvent(tx, t.Project, task, AudienceLog, "continued", text, "")
+	return insertTaskEvent(tx, t.Project, task, AudienceLog, "continued", text, "", sender)
 }
 
 // closeInterruptedRuns closes the task's interrupted runs as failed when

@@ -574,3 +574,7 @@ The owner also asked for a consistent size within each task card. Use 12 px thro
 ## D-169 — Keep a manual order for the computer list (T-244)
 
 2026-11-22, owner asked to rearrange computers by dragging their cards. Save the order in this window's local storage, across projects. Use the lasting computer ID where available. New computers follow the existing order. The keyboard can move the focused card with Alt and the up or down arrow. Clicking a card still filters by that computer.
+
+## D-172 — Attribute each coordinator message separately (T-248)
+
+2026-11-22, owner asked for the same sender name and icon on subsequent coordinator messages. The messaging tools record the calling chat's provider and its optional explicit model on each answer, continuation and note. Send this metadata with the existing remote messages, reuse the message header from D-168, and show the origin's recorded continuation in its task history. Older records and unrecognized clients keep the coordinator role label. The worker's conversation and the owner's own message attribution follow the existing rules.

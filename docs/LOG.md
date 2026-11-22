@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-22 — Codex (T-248)
+
+- Record each coordinator's provider and optional model on follow-ups, answers and notes, including remote delivery. Show remote continuation text in the task history. Test coordinator changes, delivery to both computers and the label for older messages.
+
 ## 2026-11-22 — Codex (T-246)
 
 - Added inset space to the statistics sort buttons and kept the labels in their original positions. The browser check covers symmetric insets and hover feedback for all three columns, and verifies both sort directions.

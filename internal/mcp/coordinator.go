@@ -428,22 +428,25 @@ func coordinatorTools() []map[string]any {
 			})},
 		{"name": "answer", "description": "Answer a worker's question. The worker continues in the same session. Repeating with the same op_id is safe.",
 			"inputSchema": obj(map[string]any{
-				"task_id":     str("task id"),
-				"question_id": str("question id from the event"),
-				"op_id":       str("unique id of this operation"),
-				"text":        map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxTaskText},
+				"task_id":           str("task id"),
+				"question_id":       str("question id from the event"),
+				"op_id":             str("unique id of this operation"),
+				"text":              map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxTaskText},
+				"coordinator_model": str("optional: your current model, only if known"),
 			}, "task_id", "question_id", "op_id", "text")},
 		{"name": "continue_task", "description": "Give a finished task (done or failed), here or on another computer of the network, or an interrupted task here or on another computer a follow-up (an interrupted one only once the computer that ran it confirms its worker is certainly gone): the same worker conversation resumes with your text, so it keeps its context and needs no new briefing. If the agent no longer has that conversation, the run fails; then start a new task. Repeating with the same op_id is safe.",
 			"inputSchema": obj(map[string]any{
-				"task_id": str("task id"),
-				"op_id":   str("unique id of this operation"),
-				"text":    map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxTaskText},
+				"task_id":           str("task id"),
+				"op_id":             str("unique id of this operation"),
+				"text":              map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxTaskText},
+				"coordinator_model": str("optional: your current model, only if known"),
 			}, "task_id", "op_id", "text")},
 		{"name": "note_task", "description": "Write to a worker while its task runs, on this computer or another one of the network, without stopping it: it reads your text only when its current run ends and goes on in the same conversation. A worker CLI takes no input while it works, so this can be many minutes; to stop a worker now, use cancel. A report it was about to send waits until it has read your text. For a worker that asked you, use answer instead. Repeating with the same op_id is safe.",
 			"inputSchema": obj(map[string]any{
-				"task_id": str("task id"),
-				"op_id":   str("unique id of this operation"),
-				"text":    map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxTaskText},
+				"task_id":           str("task id"),
+				"op_id":             str("unique id of this operation"),
+				"text":              map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxTaskText},
+				"coordinator_model": str("optional: your current model, only if known"),
 			}, "task_id", "op_id", "text")},
 		{"name": "task_images", "description": "See the pictures a worker attached to its reports and questions (a screenshot, a chart), newest first, up to 4 per call. A report or question says when it has pictures. For a task of another computer, the pictures it sent along.",
 			"inputSchema": obj(map[string]any{
@@ -481,6 +484,18 @@ func coordinatorTools() []map[string]any {
 				"computer": str("computer id from list_agents: this computer (the default) or another computer of the network"),
 			})},
 	}
+}
+
+func (c *coordinator) messageSender(model string) core.MessageSender {
+	c.mu.Lock()
+	client := strings.ToLower(strings.TrimSpace(c.clientName))
+	c.mu.Unlock()
+	for _, agent := range []string{"claude", "codex", "cursor"} {
+		if strings.Contains(client, agent) {
+			return core.MessageSender{Agent: agent, Model: model}
+		}
+	}
+	return core.MessageSender{}
 }
 
 func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, error) {
@@ -540,17 +555,8 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 		if err := strict(&a); err != nil {
 			return nil, err
 		}
-		c.mu.Lock()
-		client := strings.ToLower(strings.TrimSpace(c.clientName))
-		c.mu.Unlock()
-		var sender string
-		for _, agent := range []string{"claude", "codex", "cursor"} {
-			if strings.Contains(client, agent) {
-				sender = agent
-				break
-			}
-		}
-		id, created, err := c.store.StartTask(core.StartTaskRequest{Project: c.project, OpID: a.OpID, Computer: a.Computer, Provider: a.Agent, Title: a.Title, Text: a.Text, Model: a.Model, Lock: a.Lock, SenderAgent: sender, SenderModel: a.SenderModel})
+		sender := c.messageSender(a.SenderModel)
+		id, created, err := c.store.StartTask(core.StartTaskRequest{Project: c.project, OpID: a.OpID, Computer: a.Computer, Provider: a.Agent, Title: a.Title, Text: a.Text, Model: a.Model, Lock: a.Lock, SenderAgent: sender.Agent, SenderModel: sender.Model})
 		if err != nil {
 			return nil, err
 		}
@@ -593,10 +599,11 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 		return c.tasks(a.State, a.Limit, a.IfVersion)
 	case "answer":
 		var a struct {
-			TaskID     string `json:"task_id"`
-			QuestionID string `json:"question_id"`
-			OpID       string `json:"op_id"`
-			Text       string `json:"text"`
+			TaskID      string `json:"task_id"`
+			QuestionID  string `json:"question_id"`
+			OpID        string `json:"op_id"`
+			Text        string `json:"text"`
+			SenderModel string `json:"coordinator_model"`
 		}
 		if err := strict(&a); err != nil {
 			return nil, err
@@ -604,7 +611,7 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 		if err := c.ownTask(a.TaskID); err != nil {
 			return nil, err
 		}
-		if err := c.store.AnswerTask(a.TaskID, a.QuestionID, a.OpID, a.Text, core.AudienceCoordinator); err != nil {
+		if err := c.store.AnswerTask(a.TaskID, a.QuestionID, a.OpID, a.Text, core.AudienceCoordinator, c.messageSender(a.SenderModel)); err != nil {
 			return nil, err
 		}
 		return map[string]any{"answered": true, "next": "The worker continues; call wait for its next report or question.", "waiting": c.waitingInstructions()}, nil
@@ -646,9 +653,10 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 		return c.taskMessages(a.TaskID, a.Last)
 	case "continue_task":
 		var a struct {
-			TaskID string `json:"task_id"`
-			OpID   string `json:"op_id"`
-			Text   string `json:"text"`
+			TaskID      string `json:"task_id"`
+			OpID        string `json:"op_id"`
+			Text        string `json:"text"`
+			SenderModel string `json:"coordinator_model"`
 		}
 		if err := strict(&a); err != nil {
 			return nil, err
@@ -656,15 +664,16 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 		if err := c.ownTask(a.TaskID); err != nil {
 			return nil, err
 		}
-		if err := c.store.ContinueTaskChecked(a.TaskID, a.OpID, a.Text, core.AudienceCoordinator, core.CheckWorkerGone); err != nil {
+		if err := c.store.ContinueTaskChecked(a.TaskID, a.OpID, a.Text, core.AudienceCoordinator, core.CheckWorkerGone, c.messageSender(a.SenderModel)); err != nil {
 			return nil, err
 		}
 		return map[string]any{"continued": true, "next": "The worker resumes its conversation; call wait for its report or question.", "waiting": c.waitingInstructions()}, nil
 	case "note_task":
 		var a struct {
-			TaskID string `json:"task_id"`
-			OpID   string `json:"op_id"`
-			Text   string `json:"text"`
+			TaskID      string `json:"task_id"`
+			OpID        string `json:"op_id"`
+			Text        string `json:"text"`
+			SenderModel string `json:"coordinator_model"`
 		}
 		if err := strict(&a); err != nil {
 			return nil, err
@@ -672,7 +681,7 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 		if err := c.ownTask(a.TaskID); err != nil {
 			return nil, err
 		}
-		if err := c.store.AddCoordinatorNote(c.project, a.TaskID, a.OpID, a.Text); err != nil {
+		if err := c.store.AddCoordinatorNote(c.project, a.TaskID, a.OpID, a.Text, c.messageSender(a.SenderModel)); err != nil {
 			return nil, err
 		}
 		return map[string]any{"noted": true, "next": "The worker reads it only when its current run ends, which can be many minutes; to stop it now, use cancel. Otherwise call wait as usual."}, nil

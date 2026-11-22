@@ -27,21 +27,22 @@ func (s *Store) AddOwnerNote(task, opID, text string) error {
 // its project on this computer (T-114). It travels like the owner's note,
 // marked as the coordinator's. A worker that waits for the coordinator gets
 // an answer instead; one that asked the owner waits for the owner.
-func (s *Store) AddCoordinatorNote(project, task, opID, text string) error {
+func (s *Store) AddCoordinatorNote(project, task, opID, text string, senders ...MessageSender) error {
 	if project == "" {
 		return fmt.Errorf("%w: no project", ErrRejected)
 	}
-	return s.addNote(task, project, opID, text, AudienceCoordinator)
+	return s.addNote(task, project, opID, text, AudienceCoordinator, senders...)
 }
 
-func (s *Store) addNote(task, project, opID, text, author string) error {
-	return s.tx(func(tx *sql.Tx) error { return addNoteTx(tx, task, project, opID, text, author, false) })
+func (s *Store) addNote(task, project, opID, text, author string, senders ...MessageSender) error {
+	return s.tx(func(tx *sql.Tx) error { return addNoteTx(tx, task, project, opID, text, author, false, senders...) })
 }
 
 // addNoteTx records a note. viaNet is a note that another
 // computer sent for the mirror of its task (T-149); its op id is built
 // here and may be longer.
-func addNoteTx(tx *sql.Tx, task, project, opID, text, author string, viaNet bool) error {
+func addNoteTx(tx *sql.Tx, task, project, opID, text, author string, viaNet bool, senders ...MessageSender) error {
+	sender := coordinatorSender(author, senders)
 	text = strings.TrimSpace(text)
 	if opID == "" || (len(opID) > 128 && !viaNet) || text == "" || utf8.RuneCountInString(text) > MaxTaskText {
 		return fmt.Errorf("%w: a message needs an operation id and 1..%d characters", ErrRejected, MaxTaskText)
@@ -80,7 +81,7 @@ func addNoteTx(tx *sql.Tx, task, project, opID, text, author string, viaNet bool
 			return err
 		}
 		if link.remote != nil {
-			return noteRemoteTask(tx, t, *link.remote, opID, text, author)
+			return noteRemoteTask(tx, t, *link.remote, opID, text, author, sender)
 		}
 		if link.origin != nil && !viaNet {
 			return fmt.Errorf("%w: this task came from another computer; its coordinator writes to it", ErrRejected)
@@ -118,7 +119,7 @@ func addNoteTx(tx *sql.Tx, task, project, opID, text, author string, viaNet bool
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(`INSERT INTO task_owner_notes(id,task_id,op_id,text,state,created_at,author) VALUES (?,?,?,?,'pending',?,?)`, "note-"+id[:16], task, opID, text, now(), author); err != nil {
+		if _, err := tx.Exec(`INSERT INTO task_owner_notes(id,task_id,op_id,text,state,created_at,author,sender_agent,sender_model) VALUES (?,?,?,?,'pending',?,?,?,?)`, "note-"+id[:16], task, opID, text, now(), author, sender.Agent, sender.Model); err != nil {
 			return err
 		}
 		if author == AudienceCoordinator || viaNet {
@@ -172,7 +173,7 @@ func ownerNotesOf(tx *sql.Tx, run string) (string, error) {
 
 // ownerNoteItems are the task's notes for the window, in time order.
 func ownerNoteItems(tx *sql.Tx, task string) ([]FeedItem, error) {
-	rows, err := tx.Query(`SELECT text,state,created_at,author FROM task_owner_notes WHERE task_id=? ORDER BY created_at,rowid`, task)
+	rows, err := tx.Query(`SELECT text,state,created_at,author,sender_agent,sender_model FROM task_owner_notes WHERE task_id=? ORDER BY created_at,rowid`, task)
 	if err != nil {
 		return nil, err
 	}
@@ -180,7 +181,7 @@ func ownerNoteItems(tx *sql.Tx, task string) ([]FeedItem, error) {
 	var out []FeedItem
 	for rows.Next() {
 		it := FeedItem{Kind: "note", Author: AudienceOwner, Verified: true}
-		if err := rows.Scan(&it.Text, &it.State, &it.At, &it.Author); err != nil {
+		if err := rows.Scan(&it.Text, &it.State, &it.At, &it.Author, &it.SenderAgent, &it.SenderModel); err != nil {
 			return nil, err
 		}
 		out = append(out, it)
