@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-22 — Codex (T-245 follow-up)
+
+- Captured new English screenshots for the public README and download guide. Both themes show Claude Code, Codex and Cursor with fictional tasks. Also captured the English statistics table and welcome screen.
+
 ## 2026-11-22 — Codex (T-241 to T-245)
 
 - Published [0.93](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.93) from `efd0e83` and verified the five manifest signatures and archive digests.
