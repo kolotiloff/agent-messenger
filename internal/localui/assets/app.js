@@ -1435,26 +1435,31 @@
       }
       tools=null;
     };
-    const outgoing=(author,role,text,at,model)=>{
+    const messageAvatar=provider=>{
+      const avatar=el('div',undefined,'am-avatar');
+      avatar.append(providerIcon(provider));
+      return avatar;
+    };
+    const outgoing=(author,role,text,at,model,provider)=>{
       group=null;const g=el('article',undefined,'am-message-group');const row=el('div',undefined,'am-message am-outgoing');
       const body=el('div',undefined,'am-message-body');const meta=el('div',undefined,'am-meta');
+      if(provider)meta.append(messageAvatar(provider));
       const who=el('strong',author);meta.append(who);if(model)meta.append(el('span',modelName(model),'am-meta-model'));if(role)meta.append(roleTag(role));meta.append(el('time',clock(at)));
       const content=el('div',undefined,'am-message-content');content.append(richText(text));body.append(meta,content);row.append(body);g.append(row);out.push(g);
     };
     const outgoingCoordinator=it=>{
       const sender=shortNames[it.sender_agent];
-      outgoing(sender||tr('Координатор'),sender?tr('координатор'):'',it.text,it.at,sender?it.sender_model:'');
+      outgoing(sender||tr('Координатор'),sender?tr('координатор'):'',it.text,it.at,sender?it.sender_model:'',sender?it.sender_agent:'');
     };
     const workerGroup=at=>{
       if(group)return group;
       const g=el('article',undefined,'am-message-group');const row=el('div',undefined,'am-message');
-      const avatar=el('div',undefined,'am-avatar');avatar.append(providerIcon(t.agent));
       const body=el('div',undefined,'am-message-body');const meta=el('div',undefined,'am-meta');
-      meta.append(el('strong',names[t.agent]||t.agent));
+      meta.append(messageAvatar(t.agent),el('strong',names[t.agent]||t.agent));
       // The model the CLI said it runs on, else the one the coordinator asked for (T-108).
       if(displayModel){const m=el('span',displayModel,'am-meta-model');m.title=t.ran_model?tr('Модель, на которой исполнитель запущен'):tr('Модель, которую указал координатор');meta.append(m);}
       meta.append(roleTag(tr('исполнитель')),el('time',clock(at)));
-      const content=el('div',undefined,'am-message-content');meta.prepend(avatar);body.append(meta,content);row.append(body);g.append(row);out.push(g);group=content;return content;
+      const content=el('div',undefined,'am-message-content');body.append(meta,content);row.append(body);g.append(row);out.push(g);group=content;return content;
     };
     const delivery=(text,cls)=>el('div',text,'am-delivery '+cls);
     for(const [index,it] of feed.items.entries()){

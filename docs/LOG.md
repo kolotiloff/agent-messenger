@@ -4,7 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-22 — Codex (T-243 and T-244)
 
-- Record the assigning chat's agent and optional model with the original task, including its remote mirror. Use the generic coordinator label when no author information is recorded.
+- Record the assigning chat's agent and optional model with the original task, including its remote mirror. Reuse the worker agent icon in the coordinator header. Use the generic coordinator label when no author information is recorded.
 - Added drag-and-drop and keyboard reordering for computer cards, saved in the local window.
 
 ## 2026-11-21 — Codex (T-237 to T-239)

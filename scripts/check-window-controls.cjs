@@ -538,6 +538,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const sender = page.locator('#thread .am-outgoing .am-meta').first();
       await sender.waitFor();
       assert.equal(await sender.locator('strong').textContent(),'Claude');
+      assert.equal(await sender.locator('.am-avatar .am-provider-icon').getAttribute('data-provider'),'claude');
       assert.equal(await sender.locator('.am-meta-model').textContent(),'Opus 5.5');
       assert.equal(await page.locator('#thread .am-message:not(.am-outgoing) .am-meta-model').first().textContent(),'Sol 6.2 Medium');
       assert.match(await page.locator('#task-head').innerText(),/Codex \(Sol 6\.2 Medium\)/);
