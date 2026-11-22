@@ -1081,7 +1081,9 @@ func failedRunWhy(ev RunEvidence, identity bool, disposition string) string {
 	switch {
 	case ev.Reason == "sign_in":
 		return "the agent is not signed in on this computer"
-	case ev.Reason == "usage_limit" || ev.Reason == "rate_limit" || ev.Reason == "overload":
+	case ev.Reason == "overload":
+		return "the model provider was overloaded before confirming the worker's turn"
+	case ev.Reason == "usage_limit" || ev.Reason == "rate_limit":
 		return "the agent stopped at a provider limit"
 	case !ev.ExitObserved:
 		return "the agent program's exit was not observed"
