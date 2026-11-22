@@ -256,6 +256,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-computers { display:flex; flex-direction:column; min-height:0; }
 #am-concept .am-machines { display:flex; flex-direction:column; gap:var(--am-space-1); min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; margin-right:calc(-1 * var(--am-space-3)); padding-right:calc(var(--am-space-3) - var(--am-gutter, 0px)); }
 #am-concept .am-machine-card { display:flex; flex-direction:column; align-items:stretch; gap:var(--am-gap-control); padding:var(--am-pad-compact); border:1px solid var(--am-line); border-radius:var(--am-radius-s); background:var(--am-soft); }
+#am-concept .am-machine-card[data-drop-edge=before] { box-shadow:inset 0 var(--am-gap-line) var(--am-text); }
+#am-concept .am-machine-card[data-drop-edge=after] { box-shadow:inset 0 calc(-1 * var(--am-gap-line)) var(--am-text); }
 /* Centre the dot in the full line box; leave room for accents and descenders. */
 #am-concept .am-machine-name { display:flex; align-items:center; gap:var(--am-space-1); }
 #am-concept .am-machine-version, #am-concept .am-machine-role { font-weight:400; }
@@ -401,7 +403,6 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-meta .am-avatar { width:auto; height:auto; }
 #am-concept .am-message-body { flex:1; }
 #am-concept .am-outgoing { align-self:flex-end; max-width:82%; }
-#am-concept .am-outgoing .am-avatar { display:none; }
 #am-concept .am-outgoing .am-meta { justify-content:flex-end; }
 #am-concept .am-outgoing .am-message-content { padding:var(--am-space-3) var(--am-space-4); border-radius:var(--am-radius-l); background:var(--am-bubble); }
 #am-concept .am-delivery { margin-top:var(--am-space-1); font-size:var(--am-text-xs); font-style:italic; color:var(--am-muted); }
@@ -774,12 +775,21 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-stats-bar { height:var(--am-bar-thin); border-radius:var(--am-radius-xs); background:var(--am-soft); overflow:hidden; }
 #am-concept .am-stats-bar > span { display:block; height:100%; border-radius:var(--am-radius-xs); background:var(--am-muted); }
 #am-concept .am-stats-tasks { text-align:right; }
-#am-concept .am-stats-top { display:flex; flex-direction:column; margin:0 calc(-1 * var(--am-space-3)); }
-#am-concept .am-stats-top > p { margin:0; padding:var(--am-pad-compact); }
-#am-concept .am-stats-task { display:flex; align-items:center; justify-content:space-between; gap:var(--am-gap-content); min-height:var(--am-control); padding:var(--am-pad-compact); border:0; border-radius:var(--am-radius-s); background:transparent; text-align:left; font-weight:inherit; }
-#am-concept .am-stats-task:is(:hover,:focus-visible) { background:var(--am-soft); }
-#am-concept .am-stats-task-text { display:flex; flex-direction:column; gap:var(--am-gap-line); min-width:0; }
-#am-concept .am-stats-task-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#am-concept .am-stats-table-wrap { overflow-x:auto; margin-inline:calc(-1 * var(--am-space-3)); }
+#am-concept .am-stats-table { width:100%; min-width:34em; border-collapse:collapse; table-layout:fixed; text-align:left; }
+#am-concept .am-stats-date-col { width:19%; }
+#am-concept .am-stats-duration-col { width:21%; }
+#am-concept .am-stats-tokens-col { width:14%; }
+#am-concept .am-stats-table :is(th,td) { padding:var(--am-pad-compact); }
+#am-concept .am-stats-table th { font-size:var(--am-text-xs); font-weight:400; color:var(--am-muted); border-bottom:1px solid var(--am-line); }
+#am-concept .am-stats-table td:nth-child(n+3), #am-concept .am-stats-table th:nth-child(n+3) { text-align:right; }
+#am-concept .am-stats-sort, #am-concept .am-stats-task-text { border:0; padding:0; background:transparent; color:inherit; font:inherit; min-height:0; text-align:inherit; }
+#am-concept .am-stats-sort { display:inline-flex; align-items:center; gap:var(--am-space-1); white-space:nowrap; }
+#am-concept .am-stats-sort span { min-width:1ch; }
+#am-concept .am-stats-table th[aria-sort] .am-stats-sort, #am-concept .am-stats-sort:hover { color:var(--am-text); }
+#am-concept .am-stats-task:is(:hover,:focus-within) { background:var(--am-soft); }
+#am-concept .am-stats-task-text { display:flex; flex-direction:column; align-items:flex-start; gap:var(--am-gap-line); max-width:100%; }
+#am-concept .am-stats-task-text > span { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 /* T-079: while the background part starts or installs an update, the whole
    window shows the app's name, a spinner and one status line. */
 #am-concept .am-window { position:relative; }

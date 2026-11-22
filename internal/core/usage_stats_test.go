@@ -1,9 +1,56 @@
 package core
 
 import (
+	"fmt"
 	"testing"
 	"time"
 )
+
+func TestUsageRanksBeforeLimitingTheList(t *testing.T) {
+	f := newTaskFixture(t)
+	end := time.Now().UTC()
+	ids := make([]string, MaxUsageTop+3)
+	for i := range ids {
+		ids[i] = f.start(t, fmt.Sprintf("rank-%d", i), "codex", "Ranked task")
+		finished := end.Add(-time.Duration(i) * time.Minute)
+		started := finished.Add(-time.Duration(i+1) * time.Second)
+		if _, err := f.st.db.Exec(`UPDATE tasks SET state='done',finished_at=?,usage_seen=?,usage_input=? WHERE id=?`,
+			finished.Format(time.RFC3339Nano), i != len(ids)-1, 100-i, ids[i]); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.st.db.Exec(`UPDATE task_runs SET launched_at=? WHERE task_id=?`, started.Format(time.RFC3339Nano), ids[i]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s, err := f.st.UsageStats(end.Add(-time.Hour), time.Local, "local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	last, lastWithUsage := len(ids)-1, len(ids)-2
+	for _, tc := range []struct {
+		name  string
+		rows  []UsageTask
+		first int
+	}{
+		{"recent", s.Recent, 0},
+		{"oldest", s.Ranked["oldest"], lastWithUsage},
+		{"tokens", s.Top, 0},
+		{"fewest", s.Ranked["fewest"], lastWithUsage},
+		{"longest", s.Ranked["longest"], last},
+		{"shortest", s.Ranked["shortest"], 0},
+	} {
+		if len(tc.rows) != MaxUsageTop || tc.rows[0].ID != ids[tc.first] {
+			t.Fatalf("%s: %+v", tc.name, tc.rows)
+		}
+		row := tc.rows[0]
+		if row.DurationMS == nil || *row.DurationMS != int64(tc.first+1)*1000 || row.UsageMissing != (tc.first == last) {
+			t.Fatalf("%s: incorrect duration or usage flag: %+v", tc.name, row)
+		}
+	}
+	if s.Total.Tasks != len(ids)-1 {
+		t.Fatalf("duration-only task changed token totals: %+v", s.Total)
+	}
+}
 
 // Token statistics (T-068): sums by agent, by computer, by day and the
 // largest tasks; tasks without reported usage and tasks before the period

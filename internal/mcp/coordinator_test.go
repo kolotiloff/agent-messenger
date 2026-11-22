@@ -324,6 +324,26 @@ func TestCoordinatorChoosesTheWorkerModel(t *testing.T) {
 	}
 }
 
+func TestTaskFeedKeepsTheAssigningChat(t *testing.T) {
+	st := newCoordinatorStore(t)
+	claude := startCoordinator(t, st, "Game")
+	claude.send(1, "initialize", map[string]any{"clientInfo": map[string]string{"name": "claude-code"}})
+	claude.expect(1, 5*time.Second)
+	codex := startCoordinator(t, st, "Game")
+	codex.send(1, "initialize", map[string]any{"clientInfo": map[string]string{"name": "codex"}})
+	codex.expect(1, 5*time.Second)
+	var started struct {
+		TaskID string `json:"task_id"`
+	}
+	if result, ok := claude.tool("start_task", map[string]any{"op_id": "sender-test", "agent": "codex", "text": "Work", "coordinator_model": "claude-opus-5-5"}, &started); !ok {
+		t.Fatal(result)
+	}
+	feed, err := st.TaskFeed(started.TaskID)
+	if err != nil || len(feed.Items) == 0 || feed.Items[0].SenderAgent != "claude" || feed.Items[0].SenderModel != "claude-opus-5-5" || feed.Task.Agent != "codex" {
+		t.Fatalf("feed %+v, err %v", feed, err)
+	}
+}
+
 func TestCoordinatorStartIsIdempotentAndWaitReplays(t *testing.T) {
 	st := newCoordinatorStore(t)
 	c := startCoordinator(t, st, "Game")

@@ -416,6 +416,40 @@ func TestTaskFailureKeepsCLIErrorOutput(t *testing.T) {
 	})
 }
 
+func TestCodexCapacityAfterRecordedReport(t *testing.T) {
+	for _, tc := range []struct {
+		mode, state, event string
+	}{
+		{"reconnect-report", "done", "report"},
+		{"capacity-report", "failed", "failed"},
+	} {
+		t.Run(tc.mode, func(t *testing.T) {
+			h := newTaskHarness(t, tc.mode, AdapterLauncher{AllowTasks: true})
+			id := h.startTask("op-capacity", "codex", "work")
+			h.waitState(id, tc.state)
+			waitNoTaskReservations(t)
+			h.stop()
+			task, err := h.st.TaskByID(id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.state == "failed" && task.FailureReason != "overload" {
+				t.Fatalf("failure reason %q", task.FailureReason)
+			}
+			events := coordinatorEvents(t, h.st)
+			if len(events) != 1 || events[0].Kind != tc.event || !strings.Contains(events[0].Text, "work summary") {
+				t.Fatalf("coordinator events %+v", events)
+			}
+			if tc.state == "failed" && !strings.Contains(events[0].Text, "Unverified text from the worker:") {
+				t.Fatalf("unconfirmed report was not labelled: %s", events[0].Text)
+			}
+			if runs := h.runs(); len(runs) != 1 {
+				t.Fatalf("expected one run, got %d", len(runs))
+			}
+		})
+	}
+}
+
 func TestJournalRecordsRunsWithoutTaskText(t *testing.T) {
 	h := newTaskHarness(t, "stderr-only", AdapterLauncher{AllowTasks: true})
 	id := h.startTask("op-1", "cursor", "secret task text about level seven")

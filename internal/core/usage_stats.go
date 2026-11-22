@@ -45,7 +45,7 @@ type UsageDay struct {
 	UsageTotal
 }
 
-// UsageTask is one of the largest tasks of the period.
+// UsageTask is a task in one of the period's ranked lists.
 type UsageTask struct {
 	ID       string `json:"id"`
 	Title    string `json:"title"`
@@ -56,9 +56,12 @@ type UsageTask struct {
 	Tokens   int64  `json:"tokens"`
 	Model    string `json:"model,omitempty"`
 	// The parts of Tokens, shown on hover (T-197).
-	Input  int64 `json:"input_tokens"`
-	Cached int64 `json:"cached_tokens"`
-	Output int64 `json:"output_tokens"`
+	Input        int64  `json:"input_tokens"`
+	Cached       int64  `json:"cached_tokens"`
+	Output       int64  `json:"output_tokens"`
+	DurationMS   *int64 `json:"duration_ms,omitempty"`
+	UsageMissing bool   `json:"usage_missing,omitempty"`
+	atTime       time.Time
 }
 
 // UsageDayAgent is what one agent's tasks that ran on one computer spent
@@ -85,6 +88,8 @@ type UsageStats struct {
 	Top       []UsageTask  `json:"top"`
 	// Recent are the tasks that finished last, newest first (T-197).
 	Recent []UsageTask `json:"recent"`
+	// Other orders are ranked across the period, before applying the row limit.
+	Ranked map[string][]UsageTask `json:"ranked"`
 	// The filters the page was counted with (T-201), and the models of the
 	// tasks this computer knows in the period, for the model list.
 	Agent  string       `json:"agent,omitempty"`
@@ -100,8 +105,25 @@ type UsageFilter struct {
 	Model string
 }
 
-// MaxUsageTop is how many of the largest tasks the page lists.
+// MaxUsageTop is how many tasks the page lists in each order.
 const MaxUsageTop = 10
+
+func taskDurationMS(started, finished string) *int64 {
+	start, startErr := time.Parse(time.RFC3339Nano, started)
+	end, endErr := time.Parse(time.RFC3339Nano, finished)
+	if startErr != nil || endErr != nil || end.Before(start) {
+		return nil
+	}
+	ms := end.Sub(start).Milliseconds()
+	return &ms
+}
+
+// rankUsageTasks can reuse the input for the next order after copying the page.
+func rankUsageTasks(tasks []UsageTask, less func(a, b UsageTask) bool) []UsageTask {
+	sort.Slice(tasks, func(i, j int) bool { return less(tasks[i], tasks[j]) })
+	page := tasks[:min(len(tasks), MaxUsageTop)]
+	return append(make([]UsageTask, 0, len(page)), page...)
+}
 
 // UsageStats sums what tasks spent at or after since (T-068, T-076).
 // Tasks that ran on this computer count from its own records; tasks that
@@ -177,20 +199,28 @@ func (s *Store) UsageStatsFiltered(since time.Time, loc *time.Location, computer
 			}
 		}
 		models := map[string]*UsageGroup{}
+		var used, timed []UsageTask
 		rows, err := tx.Query(`SELECT t.id,t.title,t.project,t.provider,COALESCE(t.remote_peer,''),COALESCE(p.name,''),
  COALESCE(t.finished_at,t.updated_at),t.usage_input,t.usage_cached,t.usage_output,
- COALESCE(NULLIF(t.ran_model,''),NULLIF(t.model,''),'')
+ COALESCE(NULLIF(t.ran_model,''),NULLIF(t.model,''),''),t.usage_seen,
+ CASE WHEN t.state IN ('done','failed','cancelled') THEN COALESCE(t.finished_at,'') ELSE '' END,
+ COALESCE((SELECT MIN(r.launched_at) FROM task_runs r WHERE r.task_id=t.id),''),
+ t.remote_duration_ms
  FROM tasks t LEFT JOIN net_peers p ON p.peer=t.remote_peer
- WHERE t.usage_seen=1 AND COALESCE(t.finished_at,t.updated_at)>=?`, out.Since)
+ WHERE COALESCE(t.finished_at,t.updated_at)>=?
+ AND (t.usage_seen=1 OR (t.finished_at IS NOT NULL AND t.state IN ('done','failed','cancelled')))`, out.Since)
 		if err != nil {
 			return err
 		}
 		defer rows.Close()
 		for rows.Next() {
 			var task UsageTask
-			var peer, peerName string
+			var peer, peerName, finished, started string
 			var in, cached, outTokens int64
-			if err := rows.Scan(&task.ID, &task.Title, &task.Project, &task.Agent, &peer, &peerName, &task.At, &in, &cached, &outTokens, &task.Model); err != nil {
+			var usageSeen bool
+			var remoteDuration sql.NullInt64
+			if err := rows.Scan(&task.ID, &task.Title, &task.Project, &task.Agent, &peer, &peerName, &task.At, &in, &cached, &outTokens,
+				&task.Model, &usageSeen, &finished, &started, &remoteDuration); err != nil {
 				return err
 			}
 			if filter.Agent != "" && task.Agent != filter.Agent {
@@ -205,6 +235,16 @@ func (s *Store) UsageStatsFiltered(since time.Time, loc *time.Location, computer
 			if !wanted(key) {
 				continue
 			}
+			if finished != "" {
+				if this {
+					task.DurationMS = taskDurationMS(started, finished)
+				} else if remoteDuration.Valid {
+					task.DurationMS = &remoteDuration.Int64
+				}
+			}
+			if !usageSeen && task.DurationMS == nil {
+				continue
+			}
 			// The model list counts every known task of the agent, whatever
 			// model is chosen, so another model can be picked.
 			if task.Model != "" {
@@ -213,19 +253,29 @@ func (s *Store) UsageStatsFiltered(since time.Time, loc *time.Location, computer
 					m = &UsageGroup{Key: task.Model, Name: task.Model}
 					models[task.Model] = m
 				}
-				m.addN(1, in, cached, outTokens)
+				if usageSeen {
+					m.addN(1, in, cached, outTokens)
+				}
 			}
 			if filter.Model != "" && task.Model != filter.Model {
 				continue
 			}
 			task.Computer = name
-			out.Top = append(out.Top, task)
+			task.UsageMissing = !usageSeen
+			if task.DurationMS != nil {
+				timed = append(timed, task)
+			}
+			if !usageSeen {
+				continue
+			}
+			task.atTime, _ = time.Parse(time.RFC3339Nano, task.At)
+			used = append(used, task)
 			if _, ok := reported[peer]; peer != "" && ok && filter.Model == "" {
 				continue // counted from that computer's own report
 			}
 			day := ""
-			if at, err := time.Parse(time.RFC3339Nano, task.At); err == nil {
-				day = at.In(loc).Format("2006-01-02")
+			if !task.atTime.IsZero() {
+				day = task.atTime.In(loc).Format("2006-01-02")
 			}
 			count(key, name, this, task.Agent, day, 1, in, cached, outTokens)
 		}
@@ -266,28 +316,42 @@ func (s *Store) UsageStatsFiltered(since time.Time, loc *time.Location, computer
 		byTokens(out.Agents)
 		byTokens(out.Computers)
 		byTokens(out.Models)
-		sort.Slice(out.Top, func(i, j int) bool {
-			if out.Top[i].Tokens != out.Top[j].Tokens {
-				return out.Top[i].Tokens > out.Top[j].Tokens
+		byDate := func(newest bool) func(a, b UsageTask) bool {
+			return func(a, b UsageTask) bool {
+				x, y := a.atTime, b.atTime
+				if x.Equal(y) {
+					return a.ID < b.ID
+				}
+				if x.IsZero() || y.IsZero() {
+					return !x.IsZero()
+				}
+				if newest {
+					return x.After(y)
+				}
+				return x.Before(y)
 			}
-			return out.Top[i].ID < out.Top[j].ID
-		})
-		out.Recent = append(out.Recent, out.Top...)
-		// Times are RFC 3339 in UTC from the same clock, so they compare as
-		// text once parsed; an unreadable one sorts last.
-		when := func(t UsageTask) time.Time { at, _ := time.Parse(time.RFC3339Nano, t.At); return at }
-		sort.SliceStable(out.Recent, func(i, j int) bool {
-			a, b := when(out.Recent[i]), when(out.Recent[j])
-			if !a.Equal(b) {
-				return a.After(b)
-			}
-			return out.Recent[i].ID < out.Recent[j].ID
-		})
-		if len(out.Top) > MaxUsageTop {
-			out.Top = out.Top[:MaxUsageTop]
 		}
-		if len(out.Recent) > MaxUsageTop {
-			out.Recent = out.Recent[:MaxUsageTop]
+		byValue := func(value func(UsageTask) int64, largest bool) func(a, b UsageTask) bool {
+			return func(a, b UsageTask) bool {
+				x, y := value(a), value(b)
+				if x == y {
+					return a.ID < b.ID
+				}
+				if largest {
+					return x > y
+				}
+				return x < y
+			}
+		}
+		tokens := func(t UsageTask) int64 { return t.Tokens }
+		duration := func(t UsageTask) int64 { return *t.DurationMS }
+		out.Top = rankUsageTasks(used, byValue(tokens, true))
+		out.Recent = rankUsageTasks(used, byDate(true))
+		out.Ranked = map[string][]UsageTask{
+			"oldest":   rankUsageTasks(used, byDate(false)),
+			"fewest":   rankUsageTasks(used, byValue(tokens, false)),
+			"longest":  rankUsageTasks(timed, byValue(duration, true)),
+			"shortest": rankUsageTasks(timed, byValue(duration, false)),
 		}
 		start := since.In(loc)
 		first := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, loc)

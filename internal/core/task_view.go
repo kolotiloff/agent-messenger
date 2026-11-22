@@ -276,8 +276,12 @@ func (s *Store) ranModel(task string) string {
 }
 
 func (s *Store) startedAt(task string) (string, error) {
+	return taskStartedAt(s.db, task)
+}
+
+func taskStartedAt(q interface{ QueryRow(string, ...any) *sql.Row }, task string) (string, error) {
 	var at sql.NullString
-	err := s.db.QueryRow(`SELECT MIN(launched_at) FROM task_runs WHERE task_id=?`, task).Scan(&at)
+	err := q.QueryRow(`SELECT MIN(launched_at) FROM task_runs WHERE task_id=?`, task).Scan(&at)
 	return at.String, err
 }
 
@@ -496,6 +500,8 @@ type FeedItem struct {
 	Kind string `json:"kind"`
 	// Author: coordinator, owner, worker or messenger.
 	Author      string `json:"author"`
+	SenderAgent string `json:"sender_agent,omitempty"`
+	SenderModel string `json:"sender_model,omitempty"`
 	Title       string `json:"title,omitempty"`
 	Description string `json:"description,omitempty"`
 	Text        string `json:"text"`
@@ -545,7 +551,7 @@ func (s *Store) TaskFeed(id string) (TaskFeed, error) {
 	if f.Task.Usage, err = s.taskUsage(t.ID); err != nil {
 		return f, err
 	}
-	f.Items = []FeedItem{{Kind: "task", Author: AudienceCoordinator, Text: t.Text, At: t.CreatedAt, Verified: true}}
+	f.Items = []FeedItem{{Kind: "task", Author: AudienceCoordinator, Text: t.Text, At: t.CreatedAt, Verified: true, SenderAgent: t.SenderAgent, SenderModel: t.SenderModel}}
 	if f.Task.Remote != nil && !f.Task.Remote.From {
 		err = s.remoteFeed(&f)
 		return f, err

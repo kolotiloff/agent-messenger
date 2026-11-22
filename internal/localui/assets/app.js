@@ -352,7 +352,7 @@
       viewSignature='';await refresh();
     });
   }
-  function coordinatorName(client=view?.coordinator?.client){
+  function coordinatorName(client){
     const c=(client||'').toLowerCase();
     if(c.includes('codex'))return ['codex','Codex'];
     if(c.includes('cursor'))return ['cursor','Cursor'];
@@ -575,11 +575,74 @@
   // A computer of the network counts as reachable while its reports arrive:
   // it reports every 15 s, so three missed reports mean it is not.
   const peerFresh=peer=>peer.age>=0&&peer.age<=45;
-  function pickable(card,id){
+  let machineOrder=[];
+  try{
+    const saved=JSON.parse(recall('messenger-machine-order'));
+    if(Array.isArray(saved))machineOrder=saved.filter(key=>typeof key==='string');
+  }catch(_){}
+  let draggedMachine='',machineDrop=null;
+  const machineList=$('machines');
+  function clearMachineDrop(){
+    if(machineDrop)delete machineDrop.card.dataset.dropEdge;
+    machineDrop=null;
+  }
+  function moveMachine(from,to,after){
+    const order=[...machineList.children].map(card=>card.dataset.machineOrder).filter(key=>key!==from);
+    const target=order.indexOf(to);
+    if(target<0)return;
+    order.splice(target+Number(after),0,from);
+    machineOrder=[...order,...machineOrder.filter(key=>!order.includes(key))];
+    remember('messenger-machine-order',JSON.stringify(machineOrder));
+    renderMachines();
+  }
+  machineList.addEventListener('dragstart',event=>{
+    const card=event.target.closest('[data-machine-order]');
+    if(!card)return;
+    draggedMachine=card.dataset.machineOrder;
+    event.dataTransfer.setData('text/plain',draggedMachine);
+    event.dataTransfer.effectAllowed='move';
+  });
+  machineList.addEventListener('dragover',event=>{
+    if(!draggedMachine)return;
+    const card=event.target.closest('[data-machine-order]');
+    clearMachineDrop();
+    if(!card||card.dataset.machineOrder===draggedMachine)return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect='move';
+    const rect=card.getBoundingClientRect(),after=event.clientY>=rect.top+rect.height/2;
+    card.dataset.dropEdge=after?'after':'before';
+    machineDrop={card,after};
+  });
+  machineList.addEventListener('dragleave',event=>{
+    if(!machineList.contains(event.relatedTarget))clearMachineDrop();
+  });
+  machineList.addEventListener('drop',event=>{
+    if(!draggedMachine||!machineDrop)return;
+    event.preventDefault();
+    const from=draggedMachine,{card,after}=machineDrop;
+    draggedMachine='';clearMachineDrop();
+    moveMachine(from,card.dataset.machineOrder,after);
+  });
+  machineList.addEventListener('dragend',()=>{
+    draggedMachine='';clearMachineDrop();renderMachines();
+  });
+  function pickable(card,id,orderKey=id){
     card.setAttribute('role','button');card.tabIndex=0;card.setAttribute('aria-pressed',String(computerFilter===id));
+    card.dataset.machineOrder=orderKey;card.draggable=true;
+    card.setAttribute('aria-keyshortcuts','Alt+ArrowUp Alt+ArrowDown');
     card.title=computerFilter===id?tr('Показать все компьютеры'):tr('Показать только этот компьютер');
     card.addEventListener('click',event=>{if(!event.target.closest('button'))filterComputer(id);});
-    card.addEventListener('keydown',event=>{if(event.target===card&&(event.key==='Enter'||event.key===' ')){event.preventDefault();filterComputer(id);}});
+    card.addEventListener('keydown',event=>{
+      if(event.target!==card)return;
+      if(event.key==='Enter'||event.key===' '){event.preventDefault();filterComputer(id);}
+      if(!event.altKey||!['ArrowUp','ArrowDown'].includes(event.key))return;
+      event.preventDefault();
+      const after=event.key==='ArrowDown',next=after?card.nextElementSibling:card.previousElementSibling;
+      if(!next)return;
+      const key=card.dataset.machineOrder;
+      moveMachine(key,next.dataset.machineOrder,after);
+      machineList.querySelector('[data-machine-order="'+CSS.escape(key)+'"]')?.focus();
+    });
   }
   // The window redraws every two seconds. A part whose content did not change
   // keeps its nodes: rebuilding them anyway reset hover, tooltips and
@@ -595,6 +658,7 @@
     return machineRole(tr('сервер'),tr('На этом компьютере работает сервер сети'));
   }
   function renderMachines(){
+    if(draggedMachine)return;
     collectNotices();
     const live=$('machines'),box=live.cloneNode(false),busyTasks=busyTasksByComputer();
     const machine=el('div',undefined,'am-machine-card');machine.setAttribute('aria-current','true');pickable(machine,'local');
@@ -630,7 +694,7 @@
     const hosted=new Set((server?.host?.devices||[]).filter(d=>!d.revoked_at).map(d=>d.id));
     for(const peer of server?.peers||[]){
       const fresh=peerFresh(peer);
-      const card=el('div',undefined,'am-machine-card am-peer-card');card.dataset.peer=peer.id;if(peer.host)card.dataset.host='';pickable(card,peer.id);
+      const card=el('div',undefined,'am-machine-card am-peer-card');card.dataset.peer=peer.id;if(peer.host)card.dataset.host='';pickable(card,peer.id,peer.computer||peer.id);
       const name=el('div',undefined,'am-machine-name');
       const pdot=el('span',undefined,'am-dot'+(fresh?' online':''));pdot.title=fresh?tr('На связи'):tr('Нет связи');
       name.append(pdot,el('span',peer.name));
@@ -683,6 +747,9 @@
       }
       box.append(card);
     }
+    const rank=new Map(machineOrder.map((key,index)=>[key,index]));
+    const ranks=card=>rank.get(card.dataset.machineOrder)??machineOrder.length;
+    box.append(...[...box.children].sort((a,b)=>ranks(a)-ranks(b)));
     // The moved elements are left out of the comparison, so an unchanged
     // list keeps its nodes; before a rebuild they go back to the bottom row,
     // or they would leave the page with the old card.
@@ -1319,7 +1386,6 @@
     const quiet=quietLine(t);if(quiet)title.append(quiet);
     const headRow=el('div',undefined,'am-task-head-row');headRow.append(title);
     head.replaceChildren(headRow);
-    const [coordProvider,coordLabel]=coordinatorName();
     const opened=new Set([...thread.querySelectorAll('details[open][data-key]')].map(d=>d.dataset.key));
     const out=[];let group=null,tools=null;
     const pending=new Map(), unfinished=new Set();
@@ -1369,22 +1435,31 @@
       }
       tools=null;
     };
-    const outgoing=(author,provider,role,text,at)=>{
+    const messageAvatar=provider=>{
+      const avatar=el('div',undefined,'am-avatar');
+      avatar.append(providerIcon(provider));
+      return avatar;
+    };
+    const outgoing=(author,role,text,at,model,provider)=>{
       group=null;const g=el('article',undefined,'am-message-group');const row=el('div',undefined,'am-message am-outgoing');
       const body=el('div',undefined,'am-message-body');const meta=el('div',undefined,'am-meta');
-      const who=el('strong',author);meta.append(who);if(role)meta.append(roleTag(role));meta.append(el('time',clock(at)));
+      if(provider)meta.append(messageAvatar(provider));
+      const who=el('strong',author);meta.append(who);if(model)meta.append(el('span',modelName(model),'am-meta-model'));if(role)meta.append(roleTag(role));meta.append(el('time',clock(at)));
       const content=el('div',undefined,'am-message-content');content.append(richText(text));body.append(meta,content);row.append(body);g.append(row);out.push(g);
+    };
+    const outgoingCoordinator=it=>{
+      const sender=shortNames[it.sender_agent];
+      outgoing(sender||tr('Координатор'),sender?tr('координатор'):'',it.text,it.at,sender?it.sender_model:'',sender?it.sender_agent:'');
     };
     const workerGroup=at=>{
       if(group)return group;
       const g=el('article',undefined,'am-message-group');const row=el('div',undefined,'am-message');
-      const avatar=el('div',undefined,'am-avatar');avatar.append(providerIcon(t.agent));
       const body=el('div',undefined,'am-message-body');const meta=el('div',undefined,'am-meta');
-      meta.append(el('strong',names[t.agent]||t.agent));
+      meta.append(messageAvatar(t.agent),el('strong',names[t.agent]||t.agent));
       // The model the CLI said it runs on, else the one the coordinator asked for (T-108).
       if(displayModel){const m=el('span',displayModel,'am-meta-model');m.title=t.ran_model?tr('Модель, на которой исполнитель запущен'):tr('Модель, которую указал координатор');meta.append(m);}
       meta.append(roleTag(tr('исполнитель')),el('time',clock(at)));
-      const content=el('div',undefined,'am-message-content');meta.prepend(avatar);body.append(meta,content);row.append(body);g.append(row);out.push(g);group=content;return content;
+      const content=el('div',undefined,'am-message-content');body.append(meta,content);row.append(body);g.append(row);out.push(g);group=content;return content;
     };
     const delivery=(text,cls)=>el('div',text,'am-delivery '+cls);
     for(const [index,it] of feed.items.entries()){
@@ -1400,12 +1475,12 @@
         continue;
       }
       if(it.kind!=='tool')flushTools();
-      if(it.kind==='task'){outgoing(coordLabel,coordProvider,tr('координатор'),it.text,it.at);continue;}
-      if(it.kind==='note'){if(it.author==='coordinator')outgoing(coordLabel,coordProvider,tr('координатор'),it.text,it.at);else outgoing(tr('Вы'),'owner','',it.text,it.at);const c=out[out.length-1].querySelector('.am-message-content');c.append(delivery(...({pending:[tr('Исполнитель прочитает, только когда закончит текущий ход'),'am-status-wait'],delivered:[tr('Передано исполнителю'),'am-status-good'],sent:[it.author==='owner'?tr('Поставлено в очередь для исполнителя'):tr('Отправлено на компьютер исполнителя'),'am-status-wait'],undelivered:[tr('Не передано исполнителю'),'am-status-bad']}[it.state]||[it.state,'am-muted'])));continue;}
-      if(it.kind==='answer'){if(it.author==='owner'){outgoing(tr('Вы'),'owner','',it.text,it.at);
+      if(it.kind==='task'){outgoingCoordinator(it);continue;}
+      if(it.kind==='note'){if(it.author==='coordinator')outgoingCoordinator(it);else outgoing(tr('Вы'),'',it.text,it.at);const c=out[out.length-1].querySelector('.am-message-content');c.append(delivery(...({pending:[tr('Исполнитель прочитает, только когда закончит текущий ход'),'am-status-wait'],delivered:[tr('Передано исполнителю'),'am-status-good'],sent:[it.author==='owner'?tr('Поставлено в очередь для исполнителя'):tr('Отправлено на компьютер исполнителя'),'am-status-wait'],undelivered:[tr('Не передано исполнителю'),'am-status-bad']}[it.state]||[it.state,'am-muted'])));continue;}
+      if(it.kind==='answer'){if(it.author==='owner'){outgoing(tr('Вы'),'',it.text,it.at);
         // A hint about this answer lives under it while the worker has not
         // gone on yet, so it never stays in another task (owner, 2026-11-09).
-        if(feed.items.slice(index+1).every(n=>n.kind==='answer'||n.kind==='note')&&activeStates.includes(t.state))out[out.length-1].querySelector('.am-message-content').append(delivery(tr('Ответ записан. Исполнитель продолжит в той же сессии.'),'am-delivery-hint'));}else outgoing(coordLabel,coordProvider,tr('координатор'),it.text,it.at);continue;}
+        if(feed.items.slice(index+1).every(n=>n.kind==='answer'||n.kind==='note')&&activeStates.includes(t.state))out[out.length-1].querySelector('.am-message-content').append(delivery(tr('Ответ записан. Исполнитель продолжит в той же сессии.'),'am-delivery-hint'));}else outgoingCoordinator(it);continue;}
       if(it.kind==='accepted'){const c=out[out.length-1]?.querySelector('.am-message-content');if(c)c.append(delivery(tr('Принято на компьютере «')+it.text+'»','am-status-good'));group=null;continue;}
       if(it.kind==='text'){workerGroup(it.at).append(richText(it.text));continue;}
       if(it.kind==='tool'){
@@ -1420,7 +1495,7 @@
         const c=workerGroup(it.at);c.append(richText(it.text,'am-disposition'));
         if(it.images?.length)c.append(pictures(it.images));
         let note;
-        if(!it.verified)note=delivery(tr('Не опубликовано: запуск не прошёл проверку'),'am-status-bad');
+        if(!it.verified)note=delivery(it.kind==='report'?tr('Отчёт сохранён без подтверждения запуска'):tr('Не опубликовано: запуск не прошёл проверку'),'am-status-bad');
         else if(it.kind==='report'&&it.audience==='held')note=delivery(tr('Промежуточный отчёт: исполнитель продолжает с вашим сообщением'),'am-status-wait');
         else if(it.kind==='report')note=delivery(tr('Отчёт отправлен координатору, сессия закрыта'),'am-delivery-close');
         else if(it.audience==='owner')note=delivery(tr('Вопрос вам, координатор его не видит'),'am-status-wait');
@@ -1430,7 +1505,10 @@
         group=null;continue;
       }
       if(it.kind==='outcome'){
-        group=null;const text={failed:t.remote&&!t.remote.from?tr('Задача не выполнена'):tr('Запуск завершился с ошибкой'),blocked:t.remote&&!t.remote.from?tr('Задача заблокирована: результат на другом компьютере неизвестен'):tr('Задача заблокирована: процесс не завершился полностью'),interrupted:tr('Клиент перезапустился во время работы; результат неизвестен'),cancelled:tr('Задача отменена')}[it.state]||it.state;
+        group=null;
+        const overloaded=it.state==='failed'&&capacityFailure(it.text);
+        const failedTitle=overloaded?tr('Завершение запуска не подтверждено'):t.remote&&!t.remote.from?tr('Задача не выполнена'):tr('Запуск завершился с ошибкой');
+        const text={failed:failedTitle,blocked:t.remote&&!t.remote.from?tr('Задача заблокирована: результат на другом компьютере неизвестен'):tr('Задача заблокирована: процесс не завершился полностью'),interrupted:tr('Клиент перезапустился во время работы; результат неизвестен'),cancelled:tr('Задача отменена')}[it.state]||it.state;
         const note=el('div',undefined,'am-outcome '+(it.state==='cancelled'?'am-muted':'am-status-bad')),line=el('p',text);
         appendEventTime(line,it.at,t.remote&&!t.remote.from);note.append(line);
         const why=t.remote&&!t.remote.from?refusalText(it.text,t.remote.name)||failureText(it.text):failureText(it.text);if(why)note.append(el('p',why));
@@ -1479,8 +1557,12 @@
     b.hidden=!show;if(!show)b.classList.remove('am-has-new');
   }
   // Why a run was not accepted (T-091), in the window's language.
+  function capacityFailure(text){
+    return /the model provider was overloaded before confirming the worker's turn|Codex (?:error|turn\.failed):[^\n]*Selected model is at capacity/i.test((text||'').split('\nUnverified text from the worker:',1)[0]);
+  }
   function failureText(text){
     text=text||'';const code=text.match(/stopped with an error \(exit code (\d+)\)/);
+    if(capacityFailure(text))return tr('Модель перегружена. Провайдер не подтвердил завершение хода.');
     if(/not signed in/.test(text))return tr('Агент не вошёл в аккаунт на этом компьютере. Войдите на вкладке «Агенты».');
     if(/stopped at a provider limit/.test(text))return tr('Агент упёрся в лимит.');
     if(/different conversation/.test(text))return tr('Агент ответил не в той сессии, которую запустил Messenger; результату нельзя доверять.');
@@ -1901,15 +1983,23 @@
   // tokens, no dollars (D-074). One hue for every bar: the bars show size,
   // not identity, and the names stand next to them.
   let statsPeriod=['day','week','month'].includes(recall('messenger-stats-period'))?recall('messenger-stats-period'):'week',stats=null,statsGen=0;
-  // T-214: the latest tasks come first; the heading stays «Задачи» and the
-  // tabs say which order is shown.
-  let statsSort=recall('messenger-stats-sort')==='tokens'?'tokens':'recent';
+  const statsOrders=['recent','oldest','tokens','fewest','longest','shortest'];
+  let statsSort=recall('messenger-stats-sort');
+  if(!statsOrders.includes(statsSort))statsSort='recent';
   // T-201: one agent and one of its models; the model is not remembered.
   let statsAgent=['claude','codex','cursor'].includes(recall('messenger-stats-agent'))?recall('messenger-stats-agent'):'',statsModel='';
   const periodWords={day:tr('сегодня'),week:tr('за 7 дней'),month:tr('за 30 дней')};
   function tasksWord(n){const a=n%10,b=n%100;if(amLang==='en')return n+(n===1?' task':' tasks');return n+' '+(a===1&&b!==11?'задача':a>=2&&a<=4&&(b<12||b>14)?'задачи':'задач');}
   function tokensWord(n){const a=n%10,b=n%100;if(amLang==='en')return n===1?'token':'tokens';return a===1&&b!==11?'токен':a>=2&&a<=4&&(b<12||b>14)?'токена':'токенов';}
   function tokensFull(n){return n.toLocaleString(amLocale)+' '+tokensWord(n);}
+  function statsDuration(ms){
+    const seconds=Math.floor(ms/1000);
+    if(seconds<1)return '<1'+tr(' с');
+    if(seconds<60)return seconds+tr(' с');
+    const m=Math.floor(seconds/60),h=Math.floor(m/60);
+    if(!h)return m+tr(' мин');
+    return h+tr(' ч')+(m%60?' '+m%60+tr(' мин'):'');
+  }
   async function loadStats(){
     const gen=++statsGen;
     try{const s=await api('/api/usage-stats?period='+statsPeriod+(computerFilter?'&computer='+encodeURIComponent(computerFilter):'')+(statsAgent?'&agent='+statsAgent:'')+(statsModel?'&model='+encodeURIComponent(statsModel):''),8000);if(gen===statsGen){stats=s;renderStats();}}
@@ -1953,8 +2043,14 @@
     root.querySelectorAll('[data-period]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.period===statsPeriod)));
     computerChip($('stats-computer-chip'));
     $('stats-computers-card').hidden=!!computerFilter;
-    $('stats-foot').textContent=!computerFilter?tr('Считаются все компьютеры сети: каждый сообщает расход своих задач по отчётам агентов. Задача попадает в день, когда закончилась.'):computerFilter==='local'?tr('Задачи, которые выполнялись на этом компьютере. Задача попадает в день, когда закончилась.'):tr('Расход сообщает сам компьютер, когда он меняется. В самых затратных задачах — только отправленные туда с этого компьютера.');
+    $('stats-foot').textContent=!computerFilter?tr('Считаются все компьютеры сети: каждый сообщает расход своих задач по отчётам агентов. Задача попадает в день, когда закончилась.'):computerFilter==='local'?tr('Задачи, которые выполнялись на этом компьютере. Задача попадает в день, когда закончилась.'):tr('Расход сообщает сам компьютер, когда он меняется. В списке — только задачи, отправленные туда с этого компьютера.');
     $('stats-agent').value=statsAgent;
+    root.querySelectorAll('[data-stats-sort]').forEach(b=>{
+      const down=b.dataset.statsSort===statsSort,up=b.dataset.statsReverse===statsSort;
+      if(down||up)b.closest('th').setAttribute('aria-sort',down?'descending':'ascending');
+      else b.closest('th').removeAttribute('aria-sort');
+      b.querySelector('span').textContent=down?'↓':up?'↑':'';
+    });
     if(stats){
       // Rebuilt only when the list changed: a rebuild closes an open menu (T-192).
       const models=[['',tr('Все модели')],...(stats.models||[]).map(m=>[m.key,m.name||m.key])];
@@ -1975,21 +2071,30 @@
     statsDays($('stats-days'),statsPeriod==='day'?[]:stats.days);
     statsBars($('stats-agents'),stats.agents,t.tokens,true);
     statsBars($('stats-computers'),stats.computers,t.tokens);
-    // T-197: the most expensive tasks or the latest finished ones, in the
-    // same period and computer scope.
-    root.querySelectorAll('[data-stats-sort]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.statsSort===statsSort)));
-    const list=statsSort==='recent'?(stats.recent||[]):stats.top;
+    const list=statsSort==='recent'?(stats.recent||[]):statsSort==='tokens'?(stats.top||[]):stats.ranked?.[statsSort];
     const top=$('stats-top');top.replaceChildren();
-    if(!list.length)top.append(el('p',tr('Пока пусто'),'am-small am-muted'));
+    if(!list?.length){
+      const empty=el('td',list?tr('Пока пусто'):tr('Обновите фоновый клиент, чтобы использовать эту сортировку.'),'am-small am-muted');
+      empty.colSpan=4;
+      const row=el('tr');row.append(empty);top.append(row);return;
+    }
     for(const task of list){
-      const row=el('button',undefined,'am-stats-task');row.type='button';
-      const words=el('span',undefined,'am-stats-task-text');
+      const row=el('tr',undefined,'am-stats-task');
+      const words=el('button',undefined,'am-stats-task-text');words.type='button';
       const date=new Date(task.at);
-      const when=Number.isNaN(date.getTime())?'':date.toLocaleDateString(amLocale,{day:'numeric',month:'long'})+' '+date.toLocaleTimeString(amLocale,{hour:'numeric',minute:'2-digit',hourCycle:'h23'}).replace(/^0/,'');
-      const detail=[when,task.project,shortNames[task.agent]||task.agent,task.model&&modelName(task.model),task.computer&&tr('на ')+task.computer].filter(Boolean).join(' ');
+      const when=el('td',undefined,'am-small am-muted');
+      if(!Number.isNaN(date.getTime())){
+        const stamp=el('time',date.toLocaleDateString(amLocale,{day:'numeric',month:'short'})+' '+clock(task.at));
+        stamp.dateTime=task.at;when.append(stamp);
+      }
+      const detail=[task.project,shortNames[task.agent]||task.agent,task.model&&modelName(task.model),task.computer&&tr('на ')+task.computer].filter(Boolean).join(' ');
       words.append(el('span',task.title||tr('Без названия'),'am-stats-task-title'),el('span',detail,'am-small am-muted'));
-      row.append(words,el('span',tokensText(task.tokens),'am-stats-value'));
-      row.title=(typeof task.input_tokens==='number'?usageLong(task)+'\n':'')+tr('Открыть задачу');
+      const titleCell=el('td');titleCell.append(words);
+      const duration=el('td',Number.isFinite(task.duration_ms)?statsDuration(task.duration_ms):'—','am-stats-value am-muted');
+      duration.title=Number.isFinite(task.duration_ms)?tr('От первого запуска до завершения'):tr('Длительность неизвестна');
+      const tokens=el('td',task.usage_missing?'—':tokensText(task.tokens),'am-stats-value');
+      row.append(when,titleCell,duration,tokens);
+      words.title=(!task.usage_missing&&typeof task.input_tokens==='number'?usageLong(task)+'\n':'')+tr('Открыть задачу');
       row.addEventListener('click',()=>{
         if(task.project&&task.project!==project){project=task.project;remember('messenger-project',project);viewSignature='';}
         selectedTask=task.id;selectedShared=null;feed=null;feedSignature='';show('tasks');refresh();
@@ -1999,7 +2104,10 @@
   }
   $('stats-agent').addEventListener('change',()=>{statsAgent=$('stats-agent').value;remember('messenger-stats-agent',statsAgent);statsModel='';stats=null;renderStats();loadStats();});
   $('stats-model').addEventListener('change',()=>{statsModel=$('stats-model').value;stats=null;renderStats();loadStats();});
-  root.querySelectorAll('[data-stats-sort]').forEach(b=>b.addEventListener('click',()=>{statsSort=b.dataset.statsSort;remember('messenger-stats-sort',statsSort);renderStats();}));
+  root.querySelectorAll('[data-stats-sort]').forEach(b=>b.addEventListener('click',()=>{
+    statsSort=statsSort===b.dataset.statsSort?b.dataset.statsReverse:b.dataset.statsSort;
+    remember('messenger-stats-sort',statsSort);renderStats();
+  }));
   root.querySelectorAll('[data-period]').forEach(b=>b.addEventListener('click',()=>{statsPeriod=b.dataset.period;remember('messenger-stats-period',statsPeriod);stats=null;renderStats();loadStats();}));
 
   // Server tab: the broker hosted by this client and this computer's
