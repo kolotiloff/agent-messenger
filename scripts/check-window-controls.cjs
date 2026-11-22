@@ -20,6 +20,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const errors = [];
       let created = false, registered = false, connected = false, trusted = false;
       let coordinatorActive = false;
+      let machineOrder = null;
       let setupStates = [], installed = false;
       let updates = [];
       const writes = [];
@@ -35,10 +36,14 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         window.themeMessages = [];
         window.webkit = {messageHandlers: {appearance: {postMessage: theme => window.themeMessages.push(theme)}}};
       });
-      await page.route('**/*', async route => {
+      await context.route('**/*', async route => {
         const pathname = new URL(route.request().url()).pathname;
         if (route.request().method() === 'POST') {
           writes.push({path: pathname, body: route.request().postDataJSON()});
+          if (pathname === '/api/machine-order') {
+            machineOrder = route.request().postDataJSON().order;
+            return route.fulfill({json: {ok: true}});
+          }
           if (pathname === '/api/project-create') created = true;
           if (pathname === '/api/agent-install' || pathname === '/api/agent-find') {
             const input=route.request().postDataJSON();
@@ -70,6 +75,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           '/api/agent-setup-status': setupStates,
           '/api/discovery': {agents: ['claude','codex','cursor'].map(provider => ({provider, state: 'not_found'}))},
           '/api/client-info': {client: 'running', outdated: false},
+          '/api/machine-order': {order: machineOrder},
           '/api/server': {host: {running: false, enabled: false, addresses: []}, member: {connected: false}, peers: connected ? [{id:'fixture-peer',name:'Peer fixture',host:true,age:0,agents:[{agent:'cursor'}],coordinator:'cursor-vscode'},{id:'fixture-peer-2',name:'Paused agent fixture',age:0,agents:[],coordinator:'claude-code'}] : [], updates, accept: true},
           '/api/self-update': {current: '0.0.0-preview.test'},
         };
@@ -215,9 +221,18 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await coordinatorLabel.waitFor({state:'detached'});
       const localCard=page.locator('#machines [aria-current="true"]');
       const peerCard=page.locator('#machines [data-peer="fixture-peer"]');
-      await peerCard.dragTo(localCard,{sourcePosition:{x:50,y:12},targetPosition:{x:50,y:5}});
+      await Promise.all([
+        page.waitForResponse(response => response.url().endsWith('/api/machine-order') && response.request().method() === 'POST' && response.ok()),
+        peerCard.dragTo(localCard,{sourcePosition:{x:50,y:12},targetPosition:{x:50,y:5}}),
+      ]);
       assert.equal(await page.locator('#machines > :first-child').getAttribute('data-peer'),'fixture-peer');
       assert.equal(await peerCard.getAttribute('aria-pressed'),'false');
+      // The desktop window opens on another loopback port after restarting.
+      const restarted = await context.newPage();
+      await restarted.goto('http://messenger.test:11342/#new-fictional-token');
+      await restarted.locator('#machines > :first-child[data-peer="fixture-peer"]').waitFor();
+      assert.equal(await restarted.evaluate(() => localStorage.getItem('messenger-machine-order')), null);
+      await restarted.close();
       await page.reload();
       await peerCard.waitFor();
       assert.equal(await page.locator('#machines > :first-child').getAttribute('data-peer'),'fixture-peer');
