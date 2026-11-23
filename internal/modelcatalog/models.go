@@ -8,15 +8,26 @@ import (
 
 var plain = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/\[\]-]{0,79}$`)
 var selection = regexp.MustCompile(`^([A-Za-z0-9][A-Za-z0-9._:/-]*)\[effort=(low|medium|high|xhigh|max)\]$`)
+var reportedSelection = regexp.MustCompile(`^([A-Za-z0-9][A-Za-z0-9._:/-]*)\[effort=([a-z]{1,16})\]$`)
 
 // Split accepts the legacy model syntax or one explicit Messenger effort suffix.
 // The suffix is translated to CLI arguments, never passed as a Codex/Claude ID.
 func Split(value string) (model, effort string, err error) {
+	return splitModel(value, selection)
+}
+
+// SplitReported accepts effort values reported by the worker, independently
+// of the levels the coordinator can explicitly request.
+func SplitReported(value string) (model, effort string, err error) {
+	return splitModel(value, reportedSelection)
+}
+
+func splitModel(value string, suffix *regexp.Regexp) (model, effort string, err error) {
 	if value == "" || plain.MatchString(value) {
 		return value, "", nil
 	}
 	if len(value) <= 80 {
-		if m := selection.FindStringSubmatch(value); m != nil {
+		if m := suffix.FindStringSubmatch(value); m != nil {
 			return m[1], m[2], nil
 		}
 	}

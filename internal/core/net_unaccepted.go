@@ -3,7 +3,6 @@ package core
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"time"
 )
 
@@ -114,13 +113,6 @@ func unacceptedReason(machine, tx *sql.Tx, task, broker, peerID, provider string
 	case peer.Ready != nil && !peer.Ready.Accept:
 		return name + " does not take tasks from the network («Принимать задачи других компьютеров» is off there)", nil
 	}
-	// Coordinator feedback 2026-11-12: the computer ran the task while its
-	// replies never arrived. When it reports this agent busy, say so: the
-	// task may be running, so starting it again could do the work twice.
-	for _, a := range peer.Agents {
-		if a.Agent == provider && a.Running > 0 {
-			return fmt.Sprintf("%s is online and reports %d running %s task(s), but has not answered: this task may be running there with its replies not reaching this computer; ask the owner to look there before starting it again", name, a.Running, provider), nil
-		}
-	}
-	return name + " is online but has not answered", nil
+	// A start that left this computer may have arrived even without an answer.
+	return name + " is online but has not answered: this task may be running there with its replies not reaching this computer; ask the owner to look there before starting it again", nil
 }

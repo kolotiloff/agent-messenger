@@ -44,6 +44,8 @@ After that: `agent-messenger-server invite` (a new invitation), `agent-messenger
 
 `server run` is the client in the foreground for a service: it starts paused, runs no tasks or models and stops on SIGTERM. Under systemd it is updated from any computer's window like the others (the update arrow by «сервер»): it installs the signed update and asks systemd to restart the service (D-139). Started by hand it refuses update requests. `agent-messenger-server rename --name ИМЯ` changes the name the others see. The installer refuses to start while another Messenger client of the same user runs (for example one started with `start`), and says how to stop it.
 
+The stand-alone server skips the worker dispatch loop and periodic account-limit checks (T-259). The broker saves a device's contact timestamp at the 15-second presence cadence. Each request still checks that the device key is valid and has not been revoked. Delivery and presence use their existing intervals.
+
 Checked in a Linux container: the `server` commands against a running `server run` (enable with and without an address, invite, status, restart keeps the settings, a second client refused), and the installer end to end against a local copy of the release files with a stand-in `systemctl` (fresh install, update, another client running). On 2026-11-15 the owner installed it on a new Debian VPS with real systemd and joined five computers (Mac, Windows, Linux) over the internet.
 
 Without the internet scope, computers in different homes still work together when they share a VPN that gives them private addresses (10.x, 172.16–31.x, 192.168.x, or IPv6 fc00::/7): to the broker they are one private network, so "local network" accepts them (D-040).

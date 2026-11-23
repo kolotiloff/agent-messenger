@@ -25,10 +25,14 @@ type coordClient struct {
 
 func newCoordinatorStore(t *testing.T) *core.Store {
 	t.Helper()
+	return newCoordinatorStoreAt(t, t.TempDir())
+}
+
+func newCoordinatorStoreAt(t *testing.T, root string) *core.Store {
+	t.Helper()
 	old := core.TemporaryFolder
 	core.TemporaryFolder = func(string) bool { return false }
 	t.Cleanup(func() { core.TemporaryFolder = old })
-	root := t.TempDir()
 	st, err := core.Open(filepath.Join(root, "queue.sqlite"))
 	if err != nil {
 		t.Fatal(err)
@@ -232,7 +236,7 @@ func TestCoordinatorHandshakeAndTools(t *testing.T) {
 	for _, tool := range resp["result"].(map[string]any)["tools"].([]any) {
 		names = append(names, tool.(map[string]any)["name"].(string))
 	}
-	if strings.Join(names, ",") != "list_agents,agent_version,start_task,wait,tasks,answer,continue_task,note_task,task_images,task_output,task_messages,cancel,report_feedback,export_feedback,clear_feedback,get_log,update_messenger" {
+	if strings.Join(names, ",") != "list_agents,agent_version,start_task,wait,tasks,answer,continue_task,note_task,task_images,task_output,task_messages,cancel,report_feedback,export_feedback,clear_feedback,update_messenger" {
 		t.Fatalf("tools %v", names)
 	}
 	var agents struct {
@@ -380,6 +384,47 @@ func TestTaskFeedKeepsTheAssigningChat(t *testing.T) {
 	}
 }
 
+func TestCoordinatorReturnsRequestedAndReportedWorkerModel(t *testing.T) {
+	st := newCoordinatorStore(t)
+	c := startCoordinator(t, st, "Game")
+	args := map[string]any{"op_id": "model", "agent": "codex", "text": "Build the grid", "model": "gpt-6.2-sol[effort=medium]"}
+	var first taskModelInfo
+	if _, ok := c.tool("start_task", args, &first); !ok || first.ModelSelection != "explicit" ||
+		first.RequestedModel != "gpt-6.2-sol" || first.RequestedEffort != "medium" || first.RanModel != "" {
+		t.Fatalf("queued model information: %+v", first)
+	}
+	runs, err := st.NextTaskRunIntents(1)
+	if err != nil || len(runs) != 1 {
+		t.Fatalf("worker run intents: %v %v", runs, err)
+	}
+	version, err := st.TaskListVersion("Game")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetTaskRunModel(runs[0], "gpt-6.2-astra[effort=high]"); err != nil {
+		t.Fatal(err)
+	}
+	want := first
+	want.RanModel, want.ReasoningEffort = "gpt-6.2-astra", "high"
+	var list struct {
+		Unchanged bool            `json:"unchanged"`
+		Tasks     []taskModelInfo `json:"tasks"`
+	}
+	if _, ok := c.tool("tasks", map[string]any{"if_version": version}, &list); !ok || list.Unchanged ||
+		len(list.Tasks) != 1 || list.Tasks[0] != want {
+		t.Fatalf("worker model in tasks: %+v", list)
+	}
+	var after taskModelInfo
+	if _, ok := c.tool("start_task", args, &after); !ok || after != want {
+		t.Fatalf("repeat start should return the observed model: %+v", after)
+	}
+	var defaultModel taskModelInfo
+	if _, ok := c.tool("start_task", map[string]any{"op_id": "default", "agent": "codex", "text": "Default worker"}, &defaultModel); !ok ||
+		defaultModel != (taskModelInfo{ModelSelection: "default"}) {
+		t.Fatalf("CLI default before launch: %+v", defaultModel)
+	}
+}
+
 func TestCoordinatorStartIsIdempotentAndWaitReplays(t *testing.T) {
 	st := newCoordinatorStore(t)
 	c := startCoordinator(t, st, "Game")
@@ -436,6 +481,24 @@ func TestCoordinatorStartIsIdempotentAndWaitReplays(t *testing.T) {
 	}
 	if _, ok := c.tool("tasks", map[string]any{"state": "all"}, &list); !ok || len(list.Tasks) != 1 || list.Tasks[0].State != "done" || list.Cursor < woke.Cursor {
 		t.Fatalf("tasks %+v", list)
+	}
+}
+
+func TestCoordinatorWaitWakesForMacUpdateRestart(t *testing.T) {
+	st := newCoordinatorStore(t)
+	c := startCoordinator(t, st, "Game")
+	c.next++
+	waitID := c.next
+	c.send(waitID, "tools/call", map[string]any{"name": "wait", "arguments": map[string]any{"after": 0, "timeout_seconds": 30}})
+	c.none(waitID, 300*time.Millisecond)
+	if err := st.NoteMacUpdateRestart(time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	resp, _ := c.expect(waitID, 3*time.Second)
+	var w waitResult
+	decodeTool(t, resp, &w)
+	if w.TimedOut || len(w.Events) != 1 || w.Events[0].Kind != core.MacUpdateRestartEvent {
+		t.Fatalf("wait %+v", w)
 	}
 }
 
@@ -566,12 +629,100 @@ func TestCoordinatorSeesOnlyItsProject(t *testing.T) {
 	}
 }
 
+func TestCoordinatorListAndResourceWaitAreProjectScoped(t *testing.T) {
+	st := newCoordinatorStore(t)
+	if err := st.SetNetwork("brk-1", "host", []core.NetPeer{
+		{ID: "dev-b", Name: "Runner", Age: 1, Agents: []core.NetAgent{{Agent: "codex", Running: 6, Waiting: 3}}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetNetTasks([]core.NetPeerTasks{
+		{Peer: "dev-b", Name: "Runner", Tasks: []core.NetTask{
+			{ID: "other-remote", Project: "Other", Agent: "codex", State: "running"},
+			{ID: "game-remote", Project: "Game", Agent: "codex", State: "waiting_owner"},
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	other, _, err := st.StartTask(core.StartTaskRequest{Project: "Other", OpID: "o", Provider: "codex", Text: "other work", Lock: "unity-editor"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := startCoordinator(t, st, "Game")
+	var agents struct{ Computers []core.ComputerSummary }
+	if text, ok := c.tool("list_agents", map[string]any{}, &agents); !ok || len(agents.Computers) != 2 {
+		t.Fatalf("list_agents: %s", text)
+	}
+	for _, agent := range agents.Computers[0].Agents {
+		if agent.Running != 0 || agent.Waiting != 0 {
+			t.Fatalf("other project's local counts: %+v", agent)
+		}
+	}
+	a := agents.Computers[1].Agents[0]
+	if a.Running != 0 || a.Waiting != 1 {
+		t.Fatalf("remote counts: %+v", a)
+	}
+	var started struct {
+		TaskID string `json:"task_id"`
+	}
+	if text, ok := c.tool("start_task", map[string]any{"op_id": "game", "agent": "codex", "text": "game work", "lock": "unity-editor"}, &started); !ok {
+		t.Fatalf("start_task: %s", text)
+	}
+	var list struct {
+		Version   string
+		Unchanged bool
+		Tasks     []coordinatorTask
+	}
+	if text, ok := c.tool("tasks", map[string]any{}, &list); !ok || strings.Contains(text, other) || len(list.Tasks) != 1 ||
+		list.Tasks[0].ID != started.TaskID || list.Tasks[0].WaitingForResource != "unity-editor" || list.Tasks[0].WaitingForLock != "" {
+		t.Fatalf("tasks: %s", text)
+	}
+	previousVersion := list.Version
+	list.Tasks = nil
+	if _, err := st.CancelTask(other); err != nil {
+		t.Fatal(err)
+	}
+	if text, ok := c.tool("tasks", map[string]any{"if_version": previousVersion}, &list); !ok || list.Unchanged ||
+		list.Version == previousVersion || len(list.Tasks) != 1 || list.Tasks[0].WaitingForResource != "" {
+		t.Fatalf("tasks after resource becomes available: %s", text)
+	}
+}
+
 func TestCoordinatorUnknownProject(t *testing.T) {
 	st := newCoordinatorStore(t)
 	c := startCoordinator(t, st, "Missing")
 	if text, ok := c.tool("list_agents", map[string]any{}, nil); ok || !strings.Contains(text, "Новый проект") {
 		t.Fatalf("unknown project: %s", text)
 	}
+}
+
+func TestTwoCoordinatorWaitsReceiveOnlyTheirOwnReports(t *testing.T) {
+	st := newCoordinatorStore(t)
+	game, other := startCoordinator(t, st, "Game"), startCoordinator(t, st, "Other")
+	gameTask := startTasks(t, game, 1, "game")[0]
+	otherTask := startTasks(t, other, 1, "other")[0]
+	startWait := func(client *coordClient) int {
+		client.next++
+		client.send(client.next, "tools/call", map[string]any{
+			"name": "wait", "arguments": map[string]any{"after": 0, "timeout_seconds": 5},
+		})
+		return client.next
+	}
+	gameWait, otherWait := startWait(game), startWait(other)
+	check := func(client *coordClient, id int, task, expected string) {
+		t.Helper()
+		response, _ := client.expect(id, 3*time.Second)
+		var result waitResult
+		decodeTool(t, response, &result)
+		if len(result.Events) != 1 || result.Events[0].TaskID != task || !strings.Contains(result.Events[0].Text, expected) {
+			t.Fatalf("unexpected report for %s: %+v", task, result.Events)
+		}
+	}
+	finishRun(t, st, otherTask, core.DispositionReport, "Site result")
+	check(other, otherWait, otherTask, "Site result")
+	game.none(gameWait, 100*time.Millisecond)
+	finishRun(t, st, gameTask, core.DispositionReport, "Game result")
+	check(game, gameWait, gameTask, "Game result")
 }
 
 func startTasks(t *testing.T, c *coordClient, n int, prefix string) []string {
@@ -725,43 +876,11 @@ func TestCoordinatorContinuesAFinishedTask(t *testing.T) {
 	}
 }
 
-func TestCoordinatorGetLog(t *testing.T) {
-	old := coordinatorLogWait
-	coordinatorLogWait = 400 * time.Millisecond
-	t.Cleanup(func() { coordinatorLogWait = old })
+func TestCoordinatorCannotReadMachineWideLog(t *testing.T) {
 	st := newCoordinatorStore(t)
-	if err := st.SetNetwork("brk-1", "host", []core.NetPeer{{ID: "dev-b", Name: "Ноутбук", Age: 1}}); err != nil {
-		t.Fatal(err)
-	}
 	c := startCoordinator(t, st, "Game")
-	if _, ok := c.tool("get_log", map[string]any{}, nil); ok {
-		t.Fatal("get_log without a computer must fail")
-	}
-	if _, ok := c.tool("get_log", map[string]any{"computer": "dev-x"}, nil); ok {
-		t.Fatal("unknown computer must fail")
-	}
-	var waiting struct {
-		RequestID string `json:"request_id"`
-		State     string `json:"state"`
-		Computer  string `json:"computer"`
-		Next      string `json:"next"`
-	}
-	if text, ok := c.tool("get_log", map[string]any{"computer": "dev-b", "lines": 30}, &waiting); !ok || waiting.State != "waiting" || waiting.RequestID == "" || waiting.Computer != "Ноутбук" || waiting.Next == "" {
-		t.Fatalf("waiting %q %+v", text, waiting)
-	}
-	body := `{"kind":"log","task":"` + waiting.RequestID + `","text":"line 1\nline 2\n"}`
-	if err := st.ApplyNet("brk-1", core.NetIncoming{Seq: 1, From: "dev-b", OpID: "log-reply." + waiting.RequestID, Body: []byte(body)}); err != nil {
-		t.Fatal(err)
-	}
-	var done struct {
-		State string `json:"state"`
-		Text  string `json:"text"`
-	}
-	if text, ok := c.tool("get_log", map[string]any{"request_id": waiting.RequestID}, &done); !ok || done.State != "done" || done.Text != "line 1\nline 2\n" {
-		t.Fatalf("done %q %+v", text, done)
-	}
-	if _, ok := c.tool("get_log", map[string]any{"request_id": "log-nope"}, nil); ok {
-		t.Fatal("unknown request must fail")
+	if text, ok := c.tool("get_log", map[string]any{"computer": "dev-b"}, nil); ok || !strings.Contains(text, "computer-wide journal is unavailable") {
+		t.Fatalf("get_log: %s", text)
 	}
 }
 
@@ -1038,12 +1157,23 @@ func TestCoordinatorFeedback(t *testing.T) {
 	if _, err := st.AddFeedback(core.AudienceOwner, "Game", "Не видно кнопку", "", "", nil); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := st.AddFeedback(core.AudienceOwner, "Other", "remark for another project", "", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	other := startCoordinator(t, st, "Other")
+	var otherFile struct{ Path string }
+	if text, ok := other.tool("export_feedback", map[string]any{}, &otherFile); !ok || otherFile.Path == "" {
+		t.Fatalf("other project export: %s", text)
+	}
 	var out struct {
 		Path    string `json:"path"`
 		Remarks int    `json:"remarks"`
 	}
 	if text, ok := c.tool("export_feedback", map[string]any{}, &out); !ok || out.Remarks != 2 || filepath.Dir(out.Path) != filepath.Join(home, "Downloads") {
 		t.Fatalf("export_feedback %s", text)
+	}
+	if out.Path == otherFile.Path {
+		t.Fatal("project archives share a path")
 	}
 	// Owner, 2026-11-16: once passed on, the exported remarks are cleared;
 	// one written after the export stays.
@@ -1053,6 +1183,9 @@ func TestCoordinatorFeedback(t *testing.T) {
 	var cleared struct{ Deleted, Left int }
 	if text, ok := c.tool("clear_feedback", map[string]any{}, &cleared); !ok || cleared.Deleted != 2 || cleared.Left != 1 {
 		t.Fatalf("clear_feedback %s", text)
+	}
+	if all, _, err := st.FeedbackCount(); err != nil || all != 2 {
+		t.Fatalf("another project's feedback was deleted: %d, %v", all, err)
 	}
 	if !strings.Contains(coordinatorInstructions, "clear_feedback") {
 		t.Fatal("instructions do not tell about clearing")

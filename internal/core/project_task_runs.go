@@ -207,24 +207,36 @@ func checkSplitTaskResource(ctx context.Context, common interface {
 	projectFileQuerier
 	projectRouteQuerier
 }, project projectFileQuerier, currentFile string, openProject func(string) (*sql.DB, error), task Task, resource string, order int64) error {
+	holder, err := splitTaskResourceHolder(ctx, common, project, currentFile, openProject, task, resource, order)
+	if err == nil && holder.ID != "" {
+		return fmt.Errorf("%w: resource %q is already assigned", ErrRejected, resource)
+	}
+	return err
+}
+
+func splitTaskResourceHolder(ctx context.Context, common interface {
+	projectFileQuerier
+	projectRouteQuerier
+}, project projectFileQuerier, currentFile string, openProject func(string) (*sql.DB, error), task Task, resource string, order int64) (Task, error) {
 	files, err := splitProjectFiles(ctx, common)
 	if err != nil {
-		return err
+		return Task{}, err
 	}
 	for _, file := range files {
 		var read projectFileQuerier = project
 		if file != currentFile {
 			db, err := openProject(file)
 			if err != nil {
-				return err
+				return Task{}, err
 			}
 			read = db
 		}
-		if err := checkResourceInProject(ctx, common, read, task, resource, order); err != nil {
-			return err
+		holder, err := resourceHolderInProject(ctx, common, read, task, resource, order)
+		if err != nil || holder.ID != "" {
+			return holder, err
 		}
 	}
-	return nil
+	return Task{}, nil
 }
 
 func (s *Store) nextSplitRunIntents(limit int) ([]string, error) {
@@ -310,29 +322,29 @@ func (s *Store) nextSplitRunIntents(limit int) ([]string, error) {
 	return out, nil
 }
 
-func checkResourceInProject(ctx context.Context, common projectRouteQuerier, read projectFileQuerier, task Task, resource string, order int64) error {
+func resourceHolderInProject(ctx context.Context, common projectRouteQuerier, read projectFileQuerier, task Task, resource string, order int64) (Task, error) {
 	rows, err := read.QueryContext(ctx, `SELECT id,project,created_at,active FROM (
  SELECT t.id,t.project,t.created_at,t.state,EXISTS(SELECT 1 FROM task_runs r
  WHERE r.task_id=t.id AND r.state IN ('launching','running','blocked','interrupted')) AS active
  FROM tasks t WHERE t.computer=? AND t.resource=? AND t.id<>?)
  WHERE active OR state NOT IN ('done','failed','cancelled')`, task.Computer, resource, task.ID)
 	if err != nil {
-		return err
+		return Task{}, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var other Task
 		var active bool
 		if err := rows.Scan(&other.ID, &other.Project, &other.CreatedAt, &active); err != nil {
-			return err
+			return Task{}, err
 		}
 		otherOrder, err := splitRouteOrder(ctx, common, other)
 		if err != nil {
-			return err
+			return Task{}, err
 		}
 		if active || other.CreatedAt < task.CreatedAt || other.CreatedAt == task.CreatedAt && otherOrder < order {
-			return fmt.Errorf("%w: resource %q is already assigned", ErrRejected, resource)
+			return other, nil
 		}
 	}
-	return rows.Err()
+	return Task{}, rows.Err()
 }

@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/kolotiloff/agent-messenger/internal/modelcatalog"
 )
 
 // Tasks between computers (T-037, D-041). The computer whose coordinator
@@ -1364,10 +1366,10 @@ func applyReport(tx *sql.Tx, from netLink, b netBody, name string) error {
 		return err
 	}
 	if b.Kind == "ran_model" {
-		if b.Model == "" || !ValidTaskModel(b.Model) {
+		if _, _, err := modelcatalog.SplitReported(b.Model); err != nil {
 			return nil
 		}
-		_, err := tx.Exec(`UPDATE tasks SET ran_model=? WHERE id=?`, b.Model, t.ID)
+		_, err := tx.Exec(`UPDATE tasks SET ran_model=?,version=version+1 WHERE id=? AND COALESCE(ran_model,'')<>?`, b.Model, t.ID, b.Model)
 		return err
 	}
 	switch b.Kind {

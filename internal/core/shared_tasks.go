@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"sort"
 	"time"
+
+	"github.com/kolotiloff/agent-messenger/internal/modelcatalog"
 )
 
 // Shared task lists (T-047, D-080). Every computer of a network sends the
@@ -108,7 +110,7 @@ func (s *Store) SharedTasks(since time.Time) ([]NetTask, error) {
 func tasksForSharing(db *sql.DB, since time.Time) ([]NetTask, error) {
 	rows, err := db.Query(`SELECT t.id,t.project,t.title,t.provider,t.state,t.created_at,COALESCE(t.finished_at,''),t.usage_input+t.usage_output,COALESCE(t.remote_peer,''),
  COALESCE((SELECT MIN(launched_at) FROM task_runs WHERE task_id=t.id),''),
- COALESCE(NULLIF(t.ran_model,''),t.model,''),
+ COALESCE(t.ran_model,''),
  COALESCE((SELECT r.disposition_text FROM task_runs r WHERE r.task_id=t.id AND r.disposition='report' ORDER BY r.ordinal DESC LIMIT 1),
   (SELECT i.text FROM remote_task_items i WHERE i.task_id=t.id AND i.kind='report' ORDER BY i.seq DESC LIMIT 1),'')
  FROM tasks t WHERE t.origin_peer IS NULL AND t.hidden_at IS NULL AND t.created_at>=? ORDER BY t.created_at DESC, t.rowid DESC LIMIT ?`,
@@ -123,7 +125,7 @@ func tasksForSharing(db *sql.DB, since time.Time) ([]NetTask, error) {
 		if err := rows.Scan(&t.ID, &t.Project, &t.Title, &t.Agent, &t.State, &t.CreatedAt, &t.FinishedAt, &t.Tokens, &t.RunsOnPeer, &t.StartedAt, &t.Model, &t.Report); err != nil {
 			return nil, err
 		}
-		if !ValidTaskModel(t.Model) {
+		if _, _, err := modelcatalog.SplitReported(t.Model); err != nil {
 			t.Model = ""
 		}
 		t.Title, t.Report = clip(t.Title, MaxSharedTitle), clip(t.Report, MaxSharedReport)

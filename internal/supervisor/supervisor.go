@@ -279,11 +279,13 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 		defer wg.Done()
 		sup.runNetwork(ctx)
 	}()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		sup.loop(ctx)
-	}()
+	if _, disabled := launcher.(DisabledLauncher); !disabled {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sup.loop(ctx)
+		}()
+	}
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
