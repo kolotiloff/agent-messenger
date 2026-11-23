@@ -592,3 +592,11 @@ On Windows, the update relaunch and the installer's handoff to the installed app
 ## D-173 — Notify the coordinator when Codex is slow to exit (T-249)
 
 2026-11-22, two Windows workers still held their task locks long after their completed turns. If the recorded Codex worker process is observed alive after the one-minute grace period, publish one `worker_still_running` event per run through `wait`. Use the task's existing event route for remote tasks. The observation describes a delayed exit and can be followed by the ordinary verified result. The run remains subject to D-021 and D-147. The event does not mark its computer idle or trigger a cancel or retry.
+
+## D-178 — Scope displayed agent activity to the selected project (T-254)
+
+2026-11-23, the owner saw workers for one project lit in the sidebar of another project. Replace the use of provider totals in the sidebar and remote agent detail cards with running and waiting rows from the selected project, including shared tasks. Use the global network roster for computer reachability and agent availability. Task counts used for scheduling and the restart interlock remain computer-wide. This updates the sidebar choice in D-026.
+
+## D-179 — Distinguish requested and observed model settings (T-255)
+
+2026-11-23, the owner asked for the model and reasoning effort the worker actually started with. Coordinators should select an appropriate listed model when one is available. An omitted selection keeps the executor's CLI default. Record the latest model and any reported effort from the worker's start metadata. For Codex exec, use the turn context of the bound thread written during this run. Propagate the selection through the existing worker model message. The model fields in `start_task` and `tasks` separate the requested base model and effort from the reported base model and effort, and identify explicit or default selection. A queued acknowledgment includes observed fields only if they are already known. The task window shows the reported model, a default label or an unconfirmed label.

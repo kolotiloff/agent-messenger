@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-23 — Codex (T-254 and T-255)
+
+- Scope running and waiting badges to the current project's task rows, even while the peer roster still reports activity across projects.
+- Expose requested and confirmed model settings separately. Confirm Codex settings from the bound turn record, update remote mirrors through the existing model message and keep model choice optional.
+
 ## 2026-11-22 — Codex (0.94 release)
 
 - Published [0.94](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.94) from `d0e3a4e` and verified the five signed update sets. Corrected the browser regression test to read computed padding and color inside the page before returning simple values. Both browsers passed.

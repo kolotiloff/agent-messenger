@@ -21,6 +21,7 @@ import (
 	"github.com/kolotiloff/agent-messenger/internal/adapters"
 	"github.com/kolotiloff/agent-messenger/internal/buildinfo"
 	"github.com/kolotiloff/agent-messenger/internal/core"
+	"github.com/kolotiloff/agent-messenger/internal/modelcatalog"
 	"github.com/kolotiloff/agent-messenger/internal/updatefeed"
 )
 
@@ -76,7 +77,8 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - A new chat starts from the current state, not from the history: first call tasks, which gives the open tasks, their open questions and the event cursor, then wait with after = that cursor. Never wait from 0 in a new chat: it replays every old event of the project. Agreements of an earlier coordinator chat that are not in the project's rules or files are not known here; ask the owner when it matters.
 - wait returns the events of this project's tasks after the cursor: a report, a question for you, a failure, an interruption, a block or a cancellation; with none, it blocks until one comes or timeout_seconds pass (default 60, at most 120). Always pass after = the cursor from the previous wait. When it returns events, act on them (answer questions with answer, tell the owner about reports). If it says more: true, more events are ready: call wait again at once with the new cursor.
 - agent_version checks one registered agent CLI on this computer or a computer ID from list_agents. It runs only the CLI version query, with no worker or model call. If it returns waiting, pass only the same request_id to read the answer without starting another check. A missing reply can mean the other computer has older Messenger or is unreachable.
-- start_task takes an optional model. Select the exact value from that agent's models in list_agents; model_options explains the standard selections and suggested work (small edits, everyday coding, complex work, hard investigations). This also applies to Unity: scope and difficulty decide, not the project label. A value such as gpt-6.2-astra[effort=high] is a Messenger selection: copy it unchanged into model; Messenger passes the base model and the separate CLI reasoning setting. Cursor uses its published CLI ID directly. These are configured options, not proof of account access; do not retry or switch automatically on rejection. Leave model out for the CLI default. Never invent IDs or append H/Medium to a model. Tell the owner when you chose a non-default model and why. On executors running 0.82 or newer, these lists come from the coordinator computer. Older executors still use the lists they report. The executor must have CLI account access to the selection.
+- start_task takes an optional model. Prefer an explicit selection from that agent's models in list_agents when the list has a suitable option. model_options explains the suggested work, from small edits to hard investigations. Copy selections such as gpt-6.2-astra[effort=high] unchanged. Use the executor's CLI default by omitting model when no suitable option is listed or the owner wants the default. Never invent IDs, guess effort, retry or switch automatically on rejection. The executor must have CLI account access to the selection.
+- start_task and tasks distinguish requested_model and requested_reasoning_effort from ran_model and reasoning_effort. model_selection is default or explicit. The first call usually only confirms the task was queued. Read tasks for the executor's model when it becomes available. A missing reported field means Messenger could not confirm it.
 - A report or question that ends with «[N picture(s) attached: read them with task_images]» has pictures from the worker (a screenshot, a chart): look at them with task_images before you judge the result.
 - A report is the worker's short summary. Its full last message is kept too: when a report or failure ends with «[Messenger] The worker's full final message has N characters», read it with task_output before asking the worker again; it is lost nowhere, even if the worker deleted its file.
 - answer answers a worker's question (pass question_id and a unique op_id); the worker continues in the same session.
@@ -405,14 +407,14 @@ func coordinatorTools() []map[string]any {
 				"computer":   str("computer id from list_agents; omit for this computer"),
 				"request_id": str("id of a waiting version request; use without agent or computer"),
 			})},
-		{"name": "start_task", "description": "Start a task in a new worker session of the chosen agent, in this project's folder on the computer. Returns the task id. Repeating a call with the same op_id returns the same task.",
+		{"name": "start_task", "description": "Queue a task in a new worker session in this project's folder on the chosen computer. Returns the task id and known model settings. Read tasks for the reported model if the worker has not started yet. Repeating a call with the same op_id returns the same task.",
 			"inputSchema": obj(map[string]any{
 				"op_id":             str("unique id of this operation, for safe retries"),
 				"agent":             map[string]any{"type": "string", "enum": []string{"claude", "codex", "cursor"}},
 				"text":              map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxTaskText, "description": "the task: what to do and what to report"},
 				"title":             map[string]any{"type": "string", "maxLength": core.MaxTaskTitle, "description": "short title shown in the window"},
 				"computer":          str("computer id from list_agents: this computer (the default) or another computer of the network"),
-				"model":             map[string]any{"type": "string", "maxLength": 80, "description": "Exact selection from the agent's models in list_agents; model_options gives task guidance. Copy effort selections unchanged, e.g. gpt-6.2-astra[effort=high]. Leave out for the CLI default. Never guess a model or retry after rejection."},
+				"model":             map[string]any{"type": "string", "maxLength": 80, "description": "Choose a suitable exact value from this agent's models in list_agents. Copy effort selections unchanged, e.g. gpt-6.2-astra[effort=high]. Omit to use the executor's CLI default. Never guess a model or retry after rejection."},
 				"lock":              map[string]any{"type": "string", "maxLength": core.MaxTaskLock, "description": "optional name of a resource only one worker on that computer may use at a time, such as unity-editor; the task waits to start while an earlier unfinished task with the same lock is on that computer"},
 				"coordinator_model": map[string]any{"type": "string", "maxLength": 80, "description": "The model of your own coordinator chat, shown in its message header. Include it only when supplied by your client or the owner. Never infer it from the worker model."},
 			}, "op_id", "agent", "text")},
@@ -561,7 +563,16 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 		if err != nil {
 			return nil, err
 		}
-		out := map[string]any{"task_id": id, "created": created, "next": "Call wait to receive its report.", "waiting": c.waitingInstructions()}
+		model := describeTaskModel(strings.TrimSpace(a.Model), "")
+		if task, err := c.store.TaskByID(id); err == nil {
+			model = describeTaskModel(task.Model, task.RanModel)
+		}
+		out := map[string]any{"task_id": id, "created": created, "next": "Call wait to receive its report.", "waiting": c.waitingInstructions(), "model_selection": model.ModelSelection}
+		for key, value := range map[string]string{"requested_model": model.RequestedModel, "requested_reasoning_effort": model.RequestedEffort, "ran_model": model.RanModel, "reasoning_effort": model.ReasoningEffort} {
+			if value != "" {
+				out[key] = value
+			}
+		}
 		if l, err := c.store.AgentLimitFor(c.project, a.Computer, a.Agent); err == nil {
 			if note := core.LimitNote(l); note != "" {
 				out["limit_note"] = note
@@ -856,7 +867,28 @@ func (c *coordinator) ownTask(id string) error {
 	return nil
 }
 
+type taskModelInfo struct {
+	ModelSelection  string `json:"model_selection"`
+	RequestedModel  string `json:"requested_model,omitempty"`
+	RequestedEffort string `json:"requested_reasoning_effort,omitempty"`
+	RanModel        string `json:"ran_model,omitempty"`
+	ReasoningEffort string `json:"reasoning_effort,omitempty"`
+}
+
+func describeTaskModel(requested, reported string) taskModelInfo {
+	info := taskModelInfo{ModelSelection: "default", RanModel: reported}
+	if requested != "" {
+		info.ModelSelection = "explicit"
+		info.RequestedModel, info.RequestedEffort, _ = modelcatalog.Split(requested)
+	}
+	if model, effort, err := modelcatalog.SplitReported(reported); err == nil {
+		info.RanModel, info.ReasoningEffort = model, effort
+	}
+	return info
+}
+
 type coordinatorTask struct {
+	taskModelInfo
 	ID       string             `json:"task_id"`
 	Title    string             `json:"title"`
 	Agent    string             `json:"agent"`
@@ -945,7 +977,7 @@ func (c *coordinator) tasks(state string, limit int, ifVersion string) (any, err
 			more = true
 			break
 		}
-		item := coordinatorTask{ID: t.ID, Title: t.Title, Agent: t.Provider, Computer: t.Computer, State: t.State, CreatedAt: t.CreatedAt, FinishedAt: t.FinishedAt, FailureReason: t.FailureReason, FailureReset: t.FailureReset, FullAccess: t.FullAccess}
+		item := coordinatorTask{ID: t.ID, Title: t.Title, Agent: t.Provider, Computer: t.Computer, State: t.State, CreatedAt: t.CreatedAt, FinishedAt: t.FinishedAt, FailureReason: t.FailureReason, FailureReset: t.FailureReset, FullAccess: t.FullAccess, taskModelInfo: describeTaskModel(t.Model, t.RanModel)}
 		// A verified task's detail is the same verification line every
 		// time; only unfinished or unsuccessful ones explain something.
 		if t.State != "done" {

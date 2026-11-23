@@ -199,6 +199,36 @@ func hasArgs(args []string, want ...string) bool {
 	return strings.Contains(joined, "\x00"+strings.Join(want, "\x00")+"\x00")
 }
 
+func TestCodexWorkerReportsItsDefaultModel(t *testing.T) {
+	h := newTaskHarness(t, "report-model", AdapterLauncher{AllowTasks: true})
+	cli, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.st.SetComputerAgent("codex", cli, h.logDir, "messenger-only"); err != nil {
+		t.Fatal(err)
+	}
+	id := h.startTask("model", "codex", "Work on the grid")
+	h.waitState(id, "done")
+	deadline := time.Now().Add(5 * time.Second)
+	var task core.Task
+	for time.Now().Before(deadline) {
+		task, err = h.st.TaskByID(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if task.RanModel != "" {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if task.Model != "" || task.RanModel != "gpt-6.2-astra[effort=high]" {
+		t.Fatalf("default request and reported model: %+v", task)
+	}
+	waitNoTaskReservations(t)
+	h.stop()
+}
+
 func TestTaskWorkerReportsAndIsVerified(t *testing.T) {
 	for _, provider := range []string{"claude", "codex", "cursor"} {
 		t.Run(provider, func(t *testing.T) {

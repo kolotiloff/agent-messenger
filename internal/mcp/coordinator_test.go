@@ -380,6 +380,47 @@ func TestTaskFeedKeepsTheAssigningChat(t *testing.T) {
 	}
 }
 
+func TestCoordinatorReturnsRequestedAndReportedWorkerModel(t *testing.T) {
+	st := newCoordinatorStore(t)
+	c := startCoordinator(t, st, "Game")
+	args := map[string]any{"op_id": "model", "agent": "codex", "text": "Build the grid", "model": "gpt-6.2-sol[effort=medium]"}
+	var first taskModelInfo
+	if _, ok := c.tool("start_task", args, &first); !ok || first.ModelSelection != "explicit" ||
+		first.RequestedModel != "gpt-6.2-sol" || first.RequestedEffort != "medium" || first.RanModel != "" {
+		t.Fatalf("queued model information: %+v", first)
+	}
+	runs, err := st.NextTaskRunIntents(1)
+	if err != nil || len(runs) != 1 {
+		t.Fatalf("worker run intents: %v %v", runs, err)
+	}
+	version, err := st.TaskListVersion("Game")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetTaskRunModel(runs[0], "gpt-6.2-astra[effort=high]"); err != nil {
+		t.Fatal(err)
+	}
+	want := first
+	want.RanModel, want.ReasoningEffort = "gpt-6.2-astra", "high"
+	var list struct {
+		Unchanged bool            `json:"unchanged"`
+		Tasks     []taskModelInfo `json:"tasks"`
+	}
+	if _, ok := c.tool("tasks", map[string]any{"if_version": version}, &list); !ok || list.Unchanged ||
+		len(list.Tasks) != 1 || list.Tasks[0] != want {
+		t.Fatalf("worker model in tasks: %+v", list)
+	}
+	var after taskModelInfo
+	if _, ok := c.tool("start_task", args, &after); !ok || after != want {
+		t.Fatalf("repeat start should return the observed model: %+v", after)
+	}
+	var defaultModel taskModelInfo
+	if _, ok := c.tool("start_task", map[string]any{"op_id": "default", "agent": "codex", "text": "Default worker"}, &defaultModel); !ok ||
+		defaultModel != (taskModelInfo{ModelSelection: "default"}) {
+		t.Fatalf("CLI default before launch: %+v", defaultModel)
+	}
+}
+
 func TestCoordinatorStartIsIdempotentAndWaitReplays(t *testing.T) {
 	st := newCoordinatorStore(t)
 	c := startCoordinator(t, st, "Game")
