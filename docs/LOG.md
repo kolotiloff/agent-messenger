@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-23 — Codex (T-262)
+
+- Reproduced `SQLITE_BUSY_SNAPSHOT` and missing mailbox entries under concurrent sends on the 0.95 broker. Acquired the writer lock at the start of broker transactions. The regression covers concurrent sends and duplicate operation IDs. VPS-PC2 service logs and recovery are still unverified.
+
 ## 2026-11-23 — Codex (T-258, first stage)
 
 - Added checked, project-scoped SQLite history snapshots. The read-only source stays usable, and a destination is published only after the copy succeeds. Documented the migration and delivery contracts that have to land before live project files replace the shared queue.
