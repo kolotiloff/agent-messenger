@@ -8,6 +8,14 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-23 by Codex (T-263).
+
+- The client now finishes each indexed window revision read before reusing its SQLite connection. Cancellation can still stop a request while it waits for a connection. The store discards connections that return SQLite 517 and retries only if `BEGIN` failed. If the first view cannot be read, the project selector shows that projects are temporarily unavailable. The regression fixture retains a running task in a legacy queue while activation is pending. Verified the fixture and an actual SQLite 517 recovery, plus Chromium and WebKit. The installed application and release assets have not changed.
+
+Updated 2026-11-23 by Codex (T-262).
+
+- The owner recovered the VPS with the 0.95 installer. A separate persistent error 517 on the Mac prevented network messages and the window from reading local state. A normal restart restored both projects, the saved task history and the live computer list. Split activation remains pending behind an uncertain stream reservation. The cause of the persistent Mac snapshot error remains open. T-262 addresses a separately reproduced broker mailbox race and the macOS race suite passed.
+
 Updated 2026-11-23 by Codex.
 
 - T-258 begins project-local storage with a consistent SQLite copy of one project's history through `project-snapshot`. It accepts a removed project, preserves IDs and cursors, and leaves the source queue intact. The file cannot be launched as a working queue. Live tasks still share `queue.sqlite`. Migration, network delivery and restore work are tracked in [PROJECT_STORAGE.md](PROJECT_STORAGE.md).

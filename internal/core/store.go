@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -15,7 +16,8 @@ import (
 
 	"github.com/kolotiloff/agent-messenger/internal/platform"
 
-	_ "modernc.org/sqlite"
+	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
 const schema = `
@@ -316,24 +318,42 @@ func dsn(path string) string {
 }
 
 func (s *Store) tx(fn func(*sql.Tx) error) error {
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
+	err, started := s.runTx(fn)
+	if !started && busySnapshot(err) {
+		// BEGIN failed before any operation ran. Use a fresh connection.
+		err, _ = s.runTx(fn)
 	}
-	committed := false
+	return err
+}
+
+func busySnapshot(err error) bool {
+	var dbErr *sqlite.Error
+	return errors.As(err, &dbErr) && dbErr.Code() == sqlite3.SQLITE_BUSY_SNAPSHOT
+}
+
+func (s *Store) runTx(fn func(*sql.Tx) error) (err error, started bool) {
+	ctx := context.Background()
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return err, false
+	}
+	defer conn.Close()
 	defer func() {
-		if !committed {
-			_ = tx.Rollback()
+		if busySnapshot(err) {
+			// An expired WAL snapshot cannot be promoted. Evict this
+			// connection after rollback so later requests can proceed.
+			_ = conn.Raw(func(any) error { return driver.ErrBadConn })
 		}
 	}()
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err, false
+	}
+	defer tx.Rollback()
 	if err := fn(tx); err != nil {
-		return err
+		return err, true
 	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	committed = true
-	return nil
+	return tx.Commit(), true
 }
 
 func (s *Store) Register(provider, environment, conversationID, alias string) (string, error) {

@@ -33,8 +33,28 @@ const windowChangeFields = `
 
 func readWindowChanges(ctx context.Context, db *sql.DB, project, task string) (windowChangeParts, error) {
 	var parts windowChangeParts
-	err := db.QueryRowContext(ctx, `SELECT `+windowChangeFields, project, task).Scan(&parts.global, &parts.project, &parts.feed)
+	err := scanWindowRevision(ctx, db, `SELECT `+windowChangeFields, []any{project, task}, &parts.global, &parts.project, &parts.feed)
 	return parts, err
+}
+
+// The pinned SQLite driver can drop the returned rows without closing them
+// when a context is cancelled during QueryRowContext. An orphaned read keeps
+// the connection on its old WAL snapshot and subsequent writes fail with 517.
+// Let the wait be cancelled while acquiring a connection, then finish this
+// indexed, single-row read before returning the connection to the store.
+func scanWindowRevision(ctx context.Context, db *sql.DB, query string, args []any, dest ...any) error {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := conn.QueryRowContext(context.WithoutCancel(ctx), query, args...).Scan(dest...); err != nil {
+		return err
+	}
+	return ctx.Err()
 }
 
 func installWindowChanges(db *sql.DB) error {

@@ -19,6 +19,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       page.setDefaultTimeout(5000);
       const errors = [];
       let created = false, registered = false, connected = false, trusted = false;
+      let windowReadFails = true;
       let coordinatorActive = false;
       let machineOrder = null;
       let setupStates = [], installed = false;
@@ -65,6 +66,9 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           }
           if (pathname === '/api/coordinator-connect') connected = true;
         }
+        if (pathname === '/api/window' && windowReadFails) {
+          return route.fulfill({status: 502, body: 'client_rejected'});
+        }
         const fixtures = {
           '/api/window': {projects: created ? [{name: 'Welcome test'}] : [], project: created ? 'Welcome test' : '',
             folder: created ? '/fictional/project' : '', messenger: '/fictional/messenger', data_root: '/fictional/data',
@@ -95,6 +99,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         assert.equal(await trigger.evaluate(node => node.getBoundingClientRect().height), 32);
       }
       await page.goto('http://messenger.test/#fictional');
+      await page.locator('#project-select option').filter({hasText: 'Проекты недоступны'}).waitFor({state: 'attached'});
+      assert(await page.locator('#project-select').isDisabled());
+      windowReadFails = false;
+      await page.evaluate(() => window.messengerRefresh());
       const welcome = page.locator('#thread .am-welcome');
       await welcome.getByRole('heading', {name: 'Добро пожаловать в Agent Messenger', exact: true}).waitFor();
       assert(await welcome.getByText('Как это работает', {exact: true}).isVisible());

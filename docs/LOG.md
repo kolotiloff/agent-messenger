@@ -2,6 +2,15 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-23 — Codex (T-263)
+
+- Closed the window revision cancellation path that can abandon a read and added recovery for SQLite 517. Confirmed the existing project and task remain visible when migration is deferred. Chromium and WebKit exercised a failed first view and recovery. The production Mac still runs the released build.
+
+## 2026-11-23 — Codex (T-262)
+
+- Reproduced `SQLITE_BUSY_SNAPSHOT` and missing mailbox entries under concurrent sends on the 0.95 broker. Acquired the writer lock at the start of broker transactions. The regression covers concurrent sends and duplicate operation IDs. Full macOS checks passed.
+- The owner restored the VPS with the released installer. Diagnosed persistent local 517 errors on Mac and verified the original projects, task history and network computers returned after a normal restart. T-263 tracks this separate client problem.
+
 ## 2026-11-23 — Codex (T-258, first stage)
 
 - Added checked, project-scoped SQLite history snapshots. The read-only source stays usable, and a destination is published only after the copy succeeds. Documented the migration and delivery contracts that have to land before live project files replace the shared queue.

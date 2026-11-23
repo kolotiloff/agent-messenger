@@ -2,9 +2,111 @@ package core
 
 import (
 	"context"
+	"database/sql"
+	"database/sql/driver"
+	"errors"
 	"reflect"
+	"sync"
 	"testing"
+	"time"
+
+	"modernc.org/sqlite"
 )
+
+var registerWindowCancellation sync.Once
+var cancelWindowRead func() error
+
+func TestBusySnapshotDiscardsConnectionWithoutReplayingWrite(t *testing.T) {
+	f := newTaskFixture(t)
+	// A deferred transaction lets us create a real expired snapshot on
+	// demand. Normal store transactions already request the lock at BEGIN.
+	db, err := sql.Open("sqlite", sqliteFileURL(f.path, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+	if _, err := db.Exec(`CREATE TEMP TABLE connection_marker (id)`); err != nil {
+		t.Fatal(err)
+	}
+	st := &Store{db: db}
+	calls := 0
+	err = st.tx(func(tx *sql.Tx) error {
+		calls++
+		if _, err := metaValue(tx, "computer_name"); err != nil {
+			return err
+		}
+		if err := f.st.SetComputerName("Committed by another connection"); err != nil {
+			return err
+		}
+		return setMeta(tx, "computer_name", "Must not be replayed")
+	})
+	if !busySnapshot(err) || calls != 1 {
+		t.Fatalf("expected one attempt and a busy snapshot, got calls=%d, err=%v", calls, err)
+	}
+	var reused bool
+	if err := db.QueryRow(`SELECT EXISTS(SELECT 1 FROM sqlite_temp_schema WHERE name='connection_marker')`).Scan(&reused); err != nil || reused {
+		t.Fatalf("expired connection was returned to the pool: reused=%v, err=%v", reused, err)
+	}
+	if name, err := st.ComputerName(); err != nil || name != "Committed by another connection" {
+		t.Fatalf("committed state was changed: name=%q, err=%v", name, err)
+	}
+	if err := st.SetNetwork("broker", "self", nil); err != nil {
+		t.Fatalf("subsequent request could not write: %v", err)
+	}
+}
+
+func TestWindowRevisionCancellationFinishesRead(t *testing.T) {
+	registerWindowCancellation.Do(func() {
+		sqlite.MustRegisterScalarFunction("cancel_window_read", 0, func(*sqlite.FunctionContext, []driver.Value) (driver.Value, error) {
+			return int64(1), cancelWindowRead()
+		})
+	})
+	f := newTaskFixture(t)
+	task := f.start(t, "before-update", "claude", "fixture")
+	f.launch(t, task, f.sessionOf(t, task))
+	if err := ActivateProjectStorage(context.Background(), f.path); !errors.Is(err, ErrProjectStorageBusy) {
+		t.Fatalf("running task must keep the existing database in use: %v", err)
+	}
+	writer := mustOpen(t, f.path)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cancelWindowRead = func() error {
+		// Advance WAL after the reader took its snapshot and cancel while
+		// the SQL statement is still on the stack.
+		err := writer.SetComputerName("Updated from another process")
+		cancel()
+		return err
+	}
+	t.Cleanup(func() { cancelWindowRead = nil })
+	var got int
+	err := scanWindowRevision(ctx, f.st.db, `SELECT cancel_window_read() FROM projects LIMIT 1`, nil, &got)
+	if !errors.Is(err, context.Canceled) || got != 1 {
+		t.Fatalf("cancelled revision did not finish reading: value=%d, err=%v", got, err)
+	}
+	if err := f.st.SetNetwork("broker", "self", nil); err != nil {
+		t.Fatalf("write after a cancelled window request: %v", err)
+	}
+	view, err := f.st.WindowView("Game", "")
+	if err != nil || view.Project != "Game" || view.Name != "Updated from another process" {
+		t.Fatalf("saved project did not load after cancellation: project=%q, computer=%q, err=%v", view.Project, view.Name, err)
+	}
+	if len(view.Tasks) != 1 || view.Tasks[0].ID != task {
+		t.Fatalf("saved task did not load after cancellation: %+v", view.Tasks)
+	}
+
+	// The watch must still be cancellable while waiting for the pool.
+	conn, err := f.st.db.Conn(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	wait, stop := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	defer stop()
+	if _, err := f.st.WindowChanges(wait, "Game", ""); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("blocked window watch did not honor its deadline: %v", err)
+	}
+}
 
 func TestWindowChangesAndLocalFeedDelta(t *testing.T) {
 	f := newTaskFixture(t)
