@@ -826,13 +826,7 @@ func (s *Store) ResumeWork() error {
 }
 
 func (s *Store) Paused() (bool, error) {
-	var paused bool
-	err := s.tx(func(tx *sql.Tx) error {
-		var err error
-		paused, err = isPaused(tx)
-		return err
-	})
-	return paused, err
+	return isPaused(s.db)
 }
 
 // FailClosed records that the operator will not retry. History stays. The lock stays.
@@ -1235,9 +1229,9 @@ func sessionByAlias(tx *sql.Tx, alias string) (string, string, error) {
 
 func paused(tx *sql.Tx) (bool, error) { return isPaused(tx) }
 
-func isPaused(tx *sql.Tx) (bool, error) {
+func isPaused(q interface{ QueryRow(string, ...any) *sql.Row }) (bool, error) {
 	var value int
-	err := tx.QueryRow(`SELECT paused FROM control WHERE id = 1`).Scan(&value)
+	err := q.QueryRow(`SELECT paused FROM control WHERE id = 1`).Scan(&value)
 	return value != 0, err
 }
 

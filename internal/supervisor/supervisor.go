@@ -226,11 +226,13 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 		defer wg.Done()
 		sup.runNetwork(ctx)
 	}()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		sup.loop(ctx)
-	}()
+	if _, disabled := launcher.(DisabledLauncher); !disabled {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sup.loop(ctx)
+		}()
+	}
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -254,8 +256,12 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 	return err
 }
 
+// Other processes, including coordinator MCP clients, can add work directly
+// to SQLite. Poll the durable queue even when there is no in-process event.
+const dispatchInterval = 250 * time.Millisecond
+
 func (s *Supervisor) loop(ctx context.Context) {
-	ticker := time.NewTicker(30 * time.Millisecond)
+	ticker := time.NewTicker(dispatchInterval)
 	defer ticker.Stop()
 	for {
 		select {
