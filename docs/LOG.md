@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-23 — Claude Code (0.97 release)
+
+- Published [0.97](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.97) from `5de88fc` with T-264 to T-267. Verified 22 assets and all five signed update sets (signature, version, source SHA, archive hash and length). The owner moved the picture viewer (T-268) to the next release. No installed-app or VPS upgrade was performed.
+
 ## 2026-11-23 — Claude Code (T-264, CI of PR #182)
 
 - On PR #182 the window-controls job was cancelled at its 10-minute limit while apt installed the browser system packages (9.5 minutes). Raised that job's limit to 20 minutes. The macOS / Go 1.22.2 job in the same run never got a runner and was cancelled after 15 minutes of waiting; the push reruns it. Nothing in the product changed.
