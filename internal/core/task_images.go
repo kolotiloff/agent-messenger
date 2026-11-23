@@ -99,6 +99,13 @@ func (s *Store) RunImages(run string) ([]TaskImage, error) {
 // TaskImages lists the pictures of a task's published reports and
 // questions, newest run first, up to limit.
 func (s *Store) TaskImages(task string, limit int) ([]TaskImage, error) {
+	if s.split != nil {
+		scoped, err := s.storeForTask(task)
+		if err != nil {
+			return nil, err
+		}
+		return scoped.TaskImages(task, limit)
+	}
 	return queryImages(s.db, `SELECT i.id,i.name,i.type,length(i.data) FROM task_images i
  LEFT JOIN task_runs r ON r.id=i.run_id
  WHERE i.task_id=? AND (i.run_id='' OR r.state='finished')
@@ -128,12 +135,45 @@ func queryImages(q querier, query string, args ...any) ([]TaskImage, error) {
 
 // TaskImageData returns a kept picture and its type.
 func (s *Store) TaskImageData(id string) (string, []byte, error) {
-	var kind string
-	var data []byte
-	err := s.db.QueryRow(`SELECT type,data FROM task_images WHERE id=?`, id).Scan(&kind, &data)
+	if s.split != nil {
+		var kind string
+		var data []byte
+		err := s.eachProjectStore(func(scoped *Store) error {
+			if data != nil {
+				return nil
+			}
+			var err error
+			kind, data, err = scoped.taskImageData("", id)
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil
+			}
+			return err
+		})
+		if err != nil || data != nil {
+			return kind, data, err
+		}
+		return "", nil, fmt.Errorf("%w: no such picture", ErrRejected)
+	}
+	return s.TaskImageForTask("", id)
+}
+
+// TaskImageForTask opens a picture only from the given task's store.
+func (s *Store) TaskImageForTask(task, id string) (string, []byte, error) {
+	scoped, err := s.storeForTask(task)
+	if err != nil {
+		return "", nil, err
+	}
+	kind, data, err := scoped.taskImageData(task, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil, fmt.Errorf("%w: no such picture", ErrRejected)
 	}
+	return kind, data, err
+}
+
+func (s *Store) taskImageData(task, id string) (string, []byte, error) {
+	var kind string
+	var data []byte
+	err := s.db.QueryRow(`SELECT type,data FROM task_images WHERE id=? AND (?='' OR task_id=?)`, id, task, task).Scan(&kind, &data)
 	return kind, data, err
 }
 

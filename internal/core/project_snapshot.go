@@ -16,10 +16,38 @@ import (
 // snapshot has no network configuration, coordinator claims or active
 // registry, and is not an executable queue.
 func SnapshotProjectDatabase(ctx context.Context, source, project, output string) error {
-	return snapshotProjectDatabase(ctx, source, project, output, false)
+	if !ValidProjectName(project) {
+		return fmt.Errorf("%w: invalid project name", ErrRejected)
+	}
+	source, err := filepath.Abs(source)
+	if err != nil {
+		return err
+	}
+	legacy, err := sql.Open("sqlite", sqliteFileURL(source, url.Values{"mode": {"ro"}, "_pragma": {sqliteBusyTimeout}}))
+	if err != nil {
+		return err
+	}
+	generation, err := readProjectGeneration(legacy)
+	_ = legacy.Close()
+	if err != nil {
+		return err
+	}
+	if generation == "" {
+		return snapshotProjectDatabase(ctx, source, project, output, false, "")
+	}
+	root := filepath.Join(filepath.Dir(source), generation)
+	active, err := openSplitStore(ctx, root)
+	if err != nil {
+		return err
+	}
+	defer active.Close()
+	if _, err := active.projectStore(project); err != nil {
+		return err
+	}
+	return snapshotProjectDatabase(ctx, filepath.Join(root, projectMigrationFile(project)), project, output, false, filepath.Join(root, migrationComputerFile))
 }
 
-func snapshotProjectDatabase(ctx context.Context, source, project, output string, withDelivery bool) error {
+func snapshotProjectDatabase(ctx context.Context, source, project, output string, withDelivery bool, computer string) error {
 	if !ValidProjectName(project) {
 		return fmt.Errorf("%w: invalid project name", ErrRejected)
 	}
@@ -51,10 +79,17 @@ func snapshotProjectDatabase(ctx context.Context, source, project, output string
 	}
 	defer db.Close()
 	db.SetMaxOpenConns(1)
+	catalog := "main"
+	if computer != "" {
+		if _, err := db.ExecContext(ctx, "ATTACH DATABASE ? AS computer", sqliteFileURL(computer, url.Values{"mode": {"ro"}})); err != nil {
+			return fmt.Errorf("attach computer database: %w", err)
+		}
+		catalog = "computer"
+	}
 	if _, err := db.ExecContext(ctx, "ATTACH DATABASE ? AS snapshot", scratch.Name()); err != nil {
 		return fmt.Errorf("attach project snapshot: %w", err)
 	}
-	if err := writeProjectSnapshot(ctx, db, project, withDelivery); err != nil {
+	if err := writeProjectSnapshot(ctx, db, project, withDelivery, catalog); err != nil {
 		return err
 	}
 	if err := db.Close(); err != nil {
@@ -68,7 +103,7 @@ func snapshotProjectDatabase(ctx context.Context, source, project, output string
 	return nil
 }
 
-func writeProjectSnapshot(ctx context.Context, db *sql.DB, project string, withDelivery bool) error {
+func writeProjectSnapshot(ctx context.Context, db *sql.DB, project string, withDelivery bool, catalog string) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -76,7 +111,7 @@ func writeProjectSnapshot(ctx context.Context, db *sql.DB, project string, withD
 	defer tx.Rollback()
 
 	var name string
-	if err := tx.QueryRowContext(ctx, "SELECT name FROM main.projects WHERE name=?", project).Scan(&name); err != nil {
+	if err := tx.QueryRowContext(ctx, "SELECT name FROM "+catalog+".projects WHERE name=?", project).Scan(&name); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("%w: unknown project %q", ErrRejected, project)
 		}
@@ -96,16 +131,25 @@ func writeProjectSnapshot(ctx context.Context, db *sql.DB, project string, withD
 		{"remote_task_items", "task_id IN (SELECT id FROM snapshot.tasks)"},
 		{"task_outputs", "task_id IN (SELECT id FROM snapshot.tasks)"},
 		{"task_images", "task_id IN (SELECT id FROM snapshot.tasks)"},
-		{"feedback", "project=?"},
 	}
 	if withDelivery {
 		tables = append(tables, struct{ name, where string }{
 			"net_outbox", "seq IN (SELECT seq FROM (" + migrationOutboxRoutes + ") WHERE project=?)",
 		})
 		tables = append(tables, struct{ name, where string }{"net_applied", "0"})
+		// The feedback journal belongs to the computer. Keep its empty
+		// schema for the same revision triggers on all live files.
+		tables = append(tables, struct{ name, where string }{"feedback", "0"})
+	} else {
+		tables = append(tables, struct{ name, where string }{"feedback", "project=?"})
 	}
 	for _, table := range tables {
-		if err := copyProjectTable(ctx, tx, table.name, table.where, project); err != nil {
+		source := "main"
+		switch table.name {
+		case "projects", "project_folders", "feedback":
+			source = catalog
+		}
+		if err := copyProjectTable(ctx, tx, source, table.name, table.where, project); err != nil {
 			return fmt.Errorf("copy project table %s: %w", table.name, err)
 		}
 	}
@@ -127,6 +171,10 @@ func writeProjectSnapshot(ctx context.Context, db *sql.DB, project string, withD
  INSERT INTO snapshot.sqlite_sequence(name,seq)
  VALUES ('net_outbox',COALESCE((SELECT seq FROM main.sqlite_sequence WHERE name='net_outbox'),0));
  CREATE INDEX IF NOT EXISTS snapshot.task_run_intents ON task_runs(task_id) WHERE state='intent';
+ CREATE INDEX IF NOT EXISTS snapshot.tasks_window_history ON tasks(project,created_at)
+ WHERE hidden_at IS NULL AND state IN `+finishedWindowStates+`;
+ CREATE INDEX IF NOT EXISTS snapshot.tasks_window_active ON tasks(project,created_at)
+ WHERE hidden_at IS NULL AND state NOT IN `+finishedWindowStates+`;
  CREATE INDEX IF NOT EXISTS snapshot.net_applied_op ON net_applied(op_id)`); err != nil {
 			return err
 		}
@@ -137,7 +185,7 @@ func writeProjectSnapshot(ctx context.Context, db *sql.DB, project string, withD
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO snapshot.project_snapshot
- SELECT 1, CAST(value AS INTEGER), ?, ? FROM main.meta WHERE key='schema_version'`, name, now()); err != nil {
+ SELECT 1, CAST(value AS INTEGER), ?, ? FROM `+catalog+`.meta WHERE key='schema_version'`, name, now()); err != nil {
 		return err
 	}
 	var check string
@@ -150,9 +198,9 @@ func writeProjectSnapshot(ctx context.Context, db *sql.DB, project string, withD
 	return tx.Commit()
 }
 
-func copyProjectTable(ctx context.Context, tx *sql.Tx, table, where, project string) error {
+func copyProjectTable(ctx context.Context, tx *sql.Tx, source, table, where, project string) error {
 	var ddl string
-	if err := tx.QueryRowContext(ctx, "SELECT sql FROM main.sqlite_schema WHERE type='table' AND name=?", table).Scan(&ddl); err != nil {
+	if err := tx.QueryRowContext(ctx, "SELECT sql FROM "+source+".sqlite_schema WHERE type='table' AND name=?", table).Scan(&ddl); err != nil {
 		return err
 	}
 	definition, ok := strings.CutPrefix(ddl, "CREATE TABLE ")
@@ -166,16 +214,16 @@ func copyProjectTable(ctx context.Context, tx *sql.Tx, table, where, project str
 	if strings.Contains(where, "?") {
 		args = append(args, project)
 	}
-	if _, err := tx.ExecContext(ctx, "INSERT INTO snapshot."+table+" SELECT * FROM main."+table+" WHERE "+where+" ORDER BY rowid", args...); err != nil {
+	if _, err := tx.ExecContext(ctx, "INSERT INTO snapshot."+table+" SELECT * FROM "+source+"."+table+" WHERE "+where+" ORDER BY rowid", args...); err != nil {
 		return err
 	}
-	return copyProjectIndexes(ctx, tx, table)
+	return copyProjectIndexes(ctx, tx, source, table)
 }
 
-func copyProjectIndexes(ctx context.Context, tx *sql.Tx, table string) error {
+func copyProjectIndexes(ctx context.Context, tx *sql.Tx, source, table string) error {
 	// Implicit indexes come from CREATE TABLE. Preserve explicit indexes
 	// too, including the partial unique index for conversation IDs.
-	rows, err := tx.QueryContext(ctx, `SELECT sql FROM main.sqlite_schema
+	rows, err := tx.QueryContext(ctx, `SELECT sql FROM `+source+`.sqlite_schema
  WHERE type='index' AND tbl_name=? AND sql IS NOT NULL ORDER BY name`, table)
 	if err != nil {
 		return err

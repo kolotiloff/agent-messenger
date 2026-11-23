@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"database/sql"
 	"sort"
 	"time"
@@ -78,7 +79,8 @@ type UsageDayAgent struct {
 
 // UsageStats is the window's statistics page.
 type UsageStats struct {
-	Since string `json:"since"`
+	Since   string `json:"since"`
+	Project string `json:"project,omitempty"`
 	// Computer names the computer the page is limited to; empty for the
 	// whole network.
 	Computer  string       `json:"computer,omitempty"`
@@ -98,12 +100,12 @@ type UsageStats struct {
 	Models []UsageGroup `json:"models"`
 }
 
-// UsageFilter limits the statistics to one agent and one model (T-201).
-// Other computers report their days per agent only, so with a model only
-// the tasks this computer knows are counted.
+// UsageFilter limits statistics by project, agent and model. Peer summaries
+// are per agent only, so project or model filters use known task records.
 type UsageFilter struct {
-	Agent string
-	Model string
+	Project string
+	Agent   string
+	Model   string
 }
 
 // MaxUsageTop is how many tasks the page lists in each order.
@@ -138,9 +140,9 @@ func (s *Store) UsageStats(since time.Time, loc *time.Location, computer string)
 	return s.UsageStatsFiltered(since, loc, computer, UsageFilter{})
 }
 
-// UsageStatsFiltered is UsageStats for one agent or model (T-201).
+// UsageStatsFiltered applies the requested project, agent and model filters.
 func (s *Store) UsageStatsFiltered(since time.Time, loc *time.Location, computer string, filter UsageFilter) (UsageStats, error) {
-	out := UsageStats{Since: since.UTC().Format(time.RFC3339Nano), Agents: []UsageGroup{}, Computers: []UsageGroup{}, Days: []UsageDay{}, Top: []UsageTask{}, Recent: []UsageTask{}, Models: []UsageGroup{}, Agent: filter.Agent, Model: filter.Model}
+	out := UsageStats{Since: since.UTC().Format(time.RFC3339Nano), Project: filter.Project, Agents: []UsageGroup{}, Computers: []UsageGroup{}, Days: []UsageDay{}, Top: []UsageTask{}, Recent: []UsageTask{}, Models: []UsageGroup{}, Agent: filter.Agent, Model: filter.Model}
 	err := s.tx(func(tx *sql.Tx) error {
 		local, err := localComputer(tx)
 		if err != nil {
@@ -154,10 +156,16 @@ func (s *Store) UsageStatsFiltered(since time.Time, loc *time.Location, computer
 		if err != nil {
 			return err
 		}
+		peerNames := make(map[string]string, len(peers))
+		for _, peer := range peers {
+			peerNames[peer.ID] = peer.Name
+		}
 		reported := map[string]NetPeer{}
-		for _, p := range peers {
-			if p.Usage != nil {
-				reported[p.ID] = p
+		if filter.Project == "" && filter.Model == "" {
+			for _, p := range peers {
+				if p.Usage != nil {
+					reported[p.ID] = p
+				}
 			}
 		}
 		wanted := func(key string) bool {
@@ -201,7 +209,7 @@ func (s *Store) UsageStatsFiltered(since time.Time, loc *time.Location, computer
 		}
 		models := map[string]*UsageGroup{}
 		var used, dated, timed []UsageTask
-		rows, err := tx.Query(`SELECT t.id,t.title,t.project,t.provider,COALESCE(t.remote_peer,''),COALESCE(p.name,''),
+		query := `SELECT t.id,t.title,t.project,t.provider,COALESCE(t.remote_peer,''),
  COALESCE(t.finished_at,t.updated_at),t.usage_input,t.usage_cached,t.usage_output,
  COALESCE(NULLIF(t.ran_model,''),NULLIF(t.model,''),''),t.usage_seen,
  CASE WHEN t.state IN ('done','failed','cancelled') THEN COALESCE(t.finished_at,'') ELSE '' END,
@@ -209,92 +217,90 @@ func (s *Store) UsageStatsFiltered(since time.Time, loc *time.Location, computer
  t.remote_duration_ms,
  CASE WHEN t.remote_peer IS NOT NULL AND t.remote_duration_ms IS NULL AND t.state IN ('done','failed')
  THEN COALESCE((SELECT i.created_at FROM remote_task_items i WHERE i.task_id=t.id ORDER BY i.seq LIMIT 1),'') ELSE '' END
- FROM tasks t LEFT JOIN net_peers p ON p.peer=t.remote_peer
+ FROM tasks t
  WHERE COALESCE(t.finished_at,t.updated_at)>=?
- AND (t.usage_seen=1 OR (t.finished_at IS NOT NULL AND t.state IN ('done','failed','cancelled')))`, out.Since)
+ AND (?='' OR t.project=?)
+ AND (t.usage_seen=1 OR (t.finished_at IS NOT NULL AND t.state IN ('done','failed','cancelled')))`
+		err = s.visitProjectTaskRows(tx, filter.Project, query, []any{out.Since, filter.Project, filter.Project}, func(rows *sql.Rows) error {
+			for rows.Next() {
+				var task UsageTask
+				var peer, finished, started, observedStart string
+				var in, cached, outTokens int64
+				var usageSeen bool
+				var remoteDuration sql.NullInt64
+				if err := rows.Scan(&task.ID, &task.Title, &task.Project, &task.Agent, &peer, &task.At, &in, &cached, &outTokens,
+					&task.Model, &usageSeen, &finished, &started, &remoteDuration, &observedStart); err != nil {
+					return err
+				}
+				if filter.Agent != "" && task.Agent != filter.Agent {
+					continue
+				}
+				task.Tokens = in + outTokens
+				task.Input, task.Cached, task.Output = in, cached, outTokens
+				key, name, this := local, localName, true
+				if peer != "" {
+					key, name, this = peer, peerNames[peer], false
+				}
+				if !wanted(key) {
+					continue
+				}
+				if finished != "" {
+					if this {
+						task.DurationMS = taskDurationMS(started, finished)
+					} else if remoteDuration.Valid {
+						task.DurationMS = &remoteDuration.Int64
+					} else if observedStart != "" {
+						// Older remote records may only have local receipt times.
+						task.DurationMS = taskDurationMS(observedStart, finished)
+						task.DurationEstimated = task.DurationMS != nil
+					}
+				}
+				if !usageSeen && task.DurationMS == nil {
+					continue
+				}
+				// The model list counts every known task of the agent, whatever
+				// model is chosen, so another model can be picked.
+				if task.Model != "" {
+					m := models[task.Model]
+					if m == nil {
+						m = &UsageGroup{Key: task.Model, Name: task.Model}
+						models[task.Model] = m
+					}
+					if usageSeen {
+						m.addN(1, in, cached, outTokens)
+					}
+				}
+				if filter.Model != "" && task.Model != filter.Model {
+					continue
+				}
+				task.Computer = name
+				task.UsageMissing = !usageSeen
+				task.atTime, _ = time.Parse(time.RFC3339Nano, task.At)
+				dated = append(dated, task)
+				if task.DurationMS != nil {
+					timed = append(timed, task)
+				}
+				if !usageSeen {
+					continue
+				}
+				used = append(used, task)
+				if _, ok := reported[peer]; peer != "" && ok {
+					continue // counted from that computer's own report
+				}
+				day := ""
+				if !task.atTime.IsZero() {
+					day = task.atTime.In(loc).Format("2006-01-02")
+				}
+				count(key, name, this, task.Agent, day, 1, in, cached, outTokens)
+			}
+			return rows.Err()
+		})
 		if err != nil {
 			return err
 		}
-		defer rows.Close()
-		for rows.Next() {
-			var task UsageTask
-			var peer, peerName, finished, started, observedStart string
-			var in, cached, outTokens int64
-			var usageSeen bool
-			var remoteDuration sql.NullInt64
-			if err := rows.Scan(&task.ID, &task.Title, &task.Project, &task.Agent, &peer, &peerName, &task.At, &in, &cached, &outTokens,
-				&task.Model, &usageSeen, &finished, &started, &remoteDuration, &observedStart); err != nil {
-				return err
-			}
-			if filter.Agent != "" && task.Agent != filter.Agent {
-				continue
-			}
-			task.Tokens = in + outTokens
-			task.Input, task.Cached, task.Output = in, cached, outTokens
-			key, name, this := local, localName, true
-			if peer != "" {
-				key, name, this = peer, peerName, false
-			}
-			if !wanted(key) {
-				continue
-			}
-			if finished != "" {
-				if this {
-					task.DurationMS = taskDurationMS(started, finished)
-				} else if remoteDuration.Valid {
-					task.DurationMS = &remoteDuration.Int64
-				} else if observedStart != "" {
-					// Older remote records may only have local receipt times.
-					task.DurationMS = taskDurationMS(observedStart, finished)
-					task.DurationEstimated = task.DurationMS != nil
-				}
-			}
-			if !usageSeen && task.DurationMS == nil {
-				continue
-			}
-			// The model list counts every known task of the agent, whatever
-			// model is chosen, so another model can be picked.
-			if task.Model != "" {
-				m := models[task.Model]
-				if m == nil {
-					m = &UsageGroup{Key: task.Model, Name: task.Model}
-					models[task.Model] = m
-				}
-				if usageSeen {
-					m.addN(1, in, cached, outTokens)
-				}
-			}
-			if filter.Model != "" && task.Model != filter.Model {
-				continue
-			}
-			task.Computer = name
-			task.UsageMissing = !usageSeen
-			task.atTime, _ = time.Parse(time.RFC3339Nano, task.At)
-			dated = append(dated, task)
-			if task.DurationMS != nil {
-				timed = append(timed, task)
-			}
-			if !usageSeen {
-				continue
-			}
-			used = append(used, task)
-			if _, ok := reported[peer]; peer != "" && ok && filter.Model == "" {
-				continue // counted from that computer's own report
-			}
-			day := ""
-			if !task.atTime.IsZero() {
-				day = task.atTime.In(loc).Format("2006-01-02")
-			}
-			count(key, name, this, task.Agent, day, 1, in, cached, outTokens)
-		}
-		if err := rows.Err(); err != nil {
-			return err
-		}
 		firstDay := since.In(loc).Format("2006-01-02")
-		for _, p := range peers {
-			// The reports carry no model: with a model chosen, the tasks
-			// above stand for that computer.
-			if p.Usage == nil || !wanted(p.ID) || filter.Model != "" {
+		for _, p := range reported {
+			if !wanted(p.ID) {
 				continue
 			}
 			for _, u := range p.Usage {
@@ -386,35 +392,34 @@ const MaxUsageDays = 31
 func (s *Store) UsageDaily(since time.Time, loc *time.Location) ([]UsageDayAgent, error) {
 	out := []UsageDayAgent{}
 	err := s.tx(func(tx *sql.Tx) error {
-		rows, err := tx.Query(`SELECT provider,COALESCE(finished_at,updated_at),usage_input,usage_cached,usage_output FROM tasks
- WHERE usage_seen=1 AND COALESCE(remote_peer,'')='' AND COALESCE(finished_at,updated_at)>=?`, since.UTC().Format(time.RFC3339Nano))
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
+		query := `SELECT provider,COALESCE(finished_at,updated_at),usage_input,usage_cached,usage_output FROM tasks
+ WHERE usage_seen=1 AND COALESCE(remote_peer,'')='' AND COALESCE(finished_at,updated_at)>=?`
 		sums := map[[2]string]*UsageDayAgent{}
-		for rows.Next() {
-			var agent, at string
-			var in, cached, outTokens int64
-			if err := rows.Scan(&agent, &at, &in, &cached, &outTokens); err != nil {
-				return err
+		err := s.visitProjectTaskRows(tx, "", query, []any{since.UTC().Format(time.RFC3339Nano)}, func(rows *sql.Rows) error {
+			for rows.Next() {
+				var agent, at string
+				var in, cached, outTokens int64
+				if err := rows.Scan(&agent, &at, &in, &cached, &outTokens); err != nil {
+					return err
+				}
+				when, err := time.Parse(time.RFC3339Nano, at)
+				if err != nil {
+					continue
+				}
+				k := [2]string{when.In(loc).Format("2006-01-02"), agent}
+				u := sums[k]
+				if u == nil {
+					u = &UsageDayAgent{Day: k[0], Agent: agent}
+					sums[k] = u
+				}
+				u.Tasks++
+				u.Input += in
+				u.Cached += cached
+				u.Output += outTokens
 			}
-			when, err := time.Parse(time.RFC3339Nano, at)
-			if err != nil {
-				continue
-			}
-			k := [2]string{when.In(loc).Format("2006-01-02"), agent}
-			u := sums[k]
-			if u == nil {
-				u = &UsageDayAgent{Day: k[0], Agent: agent}
-				sums[k] = u
-			}
-			u.Tasks++
-			u.Input += in
-			u.Cached += cached
-			u.Output += outTokens
-		}
-		if err := rows.Err(); err != nil {
+			return rows.Err()
+		})
+		if err != nil {
 			return err
 		}
 		for _, u := range sums {
@@ -429,4 +434,46 @@ func (s *Store) UsageDaily(since time.Time, loc *time.Location) ([]UsageDayAgent
 		return nil
 	})
 	return out, err
+}
+
+// visitProjectTaskRows streams only the selected project's data when the caller
+// has a scope. Peer labels and machine summaries stay in the computer DB.
+func (s *Store) visitProjectTaskRows(machine *sql.Tx, project, query string, args []any, visit func(*sql.Rows) error) error {
+	ctx := context.Background()
+	read := func(source projectFileQuerier) error {
+		rows, err := source.QueryContext(ctx, query, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		return visit(rows)
+	}
+	if s.split == nil {
+		return read(machine)
+	}
+	if project != "" {
+		file, err := splitTaskProjectFile(ctx, machine, project)
+		if err != nil {
+			return err
+		}
+		db, err := s.split.open(file)
+		if err != nil {
+			return err
+		}
+		return read(db)
+	}
+	files, err := splitProjectFiles(ctx, machine)
+	if err != nil {
+		return err
+	}
+	for _, file := range files {
+		db, err := s.split.open(file)
+		if err != nil {
+			return err
+		}
+		if err := read(db); err != nil {
+			return err
+		}
+	}
+	return nil
 }

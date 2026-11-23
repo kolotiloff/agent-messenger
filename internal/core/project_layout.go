@@ -16,6 +16,16 @@ type projectLayout struct {
 	runs  map[string]string
 }
 
+// OpenVerifiedProjectStorage opens a freshly prepared generation after its
+// integrity check. The caller must keep it isolated from the live client
+// until the activation transaction selects this generation.
+func OpenVerifiedProjectStorage(ctx context.Context, root string) (*Store, error) {
+	if err := VerifyProjectMigration(ctx, root); err != nil {
+		return nil, err
+	}
+	return openSplitStore(ctx, root)
+}
+
 // openSplitStore uses an already verified storage generation. The upgrade
 // coordinator must select the active generation before ordinary startup
 // calls this. A staged copy on disk does not select itself.
@@ -25,6 +35,10 @@ func openSplitStore(ctx context.Context, root string) (*Store, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
+	if _, err := db.ExecContext(ctx, "SELECT seq FROM project_notices LIMIT 0"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("project storage lacks the current notice queue: %w", err)
+	}
 	if _, err := splitProjectFiles(ctx, db); err != nil {
 		db.Close()
 		return nil, err

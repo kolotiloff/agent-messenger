@@ -34,6 +34,7 @@ type Request struct {
 	Action       string `json:"action,omitempty"`
 	Confirmation string `json:"confirmation,omitempty"`
 	Provider     string `json:"provider,omitempty"`
+	Project      string `json:"project,omitempty"`
 	// Model limits the statistics to one model (T-201).
 	Model          string `json:"model,omitempty"`
 	Environment    string `json:"environment,omitempty"`
@@ -64,7 +65,8 @@ type Status struct {
 	Version string `json:"version,omitempty"`
 	// Sandbox names the marker of an agent's sandbox the client was started
 	// in (T-129); its workers inherit that sandbox.
-	Sandbox string `json:"sandbox,omitempty"`
+	Sandbox        string `json:"sandbox,omitempty"`
+	ProjectStorage string `json:"project_storage,omitempty"`
 }
 
 type StopResult struct {
@@ -132,6 +134,12 @@ func CallContext(ctx context.Context, root string, request Request) (Response, e
 }
 
 func Serve(ln net.Listener, handler Handler) error {
+	return ServeDuringStartup(ln, handler, nil)
+}
+
+// ServeDuringStartup lets the caller answer control requests during startup
+// without exposing its regular handler before the store has been selected.
+func ServeDuringStartup(ln net.Listener, handler Handler, startup func(Request) (Response, bool)) error {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -154,12 +162,32 @@ func Serve(ln net.Listener, handler Handler) error {
 				writeResponse(conn, Response{OK: false, Error: "некорректная команда"})
 				return
 			}
+			if startup != nil {
+				if response, handled := startup(request); handled {
+					writeResponse(conn, response)
+					return
+				}
+			}
+			if request.Cmd == "window-changes" {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				go func() {
+					_, _ = reader.ReadByte()
+					cancel()
+				}()
+				writeResponse(conn, dispatchContext(ctx, handler, request))
+				return
+			}
 			writeResponse(conn, dispatch(handler, request))
 		}(conn)
 	}
 }
 
 func dispatch(handler Handler, request Request) Response {
+	return dispatchContext(context.Background(), handler, request)
+}
+
+func dispatchContext(ctx context.Context, handler Handler, request Request) Response {
 	switch request.Cmd {
 	case "authorize-setup":
 		h, ok := handler.(interface{ AuthorizeSetup(string) error })
@@ -258,7 +286,7 @@ func dispatch(handler Handler, request Request) Response {
 			return Response{Error: "picture unavailable"}
 		}
 		return Response{OK: true, Overview: raw}
-	case "window-view", "task-feed":
+	case "window-view", "task-feed", "task-history", "window-changes":
 		reader, ok := handler.(interface {
 			WindowView(string) (any, error)
 			TaskFeed(string) (any, error)
@@ -268,10 +296,39 @@ func dispatch(handler Handler, request Request) Response {
 		}
 		var value any
 		var err error
-		if request.Cmd == "window-view" {
-			value, err = reader.WindowView(request.Alias)
-		} else {
-			value, err = reader.TaskFeed(request.MessageID)
+		switch request.Cmd {
+		case "window-view":
+			if h, ok := handler.(interface {
+				WindowViewFiltered(string, string, string, string) (any, error)
+			}); ok {
+				value, err = h.WindowViewFiltered(request.Alias, request.Provider, request.Text, request.Confirmation)
+			} else {
+				value, err = reader.WindowView(request.Alias)
+			}
+		case "task-history":
+			h, ok := handler.(interface {
+				WindowTaskHistory(string, string, string, string) (any, error)
+			})
+			if !ok {
+				return Response{Error: "task history unsupported; update the background client"}
+			}
+			value, err = h.WindowTaskHistory(request.Alias, request.Before, request.Provider, request.Text)
+		case "window-changes":
+			h, ok := handler.(interface {
+				WaitWindowChanges(context.Context, string, string, string, string) (any, error)
+			})
+			if !ok {
+				return Response{Error: "неизвестная команда"}
+			}
+			value, err = h.WaitWindowChanges(ctx, request.Alias, request.MessageID, request.Before, request.Confirmation)
+		default:
+			if h, ok := handler.(interface {
+				TaskFeedDelta(string, string) (any, error)
+			}); ok && request.Action == "delta" {
+				value, err = h.TaskFeedDelta(request.MessageID, request.Before)
+			} else {
+				value, err = reader.TaskFeed(request.MessageID)
+			}
 		}
 		if err != nil {
 			return Response{Error: err.Error()}
@@ -284,7 +341,15 @@ func dispatch(handler Handler, request Request) Response {
 	case "usage-stats":
 		var value any
 		var err error
-		if h, ok := handler.(interface {
+		if request.Project != "" {
+			h, ok := handler.(interface {
+				UsageStatsForProject(project, period, computer, agent, model string) (any, error)
+			})
+			if !ok {
+				return Response{Error: "project statistics unsupported; update the background client"}
+			}
+			value, err = h.UsageStatsForProject(request.Project, request.Alias, request.Text, request.Provider, request.Model)
+		} else if h, ok := handler.(interface {
 			UsageStatsFiltered(period, computer, agent, model string) (any, error)
 		}); ok {
 			value, err = h.UsageStatsFiltered(request.Alias, request.Text, request.Provider, request.Model)
@@ -398,6 +463,17 @@ func dispatch(handler Handler, request Request) Response {
 		}
 		raw, _ := json.Marshal(map[string]any{"deleted": deleted, "left": left})
 		return Response{OK: true, Overview: raw}
+	case "task-hide-history":
+		h, ok := handler.(interface {
+			HideWindowHistory(string, string, string) error
+		})
+		if !ok {
+			return Response{Error: "task history unsupported; update the background client"}
+		}
+		if err := h.HideWindowHistory(request.Alias, request.Provider, request.Text); err != nil {
+			return Response{Error: err.Error()}
+		}
+		return Response{OK: true}
 	case "task-hide":
 		h, ok := handler.(interface{ HideNetTask(string, string) error })
 		if !ok {

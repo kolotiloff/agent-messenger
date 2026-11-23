@@ -1232,7 +1232,7 @@ func (c *coordinator) taskImages(task string) (any, error) {
 		out.info["note"] = "this task has no pictures"
 	}
 	for _, img := range list {
-		kind, data, err := c.store.TaskImageData(img.ID)
+		kind, data, err := c.store.TaskImageForTask(task, img.ID)
 		if err != nil {
 			return nil, err
 		}

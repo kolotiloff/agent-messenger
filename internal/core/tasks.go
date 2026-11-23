@@ -379,6 +379,9 @@ func (s *Store) CreateProject(name, folder string) error {
 			var old string
 			err := tx.QueryRow(`SELECT folder FROM project_folders WHERE project=? AND computer=?`, name, computer).Scan(&old)
 			if err == nil && old == folder {
+				if s.split != nil {
+					return s.ensureSplitProject(tx, name, folder, computer)
+				}
 				return nil
 			}
 			return fmt.Errorf("%w: a project with this name already exists", ErrRejected)
@@ -395,6 +398,9 @@ func (s *Store) CreateProject(name, folder string) error {
 			}
 		}
 		_, err = tx.Exec(`INSERT INTO project_folders(project,computer,folder,updated_at) VALUES (?,?,?,?)`, name, computer, folder, at)
+		if err == nil && s.split != nil {
+			return s.ensureSplitProject(tx, name, folder, computer)
+		}
 		return err
 	})
 }
@@ -414,8 +420,19 @@ func (s *Store) RemoveProject(name string) error {
 			return fmt.Errorf("%w: unknown project", ErrRejected)
 		}
 		var open int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM tasks t WHERE t.project=? AND (t.state IN ('running','waiting_coordinator','waiting_owner','blocked','interrupted')
- OR EXISTS (SELECT 1 FROM task_runs r WHERE r.task_id=t.id AND r.state IN ('intent','launching','running','blocked','interrupted')))`, name).Scan(&open); err != nil {
+		ctx := context.Background()
+		var source projectRouteQuerier = tx
+		if s.split != nil {
+			file, err := splitTaskProjectFile(ctx, tx, name)
+			if err != nil {
+				return err
+			}
+			source, err = s.split.open(file)
+			if err != nil {
+				return err
+			}
+		}
+		if err := source.QueryRowContext(ctx, `SELECT COUNT(*) FROM tasks t WHERE t.project=? AND (`+activeWorkWhere+`)`, name).Scan(&open); err != nil {
 			return err
 		}
 		if open != 0 {
@@ -966,7 +983,7 @@ func scanTask(scan func(...any) error) (Task, error) {
 	return t, err
 }
 
-func openQuestion(tx *sql.Tx, task string) (*TaskQuestion, error) {
+func openQuestion(tx interface{ QueryRow(string, ...any) *sql.Row }, task string) (*TaskQuestion, error) {
 	var q TaskQuestion
 	err := tx.QueryRow(`SELECT id,task_id,audience,text,state FROM task_questions WHERE task_id=? AND state='open' ORDER BY rowid DESC LIMIT 1`, task).Scan(&q.ID, &q.TaskID, &q.Audience, &q.Text, &q.State)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -2386,23 +2403,23 @@ func (s *Store) TaskEvents(project, audience string, after int64, limit int) ([]
 			return nil, cursor, err
 		}
 	}
-	err = scoped.tx(func(tx *sql.Tx) error {
-		rows, err := tx.Query(`SELECT seq,task_id,kind,text,COALESCE(question_id,''),created_at FROM task_events WHERE project=? AND audience=? AND seq>? ORDER BY seq LIMIT ?`, project, audience, after, limit)
-		if err != nil {
-			return err
+	rows, err := scoped.db.Query(`SELECT seq,task_id,kind,text,COALESCE(question_id,''),created_at FROM task_events WHERE project=? AND audience=? AND seq>? ORDER BY seq LIMIT ?`, project, audience, after, limit)
+	if err != nil {
+		return nil, cursor, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var e TaskEvent
+		if err := rows.Scan(&e.Seq, &e.TaskID, &e.Kind, &e.Text, &e.QuestionID, &e.CreatedAt); err != nil {
+			return nil, after, err
 		}
-		defer rows.Close()
-		for rows.Next() {
-			var e TaskEvent
-			if err := rows.Scan(&e.Seq, &e.TaskID, &e.Kind, &e.Text, &e.QuestionID, &e.CreatedAt); err != nil {
-				return err
-			}
-			out = append(out, e)
-			cursor = e.Seq
-		}
-		return rows.Err()
-	})
-	return out, cursor, err
+		out = append(out, e)
+		cursor = e.Seq
+	}
+	if err := rows.Err(); err != nil {
+		return nil, after, err
+	}
+	return out, cursor, nil
 }
 
 // TaskListVersion changes whenever a project's task list or its events may
@@ -2631,11 +2648,20 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 		if c.UpdatePending {
 			c.Note = strings.TrimSpace("waiting to install a Messenger update: it takes no new tasks. " + c.Note)
 		}
-		rows, err := tx.Query(`SELECT a.provider,a.profile,
+		var activity map[string]taskAgentActivity
+		query := `SELECT a.provider,a.profile,
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='running'),
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state IN ('waiting_coordinator','waiting_owner')),
  a.models, a.limit_state, a.full_access
- FROM computer_agents a WHERE a.computer=? AND a.paused=0 ORDER BY a.provider`, computer)
+ FROM computer_agents a WHERE a.computer=? AND a.paused=0 ORDER BY a.provider`
+		if s.split != nil {
+			activity, err = s.splitAgentActivity(tx, project, computer)
+			if err != nil {
+				return err
+			}
+			query = `SELECT provider,profile,0,0,models,limit_state,full_access FROM computer_agents WHERE computer=? AND paused=0 ORDER BY provider`
+		}
+		rows, err := tx.Query(query, computer)
 		if err != nil {
 			return err
 		}
@@ -2645,6 +2671,9 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 			var models, limit string
 			if err := rows.Scan(&a.Agent, &a.Profile, &a.Running, &a.Waiting, &models, &limit, &a.FullAccess); err != nil {
 				return err
+			}
+			if s.split != nil {
+				a.Running, a.Waiting = activity[a.Agent].Running, activity[a.Agent].Waiting
 			}
 			a.Models = splitModels(models)
 			a.Limit = limitView(parseAgentLimit(limit), time.Now())

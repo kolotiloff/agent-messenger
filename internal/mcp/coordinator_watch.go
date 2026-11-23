@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/kolotiloff/agent-messenger/internal/core"
+	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
 // Background watch for the coordinator (T-120). A chat that blocks in wait
@@ -69,7 +71,12 @@ func watchCoordinator(ctx context.Context, store *core.Store, project string, af
 	for {
 		events, _, err := store.TaskEvents(project, core.AudienceCoordinator, after, coordinatorMaxReturned+1)
 		if err != nil {
-			return err
+			var busy *sqlite.Error
+			if !errors.As(err, &busy) || busy.Code()&0xff != sqlite3.SQLITE_BUSY {
+				return err
+			}
+			// A contested read leaves the cursor intact. Check again on
+			// the next tick without replaying any task actions.
 		}
 		if len(events) > 0 {
 			count := fmt.Sprint(len(events))

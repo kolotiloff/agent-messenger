@@ -194,7 +194,7 @@ func splitTaskProjectFile(ctx context.Context, common *sql.Tx, name string) (str
 	return file, nil
 }
 
-func splitRouteOrder(ctx context.Context, common *sql.Tx, task Task) (int64, error) {
+func splitRouteOrder(ctx context.Context, common projectRouteQuerier, task Task) (int64, error) {
 	var order int64
 	err := common.QueryRowContext(ctx, "SELECT rowid FROM task_storage_routes WHERE id=? AND project=?", task.ID, task.Project).Scan(&order)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -203,7 +203,10 @@ func splitRouteOrder(ctx context.Context, common *sql.Tx, task Task) (int64, err
 	return order, err
 }
 
-func checkSplitTaskResource(ctx context.Context, common *sql.Tx, project projectFileQuerier, currentFile string, openProject func(string) (*sql.DB, error), task Task, resource string, order int64) error {
+func checkSplitTaskResource(ctx context.Context, common interface {
+	projectFileQuerier
+	projectRouteQuerier
+}, project projectFileQuerier, currentFile string, openProject func(string) (*sql.DB, error), task Task, resource string, order int64) error {
 	files, err := splitProjectFiles(ctx, common)
 	if err != nil {
 		return err
@@ -226,16 +229,18 @@ func checkSplitTaskResource(ctx context.Context, common *sql.Tx, project project
 
 func (s *Store) nextSplitRunIntents(limit int) ([]string, error) {
 	ctx := context.Background()
-	common, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer common.Rollback()
+	// Candidate selection is a read. BeginTaskRun rechecks the route and
+	// resource under the shared writer lock before it reserves anything.
+	common := s.db
 	files, err := splitProjectFiles(ctx, common)
 	if err != nil {
 		return nil, err
 	}
-	self, err := localComputer(common)
+	var self string
+	err = common.QueryRowContext(ctx, "SELECT value FROM meta WHERE key='computer_id'").Scan(&self)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -305,7 +310,7 @@ func (s *Store) nextSplitRunIntents(limit int) ([]string, error) {
 	return out, nil
 }
 
-func checkResourceInProject(ctx context.Context, common *sql.Tx, read projectFileQuerier, task Task, resource string, order int64) error {
+func checkResourceInProject(ctx context.Context, common projectRouteQuerier, read projectFileQuerier, task Task, resource string, order int64) error {
 	rows, err := read.QueryContext(ctx, `SELECT id,project,created_at,active FROM (
  SELECT t.id,t.project,t.created_at,t.state,EXISTS(SELECT 1 FROM task_runs r
  WHERE r.task_id=t.id AND r.state IN ('launching','running','blocked','interrupted')) AS active

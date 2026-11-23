@@ -107,6 +107,15 @@ func (t *taskRuns) release(id string) {
 	delete(t.running, id)
 }
 
+// A write by a different local process is found by the periodic queue check.
+// Writes handled here can wake the dispatcher immediately.
+func (s *Supervisor) wakeTaskDispatch() {
+	select {
+	case s.taskWake <- struct{}{}:
+	default:
+	}
+}
+
 // dispatchTasks launches every recorded run intent. There is no limit on
 // parallel workers (D-022); one task never has two runs at once, because a
 // run is recorded only when the previous one has finished.

@@ -91,7 +91,7 @@ func StageProjectMigration(ctx context.Context, source, output string) error {
 	manifest := projectMigrationManifest{Format: migrationLayoutFormat, Backup: migrationBackupFile, Computer: migrationComputerFile, Projects: projects, ComputerPending: totalPending}
 	for _, project := range projects {
 		destination := filepath.Join(scratch, project.File)
-		if err := snapshotProjectDatabase(ctx, backup, project.Name, destination, true); err != nil {
+		if err := snapshotProjectDatabase(ctx, backup, project.Name, destination, true, ""); err != nil {
 			return fmt.Errorf("stage project %q: %w", project.Name, err)
 		}
 		if err := stageProjectRevisions(destination); err != nil {
@@ -167,6 +167,13 @@ func migrationProjects(ctx context.Context, backup string) ([]migrationProject, 
 		return nil, 0, err
 	}
 	defer db.Close()
+	generation, err := readProjectGeneration(db)
+	if err != nil {
+		return nil, 0, err
+	}
+	if generation != "" {
+		return nil, 0, fmt.Errorf("%w: project storage is already active", ErrRejected)
+	}
 	rows, err := db.QueryContext(ctx, `WITH routes AS (`+migrationOutboxRoutes+`)
  SELECT p.name, (SELECT COUNT(*) FROM tasks WHERE project=p.name),
  COALESCE((SELECT MAX(seq) FROM task_events WHERE project=p.name),0),
@@ -243,7 +250,6 @@ func stageComputerDatabase(ctx context.Context, backup, output string, manifest 
  CREATE INDEX project_notices_project ON project_notices(project,seq);
  DELETE FROM net_outbox WHERE seq IN (SELECT seq FROM (`+migrationOutboxRoutes+`)
  WHERE project IN (SELECT name FROM projects));
- DELETE FROM feedback WHERE project IN (SELECT name FROM projects);
  DELETE FROM meta WHERE
  (key GLOB 'net_continue_prev:*' AND substr(key,length('net_continue_prev:')+1) IN (SELECT id FROM tasks))
  OR (key GLOB 'net_continue:*' AND substr(value,1,instr(value,char(10))-1) IN (SELECT id FROM tasks));
@@ -293,7 +299,7 @@ func stageComputerDatabase(ctx context.Context, backup, output string, manifest 
 	if check != "ok" {
 		return fmt.Errorf("computer database integrity check failed: %s", check)
 	}
-	return nil
+	return enableProjectWAL(ctx, db)
 }
 
 func projectMigrationFile(name string) string {

@@ -349,7 +349,7 @@ func run(root string, args []string) error {
 			return err
 		}
 		refreshMenuEntry(root)
-		err = supervisor.Run(context.Background(), root, options)
+		err = supervisor.RunWithOptions(context.Background(), root, options, supervisor.RunOptions{ProjectStorage: true})
 		if errors.Is(err, platform.ErrAlreadyRunning) {
 			return errors.New("клиент уже запущен; команды нужно отправлять ему, а не запускать второй экземпляр")
 		}

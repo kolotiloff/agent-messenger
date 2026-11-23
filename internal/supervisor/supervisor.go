@@ -85,15 +85,17 @@ type Supervisor struct {
 	// their process. Only one may start at a time: the startup lease is
 	// exclusive, and a second start would fail and leave its message
 	// uncertain.
-	streamOpening atomic.Int32
-	beforeSignal  func()
-	dispatch      sync.Mutex
-	stopping      atomic.Bool
-	starting      atomic.Bool
-	codex         codexOwners
-	tasks         taskRuns
-	server        *broker.Service
-	net           netState
+	streamOpening  atomic.Int32
+	beforeSignal   func()
+	dispatch       sync.Mutex
+	stopping       atomic.Bool
+	starting       atomic.Bool
+	codex          codexOwners
+	tasks          taskRuns
+	taskWake       chan struct{}
+	projectStorage bool
+	server         *broker.Service
+	net            netState
 	// startUpdate starts the update helper for another computer's request
 	// (T-078); nil when this client cannot be updated that way.
 	startUpdate UpdateStarter
@@ -117,6 +119,8 @@ func Run(parent context.Context, root string, launcher Launcher) error {
 type RunOptions struct {
 	StartPaused bool
 	Ready       func() error
+	// ProjectStorage selects the verified layout for installed clients.
+	ProjectStorage bool
 	// StartUpdate starts the update helper when another computer of the
 	// network asks this one to update (T-078); nil refuses such requests.
 	StartUpdate UpdateStarter
@@ -164,14 +168,12 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 	defer journal.Close()
 	journal.Printf("client started, version %s", buildinfo.Current().Version)
 	defer journal.Printf("client stopped")
-	store, err := core.Open(filepath.Join(root, dbName))
+	dbPath := filepath.Join(root, dbName)
+	store, err := core.Open(dbPath)
 	if err != nil {
 		return err
 	}
-	defer store.Close()
-	// D-120: an explicit cancel closes a stuck task once its worker is
-	// certainly gone.
-	store.SetWorkerCheck(core.CheckWorkerGone)
+	defer func() { _ = store.Close() }()
 	if err := store.CheckPendingStreamRecovery(); err != nil {
 		return err
 	}
@@ -181,17 +183,28 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 	if err := reconcileRuns(root); err != nil {
 		return err
 	}
-	if _, err := store.RevokeInherited(); err != nil {
-		return err
-	}
-	if options.StartPaused {
-		if err := store.Pause(); err != nil {
+	var startup *storageStartup
+	if options.ProjectStorage && !store.UsesProjectStorage() {
+		runs, err := ReservedRuns()
+		if err != nil {
 			return err
+		}
+		if runs == 0 {
+			paused, err := store.Paused()
+			if err != nil {
+				return err
+			}
+			startup = &storageStartup{paused: paused || options.StartPaused}
+		} else {
+			journal.Printf("project storage pending: retained CLI reservations")
 		}
 	}
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
-	sup := &Supervisor{store: store, root: root, launcher: launcher, cancel: cancel, ctx: ctx, startUpdate: options.StartUpdate}
+	sup := &Supervisor{
+		store: store, root: root, launcher: launcher, cancel: cancel, ctx: ctx, startUpdate: options.StartUpdate,
+		taskWake: make(chan struct{}, 1), projectStorage: options.ProjectStorage,
+	}
 	defer sup.bg.Wait()
 	defer sup.codex.closeAll()
 	server := broker.NewService(ctx, root)
@@ -202,7 +215,7 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 		return err
 	}
 	defer ln.Close()
-	if options.Ready != nil {
+	if startup != nil && options.Ready != nil {
 		if err := options.Ready(); err != nil {
 			return err
 		}
@@ -211,10 +224,50 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 		<-ctx.Done()
 		_ = ln.Close()
 	}()
+	serveResult := make(chan error, 1)
+	if startup != nil {
+		startup.cancel = cancel
+		go func() { serveResult <- control.ServeDuringStartup(ln, sup, startup.control) }()
+		switch err := core.ActivateProjectStorage(ctx, dbPath); {
+		case errors.Is(err, core.ErrProjectStorageBusy):
+			journal.Printf("project storage pending: %v", err)
+		case err != nil:
+			return fmt.Errorf("project storage activation: %w", err)
+		default:
+			next, err := core.Open(dbPath)
+			if err != nil {
+				return err
+			}
+			_ = store.Close()
+			store, sup.store = next, next
+			journal.Printf("project storage active")
+		}
+	}
+	// D-120: an explicit cancel closes a stuck task once its worker is
+	// certainly gone.
+	store.SetWorkerCheck(core.CheckWorkerGone)
+	if _, err := store.RevokeInherited(); err != nil {
+		return err
+	}
+	if startup == nil && options.StartPaused {
+		if err := store.Pause(); err != nil {
+			return err
+		}
+	}
+	if startup == nil && options.Ready != nil {
+		if err := options.Ready(); err != nil {
+			return err
+		}
+	}
 	// The hosted broker starts only if the owner turned it on; a failure is
 	// shown in the window and does not stop the client.
 	server.Start()
 	server.SetPresence(sup.presence)
+	if startup != nil {
+		if err := startup.finish(ctx, store); err != nil {
+			return err
+		}
+	}
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -243,7 +296,11 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 			sup.checkLimits(ctx, readCodexLimits)
 		}()
 	}
-	err = control.Serve(ln, sup)
+	if startup == nil {
+		err = control.Serve(ln, sup)
+	} else {
+		err = <-serveResult
+	}
 	cancel()
 	wg.Wait()
 	sup.streams.Wait()
@@ -255,16 +312,31 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 }
 
 func (s *Supervisor) loop(ctx context.Context) {
-	ticker := time.NewTicker(30 * time.Millisecond)
-	defer ticker.Stop()
+	timer := time.NewTimer(0)
+	defer timer.Stop()
+	nextTaskCheck := time.Time{}
 	for {
+		var taskChanged bool
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-s.taskWake:
+			taskChanged = true
+			if !timer.Stop() {
+				<-timer.C
+			}
+		case <-timer.C:
 		}
-		s.dispatchTasks(ctx)
+		if taskChanged || !time.Now().Before(nextTaskCheck) {
+			s.dispatchTasks(ctx)
+			nextTaskCheck = time.Now().Add(500 * time.Millisecond)
+		}
 		launcher := s.currentLauncher()
+		delay := time.Until(nextTaskCheck)
+		if launcher.Enabled() {
+			delay = min(delay, 30*time.Millisecond)
+		}
+		timer.Reset(delay)
 		if s.stopping.Load() || s.starting.Load() || !launcher.Enabled() {
 			continue
 		}
@@ -476,17 +548,25 @@ func (s *Supervisor) spec(token string) (Spec, error) {
 
 func (s *Supervisor) Status() (control.Status, error) {
 	launcher := s.currentLauncher()
-	snap, err := s.store.Snapshot()
+	queue, err := s.store.SessionStatus()
 	if err != nil {
 		return control.Status{}, err
 	}
 	status := control.Status{
-		Paused:     snap.Paused,
-		CLILaunch:  "disabled",
-		Broker:     "not_configured",
-		Supervisor: os.Getpid(),
-		Version:    buildinfo.Version,
-		Sandbox:    AgentSandbox(),
+		Paused:      queue.Paused,
+		Held:        queue.Held,
+		Queued:      queue.Queued,
+		StreamState: queue.StreamState,
+		CLILaunch:   "disabled",
+		Broker:      "not_configured",
+		Supervisor:  os.Getpid(),
+		Version:     buildinfo.Version,
+		Sandbox:     AgentSandbox(),
+	}
+	if s.store.UsesProjectStorage() {
+		status.ProjectStorage = "active"
+	} else if s.projectStorage {
+		status.ProjectStorage = "pending"
 	}
 	if s.server != nil {
 		status.Broker = s.server.Summary()
@@ -509,19 +589,6 @@ func (s *Supervisor) Status() (control.Status, error) {
 	} else if launcher.Enabled() {
 		status.CLILaunch = "enabled"
 	}
-	for _, session := range snap.Sessions {
-		if session["active_token"] != nil {
-			status.Held++
-		}
-	}
-	for _, request := range snap.Requests {
-		if request["state"] == "queued" {
-			status.Queued++
-		}
-	}
-	if len(snap.StreamRuns) > 0 {
-		status.StreamState = text(snap.StreamRuns[len(snap.StreamRuns)-1]["state"])
-	}
 	return status, nil
 }
 
@@ -530,7 +597,13 @@ func (s *Supervisor) Pause() error {
 	defer s.dispatch.Unlock()
 	return s.store.Pause()
 }
-func (s *Supervisor) Resume() error { return s.store.ResumeWork() }
+func (s *Supervisor) Resume() error {
+	if err := s.store.ResumeWork(); err != nil {
+		return err
+	}
+	s.wakeTaskDispatch()
+	return nil
+}
 
 func (s *Supervisor) StopJob() (control.StopResult, error) {
 	s.dispatch.Lock()

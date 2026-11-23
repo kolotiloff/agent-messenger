@@ -78,8 +78,28 @@ func ensureDesktopClient(ctx context.Context, root string) error {
 		resumeCtx, stopResume := context.WithTimeout(ctx, 3*time.Second)
 		_, _ = control.CallContext(resumeCtx, root, control.Request{Cmd: "resume"})
 		stopResume()
+		return waitForProjectStorage(ctx, root)
+	}
+	if response.Status.ProjectStorage == "preparing" {
+		return waitForProjectStorage(ctx, root)
 	}
 	return nil
+}
+
+func waitForProjectStorage(ctx context.Context, root string) error {
+	for ctx.Err() == nil {
+		statusCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		response, err := control.CallContext(statusCtx, root, control.Request{Cmd: "status"})
+		cancel()
+		if err != nil || !response.OK || response.Status == nil {
+			return errors.New("Не удалось открыть базы Messenger. Проверьте журнал запуска.")
+		}
+		if response.Status.ProjectStorage != "preparing" {
+			return nil
+		}
+		sleep(ctx, time.Second)
+	}
+	return ctx.Err()
 }
 
 // startDesktopClient starts the background client the way the window does.
@@ -162,7 +182,7 @@ func restartClient(ctx context.Context, root string, start func() error, step ti
 			return errors.New("новый клиент запущен, но остался на паузе. Нажмите «Продолжить»")
 		}
 	}
-	return nil
+	return waitForProjectStorage(ctx, root)
 }
 
 func sleep(ctx context.Context, d time.Duration) {

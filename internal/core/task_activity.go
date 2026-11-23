@@ -23,6 +23,13 @@ type TaskActivity struct {
 
 // TaskActivity returns a task's last worker action and its tokens so far.
 func (s *Store) TaskActivity(id string) (TaskActivity, error) {
+	if s.split != nil {
+		scoped, err := s.storeForTask(id)
+		if err != nil {
+			return TaskActivity{}, err
+		}
+		return scoped.TaskActivity(id)
+	}
 	var a TaskActivity
 	err := s.tx(func(tx *sql.Tx) error {
 		if err := tx.QueryRow(`SELECT usage_input+usage_output FROM tasks WHERE id=?`, id).Scan(&a.Tokens); err != nil {

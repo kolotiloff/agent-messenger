@@ -11,6 +11,46 @@ import (
 	"testing"
 )
 
+func TestSnapshotReadsActiveProjectAndCurrentFeedback(t *testing.T) {
+	f := newTaskFixture(t)
+	ctx := context.Background()
+	if _, err := f.st.AddFeedback(AudienceOwner, "Game", "before upgrade", "", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := ActivateProjectStorage(ctx, f.path); err != nil {
+		t.Fatal(err)
+	}
+	active, err := Open(f.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer active.Close()
+	if _, err := active.AddFeedback(AudienceCoordinator, "Game", "after upgrade", "", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	if n, _, err := active.FeedbackCount(); n != 2 || err != nil {
+		t.Fatalf("feedback journal: %d, %v", n, err)
+	}
+	id, _, err := active.StartTask(StartTaskRequest{Project: "Game", Provider: "codex", OpID: "after-switch", Text: "Task after upgrade"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "game.sqlite")
+	if err := SnapshotProjectDatabase(ctx, f.path, "Game", path); err != nil {
+		t.Fatal(err)
+	}
+	archive, err := sql.Open("sqlite", sqliteFileURL(path, url.Values{"mode": {"ro"}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer archive.Close()
+	var task string
+	var feedback int
+	if err := archive.QueryRow("SELECT id,(SELECT COUNT(*) FROM feedback) FROM tasks").Scan(&task, &feedback); err != nil || task != id || feedback != 2 {
+		t.Fatalf("task %q, feedback %d: %v", task, feedback, err)
+	}
+}
+
 func TestProjectSnapshotKeepsRemovedProjectAndItsCursor(t *testing.T) {
 	f := newTaskFixture(t)
 	if err := f.st.CreateProject("Other", t.TempDir()); err != nil {

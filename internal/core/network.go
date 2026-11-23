@@ -268,7 +268,7 @@ func enqueueNetFrom(tx *sql.Tx, self, broker, to, opID, task string, b netBody) 
 	return err
 }
 
-func metaValue(tx *sql.Tx, key string) (string, error) {
+func metaValue(tx interface{ QueryRow(string, ...any) *sql.Row }, key string) (string, error) {
 	var v string
 	err := tx.QueryRow(`SELECT value FROM meta WHERE key=?`, key).Scan(&v)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -907,48 +907,71 @@ func (s *Store) NetDeliverySent(message NetOutgoing) error {
 // dropped. Nothing is retried.
 func (s *Store) ReleaseAbsentOutbox(now time.Time) (int, []string, error) {
 	cutoff := now.UTC().Add(-reconnectGrace).Format(time.RFC3339Nano)
-	var seqs []int64
-	err := s.tx(func(tx *sql.Tx) error {
-		broker, err := metaValue(tx, "net_broker")
-		if err != nil || broker == "" {
-			return err
+	broker, err := metaValue(s.db, "net_broker")
+	if err != nil || broker == "" {
+		return 0, nil, err
+	}
+	rows, err := s.db.Query(`SELECT peer FROM net_peers WHERE missing_since='' OR missing_since>?`, cutoff)
+	if err != nil {
+		return 0, nil, err
+	}
+	present := map[string]bool{}
+	for rows.Next() {
+		var peer string
+		if err := rows.Scan(&peer); err != nil {
+			rows.Close()
+			return 0, nil, err
 		}
-		rows, err := tx.Query(`SELECT seq FROM net_outbox WHERE broker=? AND created_at<=?
- AND NOT EXISTS (SELECT 1 FROM net_peers p WHERE p.peer=net_outbox.recipient AND p.missing_since='')
- AND NOT EXISTS (SELECT 1 FROM net_peers p WHERE p.peer=net_outbox.recipient AND p.missing_since<>'' AND p.missing_since>?)`,
-			broker, cutoff, cutoff)
+		present[peer] = true
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, nil, err
+	}
+	var n int
+	var recipients []string
+	seen := map[string]bool{}
+	expire := func(queue *Store) error {
+		messages, err := queue.absentOutbox(broker, cutoff, present)
 		if err != nil {
 			return err
 		}
-		defer rows.Close()
-		for rows.Next() {
-			var seq int64
-			if err := rows.Scan(&seq); err != nil {
+		for _, message := range messages {
+			if err := queue.netUndeliverable(message.Seq, message.OpID, broker, message.To); err != nil {
 				return err
 			}
-			seqs = append(seqs, seq)
+			n++
+			if message.To != "" && !seen[message.To] {
+				seen[message.To] = true
+				recipients = append(recipients, message.To)
+			}
 		}
-		return rows.Err()
-	})
-	if err != nil || len(seqs) == 0 {
-		return 0, nil, err
+		return nil
 	}
-	seen := map[string]bool{}
-	var recipients []string
-	n := 0
-	for _, seq := range seqs {
-		var to string
-		_ = s.db.QueryRow(`SELECT recipient FROM net_outbox WHERE seq=?`, seq).Scan(&to)
-		if err := s.NetUndeliverable(seq); err != nil {
-			return n, recipients, err
+	err = expire(s)
+	if err == nil && s.split != nil {
+		err = s.eachProjectStore(expire)
+	}
+	return n, recipients, err
+}
+
+func (s *Store) absentOutbox(broker, cutoff string, present map[string]bool) ([]NetOutgoing, error) {
+	rows, err := s.db.Query(`SELECT seq,op_id,recipient FROM net_outbox WHERE broker=? AND created_at<=? ORDER BY seq`, broker, cutoff)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var messages []NetOutgoing
+	for rows.Next() {
+		var m NetOutgoing
+		if err := rows.Scan(&m.Seq, &m.OpID, &m.To); err != nil {
+			return nil, err
 		}
-		n++
-		if to != "" && !seen[to] {
-			seen[to] = true
-			recipients = append(recipients, to)
+		if !present[m.To] {
+			messages = append(messages, m)
 		}
 	}
-	return n, recipients, nil
+	return messages, rows.Err()
 }
 
 // NetUndeliverable handles a message the broker refused because its
@@ -958,7 +981,7 @@ func (s *Store) NetUndeliverable(seq int64) error {
 	if s.split != nil {
 		return fmt.Errorf("%w: a project delivery requires its outbox identity", ErrRejected)
 	}
-	return s.netUndeliverable(seq, "")
+	return s.netUndeliverable(seq, "", "", "")
 }
 
 // NetDeliveryRefused applies a broker refusal in the originating outbox.
@@ -970,13 +993,15 @@ func (s *Store) NetDeliveryRefused(message NetOutgoing) error {
 	if err != nil {
 		return err
 	}
-	return (&Store{db: db}).netUndeliverable(message.Seq, message.OpID)
+	return (&Store{db: db}).netUndeliverable(message.Seq, message.OpID, "", message.To)
 }
 
-func (s *Store) netUndeliverable(seq int64, opID string) error {
+func (s *Store) netUndeliverable(seq int64, opID, broker, recipient string) error {
 	return s.tx(func(tx *sql.Tx) error {
 		var kind, task, to, msgBroker string
-		err := tx.QueryRow(`SELECT kind,task_id,recipient,broker FROM net_outbox WHERE seq=? AND (?='' OR op_id=?)`, seq, opID, opID).Scan(&kind, &task, &to, &msgBroker)
+		err := tx.QueryRow(`SELECT kind,task_id,recipient,broker FROM net_outbox WHERE seq=?
+ AND (?='' OR op_id=?) AND (?='' OR broker=?) AND (?='' OR recipient=?)`,
+			seq, opID, opID, broker, broker, recipient, recipient).Scan(&kind, &task, &to, &msgBroker)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}

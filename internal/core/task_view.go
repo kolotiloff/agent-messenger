@@ -258,24 +258,6 @@ func (s *Store) remoteOf(task string) (*RemoteComputer, error) {
 	return out, err
 }
 
-// hiddenTasks lists the project's tasks the owner removed from the list.
-func (s *Store) hiddenTasks(project string) (map[string]bool, error) {
-	rows, err := s.db.Query(`SELECT id FROM tasks WHERE project=? AND hidden_at IS NOT NULL`, project)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := map[string]bool{}
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		out[id] = true
-	}
-	return out, rows.Err()
-}
-
 func (s *Store) ranModel(task string) string {
 	var m sql.NullString
 	_ = s.db.QueryRow(`SELECT ran_model FROM tasks WHERE id=?`, task).Scan(&m)
@@ -350,8 +332,11 @@ type WindowView struct {
 	CoordinatorModels map[string][]string `json:"coordinator_models"`
 	Agents            []WindowAgent       `json:"agents"`
 	Tasks             []WindowTask        `json:"tasks"`
-	// TaskListLimitReached means that older tasks may be absent from Tasks.
-	TaskListLimitReached bool `json:"task_list_limit_reached,omitempty"`
+	// HistoryNext identifies the last completed row of the first page.
+	HistoryNext      string `json:"history_next,omitempty"`
+	HistoryVersion   string `json:"history_version,omitempty"`
+	HistoryUnchanged bool   `json:"history_unchanged,omitempty"`
+	HistoryPaged     bool   `json:"history_paged,omitempty"`
 	// Shared are the other computers' tasks of this project (T-047).
 	Shared []NetPeerTasks `json:"shared"`
 	// Pending counts this project's runs that are recorded but not launched.
@@ -361,6 +346,12 @@ type WindowView struct {
 // WindowView builds the window's view of a project. An empty project picks
 // the first one.
 func (s *Store) WindowView(project, today string) (WindowView, error) {
+	return s.WindowViewFiltered(project, today, "", "", "")
+}
+
+// WindowViewFiltered keeps every unfinished row available for activity and
+// limits the completed part of the list to the current filter's first page.
+func (s *Store) WindowViewFiltered(project, today, agent, computer, historyVersion string) (WindowView, error) {
 	var v WindowView
 	projects, err := s.Projects()
 	if err != nil {
@@ -399,7 +390,13 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 		if v.Name, err = computerName(tx); err != nil {
 			return err
 		}
-		rows, err := tx.Query(`SELECT a.provider,a.cli_path,a.profile,a.environment,
+		if s.split != nil {
+			v.Agents, err = s.splitWindowAgents(tx, v.Project, today, computer)
+			if err != nil {
+				return err
+			}
+		} else {
+			rows, err := tx.Query(`SELECT a.provider,a.cli_path,a.profile,a.environment,
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='running'),
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='waiting_owner'),
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='running' AND t.project=?),
@@ -409,23 +406,24 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
  (SELECT COALESCE(SUM(t.usage_input+t.usage_output),0) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.created_at>=?),
  (SELECT COALESCE(MAX(t.finished_at),'') FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='done')
  FROM computer_agents a WHERE a.computer=? ORDER BY a.provider`, project, project, project, today, today, computer)
-		if err != nil {
-			return err
-		}
-		for rows.Next() {
-			var a WindowAgent
-			var models, limit string
-			if err := rows.Scan(&a.Agent, &a.CLI, &a.Profile, &a.Env, &a.Running, &a.Waiting, &a.ProjectRunning, &a.ProjectWaiting, &a.ProjectToday, &models, &limit, &a.FullAccess, &a.Paused, &a.TodayTokens, &a.LastDone); err != nil {
-				rows.Close()
+			if err != nil {
 				return err
 			}
-			a.Models = splitModels(models)
-			a.Limit = parseAgentLimit(limit)
-			v.Agents = append(v.Agents, a)
-		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
-			return err
+			for rows.Next() {
+				var a WindowAgent
+				var models, limit string
+				if err := rows.Scan(&a.Agent, &a.CLI, &a.Profile, &a.Env, &a.Running, &a.Waiting, &a.ProjectRunning, &a.ProjectWaiting, &a.ProjectToday, &models, &limit, &a.FullAccess, &a.Paused, &a.TodayTokens, &a.LastDone); err != nil {
+					rows.Close()
+					return err
+				}
+				a.Models = splitModels(models)
+				a.Limit = parseAgentLimit(limit)
+				v.Agents = append(v.Agents, a)
+			}
+			rows.Close()
+			if err := rows.Err(); err != nil {
+				return err
+			}
 		}
 		if !found {
 			return nil
@@ -439,10 +437,7 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 		} else if !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM task_runs r JOIN tasks t ON t.id=r.task_id WHERE t.project=? AND r.state='intent' AND t.state='running'`, project).Scan(&v.Pending); err != nil {
-			return err
-		}
-		v.Shared, err = projectNetTasks(tx, project)
+		v.Shared, err = projectNetTasks(tx, project, s.split != nil)
 		return err
 	})
 	if err != nil || !found {
@@ -453,50 +448,92 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 		live, err := platform.ReadObservation(coordinator.PID)
 		v.Coordinator.Active = err == nil && live.StartToken == coordinator.StartToken && live.BootID == coordinator.BootID
 	}
-	const taskListLimit = 300
-	tasks, err := s.Tasks(project, taskListLimit)
+	scoped, err := s.projectStore(project)
 	if err != nil {
 		return v, err
 	}
-	v.TaskListLimitReached = len(tasks) == taskListLimit
-	hidden, err := s.hiddenTasks(project)
+	if err := scoped.db.QueryRow(`SELECT COUNT(*) FROM task_runs r JOIN tasks t ON t.id=r.task_id WHERE t.project=? AND r.state='intent' AND t.state='running'`, project).Scan(&v.Pending); err != nil {
+		return v, err
+	}
+	active, err := scoped.windowTaskRows(`WHERE project=? AND hidden_at IS NULL AND state NOT IN `+finishedWindowStates+`
+ ORDER BY created_at DESC,rowid DESC`, project)
 	if err != nil {
 		return v, err
 	}
-	for _, t := range tasks {
-		if hidden[t.ID] {
-			continue
+	v.Tasks, v.HistoryPaged = active, true
+	v.HistoryVersion, err = scoped.windowHistoryVersion(project, agent, computer)
+	if err != nil {
+		return v, err
+	}
+	if v.HistoryVersion == historyVersion {
+		v.HistoryUnchanged = true
+		return v, nil
+	}
+	history, err := scoped.WindowTaskHistory(project, "", agent, computer)
+	if err != nil {
+		return v, err
+	}
+	v.Tasks = append(v.Tasks, history.Tasks...)
+	v.HistoryNext = history.Next
+	return v, nil
+}
+
+func (s *Store) windowTaskRows(selection string, args ...any) ([]WindowTask, error) {
+	rows, err := s.db.Query(`SELECT `+taskColumns+` FROM tasks `+selection, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var tasks []Task
+	for rows.Next() {
+		task, err := scanTask(rows.Scan)
+		if err != nil {
+			return nil, err
 		}
+		tasks = append(tasks, task)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	out := make([]WindowTask, 0, len(tasks))
+	for _, t := range tasks {
 		w := WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt, FailureReason: t.FailureReason, FailureReset: t.FailureReset, FullAccess: t.FullAccess}
 		// The row shows the model the worker started on (T-202).
 		w.RanModel = s.ranModel(t.ID)
-		if t.OpenQuestion != nil && t.OpenQuestion.Audience == AudienceOwner {
-			w.OwnerQuestion = t.OpenQuestion
+		if t.State == "waiting_owner" {
+			question, err := openQuestion(s.db, t.ID)
+			if err != nil {
+				return nil, err
+			}
+			if question != nil && question.Audience == AudienceOwner {
+				w.OwnerQuestion = question
+			}
 		}
 		if t.State == "running" {
 			if w.PendingLaunch, err = s.pendingLaunch(t.ID); err != nil {
-				return v, err
+				return nil, err
 			}
 			if w.PendingLaunch {
 				if w.WaitsForLock, err = s.waitingLock(t.ID); err != nil {
-					return v, err
+					return nil, err
 				}
 			} else if w.Quiet, err = s.TaskRunQuiet(t.ID); err != nil {
-				return v, err
+				return nil, err
 			}
 		}
 		if w.StartedAt, err = s.startedAt(t.ID); err != nil {
-			return v, err
+			return nil, err
 		}
 		if w.Remote, err = s.remoteOf(t.ID); err != nil {
-			return v, err
+			return nil, err
 		}
 		if w.Usage, err = s.taskUsage(t.ID); err != nil {
-			return v, err
+			return nil, err
 		}
-		v.Tasks = append(v.Tasks, w)
+		out = append(out, w)
 	}
-	return v, nil
+	return out, nil
 }
 
 // FeedItem is one entry of a task's feed, rendered like a session in the
@@ -526,8 +563,40 @@ type FeedItem struct {
 
 // TaskFeed is a task with its feed.
 type TaskFeed struct {
-	Task  WindowTask `json:"task"`
-	Items []FeedItem `json:"items"`
+	Task       WindowTask `json:"task"`
+	Items      []FeedItem `json:"items"`
+	Cursor     string     `json:"cursor,omitempty"`
+	AppendFrom int        `json:"append_from,omitempty"`
+}
+
+func (s *Store) taskFeedHeader(id string) (TaskFeed, Task, error) {
+	var f TaskFeed
+	t, err := s.TaskByID(id)
+	if err != nil {
+		return f, t, err
+	}
+	f.Task = WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt, RanModel: s.ranModel(t.ID), FullAccess: t.FullAccess}
+	if t.OpenQuestion != nil && t.OpenQuestion.Audience == AudienceOwner {
+		f.Task.OwnerQuestion = t.OpenQuestion
+	}
+	if t.State == "running" {
+		if f.Task.PendingLaunch, err = s.pendingLaunch(t.ID); err != nil {
+			return f, t, err
+		}
+		if f.Task.Quiet, err = s.TaskRunQuiet(t.ID); err != nil {
+			return f, t, err
+		}
+	}
+	if f.Task.StartedAt, err = s.startedAt(t.ID); err != nil {
+		return f, t, err
+	}
+	if f.Task.Remote, err = s.remoteOf(t.ID); err != nil {
+		return f, t, err
+	}
+	if f.Task.Usage, err = s.taskUsage(t.ID); err != nil {
+		return f, t, err
+	}
+	return f, t, nil
 }
 
 // TaskFeed builds the feed of one task.
@@ -539,30 +608,8 @@ func (s *Store) TaskFeed(id string) (TaskFeed, error) {
 		}
 		return project.TaskFeed(id)
 	}
-	var f TaskFeed
-	t, err := s.TaskByID(id)
+	f, t, err := s.taskFeedHeader(id)
 	if err != nil {
-		return f, err
-	}
-	f.Task = WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt, RanModel: s.ranModel(t.ID), FullAccess: t.FullAccess}
-	if t.OpenQuestion != nil && t.OpenQuestion.Audience == AudienceOwner {
-		f.Task.OwnerQuestion = t.OpenQuestion
-	}
-	if t.State == "running" {
-		if f.Task.PendingLaunch, err = s.pendingLaunch(t.ID); err != nil {
-			return f, err
-		}
-		if f.Task.Quiet, err = s.TaskRunQuiet(t.ID); err != nil {
-			return f, err
-		}
-	}
-	if f.Task.StartedAt, err = s.startedAt(t.ID); err != nil {
-		return f, err
-	}
-	if f.Task.Remote, err = s.remoteOf(t.ID); err != nil {
-		return f, err
-	}
-	if f.Task.Usage, err = s.taskUsage(t.ID); err != nil {
 		return f, err
 	}
 	f.Items = []FeedItem{{Kind: "task", Author: AudienceCoordinator, Text: t.Text, At: t.CreatedAt, Verified: true, SenderAgent: t.SenderAgent, SenderModel: t.SenderModel}}
@@ -774,11 +821,20 @@ func (s *Store) Presence() (agents []AgentPresence, coordinator string, err erro
 		if err != nil {
 			return err
 		}
-		rows, err := tx.Query(`SELECT a.provider,
+		var activity map[string]taskAgentActivity
+		query := `SELECT a.provider,
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='running'),
  (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='waiting_owner'),
  a.models, a.limit_state
- FROM computer_agents a WHERE a.computer=? AND a.paused=0 ORDER BY a.provider`, computer)
+ FROM computer_agents a WHERE a.computer=? AND a.paused=0 ORDER BY a.provider`
+		if s.split != nil {
+			activity, err = s.splitAgentActivity(tx, "", computer)
+			if err != nil {
+				return err
+			}
+			query = `SELECT provider,0,0,models,limit_state FROM computer_agents WHERE computer=? AND paused=0 ORDER BY provider`
+		}
+		rows, err := tx.Query(query, computer)
 		if err != nil {
 			return err
 		}
@@ -788,6 +844,9 @@ func (s *Store) Presence() (agents []AgentPresence, coordinator string, err erro
 			if err := rows.Scan(&a.Agent, &a.Running, &a.Waiting, &models, &limit); err != nil {
 				rows.Close()
 				return err
+			}
+			if s.split != nil {
+				a.Running, a.Waiting = activity[a.Agent].Running, activity[a.Agent].WaitingOwner
 			}
 			a.Models = splitModels(models)
 			a.Limit = parseAgentLimit(limit)

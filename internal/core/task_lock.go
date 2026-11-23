@@ -44,6 +44,13 @@ func normalizeLock(s string) (string, bool) {
 // TaskLockHolder returns the task that keeps this task from launching, or
 // "" when none does.
 func (s *Store) TaskLockHolder(id string) (string, error) {
+	if s.split != nil {
+		scoped, err := s.storeForTask(id)
+		if err != nil {
+			return "", err
+		}
+		return scoped.TaskLockHolder(id)
+	}
 	var holder sql.NullString
 	err := s.db.QueryRow(`SELECT (`+lockHolderQuery+` ORDER BY o.created_at,o.rowid LIMIT 1) FROM tasks t WHERE t.id=? AND t.resource<>''`, id).Scan(&holder)
 	if errors.Is(err, sql.ErrNoRows) {

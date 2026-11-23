@@ -326,6 +326,9 @@ func (s *Supervisor) readInbox(ctx context.Context, n broker.Network) string {
 				return "сообщение сети не применено: " + err.Error()
 			}
 		}
+		if len(messages) > 0 {
+			s.wakeTaskDispatch()
+		}
 		if len(messages) < broker.InboxBatch {
 			return ""
 		}

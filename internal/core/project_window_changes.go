@@ -16,7 +16,21 @@ func stageProjectRevisions(path string) error {
 		return err
 	}
 	defer db.Close()
-	return installWindowChanges(db)
+	if err := installWindowChanges(db); err != nil {
+		return err
+	}
+	return enableProjectWAL(context.Background(), db)
+}
+
+func enableProjectWAL(ctx context.Context, db *sql.DB) error {
+	var mode string
+	if err := db.QueryRowContext(ctx, "PRAGMA journal_mode=WAL").Scan(&mode); err != nil {
+		return err
+	}
+	if mode != "wal" {
+		return fmt.Errorf("project storage did not enter WAL mode: %s", mode)
+	}
+	return nil
 }
 
 // splitWindowChanges joins small revision readings, not SQLite write

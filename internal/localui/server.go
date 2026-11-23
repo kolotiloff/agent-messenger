@@ -245,6 +245,9 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			// The owner chooses in the system's own dialog.
 			deadline = pickerDeadline
 		}
+		if r.URL.Path == "/api/window-changes" {
+			deadline = 15 * time.Second
+		}
 		// A long route must still be able to write its answer.
 		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(deadline + 3*time.Second))
 		ctx, cancel := context.WithTimeout(r.Context(), deadline)
@@ -476,15 +479,37 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			req.Cmd = "overview"
 		case "/api/server":
 			req.Cmd, req.Action = "server", "status"
-		case "/api/window":
+		case "/api/window-changes":
+			q := r.URL.Query()
+			req.Cmd, req.Alias, req.MessageID = "window-changes", q.Get("project"), q.Get("task")
+			req.Before, req.Confirmation = q.Get("window"), q.Get("feed")
+			if (req.Alias != "" && !core.ValidProjectName(req.Alias)) || len(req.MessageID) > 128 || len(req.Before) > 64 || len(req.Confirmation) > 32 {
+				http.Error(w, "invalid window position", 400)
+				return
+			}
+		case "/api/window", "/api/task-history":
 			req.Cmd = "window-view"
-			req.Alias = r.URL.Query().Get("project")
-			if len(req.Alias) > 256 {
-				http.Error(w, "invalid project", 400)
+			q := r.URL.Query()
+			req.Alias, req.Provider, req.Text = q.Get("project"), q.Get("agent"), q.Get("computer")
+			req.Confirmation = q.Get("history_version")
+			if r.URL.Path == "/api/task-history" {
+				req.Cmd, req.Before = "task-history", q.Get("before")
+				if !core.ValidProjectName(req.Alias) || req.Before == "" || len(req.Before) > 128 {
+					http.Error(w, "invalid history position", 400)
+					return
+				}
+			}
+			if len(req.Alias) > 256 || len(req.Confirmation) > 64 || !validTaskHistoryFilter(req.Provider, req.Text) {
+				http.Error(w, "invalid task list filter", 400)
 				return
 			}
 		case "/api/usage-stats":
 			req.Cmd = "usage-stats"
+			req.Project = r.URL.Query().Get("project")
+			if req.Project != "" && !core.ValidProjectName(req.Project) {
+				http.Error(w, "invalid project", http.StatusBadRequest)
+				return
+			}
 			req.Alias = r.URL.Query().Get("period")
 			if req.Alias != "day" && req.Alias != "week" && req.Alias != "month" {
 				http.Error(w, "invalid period", 400)
@@ -518,7 +543,10 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 		case "/api/task":
 			req.Cmd = "task-feed"
 			req.MessageID = r.URL.Query().Get("id")
-			if req.MessageID == "" || len(req.MessageID) > 128 {
+			if r.URL.Query().Has("cursor") {
+				req.Action, req.Before = "delta", r.URL.Query().Get("cursor")
+			}
+			if req.MessageID == "" || len(req.MessageID) > 128 || len(req.Before) > 512 {
 				http.Error(w, "invalid task", 400)
 				return
 			}
@@ -569,7 +597,7 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			status := *response.Status
 			status.Detail = ""
 			writeJSON(w, status)
-		case "overview", "window-view", "task-feed", "server", "usage-stats":
+		case "overview", "window-view", "task-feed", "task-history", "window-changes", "server", "usage-stats":
 			writeRaw(w, response.Overview)
 		case "timeline":
 			writeRaw(w, response.Timeline)
@@ -619,7 +647,7 @@ var serverActions = map[string]bool{"enable": true, "disable": true, "invite": t
 
 func taskMutation(path string) bool {
 	switch path {
-	case "/api/project-create", "/api/project-folder", "/api/task-answer", "/api/task-note", "/api/agent-set", "/api/agent-models", "/api/agent-access", "/api/agent-pause", "/api/agent-remove", "/api/task-cancel", "/api/task-hide", "/api/server-action", "/api/coordinator-connect", "/api/project-rules", "/api/project-title", "/api/project-remove", "/api/feedback", "/api/feedback-export", "/api/feedback-clear":
+	case "/api/project-create", "/api/project-folder", "/api/task-answer", "/api/task-note", "/api/agent-set", "/api/agent-models", "/api/agent-access", "/api/agent-pause", "/api/agent-remove", "/api/task-cancel", "/api/task-hide", "/api/task-hide-history", "/api/server-action", "/api/coordinator-connect", "/api/project-rules", "/api/project-title", "/api/project-remove", "/api/feedback", "/api/feedback-export", "/api/feedback-clear":
 		return true
 	}
 	return false
@@ -627,6 +655,10 @@ func taskMutation(path string) bool {
 
 // decodeTaskMutation reads one window action of the task model. The client
 // re-checks every rule; this only bounds the input.
+func validTaskHistoryFilter(agent, computer string) bool {
+	return (agent == "" || core.TaskProviders[agent]) && len(computer) <= 64 && !strings.ContainsAny(computer, "\x00\r\n")
+}
+
 func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bool) {
 	switch path {
 	case "/api/project-create", "/api/project-folder":
@@ -749,6 +781,16 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 			return control.Request{}, false
 		}
 		return control.Request{Cmd: "feedback-clear"}, true
+	case "/api/task-hide-history":
+		var in struct {
+			Project  string `json:"project"`
+			Agent    string `json:"agent"`
+			Computer string `json:"computer"`
+		}
+		if decoder.Decode(&in) != nil || !core.ValidProjectName(in.Project) || !validTaskHistoryFilter(in.Agent, in.Computer) {
+			return control.Request{}, false
+		}
+		return control.Request{Cmd: "task-hide-history", Alias: in.Project, Provider: in.Agent, Text: in.Computer}, true
 	case "/api/task-hide":
 		var in struct {
 			Peer string `json:"peer"`
