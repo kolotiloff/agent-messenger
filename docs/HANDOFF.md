@@ -8,6 +8,10 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-23 by Codex (T-262).
+
+- The owner reported a failed 0.95 update on VPS-PC2 and blocked remote dispatch. An isolated broker reproduced SQLite errors 5 and 517 under concurrent mailbox sends. T-262 acquires the broker write lock before reading quotas or checking duplicates. The live VPS did not accept the available SSH credentials, so the failed update and recovery remain unverified there.
+
 Updated 2026-11-23 by Codex.
 
 - T-258 begins project-local storage with a consistent SQLite copy of one project's history through `project-snapshot`. It accepts a removed project, preserves IDs and cursors, and leaves the source queue intact. The file cannot be launched as a working queue. Live tasks still share `queue.sqlite`. Migration, network delivery and restore work are tracked in [PROJECT_STORAGE.md](PROJECT_STORAGE.md).
