@@ -10,7 +10,7 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Updated 2026-11-23 by Codex (T-262).
 
-- The owner reported a failed 0.95 update on VPS-PC2 and blocked remote dispatch. An isolated broker reproduced SQLite errors 5 and 517 under concurrent mailbox sends. T-262 acquires the broker write lock before reading quotas or checking duplicates. The live VPS did not accept the available SSH credentials, so the failed update and recovery remain unverified there.
+- The owner recovered the VPS with the 0.95 installer. A separate persistent error 517 on the Mac prevented network messages and the window from reading local state. A normal restart restored both projects, the saved task history and the live computer list. Split activation remains pending behind an uncertain stream reservation. The cause of the persistent Mac snapshot error remains open. T-262 addresses a separately reproduced broker mailbox race and the macOS race suite passed.
 
 Updated 2026-11-23 by Codex.
 
