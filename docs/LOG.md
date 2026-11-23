@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-23 — Codex (0.96 release)
+
+- Published [0.96](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.96) from `b28a5cb` with T-262 and T-263. Verified all five signed update sets, 22 assets, the release tag and the VPS installer syntax. The Linux test timeout and signing runner queue required two separate job retries. No installed-app or VPS upgrade was performed.
+
 ## 2026-11-23 — Codex (T-263)
 
 - Closed the window revision cancellation path that can abandon a read and added recovery for SQLite 517. Confirmed the existing project and task remain visible when migration is deferred. Chromium and WebKit exercised a failed first view and recovery. The production Mac still runs the released build.
