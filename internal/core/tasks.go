@@ -2205,34 +2205,6 @@ func (s *Store) InterruptInheritedTaskRuns() error {
 	return s.tx(interruptInheritedTaskRuns)
 }
 
-// TaskEvents returns a project's events after the cursor for one audience,
-// at most limit. Reading never moves anything: a caller that repeats the
-// same cursor gets the same events again.
-func (s *Store) TaskEvents(project, audience string, after int64, limit int) ([]TaskEvent, int64, error) {
-	if limit <= 0 || limit > 100 {
-		limit = 20
-	}
-	var out []TaskEvent
-	cursor := after
-	err := s.tx(func(tx *sql.Tx) error {
-		rows, err := tx.Query(`SELECT seq,task_id,kind,text,COALESCE(question_id,''),created_at FROM task_events WHERE project=? AND audience=? AND seq>? ORDER BY seq LIMIT ?`, project, audience, after, limit)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var e TaskEvent
-			if err := rows.Scan(&e.Seq, &e.TaskID, &e.Kind, &e.Text, &e.QuestionID, &e.CreatedAt); err != nil {
-				return err
-			}
-			out = append(out, e)
-			cursor = e.Seq
-		}
-		return rows.Err()
-	})
-	return out, cursor, err
-}
-
 // TaskListVersion changes whenever a project's task list or its events may
 // have changed: a new event, a new task, or any task state change (every such
 // update bumps tasks.version). It lets the coordinator skip an unchanged list

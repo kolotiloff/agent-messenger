@@ -8,6 +8,12 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-23 by Codex.
+
+- T-257 makes `coordinator-watch` use the existing database in read-only mode. It skips migrations and connection timestamp writes. Event reads no longer reserve the SQLite writer, and the watch repeats a `SQLITE_BUSY` read at the same cursor until its normal deadline. If the final read could not be confirmed, it says so. Prepared for the next release. The original 0.94 Mac incident did not identify the writer holding the lock.
+
+- T-258 tracks the owner's follow-up about giving each project a separate database so its history can be archived independently. Project tasks and outbound messages currently share a transaction; the design must preserve delivery and computer-wide resource reservations. No migration or deletion change is part of T-257.
+
 Updated 2026-11-22 by Codex.
 
 - **0.94 is released** ([release](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.94), [PR #167](https://github.com/kolotiloff/agent-messenger/pull/167), source `d0e3a4ec658570e1a91387bb51a86e61ad2163e5`, [release run](https://github.com/kolotiloff/agent-messenger/actions/runs/45067378364)). T-240 refreshes Windows and Linux windows after remote updates, T-246 balances statistics sort padding, T-247 estimates otherwise missing remote task durations, T-248 attributes coordinator follow-ups and T-249 alerts the coordinator when a completed Codex turn leaves its process running. Verified all 22 published assets and all five update manifests and archives against their signatures, revisions, sizes and SHA-256 digests. The separate [checks run](https://github.com/kolotiloff/agent-messenger/actions/runs/45065644594) failed the WebKit sort-padding test because the test tried to serialize a CSSStyleDeclaration directly. Reading the individual style values passed in Chromium and WebKit. Live desktop update acceptance is pending.
