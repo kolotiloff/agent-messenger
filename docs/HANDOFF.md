@@ -8,6 +8,10 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-23 by Codex.
+
+- T-258 begins project-local storage with a consistent SQLite copy of one project's history through `project-snapshot`. It accepts a removed project, preserves IDs and cursors, and leaves the source queue intact. The file cannot be launched as a working queue. Live tasks still share `queue.sqlite`. Migration, network delivery and restore work are tracked in [PROJECT_STORAGE.md](PROJECT_STORAGE.md).
+
 Updated 2026-11-22 by Codex.
 
 - **0.94 is released** ([release](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.94), [PR #167](https://github.com/kolotiloff/agent-messenger/pull/167), source `d0e3a4ec658570e1a91387bb51a86e61ad2163e5`, [release run](https://github.com/kolotiloff/agent-messenger/actions/runs/45067378364)). T-240 refreshes Windows and Linux windows after remote updates, T-246 balances statistics sort padding, T-247 estimates otherwise missing remote task durations, T-248 attributes coordinator follow-ups and T-249 alerts the coordinator when a completed Codex turn leaves its process running. Verified all 22 published assets and all five update manifests and archives against their signatures, revisions, sizes and SHA-256 digests. The separate [checks run](https://github.com/kolotiloff/agent-messenger/actions/runs/45065644594) failed the WebKit sort-padding test because the test tried to serialize a CSSStyleDeclaration directly. Reading the individual style values passed in Chromium and WebKit. Live desktop update acceptance is pending.

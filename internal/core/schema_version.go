@@ -23,6 +23,13 @@ var ErrNewerSchema = errors.New("the data directory was written by a newer Agent
 
 // checkSchemaVersion runs before any other schema statement.
 func checkSchemaVersion(db *sql.DB) error {
+	var snapshot bool
+	if err := db.QueryRow(`SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='project_snapshot')`).Scan(&snapshot); err != nil {
+		return err
+	}
+	if snapshot {
+		return fmt.Errorf("%w: a project history snapshot cannot be used as the Messenger queue", ErrRejected)
+	}
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`); err != nil {
 		return err
 	}
