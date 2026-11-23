@@ -89,15 +89,15 @@ func (s *Store) FeedbackCount() (all, fresh int, err error) {
 
 // FeedbackList returns the remarks, oldest first, without pictures.
 func (s *Store) FeedbackList() ([]FeedbackItem, error) {
-	return s.feedbackList(false)
+	return s.feedbackList(false, "")
 }
 
-func (s *Store) feedbackList(freshOnly bool) ([]FeedbackItem, error) {
-	query := `SELECT id,created_at,author,project,text,version,image IS NOT NULL FROM feedback`
+func (s *Store) feedbackList(freshOnly bool, project string) ([]FeedbackItem, error) {
+	query := `SELECT id,created_at,author,project,text,version,image IS NOT NULL FROM feedback WHERE (?='' OR project=?)`
 	if freshOnly {
-		query += ` WHERE exported_at=''`
+		query += ` AND exported_at=''`
 	}
-	rows, err := s.db.Query(query + ` ORDER BY created_at,id`)
+	rows, err := s.db.Query(query+` ORDER BY created_at,id`, project, project)
 	if err != nil {
 		return nil, err
 	}
@@ -122,20 +122,32 @@ var unsafeName = regexp.MustCompile(`[^A-Za-z0-9А-Яа-яЁё._-]+`)
 // deleted. It returns the file's path, how many remarks it holds and
 // whether they are only the new ones.
 func (s *Store) ExportFeedback(dir string, at time.Time) (string, int, bool, error) {
-	list, err := s.feedbackList(true)
+	return s.exportFeedback(dir, at, "")
+}
+
+// ExportProjectFeedback exports only remarks tagged with the coordinator's project.
+func (s *Store) ExportProjectFeedback(dir string, at time.Time, project string) (string, int, bool, error) {
+	if !ValidProjectName(project) {
+		return "", 0, false, fmt.Errorf("%w: invalid project name", ErrRejected)
+	}
+	return s.exportFeedback(dir, at, project)
+}
+
+func (s *Store) exportFeedback(dir string, at time.Time, project string) (string, int, bool, error) {
+	list, err := s.feedbackList(true, project)
 	if err != nil {
 		return "", 0, false, err
 	}
 	fresh := len(list) > 0
 	if !fresh {
-		if list, err = s.feedbackList(false); err != nil {
+		if list, err = s.feedbackList(false, project); err != nil {
 			return "", 0, false, err
 		}
 	}
 	if len(list) == 0 {
 		return "", 0, false, fmt.Errorf("%w: there are no remarks yet", ErrRejected)
 	}
-	path, err := s.writeFeedback(dir, at, list, fresh)
+	path, err := s.writeFeedback(dir, at, list, fresh, project != "")
 	if err != nil {
 		return "", 0, false, err
 	}
@@ -155,7 +167,7 @@ func (s *Store) ExportFeedback(dir string, at time.Time) (string, int, bool, err
 	return path, len(list), fresh, nil
 }
 
-func (s *Store) writeFeedback(dir string, at time.Time, list []FeedbackItem, fresh bool) (string, error) {
+func (s *Store) writeFeedback(dir string, at time.Time, list []FeedbackItem, fresh, scoped bool) (string, error) {
 	var computer string
 	if err := s.tx(func(tx *sql.Tx) error {
 		var err error
@@ -171,8 +183,14 @@ func (s *Store) writeFeedback(dir string, at time.Time, list []FeedbackItem, fre
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}
-	path := filepath.Join(dir, fmt.Sprintf("AgentMessenger-feedback-%s-%s.zip", name, at.Local().Format("2006-01-02-1504")))
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	base := fmt.Sprintf("AgentMessenger-feedback-%s-%s", name, at.Local().Format("2006-01-02-1504"))
+	var f *os.File
+	var err error
+	if scoped {
+		f, err = os.CreateTemp(dir, base+"-*.zip")
+	} else {
+		f, err = os.OpenFile(filepath.Join(dir, base+".zip"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	}
 	if err != nil {
 		return "", err
 	}
@@ -231,7 +249,7 @@ func (s *Store) writeFeedback(dir string, at time.Time, list []FeedbackItem, fre
 	if err != nil {
 		return "", err
 	}
-	return path, nil
+	return f.Name(), nil
 }
 
 // ClearExportedFeedback deletes the remarks that already went into an
@@ -239,14 +257,26 @@ func (s *Store) writeFeedback(dir string, at time.Time, list []FeedbackItem, fre
 // you everything, why keep it"). Remarks written after the export stay. It
 // returns how many were deleted and how many remain.
 func (s *Store) ClearExportedFeedback() (deleted, left int, err error) {
+	return s.clearExportedFeedback("")
+}
+
+// ClearExportedProjectFeedback deletes only exported remarks of this project.
+func (s *Store) ClearExportedProjectFeedback(project string) (int, int, error) {
+	if !ValidProjectName(project) {
+		return 0, 0, fmt.Errorf("%w: invalid project name", ErrRejected)
+	}
+	return s.clearExportedFeedback(project)
+}
+
+func (s *Store) clearExportedFeedback(project string) (deleted, left int, err error) {
 	err = s.tx(func(tx *sql.Tx) error {
-		r, err := tx.Exec(`DELETE FROM feedback WHERE exported_at<>''`)
+		r, err := tx.Exec(`DELETE FROM feedback WHERE exported_at<>'' AND (?='' OR project=?)`, project, project)
 		if err != nil {
 			return err
 		}
 		n, _ := r.RowsAffected()
 		deleted = int(n)
-		return tx.QueryRow(`SELECT COUNT(*) FROM feedback`).Scan(&left)
+		return tx.QueryRow(`SELECT COUNT(*) FROM feedback WHERE (?='' OR project=?)`, project, project).Scan(&left)
 	})
 	return deleted, left, err
 }

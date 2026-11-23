@@ -11,8 +11,11 @@ import (
 // record when that computer did not report (an older version).
 func TestUsageStatsAcrossTheNetwork(t *testing.T) {
 	f := newTaskFixture(t)
-	finish := func(op, agent, title string, in, out int64) string {
-		id := f.start(t, op, agent, title)
+	finish := func(project, op, agent, title string, in, out int64) string {
+		id, _, err := f.st.StartTask(StartTaskRequest{Project: project, OpID: op, Provider: agent, Text: title})
+		if err != nil {
+			t.Fatal(err)
+		}
 		session := "019a0000-0000-7000-8000-0000000000" + op[len(op)-2:]
 		if agent == "claude" {
 			session = f.sessionOf(t, id)
@@ -26,9 +29,9 @@ func TestUsageStatsAcrossTheNetwork(t *testing.T) {
 		}
 		return id
 	}
-	finish("op-01", "claude", "Here", 90, 10)
-	onA := finish("op-02", "codex", "On A", 45, 5)
-	onB := finish("op-03", "codex", "On B", 27, 3)
+	finish("Game", "op-01", "claude", "Here", 90, 10)
+	onA := finish("Game", "op-02", "codex", "On A", 45, 5)
+	onB := finish("Game", "op-03", "codex", "On B", 27, 3)
 	for id, peer := range map[string]string{onA: "peer-a", onB: "peer-b"} {
 		if _, err := f.st.db.Exec(`UPDATE tasks SET remote_peer=?,remote_broker='b',remote_task='x' WHERE id=?`, peer, id); err != nil {
 			t.Fatal(err)
@@ -104,5 +107,38 @@ func TestUsageStatsAcrossTheNetwork(t *testing.T) {
 	month, _ := f.st.UsageStats(time.Now().AddDate(0, 0, -29), time.Local, "peer-a")
 	if month.Total.Tokens != 220+9900 {
 		t.Fatalf("month %+v", month.Total)
+	}
+	if err := f.st.CreateProject("Site", t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	siteTask := finish("Site", "op-04", "codex", "Site task", 300, 15)
+	if _, err := f.st.db.Exec(`UPDATE tasks SET model='site-model' WHERE id=?`, siteTask); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		project, computer, model string
+		tasks                    int
+		tokens                   int64
+	}{
+		{"Game", "", "m1", 3, 180},
+		{"Game", "peer-a", "m1", 1, 50},
+		{"Site", "", "site-model", 1, 315},
+		{"Site", "peer-a", "", 0, 0},
+	} {
+		stats, err := f.st.UsageStatsFiltered(since, time.Local, tc.computer, UsageFilter{Project: tc.project})
+		if err != nil || stats.Project != tc.project || stats.Total.Tasks != tc.tasks || stats.Total.Tokens != tc.tokens ||
+			len(stats.Recent) != tc.tasks || stats.Days[len(stats.Days)-1].Tokens != tc.tokens {
+			t.Fatalf("filtered stats for %s on %q: %+v %v", tc.project, tc.computer, stats, err)
+		}
+		if tc.model != "" && (len(stats.Models) != 1 || stats.Models[0].Key != tc.model) {
+			t.Fatalf("wrong project model choices: %+v", stats.Models)
+		}
+		for _, rows := range append([][]UsageTask{stats.Recent, stats.Top}, stats.Ranked["longest"], stats.Ranked["shortest"], stats.Ranked["fewest"], stats.Ranked["oldest"]) {
+			for _, task := range rows {
+				if task.Project != tc.project {
+					t.Fatalf("foreign task %+v in %s", task, tc.project)
+				}
+			}
+		}
 	}
 }

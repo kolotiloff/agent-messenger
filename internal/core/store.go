@@ -257,21 +257,26 @@ func (s *Store) Close() error {
 	return err
 }
 
-func dsn(path string) string {
+func sqliteFileURL(path string, q url.Values) string {
 	// SQLite reads file:///C:/dir/db on Windows; a drive letter must not
 	// become the URL's host.
 	if filepath.VolumeName(path) != "" {
 		path = "/" + filepath.ToSlash(path)
 	}
-	u := url.URL{Scheme: "file", Path: path}
+	u := url.URL{Scheme: "file", Path: path, RawQuery: q.Encode()}
+	return u.String()
+}
+
+const sqliteBusyTimeout = "busy_timeout(5000)"
+
+func dsn(path string) string {
 	q := url.Values{}
-	q.Add("_pragma", "busy_timeout(5000)")
+	q.Add("_pragma", sqliteBusyTimeout)
 	q.Add("_pragma", "foreign_keys(1)")
 	q.Add("_pragma", "journal_mode(WAL)")
 	q.Add("_pragma", "synchronous(FULL)")
 	q.Add("_txlock", "immediate")
-	u.RawQuery = q.Encode()
-	return u.String()
+	return sqliteFileURL(path, q)
 }
 
 func (s *Store) tx(fn func(*sql.Tx) error) error {

@@ -161,13 +161,21 @@ func (s *Supervisor) UsageStats(period, computer string) (any, error) {
 
 // UsageStatsFiltered is UsageStats for one agent and one model (T-201).
 func (s *Supervisor) UsageStatsFiltered(period, computer, agent, model string) (any, error) {
+	return s.UsageStatsForProject("", period, computer, agent, model)
+}
+
+// UsageStatsForProject scopes the window statistics when a project is selected.
+func (s *Supervisor) UsageStatsForProject(project, period, computer, agent, model string) (any, error) {
+	if project != "" && !core.ValidProjectName(project) {
+		return nil, fmt.Errorf("invalid project")
+	}
 	days := map[string]int{"day": 1, "week": 7, "month": 30}[period]
 	if days == 0 {
 		return nil, fmt.Errorf("unknown period %q", period)
 	}
 	y, m, d := time.Now().Date()
 	since := time.Date(y, m, d-(days-1), 0, 0, 0, 0, time.Local)
-	return s.store.UsageStatsFiltered(since, time.Local, computer, core.UsageFilter{Agent: agent, Model: model})
+	return s.store.UsageStatsFiltered(since, time.Local, computer, core.UsageFilter{Project: project, Agent: agent, Model: model})
 }
 
 // SetAgentPaused turns an agent off or on from its card (T-061).

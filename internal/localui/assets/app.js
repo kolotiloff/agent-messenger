@@ -182,10 +182,10 @@
     }
     return response.json();
   }
-  async function postAPI(path,body,timeout=6000){
+  async function postAPI(path,body,timeout=6000,keepalive=false){
     let response;
     // No answer means the result is unknown, not that nothing happened.
-    try{response=await fetch(path,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body),cache:'no-store',signal:AbortSignal.timeout(timeout)});}
+    try{response=await fetch(path,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body),cache:'no-store',signal:AbortSignal.timeout(timeout),keepalive});}
     catch(_){throw Error(tr('Ответ не получен, результат неизвестен. Проверьте состояние, прежде чем повторять.'));}
     let result={};try{result=await response.json();}catch(_){}
     if(response.ok&&result.ok===true)return result;
@@ -359,10 +359,10 @@
     if(c.includes('claude')||!c||c==='coordinator')return ['claude','Claude'];
     return ['',client];
   }
-  function agentState(a,preferRunning=false){
+  function agentState(a){
     if(!online)return ['offline',tr('Нет связи')];
-    if(a.waiting_owner>0&&(!preferRunning||!a.running))return ['wait',tr('Ждёт ответа')];
     if(a.running>0)return ['run',a.running>1?tr('Работает (')+a.running+')':tr('Работает')];
+    if(a.waiting_owner>0)return ['wait',tr('Ждёт ответа')];
     return ['idle',tr('Свободен')];
   }
   function renderProjects(){
@@ -496,6 +496,7 @@
   // live is false when the computer cannot be reached.
   function busyTasksByComputer(){
     const byComputer=new Map();
+    if(!project||view?.project!==project)return byComputer;
     function add(t,computer){
       const key=computer+'\0'+t.agent;
       if(!byComputer.has(key))byComputer.set(key,[]);
@@ -504,30 +505,16 @@
     for(const task of view?.tasks||[])add(task,taskComputer(task));
     for(const peer of view?.shared||[]){
       if(!peerFresh(peer))continue;
-      for(const task of peer.tasks||[])add(task,sharedRunsOn(task,peer));
+      for(const task of peer.tasks||[])add({...task,shared:true},sharedRunsOn(task,peer));
     }
     return byComputer;
   }
-  function agentActivity(a,computer,tasks,reportedRuns){
+  function agentActivity(tasks){
     const active=tasks.filter(t=>activeStates.includes(t.state)&&!t.pending_launch&&!t.remote?.unaccepted&&!t.remote?.lost&&!t.remote?.silent);
     const running=active.filter(t=>t.state==='running'),waiting=active.filter(t=>t.state!=='running');
-    let runCount=a.running||0,waitCount=a.waiting_owner||0;
-    if(computer==='local'&&a.project_waiting!==undefined&&!view?.task_list_limit_reached){
-      // Add the current project from the same rows the task list displays.
-      runCount=Math.max(0,runCount-a.project_running)+running.length;
-      waitCount=Math.max(0,waitCount-a.project_waiting)+waiting.length;
-    }else{
-      // The aggregate can still include a worker that just reported back.
-      // Remove only a matched run with a known outcome, leaving other work
-      // and older computers' reports alone.
-      const ended=tasks.filter(t=>reportedRuns.has(t.id)&&t.remote?.id===computer&&!t.remote.from&&
-        ['done','failed','waiting_owner','waiting_coordinator'].includes(t.state)).length;
-      runCount=Math.max(runCount-ended,running.length);
-      waitCount=Math.max(waitCount,waiting.length);
-    }
-    return {running,waiting,counts:{running:runCount,waiting_owner:waitCount}};
+    return {running,waiting,counts:{running:running.length,waiting_owner:waiting.length}};
   }
-  function agentLines(agents,coordinatorClient,live,computer,busyTasks,reportedRuns=new Set()){
+  function agentLines(agents,coordinatorClient,live,computer,busyTasks){
     const lines=el('div',undefined,'am-machine-agents');
     const [coordProvider,coordLabel]=coordinatorClient!==null?coordinatorName(coordinatorClient):['',''];
     const providers=agents.map(a=>a.agent);
@@ -540,8 +527,8 @@
       // Blue means a task is running (T-060). A chat that once used
       // Messenger's tools is listed but not lit: nothing tells whether it is
       // still open.
-      const {running,waiting,counts}=agentActivity(a,computer,busyTasks.get(computer+'\0'+provider)||[],reportedRuns);
-      const [state,text]=live?agentState(counts,true):['offline',tr('Нет связи')];
+      const {running,waiting,counts}=agentActivity(busyTasks.get(computer+'\0'+provider)||[]);
+      const [state,text]=live?agentState(counts):['offline',tr('Нет связи')];
       // A busy agent says so to the right of its name: «работает» in blue,
       // «ждёт ответа» in yellow. A free agent is just its name.
       const line=el('div',undefined,'am-agent-line am-agent-'+state);line.dataset.provider=provider;
@@ -552,12 +539,8 @@
         const tasks=state==='run'?running:waiting;
         const dates=tasks.map(taskStart).filter(at=>Number.isFinite(Date.parse(at)));
         const first=dates.reduce((old,at)=>!old||Date.parse(at)<Date.parse(old)?at:old,'');
-        const models=[...new Set(tasks.map(t=>t.ran_model||t.model).filter(Boolean))];
-        if(models.length||tasks.length){
-          const label=el('span',models.length?models.map(m=>modelName(m).replace(/ Medium$/,' Med')).join(', '):tr('модель не указана'),'am-agent-model');
-          if(models.length)label.title=models.join(', ');
-          identity.append(' ',label);
-        }
+        const models=[...new Set(tasks.map(t=>t.shared?(t.model?modelName(t.model):''):taskModelLabel(t)).filter(Boolean))];
+        if(models.length)identity.append(' ',el('span',models.map(m=>m.replace(/ Medium$/,' Med')).join(', '),'am-agent-model'));
         const total=counts.running+counts.waiting_owner;
         const count=total>1?'('+total+')':'';
         if(state==='run'&&first)line.append(elapsedLabel(first,count?count+' ':'','am-agent-status'));
@@ -575,11 +558,28 @@
   // A computer of the network counts as reachable while its reports arrive:
   // it reports every 15 s, so three missed reports mean it is not.
   const peerFresh=peer=>peer.age>=0&&peer.age<=45;
-  let machineOrder=[];
+  let machineOrder=[],machineOrderLoaded=false,machineOrderSave=Promise.resolve();
   try{
     const saved=JSON.parse(recall('messenger-machine-order'));
     if(Array.isArray(saved))machineOrder=saved.filter(key=>typeof key==='string');
   }catch(_){}
+  function saveMachineOrder(){
+    const body={order:machineOrder};
+    machineOrderSave=machineOrderSave.then(()=>postAPI('/api/machine-order',body,6000,true))
+      .catch(error=>showError(error.message));
+  }
+  async function loadMachineOrder(){
+    try{
+      const saved=await api('/api/machine-order');
+      if(Array.isArray(saved.order)){
+        machineOrder=saved.order;
+      }else if(saved.order===null&&machineOrder.length){
+        // Import a legacy order when the old window origin still exists.
+        saveMachineOrder();
+      }
+    }catch(_){}
+    finally{machineOrderLoaded=true;renderMachines();}
+  }
   let draggedMachine='',machineDrop=null;
   const machineList=$('machines');
   function clearMachineDrop(){
@@ -592,7 +592,7 @@
     if(target<0)return;
     order.splice(target+Number(after),0,from);
     machineOrder=[...order,...machineOrder.filter(key=>!order.includes(key))];
-    remember('messenger-machine-order',JSON.stringify(machineOrder));
+    saveMachineOrder();
     renderMachines();
   }
   machineList.addEventListener('dragstart',event=>{
@@ -628,14 +628,14 @@
   });
   function pickable(card,id,orderKey=id){
     card.setAttribute('role','button');card.tabIndex=0;card.setAttribute('aria-pressed',String(computerFilter===id));
-    card.dataset.machineOrder=orderKey;card.draggable=true;
+    card.dataset.machineOrder=orderKey;card.draggable=machineOrderLoaded;
     card.setAttribute('aria-keyshortcuts','Alt+ArrowUp Alt+ArrowDown');
     card.title=computerFilter===id?tr('Показать все компьютеры'):tr('Показать только этот компьютер');
     card.addEventListener('click',event=>{if(!event.target.closest('button'))filterComputer(id);});
     card.addEventListener('keydown',event=>{
       if(event.target!==card)return;
       if(event.key==='Enter'||event.key===' '){event.preventDefault();filterComputer(id);}
-      if(!event.altKey||!['ArrowUp','ArrowDown'].includes(event.key))return;
+      if(!machineOrderLoaded||!event.altKey||!['ArrowUp','ArrowDown'].includes(event.key))return;
       event.preventDefault();
       const after=event.key==='ArrowDown',next=after?card.nextElementSibling:card.previousElementSibling;
       if(!next)return;
@@ -670,15 +670,16 @@
     head.append(el('span',view?.computer_name||tr('Этот компьютер')));
     // The computer that runs the network's server is labelled as such.
     if(server?.host?.running&&server.host.scope!=='local')head.append(serverTag());
-    if(view?.coordinator?.active)head.append(machineRole(tr('координатор'),tr('На этом компьютере открыт чат-координатор выбранного проекта')));
+    const coordinator=view?.project===project?view?.coordinator:null;
+    if(coordinator?.active)head.append(machineRole(tr('координатор'),tr('На этом компьютере открыт чат-координатор выбранного проекта')));
     const version=el('div',undefined,'am-machine-version am-local-version');
     machine.append(head);
     // A paused agent is left out, as other computers leave it out of what
     // they report (owner, 2026-11-18: two of three agents were off and the
     // Mac still listed all three). One still running a task stays until it
     // ends.
-    const shownAgents=(view?.agents||[]).filter(a=>!a.paused||a.running>0||a.waiting_owner>0);
-    const lines=agentLines(shownAgents,view?.coordinator?.connected?(view.coordinator.client||''):null,online,'local',busyTasks);
+    const shownAgents=(view?.agents||[]).filter(a=>!a.paused||busyTasks.get('local\0'+a.agent)?.some(t=>activeStates.includes(t.state)));
+    const lines=agentLines(shownAgents,coordinator?.connected?(coordinator.client||''):null,online,'local',busyTasks);
     if(!lines.children.length)lines.append(el('p',online?tr('Агенты не подключены'):tr('Нет связи'),'am-small am-muted'));
     machine.append(lines);
     const corner=el('div',undefined,'am-card-update am-local-update');
@@ -732,8 +733,7 @@
         actions.append(no,yes);card.append(actions);box.append(card);continue;
       }
       if(fresh){
-        const reportedRuns=new Set((peer.workers?.runs||[]).map(run=>run.task));
-        const plines=agentLines(peer.agents||[],peer.coordinator?peer.coordinator:null,true,peer.id,busyTasks,reportedRuns);
+        const plines=agentLines(peer.agents||[],peer.coordinator?peer.coordinator:null,true,peer.id,busyTasks);
         if(!plines.children.length)plines.append(el('p',tr('Агенты не подключены'),'am-small am-muted'));
         card.append(plines);
       }else{
@@ -904,9 +904,18 @@
     if(g)return cap(g[1])+' '+g[2]+'.'+g[3]+effort;
     return base+effort;
   }
+  function taskModelLabel(t){
+    if(t.ran_model)return modelName(t.ran_model);
+    return t.model?tr('модель не подтверждена'):tr('по умолчанию');
+  }
+  function taskModelDetail(t){
+    if(t.ran_model)return tr('Модель, на которой исполнитель запущен')+' · '+t.ran_model;
+    return t.model?tr('Модель, которую указал координатор')+' · '+t.model:tr('Модель по умолчанию');
+  }
   function renderTaskList(){
     const live=$('task-list'),box=live.cloneNode(false);
     computerChip($('computer-chip'));
+    if(view?.project!==project){$('task-count').textContent='';swapChildren(live,box);return;}
     // T-096: say when the agent filter hides active tasks, with a way back.
     const agentChosen=$('agent-filter').value;
     const hidden=agentChosen?(view?.tasks||[]).filter(t=>t.agent!==agentChosen&&activeStates.includes(t.state)&&(!computerFilter||taskComputer(t)===computerFilter)).length:0;
@@ -930,10 +939,10 @@
       appendTaskWhen(agent,t);
       const [text,cls,tip,from]=taskStatus(t);
       const status=el('span',undefined,'am-task-status '+cls);if(tip)status.title=tip;
-      const model=t.ran_model||t.model;
+      const model=taskModelLabel(t);
       const words=el('span');status.append(words);words.append(statusPiece(text,!!t.usage||!!model,from));
       if(t.usage){const used=el('span',usageShort(t.usage),'am-task-usage');used.title=usageLong(t.usage);if(model)used.append(el('span',',','am-task-comma'));words.append(used);}
-      if(model){const m=el('span',modelName(model),'am-task-usage am-task-model');m.title=tr('Модель: ')+model;words.append(m);}
+      if(model){const m=el('span',model,'am-task-usage am-task-model');m.title=taskModelDetail(t);words.append(m);}
       row.append(agent,el('span',t.title,'am-task-title'),status);
       row.addEventListener('click',()=>{selectedTask=t.id;selectedShared=null;feedSignature='';renderTaskList();renderThread();loadFeed();});
       row.addEventListener('contextmenu',e=>taskMenu(e,t,null));
@@ -1121,7 +1130,7 @@
       return;
     }
     $('compose').hidden=true;$('lost-bar').hidden=true;feedSignature='';$('to-bottom').hidden=true;
-    if(!view){head.replaceChildren();return;}
+    if(view?.project!==project){head.replaceChildren();thread.replaceChildren();return;}
     if(!view.project){
       head.replaceChildren();
       thread.replaceChildren(welcome());return;
@@ -1133,7 +1142,7 @@
   }
   // The window response owns the task row. The feed response supplies
   // history, which can arrive before or after the row for the same task.
-  function selectedTaskRow(){return view?.tasks?.find(t=>t.id===selectedTask);}
+  function selectedTaskRow(){return view?.project===project?view?.tasks?.find(t=>t.id===selectedTask):undefined;}
   // The chosen task of another computer, if it is still in the lists.
   function sharedSelection(){
     if(!selectedShared)return null;
@@ -1374,8 +1383,7 @@
     const count=(feed.items||[]).filter(it=>it.kind!=='command_end').length,fresh=feedShown!==t.id,atBottom=fresh||feedStick||feedPinned,grew=!fresh&&!atBottom&&count>feedCount;feedShown=t.id;feedStick=false;feedCount=count;feedSignature=signature;
     const title=el('div',undefined,'am-task-head');title.append(el('h3',t.title));
     const where=t.remote&&!t.remote.from?tr(' на компьютере «')+t.remote.name+'»':tr(' на ')+(view.computer_name||tr('этом компьютере'))+(t.remote?.from?tr(', по заданию компьютера «')+t.remote.name+'»':'');
-    const model=t.ran_model||t.model;
-    const displayModel=model?modelName(model):'';
+    const displayModel=taskModelLabel(t);
     title.append(el('p',(names[t.agent]||t.agent)+(displayModel?' ('+displayModel+')':'')+where+tr(', папка ')+(t.folder||tr('ещё не известна'))+(t.remote&&!t.remote.from?'':t.full_access?tr(', любые команды разрешены'):tr(', без «Любых команд»')),'am-small am-muted'));
     const [statusText,statusCls,statusTip,from]=taskStatus(t);
     const when=t.finished_at?', '+clock(taskStart(t))+'–'+clock(t.finished_at):tr(', начата в ')+clock(taskStart(t));
@@ -1456,8 +1464,7 @@
       const g=el('article',undefined,'am-message-group');const row=el('div',undefined,'am-message');
       const body=el('div',undefined,'am-message-body');const meta=el('div',undefined,'am-meta');
       meta.append(messageAvatar(t.agent),el('strong',names[t.agent]||t.agent));
-      // The model the CLI said it runs on, else the one the coordinator asked for (T-108).
-      if(displayModel){const m=el('span',displayModel,'am-meta-model');m.title=t.ran_model?tr('Модель, на которой исполнитель запущен'):tr('Модель, которую указал координатор');meta.append(m);}
+      if(displayModel){const m=el('span',displayModel,'am-meta-model');m.title=taskModelDetail(t);meta.append(m);}
       meta.append(roleTag(tr('исполнитель')),el('time',clock(at)));
       const content=el('div',undefined,'am-message-content');body.append(meta,content);row.append(body);g.append(row);out.push(g);group=content;return content;
     };
@@ -1542,7 +1549,7 @@
     box.disabled=!q&&!note;box.placeholder=q?tr('Ответить исполнителю…'):note&&t.state==='waiting_coordinator'?tr('Ответить вместо координатора…'):note?tr('Написать исполнителю…'):t.remote?.from&&t.owner_question?tr('Отвечают на компьютере «')+t.remote.name+'»':t.pending_launch?tr('Задача ждёт запуска…'):t.remote?.outbox_delayed_minutes&&!t.remote.from?tr('Ответы с «')+t.remote.name+tr('» задерживаются: не уходят уже ')+t.remote.outbox_delayed_minutes+tr(' мин.'):t.remote?.worker==='none'&&!t.remote.from?tr('На «')+t.remote.name+tr('» исполнитель этой задачи сейчас не запущен'):tr('Исполнитель работает…');
     $('answer-send').hidden=!q&&!note;$('task-stop').hidden=!active;
     $('compose').dataset.mode=q?'answer':note?'note':'';
-    if($('compose').dataset.task!==t.id){$('compose').dataset.task=t.id;$('answer-status').textContent='';}
+    if($('compose').dataset.task!==t.id){$('compose').dataset.task=t.id;box.value='';$('answer-status').textContent='';}
     if(q&&$('compose').dataset.question!==q.id){$('compose').dataset.question=q.id;$('answer-text').value='';$('answer-status').textContent='';}
     else if(!q&&!note&&wasNote){$('answer-text').value='';}
     sizeAnswer();answerControls();
@@ -1596,8 +1603,8 @@
     let op=recall(key);
     if(!op){op='window-'+t.id+'-'+crypto.randomUUID();remember(key,op);}
     answering=true;answerControls();$('answer-status').textContent=tr('Отправляем сообщение…');
-    try{await postAPI('/api/task-note',{task:t.id,op_id:op,text});showError(null);try{localStorage.removeItem(key);}catch(_){}$('answer-status').textContent='';$('answer-text').value='';sizeAnswer();feedSignature='';feedStick=true;await refresh();}
-    catch(error){$('answer-status').textContent='';showError({message:error.message+tr(' Повтор с тем же текстом безопасен.'),command:error.command,hint:error.hint});}
+    try{await postAPI('/api/task-note',{task:t.id,op_id:op,text});try{localStorage.removeItem(key);}catch(_){}if(selectedTask===t.id){showError(null);$('answer-status').textContent='';$('answer-text').value='';sizeAnswer();feedSignature='';feedStick=true;}await refresh();}
+    catch(error){if(selectedTask===t.id)$('answer-status').textContent='';showError({message:error.message+tr(' Повтор с тем же текстом безопасен.'),command:error.command,hint:error.hint});}
     finally{answering=false;answerControls();}
   }
   async function sendAnswer(){
@@ -1608,8 +1615,8 @@
     let op=recall('messenger-answer-op:'+q.id);
     if(!op){op='window-'+q.id+'-'+crypto.randomUUID();remember('messenger-answer-op:'+q.id,op);}
     answering=true;answerControls();$('answer-status').textContent=tr('Отправляем ответ…');
-    try{await postAPI('/api/task-answer',{task:t.id,question:q.id,op_id:op,text});showError(null);$('answer-status').textContent='';$('answer-text').value='';sizeAnswer();feedSignature='';feedStick=true;await refresh();}
-    catch(error){$('answer-status').textContent='';showError({message:error.message+tr(' Повтор с тем же текстом безопасен.'),command:error.command,hint:error.hint});}
+    try{await postAPI('/api/task-answer',{task:t.id,question:q.id,op_id:op,text});if(selectedTask===t.id){showError(null);$('answer-status').textContent='';$('answer-text').value='';sizeAnswer();feedSignature='';feedStick=true;}await refresh();}
+    catch(error){if(selectedTask===t.id)$('answer-status').textContent='';showError({message:error.message+tr(' Повтор с тем же текстом безопасен.'),command:error.command,hint:error.hint});}
     finally{answering=false;answerControls();}
   }
   // Agent cards (T-061, D-070): the agent's name with a check, settings and
@@ -1768,12 +1775,14 @@
     $('access-bar').hidden=true;
     const peer=(server?.peers||[]).find(p=>p.id===computerFilter);
     const fresh=!!peer&&peerFresh(peer);
+    const busyTasks=busyTasksByComputer();
     cards.append(el('p',!peer?tr('Компьютер не найден в сети.'):fresh?tr('Только просмотр: агентов этого компьютера настраивают на нём самом.'):(peer.last_seen?tr('Нет связи. Был на связи ')+stamp(peer.last_seen)+'.':tr('Ещё не выходил на связь.')),'am-small am-muted am-peer-agents-note'));
     for(const a of peer?.agents||[]){
       const card=el('article',undefined,'am-card am-agent-card am-agent-remote'+(fresh?'':' am-agent-off'));
       const head=el('div',undefined,'am-agent-head');
       const heading=el('h3',undefined,'am-provider-heading');heading.append(providerIcon(a.agent),el('span',names[a.agent]||a.agent));
-      const [state,text]=fresh?agentState(a):['offline',tr('Нет связи')];
+      const {counts}=agentActivity(fresh?(busyTasks.get(peer.id+'\0'+a.agent)||[]):[]);
+      const [state,text]=fresh?agentState(counts):['offline',tr('Нет связи')];
       const st=el('span',undefined,'am-peer-state am-small am-muted');st.append(el('span',undefined,'am-dot am-dot-'+state),el('span',text));
       head.append(heading,st);card.append(head);
       const steps=el('div',undefined,'am-steps');
@@ -1795,13 +1804,13 @@
       const mm=el('span','✓','am-mark am-mark-ok');
       const r=el('div',undefined,'am-step');const t=el('div',undefined,'am-step-text');t.append(el('p',tr('Модели'),'am-step-title'),el('p',models.textContent,'am-step-sub'));r.append(mm,t,el('span'));steps.append(r);
       card.append(steps);
-      const n=(a.running||0)+(a.waiting_owner||0);
+      const n=counts.running+counts.waiting_owner;
       const tasks=el('button',undefined,'am-agent-tasks');tasks.type='button';
       // T-083: what runs there, as on this computer's cards.
       if(n){const label=el('span');label.append(tr('Задачи: '));
-        if(a.running)label.append(el('span',a.running+tr(' идёт'),'am-status-run'));
-        if(a.running&&a.waiting_owner)label.append(', ');
-        if(a.waiting_owner)label.append(el('span',a.waiting_owner+tr(' ждёт ответа'),'am-status-wait'));
+        if(counts.running)label.append(el('span',counts.running+tr(' идёт'),'am-status-run'));
+        if(counts.running&&counts.waiting_owner)label.append(', ');
+        if(counts.waiting_owner)label.append(el('span',counts.waiting_owner+tr(' ждёт ответа'),'am-status-wait'));
         tasks.append(label);tasks.addEventListener('click',()=>{$('agent-filter').value=a.agent;syncSelects();show('tasks');renderTaskList();});}
       else{tasks.textContent=tr('Задач сейчас нет');tasks.disabled=true;}
       card.append(tasks);cards.append(card);
@@ -1938,15 +1947,18 @@
   }
   async function refresh(){
     if(refreshing)return;refreshing=true;
+    const requestedProject=project;
+    let stale=false;
     try{
       let v;
-      try{v=await api('/api/window?project='+encodeURIComponent(project));}
-      catch(error){if(Date.now()-clientInfoAt>5000)loadClientInfo();online=false;offlineReason=error.name==='TimeoutError'||error.name==='TypeError'?tr('Окно потеряло связь с программой Messenger. Закройте окно и откройте снова.'):error.message;renderMachines();renderNotice();return;}
+      try{v=await api('/api/window?project='+encodeURIComponent(requestedProject));}
+      catch(error){if(requestedProject!==project){stale=true;return;}if(Date.now()-clientInfoAt>5000)loadClientInfo();online=false;offlineReason=error.name==='TimeoutError'||error.name==='TypeError'?tr('Окно потеряло связь с программой Messenger. Закройте окно и откройте снова.'):error.message;renderMachines();renderNotice();return;}
       online=true;offlineReason='';if(Date.now()-clientInfoAt>10000)loadClientInfo();
       // The first answer: learn the client's version before the start screen
       // goes, so an update starts without the old window showing.
       if(booting){await loadClientInfo();booting=false;renderBoot();}
-      if(!v.projects.some(p=>p.name===project))project=v.project||'';
+      if(requestedProject!==project){stale=true;return;}
+      if(!v.projects.some(p=>p.name===project))setProject(v.project||'');
       const signature=JSON.stringify(v);
       if(signature!==viewSignature){viewSignature=signature;view=v;if(selectedTask&&!v.tasks.some(t=>t.id===selectedTask)){selectedTask='';feed=null;feedSignature='';}if(selectedShared&&!sharedSelection())selectedShared=null;render();}
       else{renderMachines();renderNotice();}
@@ -1955,7 +1967,7 @@
       if(!selectedTask&&!selectedShared&&tab==='tasks'&&view?.project)openTopTask(true);
       if(selectedTask)await loadFeed();
     }catch(error){notice(el('p',tr('Окно не смогло показать данные: ')+error.message));}
-    finally{refreshing=false;}
+    finally{refreshing=false;if(stale)refresh();}
   }
   let discovering=false;
   async function loadDiscovery(){
@@ -1975,7 +1987,7 @@
   function show(next){
     tab=next;root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab);renderNotices();renderToasts();
     root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
-    $('list-toggle').hidden=tab!=='tasks'||!view?.project;if(tab==='server')loadServer();if(tab==='stats')loadStats();if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сервер'),stats:tr('Статистика')}[tab];
+    $('list-toggle').hidden=tab!=='tasks'||!view?.project;if(tab==='server')loadServer();if(tab==='stats'){renderStats();loadStats();}if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сервер'),stats:tr('Статистика')}[tab];
   }
 
 
@@ -2000,9 +2012,26 @@
     if(!h)return m+tr(' мин');
     return h+tr(' ч')+(m%60?' '+m%60+tr(' мин'):'');
   }
+  function setProject(name){
+    if(project===name)return;
+    project=name;
+    stats=null;statsModel='';statsGen++;
+    if(tab==='stats'){renderStats();loadStats();}
+  }
   async function loadStats(){
     const gen=++statsGen;
-    try{const s=await api('/api/usage-stats?period='+statsPeriod+(computerFilter?'&computer='+encodeURIComponent(computerFilter):'')+(statsAgent?'&agent='+statsAgent:'')+(statsModel?'&model='+encodeURIComponent(statsModel):''),8000);if(gen===statsGen){stats=s;renderStats();}}
+    const name=project;
+    if(!name)return;
+    const params=new URLSearchParams({project:name,period:statsPeriod});
+    if(computerFilter)params.set('computer',computerFilter);
+    if(statsAgent)params.set('agent',statsAgent);
+    if(statsModel)params.set('model',statsModel);
+    try{
+      const s=await api('/api/usage-stats?'+params,8000);
+      if(gen!==statsGen)return;
+      if(s.project!==name){stats=null;renderStats();throw Error(tr('Фильтр не применён: обновите фоновый клиент.'));}
+      stats=s;renderStats();
+    }
     catch(error){if(gen===statsGen){$('stats-total-title').textContent=tr('Статистика недоступна');$('stats-total-note').textContent=error.message;}}
   }
   function statsBars(box,groups,total,agents){
@@ -2043,7 +2072,7 @@
     root.querySelectorAll('[data-period]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.period===statsPeriod)));
     computerChip($('stats-computer-chip'));
     $('stats-computers-card').hidden=!!computerFilter;
-    $('stats-foot').textContent=!computerFilter?tr('Считаются все компьютеры сети: каждый сообщает расход своих задач по отчётам агентов. Задача попадает в день, когда закончилась.'):computerFilter==='local'?tr('Задачи, которые выполнялись на этом компьютере. Задача попадает в день, когда закончилась.'):tr('Расход сообщает сам компьютер, когда он меняется. В списке — только задачи, отправленные туда с этого компьютера.');
+    $('stats-foot').textContent=project?tr('Учитываются задачи выбранного проекта, известные этому компьютеру. Задача попадает в день, когда закончилась.'):'';
     $('stats-agent').value=statsAgent;
     root.querySelectorAll('[data-stats-sort]').forEach(b=>{
       const down=b.dataset.statsSort===statsSort,up=b.dataset.statsReverse===statsSort;
@@ -2051,20 +2080,25 @@
       else b.closest('th').removeAttribute('aria-sort');
       b.querySelector('span').textContent=down?'↓':up?'↑':'';
     });
-    if(stats){
-      // Rebuilt only when the list changed: a rebuild closes an open menu (T-192).
-      const models=[['',tr('Все модели')],...(stats.models||[]).map(m=>[m.key,m.name||m.key])];
-      if(statsModel&&!models.some(([v])=>v===statsModel))models.push([statsModel,statsModel]);
-      const select=$('stats-model');
-      if(select.options.length!==models.length||models.some(([v,l],i)=>select.options[i].value!==v||select.options[i].textContent!==l))select.replaceChildren(...models.map(([v,l])=>{const o=el('option',l);o.value=v;return o;}));
-      select.value=statsModel;
-    }
+    // Rebuilt only when the list changed: a rebuild closes an open menu (T-192).
+    const models=[['',tr('Все модели')],...(stats?.models||[]).map(m=>[m.key,m.name||m.key])];
+    if(statsModel&&!models.some(([v])=>v===statsModel))models.push([statsModel,statsModel]);
+    const select=$('stats-model');
+    if(select.options.length!==models.length||models.some(([v,l],i)=>select.options[i].value!==v||select.options[i].textContent!==l))select.replaceChildren(...models.map(([v,l])=>{const o=el('option',l);o.value=v;return o;}));
+    select.value=statsModel;
     syncSelects();
-    if(!stats)return;
+    if(!stats){
+      $('stats-total-title').textContent=project?tr('Загрузка статистики…'):tr('Выберите проект, чтобы увидеть статистику.');
+      $('stats-total-note').textContent='';
+      statsDays($('stats-days'),[]);
+      statsBars($('stats-agents'),[],0,true);
+      statsBars($('stats-computers'),[],0);
+      $('stats-top').replaceChildren();
+      return;
+    }
     // An older background client counts everything; say so.
     const unfiltered=(stats.agent||'')!==statsAgent||(stats.model||'')!==statsModel;
     if(unfiltered)$('stats-foot').textContent=tr('Фильтр не применён: обновите фоновый клиент.');
-    else if(statsModel)$('stats-foot').textContent+=' '+tr('С выбранной моделью считаются только задачи, которые знает этот компьютер: другие компьютеры сообщают расход по агентам, без моделей.');
     const t=stats.total;
     $('stats-total-title').textContent=t.tasks?tokensFull(t.tokens)+' '+periodWords[statsPeriod]:tr('Нет задач с расходом ')+periodWords[statsPeriod];
     $('stats-total-note').textContent=t.tasks?tasksWord(t.tasks)+tr(', на входе ')+t.input_tokens.toLocaleString(amLocale)+(t.cached_tokens?tr(' (из кэша ')+t.cached_tokens.toLocaleString(amLocale)+')':'')+tr(', на выходе ')+t.output_tokens.toLocaleString(amLocale):tr('Агент сообщает расход, когда задача заканчивается.');
@@ -2100,7 +2134,6 @@
       row.append(when,titleCell,duration,tokens);
       words.title=(!task.usage_missing&&typeof task.input_tokens==='number'?usageLong(task)+'\n':'')+tr('Открыть задачу');
       row.addEventListener('click',()=>{
-        if(task.project&&task.project!==project){project=task.project;remember('messenger-project',project);viewSignature='';}
         selectedTask=task.id;selectedShared=null;feed=null;feedSignature='';show('tasks');refresh();
       });
       top.append(row);
@@ -2339,7 +2372,7 @@
       await postAPI('/api/project-create',{name,folder});
       const rules=$('project-rules').value.trim();
       if(rules)await postAPI('/api/project-rules',{name,rules});
-      project=name;remember('messenger-project',name);
+      setProject(name);remember('messenger-project',name);
       $('project-dialog').close();viewSignature='';await refresh();
       // Connect the coordinator right away; the result is shown, not retried.
       if(view?.project===name)await connectReadyCoordinators();
@@ -2417,7 +2450,7 @@
     const name=view?.project;if(!name)return;
     askConfirm(tr('Удалить проект «')+(view.project_title||name)+'»?',tr('Проект пропадёт из списка. История задач сохранится и вернётся, если создать проект с тем же именем.'),tr('Удалить'),async()=>{
       await postAPI('/api/project-remove',{name});
-      project='';remember('messenger-project','');selectedTask='';selectedShared=null;feed=null;feedSignature='';viewSignature='';projectPageFor='';await refresh();
+      setProject('');remember('messenger-project','');selectedTask='';selectedShared=null;feed=null;feedSignature='';viewSignature='';projectPageFor='';await refresh();
     });
   }
   // Installation and sign-in use the agent's own terminal commands.
@@ -2880,7 +2913,7 @@
   $('project-select').addEventListener('change',()=>{
     const value=$('project-select').value;
     if(value==='__new'){$('project-select').value=view?.project||'__new';syncSelects();openProjectDialog();return;}
-    project=value;remember('messenger-project',value);selectedTask='';selectedShared=null;feed=null;feedSignature='';viewSignature='';refresh();
+    setProject(value);remember('messenger-project',value);selectedTask='';selectedShared=null;feed=null;feedSignature='';viewSignature='';if($('device-menu')?.matches(':popover-open'))$('device-menu').hidePopover();renderMachines();if(tab==='agents')renderAgents();renderTaskList();renderThread();refresh();
   });
   $('agent-filter').addEventListener('change',renderTaskList);
   for(const id of ['computer-chip','stats-computer-chip','agents-computer-chip'])$(id).querySelector('button').addEventListener('click',clearComputer);
@@ -3037,6 +3070,6 @@
   $('to-bottom').addEventListener('click',()=>{const t=$('thread');t.scrollTo({top:t.scrollHeight,behavior:'smooth'});});
   // A taller reply box must not pull the owner off the end of the feed.
   new ResizeObserver(()=>requestAnimationFrame(()=>{chatBody.style.setProperty('--am-footer-height',chatFooter.getBoundingClientRect().height+'px');const t=$('thread');if(feedPinned)t.scrollTop=t.scrollHeight;})).observe(chatFooter);
-  show('tasks');refresh();loadDiscovery();pollSetup();setInterval(pollSetup,2000);
+  show('tasks');loadMachineOrder();refresh();loadDiscovery();pollSetup();setInterval(pollSetup,2000);
   setInterval(updateTimers,1000);setInterval(refresh,2000);setInterval(loadDiscovery,60000);setInterval(()=>{if(tab==='stats')loadStats();},15000);
 })();
