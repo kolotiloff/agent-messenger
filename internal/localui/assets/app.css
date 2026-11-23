@@ -805,6 +805,10 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-spinner { width:28px; height:28px; box-sizing:border-box; border-radius:50%; border:3px solid var(--am-line); border-top-color:var(--am-muted); }
 @media (prefers-reduced-motion:no-preference) { #am-concept .am-spinner { animation:am-spin .9s linear infinite; } }
 @keyframes am-spin { to { transform:rotate(360deg); } }
+#am-concept .am-pane-loading { flex:1; display:flex; align-items:center; justify-content:center; opacity:0; animation:am-pane-appear 0s linear 200ms forwards; }
+@keyframes am-pane-appear { to { opacity:1; } }
+#am-concept .am-pane-empty { flex:1; display:flex; align-items:center; justify-content:center; text-align:center; }
+#am-concept .am-pane-empty-title { margin:0; font-size:var(--am-text-m); }
 /* Task pane without a task (T-152): the chain and the first steps. */
 #am-concept .am-welcome { margin:0; max-width:none; width:min(100%,760px); }
 #am-concept .am-welcome h3 { margin:0; }

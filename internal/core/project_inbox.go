@@ -100,25 +100,27 @@ func applySplitProjectMessage(ctx context.Context, computer *sql.DB, openProject
 			}
 			err = resolve()
 		}
-		if errors.Is(err, sql.ErrNoRows) {
-			// The route may still need to be restored or rebound. Do not
-			// acknowledge the message on a guess.
-			return fmt.Errorf("%w: no confirmed project route for this delivery", ErrRejected)
-		}
-		if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			// No task here matches this delivery, even after the peer was
+			// rebound: a reply for a task this computer never published,
+			// or a message the other computer should not have sent. Like
+			// the single database, skip it. Holding the cursor would stop
+			// every later message from every computer (D-188).
+		case err != nil:
 			return err
-		}
-		if file != projectMigrationFile(project) {
+		case file != projectMigrationFile(project):
 			return fmt.Errorf("%w: invalid project database route", ErrRejected)
-		}
-		db, err := openProject(file)
-		if err != nil {
-			return err
-		}
-		peer := peerName(common, m.From)
-		from := netLink{broker: broker, peer: m.From, task: body.Task}
-		if err := commitProjectDelivery(ctx, common, db, task, project, from, m, body, peer, gone); err != nil {
-			return err
+		default:
+			db, err := openProject(file)
+			if err != nil {
+				return err
+			}
+			peer := peerName(common, m.From)
+			from := netLink{broker: broker, peer: m.From, task: body.Task}
+			if err := commitProjectDelivery(ctx, common, db, task, project, from, m, body, peer, gone); err != nil {
+				return err
+			}
 		}
 	}
 	if err := advanceNetCursor(common, broker, m.Seq); err != nil {
@@ -143,7 +145,9 @@ func commitProjectDelivery(ctx context.Context, common *sql.Tx, db *sql.DB, task
 		return err
 	}
 	if !known {
-		return fmt.Errorf("%w: the project database does not contain the routed task", ErrRejected)
+		// The route names a task the project database lacks. Skip the
+		// message rather than stall the inbox (D-188).
+		return nil
 	}
 	apply, err := claimNetDelivery(tx, from.broker, m)
 	if err != nil {

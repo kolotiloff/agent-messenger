@@ -148,10 +148,12 @@ func beginSplitLocalRun(ctx context.Context, computer *sql.DB, openProject func(
 	if err := beginTaskRunTx(common, project, &r, &t, reservation); err != nil {
 		return r, t, err
 	}
-	if err := project.Commit(); err != nil {
-		return r, t, err
-	}
-	return r, t, common.Commit()
+	// The computer transaction only reads and holds the writer lock; the
+	// run lives in the project database. Once that commits the run is
+	// launching, and the deferred rollback releases the lock. Reporting a
+	// failed computer commit here would leave a launching run nobody
+	// starts (D-188).
+	return r, t, project.Commit()
 }
 
 func checkSplitProject(ctx context.Context, project *sql.Tx, name string) error {
@@ -339,6 +341,11 @@ func resourceHolderInProject(ctx context.Context, common projectRouteQuerier, re
 			return Task{}, err
 		}
 		otherOrder, err := splitRouteOrder(ctx, common, other)
+		if errors.Is(err, ErrRejected) && !active {
+			// A task whose route was never published cannot launch, so it
+			// holds nothing. FailUnpublishedTasks closes it (D-188).
+			continue
+		}
 		if err != nil {
 			return Task{}, err
 		}

@@ -3,7 +3,6 @@ package core
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -45,17 +44,23 @@ func TestSplitRemoteRequestKeepsItsProjectAndReplaysOnce(t *testing.T) {
 	}
 
 	note := netBody{Task: "origin-game", Kind: "note", Text: "Use the revised requirements", OpID: "note-one"}
-	if err := send(3, "dev-b", "wrong-sender", note); !errors.Is(err, ErrRejected) {
-		t.Fatalf("an unrelated computer could write to the task: %v", err)
+	// D-188: a request no route matches is skipped, like the single
+	// database does, instead of stopping the inbox.
+	if err := send(3, "dev-b", "wrong-sender", note); err != nil {
+		t.Fatalf("an unrouted request stopped the inbox: %v", err)
 	}
-	if cursor := cursorForFixture(t, f.computer); cursor != 2 {
-		t.Fatalf("unrouted request advanced cursor to %d", cursor)
+	if cursor := cursorForFixture(t, f.computer); cursor != 3 {
+		t.Fatalf("unrouted request did not advance the cursor: %d", cursor)
+	}
+	var written int
+	if err := game.QueryRow("SELECT COUNT(*) FROM task_owner_notes").Scan(&written); err != nil || written != 0 {
+		t.Fatalf("an unrelated computer could write to the task: %d %v", written, err)
 	}
 	if _, err := f.computer.Exec(`CREATE TRIGGER fail_note_cursor BEFORE UPDATE ON meta
  WHEN NEW.key LIKE 'net_cursor:%' BEGIN SELECT RAISE(ABORT,'fixture cursor failure'); END`); err != nil {
 		t.Fatal(err)
 	}
-	if err := send(3, "dev-a", "note-game", note); err == nil || !strings.Contains(err.Error(), "fixture cursor failure") {
+	if err := send(4, "dev-a", "note-game", note); err == nil || !strings.Contains(err.Error(), "fixture cursor failure") {
 		t.Fatalf("expected cursor failure: %v", err)
 	}
 	if err := f.computer.Close(); err != nil {
@@ -77,7 +82,7 @@ func TestSplitRemoteRequestKeepsItsProjectAndReplaysOnce(t *testing.T) {
 	if _, err := f.computer.Exec("DROP TRIGGER fail_note_cursor"); err != nil {
 		t.Fatal(err)
 	}
-	if err := send(3, "dev-a", "note-game", note); err != nil {
+	if err := send(4, "dev-a", "note-game", note); err != nil {
 		t.Fatal(err)
 	}
 	var notes int
@@ -121,7 +126,7 @@ func TestSplitRemoteRequestKeepsItsProjectAndReplaysOnce(t *testing.T) {
 	if err := game.QueryRow("SELECT id FROM task_questions WHERE state='open'").Scan(&question); err != nil {
 		t.Fatal(err)
 	}
-	if err := send(4, "dev-a", "answer-game", netBody{
+	if err := send(5, "dev-a", "answer-game", netBody{
 		Task: "origin-game", Kind: "answer", Question: question, By: AudienceCoordinator, Text: "Use plan A",
 	}); err != nil {
 		t.Fatal(err)

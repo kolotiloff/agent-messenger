@@ -808,7 +808,9 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.locator('[aria-controls="project-select-menu"]').click();
       await page.locator('#project-select-menu').getByText('Site',{exact:true}).click();
       try {
-        assert.equal(await page.locator('#task-list .am-task').count(), 0, 'clear the old project list while Site loads');
+        // The old rows stay in place so the list does not jump, but they
+        // cannot be chosen while Site loads (T-266).
+        assert(await page.locator('#task-list').evaluate(list => list.inert && list.getAttribute('aria-busy') === 'true'), 'keep the old project list inert while Site loads');
         assert(await composer.isHidden());
       } finally {
         releaseSite();

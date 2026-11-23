@@ -53,13 +53,16 @@ func applySplitStart(ctx context.Context, common *sql.Tx, openProject func(strin
 		} else if err != nil {
 			return err
 		}
-		return fmt.Errorf("%w: visible project is missing from the storage catalog", ErrRejected)
+		// The project row and its catalog entry are written together, so
+		// this does not heal by waiting. Refusing keeps the inbox moving
+		// and tells the computer that gave the task why (D-188).
+		return refuseSplitStart(common, from, fmt.Errorf("%w: visible project is missing from the storage catalog", ErrRejected))
 	}
 	if err != nil {
 		return err
 	}
 	if file != projectMigrationFile(body.Project) {
-		return fmt.Errorf("%w: invalid project database route", ErrRejected)
+		return refuseSplitStart(common, from, fmt.Errorf("%w: invalid project database route", ErrRejected))
 	}
 	db, err := openProject(file)
 	if err != nil {
@@ -70,7 +73,9 @@ func applySplitStart(ctx context.Context, common *sql.Tx, openProject func(strin
 		return err
 	}
 	defer project.Rollback()
-	if err := checkSplitProject(ctx, project, body.Project); err != nil {
+	if err := checkSplitProject(ctx, project, body.Project); errors.Is(err, ErrRejected) {
+		return refuseSplitStart(common, from, err)
+	} else if err != nil {
 		return err
 	}
 	task, known, err := mirrorTask(project, from)
@@ -98,6 +103,10 @@ func applySplitStart(ctx context.Context, common *sql.Tx, openProject func(strin
 		return err
 	}
 	return enqueueStartReply(common, from, "accepted", netBody{Mirror: task.ID, Folder: task.Folder})
+}
+
+func refuseSplitStart(common *sql.Tx, from netLink, err error) error {
+	return enqueueStartReply(common, from, "refused", netBody{Reason: refusalText(err)})
 }
 
 func recordSplitRemoteTask(ctx context.Context, common, project *sql.Tx, from netLink, body netBody) (Task, error) {

@@ -3,7 +3,6 @@ package core
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 	"testing"
 )
@@ -35,15 +34,20 @@ func TestSplitReceiverRepairsPeerRouteOnRedelivery(t *testing.T) {
 	}
 	const newBroker = "brk-00000000000000bb"
 	note := netBody{Kind: "note", Task: "origin-Game", Computer: "wrong-computer", OpID: "note-one", Text: "Read this in Game"}
-	if err := message(newBroker, "new-game", "wrong-note", 1, note); !errors.Is(err, ErrRejected) {
-		t.Fatalf("unrelated computer rebound the task: %v", err)
+	// D-188: the message is skipped; the route stays with the old peer.
+	if err := message(newBroker, "new-game", "wrong-note", 1, note); err != nil {
+		t.Fatalf("an unrouted note stopped the inbox: %v", err)
 	}
-	if _, err := f.computer.Exec(`CREATE TRIGGER fail_rebind_cursor BEFORE INSERT ON meta
+	var kept string
+	if err := f.computer.QueryRow("SELECT origin_peer FROM task_storage_routes WHERE project='Game'").Scan(&kept); err != nil || kept != "old-Game" {
+		t.Fatalf("unrelated computer rebound the task: %q %v", kept, err)
+	}
+	if _, err := f.computer.Exec(`CREATE TRIGGER fail_rebind_cursor BEFORE UPDATE ON meta
  WHEN NEW.key='net_cursor:brk-00000000000000bb' BEGIN SELECT RAISE(ABORT,'fixture rebind cursor failure'); END`); err != nil {
 		t.Fatal(err)
 	}
 	note.Computer = "machine-Game"
-	if err := message(newBroker, "new-game", "rebound-note", 1, note); err == nil || !strings.Contains(err.Error(), "fixture rebind cursor failure") {
+	if err := message(newBroker, "new-game", "rebound-note", 2, note); err == nil || !strings.Contains(err.Error(), "fixture rebind cursor failure") {
 		t.Fatalf("rebind interruption: %v", err)
 	}
 	var peer string
@@ -64,7 +68,7 @@ func TestSplitReceiverRepairsPeerRouteOnRedelivery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := message(newBroker, "new-game", "rebound-note", 1, note); err != nil {
+	if err := message(newBroker, "new-game", "rebound-note", 2, note); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.computer.QueryRow("SELECT origin_peer FROM task_storage_routes WHERE project='Game'").Scan(&peer); err != nil || peer != "new-game" {
@@ -80,7 +84,7 @@ func TestSplitReceiverRepairsPeerRouteOnRedelivery(t *testing.T) {
 	if err := game.QueryRow("SELECT COUNT(*) FROM task_owner_notes").Scan(&notes); err != nil || notes != 1 {
 		t.Fatalf("note was replayed more than once: %d %v", notes, err)
 	}
-	if cursor, err := s.NetCursor(newBroker); err != nil || cursor != 1 {
+	if cursor, err := s.NetCursor(newBroker); err != nil || cursor != 2 {
 		t.Fatalf("network cursor: %d %v", cursor, err)
 	}
 }

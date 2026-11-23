@@ -17,7 +17,8 @@ jobs:
   window-controls:
     name: Window controls (fictional data)
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    # The browser system packages alone took 9.5 minutes on one run (T-264).
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -31,12 +32,14 @@ jobs:
           export PLAYWRIGHT_MODULE="$RUNNER_TEMP/window-tests/node_modules/playwright"
           for engine in chromium webkit; do
             BROWSER_ENGINE="$engine" node scripts/check-window-controls.cjs
+            BROWSER_ENGINE="$engine" node scripts/check-window-switch.cjs
+            BROWSER_ENGINE="$engine" node scripts/check-window-stability.cjs
           done
 
   native:
     name: Tests / ${{ matrix.runner }} / Go ${{ matrix.go }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 20
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:

@@ -31,9 +31,13 @@ prepared_id='ui-00000000-0000-4000-8000-000000000001'
 queued_id='ui-00000000-0000-4000-8000-000000000002'
 client=subprocess.Popen([str(installed),'serve'],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 try:
- for _ in range(100):
-  try:run(installed,'status');break
-  except Exception:time.sleep(.05)
+ # Since 0.95 the client answers status while it is still preparing the
+ # project databases and refuses other commands until it is ready.
+ for _ in range(200):
+  try:
+   if control('status')['status'].get('project_storage')!='preparing':break
+  except Exception:pass
+  time.sleep(.05)
  else:raise RuntimeError('installed client did not start')
  profile=root/'profile';workspace=root/'workspace';profile.mkdir();workspace.mkdir()
  run(installed,'register-session','--provider','claude','--environment',str(profile),'--conversation-id','test-only-install','--alias','test','--cli','/usr/bin/false','--workspace',str(workspace))

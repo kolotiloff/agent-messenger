@@ -28,7 +28,7 @@ jobs:
   others:
     name: Windows and Linux programs
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       VERSION: ${{ inputs.version }}
     steps:
@@ -70,7 +70,7 @@ jobs:
   mac-checks:
     name: Mac checks
     runs-on: macos-15
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Refuse anything but main
         if: github.ref != 'refs/heads/main'

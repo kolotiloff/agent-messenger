@@ -411,6 +411,7 @@
   'Исполнители':'Workers',
   'Claude Code, Codex и Cursor на ваших компьютерах.':'Claude Code, Codex and Cursor on your computers.',
   'Добро пожаловать в Agent Messenger':'Welcome to Agent Messenger',
+  'Задач пока нет':'No tasks yet',
   'Ставьте задачи агентам на всех своих компьютерах из одного чата.':'Give tasks to agents on all your computers from one chat.',
   'Выберите задачу в списке справа, чтобы открыть её.':'Pick a task in the list on the right to open it.',
   'Задач пока нет. Когда координатор раздаст первые, они появятся в списке справа.':'No tasks yet. When the coordinator hands out the first ones, they appear in the list on the right.',

@@ -2,6 +2,30 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-23 — Claude Code (T-264, CI of PR #182)
+
+- On PR #182 the window-controls job was cancelled at its 10-minute limit while apt installed the browser system packages (9.5 minutes). Raised that job's limit to 20 minutes. The macOS / Go 1.22.2 job in the same run never got a runner and was cancelled after 15 minutes of waiting; the push reruns it. Nothing in the product changed.
+
+## 2026-11-23 — Claude Code (T-267)
+
+- Reviewed PR #176 (0.95). Fixed an inbox stall on a network message without a task route, a resource held by a task whose start failed half-way, a client that would not start after a failed storage activation, and a launch reported as failed after it was recorded (D-188). Three tests that asserted the stall now assert the skip; new tests cover the rest and fail on the old code.
+
+## 2026-11-23 — Claude Code (T-266)
+
+- Measured the jumps with `scripts/check-window-stability.cjs`: statistics collapsed from 1198 to 548 px on every computer, period or project choice, and the task list collapsed on a project switch. Both now keep their data until the new data arrives (D-187). The check runs in CI.
+
+## 2026-11-23 — Claude Code (T-265)
+
+- The welcome flashed on a project switch because the window drew the project before choosing its top task. It now chooses first and shows a delayed spinner while loading. The welcome is limited to the first run (D-186). Added `scripts/check-window-switch.cjs` to CI.
+
+## 2026-11-23 — Claude Code (T-264)
+
+- Reviewed the 0.96 release and the code of T-262 and T-263; no defects found in the product changes. Found why the 0.96 checks on `main` and PR #180 failed: the `core` race suite exceeds the 10-minute limit, and the Mac package check raced project storage preparation. Raised the limits and made the check wait for readiness. `TestTaskOutputIsReadToTheEnd` remains a known `SQLITE_BUSY` flake.
+
+## 2026-11-23 — Codex (0.96 release)
+
+- Published [0.96](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.96) from `b28a5cb` with T-262 and T-263. Verified all five signed update sets, 22 assets, the release tag and the VPS installer syntax. The Linux test timeout and signing runner queue required two separate job retries. No installed-app or VPS upgrade was performed.
+
 ## 2026-11-23 — Codex (T-263)
 
 - Closed the window revision cancellation path that can abandon a read and added recovery for SQLite 517. Confirmed the existing project and task remain visible when migration is deferred. Chromium and WebKit exercised a failed first view and recovery. The production Mac still runs the released build.
