@@ -4,7 +4,8 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-23 — Codex (T-262)
 
-- Reproduced `SQLITE_BUSY_SNAPSHOT` and missing mailbox entries under concurrent sends on the 0.95 broker. Acquired the writer lock at the start of broker transactions. The regression covers concurrent sends and duplicate operation IDs. VPS-PC2 service logs and recovery are still unverified.
+- Reproduced `SQLITE_BUSY_SNAPSHOT` and missing mailbox entries under concurrent sends on the 0.95 broker. Acquired the writer lock at the start of broker transactions. The regression covers concurrent sends and duplicate operation IDs. Full macOS checks passed.
+- The owner restored the VPS with the released installer. Diagnosed persistent local 517 errors on Mac and verified the original projects, task history and network computers returned after a normal restart. T-263 tracks this separate client problem.
 
 ## 2026-11-23 — Codex (T-258, first stage)
 
