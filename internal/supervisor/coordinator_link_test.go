@@ -134,6 +134,35 @@ func (f linkFixture) calls(t *testing.T) []string {
 	return strings.Split(strings.TrimSpace(string(raw)), "\n")
 }
 
+func TestWindowCoordinatorLinksUseSelectedProject(t *testing.T) {
+	f := newLinkFixture(t, true)
+	if err := f.sup.store.CreateProject("Site", t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.sup.store.SetComputerAgent("cursor", f.messenger, "", "worker"); err != nil {
+		t.Fatal(err)
+	}
+	if state := f.sup.connectCursorCoordinator("Site"); state.State != adapters.LinkConnected {
+		t.Fatalf("connect Cursor for Site: %+v", state)
+	}
+	raw, err := f.sup.WindowView(f.project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	game := raw.(windowView)
+	if game.CoordinatorLink.State != adapters.LinkMissing || game.CodexLink.State != linkNoCodex || game.CursorLink.State != adapters.LinkMissing {
+		t.Fatalf("game links: Claude=%+v Codex=%+v Cursor=%+v", game.CoordinatorLink, game.CodexLink, game.CursorLink)
+	}
+	raw, err = f.sup.WindowView("Site")
+	if err != nil {
+		t.Fatal(err)
+	}
+	site := raw.(windowView)
+	if site.CoordinatorLink.State != adapters.LinkMissing || site.CodexLink.State != linkNoCodex || site.CursorLink.State != adapters.LinkConnected {
+		t.Fatalf("site links: Claude=%+v Codex=%+v Cursor=%+v", site.CoordinatorLink, site.CodexLink, site.CursorLink)
+	}
+}
+
 func TestConnectCoordinatorRunsClaudeInTheProjectFolder(t *testing.T) {
 	f := newLinkFixture(t, true)
 	t.Setenv("MESSENGER_CLAUDE_MCP_FIXTURE", "ok")

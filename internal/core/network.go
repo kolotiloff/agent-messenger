@@ -442,7 +442,11 @@ func (s *Store) NetPeers() ([]NetPeer, error) {
 }
 
 func netPeers(tx *sql.Tx) ([]NetPeer, error) {
-	rows, err := tx.Query(`SELECT peer,name,host,age,agents,ready,usage,updated_at,missing_since!='',version,computer,outbox,workers,update_pending FROM net_peers ORDER BY host DESC, name, peer`)
+	return readNetPeers(tx, "ORDER BY host DESC, name, peer")
+}
+
+func readNetPeers(tx *sql.Tx, selection string, args ...any) ([]NetPeer, error) {
+	rows, err := tx.Query(`SELECT peer,name,host,age,agents,ready,usage,updated_at,missing_since!='',version,computer,outbox,workers,update_pending FROM net_peers `+selection, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -516,16 +520,14 @@ func reconcilePeerUpdates(tx *sql.Tx, peers []NetPeer) error {
 }
 
 func netPeer(tx *sql.Tx, id string) (NetPeer, bool, error) {
-	peers, err := netPeers(tx)
+	peers, err := readNetPeers(tx, "WHERE peer=?", id)
 	if err != nil {
 		return NetPeer{}, false, err
 	}
-	for _, p := range peers {
-		if p.ID == id {
-			return p, true, nil
-		}
+	if len(peers) == 0 {
+		return NetPeer{}, false, nil
 	}
-	return NetPeer{}, false, nil
+	return peers[0], true, nil
 }
 
 // peerName names another computer for the window; its ID if it is not in
