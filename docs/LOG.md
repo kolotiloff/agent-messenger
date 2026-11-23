@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-23 — Claude Code (T-266)
+
+- Measured the jumps with `scripts/check-window-stability.cjs`: statistics collapsed from 1198 to 548 px on every computer, period or project choice, and the task list collapsed on a project switch. Both now keep their data until the new data arrives (D-187). The check runs in CI.
+
 ## 2026-11-23 — Claude Code (T-265)
 
 - The welcome flashed on a project switch because the window drew the project before choosing its top task. It now chooses first and shows a delayed spinner while loading. The welcome is limited to the first run (D-186). Added `scripts/check-window-switch.cjs` to CI.

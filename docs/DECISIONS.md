@@ -609,3 +609,7 @@ On Windows, the update relaunch and the installer's handoff to the installed app
 ## D-186 — Loading indicator instead of the welcome; the welcome only on first run (T-265)
 
 2026-11-23, the owner saw the welcome flash while switching projects, and a server without agents always showed it. The window now chooses the top task before drawing the new project, and while the project or the chosen conversation is loading the pane shows the start screen's spinner after 200 ms. The welcome is shown only until this computer has seen its first task (its own or another computer's) or serves the network; this is remembered in the window's local storage, so a cleared storage shows it once more. Afterwards an empty project only says «Задач пока нет».
+
+## D-187 — Keep shown data in place while new data loads (T-266)
+
+2026-11-23, after the window became faster the owner saw blocks jump: choosing a computer, a period or a project emptied the statistics and the task list for a moment, so the page shrank, its scroll bar vanished and both came back. The statistics now keep the shown numbers until the new ones arrive (the computers card follows the numbers on screen), and a project switch keeps the previous rows in the task list, inert and marked busy, until the new project's view arrives. Nothing new is shown as loaded before it is, and the old rows cannot be chosen.

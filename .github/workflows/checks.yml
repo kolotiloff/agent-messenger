@@ -32,6 +32,7 @@ jobs:
           for engine in chromium webkit; do
             BROWSER_ENGINE="$engine" node scripts/check-window-controls.cjs
             BROWSER_ENGINE="$engine" node scripts/check-window-switch.cjs
+            BROWSER_ENGINE="$engine" node scripts/check-window-stability.cjs
           done
 
   native:

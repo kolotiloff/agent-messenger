@@ -803,7 +803,7 @@
   function computerChanged(){
     renderMachines();
     if(tab==='tasks')openTopTask();else renderTaskList();
-    if(tab==='stats'){stats=null;renderStats();loadStats();}
+    if(tab==='stats')reloadStats();
     if(tab==='agents')renderAgents();
     if(view?.history_paged)refresh();
   }
@@ -954,7 +954,10 @@
   function renderTaskList(){
     const live=$('task-list'),box=live.cloneNode(false);
     computerChip($('computer-chip'));
-    if(view?.project!==project){$('task-count').textContent='';swapChildren(live,box);return;}
+    // While another project loads, its rows stay in place but cannot be
+    // chosen, so the list does not collapse and grow again.
+    if(view?.project!==project){if(!live.childElementCount)$('task-count').textContent='';live.inert=true;live.setAttribute('aria-busy','true');return;}
+    live.inert=false;live.removeAttribute('aria-busy');
     // T-096: say when the agent filter hides active tasks, with a way back.
     const agentChosen=$('agent-filter').value;
     const hidden=agentChosen?(view?.tasks||[]).filter(t=>t.agent!==agentChosen&&activeStates.includes(t.state)&&(!computerFilter||taskComputer(t)===computerFilter)).length:0;
@@ -2162,24 +2165,34 @@
   function setProject(name){
     if(project===name)return;
     project=name;
-    stats=null;statsModel='';statsGen++;
-    if(tab==='stats'){renderStats();loadStats();}
+    statsModel='';statsGen++;
+    if(!name)stats=null;
+    if(tab==='stats')reloadStats();
   }
   async function loadStats(){
     const gen=++statsGen;
     const name=project;
     if(!name)return;
     const params=new URLSearchParams({project:name,period:statsPeriod});
-    if(computerFilter)params.set('computer',computerFilter);
+    const computer=computerFilter;
+    if(computer)params.set('computer',computer);
     if(statsAgent)params.set('agent',statsAgent);
     if(statsModel)params.set('model',statsModel);
     try{
       const s=await api('/api/usage-stats?'+params,8000);
       if(gen!==statsGen)return;
-      if(s.project!==name){stats=null;renderStats();throw Error(tr('Фильтр не применён: обновите фоновый клиент.'));}
-      stats=s;renderStats();
+      if(s.project!==name){stats=null;statsPending=false;renderStats();throw Error(tr('Фильтр не применён: обновите фоновый клиент.'));}
+      s.forComputer=computer;stats=s;statsPending=false;renderStats();
     }
-    catch(error){if(gen===statsGen){$('stats-total-title').textContent=tr('Статистика недоступна');$('stats-total-note').textContent=error.message;}}
+    catch(error){if(gen===statsGen){statsPending=false;setStatsBusy();$('stats-total-title').textContent=tr('Статистика недоступна');$('stats-total-note').textContent=error.message;}}
+  }
+  // A new period, filter, computer or project keeps the shown numbers until
+  // the new ones arrive, so the blocks do not collapse and grow again.
+  let statsPending=false;
+  function reloadStats(){statsPending=!!stats;renderStats();loadStats();}
+  function setStatsBusy(){
+    const screen=root.querySelector('[data-screen="stats"]');
+    if(statsPending)screen.setAttribute('aria-busy','true');else screen.removeAttribute('aria-busy');
   }
   function statsBars(box,groups,total,agents){
     box.replaceChildren();
@@ -2218,7 +2231,9 @@
   function renderStats(){
     root.querySelectorAll('[data-period]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.period===statsPeriod)));
     computerChip($('stats-computer-chip'));
-    $('stats-computers-card').hidden=!!computerFilter;
+    // The card follows the numbers on screen, not the filter still loading.
+    $('stats-computers-card').hidden=stats?!!stats.forComputer:!!computerFilter;
+    setStatsBusy();
     $('stats-foot').textContent=project?tr('Учитываются задачи выбранного проекта, известные этому компьютеру. Задача попадает в день, когда закончилась.'):'';
     $('stats-agent').value=statsAgent;
     root.querySelectorAll('[data-stats-sort]').forEach(b=>{
@@ -2244,7 +2259,7 @@
       return;
     }
     // An older background client counts everything; say so.
-    const unfiltered=(stats.agent||'')!==statsAgent||(stats.model||'')!==statsModel;
+    const unfiltered=!statsPending&&((stats.agent||'')!==statsAgent||(stats.model||'')!==statsModel);
     if(unfiltered)$('stats-foot').textContent=tr('Фильтр не применён: обновите фоновый клиент.');
     const t=stats.total;
     $('stats-total-title').textContent=t.tasks?tokensFull(t.tokens)+' '+periodWords[statsPeriod]:tr('Нет задач с расходом ')+periodWords[statsPeriod];
@@ -2286,13 +2301,13 @@
       top.append(row);
     }
   }
-  $('stats-agent').addEventListener('change',()=>{statsAgent=$('stats-agent').value;remember('messenger-stats-agent',statsAgent);statsModel='';stats=null;renderStats();loadStats();});
-  $('stats-model').addEventListener('change',()=>{statsModel=$('stats-model').value;stats=null;renderStats();loadStats();});
+  $('stats-agent').addEventListener('change',()=>{statsAgent=$('stats-agent').value;remember('messenger-stats-agent',statsAgent);statsModel='';reloadStats();});
+  $('stats-model').addEventListener('change',()=>{statsModel=$('stats-model').value;reloadStats();});
   root.querySelectorAll('[data-stats-sort]').forEach(b=>b.addEventListener('click',()=>{
     statsSort=statsSort===b.dataset.statsSort?b.dataset.statsReverse:b.dataset.statsSort;
     remember('messenger-stats-sort',statsSort);renderStats();
   }));
-  root.querySelectorAll('[data-period]').forEach(b=>b.addEventListener('click',()=>{statsPeriod=b.dataset.period;remember('messenger-stats-period',statsPeriod);stats=null;renderStats();loadStats();}));
+  root.querySelectorAll('[data-period]').forEach(b=>b.addEventListener('click',()=>{statsPeriod=b.dataset.period;remember('messenger-stats-period',statsPeriod);reloadStats();}));
 
   // Server tab: the broker hosted by this client and this computer's
   // connection to a broker. Messages stay next to the section they belong to.

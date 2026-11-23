@@ -8,6 +8,10 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-23 by Claude Code (T-266).
+
+- T-266 on `claude/amazing-noether-apbflv`, not released: statistics and the task list no longer empty while new data loads, so blocks and scroll bars stop jumping. Checked in Chromium with fictional data only.
+
 Updated 2026-11-23 by Claude Code (T-265).
 
 - T-265 on `claude/amazing-noether-apbflv`, not released: switching projects shows a delayed spinner instead of flashing the welcome; the welcome appears only until the computer has seen a task or serves the network; an empty project says «Задач пока нет». Checked in Chromium with fictional data; not tried in the installed app.
