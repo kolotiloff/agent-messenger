@@ -16,10 +16,11 @@ fi
 sh -n scripts/install-server.sh
 "$go_bin" mod verify
 "$go_bin" vet ./...
-# The timeout catches a hung test. The supervisor package alone runs close to
-# five minutes with -race on a shared CI machine, so the budget is ten.
+# The timeout catches a hung test. With -race on a shared CI machine the core
+# package already takes 520-600 seconds and supervisor about 480, so the
+# budget is fifteen minutes per package.
 case "$("$go_bin" env GOOS)" in
-  darwin) CGO_ENABLED=1 "$go_bin" test -race -count=1 -timeout=10m -ldflags=-linkmode=external ./... ;;
-  linux) CGO_ENABLED=1 "$go_bin" test -race -count=1 -timeout=10m ./... ;;
+  darwin) CGO_ENABLED=1 "$go_bin" test -race -count=1 -timeout=15m -ldflags=-linkmode=external ./... ;;
+  linux) CGO_ENABLED=1 "$go_bin" test -race -count=1 -timeout=15m ./... ;;
   *) printf 'Native race checks are currently accepted only on macOS/Linux.\n' >&2; exit 1 ;;
 esac

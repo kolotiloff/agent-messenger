@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-23 — Claude Code (T-264)
+
+- Reviewed the 0.96 release and the code of T-262 and T-263; no defects found in the product changes. Found why the 0.96 checks on `main` and PR #180 failed: the `core` race suite exceeds the 10-minute limit, and the Mac package check raced project storage preparation. Raised the limits and made the check wait for readiness. `TestTaskOutputIsReadToTheEnd` remains a known `SQLITE_BUSY` flake.
+
 ## 2026-11-23 — Codex (0.96 release)
 
 - Published [0.96](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.96) from `b28a5cb` with T-262 and T-263. Verified all five signed update sets, 22 assets, the release tag and the VPS installer syntax. The Linux test timeout and signing runner queue required two separate job retries. No installed-app or VPS upgrade was performed.

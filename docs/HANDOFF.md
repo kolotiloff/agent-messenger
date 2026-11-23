@@ -8,6 +8,10 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-23 by Claude Code (T-264).
+
+- Reviewed the 0.95 and 0.96 commits. The push checks on `main` for 0.96 ([run](https://github.com/kolotiloff/agent-messenger/actions/runs/45224688763)) failed in three jobs, and the PR #180 Mac job failed in the package install check. Neither is a product regression: the `core` race tests take 520-600 s against a 10-minute limit, and `scripts/check-package.py` did not wait for project storage preparation. T-264 fixes both in the scripts and workflow limits. The Mac package check runs only on macOS CI and was not run here. Open PRs #177 and #178 look superseded by #176 (0.95); the owner decides whether to close them.
+
 Updated 2026-11-23 by Codex (0.96 release).
 
 - **0.96 is released** ([release](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.96), [workflow](https://github.com/kolotiloff/agent-messenger/actions/runs/45224882224/attempts/3), [PR #180](https://github.com/kolotiloff/agent-messenger/pull/180), source `b28a5cb8a3ef8f4447e0e4dc05d1bc27b6b3e31e`). T-262 serializes broker writes. T-263 keeps client database access usable after SQLite error 517 and distinguishes a failed project read from an empty list. The first Linux race-test run hit its suite timeout, and the first signing job did not acquire a Mac runner. GitHub successfully retried those jobs. Confirmed all 22 published assets, the release tag and Latest designation. Independently verified all five update manifests and archives against the pinned key, source SHA, lengths and SHA-256 hashes. The live Mac and VPS were not upgraded in this release run.
