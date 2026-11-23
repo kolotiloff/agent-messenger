@@ -130,6 +130,9 @@ func Open(dir string) (*Broker, error) {
 	q.Add("_pragma", "busy_timeout(5000)")
 	q.Add("_pragma", "journal_mode(WAL)")
 	q.Add("_pragma", "synchronous(FULL)")
+	// Send reads mailbox limits before inserting. Acquire the writer lock
+	// before those reads so the busy timeout applies to concurrent sends.
+	q.Set("_txlock", "immediate")
 	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(filepath.Join(dir, "broker.sqlite"))+"?"+q.Encode())
 	if err != nil {
 		return nil, err
