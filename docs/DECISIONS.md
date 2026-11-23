@@ -592,3 +592,7 @@ On Windows, the update relaunch and the installer's handoff to the installed app
 ## D-173 — Notify the coordinator when Codex is slow to exit (T-249)
 
 2026-11-22, two Windows workers still held their task locks long after their completed turns. If the recorded Codex worker process is observed alive after the one-minute grace period, publish one `worker_still_running` event per run through `wait`. Use the task's existing event route for remote tasks. The observation describes a delayed exit and can be followed by the ordinary verified result. The run remains subject to D-021 and D-147. The event does not mark its computer idle or trigger a cancel or retry.
+
+## D-177 — Statistics follow the selected project (T-253)
+
+2026-11-23, owner reported that switching projects showed the same statistics. The window sends its selected project on every statistics request. Period, computer, agent and model filters apply within that project. Totals, charts, model options and rankings use task records this computer knows, including local and remote tasks. Peer daily totals carry no project and cannot be attributed to one. Keep the existing all-project statistics for callers without a project filter. The window clears the old result immediately when the project changes and ignores an in-flight response for the previous selection.

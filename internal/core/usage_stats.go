@@ -78,7 +78,8 @@ type UsageDayAgent struct {
 
 // UsageStats is the window's statistics page.
 type UsageStats struct {
-	Since string `json:"since"`
+	Since   string `json:"since"`
+	Project string `json:"project,omitempty"`
 	// Computer names the computer the page is limited to; empty for the
 	// whole network.
 	Computer  string       `json:"computer,omitempty"`
@@ -98,12 +99,12 @@ type UsageStats struct {
 	Models []UsageGroup `json:"models"`
 }
 
-// UsageFilter limits the statistics to one agent and one model (T-201).
-// Other computers report their days per agent only, so with a model only
-// the tasks this computer knows are counted.
+// UsageFilter limits statistics by project, agent and model. Peer summaries
+// are per agent only, so project or model filters use known task records.
 type UsageFilter struct {
-	Agent string
-	Model string
+	Project string
+	Agent   string
+	Model   string
 }
 
 // MaxUsageTop is how many tasks the page lists in each order.
@@ -138,9 +139,9 @@ func (s *Store) UsageStats(since time.Time, loc *time.Location, computer string)
 	return s.UsageStatsFiltered(since, loc, computer, UsageFilter{})
 }
 
-// UsageStatsFiltered is UsageStats for one agent or model (T-201).
+// UsageStatsFiltered applies the requested project, agent and model filters.
 func (s *Store) UsageStatsFiltered(since time.Time, loc *time.Location, computer string, filter UsageFilter) (UsageStats, error) {
-	out := UsageStats{Since: since.UTC().Format(time.RFC3339Nano), Agents: []UsageGroup{}, Computers: []UsageGroup{}, Days: []UsageDay{}, Top: []UsageTask{}, Recent: []UsageTask{}, Models: []UsageGroup{}, Agent: filter.Agent, Model: filter.Model}
+	out := UsageStats{Since: since.UTC().Format(time.RFC3339Nano), Project: filter.Project, Agents: []UsageGroup{}, Computers: []UsageGroup{}, Days: []UsageDay{}, Top: []UsageTask{}, Recent: []UsageTask{}, Models: []UsageGroup{}, Agent: filter.Agent, Model: filter.Model}
 	err := s.tx(func(tx *sql.Tx) error {
 		local, err := localComputer(tx)
 		if err != nil {
@@ -155,9 +156,11 @@ func (s *Store) UsageStatsFiltered(since time.Time, loc *time.Location, computer
 			return err
 		}
 		reported := map[string]NetPeer{}
-		for _, p := range peers {
-			if p.Usage != nil {
-				reported[p.ID] = p
+		if filter.Project == "" && filter.Model == "" {
+			for _, p := range peers {
+				if p.Usage != nil {
+					reported[p.ID] = p
+				}
 			}
 		}
 		wanted := func(key string) bool {
@@ -211,7 +214,8 @@ func (s *Store) UsageStatsFiltered(since time.Time, loc *time.Location, computer
  THEN COALESCE((SELECT i.created_at FROM remote_task_items i WHERE i.task_id=t.id ORDER BY i.seq LIMIT 1),'') ELSE '' END
  FROM tasks t LEFT JOIN net_peers p ON p.peer=t.remote_peer
  WHERE COALESCE(t.finished_at,t.updated_at)>=?
- AND (t.usage_seen=1 OR (t.finished_at IS NOT NULL AND t.state IN ('done','failed','cancelled')))`, out.Since)
+ AND (?='' OR t.project=?)
+ AND (t.usage_seen=1 OR (t.finished_at IS NOT NULL AND t.state IN ('done','failed','cancelled')))`, out.Since, filter.Project, filter.Project)
 		if err != nil {
 			return err
 		}
@@ -278,7 +282,7 @@ func (s *Store) UsageStatsFiltered(since time.Time, loc *time.Location, computer
 				continue
 			}
 			used = append(used, task)
-			if _, ok := reported[peer]; peer != "" && ok && filter.Model == "" {
+			if _, ok := reported[peer]; peer != "" && ok {
 				continue // counted from that computer's own report
 			}
 			day := ""
@@ -291,10 +295,8 @@ func (s *Store) UsageStatsFiltered(since time.Time, loc *time.Location, computer
 			return err
 		}
 		firstDay := since.In(loc).Format("2006-01-02")
-		for _, p := range peers {
-			// The reports carry no model: with a model chosen, the tasks
-			// above stand for that computer.
-			if p.Usage == nil || !wanted(p.ID) || filter.Model != "" {
+		for _, p := range reported {
+			if !wanted(p.ID) {
 				continue
 			}
 			for _, u := range p.Usage {
