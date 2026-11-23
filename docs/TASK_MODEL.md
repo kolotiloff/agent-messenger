@@ -131,7 +131,7 @@ How `wait` behaves (the contract of the [T-023 pilot](reports/2026-11-06-wait-pi
 messenger --root DIR coordinator-watch --project NAME --after CURSOR [--minutes 30]
 ```
 
-It exits when a coordinator event of the project arrives after the cursor, or after 30 minutes with none (the most allowed). Claude Code receives its background-task completion notification, reads events with `wait`, then starts the watch again with the new cursor. The watch only looks: it never moves the cursor. The server gives the command only to that client.
+It exits when a coordinator event of the project arrives after the cursor, or after its watch window (30 minutes at most). It opens the existing database in read-only mode. A busy read is repeated at the same cursor within the watch window. If the final read could not be confirmed, the output asks the chat to keep the same cursor. Claude Code receives its background-task completion notification, reads events with `wait` when notified of events, then starts the watch again with the new cursor. The server gives the command only to that client.
 
 Codex, Cursor and unrecognized clients receive active-wait instructions: while following workers, keep the turn active, call `wait` with the last cursor and a 30-second timeout, handle events, and wait again. Respond to owner messages between calls; stop when superseded, the owner stops monitoring, or the requested work is finished. A background `exec_command` session does not establish a wake-up mechanism after a Codex turn ends. If the turn must end, explicitly tell the owner monitoring stops; events remain saved for the next `wait`. This is an instruction correction, not a new idle-chat notification integration.
 

@@ -25,10 +25,14 @@ type coordClient struct {
 
 func newCoordinatorStore(t *testing.T) *core.Store {
 	t.Helper()
+	return newCoordinatorStoreAt(t, t.TempDir())
+}
+
+func newCoordinatorStoreAt(t *testing.T, root string) *core.Store {
+	t.Helper()
 	old := core.TemporaryFolder
 	core.TemporaryFolder = func(string) bool { return false }
 	t.Cleanup(func() { core.TemporaryFolder = old })
-	root := t.TempDir()
 	st, err := core.Open(filepath.Join(root, "queue.sqlite"))
 	if err != nil {
 		t.Fatal(err)

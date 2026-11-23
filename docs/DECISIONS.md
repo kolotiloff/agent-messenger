@@ -592,3 +592,7 @@ On Windows, the update relaunch and the installer's handoff to the installed app
 ## D-173 — Notify the coordinator when Codex is slow to exit (T-249)
 
 2026-11-22, two Windows workers still held their task locks long after their completed turns. If the recorded Codex worker process is observed alive after the one-minute grace period, publish one `worker_still_running` event per run through `wait`. Use the task's existing event route for remote tasks. The observation describes a delayed exit and can be followed by the ordinary verified result. The run remains subject to D-021 and D-147. The event does not mark its computer idle or trigger a cancel or retry.
+
+## D-181 — Read coordinator events without reserving the SQLite writer (T-257)
+
+2026-11-23, a running background watch exited on a transient `SQLITE_BUSY` while two projects shared one queue. SQLite already had a five-second busy timeout. A single event query uses its own read snapshot. The background watch opens the existing queue read-only and does not run migrations or update connection timestamps. The coordinator MCP process still records connections and claims. A busy read repeats at the original cursor within the watch window. The completion message distinguishes an unconfirmed final read from an empty one. Task commands, task ownership and the queue schema follow their existing rules.
