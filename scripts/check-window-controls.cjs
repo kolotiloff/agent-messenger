@@ -322,6 +322,9 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const olderStat = {...stat,id:'old-2',title:'Проверить производительность сцены',at:'2026-11-18T10:10:00',tokens:18200000,duration_ms:10800000,duration_estimated:true};
       const untimedStat = {...stat,id:'old-3',title:'Уточнить настройки агента',at:'2026-11-18T09:00:00',tokens:3400000,duration_ms:undefined};
       const localTask = {id:'local-task',title:'Local task',project:'Frame',agent:'codex',state:'running',created_at:began,started_at:began,model:'gpt-6.2-sol[effort=low]',ran_model:'gpt-6.2-sol[effort=medium]'};
+      const siteTask = {...localTask,id:'site-task',project:'Site',title:'Site worker task'};
+      let releaseSite;
+      const siteView = new Promise(resolve => { releaseSite = resolve; });
       const remoteTask = {...localTask,id:'remote-task',title:'Remote task',created_at:new Date(Date.now()-8*60*1000).toISOString(),model:'',ran_model:'',remote:{id:'dev-1',name:'Runner',worker:'none'}};
       const waitingTask = {...remoteTask,id:'waiting-task',title:'Waiting for a reply',agent:'claude',state:'waiting_owner',model:'claude-sonnet-5-5[effort=medium]'};
       let remoteRow = remoteTask;
@@ -336,7 +339,11 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         const pathname = new URL(route.request().url()).pathname;
         if (pathname === '/api/feedback-export') return route.fulfill({json: {ok: true, result: {path: '/fictional/Downloads/feedback.zip', remarks: 2}}});
         if (pathname === '/api/feedback-clear') { clears.push(true); return route.fulfill({json: {ok: true, result: {deleted: 2, left: 0}}}); }
-        if (pathname === '/api/window') return route.fulfill({json: {projects: [{name: 'Frame'}], project: 'Frame', folder: '/fictional/frame', agents: [], coordinator: {connected: false}, computer_name: 'Ёж и Йога', tasks_enabled: true, feedback_count: 5, feedback_new: 2, tasks:[localTask,remoteRow,waitingTask],
+        if (pathname === '/api/window' && new URL(route.request().url()).searchParams.get('project') === 'Site') {
+          await siteView;
+          return route.fulfill({json: {projects: [{name: 'Frame'}, {name: 'Site'}], project: 'Site', agents: [], coordinator: {connected: false}, tasks: [siteTask], shared: []}});
+        }
+        if (pathname === '/api/window') return route.fulfill({json: {projects: [{name: 'Frame'}, {name: 'Site'}], project: 'Frame', folder: '/fictional/frame', agents: [], coordinator: {connected: false}, computer_name: 'Ёж и Йога', tasks_enabled: true, feedback_count: 5, feedback_new: 2, tasks:[localTask,remoteRow,waitingTask],
           shared: [{peer: 'host', name: 'Giver', age: 1, tasks: [
             {id: 'sent', project: 'Frame', title: 'Sent task', agent: 'cursor', state: 'running', created_at: began, started_at: began, model: 'composer-2.5[effort=medium]', runs_on_peer: 'dev-1', runs_on: 'Old name'},
             {id: 'own', project: 'Frame', title: 'Own task', agent: 'codex', state: 'running', created_at: '2026-11-15T09:00:00Z'},
@@ -349,7 +356,9 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           ranked:{oldest:[untimedStat,olderStat,stat],fewest:[stat,untimedStat,olderStat],longest:[olderStat,stat],shortest:[stat,olderStat]},
         }});
         if (pathname === '/api/task') {
-          const remote = new URL(route.request().url()).searchParams.get('id') === remoteTask.id;
+          const requested = new URL(route.request().url()).searchParams.get('id');
+          if (requested === siteTask.id) return route.fulfill({json:{task:siteTask,items:[]}});
+          const remote = requested === remoteTask.id;
           const items = [
             {kind:'task',author:'coordinator',text:'Original task',at:began,sender_agent:'claude',sender_model:'claude-opus-5-5'},
             {kind:'answer',author:'coordinator',text:'Follow-up from Cursor',at:began,sender_agent:'cursor'},
@@ -727,6 +736,21 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(clears.length, 1);
       assert.equal(await page.locator('#fb-export').isDisabled(), true);
       await page.locator('#fb-close').click();
+      await page.locator('#task-list').getByText(localTask.title,{exact:true}).click();
+      const composer = page.locator('#answer-text');
+      await composer.fill('Unsent note for Frame');
+      await page.locator('[aria-controls="project-select-menu"]').click();
+      await page.locator('#project-select-menu').getByText('Site',{exact:true}).click();
+      try {
+        assert.equal(await page.locator('#task-list .am-task').count(), 0, 'clear the old project list while Site loads');
+        assert(await composer.isHidden());
+      } finally {
+        releaseSite();
+      }
+      await page.locator('#task-head h3').filter({hasText:siteTask.title}).waitFor();
+      await composer.waitFor();
+      assert.equal(await composer.inputValue(), '', 'a draft must not follow a task from another project');
+      assert(await page.locator('#answer-send').isDisabled());
       // One update button: the dialog follows the download, the install and
       // the restart; a failed install says so and offers to try again.
       const updateButton = page.locator('#app-update-button');

@@ -52,6 +52,23 @@ func (s *Store) TaskLockHolder(id string) (string, error) {
 	return holder.String, err
 }
 
+// ProjectTaskLock shows that the task waits while disclosing only holders
+// in the same project. Scheduling still uses a computer-wide resource lock.
+func (s *Store) ProjectTaskLock(project, id string) (resource, holder string, err error) {
+	var lock string
+	var heldBy, holderProject sql.NullString
+	err = s.db.QueryRow(`SELECT t.resource,o.id,o.project FROM tasks t
+ LEFT JOIN tasks o ON o.id=(`+lockHolderQuery+` ORDER BY o.created_at,o.rowid LIMIT 1)
+ WHERE t.project=? AND t.id=? AND t.resource<>''`, project, id).Scan(&lock, &heldBy, &holderProject)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && !heldBy.Valid) {
+		return "", "", nil
+	}
+	if holderProject.String == project {
+		holder = heldBy.String
+	}
+	return lock, holder, err
+}
+
 // waitingLock returns the lock a task waits for, or "" when it waits for
 // none.
 func (s *Store) waitingLock(id string) (string, error) {

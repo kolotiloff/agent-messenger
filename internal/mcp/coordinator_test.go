@@ -232,7 +232,7 @@ func TestCoordinatorHandshakeAndTools(t *testing.T) {
 	for _, tool := range resp["result"].(map[string]any)["tools"].([]any) {
 		names = append(names, tool.(map[string]any)["name"].(string))
 	}
-	if strings.Join(names, ",") != "list_agents,agent_version,start_task,wait,tasks,answer,continue_task,note_task,task_images,task_output,task_messages,cancel,report_feedback,export_feedback,clear_feedback,get_log,update_messenger" {
+	if strings.Join(names, ",") != "list_agents,agent_version,start_task,wait,tasks,answer,continue_task,note_task,task_images,task_output,task_messages,cancel,report_feedback,export_feedback,clear_feedback,update_messenger" {
 		t.Fatalf("tools %v", names)
 	}
 	var agents struct {
@@ -566,6 +566,65 @@ func TestCoordinatorSeesOnlyItsProject(t *testing.T) {
 	}
 }
 
+func TestCoordinatorListAndResourceWaitAreProjectScoped(t *testing.T) {
+	st := newCoordinatorStore(t)
+	if err := st.SetNetwork("brk-1", "host", []core.NetPeer{
+		{ID: "dev-b", Name: "Runner", Age: 1, Agents: []core.NetAgent{{Agent: "codex", Running: 6, Waiting: 3}}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetNetTasks([]core.NetPeerTasks{
+		{Peer: "dev-b", Name: "Runner", Tasks: []core.NetTask{
+			{ID: "other-remote", Project: "Other", Agent: "codex", State: "running"},
+			{ID: "game-remote", Project: "Game", Agent: "codex", State: "waiting_owner"},
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	other, _, err := st.StartTask(core.StartTaskRequest{Project: "Other", OpID: "o", Provider: "codex", Text: "other work", Lock: "unity-editor"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := startCoordinator(t, st, "Game")
+	var agents struct{ Computers []core.ComputerSummary }
+	if text, ok := c.tool("list_agents", map[string]any{}, &agents); !ok || len(agents.Computers) != 2 {
+		t.Fatalf("list_agents: %s", text)
+	}
+	for _, agent := range agents.Computers[0].Agents {
+		if agent.Running != 0 || agent.Waiting != 0 {
+			t.Fatalf("other project's local counts: %+v", agent)
+		}
+	}
+	a := agents.Computers[1].Agents[0]
+	if a.Running != 0 || a.Waiting != 1 {
+		t.Fatalf("remote counts: %+v", a)
+	}
+	var started struct {
+		TaskID string `json:"task_id"`
+	}
+	if text, ok := c.tool("start_task", map[string]any{"op_id": "game", "agent": "codex", "text": "game work", "lock": "unity-editor"}, &started); !ok {
+		t.Fatalf("start_task: %s", text)
+	}
+	var list struct {
+		Version   string
+		Unchanged bool
+		Tasks     []coordinatorTask
+	}
+	if text, ok := c.tool("tasks", map[string]any{}, &list); !ok || strings.Contains(text, other) || len(list.Tasks) != 1 ||
+		list.Tasks[0].ID != started.TaskID || list.Tasks[0].WaitingForResource != "unity-editor" || list.Tasks[0].WaitingForLock != "" {
+		t.Fatalf("tasks: %s", text)
+	}
+	previousVersion := list.Version
+	list.Tasks = nil
+	if _, err := st.CancelTask(other); err != nil {
+		t.Fatal(err)
+	}
+	if text, ok := c.tool("tasks", map[string]any{"if_version": previousVersion}, &list); !ok || list.Unchanged ||
+		list.Version == previousVersion || len(list.Tasks) != 1 || list.Tasks[0].WaitingForResource != "" {
+		t.Fatalf("tasks after resource becomes available: %s", text)
+	}
+}
+
 func TestCoordinatorUnknownProject(t *testing.T) {
 	st := newCoordinatorStore(t)
 	c := startCoordinator(t, st, "Missing")
@@ -725,43 +784,11 @@ func TestCoordinatorContinuesAFinishedTask(t *testing.T) {
 	}
 }
 
-func TestCoordinatorGetLog(t *testing.T) {
-	old := coordinatorLogWait
-	coordinatorLogWait = 400 * time.Millisecond
-	t.Cleanup(func() { coordinatorLogWait = old })
+func TestCoordinatorCannotReadMachineWideLog(t *testing.T) {
 	st := newCoordinatorStore(t)
-	if err := st.SetNetwork("brk-1", "host", []core.NetPeer{{ID: "dev-b", Name: "Ноутбук", Age: 1}}); err != nil {
-		t.Fatal(err)
-	}
 	c := startCoordinator(t, st, "Game")
-	if _, ok := c.tool("get_log", map[string]any{}, nil); ok {
-		t.Fatal("get_log without a computer must fail")
-	}
-	if _, ok := c.tool("get_log", map[string]any{"computer": "dev-x"}, nil); ok {
-		t.Fatal("unknown computer must fail")
-	}
-	var waiting struct {
-		RequestID string `json:"request_id"`
-		State     string `json:"state"`
-		Computer  string `json:"computer"`
-		Next      string `json:"next"`
-	}
-	if text, ok := c.tool("get_log", map[string]any{"computer": "dev-b", "lines": 30}, &waiting); !ok || waiting.State != "waiting" || waiting.RequestID == "" || waiting.Computer != "Ноутбук" || waiting.Next == "" {
-		t.Fatalf("waiting %q %+v", text, waiting)
-	}
-	body := `{"kind":"log","task":"` + waiting.RequestID + `","text":"line 1\nline 2\n"}`
-	if err := st.ApplyNet("brk-1", core.NetIncoming{Seq: 1, From: "dev-b", OpID: "log-reply." + waiting.RequestID, Body: []byte(body)}); err != nil {
-		t.Fatal(err)
-	}
-	var done struct {
-		State string `json:"state"`
-		Text  string `json:"text"`
-	}
-	if text, ok := c.tool("get_log", map[string]any{"request_id": waiting.RequestID}, &done); !ok || done.State != "done" || done.Text != "line 1\nline 2\n" {
-		t.Fatalf("done %q %+v", text, done)
-	}
-	if _, ok := c.tool("get_log", map[string]any{"request_id": "log-nope"}, nil); ok {
-		t.Fatal("unknown request must fail")
+	if text, ok := c.tool("get_log", map[string]any{"computer": "dev-b"}, nil); ok || !strings.Contains(text, "computer-wide journal is unavailable") {
+		t.Fatalf("get_log: %s", text)
 	}
 }
 
@@ -1038,12 +1065,23 @@ func TestCoordinatorFeedback(t *testing.T) {
 	if _, err := st.AddFeedback(core.AudienceOwner, "Game", "Не видно кнопку", "", "", nil); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := st.AddFeedback(core.AudienceOwner, "Other", "remark for another project", "", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	other := startCoordinator(t, st, "Other")
+	var otherFile struct{ Path string }
+	if text, ok := other.tool("export_feedback", map[string]any{}, &otherFile); !ok || otherFile.Path == "" {
+		t.Fatalf("other project export: %s", text)
+	}
 	var out struct {
 		Path    string `json:"path"`
 		Remarks int    `json:"remarks"`
 	}
 	if text, ok := c.tool("export_feedback", map[string]any{}, &out); !ok || out.Remarks != 2 || filepath.Dir(out.Path) != filepath.Join(home, "Downloads") {
 		t.Fatalf("export_feedback %s", text)
+	}
+	if out.Path == otherFile.Path {
+		t.Fatal("project archives share a path")
 	}
 	// Owner, 2026-11-16: once passed on, the exported remarks are cleared;
 	// one written after the export stays.
@@ -1053,6 +1091,9 @@ func TestCoordinatorFeedback(t *testing.T) {
 	var cleared struct{ Deleted, Left int }
 	if text, ok := c.tool("clear_feedback", map[string]any{}, &cleared); !ok || cleared.Deleted != 2 || cleared.Left != 1 {
 		t.Fatalf("clear_feedback %s", text)
+	}
+	if all, _, err := st.FeedbackCount(); err != nil || all != 2 {
+		t.Fatalf("another project's feedback was deleted: %d, %v", all, err)
 	}
 	if !strings.Contains(coordinatorInstructions, "clear_feedback") {
 		t.Fatal("instructions do not tell about clearing")

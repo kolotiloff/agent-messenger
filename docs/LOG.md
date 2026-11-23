@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-23 — Codex (T-256)
+
+- Audited two projects sharing computers. Coordinator tasks and events passed their isolation tests. Browser fixtures reproduced stale actionable rows and an unsent note reaching a new project's task after a switch. Tested shared locks, global load in `list_agents`, note operation ID collisions, and the cross-project cap on the shared feed with a temporary store. The follow-up fixes are tracked in T-256.
+- Follow-up after the owner reproduced the crossover: keep MCP counts and feedback local to the selected project, expose shared-resource waits without foreign IDs, and refuse the unscoped machine log. Clear old task controls immediately and a draft when the selected task changes.
+
 ## 2026-11-22 — Codex (0.94 release)
 
 - Published [0.94](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.94) from `d0e3a4e` and verified the five signed update sets. Corrected the browser regression test to read computed padding and color inside the page before returning simple values. Both browsers passed.

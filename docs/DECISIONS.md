@@ -592,3 +592,8 @@ On Windows, the update relaunch and the installer's handoff to the installed app
 ## D-173 — Notify the coordinator when Codex is slow to exit (T-249)
 
 2026-11-22, two Windows workers still held their task locks long after their completed turns. If the recorded Codex worker process is observed alive after the one-minute grace period, publish one `worker_still_running` event per run through `wait`. Use the task's existing event route for remote tasks. The observation describes a delayed exit and can be followed by the ordinary verified result. The run remains subject to D-021 and D-147. The event does not mark its computer idle or trigger a cancel or retry.
+
+
+## D-180 — Scope coordinator reads and task input to their project (T-256)
+
+2026-11-23, owner saw a coordinator describe another project's activity. List known running and waiting tasks per project, using only recorded tasks and recent shared task rows for that project. Shared resource locks retain computer-wide scheduling. The coordinator sees the name of its own waiting resource and receives a holder's task ID only within its own project. Computer-wide task journals have no project boundary and are unavailable through coordinator MCP. Export and clearing of feedback through MCP apply only to the named project. The task pane discards an older project response, clears the old list as the new project loads and clears a compose draft when changing tasks.

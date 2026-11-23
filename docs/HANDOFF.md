@@ -8,6 +8,10 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-23 by Codex.
+
+- T-256 audits simultaneous projects against 0.94 and the pending project fixes ([statistics #172](https://github.com/kolotiloff/agent-messenger/pull/172), [activity #173](https://github.com/kolotiloff/agent-messenger/pull/173)). Its follow-up scopes coordinator load and feedback to the current project, hides foreign resource-lock holder IDs, removes the machine-wide log from coordinator tools, and clears stale task controls and unsent notes when changing tasks. The audit reproduced cross-project draft transfer in both browser engines and with #173 in WebKit. Remaining audit cases are in TASKS.md. This change is outside the published 0.94 release.
+
 Updated 2026-11-22 by Codex.
 
 - **0.94 is released** ([release](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.94), [PR #167](https://github.com/kolotiloff/agent-messenger/pull/167), source `d0e3a4ec658570e1a91387bb51a86e61ad2163e5`, [release run](https://github.com/kolotiloff/agent-messenger/actions/runs/45067378364)). T-240 refreshes Windows and Linux windows after remote updates, T-246 balances statistics sort padding, T-247 estimates otherwise missing remote task durations, T-248 attributes coordinator follow-ups and T-249 alerts the coordinator when a completed Codex turn leaves its process running. Verified all 22 published assets and all five update manifests and archives against their signatures, revisions, sizes and SHA-256 digests. The separate [checks run](https://github.com/kolotiloff/agent-messenger/actions/runs/45065644594) failed the WebKit sort-padding test because the test tried to serialize a CSSStyleDeclaration directly. Reading the individual style values passed in Chromium and WebKit. Live desktop update acceptance is pending.
