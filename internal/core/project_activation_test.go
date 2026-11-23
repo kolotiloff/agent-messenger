@@ -22,7 +22,8 @@ func TestProjectActivationSealsLegacyWritersAndReopensTheSameFiles(t *testing.T)
  WHEN NEW.key='project_storage_generation' BEGIN SELECT RAISE(ABORT,'fixture cutover interruption'); END`); err != nil {
 		t.Fatal(err)
 	}
-	if err := ActivateProjectStorage(ctx, f.path); err == nil || !strings.Contains(err.Error(), "fixture cutover interruption") {
+	// D-188: the client keeps the single database it still uses.
+	if err := ActivateProjectStorage(ctx, f.path); !errors.Is(err, ErrProjectStorageNotActivated) || !strings.Contains(err.Error(), "fixture cutover interruption") {
 		t.Fatalf("activation did not stop before committing: %v", err)
 	}
 	if _, err := f.st.db.Exec("DROP TRIGGER fail_generation"); err != nil {
@@ -129,5 +130,26 @@ func TestProjectActivationWaitsForAnOpenCoordinator(t *testing.T) {
 		if err := queue.db.QueryRow("PRAGMA journal_mode").Scan(&mode); err != nil || mode != "wal" {
 			t.Fatalf("journal mode after startup: %q %v", mode, err)
 		}
+	}
+}
+
+// D-188: once a generation is selected the single database is sealed, so a
+// generation that cannot be opened must stop the client, not fall back.
+func TestProjectActivationNeverFallsBackFromASelectedGeneration(t *testing.T) {
+	f := newTaskFixture(t)
+	ctx := context.Background()
+	if err := ActivateProjectStorage(ctx, f.path); err != nil {
+		t.Fatal(err)
+	}
+	generations, err := filepath.Glob(filepath.Join(filepath.Dir(f.path), projectGenerationPrefix+"*"))
+	if err != nil || len(generations) != 1 {
+		t.Fatalf("generation: %v %v", generations, err)
+	}
+	if err := os.Remove(filepath.Join(generations[0], migrationComputerFile)); err != nil {
+		t.Fatal(err)
+	}
+	err = ActivateProjectStorage(ctx, f.path)
+	if err == nil || errors.Is(err, ErrProjectStorageNotActivated) {
+		t.Fatalf("a broken selected generation allowed the sealed database: %v", err)
 	}
 }

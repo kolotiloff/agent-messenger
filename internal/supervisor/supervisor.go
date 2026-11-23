@@ -231,6 +231,11 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 		switch err := core.ActivateProjectStorage(ctx, dbPath); {
 		case errors.Is(err, core.ErrProjectStorageBusy):
 			journal.Printf("project storage pending: %v", err)
+		case errors.Is(err, core.ErrProjectStorageNotActivated) && ctx.Err() == nil:
+			// Nothing was switched: the single database is still the
+			// one in use, so the client keeps working and tries again
+			// on its next start (D-188).
+			journal.Printf("project storage not activated, the single database stays in use: %v", err)
 		case err != nil:
 			return fmt.Errorf("project storage activation: %w", err)
 		default:
@@ -248,6 +253,11 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 	store.SetWorkerCheck(core.CheckWorkerGone)
 	if _, err := store.RevokeInherited(); err != nil {
 		return err
+	}
+	if n, err := store.FailUnpublishedTasks(); err != nil {
+		return err
+	} else if n > 0 {
+		journal.Printf("closed %d task(s) whose start was never registered", n)
 	}
 	if startup == nil && options.StartPaused {
 		if err := store.Pause(); err != nil {

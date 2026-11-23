@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-23 — Claude Code (T-267)
+
+- Reviewed PR #176 (0.95). Fixed an inbox stall on a network message without a task route, a resource held by a task whose start failed half-way, a client that would not start after a failed storage activation, and a launch reported as failed after it was recorded (D-188). Three tests that asserted the stall now assert the skip; new tests cover the rest and fail on the old code.
+
 ## 2026-11-23 — Claude Code (T-266)
 
 - Measured the jumps with `scripts/check-window-stability.cjs`: statistics collapsed from 1198 to 548 px on every computer, period or project choice, and the task list collapsed on a project switch. Both now keep their data until the new data arrives (D-187). The check runs in CI.

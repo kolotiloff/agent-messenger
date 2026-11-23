@@ -3,7 +3,6 @@ package core
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -130,11 +129,15 @@ func TestSplitProjectResponseResumesAfterCursorWriteFails(t *testing.T) {
 	unknown.Seq++
 	unknown.From = "other-peer"
 	unknown.OpID += "-unrouted"
-	if err := applySplitProjectResponse(ctx, computer, resolve, testBroker, unknown); !errors.Is(err, ErrRejected) {
-		t.Fatalf("unrouted report accepted: %v", err)
+	// D-188: a report no route matches is skipped and the inbox moves on.
+	if err := applySplitProjectResponse(ctx, computer, resolve, testBroker, unknown); err != nil {
+		t.Fatalf("unrouted report stopped the inbox: %v", err)
 	}
-	if got := readCursor(computer); got != report.Seq {
-		t.Fatalf("unrouted report advanced cursor: %d", got)
+	if got := readCursor(computer); got != unknown.Seq {
+		t.Fatalf("unrouted report did not advance the cursor: %d", got)
+	}
+	if got := countReports(game); got != 1 {
+		t.Fatalf("unrouted report changed a task: %d reports", got)
 	}
 	if got := countReports(pair.a.st.db); got != 0 {
 		t.Fatalf("test wrote back to the legacy working store: %d reports", got)

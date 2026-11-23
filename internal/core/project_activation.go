@@ -49,6 +49,32 @@ func readProjectGeneration(db projectRouteQuerier) (string, error) {
 // the legacy queue intact as a sealed source and keeps a separate backup.
 // The committed selector and the fence against old writers are atomic.
 func ActivateProjectStorage(ctx context.Context, legacy string) error {
+	err := activateProjectStorage(ctx, legacy)
+	var kept *legacyKept
+	if errors.As(err, &kept) {
+		return fmt.Errorf("%w: %w", ErrProjectStorageNotActivated, kept.err)
+	}
+	return err
+}
+
+// ErrProjectStorageNotActivated means activation stopped before it changed
+// the single database, which stays complete and in use (D-188).
+var ErrProjectStorageNotActivated = errors.New("project storage was not activated")
+
+type legacyKept struct{ err error }
+
+func (k *legacyKept) Error() string { return k.err.Error() }
+
+func activateProjectStorage(ctx context.Context, legacy string) (err error) {
+	// Until the selector is written, a failure leaves the single database
+	// as it was. An already selected generation, or an uncertain commit,
+	// is not marked: the client must not fall back to the old copy.
+	selected := false
+	defer func() {
+		if err != nil && !selected && !errors.Is(err, ErrProjectStorageBusy) {
+			err = &legacyKept{err}
+		}
+	}()
 	root := filepath.Dir(legacy)
 	db, err := sql.Open("sqlite", sqliteFileURL(legacy, url.Values{
 		"mode": {"rw"}, "_pragma": {sqliteBusyTimeout, "synchronous(FULL)"}, "_txlock": {"immediate"},
@@ -67,6 +93,7 @@ func ActivateProjectStorage(ctx context.Context, legacy string) error {
 		return err
 	}
 	if generation != "" {
+		selected = true
 		// Verify the installed generation can actually be opened. Its
 		// staging checksums no longer describe files intentionally in use.
 		current, err := openSplitStore(ctx, filepath.Join(root, generation))
@@ -127,6 +154,7 @@ func ActivateProjectStorage(ctx context.Context, legacy string) error {
 	}
 	// If Commit returns an uncertain result the generation stays on disk.
 	committing = true
+	selected = true
 	return tx.Commit()
 }
 

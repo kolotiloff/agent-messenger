@@ -8,6 +8,10 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-23 by Claude Code (T-267).
+
+- T-267 on `claude/amazing-noether-apbflv`, not released: review fixes for the 0.95 per-project storage (D-188). An unroutable network message no longer stops the inbox; a half-created task no longer blocks a resource and is closed at the next start; a failed activation keeps the single database. Go tests with fixture databases only.
+
 Updated 2026-11-23 by Claude Code (T-266).
 
 - T-266 on `claude/amazing-noether-apbflv`, not released: statistics and the task list no longer empty while new data loads, so blocks and scroll bars stop jumping. Checked in Chromium with fictional data only.
