@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-23 — Claude Code (T-265)
+
+- The welcome flashed on a project switch because the window drew the project before choosing its top task. It now chooses first and shows a delayed spinner while loading. The welcome is limited to the first run (D-186). Added `scripts/check-window-switch.cjs` to CI.
+
 ## 2026-11-23 — Claude Code (T-264)
 
 - Reviewed the 0.96 release and the code of T-262 and T-263; no defects found in the product changes. Found why the 0.96 checks on `main` and PR #180 failed: the `core` race suite exceeds the 10-minute limit, and the Mac package check raced project storage preparation. Raised the limits and made the check wait for readiness. `TestTaskOutputIsReadToTheEnd` remains a known `SQLITE_BUSY` flake.

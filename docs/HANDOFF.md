@@ -8,6 +8,10 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-23 by Claude Code (T-265).
+
+- T-265 on `claude/amazing-noether-apbflv`, not released: switching projects shows a delayed spinner instead of flashing the welcome; the welcome appears only until the computer has seen a task or serves the network; an empty project says «Задач пока нет». Checked in Chromium with fictional data; not tried in the installed app.
+
 Updated 2026-11-23 by Claude Code (T-264).
 
 - Reviewed the 0.95 and 0.96 commits. The push checks on `main` for 0.96 ([run](https://github.com/kolotiloff/agent-messenger/actions/runs/45224688763)) failed in three jobs, and the PR #180 Mac job failed in the package install check. Neither is a product regression: the `core` race tests take 520-600 s against a 10-minute limit, and `scripts/check-package.py` did not wait for project storage preparation. T-264 fixes both in the scripts and workflow limits. The Mac package check runs only on macOS CI and was not run here. Open PRs #177 and #178 look superseded by #176 (0.95); the owner decides whether to close them.

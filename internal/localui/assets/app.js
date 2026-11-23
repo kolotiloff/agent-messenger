@@ -1175,15 +1175,40 @@
       return;
     }
     $('compose').hidden=true;$('lost-bar').hidden=true;feedSignature='';$('to-bottom').hidden=true;
-    if(view?.project!==project){head.replaceChildren();thread.replaceChildren();return;}
+    if(view?.project!==project){head.replaceChildren();showPane(thread,'loading');return;}
     if(!view.project){
       head.replaceChildren();
-      thread.replaceChildren(welcome());return;
+      showPane(thread,'welcome');return;
     }
     const shared=sharedSelection();
     if(shared){renderSharedTask(shared.t,shared.p);return;}
     head.replaceChildren();
-    if(!selectedTask)thread.replaceChildren(welcome());
+    // A chosen task whose conversation has not arrived keeps the previous
+    // conversation on screen; an empty pane shows the loading indicator.
+    if(selectedTask){if(!thread.firstElementChild||thread.firstElementChild.dataset.pane)showPane(thread,'loading');return;}
+    showPane(thread,showWelcome()?'welcome':'empty');
+  }
+  // The welcome explains the setup until this computer has seen its first
+  // task or serves the network; afterwards an empty project just says so
+  // (owner, 2026-11-23).
+  let welcomeDone=recall('messenger-welcome-done')==='1';
+  function noteWelcomeDone(){
+    if(welcomeDone)return;
+    if((view?.tasks||[]).length||(view?.shared||[]).some(p=>(p.tasks||[]).length)||server?.host?.running){welcomeDone=true;remember('messenger-welcome-done','1');}
+  }
+  function showWelcome(){noteWelcomeDone();return !welcomeDone;}
+  function showPane(thread,kind){
+    if(kind!=='welcome'&&thread.firstElementChild?.dataset.pane===kind&&thread.childElementCount===1)return;
+    let pane;
+    if(kind==='welcome')pane=welcome();
+    else if(kind==='loading'){
+      pane=el('div',undefined,'am-pane-loading');pane.setAttribute('role','status');pane.setAttribute('aria-label',tr('Загрузка…'));
+      const spin=el('span',undefined,'am-spinner');spin.setAttribute('aria-hidden','true');pane.append(spin);
+    }else{
+      pane=el('div',undefined,'am-pane-empty');
+      pane.append(el('p',tr('Задач пока нет'),'am-pane-empty-title am-muted'));
+    }
+    pane.dataset.pane=kind;thread.replaceChildren(pane);
   }
   // The window response owns the task row. The feed response supplies
   // history, which can arrive before or after the row for the same task.
@@ -2071,9 +2096,13 @@
       if(signature!==viewSignature){
         const history=currentTaskHistory();
         if(history&&view?.history_next!==v.history_next)taskHistory=null;
-        viewSignature=signature;view=v;
+        viewSignature=signature;view=v;noteWelcomeDone();
         if(!v.history_paged&&selectedTask&&!v.tasks.some(t=>t.id===selectedTask)){selectedTask='';feed=null;feedSignature='';}
-        if(selectedShared&&!sharedSelection())selectedShared=null;render();
+        if(selectedShared&&!sharedSelection())selectedShared=null;
+        // Choose the top task before drawing, so a project switch goes from
+        // loading straight to the conversation without an empty pane between.
+        if(!selectedTask&&!selectedShared&&tab==='tasks'&&v.project)openTopTask(true);
+        render();
       }
       else if(cameOnline){renderMachines();renderNotice();}
       // Nothing chosen yet (the first start, or the chosen task went away):

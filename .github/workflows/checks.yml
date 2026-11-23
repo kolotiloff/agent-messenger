@@ -31,6 +31,7 @@ jobs:
           export PLAYWRIGHT_MODULE="$RUNNER_TEMP/window-tests/node_modules/playwright"
           for engine in chromium webkit; do
             BROWSER_ENGINE="$engine" node scripts/check-window-controls.cjs
+            BROWSER_ENGINE="$engine" node scripts/check-window-switch.cjs
           done
 
   native:

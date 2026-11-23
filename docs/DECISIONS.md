@@ -605,3 +605,7 @@ On Windows, the update relaunch and the installer's handoff to the installed app
 ## D-185 — Finish revision reads and discard expired SQLite connections (T-263)
 
 2026-11-23, a Mac running 0.95 repeatedly returned SQLite 517 while its legacy database remained active. The pinned SQLite driver can abandon live rows when interrupted while returning a result, leaving a stale WAL snapshot in a persistent pool. Keep revision reads cancellable while acquiring a connection, then finish the indexed query before returning the connection. For store transactions, discard a connection reporting 517 after rollback. Retry once only when `BEGIN` failed, before running any operation. If the first window snapshot fails, show that the projects are unavailable. Do not change migration, session ownership or receipt rules.
+
+## D-186 — Loading indicator instead of the welcome; the welcome only on first run (T-265)
+
+2026-11-23, the owner saw the welcome flash while switching projects, and a server without agents always showed it. The window now chooses the top task before drawing the new project, and while the project or the chosen conversation is loading the pane shows the start screen's spinner after 200 ms. The welcome is shown only until this computer has seen its first task (its own or another computer's) or serves the network; this is remembered in the window's local storage, so a cleared storage shows it once more. Afterwards an empty project only says «Задач пока нет».
