@@ -89,8 +89,17 @@ func applySplitProjectMessage(ctx context.Context, computer *sql.DB, openProject
 		if request {
 			where = "r.origin_task=? AND r.origin_broker=? AND r.origin_peer=?"
 		}
-		err := common.QueryRowContext(ctx, `SELECT r.id,r.project,s.file
+		resolve := func() error {
+			return common.QueryRowContext(ctx, `SELECT r.id,r.project,s.file
  FROM task_storage_routes r JOIN project_storage_stage s ON s.project=r.project WHERE `+where, body.Task, broker, m.From).Scan(&task, &project, &file)
+		}
+		err := resolve()
+		if errors.Is(err, sql.ErrNoRows) && validComputer(body.Computer) != "" {
+			if err := rebindSplitPeer(ctx, common, openProject, broker, NetPeer{ID: m.From, Computer: body.Computer}); err != nil {
+				return err
+			}
+			err = resolve()
+		}
 		if errors.Is(err, sql.ErrNoRows) {
 			// The route may still need to be restored or rebound. Do not
 			// acknowledge the message on a guess.

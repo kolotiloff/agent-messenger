@@ -34,6 +34,8 @@ The receiver and sender components use format 4 of the prepared layout. The veri
 
 The staged outbox keeps the old queue order and starts new local sequences beyond the previous high-water mark. The split sender reads the computer and project queues and acknowledges a message by its source database, sequence and operation ID. Coincident sequence numbers in different projects do not cause deletion or duplication.
 
+A known computer that reconnects with a new broker or peer keeps its project routes and pending replies. The project updates its task and outbox first, then the computer catalog updates its route and any pending start acceptance. Redelivery repairs a catalog rollback from the validated computer ID. It never creates a second assignment.
+
 The integration tests deliberately fail the cursor write after saving a report or note, reopen the files and verify one copy and eventual cursor advancement. The worker receives the answer and pending note in the next run. The test also checks the machine's paused-agent policy on a continuation and cancels a second continuation before it can launch. The other project remains independent. The sender now passes the selected message with its database identity when accepting or rejecting a delivery.
 
 ## Local task admission across project databases

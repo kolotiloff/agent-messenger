@@ -26,6 +26,9 @@ func applySplitRemoteStart(ctx context.Context, computer *sql.DB, openProject fu
 	}
 	if apply {
 		from := netLink{broker: broker, peer: m.From, task: body.Task}
+		if err := rebindSplitPeer(ctx, common, openProject, broker, NetPeer{ID: m.From, Computer: body.Computer}); err != nil {
+			return err
+		}
 		if err := applySplitStart(ctx, common, openProject, from, body); err != nil {
 			return err
 		}

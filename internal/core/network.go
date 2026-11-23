@@ -413,6 +413,9 @@ func (s *Store) SetNetwork(broker, self string, peers []NetPeer) error {
 			}
 		}
 		// T-132: tasks shared with a computer follow it into this network.
+		if s.split != nil {
+			return s.refreshSplitPeers(tx, broker, peers)
+		}
 		if err := fillComputers(tx, broker, peers); err != nil {
 			return err
 		}
