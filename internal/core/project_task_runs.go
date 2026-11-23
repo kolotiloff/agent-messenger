@@ -1,0 +1,234 @@
+package core
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+)
+
+// startSplitLocalTask prepares the request from the computer database and
+// records the task and its first intent together in the project database.
+// The common route is written only after that commit. If the route write
+// fails, an explicit retry of the same operation repairs it without creating
+// another task or making an unregistered task eligible for launch.
+func startSplitLocalTask(ctx context.Context, computer *sql.DB, openProject func(string) (*sql.DB, error), r StartTaskRequest) (string, bool, error) {
+	r, err := normalizeStartTask(r)
+	if err != nil {
+		return "", false, err
+	}
+	common, err := beginSplitAdmission(ctx, computer)
+	if err != nil {
+		return "", false, err
+	}
+	defer common.Rollback()
+	self, err := localComputer(common)
+	if err != nil {
+		return "", false, err
+	}
+	if r.Computer != "" && r.Computer != self {
+		return "", false, fmt.Errorf("%w: a remote assignment needs the network task path", ErrRejected)
+	}
+	r.Computer = self
+	file, err := splitTaskProjectFile(ctx, common, r.Project)
+	if err != nil {
+		return "", false, err
+	}
+	db, err := openProject(file)
+	if err != nil {
+		return "", false, err
+	}
+	project, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", false, err
+	}
+	defer project.Rollback()
+	var storedProject string
+	if err := project.QueryRowContext(ctx, "SELECT project FROM project_snapshot").Scan(&storedProject); err != nil {
+		return "", false, err
+	}
+	if storedProject != r.Project {
+		return "", false, fmt.Errorf("%w: the database belongs to another project", ErrRejected)
+	}
+	id, err := existingStartTask(project, r)
+	created := errors.Is(err, sql.ErrNoRows)
+	if created {
+		r.Rules, err = startProjectRules(common, r.Project)
+		if err != nil {
+			return "", false, err
+		}
+		cfg, err := prepareLocalTask(common, r, self, false, false)
+		if err != nil {
+			return "", false, err
+		}
+		id, err = recordLocalTask(project, r, self, nil, cfg)
+		if err != nil {
+			return "", false, err
+		}
+	} else if err != nil {
+		return "", false, err
+	}
+	if err := project.Commit(); err != nil {
+		return "", false, err
+	}
+	if _, err := common.ExecContext(ctx, `INSERT INTO task_storage_routes(id,project)
+ VALUES (?,?) ON CONFLICT(id) DO NOTHING`, id, r.Project); err != nil {
+		return "", false, err
+	}
+	var registered string
+	if err := common.QueryRowContext(ctx, "SELECT project FROM task_storage_routes WHERE id=?", id).Scan(&registered); err != nil {
+		return "", false, err
+	}
+	if registered != r.Project {
+		return "", false, fmt.Errorf("%w: task ID already belongs to another project", ErrRejected)
+	}
+	if err := common.Commit(); err != nil {
+		return "", false, err
+	}
+	return id, created, nil
+}
+
+// beginSplitLocalRun uses the shared admission transaction to serialize
+// resource checks with other project launches. The project run's durable
+// state is authoritative, even if the process stops after it changes.
+// This records a launch reservation in SQLite. Its caller still has to use
+// the existing process registry before any exec.
+func beginSplitLocalRun(ctx context.Context, computer *sql.DB, openProject func(string) (*sql.DB, error), projectName, run, reservation string) (TaskRun, Task, error) {
+	var r TaskRun
+	var t Task
+	common, err := beginSplitAdmission(ctx, computer)
+	if err != nil {
+		return r, t, err
+	}
+	defer common.Rollback()
+	file, err := splitTaskProjectFile(ctx, common, projectName)
+	if err != nil {
+		return r, t, err
+	}
+	db, err := openProject(file)
+	if err != nil {
+		return r, t, err
+	}
+	project, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return r, t, err
+	}
+	defer project.Rollback()
+	r, t, err = runTask(project, run)
+	if err != nil {
+		return r, t, err
+	}
+	self, err := localComputer(common)
+	if err != nil {
+		return r, t, err
+	}
+	if t.Project != projectName || t.FromNetwork || t.Computer != self || r.State != "intent" {
+		return r, t, fmt.Errorf("%w: the task does not have a local launch intent in this project", ErrRejected)
+	}
+	order, err := splitRouteOrder(ctx, common, t)
+	if err != nil {
+		return r, t, err
+	}
+	var resource string
+	if err := project.QueryRowContext(ctx, "SELECT resource FROM tasks WHERE id=?", t.ID).Scan(&resource); err != nil {
+		return r, t, err
+	}
+	if resource != "" {
+		if err := checkSplitTaskResource(ctx, common, project, file, openProject, t, resource, order); err != nil {
+			return r, t, err
+		}
+	}
+	if err := beginTaskRunTx(common, project, &r, &t, reservation); err != nil {
+		return r, t, err
+	}
+	if err := project.Commit(); err != nil {
+		return r, t, err
+	}
+	return r, t, common.Commit()
+}
+
+func beginSplitAdmission(ctx context.Context, computer *sql.DB) (*sql.Tx, error) {
+	tx, err := computer.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	// Take SQLite's computer-wide writer lock before any project writes,
+	// even when the connection was opened with deferred transactions.
+	if _, err := tx.ExecContext(ctx, "UPDATE project_storage_stage SET file=file WHERE 0"); err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	return tx, nil
+}
+
+func splitTaskProjectFile(ctx context.Context, common *sql.Tx, name string) (string, error) {
+	var file string
+	err := common.QueryRowContext(ctx, "SELECT file FROM project_storage_stage WHERE project=?", name).Scan(&file)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("%w: project is missing from the storage catalog", ErrRejected)
+	}
+	if err != nil {
+		return "", err
+	}
+	if file != projectMigrationFile(name) {
+		return "", fmt.Errorf("%w: invalid project database route", ErrRejected)
+	}
+	return file, nil
+}
+
+func splitRouteOrder(ctx context.Context, common *sql.Tx, task Task) (int64, error) {
+	var order int64
+	err := common.QueryRowContext(ctx, "SELECT rowid FROM task_storage_routes WHERE id=? AND project=?", task.ID, task.Project).Scan(&order)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, fmt.Errorf("%w: task route was not committed", ErrRejected)
+	}
+	return order, err
+}
+
+func checkSplitTaskResource(ctx context.Context, common, project *sql.Tx, currentFile string, openProject func(string) (*sql.DB, error), task Task, resource string, order int64) error {
+	files, err := splitProjectFiles(ctx, common)
+	if err != nil {
+		return err
+	}
+	for _, file := range files {
+		var read projectFileQuerier = project
+		if file != currentFile {
+			db, err := openProject(file)
+			if err != nil {
+				return err
+			}
+			read = db
+		}
+		if err := checkResourceInProject(ctx, common, read, task, resource, order); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func checkResourceInProject(ctx context.Context, common *sql.Tx, read projectFileQuerier, task Task, resource string, order int64) error {
+	rows, err := read.QueryContext(ctx, `SELECT id,project,created_at,active FROM (
+ SELECT t.id,t.project,t.created_at,t.state,EXISTS(SELECT 1 FROM task_runs r
+ WHERE r.task_id=t.id AND r.state IN ('launching','running','blocked','interrupted')) AS active
+ FROM tasks t WHERE t.computer=? AND t.resource=? AND t.id<>?)
+ WHERE active OR state NOT IN ('done','failed','cancelled')`, task.Computer, resource, task.ID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var other Task
+		var active bool
+		if err := rows.Scan(&other.ID, &other.Project, &other.CreatedAt, &active); err != nil {
+			return err
+		}
+		otherOrder, err := splitRouteOrder(ctx, common, other)
+		if err != nil {
+			return err
+		}
+		if active || other.CreatedAt < task.CreatedAt || other.CreatedAt == task.CreatedAt && otherOrder < order {
+			return fmt.Errorf("%w: resource %q is already assigned", ErrRejected, resource)
+		}
+	}
+	return rows.Err()
+}

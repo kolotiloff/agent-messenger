@@ -9,7 +9,7 @@ import (
 )
 
 // Resource locks (T-072, D-086). A task may name a resource, such as
-// «Unity editor», that only one worker on a computer may use at a time. A
+// a shared device, that only one worker on a computer may use at a time. A
 // task with a lock does not launch while an earlier task with the same lock
 // is open (not done, failed or cancelled) on the same computer. A blocked
 // task keeps its lock: whether it still uses the resource is unknown. The
@@ -25,8 +25,8 @@ const lockHolderQuery = `SELECT o.id FROM tasks o WHERE o.resource=t.resource AN
  AND o.state NOT IN ('done','failed','cancelled')
  AND (o.created_at<t.created_at OR (o.created_at=t.created_at AND o.rowid<t.rowid))`
 
-// normalizeLock trims and lowercases a lock name, so «Unity editor» and
-// «unity EDITOR» are one lock. It reports false for a name that is too long
+// normalizeLock trims and lowercases a lock name, so «Shared cache» and
+// «shared CACHE» are one lock. It reports false for a name that is too long
 // or not one plain line.
 func normalizeLock(s string) (string, bool) {
 	if !utf8.ValidString(s) {

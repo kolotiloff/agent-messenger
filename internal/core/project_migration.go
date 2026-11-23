@@ -225,9 +225,13 @@ func stageComputerDatabase(ctx context.Context, backup, output string, manifest 
 	defer tx.Rollback()
 	if _, err := tx.ExecContext(ctx, `
  CREATE TABLE project_storage_stage (project TEXT PRIMARY KEY REFERENCES projects(name), file TEXT NOT NULL UNIQUE);
- CREATE TABLE task_storage_routes AS
- SELECT id,project,origin_broker,origin_peer,origin_task,origin_computer,remote_broker,remote_peer,remote_task,remote_computer FROM tasks;
- CREATE UNIQUE INDEX task_storage_routes_id ON task_storage_routes(id);
+ CREATE TABLE task_storage_routes (
+ admission_order INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, project TEXT NOT NULL,
+ origin_broker TEXT, origin_peer TEXT, origin_task TEXT, origin_computer TEXT,
+ remote_broker TEXT, remote_peer TEXT, remote_task TEXT, remote_computer TEXT
+ );
+ INSERT INTO task_storage_routes
+ SELECT rowid,id,project,origin_broker,origin_peer,origin_task,origin_computer,remote_broker,remote_peer,remote_task,remote_computer FROM tasks;
  CREATE INDEX task_storage_routes_origin ON task_storage_routes(origin_broker,origin_peer,origin_task);
  DELETE FROM net_outbox WHERE seq IN (SELECT seq FROM (`+migrationOutboxRoutes+`)
  WHERE project IN (SELECT name FROM projects));

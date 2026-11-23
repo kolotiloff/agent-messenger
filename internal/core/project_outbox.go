@@ -47,7 +47,11 @@ func splitNetPending(ctx context.Context, computer *sql.DB, openProject func(str
 	return out, nil
 }
 
-func splitProjectFiles(ctx context.Context, computer *sql.DB) ([]string, error) {
+type projectFileQuerier interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+func splitProjectFiles(ctx context.Context, computer projectFileQuerier) ([]string, error) {
 	rows, err := computer.QueryContext(ctx, "SELECT project,file FROM project_storage_stage ORDER BY project")
 	if err != nil {
 		return nil, err

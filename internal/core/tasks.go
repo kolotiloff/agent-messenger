@@ -699,7 +699,7 @@ type StartTaskRequest struct {
 	// Rules are the project's worker rules of the computer that started the
 	// task (T-050). StartTask fills them; they travel with a remote task.
 	Rules string
-	// Lock names a resource such as «Unity editor» (T-072): a task with a
+	// Lock explicitly names a shared resource (T-072): a task with a
 	// lock does not launch while an earlier open task with the same lock
 	// runs on the same computer. Empty means no lock.
 	Lock string
@@ -735,25 +735,13 @@ func ValidTaskModel(name string) bool { _, _, err := modelcatalog.Split(name); r
 // network is sent to it (network.go). It returns the task ID and whether it
 // was newly created.
 func (s *Store) StartTask(r StartTaskRequest) (string, bool, error) {
-	r.Text = strings.TrimSpace(r.Text)
-	if r.OpID == "" || len(r.OpID) > 128 || r.Text == "" || utf8.RuneCountInString(r.Text) > MaxTaskText {
-		return "", false, fmt.Errorf("%w: start_task needs an operation id and a task text of 1..%d characters", ErrRejected, MaxTaskText)
+	r, err := normalizeStartTask(r)
+	if err != nil {
+		return "", false, err
 	}
-	if !TaskProviders[r.Provider] {
-		return "", false, fmt.Errorf("%w: unsupported agent %q", ErrRejected, r.Provider)
-	}
-	r.Model = strings.TrimSpace(r.Model)
-	if !ValidTaskModel(r.Model) {
-		return "", false, fmt.Errorf("%w: model must be a CLI ID or a selection such as gpt-6-astra[effort=high]", ErrRejected)
-	}
-	lock, ok := normalizeLock(r.Lock)
-	if !ok {
-		return "", false, fmt.Errorf("%w: lock must be a short one-line name such as unity-editor (at most %d characters)", ErrRejected, MaxTaskLock)
-	}
-	r.Lock = lock
 	var id string
 	var created bool
-	err := s.tx(func(tx *sql.Tx) error {
+	err = s.tx(func(tx *sql.Tx) error {
 		computer, err := localComputer(tx)
 		if err != nil {
 			return err
@@ -761,25 +749,12 @@ func (s *Store) StartTask(r StartTaskRequest) (string, bool, error) {
 		if r.Computer == "" {
 			r.Computer = computer
 		}
-		var old struct{ computer, provider, title, text, model, lock string }
-		err = tx.QueryRow(`SELECT id,computer,provider,title,text,COALESCE(model,''),resource FROM tasks WHERE project=? AND op_id=?`, r.Project, r.OpID).Scan(&id, &old.computer, &old.provider, &old.title, &old.text, &old.model, &old.lock)
-		if err == nil {
-			if old.computer != r.Computer || old.provider != r.Provider || old.text != r.Text || old.title != taskTitle(r.Title, r.Text) || old.model != r.Model || old.lock != r.Lock {
-				return fmt.Errorf("%w: this operation id was used for a different task", ErrRejected)
-			}
-			return nil
-		}
+		id, err = existingStartTask(tx, r)
 		if !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
-		var projects int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM projects WHERE name=? AND removed_at IS NULL`, r.Project).Scan(&projects); err != nil {
-			return err
-		}
-		if projects == 0 {
-			return fmt.Errorf("%w: unknown project", ErrRejected)
-		}
-		if err := tx.QueryRow(`SELECT worker_rules FROM projects WHERE name=?`, r.Project).Scan(&r.Rules); err != nil {
+		r.Rules, err = startProjectRules(tx, r.Project)
+		if err != nil {
 			return err
 		}
 		if r.Computer != computer {
@@ -793,52 +768,120 @@ func (s *Store) StartTask(r StartTaskRequest) (string, bool, error) {
 	return id, created, err
 }
 
+func normalizeStartTask(r StartTaskRequest) (StartTaskRequest, error) {
+	r.Text = strings.TrimSpace(r.Text)
+	if r.OpID == "" || len(r.OpID) > 128 || r.Text == "" || utf8.RuneCountInString(r.Text) > MaxTaskText {
+		return r, fmt.Errorf("%w: start_task needs an operation id and a task text of 1..%d characters", ErrRejected, MaxTaskText)
+	}
+	if !TaskProviders[r.Provider] {
+		return r, fmt.Errorf("%w: unsupported agent %q", ErrRejected, r.Provider)
+	}
+	r.Model = strings.TrimSpace(r.Model)
+	if !ValidTaskModel(r.Model) {
+		return r, fmt.Errorf("%w: model must be a CLI ID or a selection such as gpt-6-astra[effort=high]", ErrRejected)
+	}
+	lock, ok := normalizeLock(r.Lock)
+	if !ok {
+		return r, fmt.Errorf("%w: lock must be a short one-line resource name (at most %d characters)", ErrRejected, MaxTaskLock)
+	}
+	r.Lock = lock
+	return r, nil
+}
+
+func existingStartTask(tx *sql.Tx, r StartTaskRequest) (string, error) {
+	var id string
+	var old struct{ computer, provider, title, text, model, lock string }
+	err := tx.QueryRow(`SELECT id,computer,provider,title,text,COALESCE(model,''),resource FROM tasks WHERE project=? AND op_id=?`, r.Project, r.OpID).Scan(&id, &old.computer, &old.provider, &old.title, &old.text, &old.model, &old.lock)
+	if err != nil {
+		return id, err
+	}
+	if old.computer != r.Computer || old.provider != r.Provider || old.text != r.Text || old.title != taskTitle(r.Title, r.Text) || old.model != r.Model || old.lock != r.Lock {
+		return id, fmt.Errorf("%w: this operation id was used for a different task", ErrRejected)
+	}
+	return id, nil
+}
+
+func startProjectRules(tx *sql.Tx, project string) (string, error) {
+	var rules string
+	err := tx.QueryRow(`SELECT worker_rules FROM projects WHERE name=? AND removed_at IS NULL`, project).Scan(&rules)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = fmt.Errorf("%w: unknown project", ErrRejected)
+	}
+	return rules, err
+}
+
 // startLocalTask records a task of this computer and its first run's launch
 // intent. origin is set for a task another computer started (T-037).
 func startLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, origin *netLink, coordinatorModel bool) (string, error) {
-	var folder string
-	if err := tx.QueryRow(`SELECT folder FROM project_folders WHERE project=? AND computer=?`, r.Project, computer).Scan(&folder); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", fmt.Errorf("%w: this computer has no folder for the project; the owner chooses it in the window", ErrRejected)
-		}
+	setup, err := prepareLocalTask(tx, r, computer, origin != nil, coordinatorModel)
+	if err != nil {
 		return "", err
 	}
-	if info, err := os.Stat(folder); err != nil || !info.IsDir() {
-		return "", fmt.Errorf("%w: the project folder is missing on this computer", ErrRejected)
+	return recordLocalTask(tx, r, computer, origin, setup)
+}
+
+type localTaskConfig struct {
+	folder     string
+	agent      ComputerAgent
+	fullAccess bool
+}
+
+func prepareLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, fromNetwork, coordinatorModel bool) (localTaskConfig, error) {
+	var cfg localTaskConfig
+	if err := tx.QueryRow(`SELECT folder FROM project_folders WHERE project=? AND computer=?`, r.Project, computer).Scan(&cfg.folder); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return cfg, fmt.Errorf("%w: this computer has no folder for the project; the owner chooses it in the window", ErrRejected)
+		}
+		return cfg, err
+	}
+	if info, err := os.Stat(cfg.folder); err != nil || !info.IsDir() {
+		return cfg, fmt.Errorf("%w: the project folder is missing on this computer", ErrRejected)
 	}
 	if pending, err := hasPendingUpdate(tx); err != nil {
-		return "", err
+		return cfg, err
 	} else if pending {
-		return "", fmt.Errorf("%w: this computer is waiting to install a Messenger update and takes no new tasks", ErrRejected)
+		return cfg, fmt.Errorf("%w: this computer is waiting to install a Messenger update and takes no new tasks", ErrRejected)
 	}
-	var agent ComputerAgent
 	var models string
 	var fullAccess int
 	var paused int
-	if err := tx.QueryRow(`SELECT cli_path,environment,profile,models,full_access,paused FROM computer_agents WHERE computer=? AND provider=?`, computer, r.Provider).Scan(&agent.CLI, &agent.Environment, &agent.Profile, &models, &fullAccess, &paused); err != nil {
+	if err := tx.QueryRow(`SELECT cli_path,environment,profile,models,full_access,paused FROM computer_agents WHERE computer=? AND provider=?`, computer, r.Provider).Scan(&cfg.agent.CLI, &cfg.agent.Environment, &cfg.agent.Profile, &models, &fullAccess, &paused); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return "", fmt.Errorf("%w: agent %s is not set up on this computer", ErrRejected, r.Provider)
+			return cfg, fmt.Errorf("%w: agent %s is not set up on this computer", ErrRejected, r.Provider)
 		}
-		return "", err
+		return cfg, err
 	}
 	if paused != 0 {
-		return "", errAgentPaused(r.Provider)
+		return cfg, errAgentPaused(r.Provider)
 	}
-	if link := agentLinkFor(r.Provider, agent.CLI); link != "" {
+	if link := agentLinkFor(r.Provider, cfg.agent.CLI); link != "" {
 		// An agent registered before T-207 kept the resolved file of its
 		// link; while the link still points there, keep the link instead.
-		agent.CLI = link
+		cfg.agent.CLI = link
 		if _, err := tx.Exec(`UPDATE computer_agents SET cli_path=? WHERE computer=? AND provider=?`, link, computer, r.Provider); err != nil {
-			return "", err
+			return cfg, err
 		}
 	}
 	if coordinatorModel {
 		if _, _, err := modelcatalog.Resolve(r.Provider, r.Model); err != nil {
-			return "", fmt.Errorf("%w: %v", ErrRejected, err)
+			return cfg, fmt.Errorf("%w: %v", ErrRejected, err)
 		}
 	} else if err := modelAllowed(r.Provider, r.Model, splitModels(models)); err != nil {
-		return "", err
+		return cfg, err
 	}
+	cfg.fullAccess = fullAccess != 0
+	if cfg.fullAccess && fromNetwork {
+		// Network tasks also need the owner's explicit permission (T-094).
+		on, err := netFullAccess(tx)
+		if err != nil {
+			return cfg, err
+		}
+		cfg.fullAccess = on
+	}
+	return cfg, nil
+}
+
+func recordLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, origin *netLink, cfg localTaskConfig) (string, error) {
 	id, err := randomID()
 	if err != nil {
 		return "", err
@@ -857,19 +900,10 @@ func startLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, origin *net
 	at := now()
 	sender, senderModel := taskSender(r.SenderAgent, r.SenderModel)
 	if _, err := tx.Exec(`INSERT INTO tasks(id,project,op_id,computer,provider,cli_path,environment,profile,folder,title,text,state,session_id,created_at,updated_at,model,sender_agent,sender_model) VALUES (?,?,?,?,?,?,?,?,?,?,?,'running',?,?,?,?,?,?)`,
-		id, r.Project, r.OpID, computer, r.Provider, agent.CLI, agent.Environment, agent.Profile, folder, taskTitle(r.Title, r.Text), r.Text, nullString(session), at, at, r.Model, sender, senderModel); err != nil {
+		id, r.Project, r.OpID, computer, r.Provider, cfg.agent.CLI, cfg.agent.Environment, cfg.agent.Profile, cfg.folder, taskTitle(r.Title, r.Text), r.Text, nullString(session), at, at, r.Model, sender, senderModel); err != nil {
 		return "", err
 	}
-	if fullAccess != 0 && origin != nil {
-		// T-094: a task of another computer gets «Любые команды» only when
-		// the owner allowed it for network tasks too.
-		if on, err := netFullAccess(tx); err != nil {
-			return "", err
-		} else if !on {
-			fullAccess = 0
-		}
-	}
-	if fullAccess != 0 {
+	if cfg.fullAccess {
 		if _, err := tx.Exec(`UPDATE tasks SET full_access=1 WHERE id=?`, id); err != nil {
 			return "", err
 		}
@@ -1155,61 +1189,65 @@ func (s *Store) BeginTaskRun(run, reservation string) (TaskRun, Task, error) {
 		if err != nil {
 			return err
 		}
-		if t.State != "running" {
-			return fmt.Errorf("%w: task is %s", ErrRejected, t.State)
-		}
-		if p, err := isPaused(tx); err != nil || p {
-			if err == nil {
-				err = ErrPaused
-			}
-			return err
-		}
-		if t.CancelRequested {
-			if err := setRunState(tx, run, "cancelled", "cancelled before launch", "intent"); err != nil {
-				return err
-			}
-			if err := setTaskState(tx, t.ID, "cancelled", "cancelled before launch"); err != nil {
-				return err
-			}
-			if err := insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "cancelled", "cancelled before the run started", ""); err != nil {
-				return err
-			}
-			return ErrCancelled
-		}
-		// A follow-up or an answer is a new run the owner or coordinator
-		// asked for now: it takes the agent's current «Любые команды», so
-		// turning it on helps a task started before (T-056). Without the
-		// agent row the task keeps what it had.
-		if r.Kind == "answer" || r.Kind == "continue" || r.Kind == "note" {
-			var full int
-			err := tx.QueryRow(`SELECT full_access FROM computer_agents WHERE computer=? AND provider=?`, t.Computer, t.Provider).Scan(&full)
-			if err != nil && !errors.Is(err, sql.ErrNoRows) {
-				return err
-			}
-			if err == nil && full != 0 && t.FromNetwork {
-				on, nerr := netFullAccess(tx)
-				if nerr != nil {
-					return nerr
-				}
-				if !on {
-					full = 0
-				}
-			}
-			if err == nil && (full != 0) != t.FullAccess {
-				if _, err := tx.Exec(`UPDATE tasks SET full_access=? WHERE id=?`, full, t.ID); err != nil {
-					return err
-				}
-				t.FullAccess = full != 0
-			}
-		}
-		if err := setRunState(tx, run, "launching", "process may start; never launched again", "intent"); err != nil {
-			return err
-		}
-		_, err = tx.Exec(`UPDATE task_runs SET reservation=?, launched_at=? WHERE id=?`, reservation, now(), run)
-		r.State, r.Reservation = "launching", reservation
-		return err
+		return beginTaskRunTx(tx, tx, &r, &t, reservation)
 	})
 	return r, t, err
+}
+
+func beginTaskRunTx(machine, tx *sql.Tx, r *TaskRun, t *Task, reservation string) error {
+	if t.State != "running" {
+		return fmt.Errorf("%w: task is %s", ErrRejected, t.State)
+	}
+	if p, err := isPaused(machine); err != nil || p {
+		if err == nil {
+			err = ErrPaused
+		}
+		return err
+	}
+	if t.CancelRequested {
+		if err := setRunState(tx, r.ID, "cancelled", "cancelled before launch", "intent"); err != nil {
+			return err
+		}
+		if err := setTaskState(tx, t.ID, "cancelled", "cancelled before launch"); err != nil {
+			return err
+		}
+		if err := insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "cancelled", "cancelled before the run started", ""); err != nil {
+			return err
+		}
+		return ErrCancelled
+	}
+	// A follow-up or an answer is a new run the owner or coordinator
+	// asked for now: it takes the agent's current «Любые команды», so
+	// turning it on helps a task started before (T-056). Without the
+	// agent row the task keeps what it had.
+	if r.Kind == "answer" || r.Kind == "continue" || r.Kind == "note" {
+		var full int
+		err := machine.QueryRow(`SELECT full_access FROM computer_agents WHERE computer=? AND provider=?`, t.Computer, t.Provider).Scan(&full)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		if err == nil && full != 0 && t.FromNetwork {
+			on, nerr := netFullAccess(machine)
+			if nerr != nil {
+				return nerr
+			}
+			if !on {
+				full = 0
+			}
+		}
+		if err == nil && (full != 0) != t.FullAccess {
+			if _, err := tx.Exec(`UPDATE tasks SET full_access=? WHERE id=?`, full, t.ID); err != nil {
+				return err
+			}
+			t.FullAccess = full != 0
+		}
+	}
+	if err := setRunState(tx, r.ID, "launching", "process may start; never launched again", "intent"); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`UPDATE task_runs SET reservation=?, launched_at=? WHERE id=?`, reservation, now(), r.ID)
+	r.State, r.Reservation = "launching", reservation
+	return err
 }
 
 // ErrCancelled means the task was cancelled before the run launched.

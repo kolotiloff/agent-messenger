@@ -34,6 +34,14 @@ The staged outbox keeps the old queue order and starts new local sequences beyon
 
 The integration tests use two real SQLite files and deliberately fail the cursor write after saving a worker's report, then close and reopen the files. They verify one report, no change to the other project, and eventual advancement of the broker cursor. Outbox tests verify exact legacy order and acknowledgement of only the selected file. These split receiver and sender components have not been connected to the running supervisor.
 
+## Local task admission across project databases
+
+Local task admission reads the project folder and rules, agent setup and pending updates from the computer database. It writes the task and its first run intent together in the project database before registering the route in the computer database. A missing route prevents launch. Repeating the same explicit operation after a failed route write registers the already committed task. It creates no second task or run.
+
+Resource locks are optional and domain-neutral. Messenger supplies no resource name by default. Tasks that explicitly name the same resource on the same computer share its queue across projects. Tasks without that shared name are independent. The common admission transaction serializes checks across separate database connections. The project run state remains authoritative after it is recorded: a launch with an uncertain outcome still holds the resource when the files reopen. The existing process registry remains required before starting a worker.
+
+Tests exercise two project files, a failed route registration, explicit replay, concurrent admission through independent connections and a verified refusal before exec. The legacy single-database task entry points reuse the preparation and launch-state helpers. Split dispatch and process execution have not been activated.
+
 ## Live layout
 
 - Keep settings, machine identity, network membership and shared resource ownership in the computer database. The project catalog owns a stable local storage ID and maps the existing network project name to it. The display title can change independently.
@@ -45,6 +53,6 @@ SQLite WAL can commit an individual database atomically. Attaching multiple file
 
 ## Migration and archive behaviour
 
-The staging command already preserves task IDs, mirror and origin links, old operation deduplication, unacknowledged messages and event cursors. The running client still needs activation, task creation and worker-run routing, machine-wide resource ownership integration, and storage dispatch in the supervisor. Verify project row counts, SQLite integrity, pending delivery routing and that each task still opens with its history. Activate the new storage only after that verification and while old writers are stopped. Keep a recoverable copy of the old data directory. A failed staging pass must leave the old layout usable and a second pass must not duplicate a task or report.
+The staging command already preserves task IDs, mirror and origin links, old operation deduplication, unacknowledged messages and event cursors. The running client still needs activation, remote task admission, worker-run and process-registry routing, and storage dispatch in the supervisor. Verify project row counts, SQLite integrity, pending delivery routing and that each task still opens with its history. Activate the new storage only after that verification and while old writers are stopped. Keep a recoverable copy of the old data directory. A failed staging pass must leave the old layout usable and a second pass must not duplicate a task or report.
 
 Keep ordinary removal reversible by archiving the project history after its tasks and pending deliveries settle. Recover the archive on reopen. Permanent deletion of the archive is a separate owner action. Live supervisor routing, new-assignment admission and peer rebinding across files, migration cutover and restore, and the window's archive workflow are pending. Verify a restart during migration, a mixed-version two-computer delivery and an update waiting for work from more than one project.
