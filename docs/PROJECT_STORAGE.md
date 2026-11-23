@@ -26,9 +26,11 @@ Staging takes one SQLite backup so all files agree on a single point in time. It
 
 No worker is launched and the live database keeps all history and pending messages. Archive and staged computer files are refused if opened as an ordinary working queue. An interrupted stage can be run again. If a process stopped while publishing files and left an output directory without the manifest, choose a new output directory for the next attempt. The existing output is never reused or silently overwritten.
 
+An offline migration check used a synthetic two-project queue created by the 0.94 release source. Format 3 verification passed. The completed project's report, transcript output and usage stayed together. The other project's unsent assignment retained its sequence, operation ID and exact bytes. Both routes were in the computer database. This exercise covered preparation and verification of the files. Live activation still requires a separate acceptance run.
+
 ## Delivery across separate files
 
-The receiver and sender components use format 2 of the prepared layout. The verify command can still check the checksums of earlier format 1 layouts. Inbound responses for already assigned tasks use the verified project route. The response and its operation receipt commit in the project database. The computer's broker cursor advances only after that commit. If the process restarts between commits, the replay finds the project receipt and advances the cursor without repeating the result. An unresolved route stops the advance. The existing single-database receiver uses the same report and deduplication code.
+The receiver and sender components use format 3 of the prepared layout. The verify command can still check earlier format 1 and 2 layouts. Inbound responses for already assigned tasks use the verified project route. The response and its operation receipt commit in the project database. The computer's broker cursor advances only after that commit. If the process restarts between commits, the replay finds the project receipt and advances the cursor without repeating the result. An unresolved route stops the advance. The existing single-database receiver uses the same report and deduplication code.
 
 The staged outbox keeps the old queue order and starts new local sequences beyond the previous high-water mark. The split sender reads the computer and project queues and acknowledges a message by its source database, sequence and operation ID. Coincident sequence numbers in different projects do not cause deletion or duplication.
 
@@ -47,6 +49,16 @@ Tests exercise two project files, a failed route registration, explicit replay, 
 An incoming assignment uses the exact project name and the same admission policy as the existing client. The project database commits the mirror, its original sender identity and its first launch intent. The computer database commits the confirmed route, the start reply and the broker cursor together. This keeps the acceptance reply invisible until the route exists. A delivery replay after a failed computer commit finds the same mirror and publishes its route without a second run. An existing remote task identity cannot create another mirror in a different project.
 
 The two-project test injects a cursor write failure, checks that the unregistered run cannot launch, reopens both files and replays the assignment. It also delivers a separate assignment for the other project and a request for a missing project. The remote supervisor, worker process and later messages still use the legacy dispatch path in the running app.
+
+## Outgoing assignments and worker completion
+
+The assigning computer records the task and its start message in the same project transaction. The sender only selects a start that has a confirmed computer route for the matching project, broker and peer. An interruption between commits leaves the single committed task and envelope intact. Repeating its explicit operation repairs the route without generating another start. An ineligible start cannot exhaust the send batch or hold back another project. The test sends two such assignments to a legacy executor and applies both acceptances to their own project files.
+
+The project worker store checks the run, its computer and its registered project route before opening the existing database. It provides the computer's immutable sender ID on each SQLite connection and keeps persistent reads and writes in the project file. The existing process-observation, identity and receipt checks still govern access. A worker completion saves its result, usage, full output and delivery frames in one project transaction. An injected outbox failure rolls back all of those changes. The end-to-end storage test forwards a verified report to a legacy origin after recovery. It simulates process evidence and does not start a worker or alter the shared process registry.
+
+## Window revisions
+
+The computer database tracks machine and coordinator changes. Project databases track their own task and transcript revisions. Staging regenerates these derived counters, while preserving the history and event cursors they describe. The reader checks the computer catalog and reads the selected project's revisions. It cannot use a task's revision through another project. The worker test verifies that a failed completion emits no changed revision and a committed completion changes the task and window revisions for exactly its own project. The running window still needs to use this reader at cutover.
 
 ## Live layout
 

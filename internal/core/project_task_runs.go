@@ -7,12 +7,10 @@ import (
 	"fmt"
 )
 
-// startSplitLocalTask prepares the request from the computer database and
-// records the task and its first intent together in the project database.
-// The common route is written only after that commit. If the route write
-// fails, an explicit retry of the same operation repairs it without creating
-// another task or making an unregistered task eligible for launch.
-func startSplitLocalTask(ctx context.Context, computer *sql.DB, openProject func(string) (*sql.DB, error), r StartTaskRequest) (string, bool, error) {
+// startSplitTask records the task and its launch intent or start message
+// together in the project database. The computer route gates launch or
+// delivery. Repeating the explicit operation can repair a missing route.
+func startSplitTask(ctx context.Context, computer *sql.DB, openProject func(string) (*sql.DB, error), r StartTaskRequest) (string, bool, error) {
 	r, err := normalizeStartTask(r)
 	if err != nil {
 		return "", false, err
@@ -26,10 +24,9 @@ func startSplitLocalTask(ctx context.Context, computer *sql.DB, openProject func
 	if err != nil {
 		return "", false, err
 	}
-	if r.Computer != "" && r.Computer != self {
-		return "", false, fmt.Errorf("%w: a remote assignment needs the network task path", ErrRejected)
+	if r.Computer == "" {
+		r.Computer = self
 	}
-	r.Computer = self
 	file, err := splitTaskProjectFile(ctx, common, r.Project)
 	if err != nil {
 		return "", false, err
@@ -53,30 +50,43 @@ func startSplitLocalTask(ctx context.Context, computer *sql.DB, openProject func
 		if err != nil {
 			return "", false, err
 		}
-		cfg, err := prepareLocalTask(common, r, self, false, false)
-		if err != nil {
-			return "", false, err
+		if r.Computer == self {
+			cfg, prepareErr := prepareLocalTask(common, r, self, false, false)
+			if prepareErr != nil {
+				return "", false, prepareErr
+			}
+			id, err = recordLocalTask(project, r, self, nil, cfg)
+		} else {
+			cfg, prepareErr := prepareRemoteTask(common, r)
+			if prepareErr != nil {
+				return "", false, prepareErr
+			}
+			id, err = recordRemoteTask(project, r, self, cfg)
 		}
-		id, err = recordLocalTask(project, r, self, nil, cfg)
 		if err != nil {
 			return "", false, err
 		}
 	} else if err != nil {
 		return "", false, err
 	}
+	var broker, peer, machine sql.NullString
+	if err := project.QueryRowContext(ctx, `SELECT remote_broker,remote_peer,remote_computer FROM tasks WHERE id=?`, id).Scan(&broker, &peer, &machine); err != nil {
+		return "", false, err
+	}
 	if err := project.Commit(); err != nil {
 		return "", false, err
 	}
-	if _, err := common.ExecContext(ctx, `INSERT INTO task_storage_routes(id,project)
- VALUES (?,?) ON CONFLICT(id) DO NOTHING`, id, r.Project); err != nil {
+	if _, err := common.ExecContext(ctx, `INSERT INTO task_storage_routes(id,project,remote_broker,remote_peer,remote_computer)
+ VALUES (?,?,?,?,?) ON CONFLICT(id) DO NOTHING`, id, r.Project, broker, peer, machine); err != nil {
 		return "", false, err
 	}
-	var registered string
-	if err := common.QueryRowContext(ctx, "SELECT project FROM task_storage_routes WHERE id=?", id).Scan(&registered); err != nil {
+	var registered bool
+	if err := common.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM task_storage_routes
+ WHERE id=? AND project=? AND remote_broker IS ? AND remote_peer IS ?)`, id, r.Project, broker, peer).Scan(&registered); err != nil {
 		return "", false, err
 	}
-	if registered != r.Project {
-		return "", false, fmt.Errorf("%w: task ID already belongs to another project", ErrRejected)
+	if !registered {
+		return "", false, fmt.Errorf("%w: registered task does not match the project route", ErrRejected)
 	}
 	if err := common.Commit(); err != nil {
 		return "", false, err

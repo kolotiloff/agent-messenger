@@ -248,6 +248,10 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := installWindowChanges(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if err := recordSchemaVersion(db); err != nil {
 		db.Close()
 		return nil, err

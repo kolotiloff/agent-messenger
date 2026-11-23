@@ -66,14 +66,14 @@ func TestSplitLocalAdmissionRepairsRouteWithoutCreatingAnotherTask(t *testing.T)
 	ctx := context.Background()
 	req := StartTaskRequest{Project: "Game", OpID: "local-create", Provider: "codex", Text: "Do local work"}
 	wrongFile := func(string) (*sql.DB, error) { return f.project(projectMigrationFile("Site")) }
-	if _, _, err := startSplitLocalTask(ctx, f.computer, wrongFile, req); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "belongs to another project") {
+	if _, _, err := startSplitTask(ctx, f.computer, wrongFile, req); !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "belongs to another project") {
 		t.Fatalf("wrong project accepted: %v", err)
 	}
 	if _, err := f.computer.Exec(`CREATE TRIGGER fail_route BEFORE INSERT ON task_storage_routes
  BEGIN SELECT RAISE(ABORT, 'fixture route write failed'); END`); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := startSplitLocalTask(ctx, f.computer, f.project, req); err == nil || !strings.Contains(err.Error(), "fixture route write failed") {
+	if _, _, err := startSplitTask(ctx, f.computer, f.project, req); err == nil || !strings.Contains(err.Error(), "fixture route write failed") {
 		t.Fatalf("expected route failure: %v", err)
 	}
 	game := f.projects[projectMigrationFile("Game")]
@@ -93,7 +93,7 @@ func TestSplitLocalAdmissionRepairsRouteWithoutCreatingAnotherTask(t *testing.T)
 	if _, err := f.computer.Exec("DROP TRIGGER fail_route"); err != nil {
 		t.Fatal(err)
 	}
-	id, created, err := startSplitLocalTask(ctx, f.computer, f.project, req)
+	id, created, err := startSplitTask(ctx, f.computer, f.project, req)
 	if err != nil || created || id != saved {
 		t.Fatalf("replayed create: id=%q created=%t err=%v", id, created, err)
 	}
@@ -102,7 +102,7 @@ func TestSplitLocalAdmissionRepairsRouteWithoutCreatingAnotherTask(t *testing.T)
 		t.Fatalf("duplicate task or run: %d %d %v", tasks, runs, err)
 	}
 	req.Text = "Different work"
-	if _, _, err := startSplitLocalTask(ctx, f.computer, f.project, req); !errors.Is(err, ErrRejected) {
+	if _, _, err := startSplitTask(ctx, f.computer, f.project, req); !errors.Is(err, ErrRejected) {
 		t.Fatalf("operation id reused for different work: %v", err)
 	}
 }
@@ -139,7 +139,7 @@ func TestSplitProjectsShareOnlyExplicitlyNamedResources(t *testing.T) {
 	ctx := context.Background()
 	start := func(project, op, resource string) (string, string) {
 		t.Helper()
-		id, created, err := startSplitLocalTask(ctx, f.computer, f.project, StartTaskRequest{Project: project, OpID: op, Provider: "codex", Text: "fixture", Lock: resource})
+		id, created, err := startSplitTask(ctx, f.computer, f.project, StartTaskRequest{Project: project, OpID: op, Provider: "codex", Text: "fixture", Lock: resource})
 		if err != nil || !created {
 			t.Fatalf("create %s: %s %t %v", project, id, created, err)
 		}

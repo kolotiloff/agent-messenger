@@ -20,7 +20,7 @@ const (
 	migrationBackupFile   = "legacy-backup.sqlite"
 	migrationComputerFile = "computer.sqlite"
 	migrationManifestFile = "manifest.json"
-	migrationLayoutFormat = 2
+	migrationLayoutFormat = 3
 )
 
 // A local task ID is recorded on outgoing task frames, except the acceptance
@@ -93,6 +93,9 @@ func StageProjectMigration(ctx context.Context, source, output string) error {
 		destination := filepath.Join(scratch, project.File)
 		if err := snapshotProjectDatabase(ctx, backup, project.Name, destination, true); err != nil {
 			return fmt.Errorf("stage project %q: %w", project.Name, err)
+		}
+		if err := stageProjectRevisions(destination); err != nil {
+			return fmt.Errorf("stage window revisions for %q: %w", project.Name, err)
 		}
 		if err := verifyStagedProject(ctx, destination, project); err != nil {
 			return fmt.Errorf("verify project %q: %w", project.Name, err)
@@ -262,6 +265,14 @@ func stageComputerDatabase(ctx context.Context, backup, output string, manifest 
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+	if err := installWindowChanges(db); err != nil {
+		return err
+	}
+	// Window tokens are derived from the active layout. The copy must not
+	// keep the legacy queue's per-task revisions in the computer database.
+	if _, err := db.ExecContext(ctx, "DELETE FROM window_revisions"); err != nil {
+		return err
+	}
 	// Strip unused pages from the computer copy; the source backup remains
 	// separately available with all original data.
 	if _, err := db.ExecContext(ctx, "VACUUM"); err != nil {
@@ -294,7 +305,7 @@ func VerifyProjectMigration(ctx context.Context, dir string) error {
 	if err := json.Unmarshal(raw, &manifest); err != nil {
 		return err
 	}
-	if (manifest.Format != 1 && manifest.Format != migrationLayoutFormat) || manifest.Backup != migrationBackupFile || manifest.Computer != migrationComputerFile {
+	if manifest.Format < 1 || manifest.Format > migrationLayoutFormat || manifest.Backup != migrationBackupFile || manifest.Computer != migrationComputerFile {
 		return fmt.Errorf("unsupported project migration manifest")
 	}
 	for _, project := range manifest.Projects {

@@ -32,7 +32,7 @@ func splitNetPending(ctx context.Context, computer *sql.DB, openProject func(str
 				return nil, err
 			}
 		}
-		pending, err := pendingNetMessages(ctx, db, broker, limit, skip)
+		pending, err := splitPendingInFile(ctx, computer, db, file, broker, limit, skip)
 		if err != nil {
 			return nil, err
 		}
@@ -43,6 +43,45 @@ func splitNetPending(ctx context.Context, computer *sql.DB, openProject func(str
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Seq < out[j].Seq })
 	if limit >= 0 && len(out) > limit {
 		out = out[:limit]
+	}
+	return out, nil
+}
+
+func splitPendingInFile(ctx context.Context, computer, db *sql.DB, file, broker string, limit int, skip []string) ([]NetOutgoing, error) {
+	if file == migrationComputerFile {
+		return pendingNetMessages(ctx, db, broker, limit, skip)
+	}
+	var out []NetOutgoing
+	var after sql.NullInt64
+	for limit < 0 || len(out) < limit {
+		batch := limit
+		if limit >= 0 {
+			batch = limit - len(out)
+		}
+		pending, err := pendingNetMessagesAfter(ctx, db, broker, batch, skip, after)
+		if err != nil {
+			return nil, err
+		}
+		for _, m := range pending {
+			if m.kind == "start" {
+				// The project can commit before the shared route. Only a
+				// published route makes this assignment eligible to send.
+				var registered bool
+				if err := computer.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1
+ FROM task_storage_routes r JOIN project_storage_stage p ON p.project=r.project
+ WHERE r.id=? AND r.remote_broker=? AND r.remote_peer=? AND p.file=?)`, m.task, broker, m.To, file).Scan(&registered); err != nil {
+					return nil, err
+				}
+				if !registered {
+					continue
+				}
+			}
+			out = append(out, m)
+		}
+		if batch < 0 || len(pending) < batch {
+			break
+		}
+		after = sql.NullInt64{Int64: pending[len(pending)-1].Seq, Valid: true}
 	}
 	return out, nil
 }
