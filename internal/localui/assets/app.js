@@ -370,14 +370,14 @@
   }
   function renderProjects(){
     const select=$('project-select');
-    const options=(view?.projects||[]).map(p=>[p.name,p.title||p.name]);
-    options.push(['__new',tr('Новый проект')]);
+    const options=view?view.projects.map(p=>[p.name,p.title||p.name]):[['',offlineReason?tr('Проекты недоступны'):tr('Загружаем проекты…')]];
+    if(view)options.push(['__new',tr('Новый проект')]);
     if(select.options.length!==options.length||options.some(([value,label],i)=>select.options[i].value!==value||select.options[i].textContent!==label)){
       select.replaceChildren(...options.map(([value,label])=>{
         const option=el('option',label);option.value=value;return option;
       }));
     }
-    select.value=view?.project||'__new';
+    select.value=view?.project||(view?'__new':'');
     if(!view?.project&&select.options.length>1)select.selectedIndex=0;
     if(select.disabled!==!view)select.disabled=!view;
     syncSelects();
@@ -2051,7 +2051,7 @@
       const q=new URLSearchParams(requestScope);
       if(windowHistoryScope===requestScope&&view?.history_version)q.set('history_version',view.history_version);
       try{v=await api('/api/window?'+q);}
-      catch(error){if(requestScope!==taskWindowQuery())return;if(Date.now()-clientInfoAt>5000)loadClientInfo();online=false;offlineReason=error.name==='TimeoutError'||error.name==='TypeError'?tr('Окно потеряло связь с программой Messenger. Закройте окно и откройте снова.'):error.message;renderMachines();renderNotice();return false;}
+      catch(error){if(requestScope!==taskWindowQuery())return;if(Date.now()-clientInfoAt>5000)loadClientInfo();online=false;offlineReason=error.name==='TimeoutError'||error.name==='TypeError'?tr('Окно потеряло связь с программой Messenger. Закройте окно и откройте снова.'):error.message;renderProjects();renderMachines();renderNotice();return false;}
       if(requestScope!==taskWindowQuery())return;
       const cameOnline=!online;
       online=true;lastWindowRefresh=Date.now();offlineReason='';if(Date.now()-clientInfoAt>10000)loadClientInfo();
