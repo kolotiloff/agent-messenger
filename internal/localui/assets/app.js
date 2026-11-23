@@ -1946,7 +1946,7 @@
       // The first answer: learn the client's version before the start screen
       // goes, so an update starts without the old window showing.
       if(booting){await loadClientInfo();booting=false;renderBoot();}
-      if(!v.projects.some(p=>p.name===project))project=v.project||'';
+      if(!v.projects.some(p=>p.name===project))setProject(v.project||'');
       const signature=JSON.stringify(v);
       if(signature!==viewSignature){viewSignature=signature;view=v;if(selectedTask&&!v.tasks.some(t=>t.id===selectedTask)){selectedTask='';feed=null;feedSignature='';}if(selectedShared&&!sharedSelection())selectedShared=null;render();}
       else{renderMachines();renderNotice();}
@@ -1975,7 +1975,7 @@
   function show(next){
     tab=next;root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab);renderNotices();renderToasts();
     root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
-    $('list-toggle').hidden=tab!=='tasks'||!view?.project;if(tab==='server')loadServer();if(tab==='stats')loadStats();if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сервер'),stats:tr('Статистика')}[tab];
+    $('list-toggle').hidden=tab!=='tasks'||!view?.project;if(tab==='server')loadServer();if(tab==='stats'){renderStats();loadStats();}if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сервер'),stats:tr('Статистика')}[tab];
   }
 
 
@@ -2000,9 +2000,26 @@
     if(!h)return m+tr(' мин');
     return h+tr(' ч')+(m%60?' '+m%60+tr(' мин'):'');
   }
+  function setProject(name){
+    if(project===name)return;
+    project=name;
+    stats=null;statsModel='';statsGen++;
+    if(tab==='stats'){renderStats();loadStats();}
+  }
   async function loadStats(){
     const gen=++statsGen;
-    try{const s=await api('/api/usage-stats?period='+statsPeriod+(computerFilter?'&computer='+encodeURIComponent(computerFilter):'')+(statsAgent?'&agent='+statsAgent:'')+(statsModel?'&model='+encodeURIComponent(statsModel):''),8000);if(gen===statsGen){stats=s;renderStats();}}
+    const name=project;
+    if(!name)return;
+    const params=new URLSearchParams({project:name,period:statsPeriod});
+    if(computerFilter)params.set('computer',computerFilter);
+    if(statsAgent)params.set('agent',statsAgent);
+    if(statsModel)params.set('model',statsModel);
+    try{
+      const s=await api('/api/usage-stats?'+params,8000);
+      if(gen!==statsGen)return;
+      if(s.project!==name){stats=null;renderStats();throw Error(tr('Фильтр не применён: обновите фоновый клиент.'));}
+      stats=s;renderStats();
+    }
     catch(error){if(gen===statsGen){$('stats-total-title').textContent=tr('Статистика недоступна');$('stats-total-note').textContent=error.message;}}
   }
   function statsBars(box,groups,total,agents){
@@ -2043,7 +2060,7 @@
     root.querySelectorAll('[data-period]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.period===statsPeriod)));
     computerChip($('stats-computer-chip'));
     $('stats-computers-card').hidden=!!computerFilter;
-    $('stats-foot').textContent=!computerFilter?tr('Считаются все компьютеры сети: каждый сообщает расход своих задач по отчётам агентов. Задача попадает в день, когда закончилась.'):computerFilter==='local'?tr('Задачи, которые выполнялись на этом компьютере. Задача попадает в день, когда закончилась.'):tr('Расход сообщает сам компьютер, когда он меняется. В списке — только задачи, отправленные туда с этого компьютера.');
+    $('stats-foot').textContent=project?tr('Учитываются задачи выбранного проекта, известные этому компьютеру. Задача попадает в день, когда закончилась.'):'';
     $('stats-agent').value=statsAgent;
     root.querySelectorAll('[data-stats-sort]').forEach(b=>{
       const down=b.dataset.statsSort===statsSort,up=b.dataset.statsReverse===statsSort;
@@ -2051,20 +2068,25 @@
       else b.closest('th').removeAttribute('aria-sort');
       b.querySelector('span').textContent=down?'↓':up?'↑':'';
     });
-    if(stats){
-      // Rebuilt only when the list changed: a rebuild closes an open menu (T-192).
-      const models=[['',tr('Все модели')],...(stats.models||[]).map(m=>[m.key,m.name||m.key])];
-      if(statsModel&&!models.some(([v])=>v===statsModel))models.push([statsModel,statsModel]);
-      const select=$('stats-model');
-      if(select.options.length!==models.length||models.some(([v,l],i)=>select.options[i].value!==v||select.options[i].textContent!==l))select.replaceChildren(...models.map(([v,l])=>{const o=el('option',l);o.value=v;return o;}));
-      select.value=statsModel;
-    }
+    // Rebuilt only when the list changed: a rebuild closes an open menu (T-192).
+    const models=[['',tr('Все модели')],...(stats?.models||[]).map(m=>[m.key,m.name||m.key])];
+    if(statsModel&&!models.some(([v])=>v===statsModel))models.push([statsModel,statsModel]);
+    const select=$('stats-model');
+    if(select.options.length!==models.length||models.some(([v,l],i)=>select.options[i].value!==v||select.options[i].textContent!==l))select.replaceChildren(...models.map(([v,l])=>{const o=el('option',l);o.value=v;return o;}));
+    select.value=statsModel;
     syncSelects();
-    if(!stats)return;
+    if(!stats){
+      $('stats-total-title').textContent=project?tr('Загрузка статистики…'):tr('Выберите проект, чтобы увидеть статистику.');
+      $('stats-total-note').textContent='';
+      statsDays($('stats-days'),[]);
+      statsBars($('stats-agents'),[],0,true);
+      statsBars($('stats-computers'),[],0);
+      $('stats-top').replaceChildren();
+      return;
+    }
     // An older background client counts everything; say so.
     const unfiltered=(stats.agent||'')!==statsAgent||(stats.model||'')!==statsModel;
     if(unfiltered)$('stats-foot').textContent=tr('Фильтр не применён: обновите фоновый клиент.');
-    else if(statsModel)$('stats-foot').textContent+=' '+tr('С выбранной моделью считаются только задачи, которые знает этот компьютер: другие компьютеры сообщают расход по агентам, без моделей.');
     const t=stats.total;
     $('stats-total-title').textContent=t.tasks?tokensFull(t.tokens)+' '+periodWords[statsPeriod]:tr('Нет задач с расходом ')+periodWords[statsPeriod];
     $('stats-total-note').textContent=t.tasks?tasksWord(t.tasks)+tr(', на входе ')+t.input_tokens.toLocaleString(amLocale)+(t.cached_tokens?tr(' (из кэша ')+t.cached_tokens.toLocaleString(amLocale)+')':'')+tr(', на выходе ')+t.output_tokens.toLocaleString(amLocale):tr('Агент сообщает расход, когда задача заканчивается.');
@@ -2100,7 +2122,6 @@
       row.append(when,titleCell,duration,tokens);
       words.title=(!task.usage_missing&&typeof task.input_tokens==='number'?usageLong(task)+'\n':'')+tr('Открыть задачу');
       row.addEventListener('click',()=>{
-        if(task.project&&task.project!==project){project=task.project;remember('messenger-project',project);viewSignature='';}
         selectedTask=task.id;selectedShared=null;feed=null;feedSignature='';show('tasks');refresh();
       });
       top.append(row);
@@ -2339,7 +2360,7 @@
       await postAPI('/api/project-create',{name,folder});
       const rules=$('project-rules').value.trim();
       if(rules)await postAPI('/api/project-rules',{name,rules});
-      project=name;remember('messenger-project',name);
+      setProject(name);remember('messenger-project',name);
       $('project-dialog').close();viewSignature='';await refresh();
       // Connect the coordinator right away; the result is shown, not retried.
       if(view?.project===name)await connectReadyCoordinators();
@@ -2417,7 +2438,7 @@
     const name=view?.project;if(!name)return;
     askConfirm(tr('Удалить проект «')+(view.project_title||name)+'»?',tr('Проект пропадёт из списка. История задач сохранится и вернётся, если создать проект с тем же именем.'),tr('Удалить'),async()=>{
       await postAPI('/api/project-remove',{name});
-      project='';remember('messenger-project','');selectedTask='';selectedShared=null;feed=null;feedSignature='';viewSignature='';projectPageFor='';await refresh();
+      setProject('');remember('messenger-project','');selectedTask='';selectedShared=null;feed=null;feedSignature='';viewSignature='';projectPageFor='';await refresh();
     });
   }
   // Installation and sign-in use the agent's own terminal commands.
@@ -2880,7 +2901,7 @@
   $('project-select').addEventListener('change',()=>{
     const value=$('project-select').value;
     if(value==='__new'){$('project-select').value=view?.project||'__new';syncSelects();openProjectDialog();return;}
-    project=value;remember('messenger-project',value);selectedTask='';selectedShared=null;feed=null;feedSignature='';viewSignature='';refresh();
+    setProject(value);remember('messenger-project',value);selectedTask='';selectedShared=null;feed=null;feedSignature='';viewSignature='';refresh();
   });
   $('agent-filter').addEventListener('change',renderTaskList);
   for(const id of ['computer-chip','stats-computer-chip','agents-computer-chip'])$(id).querySelector('button').addEventListener('click',clearComputer);

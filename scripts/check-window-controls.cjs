@@ -321,6 +321,8 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const stat = {id:'old-1',title:'Проверить сборку проекта',at:'2026-11-19T09:20:00',project:'Frame',agent:'codex',model:'gpt-6.2-sol[effort=medium]',computer:'Runner',tokens:420000,duration_ms:42000};
       const olderStat = {...stat,id:'old-2',title:'Проверить производительность сцены',at:'2026-11-18T10:10:00',tokens:18200000,duration_ms:10800000,duration_estimated:true};
       const untimedStat = {...stat,id:'old-3',title:'Уточнить настройки агента',at:'2026-11-18T09:00:00',tokens:3400000,duration_ms:undefined};
+      const otherStat = {...stat,id:'other-1',title:'Собрать сайт',project:'Site',tokens:700};
+      let holdFrameStats, frameStatsRequested;
       const localTask = {id:'local-task',title:'Local task',project:'Frame',agent:'codex',state:'running',created_at:began,started_at:began,model:'gpt-6.2-sol[effort=low]',ran_model:'gpt-6.2-sol[effort=medium]'};
       const remoteTask = {...localTask,id:'remote-task',title:'Remote task',created_at:new Date(Date.now()-8*60*1000).toISOString(),model:'',ran_model:'',remote:{id:'dev-1',name:'Runner',worker:'none'}};
       const waitingTask = {...remoteTask,id:'waiting-task',title:'Waiting for a reply',agent:'claude',state:'waiting_owner',model:'claude-sonnet-5-5[effort=medium]'};
@@ -333,21 +335,32 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const clears = [];
       await page.addInitScript(() => { window.amDesktop = 'windows'; window.amFrameless = true; window.amWindow = () => {}; });
       await page.route('**/*', async route => {
-        const pathname = new URL(route.request().url()).pathname;
+        const {pathname, searchParams} = new URL(route.request().url());
+        const project = searchParams.get('project') || 'Frame';
         if (pathname === '/api/feedback-export') return route.fulfill({json: {ok: true, result: {path: '/fictional/Downloads/feedback.zip', remarks: 2}}});
         if (pathname === '/api/feedback-clear') { clears.push(true); return route.fulfill({json: {ok: true, result: {deleted: 2, left: 0}}}); }
-        if (pathname === '/api/window') return route.fulfill({json: {projects: [{name: 'Frame'}], project: 'Frame', folder: '/fictional/frame', agents: [], coordinator: {connected: false}, computer_name: 'Ёж и Йога', tasks_enabled: true, feedback_count: 5, feedback_new: 2, tasks:[localTask,remoteRow,waitingTask],
+        if (pathname === '/api/window') return route.fulfill({json: {projects: [{name: 'Frame'}, {name: 'Site'}], project, folder: '/fictional/frame', agents: [], coordinator: {connected: false}, computer_name: 'Ёж и Йога', tasks_enabled: true, feedback_count: 5, feedback_new: 2, tasks:project==='Frame'?[localTask,remoteRow,waitingTask]:[],
           shared: [{peer: 'host', name: 'Giver', age: 1, tasks: [
             {id: 'sent', project: 'Frame', title: 'Sent task', agent: 'cursor', state: 'running', created_at: began, started_at: began, model: 'composer-2.5[effort=medium]', runs_on_peer: 'dev-1', runs_on: 'Old name'},
             {id: 'own', project: 'Frame', title: 'Own task', agent: 'codex', state: 'running', created_at: '2026-11-15T09:00:00Z'},
             {id: 'old-1', project: 'Frame', title: 'Old 1', agent: 'codex', state: 'done', created_at: '2026-11-14T09:00:00Z', finished_at: ended},
             {id: 'old-2', project: 'Frame', title: 'Old 2', agent: 'codex', state: 'failed', created_at: '2026-11-14T08:00:00Z', finished_at: '2026-11-14T08:30:00Z'}]}]}});
         if (pathname === '/api/server') return route.fulfill({json: {host: {running: false, enabled: false, addresses: []}, member: {connected: true, reachable: true, address:'203.0.113.7:47100', connected_at:began}, peers: [{id: 'host', name: 'Giver', age: 0, agents: []}, {id: 'dev-1', name: 'Runner', age: 0, version:'0.0.0-preview.97', agents: runnerAgents, workers:{runs:runnerWorkers}}], updates: [], accept: true}});
-        if (pathname === '/api/usage-stats') return route.fulfill({json:{
-          total:{tasks:3,tokens:22020000,input_tokens:21100000,output_tokens:920000},agents:[],computers:[],days:[],
-          recent:[stat,olderStat,untimedStat],top:[olderStat,untimedStat,stat],
-          ranked:{oldest:[untimedStat,olderStat,stat],fewest:[stat,untimedStat,olderStat],longest:[olderStat,stat],shortest:[stat,olderStat]},
-        }});
+        if (pathname === '/api/usage-stats') {
+          if (project === 'Site') return route.fulfill({json:{
+            project,total:{tasks:1,tokens:700,input_tokens:600,output_tokens:100},agents:[],computers:[],days:[],
+            recent:[otherStat],top:[otherStat],ranked:{oldest:[otherStat],fewest:[otherStat],longest:[otherStat],shortest:[otherStat]},
+          }});
+          if (holdFrameStats) {
+            frameStatsRequested();
+            await holdFrameStats;
+          }
+          return route.fulfill({json:{
+            project,total:{tasks:3,tokens:22020000,input_tokens:21100000,output_tokens:920000},agents:[],computers:[],days:[],
+            recent:[stat,olderStat,untimedStat],top:[olderStat,untimedStat,stat],
+            ranked:{oldest:[untimedStat,olderStat,stat],fewest:[stat,untimedStat,olderStat],longest:[olderStat,stat],shortest:[stat,olderStat]},
+          }});
+        }
         if (pathname === '/api/task') {
           const remote = new URL(route.request().url()).searchParams.get('id') === remoteTask.id;
           const items = [
@@ -589,6 +602,24 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.setViewportSize({width:600,height:600});
       assert(await page.locator('.am-stats-table-wrap').evaluate(box=>box.scrollWidth===box.clientWidth));
       await page.setViewportSize({width:1100,height:600});
+      const chooseProject = async name => {
+        await page.locator('[aria-controls="project-select-menu"]').click();
+        await page.getByRole('option',{name,exact:true}).click();
+      };
+      const pendingFrame = new Promise(resolve => { frameStatsRequested = resolve; });
+      let releaseFrame;
+      holdFrameStats = new Promise(resolve => { releaseFrame = resolve; });
+      await page.locator('[data-tab=stats]').click();
+      await pendingFrame;
+      await chooseProject('Site');
+      await page.locator('#stats-top').getByText(otherStat.title,{exact:true}).waitFor();
+      assert.match(await page.locator('#stats-total-title').textContent(),/^700 /);
+      const lateFrame = page.waitForResponse(r => new URL(r.url()).pathname==='/api/usage-stats' && new URL(r.url()).searchParams.get('project')==='Frame');
+      releaseFrame();holdFrameStats=null;
+      await (await lateFrame).finished();
+      assert.equal(await firstTitle(),otherStat.title);
+      await chooseProject('Frame');
+      await page.locator('#stats-top').getByText(stat.title,{exact:true}).waitFor();
       await page.locator('[data-tab=tasks]').click();
       await page.locator('.am-task-title',{hasText:localTask.title}).click();
       const sender = page.locator('#thread .am-outgoing .am-meta').first();

@@ -485,6 +485,11 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			}
 		case "/api/usage-stats":
 			req.Cmd = "usage-stats"
+			req.Project = r.URL.Query().Get("project")
+			if req.Project != "" && !core.ValidProjectName(req.Project) {
+				http.Error(w, "invalid project", http.StatusBadRequest)
+				return
+			}
 			req.Alias = r.URL.Query().Get("period")
 			if req.Alias != "day" && req.Alias != "week" && req.Alias != "month" {
 				http.Error(w, "invalid period", 400)
