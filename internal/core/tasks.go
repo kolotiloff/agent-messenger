@@ -2239,9 +2239,11 @@ func (s *Store) TaskEvents(project, audience string, after int64, limit int) ([]
 // (T-032).
 func (s *Store) TaskListVersion(project string) (string, error) {
 	var seq sql.NullInt64
-	var count, sum int64
-	err := s.db.QueryRow(`SELECT (SELECT MAX(seq) FROM task_events WHERE project=?), COUNT(*), COALESCE(SUM(version),0) FROM tasks WHERE project=?`, project, project).Scan(&seq, &count, &sum)
-	return fmt.Sprintf("%d.%d.%d", seq.Int64, count, sum), err
+	var count, sum, waiting int64
+	err := s.db.QueryRow(`SELECT (SELECT MAX(seq) FROM task_events WHERE project=?), COUNT(*), COALESCE(SUM(version),0),
+ COUNT(CASE WHEN t.state='running' AND t.resource<>'' AND EXISTS (`+lockHolderQuery+`) THEN 1 END)
+ FROM tasks t WHERE t.project=?`, project, project).Scan(&seq, &count, &sum, &waiting)
+	return fmt.Sprintf("%d.%d.%d.%d", seq.Int64, count, sum, waiting), err
 }
 
 // LatestTaskEvent returns the newest event sequence number of a project.
@@ -2328,9 +2330,9 @@ func (s *Store) CoordinatorLastSeen(project string) (string, error) {
 type AgentSummary struct {
 	Agent   string `json:"agent"`
 	Profile string `json:"profile"`
-	// Running counts tasks of all projects that run on this agent now.
+	// Running counts known active tasks of this project on this agent.
 	Running int `json:"running"`
-	// Waiting counts this agent's tasks waiting for an answer, all projects.
+	// Waiting counts known tasks of this project waiting for an answer.
 	Waiting int `json:"waiting"`
 	// Models are the names the owner listed; for Codex and Cursor only
 	// these may be passed to start_task (T-043).
@@ -2400,6 +2402,8 @@ type ComputerSummary struct {
 func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 	var c ComputerSummary
 	var catalog map[string][]string
+	type agentOnComputer struct{ computer, agent string }
+	activity := map[agentOnComputer]AgentSummary{}
 	err := s.tx(func(tx *sql.Tx) error {
 		computer, err := localComputer(tx)
 		if err != nil {
@@ -2434,11 +2438,51 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 		if c.UpdatePending {
 			c.Note = strings.TrimSpace("waiting to install a Messenger update: it takes no new tasks. " + c.Note)
 		}
-		rows, err := tx.Query(`SELECT a.provider,a.profile,
- (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='running'),
- (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state IN ('waiting_coordinator','waiting_owner')),
- a.models, a.limit_state, a.full_access
- FROM computer_agents a WHERE a.computer=? AND a.paused=0 ORDER BY a.provider`, computer)
+		tasks, err := tx.Query(`SELECT computer,provider,COUNT(CASE WHEN state='running' THEN 1 END),
+ COUNT(CASE WHEN state IN ('waiting_coordinator','waiting_owner') THEN 1 END)
+ FROM tasks WHERE project=? AND state IN ('running','waiting_coordinator','waiting_owner')
+ AND (remote_peer IS NULL OR remote_broker=(SELECT value FROM meta WHERE key='net_broker'))
+ GROUP BY computer,provider`, project)
+		if err != nil {
+			return err
+		}
+		for tasks.Next() {
+			var key agentOnComputer
+			var counts AgentSummary
+			if err := tasks.Scan(&key.computer, &key.agent, &counts.Running, &counts.Waiting); err != nil {
+				tasks.Close()
+				return err
+			}
+			activity[key] = counts
+		}
+		tasks.Close()
+		if err := tasks.Err(); err != nil {
+			return err
+		}
+		shared, err := projectNetTasks(tx, project)
+		if err != nil {
+			return err
+		}
+		for _, peer := range shared {
+			if peer.Age < 0 || peer.Age > PeerFresh {
+				continue
+			}
+			for _, task := range peer.Tasks {
+				key := agentOnComputer{peer.Peer, task.Agent}
+				if task.RunsOnPeer != "" {
+					key.computer = task.RunsOnPeer
+				}
+				counts := activity[key]
+				switch task.State {
+				case "running":
+					counts.Running++
+				case "waiting_coordinator", "waiting_owner":
+					counts.Waiting++
+				}
+				activity[key] = counts
+			}
+		}
+		rows, err := tx.Query(`SELECT a.provider,a.profile,a.models,a.limit_state,a.full_access FROM computer_agents a WHERE a.computer=? AND a.paused=0 ORDER BY a.provider`, computer)
 		if err != nil {
 			return err
 		}
@@ -2446,9 +2490,11 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 		for rows.Next() {
 			var a AgentSummary
 			var models, limit string
-			if err := rows.Scan(&a.Agent, &a.Profile, &a.Running, &a.Waiting, &models, &limit, &a.FullAccess); err != nil {
+			if err := rows.Scan(&a.Agent, &a.Profile, &models, &limit, &a.FullAccess); err != nil {
 				return err
 			}
+			counts := activity[agentOnComputer{computer, a.Agent}]
+			a.Running, a.Waiting = counts.Running, counts.Waiting
 			a.Models = splitModels(models)
 			a.Limit = limitView(parseAgentLimit(limit), time.Now())
 			a.explain()
@@ -2500,7 +2546,8 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 			if models == nil {
 				models = []string{}
 			}
-			as := AgentSummary{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting, Models: models, Limit: limitView(a.Limit, time.Now())}
+			counts := activity[agentOnComputer{p.ID, a.Agent}]
+			as := AgentSummary{Agent: a.Agent, Running: counts.Running, Waiting: counts.Waiting, Models: models, Limit: limitView(a.Limit, time.Now())}
 			as.explain()
 			o.Agents = append(o.Agents, as)
 		}
@@ -2530,7 +2577,7 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 }
 
 // idleComputers names the online computers that can take this project's
-// tasks and run no task now (of any project): where the next task can go.
+// tasks and have no known running task of this project.
 func idleComputers(list []ComputerSummary) []string {
 	var out []string
 	for _, c := range list {

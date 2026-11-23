@@ -907,6 +907,7 @@
   function renderTaskList(){
     const live=$('task-list'),box=live.cloneNode(false);
     computerChip($('computer-chip'));
+    if(view?.project!==project){$('task-count').textContent='';swapChildren(live,box);return;}
     // T-096: say when the agent filter hides active tasks, with a way back.
     const agentChosen=$('agent-filter').value;
     const hidden=agentChosen?(view?.tasks||[]).filter(t=>t.agent!==agentChosen&&activeStates.includes(t.state)&&(!computerFilter||taskComputer(t)===computerFilter)).length:0;
@@ -1121,7 +1122,7 @@
       return;
     }
     $('compose').hidden=true;$('lost-bar').hidden=true;feedSignature='';$('to-bottom').hidden=true;
-    if(!view){head.replaceChildren();return;}
+    if(view?.project!==project){head.replaceChildren();thread.replaceChildren();return;}
     if(!view.project){
       head.replaceChildren();
       thread.replaceChildren(welcome());return;
@@ -1133,7 +1134,7 @@
   }
   // The window response owns the task row. The feed response supplies
   // history, which can arrive before or after the row for the same task.
-  function selectedTaskRow(){return view?.tasks?.find(t=>t.id===selectedTask);}
+  function selectedTaskRow(){return view?.project===project?view?.tasks?.find(t=>t.id===selectedTask):undefined;}
   // The chosen task of another computer, if it is still in the lists.
   function sharedSelection(){
     if(!selectedShared)return null;
@@ -1542,7 +1543,7 @@
     box.disabled=!q&&!note;box.placeholder=q?tr('Ответить исполнителю…'):note&&t.state==='waiting_coordinator'?tr('Ответить вместо координатора…'):note?tr('Написать исполнителю…'):t.remote?.from&&t.owner_question?tr('Отвечают на компьютере «')+t.remote.name+'»':t.pending_launch?tr('Задача ждёт запуска…'):t.remote?.outbox_delayed_minutes&&!t.remote.from?tr('Ответы с «')+t.remote.name+tr('» задерживаются: не уходят уже ')+t.remote.outbox_delayed_minutes+tr(' мин.'):t.remote?.worker==='none'&&!t.remote.from?tr('На «')+t.remote.name+tr('» исполнитель этой задачи сейчас не запущен'):tr('Исполнитель работает…');
     $('answer-send').hidden=!q&&!note;$('task-stop').hidden=!active;
     $('compose').dataset.mode=q?'answer':note?'note':'';
-    if($('compose').dataset.task!==t.id){$('compose').dataset.task=t.id;$('answer-status').textContent='';}
+    if($('compose').dataset.task!==t.id){$('compose').dataset.task=t.id;box.value='';$('answer-status').textContent='';}
     if(q&&$('compose').dataset.question!==q.id){$('compose').dataset.question=q.id;$('answer-text').value='';$('answer-status').textContent='';}
     else if(!q&&!note&&wasNote){$('answer-text').value='';}
     sizeAnswer();answerControls();
@@ -1596,8 +1597,8 @@
     let op=recall(key);
     if(!op){op='window-'+t.id+'-'+crypto.randomUUID();remember(key,op);}
     answering=true;answerControls();$('answer-status').textContent=tr('Отправляем сообщение…');
-    try{await postAPI('/api/task-note',{task:t.id,op_id:op,text});showError(null);try{localStorage.removeItem(key);}catch(_){}$('answer-status').textContent='';$('answer-text').value='';sizeAnswer();feedSignature='';feedStick=true;await refresh();}
-    catch(error){$('answer-status').textContent='';showError({message:error.message+tr(' Повтор с тем же текстом безопасен.'),command:error.command,hint:error.hint});}
+    try{await postAPI('/api/task-note',{task:t.id,op_id:op,text});try{localStorage.removeItem(key);}catch(_){}if(selectedTask===t.id){showError(null);$('answer-status').textContent='';$('answer-text').value='';sizeAnswer();feedSignature='';feedStick=true;}await refresh();}
+    catch(error){if(selectedTask===t.id)$('answer-status').textContent='';showError({message:error.message+tr(' Повтор с тем же текстом безопасен.'),command:error.command,hint:error.hint});}
     finally{answering=false;answerControls();}
   }
   async function sendAnswer(){
@@ -1608,8 +1609,8 @@
     let op=recall('messenger-answer-op:'+q.id);
     if(!op){op='window-'+q.id+'-'+crypto.randomUUID();remember('messenger-answer-op:'+q.id,op);}
     answering=true;answerControls();$('answer-status').textContent=tr('Отправляем ответ…');
-    try{await postAPI('/api/task-answer',{task:t.id,question:q.id,op_id:op,text});showError(null);$('answer-status').textContent='';$('answer-text').value='';sizeAnswer();feedSignature='';feedStick=true;await refresh();}
-    catch(error){$('answer-status').textContent='';showError({message:error.message+tr(' Повтор с тем же текстом безопасен.'),command:error.command,hint:error.hint});}
+    try{await postAPI('/api/task-answer',{task:t.id,question:q.id,op_id:op,text});if(selectedTask===t.id){showError(null);$('answer-status').textContent='';$('answer-text').value='';sizeAnswer();feedSignature='';feedStick=true;}await refresh();}
+    catch(error){if(selectedTask===t.id)$('answer-status').textContent='';showError({message:error.message+tr(' Повтор с тем же текстом безопасен.'),command:error.command,hint:error.hint});}
     finally{answering=false;answerControls();}
   }
   // Agent cards (T-061, D-070): the agent's name with a check, settings and
@@ -1938,14 +1939,17 @@
   }
   async function refresh(){
     if(refreshing)return;refreshing=true;
+    const requestedProject=project;
+    let stale=false;
     try{
       let v;
-      try{v=await api('/api/window?project='+encodeURIComponent(project));}
-      catch(error){if(Date.now()-clientInfoAt>5000)loadClientInfo();online=false;offlineReason=error.name==='TimeoutError'||error.name==='TypeError'?tr('Окно потеряло связь с программой Messenger. Закройте окно и откройте снова.'):error.message;renderMachines();renderNotice();return;}
+      try{v=await api('/api/window?project='+encodeURIComponent(requestedProject));}
+      catch(error){if(requestedProject!==project){stale=true;return;}if(Date.now()-clientInfoAt>5000)loadClientInfo();online=false;offlineReason=error.name==='TimeoutError'||error.name==='TypeError'?tr('Окно потеряло связь с программой Messenger. Закройте окно и откройте снова.'):error.message;renderMachines();renderNotice();return;}
       online=true;offlineReason='';if(Date.now()-clientInfoAt>10000)loadClientInfo();
       // The first answer: learn the client's version before the start screen
       // goes, so an update starts without the old window showing.
       if(booting){await loadClientInfo();booting=false;renderBoot();}
+      if(requestedProject!==project){stale=true;return;}
       if(!v.projects.some(p=>p.name===project))project=v.project||'';
       const signature=JSON.stringify(v);
       if(signature!==viewSignature){viewSignature=signature;view=v;if(selectedTask&&!v.tasks.some(t=>t.id===selectedTask)){selectedTask='';feed=null;feedSignature='';}if(selectedShared&&!sharedSelection())selectedShared=null;render();}
@@ -1955,7 +1959,7 @@
       if(!selectedTask&&!selectedShared&&tab==='tasks'&&view?.project)openTopTask(true);
       if(selectedTask)await loadFeed();
     }catch(error){notice(el('p',tr('Окно не смогло показать данные: ')+error.message));}
-    finally{refreshing=false;}
+    finally{refreshing=false;if(stale)refresh();}
   }
   let discovering=false;
   async function loadDiscovery(){
@@ -2880,7 +2884,7 @@
   $('project-select').addEventListener('change',()=>{
     const value=$('project-select').value;
     if(value==='__new'){$('project-select').value=view?.project||'__new';syncSelects();openProjectDialog();return;}
-    project=value;remember('messenger-project',value);selectedTask='';selectedShared=null;feed=null;feedSignature='';viewSignature='';refresh();
+    project=value;remember('messenger-project',value);selectedTask='';selectedShared=null;feed=null;feedSignature='';viewSignature='';if($('device-menu')?.matches(':popover-open'))$('device-menu').hidePopover();renderTaskList();renderThread();refresh();
   });
   $('agent-filter').addEventListener('change',renderTaskList);
   for(const id of ['computer-chip','stats-computer-chip','agents-computer-chip'])$(id).querySelector('button').addEventListener('click',clearComputer);
