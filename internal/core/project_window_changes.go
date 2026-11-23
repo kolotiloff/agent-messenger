@@ -39,10 +39,10 @@ func splitWindowChanges(ctx context.Context, computer *sql.DB, openProject func(
 	var shared, local windowChangeParts
 	var file sql.NullString
 	var registered bool
-	err := computer.QueryRowContext(ctx, `SELECT `+windowChangeFields+`,
+	err := scanWindowRevision(ctx, computer, `SELECT `+windowChangeFields+`,
  (SELECT file FROM project_storage_stage WHERE project=?),
- EXISTS(SELECT 1 FROM task_storage_routes WHERE id=? AND project=?)`, project, "", project, task, project).
-		Scan(&shared.global, &shared.project, &shared.feed, &file, &registered)
+ EXISTS(SELECT 1 FROM task_storage_routes WHERE id=? AND project=?)`, []any{project, "", project, task, project},
+		&shared.global, &shared.project, &shared.feed, &file, &registered)
 	if err != nil {
 		return WindowChanges{}, err
 	}
@@ -60,8 +60,8 @@ func splitWindowChanges(ctx context.Context, computer *sql.DB, openProject func(
 		if !registered {
 			task = ""
 		}
-		err = db.QueryRowContext(ctx, `SELECT `+windowChangeFields+` WHERE (SELECT project FROM project_snapshot)=?`, project, task, project).
-			Scan(&local.global, &local.project, &local.feed)
+		err = scanWindowRevision(ctx, db, `SELECT `+windowChangeFields+` WHERE (SELECT project FROM project_snapshot)=?`, []any{project, task, project},
+			&local.global, &local.project, &local.feed)
 		if errors.Is(err, sql.ErrNoRows) {
 			return WindowChanges{}, fmt.Errorf("%w: the database belongs to another project", ErrRejected)
 		}
