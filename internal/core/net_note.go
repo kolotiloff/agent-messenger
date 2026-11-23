@@ -33,7 +33,7 @@ func peerAtLeast(version string, build int) bool {
 // noteRemoteTask sends a note to the computer that runs the
 // task. The note is kept here too, marked sent, for the window and for a
 // repeated call with the same op id.
-func noteRemoteTask(tx *sql.Tx, t Task, remote netLink, opID, text, author string, sender MessageSender) error {
+func noteRemoteTask(machine, tx *sql.Tx, t Task, remote netLink, opID, text, author string, sender MessageSender) error {
 	switch {
 	case t.CancelRequested:
 		return fmt.Errorf("%w: the task is being cancelled", ErrRejected)
@@ -44,11 +44,11 @@ func noteRemoteTask(tx *sql.Tx, t Task, remote netLink, opID, text, author strin
 	case t.State != "running":
 		return fmt.Errorf("%w: only a working task takes messages; this one is %s", ErrRejected, t.State)
 	}
-	broker, err := metaValue(tx, "net_broker")
+	broker, err := metaValue(machine, "net_broker")
 	if err != nil {
 		return err
 	}
-	peer, found, err := netPeer(tx, remote.peer)
+	peer, found, err := netPeer(machine, remote.peer)
 	if err != nil {
 		return err
 	}
@@ -80,7 +80,7 @@ func noteRemoteTask(tx *sql.Tx, t Task, remote netLink, opID, text, author strin
 
 // applyNote keeps another computer's note for the mirror of its
 // task, or tells that computer why not.
-func applyNote(tx *sql.Tx, from netLink, b netBody) error {
+func applyNote(machine, tx *sql.Tx, from netLink, b netBody) error {
 	t, ok, err := mirrorTask(tx, from)
 	if err != nil || !ok {
 		return err
@@ -90,7 +90,7 @@ func applyNote(tx *sql.Tx, from netLink, b netBody) error {
 		author = AudienceOwner
 	}
 	err = savepoint(tx, func() error {
-		return addNoteTx(tx, t.ID, "", "net:"+from.broker+":"+from.peer+":"+b.OpID, b.Text, author, true, MessageSender{Agent: b.SenderAgent, Model: b.SenderModel})
+		return addNoteTx(machine, tx, t.ID, "", "net:"+from.broker+":"+from.peer+":"+b.OpID, b.Text, author, true, MessageSender{Agent: b.SenderAgent, Model: b.SenderModel})
 	})
 	if errors.Is(err, ErrRejected) {
 		return enqueueNet(tx, from.broker, from.peer, "note-refused."+b.OpID, t.ID, netBody{Kind: "note_refused", Task: from.task, OpID: b.OpID, Reason: refusalText(err)})

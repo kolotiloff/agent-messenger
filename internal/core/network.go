@@ -145,6 +145,7 @@ type NetOutgoing struct {
 	Body []byte
 	kind string
 	task string
+	file string
 }
 
 // NetIncoming is one message from another computer.
@@ -703,11 +704,11 @@ func recordRemoteTask(tx *sql.Tx, r StartTaskRequest, self string, cfg remoteTas
 }
 
 // answerRemoteTask sends an answer to the computer that runs the task.
-func answerRemoteTask(tx *sql.Tx, t Task, remote netLink, question, opID, text, by string, sender MessageSender) error {
+func answerRemoteTask(machine, tx *sql.Tx, t Task, remote netLink, question, opID, text, by string, sender MessageSender) error {
 	if _, err := tx.Exec(`UPDATE task_questions SET state='answered',answer=?,answer_op=?,answered_by=? WHERE id=?`, text, opID, by, question); err != nil {
 		return err
 	}
-	if err := setTaskState(tx, t.ID, "running", "answer sent to "+peerName(tx, remote.peer)); err != nil {
+	if err := setTaskState(tx, t.ID, "running", "answer sent to "+peerName(machine, remote.peer)); err != nil {
 		return err
 	}
 	answeredFor := AudienceLog
@@ -729,7 +730,7 @@ func answerRemoteTask(tx *sql.Tx, t Task, remote netLink, question, opID, text, 
 // unanswered before the owner can close the task here (T-131).
 var cancelAnswerWait = 2 * time.Minute
 
-func cancelRemoteTask(tx *sql.Tx, t Task, remote netLink) (string, error) {
+func cancelRemoteTask(machine, tx *sql.Tx, t Task, remote netLink) (string, error) {
 	switch t.State {
 	case "running", "waiting_coordinator", "waiting_owner", "blocked", "interrupted":
 	default:
@@ -750,8 +751,8 @@ func cancelRemoteTask(tx *sql.Tx, t Task, remote netLink) (string, error) {
 	// there is already unknown, or when a cancel was asked for and no
 	// answer came. What happened there stays unknown; a cancel still goes
 	// out if that computer is in this network, for when it is back.
-	contact := RemoteComputer{ID: remote.peer, Name: peerName(tx, remote.peer)}
-	if err := remoteContact(tx, t.ID, remote, &contact); err != nil {
+	contact := RemoteComputer{ID: remote.peer, Name: peerName(machine, remote.peer)}
+	if err := remoteContact(machine, tx, t.ID, remote, &contact); err != nil {
 		return "", err
 	}
 	if t.CancelRequested && !contact.Silent && !contact.Lost {
@@ -770,7 +771,7 @@ func cancelRemoteTask(tx *sql.Tx, t Task, remote netLink) (string, error) {
 		if err := insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "cancelled", "the owner closed this task here; what happened on "+contact.Name+" is unknown", ""); err != nil {
 			return "", err
 		}
-		broker, err := metaValue(tx, "net_broker")
+		broker, err := metaValue(machine, "net_broker")
 		if err != nil {
 			return "", err
 		}
@@ -825,6 +826,19 @@ func (s *Store) NetPending(broker string, limit int) ([]NetOutgoing, error) {
 // in skip, so a computer whose mailbox is full cannot hold back the
 // messages to the others behind its own (T-137).
 func (s *Store) NetPendingExcept(broker string, limit int, skip []string) ([]NetOutgoing, error) {
+	if s.split != nil {
+		messages, err := splitNetPending(context.Background(), s.db, s.split.open, broker, limit, skip)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]NetOutgoing, 0, len(messages))
+		for _, message := range messages {
+			record := message.NetOutgoing
+			record.file = message.file
+			out = append(out, record)
+		}
+		return out, nil
+	}
 	return pendingNetMessages(context.Background(), s.db, broker, limit, skip)
 }
 
@@ -866,8 +880,19 @@ func pendingNetMessagesAfter(ctx context.Context, db *sql.DB, broker string, lim
 
 // NetSent removes a message the broker stored.
 func (s *Store) NetSent(seq int64) error {
+	if s.split != nil {
+		return fmt.Errorf("%w: a project delivery requires its outbox identity", ErrRejected)
+	}
 	_, err := s.db.Exec(`DELETE FROM net_outbox WHERE seq=?`, seq)
 	return err
+}
+
+// NetDeliverySent acknowledges exactly the message selected by NetPending.
+func (s *Store) NetDeliverySent(message NetOutgoing) error {
+	if s.split == nil {
+		return s.NetSent(message.Seq)
+	}
+	return splitNetSent(context.Background(), s.db, s.split.open, splitNetMessage{NetOutgoing: message, file: message.file})
 }
 
 // ReleaseAbsentOutbox retires messages aimed at a computer that is not in
@@ -927,9 +952,28 @@ func (s *Store) ReleaseAbsentOutbox(now time.Time) (int, []string, error) {
 // recipient is not in the network any more. A start that never left fails
 // its task; an answer or cancel that never arrived blocks it.
 func (s *Store) NetUndeliverable(seq int64) error {
+	if s.split != nil {
+		return fmt.Errorf("%w: a project delivery requires its outbox identity", ErrRejected)
+	}
+	return s.netUndeliverable(seq, "")
+}
+
+// NetDeliveryRefused applies a broker refusal in the originating outbox.
+func (s *Store) NetDeliveryRefused(message NetOutgoing) error {
+	if s.split == nil {
+		return s.NetUndeliverable(message.Seq)
+	}
+	db, err := splitOutboxDB(context.Background(), s.db, s.split.open, message.file)
+	if err != nil {
+		return err
+	}
+	return (&Store{db: db}).netUndeliverable(message.Seq, message.OpID)
+}
+
+func (s *Store) netUndeliverable(seq int64, opID string) error {
 	return s.tx(func(tx *sql.Tx) error {
 		var kind, task, to, msgBroker string
-		err := tx.QueryRow(`SELECT kind,task_id,recipient,broker FROM net_outbox WHERE seq=?`, seq).Scan(&kind, &task, &to, &msgBroker)
+		err := tx.QueryRow(`SELECT kind,task_id,recipient,broker FROM net_outbox WHERE seq=? AND (?='' OR op_id=?)`, seq, opID, opID).Scan(&kind, &task, &to, &msgBroker)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}
@@ -1005,6 +1049,9 @@ func (s *Store) NetCursor(broker string) (int64, error) {
 // nothing the second time. A message that cannot be read or does not fit a
 // task of this computer is recorded and ignored.
 func (s *Store) ApplyNet(broker string, m NetIncoming) error {
+	if s.split != nil {
+		return s.applySplitNet(broker, m)
+	}
 	return s.tx(func(tx *sql.Tx) error {
 		if err := advanceNetCursor(tx, broker, m.Seq); err != nil {
 			return err
@@ -1026,6 +1073,9 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 		if isProjectResponse(b.Kind) {
 			return applyProjectResponseTx(tx, from, b, peerName(tx, m.From))
 		}
+		if isProjectRequest(b.Kind) {
+			return applyProjectRequestTx(tx, tx, from, m, b, s.gone)
+		}
 		switch b.Kind {
 		case "start":
 			if err := applyStart(tx, from, b); err != nil {
@@ -1033,14 +1083,6 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 			}
 			_, err := tx.Exec(`UPDATE tasks SET origin_computer=? WHERE origin_broker=? AND origin_peer=? AND origin_task=? AND origin_computer=''`, validComputer(b.Computer), from.broker, from.peer, from.task)
 			return err
-		case "answer":
-			return applyAnswer(tx, from, m.OpID, b)
-		case "continue":
-			return applyContinue(tx, from, b, s.gone)
-		case "note":
-			return applyNote(tx, from, b)
-		case "cancel":
-			return applyCancel(tx, from, s.gone)
 		case "log_request":
 			return applyLogRequest(tx, from, b)
 		case "log":
@@ -1055,6 +1097,44 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 			return applyUpdateReply(tx, from, b)
 		}
 		return nil
+	})
+}
+
+func (s *Store) applySplitNet(broker string, m NetIncoming) error {
+	ctx := context.Background()
+	body, valid := decodeNetIncoming(m)
+	switch {
+	case valid && body.Kind == "start":
+		return applySplitRemoteStart(ctx, s.db, s.split.open, broker, m)
+	case valid && (isProjectRequest(body.Kind) || isProjectResponse(body.Kind)):
+		return applySplitProjectMessage(ctx, s.db, s.split.open, broker, m, body, s.gone)
+	case valid && body.Kind == "update":
+		return fmt.Errorf("%w: update notices require a project event route", ErrRejected)
+	}
+	return s.tx(func(tx *sql.Tx) error {
+		apply, err := claimNetDelivery(tx, broker, m)
+		if err != nil {
+			return err
+		}
+		if apply && valid {
+			from := netLink{broker: broker, peer: m.From, task: body.Task}
+			switch body.Kind {
+			case "log_request":
+				err = applyLogRequest(tx, from, body)
+			case "log":
+				err = applyLogReply(tx, from, body)
+			case "agent_version_request":
+				err = applyAgentVersionRequest(tx, from, body)
+			case "agent_version":
+				err = applyAgentVersionReply(tx, from, body)
+			case "update_request":
+				err = applyUpdateRequest(tx, from, body)
+			}
+			if err != nil {
+				return err
+			}
+		}
+		return advanceNetCursor(tx, broker, m.Seq)
 	})
 }
 
@@ -1202,13 +1282,13 @@ func remoteStartRequest(tx *sql.Tx, from netLink, b netBody) (StartTaskRequest, 
 	return r, err
 }
 
-func applyAnswer(tx *sql.Tx, from netLink, opID string, b netBody) error {
+func applyAnswer(machine, tx *sql.Tx, from netLink, opID string, b netBody) error {
 	t, ok, err := mirrorTask(tx, from)
 	if err != nil || !ok {
 		return err
 	}
 	err = savepoint(tx, func() error {
-		return answerTask(tx, t.ID, b.Question, "net:"+from.broker+":"+from.peer+":"+opID, b.Text, b.By, true, false, MessageSender{Agent: b.SenderAgent, Model: b.SenderModel})
+		return answerTask(machine, tx, t.ID, b.Question, "net:"+from.broker+":"+from.peer+":"+opID, b.Text, b.By, true, false, MessageSender{Agent: b.SenderAgent, Model: b.SenderModel})
 	})
 	if errors.Is(err, ErrRejected) {
 		// State tells the asking computer whether the question is still open
@@ -1222,13 +1302,13 @@ func applyAnswer(tx *sql.Tx, from netLink, opID string, b netBody) error {
 	return err
 }
 
-func applyCancel(tx *sql.Tx, from netLink, gone WorkerGone) error {
+func applyCancel(machine, tx *sql.Tx, from netLink, gone WorkerGone) error {
 	t, ok, err := mirrorTask(tx, from)
 	if err != nil || !ok {
 		return err
 	}
 	err = savepoint(tx, func() error {
-		_, err := cancelTask(tx, t.ID, gone)
+		_, err := cancelTask(machine, tx, t.ID, gone)
 		return err
 	})
 	if errors.Is(err, ErrRejected) {

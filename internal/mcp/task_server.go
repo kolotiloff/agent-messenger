@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -52,7 +53,7 @@ func taskTools() []map[string]any {
 
 // ServeTask runs the worker tool server for one run until in closes.
 func ServeTask(dbPath, run, receipt string, in io.Reader, out io.Writer) error {
-	store, err := core.Open(dbPath)
+	store, err := core.OpenTaskRunStore(context.Background(), dbPath, run)
 	if err != nil {
 		return err
 	}

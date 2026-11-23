@@ -113,26 +113,29 @@ func splitProjectFiles(ctx context.Context, computer projectFileQuerier) ([]stri
 // splitNetSent acknowledges the precise outbox row the broker stored.
 // It cannot remove an equally numbered message from another database.
 func splitNetSent(ctx context.Context, computer *sql.DB, openProject func(string) (*sql.DB, error), message splitNetMessage) error {
-	db := computer
-	if message.file != migrationComputerFile {
-		// The filename was resolved from the catalog when selecting the
-		// message. It must remain a member before opening it again.
-		var project string
-		err := computer.QueryRowContext(ctx, "SELECT project FROM project_storage_stage WHERE file=?", message.file).Scan(&project)
-		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("%w: the outbox is no longer in the project catalog", ErrRejected)
-		}
-		if err != nil {
-			return err
-		}
-		if message.file != projectMigrationFile(project) {
-			return fmt.Errorf("%w: invalid project database route", ErrRejected)
-		}
-		db, err = openProject(message.file)
-		if err != nil {
-			return err
-		}
+	db, err := splitOutboxDB(ctx, computer, openProject, message.file)
+	if err != nil {
+		return err
 	}
-	_, err := db.ExecContext(ctx, "DELETE FROM net_outbox WHERE seq=? AND op_id=?", message.Seq, message.OpID)
+	_, err = db.ExecContext(ctx, `DELETE FROM net_outbox WHERE seq=? AND op_id=?`, message.Seq, message.OpID)
 	return err
+}
+
+func splitOutboxDB(ctx context.Context, computer *sql.DB, openProject func(string) (*sql.DB, error), file string) (*sql.DB, error) {
+	if file == migrationComputerFile {
+		return computer, nil
+	}
+	// A file selected for sending must still belong to the catalog.
+	var project string
+	err := computer.QueryRowContext(ctx, "SELECT project FROM project_storage_stage WHERE file=?", file).Scan(&project)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("%w: the outbox is no longer in the project catalog", ErrRejected)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if file != projectMigrationFile(project) {
+		return nil, fmt.Errorf("%w: invalid project database route", ErrRejected)
+	}
+	return openProject(file)
 }

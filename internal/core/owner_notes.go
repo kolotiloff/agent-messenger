@@ -35,13 +35,15 @@ func (s *Store) AddCoordinatorNote(project, task, opID, text string, senders ...
 }
 
 func (s *Store) addNote(task, project, opID, text, author string, senders ...MessageSender) error {
-	return s.tx(func(tx *sql.Tx) error { return addNoteTx(tx, task, project, opID, text, author, false, senders...) })
+	return s.taskTx(task, func(machine, tx *sql.Tx) error {
+		return addNoteTx(machine, tx, task, project, opID, text, author, false, senders...)
+	})
 }
 
 // addNoteTx records a note. viaNet is a note that another
 // computer sent for the mirror of its task (T-149); its op id is built
 // here and may be longer.
-func addNoteTx(tx *sql.Tx, task, project, opID, text, author string, viaNet bool, senders ...MessageSender) error {
+func addNoteTx(machine, tx *sql.Tx, task, project, opID, text, author string, viaNet bool, senders ...MessageSender) error {
 	sender := coordinatorSender(author, senders)
 	text = strings.TrimSpace(text)
 	if opID == "" || (len(opID) > 128 && !viaNet) || text == "" || utf8.RuneCountInString(text) > MaxTaskText {
@@ -81,7 +83,7 @@ func addNoteTx(tx *sql.Tx, task, project, opID, text, author string, viaNet bool
 			return err
 		}
 		if link.remote != nil {
-			return noteRemoteTask(tx, t, *link.remote, opID, text, author, sender)
+			return noteRemoteTask(machine, tx, t, *link.remote, opID, text, author, sender)
 		}
 		if link.origin != nil && !viaNet {
 			return fmt.Errorf("%w: this task came from another computer; its coordinator writes to it", ErrRejected)
@@ -99,7 +101,7 @@ func addNoteTx(tx *sql.Tx, task, project, opID, text, author string, viaNet bool
 			var question string
 			err := tx.QueryRow(`SELECT id FROM task_questions WHERE task_id=? AND audience=? AND state='open' ORDER BY rowid DESC LIMIT 1`, task, AudienceCoordinator).Scan(&question)
 			if err == nil {
-				return answerTask(tx, task, question, opID, text, AudienceOwner, false, true)
+				return answerTask(machine, tx, task, question, opID, text, AudienceOwner, false, true)
 			}
 			if !errors.Is(err, sql.ErrNoRows) {
 				return err

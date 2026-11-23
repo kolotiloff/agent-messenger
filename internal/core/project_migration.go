@@ -20,7 +20,7 @@ const (
 	migrationBackupFile   = "legacy-backup.sqlite"
 	migrationComputerFile = "computer.sqlite"
 	migrationManifestFile = "manifest.json"
-	migrationLayoutFormat = 3
+	migrationLayoutFormat = 4
 )
 
 // A local task ID is recorded on outgoing task frames, except the acceptance
@@ -239,6 +239,9 @@ func stageComputerDatabase(ctx context.Context, backup, output string, manifest 
  DELETE FROM net_outbox WHERE seq IN (SELECT seq FROM (`+migrationOutboxRoutes+`)
  WHERE project IN (SELECT name FROM projects));
  DELETE FROM feedback WHERE project IN (SELECT name FROM projects);
+ DELETE FROM meta WHERE
+ (key GLOB 'net_continue_prev:*' AND substr(key,length('net_continue_prev:')+1) IN (SELECT id FROM tasks))
+ OR (key GLOB 'net_continue:*' AND substr(value,1,instr(value,char(10))-1) IN (SELECT id FROM tasks));
  DROP TABLE task_images;
  DROP TABLE task_outputs;
  DROP TABLE remote_task_items;

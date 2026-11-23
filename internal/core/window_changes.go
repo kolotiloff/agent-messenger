@@ -15,6 +15,9 @@ type WindowChanges struct {
 // WindowChanges reads small committed revisions, including writes made by
 // a worker or coordinator in another process. It never reads a transcript.
 func (s *Store) WindowChanges(ctx context.Context, project, task string) (WindowChanges, error) {
+	if s.split != nil {
+		return splitWindowChanges(ctx, s.db, s.split.open, project, task)
+	}
 	parts, err := readWindowChanges(ctx, s.db, project, task)
 	return WindowChanges{Window: fmt.Sprintf("%d.%d", parts.global, parts.project), Feed: fmt.Sprint(parts.feed)}, err
 }

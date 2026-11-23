@@ -64,6 +64,13 @@ func isCommandActivity(kind string) bool {
 // (its text or a tool action) for the window. Items past the bound are
 // dropped; this never affects verification.
 func (s *Store) AppendTaskRunItem(run, kind, title, text, description string) error {
+	if s.split != nil {
+		project, err := s.storeForRun(run)
+		if err != nil {
+			return err
+		}
+		return project.AppendTaskRunItem(run, kind, title, text, description)
+	}
 	activity := isCommandActivity(kind)
 	if kind != "text" && kind != "tool" && !activity {
 		return fmt.Errorf("%w: unknown item kind", ErrRejected)
@@ -185,7 +192,7 @@ func (s *Store) TaskRemote(task string) (*RemoteComputer, error) { return s.remo
 
 // remoteContact fills in whether the computer that runs a task is out of
 // reach (T-126).
-func remoteContact(tx *sql.Tx, task string, link netLink, out *RemoteComputer) error {
+func remoteContact(machine, tx *sql.Tx, task string, link netLink, out *RemoteComputer) error {
 	var name, remoteTask sql.NullString
 	var created, updated string
 	var cancel int
@@ -199,10 +206,10 @@ func remoteContact(tx *sql.Tx, task string, link netLink, out *RemoteComputer) e
 	}
 	out.Silent = (out.Unaccepted && older(created, unacceptedAfter)) || (cancel != 0 && older(updated, cancelAnswerWait))
 	var broker string
-	if err := tx.QueryRow(`SELECT COALESCE((SELECT value FROM meta WHERE key='net_broker'),'')`).Scan(&broker); err != nil {
+	if err := machine.QueryRow(`SELECT COALESCE((SELECT value FROM meta WHERE key='net_broker'),'')`).Scan(&broker); err != nil {
 		return err
 	}
-	peer, found, err := netPeer(tx, link.peer)
+	peer, found, err := netPeer(machine, link.peer)
 	if err != nil {
 		return err
 	}
@@ -234,17 +241,17 @@ func remoteContact(tx *sql.Tx, task string, link netLink, out *RemoteComputer) e
 
 func (s *Store) remoteOf(task string) (*RemoteComputer, error) {
 	var out *RemoteComputer
-	err := s.tx(func(tx *sql.Tx) error {
+	err := s.taskTx(task, func(machine, tx *sql.Tx) error {
 		link, err := taskLink(tx, task)
 		if err != nil {
 			return err
 		}
 		switch {
 		case link.remote != nil:
-			out = &RemoteComputer{ID: link.remote.peer, Name: peerName(tx, link.remote.peer)}
-			return remoteContact(tx, task, *link.remote, out)
+			out = &RemoteComputer{ID: link.remote.peer, Name: peerName(machine, link.remote.peer)}
+			return remoteContact(machine, tx, task, *link.remote, out)
 		case link.origin != nil:
-			out = &RemoteComputer{ID: link.origin.peer, Name: peerName(tx, link.origin.peer), From: true}
+			out = &RemoteComputer{ID: link.origin.peer, Name: peerName(machine, link.origin.peer), From: true}
 		}
 		return nil
 	})
@@ -525,6 +532,13 @@ type TaskFeed struct {
 
 // TaskFeed builds the feed of one task.
 func (s *Store) TaskFeed(id string) (TaskFeed, error) {
+	if s.split != nil {
+		project, err := s.storeForTask(id)
+		if err != nil {
+			return TaskFeed{}, err
+		}
+		return project.TaskFeed(id)
+	}
 	var f TaskFeed
 	t, err := s.TaskByID(id)
 	if err != nil {

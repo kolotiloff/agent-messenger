@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -88,8 +89,12 @@ INSERT OR IGNORE INTO control(id, paused) VALUES (1, 0);
 
 // Store is the durable queue and session registry for one user client.
 type Store struct {
-	db   *sql.DB
-	gone WorkerGone
+	db    *sql.DB
+	gone  WorkerGone
+	split *projectLayout
+	// A scoped task store reads machine policy from the catalog's owner.
+	// It does not own or close that connection.
+	machine *sql.DB
 }
 
 type Message struct {
@@ -266,6 +271,9 @@ func (s *Store) Close() error {
 	}
 	err := s.db.Close()
 	s.db = nil
+	if s.split != nil {
+		err = errors.Join(err, s.split.close())
+	}
 	return err
 }
 

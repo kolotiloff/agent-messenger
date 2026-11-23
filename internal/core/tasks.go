@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 	"unicode"
@@ -735,6 +737,9 @@ func ValidTaskModel(name string) bool { _, _, err := modelcatalog.Split(name); r
 // network is sent to it (network.go). It returns the task ID and whether it
 // was newly created.
 func (s *Store) StartTask(r StartTaskRequest) (string, bool, error) {
+	if s.split != nil {
+		return startSplitTask(context.Background(), s.db, s.split.open, r)
+	}
 	r, err := normalizeStartTask(r)
 	if err != nil {
 		return "", false, err
@@ -975,6 +980,13 @@ func openQuestion(tx *sql.Tx, task string) (*TaskQuestion, error) {
 
 // TaskByID reads one task with its open question.
 func (s *Store) TaskByID(id string) (Task, error) {
+	if s.split != nil {
+		project, err := s.storeForTask(id)
+		if err != nil {
+			return Task{}, err
+		}
+		return project.TaskByID(id)
+	}
 	var t Task
 	err := s.tx(func(tx *sql.Tx) error {
 		var err error
@@ -995,6 +1007,16 @@ func (s *Store) TaskByID(id string) (Task, error) {
 func (s *Store) Tasks(project string, limit int) ([]Task, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 200
+	}
+	if s.split != nil {
+		if project != "" {
+			store, err := s.projectStore(project)
+			if err != nil {
+				return nil, err
+			}
+			return store.Tasks(project, limit)
+		}
+		return s.splitTasks(limit)
 	}
 	var out []Task
 	err := s.tx(func(tx *sql.Tx) error {
@@ -1022,6 +1044,30 @@ func (s *Store) Tasks(project string, limit int) ([]Task, error) {
 		return nil
 	})
 	return out, err
+}
+
+func (s *Store) splitTasks(limit int) ([]Task, error) {
+	files, err := splitProjectFiles(context.Background(), s.db)
+	if err != nil {
+		return nil, err
+	}
+	var tasks []Task
+	for _, file := range files {
+		db, err := s.split.open(file)
+		if err != nil {
+			return nil, err
+		}
+		inProject, err := (&Store{db: db}).Tasks("", limit)
+		if err != nil {
+			return nil, err
+		}
+		tasks = append(tasks, inProject...)
+		sort.SliceStable(tasks, func(i, j int) bool {
+			return tasks[i].CreatedAt > tasks[j].CreatedAt
+		})
+		tasks = tasks[:min(len(tasks), limit)]
+	}
+	return tasks, nil
 }
 
 const runColumns = `id,task_id,ordinal,kind,input,receipt,state,COALESCE(reservation,''),COALESCE(pid,0),COALESCE(pgid,0),COALESCE(start_token,''),COALESCE(boot_id,''),COALESCE(disposition,''),COALESCE(disposition_text,''),detail`
@@ -1055,6 +1101,13 @@ func (s *Store) TaskRuns(task string) ([]TaskRun, error) {
 
 // TaskRun reads one run.
 func (s *Store) TaskRun(id string) (TaskRun, error) {
+	if s.split != nil {
+		project, err := s.storeForRun(id)
+		if err != nil {
+			return TaskRun{}, err
+		}
+		return project.TaskRun(id)
+	}
 	var r TaskRun
 	err := s.tx(func(tx *sql.Tx) error {
 		var err error
@@ -1067,6 +1120,9 @@ func (s *Store) TaskRun(id string) (TaskRun, error) {
 // NextTaskRunIntents lists runs that are recorded but not launched, oldest
 // first. Reading them never launches anything.
 func (s *Store) NextTaskRunIntents(limit int) ([]string, error) {
+	if s.split != nil {
+		return s.nextSplitRunIntents(limit)
+	}
 	var out []string
 	err := s.tx(func(tx *sql.Tx) error {
 		// A task with a lock waits while an earlier open task with the same
@@ -1181,6 +1237,24 @@ func failureNote(reason, reset string) string {
 // BeginTaskRun is committed BEFORE the reservation and exec. From here a
 // crash leaves the run interrupted; it is never launched again.
 func (s *Store) BeginTaskRun(run, reservation string) (TaskRun, Task, error) {
+	if s.split != nil {
+		ctx := context.Background()
+		store, err := s.storeForRun(run)
+		if err != nil {
+			return TaskRun{}, Task{}, err
+		}
+		var project string
+		if err := store.db.QueryRow("SELECT project FROM project_snapshot").Scan(&project); err != nil {
+			return TaskRun{}, Task{}, err
+		}
+		r, t, err := beginSplitLocalRun(ctx, s.db, s.split.open, project, run, reservation)
+		if err == nil {
+			s.split.mu.Lock()
+			s.split.runs[run] = projectMigrationFile(project)
+			s.split.mu.Unlock()
+		}
+		return r, t, err
+	}
 	var r TaskRun
 	var t Task
 	err := s.tx(func(tx *sql.Tx) error {
@@ -1256,6 +1330,17 @@ var ErrCancelled = errors.New("task cancelled")
 // TaskRunNotStarted is only for a definite OS refusal before the executable
 // ran. The task fails; nothing is launched again automatically.
 func (s *Store) TaskRunNotStarted(run, reason string) error {
+	if s.split != nil {
+		project, err := s.storeForRun(run)
+		if err != nil {
+			return err
+		}
+		err = project.TaskRunNotStarted(run, reason)
+		if err == nil {
+			s.split.forgetRun(run)
+		}
+		return err
+	}
 	return s.tx(func(tx *sql.Tx) error {
 		r, t, err := runTask(tx, run)
 		if err != nil {
@@ -1277,6 +1362,13 @@ func (s *Store) TaskRunNotStarted(run, reason string) error {
 // RecordTaskRunProcess stores the observed process. Tools stay closed until
 // the conversation identity is bound.
 func (s *Store) RecordTaskRunProcess(run string, obs platform.Observation) error {
+	if s.split != nil {
+		project, err := s.storeForRun(run)
+		if err != nil {
+			return err
+		}
+		return project.RecordTaskRunProcess(run, obs)
+	}
 	if obs.PID <= 0 || obs.PGID <= 1 || obs.StartToken == "" || obs.BootID == "" {
 		return fmt.Errorf("%w: incomplete process observation", ErrRejected)
 	}
@@ -1292,6 +1384,13 @@ func (s *Store) RecordTaskRunProcess(run string, obs platform.Observation) error
 // SetTaskRunModel records the model a run's CLI reported at its start
 // (T-108). It is shown to people only and decides nothing.
 func (s *Store) SetTaskRunModel(run, model string) error {
+	if s.split != nil {
+		project, err := s.storeForRun(run)
+		if err != nil {
+			return err
+		}
+		return project.SetTaskRunModel(run, model)
+	}
 	model = strings.TrimSpace(model)
 	if model == "" || len(model) > 120 {
 		return nil
@@ -1331,6 +1430,13 @@ func (s *Store) SetTaskRunModel(run, model string) error {
 // and every resumed run must match the recorded ID exactly. A new Codex task
 // binds the first ID once; an ID already bound to another task is refused.
 func (s *Store) BindTaskSession(run, session string) error {
+	if s.split != nil {
+		project, err := s.storeForRun(run)
+		if err != nil {
+			return err
+		}
+		return project.BindTaskSession(run, session)
+	}
 	if session == "" || len(session) > 128 || strings.TrimSpace(session) != session {
 		return fmt.Errorf("%w: invalid conversation id", ErrRejected)
 	}
@@ -1582,6 +1688,13 @@ type RunEvidence struct {
 // after its report and only named leftovers remain (D-147), so the caller may
 // retire the reservation.
 func (s *Store) FinishTaskRun(run string, ev RunEvidence) (string, error) {
+	if s.split != nil {
+		project, err := s.storeForRun(run)
+		if err != nil {
+			return "", err
+		}
+		return project.FinishTaskRun(run, ev)
+	}
 	var final string
 	err := s.tx(func(tx *sql.Tx) error {
 		r, t, err := runTask(tx, run)
@@ -1768,8 +1881,8 @@ func publishDisposition(tx *sql.Tx, t Task, r TaskRun) error {
 // question must be the newest open one and addressed to by (coordinator or
 // owner); a late or stale answer is refused.
 func (s *Store) AnswerTask(task, question, opID, text, by string, senders ...MessageSender) error {
-	return s.tx(func(tx *sql.Tx) error {
-		return answerTask(tx, task, question, opID, text, by, false, false, senders...)
+	return s.taskTx(task, func(machine, tx *sql.Tx) error {
+		return answerTask(machine, tx, task, question, opID, text, by, false, false, senders...)
 	})
 }
 
@@ -1782,7 +1895,7 @@ func (s *Store) AnswerTask(task, question, opID, text, by string, senders ...Mes
 // maxNetOpID bounds an op id built for a message from another computer.
 const maxNetOpID = 1024
 
-func answerTask(tx *sql.Tx, task, question, opID, text, by string, fromNetwork, ownerOver bool, senders ...MessageSender) error {
+func answerTask(machine, tx *sql.Tx, task, question, opID, text, by string, fromNetwork, ownerOver bool, senders ...MessageSender) error {
 	sender := coordinatorSender(by, senders)
 	text = strings.TrimSpace(text)
 	// An answer from the computer that started the task carries an op id
@@ -1846,7 +1959,7 @@ func answerTask(tx *sql.Tx, task, question, opID, text, by string, fromNetwork, 
 			return fmt.Errorf("%w: this operation id was used for another answer", ErrRejected)
 		}
 		if link.remote != nil {
-			return answerRemoteTask(tx, t, *link.remote, question, opID, text, by, sender)
+			return answerRemoteTask(machine, tx, t, *link.remote, question, opID, text, by, sender)
 		}
 		if t.SessionID == "" {
 			return fmt.Errorf("%w: no recorded conversation to resume", ErrRejected)
@@ -1898,21 +2011,21 @@ func (s *Store) ContinueTaskChecked(task, opID, text, by string, gone WorkerGone
 	if by != AudienceCoordinator {
 		return fmt.Errorf("%w: only the coordinator continues a task", ErrRejected)
 	}
-	return s.tx(func(tx *sql.Tx) error {
+	return s.taskTx(task, func(machine, tx *sql.Tx) error {
 		link, err := taskLink(tx, task)
 		if err != nil {
 			return err
 		}
 		if link.remote != nil {
-			return continueRemoteTask(tx, task, *link.remote, opID, text, coordinatorSender(by, senders))
+			return continueRemoteTask(machine, tx, task, *link.remote, opID, text, coordinatorSender(by, senders))
 		}
-		return continueTaskTx(tx, task, opID, text, gone, false, coordinatorSender(by, senders))
+		return continueTaskTx(machine, tx, task, opID, text, gone, false, coordinatorSender(by, senders))
 	})
 }
 
 // continueTaskTx continues a task that runs on this computer. fromNet is
 // set when the computer that started it asked (T-113).
-func continueTaskTx(tx *sql.Tx, task, opID, text string, gone WorkerGone, fromNet bool, sender MessageSender) error {
+func continueTaskTx(machine, tx *sql.Tx, task, opID, text string, gone WorkerGone, fromNet bool, sender MessageSender) error {
 	var oldTask, oldInput string
 	err := tx.QueryRow(`SELECT task_id,input FROM task_runs WHERE op_id=?`, opID).Scan(&oldTask, &oldInput)
 	if err == nil {
@@ -1951,7 +2064,7 @@ func continueTaskTx(tx *sql.Tx, task, opID, text string, gone WorkerGone, fromNe
 		return fmt.Errorf("%w: no recorded conversation to continue; start a new task", ErrRejected)
 	}
 	var paused int
-	if err := tx.QueryRow(`SELECT paused FROM computer_agents WHERE computer=? AND provider=?`, t.Computer, t.Provider).Scan(&paused); err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err := machine.QueryRow(`SELECT paused FROM computer_agents WHERE computer=? AND provider=?`, t.Computer, t.Provider).Scan(&paused); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
 	if paused != 0 {
@@ -2087,16 +2200,16 @@ func closeStuckRuns(tx *sql.Tx, task string, gone WorkerGone) (string, error) {
 // It returns the resulting state.
 func (s *Store) CancelTask(task string) (string, error) {
 	var state string
-	err := s.tx(func(tx *sql.Tx) error {
+	err := s.taskTx(task, func(machine, tx *sql.Tx) error {
 		var err error
-		state, err = cancelTask(tx, task, s.gone)
+		state, err = cancelTask(machine, tx, task, s.gone)
 		return err
 	})
 	return state, err
 }
 
 // cancelTask cancels in tx and returns the resulting state.
-func cancelTask(tx *sql.Tx, task string, gone WorkerGone) (string, error) {
+func cancelTask(machine, tx *sql.Tx, task string, gone WorkerGone) (string, error) {
 	var state string
 	err := func() error {
 		t, err := scanTask(tx.QueryRow(`SELECT `+taskColumns+` FROM tasks WHERE id=?`, task).Scan)
@@ -2110,7 +2223,7 @@ func cancelTask(tx *sql.Tx, task string, gone WorkerGone) (string, error) {
 		if link, err := taskLink(tx, task); err != nil {
 			return err
 		} else if link.remote != nil && t.State != "cancelled" {
-			state, err = cancelRemoteTask(tx, t, *link.remote)
+			state, err = cancelRemoteTask(machine, tx, t, *link.remote)
 			return err
 		}
 		switch t.State {
@@ -2170,6 +2283,15 @@ func cancelTask(tx *sql.Tx, task string, gone WorkerGone) (string, error) {
 
 // CancelRequestedRuns lists launched runs whose task asked to be cancelled.
 func (s *Store) CancelRequestedRuns() ([]TaskRun, error) {
+	if s.split != nil {
+		var out []TaskRun
+		err := s.eachProjectStore(func(project *Store) error {
+			list, err := project.CancelRequestedRuns()
+			out = append(out, list...)
+			return err
+		})
+		return out, err
+	}
 	var out []TaskRun
 	err := s.tx(func(tx *sql.Tx) error {
 		rows, err := tx.Query(`SELECT r.id FROM task_runs r JOIN tasks t ON t.id=r.task_id WHERE t.cancel_requested=1 AND r.state='running'`)
@@ -2240,6 +2362,9 @@ func interruptInheritedTaskRuns(tx *sql.Tx) error {
 
 // InterruptInheritedTaskRuns marks the previous client's runs interrupted.
 func (s *Store) InterruptInheritedTaskRuns() error {
+	if s.split != nil {
+		return s.eachProjectStore(func(project *Store) error { return project.InterruptInheritedTaskRuns() })
+	}
 	return s.tx(interruptInheritedTaskRuns)
 }
 
@@ -2252,7 +2377,11 @@ func (s *Store) TaskEvents(project, audience string, after int64, limit int) ([]
 	}
 	var out []TaskEvent
 	cursor := after
-	err := s.tx(func(tx *sql.Tx) error {
+	scoped, err := s.projectStore(project)
+	if err != nil {
+		return nil, cursor, err
+	}
+	err = scoped.tx(func(tx *sql.Tx) error {
 		rows, err := tx.Query(`SELECT seq,task_id,kind,text,COALESCE(question_id,''),created_at FROM task_events WHERE project=? AND audience=? AND seq>? ORDER BY seq LIMIT ?`, project, audience, after, limit)
 		if err != nil {
 			return err
@@ -2276,16 +2405,24 @@ func (s *Store) TaskEvents(project, audience string, after int64, limit int) ([]
 // update bumps tasks.version). It lets the coordinator skip an unchanged list
 // (T-032).
 func (s *Store) TaskListVersion(project string) (string, error) {
+	scoped, err := s.projectStore(project)
+	if err != nil {
+		return "", err
+	}
 	var seq sql.NullInt64
 	var count, sum int64
-	err := s.db.QueryRow(`SELECT (SELECT MAX(seq) FROM task_events WHERE project=?), COUNT(*), COALESCE(SUM(version),0) FROM tasks WHERE project=?`, project, project).Scan(&seq, &count, &sum)
+	err = scoped.db.QueryRow(`SELECT (SELECT MAX(seq) FROM task_events WHERE project=?), COUNT(*), COALESCE(SUM(version),0) FROM tasks WHERE project=?`, project, project).Scan(&seq, &count, &sum)
 	return fmt.Sprintf("%d.%d.%d", seq.Int64, count, sum), err
 }
 
 // LatestTaskEvent returns the newest event sequence number of a project.
 func (s *Store) LatestTaskEvent(project string) (int64, error) {
+	scoped, err := s.projectStore(project)
+	if err != nil {
+		return 0, err
+	}
 	var seq sql.NullInt64
-	err := s.db.QueryRow(`SELECT MAX(seq) FROM task_events WHERE project=?`, project).Scan(&seq)
+	err = scoped.db.QueryRow(`SELECT MAX(seq) FROM task_events WHERE project=?`, project).Scan(&seq)
 	return seq.Int64, err
 }
 
@@ -2293,6 +2430,17 @@ func (s *Store) LatestTaskEvent(project string) (int64, error) {
 // removed it from the registry. It is only for runs whose exit and empty
 // group were observed.
 func (s *Store) TaskRunReservationRetired(run string) error {
+	if s.split != nil {
+		project, err := s.storeForRun(run)
+		if err != nil {
+			return err
+		}
+		err = project.TaskRunReservationRetired(run)
+		if err == nil {
+			s.split.forgetRun(run)
+		}
+		return err
+	}
 	return s.tx(func(tx *sql.Tx) error {
 		var state string
 		if err := tx.QueryRow(`SELECT state FROM task_runs WHERE id=?`, run).Scan(&state); err != nil {

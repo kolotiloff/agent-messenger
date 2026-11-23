@@ -110,11 +110,22 @@ func writeProjectSnapshot(ctx context.Context, db *sql.DB, project string, withD
 		}
 	}
 	if withDelivery {
+		// A task frame must use the same machine identity after cutover.
+		// Keep only that identity and the continuation records owned by
+		// this project's tasks. Settings and broker cursors stay shared.
+		if _, err := tx.ExecContext(ctx, `CREATE TABLE snapshot.meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+ INSERT INTO snapshot.meta SELECT key,value FROM main.meta
+ WHERE key='computer_id'
+ OR (key GLOB 'net_continue_prev:*' AND substr(key,length('net_continue_prev:')+1) IN (SELECT id FROM snapshot.tasks))
+ OR (key GLOB 'net_continue:*' AND substr(value,1,instr(value,char(10))-1) IN (SELECT id FROM snapshot.tasks));`); err != nil {
+			return fmt.Errorf("copy project delivery metadata: %w", err)
+		}
 		// New project messages start beyond all already allocated legacy
 		// sequence numbers, even when a project had no pending message.
 		if _, err := tx.ExecContext(ctx, `DELETE FROM snapshot.sqlite_sequence WHERE name='net_outbox';
  INSERT INTO snapshot.sqlite_sequence(name,seq)
  VALUES ('net_outbox',COALESCE((SELECT seq FROM main.sqlite_sequence WHERE name='net_outbox'),0));
+ CREATE INDEX IF NOT EXISTS snapshot.task_run_intents ON task_runs(task_id) WHERE state='intent';
  CREATE INDEX IF NOT EXISTS snapshot.net_applied_op ON net_applied(op_id)`); err != nil {
 			return err
 		}

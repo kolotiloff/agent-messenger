@@ -20,6 +20,15 @@ func isProjectResponse(kind string) bool {
 	}
 }
 
+func isProjectRequest(kind string) bool {
+	switch kind {
+	case "answer", "continue", "note", "cancel":
+		return true
+	default:
+		return false
+	}
+}
+
 func applyProjectResponseTx(tx *sql.Tx, from netLink, body netBody, peer string) error {
 	switch body.Kind {
 	case "output":
@@ -28,6 +37,21 @@ func applyProjectResponseTx(tx *sql.Tx, from netLink, body netBody, peer string)
 		return applyImage(tx, from, body)
 	default:
 		return applyReport(tx, from, body, peer)
+	}
+}
+
+func applyProjectRequestTx(machine, tx *sql.Tx, from netLink, m NetIncoming, body netBody, gone WorkerGone) error {
+	switch body.Kind {
+	case "answer":
+		return applyAnswer(machine, tx, from, m.OpID, body)
+	case "continue":
+		return applyContinue(machine, tx, from, body, gone)
+	case "note":
+		return applyNote(machine, tx, from, body)
+	case "cancel":
+		return applyCancel(machine, tx, from, gone)
+	default:
+		return fmt.Errorf("%w: the delivery is not a task request", ErrRejected)
 	}
 }
 
@@ -41,6 +65,15 @@ func applySplitProjectResponse(ctx context.Context, computer *sql.DB, openProjec
 	if !valid || !isProjectResponse(body.Kind) {
 		return fmt.Errorf("%w: this delivery requires the computer's inbox handler", ErrRejected)
 	}
+	return applySplitProjectMessage(ctx, computer, openProject, broker, m, body, nil)
+}
+
+// applySplitProjectMessage applies a routed response or request. Requests
+// are sent by a task's coordinator and must match its recorded origin.
+// A continuation uses the current machine policy while the common writer
+// lock is held. It only records an intent. Dispatch still verifies it.
+func applySplitProjectMessage(ctx context.Context, computer *sql.DB, openProject func(string) (*sql.DB, error), broker string, m NetIncoming, body netBody, gone WorkerGone) error {
+	request := isProjectRequest(body.Kind)
 	common, err := computer.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -51,10 +84,13 @@ func applySplitProjectResponse(ctx context.Context, computer *sql.DB, openProjec
 		return err
 	}
 	if apply {
-		var project, file string
-		err := common.QueryRowContext(ctx, `SELECT r.project,s.file
- FROM task_storage_routes r JOIN project_storage_stage s ON s.project=r.project
- WHERE r.id=? AND r.remote_broker=? AND r.remote_peer=?`, body.Task, broker, m.From).Scan(&project, &file)
+		var task, project, file string
+		where := "r.id=? AND r.remote_broker=? AND r.remote_peer=?"
+		if request {
+			where = "r.origin_task=? AND r.origin_broker=? AND r.origin_peer=?"
+		}
+		err := common.QueryRowContext(ctx, `SELECT r.id,r.project,s.file
+ FROM task_storage_routes r JOIN project_storage_stage s ON s.project=r.project WHERE `+where, body.Task, broker, m.From).Scan(&task, &project, &file)
 		if errors.Is(err, sql.ErrNoRows) {
 			// The route may still need to be restored or rebound. Do not
 			// acknowledge the message on a guess.
@@ -72,7 +108,7 @@ func applySplitProjectResponse(ctx context.Context, computer *sql.DB, openProjec
 		}
 		peer := peerName(common, m.From)
 		from := netLink{broker: broker, peer: m.From, task: body.Task}
-		if err := commitProjectResponse(ctx, db, project, from, m, body, peer); err != nil {
+		if err := commitProjectDelivery(ctx, common, db, task, project, from, m, body, peer, gone); err != nil {
 			return err
 		}
 	}
@@ -82,15 +118,19 @@ func applySplitProjectResponse(ctx context.Context, computer *sql.DB, openProjec
 	return common.Commit()
 }
 
-func commitProjectResponse(ctx context.Context, db *sql.DB, project string, from netLink, m NetIncoming, body netBody, peer string) error {
+func commitProjectDelivery(ctx context.Context, common *sql.Tx, db *sql.DB, task, project string, from netLink, m NetIncoming, body netBody, peer string, gone WorkerGone) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	link := "remote_broker=? AND remote_peer=? AND id=?"
+	if isProjectRequest(body.Kind) {
+		link = "origin_broker=? AND origin_peer=? AND origin_task=?"
+	}
 	var known bool
 	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM tasks
- WHERE id=? AND project=? AND remote_broker=? AND remote_peer=?)`, from.task, project, from.broker, from.peer).Scan(&known); err != nil {
+ WHERE id=? AND project=? AND `+link+`)`, task, project, from.broker, from.peer, from.task).Scan(&known); err != nil {
 		return err
 	}
 	if !known {
@@ -101,7 +141,12 @@ func commitProjectResponse(ctx context.Context, db *sql.DB, project string, from
 		return err
 	}
 	if apply {
-		if err := applyProjectResponseTx(tx, from, body, peer); err != nil {
+		if isProjectRequest(body.Kind) {
+			err = applyProjectRequestTx(common, tx, from, m, body, gone)
+		} else {
+			err = applyProjectResponseTx(tx, from, body, peer)
+		}
+		if err != nil {
 			return err
 		}
 	}

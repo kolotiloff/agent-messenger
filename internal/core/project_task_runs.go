@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 )
 
 // startSplitTask records the task and its launch intent or start message
@@ -128,7 +129,7 @@ func beginSplitLocalRun(ctx context.Context, computer *sql.DB, openProject func(
 	if err != nil {
 		return r, t, err
 	}
-	if t.Project != projectName || t.Computer != self || r.State != "intent" || (t.FromNetwork && r.Kind != "start") {
+	if t.Project != projectName || t.Computer != self || r.State != "intent" {
 		return r, t, fmt.Errorf("%w: the task does not have a local launch intent in this project", ErrRejected)
 	}
 	order, err := splitRouteOrder(ctx, common, t)
@@ -202,7 +203,7 @@ func splitRouteOrder(ctx context.Context, common *sql.Tx, task Task) (int64, err
 	return order, err
 }
 
-func checkSplitTaskResource(ctx context.Context, common, project *sql.Tx, currentFile string, openProject func(string) (*sql.DB, error), task Task, resource string, order int64) error {
+func checkSplitTaskResource(ctx context.Context, common *sql.Tx, project projectFileQuerier, currentFile string, openProject func(string) (*sql.DB, error), task Task, resource string, order int64) error {
 	files, err := splitProjectFiles(ctx, common)
 	if err != nil {
 		return err
@@ -221,6 +222,87 @@ func checkSplitTaskResource(ctx context.Context, common, project *sql.Tx, curren
 		}
 	}
 	return nil
+}
+
+func (s *Store) nextSplitRunIntents(limit int) ([]string, error) {
+	ctx := context.Background()
+	common, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer common.Rollback()
+	files, err := splitProjectFiles(ctx, common)
+	if err != nil {
+		return nil, err
+	}
+	self, err := localComputer(common)
+	if err != nil {
+		return nil, err
+	}
+	type candidate struct {
+		run, at, resource string
+		task              Task
+		order             int64
+	}
+	var eligible []candidate
+	for _, file := range files {
+		db, err := s.split.open(file)
+		if err != nil {
+			return nil, err
+		}
+		rows, err := db.QueryContext(ctx, `SELECT r.id,r.created_at,t.id,t.project,t.created_at,t.resource
+ FROM task_runs r JOIN tasks t ON t.id=r.task_id WHERE r.state='intent' AND t.state='running' AND t.computer=?`, self)
+		if err != nil {
+			return nil, err
+		}
+		var candidates []candidate
+		for rows.Next() {
+			var c candidate
+			c.task.Computer = self
+			if err := rows.Scan(&c.run, &c.at, &c.task.ID, &c.task.Project, &c.task.CreatedAt, &c.resource); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			candidates = append(candidates, c)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		for _, c := range candidates {
+			c.order, err = splitRouteOrder(ctx, common, c.task)
+			if errors.Is(err, ErrRejected) {
+				continue
+			}
+			if err != nil {
+				return nil, err
+			}
+			if c.resource != "" {
+				err := checkSplitTaskResource(ctx, common, db, file, s.split.open, c.task, c.resource, c.order)
+				if errors.Is(err, ErrRejected) {
+					continue
+				}
+				if err != nil {
+					return nil, err
+				}
+			}
+			eligible = append(eligible, c)
+		}
+	}
+	sort.SliceStable(eligible, func(i, j int) bool {
+		if eligible[i].at != eligible[j].at {
+			return eligible[i].at < eligible[j].at
+		}
+		return eligible[i].order < eligible[j].order
+	})
+	if limit >= 0 {
+		eligible = eligible[:min(len(eligible), limit)]
+	}
+	out := make([]string, 0, len(eligible))
+	for _, c := range eligible {
+		out = append(out, c.run)
+	}
+	return out, nil
 }
 
 func checkResourceInProject(ctx context.Context, common *sql.Tx, read projectFileQuerier, task Task, resource string, order int64) error {

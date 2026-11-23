@@ -264,13 +264,13 @@ func (s *Supervisor) sendOutbox(ctx context.Context, n broker.Network) string {
 				s.net.mu.Lock()
 				delete(s.net.fullNoted, m.To)
 				s.net.mu.Unlock()
-				err = s.store.NetSent(m.Seq)
+				err = s.store.NetDeliverySent(m)
 			case errors.Is(err, broker.ErrRecipient), errors.Is(err, broker.ErrBadMessage):
 				// Sending it again now cannot help: a reply about another
 				// computer's task waits for that computer (T-146); anything
 				// else is dropped, never retried.
 				journal.Printf("not delivered (a task reply waits for that computer, anything else is dropped): to %s: %s: %v", s.peerName(m.To), desc, err)
-				err = s.store.NetUndeliverable(m.Seq)
+				err = s.store.NetDeliveryRefused(m)
 			case errors.Is(err, broker.ErrNetworkChanged):
 				return ""
 			case errors.Is(err, broker.ErrMailboxFull):

@@ -158,8 +158,13 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 		s.runNotStarted(runID, task.ID, "messenger executable not found")
 		return
 	}
+	taskDB, err := s.store.WorkerTaskDatabase(filepath.Join(s.root, dbName), task.ID)
+	if err != nil {
+		s.runNotStarted(runID, task.ID, "worker database not available: "+err.Error())
+		return
+	}
 	spec := adapters.TaskRunSpec{
-		Provider: task.Provider, CLI: task.CLI, Messenger: exe, DB: filepath.Join(s.root, dbName),
+		Provider: task.Provider, CLI: task.CLI, Messenger: exe, DB: taskDB,
 		RunID: run.ID, Receipt: run.Receipt, Session: task.SessionID, Resume: run.Kind == "answer" || run.Kind == "continue" || run.Kind == "note", Profile: task.Profile, Model: task.Model, FullAccess: task.FullAccess,
 	}
 	args, err := adapters.TaskArgs(spec)

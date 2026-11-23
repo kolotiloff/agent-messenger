@@ -51,7 +51,7 @@ func TestSplitWorkerCommitsReportAndDeliveryInItsProject(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer worker.Close()
-	// Exercise reinitialization of the connection-local machine identity.
+	// Exercise fetching the persisted identity on a fresh connection.
 	worker.db.SetMaxIdleConns(0)
 	if _, err := worker.ReadTask(run.ID, run.Receipt, false); !errors.Is(err, ErrRejected) {
 		t.Fatalf("receipt opened before process observation: %v", err)
