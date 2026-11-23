@@ -597,3 +597,7 @@ On Windows, the update relaunch and the installer's handoff to the installed app
 ## D-182 — Stage project data before switching the live queue (T-258)
 
 2026-11-23, owner requested a database per project and a database for the computer's common state. Use a project-scoped SQLite snapshot as the first inspectable migration component. A snapshot contains the selected project's history and has a format marker that prevents ordinary queue startup. It leaves the computer's existing queue intact. Live migration, network delivery and the archive workflow are tracked in PROJECT_STORAGE.md. D-066 remains in effect until the archive lifecycle is implemented.
+
+## D-184 — Start broker write transactions before reading mailbox quotas (T-262)
+
+2026-11-23, concurrent mailbox sends reproduced SQLite error 517 on the 0.95 broker. Begin broker write transactions with `BEGIN IMMEDIATE`, so contention waits at transaction start under the existing busy timeout. Keep the quota checks, duplicate check and insert together and preserve the existing operation IDs and delivery rules.
