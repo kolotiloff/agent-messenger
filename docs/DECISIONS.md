@@ -601,3 +601,7 @@ On Windows, the update relaunch and the installer's handoff to the installed app
 ## D-184 — Start broker write transactions before reading mailbox quotas (T-262)
 
 2026-11-23, concurrent mailbox sends reproduced SQLite error 517 on the 0.95 broker. Begin broker write transactions with `BEGIN IMMEDIATE`, so contention waits at transaction start under the existing busy timeout. Keep the quota checks, duplicate check and insert together and preserve the existing operation IDs and delivery rules.
+
+## D-185 — Finish revision reads and discard expired SQLite connections (T-263)
+
+2026-11-23, a Mac running 0.95 repeatedly returned SQLite 517 while its legacy database remained active. The pinned SQLite driver can abandon live rows when interrupted while returning a result, leaving a stale WAL snapshot in a persistent pool. Keep revision reads cancellable while acquiring a connection, then finish the indexed query before returning the connection. For store transactions, discard a connection reporting 517 after rollback. Retry once only when `BEGIN` failed, before running any operation. If the first window snapshot fails, show that the projects are unavailable. Do not change migration, session ownership or receipt rules.
