@@ -102,10 +102,21 @@ func writeProjectSnapshot(ctx context.Context, db *sql.DB, project string, withD
 		tables = append(tables, struct{ name, where string }{
 			"net_outbox", "seq IN (SELECT seq FROM (" + migrationOutboxRoutes + ") WHERE project=?)",
 		})
+		tables = append(tables, struct{ name, where string }{"net_applied", "0"})
 	}
 	for _, table := range tables {
 		if err := copyProjectTable(ctx, tx, table.name, table.where, project); err != nil {
 			return fmt.Errorf("copy project table %s: %w", table.name, err)
+		}
+	}
+	if withDelivery {
+		// New project messages start beyond all already allocated legacy
+		// sequence numbers, even when a project had no pending message.
+		if _, err := tx.ExecContext(ctx, `DELETE FROM snapshot.sqlite_sequence WHERE name='net_outbox';
+ INSERT INTO snapshot.sqlite_sequence(name,seq)
+ VALUES ('net_outbox',COALESCE((SELECT seq FROM main.sqlite_sequence WHERE name='net_outbox'),0));
+ CREATE INDEX snapshot.net_applied_op ON net_applied(op_id)`); err != nil {
+			return err
 		}
 	}
 	if _, err := tx.ExecContext(ctx, `CREATE TABLE snapshot.project_snapshot (

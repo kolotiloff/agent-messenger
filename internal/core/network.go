@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -793,6 +794,10 @@ func (s *Store) NetPending(broker string, limit int) ([]NetOutgoing, error) {
 // in skip, so a computer whose mailbox is full cannot hold back the
 // messages to the others behind its own (T-137).
 func (s *Store) NetPendingExcept(broker string, limit int, skip []string) ([]NetOutgoing, error) {
+	return pendingNetMessages(context.Background(), s.db, broker, limit, skip)
+}
+
+func pendingNetMessages(ctx context.Context, db *sql.DB, broker string, limit int, skip []string) ([]NetOutgoing, error) {
 	query := `SELECT seq,recipient,op_id,body FROM net_outbox WHERE broker=?`
 	args := []any{broker}
 	if len(skip) > 0 {
@@ -802,7 +807,7 @@ func (s *Store) NetPendingExcept(broker string, limit int, skip []string) ([]Net
 		}
 	}
 	args = append(args, limit)
-	rows, err := s.db.Query(query+` ORDER BY seq LIMIT ?`, args...)
+	rows, err := db.QueryContext(ctx, query+` ORDER BY seq LIMIT ?`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -962,33 +967,15 @@ func (s *Store) NetCursor(broker string) (int64, error) {
 // task of this computer is recorded and ignored.
 func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 	return s.tx(func(tx *sql.Tx) error {
-		cursor := m.Seq
-		if old, err := metaValue(tx, "net_cursor:"+broker); err != nil {
-			return err
-		} else if n := atoi64(old); n > cursor {
-			cursor = n
-		}
-		if err := setMeta(tx, "net_cursor:"+broker, fmt.Sprint(cursor)); err != nil {
+		if err := advanceNetCursor(tx, broker, m.Seq); err != nil {
 			return err
 		}
-		// T-132: a message re-sent through a new network after the old one
-		// may already have delivered it carries the same op id; it is
-		// applied once whatever network and sender id it came with.
-		var seen int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM net_applied WHERE op_id=?`, m.OpID).Scan(&seen); err != nil {
+		apply, err := claimNetDelivery(tx, broker, m)
+		if err != nil || !apply {
 			return err
 		}
-		res, err := tx.Exec(`INSERT INTO net_applied(broker,sender,op_id,applied_at) VALUES (?,?,?,?) ON CONFLICT DO NOTHING`, broker, m.From, m.OpID, now())
-		if err != nil {
-			return err
-		}
-		if n, _ := res.RowsAffected(); n == 0 || seen > 0 {
-			return nil
-		}
-		var b netBody
-		// A message whose ids could not travel back is ignored, so a reply
-		// to it can never block this computer's outbox.
-		if json.Unmarshal(m.Body, &b) != nil || !netRef.MatchString(b.Task) || (b.Question != "" && !netRef.MatchString(b.Question)) {
+		b, valid := decodeNetIncoming(m)
+		if !valid {
 			return nil
 		}
 		from := netLink{broker: broker, peer: m.From, task: b.Task}
@@ -996,6 +983,9 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 			if err := rebindComputer(tx, c, broker, m.From); err != nil {
 				return err
 			}
+		}
+		if isProjectResponse(b.Kind) {
+			return applyProjectResponseTx(tx, from, b, peerName(tx, m.From))
 		}
 		switch b.Kind {
 		case "start":
@@ -1012,8 +1002,6 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 			return applyNote(tx, from, b)
 		case "cancel":
 			return applyCancel(tx, from, s.gone)
-		case "accepted", "refused", "event", "answer_refused", "continue_refused", "note_refused", "progress", "ran_model":
-			return applyReport(tx, from, b)
 		case "log_request":
 			return applyLogRequest(tx, from, b)
 		case "log":
@@ -1026,13 +1014,44 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 			return applyUpdateRequest(tx, from, b)
 		case "update":
 			return applyUpdateReply(tx, from, b)
-		case "output":
-			return applyOutput(tx, from, b)
-		case "image":
-			return applyImage(tx, from, b)
 		}
 		return nil
 	})
+}
+
+// advanceNetCursor acknowledges a broker sequence after the caller has
+// accepted responsibility for applying it. It never moves backwards.
+func advanceNetCursor(tx *sql.Tx, broker string, seq int64) error {
+	key := "net_cursor:" + broker
+	old, err := metaValue(tx, key)
+	if err != nil {
+		return err
+	}
+	return setMeta(tx, key, fmt.Sprint(max(seq, atoi64(old))))
+}
+
+// claimNetDelivery is committed together with the change this message
+// causes. The global operation ID also covers a resend after a peer or
+// broker changes (T-132).
+func claimNetDelivery(tx *sql.Tx, broker string, m NetIncoming) (bool, error) {
+	var seen bool
+	if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM net_applied WHERE op_id=?)`, m.OpID).Scan(&seen); err != nil {
+		return false, err
+	}
+	res, err := tx.Exec(`INSERT INTO net_applied(broker,sender,op_id,applied_at) VALUES (?,?,?,?) ON CONFLICT DO NOTHING`, broker, m.From, m.OpID, now())
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n != 0 && !seen, err
+}
+
+func decodeNetIncoming(m NetIncoming) (netBody, bool) {
+	var b netBody
+	// Ignore IDs that cannot travel back in a reply.
+	valid := json.Unmarshal(m.Body, &b) == nil && netRef.MatchString(b.Task) &&
+		(b.Question == "" || netRef.MatchString(b.Question))
+	return b, valid
 }
 
 func atoi64(s string) int64 {
@@ -1182,7 +1201,7 @@ var taskStates = map[string]bool{"running": true, "waiting_coordinator": true, "
 
 // applyReport applies a message from the computer that runs one of this
 // computer's tasks.
-func applyReport(tx *sql.Tx, from netLink, b netBody) error {
+func applyReport(tx *sql.Tx, from netLink, b netBody, name string) error {
 	t, err := scanTask(tx.QueryRow(`SELECT `+taskColumns+` FROM tasks WHERE id=? AND remote_broker=? AND remote_peer=?`, from.task, from.broker, from.peer).Scan)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
@@ -1197,7 +1216,6 @@ func applyReport(tx *sql.Tx, from netLink, b netBody) error {
 		_, err := tx.Exec(`UPDATE tasks SET ran_model=? WHERE id=?`, b.Model, t.ID)
 		return err
 	}
-	name := peerName(tx, from.peer)
 	switch b.Kind {
 	case "progress":
 		// A line of the worker's progress, for the window only (D-055).

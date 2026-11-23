@@ -20,6 +20,7 @@ const (
 	migrationBackupFile   = "legacy-backup.sqlite"
 	migrationComputerFile = "computer.sqlite"
 	migrationManifestFile = "manifest.json"
+	migrationLayoutFormat = 2
 )
 
 // A local task ID is recorded on outgoing task frames, except the acceptance
@@ -87,7 +88,7 @@ func StageProjectMigration(ctx context.Context, source, output string) error {
 	if err != nil {
 		return err
 	}
-	manifest := projectMigrationManifest{Format: 1, Backup: migrationBackupFile, Computer: migrationComputerFile, Projects: projects, ComputerPending: totalPending}
+	manifest := projectMigrationManifest{Format: migrationLayoutFormat, Backup: migrationBackupFile, Computer: migrationComputerFile, Projects: projects, ComputerPending: totalPending}
 	for _, project := range projects {
 		destination := filepath.Join(scratch, project.File)
 		if err := snapshotProjectDatabase(ctx, backup, project.Name, destination, true); err != nil {
@@ -289,7 +290,7 @@ func VerifyProjectMigration(ctx context.Context, dir string) error {
 	if err := json.Unmarshal(raw, &manifest); err != nil {
 		return err
 	}
-	if manifest.Format != 1 || manifest.Backup != migrationBackupFile || manifest.Computer != migrationComputerFile {
+	if (manifest.Format != 1 && manifest.Format != migrationLayoutFormat) || manifest.Backup != migrationBackupFile || manifest.Computer != migrationComputerFile {
 		return fmt.Errorf("unsupported project migration manifest")
 	}
 	for _, project := range manifest.Projects {

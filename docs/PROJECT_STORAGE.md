@@ -26,6 +26,14 @@ Staging takes one SQLite backup so all files agree on a single point in time. It
 
 No worker is launched and the live database keeps all history and pending messages. Archive and staged computer files are refused if opened as an ordinary working queue. An interrupted stage can be run again. If a process stopped while publishing files and left an output directory without the manifest, choose a new output directory for the next attempt. The existing output is never reused or silently overwritten.
 
+## Delivery across separate files
+
+The receiver and sender components use format 2 of the prepared layout. The verify command can still check the checksums of earlier format 1 layouts. Inbound responses for already assigned tasks use the verified project route. The response and its operation receipt commit in the project database. The computer's broker cursor advances only after that commit. If the process restarts between commits, the replay finds the project receipt and advances the cursor without repeating the result. An unresolved route stops the advance. The existing single-database receiver uses the same report and deduplication code.
+
+The staged outbox keeps the old queue order and starts new local sequences beyond the previous high-water mark. The split sender reads the computer and project queues and acknowledges a message by its source database, sequence and operation ID. Coincident sequence numbers in different projects do not cause deletion or duplication.
+
+The integration tests use two real SQLite files and deliberately fail the cursor write after saving a worker's report, then close and reopen the files. They verify one report, no change to the other project, and eventual advancement of the broker cursor. Outbox tests verify exact legacy order and acknowledgement of only the selected file. These split receiver and sender components have not been connected to the running supervisor.
+
 ## Live layout
 
 - Keep settings, machine identity, network membership and shared resource ownership in the computer database. The project catalog owns a stable local storage ID and maps the existing network project name to it. The display title can change independently.
@@ -37,6 +45,6 @@ SQLite WAL can commit an individual database atomically. Attaching multiple file
 
 ## Migration and archive behaviour
 
-The staging command already preserves task IDs, mirror and origin links, old operation deduplication, unacknowledged messages and event cursors. The running client still needs storage dispatch and recovery that use those prepared files. Verify project row counts, SQLite integrity, pending delivery routing and that each task still opens with its history. Activate the new storage only after that verification and while old writers are stopped. Keep a recoverable copy of the old data directory. A failed staging pass must leave the old layout usable and a second pass must not duplicate a task or report.
+The staging command already preserves task IDs, mirror and origin links, old operation deduplication, unacknowledged messages and event cursors. The running client still needs activation, task creation and worker-run routing, machine-wide resource ownership integration, and storage dispatch in the supervisor. Verify project row counts, SQLite integrity, pending delivery routing and that each task still opens with its history. Activate the new storage only after that verification and while old writers are stopped. Keep a recoverable copy of the old data directory. A failed staging pass must leave the old layout usable and a second pass must not duplicate a task or report.
 
-Keep ordinary removal reversible by archiving the project history after its tasks and pending deliveries settle. Recover the archive on reopen. Permanent deletion of the archive is a separate owner action. Live routing, the migration cutover and restore, and the window's archive workflow are pending. Verify a restart during migration, a mixed-version two-computer delivery and an update waiting for work from more than one project.
+Keep ordinary removal reversible by archiving the project history after its tasks and pending deliveries settle. Recover the archive on reopen. Permanent deletion of the archive is a separate owner action. Live supervisor routing, new-assignment admission and peer rebinding across files, migration cutover and restore, and the window's archive workflow are pending. Verify a restart during migration, a mixed-version two-computer delivery and an update waiting for work from more than one project.
