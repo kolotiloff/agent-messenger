@@ -47,24 +47,37 @@ type coordinatorTarget struct {
 }
 
 func (s *Supervisor) coordinatorTarget(project string) (coordinatorTarget, CoordinatorLinkView, bool) {
-	v, err := s.store.WindowView(project, "")
+	projects, err := s.store.Projects()
 	if err != nil {
 		return coordinatorTarget{}, CoordinatorLinkView{State: adapters.LinkUnknown, Detail: err.Error()}, false
 	}
-	if v.Folder == "" {
-		return coordinatorTarget{}, CoordinatorLinkView{State: linkNoFolder}, false
-	}
-	t := coordinatorTarget{folder: v.Folder}
-	for _, a := range v.Agents {
-		switch a.Agent {
-		case "claude":
-			t.cli = a.CLI
-		case "codex":
-			t.codexCLI = a.CLI
-		case "cursor":
-			t.cursorCLI = a.CLI
+	var folder string
+	for _, p := range projects {
+		if project == "" || p.Name == project {
+			folder = p.Folder
+			break
 		}
 	}
+	if folder == "" {
+		return coordinatorTarget{}, CoordinatorLinkView{State: linkNoFolder}, false
+	}
+	agents, err := s.store.ComputerAgents()
+	if err != nil {
+		return coordinatorTarget{}, CoordinatorLinkView{State: adapters.LinkUnknown, Detail: err.Error()}, false
+	}
+	programs := make(map[string]string, len(agents))
+	for _, a := range agents {
+		programs[a.Provider] = a.CLI
+	}
+	return s.coordinatorTargetForFolder(folder, programs)
+}
+
+func (s *Supervisor) coordinatorTargetForFolder(folder string, programs map[string]string) (coordinatorTarget, CoordinatorLinkView, bool) {
+	if folder == "" {
+		return coordinatorTarget{}, CoordinatorLinkView{State: linkNoFolder}, false
+	}
+	t := coordinatorTarget{folder: folder, cli: programs["claude"], codexCLI: programs["codex"], cursorCLI: programs["cursor"]}
+	var err error
 	t.messenger, err = CoordinatorProgram(s.root)
 	if err != nil {
 		return t, CoordinatorLinkView{State: adapters.LinkUnknown, Detail: err.Error()}, false

@@ -114,6 +114,7 @@ CREATE TABLE IF NOT EXISTS task_runs (
  finished_at TEXT,
  UNIQUE (task_id, ordinal)
 );
+CREATE INDEX IF NOT EXISTS task_runs_intent_order ON task_runs(created_at) WHERE state='intent';
 CREATE TABLE IF NOT EXISTS task_questions (
  id TEXT PRIMARY KEY,
  task_id TEXT NOT NULL REFERENCES tasks(id),
@@ -126,6 +127,7 @@ CREATE TABLE IF NOT EXISTS task_questions (
  answered_by TEXT,
  created_at TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS task_questions_open ON task_questions(task_id) WHERE state='open';
 CREATE TABLE IF NOT EXISTS task_owner_notes (
  id TEXT PRIMARY KEY,
  task_id TEXT NOT NULL REFERENCES tasks(id),
@@ -1033,27 +1035,24 @@ func (s *Store) TaskRun(id string) (TaskRun, error) {
 // NextTaskRunIntents lists runs that are recorded but not launched, oldest
 // first. Reading them never launches anything.
 func (s *Store) NextTaskRunIntents(limit int) ([]string, error) {
-	var out []string
-	err := s.tx(func(tx *sql.Tx) error {
-		// A task with a lock waits while an earlier open task with the same
-		// lock is on this computer (T-072).
-		rows, err := tx.Query(`SELECT r.id FROM task_runs r JOIN tasks t ON t.id=r.task_id WHERE r.state='intent' AND t.state='running'
+	// A task with a lock waits while an earlier open task with the same
+	// lock is on this computer (T-072).
+	rows, err := s.db.Query(`SELECT r.id FROM task_runs r JOIN tasks t ON t.id=r.task_id WHERE r.state='intent' AND t.state='running'
  AND NOT (t.resource<>'' AND EXISTS (`+lockHolderQuery+`))
  ORDER BY r.created_at,r.rowid LIMIT ?`, limit)
-		if err != nil {
-			return err
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return out, err
 		}
-		defer rows.Close()
-		for rows.Next() {
-			var id string
-			if err := rows.Scan(&id); err != nil {
-				return err
-			}
-			out = append(out, id)
-		}
-		return rows.Err()
-	})
-	return out, err
+		out = append(out, id)
+	}
+	return out, rows.Err()
 }
 
 func runTask(tx *sql.Tx, run string) (TaskRun, Task, error) {

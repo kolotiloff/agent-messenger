@@ -56,7 +56,9 @@ func (s *Supervisor) WindowView(project string) (any, error) {
 	}
 	out := windowView{WindowView: v, Agents: []windowAgent{}}
 	home, _ := os.UserHomeDir()
+	programs := make(map[string]string, len(v.Agents))
 	for _, a := range v.Agents {
+		programs[a.Agent] = a.CLI
 		trust := adapters.FolderTrust{State: adapters.TrustUnknown}
 		if v.Folder != "" {
 			trust = adapters.CheckFolderTrust(a.Agent, v.Folder, a.Env, home)
@@ -83,12 +85,14 @@ func (s *Supervisor) WindowView(project string) (any, error) {
 	}
 	if v.Project != "" {
 		s.repairStaleCoordinator(v.Project)
-		claude := s.CoordinatorLinkState(v.Project)
-		codex := s.CodexCoordinatorLinkState(v.Project)
-		out.CoordinatorLink = &claude
-		out.CodexLink = &codex
-		cursor := s.CursorCoordinatorLinkState(v.Project)
-		out.CursorLink = &cursor
+		t, state, ok := s.coordinatorTargetForFolder(v.Folder, programs)
+		claude, codex, cursor := state, state, state
+		if ok {
+			claude = s.readCoordinatorLink(v.Project, t)
+			codex = s.readCodexLink(v.Project, t)
+			cursor = s.readCursorLink(v.Project, t)
+		}
+		out.CoordinatorLink, out.CodexLink, out.CursorLink = &claude, &codex, &cursor
 	}
 	return out, nil
 }

@@ -438,16 +438,31 @@ func (b *Broker) register(secret, name string) (string, string, error) {
 func (b *Broker) device(key string) (Device, error) {
 	var d Device
 	var revoked sql.NullString
-	err := b.db.QueryRow(`SELECT id,name,created_at,revoked_at FROM devices WHERE key_hash=?`, hash(key)).Scan(&d.ID, &d.Name, &d.CreatedAt, &revoked)
+	err := b.db.QueryRow(`SELECT id,name,created_at,COALESCE(last_seen,''),revoked_at FROM devices WHERE key_hash=?`, hash(key)).Scan(&d.ID, &d.Name, &d.CreatedAt, &d.LastSeen, &revoked)
 	if errors.Is(err, sql.ErrNoRows) || revoked.Valid {
 		return Device{}, ErrRevoked
 	}
 	if err != nil {
 		return Device{}, err
 	}
-	d.LastSeen = b.now().UTC().Format(time.RFC3339)
-	_, err = b.db.Exec(`UPDATE devices SET last_seen=? WHERE id=?`, d.LastSeen, d.ID)
-	return d, err
+	// Mailbox polling is more frequent than presence reporting. Record contact
+	// once per presence interval instead of syncing a write on every request.
+	now := b.now().UTC()
+	if at, err := time.Parse(time.RFC3339, d.LastSeen); err == nil && !now.Before(at) && now.Sub(at) < PresenceInterval {
+		return d, nil
+	}
+	d.LastSeen = now.Format(time.RFC3339)
+	updated, err := b.db.Exec(`UPDATE devices SET last_seen=? WHERE id=? AND revoked_at IS NULL`, d.LastSeen, d.ID)
+	if err != nil {
+		return Device{}, err
+	}
+	if n, err := updated.RowsAffected(); err != nil || n == 0 {
+		if err != nil {
+			return Device{}, err
+		}
+		return Device{}, ErrRevoked
+	}
+	return d, nil
 }
 
 // OpenInvitations lists the IDs of invitations that can still be used.

@@ -2,6 +2,7 @@ package core
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -187,9 +188,14 @@ func (s *Store) TaskRemote(task string) (*RemoteComputer, error) { return s.remo
 // reach (T-126).
 func remoteContact(tx *sql.Tx, task string, link netLink, out *RemoteComputer) error {
 	var name, remoteTask sql.NullString
-	var created, updated string
+	var created, updated, state, broker string
+	var age sql.NullInt64
+	var peerUpdated, outbox, workers sql.NullString
 	var cancel int
-	if err := tx.QueryRow(`SELECT remote_name,remote_task,created_at,updated_at,cancel_requested FROM tasks WHERE id=?`, task).Scan(&name, &remoteTask, &created, &updated, &cancel); err != nil {
+	if err := tx.QueryRow(`SELECT t.remote_name,t.remote_task,t.created_at,t.updated_at,t.cancel_requested,t.state,
+ COALESCE((SELECT value FROM meta WHERE key='net_broker'),''),p.age,p.updated_at,p.outbox,p.workers
+ FROM tasks t LEFT JOIN net_peers p ON p.peer=? WHERE t.id=?`, link.peer, task).
+		Scan(&name, &remoteTask, &created, &updated, &cancel, &state, &broker, &age, &peerUpdated, &outbox, &workers); err != nil {
 		return err
 	}
 	out.Unaccepted = remoteTask.String == ""
@@ -198,33 +204,38 @@ func remoteContact(tx *sql.Tx, task string, link netLink, out *RemoteComputer) e
 		return err == nil && time.Since(t) > d
 	}
 	out.Silent = (out.Unaccepted && older(created, unacceptedAfter)) || (cancel != 0 && older(updated, cancelAnswerWait))
-	var broker string
-	if err := tx.QueryRow(`SELECT COALESCE((SELECT value FROM meta WHERE key='net_broker'),'')`).Scan(&broker); err != nil {
-		return err
-	}
-	peer, found, err := netPeer(tx, link.peer)
-	if err != nil {
-		return err
-	}
 	if out.Name == link.peer && name.String != "" {
 		out.Name = name.String
 	}
-	if found && peer.Age >= 0 {
-		out.LastSeen = time.Now().UTC().Add(-time.Duration(peer.Age) * time.Second).Format(time.RFC3339)
-	}
-	out.Lost = broker == "" || broker != link.broker || !found || peer.Age < 0 || peer.Age > PeerFresh
-	if !out.Lost {
-		out.Delayed = peer.OutboxDelayedMinutes()
-		var state string
-		if err := tx.QueryRow(`SELECT state FROM tasks WHERE id=?`, task).Scan(&state); err != nil {
-			return err
+	now := time.Now().UTC()
+	peer := NetPeer{Age: int(age.Int64)}
+	if age.Valid && peer.Age >= 0 {
+		if at, err := time.Parse(time.RFC3339Nano, peerUpdated.String); err == nil {
+			peer.Age += int(now.Sub(at) / time.Second)
 		}
-		if peer.Workers != nil && state == "running" && !out.Unaccepted {
+		if peer.Age >= 0 {
+			out.LastSeen = now.Add(-time.Duration(peer.Age) * time.Second).Format(time.RFC3339)
+		}
+	}
+	out.Lost = broker == "" || broker != link.broker || !age.Valid || peer.Age < 0 || peer.Age > PeerFresh
+	if out.Lost {
+		return nil
+	}
+	if outbox.String != "" {
+		var pending NetOutbox
+		if json.Unmarshal([]byte(outbox.String), &pending) == nil {
+			peer.Outbox = &pending
+			out.Delayed = peer.OutboxDelayedMinutes()
+		}
+	}
+	if state == "running" && !out.Unaccepted && workers.String != "" {
+		var live NetWorkers
+		if json.Unmarshal([]byte(workers.String), &live) == nil {
 			out.Worker = "none"
-			for _, r := range peer.Workers.Runs {
+			for _, r := range live.Runs {
 				if r.Task == task {
 					out.Worker = "running"
-					out.WorkerOutputAt = time.Now().UTC().Add(-time.Duration(r.OutputAge+peer.Age) * time.Second).Format(time.RFC3339)
+					out.WorkerOutputAt = now.Add(-time.Duration(r.OutputAge+peer.Age) * time.Second).Format(time.RFC3339)
 				}
 			}
 		}
