@@ -21,15 +21,21 @@ const SchemaVersion = 3
 // client stops before changing anything in it.
 var ErrNewerSchema = errors.New("the data directory was written by a newer Agent Messenger; update this client")
 
-// checkSchemaVersion runs before any other schema statement.
-func checkSchemaVersion(db *sql.DB) error {
+// Check for split storage before switching journal modes or running schema
+// statements. Refusing a staged database must leave its bytes intact.
+func rejectStagedDatabase(db *sql.DB) error {
 	var snapshot bool
-	if err := db.QueryRow(`SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='project_snapshot')`).Scan(&snapshot); err != nil {
+	if err := db.QueryRow(`SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name IN ('project_snapshot','project_storage_stage'))`).Scan(&snapshot); err != nil {
 		return err
 	}
 	if snapshot {
-		return fmt.Errorf("%w: a project history snapshot cannot be used as the Messenger queue", ErrRejected)
+		return fmt.Errorf("%w: a staged project database cannot be used as the Messenger queue", ErrRejected)
 	}
+	return nil
+}
+
+// checkSchemaVersion runs before any other schema statement.
+func checkSchemaVersion(db *sql.DB) error {
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`); err != nil {
 		return err
 	}

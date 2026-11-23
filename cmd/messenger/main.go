@@ -513,6 +513,8 @@ func usage() {
   messenger --root КАТАЛОГ task-answer --task ID --question ID --op ID --text ТЕКСТ
   messenger --root КАТАЛОГ task-cancel --task ID
   messenger --root КАТАЛОГ coordinator --project ИМЯ
+  messenger --root КАТАЛОГ project-storage-stage --output-dir КАТАЛОГ
+  messenger project-storage-verify --dir КАТАЛОГ
   messenger --root КАТАЛОГ project-snapshot --name ИМЯ --output ФАЙЛ
   messenger --root КАТАЛОГ coordinator-watch --project ИМЯ --after КУРСОР [--minutes 30]
   messenger --root КАТАЛОГ recover-codex --alias ИМЯ --confirm preserve-uncertain

@@ -130,6 +130,14 @@ func Open(path string) (*Store, error) {
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 	store := &Store{db: db}
+	if err := rejectStagedDatabase(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if err := checkSchemaVersion(db); err != nil {
 		db.Close()
 		return nil, err
@@ -273,7 +281,6 @@ func dsn(path string) string {
 	q := url.Values{}
 	q.Add("_pragma", sqliteBusyTimeout)
 	q.Add("_pragma", "foreign_keys(1)")
-	q.Add("_pragma", "journal_mode(WAL)")
 	q.Add("_pragma", "synchronous(FULL)")
 	q.Add("_txlock", "immediate")
 	return sqliteFileURL(path, q)

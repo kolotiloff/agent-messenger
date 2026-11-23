@@ -16,6 +16,10 @@ import (
 // snapshot has no network configuration, coordinator claims or active
 // registry, and is not an executable queue.
 func SnapshotProjectDatabase(ctx context.Context, source, project, output string) error {
+	return snapshotProjectDatabase(ctx, source, project, output, false)
+}
+
+func snapshotProjectDatabase(ctx context.Context, source, project, output string, withDelivery bool) error {
 	if !ValidProjectName(project) {
 		return fmt.Errorf("%w: invalid project name", ErrRejected)
 	}
@@ -50,7 +54,7 @@ func SnapshotProjectDatabase(ctx context.Context, source, project, output string
 	if _, err := db.ExecContext(ctx, "ATTACH DATABASE ? AS snapshot", scratch.Name()); err != nil {
 		return fmt.Errorf("attach project snapshot: %w", err)
 	}
-	if err := writeProjectSnapshot(ctx, db, project); err != nil {
+	if err := writeProjectSnapshot(ctx, db, project, withDelivery); err != nil {
 		return err
 	}
 	if err := db.Close(); err != nil {
@@ -64,7 +68,7 @@ func SnapshotProjectDatabase(ctx context.Context, source, project, output string
 	return nil
 }
 
-func writeProjectSnapshot(ctx context.Context, db *sql.DB, project string) error {
+func writeProjectSnapshot(ctx context.Context, db *sql.DB, project string, withDelivery bool) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -93,6 +97,11 @@ func writeProjectSnapshot(ctx context.Context, db *sql.DB, project string) error
 		{"task_outputs", "task_id IN (SELECT id FROM snapshot.tasks)"},
 		{"task_images", "task_id IN (SELECT id FROM snapshot.tasks)"},
 		{"feedback", "project=?"},
+	}
+	if withDelivery {
+		tables = append(tables, struct{ name, where string }{
+			"net_outbox", "seq IN (SELECT seq FROM (" + migrationOutboxRoutes + ") WHERE project=?)",
+		})
 	}
 	for _, table := range tables {
 		if err := copyProjectTable(ctx, tx, table.name, table.where, project); err != nil {
@@ -131,7 +140,7 @@ func copyProjectTable(ctx context.Context, tx *sql.Tx, table, where, project str
 		return err
 	}
 	var args []any
-	if strings.HasSuffix(where, "=?") {
+	if strings.Contains(where, "?") {
 		args = append(args, project)
 	}
 	_, err := tx.ExecContext(ctx, "INSERT INTO snapshot."+table+" SELECT * FROM main."+table+" WHERE "+where+" ORDER BY rowid", args...)
