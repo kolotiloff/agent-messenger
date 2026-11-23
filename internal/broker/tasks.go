@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"time"
 	"unicode/utf8"
+
+	"github.com/kolotiloff/agent-messenger/internal/modelcatalog"
 )
 
 // Shared task lists (T-047). Every computer posts the tasks it started in
@@ -94,7 +96,7 @@ func validSharedTasks(tasks []SharedTask) bool {
 				}
 			}
 		}
-		if t.Model != "" && !validModelSelection(t.Model) {
+		if _, _, err := modelcatalog.SplitReported(t.Model); err != nil {
 			return false
 		}
 	}

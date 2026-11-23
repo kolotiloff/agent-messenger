@@ -215,7 +215,7 @@ type Task struct {
 	ID, Project, Computer, Provider, Profile, Folder, Title, Text, State string
 	SessionID, Detail, CreatedAt, UpdatedAt, FinishedAt                  string
 	CLI, Environment                                                     string
-	Model                                                                string
+	Model, RanModel                                                      string
 	// FailureReason and FailureReset explain a failed task (T-034): the
 	// failure class the provider reported and its limit reset time (RFC 3339).
 	// They never cause a retry.
@@ -917,12 +917,12 @@ func insertTaskRun(tx *sql.Tx, task string, ordinal int, kind, input string, sen
 	return err
 }
 
-const taskColumns = `id,project,computer,provider,profile,folder,title,text,state,COALESCE(session_id,''),detail,created_at,updated_at,COALESCE(finished_at,''),cli_path,environment,cancel_requested,version,COALESCE(model,''),COALESCE(failure_reason,''),COALESCE(failure_reset,''),origin_peer IS NOT NULL,full_access,sender_agent,sender_model`
+const taskColumns = `id,project,computer,provider,profile,folder,title,text,state,COALESCE(session_id,''),detail,created_at,updated_at,COALESCE(finished_at,''),cli_path,environment,cancel_requested,version,COALESCE(model,''),COALESCE(ran_model,''),COALESCE(failure_reason,''),COALESCE(failure_reset,''),origin_peer IS NOT NULL,full_access,sender_agent,sender_model`
 
 func scanTask(scan func(...any) error) (Task, error) {
 	var t Task
 	var cancel, origin, full int
-	err := scan(&t.ID, &t.Project, &t.Computer, &t.Provider, &t.Profile, &t.Folder, &t.Title, &t.Text, &t.State, &t.SessionID, &t.Detail, &t.CreatedAt, &t.UpdatedAt, &t.FinishedAt, &t.CLI, &t.Environment, &cancel, &t.Version, &t.Model, &t.FailureReason, &t.FailureReset, &origin, &full, &t.SenderAgent, &t.SenderModel)
+	err := scan(&t.ID, &t.Project, &t.Computer, &t.Provider, &t.Profile, &t.Folder, &t.Title, &t.Text, &t.State, &t.SessionID, &t.Detail, &t.CreatedAt, &t.UpdatedAt, &t.FinishedAt, &t.CLI, &t.Environment, &cancel, &t.Version, &t.Model, &t.RanModel, &t.FailureReason, &t.FailureReset, &origin, &full, &t.SenderAgent, &t.SenderModel)
 	t.CancelRequested, t.FromNetwork, t.FullAccess = cancel != 0, origin != 0, full != 0
 	return t, err
 }
@@ -1258,35 +1258,41 @@ func (s *Store) SetTaskRunModel(run, model string) error {
 	if model == "" || len(model) > 120 {
 		return nil
 	}
-	return s.tx(func(tx *sql.Tx) error {
-		var task, previous string
-		err := tx.QueryRow(`SELECT t.id,COALESCE(t.ran_model,'') FROM task_runs r JOIN tasks t ON t.id=r.task_id WHERE r.id=?`, run).Scan(&task, &previous)
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		if previous == model {
-			return nil
-		}
-		if _, err := tx.Exec(`UPDATE tasks SET ran_model=? WHERE id=?`, model, task); err != nil {
-			return err
-		}
-		if !ValidTaskModel(model) {
-			return nil
-		}
-		link, err := taskLink(tx, task)
-		if err != nil || link.origin == nil {
-			return err
-		}
-		op, err := randomID()
-		if err != nil {
-			return err
-		}
-		origin := link.origin
-		return enqueueNet(tx, origin.broker, origin.peer, "ran_model."+op, task, netBody{Kind: "ran_model", Task: origin.task, Model: model})
-	})
+	return s.tx(func(tx *sql.Tx) error { return setTaskRunModel(tx, run, model) })
+}
+
+// ClearTaskRunModel removes the previous observation when a new process
+// resumes a task, since its CLI defaults may have changed.
+func (s *Store) ClearTaskRunModel(run string) error {
+	return s.tx(func(tx *sql.Tx) error { return setTaskRunModel(tx, run, "") })
+}
+
+func setTaskRunModel(tx *sql.Tx, run, model string) error {
+	var task, previous string
+	err := tx.QueryRow(`SELECT t.id,COALESCE(t.ran_model,'') FROM task_runs r JOIN tasks t ON t.id=r.task_id WHERE r.id=?
+AND NOT EXISTS (SELECT 1 FROM task_runs newer WHERE newer.task_id=t.id AND newer.ordinal>r.ordinal AND newer.launched_at IS NOT NULL)`, run).Scan(&task, &previous)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil || previous == model {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE tasks SET ran_model=?,version=version+1 WHERE id=?`, model, task); err != nil {
+		return err
+	}
+	if _, _, err := modelcatalog.SplitReported(model); err != nil {
+		return nil
+	}
+	link, err := taskLink(tx, task)
+	if err != nil || link.origin == nil {
+		return err
+	}
+	op, err := randomID()
+	if err != nil {
+		return err
+	}
+	origin := link.origin
+	return enqueueNet(tx, origin.broker, origin.peer, "ran_model."+op, task, netBody{Kind: "ran_model", Task: origin.task, Model: model})
 }
 
 // BindTaskSession checks the conversation ID the CLI reported. A Claude task

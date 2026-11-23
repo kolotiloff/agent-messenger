@@ -323,8 +323,9 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const untimedStat = {...stat,id:'old-3',title:'Уточнить настройки агента',at:'2026-11-18T09:00:00',tokens:3400000,duration_ms:undefined};
       const localTask = {id:'local-task',title:'Local task',project:'Frame',agent:'codex',state:'running',created_at:began,started_at:began,model:'gpt-6.2-sol[effort=low]',ran_model:'gpt-6.2-sol[effort=medium]'};
       const remoteTask = {...localTask,id:'remote-task',title:'Remote task',created_at:new Date(Date.now()-8*60*1000).toISOString(),model:'',ran_model:'',remote:{id:'dev-1',name:'Runner',worker:'none'}};
-      const waitingTask = {...remoteTask,id:'waiting-task',title:'Waiting for a reply',agent:'claude',state:'waiting_owner',model:'claude-sonnet-5-5[effort=medium]'};
+      const waitingTask = {...remoteTask,id:'waiting-task',title:'Waiting for a reply',agent:'claude',state:'waiting_owner',model:'claude-sonnet-5-5[effort=medium]',ran_model:'claude-sonnet-5-5[effort=medium]'};
       let remoteRow = remoteTask;
+      let codexWaiting = true;
       let runnerAgents = [{agent:'cursor',running:1},{agent:'claude',waiting_owner:1},{agent:'codex',running:1,waiting_owner:1}];
       let runnerWorkers = [];
       const ownerNotes = [];
@@ -333,15 +334,18 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const clears = [];
       await page.addInitScript(() => { window.amDesktop = 'windows'; window.amFrameless = true; window.amWindow = () => {}; });
       await page.route('**/*', async route => {
-        const pathname = new URL(route.request().url()).pathname;
+        const {pathname, searchParams} = new URL(route.request().url());
+        const project = searchParams.get('project') || 'Frame';
         if (pathname === '/api/feedback-export') return route.fulfill({json: {ok: true, result: {path: '/fictional/Downloads/feedback.zip', remarks: 2}}});
         if (pathname === '/api/feedback-clear') { clears.push(true); return route.fulfill({json: {ok: true, result: {deleted: 2, left: 0}}}); }
-        if (pathname === '/api/window') return route.fulfill({json: {projects: [{name: 'Frame'}], project: 'Frame', folder: '/fictional/frame', agents: [], coordinator: {connected: false}, computer_name: 'Ёж и Йога', tasks_enabled: true, feedback_count: 5, feedback_new: 2, tasks:[localTask,remoteRow,waitingTask],
-          shared: [{peer: 'host', name: 'Giver', age: 1, tasks: [
+        if (pathname === '/api/window') return route.fulfill({json: {projects: [{name: 'Frame'}, {name: 'Site'}], project, folder: '/fictional/frame',
+          agents: [{agent:'codex',running:1,project_running:project==='Frame'?1:0}], coordinator: {connected: false}, computer_name: 'Ёж и Йога', tasks_enabled: true, feedback_count: 5, feedback_new: 2, tasks:project==='Frame'?[localTask,remoteRow,waitingTask]:[],
+          shared: project==='Frame'?[{peer: 'host', name: 'Giver', age: 1, tasks: [
             {id: 'sent', project: 'Frame', title: 'Sent task', agent: 'cursor', state: 'running', created_at: began, started_at: began, model: 'composer-2.5[effort=medium]', runs_on_peer: 'dev-1', runs_on: 'Old name'},
+            ...(codexWaiting?[{id:'codex-waiting',project:'Frame',title:'Queued answer',agent:'codex',state:'waiting_coordinator',created_at:began,runs_on_peer:'dev-1'}]:[]),
             {id: 'own', project: 'Frame', title: 'Own task', agent: 'codex', state: 'running', created_at: '2026-11-15T09:00:00Z'},
             {id: 'old-1', project: 'Frame', title: 'Old 1', agent: 'codex', state: 'done', created_at: '2026-11-14T09:00:00Z', finished_at: ended},
-            {id: 'old-2', project: 'Frame', title: 'Old 2', agent: 'codex', state: 'failed', created_at: '2026-11-14T08:00:00Z', finished_at: '2026-11-14T08:30:00Z'}]}]}});
+            {id: 'old-2', project: 'Frame', title: 'Old 2', agent: 'codex', state: 'failed', created_at: '2026-11-14T08:00:00Z', finished_at: '2026-11-14T08:30:00Z'}]}]:[]}});
         if (pathname === '/api/server') return route.fulfill({json: {host: {running: false, enabled: false, addresses: []}, member: {connected: true, reachable: true, address:'203.0.113.7:47100', connected_at:began}, peers: [{id: 'host', name: 'Giver', age: 0, agents: []}, {id: 'dev-1', name: 'Runner', age: 0, version:'0.0.0-preview.97', agents: runnerAgents, workers:{runs:runnerWorkers}}], updates: [], accept: true}});
         if (pathname === '/api/usage-stats') return route.fulfill({json:{
           total:{tasks:3,tokens:22020000,input_tokens:21100000,output_tokens:920000},agents:[],computers:[],days:[],
@@ -402,7 +406,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       // T-186: another computer's task says where it runs, and who gave it
       // when that is another computer.
       const sharedLabels = await page.locator('.am-task-shared .am-task-agent > span:not(.am-task-when)').allInnerTexts();
-      assert.deepEqual(sharedLabels.filter(Boolean), ['Cursor на Runner — от Giver', 'Codex на Giver', 'Codex на Giver', 'Codex на Giver']);
+      assert.deepEqual(sharedLabels.filter(Boolean), ['Cursor на Runner — от Giver', 'Codex на Runner — от Giver', 'Codex на Giver', 'Codex на Giver', 'Codex на Giver']);
       const completedTime=page.locator('.am-task-shared',{hasText:'Old 1'}).locator('.am-task-when');
       assert.equal(await completedTime.getAttribute('datetime'),ended);
       assert.match(await completedTime.innerText(),/\d{1,2}:\d{2}/);
@@ -440,9 +444,20 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const waitingLabelBox=await waiting.locator('span').first().boundingBox(),waitingStatusBox=await waitingStatus.boundingBox();
       assert(Math.abs(waitingStatusBox.x-waitingLabelBox.x-waitingLabelBox.width)<1,'waiting status must sit directly beside the model');
       const overlappingAgent=runner.locator('.am-agent-run[data-provider=codex]');
-      assert.equal(await overlappingAgent.locator('.am-agent-model').textContent(),'модель не указана');
+      assert.equal(await overlappingAgent.locator('.am-agent-model').textContent(),'по умолчанию');
       assert.equal(await overlappingAgent.locator('.am-agent-status').textContent(),'(2) 3 мин');
       assert.match(await overlappingAgent.getAttribute('title'),/Ждёт ответа/);
+      const chooseProject = async name => {
+        await page.locator('[aria-controls="project-select-menu"]').click();
+        await page.getByRole('option',{name,exact:true}).click();
+      };
+      await page.locator('#machines [aria-current="true"] .am-agent-run[data-provider=codex]').waitFor();
+      await chooseProject('Site');
+      assert.equal(await page.locator('#machines .am-agent-run, #machines .am-agent-wait').count(),0);
+      await page.waitForFunction(() => document.querySelector('#project-select').value==='Site');
+      assert.equal(await runner.locator('.am-agent-idle').count(),3);
+      await chooseProject('Frame');
+      await runningLabel.waitFor();
       assert.equal(await runningLabel.evaluate(node=>getComputedStyle(node).animationName),'none');
       assert.equal(await runningTimer.evaluate(node=>getComputedStyle(node).animationName),'none');
       const rowFontSize=await page.locator('.am-task-agent').first().evaluate(node=>getComputedStyle(node).fontSize);
@@ -700,6 +715,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       // Keep the broker and feed stale while the task row records completion.
       runnerAgents=[...runnerAgents.slice(0,2),{agent:'codex',running:1}];
       runnerWorkers=[{task:remoteTask.id,output_age:0}];
+      codexWaiting=false;
       await Promise.all([page.waitForResponse(response=>new URL(response.url()).pathname==='/api/server'),page.locator('[data-tab=server]').click()]);
       await page.locator('[data-tab=tasks]').click();
       remoteRow={...remoteRow,state:'done',finished_at:new Date(Date.now()).toISOString()};
