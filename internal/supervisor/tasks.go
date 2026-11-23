@@ -208,6 +208,7 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 		s.runNotStarted(runID, task.ID, "reservation not written: "+err.Error())
 		return
 	}
+	launched := time.Now()
 	err = platform.StartGroup(cmd)
 	_ = stdoutW.Close()
 	if err != nil {
@@ -237,6 +238,9 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 		return
 	}
 	started = true
+	if spec.Resume {
+		_ = s.store.ClearTaskRunModel(runID)
+	}
 	journal.Printf("run %s of %s: worker started, process %d", runID, task.ID, obs.PID)
 	live := s.tasks.started(runID, task.ID)
 	lingerDone := make(chan struct{})
@@ -298,6 +302,8 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 						// A different conversation: its tools stay closed, and
 						// the run will fail verification. Stop it early.
 						_ = platform.SignalGroup(obs.PGID)
+					} else if task.Provider == "codex" && result.Model == "" {
+						go s.watchCodexTaskModel(ctx, lingerDone, runID, task, result.Session, launched)
 					}
 				}
 			}
@@ -444,6 +450,42 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	if final == "finished" || final == "failed" || final == "cancelled" {
 		if forgetRunID(reservation) == nil {
 			_ = s.store.TaskRunReservationRetired(runID)
+		}
+	}
+}
+
+func (s *Supervisor) watchCodexTaskModel(ctx context.Context, done <-chan struct{}, runID string, task core.Task, thread string, launched time.Time) {
+	profile := task.Environment
+	if profile == "" {
+		profile, _ = defaultProfileDir("codex")
+	}
+	if !filepath.IsAbs(profile) {
+		return
+	}
+	created, _ := time.Parse(time.RFC3339Nano, task.CreatedAt)
+	read := func() bool {
+		if model := adapters.CodexTurnModel(profile, thread, launched, created); model != "" {
+			return s.store.SetTaskRunModel(runID, model) == nil
+		}
+		return false
+	}
+	tick := time.NewTicker(500 * time.Millisecond)
+	defer tick.Stop()
+	deadline := time.NewTimer(20 * time.Second)
+	defer deadline.Stop()
+	for {
+		if read() {
+			return
+		}
+		select {
+		case <-tick.C:
+		case <-deadline.C:
+			return
+		case <-ctx.Done():
+			return
+		case <-done:
+			read()
+			return
 		}
 	}
 }

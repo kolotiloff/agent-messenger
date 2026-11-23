@@ -34,6 +34,7 @@ type Request struct {
 	Action       string `json:"action,omitempty"`
 	Confirmation string `json:"confirmation,omitempty"`
 	Provider     string `json:"provider,omitempty"`
+	Project      string `json:"project,omitempty"`
 	// Model limits the statistics to one model (T-201).
 	Model          string `json:"model,omitempty"`
 	Environment    string `json:"environment,omitempty"`
@@ -284,7 +285,15 @@ func dispatch(handler Handler, request Request) Response {
 	case "usage-stats":
 		var value any
 		var err error
-		if h, ok := handler.(interface {
+		if request.Project != "" {
+			h, ok := handler.(interface {
+				UsageStatsForProject(project, period, computer, agent, model string) (any, error)
+			})
+			if !ok {
+				return Response{Error: "project statistics unsupported; update the background client"}
+			}
+			value, err = h.UsageStatsForProject(request.Project, request.Alias, request.Text, request.Provider, request.Model)
+		} else if h, ok := handler.(interface {
 			UsageStatsFiltered(period, computer, agent, model string) (any, error)
 		}); ok {
 			value, err = h.UsageStatsFiltered(request.Alias, request.Text, request.Provider, request.Model)

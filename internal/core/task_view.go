@@ -269,12 +269,6 @@ func (s *Store) hiddenTasks(project string) (map[string]bool, error) {
 	return out, rows.Err()
 }
 
-func (s *Store) ranModel(task string) string {
-	var m sql.NullString
-	_ = s.db.QueryRow(`SELECT ran_model FROM tasks WHERE id=?`, task).Scan(&m)
-	return m.String
-}
-
 func (s *Store) startedAt(task string) (string, error) {
 	return taskStartedAt(s.db, task)
 }
@@ -462,7 +456,7 @@ func (s *Store) WindowView(project, today string) (WindowView, error) {
 		}
 		w := WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt, FailureReason: t.FailureReason, FailureReset: t.FailureReset, FullAccess: t.FullAccess}
 		// The row shows the model the worker started on (T-202).
-		w.RanModel = s.ranModel(t.ID)
+		w.RanModel = t.RanModel
 		if t.OpenQuestion != nil && t.OpenQuestion.Audience == AudienceOwner {
 			w.OwnerQuestion = t.OpenQuestion
 		}
@@ -530,7 +524,7 @@ func (s *Store) TaskFeed(id string) (TaskFeed, error) {
 	if err != nil {
 		return f, err
 	}
-	f.Task = WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt, RanModel: s.ranModel(t.ID), FullAccess: t.FullAccess}
+	f.Task = WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt, RanModel: t.RanModel, FullAccess: t.FullAccess}
 	if t.OpenQuestion != nil && t.OpenQuestion.Audience == AudienceOwner {
 		f.Task.OwnerQuestion = t.OpenQuestion
 	}

@@ -2,7 +2,6 @@ package core
 
 import (
 	"database/sql"
-	"fmt"
 	"strings"
 	"time"
 )
@@ -16,19 +15,86 @@ import (
 
 const (
 	// NetworkLostEvent and NetworkBackEvent are the coordinator events.
-	NetworkLostEvent = "network_lost"
-	NetworkBackEvent = "network_back"
+	NetworkLostEvent      = "network_lost"
+	NetworkBackEvent      = "network_back"
+	MacUpdateRestartEvent = "messenger_updating"
+	macUpdateRestartGrace = 2 * time.Minute
 )
+
+// NoteMacUpdateRestart is called by the Mac window just before it stops
+// the old client. Store the notice and the grace period together so they
+// survive the client restart and are visible to a waiting coordinator.
+func (s *Store) NoteMacUpdateRestart(at time.Time) error {
+	return s.tx(func(tx *sql.Tx) error {
+		broker, err := metaValue(tx, "net_broker")
+		if err != nil {
+			return err
+		}
+		planned, err := metaValue(tx, "mac_update_restart")
+		if err != nil {
+			return err
+		}
+		if b, until := macUpdateRestart(planned); b == broker && at.Before(until) {
+			return nil
+		}
+		if err := setMeta(tx, "mac_update_restart", broker+"|"+at.Add(macUpdateRestartGrace).UTC().Format(time.RFC3339Nano)); err != nil {
+			return err
+		}
+		return noticeAllProjects(tx, MacUpdateRestartEvent, "Messenger on this Mac is updating. Its background client will restart and network contact may briefly go away. Keep waiting for task updates. Tell the owner if network_lost follows; no warning is needed for the planned restart itself.")
+	})
+}
+
+func macUpdateRestart(value string) (string, time.Time) {
+	broker, stamp, _ := strings.Cut(value, "|")
+	until, _ := time.Parse(time.RFC3339Nano, stamp)
+	return broker, until
+}
 
 // NoteNetworkContact compares the network's state with the last one noted
 // and tells every project's coordinator once when contact with all other
 // computers was lost, or came back.
 func (s *Store) NoteNetworkContact(at time.Time) (string, error) {
+	return s.noteNetworkContact(at, false)
+}
+
+// CheckExpiredMacUpdateRestart lets a waiting coordinator report a
+// prolonged outage even if the old client stopped and the new one has yet
+// to start. The supervisor still checks ordinary outages.
+func (s *Store) CheckExpiredMacUpdateRestart(at time.Time) error {
+	// Wait polls often. Reserve a write transaction only when a deadline
+	// is actually due, then check again in the transaction.
+	var planned string
+	if err := s.db.QueryRow(`SELECT COALESCE((SELECT value FROM meta WHERE key='mac_update_restart'),'')`).Scan(&planned); err != nil {
+		return err
+	}
+	_, until := macUpdateRestart(planned)
+	if planned == "" || at.Before(until) {
+		return nil
+	}
+	_, err := s.noteNetworkContact(at, true)
+	return err
+}
+
+func (s *Store) noteNetworkContact(at time.Time, expiredUpdateOnly bool) (string, error) {
 	noted := ""
 	err := s.tx(func(tx *sql.Tx) error {
+		planned, err := metaValue(tx, "mac_update_restart")
+		if err != nil {
+			return err
+		}
+		plannedBroker, until := macUpdateRestart(planned)
+		inGrace := at.Before(until)
+		if expiredUpdateOnly && (planned == "" || inGrace) {
+			return nil
+		}
 		broker, err := metaValue(tx, "net_broker")
 		if err != nil {
 			return err
+		}
+		if planned != "" && (!inGrace || (broker != "" && plannedBroker != broker)) {
+			if err := setMeta(tx, "mac_update_restart", ""); err != nil {
+				return err
+			}
 		}
 		prev, err := metaValue(tx, "net_contact")
 		if err != nil {
@@ -44,7 +110,7 @@ func (s *Store) NoteNetworkContact(at time.Time) (string, error) {
 		if err != nil {
 			return err
 		}
-		if len(peers) == 0 {
+		if len(peers) == 0 && planned == "" {
 			return nil
 		}
 		fresh := false
@@ -61,30 +127,34 @@ func (s *Store) NoteNetworkContact(at time.Time) (string, error) {
 			if err := setMeta(tx, "net_contact", broker+"|ok"); err != nil {
 				return err
 			}
+			if prevState == "updating" && plannedBroker == broker {
+				return setMeta(tx, "mac_update_restart", "")
+			}
 			if prevState != "lost" {
 				return nil
 			}
 			noted = NetworkBackEvent
 			return noticeAllProjects(tx, NetworkBackEvent, "contact with the network is back: other computers report again. Check tasks before you start or cancel anything: the states of their tasks catch up within a minute, and reports sent meanwhile arrive now.")
-		case !fresh && prevState == "ok":
+		case !fresh && (prevState == "ok" || prevState == "updating"):
+			if inGrace && plannedBroker == broker {
+				if prevState == "ok" {
+					return setMeta(tx, "net_contact", broker+"|updating")
+				}
+				return nil
+			}
 			if err := setMeta(tx, "net_contact", broker+"|lost"); err != nil {
 				return err
 			}
 			noted = NetworkLostEvent
-			text, err := networkLostText(tx, peers)
-			if err != nil {
-				return err
-			}
-			return noticeAllProjects(tx, NetworkLostEvent, text)
+			return noticeAllProjects(tx, NetworkLostEvent, networkLostText(peers))
 		}
 		return nil
 	})
 	return noted, err
 }
 
-// networkLostText names what was lost: the server's computer, the others,
-// and the open tasks on them.
-func networkLostText(tx *sql.Tx, peers []NetPeer) (string, error) {
+// networkLostText describes the disconnected computers.
+func networkLostText(peers []NetPeer) string {
 	var names []string
 	server := ""
 	for _, p := range peers {
@@ -99,22 +169,19 @@ func networkLostText(tx *sql.Tx, peers []NetPeer) (string, error) {
 			names = append(names, "«"+name+"»")
 		}
 	}
-	var open int
-	if err := tx.QueryRow(`SELECT COUNT(*) FROM tasks WHERE COALESCE(remote_broker,'')<>'' AND state IN ('running','waiting_coordinator','waiting_owner')`).Scan(&open); err != nil {
-		return "", err
+	text := "contact with every other computer of the network is lost"
+	if len(names) > 0 {
+		text += " (" + strings.Join(names, ", ") + ")"
 	}
-	text := "contact with every other computer of the network is lost (" + strings.Join(names, ", ") + ")"
 	if server != "" {
 		text += "; the server runs on «" + server + "», so it has probably stopped or left the network"
 	} else {
 		text += "; this computer's own link to the server may be down"
 	}
 	text += "."
-	if open > 0 {
-		text += fmt.Sprintf(" %d open task(s) on other computers: their outcome is unknown; they may still run there and report when contact is back.", open)
-	}
+	text += " Open tasks of this project may still run and report when contact is back."
 	text += " Nothing is retried, cancelled or moved. Do not start the same work again; tell the owner, who can start Messenger on the server computer again. A network_back event follows when contact returns."
-	return text, nil
+	return text
 }
 
 // noticeAllProjects gives every project's coordinator the same event.

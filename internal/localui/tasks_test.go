@@ -53,8 +53,11 @@ func TestTaskWindowRoutes(t *testing.T) {
 	if code, _ := do("GET", "/api/usage-stats?period=week", ""); code != 200 || got[len(got)-1].Cmd != "usage-stats" || got[len(got)-1].Alias != "week" || got[len(got)-1].Text != "" {
 		t.Fatalf("usage stats %d %+v", code, got)
 	}
-	if code, _ := do("GET", "/api/usage-stats?period=month&computer=dev-1", ""); code != 200 || got[len(got)-1].Alias != "month" || got[len(got)-1].Text != "dev-1" {
+	if code, _ := do("GET", "/api/usage-stats?project=Main%20Game&period=month&computer=dev-1", ""); code != 200 || got[len(got)-1].Alias != "month" || got[len(got)-1].Project != "Main Game" || got[len(got)-1].Text != "dev-1" {
 		t.Fatalf("usage stats of a computer %d %+v", code, got[len(got)-1])
+	}
+	if code, _ := do("GET", "/api/usage-stats?period=week&project=Game%2FSite", ""); code != 400 {
+		t.Fatalf("invalid statistics project: %d", code)
 	}
 	if code, _ := do("GET", "/api/usage-stats?period=week&agent=codex&model=gpt-6.2-sol%5Beffort%3Dlow%5D", ""); code != 200 || got[len(got)-1].Provider != "codex" || got[len(got)-1].Model != "gpt-6.2-sol[effort=low]" {
 		t.Fatalf("usage filter %d %+v", code, got[len(got)-1])

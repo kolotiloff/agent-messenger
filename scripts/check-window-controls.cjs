@@ -20,6 +20,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const errors = [];
       let created = false, registered = false, connected = false, trusted = false;
       let coordinatorActive = false;
+      let machineOrder = null;
       let setupStates = [], installed = false;
       let updates = [];
       const writes = [];
@@ -35,10 +36,14 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         window.themeMessages = [];
         window.webkit = {messageHandlers: {appearance: {postMessage: theme => window.themeMessages.push(theme)}}};
       });
-      await page.route('**/*', async route => {
+      await context.route('**/*', async route => {
         const pathname = new URL(route.request().url()).pathname;
         if (route.request().method() === 'POST') {
           writes.push({path: pathname, body: route.request().postDataJSON()});
+          if (pathname === '/api/machine-order') {
+            machineOrder = route.request().postDataJSON().order;
+            return route.fulfill({json: {ok: true}});
+          }
           if (pathname === '/api/project-create') created = true;
           if (pathname === '/api/agent-install' || pathname === '/api/agent-find') {
             const input=route.request().postDataJSON();
@@ -70,6 +75,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           '/api/agent-setup-status': setupStates,
           '/api/discovery': {agents: ['claude','codex','cursor'].map(provider => ({provider, state: 'not_found'}))},
           '/api/client-info': {client: 'running', outdated: false},
+          '/api/machine-order': {order: machineOrder},
           '/api/server': {host: {running: false, enabled: false, addresses: []}, member: {connected: false}, peers: connected ? [{id:'fixture-peer',name:'Peer fixture',host:true,age:0,agents:[{agent:'cursor'}],coordinator:'cursor-vscode'},{id:'fixture-peer-2',name:'Paused agent fixture',age:0,agents:[],coordinator:'claude-code'}] : [], updates, accept: true},
           '/api/self-update': {current: '0.0.0-preview.test'},
         };
@@ -215,9 +221,18 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await coordinatorLabel.waitFor({state:'detached'});
       const localCard=page.locator('#machines [aria-current="true"]');
       const peerCard=page.locator('#machines [data-peer="fixture-peer"]');
-      await peerCard.dragTo(localCard,{sourcePosition:{x:50,y:12},targetPosition:{x:50,y:5}});
+      await Promise.all([
+        page.waitForResponse(response => response.url().endsWith('/api/machine-order') && response.request().method() === 'POST' && response.ok()),
+        peerCard.dragTo(localCard,{sourcePosition:{x:50,y:12},targetPosition:{x:50,y:5}}),
+      ]);
       assert.equal(await page.locator('#machines > :first-child').getAttribute('data-peer'),'fixture-peer');
       assert.equal(await peerCard.getAttribute('aria-pressed'),'false');
+      // The desktop window opens on another loopback port after restarting.
+      const restarted = await context.newPage();
+      await restarted.goto('http://messenger.test:11342/#new-fictional-token');
+      await restarted.locator('#machines > :first-child[data-peer="fixture-peer"]').waitFor();
+      assert.equal(await restarted.evaluate(() => localStorage.getItem('messenger-machine-order')), null);
+      await restarted.close();
       await page.reload();
       await peerCard.waitFor();
       assert.equal(await page.locator('#machines > :first-child').getAttribute('data-peer'),'fixture-peer');
@@ -321,10 +336,16 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const stat = {id:'old-1',title:'Проверить сборку проекта',at:'2026-11-19T09:20:00',project:'Frame',agent:'codex',model:'gpt-6.2-sol[effort=medium]',computer:'Runner',tokens:420000,duration_ms:42000};
       const olderStat = {...stat,id:'old-2',title:'Проверить производительность сцены',at:'2026-11-18T10:10:00',tokens:18200000,duration_ms:10800000,duration_estimated:true};
       const untimedStat = {...stat,id:'old-3',title:'Уточнить настройки агента',at:'2026-11-18T09:00:00',tokens:3400000,duration_ms:undefined};
+      const otherStat = {...stat,id:'other-1',title:'Собрать сайт',project:'Site',tokens:700};
+      let holdFrameStats, frameStatsRequested;
       const localTask = {id:'local-task',title:'Local task',project:'Frame',agent:'codex',state:'running',created_at:began,started_at:began,model:'gpt-6.2-sol[effort=low]',ran_model:'gpt-6.2-sol[effort=medium]'};
+      const siteTask = {...localTask,id:'site-task',project:'Site',title:'Site worker task'};
+      let releaseSite, delaySiteView = false;
+      const siteView = new Promise(resolve => { releaseSite = resolve; });
       const remoteTask = {...localTask,id:'remote-task',title:'Remote task',created_at:new Date(Date.now()-8*60*1000).toISOString(),model:'',ran_model:'',remote:{id:'dev-1',name:'Runner',worker:'none'}};
-      const waitingTask = {...remoteTask,id:'waiting-task',title:'Waiting for a reply',agent:'claude',state:'waiting_owner',model:'claude-sonnet-5-5[effort=medium]'};
+      const waitingTask = {...remoteTask,id:'waiting-task',title:'Waiting for a reply',agent:'claude',state:'waiting_owner',model:'claude-sonnet-5-5[effort=medium]',ran_model:'claude-sonnet-5-5[effort=medium]'};
       let remoteRow = remoteTask;
+      let codexWaiting = true;
       let runnerAgents = [{agent:'cursor',running:1},{agent:'claude',waiting_owner:1},{agent:'codex',running:1,waiting_owner:1}];
       let runnerWorkers = [];
       const ownerNotes = [];
@@ -333,23 +354,42 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const clears = [];
       await page.addInitScript(() => { window.amDesktop = 'windows'; window.amFrameless = true; window.amWindow = () => {}; });
       await page.route('**/*', async route => {
-        const pathname = new URL(route.request().url()).pathname;
+        const {pathname, searchParams} = new URL(route.request().url());
+        const project = searchParams.get('project') || 'Frame';
         if (pathname === '/api/feedback-export') return route.fulfill({json: {ok: true, result: {path: '/fictional/Downloads/feedback.zip', remarks: 2}}});
         if (pathname === '/api/feedback-clear') { clears.push(true); return route.fulfill({json: {ok: true, result: {deleted: 2, left: 0}}}); }
-        if (pathname === '/api/window') return route.fulfill({json: {projects: [{name: 'Frame'}], project: 'Frame', folder: '/fictional/frame', agents: [], coordinator: {connected: false}, computer_name: 'Ёж и Йога', tasks_enabled: true, feedback_count: 5, feedback_new: 2, tasks:[localTask,remoteRow,waitingTask],
-          shared: [{peer: 'host', name: 'Giver', age: 1, tasks: [
+        if (pathname === '/api/window' && project === 'Site' && delaySiteView) {
+          await siteView;
+          return route.fulfill({json: {projects: [{name: 'Frame'}, {name: 'Site'}], project: 'Site', agents: [], coordinator: {connected: false}, tasks: [siteTask], shared: []}});
+        }
+        if (pathname === '/api/window') return route.fulfill({json: {projects: [{name: 'Frame'}, {name: 'Site'}], project, folder: '/fictional/frame',
+          agents: [{agent:'codex',running:1,project_running:project==='Frame'?1:0}], coordinator: {connected: false}, computer_name: 'Ёж и Йога', tasks_enabled: true, feedback_count: 5, feedback_new: 2, tasks:project==='Frame'?[localTask,remoteRow,waitingTask]:[],
+          shared: project==='Frame'?[{peer: 'host', name: 'Giver', age: 1, tasks: [
             {id: 'sent', project: 'Frame', title: 'Sent task', agent: 'cursor', state: 'running', created_at: began, started_at: began, model: 'composer-2.5[effort=medium]', runs_on_peer: 'dev-1', runs_on: 'Old name'},
+            ...(codexWaiting?[{id:'codex-waiting',project:'Frame',title:'Queued answer',agent:'codex',state:'waiting_coordinator',created_at:began,runs_on_peer:'dev-1'}]:[]),
             {id: 'own', project: 'Frame', title: 'Own task', agent: 'codex', state: 'running', created_at: '2026-11-15T09:00:00Z'},
             {id: 'old-1', project: 'Frame', title: 'Old 1', agent: 'codex', state: 'done', created_at: '2026-11-14T09:00:00Z', finished_at: ended},
-            {id: 'old-2', project: 'Frame', title: 'Old 2', agent: 'codex', state: 'failed', created_at: '2026-11-14T08:00:00Z', finished_at: '2026-11-14T08:30:00Z'}]}]}});
+            {id: 'old-2', project: 'Frame', title: 'Old 2', agent: 'codex', state: 'failed', created_at: '2026-11-14T08:00:00Z', finished_at: '2026-11-14T08:30:00Z'}]}]:[]}});
         if (pathname === '/api/server') return route.fulfill({json: {host: {running: false, enabled: false, addresses: []}, member: {connected: true, reachable: true, address:'203.0.113.7:47100', connected_at:began}, peers: [{id: 'host', name: 'Giver', age: 0, agents: []}, {id: 'dev-1', name: 'Runner', age: 0, version:'0.0.0-preview.97', agents: runnerAgents, workers:{runs:runnerWorkers}}], updates: [], accept: true}});
-        if (pathname === '/api/usage-stats') return route.fulfill({json:{
-          total:{tasks:3,tokens:22020000,input_tokens:21100000,output_tokens:920000},agents:[],computers:[],days:[],
-          recent:[stat,olderStat,untimedStat],top:[olderStat,untimedStat,stat],
-          ranked:{oldest:[untimedStat,olderStat,stat],fewest:[stat,untimedStat,olderStat],longest:[olderStat,stat],shortest:[stat,olderStat]},
-        }});
+        if (pathname === '/api/usage-stats') {
+          if (project === 'Site') return route.fulfill({json:{
+            project,total:{tasks:1,tokens:700,input_tokens:600,output_tokens:100},agents:[],computers:[],days:[],
+            recent:[otherStat],top:[otherStat],ranked:{oldest:[otherStat],fewest:[otherStat],longest:[otherStat],shortest:[otherStat]},
+          }});
+          if (holdFrameStats) {
+            frameStatsRequested();
+            await holdFrameStats;
+          }
+          return route.fulfill({json:{
+            project,total:{tasks:3,tokens:22020000,input_tokens:21100000,output_tokens:920000},agents:[],computers:[],days:[],
+            recent:[stat,olderStat,untimedStat],top:[olderStat,untimedStat,stat],
+            ranked:{oldest:[untimedStat,olderStat,stat],fewest:[stat,untimedStat,olderStat],longest:[olderStat,stat],shortest:[stat,olderStat]},
+          }});
+        }
         if (pathname === '/api/task') {
-          const remote = new URL(route.request().url()).searchParams.get('id') === remoteTask.id;
+          const requested = new URL(route.request().url()).searchParams.get('id');
+          if (requested === siteTask.id) return route.fulfill({json:{task:siteTask,items:[]}});
+          const remote = requested === remoteTask.id;
           const items = [
             {kind:'task',author:'coordinator',text:'Original task',at:began,sender_agent:'claude',sender_model:'claude-opus-5-5'},
             {kind:'answer',author:'coordinator',text:'Follow-up from Cursor',at:began,sender_agent:'cursor'},
@@ -402,7 +442,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       // T-186: another computer's task says where it runs, and who gave it
       // when that is another computer.
       const sharedLabels = await page.locator('.am-task-shared .am-task-agent > span:not(.am-task-when)').allInnerTexts();
-      assert.deepEqual(sharedLabels.filter(Boolean), ['Cursor на Runner — от Giver', 'Codex на Giver', 'Codex на Giver', 'Codex на Giver']);
+      assert.deepEqual(sharedLabels.filter(Boolean), ['Cursor на Runner — от Giver', 'Codex на Runner — от Giver', 'Codex на Giver', 'Codex на Giver', 'Codex на Giver']);
       const completedTime=page.locator('.am-task-shared',{hasText:'Old 1'}).locator('.am-task-when');
       assert.equal(await completedTime.getAttribute('datetime'),ended);
       assert.match(await completedTime.innerText(),/\d{1,2}:\d{2}/);
@@ -440,9 +480,20 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const waitingLabelBox=await waiting.locator('span').first().boundingBox(),waitingStatusBox=await waitingStatus.boundingBox();
       assert(Math.abs(waitingStatusBox.x-waitingLabelBox.x-waitingLabelBox.width)<1,'waiting status must sit directly beside the model');
       const overlappingAgent=runner.locator('.am-agent-run[data-provider=codex]');
-      assert.equal(await overlappingAgent.locator('.am-agent-model').textContent(),'модель не указана');
+      assert.equal(await overlappingAgent.locator('.am-agent-model').textContent(),'по умолчанию');
       assert.equal(await overlappingAgent.locator('.am-agent-status').textContent(),'(2) 3 мин');
       assert.match(await overlappingAgent.getAttribute('title'),/Ждёт ответа/);
+      const chooseProject = async name => {
+        await page.locator('[aria-controls="project-select-menu"]').click();
+        await page.getByRole('option',{name,exact:true}).click();
+      };
+      await page.locator('#machines [aria-current="true"] .am-agent-run[data-provider=codex]').waitFor();
+      await chooseProject('Site');
+      assert.equal(await page.locator('#machines .am-agent-run, #machines .am-agent-wait').count(),0);
+      await page.waitForFunction(() => document.querySelector('#project-select').value==='Site');
+      assert.equal(await runner.locator('.am-agent-idle').count(),3);
+      await chooseProject('Frame');
+      await runningLabel.waitFor();
       assert.equal(await runningLabel.evaluate(node=>getComputedStyle(node).animationName),'none');
       assert.equal(await runningTimer.evaluate(node=>getComputedStyle(node).animationName),'none');
       const rowFontSize=await page.locator('.am-task-agent').first().evaluate(node=>getComputedStyle(node).fontSize);
@@ -521,7 +572,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         const action = await disconnect.boundingBox();
         const badge = await page.locator('#member-badge').boundingBox();
         assert(action.x >= details.x + details.width, 'disconnect action overlaps the connection details');
-        assert(Math.abs(action.y + action.height / 2 - (details.y + details.height / 2)) <= 1, 'disconnect action is on a separate row');
+        assert(Math.abs(action.y + action.height - (details.y + details.height)) <= 1, 'disconnect action is not aligned with the bottom of the connection details');
         assert(Math.abs(action.x + action.width - (badge.x + badge.width)) <= 1, 'disconnect action is off the right edge of the status');
       }
       await page.setViewportSize({width: 1100, height: 600});
@@ -589,6 +640,20 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.setViewportSize({width:600,height:600});
       assert(await page.locator('.am-stats-table-wrap').evaluate(box=>box.scrollWidth===box.clientWidth));
       await page.setViewportSize({width:1100,height:600});
+      const pendingFrame = new Promise(resolve => { frameStatsRequested = resolve; });
+      let releaseFrame;
+      holdFrameStats = new Promise(resolve => { releaseFrame = resolve; });
+      await page.locator('[data-tab=stats]').click();
+      await pendingFrame;
+      await chooseProject('Site');
+      await page.locator('#stats-top').getByText(otherStat.title,{exact:true}).waitFor();
+      assert.match(await page.locator('#stats-total-title').textContent(),/^700 /);
+      const lateFrame = page.waitForResponse(r => new URL(r.url()).pathname==='/api/usage-stats' && new URL(r.url()).searchParams.get('project')==='Frame');
+      releaseFrame();holdFrameStats=null;
+      await (await lateFrame).finished();
+      assert.equal(await firstTitle(),otherStat.title);
+      await chooseProject('Frame');
+      await page.locator('#stats-top').getByText(stat.title,{exact:true}).waitFor();
       await page.locator('[data-tab=tasks]').click();
       await page.locator('.am-task-title',{hasText:localTask.title}).click();
       const sender = page.locator('#thread .am-outgoing .am-meta').first();
@@ -700,6 +765,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       // Keep the broker and feed stale while the task row records completion.
       runnerAgents=[...runnerAgents.slice(0,2),{agent:'codex',running:1}];
       runnerWorkers=[{task:remoteTask.id,output_age:0}];
+      codexWaiting=false;
       await Promise.all([page.waitForResponse(response=>new URL(response.url()).pathname==='/api/server'),page.locator('[data-tab=server]').click()]);
       await page.locator('[data-tab=tasks]').click();
       remoteRow={...remoteRow,state:'done',finished_at:new Date(Date.now()).toISOString()};
@@ -727,6 +793,22 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(clears.length, 1);
       assert.equal(await page.locator('#fb-export').isDisabled(), true);
       await page.locator('#fb-close').click();
+      await page.locator('#task-list').getByText(localTask.title,{exact:true}).click();
+      const composer = page.locator('#answer-text');
+      await composer.fill('Unsent note for Frame');
+      delaySiteView = true;
+      await page.locator('[aria-controls="project-select-menu"]').click();
+      await page.locator('#project-select-menu').getByText('Site',{exact:true}).click();
+      try {
+        assert.equal(await page.locator('#task-list .am-task').count(), 0, 'clear the old project list while Site loads');
+        assert(await composer.isHidden());
+      } finally {
+        releaseSite();
+      }
+      await page.locator('#task-head h3').filter({hasText:siteTask.title}).waitFor();
+      await composer.waitFor();
+      assert.equal(await composer.inputValue(), '', 'a draft must not follow a task from another project');
+      assert(await page.locator('#answer-send').isDisabled());
       // One update button: the dialog follows the download, the install and
       // the restart; a failed install says so and offers to try again.
       const updateButton = page.locator('#app-update-button');

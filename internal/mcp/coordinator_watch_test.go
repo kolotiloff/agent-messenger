@@ -3,6 +3,12 @@ package mcp
 import (
 	"bytes"
 	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -16,10 +22,18 @@ func TestCoordinatorWatchExitsOnAnEvent(t *testing.T) {
 	old := coordinatorWatchPoll
 	coordinatorWatchPoll = 20 * time.Millisecond
 	defer func() { coordinatorWatchPoll = old }()
-	st := newCoordinatorStore(t)
+	root := t.TempDir()
+	st := newCoordinatorStoreAt(t, root)
+	reader, err := core.OpenTaskEventReader(filepath.Join(root, "queue.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
 	var out bytes.Buffer
 	done := make(chan error, 1)
-	go func() { done <- watchCoordinator(context.Background(), st, "Game", 0, &out) }()
+	watchCtx, cancelWatch := context.WithCancel(context.Background())
+	defer cancelWatch()
+	go func() { done <- watchCoordinator(watchCtx, reader.TaskEvents, "Game", 0, &out) }()
 	other, _, err := st.StartTask(core.StartTaskRequest{Project: "Other", OpID: "o", Provider: "claude", Text: "other work"})
 	if err != nil {
 		t.Fatal(err)
@@ -45,8 +59,111 @@ func TestCoordinatorWatchExitsOnAnEvent(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 	_, cursor, _ := st.TaskEvents("Game", core.AudienceCoordinator, 0, 100)
-	if err := watchCoordinator(ctx, st, "Game", cursor, &out); err != nil || !strings.Contains(out.String(), "no new events") {
+	if err := watchCoordinator(ctx, reader.TaskEvents, "Game", cursor, &out); err != nil || !strings.Contains(out.String(), "no new events") {
 		t.Fatalf("%v %q", err, out.String())
+	}
+}
+
+func TestCoordinatorWatchReadsThroughWALWriter(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "queue.sqlite")
+	st := newCoordinatorStoreAt(t, root)
+	task, _, err := st.StartTask(core.StartTaskRequest{Project: "Game", OpID: "work", Provider: "claude", Text: "fixture"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	finishRun(t, st, task, core.DispositionReport, "committed before the other project wrote")
+	lock := holdSQLiteLock(t, path, "BEGIN IMMEDIATE")
+	defer lock()
+	var out bytes.Buffer
+	done := make(chan error, 1)
+	go func() {
+		done <- CoordinatorWatchMain(path, []string{"--project", "Game", "--after", "0"}, &out)
+	}()
+	select {
+	case err := <-done:
+		if err != nil || !strings.Contains(out.String(), "(report)") {
+			t.Fatalf("watch: %v, %q", err, out.String())
+		}
+	case <-time.After(4 * time.Second):
+		t.Fatal("could not read the committed event while the writer held its transaction")
+	}
+}
+
+func TestCoordinatorWatchRetriesBusyWithoutMovingCursor(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rollback.sqlite")
+	db, err := sql.Open("sqlite", filepath.ToSlash(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`CREATE TABLE fixture (id INTEGER)`); err != nil {
+		t.Fatal(err)
+	}
+	release := holdSQLiteLock(t, path, "BEGIN EXCLUSIVE")
+	_, err = db.Exec(`SELECT id FROM fixture`)
+	release()
+	if !sqliteBusy(err) {
+		t.Fatalf("expected a real SQLITE_BUSY, got %v", err)
+	}
+	busy := fmt.Errorf("read fixture: %w", err)
+	old := coordinatorWatchPoll
+	coordinatorWatchPoll = 10 * time.Millisecond
+	defer func() { coordinatorWatchPoll = old }()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	var out bytes.Buffer
+	attempts := 0
+	read := func(_ context.Context, project, audience string, after int64, _ int) ([]core.TaskEvent, int64, error) {
+		if project != "Game" || audience != core.AudienceCoordinator || after != 42 {
+			t.Fatalf("watch changed scope or cursor: %s %s %d", project, audience, after)
+		}
+		attempts++
+		if attempts < 3 {
+			return nil, after, busy
+		}
+		return []core.TaskEvent{{Seq: 51, Kind: "report"}}, 51, nil
+	}
+	if err := watchCoordinator(ctx, read, "Game", 42, &out); err != nil || attempts != 3 || !strings.Contains(out.String(), "after=42") {
+		t.Fatalf("watch recovery: attempts %d, %v, %q", attempts, err, out.String())
+	}
+	out.Reset()
+	ended, stop := context.WithCancel(context.Background())
+	defer stop()
+	read = func(context.Context, string, string, int64, int) ([]core.TaskEvent, int64, error) {
+		stop()
+		return nil, 42, busy
+	}
+	if err := watchCoordinator(ended, read, "Game", 42, &out); err != nil || !strings.Contains(out.String(), "could not check") || !strings.Contains(out.String(), "cursor 42") {
+		t.Fatalf("watch ended during lock: %v, %q", err, out.String())
+	}
+}
+
+func TestCoordinatorWatchDoesNotCreateAMissingDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "queue.sqlite")
+	var out bytes.Buffer
+	if err := CoordinatorWatchMain(path, []string{"--project", "Game", "--after", "0"}, &out); err == nil || !strings.Contains(err.Error(), "read coordinator events") {
+		t.Fatalf("expected a database read error, got %v", err)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("missing queue should not be created: %v", err)
+	}
+}
+
+func holdSQLiteLock(t *testing.T, path, begin string) func() {
+	t.Helper()
+	db, err := sql.Open("sqlite", filepath.ToSlash(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	if _, err := db.Exec(begin); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	return func() {
+		_, _ = db.Exec("ROLLBACK")
+		_ = db.Close()
 	}
 }
 
@@ -56,6 +173,26 @@ func TestCoordinatorWatchLineIsQuoted(t *testing.T) {
 	want := `'/Applications/Agent Messenger.app/Contents/MacOS/messenger' --root '/Users/o/data dir' coordinator-watch --project 'Game'\''s' --after CURSOR`
 	if line != want {
 		t.Fatalf("got  %s\nwant %s", line, want)
+	}
+}
+
+func TestCoordinatorWatchWakesForOverdueRestartWithoutWriting(t *testing.T) {
+	root := t.TempDir()
+	store := newCoordinatorStoreAt(t, root)
+	if err := store.NoteMacUpdateRestart(time.Now().Add(-3 * time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	_, cursor, err := store.TaskEvents("Game", core.AudienceCoordinator, 0, 10)
+	if err != nil || cursor == 0 {
+		t.Fatalf("restart event: %d %v", cursor, err)
+	}
+	var out bytes.Buffer
+	if err := CoordinatorWatchMain(filepath.Join(root, "queue.sqlite"), []string{"--project", "Game", "--after", strconv.FormatInt(cursor, 10)}, &out); err != nil || !strings.Contains(out.String(), "planned restart deadline passed") {
+		t.Fatalf("watch: %v %q", err, out.String())
+	}
+	events, _, err := store.TaskEvents("Game", core.AudienceCoordinator, cursor, 10)
+	if err != nil || len(events) != 0 {
+		t.Fatalf("watch wrote additional events: %+v %v", events, err)
 	}
 }
 

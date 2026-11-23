@@ -215,7 +215,7 @@ type Task struct {
 	ID, Project, Computer, Provider, Profile, Folder, Title, Text, State string
 	SessionID, Detail, CreatedAt, UpdatedAt, FinishedAt                  string
 	CLI, Environment                                                     string
-	Model                                                                string
+	Model, RanModel                                                      string
 	// FailureReason and FailureReset explain a failed task (T-034): the
 	// failure class the provider reported and its limit reset time (RFC 3339).
 	// They never cause a retry.
@@ -699,7 +699,7 @@ type StartTaskRequest struct {
 	// Rules are the project's worker rules of the computer that started the
 	// task (T-050). StartTask fills them; they travel with a remote task.
 	Rules string
-	// Lock names a resource such as «Unity editor» (T-072): a task with a
+	// Lock explicitly names a shared resource (T-072): a task with a
 	// lock does not launch while an earlier open task with the same lock
 	// runs on the same computer. Empty means no lock.
 	Lock string
@@ -748,7 +748,7 @@ func (s *Store) StartTask(r StartTaskRequest) (string, bool, error) {
 	}
 	lock, ok := normalizeLock(r.Lock)
 	if !ok {
-		return "", false, fmt.Errorf("%w: lock must be a short one-line name such as unity-editor (at most %d characters)", ErrRejected, MaxTaskLock)
+		return "", false, fmt.Errorf("%w: lock must be a short one-line resource name (at most %d characters)", ErrRejected, MaxTaskLock)
 	}
 	r.Lock = lock
 	var id string
@@ -917,12 +917,12 @@ func insertTaskRun(tx *sql.Tx, task string, ordinal int, kind, input string, sen
 	return err
 }
 
-const taskColumns = `id,project,computer,provider,profile,folder,title,text,state,COALESCE(session_id,''),detail,created_at,updated_at,COALESCE(finished_at,''),cli_path,environment,cancel_requested,version,COALESCE(model,''),COALESCE(failure_reason,''),COALESCE(failure_reset,''),origin_peer IS NOT NULL,full_access,sender_agent,sender_model`
+const taskColumns = `id,project,computer,provider,profile,folder,title,text,state,COALESCE(session_id,''),detail,created_at,updated_at,COALESCE(finished_at,''),cli_path,environment,cancel_requested,version,COALESCE(model,''),COALESCE(ran_model,''),COALESCE(failure_reason,''),COALESCE(failure_reset,''),origin_peer IS NOT NULL,full_access,sender_agent,sender_model`
 
 func scanTask(scan func(...any) error) (Task, error) {
 	var t Task
 	var cancel, origin, full int
-	err := scan(&t.ID, &t.Project, &t.Computer, &t.Provider, &t.Profile, &t.Folder, &t.Title, &t.Text, &t.State, &t.SessionID, &t.Detail, &t.CreatedAt, &t.UpdatedAt, &t.FinishedAt, &t.CLI, &t.Environment, &cancel, &t.Version, &t.Model, &t.FailureReason, &t.FailureReset, &origin, &full, &t.SenderAgent, &t.SenderModel)
+	err := scan(&t.ID, &t.Project, &t.Computer, &t.Provider, &t.Profile, &t.Folder, &t.Title, &t.Text, &t.State, &t.SessionID, &t.Detail, &t.CreatedAt, &t.UpdatedAt, &t.FinishedAt, &t.CLI, &t.Environment, &cancel, &t.Version, &t.Model, &t.RanModel, &t.FailureReason, &t.FailureReset, &origin, &full, &t.SenderAgent, &t.SenderModel)
 	t.CancelRequested, t.FromNetwork, t.FullAccess = cancel != 0, origin != 0, full != 0
 	return t, err
 }
@@ -1258,35 +1258,41 @@ func (s *Store) SetTaskRunModel(run, model string) error {
 	if model == "" || len(model) > 120 {
 		return nil
 	}
-	return s.tx(func(tx *sql.Tx) error {
-		var task, previous string
-		err := tx.QueryRow(`SELECT t.id,COALESCE(t.ran_model,'') FROM task_runs r JOIN tasks t ON t.id=r.task_id WHERE r.id=?`, run).Scan(&task, &previous)
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		if previous == model {
-			return nil
-		}
-		if _, err := tx.Exec(`UPDATE tasks SET ran_model=? WHERE id=?`, model, task); err != nil {
-			return err
-		}
-		if !ValidTaskModel(model) {
-			return nil
-		}
-		link, err := taskLink(tx, task)
-		if err != nil || link.origin == nil {
-			return err
-		}
-		op, err := randomID()
-		if err != nil {
-			return err
-		}
-		origin := link.origin
-		return enqueueNet(tx, origin.broker, origin.peer, "ran_model."+op, task, netBody{Kind: "ran_model", Task: origin.task, Model: model})
-	})
+	return s.tx(func(tx *sql.Tx) error { return setTaskRunModel(tx, run, model) })
+}
+
+// ClearTaskRunModel removes the previous observation when a new process
+// resumes a task, since its CLI defaults may have changed.
+func (s *Store) ClearTaskRunModel(run string) error {
+	return s.tx(func(tx *sql.Tx) error { return setTaskRunModel(tx, run, "") })
+}
+
+func setTaskRunModel(tx *sql.Tx, run, model string) error {
+	var task, previous string
+	err := tx.QueryRow(`SELECT t.id,COALESCE(t.ran_model,'') FROM task_runs r JOIN tasks t ON t.id=r.task_id WHERE r.id=?
+AND NOT EXISTS (SELECT 1 FROM task_runs newer WHERE newer.task_id=t.id AND newer.ordinal>r.ordinal AND newer.launched_at IS NOT NULL)`, run).Scan(&task, &previous)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil || previous == model {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE tasks SET ran_model=?,version=version+1 WHERE id=?`, model, task); err != nil {
+		return err
+	}
+	if _, _, err := modelcatalog.SplitReported(model); err != nil {
+		return nil
+	}
+	link, err := taskLink(tx, task)
+	if err != nil || link.origin == nil {
+		return err
+	}
+	op, err := randomID()
+	if err != nil {
+		return err
+	}
+	origin := link.origin
+	return enqueueNet(tx, origin.broker, origin.peer, "ran_model."+op, task, netBody{Kind: "ran_model", Task: origin.task, Model: model})
 }
 
 // BindTaskSession checks the conversation ID the CLI reported. A Claude task
@@ -2205,43 +2211,17 @@ func (s *Store) InterruptInheritedTaskRuns() error {
 	return s.tx(interruptInheritedTaskRuns)
 }
 
-// TaskEvents returns a project's events after the cursor for one audience,
-// at most limit. Reading never moves anything: a caller that repeats the
-// same cursor gets the same events again.
-func (s *Store) TaskEvents(project, audience string, after int64, limit int) ([]TaskEvent, int64, error) {
-	if limit <= 0 || limit > 100 {
-		limit = 20
-	}
-	var out []TaskEvent
-	cursor := after
-	err := s.tx(func(tx *sql.Tx) error {
-		rows, err := tx.Query(`SELECT seq,task_id,kind,text,COALESCE(question_id,''),created_at FROM task_events WHERE project=? AND audience=? AND seq>? ORDER BY seq LIMIT ?`, project, audience, after, limit)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var e TaskEvent
-			if err := rows.Scan(&e.Seq, &e.TaskID, &e.Kind, &e.Text, &e.QuestionID, &e.CreatedAt); err != nil {
-				return err
-			}
-			out = append(out, e)
-			cursor = e.Seq
-		}
-		return rows.Err()
-	})
-	return out, cursor, err
-}
-
 // TaskListVersion changes whenever a project's task list or its events may
 // have changed: a new event, a new task, or any task state change (every such
 // update bumps tasks.version). It lets the coordinator skip an unchanged list
 // (T-032).
 func (s *Store) TaskListVersion(project string) (string, error) {
 	var seq sql.NullInt64
-	var count, sum int64
-	err := s.db.QueryRow(`SELECT (SELECT MAX(seq) FROM task_events WHERE project=?), COUNT(*), COALESCE(SUM(version),0) FROM tasks WHERE project=?`, project, project).Scan(&seq, &count, &sum)
-	return fmt.Sprintf("%d.%d.%d", seq.Int64, count, sum), err
+	var count, sum, waiting int64
+	err := s.db.QueryRow(`SELECT (SELECT MAX(seq) FROM task_events WHERE project=?), COUNT(*), COALESCE(SUM(version),0),
+ COUNT(CASE WHEN t.state='running' AND t.resource<>'' AND EXISTS (`+lockHolderQuery+`) THEN 1 END)
+ FROM tasks t WHERE t.project=?`, project, project).Scan(&seq, &count, &sum, &waiting)
+	return fmt.Sprintf("%d.%d.%d.%d", seq.Int64, count, sum, waiting), err
 }
 
 // LatestTaskEvent returns the newest event sequence number of a project.
@@ -2328,9 +2308,9 @@ func (s *Store) CoordinatorLastSeen(project string) (string, error) {
 type AgentSummary struct {
 	Agent   string `json:"agent"`
 	Profile string `json:"profile"`
-	// Running counts tasks of all projects that run on this agent now.
+	// Running counts known active tasks of this project on this agent.
 	Running int `json:"running"`
-	// Waiting counts this agent's tasks waiting for an answer, all projects.
+	// Waiting counts known tasks of this project waiting for an answer.
 	Waiting int `json:"waiting"`
 	// Models are the names the owner listed; for Codex and Cursor only
 	// these may be passed to start_task (T-043).
@@ -2400,6 +2380,8 @@ type ComputerSummary struct {
 func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 	var c ComputerSummary
 	var catalog map[string][]string
+	type agentOnComputer struct{ computer, agent string }
+	activity := map[agentOnComputer]AgentSummary{}
 	err := s.tx(func(tx *sql.Tx) error {
 		computer, err := localComputer(tx)
 		if err != nil {
@@ -2434,11 +2416,51 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 		if c.UpdatePending {
 			c.Note = strings.TrimSpace("waiting to install a Messenger update: it takes no new tasks. " + c.Note)
 		}
-		rows, err := tx.Query(`SELECT a.provider,a.profile,
- (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='running'),
- (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state IN ('waiting_coordinator','waiting_owner')),
- a.models, a.limit_state, a.full_access
- FROM computer_agents a WHERE a.computer=? AND a.paused=0 ORDER BY a.provider`, computer)
+		tasks, err := tx.Query(`SELECT computer,provider,COUNT(CASE WHEN state='running' THEN 1 END),
+ COUNT(CASE WHEN state IN ('waiting_coordinator','waiting_owner') THEN 1 END)
+ FROM tasks WHERE project=? AND state IN ('running','waiting_coordinator','waiting_owner')
+ AND (remote_peer IS NULL OR remote_broker=(SELECT value FROM meta WHERE key='net_broker'))
+ GROUP BY computer,provider`, project)
+		if err != nil {
+			return err
+		}
+		for tasks.Next() {
+			var key agentOnComputer
+			var counts AgentSummary
+			if err := tasks.Scan(&key.computer, &key.agent, &counts.Running, &counts.Waiting); err != nil {
+				tasks.Close()
+				return err
+			}
+			activity[key] = counts
+		}
+		tasks.Close()
+		if err := tasks.Err(); err != nil {
+			return err
+		}
+		shared, err := projectNetTasks(tx, project)
+		if err != nil {
+			return err
+		}
+		for _, peer := range shared {
+			if peer.Age < 0 || peer.Age > PeerFresh {
+				continue
+			}
+			for _, task := range peer.Tasks {
+				key := agentOnComputer{peer.Peer, task.Agent}
+				if task.RunsOnPeer != "" {
+					key.computer = task.RunsOnPeer
+				}
+				counts := activity[key]
+				switch task.State {
+				case "running":
+					counts.Running++
+				case "waiting_coordinator", "waiting_owner":
+					counts.Waiting++
+				}
+				activity[key] = counts
+			}
+		}
+		rows, err := tx.Query(`SELECT a.provider,a.profile,a.models,a.limit_state,a.full_access FROM computer_agents a WHERE a.computer=? AND a.paused=0 ORDER BY a.provider`, computer)
 		if err != nil {
 			return err
 		}
@@ -2446,9 +2468,11 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 		for rows.Next() {
 			var a AgentSummary
 			var models, limit string
-			if err := rows.Scan(&a.Agent, &a.Profile, &a.Running, &a.Waiting, &models, &limit, &a.FullAccess); err != nil {
+			if err := rows.Scan(&a.Agent, &a.Profile, &models, &limit, &a.FullAccess); err != nil {
 				return err
 			}
+			counts := activity[agentOnComputer{computer, a.Agent}]
+			a.Running, a.Waiting = counts.Running, counts.Waiting
 			a.Models = splitModels(models)
 			a.Limit = limitView(parseAgentLimit(limit), time.Now())
 			a.explain()
@@ -2500,7 +2524,8 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 			if models == nil {
 				models = []string{}
 			}
-			as := AgentSummary{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting, Models: models, Limit: limitView(a.Limit, time.Now())}
+			counts := activity[agentOnComputer{p.ID, a.Agent}]
+			as := AgentSummary{Agent: a.Agent, Running: counts.Running, Waiting: counts.Waiting, Models: models, Limit: limitView(a.Limit, time.Now())}
 			as.explain()
 			o.Agents = append(o.Agents, as)
 		}
@@ -2530,7 +2555,7 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 }
 
 // idleComputers names the online computers that can take this project's
-// tasks and run no task now (of any project): where the next task can go.
+// tasks and have no known running task of this project.
 func idleComputers(list []ComputerSummary) []string {
 	var out []string
 	for _, c := range list {
