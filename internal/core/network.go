@@ -1092,59 +1092,26 @@ func refusalText(err error) string {
 	return strings.TrimPrefix(err.Error(), ErrRejected.Error()+": ")
 }
 
+func enqueueStartReply(tx *sql.Tx, from netLink, kind string, body netBody) error {
+	body.Kind, body.Task = kind, from.task
+	return enqueueNet(tx, from.broker, from.peer, "reply."+from.peer+"."+from.task, from.task, body)
+}
+
 func applyStart(tx *sql.Tx, from netLink, b netBody) error {
-	reply := func(kind string, body netBody) error {
-		body.Kind, body.Task = kind, from.task
-		return enqueueNet(tx, from.broker, from.peer, "reply."+from.peer+"."+from.task, from.task, body)
-	}
 	if _, ok, err := mirrorTask(tx, from); err != nil || ok {
 		return err
 	}
-	accept, err := metaValue(tx, "net_accept")
-	if err != nil {
-		return err
-	}
-	if accept == "0" {
-		return reply("refused", netBody{Reason: "this computer does not run tasks of other computers; its owner can turn this on in the Server tab"})
-	}
-	if pending, err := hasPendingUpdate(tx); err != nil {
-		return err
-	} else if pending {
-		return reply("refused", netBody{Reason: "this computer is waiting to install a Messenger update and takes no new tasks"})
-	}
-	r := StartTaskRequest{Project: b.Project, OpID: mirrorOp(from), Provider: b.Agent, Title: b.Title, Text: strings.TrimSpace(b.Text), Model: strings.TrimSpace(b.Model), Rules: strings.TrimSpace(b.Rules), SenderAgent: b.SenderAgent, SenderModel: b.SenderModel}
-	lock, lockOK := normalizeLock(b.Lock)
-	r.Lock = lock
 	var id string
-	err = savepoint(tx, func() error {
-		switch {
-		case !lockOK:
-			return fmt.Errorf("%w: invalid lock name", ErrRejected)
-		case !TaskProviders[r.Provider]:
-			return fmt.Errorf("%w: unsupported agent %q", ErrRejected, r.Provider)
-		case r.Text == "" || utf8.RuneCountInString(r.Text) > MaxTaskText:
-			return fmt.Errorf("%w: the task text is empty or too long", ErrRejected)
-		case !ValidTaskModel(r.Model):
-			return fmt.Errorf("%w: invalid model name", ErrRejected)
-		case utf8.RuneCountInString(r.Rules) > MaxWorkerRules || strings.ContainsRune(r.Rules, 0):
-			return fmt.Errorf("%w: the worker rules are too long", ErrRejected)
-		}
-		var projects int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM projects WHERE name=? AND removed_at IS NULL`, r.Project).Scan(&projects); err != nil {
-			return err
-		}
-		if projects == 0 {
-			return fmt.Errorf("%w: this computer has no project named exactly %q; projects are matched by their exact name, so the owner creates or renames the project here to exactly this name", ErrRejected, r.Project)
-		}
-		computer, err := localComputer(tx)
+	err := savepoint(tx, func() error {
+		r, err := remoteStartRequest(tx, from, b)
 		if err != nil {
 			return err
 		}
-		id, err = startLocalTask(tx, r, computer, &from, b.CoordinatorModel)
+		id, err = startLocalTask(tx, r, r.Computer, &from, b.CoordinatorModel)
 		return err
 	})
 	if errors.Is(err, ErrRejected) {
-		return reply("refused", netBody{Reason: refusalText(err)})
+		return enqueueStartReply(tx, from, "refused", netBody{Reason: refusalText(err)})
 	}
 	if err != nil {
 		return err
@@ -1153,7 +1120,47 @@ func applyStart(tx *sql.Tx, from netLink, b netBody) error {
 	if err := tx.QueryRow(`SELECT folder FROM tasks WHERE id=?`, id).Scan(&folder); err != nil {
 		return err
 	}
-	return reply("accepted", netBody{Mirror: id, Folder: folder})
+	return enqueueStartReply(tx, from, "accepted", netBody{Mirror: id, Folder: folder})
+}
+
+func remoteStartRequest(tx *sql.Tx, from netLink, b netBody) (StartTaskRequest, error) {
+	var r StartTaskRequest
+	accept, err := metaValue(tx, "net_accept")
+	if err != nil {
+		return r, err
+	}
+	if accept == "0" {
+		return r, fmt.Errorf("%w: this computer does not run tasks of other computers; its owner can turn this on in the Server tab", ErrRejected)
+	}
+	if pending, err := hasPendingUpdate(tx); err != nil {
+		return r, err
+	} else if pending {
+		return r, fmt.Errorf("%w: this computer is waiting to install a Messenger update and takes no new tasks", ErrRejected)
+	}
+	r = StartTaskRequest{Project: b.Project, OpID: mirrorOp(from), Provider: b.Agent, Title: b.Title, Text: strings.TrimSpace(b.Text), Model: strings.TrimSpace(b.Model), Rules: strings.TrimSpace(b.Rules), SenderAgent: b.SenderAgent, SenderModel: b.SenderModel}
+	lock, lockOK := normalizeLock(b.Lock)
+	r.Lock = lock
+	switch {
+	case !lockOK:
+		return r, fmt.Errorf("%w: invalid lock name", ErrRejected)
+	case !TaskProviders[r.Provider]:
+		return r, fmt.Errorf("%w: unsupported agent %q", ErrRejected, r.Provider)
+	case r.Text == "" || utf8.RuneCountInString(r.Text) > MaxTaskText:
+		return r, fmt.Errorf("%w: the task text is empty or too long", ErrRejected)
+	case !ValidTaskModel(r.Model):
+		return r, fmt.Errorf("%w: invalid model name", ErrRejected)
+	case utf8.RuneCountInString(r.Rules) > MaxWorkerRules || strings.ContainsRune(r.Rules, 0):
+		return r, fmt.Errorf("%w: the worker rules are too long", ErrRejected)
+	}
+	var exists bool
+	if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM projects WHERE name=? AND removed_at IS NULL)`, r.Project).Scan(&exists); err != nil {
+		return r, err
+	}
+	if !exists {
+		return r, fmt.Errorf("%w: this computer has no project named exactly %q; projects are matched by their exact name, so the owner creates or renames the project here to exactly this name", ErrRejected, r.Project)
+	}
+	r.Computer, err = localComputer(tx)
+	return r, err
 }
 
 func applyAnswer(tx *sql.Tx, from netLink, opID string, b netBody) error {

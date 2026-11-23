@@ -115,7 +115,7 @@ func writeProjectSnapshot(ctx context.Context, db *sql.DB, project string, withD
 		if _, err := tx.ExecContext(ctx, `DELETE FROM snapshot.sqlite_sequence WHERE name='net_outbox';
  INSERT INTO snapshot.sqlite_sequence(name,seq)
  VALUES ('net_outbox',COALESCE((SELECT seq FROM main.sqlite_sequence WHERE name='net_outbox'),0));
- CREATE INDEX snapshot.net_applied_op ON net_applied(op_id)`); err != nil {
+ CREATE INDEX IF NOT EXISTS snapshot.net_applied_op ON net_applied(op_id)`); err != nil {
 			return err
 		}
 	}
@@ -154,6 +154,40 @@ func copyProjectTable(ctx context.Context, tx *sql.Tx, table, where, project str
 	if strings.Contains(where, "?") {
 		args = append(args, project)
 	}
-	_, err := tx.ExecContext(ctx, "INSERT INTO snapshot."+table+" SELECT * FROM main."+table+" WHERE "+where+" ORDER BY rowid", args...)
-	return err
+	if _, err := tx.ExecContext(ctx, "INSERT INTO snapshot."+table+" SELECT * FROM main."+table+" WHERE "+where+" ORDER BY rowid", args...); err != nil {
+		return err
+	}
+	return copyProjectIndexes(ctx, tx, table)
+}
+
+func copyProjectIndexes(ctx context.Context, tx *sql.Tx, table string) error {
+	// Implicit indexes come from CREATE TABLE. Preserve explicit indexes
+	// too, including the partial unique index for conversation IDs.
+	rows, err := tx.QueryContext(ctx, `SELECT sql FROM main.sqlite_schema
+ WHERE type='index' AND tbl_name=? AND sql IS NOT NULL ORDER BY name`, table)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	var definitions []string
+	for rows.Next() {
+		var ddl string
+		if err := rows.Scan(&ddl); err != nil {
+			return err
+		}
+		prefix, definition, ok := strings.Cut(ddl, "INDEX ")
+		if !ok || (prefix != "CREATE " && prefix != "CREATE UNIQUE ") {
+			return fmt.Errorf("unsupported index definition")
+		}
+		definitions = append(definitions, prefix+"INDEX snapshot."+definition)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, ddl := range definitions {
+		if _, err := tx.ExecContext(ctx, ddl); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -88,6 +88,7 @@ func TestProjectSnapshotKeepsRemovedProjectAndItsCursor(t *testing.T) {
 	check("SELECT MAX(seq) FROM task_events", cursor)
 	check("SELECT text FROM task_run_items", "worker text")
 	check("SELECT text FROM feedback", "project feedback")
+	check("SELECT COUNT(*) FROM sqlite_schema WHERE type='index' AND name IN ('tasks_session','task_owner_notes_task','task_events_project','task_images_task','task_images_run')", int64(5))
 	check("SELECT COUNT(*) FROM sqlite_schema WHERE name IN ('meta','net_peers','net_outbox','computer_agents','coordinator_chats')", int64(0))
 	var saved []byte
 	if err := archive.QueryRow("SELECT data FROM task_images").Scan(&saved); err != nil || !bytes.Equal(saved, png) {

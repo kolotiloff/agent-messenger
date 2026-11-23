@@ -43,12 +43,8 @@ func startSplitLocalTask(ctx context.Context, computer *sql.DB, openProject func
 		return "", false, err
 	}
 	defer project.Rollback()
-	var storedProject string
-	if err := project.QueryRowContext(ctx, "SELECT project FROM project_snapshot").Scan(&storedProject); err != nil {
+	if err := checkSplitProject(ctx, project, r.Project); err != nil {
 		return "", false, err
-	}
-	if storedProject != r.Project {
-		return "", false, fmt.Errorf("%w: the database belongs to another project", ErrRejected)
 	}
 	id, err := existingStartTask(project, r)
 	created := errors.Is(err, sql.ErrNoRows)
@@ -122,7 +118,7 @@ func beginSplitLocalRun(ctx context.Context, computer *sql.DB, openProject func(
 	if err != nil {
 		return r, t, err
 	}
-	if t.Project != projectName || t.FromNetwork || t.Computer != self || r.State != "intent" {
+	if t.Project != projectName || t.Computer != self || r.State != "intent" || (t.FromNetwork && r.Kind != "start") {
 		return r, t, fmt.Errorf("%w: the task does not have a local launch intent in this project", ErrRejected)
 	}
 	order, err := splitRouteOrder(ctx, common, t)
@@ -145,6 +141,17 @@ func beginSplitLocalRun(ctx context.Context, computer *sql.DB, openProject func(
 		return r, t, err
 	}
 	return r, t, common.Commit()
+}
+
+func checkSplitProject(ctx context.Context, project *sql.Tx, name string) error {
+	var saved string
+	if err := project.QueryRowContext(ctx, "SELECT project FROM project_snapshot").Scan(&saved); err != nil {
+		return err
+	}
+	if saved != name {
+		return fmt.Errorf("%w: the database belongs to another project", ErrRejected)
+	}
+	return nil
 }
 
 func beginSplitAdmission(ctx context.Context, computer *sql.DB) (*sql.Tx, error) {

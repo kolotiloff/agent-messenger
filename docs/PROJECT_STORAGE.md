@@ -8,7 +8,7 @@ Messenger still runs tasks from one `queue.sqlite` per computer. Removal from th
 messenger --root DIR project-snapshot --name NAME --output PATH.sqlite
 ```
 
-The destination must be a new file in an existing directory that supports hard links. The command reads the live queue without beginning a writer transaction. It copies the selected project's records, worker runs, questions, notes, events, action items, output, report images and feedback. The file keeps task and run IDs, event sequences and existing columns. SQLite checks the staged copy before it becomes visible at the requested path. Network membership, unsent messages, coordinator claims, agents and the reservation registry do not go into this history copy. The client refuses to use the snapshot as a live queue. No data is removed from the source.
+The destination must be a new file in an existing directory that supports hard links. The command reads the live queue without beginning a writer transaction. It copies the selected project's records, worker runs, questions, notes, events, action items, output, report images and feedback. The file keeps task and run IDs, event sequences, existing columns and indexes. SQLite checks the staged copy before it becomes visible at the requested path. Network membership, unsent messages, coordinator claims, agents and the reservation registry do not go into this history copy. The client refuses to use the snapshot as a live queue. No data is removed from the source.
 
 ## Staging and verification
 
@@ -42,6 +42,12 @@ Resource locks are optional and domain-neutral. Messenger supplies no resource n
 
 Tests exercise two project files, a failed route registration, explicit replay, concurrent admission through independent connections and a verified refusal before exec. The legacy single-database task entry points reuse the preparation and launch-state helpers. Split dispatch and process execution have not been activated.
 
+## Remote task admission
+
+An incoming assignment uses the exact project name and the same admission policy as the existing client. The project database commits the mirror, its original sender identity and its first launch intent. The computer database commits the confirmed route, the start reply and the broker cursor together. This keeps the acceptance reply invisible until the route exists. A delivery replay after a failed computer commit finds the same mirror and publishes its route without a second run. An existing remote task identity cannot create another mirror in a different project.
+
+The two-project test injects a cursor write failure, checks that the unregistered run cannot launch, reopens both files and replays the assignment. It also delivers a separate assignment for the other project and a request for a missing project. The remote supervisor, worker process and later messages still use the legacy dispatch path in the running app.
+
 ## Live layout
 
 - Keep settings, machine identity, network membership and shared resource ownership in the computer database. The project catalog owns a stable local storage ID and maps the existing network project name to it. The display title can change independently.
@@ -53,6 +59,6 @@ SQLite WAL can commit an individual database atomically. Attaching multiple file
 
 ## Migration and archive behaviour
 
-The staging command already preserves task IDs, mirror and origin links, old operation deduplication, unacknowledged messages and event cursors. The running client still needs activation, remote task admission, worker-run and process-registry routing, and storage dispatch in the supervisor. Verify project row counts, SQLite integrity, pending delivery routing and that each task still opens with its history. Activate the new storage only after that verification and while old writers are stopped. Keep a recoverable copy of the old data directory. A failed staging pass must leave the old layout usable and a second pass must not duplicate a task or report.
+The staging command already preserves task IDs, mirror and origin links, old operation deduplication, unacknowledged messages and event cursors. The running client still needs activation, worker-run and process-registry routing, and storage dispatch in the supervisor. Verify project row counts, SQLite integrity, pending delivery routing and that each task still opens with its history. Activate the new storage only after that verification and while old writers are stopped. Keep a recoverable copy of the old data directory. A failed staging pass must leave the old layout usable and a second pass must not duplicate a task or report.
 
-Keep ordinary removal reversible by archiving the project history after its tasks and pending deliveries settle. Recover the archive on reopen. Permanent deletion of the archive is a separate owner action. Live supervisor routing, new-assignment admission and peer rebinding across files, migration cutover and restore, and the window's archive workflow are pending. Verify a restart during migration, a mixed-version two-computer delivery and an update waiting for work from more than one project.
+Keep ordinary removal reversible by archiving the project history after its tasks and pending deliveries settle. Recover the archive on reopen. Permanent deletion of the archive is a separate owner action. Live supervisor routing, peer rebinding across files, migration cutover and restore, and the window's archive workflow are pending. The next release requires active separate databases, verified migration from 0.94, and two projects working at the same time. Acceptance covers a restart during migration, a mixed-version two-computer delivery and an update waiting for work from more than one project.
