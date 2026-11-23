@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -83,6 +84,41 @@ func TestMailboxCarriesMessagesInOrder(t *testing.T) {
 		t.Fatalf("member inbox %+v", m)
 	}
 	// Nobody reads another computer's mail: a's inbox never had b's.
+}
+
+func TestConcurrentMailboxWrites(t *testing.T) {
+	host, sender, recipient := joined(t)
+	senderNetwork, _ := sender.Network()
+	recipientNetwork, _ := recipient.Network()
+	host.mu.Lock()
+	b := host.broker
+	host.mu.Unlock()
+
+	const messages = 16
+	start := make(chan struct{})
+	errs := make(chan error, messages)
+	var writers sync.WaitGroup
+	for i := 0; i < messages; i++ {
+		writers.Add(1)
+		go func(i int) {
+			defer writers.Done()
+			<-start
+			opID := fmt.Sprintf("op-%d", i/2)
+			errs <- b.Send(senderNetwork.Self, recipientNetwork.Self, opID, []byte(`{}`))
+		}(i)
+	}
+	close(start)
+	writers.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Error(err)
+		}
+	}
+	got, err := b.Inbox(recipientNetwork.Self, 0)
+	if err != nil || len(got) != messages/2 {
+		t.Fatalf("expected %d unique messages, got %d: %v", messages/2, len(got), err)
+	}
 }
 
 func TestMailboxRefusals(t *testing.T) {
