@@ -5,14 +5,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
 	"github.com/kolotiloff/agent-messenger/internal/buildinfo"
 	"github.com/kolotiloff/agent-messenger/internal/control"
+	"github.com/kolotiloff/agent-messenger/internal/core"
 	"github.com/kolotiloff/agent-messenger/internal/distribution"
 	"github.com/kolotiloff/agent-messenger/internal/localui"
 	"github.com/kolotiloff/agent-messenger/internal/platform"
@@ -50,7 +53,20 @@ func runDesktop(root string, args []string) error {
 
 func desktopRestart(root string) localui.Restarter {
 	return func(ctx context.Context) error {
-		return restartClient(ctx, root, func() error { return startDesktopClient(root) }, time.Second)
+		start := func() error { return startDesktopClient(root) }
+		if runtime.GOOS != "darwin" {
+			return restartClient(ctx, root, start, time.Second)
+		}
+		return restartClientWithNotice(ctx, root, start, time.Second, func() {
+			store, err := core.Open(filepath.Join(root, "queue.sqlite"))
+			if err == nil {
+				defer store.Close()
+				err = store.NoteMacUpdateRestart(time.Now())
+			}
+			if err != nil {
+				log.Print("Mac update: coordinator restart notice could not be recorded")
+			}
+		})
 	}
 }
 
@@ -78,8 +94,28 @@ func ensureDesktopClient(ctx context.Context, root string) error {
 		resumeCtx, stopResume := context.WithTimeout(ctx, 3*time.Second)
 		_, _ = control.CallContext(resumeCtx, root, control.Request{Cmd: "resume"})
 		stopResume()
+		return waitForProjectStorage(ctx, root)
+	}
+	if response.Status.ProjectStorage == "preparing" {
+		return waitForProjectStorage(ctx, root)
 	}
 	return nil
+}
+
+func waitForProjectStorage(ctx context.Context, root string) error {
+	for ctx.Err() == nil {
+		statusCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		response, err := control.CallContext(statusCtx, root, control.Request{Cmd: "status"})
+		cancel()
+		if err != nil || !response.OK || response.Status == nil {
+			return errors.New("Не удалось открыть базы Messenger. Проверьте журнал запуска.")
+		}
+		if response.Status.ProjectStorage != "preparing" {
+			return nil
+		}
+		sleep(ctx, time.Second)
+	}
+	return ctx.Err()
 }
 
 // startDesktopClient starts the background client the way the window does.
@@ -116,6 +152,10 @@ func startClientFrom(root, executable string) error {
 // the client lock still decides whether it may run. A pause set by the
 // owner is kept.
 func restartClient(ctx context.Context, root string, start func() error, step time.Duration) error {
+	return restartClientWithNotice(ctx, root, start, step, nil)
+}
+
+func restartClientWithNotice(ctx context.Context, root string, start func() error, step time.Duration, beforeShutdown func()) error {
 	call := func(cmd string, limit time.Duration) (control.Response, error) {
 		c, cancel := context.WithTimeout(ctx, limit)
 		defer cancel()
@@ -126,6 +166,9 @@ func restartClient(ctx context.Context, root string, start func() error, step ti
 		return errors.New("фоновый клиент не ответил. Ничего не остановлено")
 	}
 	paused := response.Status.Paused
+	if beforeShutdown != nil {
+		beforeShutdown()
+	}
 	response, err = call("shutdown", 5*time.Second)
 	if err == nil && !response.OK {
 		return errors.New("фоновый клиент отказался остановиться. Новый не запущен")
@@ -162,7 +205,7 @@ func restartClient(ctx context.Context, root string, start func() error, step ti
 			return errors.New("новый клиент запущен, но остался на паузе. Нажмите «Продолжить»")
 		}
 	}
-	return nil
+	return waitForProjectStorage(ctx, root)
 }
 
 func sleep(ctx context.Context, d time.Duration) {

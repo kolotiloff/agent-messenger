@@ -1,9 +1,11 @@
 package core
 
 import (
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -88,8 +90,12 @@ INSERT OR IGNORE INTO control(id, paused) VALUES (1, 0);
 
 // Store is the durable queue and session registry for one user client.
 type Store struct {
-	db   *sql.DB
-	gone WorkerGone
+	db    *sql.DB
+	gone  WorkerGone
+	split *projectLayout
+	// A scoped task store reads machine policy from the catalog's owner.
+	// It does not own or close that connection.
+	machine *sql.DB
 }
 
 type Message struct {
@@ -130,6 +136,22 @@ func Open(path string) (*Store, error) {
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 	store := &Store{db: db}
+	if err := rejectStagedDatabase(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	generation, err := readProjectGeneration(db)
+	if err != nil || generation != "" {
+		db.Close()
+		if err != nil {
+			return nil, err
+		}
+		return openSplitStore(context.Background(), filepath.Join(filepath.Dir(path), generation))
+	}
+	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if err := checkSchemaVersion(db); err != nil {
 		db.Close()
 		return nil, err
@@ -240,6 +262,18 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := installWindowChanges(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	// hidden_at predates the window indexes but is added above for old stores.
+	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS tasks_window_history ON tasks(project,created_at)
+ WHERE hidden_at IS NULL AND state IN ` + finishedWindowStates + `;
+ CREATE INDEX IF NOT EXISTS tasks_window_active ON tasks(project,created_at)
+ WHERE hidden_at IS NULL AND state NOT IN ` + finishedWindowStates); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if err := recordSchemaVersion(db); err != nil {
 		db.Close()
 		return nil, err
@@ -254,24 +288,31 @@ func (s *Store) Close() error {
 	}
 	err := s.db.Close()
 	s.db = nil
+	if s.split != nil {
+		err = errors.Join(err, s.split.close())
+	}
 	return err
 }
 
-func dsn(path string) string {
+func sqliteFileURL(path string, q url.Values) string {
 	// SQLite reads file:///C:/dir/db on Windows; a drive letter must not
 	// become the URL's host.
 	if filepath.VolumeName(path) != "" {
 		path = "/" + filepath.ToSlash(path)
 	}
-	u := url.URL{Scheme: "file", Path: path}
+	u := url.URL{Scheme: "file", Path: path, RawQuery: q.Encode()}
+	return u.String()
+}
+
+const sqliteBusyTimeout = "busy_timeout(5000)"
+
+func dsn(path string) string {
 	q := url.Values{}
-	q.Add("_pragma", "busy_timeout(5000)")
+	q.Add("_pragma", sqliteBusyTimeout)
 	q.Add("_pragma", "foreign_keys(1)")
-	q.Add("_pragma", "journal_mode(WAL)")
 	q.Add("_pragma", "synchronous(FULL)")
 	q.Add("_txlock", "immediate")
-	u.RawQuery = q.Encode()
-	return u.String()
+	return sqliteFileURL(path, q)
 }
 
 func (s *Store) tx(fn func(*sql.Tx) error) error {
@@ -712,6 +753,13 @@ func (s *Store) FinishObserved(token string, exitCode int, groupEmpty, providerO
 // RevokeInherited drops MCP access for attempts left by a previous supervisor.
 // The session lock stays, so the new process cannot launch that session again.
 func (s *Store) RevokeInherited() (int, error) {
+	if s.split != nil {
+		// The inherited worker remains interrupted with its shared process
+		// reservation. A partial pass can be repeated on the next startup.
+		if err := s.InterruptInheritedTaskRuns(); err != nil {
+			return 0, err
+		}
+	}
 	var n int
 	err := s.tx(func(tx *sql.Tx) error {
 		if err := stopInheritedStreams(tx); err != nil {
@@ -720,8 +768,10 @@ func (s *Store) RevokeInherited() (int, error) {
 		if err := stopInheritedCodexSetups(tx); err != nil {
 			return err
 		}
-		if err := interruptInheritedTaskRuns(tx); err != nil {
-			return err
+		if s.split == nil {
+			if err := interruptInheritedTaskRuns(tx); err != nil {
+				return err
+			}
 		}
 		rows, err := tx.Query(`SELECT active_token FROM sessions WHERE active_token IS NOT NULL AND key NOT IN (SELECT session_key FROM stream_runs)`)
 		if err != nil {
@@ -826,13 +876,7 @@ func (s *Store) ResumeWork() error {
 }
 
 func (s *Store) Paused() (bool, error) {
-	var paused bool
-	err := s.tx(func(tx *sql.Tx) error {
-		var err error
-		paused, err = isPaused(tx)
-		return err
-	})
-	return paused, err
+	return isPaused(s.db)
 }
 
 // FailClosed records that the operator will not retry. History stays. The lock stays.
@@ -1124,6 +1168,24 @@ func (s *Store) ActiveToken(alias string) (string, error) {
 	return token.String, nil
 }
 
+type SessionQueueStatus struct {
+	Paused      bool
+	Held        int
+	Queued      int
+	StreamState string
+}
+
+// SessionStatus reads the small summary used for client health checks.
+func (s *Store) SessionStatus() (SessionQueueStatus, error) {
+	var status SessionQueueStatus
+	err := s.db.QueryRow(`SELECT paused,
+ (SELECT COUNT(*) FROM sessions WHERE active_token IS NOT NULL),
+ (SELECT COUNT(*) FROM requests WHERE state='queued'),
+ COALESCE((SELECT state FROM stream_runs ORDER BY rowid DESC LIMIT 1),'')
+ FROM control WHERE id=1`).Scan(&status.Paused, &status.Held, &status.Queued, &status.StreamState)
+	return status, err
+}
+
 func (s *Store) Snapshot() (Snapshot, error) {
 	var snap Snapshot
 	err := s.tx(func(tx *sql.Tx) error {
@@ -1235,9 +1297,9 @@ func sessionByAlias(tx *sql.Tx, alias string) (string, string, error) {
 
 func paused(tx *sql.Tx) (bool, error) { return isPaused(tx) }
 
-func isPaused(tx *sql.Tx) (bool, error) {
+func isPaused(db interface{ QueryRow(string, ...any) *sql.Row }) (bool, error) {
 	var value int
-	err := tx.QueryRow(`SELECT paused FROM control WHERE id = 1`).Scan(&value)
+	err := db.QueryRow(`SELECT paused FROM control WHERE id = 1`).Scan(&value)
 	return value != 0, err
 }
 

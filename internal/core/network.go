@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -12,6 +13,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/kolotiloff/agent-messenger/internal/modelcatalog"
 )
 
 // Tasks between computers (T-037, D-041). The computer whose coordinator
@@ -142,6 +145,9 @@ type NetOutgoing struct {
 	To   string
 	OpID string
 	Body []byte
+	kind string
+	task string
+	file string
 }
 
 // NetIncoming is one message from another computer.
@@ -245,11 +251,15 @@ func safeNetOp(opID string) string {
 }
 
 func enqueueNet(tx *sql.Tx, broker, to, opID, task string, b netBody) error {
-	opID = safeNetOp(opID)
 	self, err := localComputer(tx)
 	if err != nil {
 		return err
 	}
+	return enqueueNetFrom(tx, self, broker, to, opID, task, b)
+}
+
+func enqueueNetFrom(tx *sql.Tx, self, broker, to, opID, task string, b netBody) error {
+	opID = safeNetOp(opID)
 	b.Computer = self
 	raw, err := json.Marshal(b)
 	if err != nil {
@@ -260,7 +270,7 @@ func enqueueNet(tx *sql.Tx, broker, to, opID, task string, b netBody) error {
 	return err
 }
 
-func metaValue(tx *sql.Tx, key string) (string, error) {
+func metaValue(tx interface{ QueryRow(string, ...any) *sql.Row }, key string) (string, error) {
 	var v string
 	err := tx.QueryRow(`SELECT value FROM meta WHERE key=?`, key).Scan(&v)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -405,6 +415,9 @@ func (s *Store) SetNetwork(broker, self string, peers []NetPeer) error {
 			}
 		}
 		// T-132: tasks shared with a computer follow it into this network.
+		if s.split != nil {
+			return s.refreshSplitPeers(tx, broker, peers)
+		}
 		if err := fillComputers(tx, broker, peers); err != nil {
 			return err
 		}
@@ -435,7 +448,11 @@ func (s *Store) NetPeers() ([]NetPeer, error) {
 }
 
 func netPeers(tx *sql.Tx) ([]NetPeer, error) {
-	rows, err := tx.Query(`SELECT peer,name,host,age,agents,ready,usage,updated_at,missing_since!='',version,computer,outbox,workers,update_pending FROM net_peers ORDER BY host DESC, name, peer`)
+	return readNetPeers(tx, "ORDER BY host DESC, name, peer")
+}
+
+func readNetPeers(tx *sql.Tx, selection string, args ...any) ([]NetPeer, error) {
+	rows, err := tx.Query(`SELECT peer,name,host,age,agents,ready,usage,updated_at,missing_since!='',version,computer,outbox,workers,update_pending FROM net_peers `+selection, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -509,16 +526,14 @@ func reconcilePeerUpdates(tx *sql.Tx, peers []NetPeer) error {
 }
 
 func netPeer(tx *sql.Tx, id string) (NetPeer, bool, error) {
-	peers, err := netPeers(tx)
+	peers, err := readNetPeers(tx, "WHERE peer=?", id)
 	if err != nil {
 		return NetPeer{}, false, err
 	}
-	for _, p := range peers {
-		if p.ID == id {
-			return p, true, nil
-		}
+	if len(peers) == 0 {
+		return NetPeer{}, false, nil
 	}
-	return NetPeer{}, false, nil
+	return peers[0], true, nil
 }
 
 // peerName names another computer for the window; its ID if it is not in
@@ -607,48 +622,71 @@ func usesCoordinatorModels(version string) bool {
 // startRemoteTask records a task for another computer of the network and
 // queues its start. Nothing runs here.
 func startRemoteTask(tx *sql.Tx, r StartTaskRequest) (string, error) {
-	broker, err := metaValue(tx, "net_broker")
+	cfg, err := prepareRemoteTask(tx, r)
 	if err != nil {
 		return "", err
 	}
+	self, err := localComputer(tx)
+	if err != nil {
+		return "", err
+	}
+	return recordRemoteTask(tx, r, self, cfg)
+}
+
+type remoteTaskConfig struct {
+	broker        string
+	peer          NetPeer
+	centralModels bool
+}
+
+func prepareRemoteTask(tx *sql.Tx, r StartTaskRequest) (remoteTaskConfig, error) {
+	var cfg remoteTaskConfig
+	broker, err := metaValue(tx, "net_broker")
+	if err != nil {
+		return cfg, err
+	}
 	if broker == "" {
-		return "", fmt.Errorf("%w: this computer is in no network; computer must be this computer's id from list_agents", ErrRejected)
+		return cfg, fmt.Errorf("%w: this computer is in no network; computer must be this computer's id from list_agents", ErrRejected)
 	}
 	peer, ok, err := netPeer(tx, r.Computer)
 	if err != nil {
-		return "", err
+		return cfg, err
 	}
 	if !ok {
-		return "", fmt.Errorf("%w: unknown computer %q; list_agents shows the computers of the network", ErrRejected, r.Computer)
+		return cfg, fmt.Errorf("%w: unknown computer %q; list_agents shows the computers of the network", ErrRejected, r.Computer)
 	}
 	has := false
 	for _, a := range peer.Agents {
 		has = has || a.Agent == r.Provider
 	}
 	if !has {
-		return "", fmt.Errorf("%w: agent %s is not set up on %s", ErrRejected, r.Provider, peer.Name)
+		return cfg, fmt.Errorf("%w: agent %s is not set up on %s", ErrRejected, r.Provider, peer.Name)
 	}
 	centralModels := usesCoordinatorModels(peer.Version)
 	if centralModels {
 		self, err := localComputer(tx)
 		if err != nil {
-			return "", err
+			return cfg, err
 		}
 		models, err := coordinatorModelList(tx, self, r.Provider)
 		if err != nil {
-			return "", err
+			return cfg, err
 		}
 		if err := modelAllowed(r.Provider, r.Model, splitModels(models)); err != nil {
-			return "", err
+			return cfg, err
 		}
 	}
 	if peer.UpdatePending {
-		return "", fmt.Errorf("%w: computer «%s» is waiting to install a Messenger update and takes no new tasks", ErrRejected, peer.Name)
+		return cfg, fmt.Errorf("%w: computer «%s» is waiting to install a Messenger update and takes no new tasks", ErrRejected, peer.Name)
 	}
 	if strings.Contains(r.Model, "[") && !peerBuildAtLeast(peer.Version, netModelSettingsSince) {
 		// T-211: an older computer refuses such a name as invalid.
-		return "", fmt.Errorf("%w: computer «%s» runs Messenger %s, which reads model settings such as [effort=…] only from build %d; update it with update_messenger first, or name the model without settings", ErrRejected, peer.Name, peerVersionText(peer.Version), netModelSettingsSince)
+		return cfg, fmt.Errorf("%w: computer «%s» runs Messenger %s, which reads model settings such as [effort=…] only from build %d; update it with update_messenger first, or name the model without settings", ErrRejected, peer.Name, peerVersionText(peer.Version), netModelSettingsSince)
 	}
+	return remoteTaskConfig{broker, peer, centralModels}, nil
+}
+
+func recordRemoteTask(tx *sql.Tx, r StartTaskRequest, self string, cfg remoteTaskConfig) (string, error) {
 	id, err := randomID()
 	if err != nil {
 		return "", err
@@ -658,24 +696,24 @@ func startRemoteTask(tx *sql.Tx, r StartTaskRequest) (string, error) {
 	title := taskTitle(r.Title, r.Text)
 	sender, senderModel := taskSender(r.SenderAgent, r.SenderModel)
 	if _, err := tx.Exec(`INSERT INTO tasks(id,project,op_id,computer,provider,cli_path,environment,profile,folder,title,text,state,detail,created_at,updated_at,model,remote_broker,remote_peer,resource,remote_name,sender_agent,sender_model) VALUES (?,?,?,?,?,'','','','',?,?,'running',?,?,?,?,?,?,?,?,?,?)`,
-		id, r.Project, r.OpID, r.Computer, r.Provider, title, r.Text, "sent to "+peer.Name+"; waiting for it to accept", at, at, r.Model, broker, r.Computer, r.Lock, peer.Name, sender, senderModel); err != nil {
+		id, r.Project, r.OpID, r.Computer, r.Provider, title, r.Text, "sent to "+cfg.peer.Name+"; waiting for it to accept", at, at, r.Model, cfg.broker, r.Computer, r.Lock, cfg.peer.Name, sender, senderModel); err != nil {
 		return "", err
 	}
-	if _, err := tx.Exec(`UPDATE tasks SET remote_computer=? WHERE id=?`, validComputer(peer.Computer), id); err != nil {
+	if _, err := tx.Exec(`UPDATE tasks SET remote_computer=? WHERE id=?`, validComputer(cfg.peer.Computer), id); err != nil {
 		return "", err
 	}
 	if err := insertTaskEvent(tx, r.Project, id, AudienceLog, "started", title, ""); err != nil {
 		return "", err
 	}
-	return id, enqueueNet(tx, broker, r.Computer, "start."+id, id, netBody{Kind: "start", Task: id, Project: r.Project, Agent: r.Provider, Title: title, Text: r.Text, Model: r.Model, CoordinatorModel: centralModels, Rules: r.Rules, Lock: r.Lock, SenderAgent: sender, SenderModel: senderModel})
+	return id, enqueueNetFrom(tx, self, cfg.broker, r.Computer, "start."+id, id, netBody{Kind: "start", Task: id, Project: r.Project, Agent: r.Provider, Title: title, Text: r.Text, Model: r.Model, CoordinatorModel: cfg.centralModels, Rules: r.Rules, Lock: r.Lock, SenderAgent: sender, SenderModel: senderModel})
 }
 
 // answerRemoteTask sends an answer to the computer that runs the task.
-func answerRemoteTask(tx *sql.Tx, t Task, remote netLink, question, opID, text, by string, sender MessageSender) error {
+func answerRemoteTask(machine, tx *sql.Tx, t Task, remote netLink, question, opID, text, by string, sender MessageSender) error {
 	if _, err := tx.Exec(`UPDATE task_questions SET state='answered',answer=?,answer_op=?,answered_by=? WHERE id=?`, text, opID, by, question); err != nil {
 		return err
 	}
-	if err := setTaskState(tx, t.ID, "running", "answer sent to "+peerName(tx, remote.peer)); err != nil {
+	if err := setTaskState(tx, t.ID, "running", "answer sent to "+peerName(machine, remote.peer)); err != nil {
 		return err
 	}
 	answeredFor := AudienceLog
@@ -697,7 +735,7 @@ func answerRemoteTask(tx *sql.Tx, t Task, remote netLink, question, opID, text, 
 // unanswered before the owner can close the task here (T-131).
 var cancelAnswerWait = 2 * time.Minute
 
-func cancelRemoteTask(tx *sql.Tx, t Task, remote netLink) (string, error) {
+func cancelRemoteTask(machine, tx *sql.Tx, t Task, remote netLink) (string, error) {
 	switch t.State {
 	case "running", "waiting_coordinator", "waiting_owner", "blocked", "interrupted":
 	default:
@@ -718,8 +756,8 @@ func cancelRemoteTask(tx *sql.Tx, t Task, remote netLink) (string, error) {
 	// there is already unknown, or when a cancel was asked for and no
 	// answer came. What happened there stays unknown; a cancel still goes
 	// out if that computer is in this network, for when it is back.
-	contact := RemoteComputer{ID: remote.peer, Name: peerName(tx, remote.peer)}
-	if err := remoteContact(tx, t.ID, remote, &contact); err != nil {
+	contact := RemoteComputer{ID: remote.peer, Name: peerName(machine, remote.peer)}
+	if err := remoteContact(machine, tx, t.ID, remote, &contact); err != nil {
 		return "", err
 	}
 	if t.CancelRequested && !contact.Silent && !contact.Lost {
@@ -738,7 +776,7 @@ func cancelRemoteTask(tx *sql.Tx, t Task, remote netLink) (string, error) {
 		if err := insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "cancelled", "the owner closed this task here; what happened on "+contact.Name+" is unknown", ""); err != nil {
 			return "", err
 		}
-		broker, err := metaValue(tx, "net_broker")
+		broker, err := metaValue(machine, "net_broker")
 		if err != nil {
 			return "", err
 		}
@@ -793,8 +831,33 @@ func (s *Store) NetPending(broker string, limit int) ([]NetOutgoing, error) {
 // in skip, so a computer whose mailbox is full cannot hold back the
 // messages to the others behind its own (T-137).
 func (s *Store) NetPendingExcept(broker string, limit int, skip []string) ([]NetOutgoing, error) {
-	query := `SELECT seq,recipient,op_id,body FROM net_outbox WHERE broker=?`
+	if s.split != nil {
+		messages, err := splitNetPending(context.Background(), s.db, s.split.open, broker, limit, skip)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]NetOutgoing, 0, len(messages))
+		for _, message := range messages {
+			record := message.NetOutgoing
+			record.file = message.file
+			out = append(out, record)
+		}
+		return out, nil
+	}
+	return pendingNetMessages(context.Background(), s.db, broker, limit, skip)
+}
+
+func pendingNetMessages(ctx context.Context, db *sql.DB, broker string, limit int, skip []string) ([]NetOutgoing, error) {
+	return pendingNetMessagesAfter(ctx, db, broker, limit, skip, sql.NullInt64{})
+}
+
+func pendingNetMessagesAfter(ctx context.Context, db *sql.DB, broker string, limit int, skip []string, after sql.NullInt64) ([]NetOutgoing, error) {
+	query := `SELECT seq,recipient,op_id,body,kind,task_id FROM net_outbox WHERE broker=?`
 	args := []any{broker}
+	if after.Valid {
+		query += ` AND seq>?`
+		args = append(args, after.Int64)
+	}
 	if len(skip) > 0 {
 		query += ` AND recipient NOT IN (?` + strings.Repeat(`,?`, len(skip)-1) + `)`
 		for _, r := range skip {
@@ -802,7 +865,7 @@ func (s *Store) NetPendingExcept(broker string, limit int, skip []string) ([]Net
 		}
 	}
 	args = append(args, limit)
-	rows, err := s.db.Query(query+` ORDER BY seq LIMIT ?`, args...)
+	rows, err := db.QueryContext(ctx, query+` ORDER BY seq LIMIT ?`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -811,7 +874,7 @@ func (s *Store) NetPendingExcept(broker string, limit int, skip []string) ([]Net
 	for rows.Next() {
 		var m NetOutgoing
 		var body string
-		if err := rows.Scan(&m.Seq, &m.To, &m.OpID, &body); err != nil {
+		if err := rows.Scan(&m.Seq, &m.To, &m.OpID, &body, &m.kind, &m.task); err != nil {
 			return nil, err
 		}
 		m.Body = []byte(body)
@@ -822,8 +885,19 @@ func (s *Store) NetPendingExcept(broker string, limit int, skip []string) ([]Net
 
 // NetSent removes a message the broker stored.
 func (s *Store) NetSent(seq int64) error {
+	if s.split != nil {
+		return fmt.Errorf("%w: a project delivery requires its outbox identity", ErrRejected)
+	}
 	_, err := s.db.Exec(`DELETE FROM net_outbox WHERE seq=?`, seq)
 	return err
+}
+
+// NetDeliverySent acknowledges exactly the message selected by NetPending.
+func (s *Store) NetDeliverySent(message NetOutgoing) error {
+	if s.split == nil {
+		return s.NetSent(message.Seq)
+	}
+	return splitNetSent(context.Background(), s.db, s.split.open, splitNetMessage{NetOutgoing: message, file: message.file})
 }
 
 // ReleaseAbsentOutbox retires messages aimed at a computer that is not in
@@ -835,57 +909,101 @@ func (s *Store) NetSent(seq int64) error {
 // dropped. Nothing is retried.
 func (s *Store) ReleaseAbsentOutbox(now time.Time) (int, []string, error) {
 	cutoff := now.UTC().Add(-reconnectGrace).Format(time.RFC3339Nano)
-	var seqs []int64
-	err := s.tx(func(tx *sql.Tx) error {
-		broker, err := metaValue(tx, "net_broker")
-		if err != nil || broker == "" {
-			return err
+	broker, err := metaValue(s.db, "net_broker")
+	if err != nil || broker == "" {
+		return 0, nil, err
+	}
+	rows, err := s.db.Query(`SELECT peer FROM net_peers WHERE missing_since='' OR missing_since>?`, cutoff)
+	if err != nil {
+		return 0, nil, err
+	}
+	present := map[string]bool{}
+	for rows.Next() {
+		var peer string
+		if err := rows.Scan(&peer); err != nil {
+			rows.Close()
+			return 0, nil, err
 		}
-		rows, err := tx.Query(`SELECT seq FROM net_outbox WHERE broker=? AND created_at<=?
- AND NOT EXISTS (SELECT 1 FROM net_peers p WHERE p.peer=net_outbox.recipient AND p.missing_since='')
- AND NOT EXISTS (SELECT 1 FROM net_peers p WHERE p.peer=net_outbox.recipient AND p.missing_since<>'' AND p.missing_since>?)`,
-			broker, cutoff, cutoff)
+		present[peer] = true
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, nil, err
+	}
+	var n int
+	var recipients []string
+	seen := map[string]bool{}
+	expire := func(queue *Store) error {
+		messages, err := queue.absentOutbox(broker, cutoff, present)
 		if err != nil {
 			return err
 		}
-		defer rows.Close()
-		for rows.Next() {
-			var seq int64
-			if err := rows.Scan(&seq); err != nil {
+		for _, message := range messages {
+			if err := queue.netUndeliverable(message.Seq, message.OpID, broker, message.To); err != nil {
 				return err
 			}
-			seqs = append(seqs, seq)
+			n++
+			if message.To != "" && !seen[message.To] {
+				seen[message.To] = true
+				recipients = append(recipients, message.To)
+			}
 		}
-		return rows.Err()
-	})
-	if err != nil || len(seqs) == 0 {
-		return 0, nil, err
+		return nil
 	}
-	seen := map[string]bool{}
-	var recipients []string
-	n := 0
-	for _, seq := range seqs {
-		var to string
-		_ = s.db.QueryRow(`SELECT recipient FROM net_outbox WHERE seq=?`, seq).Scan(&to)
-		if err := s.NetUndeliverable(seq); err != nil {
-			return n, recipients, err
+	err = expire(s)
+	if err == nil && s.split != nil {
+		err = s.eachProjectStore(expire)
+	}
+	return n, recipients, err
+}
+
+func (s *Store) absentOutbox(broker, cutoff string, present map[string]bool) ([]NetOutgoing, error) {
+	rows, err := s.db.Query(`SELECT seq,op_id,recipient FROM net_outbox WHERE broker=? AND created_at<=? ORDER BY seq`, broker, cutoff)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var messages []NetOutgoing
+	for rows.Next() {
+		var m NetOutgoing
+		if err := rows.Scan(&m.Seq, &m.OpID, &m.To); err != nil {
+			return nil, err
 		}
-		n++
-		if to != "" && !seen[to] {
-			seen[to] = true
-			recipients = append(recipients, to)
+		if !present[m.To] {
+			messages = append(messages, m)
 		}
 	}
-	return n, recipients, nil
+	return messages, rows.Err()
 }
 
 // NetUndeliverable handles a message the broker refused because its
 // recipient is not in the network any more. A start that never left fails
 // its task; an answer or cancel that never arrived blocks it.
 func (s *Store) NetUndeliverable(seq int64) error {
+	if s.split != nil {
+		return fmt.Errorf("%w: a project delivery requires its outbox identity", ErrRejected)
+	}
+	return s.netUndeliverable(seq, "", "", "")
+}
+
+// NetDeliveryRefused applies a broker refusal in the originating outbox.
+func (s *Store) NetDeliveryRefused(message NetOutgoing) error {
+	if s.split == nil {
+		return s.NetUndeliverable(message.Seq)
+	}
+	db, err := splitOutboxDB(context.Background(), s.db, s.split.open, message.file)
+	if err != nil {
+		return err
+	}
+	return (&Store{db: db}).netUndeliverable(message.Seq, message.OpID, "", message.To)
+}
+
+func (s *Store) netUndeliverable(seq int64, opID, broker, recipient string) error {
 	return s.tx(func(tx *sql.Tx) error {
 		var kind, task, to, msgBroker string
-		err := tx.QueryRow(`SELECT kind,task_id,recipient,broker FROM net_outbox WHERE seq=?`, seq).Scan(&kind, &task, &to, &msgBroker)
+		err := tx.QueryRow(`SELECT kind,task_id,recipient,broker FROM net_outbox WHERE seq=?
+ AND (?='' OR op_id=?) AND (?='' OR broker=?) AND (?='' OR recipient=?)`,
+			seq, opID, opID, broker, broker, recipient, recipient).Scan(&kind, &task, &to, &msgBroker)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}
@@ -961,34 +1079,19 @@ func (s *Store) NetCursor(broker string) (int64, error) {
 // nothing the second time. A message that cannot be read or does not fit a
 // task of this computer is recorded and ignored.
 func (s *Store) ApplyNet(broker string, m NetIncoming) error {
+	if s.split != nil {
+		return s.applySplitNet(broker, m)
+	}
 	return s.tx(func(tx *sql.Tx) error {
-		cursor := m.Seq
-		if old, err := metaValue(tx, "net_cursor:"+broker); err != nil {
-			return err
-		} else if n := atoi64(old); n > cursor {
-			cursor = n
-		}
-		if err := setMeta(tx, "net_cursor:"+broker, fmt.Sprint(cursor)); err != nil {
+		if err := advanceNetCursor(tx, broker, m.Seq); err != nil {
 			return err
 		}
-		// T-132: a message re-sent through a new network after the old one
-		// may already have delivered it carries the same op id; it is
-		// applied once whatever network and sender id it came with.
-		var seen int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM net_applied WHERE op_id=?`, m.OpID).Scan(&seen); err != nil {
+		apply, err := claimNetDelivery(tx, broker, m)
+		if err != nil || !apply {
 			return err
 		}
-		res, err := tx.Exec(`INSERT INTO net_applied(broker,sender,op_id,applied_at) VALUES (?,?,?,?) ON CONFLICT DO NOTHING`, broker, m.From, m.OpID, now())
-		if err != nil {
-			return err
-		}
-		if n, _ := res.RowsAffected(); n == 0 || seen > 0 {
-			return nil
-		}
-		var b netBody
-		// A message whose ids could not travel back is ignored, so a reply
-		// to it can never block this computer's outbox.
-		if json.Unmarshal(m.Body, &b) != nil || !netRef.MatchString(b.Task) || (b.Question != "" && !netRef.MatchString(b.Question)) {
+		b, valid := decodeNetIncoming(m)
+		if !valid {
 			return nil
 		}
 		from := netLink{broker: broker, peer: m.From, task: b.Task}
@@ -997,6 +1100,12 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 				return err
 			}
 		}
+		if isProjectResponse(b.Kind) {
+			return applyProjectResponseTx(tx, from, b, peerName(tx, m.From))
+		}
+		if isProjectRequest(b.Kind) {
+			return applyProjectRequestTx(tx, tx, from, m, b, s.gone)
+		}
 		switch b.Kind {
 		case "start":
 			if err := applyStart(tx, from, b); err != nil {
@@ -1004,16 +1113,6 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 			}
 			_, err := tx.Exec(`UPDATE tasks SET origin_computer=? WHERE origin_broker=? AND origin_peer=? AND origin_task=? AND origin_computer=''`, validComputer(b.Computer), from.broker, from.peer, from.task)
 			return err
-		case "answer":
-			return applyAnswer(tx, from, m.OpID, b)
-		case "continue":
-			return applyContinue(tx, from, b, s.gone)
-		case "note":
-			return applyNote(tx, from, b)
-		case "cancel":
-			return applyCancel(tx, from, s.gone)
-		case "accepted", "refused", "event", "answer_refused", "continue_refused", "note_refused", "progress", "ran_model":
-			return applyReport(tx, from, b)
 		case "log_request":
 			return applyLogRequest(tx, from, b)
 		case "log":
@@ -1026,13 +1125,82 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 			return applyUpdateRequest(tx, from, b)
 		case "update":
 			return applyUpdateReply(tx, from, b)
-		case "output":
-			return applyOutput(tx, from, b)
-		case "image":
-			return applyImage(tx, from, b)
 		}
 		return nil
 	})
+}
+
+func (s *Store) applySplitNet(broker string, m NetIncoming) error {
+	ctx := context.Background()
+	body, valid := decodeNetIncoming(m)
+	switch {
+	case valid && body.Kind == "start":
+		return applySplitRemoteStart(ctx, s.db, s.split.open, broker, m)
+	case valid && (isProjectRequest(body.Kind) || isProjectResponse(body.Kind)):
+		return applySplitProjectMessage(ctx, s.db, s.split.open, broker, m, body, s.gone)
+	}
+	return s.tx(func(tx *sql.Tx) error {
+		apply, err := claimNetDelivery(tx, broker, m)
+		if err != nil {
+			return err
+		}
+		if apply && valid {
+			from := netLink{broker: broker, peer: m.From, task: body.Task}
+			switch body.Kind {
+			case "log_request":
+				err = applyLogRequest(tx, from, body)
+			case "log":
+				err = applyLogReply(tx, from, body)
+			case "agent_version_request":
+				err = applyAgentVersionRequest(tx, from, body)
+			case "agent_version":
+				err = applyAgentVersionReply(tx, from, body)
+			case "update_request":
+				err = applyUpdateRequest(tx, from, body)
+			case "update":
+				err = applyUpdateReply(tx, from, body)
+			}
+			if err != nil {
+				return err
+			}
+		}
+		return advanceNetCursor(tx, broker, m.Seq)
+	})
+}
+
+// advanceNetCursor acknowledges a broker sequence after the caller has
+// accepted responsibility for applying it. It never moves backwards.
+func advanceNetCursor(tx *sql.Tx, broker string, seq int64) error {
+	key := "net_cursor:" + broker
+	old, err := metaValue(tx, key)
+	if err != nil {
+		return err
+	}
+	return setMeta(tx, key, fmt.Sprint(max(seq, atoi64(old))))
+}
+
+// claimNetDelivery is committed together with the change this message
+// causes. The global operation ID also covers a resend after a peer or
+// broker changes (T-132).
+func claimNetDelivery(tx *sql.Tx, broker string, m NetIncoming) (bool, error) {
+	var seen bool
+	if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM net_applied WHERE op_id=?)`, m.OpID).Scan(&seen); err != nil {
+		return false, err
+	}
+	res, err := tx.Exec(`INSERT INTO net_applied(broker,sender,op_id,applied_at) VALUES (?,?,?,?) ON CONFLICT DO NOTHING`, broker, m.From, m.OpID, now())
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n != 0 && !seen, err
+}
+
+func decodeNetIncoming(m NetIncoming) (netBody, bool) {
+	var b netBody
+	// Ignore IDs that cannot travel back in a reply.
+	valid := json.Unmarshal(m.Body, &b) == nil && netRef.MatchString(b.Task) &&
+		(b.Question == "" || netRef.MatchString(b.Question))
+	return b, valid
 }
 
 func atoi64(s string) int64 {
@@ -1073,59 +1241,26 @@ func refusalText(err error) string {
 	return strings.TrimPrefix(err.Error(), ErrRejected.Error()+": ")
 }
 
+func enqueueStartReply(tx *sql.Tx, from netLink, kind string, body netBody) error {
+	body.Kind, body.Task = kind, from.task
+	return enqueueNet(tx, from.broker, from.peer, "reply."+from.peer+"."+from.task, from.task, body)
+}
+
 func applyStart(tx *sql.Tx, from netLink, b netBody) error {
-	reply := func(kind string, body netBody) error {
-		body.Kind, body.Task = kind, from.task
-		return enqueueNet(tx, from.broker, from.peer, "reply."+from.peer+"."+from.task, from.task, body)
-	}
 	if _, ok, err := mirrorTask(tx, from); err != nil || ok {
 		return err
 	}
-	accept, err := metaValue(tx, "net_accept")
-	if err != nil {
-		return err
-	}
-	if accept == "0" {
-		return reply("refused", netBody{Reason: "this computer does not run tasks of other computers; its owner can turn this on in the Server tab"})
-	}
-	if pending, err := hasPendingUpdate(tx); err != nil {
-		return err
-	} else if pending {
-		return reply("refused", netBody{Reason: "this computer is waiting to install a Messenger update and takes no new tasks"})
-	}
-	r := StartTaskRequest{Project: b.Project, OpID: mirrorOp(from), Provider: b.Agent, Title: b.Title, Text: strings.TrimSpace(b.Text), Model: strings.TrimSpace(b.Model), Rules: strings.TrimSpace(b.Rules), SenderAgent: b.SenderAgent, SenderModel: b.SenderModel}
-	lock, lockOK := normalizeLock(b.Lock)
-	r.Lock = lock
 	var id string
-	err = savepoint(tx, func() error {
-		switch {
-		case !lockOK:
-			return fmt.Errorf("%w: invalid lock name", ErrRejected)
-		case !TaskProviders[r.Provider]:
-			return fmt.Errorf("%w: unsupported agent %q", ErrRejected, r.Provider)
-		case r.Text == "" || utf8.RuneCountInString(r.Text) > MaxTaskText:
-			return fmt.Errorf("%w: the task text is empty or too long", ErrRejected)
-		case !ValidTaskModel(r.Model):
-			return fmt.Errorf("%w: invalid model name", ErrRejected)
-		case utf8.RuneCountInString(r.Rules) > MaxWorkerRules || strings.ContainsRune(r.Rules, 0):
-			return fmt.Errorf("%w: the worker rules are too long", ErrRejected)
-		}
-		var projects int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM projects WHERE name=? AND removed_at IS NULL`, r.Project).Scan(&projects); err != nil {
-			return err
-		}
-		if projects == 0 {
-			return fmt.Errorf("%w: this computer has no project named exactly %q; projects are matched by their exact name, so the owner creates or renames the project here to exactly this name", ErrRejected, r.Project)
-		}
-		computer, err := localComputer(tx)
+	err := savepoint(tx, func() error {
+		r, err := remoteStartRequest(tx, from, b)
 		if err != nil {
 			return err
 		}
-		id, err = startLocalTask(tx, r, computer, &from, b.CoordinatorModel)
+		id, err = startLocalTask(tx, r, r.Computer, &from, b.CoordinatorModel)
 		return err
 	})
 	if errors.Is(err, ErrRejected) {
-		return reply("refused", netBody{Reason: refusalText(err)})
+		return enqueueStartReply(tx, from, "refused", netBody{Reason: refusalText(err)})
 	}
 	if err != nil {
 		return err
@@ -1134,16 +1269,56 @@ func applyStart(tx *sql.Tx, from netLink, b netBody) error {
 	if err := tx.QueryRow(`SELECT folder FROM tasks WHERE id=?`, id).Scan(&folder); err != nil {
 		return err
 	}
-	return reply("accepted", netBody{Mirror: id, Folder: folder})
+	return enqueueStartReply(tx, from, "accepted", netBody{Mirror: id, Folder: folder})
 }
 
-func applyAnswer(tx *sql.Tx, from netLink, opID string, b netBody) error {
+func remoteStartRequest(tx *sql.Tx, from netLink, b netBody) (StartTaskRequest, error) {
+	var r StartTaskRequest
+	accept, err := metaValue(tx, "net_accept")
+	if err != nil {
+		return r, err
+	}
+	if accept == "0" {
+		return r, fmt.Errorf("%w: this computer does not run tasks of other computers; its owner can turn this on in the Server tab", ErrRejected)
+	}
+	if pending, err := hasPendingUpdate(tx); err != nil {
+		return r, err
+	} else if pending {
+		return r, fmt.Errorf("%w: this computer is waiting to install a Messenger update and takes no new tasks", ErrRejected)
+	}
+	r = StartTaskRequest{Project: b.Project, OpID: mirrorOp(from), Provider: b.Agent, Title: b.Title, Text: strings.TrimSpace(b.Text), Model: strings.TrimSpace(b.Model), Rules: strings.TrimSpace(b.Rules), SenderAgent: b.SenderAgent, SenderModel: b.SenderModel}
+	lock, lockOK := normalizeLock(b.Lock)
+	r.Lock = lock
+	switch {
+	case !lockOK:
+		return r, fmt.Errorf("%w: invalid lock name", ErrRejected)
+	case !TaskProviders[r.Provider]:
+		return r, fmt.Errorf("%w: unsupported agent %q", ErrRejected, r.Provider)
+	case r.Text == "" || utf8.RuneCountInString(r.Text) > MaxTaskText:
+		return r, fmt.Errorf("%w: the task text is empty or too long", ErrRejected)
+	case !ValidTaskModel(r.Model):
+		return r, fmt.Errorf("%w: invalid model name", ErrRejected)
+	case utf8.RuneCountInString(r.Rules) > MaxWorkerRules || strings.ContainsRune(r.Rules, 0):
+		return r, fmt.Errorf("%w: the worker rules are too long", ErrRejected)
+	}
+	var exists bool
+	if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM projects WHERE name=? AND removed_at IS NULL)`, r.Project).Scan(&exists); err != nil {
+		return r, err
+	}
+	if !exists {
+		return r, fmt.Errorf("%w: this computer has no project named exactly %q; projects are matched by their exact name, so the owner creates or renames the project here to exactly this name", ErrRejected, r.Project)
+	}
+	r.Computer, err = localComputer(tx)
+	return r, err
+}
+
+func applyAnswer(machine, tx *sql.Tx, from netLink, opID string, b netBody) error {
 	t, ok, err := mirrorTask(tx, from)
 	if err != nil || !ok {
 		return err
 	}
 	err = savepoint(tx, func() error {
-		return answerTask(tx, t.ID, b.Question, "net:"+from.broker+":"+from.peer+":"+opID, b.Text, b.By, true, false, MessageSender{Agent: b.SenderAgent, Model: b.SenderModel})
+		return answerTask(machine, tx, t.ID, b.Question, "net:"+from.broker+":"+from.peer+":"+opID, b.Text, b.By, true, false, MessageSender{Agent: b.SenderAgent, Model: b.SenderModel})
 	})
 	if errors.Is(err, ErrRejected) {
 		// State tells the asking computer whether the question is still open
@@ -1157,13 +1332,13 @@ func applyAnswer(tx *sql.Tx, from netLink, opID string, b netBody) error {
 	return err
 }
 
-func applyCancel(tx *sql.Tx, from netLink, gone WorkerGone) error {
+func applyCancel(machine, tx *sql.Tx, from netLink, gone WorkerGone) error {
 	t, ok, err := mirrorTask(tx, from)
 	if err != nil || !ok {
 		return err
 	}
 	err = savepoint(tx, func() error {
-		_, err := cancelTask(tx, t.ID, gone)
+		_, err := cancelTask(machine, tx, t.ID, gone)
 		return err
 	})
 	if errors.Is(err, ErrRejected) {
@@ -1182,7 +1357,7 @@ var taskStates = map[string]bool{"running": true, "waiting_coordinator": true, "
 
 // applyReport applies a message from the computer that runs one of this
 // computer's tasks.
-func applyReport(tx *sql.Tx, from netLink, b netBody) error {
+func applyReport(tx *sql.Tx, from netLink, b netBody, name string) error {
 	t, err := scanTask(tx.QueryRow(`SELECT `+taskColumns+` FROM tasks WHERE id=? AND remote_broker=? AND remote_peer=?`, from.task, from.broker, from.peer).Scan)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
@@ -1191,13 +1366,12 @@ func applyReport(tx *sql.Tx, from netLink, b netBody) error {
 		return err
 	}
 	if b.Kind == "ran_model" {
-		if b.Model == "" || !ValidTaskModel(b.Model) {
+		if _, _, err := modelcatalog.SplitReported(b.Model); err != nil {
 			return nil
 		}
-		_, err := tx.Exec(`UPDATE tasks SET ran_model=? WHERE id=?`, b.Model, t.ID)
+		_, err := tx.Exec(`UPDATE tasks SET ran_model=?,version=version+1 WHERE id=? AND COALESCE(ran_model,'')<>?`, b.Model, t.ID, b.Model)
 		return err
 	}
-	name := peerName(tx, from.peer)
 	switch b.Kind {
 	case "progress":
 		// A line of the worker's progress, for the window only (D-055).

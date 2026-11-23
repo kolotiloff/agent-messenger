@@ -34,7 +34,11 @@ func startBackground(root string, flags []string) (int, string, error) {
 	if err != nil {
 		return 0, "", err
 	}
-	return startBackgroundAt(root, flags, executable)
+	pid, log, err := startBackgroundAt(root, flags, executable)
+	if err == nil {
+		err = waitForProjectStorage(context.Background(), root)
+	}
+	return pid, log, err
 }
 
 func startBackgroundAt(root string, flags []string, executable string) (int, string, error) {
@@ -208,7 +212,7 @@ func runBackgroundChild(root string, flags []string) error {
 	}
 	err = supervisor.RunWithOptions(context.Background(), root,
 		options,
-		supervisor.RunOptions{StartPaused: true, CheckLimits: true, Ready: ready, StartUpdate: remoteUpdateStarter(root)})
+		supervisor.RunOptions{StartPaused: true, ProjectStorage: true, CheckLimits: true, Ready: ready, StartUpdate: remoteUpdateStarter(root)})
 	if err != nil {
 		_ = json.NewEncoder(readyFile).Encode(backgroundReady{Error: err.Error()})
 	}

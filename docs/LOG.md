@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-23 — Codex (T-258, first stage)
+
+- Added checked, project-scoped SQLite history snapshots. The read-only source stays usable, and a destination is published only after the copy succeeds. Documented the migration and delivery contracts that have to land before live project files replace the shared queue.
+
 ## 2026-11-22 — Codex (0.94 release)
 
 - Published [0.94](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.94) from `d0e3a4e` and verified the five signed update sets. Corrected the browser regression test to read computed padding and color inside the page before returning simple values. Both browsers passed.

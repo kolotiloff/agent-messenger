@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"strings"
@@ -9,7 +10,7 @@ import (
 )
 
 // Resource locks (T-072, D-086). A task may name a resource, such as
-// «Unity editor», that only one worker on a computer may use at a time. A
+// a shared device, that only one worker on a computer may use at a time. A
 // task with a lock does not launch while an earlier task with the same lock
 // is open (not done, failed or cancelled) on the same computer. A blocked
 // task keeps its lock: whether it still uses the resource is unknown. The
@@ -25,8 +26,8 @@ const lockHolderQuery = `SELECT o.id FROM tasks o WHERE o.resource=t.resource AN
  AND o.state NOT IN ('done','failed','cancelled')
  AND (o.created_at<t.created_at OR (o.created_at=t.created_at AND o.rowid<t.rowid))`
 
-// normalizeLock trims and lowercases a lock name, so «Unity editor» and
-// «unity EDITOR» are one lock. It reports false for a name that is too long
+// normalizeLock trims and lowercases a lock name, so «Shared cache» and
+// «shared CACHE» are one lock. It reports false for a name that is too long
 // or not one plain line.
 func normalizeLock(s string) (string, bool) {
 	if !utf8.ValidString(s) {
@@ -44,12 +45,70 @@ func normalizeLock(s string) (string, bool) {
 // TaskLockHolder returns the task that keeps this task from launching, or
 // "" when none does.
 func (s *Store) TaskLockHolder(id string) (string, error) {
+	if s.split != nil {
+		_, holder, err := s.splitTaskLock("", id)
+		return holder.ID, err
+	}
 	var holder sql.NullString
 	err := s.db.QueryRow(`SELECT (`+lockHolderQuery+` ORDER BY o.created_at,o.rowid LIMIT 1) FROM tasks t WHERE t.id=? AND t.resource<>''`, id).Scan(&holder)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
 	return holder.String, err
+}
+
+// ProjectTaskLock shows that the task waits while disclosing only holders
+// in the same project. Scheduling still uses a computer-wide resource lock.
+func (s *Store) ProjectTaskLock(project, id string) (resource, holder string, err error) {
+	if s.split != nil {
+		resource, owner, err := s.splitTaskLock(project, id)
+		if owner.Project == project {
+			holder = owner.ID
+		}
+		return resource, holder, err
+	}
+	var lock string
+	var heldBy, holderProject sql.NullString
+	err = s.db.QueryRow(`SELECT t.resource,o.id,o.project FROM tasks t
+ LEFT JOIN tasks o ON o.id=(`+lockHolderQuery+` ORDER BY o.created_at,o.rowid LIMIT 1)
+ WHERE t.project=? AND t.id=? AND t.resource<>''`, project, id).Scan(&lock, &heldBy, &holderProject)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && !heldBy.Valid) {
+		return "", "", nil
+	}
+	if holderProject.String == project {
+		holder = heldBy.String
+	}
+	return lock, holder, err
+}
+
+func (s *Store) splitTaskLock(project, id string) (string, Task, error) {
+	ctx := context.Background()
+	route, file, err := taskProjectFile(ctx, s.db, id)
+	if err != nil || (project != "" && route != project) {
+		return "", Task{}, err
+	}
+	scoped, err := s.splitProjectStore(route, file)
+	if err != nil {
+		return "", Task{}, err
+	}
+	task := Task{ID: id, Project: route}
+	var lock string
+	err = scoped.db.QueryRow(`SELECT resource,computer,created_at FROM tasks WHERE id=? AND resource<>''`, id).Scan(&lock, &task.Computer, &task.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", Task{}, nil
+	}
+	if err != nil {
+		return "", Task{}, err
+	}
+	order, err := splitRouteOrder(ctx, s.db, task)
+	if err != nil {
+		return "", Task{}, err
+	}
+	holder, err := splitTaskResourceHolder(ctx, s.db, scoped.db, file, s.split.open, task, lock, order)
+	if err != nil || holder.ID == "" {
+		return "", Task{}, err
+	}
+	return lock, holder, nil
 }
 
 // waitingLock returns the lock a task waits for, or "" when it waits for

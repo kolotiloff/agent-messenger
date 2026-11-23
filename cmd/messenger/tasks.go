@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -67,6 +68,49 @@ func runTaskCommand(root string, args []string) (bool, error) {
 		}
 		if err == nil {
 			fmt.Println("готово; модель не вызывалась")
+		}
+		return true, err
+	case "project-storage-stage":
+		fs := flag.NewFlagSet(args[0], flag.ContinueOnError)
+		output := fs.String("output-dir", "", "path for a new migration directory")
+		if err := fs.Parse(args[1:]); err != nil {
+			return true, err
+		}
+		if fs.NArg() != 0 {
+			return true, errors.New("project-storage-stage takes only --output-dir")
+		}
+		err := core.StageProjectMigration(context.Background(), filepath.Join(root, "queue.sqlite"), *output)
+		if err == nil {
+			fmt.Println("Копии баз для проверки сохранены:", *output)
+		}
+		return true, err
+	case "project-storage-verify":
+		fs := flag.NewFlagSet(args[0], flag.ContinueOnError)
+		dir := fs.String("dir", "", "directory with the staged databases")
+		if err := fs.Parse(args[1:]); err != nil {
+			return true, err
+		}
+		if fs.NArg() != 0 || *dir == "" {
+			return true, errors.New("project-storage-verify needs --dir")
+		}
+		err := core.VerifyProjectMigration(context.Background(), *dir)
+		if err == nil {
+			fmt.Println("Подготовленные базы совпадают с контрольными суммами")
+		}
+		return true, err
+	case "project-snapshot":
+		fs := flag.NewFlagSet(args[0], flag.ContinueOnError)
+		project := fs.String("name", "", "project name, including a removed project")
+		output := fs.String("output", "", "path for a new SQLite file")
+		if err := fs.Parse(args[1:]); err != nil {
+			return true, err
+		}
+		if fs.NArg() != 0 {
+			return true, errors.New("project-snapshot takes only --name and --output")
+		}
+		err := core.SnapshotProjectDatabase(context.Background(), filepath.Join(root, "queue.sqlite"), *project, *output)
+		if err == nil {
+			fmt.Println("Копия истории проекта сохранена:", *output)
 		}
 		return true, err
 	case "projects":

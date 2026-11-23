@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 	"unicode"
@@ -114,6 +116,7 @@ CREATE TABLE IF NOT EXISTS task_runs (
  finished_at TEXT,
  UNIQUE (task_id, ordinal)
 );
+CREATE INDEX IF NOT EXISTS task_runs_intent_order ON task_runs(created_at) WHERE state='intent';
 CREATE TABLE IF NOT EXISTS task_questions (
  id TEXT PRIMARY KEY,
  task_id TEXT NOT NULL REFERENCES tasks(id),
@@ -126,6 +129,7 @@ CREATE TABLE IF NOT EXISTS task_questions (
  answered_by TEXT,
  created_at TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS task_questions_open ON task_questions(task_id) WHERE state='open';
 CREATE TABLE IF NOT EXISTS task_owner_notes (
  id TEXT PRIMARY KEY,
  task_id TEXT NOT NULL REFERENCES tasks(id),
@@ -215,7 +219,7 @@ type Task struct {
 	ID, Project, Computer, Provider, Profile, Folder, Title, Text, State string
 	SessionID, Detail, CreatedAt, UpdatedAt, FinishedAt                  string
 	CLI, Environment                                                     string
-	Model                                                                string
+	Model, RanModel                                                      string
 	// FailureReason and FailureReset explain a failed task (T-034): the
 	// failure class the provider reported and its limit reset time (RFC 3339).
 	// They never cause a retry.
@@ -377,6 +381,9 @@ func (s *Store) CreateProject(name, folder string) error {
 			var old string
 			err := tx.QueryRow(`SELECT folder FROM project_folders WHERE project=? AND computer=?`, name, computer).Scan(&old)
 			if err == nil && old == folder {
+				if s.split != nil {
+					return s.ensureSplitProject(tx, name, folder, computer)
+				}
 				return nil
 			}
 			return fmt.Errorf("%w: a project with this name already exists", ErrRejected)
@@ -393,6 +400,9 @@ func (s *Store) CreateProject(name, folder string) error {
 			}
 		}
 		_, err = tx.Exec(`INSERT INTO project_folders(project,computer,folder,updated_at) VALUES (?,?,?,?)`, name, computer, folder, at)
+		if err == nil && s.split != nil {
+			return s.ensureSplitProject(tx, name, folder, computer)
+		}
 		return err
 	})
 }
@@ -412,8 +422,19 @@ func (s *Store) RemoveProject(name string) error {
 			return fmt.Errorf("%w: unknown project", ErrRejected)
 		}
 		var open int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM tasks t WHERE t.project=? AND (t.state IN ('running','waiting_coordinator','waiting_owner','blocked','interrupted')
- OR EXISTS (SELECT 1 FROM task_runs r WHERE r.task_id=t.id AND r.state IN ('intent','launching','running','blocked','interrupted')))`, name).Scan(&open); err != nil {
+		ctx := context.Background()
+		var source projectRouteQuerier = tx
+		if s.split != nil {
+			file, err := splitTaskProjectFile(ctx, tx, name)
+			if err != nil {
+				return err
+			}
+			source, err = s.split.open(file)
+			if err != nil {
+				return err
+			}
+		}
+		if err := source.QueryRowContext(ctx, `SELECT COUNT(*) FROM tasks t WHERE t.project=? AND (`+activeWorkWhere+`)`, name).Scan(&open); err != nil {
 			return err
 		}
 		if open != 0 {
@@ -699,7 +720,7 @@ type StartTaskRequest struct {
 	// Rules are the project's worker rules of the computer that started the
 	// task (T-050). StartTask fills them; they travel with a remote task.
 	Rules string
-	// Lock names a resource such as «Unity editor» (T-072): a task with a
+	// Lock explicitly names a shared resource (T-072): a task with a
 	// lock does not launch while an earlier open task with the same lock
 	// runs on the same computer. Empty means no lock.
 	Lock string
@@ -735,25 +756,16 @@ func ValidTaskModel(name string) bool { _, _, err := modelcatalog.Split(name); r
 // network is sent to it (network.go). It returns the task ID and whether it
 // was newly created.
 func (s *Store) StartTask(r StartTaskRequest) (string, bool, error) {
-	r.Text = strings.TrimSpace(r.Text)
-	if r.OpID == "" || len(r.OpID) > 128 || r.Text == "" || utf8.RuneCountInString(r.Text) > MaxTaskText {
-		return "", false, fmt.Errorf("%w: start_task needs an operation id and a task text of 1..%d characters", ErrRejected, MaxTaskText)
+	if s.split != nil {
+		return startSplitTask(context.Background(), s.db, s.split.open, r)
 	}
-	if !TaskProviders[r.Provider] {
-		return "", false, fmt.Errorf("%w: unsupported agent %q", ErrRejected, r.Provider)
+	r, err := normalizeStartTask(r)
+	if err != nil {
+		return "", false, err
 	}
-	r.Model = strings.TrimSpace(r.Model)
-	if !ValidTaskModel(r.Model) {
-		return "", false, fmt.Errorf("%w: model must be a CLI ID or a selection such as gpt-6-astra[effort=high]", ErrRejected)
-	}
-	lock, ok := normalizeLock(r.Lock)
-	if !ok {
-		return "", false, fmt.Errorf("%w: lock must be a short one-line name such as unity-editor (at most %d characters)", ErrRejected, MaxTaskLock)
-	}
-	r.Lock = lock
 	var id string
 	var created bool
-	err := s.tx(func(tx *sql.Tx) error {
+	err = s.tx(func(tx *sql.Tx) error {
 		computer, err := localComputer(tx)
 		if err != nil {
 			return err
@@ -761,25 +773,12 @@ func (s *Store) StartTask(r StartTaskRequest) (string, bool, error) {
 		if r.Computer == "" {
 			r.Computer = computer
 		}
-		var old struct{ computer, provider, title, text, model, lock string }
-		err = tx.QueryRow(`SELECT id,computer,provider,title,text,COALESCE(model,''),resource FROM tasks WHERE project=? AND op_id=?`, r.Project, r.OpID).Scan(&id, &old.computer, &old.provider, &old.title, &old.text, &old.model, &old.lock)
-		if err == nil {
-			if old.computer != r.Computer || old.provider != r.Provider || old.text != r.Text || old.title != taskTitle(r.Title, r.Text) || old.model != r.Model || old.lock != r.Lock {
-				return fmt.Errorf("%w: this operation id was used for a different task", ErrRejected)
-			}
-			return nil
-		}
+		id, err = existingStartTask(tx, r)
 		if !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
-		var projects int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM projects WHERE name=? AND removed_at IS NULL`, r.Project).Scan(&projects); err != nil {
-			return err
-		}
-		if projects == 0 {
-			return fmt.Errorf("%w: unknown project", ErrRejected)
-		}
-		if err := tx.QueryRow(`SELECT worker_rules FROM projects WHERE name=?`, r.Project).Scan(&r.Rules); err != nil {
+		r.Rules, err = startProjectRules(tx, r.Project)
+		if err != nil {
 			return err
 		}
 		if r.Computer != computer {
@@ -793,52 +792,120 @@ func (s *Store) StartTask(r StartTaskRequest) (string, bool, error) {
 	return id, created, err
 }
 
+func normalizeStartTask(r StartTaskRequest) (StartTaskRequest, error) {
+	r.Text = strings.TrimSpace(r.Text)
+	if r.OpID == "" || len(r.OpID) > 128 || r.Text == "" || utf8.RuneCountInString(r.Text) > MaxTaskText {
+		return r, fmt.Errorf("%w: start_task needs an operation id and a task text of 1..%d characters", ErrRejected, MaxTaskText)
+	}
+	if !TaskProviders[r.Provider] {
+		return r, fmt.Errorf("%w: unsupported agent %q", ErrRejected, r.Provider)
+	}
+	r.Model = strings.TrimSpace(r.Model)
+	if !ValidTaskModel(r.Model) {
+		return r, fmt.Errorf("%w: model must be a CLI ID or a selection such as gpt-6-astra[effort=high]", ErrRejected)
+	}
+	lock, ok := normalizeLock(r.Lock)
+	if !ok {
+		return r, fmt.Errorf("%w: lock must be a short one-line resource name (at most %d characters)", ErrRejected, MaxTaskLock)
+	}
+	r.Lock = lock
+	return r, nil
+}
+
+func existingStartTask(tx *sql.Tx, r StartTaskRequest) (string, error) {
+	var id string
+	var old struct{ computer, provider, title, text, model, lock string }
+	err := tx.QueryRow(`SELECT id,computer,provider,title,text,COALESCE(model,''),resource FROM tasks WHERE project=? AND op_id=?`, r.Project, r.OpID).Scan(&id, &old.computer, &old.provider, &old.title, &old.text, &old.model, &old.lock)
+	if err != nil {
+		return id, err
+	}
+	if old.computer != r.Computer || old.provider != r.Provider || old.text != r.Text || old.title != taskTitle(r.Title, r.Text) || old.model != r.Model || old.lock != r.Lock {
+		return id, fmt.Errorf("%w: this operation id was used for a different task", ErrRejected)
+	}
+	return id, nil
+}
+
+func startProjectRules(tx *sql.Tx, project string) (string, error) {
+	var rules string
+	err := tx.QueryRow(`SELECT worker_rules FROM projects WHERE name=? AND removed_at IS NULL`, project).Scan(&rules)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = fmt.Errorf("%w: unknown project", ErrRejected)
+	}
+	return rules, err
+}
+
 // startLocalTask records a task of this computer and its first run's launch
 // intent. origin is set for a task another computer started (T-037).
 func startLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, origin *netLink, coordinatorModel bool) (string, error) {
-	var folder string
-	if err := tx.QueryRow(`SELECT folder FROM project_folders WHERE project=? AND computer=?`, r.Project, computer).Scan(&folder); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", fmt.Errorf("%w: this computer has no folder for the project; the owner chooses it in the window", ErrRejected)
-		}
+	setup, err := prepareLocalTask(tx, r, computer, origin != nil, coordinatorModel)
+	if err != nil {
 		return "", err
 	}
-	if info, err := os.Stat(folder); err != nil || !info.IsDir() {
-		return "", fmt.Errorf("%w: the project folder is missing on this computer", ErrRejected)
+	return recordLocalTask(tx, r, computer, origin, setup)
+}
+
+type localTaskConfig struct {
+	folder     string
+	agent      ComputerAgent
+	fullAccess bool
+}
+
+func prepareLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, fromNetwork, coordinatorModel bool) (localTaskConfig, error) {
+	var cfg localTaskConfig
+	if err := tx.QueryRow(`SELECT folder FROM project_folders WHERE project=? AND computer=?`, r.Project, computer).Scan(&cfg.folder); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return cfg, fmt.Errorf("%w: this computer has no folder for the project; the owner chooses it in the window", ErrRejected)
+		}
+		return cfg, err
+	}
+	if info, err := os.Stat(cfg.folder); err != nil || !info.IsDir() {
+		return cfg, fmt.Errorf("%w: the project folder is missing on this computer", ErrRejected)
 	}
 	if pending, err := hasPendingUpdate(tx); err != nil {
-		return "", err
+		return cfg, err
 	} else if pending {
-		return "", fmt.Errorf("%w: this computer is waiting to install a Messenger update and takes no new tasks", ErrRejected)
+		return cfg, fmt.Errorf("%w: this computer is waiting to install a Messenger update and takes no new tasks", ErrRejected)
 	}
-	var agent ComputerAgent
 	var models string
 	var fullAccess int
 	var paused int
-	if err := tx.QueryRow(`SELECT cli_path,environment,profile,models,full_access,paused FROM computer_agents WHERE computer=? AND provider=?`, computer, r.Provider).Scan(&agent.CLI, &agent.Environment, &agent.Profile, &models, &fullAccess, &paused); err != nil {
+	if err := tx.QueryRow(`SELECT cli_path,environment,profile,models,full_access,paused FROM computer_agents WHERE computer=? AND provider=?`, computer, r.Provider).Scan(&cfg.agent.CLI, &cfg.agent.Environment, &cfg.agent.Profile, &models, &fullAccess, &paused); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return "", fmt.Errorf("%w: agent %s is not set up on this computer", ErrRejected, r.Provider)
+			return cfg, fmt.Errorf("%w: agent %s is not set up on this computer", ErrRejected, r.Provider)
 		}
-		return "", err
+		return cfg, err
 	}
 	if paused != 0 {
-		return "", errAgentPaused(r.Provider)
+		return cfg, errAgentPaused(r.Provider)
 	}
-	if link := agentLinkFor(r.Provider, agent.CLI); link != "" {
+	if link := agentLinkFor(r.Provider, cfg.agent.CLI); link != "" {
 		// An agent registered before T-207 kept the resolved file of its
 		// link; while the link still points there, keep the link instead.
-		agent.CLI = link
+		cfg.agent.CLI = link
 		if _, err := tx.Exec(`UPDATE computer_agents SET cli_path=? WHERE computer=? AND provider=?`, link, computer, r.Provider); err != nil {
-			return "", err
+			return cfg, err
 		}
 	}
 	if coordinatorModel {
 		if _, _, err := modelcatalog.Resolve(r.Provider, r.Model); err != nil {
-			return "", fmt.Errorf("%w: %v", ErrRejected, err)
+			return cfg, fmt.Errorf("%w: %v", ErrRejected, err)
 		}
 	} else if err := modelAllowed(r.Provider, r.Model, splitModels(models)); err != nil {
-		return "", err
+		return cfg, err
 	}
+	cfg.fullAccess = fullAccess != 0
+	if cfg.fullAccess && fromNetwork {
+		// Network tasks also need the owner's explicit permission (T-094).
+		on, err := netFullAccess(tx)
+		if err != nil {
+			return cfg, err
+		}
+		cfg.fullAccess = on
+	}
+	return cfg, nil
+}
+
+func recordLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, origin *netLink, cfg localTaskConfig) (string, error) {
 	id, err := randomID()
 	if err != nil {
 		return "", err
@@ -857,19 +924,10 @@ func startLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, origin *net
 	at := now()
 	sender, senderModel := taskSender(r.SenderAgent, r.SenderModel)
 	if _, err := tx.Exec(`INSERT INTO tasks(id,project,op_id,computer,provider,cli_path,environment,profile,folder,title,text,state,session_id,created_at,updated_at,model,sender_agent,sender_model) VALUES (?,?,?,?,?,?,?,?,?,?,?,'running',?,?,?,?,?,?)`,
-		id, r.Project, r.OpID, computer, r.Provider, agent.CLI, agent.Environment, agent.Profile, folder, taskTitle(r.Title, r.Text), r.Text, nullString(session), at, at, r.Model, sender, senderModel); err != nil {
+		id, r.Project, r.OpID, computer, r.Provider, cfg.agent.CLI, cfg.agent.Environment, cfg.agent.Profile, cfg.folder, taskTitle(r.Title, r.Text), r.Text, nullString(session), at, at, r.Model, sender, senderModel); err != nil {
 		return "", err
 	}
-	if fullAccess != 0 && origin != nil {
-		// T-094: a task of another computer gets «Любые команды» only when
-		// the owner allowed it for network tasks too.
-		if on, err := netFullAccess(tx); err != nil {
-			return "", err
-		} else if !on {
-			fullAccess = 0
-		}
-	}
-	if fullAccess != 0 {
+	if cfg.fullAccess {
 		if _, err := tx.Exec(`UPDATE tasks SET full_access=1 WHERE id=?`, id); err != nil {
 			return "", err
 		}
@@ -917,17 +975,17 @@ func insertTaskRun(tx *sql.Tx, task string, ordinal int, kind, input string, sen
 	return err
 }
 
-const taskColumns = `id,project,computer,provider,profile,folder,title,text,state,COALESCE(session_id,''),detail,created_at,updated_at,COALESCE(finished_at,''),cli_path,environment,cancel_requested,version,COALESCE(model,''),COALESCE(failure_reason,''),COALESCE(failure_reset,''),origin_peer IS NOT NULL,full_access,sender_agent,sender_model`
+const taskColumns = `id,project,computer,provider,profile,folder,title,text,state,COALESCE(session_id,''),detail,created_at,updated_at,COALESCE(finished_at,''),cli_path,environment,cancel_requested,version,COALESCE(model,''),COALESCE(ran_model,''),COALESCE(failure_reason,''),COALESCE(failure_reset,''),origin_peer IS NOT NULL,full_access,sender_agent,sender_model`
 
 func scanTask(scan func(...any) error) (Task, error) {
 	var t Task
 	var cancel, origin, full int
-	err := scan(&t.ID, &t.Project, &t.Computer, &t.Provider, &t.Profile, &t.Folder, &t.Title, &t.Text, &t.State, &t.SessionID, &t.Detail, &t.CreatedAt, &t.UpdatedAt, &t.FinishedAt, &t.CLI, &t.Environment, &cancel, &t.Version, &t.Model, &t.FailureReason, &t.FailureReset, &origin, &full, &t.SenderAgent, &t.SenderModel)
+	err := scan(&t.ID, &t.Project, &t.Computer, &t.Provider, &t.Profile, &t.Folder, &t.Title, &t.Text, &t.State, &t.SessionID, &t.Detail, &t.CreatedAt, &t.UpdatedAt, &t.FinishedAt, &t.CLI, &t.Environment, &cancel, &t.Version, &t.Model, &t.RanModel, &t.FailureReason, &t.FailureReset, &origin, &full, &t.SenderAgent, &t.SenderModel)
 	t.CancelRequested, t.FromNetwork, t.FullAccess = cancel != 0, origin != 0, full != 0
 	return t, err
 }
 
-func openQuestion(tx *sql.Tx, task string) (*TaskQuestion, error) {
+func openQuestion(tx interface{ QueryRow(string, ...any) *sql.Row }, task string) (*TaskQuestion, error) {
 	var q TaskQuestion
 	err := tx.QueryRow(`SELECT id,task_id,audience,text,state FROM task_questions WHERE task_id=? AND state='open' ORDER BY rowid DESC LIMIT 1`, task).Scan(&q.ID, &q.TaskID, &q.Audience, &q.Text, &q.State)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -941,6 +999,13 @@ func openQuestion(tx *sql.Tx, task string) (*TaskQuestion, error) {
 
 // TaskByID reads one task with its open question.
 func (s *Store) TaskByID(id string) (Task, error) {
+	if s.split != nil {
+		project, err := s.storeForTask(id)
+		if err != nil {
+			return Task{}, err
+		}
+		return project.TaskByID(id)
+	}
 	var t Task
 	err := s.tx(func(tx *sql.Tx) error {
 		var err error
@@ -961,6 +1026,16 @@ func (s *Store) TaskByID(id string) (Task, error) {
 func (s *Store) Tasks(project string, limit int) ([]Task, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 200
+	}
+	if s.split != nil {
+		if project != "" {
+			store, err := s.projectStore(project)
+			if err != nil {
+				return nil, err
+			}
+			return store.Tasks(project, limit)
+		}
+		return s.splitTasks(limit)
 	}
 	var out []Task
 	err := s.tx(func(tx *sql.Tx) error {
@@ -988,6 +1063,30 @@ func (s *Store) Tasks(project string, limit int) ([]Task, error) {
 		return nil
 	})
 	return out, err
+}
+
+func (s *Store) splitTasks(limit int) ([]Task, error) {
+	files, err := splitProjectFiles(context.Background(), s.db)
+	if err != nil {
+		return nil, err
+	}
+	var tasks []Task
+	for _, file := range files {
+		db, err := s.split.open(file)
+		if err != nil {
+			return nil, err
+		}
+		inProject, err := (&Store{db: db}).Tasks("", limit)
+		if err != nil {
+			return nil, err
+		}
+		tasks = append(tasks, inProject...)
+		sort.SliceStable(tasks, func(i, j int) bool {
+			return tasks[i].CreatedAt > tasks[j].CreatedAt
+		})
+		tasks = tasks[:min(len(tasks), limit)]
+	}
+	return tasks, nil
 }
 
 const runColumns = `id,task_id,ordinal,kind,input,receipt,state,COALESCE(reservation,''),COALESCE(pid,0),COALESCE(pgid,0),COALESCE(start_token,''),COALESCE(boot_id,''),COALESCE(disposition,''),COALESCE(disposition_text,''),detail`
@@ -1021,6 +1120,13 @@ func (s *Store) TaskRuns(task string) ([]TaskRun, error) {
 
 // TaskRun reads one run.
 func (s *Store) TaskRun(id string) (TaskRun, error) {
+	if s.split != nil {
+		project, err := s.storeForRun(id)
+		if err != nil {
+			return TaskRun{}, err
+		}
+		return project.TaskRun(id)
+	}
 	var r TaskRun
 	err := s.tx(func(tx *sql.Tx) error {
 		var err error
@@ -1033,27 +1139,27 @@ func (s *Store) TaskRun(id string) (TaskRun, error) {
 // NextTaskRunIntents lists runs that are recorded but not launched, oldest
 // first. Reading them never launches anything.
 func (s *Store) NextTaskRunIntents(limit int) ([]string, error) {
-	var out []string
-	err := s.tx(func(tx *sql.Tx) error {
-		// A task with a lock waits while an earlier open task with the same
-		// lock is on this computer (T-072).
-		rows, err := tx.Query(`SELECT r.id FROM task_runs r JOIN tasks t ON t.id=r.task_id WHERE r.state='intent' AND t.state='running'
+	if s.split != nil {
+		return s.nextSplitRunIntents(limit)
+	}
+	// A task with a lock waits while an earlier open task with the same
+	// lock is on this computer (T-072).
+	rows, err := s.db.Query(`SELECT r.id FROM task_runs r JOIN tasks t ON t.id=r.task_id WHERE r.state='intent' AND t.state='running'
  AND NOT (t.resource<>'' AND EXISTS (`+lockHolderQuery+`))
  ORDER BY r.created_at,r.rowid LIMIT ?`, limit)
-		if err != nil {
-			return err
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return out, err
 		}
-		defer rows.Close()
-		for rows.Next() {
-			var id string
-			if err := rows.Scan(&id); err != nil {
-				return err
-			}
-			out = append(out, id)
-		}
-		return rows.Err()
-	})
-	return out, err
+		out = append(out, id)
+	}
+	return out, rows.Err()
 }
 
 func runTask(tx *sql.Tx, run string) (TaskRun, Task, error) {
@@ -1147,6 +1253,24 @@ func failureNote(reason, reset string) string {
 // BeginTaskRun is committed BEFORE the reservation and exec. From here a
 // crash leaves the run interrupted; it is never launched again.
 func (s *Store) BeginTaskRun(run, reservation string) (TaskRun, Task, error) {
+	if s.split != nil {
+		ctx := context.Background()
+		store, err := s.storeForRun(run)
+		if err != nil {
+			return TaskRun{}, Task{}, err
+		}
+		var project string
+		if err := store.db.QueryRow("SELECT project FROM project_snapshot").Scan(&project); err != nil {
+			return TaskRun{}, Task{}, err
+		}
+		r, t, err := beginSplitLocalRun(ctx, s.db, s.split.open, project, run, reservation)
+		if err == nil {
+			s.split.mu.Lock()
+			s.split.runs[run] = projectMigrationFile(project)
+			s.split.mu.Unlock()
+		}
+		return r, t, err
+	}
 	var r TaskRun
 	var t Task
 	err := s.tx(func(tx *sql.Tx) error {
@@ -1155,61 +1279,65 @@ func (s *Store) BeginTaskRun(run, reservation string) (TaskRun, Task, error) {
 		if err != nil {
 			return err
 		}
-		if t.State != "running" {
-			return fmt.Errorf("%w: task is %s", ErrRejected, t.State)
-		}
-		if p, err := isPaused(tx); err != nil || p {
-			if err == nil {
-				err = ErrPaused
-			}
-			return err
-		}
-		if t.CancelRequested {
-			if err := setRunState(tx, run, "cancelled", "cancelled before launch", "intent"); err != nil {
-				return err
-			}
-			if err := setTaskState(tx, t.ID, "cancelled", "cancelled before launch"); err != nil {
-				return err
-			}
-			if err := insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "cancelled", "cancelled before the run started", ""); err != nil {
-				return err
-			}
-			return ErrCancelled
-		}
-		// A follow-up or an answer is a new run the owner or coordinator
-		// asked for now: it takes the agent's current «Любые команды», so
-		// turning it on helps a task started before (T-056). Without the
-		// agent row the task keeps what it had.
-		if r.Kind == "answer" || r.Kind == "continue" || r.Kind == "note" {
-			var full int
-			err := tx.QueryRow(`SELECT full_access FROM computer_agents WHERE computer=? AND provider=?`, t.Computer, t.Provider).Scan(&full)
-			if err != nil && !errors.Is(err, sql.ErrNoRows) {
-				return err
-			}
-			if err == nil && full != 0 && t.FromNetwork {
-				on, nerr := netFullAccess(tx)
-				if nerr != nil {
-					return nerr
-				}
-				if !on {
-					full = 0
-				}
-			}
-			if err == nil && (full != 0) != t.FullAccess {
-				if _, err := tx.Exec(`UPDATE tasks SET full_access=? WHERE id=?`, full, t.ID); err != nil {
-					return err
-				}
-				t.FullAccess = full != 0
-			}
-		}
-		if err := setRunState(tx, run, "launching", "process may start; never launched again", "intent"); err != nil {
-			return err
-		}
-		_, err = tx.Exec(`UPDATE task_runs SET reservation=?, launched_at=? WHERE id=?`, reservation, now(), run)
-		r.State, r.Reservation = "launching", reservation
-		return err
+		return beginTaskRunTx(tx, tx, &r, &t, reservation)
 	})
 	return r, t, err
+}
+
+func beginTaskRunTx(machine, tx *sql.Tx, r *TaskRun, t *Task, reservation string) error {
+	if t.State != "running" {
+		return fmt.Errorf("%w: task is %s", ErrRejected, t.State)
+	}
+	if p, err := isPaused(machine); err != nil || p {
+		if err == nil {
+			err = ErrPaused
+		}
+		return err
+	}
+	if t.CancelRequested {
+		if err := setRunState(tx, r.ID, "cancelled", "cancelled before launch", "intent"); err != nil {
+			return err
+		}
+		if err := setTaskState(tx, t.ID, "cancelled", "cancelled before launch"); err != nil {
+			return err
+		}
+		if err := insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "cancelled", "cancelled before the run started", ""); err != nil {
+			return err
+		}
+		return ErrCancelled
+	}
+	// A follow-up or an answer is a new run the owner or coordinator
+	// asked for now: it takes the agent's current «Любые команды», so
+	// turning it on helps a task started before (T-056). Without the
+	// agent row the task keeps what it had.
+	if r.Kind == "answer" || r.Kind == "continue" || r.Kind == "note" {
+		var full int
+		err := machine.QueryRow(`SELECT full_access FROM computer_agents WHERE computer=? AND provider=?`, t.Computer, t.Provider).Scan(&full)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		if err == nil && full != 0 && t.FromNetwork {
+			on, nerr := netFullAccess(machine)
+			if nerr != nil {
+				return nerr
+			}
+			if !on {
+				full = 0
+			}
+		}
+		if err == nil && (full != 0) != t.FullAccess {
+			if _, err := tx.Exec(`UPDATE tasks SET full_access=? WHERE id=?`, full, t.ID); err != nil {
+				return err
+			}
+			t.FullAccess = full != 0
+		}
+	}
+	if err := setRunState(tx, r.ID, "launching", "process may start; never launched again", "intent"); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`UPDATE task_runs SET reservation=?, launched_at=? WHERE id=?`, reservation, now(), r.ID)
+	r.State, r.Reservation = "launching", reservation
+	return err
 }
 
 // ErrCancelled means the task was cancelled before the run launched.
@@ -1218,6 +1346,17 @@ var ErrCancelled = errors.New("task cancelled")
 // TaskRunNotStarted is only for a definite OS refusal before the executable
 // ran. The task fails; nothing is launched again automatically.
 func (s *Store) TaskRunNotStarted(run, reason string) error {
+	if s.split != nil {
+		project, err := s.storeForRun(run)
+		if err != nil {
+			return err
+		}
+		err = project.TaskRunNotStarted(run, reason)
+		if err == nil {
+			s.split.forgetRun(run)
+		}
+		return err
+	}
 	return s.tx(func(tx *sql.Tx) error {
 		r, t, err := runTask(tx, run)
 		if err != nil {
@@ -1239,6 +1378,13 @@ func (s *Store) TaskRunNotStarted(run, reason string) error {
 // RecordTaskRunProcess stores the observed process. Tools stay closed until
 // the conversation identity is bound.
 func (s *Store) RecordTaskRunProcess(run string, obs platform.Observation) error {
+	if s.split != nil {
+		project, err := s.storeForRun(run)
+		if err != nil {
+			return err
+		}
+		return project.RecordTaskRunProcess(run, obs)
+	}
 	if obs.PID <= 0 || obs.PGID <= 1 || obs.StartToken == "" || obs.BootID == "" {
 		return fmt.Errorf("%w: incomplete process observation", ErrRejected)
 	}
@@ -1254,45 +1400,65 @@ func (s *Store) RecordTaskRunProcess(run string, obs platform.Observation) error
 // SetTaskRunModel records the model a run's CLI reported at its start
 // (T-108). It is shown to people only and decides nothing.
 func (s *Store) SetTaskRunModel(run, model string) error {
+	if s.split != nil {
+		project, err := s.storeForRun(run)
+		if err != nil {
+			return err
+		}
+		return project.SetTaskRunModel(run, model)
+	}
 	model = strings.TrimSpace(model)
 	if model == "" || len(model) > 120 {
 		return nil
 	}
-	return s.tx(func(tx *sql.Tx) error {
-		var task, previous string
-		err := tx.QueryRow(`SELECT t.id,COALESCE(t.ran_model,'') FROM task_runs r JOIN tasks t ON t.id=r.task_id WHERE r.id=?`, run).Scan(&task, &previous)
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		if previous == model {
-			return nil
-		}
-		if _, err := tx.Exec(`UPDATE tasks SET ran_model=? WHERE id=?`, model, task); err != nil {
-			return err
-		}
-		if !ValidTaskModel(model) {
-			return nil
-		}
-		link, err := taskLink(tx, task)
-		if err != nil || link.origin == nil {
-			return err
-		}
-		op, err := randomID()
-		if err != nil {
-			return err
-		}
-		origin := link.origin
-		return enqueueNet(tx, origin.broker, origin.peer, "ran_model."+op, task, netBody{Kind: "ran_model", Task: origin.task, Model: model})
-	})
+	return s.tx(func(tx *sql.Tx) error { return setTaskRunModel(tx, run, model) })
+}
+
+// ClearTaskRunModel removes the previous observation when a new process
+// resumes a task, since its CLI defaults may have changed.
+func (s *Store) ClearTaskRunModel(run string) error {
+	return s.tx(func(tx *sql.Tx) error { return setTaskRunModel(tx, run, "") })
+}
+
+func setTaskRunModel(tx *sql.Tx, run, model string) error {
+	var task, previous string
+	err := tx.QueryRow(`SELECT t.id,COALESCE(t.ran_model,'') FROM task_runs r JOIN tasks t ON t.id=r.task_id WHERE r.id=?
+AND NOT EXISTS (SELECT 1 FROM task_runs newer WHERE newer.task_id=t.id AND newer.ordinal>r.ordinal AND newer.launched_at IS NOT NULL)`, run).Scan(&task, &previous)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil || previous == model {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE tasks SET ran_model=?,version=version+1 WHERE id=?`, model, task); err != nil {
+		return err
+	}
+	if _, _, err := modelcatalog.SplitReported(model); err != nil {
+		return nil
+	}
+	link, err := taskLink(tx, task)
+	if err != nil || link.origin == nil {
+		return err
+	}
+	op, err := randomID()
+	if err != nil {
+		return err
+	}
+	origin := link.origin
+	return enqueueNet(tx, origin.broker, origin.peer, "ran_model."+op, task, netBody{Kind: "ran_model", Task: origin.task, Model: model})
 }
 
 // BindTaskSession checks the conversation ID the CLI reported. A Claude task
 // and every resumed run must match the recorded ID exactly. A new Codex task
 // binds the first ID once; an ID already bound to another task is refused.
 func (s *Store) BindTaskSession(run, session string) error {
+	if s.split != nil {
+		project, err := s.storeForRun(run)
+		if err != nil {
+			return err
+		}
+		return project.BindTaskSession(run, session)
+	}
 	if session == "" || len(session) > 128 || strings.TrimSpace(session) != session {
 		return fmt.Errorf("%w: invalid conversation id", ErrRejected)
 	}
@@ -1544,6 +1710,13 @@ type RunEvidence struct {
 // after its report and only named leftovers remain (D-147), so the caller may
 // retire the reservation.
 func (s *Store) FinishTaskRun(run string, ev RunEvidence) (string, error) {
+	if s.split != nil {
+		project, err := s.storeForRun(run)
+		if err != nil {
+			return "", err
+		}
+		return project.FinishTaskRun(run, ev)
+	}
 	var final string
 	err := s.tx(func(tx *sql.Tx) error {
 		r, t, err := runTask(tx, run)
@@ -1730,8 +1903,8 @@ func publishDisposition(tx *sql.Tx, t Task, r TaskRun) error {
 // question must be the newest open one and addressed to by (coordinator or
 // owner); a late or stale answer is refused.
 func (s *Store) AnswerTask(task, question, opID, text, by string, senders ...MessageSender) error {
-	return s.tx(func(tx *sql.Tx) error {
-		return answerTask(tx, task, question, opID, text, by, false, false, senders...)
+	return s.taskTx(task, func(machine, tx *sql.Tx) error {
+		return answerTask(machine, tx, task, question, opID, text, by, false, false, senders...)
 	})
 }
 
@@ -1744,7 +1917,7 @@ func (s *Store) AnswerTask(task, question, opID, text, by string, senders ...Mes
 // maxNetOpID bounds an op id built for a message from another computer.
 const maxNetOpID = 1024
 
-func answerTask(tx *sql.Tx, task, question, opID, text, by string, fromNetwork, ownerOver bool, senders ...MessageSender) error {
+func answerTask(machine, tx *sql.Tx, task, question, opID, text, by string, fromNetwork, ownerOver bool, senders ...MessageSender) error {
 	sender := coordinatorSender(by, senders)
 	text = strings.TrimSpace(text)
 	// An answer from the computer that started the task carries an op id
@@ -1808,7 +1981,7 @@ func answerTask(tx *sql.Tx, task, question, opID, text, by string, fromNetwork, 
 			return fmt.Errorf("%w: this operation id was used for another answer", ErrRejected)
 		}
 		if link.remote != nil {
-			return answerRemoteTask(tx, t, *link.remote, question, opID, text, by, sender)
+			return answerRemoteTask(machine, tx, t, *link.remote, question, opID, text, by, sender)
 		}
 		if t.SessionID == "" {
 			return fmt.Errorf("%w: no recorded conversation to resume", ErrRejected)
@@ -1860,21 +2033,21 @@ func (s *Store) ContinueTaskChecked(task, opID, text, by string, gone WorkerGone
 	if by != AudienceCoordinator {
 		return fmt.Errorf("%w: only the coordinator continues a task", ErrRejected)
 	}
-	return s.tx(func(tx *sql.Tx) error {
+	return s.taskTx(task, func(machine, tx *sql.Tx) error {
 		link, err := taskLink(tx, task)
 		if err != nil {
 			return err
 		}
 		if link.remote != nil {
-			return continueRemoteTask(tx, task, *link.remote, opID, text, coordinatorSender(by, senders))
+			return continueRemoteTask(machine, tx, task, *link.remote, opID, text, coordinatorSender(by, senders))
 		}
-		return continueTaskTx(tx, task, opID, text, gone, false, coordinatorSender(by, senders))
+		return continueTaskTx(machine, tx, task, opID, text, gone, false, coordinatorSender(by, senders))
 	})
 }
 
 // continueTaskTx continues a task that runs on this computer. fromNet is
 // set when the computer that started it asked (T-113).
-func continueTaskTx(tx *sql.Tx, task, opID, text string, gone WorkerGone, fromNet bool, sender MessageSender) error {
+func continueTaskTx(machine, tx *sql.Tx, task, opID, text string, gone WorkerGone, fromNet bool, sender MessageSender) error {
 	var oldTask, oldInput string
 	err := tx.QueryRow(`SELECT task_id,input FROM task_runs WHERE op_id=?`, opID).Scan(&oldTask, &oldInput)
 	if err == nil {
@@ -1913,7 +2086,7 @@ func continueTaskTx(tx *sql.Tx, task, opID, text string, gone WorkerGone, fromNe
 		return fmt.Errorf("%w: no recorded conversation to continue; start a new task", ErrRejected)
 	}
 	var paused int
-	if err := tx.QueryRow(`SELECT paused FROM computer_agents WHERE computer=? AND provider=?`, t.Computer, t.Provider).Scan(&paused); err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err := machine.QueryRow(`SELECT paused FROM computer_agents WHERE computer=? AND provider=?`, t.Computer, t.Provider).Scan(&paused); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
 	if paused != 0 {
@@ -2049,16 +2222,16 @@ func closeStuckRuns(tx *sql.Tx, task string, gone WorkerGone) (string, error) {
 // It returns the resulting state.
 func (s *Store) CancelTask(task string) (string, error) {
 	var state string
-	err := s.tx(func(tx *sql.Tx) error {
+	err := s.taskTx(task, func(machine, tx *sql.Tx) error {
 		var err error
-		state, err = cancelTask(tx, task, s.gone)
+		state, err = cancelTask(machine, tx, task, s.gone)
 		return err
 	})
 	return state, err
 }
 
 // cancelTask cancels in tx and returns the resulting state.
-func cancelTask(tx *sql.Tx, task string, gone WorkerGone) (string, error) {
+func cancelTask(machine, tx *sql.Tx, task string, gone WorkerGone) (string, error) {
 	var state string
 	err := func() error {
 		t, err := scanTask(tx.QueryRow(`SELECT `+taskColumns+` FROM tasks WHERE id=?`, task).Scan)
@@ -2072,7 +2245,7 @@ func cancelTask(tx *sql.Tx, task string, gone WorkerGone) (string, error) {
 		if link, err := taskLink(tx, task); err != nil {
 			return err
 		} else if link.remote != nil && t.State != "cancelled" {
-			state, err = cancelRemoteTask(tx, t, *link.remote)
+			state, err = cancelRemoteTask(machine, tx, t, *link.remote)
 			return err
 		}
 		switch t.State {
@@ -2132,6 +2305,15 @@ func cancelTask(tx *sql.Tx, task string, gone WorkerGone) (string, error) {
 
 // CancelRequestedRuns lists launched runs whose task asked to be cancelled.
 func (s *Store) CancelRequestedRuns() ([]TaskRun, error) {
+	if s.split != nil {
+		var out []TaskRun
+		err := s.eachProjectStore(func(project *Store) error {
+			list, err := project.CancelRequestedRuns()
+			out = append(out, list...)
+			return err
+		})
+		return out, err
+	}
 	var out []TaskRun
 	err := s.tx(func(tx *sql.Tx) error {
 		rows, err := tx.Query(`SELECT r.id FROM task_runs r JOIN tasks t ON t.id=r.task_id WHERE t.cancel_requested=1 AND r.state='running'`)
@@ -2202,6 +2384,9 @@ func interruptInheritedTaskRuns(tx *sql.Tx) error {
 
 // InterruptInheritedTaskRuns marks the previous client's runs interrupted.
 func (s *Store) InterruptInheritedTaskRuns() error {
+	if s.split != nil {
+		return s.eachProjectStore(func(project *Store) error { return project.InterruptInheritedTaskRuns() })
+	}
 	return s.tx(interruptInheritedTaskRuns)
 }
 
@@ -2209,28 +2394,16 @@ func (s *Store) InterruptInheritedTaskRuns() error {
 // at most limit. Reading never moves anything: a caller that repeats the
 // same cursor gets the same events again.
 func (s *Store) TaskEvents(project, audience string, after int64, limit int) ([]TaskEvent, int64, error) {
-	if limit <= 0 || limit > 100 {
-		limit = 20
+	scoped, err := s.projectStore(project)
+	if err != nil {
+		return nil, after, err
 	}
-	var out []TaskEvent
-	cursor := after
-	err := s.tx(func(tx *sql.Tx) error {
-		rows, err := tx.Query(`SELECT seq,task_id,kind,text,COALESCE(question_id,''),created_at FROM task_events WHERE project=? AND audience=? AND seq>? ORDER BY seq LIMIT ?`, project, audience, after, limit)
-		if err != nil {
-			return err
+	if audience == AudienceCoordinator {
+		if err := s.drainProjectNotices(project, scoped); err != nil {
+			return nil, after, err
 		}
-		defer rows.Close()
-		for rows.Next() {
-			var e TaskEvent
-			if err := rows.Scan(&e.Seq, &e.TaskID, &e.Kind, &e.Text, &e.QuestionID, &e.CreatedAt); err != nil {
-				return err
-			}
-			out = append(out, e)
-			cursor = e.Seq
-		}
-		return rows.Err()
-	})
-	return out, cursor, err
+	}
+	return readTaskEvents(context.Background(), scoped.db, project, audience, after, limit)
 }
 
 // TaskListVersion changes whenever a project's task list or its events may
@@ -2238,16 +2411,65 @@ func (s *Store) TaskEvents(project, audience string, after int64, limit int) ([]
 // update bumps tasks.version). It lets the coordinator skip an unchanged list
 // (T-032).
 func (s *Store) TaskListVersion(project string) (string, error) {
+	scoped, err := s.projectStore(project)
+	if err != nil {
+		return "", err
+	}
+	if err := s.drainProjectNotices(project, scoped); err != nil {
+		return "", err
+	}
 	var seq sql.NullInt64
-	var count, sum int64
-	err := s.db.QueryRow(`SELECT (SELECT MAX(seq) FROM task_events WHERE project=?), COUNT(*), COALESCE(SUM(version),0) FROM tasks WHERE project=?`, project, project).Scan(&seq, &count, &sum)
-	return fmt.Sprintf("%d.%d.%d", seq.Int64, count, sum), err
+	var count, sum, waiting int64
+	if s.split == nil {
+		err = scoped.db.QueryRow(`SELECT (SELECT MAX(seq) FROM task_events WHERE project=?), COUNT(*), COALESCE(SUM(version),0),
+ COUNT(CASE WHEN t.state='running' AND t.resource<>'' AND EXISTS (`+lockHolderQuery+`) THEN 1 END)
+ FROM tasks t WHERE t.project=?`, project, project).Scan(&seq, &count, &sum, &waiting)
+		return fmt.Sprintf("%d.%d.%d.%d", seq.Int64, count, sum, waiting), err
+	}
+	err = scoped.db.QueryRow(`SELECT (SELECT MAX(seq) FROM task_events WHERE project=?), COUNT(*), COALESCE(SUM(version),0) FROM tasks WHERE project=?`, project, project).Scan(&seq, &count, &sum)
+	if err != nil {
+		return "", err
+	}
+	rows, err := scoped.db.Query(`SELECT id FROM tasks WHERE project=? AND state='running' AND resource<>''`, project)
+	if err != nil {
+		return "", err
+	}
+	var candidates []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return "", err
+		}
+		candidates = append(candidates, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	for _, id := range candidates {
+		resource, _, err := s.ProjectTaskLock(project, id)
+		if err != nil {
+			return "", err
+		}
+		if resource != "" {
+			waiting++
+		}
+	}
+	return fmt.Sprintf("%d.%d.%d.%d", seq.Int64, count, sum, waiting), nil
 }
 
 // LatestTaskEvent returns the newest event sequence number of a project.
 func (s *Store) LatestTaskEvent(project string) (int64, error) {
+	scoped, err := s.projectStore(project)
+	if err != nil {
+		return 0, err
+	}
+	if err := s.drainProjectNotices(project, scoped); err != nil {
+		return 0, err
+	}
 	var seq sql.NullInt64
-	err := s.db.QueryRow(`SELECT MAX(seq) FROM task_events WHERE project=?`, project).Scan(&seq)
+	err = scoped.db.QueryRow(`SELECT MAX(seq) FROM task_events WHERE project=?`, project).Scan(&seq)
 	return seq.Int64, err
 }
 
@@ -2255,6 +2477,17 @@ func (s *Store) LatestTaskEvent(project string) (int64, error) {
 // removed it from the registry. It is only for runs whose exit and empty
 // group were observed.
 func (s *Store) TaskRunReservationRetired(run string) error {
+	if s.split != nil {
+		project, err := s.storeForRun(run)
+		if err != nil {
+			return err
+		}
+		err = project.TaskRunReservationRetired(run)
+		if err == nil {
+			s.split.forgetRun(run)
+		}
+		return err
+	}
 	return s.tx(func(tx *sql.Tx) error {
 		var state string
 		if err := tx.QueryRow(`SELECT state FROM task_runs WHERE id=?`, run).Scan(&state); err != nil {
@@ -2328,9 +2561,9 @@ func (s *Store) CoordinatorLastSeen(project string) (string, error) {
 type AgentSummary struct {
 	Agent   string `json:"agent"`
 	Profile string `json:"profile"`
-	// Running counts tasks of all projects that run on this agent now.
+	// Running counts known active tasks of this project on this agent.
 	Running int `json:"running"`
-	// Waiting counts this agent's tasks waiting for an answer, all projects.
+	// Waiting counts known tasks of this project waiting for an answer.
 	Waiting int `json:"waiting"`
 	// Models are the names the owner listed; for Codex and Cursor only
 	// these may be passed to start_task (T-043).
@@ -2400,6 +2633,8 @@ type ComputerSummary struct {
 func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 	var c ComputerSummary
 	var catalog map[string][]string
+	type agentOnComputer struct{ computer, agent string }
+	activity := map[agentOnComputer]AgentSummary{}
 	err := s.tx(func(tx *sql.Tx) error {
 		computer, err := localComputer(tx)
 		if err != nil {
@@ -2434,11 +2669,51 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 		if c.UpdatePending {
 			c.Note = strings.TrimSpace("waiting to install a Messenger update: it takes no new tasks. " + c.Note)
 		}
-		rows, err := tx.Query(`SELECT a.provider,a.profile,
- (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state='running'),
- (SELECT COUNT(*) FROM tasks t WHERE t.computer=a.computer AND t.provider=a.provider AND t.state IN ('waiting_coordinator','waiting_owner')),
- a.models, a.limit_state, a.full_access
- FROM computer_agents a WHERE a.computer=? AND a.paused=0 ORDER BY a.provider`, computer)
+		broker, err := metaValue(tx, "net_broker")
+		if err != nil {
+			return err
+		}
+		query := `SELECT computer,provider,COUNT(CASE WHEN state='running' THEN 1 END),
+ COUNT(CASE WHEN state IN ('waiting_coordinator','waiting_owner') THEN 1 END)
+ FROM tasks WHERE project=? AND state IN ('running','waiting_coordinator','waiting_owner')
+ AND (remote_peer IS NULL OR remote_broker=?) GROUP BY computer,provider`
+		if err := s.visitProjectTaskRows(tx, project, query, []any{project, broker}, func(rows *sql.Rows) error {
+			for rows.Next() {
+				var key agentOnComputer
+				var counts AgentSummary
+				if err := rows.Scan(&key.computer, &key.agent, &counts.Running, &counts.Waiting); err != nil {
+					return err
+				}
+				activity[key] = counts
+			}
+			return rows.Err()
+		}); err != nil {
+			return err
+		}
+		shared, err := projectNetTasks(tx, project, s.split != nil)
+		if err != nil {
+			return err
+		}
+		for _, peer := range shared {
+			if peer.Age < 0 || peer.Age > PeerFresh {
+				continue
+			}
+			for _, task := range peer.Tasks {
+				key := agentOnComputer{peer.Peer, task.Agent}
+				if task.RunsOnPeer != "" {
+					key.computer = task.RunsOnPeer
+				}
+				counts := activity[key]
+				switch task.State {
+				case "running":
+					counts.Running++
+				case "waiting_coordinator", "waiting_owner":
+					counts.Waiting++
+				}
+				activity[key] = counts
+			}
+		}
+		rows, err := tx.Query(`SELECT a.provider,a.profile,a.models,a.limit_state,a.full_access FROM computer_agents a WHERE a.computer=? AND a.paused=0 ORDER BY a.provider`, computer)
 		if err != nil {
 			return err
 		}
@@ -2446,9 +2721,11 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 		for rows.Next() {
 			var a AgentSummary
 			var models, limit string
-			if err := rows.Scan(&a.Agent, &a.Profile, &a.Running, &a.Waiting, &models, &limit, &a.FullAccess); err != nil {
+			if err := rows.Scan(&a.Agent, &a.Profile, &models, &limit, &a.FullAccess); err != nil {
 				return err
 			}
+			counts := activity[agentOnComputer{computer, a.Agent}]
+			a.Running, a.Waiting = counts.Running, counts.Waiting
 			a.Models = splitModels(models)
 			a.Limit = limitView(parseAgentLimit(limit), time.Now())
 			a.explain()
@@ -2500,7 +2777,8 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 			if models == nil {
 				models = []string{}
 			}
-			as := AgentSummary{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting, Models: models, Limit: limitView(a.Limit, time.Now())}
+			counts := activity[agentOnComputer{p.ID, a.Agent}]
+			as := AgentSummary{Agent: a.Agent, Running: counts.Running, Waiting: counts.Waiting, Models: models, Limit: limitView(a.Limit, time.Now())}
 			as.explain()
 			o.Agents = append(o.Agents, as)
 		}
@@ -2530,7 +2808,7 @@ func (s *Store) ProjectAgents(project string) (map[string]any, error) {
 }
 
 // idleComputers names the online computers that can take this project's
-// tasks and run no task now (of any project): where the next task can go.
+// tasks and have no known running task of this project.
 func idleComputers(list []ComputerSummary) []string {
 	var out []string
 	for _, c := range list {

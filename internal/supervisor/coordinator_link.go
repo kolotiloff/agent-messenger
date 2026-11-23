@@ -47,28 +47,53 @@ type coordinatorTarget struct {
 }
 
 func (s *Supervisor) coordinatorTarget(project string) (coordinatorTarget, CoordinatorLinkView, bool) {
-	v, err := s.store.WindowView(project, "")
+	projects, err := s.store.Projects()
 	if err != nil {
 		return coordinatorTarget{}, CoordinatorLinkView{State: adapters.LinkUnknown, Detail: err.Error()}, false
 	}
-	if v.Folder == "" {
-		return coordinatorTarget{}, CoordinatorLinkView{State: linkNoFolder}, false
+	if project == "" && len(projects) > 0 {
+		project = projects[0].Name
 	}
-	t := coordinatorTarget{folder: v.Folder}
-	for _, a := range v.Agents {
-		switch a.Agent {
-		case "claude":
-			t.cli = a.CLI
-		case "codex":
-			t.codexCLI = a.CLI
-		case "cursor":
-			t.cursorCLI = a.CLI
+	var t coordinatorTarget
+	for _, p := range projects {
+		if p.Name == project {
+			t.folder = p.Folder
+			break
 		}
 	}
-	t.messenger, err = CoordinatorProgram(s.root)
+	if t.folder == "" {
+		return coordinatorTarget{}, CoordinatorLinkView{State: linkNoFolder}, false
+	}
+	agents, err := s.store.ComputerAgents()
 	if err != nil {
 		return t, CoordinatorLinkView{State: adapters.LinkUnknown, Detail: err.Error()}, false
 	}
+	for _, a := range agents {
+		t.setCLI(a.Provider, a.CLI)
+	}
+	return s.resolveCoordinatorTarget(t)
+}
+
+func (t *coordinatorTarget) setCLI(provider, path string) {
+	switch provider {
+	case "claude":
+		t.cli = path
+	case "codex":
+		t.codexCLI = path
+	case "cursor":
+		t.cursorCLI = path
+	}
+}
+
+func (s *Supervisor) resolveCoordinatorTarget(t coordinatorTarget) (coordinatorTarget, CoordinatorLinkView, bool) {
+	if t.folder == "" {
+		return t, CoordinatorLinkView{State: linkNoFolder}, false
+	}
+	messenger, err := CoordinatorProgram(s.root)
+	if err != nil {
+		return t, CoordinatorLinkView{State: adapters.LinkUnknown, Detail: err.Error()}, false
+	}
+	t.messenger = messenger
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return t, CoordinatorLinkView{State: adapters.LinkUnknown, Detail: err.Error()}, false

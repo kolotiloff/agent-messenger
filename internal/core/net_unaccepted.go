@@ -1,8 +1,8 @@
 package core
 
 import (
+	"context"
 	"database/sql"
-	"fmt"
 	"time"
 )
 
@@ -17,8 +17,30 @@ var unacceptedAfter = 5 * time.Minute
 // NoteUnaccepted tells the coordinator once about each task this computer
 // sent that the other computer has not accepted within unacceptedAfter.
 func (s *Store) NoteUnaccepted(at time.Time) (int, error) {
+	if s.split != nil {
+		var total int
+		err := s.eachProjectStore(func(project *Store) error {
+			n, err := project.NoteUnaccepted(at)
+			total += n
+			return err
+		})
+		return total, err
+	}
+	var machine *sql.Tx
+	if s.machine != nil {
+		var err error
+		machine, err = s.machine.BeginTx(context.Background(), nil)
+		if err != nil {
+			return 0, err
+		}
+		defer machine.Rollback()
+	}
+
 	noted := 0
 	err := s.tx(func(tx *sql.Tx) error {
+		if machine == nil {
+			machine = tx
+		}
 		type waiting struct{ id, project, created, broker, peer, provider string }
 		rows, err := tx.Query(`SELECT id,project,created_at,remote_broker,remote_peer,provider FROM tasks
  WHERE state='running' AND COALESCE(remote_broker,'')<>'' AND COALESCE(remote_task,'')=''
@@ -44,7 +66,7 @@ func (s *Store) NoteUnaccepted(at time.Time) (int, error) {
 			if err != nil || at.Sub(created) < unacceptedAfter {
 				continue
 			}
-			why, err := unacceptedReason(tx, w.id, w.broker, w.peer, w.provider)
+			why, err := unacceptedReason(machine, tx, w.id, w.broker, w.peer, w.provider)
 			if err != nil {
 				return err
 			}
@@ -63,17 +85,17 @@ func (s *Store) NoteUnaccepted(at time.Time) (int, error) {
 }
 
 // unacceptedReason names the likely reason a task was not accepted.
-func unacceptedReason(tx *sql.Tx, task, broker, peerID, provider string) (string, error) {
+func unacceptedReason(machine, tx *sql.Tx, task, broker, peerID, provider string) (string, error) {
 	var queued int
 	if err := tx.QueryRow(`SELECT COUNT(*) FROM net_outbox WHERE op_id=?`, safeNetOp("start."+task)).Scan(&queued); err != nil {
 		return "", err
 	}
-	current, err := metaValue(tx, "net_broker")
+	current, err := metaValue(machine, "net_broker")
 	if err != nil {
 		return "", err
 	}
-	name := peerName(tx, peerID)
-	peer, found, err := netPeer(tx, peerID)
+	name := peerName(machine, peerID)
+	peer, found, err := netPeer(machine, peerID)
 	if err != nil {
 		return "", err
 	}
@@ -91,13 +113,6 @@ func unacceptedReason(tx *sql.Tx, task, broker, peerID, provider string) (string
 	case peer.Ready != nil && !peer.Ready.Accept:
 		return name + " does not take tasks from the network («Принимать задачи других компьютеров» is off there)", nil
 	}
-	// Coordinator feedback 2026-11-12: the computer ran the task while its
-	// replies never arrived. When it reports this agent busy, say so: the
-	// task may be running, so starting it again could do the work twice.
-	for _, a := range peer.Agents {
-		if a.Agent == provider && a.Running > 0 {
-			return fmt.Sprintf("%s is online and reports %d running %s task(s), but has not answered: this task may be running there with its replies not reaching this computer; ask the owner to look there before starting it again", name, a.Running, provider), nil
-		}
-	}
-	return name + " is online but has not answered", nil
+	// A start that left this computer may have arrived even without an answer.
+	return name + " is online but has not answered: this task may be running there with its replies not reaching this computer; ask the owner to look there before starting it again", nil
 }

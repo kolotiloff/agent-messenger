@@ -114,6 +114,21 @@ func taskWorkerFixture(mode string) int {
 	}
 	if codex {
 		emit(map[string]any{"type": "thread.started", "thread_id": session})
+		if mode == "report-model" {
+			at := time.Now()
+			profile := os.Getenv("CODEX_HOME")
+			if profile == "" {
+				return 7
+			}
+			dir := filepath.Join(profile, "sessions", filepath.FromSlash(at.Format("2006/01/02")))
+			if err := os.MkdirAll(dir, 0700); err != nil {
+				return 7
+			}
+			model := fmt.Sprintf(`{"timestamp":%q,"type":"turn_context","payload":{"model":"gpt-6.2-astra","effort":"high"}}`, at.UTC().Format(time.RFC3339Nano))
+			if err := os.WriteFile(filepath.Join(dir, "rollout-fixture-"+session+".jsonl"), []byte(model+"\n"), 0600); err != nil {
+				return 7
+			}
+		}
 	} else {
 		emit(map[string]any{"type": "system", "subtype": "init", "session_id": session})
 	}
@@ -188,7 +203,7 @@ func taskWorkerFixture(mode string) int {
 		}
 	}
 	switch mode {
-	case "report", "wrong-session":
+	case "report", "report-model", "wrong-session":
 		tool("report", map[string]any{"text": "done: " + brief.Task})
 	case "reconnect-report", "capacity-report":
 		tool("report", map[string]any{"text": "work summary"})

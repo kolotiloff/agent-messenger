@@ -109,6 +109,51 @@ func TestInvitationRegistersOnceAndPingWorks(t *testing.T) {
 	}
 }
 
+func TestDeviceContactCoalescesWritesAndStillChecksRevocation(t *testing.T) {
+	b, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.Close()
+	clock := time.Date(2026, 11, 23, 12, 0, 0, 0, time.UTC)
+	b.now = func() time.Time { return clock }
+	code, err := b.Invite("127.0.0.1:47100")
+	if err != nil {
+		t.Fatal(err)
+	}
+	inv, err := ParseInvitation(code.Code)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, key, err := b.register(inv.Secret, "Test device")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkContact := func(want time.Time) {
+		t.Helper()
+		d, err := b.device(key)
+		if err != nil || d.LastSeen != want.Format(time.RFC3339) {
+			t.Fatalf("last contact %q, want %s: %v", d.LastSeen, want, err)
+		}
+	}
+	first := clock
+	checkContact(first)
+	clock = first.Add(PresenceInterval - time.Second)
+	checkContact(first)
+	clock = first.Add(PresenceInterval)
+	checkContact(clock)
+	devices, err := b.Devices()
+	if err != nil || len(devices) != 1 || devices[0].LastSeen != clock.Format(time.RFC3339) {
+		t.Fatalf("stored contact: %+v %v", devices, err)
+	}
+	if err := b.Revoke(id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.device(key); !errors.Is(err, ErrRevoked) {
+		t.Fatalf("revoked device still allowed: %v", err)
+	}
+}
+
 func TestExpiredInvitationIsRefused(t *testing.T) {
 	r := serve(t, filepath.Join(t.TempDir(), "broker"))
 	code, err := r.b.Invite(r.addr)

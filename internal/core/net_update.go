@@ -1,9 +1,11 @@
 package core
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -114,7 +116,7 @@ func (s *Store) RequestNetUpdate(computer, project string) (string, error) {
 			return err
 		}
 		if computer == "" || computer == self {
-			id, err = queueLocalUpdate(tx, project)
+			id, err = s.queueLocalUpdate(tx, project)
 			return err
 		}
 		broker, err := metaValue(tx, "net_broker")
@@ -181,7 +183,7 @@ func updateStale(created string) bool {
 	return err != nil || time.Since(when) > UpdateWait
 }
 
-func queueLocalUpdate(tx *sql.Tx, project string) (string, error) {
+func (s *Store) queueLocalUpdate(tx *sql.Tx, project string) (string, error) {
 	var existing string
 	err := tx.QueryRow(`SELECT id FROM pending_updates LIMIT 1`).Scan(&existing)
 	if err == nil {
@@ -206,14 +208,18 @@ func queueLocalUpdate(tx *sql.Tx, project string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	n, err := liveWork(tx)
+	n, err := s.countWork(tx, liveWorkWhere)
 	if err != nil {
 		return "", err
 	}
 	text := ""
 	if n > 0 {
-		tasks, _ := liveWorkTasks(tx, 3)
-		text = updateQueuedText(n, tasks)
+		if s.split != nil {
+			text = "The update will start when this computer finishes its current work."
+		} else {
+			tasks, _ := liveWorkTasks(tx, 3)
+			text = updateQueuedText(n, tasks)
+		}
 	}
 	if err := writeLocalUpdate(tx, self, id, UpdateQueued, "", text, project); err != nil {
 		return "", err
@@ -526,20 +532,38 @@ const (
 )
 
 func listWorkTasks(s *Store, limit int, where string) ([]ActiveTask, error) {
-	rows, err := s.db.Query(`SELECT t.title,t.state FROM tasks t WHERE `+where+` ORDER BY t.created_at DESC LIMIT ?`, limit)
+	type item struct {
+		task ActiveTask
+		at   string
+	}
+	var items []item
+	err := s.tx(func(tx *sql.Tx) error {
+		query := `SELECT t.title,t.state,t.created_at FROM tasks t WHERE ` + where + ` ORDER BY t.created_at DESC LIMIT ?`
+		return s.visitProjectTaskRows(tx, "", query, []any{limit}, func(rows *sql.Rows) error {
+			for rows.Next() {
+				var i item
+				if err := rows.Scan(&i.task.Title, &i.task.State, &i.at); err != nil {
+					return err
+				}
+				items = append(items, i)
+			}
+			return rows.Err()
+		})
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []ActiveTask
-	for rows.Next() {
-		var a ActiveTask
-		if err := rows.Scan(&a.Title, &a.State); err != nil {
-			return nil, err
+	if s.split != nil {
+		sort.SliceStable(items, func(i, j int) bool { return items[i].at > items[j].at })
+		if limit >= 0 {
+			items = items[:min(len(items), limit)]
 		}
-		out = append(out, a)
 	}
-	return out, rows.Err()
+	var out []ActiveTask
+	for _, i := range items {
+		out = append(out, i.task)
+	}
+	return out, nil
 }
 
 // ActiveTask is a task that keeps a computer from updating.
@@ -547,23 +571,46 @@ type ActiveTask struct{ Title, State string }
 
 func (s *Store) ActiveWork() (int, error) {
 	var n int
-	err := s.db.QueryRow(`SELECT COUNT(*) FROM tasks t WHERE ` + activeWorkWhere).Scan(&n)
+	err := s.tx(func(tx *sql.Tx) (err error) {
+		n, err = s.countWork(tx, activeWorkWhere)
+		return err
+	})
 	return n, err
 }
 
 func (s *Store) LiveWork() (int, error) {
 	var n int
 	err := s.tx(func(tx *sql.Tx) (err error) {
-		n, err = liveWork(tx)
+		n, err = s.countWork(tx, liveWorkWhere)
 		return
 	})
 	return n, err
 }
 
-func liveWork(tx *sql.Tx) (int, error) {
-	var n int
-	err := tx.QueryRow(`SELECT COUNT(*) FROM tasks t WHERE ` + liveWorkWhere).Scan(&n)
-	return n, err
+func (s *Store) countWork(machine *sql.Tx, where string) (int, error) {
+	if s.split == nil {
+		var n int
+		err := machine.QueryRow(`SELECT COUNT(*) FROM tasks t WHERE ` + where).Scan(&n)
+		return n, err
+	}
+	ctx := context.Background()
+	files, err := splitProjectFiles(ctx, machine)
+	if err != nil {
+		return 0, err
+	}
+	var total int
+	for _, file := range files {
+		db, err := s.split.open(file)
+		if err != nil {
+			return 0, err
+		}
+		var count int
+		if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM tasks t WHERE `+where).Scan(&count); err != nil {
+			return 0, err
+		}
+		total += count
+	}
+	return total, nil
 }
 
 func liveWorkTasks(tx *sql.Tx, limit int) ([]ActiveTask, error) {
@@ -645,8 +692,21 @@ func insertCoordinatorNotice(tx *sql.Tx, project, kind, text string) error {
 	if project == "" || !ValidProjectName(project) {
 		return nil
 	}
+	var split bool
+	if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name='project_notices' AND type='table')`).Scan(&split); err != nil {
+		return err
+	}
+	if split {
+		_, err := tx.Exec(`INSERT INTO project_notices(project,kind,text,created_at)
+ SELECT project,?,?,? FROM project_storage_stage WHERE project=?`, kind, text, now(), project)
+		return err
+	}
+	return insertProjectNoticeEvent(tx, project, kind, text, now())
+}
+
+func insertProjectNoticeEvent(tx *sql.Tx, project, kind, text, created string) error {
 	_, err := tx.Exec(`INSERT INTO task_events(project,task_id,audience,kind,text,created_at) VALUES (?,'',?,?,?,?)`,
-		project, AudienceCoordinator, kind, text, now())
+		project, AudienceCoordinator, kind, text, created)
 	return err
 }
 

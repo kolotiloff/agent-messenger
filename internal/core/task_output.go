@@ -117,6 +117,13 @@ type TaskOutput struct {
 // TaskOutputOf returns up to TaskOutputChunk characters of the task's
 // output from offset; run 0 is the latest run that left one.
 func (s *Store) TaskOutputOf(task string, run, offset int) (TaskOutput, error) {
+	if s.split != nil {
+		scoped, err := s.storeForTask(task)
+		if err != nil {
+			return TaskOutput{}, err
+		}
+		return scoped.TaskOutputOf(task, run, offset)
+	}
 	if offset < 0 || run < 0 {
 		return TaskOutput{}, fmt.Errorf("%w: offset and run start at 0", ErrRejected)
 	}

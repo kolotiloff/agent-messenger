@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/kolotiloff/agent-messenger/internal/core"
 	"github.com/kolotiloff/agent-messenger/internal/platform"
@@ -28,6 +29,11 @@ var groupEmpty = platform.GroupEmpty
 
 // groupMembers lists a run's group; tests replace it.
 var groupMembers = platform.GroupMembers
+
+// The supervisor lock excludes recovery commands in other processes.
+// Concurrent worker goroutines also need to serialize the full read,
+// modify and save operation, otherwise one worker can erase another.
+var runRegistryMu sync.Mutex
 
 type recordedRun struct {
 	StreamRunID    string                 `json:"stream_run_id,omitempty"`
@@ -158,6 +164,8 @@ func writeAtomic(path string, raw []byte) error {
 }
 
 func rememberRun(run recordedRun) error {
+	runRegistryMu.Lock()
+	defer runRegistryMu.Unlock()
 	runs, err := loadRuns()
 	if err != nil {
 		return err
@@ -179,6 +187,8 @@ func forgetRunID(id string) error {
 	if id == "" {
 		return nil
 	}
+	runRegistryMu.Lock()
+	defer runRegistryMu.Unlock()
 	runs, err := loadRuns()
 	if err != nil {
 		return err

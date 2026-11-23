@@ -1,6 +1,7 @@
 package supervisor
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -22,6 +23,7 @@ type windowAgent struct {
 
 type windowView struct {
 	core.WindowView
+	ChangeWatch  bool          `json:"change_watch"`
 	Agents       []windowAgent `json:"agents"`
 	TasksEnabled bool          `json:"tasks_enabled"`
 	Paused       bool          `json:"paused"`
@@ -48,15 +50,21 @@ type windowView struct {
 
 // WindowView returns the selected project's view with folder trust per agent.
 func (s *Supervisor) WindowView(project string) (any, error) {
+	return s.WindowViewFiltered(project, "", "", "")
+}
+
+func (s *Supervisor) WindowViewFiltered(project, agent, computer, version string) (any, error) {
 	y, m, d := time.Now().Date()
 	today := time.Date(y, m, d, 0, 0, 0, 0, time.Local).UTC().Format(time.RFC3339Nano)
-	v, err := s.store.WindowView(project, today)
+	v, err := s.store.WindowViewFiltered(project, today, agent, computer, version)
 	if err != nil {
 		return nil, err
 	}
-	out := windowView{WindowView: v, Agents: []windowAgent{}}
+	out := windowView{WindowView: v, ChangeWatch: true, Agents: []windowAgent{}}
 	home, _ := os.UserHomeDir()
+	target := coordinatorTarget{folder: v.Folder}
 	for _, a := range v.Agents {
+		target.setCLI(a.Agent, a.CLI)
 		trust := adapters.FolderTrust{State: adapters.TrustUnknown}
 		if v.Folder != "" {
 			trust = adapters.CheckFolderTrust(a.Agent, v.Folder, a.Env, home)
@@ -83,18 +91,63 @@ func (s *Supervisor) WindowView(project string) (any, error) {
 	}
 	if v.Project != "" {
 		s.repairStaleCoordinator(v.Project)
-		claude := s.CoordinatorLinkState(v.Project)
-		codex := s.CodexCoordinatorLinkState(v.Project)
+		t, state, ok := s.resolveCoordinatorTarget(target)
+		claude, codex, cursor := state, state, state
+		if ok {
+			claude = s.readCoordinatorLink(v.Project, t)
+			codex = s.readCodexLink(v.Project, t)
+			cursor = s.readCursorLink(v.Project, t)
+		}
 		out.CoordinatorLink = &claude
 		out.CodexLink = &codex
-		cursor := s.CursorCoordinatorLinkState(v.Project)
 		out.CursorLink = &cursor
 	}
 	return out, nil
 }
 
+func (s *Supervisor) WindowTaskHistory(project, before, agent, computer string) (any, error) {
+	return s.store.WindowTaskHistory(project, before, agent, computer)
+}
+
+func (s *Supervisor) HideWindowHistory(project, agent, computer string) error {
+	return s.store.HideWindowHistory(project, agent, computer)
+}
+
 // TaskFeed returns one task's feed.
 func (s *Supervisor) TaskFeed(id string) (any, error) { return s.store.TaskFeed(id) }
+
+func (s *Supervisor) TaskFeedDelta(id, cursor string) (any, error) {
+	return s.store.TaskFeedDelta(id, cursor)
+}
+
+const windowWatchInterval = 250 * time.Millisecond
+
+// WaitWindowChanges holds a lightweight request open until a committed
+// change is visible. Writers may be independent MCP processes.
+func (s *Supervisor) WaitWindowChanges(request context.Context, project, task, window, feed string) (any, error) {
+	ctx, cancel := context.WithTimeout(request, 12*time.Second)
+	defer cancel()
+	stop := context.AfterFunc(s.ctx, cancel)
+	defer stop()
+	ticker := time.NewTicker(windowWatchInterval)
+	defer ticker.Stop()
+	current := core.WindowChanges{Window: window, Feed: feed}
+	for {
+		change, err := s.store.WindowChanges(ctx, project, task)
+		if ctx.Err() != nil {
+			return current, nil
+		}
+		if err != nil || change.Window != window || change.Feed != feed {
+			return change, err
+		}
+		current = change
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			return change, nil
+		}
+	}
+}
 
 // TaskImage is a worker's picture for the window (T-175).
 func (s *Supervisor) TaskImage(id string) (any, error) {
@@ -120,7 +173,11 @@ func (s *Supervisor) SetProjectFolder(name, folder string) error {
 
 // OwnerAnswer answers the owner's question of a task.
 func (s *Supervisor) OwnerAnswer(task, question, op, text string) error {
-	return s.store.WindowAnswer(task, question, op, text)
+	if err := s.store.WindowAnswer(task, question, op, text); err != nil {
+		return err
+	}
+	s.wakeTaskDispatch()
+	return nil
 }
 
 // OwnerNote keeps the owner's message to a working task; the worker gets it
@@ -161,13 +218,21 @@ func (s *Supervisor) UsageStats(period, computer string) (any, error) {
 
 // UsageStatsFiltered is UsageStats for one agent and one model (T-201).
 func (s *Supervisor) UsageStatsFiltered(period, computer, agent, model string) (any, error) {
+	return s.UsageStatsForProject("", period, computer, agent, model)
+}
+
+// UsageStatsForProject scopes the window statistics when a project is selected.
+func (s *Supervisor) UsageStatsForProject(project, period, computer, agent, model string) (any, error) {
+	if project != "" && !core.ValidProjectName(project) {
+		return nil, fmt.Errorf("invalid project")
+	}
 	days := map[string]int{"day": 1, "week": 7, "month": 30}[period]
 	if days == 0 {
 		return nil, fmt.Errorf("unknown period %q", period)
 	}
 	y, m, d := time.Now().Date()
 	since := time.Date(y, m, d-(days-1), 0, 0, 0, 0, time.Local)
-	return s.store.UsageStatsFiltered(since, time.Local, computer, core.UsageFilter{Agent: agent, Model: model})
+	return s.store.UsageStatsFiltered(since, time.Local, computer, core.UsageFilter{Project: project, Agent: agent, Model: model})
 }
 
 // SetAgentPaused turns an agent off or on from its card (T-061).

@@ -48,7 +48,7 @@ func peerBuildAtLeast(version string, since int) bool {
 
 // continueRemoteTask sends the coordinator's follow-up to the computer that
 // ran the task. opID makes it idempotent.
-func continueRemoteTask(tx *sql.Tx, task string, remote netLink, opID, text string, sender MessageSender) error {
+func continueRemoteTask(machine, tx *sql.Tx, task string, remote netLink, opID, text string, sender MessageSender) error {
 	key := "net_continue:" + opID
 	old, err := metaValue(tx, key)
 	if err != nil {
@@ -67,11 +67,11 @@ func continueRemoteTask(tx *sql.Tx, task string, remote netLink, opID, text stri
 	if t.State != "done" && t.State != "failed" && t.State != "interrupted" {
 		return fmt.Errorf("%w: only a finished task (done or failed) or an interrupted one of another computer can be continued; this one is %s", ErrRejected, t.State)
 	}
-	broker, err := metaValue(tx, "net_broker")
+	broker, err := metaValue(machine, "net_broker")
 	if err != nil {
 		return err
 	}
-	peer, found, err := netPeer(tx, remote.peer)
+	peer, found, err := netPeer(machine, remote.peer)
 	if err != nil {
 		return err
 	}
@@ -105,13 +105,13 @@ func continueRemoteTask(tx *sql.Tx, task string, remote netLink, opID, text stri
 // applyContinue resumes the mirror of another computer's task.
 // An interrupted run is closed only when gone confirms its worker is gone
 // (D-108); without gone it is refused, as before.
-func applyContinue(tx *sql.Tx, from netLink, b netBody, gone WorkerGone) error {
+func applyContinue(machine, tx *sql.Tx, from netLink, b netBody, gone WorkerGone) error {
 	t, ok, err := mirrorTask(tx, from)
 	if err != nil || !ok {
 		return err
 	}
 	err = savepoint(tx, func() error {
-		return continueTaskTx(tx, t.ID, "net:"+from.broker+":"+from.peer+":"+b.OpID, b.Text, gone, true, MessageSender{Agent: b.SenderAgent, Model: b.SenderModel})
+		return continueTaskTx(machine, tx, t.ID, "net:"+from.broker+":"+from.peer+":"+b.OpID, b.Text, gone, true, MessageSender{Agent: b.SenderAgent, Model: b.SenderModel})
 	})
 	if errors.Is(err, ErrRejected) {
 		return enqueueNet(tx, from.broker, from.peer, "continue-refused."+b.OpID, t.ID, netBody{Kind: "continue_refused", Task: from.task, Reason: refusalText(err)})
