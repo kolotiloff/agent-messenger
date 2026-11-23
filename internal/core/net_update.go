@@ -645,8 +645,21 @@ func insertCoordinatorNotice(tx *sql.Tx, project, kind, text string) error {
 	if project == "" || !ValidProjectName(project) {
 		return nil
 	}
+	var split bool
+	if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name='project_notices' AND type='table')`).Scan(&split); err != nil {
+		return err
+	}
+	if split {
+		_, err := tx.Exec(`INSERT INTO project_notices(project,kind,text,created_at)
+ SELECT project,?,?,? FROM project_storage_stage WHERE project=?`, kind, text, now(), project)
+		return err
+	}
+	return insertProjectNoticeEvent(tx, project, kind, text, now())
+}
+
+func insertProjectNoticeEvent(tx *sql.Tx, project, kind, text, created string) error {
 	_, err := tx.Exec(`INSERT INTO task_events(project,task_id,audience,kind,text,created_at) VALUES (?,'',?,?,?,?)`,
-		project, AudienceCoordinator, kind, text, now())
+		project, AudienceCoordinator, kind, text, created)
 	return err
 }
 

@@ -2381,6 +2381,11 @@ func (s *Store) TaskEvents(project, audience string, after int64, limit int) ([]
 	if err != nil {
 		return nil, cursor, err
 	}
+	if audience == AudienceCoordinator {
+		if err := s.drainProjectNotices(project, scoped); err != nil {
+			return nil, cursor, err
+		}
+	}
 	err = scoped.tx(func(tx *sql.Tx) error {
 		rows, err := tx.Query(`SELECT seq,task_id,kind,text,COALESCE(question_id,''),created_at FROM task_events WHERE project=? AND audience=? AND seq>? ORDER BY seq LIMIT ?`, project, audience, after, limit)
 		if err != nil {
@@ -2409,6 +2414,9 @@ func (s *Store) TaskListVersion(project string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if err := s.drainProjectNotices(project, scoped); err != nil {
+		return "", err
+	}
 	var seq sql.NullInt64
 	var count, sum int64
 	err = scoped.db.QueryRow(`SELECT (SELECT MAX(seq) FROM task_events WHERE project=?), COUNT(*), COALESCE(SUM(version),0) FROM tasks WHERE project=?`, project, project).Scan(&seq, &count, &sum)
@@ -2419,6 +2427,9 @@ func (s *Store) TaskListVersion(project string) (string, error) {
 func (s *Store) LatestTaskEvent(project string) (int64, error) {
 	scoped, err := s.projectStore(project)
 	if err != nil {
+		return 0, err
+	}
+	if err := s.drainProjectNotices(project, scoped); err != nil {
 		return 0, err
 	}
 	var seq sql.NullInt64

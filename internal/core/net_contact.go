@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -71,11 +72,14 @@ func (s *Store) NoteNetworkContact(at time.Time) (string, error) {
 				return err
 			}
 			noted = NetworkLostEvent
-			text, err := networkLostText(tx, peers)
-			if err != nil {
+			if s.split != nil {
+				return s.noticeSplitNetworkLost(tx, peers)
+			}
+			var open int
+			if err := tx.QueryRow(networkOpenTasks).Scan(&open); err != nil {
 				return err
 			}
-			return noticeAllProjects(tx, NetworkLostEvent, text)
+			return noticeAllProjects(tx, NetworkLostEvent, networkLostText(peers, open))
 		}
 		return nil
 	})
@@ -84,7 +88,9 @@ func (s *Store) NoteNetworkContact(at time.Time) (string, error) {
 
 // networkLostText names what was lost: the server's computer, the others,
 // and the open tasks on them.
-func networkLostText(tx *sql.Tx, peers []NetPeer) (string, error) {
+const networkOpenTasks = `SELECT COUNT(*) FROM tasks WHERE COALESCE(remote_broker,'')<>'' AND state IN ('running','waiting_coordinator','waiting_owner')`
+
+func networkLostText(peers []NetPeer, open int) string {
 	var names []string
 	server := ""
 	for _, p := range peers {
@@ -99,10 +105,6 @@ func networkLostText(tx *sql.Tx, peers []NetPeer) (string, error) {
 			names = append(names, "«"+name+"»")
 		}
 	}
-	var open int
-	if err := tx.QueryRow(`SELECT COUNT(*) FROM tasks WHERE COALESCE(remote_broker,'')<>'' AND state IN ('running','waiting_coordinator','waiting_owner')`).Scan(&open); err != nil {
-		return "", err
-	}
 	text := "contact with every other computer of the network is lost (" + strings.Join(names, ", ") + ")"
 	if server != "" {
 		text += "; the server runs on «" + server + "», so it has probably stopped or left the network"
@@ -114,26 +116,57 @@ func networkLostText(tx *sql.Tx, peers []NetPeer) (string, error) {
 		text += fmt.Sprintf(" %d open task(s) on other computers: their outcome is unknown; they may still run there and report when contact is back.", open)
 	}
 	text += " Nothing is retried, cancelled or moved. Do not start the same work again; tell the owner, who can start Messenger on the server computer again. A network_back event follows when contact returns."
-	return text, nil
+	return text
 }
 
-// noticeAllProjects gives every project's coordinator the same event.
-func noticeAllProjects(tx *sql.Tx, kind, text string) error {
+func visibleProjects(tx *sql.Tx) ([]string, error) {
 	rows, err := tx.Query(`SELECT name FROM projects WHERE removed_at IS NULL`)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var projects []string
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
 			rows.Close()
-			return err
+			return nil, err
 		}
 		projects = append(projects, name)
 	}
 	rows.Close()
-	if err := rows.Err(); err != nil {
+	return projects, rows.Err()
+}
+
+func (s *Store) noticeSplitNetworkLost(tx *sql.Tx, peers []NetPeer) error {
+	ctx := context.Background()
+	projects, err := visibleProjects(tx)
+	if err != nil {
+		return err
+	}
+	for _, name := range projects {
+		file, err := splitTaskProjectFile(ctx, tx, name)
+		if err != nil {
+			return err
+		}
+		db, err := s.split.open(file)
+		if err != nil {
+			return err
+		}
+		var open int
+		if err := db.QueryRowContext(ctx, networkOpenTasks).Scan(&open); err != nil {
+			return err
+		}
+		if err := insertCoordinatorNotice(tx, name, NetworkLostEvent, networkLostText(peers, open)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// noticeAllProjects gives every project's coordinator the same event.
+func noticeAllProjects(tx *sql.Tx, kind, text string) error {
+	projects, err := visibleProjects(tx)
+	if err != nil {
 		return err
 	}
 	for _, p := range projects {

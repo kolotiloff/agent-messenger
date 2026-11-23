@@ -1111,8 +1111,6 @@ func (s *Store) applySplitNet(broker string, m NetIncoming) error {
 		return applySplitRemoteStart(ctx, s.db, s.split.open, broker, m)
 	case valid && (isProjectRequest(body.Kind) || isProjectResponse(body.Kind)):
 		return applySplitProjectMessage(ctx, s.db, s.split.open, broker, m, body, s.gone)
-	case valid && body.Kind == "update":
-		return fmt.Errorf("%w: update notices require a project event route", ErrRejected)
 	}
 	return s.tx(func(tx *sql.Tx) error {
 		apply, err := claimNetDelivery(tx, broker, m)
@@ -1132,6 +1130,8 @@ func (s *Store) applySplitNet(broker string, m NetIncoming) error {
 				err = applyAgentVersionReply(tx, from, body)
 			case "update_request":
 				err = applyUpdateRequest(tx, from, body)
+			case "update":
+				err = applyUpdateReply(tx, from, body)
 			}
 			if err != nil {
 				return err

@@ -113,7 +113,8 @@ func writeProjectSnapshot(ctx context.Context, db *sql.DB, project string, withD
 		// A task frame must use the same machine identity after cutover.
 		// Keep only that identity and the continuation records owned by
 		// this project's tasks. Settings and broker cursors stay shared.
-		if _, err := tx.ExecContext(ctx, `CREATE TABLE snapshot.meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+		if _, err := tx.ExecContext(ctx, `CREATE TABLE snapshot.project_notice_receipts (seq INTEGER PRIMARY KEY);
+ CREATE TABLE snapshot.meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
  INSERT INTO snapshot.meta SELECT key,value FROM main.meta
  WHERE key='computer_id'
  OR (key GLOB 'net_continue_prev:*' AND substr(key,length('net_continue_prev:')+1) IN (SELECT id FROM snapshot.tasks))

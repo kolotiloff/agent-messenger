@@ -20,7 +20,7 @@ const (
 	migrationBackupFile   = "legacy-backup.sqlite"
 	migrationComputerFile = "computer.sqlite"
 	migrationManifestFile = "manifest.json"
-	migrationLayoutFormat = 4
+	migrationLayoutFormat = 5
 )
 
 // A local task ID is recorded on outgoing task frames, except the acceptance
@@ -236,6 +236,11 @@ func stageComputerDatabase(ctx context.Context, backup, output string, manifest 
  INSERT INTO task_storage_routes
  SELECT rowid,id,project,origin_broker,origin_peer,origin_task,origin_computer,remote_broker,remote_peer,remote_task,remote_computer FROM tasks;
  CREATE INDEX task_storage_routes_origin ON task_storage_routes(origin_broker,origin_peer,origin_task);
+ CREATE TABLE project_notices (
+ seq INTEGER PRIMARY KEY AUTOINCREMENT, project TEXT NOT NULL REFERENCES projects(name),
+ kind TEXT NOT NULL, text TEXT NOT NULL, created_at TEXT NOT NULL
+ );
+ CREATE INDEX project_notices_project ON project_notices(project,seq);
  DELETE FROM net_outbox WHERE seq IN (SELECT seq FROM (`+migrationOutboxRoutes+`)
  WHERE project IN (SELECT name FROM projects));
  DELETE FROM feedback WHERE project IN (SELECT name FROM projects);
