@@ -2,6 +2,18 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-25 — Codex (1.0.1 release)
+
+- Published [1.0.1, build 104](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.1-preview.104) from `f2f6f4c` after all eight [main checks](https://github.com/kolotiloff/agent-messenger/actions/runs/45497895256/attempts/2) passed. The first Linux run with Go 1.22 timed out waiting for the command socket in four fixture tests. The targeted retry passed on the same revision. All four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45504161598) passed, including signed upgrade verification for all five targets. Verified 22 uploaded release assets.
+
+## 2026-11-25 — Codex (T-291)
+
+- Recorded a future task-list context menu action for tasks whose existing chat stop action is available. The action targets the clicked row and uses the shared pending-stop guard.
+
+## 2026-11-25 — Codex (T-290)
+
+- Recorded the worker diagnostics follow-up after a report of delayed exit on Windows. Confirmed the existing `worker_still_running` advisory requires a completed CLI turn and a verified live worker process. The reported run's CLI events remain unverified.
+
 ## 2026-11-25 — Codex (T-289)
 
 - Integrated PRs #192–195 for the next release. Fixed three update state regressions involving equal display versions, an absent requester, and successive requests for one computer. See the [release audit](reports/2026-11-25-t289-release-audit.md) for validation and live acceptance status.

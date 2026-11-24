@@ -8,19 +8,13 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
-**[1.0](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.0-preview.103) is released** from `cef286b07290f660b2e34ae4022f7eaeb7e45aa5`. The [release workflow](https://github.com/kolotiloff/agent-messenger/actions/runs/45459724676) passed the public upgrade check for all five platforms. The original macOS 0.99 and 0.101 binaries each found and downloaded the signed release in isolated homes. The owner’s installed 0.99 client also staged 1.0. Existing release assets and links were preserved.
+**[1.0.1](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.1-preview.104) is released** from `f2f6f4ce92740eb6a9973d8b8730ea0462005c47`. All eight [client checks](https://github.com/kolotiloff/agent-messenger/actions/runs/45497895256/attempts/2) and all four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45504161598) passed. The public release has 22 assets and the signed upgrade check passed for all five targets. The installed fleet has not been upgraded as part of this release task.
 
-T-289 integrates T-281, T-285, T-287 and T-288 and audits the next release across task delivery, project storage, the window and packaging. It fixes the sidebar's comparison of builds with the same display name, the shared status of a request whose executor has emptied its queue, and reconciliation of a final result when another update is pending. See the [audit report](reports/2026-11-25-t289-release-audit.md) for the checks and remaining live acceptance.
+It includes Planned tasks, the remote stop delivery status, the synchronized update queue with five-minute expiry, the local computer stripe, and the confirmed model label. T-289 fixes three update state regressions. See [PR #196](https://github.com/kolotiloff/agent-messenger/pull/196) and the [audit report](reports/2026-11-25-t289-release-audit.md). T-290 and T-291 record worker diagnostics and a task-list stop action for a later version.
 
-After 1.0, T-287 gives accepted updates five minutes to start and shares the target computer’s update state with open windows via the broker. Waiting tasks use the same yellow status for an owner or coordinator question. Verified with three loopback clients and the real sidebar against browser fixtures. Installation on the owner’s fleet is pending a release.
-
-After 1.0, T-286 adds a thin neutral stripe to the local computer's card. WebKit checks cover selection changes in both themes. T-285 (a planned task section) is queued for a future release.
-
-After 1.0, T-288 keeps the stop button disabled once a remote task’s stop request is queued. The window distinguishes local queuing and broker acceptance and waits for the executing computer to confirm the task outcome. Go network fixtures and Chromium and WebKit window checks cover the transition.
+The earlier [1.0 release](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.0-preview.103) passed the [public upgrade check](https://github.com/kolotiloff/agent-messenger/actions/runs/45459724676) for all five platforms. The original macOS 0.99 and 0.101 binaries each downloaded the signed release in isolated homes. The owner’s installed 0.99 client also staged 1.0.
 
 Updated 2026-11-24 by Codex (T-283). The original 0.99 binary still returned current after 0.101 shipped. Added a public-channel check to the release workflow and an opt-in recovery for legacy discovery. Fleet delivery requires verification after publication.
-
-After 1.0, T-285 adds a Planned section for tasks awaiting their first run. A remote acceptance can report that the task is queued, along with a resource if known. The executor's first observed process moves the task to Active. The tests use fixture workers and both storage layouts.
 
 Updated 2026-11-24 by Codex (T-282).
 
