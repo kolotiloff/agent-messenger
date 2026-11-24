@@ -8,9 +8,13 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-24 by Claude Code (0.99 release).
+
+- **0.99 is released** ([release](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.99), [workflow](https://github.com/kolotiloff/agent-messenger/actions/runs/45394116908), [PR #184](https://github.com/kolotiloff/agent-messenger/pull/184), source `7729983bec9da0d581b413c6d3c977ac360b77fc`) with T-278 and T-279 below. Confirmed 22 assets, as in 0.98. Verified all five update manifests against the pinned key (a changed manifest fails), their version and source SHA, and downloaded each update archive: its SHA-256 and length match its manifest. The live Mac and VPS were not upgraded by the agent.
+
 Updated 2026-11-24 by Claude Code (T-278, T-279).
 
-- On `claude/amazing-noether-apbflv`, not released: T-278 (D-192), an old-network task no longer shows as the task of the computer that now has its old peer id (the owner saw ПК-2's tasks on the VPS card); T-279, choosing a computer no longer flashes an empty list and pane. Checked with Go tests (`old_network_test.go`), `scripts/check.sh` and the window checks in Chromium; WebKit runs in CI; not seen in the installed app. The 0.98 release notes above are also only on this branch until a PR is opened.
+- Released in 0.99: T-278 (D-192), an old-network task no longer shows as the task of the computer that now has its old peer id (the owner saw ПК-2's tasks on the VPS card); T-279, choosing a computer no longer flashes an empty list and pane. Checked with Go tests (`old_network_test.go`), `scripts/check.sh` and the window checks in Chromium; WebKit runs in CI; not seen in the installed app.
 
 Updated 2026-11-24 by Claude Code (0.98 release).
 
