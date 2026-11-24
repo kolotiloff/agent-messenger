@@ -732,7 +732,12 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await page.locator('#thread').getByText('Отчёт сохранён без подтверждения запуска',{exact:true}).count(),1);
       const toolGroups=page.locator('#thread .am-tool-group');
       const actionGroup=toolGroups.first();
-      await actionGroup.locator(':scope > summary').click();
+      // A click that lands while the thread is redrawn reaches the old
+      // group, so open it until the current one stays open.
+      for(let tries=0;!(await actionGroup.evaluate(node=>node.open));tries++){
+        assert.ok(tries<5,'the action group opens');
+        await actionGroup.locator(':scope > summary').click();
+      }
       const timer=actionGroup.locator('.am-tool-timer');
       assert.match(await timer.innerText(),/^1 мин \d{1,2} с$/);
       const label=actionGroup.getByText('Выполняются команды',{exact:true});
