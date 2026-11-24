@@ -159,8 +159,8 @@ func (s *Supervisor) presence() (broker.Presence, error) {
 		return broker.Presence{}, err
 	}
 	p := broker.Presence{Agents: []broker.PresenceAgent{}, Coordinator: clipName(coordinator), Version: buildinfo.Version}
-	if pending, err := s.store.HasPendingUpdate(); err == nil {
-		p.UpdatePending = pending
+	if pending, ok, err := s.store.PendingUpdate(); err == nil && ok {
+		p.UpdatePending, p.UpdateRequestID = true, pending.ID
 	}
 	for _, a := range agents {
 		pa := broker.PresenceAgent{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting}
