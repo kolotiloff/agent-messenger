@@ -471,6 +471,7 @@
         const same=/последн/i.test(u.text||'');
         addNotice(key,same?'info':'good',same?name+tr(': уже последняя версия'):name+tr(' обновлён до ')+versionName(u.version||''),same?'':u.text||'');
       }else if(u.state==='queued'&&at>=noticeSince-60000)addNotice(key,'info',name+tr(' ждёт обновления'),u.text||tr('Программа обновится, когда задачи закончатся; до тех пор компьютер не берёт новых задач.'));
+      else if(u.state==='cancelled'&&at>=noticeSince-60000)addNotice(key,'info',name+tr(': обновление отменено'),'');
       else if(u.state==='refused'||u.state==='failed')addNotice(key,'bad',name+tr(' не обновлён'),capital(u.text||''));
     };
     for(const u of server?.updates||[])showUpdate(u,names[u.computer]||tr('Компьютер'));
