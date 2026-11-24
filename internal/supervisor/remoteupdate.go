@@ -10,7 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kolotiloff/agent-messenger/internal/buildinfo"
 	"github.com/kolotiloff/agent-messenger/internal/core"
+	"github.com/kolotiloff/agent-messenger/internal/selfupdate"
 )
 
 // Updating this computer at another computer's request (T-078, D-100,
@@ -240,7 +242,7 @@ func readUpdateFile(path string) (RemoteUpdate, bool) {
 // result not sent yet.
 func (s *Supervisor) updateBusy() bool {
 	for _, name := range []string{remoteUpdateMarker, RemoteUpdateResult} {
-		if _, err := os.Lstat(filepath.Join(s.root, name)); err == nil {
+		if _, err := os.Lstat(filepath.Join(s.root, name)); !errors.Is(err, os.ErrNotExist) {
 			return true
 		}
 	}
@@ -253,6 +255,15 @@ func (s *Supervisor) updateBusy() bool {
 func (s *Supervisor) answerUpdateRequests(broker string) string {
 	if p := s.sendUpdateResult(); p != "" {
 		return p
+	}
+	cancellations, err := s.store.UpdateCancellations(broker)
+	if err != nil {
+		return "отмена обновления не читается: " + err.Error()
+	}
+	for _, r := range cancellations {
+		if err := s.store.FinishUpdateCancellation(r, s.updateBusy()); err != nil {
+			return "отмена обновления не записана: " + err.Error()
+		}
 	}
 	reqs, err := s.store.NetUpdateRequests(broker)
 	if err != nil {
@@ -397,6 +408,13 @@ func (s *Supervisor) startQueuedUpdate() string {
 		return "очередь обновления не читается: " + err.Error()
 	}
 	if !ok || s.updateBusy() {
+		return ""
+	}
+	running := selfupdate.Build(buildinfo.Version)
+	if target := selfupdate.Build(p.Target); target > 0 && running >= target {
+		if err := s.store.FinishPendingUpdate(p.ID, core.UpdateDone, buildinfo.Version, "запрошенная версия уже установлена"); err != nil {
+			return "результат обновления не записан: " + err.Error()
+		}
 		return ""
 	}
 	if n, err := s.store.LiveWork(); err != nil {
