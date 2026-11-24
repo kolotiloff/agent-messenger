@@ -11,7 +11,7 @@ name: Release preview
   workflow_dispatch:
     inputs:
       version:
-        description: "Preview version, for example 0.0.0-preview.20"
+        description: "Preview version, for example 1.0.0-preview.103"
         required: true
       notes:
         description: "Release notes shown in the app (plain text)"
@@ -51,7 +51,7 @@ jobs:
           cache: false
       - name: Validate version
         run: |
-          [[ "$VERSION" =~ ^0\.0\.0-preview\.[1-9][0-9]{0,8}$ ]] || { echo "Version must look like 0.0.0-preview.N" >&2; exit 1; }
+          python3 scripts/release_version.py "$VERSION"
       - name: Checks (no real models)
         run: bash scripts/check.sh
       - name: Build programs and update archives
@@ -120,7 +120,7 @@ jobs:
           cache: false
       - name: Validate version and tag
         run: |
-          [[ "$VERSION" =~ ^0\.0\.0-preview\.[1-9][0-9]{0,8}$ ]] || { echo "Version must look like 0.0.0-preview.N" >&2; exit 1; }
+          python3 scripts/release_version.py "$VERSION"
           if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release v$VERSION already exists" >&2; exit 1
           fi
@@ -198,7 +198,7 @@ jobs:
           # Not a pre-release, so /releases/latest/download/<name> always
           # points to this build. The in-app updater reads every release.
           gh release create "v$VERSION" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --draft --latest \
-            --target "$GITHUB_SHA" --title "Agent Messenger 0.${VERSION##*.}" --notes-file "$RUNNER_TEMP/page.md"
+            --target "$GITHUB_SHA" --title "Agent Messenger $(python3 scripts/release_version.py "$VERSION")" --notes-file "$RUNNER_TEMP/page.md"
           gh release edit "v$VERSION" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease=false --latest
           gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" --json url,assets --jq '.url, (.assets[].name)'
       - name: Remove signing material

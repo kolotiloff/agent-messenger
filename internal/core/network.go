@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -654,9 +653,7 @@ func peerVersionText(version string) string {
 // usesCoordinatorModels marks the first release that accepts the model
 // selected by the coordinator without consulting an executor-side list.
 func usesCoordinatorModels(version string) bool {
-	const prefix = "0.0.0-preview."
-	build, err := strconv.Atoi(strings.TrimPrefix(version, prefix))
-	return version == "dev" || (strings.HasPrefix(version, prefix) && err == nil && build >= 82)
+	return version == "dev" || (previewBuild.MatchString(version) && peerBuildAtLeast(version, 82))
 }
 
 // startRemoteTask records a task for another computer of the network and

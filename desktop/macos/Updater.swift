@@ -202,7 +202,7 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
                 let state = child.terminationStatus == 0 ? (result?["state"] as? String ?? "") : ""
                 switch state {
                 case "found":
-                    self.remoteVersion = result?["version"] as? String
+                    self.remoteVersion = (result?["display_version"] as? String) ?? (result?["version"] as? String)
                     self.onStatus?(self.shownVersion)
                     if manual, self.availableVersion == nil { self.offerDownload() }
                 case "current":

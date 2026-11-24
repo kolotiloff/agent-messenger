@@ -2990,14 +2990,15 @@
   // Mac app already reports the short form (0.58).
   function versionName(version){
     const preview=version.match(/^0\.0\.0-preview\.(\d+)$/);
-    return preview?'v0.'+preview[1]:version?'v'+version:'';
+    if(preview)return 'v0.'+preview[1];
+    const release=version.match(/^([1-9]\d*\.\d+\.\d+)-preview\.\d+$/);
+    return release?'v'+release[1].replace(/\.0$/,''):version?'v'+version:'';
   }
   function versionText(installed){return versionName(installed);}
   // Comparing builds: 0.0.0-preview.41 and 0.41 are the same build.
   function versionRank(version){
-    const v=String(version||'').replace(/^v/,'');
-    const preview=v.match(/^0\.0\.0-preview\.(\d+)$/);
-    return preview?[0,Number(preview[1])]:v.split(/[.-]/).map(x=>Number(x)||0);
+    const v=versionName(String(version||'').replace(/^v/,'')).replace(/^v/,'');
+    return v.split(/[.-]/).map(x=>Number(x)||0);
   }
   function versionOlder(a,b){
     if(!a||!b)return false;

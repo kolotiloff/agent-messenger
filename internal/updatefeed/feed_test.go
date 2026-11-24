@@ -86,7 +86,7 @@ func TestSignedChannelRejectsTamperingAndIncompatiblePackages(t *testing.T) {
 
 // People see 0.58; manifests and tags keep 0.0.0-preview.58.
 func TestShortVersion(t *testing.T) {
-	for in, want := range map[string]string{"0.0.0-preview.58": "0.58", "0.0.0-preview.1": "0.1", "0.0.0-preview.ci1": "0.0.0-preview.ci1", "1.2.3-preview.4": "1.2.3-preview.4", "": ""} {
+	for in, want := range map[string]string{"0.0.0-preview.58": "0.58", "0.0.0-preview.1": "0.1", "0.0.0-preview.ci1": "0.0.0-preview.ci1", "1.2.3-preview.4": "1.2.3", "1.0.0-preview.103": "1.0", "": ""} {
 		if got := ShortVersion(in); got != want {
 			t.Fatalf("%q: %q, want %q", in, got, want)
 		}

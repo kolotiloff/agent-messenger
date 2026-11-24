@@ -3,6 +3,8 @@
 The private key stays in Keychain. No upload, provider call or client shutdown.
 """
 import argparse,base64,hashlib,json,os,pathlib,plistlib,re,shutil,subprocess,tempfile
+from release_version import release_info
+
 p=argparse.ArgumentParser()
 p.add_argument('bundle_directory',type=pathlib.Path)
 p.add_argument('--sparkle',required=True,type=pathlib.Path)
@@ -12,13 +14,15 @@ p.add_argument('--directory',type=pathlib.Path,default=pathlib.Path.home()/'Libr
 a=p.parse_args();source=a.bundle_directory.resolve();target=a.directory.resolve()
 app=source/'Agent Messenger.app';archive=source/'Agent-Messenger-mac.zip'
 with (app/'Contents/Info.plist').open('rb') as f: info=plistlib.load(f)
-build=int(info['CFBundleVersion']);version='0.0.0-preview.%d'%build
-# The bundle shows the short version (0.58); the channel keeps the full one.
-if build<1 or info['CFBundleShortVersionString']!='0.%d'%build: raise SystemExit('A numbered preview version is required')
+build=int(info['CFBundleVersion'])
 if info.get('AMClientAPI')!=1: raise SystemExit('Unsupported client API')
 subprocess.run(['/usr/bin/codesign','--verify','--deep','--strict',str(app)],check=True)
 meta=json.loads(subprocess.check_output([str(app/'Contents/Resources/messenger'),'version']))
-if meta['revision']=='0'*40 or meta['version']!=version or meta['os']!='darwin' or not re.fullmatch('[0-9a-f]{40}',meta['revision']): raise SystemExit('Bundle metadata mismatch')
+version = meta['version']
+display, package_build = release_info(version)
+if (info['CFBundleShortVersionString'], build) != (display, package_build):
+    raise SystemExit('Bundle version does not match the embedded client')
+if meta['revision']=='0'*40 or meta['os']!='darwin' or not re.fullmatch('[0-9a-f]{40}',meta['revision']): raise SystemExit('Bundle metadata mismatch')
 if a.key_file is None:
  public=subprocess.check_output([str(a.sparkle/'bin/generate_keys'),'--account','agent-messenger-preview','-p'],text=True).strip()
  if public!=info['SUPublicEDKey']: raise SystemExit('Signing key does not match application')

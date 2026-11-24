@@ -47,6 +47,10 @@ func ShortVersion(version string) string {
 	if versionPattern.MatchString(version) && strings.HasPrefix(version, "0.0.0-preview.") {
 		return "0." + strings.TrimPrefix(version, "0.0.0-preview.")
 	}
+	if versionPattern.MatchString(version) && !strings.HasPrefix(version, "0.") {
+		base, _, _ := strings.Cut(version, "-preview.")
+		return strings.TrimSuffix(base, ".0")
+	}
 	return version
 }
 

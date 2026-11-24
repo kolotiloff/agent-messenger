@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-24 — Codex (T-284)
+
+- Prepared public version 1.0 after 0.102 reproduced the legacy discovery issue. The package and tag retain the signed format understood by 0.99 and the ordered updater in 0.101.
+
 ## 2026-11-24 — Codex (T-283)
 
 - Confirmed the 0.99 check still returned current in an isolated home. The corrected finder staged signed build 101 on the owner’s Mac. Added independent public release checks for all five platform routes and an optional, reversible archive step for blocking discovery manifests.

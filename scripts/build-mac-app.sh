@@ -33,7 +33,7 @@ build_number="${version##*.}"
 [[ "$build_number" =~ ^[1-9][0-9]{0,8}$ ]] || build_number=0
 # People see the short version (0.58); the program inside keeps the full one.
 short_version="$version"
-[[ "$build_number" != 0 ]] && short_version="0.$build_number"
+[[ "$build_number" != 0 ]] && short_version="$(python3 scripts/release_version.py "$version")"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $short_version" "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" "$app/Contents/Info.plist"
 xcrun swiftc -swift-version 5 desktop/macos/icon.swift -o "$out/icon-generator"
