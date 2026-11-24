@@ -254,7 +254,8 @@
     const time=el('time',label);
     time.dateTime=at;
     if(remote)time.title=tr('Время события на этом компьютере');
-    line.append(' · ',time);
+    // T-276: the owner prefers a comma to a dot between words.
+    line.append(', ',time);
   }
   function taskWhenTitle(t){
     const d=new Date(t.created_at);if(isNaN(d.getTime()))return '';
@@ -535,7 +536,7 @@
       // A busy agent says so to the right of its name: «работает» in blue,
       // «ждёт ответа» in yellow. A free agent is just its name.
       const line=el('div',undefined,'am-agent-line am-agent-'+state);line.dataset.provider=provider;
-      line.title=(names[provider]||provider)+(a?': '+text:'')+(state==='run'&&counts.waiting_owner>0?' · '+tr('Ждёт ответа')+' ('+counts.waiting_owner+')':'');
+      line.title=(names[provider]||provider)+(a?': '+text:'')+(state==='run'&&counts.waiting_owner>0?', '+tr('ждёт ответа')+' ('+counts.waiting_owner+')':'');
       const identity=el('span',shortNames[provider]||provider,state==='run'?'am-agent-running-label':'');
       line.append(identity);
       if(state==='run'||state==='wait'){
@@ -561,13 +562,16 @@
   // A computer of the network counts as reachable while its reports arrive:
   // it reports every 15 s, so three missed reports mean it is not.
   const peerFresh=peer=>peer.age>=0&&peer.age<=45;
-  let machineOrder=[],machineOrderLoaded=false,machineOrderSave=Promise.resolve();
+  // machinePeers maps a network peer id to the computer's lasting id
+  // (T-273), so a report that briefly lacks the lasting id keeps the card
+  // in its place.
+  let machineOrder=[],machinePeers={},machineOrderLoaded=false,machineOrderSave=Promise.resolve();
   try{
     const saved=JSON.parse(recall('messenger-machine-order'));
     if(Array.isArray(saved))machineOrder=saved.filter(key=>typeof key==='string');
   }catch(_){}
   function saveMachineOrder(){
-    const body={order:machineOrder};
+    const body={order:machineOrder,peers:machinePeers};
     machineOrderSave=machineOrderSave.then(()=>postAPI('/api/machine-order',body,6000,true))
       .catch(error=>showError(error.message));
   }
@@ -576,6 +580,7 @@
       const saved=await api('/api/machine-order');
       if(Array.isArray(saved.order)){
         machineOrder=saved.order;
+        if(saved.peers&&typeof saved.peers==='object')machinePeers=saved.peers;
       }else if(saved.order===null&&machineOrder.length){
         // Import a legacy order when the old window origin still exists.
         saveMachineOrder();
@@ -588,6 +593,21 @@
   function clearMachineDrop(){
     if(machineDrop)delete machineDrop.card.dataset.dropEdge;
     machineDrop=null;
+  }
+  // The order key of a computer of the network: its lasting id, known now
+  // or from before, else its peer id. A newly learned id is saved, and an
+  // order entry saved under the peer id moves to the lasting id.
+  let peerKeySave=false;
+  function peerOrderKey(peer){
+    const known=machinePeers[peer.id];
+    if(peer.computer&&known!==peer.computer&&machineOrderLoaded){
+      if(Object.keys(machinePeers).length>=500)machinePeers={};
+      machinePeers={...machinePeers,[peer.id]:peer.computer};
+      const at=machineOrder.indexOf(peer.id);
+      if(at>=0)machineOrder=machineOrder.includes(peer.computer)?machineOrder.filter(key=>key!==peer.id):machineOrder.map(key=>key===peer.id?peer.computer:key);
+      if(!peerKeySave){peerKeySave=true;queueMicrotask(()=>{peerKeySave=false;saveMachineOrder();});}
+    }
+    return peer.computer||machinePeers[peer.id]||peer.id;
   }
   function moveMachine(from,to,after){
     const order=[...machineList.children].map(card=>card.dataset.machineOrder).filter(key=>key!==from);
@@ -702,7 +722,7 @@
     const hosted=new Set((server?.host?.devices||[]).filter(d=>!d.revoked_at).map(d=>d.id));
     for(const peer of server?.peers||[]){
       const fresh=peerFresh(peer);
-      const card=el('div',undefined,'am-machine-card am-peer-card');card.dataset.peer=peer.id;if(peer.host)card.dataset.host='';pickable(card,peer.id,peer.computer||peer.id);
+      const card=el('div',undefined,'am-machine-card am-peer-card');card.dataset.peer=peer.id;if(peer.host)card.dataset.host='';pickable(card,peer.id,peerOrderKey(peer));
       const name=el('div',undefined,'am-machine-name');
       const pdot=el('span',undefined,'am-dot'+(fresh?' online':''));pdot.title=fresh?tr('На связи'):tr('Нет связи');
       name.append(pdot,el('span',peer.name));
@@ -938,7 +958,10 @@
   }
   // A model's display name (T-202): «gpt-6.2-sol[effort=low]»
   // reads «Sol 6.2 Low», «claude-opus-5-5[effort=medium]» «Opus 5.5 Medium».
-  // Anything else is shown as it is.
+  // T-274: other ids of plain words read word by word, «opus» «Opus»,
+  // «grok-4.7-high-fast» «Grok 4.7 High Fast»; Cursor's own prefix is
+  // left out. The window shows every model through this one rule; the
+  // exact id stays in the details.
   function modelName(value){
     const m=String(value).match(/^(.*?)(?:\[effort=([a-z]+)\])?$/);
     let base=m[1];const effort=m[2]?' '+capital(m[2]):'';
@@ -947,6 +970,7 @@
     if(g)return cap(g[2])+' '+g[1]+effort;
     g=base.match(/^claude-([a-z]+)-(\d+)-(\d+)$/i);
     if(g)return cap(g[1])+' '+g[2]+'.'+g[3]+effort;
+    if(/^[a-z][a-z0-9.]*(?:-[a-z0-9.]+)*$/i.test(base))return base.replace(/^cursor-(?=.)/i,'').split('-').map(cap).join(' ')+effort;
     return base+effort;
   }
   function taskModelLabel(t){
@@ -954,8 +978,8 @@
     return t.model?tr('модель не подтверждена'):tr('по умолчанию');
   }
   function taskModelDetail(t){
-    if(t.ran_model)return tr('Модель, на которой исполнитель запущен')+' · '+t.ran_model;
-    return t.model?tr('Модель, которую указал координатор')+' · '+t.model:tr('Модель по умолчанию');
+    if(t.ran_model)return tr('Модель, на которой исполнитель запущен')+': '+t.ran_model;
+    return t.model?tr('Модель, которую указал координатор')+': '+t.model:tr('Модель по умолчанию');
   }
   function renderTaskList(){
     const live=$('task-list'),box=live.cloneNode(false);
@@ -1386,6 +1410,8 @@
     return (minutes?minutes+tr(' мин')+' ':'')+(seconds%60)+tr(' с');
   }
   function updateTimers(){
+    // T-275: a hidden window draws nothing; it catches up when shown.
+    if(document.hidden)return;
     const now=Date.now();
     for(const label of root.querySelectorAll('[data-elapsed-from]')){
       const text=label.dataset.elapsedPrefix+minutes(label.dataset.elapsedFrom,null,now);
@@ -1871,7 +1897,7 @@
         const newer=check?.tested==='newer';
         let sub=check?.version?.value||(busy?tr('Проверяем'):'');
         if(newer){
-          const box=document.createDocumentFragment(),mark=el('span',' · '+tr('не проверена'),'am-status-wait');
+          const box=document.createDocumentFragment(),mark=el('span',', '+tr('не проверена'),'am-status-wait');
           mark.title=tr('Messenger проверен с версией ')+check.tested_version+tr('. Новая версия обычно работает, но если задачи этого агента начнут падать, причина может быть в ней.');
           box.append(el('span',sub),mark);sub=box;
         }
@@ -2063,7 +2089,7 @@
     else text=tr('В фоне работает более ранняя версия клиента. Закройте окно, выполните скопированную команду в Терминале и откройте окно снова.');
     $('restart-title').textContent=title;$('restart-text').textContent=text;
     const list=$('restart-tasks');list.replaceChildren();
-    for(const t of ask?.tasks||[]){const row=el('div',undefined,'am-restart-task');row.append(el('span',(names[t.agent]||t.agent)+' · '+t.title),el('span',minutes(t.started_at),'am-status-run'));list.append(row);}
+    for(const t of ask?.tasks||[]){const row=el('div',undefined,'am-restart-task');row.append(el('span',(names[t.agent]||t.agent)+': '+t.title),el('span',minutes(t.started_at),'am-status-run'));list.append(row);}
     const others=ask?.known?ask.running-(ask.tasks||[]).length:0;
     if(others>0)list.append(el('p',tr('И ещё в других проектах: ')+others,'am-small am-muted'));
     list.hidden=!list.childElementCount;
@@ -2327,8 +2353,8 @@
       b.querySelector('span').textContent=down?'↓':up?'↑':'';
     });
     // Rebuilt only when the list changed: a rebuild closes an open menu (T-192).
-    const models=[['',tr('Все модели')],...(stats?.models||[]).map(m=>[m.key,m.name||m.key])];
-    if(statsModel&&!models.some(([v])=>v===statsModel))models.push([statsModel,statsModel]);
+    const models=[['',tr('Все модели')],...(stats?.models||[]).map(m=>[m.key,modelName(m.key)])];
+    if(statsModel&&!models.some(([v])=>v===statsModel))models.push([statsModel,modelName(statsModel)]);
     const select=$('stats-model');
     if(select.options.length!==models.length||models.some(([v,l],i)=>select.options[i].value!==v||select.options[i].textContent!==l))select.replaceChildren(...models.map(([v,l])=>{const o=el('option',l);o.value=v;return o;}));
     select.value=statsModel;
@@ -3291,7 +3317,9 @@
     if(event.defaultPrevented||event.target.closest?.('input,textarea,[contenteditable]')||String(window.getSelection?.()||''))return;
     event.preventDefault();
   });
-  setInterval(()=>{serverPolls++;if(tab==='server'||serverPolls%3===0)loadServer();},5000);
+  // T-275: a hidden window asks for the network every minute, not every
+  // 5 or 15 s, and catches up when shown.
+  setInterval(()=>{serverPolls++;if(document.hidden?serverPolls%12===0:(tab==='server'||serverPolls%3===0))loadServer();},5000);
   loadServer();
   let initialTheme=window.messengerInitialTheme;
   if(!initialTheme)try{initialTheme=localStorage.getItem('messenger-theme');}catch(_){}
@@ -3320,5 +3348,6 @@
   show('tasks');loadMachineOrder();refresh();loadDiscovery();pollSetup();setInterval(()=>{if(setupPending)pollSetup();},2000);
   setInterval(updateTimers,1000);
   setInterval(()=>{if(!windowWatch||Date.now()-lastWindowRefresh>=15000)refresh();},2000);
-  setInterval(loadDiscovery,60000);setInterval(()=>{if(tab==='stats')loadStats();},15000);
+  setInterval(loadDiscovery,60000);setInterval(()=>{if(tab==='stats'&&!document.hidden)loadStats();},15000);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)return;updateTimers();loadServer();if(tab==='stats')loadStats();});
 })();

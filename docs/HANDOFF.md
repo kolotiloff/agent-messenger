@@ -8,6 +8,11 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-24 by Claude Code (T-272 to T-276).
+
+- On `claude/amazing-noether-apbflv`, not released, per D-190: the update's work count reads only current tasks through state indexes (T-272); the computer order survives a report without the lasting id (T-273); readable model names in the statistics filter (T-274); a hidden window stops redrawing and polling statistics (T-275); no «·» between words (T-276). Checked with Go tests and the window checks in Chromium; WebKit is not installed here and runs in CI; nothing seen on the Mac yet.
+- Audit notes not acted on: the change watch reads two indexed rows every 250 ms while the window is open (cheap); the persistent Claude stream loop ticks every 50 ms; discovery every 60 s only looks up files. Each could be slowed further if the owner sees load.
+
 Updated 2026-11-24 by Claude Code (T-268 to T-271).
 
 - On `claude/amazing-noether-apbflv`, not released: the picture viewer (T-268), one-height statistics filters from the left (T-269), the project page as four cards (T-270), and no computer chip anywhere (T-271), per D-189. Checked in Chromium with fictional data, including the new `scripts/check-window-pictures.cjs`; WebKit runs in CI only; not tried in the installed app.

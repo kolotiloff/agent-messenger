@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-24 — Claude Code (T-272 to T-276)
+
+- T-272: the update's work count now uses state indexes; a query-plan test fails with the old query. T-273: found why the computer order was lost after updates (a refused report drops the lasting id for a while) and kept a peer-to-computer map in the order file. T-274: readable model names in the statistics filter. T-275: a hidden window no longer redraws timers or polls statistics, and polls the network once a minute. T-276: replaced «·» separators. Window checks pass in Chromium; WebKit runs in CI.
+
 ## 2026-11-24 — Claude Code (T-268 to T-271)
 
 - Finished the picture viewer from the draft kept after 0.97 and added the English texts it lacked. On the owner's screenshots: statistics filters now share one height and start at the left, the project page is split into cards, and the computer chip is removed because the highlighted card already shows the choice (D-189). New `scripts/check-window-pictures.cjs` covers the viewer and a chosen computer that leaves the list.

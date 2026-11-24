@@ -23,12 +23,15 @@ func TestComputerOrderSurvivesWindowRestart(t *testing.T) {
 	}
 	first := window(actionHost)
 	read(first, actionHost, `{"order":null}`)
-	order := `{"order":["dev-a","local","host"]}`
+	order := `{"order":["dev-a","local","computer-1"],"peers":{"host":"computer-1"}}`
 	if w := postAction(first, "machine-order", order); w.Code != http.StatusOK {
 		t.Fatalf("write order: %d %q", w.Code, w.Body.String())
 	}
 	if w := postAction(first, "machine-order", `{"order":["local","local"]}`); w.Code != http.StatusBadRequest {
 		t.Fatalf("duplicate order entries accepted: %d", w.Code)
+	}
+	if w := postAction(first, "machine-order", `{"order":["local"],"peers":{"host":"bad id"}}`); w.Code != http.StatusBadRequest {
+		t.Fatalf("bad peer alias accepted: %d", w.Code)
 	}
 	const newHost = "127.0.0.1:4321"
 	read(window(newHost), newHost, order)

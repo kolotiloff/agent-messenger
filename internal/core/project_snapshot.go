@@ -175,6 +175,8 @@ func writeProjectSnapshot(ctx context.Context, db *sql.DB, project string, withD
  WHERE hidden_at IS NULL AND state IN `+finishedWindowStates+`;
  CREATE INDEX IF NOT EXISTS snapshot.tasks_window_active ON tasks(project,created_at)
  WHERE hidden_at IS NULL AND state NOT IN `+finishedWindowStates+`;
+ CREATE INDEX IF NOT EXISTS snapshot.tasks_state ON tasks(state);
+ CREATE INDEX IF NOT EXISTS snapshot.task_runs_state ON task_runs(state, task_id);
  CREATE INDEX IF NOT EXISTS snapshot.net_applied_op ON net_applied(op_id)`); err != nil {
 			return err
 		}

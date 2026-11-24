@@ -18,6 +18,10 @@ var machineOrderKey = regexp.MustCompile(`^[a-zA-Z0-9._:-]{1,80}$`)
 
 type machineOrder struct {
 	Order []string `json:"order"`
+	// Peers maps a network peer id to the computer's lasting id (T-273).
+	// A computer whose report briefly comes without its lasting id keeps
+	// its place, and a move made meanwhile is saved under the lasting id.
+	Peers map[string]string `json:"peers,omitempty"`
 }
 
 func (o machineOrder) valid() bool {
@@ -30,6 +34,14 @@ func (o machineOrder) valid() bool {
 			return false
 		}
 		seen[key] = true
+	}
+	if len(o.Peers) > 512 {
+		return false
+	}
+	for peer, computer := range o.Peers {
+		if !machineOrderKey.MatchString(peer) || !machineOrderKey.MatchString(computer) {
+			return false
+		}
 	}
 	return true
 }

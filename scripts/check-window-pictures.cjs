@@ -141,6 +141,26 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     assert.ok(statsComputers.length && statsComputers.every(c => c === ''), 'statistics for every computer again: ' + statsComputers);
     result.gone_computer_cleared = true;
 
+    // T-275: a hidden window stops asking for statistics and asks for the
+    // network at most once a minute; shown again, it catches up at once.
+    let serverAsks = 0;
+    page.on('request', request => { if (new URL(request.url()).pathname === '/api/server') serverAsks++; });
+    const setHidden = hidden => page.evaluate(hidden => {
+      Object.defineProperty(document, 'hidden', {configurable: true, get: () => hidden});
+      Object.defineProperty(document, 'visibilityState', {configurable: true, get: () => hidden ? 'hidden' : 'visible'});
+      document.dispatchEvent(new Event('visibilitychange'));
+    }, hidden);
+    await setHidden(true);
+    statsComputers.length = 0; serverAsks = 0;
+    await delay(16000);
+    assert.equal(statsComputers.length, 0, 'a hidden window asked for statistics');
+    assert.ok(serverAsks <= 1, 'a hidden window asked for the network ' + serverAsks + ' times');
+    await setHidden(false);
+    await page.waitForFunction(() => true);
+    await delay(500);
+    assert.ok(statsComputers.length >= 1 && serverAsks >= 1, 'a shown window catches up');
+    result.hidden_window_quiet = true;
+
     assert.deepEqual(errors, []);
     console.log(JSON.stringify({...result, result: 'passed'}));
   } finally { await browser.close(); }

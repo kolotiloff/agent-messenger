@@ -621,3 +621,11 @@ On Windows, the update relaunch and the installer's handoff to the installed app
 ## D-189 — The chosen computer is shown only by its card; the project page is a column of cards (T-268 to T-271)
 
 2026-11-24, the owner found the computer chip redundant: the sidebar already highlights the chosen computer, and the chip moved the task list down. The chip is gone from the tasks, the agents and the statistics; a second click on the card or a click on empty sidebar space shows every computer, as before. Because nothing else shows the choice, a chosen computer whose card leaves the list stops filtering. On the statistics the period tabs and the lists are one control height and sit from the left edge. The project page is split like the server page: settings (name and folder), the MCP plugin, the shared worker instructions with their own save status, and removal. A worker's picture opens in a large viewer (wheel, buttons, keys and a click zoom; a zoomed picture is dragged; arrows step through the pictures of one message) instead of growing inside the chat.
+
+## D-190 — Current work through state indexes; computer order by lasting id; a quiet hidden window (T-272 to T-276)
+
+2026-11-24, owner asked that the update's work count read only current tasks and that the program not waste resources. The work conditions select task ids from the tasks and runs in a current state (`tasks_state`, `task_runs_state`) instead of testing every task; the meaning is unchanged. A project database made earlier gets the indexes when the client opens it; a failure there only leaves the slower plan.
+
+The computer order file keeps, beside the order, which lasting computer id each network peer id had. A report briefly without the lasting id (the fallback after a refused report) no longer changes the card's key.
+
+The window names every model through one rule (`modelName`), the statistics filter included. While the window is hidden it draws no timers, does not ask for statistics and asks for the network once a minute; the task list and the change watch keep running, because notices depend on them. Between words the window uses a comma or a colon, not «·».
