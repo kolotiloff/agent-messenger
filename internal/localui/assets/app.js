@@ -254,7 +254,8 @@
     const time=el('time',label);
     time.dateTime=at;
     if(remote)time.title=tr('Время события на этом компьютере');
-    line.append(' · ',time);
+    // T-276: the owner prefers a comma to a dot between words.
+    line.append(', ',time);
   }
   function taskWhenTitle(t){
     const d=new Date(t.created_at);if(isNaN(d.getTime()))return '';
@@ -535,7 +536,7 @@
       // A busy agent says so to the right of its name: «работает» in blue,
       // «ждёт ответа» in yellow. A free agent is just its name.
       const line=el('div',undefined,'am-agent-line am-agent-'+state);line.dataset.provider=provider;
-      line.title=(names[provider]||provider)+(a?': '+text:'')+(state==='run'&&counts.waiting_owner>0?' · '+tr('Ждёт ответа')+' ('+counts.waiting_owner+')':'');
+      line.title=(names[provider]||provider)+(a?': '+text:'')+(state==='run'&&counts.waiting_owner>0?', '+tr('ждёт ответа')+' ('+counts.waiting_owner+')':'');
       const identity=el('span',shortNames[provider]||provider,state==='run'?'am-agent-running-label':'');
       line.append(identity);
       if(state==='run'||state==='wait'){
@@ -561,13 +562,16 @@
   // A computer of the network counts as reachable while its reports arrive:
   // it reports every 15 s, so three missed reports mean it is not.
   const peerFresh=peer=>peer.age>=0&&peer.age<=45;
-  let machineOrder=[],machineOrderLoaded=false,machineOrderSave=Promise.resolve();
+  // machinePeers maps a network peer id to the computer's lasting id
+  // (T-273), so a report that briefly lacks the lasting id keeps the card
+  // in its place.
+  let machineOrder=[],machinePeers={},machineOrderLoaded=false,machineOrderSave=Promise.resolve();
   try{
     const saved=JSON.parse(recall('messenger-machine-order'));
     if(Array.isArray(saved))machineOrder=saved.filter(key=>typeof key==='string');
   }catch(_){}
   function saveMachineOrder(){
-    const body={order:machineOrder};
+    const body={order:machineOrder,peers:machinePeers};
     machineOrderSave=machineOrderSave.then(()=>postAPI('/api/machine-order',body,6000,true))
       .catch(error=>showError(error.message));
   }
@@ -576,6 +580,7 @@
       const saved=await api('/api/machine-order');
       if(Array.isArray(saved.order)){
         machineOrder=saved.order;
+        if(saved.peers&&typeof saved.peers==='object')machinePeers=saved.peers;
       }else if(saved.order===null&&machineOrder.length){
         // Import a legacy order when the old window origin still exists.
         saveMachineOrder();
@@ -588,6 +593,21 @@
   function clearMachineDrop(){
     if(machineDrop)delete machineDrop.card.dataset.dropEdge;
     machineDrop=null;
+  }
+  // The order key of a computer of the network: its lasting id, known now
+  // or from before, else its peer id. A newly learned id is saved, and an
+  // order entry saved under the peer id moves to the lasting id.
+  let peerKeySave=false;
+  function peerOrderKey(peer){
+    const known=machinePeers[peer.id];
+    if(peer.computer&&known!==peer.computer&&machineOrderLoaded){
+      if(Object.keys(machinePeers).length>=500)machinePeers={};
+      machinePeers={...machinePeers,[peer.id]:peer.computer};
+      const at=machineOrder.indexOf(peer.id);
+      if(at>=0)machineOrder=machineOrder.includes(peer.computer)?machineOrder.filter(key=>key!==peer.id):machineOrder.map(key=>key===peer.id?peer.computer:key);
+      if(!peerKeySave){peerKeySave=true;queueMicrotask(()=>{peerKeySave=false;saveMachineOrder();});}
+    }
+    return peer.computer||machinePeers[peer.id]||peer.id;
   }
   function moveMachine(from,to,after){
     const order=[...machineList.children].map(card=>card.dataset.machineOrder).filter(key=>key!==from);
@@ -629,7 +649,10 @@
   machineList.addEventListener('dragend',()=>{
     draggedMachine='';clearMachineDrop();renderMachines();
   });
+  // T-271: the computers that have a card in the current render.
+  let pickedComputers=new Set();
   function pickable(card,id,orderKey=id){
+    pickedComputers.add(id);
     card.setAttribute('role','button');card.tabIndex=0;card.setAttribute('aria-pressed',String(computerFilter===id));
     card.dataset.machineOrder=orderKey;card.draggable=machineOrderLoaded;
     card.setAttribute('aria-keyshortcuts','Alt+ArrowUp Alt+ArrowDown');
@@ -663,6 +686,7 @@
   function renderMachines(){
     if(draggedMachine)return;
     collectNotices();
+    pickedComputers=new Set();
     const live=$('machines'),box=live.cloneNode(false),busyTasks=busyTasksByComputer();
     const machine=el('div',undefined,'am-machine-card');machine.setAttribute('aria-current','true');pickable(machine,'local');
     // Every card is laid out the same (owner, 2026-11-18, T-198): the dot
@@ -698,7 +722,7 @@
     const hosted=new Set((server?.host?.devices||[]).filter(d=>!d.revoked_at).map(d=>d.id));
     for(const peer of server?.peers||[]){
       const fresh=peerFresh(peer);
-      const card=el('div',undefined,'am-machine-card am-peer-card');card.dataset.peer=peer.id;if(peer.host)card.dataset.host='';pickable(card,peer.id,peer.computer||peer.id);
+      const card=el('div',undefined,'am-machine-card am-peer-card');card.dataset.peer=peer.id;if(peer.host)card.dataset.host='';pickable(card,peer.id,peerOrderKey(peer));
       const name=el('div',undefined,'am-machine-name');
       const pdot=el('span',undefined,'am-dot'+(fresh?' online':''));pdot.title=fresh?tr('На связи'):tr('Нет связи');
       name.append(pdot,el('span',peer.name));
@@ -760,6 +784,9 @@
     for(const id of localParts)copy.querySelector('#'+id)?.remove();
     if(copy.innerHTML!==box.innerHTML){parkLocalParts();live.replaceChildren(...box.childNodes);}
     placeLocalParts();
+    // T-271: only the highlighted card shows the chosen computer, so a
+    // computer that left the list no longer filters anything.
+    if(computerFilter&&!pickedComputers.has(computerFilter))queueMicrotask(()=>{if(computerFilter&&!pickedComputers.has(computerFilter))clearComputer();});
   }
   // This computer's version and update button live in its card; in a narrow
   // window the computer list is hidden and they stay in the bottom row.
@@ -786,8 +813,9 @@
   function fromTag(name){return el('span',tr(' — от ')+name,'am-task-from');}
   function sharedRunsOn(t,p){return t.runs_on_peer||p.peer;}
   function sharedComputer(t,p){return t.runs_on_peer?((server?.peers||[]).find(x=>x.id===t.runs_on_peer)?.name||t.runs_on||t.runs_on_peer):p.name;}
-  // A click on a computer in the sidebar shows only its tasks; a second click,
-  // the chip's cross or a click on empty sidebar space shows all again (T-056).
+  // A click on a computer in the sidebar shows only its tasks; a second click
+  // or a click on empty sidebar space shows all again (T-056). The highlighted
+  // card is the only sign of the choice (T-271).
   let computerFilter='';
   // On the statistics and agents tabs the choice filters that tab (T-076);
   // elsewhere it opens the tasks.
@@ -810,8 +838,6 @@
   function computerName(id){
     return id==='local'?(view?.computer_name||tr('Этот компьютер')):(server?.peers||[]).find(p=>p.id===id)?.name||(view?.tasks||[]).find(t=>taskComputer(t)===id)?.remote?.name||'';
   }
-  // The chip of a tab filtered by computer; its cross shows all again.
-  function computerChip(chip){chip.hidden=!computerFilter;chip.querySelector('span').textContent=computerFilter?tr('Компьютер: ')+computerName(computerFilter):'';}
   let taskHistory=null,windowHistoryScope='';
   function taskWindowQuery(){return new URLSearchParams({project,agent:$('agent-filter').value,computer:computerFilter}).toString();}
   function currentTaskHistory(){return taskHistory?.scope===taskWindowQuery()?taskHistory:null;}
@@ -932,7 +958,10 @@
   }
   // A model's display name (T-202): «gpt-6.2-sol[effort=low]»
   // reads «Sol 6.2 Low», «claude-opus-5-5[effort=medium]» «Opus 5.5 Medium».
-  // Anything else is shown as it is.
+  // T-274: other ids of plain words read word by word, «opus» «Opus»,
+  // «grok-4.7-high-fast» «Grok 4.7 High Fast»; Cursor's own prefix is
+  // left out. The window shows every model through this one rule; the
+  // exact id stays in the details.
   function modelName(value){
     const m=String(value).match(/^(.*?)(?:\[effort=([a-z]+)\])?$/);
     let base=m[1];const effort=m[2]?' '+capital(m[2]):'';
@@ -941,6 +970,7 @@
     if(g)return cap(g[2])+' '+g[1]+effort;
     g=base.match(/^claude-([a-z]+)-(\d+)-(\d+)$/i);
     if(g)return cap(g[1])+' '+g[2]+'.'+g[3]+effort;
+    if(/^[a-z][a-z0-9.]*(?:-[a-z0-9.]+)*$/i.test(base))return base.replace(/^cursor-(?=.)/i,'').split('-').map(cap).join(' ')+effort;
     return base+effort;
   }
   function taskModelLabel(t){
@@ -948,12 +978,11 @@
     return t.model?tr('модель не подтверждена'):tr('по умолчанию');
   }
   function taskModelDetail(t){
-    if(t.ran_model)return tr('Модель, на которой исполнитель запущен')+' · '+t.ran_model;
-    return t.model?tr('Модель, которую указал координатор')+' · '+t.model:tr('Модель по умолчанию');
+    if(t.ran_model)return tr('Модель, на которой исполнитель запущен')+': '+t.ran_model;
+    return t.model?tr('Модель, которую указал координатор')+': '+t.model:tr('Модель по умолчанию');
   }
   function renderTaskList(){
     const live=$('task-list'),box=live.cloneNode(false);
-    computerChip($('computer-chip'));
     // While another project loads, its rows stay in place but cannot be
     // chosen, so the list does not collapse and grow again.
     if(view?.project!==project){if(!live.childElementCount)$('task-count').textContent='';live.inert=true;live.setAttribute('aria-busy','true');return;}
@@ -1075,7 +1104,7 @@
     }
   }
   // The coordinator of the project on this computer (T-152): Claude's link
-  // for the project folder, as one row of the «Проект» page, and the manual
+  // for the project folder, as its own card of the «Проект» page, and the manual
   // command under it. Agents are set up once; the link is per folder.
   function renderCoordinatorRow(){
     const box=$('coord-box');if(!box||!view?.project)return;
@@ -1097,7 +1126,7 @@
     const cursorJSON=JSON.stringify({mcpServers:{messenger:{type:'stdio',command:view.messenger,args:['--root',view.data_root,'coordinator','--project',view.project],env:{AGENT_MESSENGER_WORKER_RUN:'${env:AGENT_MESSENGER_WORKER_RUN}'}}}},null,2);
     manual.append(block('Claude Code',claudeCmd),block('Codex (.codex/config.toml)',codexToml),block(tr('Cursor: добавьте messenger в .cursor/mcp.json, сохранив остальные записи'),cursorJSON));
     manual.hidden=!view.folder||(['claude','codex','cursor'].every(coordinatorAgentOn));
-    const body=el('div',undefined,'am-coord-box am-field-sep');body.id='coord-box';body.append(heading,steps,manual);
+    const body=el('section',undefined,'am-card am-coord-box');body.id='coord-box';body.append(heading,steps,manual);
     if(box.querySelector('details')?.open)manual.open=true;
     if(box.innerHTML!==body.innerHTML)box.replaceWith(body);
   }
@@ -1381,6 +1410,8 @@
     return (minutes?minutes+tr(' мин')+' ':'')+(seconds%60)+tr(' с');
   }
   function updateTimers(){
+    // T-275: a hidden window draws nothing; it catches up when shown.
+    if(document.hidden)return;
     const now=Date.now();
     for(const label of root.querySelectorAll('[data-elapsed-from]')){
       const text=label.dataset.elapsedPrefix+minutes(label.dataset.elapsedFrom,null,now);
@@ -1413,7 +1444,7 @@
     finally{stopping=false;$('task-stop').disabled=false;}
   }
   // T-175: the worker's pictures. The page asks for them with its key and
-  // shows them from memory; a click opens one at full width.
+  // shows them from memory; a click opens the viewer (T-268).
   const pictureURLs=new Map();
   async function loadPicture(id){
     if(pictureURLs.has(id))return pictureURLs.get(id);
@@ -1423,11 +1454,92 @@
       const url=URL.createObjectURL(await response.blob());pictureURLs.set(id,url);return url;
     }catch(_){return '';}
   }
+  // T-268: a picture opens in a large viewer. The wheel, the buttons or a
+  // click zoom in; a zoomed picture is dragged; arrows step through the
+  // pictures of the same message; Escape or a click beside it closes it.
+  const viewer={list:[],at:0,scale:1,x:0,y:0};
+  function viewerApply(){
+    const img=$('picture-image');
+    if(viewer.scale<=1){viewer.scale=1;viewer.x=0;viewer.y=0;}
+    img.style.transform=`translate(${viewer.x}px,${viewer.y}px) scale(${viewer.scale})`;
+    $('picture-stage').classList.toggle('am-zoomed',viewer.scale>1);
+    $('picture-zoom-reset').textContent=Math.round(viewer.scale*100)+'%';
+    $('picture-zoom-out').disabled=viewer.scale<=1;
+    $('picture-zoom-in').disabled=viewer.scale>=8;
+  }
+  // Zoom keeps the point under the cursor (or the centre) in place.
+  function viewerZoom(scale,cx,cy){
+    const next=Math.min(8,Math.max(1,scale));
+    const box=$('picture-stage').getBoundingClientRect();
+    const px=(cx??box.left+box.width/2)-(box.left+box.width/2),py=(cy??box.top+box.height/2)-(box.top+box.height/2);
+    viewer.x=px-(px-viewer.x)*next/viewer.scale;viewer.y=py-(py-viewer.y)*next/viewer.scale;
+    viewer.scale=next;viewerApply();
+  }
+  function viewerShow(at){
+    const n=viewer.list.length;if(!n)return;
+    viewer.at=(at+n)%n;viewer.scale=1;
+    const p=viewer.list[viewer.at],img=$('picture-image');
+    img.alt=p.name||'';img.removeAttribute('src');
+    $('picture-name').textContent=p.name||tr('Картинка');
+    $('picture-count').textContent=n>1?tr('{n} из {total}').replace('{n}',viewer.at+1).replace('{total}',n):'';
+    $('picture-prev').hidden=$('picture-next').hidden=n<2;
+    const known=pictureURLs.get(p.id);
+    if(known)img.src=known;else loadPicture(p.id).then(url=>{if(url&&viewer.list[viewer.at]===p)img.src=url;});
+    viewerApply();
+  }
+  function openPicture(list,at){
+    viewer.list=list;viewerShow(at);
+    const d=$('picture-dialog');if(!d.open)d.showModal();
+    $('picture-close').focus();
+  }
+  function setupPictureViewer(){
+    const d=$('picture-dialog'),stage=$('picture-stage'),img=$('picture-image');
+    $('picture-close').addEventListener('click',()=>d.close());
+    $('picture-prev').addEventListener('click',()=>viewerShow(viewer.at-1));
+    $('picture-next').addEventListener('click',()=>viewerShow(viewer.at+1));
+    $('picture-zoom-in').addEventListener('click',()=>viewerZoom(viewer.scale*1.5));
+    $('picture-zoom-out').addEventListener('click',()=>viewerZoom(viewer.scale/1.5));
+    $('picture-zoom-reset').addEventListener('click',()=>viewerZoom(1));
+    d.addEventListener('close',()=>{viewer.list=[];img.removeAttribute('src');});
+    d.addEventListener('keydown',e=>{
+      if(e.key==='ArrowLeft'){e.preventDefault();viewerShow(viewer.at-1);}
+      else if(e.key==='ArrowRight'){e.preventDefault();viewerShow(viewer.at+1);}
+      else if(e.key==='+'||e.key==='='){e.preventDefault();viewerZoom(viewer.scale*1.5);}
+      else if(e.key==='-'){e.preventDefault();viewerZoom(viewer.scale/1.5);}
+      else if(e.key==='0'){e.preventDefault();viewerZoom(1);}
+    });
+    // A click on the dimmed area outside the window closes it.
+    d.addEventListener('click',e=>{if(e.target===d){const r=d.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)d.close();}});
+    stage.addEventListener('wheel',e=>{e.preventDefault();viewerZoom(viewer.scale*Math.exp(-e.deltaY*(e.ctrlKey?0.01:0.002)),e.clientX,e.clientY);},{passive:false});
+    let drag=null;
+    stage.addEventListener('pointerdown',e=>{
+      if(e.button!==0||e.target.closest('button'))return;
+      drag={id:e.pointerId,sx:e.clientX,sy:e.clientY,x:viewer.x,y:viewer.y,moved:false,onImage:e.target===img};
+      stage.setPointerCapture(e.pointerId);
+    });
+    stage.addEventListener('pointermove',e=>{
+      if(!drag||drag.id!==e.pointerId)return;
+      const dx=e.clientX-drag.sx,dy=e.clientY-drag.sy;
+      if(!drag.moved&&Math.hypot(dx,dy)<4)return;
+      drag.moved=true;
+      if(viewer.scale>1){stage.classList.add('am-dragging');viewer.x=drag.x+dx;viewer.y=drag.y+dy;viewerApply();}
+    });
+    const end=e=>{
+      if(!drag||drag.id!==e.pointerId)return;
+      const was=drag;drag=null;stage.classList.remove('am-dragging');
+      if(e.type!=='pointerup'||was.moved)return;
+      // A plain click: on the picture it zooms in or back; beside it, closes.
+      if(was.onImage)viewerZoom(viewer.scale>1?1:2.5,e.clientX,e.clientY);
+      else if(viewer.scale<=1)d.close();
+    };
+    stage.addEventListener('pointerup',end);
+    stage.addEventListener('pointercancel',end);
+  }
   function pictures(list){
     const box=el('div',undefined,'am-pictures');
     for(const p of list){
       const img=document.createElement('img');img.className='am-picture';img.alt=p.name;img.title=p.name;
-      img.addEventListener('click',()=>img.classList.toggle('am-picture-open'));
+      img.addEventListener('click',()=>openPicture(list,list.indexOf(p)));
       const known=pictureURLs.get(p.id);
       if(known)img.src=known;else loadPicture(p.id).then(url=>{if(url)img.src=url;});
       box.append(img);
@@ -1748,7 +1860,6 @@
   }
   function renderAgents(){
     const live=$('agents'),cards=live.cloneNode(false);
-    computerChip($('agents-computer-chip'));
     if(computerFilter&&computerFilter!=='local'){renderPeerAgents(cards);swapChildren(live,cards);return;}
     for(const provider of ['claude','codex','cursor']){
       const a=(view?.agents||[]).find(x=>x.agent===provider);
@@ -1786,7 +1897,7 @@
         const newer=check?.tested==='newer';
         let sub=check?.version?.value||(busy?tr('Проверяем'):'');
         if(newer){
-          const box=document.createDocumentFragment(),mark=el('span',' · '+tr('не проверена'),'am-status-wait');
+          const box=document.createDocumentFragment(),mark=el('span',', '+tr('не проверена'),'am-status-wait');
           mark.title=tr('Messenger проверен с версией ')+check.tested_version+tr('. Новая версия обычно работает, но если задачи этого агента начнут падать, причина может быть в ней.');
           box.append(el('span',sub),mark);sub=box;
         }
@@ -1978,7 +2089,7 @@
     else text=tr('В фоне работает более ранняя версия клиента. Закройте окно, выполните скопированную команду в Терминале и откройте окно снова.');
     $('restart-title').textContent=title;$('restart-text').textContent=text;
     const list=$('restart-tasks');list.replaceChildren();
-    for(const t of ask?.tasks||[]){const row=el('div',undefined,'am-restart-task');row.append(el('span',(names[t.agent]||t.agent)+' · '+t.title),el('span',minutes(t.started_at),'am-status-run'));list.append(row);}
+    for(const t of ask?.tasks||[]){const row=el('div',undefined,'am-restart-task');row.append(el('span',(names[t.agent]||t.agent)+': '+t.title),el('span',minutes(t.started_at),'am-status-run'));list.append(row);}
     const others=ask?.known?ask.running-(ask.tasks||[]).length:0;
     if(others>0)list.append(el('p',tr('И ещё в других проектах: ')+others,'am-small am-muted'));
     list.hidden=!list.childElementCount;
@@ -2230,7 +2341,6 @@
   }
   function renderStats(){
     root.querySelectorAll('[data-period]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.period===statsPeriod)));
-    computerChip($('stats-computer-chip'));
     // The card follows the numbers on screen, not the filter still loading.
     $('stats-computers-card').hidden=stats?!!stats.forComputer:!!computerFilter;
     setStatsBusy();
@@ -2243,8 +2353,8 @@
       b.querySelector('span').textContent=down?'↓':up?'↑':'';
     });
     // Rebuilt only when the list changed: a rebuild closes an open menu (T-192).
-    const models=[['',tr('Все модели')],...(stats?.models||[]).map(m=>[m.key,m.name||m.key])];
-    if(statsModel&&!models.some(([v])=>v===statsModel))models.push([statsModel,statsModel]);
+    const models=[['',tr('Все модели')],...(stats?.models||[]).map(m=>[m.key,modelName(m.key)])];
+    if(statsModel&&!models.some(([v])=>v===statsModel))models.push([statsModel,modelName(statsModel)]);
     const select=$('stats-model');
     if(select.options.length!==models.length||models.some(([v,l],i)=>select.options[i].value!==v||select.options[i].textContent!==l))select.replaceChildren(...models.map(([v,l])=>{const o=el('option',l);o.value=v;return o;}));
     select.value=statsModel;
@@ -2329,6 +2439,21 @@
     const accept=!!server.accept;$('accept-toggle').setAttribute('aria-checked',String(accept));
     $('log-share-toggle').setAttribute('aria-checked',String(!!server.log_share));
   }
+  // Automatic updates are set here only, by the owner, on each computer
+  // (T-277): no coordinator or other computer can turn them on.
+  let autoUpdateBusy=false;
+  function renderAutoUpdate(){
+    $('auto-update-row').hidden=!server?.auto_update_supported;
+    $('auto-update-toggle').setAttribute('aria-checked',String(!!server?.auto_update));
+    $('auto-update-toggle').disabled=autoUpdateBusy;
+  }
+  async function toggleAutoUpdate(){
+    if(!server||autoUpdateBusy)return;
+    const on=!server.auto_update;autoUpdateBusy=true;serverGen++;$('auto-update-status').textContent='';renderAutoUpdate();
+    try{const answer=await postAPI('/api/server-action',{action:'auto_update',on},28000);server=answer.result;renderServer();}
+    catch(error){$('auto-update-status').textContent=capital(error.message);}
+    finally{autoUpdateBusy=false;serverGen++;renderAutoUpdate();}
+  }
   async function loadServer(){
     if(serverBusy||serverPolling)return;
     serverPolling=true;const gen=serverGen;
@@ -2356,7 +2481,7 @@
   }
   function hideInvitation(){invitation=null;clearInterval(inviteTimer);const d=$('invite-dialog');if(d.open)d.close();}
   function renderServer(){
-    renderAccessBar();
+    renderAccessBar();renderAutoUpdate();
     if(!server)return;const h=server.host,m=server.member;
     const focused=document.activeElement?.dataset?.key||'';
     badge($('host-badge'),h.running?tr('Работает'):h.enabled?tr('Не запустился'):tr('Остановлен'),h.running?'good':h.enabled?'bad':'');
@@ -2569,7 +2694,7 @@
     const name=view?.project||'';
     $('project-none').hidden=!!name;$('project-page').hidden=!name;
     if(!name){projectPageFor='';return;}
-    if(projectPageFor!==name){$('project-page-status').textContent='';clearTimeout(rulesTimer);}
+    if(projectPageFor!==name){$('project-page-status').textContent='';$('project-rules-status').textContent='';clearTimeout(rulesTimer);}
     const fresh=projectPageFor!==name;projectPageFor=name;
     if(fresh||document.activeElement!==$('project-page-name'))$('project-page-name').value=view.project_title||name;
     // Other computers and the coordinator chat know the project by the name it
@@ -2583,7 +2708,7 @@
   }
   function saveProjectField(field){
     const name=view?.project;if(!name)return;
-    const status=$('project-page-status');
+    const status=$(field==='rules'?'project-rules-status':'project-page-status');
     projectSaving=projectSaving.then(async()=>{
       if(view?.project!==name)return;
       try{
@@ -3079,7 +3204,6 @@
     setProject(value);remember('messenger-project',value);selectedTask='';selectedShared=null;feed=null;feedSignature='';viewSignature='';taskHistory=null;if($('device-menu')?.matches(':popover-open'))$('device-menu').hidePopover();renderMachines();if(tab==='agents')renderAgents();renderTaskList();renderThread();refresh();
   });
   $('agent-filter').addEventListener('change',()=>{taskHistory=null;renderTaskList();if(view?.history_paged)refresh();});
-  for(const id of ['computer-chip','stats-computer-chip','agents-computer-chip'])$(id).querySelector('button').addEventListener('click',clearComputer);
   // The sidebar and the task list are as wide as the owner drags them (T-063).
   // A double click or Home restores the usual width; the width is remembered.
   function splitter(pane,name,variable,usual,min,max,side){
@@ -3119,8 +3243,10 @@
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.isComposing&&!$('task-stop').hidden&&!$('compose').hidden&&!document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true]')){e.preventDefault();stopTask();}});
   $('answer-text').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();sendAnswer();}});
   $('project-dialog-close').addEventListener('click',()=>$('project-dialog').close());
-  $('settings-open').addEventListener('click',()=>$('settings-dialog').showModal());
+  $('settings-open').addEventListener('click',()=>{$('auto-update-status').textContent='';$('settings-dialog').showModal();loadServer();});
+  $('auto-update-toggle').addEventListener('click',toggleAutoUpdate);
   $('settings-close').addEventListener('click',()=>$('settings-dialog').close());
+  setupPictureViewer();
   $('fb-open').addEventListener('click',openFeedback);
   $('fb-close').addEventListener('click',()=>$('fb-dialog').close());
   $('fb-save').addEventListener('click',saveFeedback);
@@ -3207,7 +3333,9 @@
     if(event.defaultPrevented||event.target.closest?.('input,textarea,[contenteditable]')||String(window.getSelection?.()||''))return;
     event.preventDefault();
   });
-  setInterval(()=>{serverPolls++;if(tab==='server'||serverPolls%3===0)loadServer();},5000);
+  // T-275: a hidden window asks for the network every minute, not every
+  // 5 or 15 s, and catches up when shown.
+  setInterval(()=>{serverPolls++;if(document.hidden?serverPolls%12===0:(tab==='server'||serverPolls%3===0))loadServer();},5000);
   loadServer();
   let initialTheme=window.messengerInitialTheme;
   if(!initialTheme)try{initialTheme=localStorage.getItem('messenger-theme');}catch(_){}
@@ -3236,5 +3364,6 @@
   show('tasks');loadMachineOrder();refresh();loadDiscovery();pollSetup();setInterval(()=>{if(setupPending)pollSetup();},2000);
   setInterval(updateTimers,1000);
   setInterval(()=>{if(!windowWatch||Date.now()-lastWindowRefresh>=15000)refresh();},2000);
-  setInterval(loadDiscovery,60000);setInterval(()=>{if(tab==='stats')loadStats();},15000);
+  setInterval(loadDiscovery,60000);setInterval(()=>{if(tab==='stats'&&!document.hidden)loadStats();},15000);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)return;updateTimers();loadServer();if(tab==='stats')loadStats();});
 })();

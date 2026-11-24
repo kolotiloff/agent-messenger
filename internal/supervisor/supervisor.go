@@ -99,6 +99,10 @@ type Supervisor struct {
 	// startUpdate starts the update helper for another computer's request
 	// (T-078); nil when this client cannot be updated that way.
 	startUpdate UpdateStarter
+	// findUpdate looks for a newer release for automatic updates (T-277);
+	// nil when this client cannot update itself.
+	findUpdate UpdateFinder
+	auto       autoUpdateState
 }
 
 type activeJob struct {
@@ -124,6 +128,9 @@ type RunOptions struct {
 	// StartUpdate starts the update helper when another computer of the
 	// network asks this one to update (T-078); nil refuses such requests.
 	StartUpdate UpdateStarter
+	// FindUpdate looks for a newer signed release when the owner turned on
+	// automatic updates (T-277); nil turns them off.
+	FindUpdate UpdateFinder
 	// CheckLimits reads the Codex account limits every few minutes
 	// (T-191). Only the real program turns it on; tests never start Codex.
 	CheckLimits bool
@@ -202,7 +209,7 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 	sup := &Supervisor{
-		store: store, root: root, launcher: launcher, cancel: cancel, ctx: ctx, startUpdate: options.StartUpdate,
+		store: store, root: root, launcher: launcher, cancel: cancel, ctx: ctx, startUpdate: options.StartUpdate, findUpdate: options.FindUpdate,
 		taskWake: make(chan struct{}, 1), projectStorage: options.ProjectStorage,
 	}
 	defer sup.bg.Wait()

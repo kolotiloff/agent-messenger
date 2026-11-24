@@ -524,12 +524,19 @@ func (s *Store) LiveWorkTasks(limit int) ([]ActiveTask, error) {
 	return listWorkTasks(s, limit, liveWorkWhere)
 }
 
+// The work conditions read only the tasks and runs in a current state,
+// through the state indexes (T-272), never every task a project ever had.
 const (
-	activeWorkWhere = `t.state IN ('running','waiting_coordinator','waiting_owner','blocked','interrupted')
- OR EXISTS (SELECT 1 FROM task_runs r WHERE r.task_id=t.id AND r.state IN ('intent','launching','running','blocked','interrupted'))`
-	liveWorkWhere = `t.state IN ('running','waiting_coordinator','waiting_owner')
- OR EXISTS (SELECT 1 FROM task_runs r WHERE r.task_id=t.id AND r.state IN ('intent','launching','running'))`
+	activeWorkWhere = `t.id IN (SELECT id FROM tasks WHERE state IN ('running','waiting_coordinator','waiting_owner','blocked','interrupted')
+ UNION SELECT task_id FROM task_runs WHERE state IN ('intent','launching','running','blocked','interrupted'))`
+	liveWorkWhere = `t.id IN (SELECT id FROM tasks WHERE state IN ('running','waiting_coordinator','waiting_owner')
+ UNION SELECT task_id FROM task_runs WHERE state IN ('intent','launching','running'))`
 )
+
+// workStateIndexes serve the work conditions (T-272) in the computer's
+// database and in every project database.
+const workStateIndexes = `CREATE INDEX IF NOT EXISTS tasks_state ON tasks(state);
+CREATE INDEX IF NOT EXISTS task_runs_state ON task_runs(state, task_id);`
 
 func listWorkTasks(s *Store, limit int, where string) ([]ActiveTask, error) {
 	type item struct {

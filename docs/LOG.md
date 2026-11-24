@@ -2,6 +2,22 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-24 — Claude Code (T-277)
+
+- Automatic updates: a switch in the program settings of each computer (D-191). Windows and Linux clients look for a release every 30 minutes and queue their own update once per release. Mac and the update marks are open in Q-031. Go tests and the Chromium window check pass.
+
+## 2026-11-24 — Claude Code (T-272 to T-276)
+
+- T-272: the update's work count now uses state indexes; a query-plan test fails with the old query. T-273: found why the computer order was lost after updates (a refused report drops the lasting id for a while) and kept a peer-to-computer map in the order file. T-274: readable model names in the statistics filter. T-275: a hidden window no longer redraws timers or polls statistics, and polls the network once a minute. T-276: replaced «·» separators. Window checks pass in Chromium; WebKit runs in CI.
+
+## 2026-11-24 — Claude Code (T-268 to T-271)
+
+- Finished the picture viewer from the draft kept after 0.97 and added the English texts it lacked. On the owner's screenshots: statistics filters now share one height and start at the left, the project page is split into cards, and the computer chip is removed because the highlighted card already shows the choice (D-189). New `scripts/check-window-pictures.cjs` covers the viewer and a chosen computer that leaves the list.
+
+## 2026-11-23 — Claude Code (0.97 release)
+
+- Published [0.97](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.97) from `5de88fc` with T-264 to T-267. Verified 22 assets and all five signed update sets (signature, version, source SHA, archive hash and length). The owner moved the picture viewer (T-268) to the next release. No installed-app or VPS upgrade was performed.
+
 ## 2026-11-23 — Claude Code (T-264, CI of PR #182)
 
 - On PR #182 the window-controls job was cancelled at its 10-minute limit while apt installed the browser system packages (9.5 minutes). Raised that job's limit to 20 minutes. The macOS / Go 1.22.2 job in the same run never got a runner and was cancelled after 15 minutes of waiting; the push reruns it. Nothing in the product changed.

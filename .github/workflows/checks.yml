@@ -34,6 +34,7 @@ jobs:
             BROWSER_ENGINE="$engine" node scripts/check-window-controls.cjs
             BROWSER_ENGINE="$engine" node scripts/check-window-switch.cjs
             BROWSER_ENGINE="$engine" node scripts/check-window-stability.cjs
+            BROWSER_ENGINE="$engine" node scripts/check-window-pictures.cjs
           done
 
   native:

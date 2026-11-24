@@ -117,6 +117,8 @@ CREATE TABLE IF NOT EXISTS task_runs (
  UNIQUE (task_id, ordinal)
 );
 CREATE INDEX IF NOT EXISTS task_runs_intent_order ON task_runs(created_at) WHERE state='intent';
+CREATE INDEX IF NOT EXISTS tasks_state ON tasks(state);
+CREATE INDEX IF NOT EXISTS task_runs_state ON task_runs(state, task_id);
 CREATE TABLE IF NOT EXISTS task_questions (
  id TEXT PRIMARY KEY,
  task_id TEXT NOT NULL REFERENCES tasks(id),

@@ -107,9 +107,14 @@ const shots = process.env.SCREENSHOT_DIR;
       // Clear storage from an empty page, so the running window cannot
       // record the earlier tasks again.
       tasks.Frame = []; tasks.Site = [];
+      // Leaving the page cancels the window's pending requests; WebKit
+      // reports each as an access control failure. Only those, and only
+      // while the check itself leaves and comes back, are expected.
+      const before = errors.length;
       await page.goto('http://messenger.test/blank');
       await page.evaluate(() => localStorage.clear());
       await page.goto('http://messenger.test/#fictional');
+      errors.splice(before, Infinity, ...errors.slice(before).filter(message => !/\/api\/[^ ]* due to access control checks\.$/.test(message)));
       await page.locator('#thread .am-welcome').getByRole('heading', {name: 'Добро пожаловать в Agent Messenger', exact: true}).waitFor();
       if (shots && scheme === 'light') await page.screenshot({path: path.join(shots, `first-run-welcome-${scheme}.png`)});
 

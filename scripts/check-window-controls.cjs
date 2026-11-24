@@ -21,9 +21,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       let created = false, registered = false, connected = false, trusted = false;
       let windowReadFails = true;
       let coordinatorActive = false;
-      let machineOrder = null;
+      let machineOrder = null, machinePeers = undefined, peerLasting = true;
       let setupStates = [], installed = false;
       let updates = [];
+      let autoUpdate = false, autoSupported = false, autoRefuse = false;
       const writes = [];
       // WebKit reports a background request that a reload cut off as a page
       // error ("… due to access control checks"); the app catches it, so it
@@ -42,8 +43,13 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         if (route.request().method() === 'POST') {
           writes.push({path: pathname, body: route.request().postDataJSON()});
           if (pathname === '/api/machine-order') {
-            machineOrder = route.request().postDataJSON().order;
+            ({order: machineOrder, peers: machinePeers} = route.request().postDataJSON());
             return route.fulfill({json: {ok: true}});
+          }
+          if (pathname === '/api/server-action' && route.request().postDataJSON().action === 'auto_update') {
+            if (autoRefuse) return route.fulfill({status: 409, json: {ok: false, detail: 'Fixture refusal'}});
+            autoUpdate = route.request().postDataJSON().on;
+            return route.fulfill({json: {ok: true, result: {host: {running: false, enabled: false, addresses: []}, member: {connected: false}, peers: [], updates, accept: true, auto_update: autoUpdate, auto_update_supported: autoSupported}}});
           }
           if (pathname === '/api/project-create') created = true;
           if (pathname === '/api/agent-install' || pathname === '/api/agent-find') {
@@ -79,8 +85,8 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           '/api/agent-setup-status': setupStates,
           '/api/discovery': {agents: ['claude','codex','cursor'].map(provider => ({provider, state: 'not_found'}))},
           '/api/client-info': {client: 'running', outdated: false},
-          '/api/machine-order': {order: machineOrder},
-          '/api/server': {host: {running: false, enabled: false, addresses: []}, member: {connected: false}, peers: connected ? [{id:'fixture-peer',name:'Peer fixture',host:true,age:0,agents:[{agent:'cursor'}],coordinator:'cursor-vscode'},{id:'fixture-peer-2',name:'Paused agent fixture',age:0,agents:[],coordinator:'claude-code'}] : [], updates, accept: true},
+          '/api/machine-order': {order: machineOrder, peers: machinePeers},
+          '/api/server': {host: {running: false, enabled: false, addresses: []}, member: {connected: false}, peers: connected ? [{id:'fixture-peer',...(peerLasting ? {computer:'computer-fixture'} : {}),name:'Peer fixture',host:true,age:0,agents:[{agent:'cursor'}],coordinator:'cursor-vscode'},{id:'fixture-peer-2',name:'Paused agent fixture',age:0,agents:[],coordinator:'claude-code'}] : [], updates, accept: true, auto_update: autoUpdate, auto_update_supported: autoSupported},
           '/api/self-update': {current: '0.0.0-preview.test'},
         };
         if (pathname.startsWith('/api/')) return route.fulfill({json: fixtures[pathname] || {ok: true}});
@@ -152,6 +158,35 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.locator('[aria-controls="lang-select-menu"]').click();
       await page.getByRole('option', {name: 'Русский', exact: true}).click();
       await page.waitForFunction(() => document.documentElement.lang === 'ru');
+      // T-277: the automatic update switch shows only where the client can
+      // update itself, and changes only through the owner's click.
+      const autoRow = page.locator('#auto-update-row'), autoToggle = page.locator('#auto-update-toggle');
+      const serverRead = page.waitForResponse(response => new URL(response.url()).pathname === '/api/server');
+      await page.locator('#settings-open').click();
+      await serverRead;
+      assert.equal(await autoRow.isVisible(), false, 'no switch where automatic updates are unavailable');
+      await page.locator('#settings-close').click();
+      autoSupported = true;
+      await page.locator('#settings-open').click();
+      await autoRow.waitFor();
+      assert.equal(await autoToggle.getAttribute('aria-checked'), 'false');
+      assert.equal(await page.locator('#auto-update-status').isVisible(), false);
+      await autoToggle.click();
+      await page.waitForFunction(() => document.getElementById('auto-update-toggle').getAttribute('aria-checked') === 'true');
+      assert.deepEqual(writes.filter(w => w.body?.action === 'auto_update').map(w => w.body), [{action: 'auto_update', on: true}]);
+      const autoBox = await autoToggle.boundingBox();
+      assert(autoBox.width < 60, 'the switch keeps its own width');
+      autoRefuse = true;
+      await autoToggle.click();
+      await page.locator('#auto-update-status').filter({hasText: 'Fixture refusal'}).waitFor();
+      assert.equal(await autoToggle.getAttribute('aria-checked'), 'true', 'a refused change keeps the switch');
+      autoRefuse = false;
+      await autoToggle.click();
+      await page.waitForFunction(() => document.getElementById('auto-update-toggle').getAttribute('aria-checked') === 'false');
+      await page.locator('#settings-close').click();
+      await page.locator('#settings-open').click();
+      assert.equal(await page.locator('#auto-update-status').isVisible(), false, 'an old refusal is gone when settings open again');
+      await page.locator('#settings-close').click();
       for (const width of [1100, 600]) {
         await page.setViewportSize({width, height: 850});
         for (const [value, label] of [['light', 'Светлая'], ['dark', 'Тёмная']]) {
@@ -235,6 +270,11 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       ]);
       assert.equal(await page.locator('#machines > :first-child').getAttribute('data-peer'),'fixture-peer');
       assert.equal(await peerCard.getAttribute('aria-pressed'),'false');
+      // T-273: the order is kept under the lasting id, and a report that
+      // briefly comes without it (a refused report) keeps the card's place.
+      assert.equal(machineOrder[0],'computer-fixture');
+      assert.deepEqual(machinePeers,{'fixture-peer':'computer-fixture'});
+      peerLasting = false;
       // The desktop window opens on another loopback port after restarting.
       const restarted = await context.newPage();
       await restarted.goto('http://messenger.test:11342/#new-fictional-token');
@@ -390,6 +430,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           }
           return route.fulfill({json:{
             project,total:{tasks:3,tokens:22020000,input_tokens:21100000,output_tokens:920000},agents:[],computers:[],days:[],
+            models:['gpt-6.2-sol[effort=high]','claude-opus-5-5[effort=medium]','opus','grok-4.7-high-fast','cursor-grok-4.6-medium'].map(key=>({key,name:key,tokens:1})),
             recent:[stat,olderStat,untimedStat],top:[olderStat,untimedStat,stat],
             ranked:{oldest:[untimedStat,olderStat,stat],fewest:[stat,untimedStat,olderStat],longest:[olderStat,stat],shortest:[stat,olderStat]},
           }});
@@ -475,7 +516,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const runningLabel=running.locator('.am-agent-running-label');
       const runningTimer=running.locator('.am-agent-status');
       await runningLabel.waitFor();
-      assert.equal(await runningLabel.locator('.am-agent-model').textContent(),'composer-2.5 Med');
+      assert.equal(await runningLabel.locator('.am-agent-model').textContent(),'Composer 2.5 Med');
       assert.equal(await runningTimer.textContent(),'3 мин');
       assert.equal(await runner.locator('.am-agent-wait').count(),1);
       assert.equal(await runner.locator('.am-agent-idle').count(),0);
@@ -490,7 +531,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const overlappingAgent=runner.locator('.am-agent-run[data-provider=codex]');
       assert.equal(await overlappingAgent.locator('.am-agent-model').textContent(),'по умолчанию');
       assert.equal(await overlappingAgent.locator('.am-agent-status').textContent(),'(2) 3 мин');
-      assert.match(await overlappingAgent.getAttribute('title'),/Ждёт ответа/);
+      assert.match(await overlappingAgent.getAttribute('title'),/, ждёт ответа \(1\)/);
       const chooseProject = async name => {
         await page.locator('[aria-controls="project-select-menu"]').click();
         await page.getByRole('option',{name,exact:true}).click();
@@ -591,6 +632,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       }
       await page.locator('[data-tab=stats]').click();
       const detail = page.locator('#stats-top .am-stats-task-text .am-muted').first();
+      // T-274: the model filter uses the same names as tasks and messages.
+      await page.locator('#stats-model option[value=opus]').waitFor({state:'attached'});
+      assert.deepEqual(await page.locator('#stats-model option').allTextContents(),
+        ['Все модели','Sol 6.2 High','Opus 5.5 Medium','Opus','Grok 4.7 High Fast','Grok 4.6 Medium']);
       await detail.waitFor();
       assert.equal(await detail.textContent(),'Frame Codex Sol 6.2 Medium на Runner');
       assert.equal(await page.locator('#stats-top time').first().getAttribute('datetime'),stat.at);
@@ -687,7 +732,12 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await page.locator('#thread').getByText('Отчёт сохранён без подтверждения запуска',{exact:true}).count(),1);
       const toolGroups=page.locator('#thread .am-tool-group');
       const actionGroup=toolGroups.first();
-      await actionGroup.locator(':scope > summary').click();
+      // A click that lands while the thread is redrawn reaches the old
+      // group, so open it until the current one stays open.
+      for(let tries=0;!(await actionGroup.evaluate(node=>node.open));tries++){
+        assert.ok(tries<5,'the action group opens');
+        await actionGroup.locator(':scope > summary').click();
+      }
       const timer=actionGroup.locator('.am-tool-timer');
       assert.match(await timer.innerText(),/^1 мин \d{1,2} с$/);
       const label=actionGroup.getByText('Выполняются команды',{exact:true});

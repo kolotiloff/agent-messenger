@@ -91,6 +91,15 @@ func (s *Supervisor) Server(_ context.Context, action string, payload json.RawMe
 		if err := s.store.SetNetLogShare(in.On); err != nil {
 			return nil, err
 		}
+	case "auto_update":
+		// Only the owner's window or command line reaches this: no message
+		// of the network turns it on (T-277).
+		if in.On && !s.autoUpdateSupported() {
+			return nil, errors.New(autoUpdateRefusal())
+		}
+		if err := s.store.SetAutoUpdate(in.On); err != nil {
+			return nil, err
+		}
 	case "update":
 		// Another computer of the network installs the newest signed
 		// update (T-078); its answer arrives through the mailbox.
@@ -135,7 +144,11 @@ func (s *Supervisor) Server(_ context.Context, action string, payload json.RawMe
 		peer := &st.Peers[i]
 		peer.Version, peer.UpdatePending = byPeer[peer.ID].PeerUpdateState(peer.Version, peer.UpdatePending, peer.Age, now)
 	}
-	return serverView{Status: st, NetFullAccess: full, Updates: updates}, nil
+	auto, err := s.store.AutoUpdate()
+	if err != nil {
+		return nil, err
+	}
+	return serverView{Status: st, NetFullAccess: full, Updates: updates, AutoUpdate: auto, AutoUpdateSupported: s.autoUpdateSupported()}, nil
 }
 
 // presence describes this computer's agents for its network: the agent
@@ -240,4 +253,14 @@ type serverView struct {
 	NetFullAccess bool `json:"net_full_access"`
 	// Updates are the last update requests to the other computers (T-078).
 	Updates []core.NetUpdate `json:"updates"`
+	// AutoUpdate: this computer installs new releases by itself (T-277).
+	AutoUpdate          bool `json:"auto_update"`
+	AutoUpdateSupported bool `json:"auto_update_supported"`
+}
+
+func autoUpdateRefusal() string {
+	if updateOS == "darwin" {
+		return "На Mac автообновление пока недоступно: программа обновляется кнопкой в окне."
+	}
+	return "Этот фоновый клиент не умеет обновляться сам: перезапустите его из окна программы."
 }

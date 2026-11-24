@@ -61,6 +61,10 @@ func (p *projectLayout) open(file string) (*sql.DB, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
+	// A project database made before T-272 gets the state indexes once.
+	// They only speed up the work count, so a busy database is not a
+	// reason to refuse it; the next start tries again.
+	_, _ = db.Exec(workStateIndexes)
 	p.files[file] = db
 	return db, nil
 }

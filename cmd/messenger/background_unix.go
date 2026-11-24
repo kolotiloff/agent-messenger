@@ -170,7 +170,7 @@ func runBackgroundChild(root string, flags []string) error {
 	}
 	err = supervisor.RunWithOptions(context.Background(), root,
 		options,
-		supervisor.RunOptions{StartPaused: true, ProjectStorage: true, CheckLimits: true, Ready: ready, StartUpdate: remoteUpdateStarter(root)})
+		supervisor.RunOptions{StartPaused: true, ProjectStorage: true, CheckLimits: true, Ready: ready, StartUpdate: remoteUpdateStarter(root), FindUpdate: autoUpdateFinder()})
 	if err != nil {
 		_ = json.NewEncoder(conn).Encode(backgroundReady{Error: err.Error()})
 	}
