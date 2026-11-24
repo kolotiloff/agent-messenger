@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-24 — Claude Code (0.98 release)
+
+- Published [0.98](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.98) from `1fac081` with T-268 to T-277. Verified 22 assets and all five signed update sets (signature, version, source SHA, archive hash and length). Before the merge, the WebKit window checks on PR #183 failed four times on test-environment issues, fixed in the test scripts only: the picture fixture now serves PNG and lets `blob:` loads through, the settings read is awaited from before the click, the action group is reopened after a lost click, and cancelled requests while the switch check leaves the page are expected. No installed-app or VPS upgrade was performed.
+
 ## 2026-11-24 — Claude Code (T-277)
 
 - Automatic updates: a switch in the program settings of each computer (D-191). Windows and Linux clients look for a release every 30 minutes and queue their own update once per release. Mac and the update marks are open in Q-031. Go tests and the Chromium window check pass.
