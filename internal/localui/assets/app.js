@@ -476,8 +476,23 @@
     if(active(localState))return {state:localState,id:localID};
     return peer?.update_pending?{state:'queued',id:peer.update_request_id}:null;
   }
+  const updateCancelAttempts=new Map();
+  function cancelUpdateKey(broker,device,id){return JSON.stringify([broker,device,id]);}
   function updateControl(peer,mark){
+    const broker=updateNetwork(),device=peer?.id||'';
+    const key=cancelUpdateKey(broker,device,mark.id);
+    const attempt=updateCancelAttempts.get(key);
+    const queued=server?.update_cancellations?.some(r=>r.device===device&&r.request_id===mark.id);
     const installing=mark.state==='updating';
+    if(!installing&&(attempt||queued)){
+      const caption=attempt==='sending'?tr('Отправляем запрос на отмену…'):
+        queued||attempt==='queued'?tr('Отмена запрошена, ждём подтверждения'):tr('Проверяем, принят ли запрос на отмену…');
+      const status=el('span',undefined,'am-update-icon am-update-wait am-update-cancelling');
+      status.title=caption;status.setAttribute('role','img');status.setAttribute('aria-label',caption);
+      status.append(svgIcon(['M6 3h12M6 21h12M8 3v5l8 8v5M16 3v5l-8 8v5']));
+      status.addEventListener('click',e=>e.stopPropagation());
+      return status;
+    }
     const caption=installing?tr('Обновление устанавливается'):mark.state==='waiting'?tr('Обновление запрошено…'):tr('ждёт обновления');
     const canCancel=!installing&&!!mark.id&&(!peer||(peerFresh(peer)&&!versionOlder(peer.version,'0.100')&&!!peer.version));
     const b=el(canCancel?'button':'span',undefined,'am-update-icon am-peer-update '+(canCancel?'am-update-cancel':'am-update-wait'));
@@ -489,13 +504,19 @@
     if(!canCancel){b.setAttribute('role','img');return b;}
     b.type='button';b.dataset.key='cancel-update-'+(peer?.id||'local');
     b.append(svgIcon(['M6 6l12 12M18 6L6 18']));
-    const broker=updateNetwork(),device=peer?.id||'';
     b.addEventListener('keydown',e=>e.stopPropagation());
     b.addEventListener('click',async e=>{
-      e.stopPropagation();b.disabled=true;
-      try{await postAPI('/api/server-action',{action:'cancel-update',device,broker,request_id:mark.id},28000);}
-      catch(error){addNotice('cancel-'+mark.id,'bad',tr('Отменить запрос'),capital(error.message));}
-      finally{b.disabled=false;}
+      e.stopPropagation();
+      if(updateCancelAttempts.has(key))return;
+      updateCancelAttempts.set(key,'sending');renderMachines();
+      try{
+        await postAPI('/api/server-action',{action:'cancel-update',device,broker,request_id:mark.id},28000);
+        updateCancelAttempts.set(key,'queued');
+      }catch(error){
+        updateCancelAttempts.set(key,'unknown');
+        addNotice('cancel-'+mark.id,'bad',tr('Отменить запрос'),capital(error.message));
+      }
+      renderMachines();void loadServer();
     });
     return b;
   }
@@ -747,24 +768,33 @@
   function serverTag(){
     return machineRole(tr('сервер'),tr('На этом компьютере работает сервер сети'));
   }
+  function machinePresence(online){
+    const mark=el('span',undefined,'am-machine-presence'+(online?' online':''));
+    mark.title=online?tr('На связи'):tr('Нет связи');
+    mark.setAttribute('role','img');
+    mark.setAttribute('aria-label',mark.title);
+    mark.append(svgIcon(online
+      ?['M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-7v2h3v2H8v-2h3v-2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z']
+      :['M9 4h11a2 2 0 0 1 2 2v8M2 6v9a2 2 0 0 0 2 2h12M12 17v3M8 20h8M2 2l20 20']));
+    return mark;
+  }
   function renderMachines(){
     if(draggedMachine)return;
     collectNotices();
     pickedComputers=new Set();
     const live=$('machines'),box=live.cloneNode(false),busyTasks=busyTasksByComputer();
     const machine=el('div',undefined,'am-machine-card');machine.setAttribute('aria-current','true');pickable(machine,'local');
-    // Every card is laid out the same (owner, 2026-11-18, T-198): the dot
-    // before the name, with the update icon and version at the top right. This computer's version and update button
-    // are the window's own elements, moved into its card (placeLocalParts).
+    // This computer's version and update button are moved into its header
+    // by placeLocalParts, alongside the same status icon as on remote cards.
     const head=el('div',undefined,'am-machine-name');
-    const dot=el('span',undefined,'am-dot'+(online?' online':''));dot.title=online?tr('На связи'):tr('Нет связи');head.append(dot);
-    head.append(el('span',view?.computer_name||tr('Этот компьютер')));
+    head.append(machinePresence(online),el('span',view?.computer_name||tr('Этот компьютер')));
     // The computer that runs the network's server is labelled as such.
     if(server?.host?.running&&server.host.scope!=='local')head.append(serverTag());
     const coordinator=view?.project===project?view?.coordinator:null;
     if(coordinator?.active)head.append(machineRole(tr('координатор'),tr('На этом компьютере открыт чат-координатор выбранного проекта')));
     const version=el('div',undefined,'am-machine-version am-local-version');
-    machine.append(head);
+    const body=el('div',undefined,'am-machine-body');
+    machine.append(head,body);
     // A paused agent is left out, as other computers leave it out of what
     // they report (owner, 2026-11-18: two of three agents were off and the
     // Mac still listed all three). One still running a task stays until it
@@ -772,7 +802,7 @@
     const shownAgents=(view?.agents||[]).filter(a=>!a.paused||busyTasks.get('local\0'+a.agent)?.some(t=>activeStates.includes(t.state)));
     const lines=agentLines(shownAgents,coordinator?.connected?(coordinator.client||''):null,online,'local',busyTasks);
     if(!lines.children.length)lines.append(el('p',online?tr('Агенты не подключены'):tr('Нет связи'),'am-small am-muted'));
-    machine.append(lines);
+    body.append(lines);
     const corner=el('div',undefined,'am-card-update am-local-update');
     const localMark=updateMark(null);
     if(localMark)corner.append(updateControl(null,localMark));
@@ -786,8 +816,7 @@
       const fresh=peerFresh(peer);
       const card=el('div',undefined,'am-machine-card am-peer-card');card.dataset.peer=peer.id;if(peer.host)card.dataset.host='';pickable(card,peer.id,peerOrderKey(peer));
       const name=el('div',undefined,'am-machine-name');
-      const pdot=el('span',undefined,'am-dot'+(fresh?' online':''));pdot.title=fresh?tr('На связи'):tr('Нет связи');
-      name.append(pdot,el('span',peer.name));
+      name.append(machinePresence(fresh),el('span',peer.name));
       if(peer.host)name.append(serverTag());
       const meta=el('div',undefined,'am-machine-meta');
       const corner=el('div',undefined,'am-card-update');
@@ -806,22 +835,23 @@
       }
       if(corner.children.length)meta.append(corner);
       if(installed)meta.append(el('span',versionName(installed),'am-version am-machine-version'));
-      name.append(meta);card.append(name);
+      const peerBody=el('div',undefined,'am-machine-body');
+      name.append(meta);card.append(name,peerBody);
       if(revokeAsk===peer.id&&hosted.has(peer.id)){
-        card.append(el('p',tr('Отозвать устройство? Вернуть его можно только новым приглашением.'),'am-small am-muted'));
+        peerBody.append(el('p',tr('Отозвать устройство? Вернуть его можно только новым приглашением.'),'am-small am-muted'));
         const actions=el('div',undefined,'am-actions am-device-confirm');
         const yes=el('button',tr('Отозвать'),'am-danger');yes.type='button';yes.dataset.key='revoke-yes-'+peer.id;
         yes.addEventListener('click',()=>{revokeAsk='';serverAction({action:'revoke',device:peer.id},'host','');});
         const no=el('button',tr('Отмена'));no.type='button';
         no.addEventListener('click',()=>{revokeAsk='';renderMachines();$('machines').querySelector('[data-key="'+CSS.escape('revoke-'+peer.id)+'"]')?.focus();});
-        actions.append(no,yes);card.append(actions);box.append(card);continue;
+        actions.append(no,yes);peerBody.append(actions);box.append(card);continue;
       }
       if(fresh){
         const plines=agentLines(peer.agents||[],peer.coordinator?peer.coordinator:null,true,peer.id,busyTasks);
         if(!plines.children.length)plines.append(el('p',tr('Агенты не подключены'),'am-small am-muted'));
-        card.append(plines);
+        peerBody.append(plines);
       }else{
-        card.append(el('p',peer.last_seen?tr('Был на связи ')+stamp(peer.last_seen):tr('Ещё не выходил на связь'),'am-small am-muted'));
+        peerBody.append(el('p',peer.last_seen?tr('Был на связи ')+stamp(peer.last_seen):tr('Ещё не выходил на связь'),'am-small am-muted'));
       }
       const can={revoke:hosted.has(peer.id)};
       if(can.revoke){
@@ -2556,7 +2586,19 @@
   async function loadServer(){
     if(serverBusy||serverPolling)return;
     serverPolling=true;const gen=serverGen;
-    try{const next=await api('/api/server');if(gen===serverGen&&!serverBusy){server=next;renderServer();}}
+    const cancelAttempts=[...updateCancelAttempts];
+    try{
+      const next=await api('/api/server');
+      if(gen===serverGen&&!serverBusy){
+        server=next;
+        // This snapshot started after the submission returned. Trust the
+        // durable queue from here, regardless of the submission's reply.
+        for(const [key,state] of cancelAttempts){
+          if(state!=='sending'&&updateCancelAttempts.get(key)===state&&(next.update_cancellations||state==='unknown'))updateCancelAttempts.delete(key);
+        }
+        renderServer();
+      }
+    }
     catch(error){if(gen===serverGen&&!serverBusy){$('host-state').textContent=error.message;$('member-state').textContent='';}}
     finally{serverPolling=false;}
   }

@@ -661,3 +661,11 @@ Give an accepted update five minutes to start on the receiving computer. Only ex
 ## D-198 — Reconcile update state by request ID and numeric build (T-289)
 
 The window orders numbered builds by their numeric suffix, following D-196. A receiving computer can clear a shared queued or installing mark by reporting an empty queue after it has reported that request's ID as pending. The broker commits both changes together. A result can advance the reported build while an independent update remains pending under its own ID. Neither queue removal nor a notification substitutes for evidence of an installed version.
+
+## D-199 — Compact computer cards and macOS menu bar clicks (T-292, T-293)
+
+Use a shared gray header, the same gray body on every computer card, and an accent tint on the local header. Selection changes the border. Presence uses a filled green monitor while online and a gray crossed monitor while offline. The macOS menu bar button opens or restores the window on primary click. Its context menu supplies Open Window and Quit on secondary click.
+
+## D-200 — Show a queued update cancellation (T-294)
+
+The window replaces the cancel control with an hourglass during submission and while the local client has the exact cancellation queued. The server status carries pending cancellation targets, so redraws and reopenings preserve the indicator. A new window submission for the same pending cancellation reuses its operation, including after a lost reply. The target's actual update state still determines when the download arrow returns.

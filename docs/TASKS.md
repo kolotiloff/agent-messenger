@@ -110,6 +110,10 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 | T-016 | Windows and Linux: job-object process groups on Windows (D-043), `.exe` agents only (D-044), the window in the browser (`messenger open`) and zip/tar.gz archives in every release (D-045), Windows CI. Left: the owner's test on real Windows and Linux computers; installer and code signing there (self-update: T-038). | owner | PR #52, preview.32 |
 | T-015 | Done: broker hosted by the client, invitations, joining, check, devices and revoke, the «Сервер» tab ([BROKER.md](BROKER.md), D-033–D-035), computers with agents in the sidebar (T-035), tasks between computers (T-037). Left: Keychain (Q-013). | agent + owner | — |
 
+| T-292 | Give computers consistent compact headers, use monitor icons for presence, and tint the local computer's header. | agent | Implemented on `codex/t292-computer-card-headers` (D-199). Both themes checked in Chromium and WebKit. |
+| T-293 | Open or restore the macOS window with a primary menu bar click and open its menu with a secondary click. | agent | Same branch (D-199). macOS app built. Live menu bar clicks pending. |
+| T-294 | Show that update cancellation is pending and keep repeated clicks from duplicating the request. | agent | Same branch (D-200). Three-client fixture and Chromium and WebKit window checks. |
+
 ## Next
 
 T-281 is implemented on `codex/t281-hide-unconfirmed-sidebar-model` and pending release. Chromium and WebKit checks cover the comma before elapsed time with and without a reported model.

@@ -6,6 +6,11 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 - Integrated PRs #192–195 for the next release. Fixed three update state regressions involving equal display versions, an absent requester, and successive requests for one computer. See the [release audit](reports/2026-11-25-t289-release-audit.md) for validation and live acceptance status.
 
+## 2026-11-25 — Codex (T-292, T-293, T-294)
+
+- Refined computer cards in both themes and changed the Mac menu bar click behavior. Verified the cards in Chromium and WebKit and built the native Mac application. Live menu bar clicks remain unverified.
+- Added a pending update cancellation indicator with redraw, reopening and lost response coverage. A three-computer fixture checks repeated submission and receiver confirmation. Branch `codex/t292-computer-card-headers`.
+
 ## 2026-11-25 — Codex (T-285)
 
 - Added Planned to the task sidebar for tasks awaiting their first run. Remote executors report queuing on acceptance and confirm the first observed worker process. Shared task snapshots preserve the phase and an available resource name.

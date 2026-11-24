@@ -18,6 +18,8 @@ After 1.0, T-286 adds a thin neutral stripe to the local computer's card. WebKit
 
 After 1.0, T-288 keeps the stop button disabled once a remote task’s stop request is queued. The window distinguishes local queuing and broker acceptance and waits for the executing computer to confirm the task outcome. Go network fixtures and Chromium and WebKit window checks cover the transition.
 
+T-292, T-293 and T-294 are on `codex/t292-computer-card-headers` for the next functional release. Computer cards have compact headers, monitor-shaped presence indicators and a subtle local header tint. Selection changes the border. The macOS menu bar button opens or restores the window on primary click, with its existing commands on secondary click. An update cancellation now has a separate pending indicator backed by the local queue. A repeated submission reuses the pending operation for that exact update.
+
 Updated 2026-11-24 by Codex (T-283). The original 0.99 binary still returned current after 0.101 shipped. Added a public-channel check to the release workflow and an opt-in recovery for legacy discovery. Fleet delivery requires verification after publication.
 
 After 1.0, T-285 adds a Planned section for tasks awaiting their first run. A remote acceptance can report that the task is queued, along with a resource if known. The executor's first observed process moves the task to Active. The tests use fixture workers and both storage layouts.

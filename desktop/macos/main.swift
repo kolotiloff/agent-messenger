@@ -115,23 +115,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         showWindow()
         connect()
     }
-    // T-184: the icon in the menu bar. Closing the window hides it there:
-    // the Dock icon goes away and the program keeps running; the icon opens
-    // the window again or quits.
+    // The menu bar button opens the window. Its view-level context menu is
+    // available on secondary click, including Control-click (T-293).
     func buildStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        guard let button = item.button else { return }
         if let image = NSImage(systemSymbolName: "bubble.left.fill", accessibilityDescription: "Agent Messenger") {
             image.isTemplate = true
-            item.button?.image = image
+            button.image = image
         } else {
-            item.button?.title = "AM"
+            button.title = "AM"
         }
-        item.button?.toolTip = "Agent Messenger"
+        button.toolTip = "Agent Messenger"
+        button.target = self
+        button.action = #selector(showWindow)
         let menu = NSMenu()
         let open = menu.addItem(withTitle: "Открыть окно", action: #selector(showWindow), keyEquivalent: ""); open.target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Закрыть приложение", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
-        item.menu = menu
+        button.menu = menu
         statusItem = item
     }
     func windowWillClose(_ notification: Notification) {
@@ -178,6 +180,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     }
     @objc func showWindow() {
         if NSApp.activationPolicy() != .regular { NSApp.setActivationPolicy(.regular) }
+        if window?.isMiniaturized == true { window?.deminiaturize(nil) }
         window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
     }
     @objc func chooseData() {
