@@ -107,7 +107,13 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     await thumbs.first().click();
     const dialog = page.locator('#picture-dialog');
     await dialog.waitFor();
-    await page.waitForFunction(() => document.getElementById('picture-image').naturalWidth > 0);
+    await page.waitForFunction(() => document.getElementById('picture-image').naturalWidth > 0).catch(async error => {
+      // Say what the viewer and the thumbnails hold, so a failure in one
+      // engine names its cause.
+      console.error(JSON.stringify(await page.evaluate(() => [...document.querySelectorAll('#picture-image, .am-picture')].map(img =>
+        ({id: img.id, src: img.getAttribute('src'), complete: img.complete, natural: [img.naturalWidth, img.naturalHeight], box: [img.clientWidth, img.clientHeight]})))));
+      throw error;
+    });
     assert.equal(await page.locator('#picture-count').textContent(), '1 из 2');
     assert.equal(await page.locator('#picture-name').textContent(), 'окно-светлое.png');
     const box = await page.locator('#picture-stage').boundingBox();
