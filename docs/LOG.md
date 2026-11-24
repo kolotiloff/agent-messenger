@@ -5,6 +5,8 @@ One entry per work session, newest first. Write what was done, which tool did it
 ## 2026-11-24 — Codex (T-280)
 
 - Confirmed the affected computer still reported 0.99 and a machine-wide queued update. Added safe version reconciliation and a coordinator cancellation tied to the queued request ID. Verified the two-computer and split-store scenarios with fixture data.
+- `scripts/check.sh` and cross-build checks passed locally. Recorded T-281 for a future release, covering every provider in the computer sidebar.
+- Published [0.100](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.100) from `8ca1dfe` in [workflow 45428605429](https://github.com/kolotiloff/agent-messenger/actions/runs/45428605429). Verified the Latest designation, all 22 uploaded assets, and all five signed update sets (signatures, revision, hashes, sizes). No live update was performed.
 
 ## 2026-11-24 — Claude Code (T-278, T-279)
 
