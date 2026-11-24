@@ -61,7 +61,11 @@ func (s *Store) QueueAutoUpdate(version string) (bool, error) {
 		if err := setMeta(tx, "auto_update_release", version); err != nil {
 			return err
 		}
-		if _, err := s.queueLocalUpdate(tx, ""); err != nil {
+		id, err := s.queueLocalUpdate(tx, "")
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE pending_updates SET target_version=? WHERE id=?`, version, id); err != nil {
 			return err
 		}
 		queued = true
