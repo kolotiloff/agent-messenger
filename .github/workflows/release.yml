@@ -17,6 +17,11 @@ name: Release preview
         description: "Release notes shown in the app (plain text)"
         required: true
 
+      retire_legacy_manifests:
+        description: "Archive blocking 0.98/0.99 update manifests after checking their signed replacement"
+        type: boolean
+        default: false
+
 permissions:
   contents: read
 
@@ -199,3 +204,28 @@ jobs:
       - name: Remove signing material
         if: always()
         run: rm -f "$RUNNER_TEMP/sparkle-key"
+
+  channel:
+    name: Check the upgrade path from 0.99
+    needs: release
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      VERSION: ${{ inputs.version }}
+      RETIRE_LEGACY: ${{ inputs.retire_legacy_manifests }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+      - name: Verify the public channel on all five targets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flags=()
+          if [[ "$RETIRE_LEGACY" == "true" ]]; then flags+=(--retire-legacy-manifests); fi
+          python3 scripts/check-release-channel.py "$VERSION" "${flags[@]}"
