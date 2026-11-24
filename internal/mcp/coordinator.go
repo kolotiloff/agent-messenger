@@ -106,6 +106,7 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - newest_release in list_agents is the newest Messenger release this computer has downloaded, with its notes; update_available marks a computer that runs an older one. Before reporting a problem in Messenger, check whether those notes already cover it, and tell the owner when a computer that needs the fix has update_available. It is what this computer last downloaded, not a live check; left out when it has none.
 - server: true in list_agents marks the computer that runs the network's server. It takes tasks like any other computer when it has agents; while it restarts or is off, the computers do not reach each other.
 - update_messenger asks a Windows or Linux computer (this one, or another of the network from list_agents) to install the newest Messenger, the program only. Running tasks are never interrupted: the computer answers queued, takes no new tasks, and installs as soon as none runs. A Mac answers that its update needs the button in its app. The result comes as a messenger_update event; nothing is retried. Do not call it again for the same computer while it is queued or updating. list_agents shows update_pending on a computer that is waiting.
+- cancel_messenger_update cancels a queued Messenger update on the computer named by the owner. It leaves running tasks and any installation already started alone. Call wait for the messenger_update event before claiming it was cancelled.
 - full_access on a task of this computer means its worker may run any command (the owner's «Любые команды» switch on «Агенты»). Without it a command that needs approval is refused, and nobody can approve it: tell the owner to turn that switch on and then continue the task. For tasks from other computers it is «И для задач с других компьютеров» under it on «Агенты».
 - contact_lost on an open task of another computer means this computer has no contact with it (offline, left the network, or the network was made again); computer_last_seen is when it last reported. Its outcome there is unknown: do not start it again by yourself; tell the owner, and when that computer is back the task goes on reporting.
 - To tell a working task from a stuck one, call tasks: an open task shows the worker's last action and when it was (last_activity, last_activity_at; for another computer's task, the last progress line it forwarded). A long quiet time is a reason to tell the owner, not to cancel or start the task again by yourself. tokens is what the task used so far. Every report and failure ends with a «[Messenger] Tokens of this task so far» line (new input, cache write, cache read, output); use it to compare costs instead of asking the worker to add up its log.
@@ -145,7 +146,7 @@ type coordinator struct {
 }
 
 // acting tools make this chat the project's coordinator (T-090).
-var actingTools = map[string]bool{"wait": true, "start_task": true, "answer": true, "continue_task": true, "note_task": true, "cancel": true, "update_messenger": true}
+var actingTools = map[string]bool{"wait": true, "start_task": true, "answer": true, "continue_task": true, "note_task": true, "cancel": true, "update_messenger": true, "cancel_messenger_update": true}
 
 // claim makes this chat the active coordinator of its project. The new chat
 // is told it replaced another only while that chat's process still runs:
@@ -478,6 +479,10 @@ func coordinatorTools() []map[string]any {
 			"inputSchema": obj(map[string]any{
 				"computer": str("computer id from list_agents: this computer (the default) or another computer of the network"),
 			})},
+		{"name": "cancel_messenger_update", "description": "Cancel the specified computer's queued Messenger update when the owner asks. An installation already started is left alone. Wait for a messenger_update event to learn the result.",
+			"inputSchema": obj(map[string]any{
+				"computer": str("computer id from list_agents"),
+			}, "computer")},
 	}
 }
 
@@ -752,6 +757,22 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 			return nil, err
 		}
 		return c.updateMessenger(a.Computer)
+	case "cancel_messenger_update":
+		var a struct {
+			Computer string `json:"computer"`
+		}
+		if err := strict(&a); err != nil {
+			return nil, err
+		}
+		if a.Computer == "" {
+			return nil, errors.New("computer is required; choose its id from list_agents")
+		}
+		id, err := c.store.RequestUpdateCancellation(a.Computer, c.project)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"request_id": id, "computer": a.Computer, "state": core.UpdateWaiting,
+			"next": "Call wait for the messenger_update event. The cancellation has not been confirmed yet."}, nil
 	}
 	return nil, fmt.Errorf("unknown tool %q", p.Name)
 }

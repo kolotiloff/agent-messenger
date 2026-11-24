@@ -29,12 +29,13 @@ const UpdateWait = 15 * time.Minute
 
 // Update states.
 const (
-	UpdateWaiting  = "waiting"
-	UpdateQueued   = "queued"
-	UpdateUpdating = "updating"
-	UpdateDone     = "done"
-	UpdateRefused  = "refused"
-	UpdateFailed   = "failed"
+	UpdateWaiting   = "waiting"
+	UpdateQueued    = "queued"
+	UpdateUpdating  = "updating"
+	UpdateDone      = "done"
+	UpdateRefused   = "refused"
+	UpdateFailed    = "failed"
+	UpdateCancelled = "cancelled"
 )
 
 // MessengerUpdateEvent is the coordinator event for an update this
@@ -48,7 +49,7 @@ const (
 	maxUpdateVersion = 64
 )
 
-var updateReplyStates = map[string]bool{UpdateQueued: true, UpdateUpdating: true, UpdateDone: true, UpdateRefused: true, UpdateFailed: true}
+var updateReplyStates = map[string]bool{UpdateQueued: true, UpdateUpdating: true, UpdateDone: true, UpdateRefused: true, UpdateFailed: true, UpdateCancelled: true}
 
 const netUpdatesSchema = `
 CREATE TABLE IF NOT EXISTS net_updates (
@@ -97,6 +98,7 @@ type NetUpdateRequest struct {
 // (queued until live work ends, or the helper still running).
 type PendingUpdate struct {
 	Broker, Peer, ID, Project string
+	Target                    string
 }
 
 // RequestNetUpdate asks another computer of the network to install the
@@ -303,7 +305,7 @@ const updateResultFresh = 10 * time.Minute
 // PeerUpdateState reconciles a computer's version and pending flag with the
 // last result for that computer. The same result drives notices and the roster.
 func (u NetUpdate) PeerUpdateState(version string, pending bool, presenceAge int, now time.Time) (string, bool) {
-	if u.State != UpdateDone && u.State != UpdateFailed && u.State != UpdateRefused {
+	if u.State != UpdateDone && u.State != UpdateFailed && u.State != UpdateRefused && u.State != UpdateCancelled {
 		return version, pending
 	}
 	at, err := time.Parse(time.RFC3339Nano, u.UpdatedAt)
@@ -360,7 +362,7 @@ func (s *Store) NetUpdateRequests(broker string) ([]NetUpdateRequest, error) {
 // PendingUpdate returns this computer's unfinished update, if any.
 func (s *Store) PendingUpdate() (PendingUpdate, bool, error) {
 	var p PendingUpdate
-	err := s.db.QueryRow(`SELECT id,broker,peer,project FROM pending_updates ORDER BY created_at, id LIMIT 1`).Scan(&p.ID, &p.Broker, &p.Peer, &p.Project)
+	err := s.db.QueryRow(`SELECT id,broker,peer,project,target_version FROM pending_updates ORDER BY created_at, id LIMIT 1`).Scan(&p.ID, &p.Broker, &p.Peer, &p.Project, &p.Target)
 	if errors.Is(err, sql.ErrNoRows) {
 		return PendingUpdate{}, false, nil
 	}
@@ -420,26 +422,37 @@ func (s *Store) FinishPendingUpdate(id, state, version, text string) error {
 		return fmt.Errorf("%w: unknown final update state %q", ErrRejected, state)
 	}
 	return s.tx(func(tx *sql.Tx) error {
-		var project string
-		err := tx.QueryRow(`SELECT project FROM pending_updates WHERE id=?`, id).Scan(&project)
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		if _, err := tx.Exec(`DELETE FROM pending_updates WHERE id=?`, id); err != nil {
-			return err
-		}
-		if err := touchLocalUpdate(tx, id, state, version, text); err != nil {
-			return err
-		}
-		name, err := computerName(tx)
-		if err != nil {
-			return err
-		}
-		return insertCoordinatorNotice(tx, project, MessengerUpdateEvent, messengerUpdateEvent(name, state, version, text))
+		return finishPendingUpdate(tx, id, state, version, text)
 	})
+}
+
+func finishPendingUpdate(tx *sql.Tx, id, state, version, text string) error {
+	var project, broker, peer string
+	err := tx.QueryRow(`SELECT project,broker,peer FROM pending_updates WHERE id=?`, id).Scan(&project, &broker, &peer)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM pending_updates WHERE id=?`, id); err != nil {
+		return err
+	}
+	if broker != "" {
+		current, err := metaValue(tx, "net_broker")
+		if err != nil || current != broker {
+			return err
+		}
+		return enqueueNet(tx, broker, peer, "update-final."+id, id, netBody{Kind: "update", Task: id, State: state, Detail: clip(version, maxUpdateVersion), Text: clip(text, maxUpdateText)})
+	}
+	if err := touchLocalUpdate(tx, id, state, version, text); err != nil {
+		return err
+	}
+	name, err := computerName(tx)
+	if err != nil {
+		return err
+	}
+	return insertCoordinatorNotice(tx, project, MessengerUpdateEvent, messengerUpdateEvent(name, state, version, text))
 }
 
 // RecordMessengerUpdate writes a messenger_update event for a project on
@@ -691,6 +704,8 @@ func messengerUpdateEvent(name, state, version, text string) string {
 		return "Messenger update of computer «" + name + "» was refused: " + text + " Nothing is retried."
 	case UpdateFailed:
 		return "Messenger update of computer «" + name + "» failed: " + text + " Nothing is retried."
+	case UpdateCancelled:
+		return "The queued Messenger update of computer «" + name + "» was cancelled. Running tasks were left alone."
 	}
 	return "Messenger update of computer «" + name + "»: " + state
 }

@@ -105,7 +105,7 @@ func (s *Supervisor) runNetwork(ctx context.Context) {
 // start, answer or cancel.
 func (s *Supervisor) networkRound(ctx context.Context) {
 	if s.server == nil {
-		s.setNetworkProblem(firstProblem(s.sendUpdateResult(), s.autoUpdate(), s.startQueuedUpdate()))
+		s.setNetworkProblem(s.answerUpdateRequests(""))
 		return
 	}
 	n, ok := s.server.Network()
@@ -126,13 +126,13 @@ func (s *Supervisor) networkRound(ctx context.Context) {
 		if changed {
 			_ = s.store.SetNetwork("", "", nil)
 		}
-		s.setNetworkProblem(firstProblem(s.sendUpdateResult(), s.autoUpdate(), s.startQueuedUpdate()))
+		s.setNetworkProblem(s.answerUpdateRequests(""))
 		return
 	}
 	if refresh {
 		var peers []core.NetPeer
 		for _, p := range s.server.Status().Peers {
-			np := core.NetPeer{ID: p.ID, Name: p.Name, Host: p.Host, Age: p.Age, Version: p.Version, Computer: p.Computer, UpdatePending: p.UpdatePending}
+			np := core.NetPeer{ID: p.ID, Name: p.Name, Host: p.Host, Age: p.Age, Version: p.Version, Computer: p.Computer, UpdatePending: p.UpdatePending, UpdateRequestID: p.UpdateRequestID}
 			if r := p.Ready; r != nil {
 				np.Ready = &core.NetReady{Accept: r.Accept, Projects: r.Projects}
 			}

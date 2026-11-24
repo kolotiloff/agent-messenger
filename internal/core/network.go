@@ -115,7 +115,8 @@ type NetPeer struct {
 	Version string
 	// UpdatePending: the computer is waiting to install a Messenger update
 	// and takes no new tasks (T-155). False when it did not say.
-	UpdatePending bool
+	UpdatePending   bool
+	UpdateRequestID string
 	// Computer is the computer's own lasting id (T-132): it stays the same
 	// when the computer joins another network, where its peer id is new.
 	// Empty for a computer before 0.61.
@@ -410,7 +411,16 @@ func (s *Store) SetNetwork(broker, self string, peers []NetPeer) error {
 				w, _ := json.Marshal(p.Workers)
 				workers = string(w)
 			}
-			if _, err := tx.Exec(`INSERT INTO net_peers(peer,name,host,age,agents,ready,usage,updated_at,missing_since,version,computer,outbox,workers,update_pending) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, p.ID, p.Name, boolInt(p.Host), p.Age, string(raw), ready, usage, at, missing[p.ID], clip(p.Version, 64), validComputer(p.Computer), outbox, workers, boolInt(p.UpdatePending)); err != nil {
+			request := ""
+			if p.UpdatePending && netRef.MatchString(p.UpdateRequestID) {
+				request = p.UpdateRequestID
+				if previous, ok := old[p.ID]; ok && previous.p.UpdateRequestID == request && !previous.p.UpdatePending {
+					// Presence may still contain the queued request that
+					// this computer has already confirmed as cancelled.
+					p.UpdatePending = false
+				}
+			}
+			if _, err := tx.Exec(`INSERT INTO net_peers(peer,name,host,age,agents,ready,usage,updated_at,missing_since,version,computer,outbox,workers,update_pending,update_request_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, p.ID, p.Name, boolInt(p.Host), p.Age, string(raw), ready, usage, at, missing[p.ID], clip(p.Version, 64), validComputer(p.Computer), outbox, workers, boolInt(p.UpdatePending), request); err != nil {
 				return err
 			}
 		}
@@ -452,7 +462,7 @@ func netPeers(tx *sql.Tx) ([]NetPeer, error) {
 }
 
 func readNetPeers(tx *sql.Tx, selection string, args ...any) ([]NetPeer, error) {
-	rows, err := tx.Query(`SELECT peer,name,host,age,agents,ready,usage,updated_at,missing_since!='',version,computer,outbox,workers,update_pending FROM net_peers `+selection, args...)
+	rows, err := tx.Query(`SELECT peer,name,host,age,agents,ready,usage,updated_at,missing_since!='',version,computer,outbox,workers,update_pending,update_request_id FROM net_peers `+selection, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -462,7 +472,7 @@ func readNetPeers(tx *sql.Tx, selection string, args ...any) ([]NetPeer, error) 
 		var p NetPeer
 		var host, pending int
 		var agents, ready, usage, at, outbox, workers string
-		if err := rows.Scan(&p.ID, &p.Name, &host, &p.Age, &agents, &ready, &usage, &at, &p.Reconnecting, &p.Version, &p.Computer, &outbox, &workers, &pending); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &host, &p.Age, &agents, &ready, &usage, &at, &p.Reconnecting, &p.Version, &p.Computer, &outbox, &workers, &pending, &p.UpdateRequestID); err != nil {
 			return nil, err
 		}
 		p.Host, p.UpdatePending = host != 0, pending != 0
@@ -520,7 +530,11 @@ func reconcilePeerUpdates(tx *sql.Tx, peers []NetPeer) error {
 	now := time.Now()
 	for i := range peers {
 		peer := &peers[i]
+		pending := peer.UpdatePending
 		peer.Version, peer.UpdatePending = byPeer[peer.ID].PeerUpdateState(peer.Version, peer.UpdatePending, peer.Age, now)
+		if pending && !peer.UpdatePending {
+			peer.UpdateRequestID = ""
+		}
 	}
 	return nil
 }
@@ -1060,6 +1074,12 @@ func (s *Store) netUndeliverable(seq int64, opID, broker, recipient string) erro
 		if kind == "update_request" || kind == "update" {
 			return updateUndeliverable(tx, kind, task)
 		}
+		if kind == "update_cancel_result" {
+			return nil
+		}
+		if kind == "update_cancel_request" {
+			return applyUpdateCancellationResult(tx, netLink{broker: msgBroker, peer: to, task: task}, netBody{State: UpdateFailed, Text: "the computer is no longer in the network"})
+		}
 		var project, state string
 		if err := tx.QueryRow(`SELECT project,state FROM tasks WHERE id=?`, task).Scan(&project, &state); err != nil {
 			return err
@@ -1155,6 +1175,10 @@ func (s *Store) ApplyNet(broker string, m NetIncoming) error {
 			return applyUpdateRequest(tx, from, b)
 		case "update":
 			return applyUpdateReply(tx, from, b)
+		case "update_cancel_request":
+			return applyUpdateCancellation(tx, from, b)
+		case "update_cancel_result":
+			return applyUpdateCancellationResult(tx, from, b)
 		}
 		return nil
 	})
@@ -1189,6 +1213,10 @@ func (s *Store) applySplitNet(broker string, m NetIncoming) error {
 				err = applyUpdateRequest(tx, from, body)
 			case "update":
 				err = applyUpdateReply(tx, from, body)
+			case "update_cancel_request":
+				err = applyUpdateCancellation(tx, from, body)
+			case "update_cancel_result":
+				err = applyUpdateCancellationResult(tx, from, body)
 			}
 			if err != nil {
 				return err

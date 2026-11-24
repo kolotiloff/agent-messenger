@@ -301,6 +301,7 @@
   'На нём работает сервер сети: пока он перезапускается, компьютеры не видят друг друга. Если там попросят подтверждение, сервер не вернётся, пока кто-нибудь не ответит у того компьютера.':'It runs the network server: while it restarts, the computers do not see each other. If it asks for a confirmation there, the server does not come back until someone answers at that computer.',
   'Компьютер':'Computer',
   ' не обновлён':' was not updated',
+  ': обновление отменено':': update cancelled',
   ' не ответил об обновлении':' did not answer about the update',
   'Проверьте, что программа там запущена, и попросите ещё раз.':'Check that the program runs there, and ask again.',
   ': уже последняя версия':': already the latest version',

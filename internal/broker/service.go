@@ -124,6 +124,7 @@ type Service struct {
 	outboxSkip time.Time
 	// updatePendingSkip is the same for a queued Messenger update (T-155).
 	updatePendingSkip time.Time
+	updateRequestSkip time.Time
 	// limitSkip is the same for the checked limit fields (T-191).
 	limitSkip time.Time
 	// usageSkip is the same for usage. usageSent is the version of this
@@ -801,6 +802,9 @@ func (s *Service) ReportPresence(ctx context.Context) {
 	if time.Now().Before(s.updatePendingSkip) {
 		p.UpdatePending = false
 	}
+	if !p.UpdatePending || time.Now().Before(s.updateRequestSkip) {
+		p.UpdateRequestID = ""
+	}
 	if time.Now().Before(s.limitSkip) {
 		p.Agents = plainLimits(p.Agents)
 	}
@@ -822,6 +826,13 @@ func (s *Service) ReportPresence(ctx context.Context) {
 		p.Ready = nil
 	}
 	peers, err := Report(call, *c, p)
+	if errors.Is(err, errPresenceRefused) && p.UpdateRequestID != "" {
+		s.mu.Lock()
+		s.updateRequestSkip = time.Now().Add(readyRetry)
+		s.mu.Unlock()
+		p.UpdateRequestID = ""
+		peers, err = Report(call, *c, p)
+	}
 	// A stuck mailbox is not part of this report. Drop the fields an older
 	// host refuses before touching model names, so a refusal of one field
 	// does not publish an empty model list (T-173).

@@ -5,7 +5,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kolotiloff/agent-messenger/internal/buildinfo"
+	"github.com/kolotiloff/agent-messenger/internal/core"
 	"github.com/kolotiloff/agent-messenger/internal/journal"
+	"github.com/kolotiloff/agent-messenger/internal/selfupdate"
 )
 
 // Automatic updates of this computer (T-277, D-191). While the owner has
@@ -15,8 +18,8 @@ import (
 // request uses: it waits until no task runs here, then the helper installs
 // the update and restarts the client. A Mac is updated by its app.
 
-// UpdateFinder returns the version of a newer signed release than the
-// running program, or "" when there is none. It downloads nothing.
+// UpdateFinder returns the newest verified release, including the running
+// version when it is current. An empty version proves nothing.
 type UpdateFinder func(context.Context) (string, error)
 
 // autoUpdateEvery matches the window's look: GitHub allows 60 checks an
@@ -24,10 +27,12 @@ type UpdateFinder func(context.Context) (string, error)
 var autoUpdateEvery = 30 * time.Minute
 
 type autoUpdateState struct {
-	mu      sync.Mutex
-	looking bool
-	looked  time.Time
-	found   string
+	mu         sync.Mutex
+	looking    bool
+	looked     time.Time
+	found      string
+	lookedFor  string
+	checkedFor string
 }
 
 // autoUpdateSupported reports whether this computer can update itself.
@@ -45,14 +50,22 @@ func (s *Supervisor) autoUpdate() string {
 	if err != nil {
 		return "настройка автообновления не читается: " + err.Error()
 	}
-	if !on {
+	pending, hasPending, err := s.store.PendingUpdate()
+	if err != nil {
+		return "очередь обновления не читается: " + err.Error()
+	}
+	if (!on && !hasPending) || s.updateBusy() || (hasPending && pending.Target != "") {
 		return ""
 	}
 	a := &s.auto
 	a.mu.Lock()
-	found := a.found
-	if !a.looking && (a.looked.IsZero() || time.Since(a.looked) >= autoUpdateEvery) {
+	found, checkedFor := a.found, a.checkedFor
+	newRequest := hasPending && a.lookedFor != pending.ID
+	if !a.looking && (newRequest || a.looked.IsZero() || time.Since(a.looked) >= autoUpdateEvery) {
 		a.looking, a.looked = true, time.Now()
+		a.lookedFor = pending.ID
+		// Bind the answer to the request present when the check started.
+		// A result received later must not finish a new request.
 		s.bg.Add(1)
 		go func() {
 			defer s.bg.Done()
@@ -62,13 +75,23 @@ func (s *Supervisor) autoUpdate() string {
 			a.mu.Lock()
 			defer a.mu.Unlock()
 			a.looking = false
+			a.found, a.checkedFor = "", ""
 			if err == nil {
-				a.found = version
+				a.found, a.checkedFor = version, pending.ID
 			}
 		}()
 	}
 	a.mu.Unlock()
-	if found == "" || ProgramPath(s.root) == "" || s.updateBusy() {
+	build, running := selfupdate.Build(found), selfupdate.Build(buildinfo.Version)
+	if hasPending {
+		if checkedFor == pending.ID && build > 0 && build <= running {
+			if err := s.store.FinishPendingUpdate(pending.ID, core.UpdateDone, buildinfo.Version, "уже последняя версия"); err != nil {
+				return "результат обновления не записан: " + err.Error()
+			}
+		}
+		return ""
+	}
+	if !on || build <= running || ProgramPath(s.root) == "" {
 		return ""
 	}
 	queued, err := s.store.QueueAutoUpdate(found)

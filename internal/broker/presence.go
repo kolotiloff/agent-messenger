@@ -298,7 +298,8 @@ type Presence struct {
 	// UpdatePending: this computer is waiting to install a Messenger
 	// update and takes no new tasks (T-155). A host that does not know
 	// the field refuses the report; the client then reports without it.
-	UpdatePending bool `json:"update_pending,omitempty"`
+	UpdatePending   bool   `json:"update_pending,omitempty"`
+	UpdateRequestID string `json:"update_request_id,omitempty"`
 }
 
 // Peer is one computer of the broker as others see it.
@@ -332,7 +333,8 @@ type Peer struct {
 	Workers *PresenceWorkers `json:"workers,omitempty"`
 	// UpdatePending: the computer is waiting to install a Messenger update
 	// (T-155); false if it did not say.
-	UpdatePending bool `json:"update_pending,omitempty"`
+	UpdatePending   bool   `json:"update_pending,omitempty"`
+	UpdateRequestID string `json:"update_request_id,omitempty"`
 }
 
 // rosterResponse answers a presence report.
@@ -345,6 +347,9 @@ type rosterResponse struct {
 // publishable keeps a report the server can store. A long or unreadable
 // model list must not drop the whole report: the names that fit are sent.
 func (p *Presence) publishable() {
+	if !p.UpdatePending || !messageOp.MatchString(p.UpdateRequestID) || len(p.UpdateRequestID) > 80 {
+		p.UpdateRequestID = ""
+	}
 	for i := range p.Agents {
 		var models []string
 		for _, m := range p.Agents[i].Models {
@@ -357,6 +362,9 @@ func (p *Presence) publishable() {
 }
 
 func (p Presence) valid() bool {
+	if p.UpdateRequestID != "" && (!p.UpdatePending || len(p.UpdateRequestID) > 80 || !messageOp.MatchString(p.UpdateRequestID)) {
+		return false
+	}
 	if len(p.Agents) > maxPresenceAgents || len(p.Coordinator) > 64 || (p.Name != "" && !validDeviceName(p.Name)) || !p.Ready.valid() || !p.Usage.valid() || len(p.UsageSeen) > maxUsageSeen || (p.Version != "" && !versionName.MatchString(p.Version)) || (p.Computer != "" && !versionName.MatchString(p.Computer)) || !p.Outbox.valid() || !p.Workers.valid() {
 		return false
 	}
@@ -509,6 +517,7 @@ func fill(peer *Peer, report, at string, now time.Time) {
 		peer.Name = p.Name
 	}
 	peer.Coordinator, peer.Ready, peer.Usage, peer.Version, peer.Computer, peer.Outbox, peer.Workers, peer.UpdatePending = p.Coordinator, p.Ready, p.Usage, p.Version, p.Computer, p.Outbox, p.Workers, p.UpdatePending
+	peer.UpdateRequestID = p.UpdateRequestID
 	if p.Agents != nil {
 		peer.Agents = p.Agents
 	}
