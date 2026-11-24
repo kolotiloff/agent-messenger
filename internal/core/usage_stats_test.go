@@ -137,6 +137,10 @@ func TestUsageStats(t *testing.T) {
 	if _, err := f.st.db.Exec(`UPDATE tasks SET remote_peer='peer-mac',remote_broker='b',remote_task='x' WHERE id=?`, remote); err != nil {
 		t.Fatal(err)
 	}
+	// The task was sent in the current network (D-192).
+	if _, err := f.st.db.Exec(`INSERT INTO meta(key,value) VALUES ('net_broker','b') ON CONFLICT(key) DO UPDATE SET value=excluded.value`); err != nil {
+		t.Fatal(err)
+	}
 	since := time.Now().Add(-7 * 24 * time.Hour)
 	s, err := f.st.UsageStats(since, time.Local, "")
 	if err != nil {
