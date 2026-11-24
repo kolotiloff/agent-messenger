@@ -544,7 +544,8 @@
         const tasks=state==='run'?running:waiting;
         const dates=tasks.map(taskStart).filter(at=>Number.isFinite(Date.parse(at)));
         const first=dates.reduce((old,at)=>!old||Date.parse(at)<Date.parse(old)?at:old,'');
-        const models=[...new Set(tasks.map(t=>t.shared?(t.model?modelName(t.model):''):taskModelLabel(t)).filter(Boolean))];
+        // Shared task lists already put the worker's reported model in model.
+        const models=[...new Set(tasks.map(t=>t.shared?t.model:t.ran_model).filter(Boolean).map(modelName))];
         if(models.length)identity.append(' ',el('span',models.map(m=>m.replace(/ Medium$/,' Med')).join(', '),'am-agent-model'));
         const total=counts.running+counts.waiting_owner;
         const count=total>1?'('+total+')':'';

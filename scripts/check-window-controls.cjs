@@ -529,7 +529,8 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const waitingLabelBox=await waiting.locator('span').first().boundingBox(),waitingStatusBox=await waitingStatus.boundingBox();
       assert(Math.abs(waitingStatusBox.x-waitingLabelBox.x-waitingLabelBox.width)<1,'waiting status must sit directly beside the model');
       const overlappingAgent=runner.locator('.am-agent-run[data-provider=codex]');
-      assert.equal(await overlappingAgent.locator('.am-agent-model').textContent(),'по умолчанию');
+      assert.equal(await overlappingAgent.locator('.am-agent-model').count(),0);
+      assert.equal(await overlappingAgent.locator('.am-agent-running-label').innerText(),'Codex');
       assert.equal(await overlappingAgent.locator('.am-agent-status').textContent(),'(2) 3 мин');
       assert.match(await overlappingAgent.getAttribute('title'),/, ждёт ответа \(1\)/);
       const chooseProject = async name => {
@@ -801,9 +802,12 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const remoteList=page.locator('.am-task',{hasText:remoteTask.title});
       const remoteHead=page.locator('#task-head');
       assert.equal(await remoteList.locator('.am-task-when').getAttribute('datetime'),began);
+      remoteRow={...remoteTask,model:'gpt-6.2-sol[effort=low]'};
+      await remoteList.getByText('модель не подтверждена',{exact:true}).waitFor();
+      assert.equal(await remoteAgent.locator('.am-agent-model').count(),0);
       // The feed may not yet have a model. All three surfaces take the model
       // and state from the task row, and tick without a new payload.
-      remoteRow={...remoteTask,ran_model:'gpt-6.2-astra[effort=high]'};
+      remoteRow={...remoteRow,ran_model:'gpt-6.2-astra[effort=high]'};
       await remoteHead.getByText(/Astra 6\.2 High/).waitFor();
       assert.equal(await remoteList.locator('.am-task-model').textContent(),'Astra 6.2 High');
       assert.equal(await remoteAgent.locator('.am-agent-model').textContent(),'Astra 6.2 High');

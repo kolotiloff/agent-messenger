@@ -15,6 +15,10 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 - Confirmed the 0.99 check still returned current in an isolated home. The corrected finder staged signed build 101 on the owner’s Mac. Added independent public release checks for all five platform routes and an optional, reversible archive step for blocking discovery manifests.
 
+## 2026-11-24 — Codex (T-281)
+
+- Computer cards show the agent name and its status while the worker has yet to report a model. Once the reported model arrives, it appears beside the name. Verified in Chromium and WebKit with fictional local and remote tasks.
+
 ## 2026-11-24 — Codex (T-282)
 
 - Reproduced the false current-version result from the installed 0.99 binary. The GitHub response listed builds 99, 98, and 100 in that order. Select by numeric preview build and require a signed version matching its tag. The updater race tests passed, and the patched 0.99 test binary found the real signed 0.100 in a separate home directory. Also verified the signature on the direct Mac download. The published 0.100 binaries predate this updater fix.

@@ -111,6 +111,8 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 ## Next
 
+T-281 is implemented on `codex/t281-hide-unconfirmed-sidebar-model` and pending release. Chromium and WebKit checks cover missing and requested-only models, followed by a reported model.
+
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
 | T-286 | Identify this computer in the computer sidebar. | window | Implemented after 1.0, pending the next release. A thin inset stripe on the left edge of the local card. It follows the computer when reordered, stays on it when another card is selected, and uses a soft white in dark mode and gray in light mode. |
