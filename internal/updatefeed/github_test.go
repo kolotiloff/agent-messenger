@@ -29,15 +29,15 @@ type transportFunc func(*http.Request) (*http.Response, error)
 func (f transportFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 func fixturePackage(t *testing.T, key ed25519.PrivateKey, build int) (Manifest, []byte, []byte, []byte) {
 	t.Helper()
-	archive := []byte("archive for build " + string(rune('0'+build)))
+	archive := []byte("archive for build " + strconv.Itoa(build))
 	h := sha256.Sum256(archive)
-	m := Manifest{Schema: 1, Build: build, Version: "0.0.0-preview." + string(rune('0'+build)), Revision: strings.Repeat("a", 40), OS: runtime.GOOS, Arch: runtime.GOARCH, ClientAPI: 1, SHA256: hex.EncodeToString(h[:]), Length: int64(len(archive)), Signature: base64.StdEncoding.EncodeToString(ed25519.Sign(key, archive))}
+	m := Manifest{Schema: 1, Build: build, Version: "0.0.0-preview." + strconv.Itoa(build), Revision: strings.Repeat("a", 40), OS: runtime.GOOS, Arch: runtime.GOARCH, ClientAPI: 1, SHA256: hex.EncodeToString(h[:]), Length: int64(len(archive)), Signature: base64.StdEncoding.EncodeToString(ed25519.Sign(key, archive))}
 	raw, _ := json.Marshal(m)
 	signature := []byte(base64.StdEncoding.EncodeToString(ed25519.Sign(key, raw)))
 	return m, raw, signature, archive
 }
 func TestGitHubDownloadCommitAndFailurePreservePreviousPackage(t *testing.T) {
-	for _, scenario := range []string{"valid", "tampered manifest", "tampered archive", "interrupted", "oversized", "duplicate asset", "missing signature", "http error", "downgrade", "conflict", "redirect", "bad redirect", "foreign address", "rate limit"} {
+	for _, scenario := range []string{"valid", "tampered manifest", "tampered archive", "interrupted", "oversized", "duplicate asset", "missing signature", "http error", "downgrade", "conflict", "tag mismatch", "redirect", "bad redirect", "foreign address", "rate limit"} {
 		t.Run(scenario, func(t *testing.T) {
 			pub, key, _ := ed25519.GenerateKey(rand.Reader)
 			c := Channel{Directory: t.TempDir(), PublicKey: base64.StdEncoding.EncodeToString(pub)}
@@ -57,7 +57,10 @@ func TestGitHubDownloadCommitAndFailurePreservePreviousPackage(t *testing.T) {
 				sig = []byte(base64.StdEncoding.EncodeToString(ed25519.Sign(key, raw)))
 			}
 			name := "update-" + runtime.GOOS + "-" + runtime.GOARCH + ".json"
-			const tag = "v0.0.0-preview.7"
+			tag := "v" + m.Version
+			if scenario == "tag mismatch" {
+				tag = "v0.0.0-preview.8"
+			}
 			at := func(n string) string { return releaseDownload + tag + "/" + n }
 			assets := []releaseAsset{{ID: 1, Name: name, State: "uploaded", Size: int64(len(raw)), URL: at(name)}, {ID: 2, Name: name + ".sig", State: "uploaded", Size: int64(len(sig)), URL: at(name + ".sig")}, {ID: 3, Name: m.SHA256 + ".zip", State: "uploaded", Size: int64(len(archive)), URL: at(m.SHA256 + ".zip")}}
 			if scenario == "duplicate asset" {
@@ -184,6 +187,60 @@ func TestGitHubDownloadCommitAndFailurePreservePreviousPackage(t *testing.T) {
 				t.Fatal("transport not exercised")
 			}
 		})
+	}
+}
+
+func TestGitHubSelectsHighestBuildInUnorderedList(t *testing.T) {
+	pub, key, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	channel := Channel{Directory: t.TempDir(), PublicKey: base64.StdEncoding.EncodeToString(pub)}
+	name := "update-" + runtime.GOOS + "-" + runtime.GOARCH + ".json"
+	list := []release{}
+	files := map[string][]byte{}
+	for _, build := range []int{99, 98, 100, 101} {
+		m, raw, sig, archive := fixturePackage(t, key, build)
+		r := release{Tag: "v" + m.Version, Draft: build == 101}
+		for _, asset := range []struct {
+			name string
+			data []byte
+		}{{name, raw}, {name + ".sig", sig}, {m.SHA256 + ".zip", archive}} {
+			address := releaseDownload + r.Tag + "/" + asset.name
+			r.Assets = append(r.Assets, releaseAsset{
+				ID: int64(len(r.Assets) + 1), Name: asset.name, State: "uploaded",
+				Size: int64(len(asset.data)), URL: address,
+			})
+			files[address] = asset.data
+		}
+		list = append(list, r)
+	}
+	listing, err := json.Marshal(list)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+		address := req.URL.String()
+		data := files[address]
+		if address == releaseAPI+"?per_page=20" {
+			data = listing
+		}
+		if data == nil {
+			t.Fatalf("unexpected request: %s", address)
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(data)),
+			ContentLength: int64(len(data)), Request: req,
+		}, nil
+	})}
+	for _, check := range []struct {
+		fetch bool
+		state string
+	}{{false, "found"}, {true, "downloaded"}} {
+		got, err := channel.syncGitHub(context.Background(), 99, client, check.fetch)
+		if err != nil || got.Version != "0.0.0-preview.100" || got.State != check.state {
+			t.Fatalf("fetch=%t: got %+v, error %v", check.fetch, got, err)
+		}
 	}
 }
 func TestUpdateChannelRejectsBrokenEnvelopeWithoutLegacyFallback(t *testing.T) {
