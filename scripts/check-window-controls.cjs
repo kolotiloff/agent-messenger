@@ -161,8 +161,9 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       // T-277: the automatic update switch shows only where the client can
       // update itself, and changes only through the owner's click.
       const autoRow = page.locator('#auto-update-row'), autoToggle = page.locator('#auto-update-toggle');
+      const serverRead = page.waitForResponse(response => new URL(response.url()).pathname === '/api/server');
       await page.locator('#settings-open').click();
-      await page.waitForResponse(response => new URL(response.url()).pathname === '/api/server');
+      await serverRead;
       assert.equal(await autoRow.isVisible(), false, 'no switch where automatic updates are unavailable');
       await page.locator('#settings-close').click();
       autoSupported = true;
