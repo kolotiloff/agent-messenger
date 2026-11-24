@@ -7,6 +7,30 @@
 const {strict: assert} = require('node:assert');
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const zlib = require('node:zlib');
+
+// A plain PNG picture: a task picture is PNG, JPEG, GIF or WebP, never SVG.
+function png(width, height, paint) {
+  const crcTable = Array.from({length: 256}, (_, n) => { for (let k = 0; k < 8; k++) n = n & 1 ? 0xedb88320 ^ (n >>> 1) : n >>> 1; return n >>> 0; });
+  const crc = bytes => { let c = 0xffffffff; for (const b of bytes) c = crcTable[(c ^ b) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const chunk = (type, data) => {
+    const body = Buffer.concat([Buffer.from(type, 'latin1'), data]);
+    const out = Buffer.alloc(body.length + 8);
+    out.writeUInt32BE(data.length, 0); body.copy(out, 4); out.writeUInt32BE(crc(body), body.length + 4);
+    return out;
+  };
+  const rows = Buffer.alloc((width * 3 + 1) * height);
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) rows.set(paint(x, y), y * (width * 3 + 1) + 1 + x * 3);
+  const head = Buffer.alloc(13);
+  head.writeUInt32BE(width, 0); head.writeUInt32BE(height, 4); head[8] = 8; head[9] = 2;
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', head), chunk('IDAT', zlib.deflateSync(rows)), chunk('IEND', Buffer.alloc(0))]);
+}
+const pictures = [false, true].map(dark => png(1600, 1000, (x, y) => {
+  const panel = x >= 80 && x < 500 && y >= 80 && y < 920;
+  const circle = (x - 1040) ** 2 + (y - 580) ** 2 < 220 ** 2;
+  return dark ? (circle ? [0x5a, 0x7b, 0xd8] : panel ? [0x2b, 0x34, 0x45] : [0x1d, 0x24, 0x30])
+    : (circle ? [0x7f, 0xb3, 0x7a] : panel ? [0xff, 0xff, 0xff] : [0xe8, 0xee, 0xf7]);
+}));
 const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const assets = path.resolve(__dirname, '../internal/localui/assets');
 
@@ -56,9 +80,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           {kind: 'report', author: 'worker', text: 'Готово, снимки экрана ниже.', at: row.created_at, images: [{id: 'img-1', name: 'окно-светлое.png'}, {id: 'img-2', name: 'окно-тёмное.png'}]}]}});
       }
       if (url.pathname === '/api/task-image') {
-        const dark = url.searchParams.get('id') === 'img-2';
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000"><rect width="1600" height="1000" fill="${dark ? '#1d2430' : '#e8eef7'}"/><rect x="80" y="80" width="420" height="840" rx="24" fill="${dark ? '#2b3445' : '#fff'}"/><rect x="560" y="80" width="960" height="120" rx="24" fill="${dark ? '#334' : '#cfd9ea'}"/><text x="620" y="160" font-size="56" font-family="sans-serif" fill="${dark ? '#dde' : '#223'}">Тестовая картинка ${dark ? 2 : 1}</text><circle cx="1040" cy="580" r="220" fill="${dark ? '#5a7bd8' : '#7fb37a'}"/></svg>`;
-        return route.fulfill({body: svg, contentType: 'image/svg+xml'});
+        return route.fulfill({body: pictures[url.searchParams.get('id') === 'img-2' ? 1 : 0], contentType: 'image/png'});
       }
       if (url.pathname === '/api/usage-stats') {
         await delay(150);
