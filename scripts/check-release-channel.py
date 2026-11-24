@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+from release_version import release_info
 import re
 import subprocess
 import tempfile
@@ -45,8 +46,9 @@ def verify(release, target, verifier, key, directory):
     signature = read(asset(release, name + ".sig")["browser_download_url"], 256)
     subprocess.run([verifier, key, manifest, signature.decode().strip()], check=True)
     data = json.loads(manifest.read_bytes())
-    version = f"0.0.0-preview.{data['build']}"
-    if (data["build"] < 101 or version != data["version"] or "v" + version != release["tag_name"]
+    version = data["version"]
+    _, build = release_info(version)
+    if (data["build"] < 101 or build != data["build"] or "v" + version != release["tag_name"]
             or target != f"{data['os']}-{data['arch']}" or not re.fullmatch("[a-f0-9]{64}", data["sha256"])):
         raise ValueError(f"Invalid signed upgrade destination for {target}")
     archive = asset(release, data["sha256"] + ".zip")

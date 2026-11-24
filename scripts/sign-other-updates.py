@@ -10,6 +10,8 @@ it cannot be run here (another system).
 """
 import argparse, base64, hashlib, json, pathlib, re, subprocess, zipfile
 
+from release_version import release_info
+
 p = argparse.ArgumentParser()
 p.add_argument('archives', type=pathlib.Path, help='folder with <os>-<arch>.zip files')
 p.add_argument('--version', required=True)
@@ -20,11 +22,9 @@ p.add_argument('--public-key', required=True)
 p.add_argument('--out', required=True, type=pathlib.Path)
 a = p.parse_args()
 
-if not re.fullmatch(r'0\.0\.0-preview\.[1-9][0-9]{0,8}', a.version):
-    raise SystemExit('A numbered preview version is required')
+_, build = release_info(a.version)
 if not re.fullmatch(r'[0-9a-f]{40}', a.revision):
     raise SystemExit('A full source revision is required')
-build = int(a.version.rsplit('.', 1)[1])
 notes = a.notes.read_text()
 if len(notes.encode()) > 16000:
     raise SystemExit('Notes exceed limits')

@@ -13,7 +13,7 @@ import (
 // menu brought it back instead of the new version. A window started from an
 // older installed version is stale: the new one closes it and opens itself.
 
-var previewVersion = regexp.MustCompile(`^0\.0\.0-preview\.(\d+)$`)
+var previewVersion = regexp.MustCompile(`^(?:0\.0\.0|[1-9][0-9]*\.[0-9]+\.[0-9]+)-preview\.(\d+)$`)
 
 func previewNumber(version string) (int, bool) {
 	m := previewVersion.FindStringSubmatch(version)

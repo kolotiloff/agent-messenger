@@ -71,5 +71,8 @@ func runUpdateChannel(fetch bool) error {
 	if err != nil {
 		return err
 	}
-	return json.NewEncoder(os.Stdout).Encode(result)
+	return json.NewEncoder(os.Stdout).Encode(struct {
+		updatefeed.SyncResult
+		DisplayVersion string `json:"display_version,omitempty"`
+	}{result, updatefeed.ShortVersion(result.Version)})
 }

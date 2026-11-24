@@ -8,6 +8,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+2026-11-24 (T-284). Release 0.102 was published; the original 0.99 updater still saw itself first on GitHub. The owner chose public version 1.0. Use tag `v1.0.0-preview.103`, signed build 103, with a single public release for existing and new clients.
+
 Updated 2026-11-24 by Codex (T-283). The original 0.99 binary still returned current after 0.101 shipped. Added a public-channel check to the release workflow and an opt-in recovery for legacy discovery. Fleet delivery requires verification after publication.
 
 Updated 2026-11-24 by Codex (T-282).

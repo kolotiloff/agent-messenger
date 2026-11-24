@@ -24,7 +24,7 @@ const netContinueSince = 60
 // interrupted task on request from another computer (T-159).
 const netContinueInterruptedSince = 75
 
-var previewBuild = regexp.MustCompile(`^0\.0\.0-preview\.(\d+)$`)
+var previewBuild = regexp.MustCompile(`^(?:0\.0\.0|[1-9][0-9]*\.[0-9]+\.[0-9]+)-preview\.(\d+)$`)
 
 // peerReadsContinue says whether a computer's reported version reads
 // "continue" messages. A version this code cannot read is assumed newer.

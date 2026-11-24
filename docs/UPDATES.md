@@ -52,6 +52,8 @@ On Windows, the update and the installer's handoff to the installed program star
 
 The **Release preview** workflow (`.github/workflows/release.yml`) builds, signs and publishes a preview from `main`. Run it under **Actions → Release preview → Run workflow** with the version (for example, `0.0.0-preview.86`) and release notes.
 
+From 1.0, the public name comes from the semantic version before the signed build suffix. For example, `1.0.0-preview.103` displays as 1.0 and sorts as build 103. Earlier builds keep their original names.
+
 People see the short version: the release title, the Mac app («О программе», `CFBundleShortVersionString`), the Mac update dialog and the window say «0.58» for `0.0.0-preview.58` (owner, 2026-11-09, D-105). The tag, the manifests and the program's own `version` keep the full form, because every installed program checks it before it accepts an update; changing it would need a release that accepts both forms first, and all computers updated to it.
 
 1. **Checks.** It refuses any ref other than `main`, a malformed version, an existing tag and empty notes. Then it runs `scripts/check.sh`.
