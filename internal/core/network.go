@@ -546,6 +546,32 @@ func peerName(tx *sql.Tx, id string) string {
 	return name
 }
 
+// formerComputer names the other computer of a task from an earlier
+// network when its name was not kept.
+const formerComputer = "компьютер прежней сети"
+
+// currentBroker is the network this computer is in now, or "".
+func currentBroker(q interface {
+	QueryRow(string, ...any) *sql.Row
+}) (string, error) {
+	var broker string
+	err := q.QueryRow(`SELECT COALESCE((SELECT value FROM meta WHERE key='net_broker'),'')`).Scan(&broker)
+	return broker, err
+}
+
+// linkComputer gives the window's id and name of a task's other computer.
+// A peer id means a computer only within its own network, and «host» names
+// whichever computer runs the server, so a task bound to an earlier network
+// gets no id and no name here: after the server moved, its old «host» is
+// another computer now (owner, 2026-11-24).
+func linkComputer(machine *sql.Tx, link netLink) (id, name string, err error) {
+	broker, err := currentBroker(machine)
+	if err != nil || broker == "" || broker != link.broker {
+		return "", "", err
+	}
+	return link.peer, peerName(machine, link.peer), nil
+}
+
 // NetAccept reports whether this computer runs tasks that other computers
 // of its network start. It is off until the owner turns it on (Q-014).
 func (s *Store) NetAccept() (bool, error) {
@@ -713,7 +739,11 @@ func answerRemoteTask(machine, tx *sql.Tx, t Task, remote netLink, question, opI
 	if _, err := tx.Exec(`UPDATE task_questions SET state='answered',answer=?,answer_op=?,answered_by=? WHERE id=?`, text, opID, by, question); err != nil {
 		return err
 	}
-	if err := setTaskState(tx, t.ID, "running", "answer sent to "+peerName(machine, remote.peer)); err != nil {
+	contact, err := remoteComputer(machine, tx, t.ID, remote)
+	if err != nil {
+		return err
+	}
+	if err := setTaskState(tx, t.ID, "running", "answer sent to "+contact.Name); err != nil {
 		return err
 	}
 	answeredFor := AudienceLog
@@ -756,8 +786,8 @@ func cancelRemoteTask(machine, tx *sql.Tx, t Task, remote netLink) (string, erro
 	// there is already unknown, or when a cancel was asked for and no
 	// answer came. What happened there stays unknown; a cancel still goes
 	// out if that computer is in this network, for when it is back.
-	contact := RemoteComputer{ID: remote.peer, Name: peerName(machine, remote.peer)}
-	if err := remoteContact(machine, tx, t.ID, remote, &contact); err != nil {
+	contact, err := remoteComputer(machine, tx, t.ID, remote)
+	if err != nil {
 		return "", err
 	}
 	if t.CancelRequested && !contact.Silent && !contact.Lost {

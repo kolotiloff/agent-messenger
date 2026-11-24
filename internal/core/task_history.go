@@ -10,17 +10,24 @@ const windowHistorySize = 10
 
 const finishedWindowStates = `('done','failed','cancelled')`
 
+// A task sent in an earlier network belongs to no computer of the current
+// one: its peer id there may name another computer now (linkComputer).
 const windowHistoryWhere = `project=? AND hidden_at IS NULL AND state IN ` + finishedWindowStates + `
- AND (?='' OR provider=?) AND (?='' OR COALESCE(remote_peer,'local')=?)`
+ AND (?='' OR provider=?) AND (?='' OR CASE WHEN remote_peer IS NULL THEN 'local' WHEN remote_broker=? THEN remote_peer ELSE '' END=?)`
+
+// windowHistoryArgs are the arguments of windowHistoryWhere.
+func windowHistoryArgs(project, agent, computer, broker string) []any {
+	return []any{project, agent, agent, computer, broker, computer}
+}
 
 type TaskHistoryPage struct {
 	Tasks []WindowTask `json:"tasks"`
 	Next  string       `json:"next,omitempty"`
 }
 
-func (s *Store) windowHistoryVersion(project, agent, computer string) (string, error) {
+func (s *Store) windowHistoryVersion(project, agent, computer, broker string) (string, error) {
 	rows, err := s.db.Query(`SELECT id,version,updated_at,COALESCE(ran_model,'') FROM tasks WHERE `+windowHistoryWhere+`
- ORDER BY created_at DESC,rowid DESC LIMIT ?`, project, agent, agent, computer, computer, windowHistorySize+1)
+ ORDER BY created_at DESC,rowid DESC LIMIT ?`, append(windowHistoryArgs(project, agent, computer, broker), windowHistorySize+1)...)
 	if err != nil {
 		return "", err
 	}
@@ -40,15 +47,20 @@ func (s *Store) windowHistoryVersion(project, agent, computer string) (string, e
 // WindowTaskHistory reads completed cards older than before. The saved
 // position also works if that card was hidden between requests.
 func (s *Store) WindowTaskHistory(project, before, agent, computer string) (TaskHistoryPage, error) {
-	if s.split != nil {
-		scoped, err := s.projectStore(project)
-		if err != nil {
-			return TaskHistoryPage{}, err
-		}
-		return scoped.WindowTaskHistory(project, before, agent, computer)
+	broker, err := currentBroker(s.db)
+	if err != nil {
+		return TaskHistoryPage{}, err
 	}
+	scoped, err := s.projectStore(project)
+	if err != nil {
+		return TaskHistoryPage{}, err
+	}
+	return scoped.windowTaskHistory(project, before, agent, computer, broker)
+}
+
+func (s *Store) windowTaskHistory(project, before, agent, computer, broker string) (TaskHistoryPage, error) {
 	where := `WHERE ` + windowHistoryWhere
-	args := []any{project, agent, agent, computer, computer}
+	args := windowHistoryArgs(project, agent, computer, broker)
 	if before != "" {
 		where += ` AND (created_at,rowid)<(SELECT created_at,rowid FROM tasks WHERE project=? AND id=?)`
 		args = append(args, project, before)
@@ -65,10 +77,14 @@ func (s *Store) WindowTaskHistory(project, before, agent, computer string) (Task
 // HideWindowHistory clears the completed list for the selected filter in
 // one operation, including cards that have not been fetched by the window.
 func (s *Store) HideWindowHistory(project, agent, computer string) error {
+	broker, err := currentBroker(s.db)
+	if err != nil {
+		return err
+	}
 	scoped, err := s.projectStore(project)
 	if err != nil {
 		return err
 	}
-	_, err = scoped.db.Exec(`UPDATE tasks SET hidden_at=? WHERE `+windowHistoryWhere, now(), project, agent, agent, computer, computer)
+	_, err = scoped.db.Exec(`UPDATE tasks SET hidden_at=? WHERE `+windowHistoryWhere, append([]any{now()}, windowHistoryArgs(project, agent, computer, broker)...)...)
 	return err
 }

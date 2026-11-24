@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-24 — Claude Code (T-278, T-279)
+
+- T-278 (D-192): the VPS card listed finished tasks sent to ПК-2 in the earlier network, because «host» named ПК-2 then and names the VPS now. Tasks whose broker is not the current network no longer match any current computer in the window, its filter and cleanup, the shared list and the usage page. T-279: choosing a computer waits for the program's list instead of flashing an empty one; new `scripts/check-window-computer-switch.cjs`. Not released.
+
 ## 2026-11-24 — Claude Code (0.98 release)
 
 - Published [0.98](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.98) from `1fac081` with T-268 to T-277. Verified 22 assets and all five signed update sets (signature, version, source SHA, archive hash and length). Before the merge, the WebKit window checks on PR #183 failed four times on test-environment issues, fixed in the test scripts only: the picture fixture now serves PNG and lets `blob:` loads through, the settings read is awaited from before the click, the action group is reopened after a lost click, and cancelled requests while the switch check leaves the page are expected. No installed-app or VPS upgrade was performed.
