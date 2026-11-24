@@ -255,7 +255,7 @@ func autoUpdateFinder() supervisor.UpdateFinder {
 			return m.Version, nil
 		}
 		r, err := channel.FindGitHub(ctx, running)
-		if err != nil || r.State != "found" || selfupdate.Build(r.Version) <= running {
+		if err != nil || (r.State != "found" && r.State != "current") {
 			return "", err
 		}
 		return r.Version, nil
