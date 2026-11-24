@@ -51,7 +51,7 @@ func (p *netPair) carry(t *testing.T, fromA bool) []NetIncoming {
 		if err := to.ApplyNet(testBroker, in); err != nil {
 			t.Fatal(err)
 		}
-		if err := from.NetSent(m.Seq); err != nil {
+		if err := from.NetDeliverySent(m); err != nil {
 			t.Fatal(err)
 		}
 		out = append(out, in)
@@ -70,13 +70,19 @@ func (p *netPair) startRemote(t *testing.T, op, provider, text string) string {
 
 func (p *netPair) mirror(t *testing.T, origin string) Task {
 	t.Helper()
+	project, err := p.b.st.projectStore("Game")
+	if err != nil {
+		t.Fatal(err)
+	}
 	tasks, err := p.b.st.Tasks("Game", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, tk := range tasks {
 		var o string
-		_ = p.b.st.db.QueryRow(`SELECT COALESCE(origin_task,'') FROM tasks WHERE id=?`, tk.ID).Scan(&o)
+		if err := project.db.QueryRow(`SELECT COALESCE(origin_task,'') FROM tasks WHERE id=?`, tk.ID).Scan(&o); err != nil {
+			t.Fatal(err)
+		}
 		if o == origin {
 			return tk
 		}
@@ -441,6 +447,7 @@ func TestRemoteTaskProgressReachesTheStarter(t *testing.T) {
 	p.carry(t, false)
 	m := p.mirror(t, id)
 	r := p.b.launch(t, m.ID, "019a0000-0000-7000-8000-0000000000b1")
+	p.carry(t, false) // first launch observation
 	if err := p.b.st.AppendTaskRunItem(r.ID, "text", "", "Reading the level files", ""); err != nil {
 		t.Fatal(err)
 	}

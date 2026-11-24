@@ -387,7 +387,8 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const otherStat = {...stat,id:'other-1',title:'Собрать сайт',project:'Site',tokens:700};
       let holdFrameStats, frameStatsRequested;
       const localTask = {id:'local-task',title:'Local task',project:'Frame',agent:'codex',state:'running',created_at:began,started_at:began,model:'gpt-6.2-sol[effort=low]',ran_model:'gpt-6.2-sol[effort=medium]'};
-      const siteTask = {...localTask,id:'site-task',project:'Site',title:'Site worker task'};
+      let siteTask = {...localTask,id:'site-task',project:'Site',title:'Site worker task',
+        pending_launch:true, waits_for_lock:'shared-cache', started_at:undefined};
       let releaseSite, delaySiteView = false;
       const siteView = new Promise(resolve => { releaseSite = resolve; });
       const remoteTask = {...localTask,id:'remote-task',title:'Remote task',created_at:new Date(Date.now()-8*60*1000).toISOString(),model:'',ran_model:'',remote:{id:'dev-1',name:'Runner',worker:'none'}};
@@ -866,9 +867,23 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         releaseSite();
       }
       await page.locator('#task-head h3').filter({hasText:siteTask.title}).waitFor();
+      const taskSection=title=>page.locator('.am-task-title',{hasText:title}).evaluate(node=>{
+        let heading=node.closest('.am-task').previousElementSibling;
+        while(heading&&!heading.classList.contains('am-task-section'))heading=heading.previousElementSibling;
+        return heading?.querySelector('span')?.textContent;
+      });
+      assert.equal(await taskSection(siteTask.title),'Запланированные');
+      assert.match(await page.locator('#task-head').innerText(),/Ждёт ресурс «shared-cache»/);
       await composer.waitFor();
       assert.equal(await composer.inputValue(), '', 'a draft must not follow a task from another project');
       assert(await page.locator('#answer-send').isDisabled());
+      siteTask={...siteTask,pending_launch:false,waits_for_lock:undefined,started_at:began};
+      await page.locator('#task-head').getByText(/Работает/).waitFor();
+      assert.equal(await taskSection(siteTask.title),'Активные');
+      assert.equal(await page.locator('.am-task-section',{hasText:'Запланированные'}).count(),0);
+      siteTask={...siteTask,pending_launch:true};
+      await page.locator('#task-head').getByText('Ждёт запуска',{exact:true}).waitFor();
+      assert.equal(await taskSection(siteTask.title),'Активные');
       // One update button: the dialog follows the download, the install and
       // the restart; a failed install says so and offers to try again.
       const updateButton = page.locator('#app-update-button');

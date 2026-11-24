@@ -31,15 +31,17 @@ const (
 
 // SharedTask is one task of a computer's list.
 type SharedTask struct {
-	ID         string `json:"id"`
-	Project    string `json:"project"`
-	Title      string `json:"title"`
-	Agent      string `json:"agent"`
-	State      string `json:"state"`
-	CreatedAt  string `json:"created_at"`
-	StartedAt  string `json:"started_at,omitempty"`
-	Model      string `json:"model,omitempty"`
-	FinishedAt string `json:"finished_at,omitempty"`
+	ID            string `json:"id"`
+	Project       string `json:"project"`
+	Title         string `json:"title"`
+	Agent         string `json:"agent"`
+	State         string `json:"state"`
+	CreatedAt     string `json:"created_at"`
+	StartedAt     string `json:"started_at,omitempty"`
+	PendingLaunch bool   `json:"pending_launch,omitempty"`
+	WaitsForLock  string `json:"waits_for_lock,omitempty"`
+	Model         string `json:"model,omitempty"`
+	FinishedAt    string `json:"finished_at,omitempty"`
 	// Report is the beginning of the worker's report.
 	Report string `json:"report,omitempty"`
 	Tokens int64  `json:"tokens,omitempty"`
@@ -84,6 +86,9 @@ func validSharedTasks(tasks []SharedTask) bool {
 			return false
 		}
 		if !utf8.ValidString(t.Title) || utf8.RuneCountInString(t.Title) > MaxSharedTitle || !utf8.ValidString(t.Report) || utf8.RuneCountInString(t.Report) > MaxSharedReport {
+			return false
+		}
+		if t.WaitsForLock != "" && (!t.PendingLaunch || !utf8.ValidString(t.WaitsForLock) || utf8.RuneCountInString(t.WaitsForLock) > MaxDeviceName) {
 			return false
 		}
 		if _, err := time.Parse(time.RFC3339Nano, t.CreatedAt); err != nil {
@@ -200,6 +205,19 @@ func PostSharedTasks(ctx context.Context, c Connection, tasks []SharedTask) ([]P
 	var out sharedResponse
 	client := pinnedClient(c.Fingerprint)
 	code, err := call(ctx, client, http.MethodPost, c.Address, "/v1/tasks", c.DeviceKey, sharedRequest{Tasks: tasks}, &out)
+	if err == nil && code == http.StatusBadRequest && validSharedTasks(tasks) {
+		for _, t := range tasks {
+			if t.PendingLaunch {
+				tasks = append([]SharedTask(nil), tasks...)
+				for i := range tasks {
+					tasks[i].PendingLaunch, tasks[i].WaitsForLock = false, ""
+				}
+				out = sharedResponse{}
+				code, err = call(ctx, client, http.MethodPost, c.Address, "/v1/tasks", c.DeviceKey, sharedRequest{Tasks: tasks}, &out)
+				break
+			}
+		}
+	}
 	if err == nil && code == http.StatusBadRequest && validSharedTasks(tasks) {
 		// Older brokers strictly decode the list. After an explicit refusal,
 		// submit the same snapshot without the new optional fields.

@@ -846,7 +846,7 @@
     topTaskScope='';
     if(tab!=='tasks'){renderTaskList();return;}
     const g=taskGroups();
-    openTopTask(!!(g.active.length||g.attention.length||g.done.length));
+    openTopTask(!!(g.active.length||g.planned.length||g.attention.length||g.done.length));
   }
   function computerName(id){
     return id==='local'?(view?.computer_name||tr('Этот компьютер')):(server?.peers||[]).find(p=>p.id===id)?.name||(view?.tasks||[]).find(t=>taskComputer(t)===id)?.remote?.name||'';
@@ -895,9 +895,10 @@
       }
     }
     items.sort((x,y)=>String(y.t.created_at).localeCompare(String(x.t.created_at)));
-    const groups={active:[],attention:[],done:[]};
+    const groups={active:[],planned:[],attention:[],done:[]};
     for(const it of items){
       if(needsDecision(it))groups.attention.push(it);
+      else if(it.t.state==='running'&&!it.t.started_at&&(it.t.pending_launch||it.t.remote?.unaccepted))groups.planned.push(it);
       else if(activeStates.includes(it.t.state))groups.active.push(it);
       else groups.done.push(it);
     }
@@ -963,7 +964,7 @@
   // On refresh (quiet) the caller loads the conversation itself, and an
   // empty list changes nothing.
   function openTopTask(quiet){
-    const g=taskGroups(),it=g.active[0]||[...g.attention,...g.done].sort((x,y)=>String(y.t.created_at).localeCompare(String(x.t.created_at)))[0];
+    const g=taskGroups(),it=g.active[0]||g.planned[0]||[...g.attention,...g.done].sort((x,y)=>String(y.t.created_at).localeCompare(String(x.t.created_at)))[0];
     if(!it){if(quiet)return;selectedTask='';selectedShared=null;feed=null;feedSignature='';renderTaskList();renderThread();return;}
     if(it.peer){selectedShared={peer:it.peer.peer,id:it.t.id};selectedTask='';feed=null;feedSignature='';renderTaskList();renderThread();startWindowWatch();return;}
     if(selectedTask===it.t.id&&!selectedShared)return;
@@ -1005,7 +1006,7 @@
     const hidden=agentChosen?(view?.tasks||[]).filter(t=>t.agent!==agentChosen&&activeStates.includes(t.state)&&(!computerFilter||taskComputer(t)===computerFilter)).length:0;
     if(hidden){
       const all=el('button',undefined,'am-task am-task-hidden');all.type='button';
-      all.append(el('span',tr('Фильтр «')+(names[agentChosen]||agentChosen)+tr('» скрывает активные задачи: ')+hidden,'am-task-agent'),el('span',tr('Показать всех агентов'),'am-status-run'));
+      all.append(el('span',tr('Фильтр «')+(names[agentChosen]||agentChosen)+tr('» скрывает незавершённые задачи: ')+hidden,'am-task-agent'),el('span',tr('Показать всех агентов'),'am-status-run'));
       all.addEventListener('click',()=>{$('agent-filter').value='';syncSelects();renderTaskList();});
       box.append(all);
     }
@@ -1066,6 +1067,7 @@
     };
     const groups=taskGroups();
     section(tr('Активные'),groups.active);
+    section(tr('Запланированные'),groups.planned);
     // Owner, 2026-11-12: tasks whose outcome is unknown kept «Активные» full
     // for days. They wait here until someone closes them; nothing closes
     // them by itself (unknown is not success).

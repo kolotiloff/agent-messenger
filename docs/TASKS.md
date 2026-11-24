@@ -247,6 +247,8 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 | T-174 | The journal repeated every few seconds that the mailbox of a computer no longer in the project is full (Ноут-Linux, 2026-11-14). | agent | Messages to a computer that is not listed, once they have waited out the reconnect grace, are parked or dropped and are not sent again. A computer that is listed keeps its mail, even when the mailbox is full. The full-mailbox line is written once, not every round. |
 | T-028 | Close or migrate existing persistent sessions and state, then retire the persistent Claude stream and Codex app-server owners. | agent | blocked: Q-012 |
 
+T-285 is implemented on `codex/t285-planned-tasks`, pending release. Browser checks cover selection and first launch. The network fixture covers a second task waiting for the first task to release a resource in both storage layouts.
+
 ## Backlog
 
 | ID | Task | Owner | Notes |

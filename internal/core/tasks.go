@@ -153,6 +153,7 @@ CREATE TABLE IF NOT EXISTS task_events (
  created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS task_events_project ON task_events(project, seq);
+` + taskLaunchEventsIndex + `
 CREATE TABLE IF NOT EXISTS coordinator_connections (
  project TEXT PRIMARY KEY,
  last_seen TEXT NOT NULL
@@ -1394,8 +1395,10 @@ func (s *Store) RecordTaskRunProcess(run string, obs platform.Observation) error
 		if err := setRunState(tx, run, "running", "process observed", "launching"); err != nil {
 			return err
 		}
-		_, err := tx.Exec(`UPDATE task_runs SET pid=?,pgid=?,start_token=?,boot_id=? WHERE id=?`, obs.PID, obs.PGID, obs.StartToken, obs.BootID, run)
-		return err
+		if _, err := tx.Exec(`UPDATE task_runs SET pid=?,pgid=?,start_token=?,boot_id=? WHERE id=?`, obs.PID, obs.PGID, obs.StartToken, obs.BootID, run); err != nil {
+			return err
+		}
+		return reportFirstTaskLaunch(tx, run)
 	})
 }
 

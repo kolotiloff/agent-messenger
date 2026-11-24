@@ -293,13 +293,31 @@ func taskStartedAt(q interface{ QueryRow(string, ...any) *sql.Row }, task string
 	return at.String, err
 }
 
-func (s *Store) pendingLaunch(task string) (bool, error) {
-	var state string
-	err := s.db.QueryRow(`SELECT state FROM task_runs WHERE task_id=? ORDER BY ordinal DESC LIMIT 1`, task).Scan(&state)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
+// fillWindowLaunch keeps the list and the open conversation in sync.
+func (s *Store) fillWindowLaunch(t *WindowTask) error {
+	if t.Remote != nil && !t.Remote.From {
+		pending, started, lock, err := remoteLaunch(s.db, t.ID)
+		t.StartedAt = started
+		if t.State == "running" {
+			t.PendingLaunch, t.WaitsForLock = pending, lock
+		}
+		return err
 	}
-	return state == "intent", err
+	var err error
+	t.StartedAt, err = s.startedAt(t.ID)
+	if err != nil || t.State != "running" {
+		return err
+	}
+	t.PendingLaunch, err = runPendingLaunch(s.db, t.ID)
+	if err != nil {
+		return err
+	}
+	if t.PendingLaunch {
+		t.WaitsForLock, err = s.waitingLock(t.ID)
+	} else {
+		t.Quiet, err = s.TaskRunQuiet(t.ID)
+	}
+	return err
 }
 
 // WindowAgent is one agent program of this computer, with its state across
@@ -533,22 +551,10 @@ func (s *Store) windowTaskRows(selection string, args ...any) ([]WindowTask, err
 				w.OwnerQuestion = question
 			}
 		}
-		if t.State == "running" {
-			if w.PendingLaunch, err = s.pendingLaunch(t.ID); err != nil {
-				return nil, err
-			}
-			if w.PendingLaunch {
-				if w.WaitsForLock, err = s.waitingLock(t.ID); err != nil {
-					return nil, err
-				}
-			} else if w.Quiet, err = s.TaskRunQuiet(t.ID); err != nil {
-				return nil, err
-			}
-		}
-		if w.StartedAt, err = s.startedAt(t.ID); err != nil {
+		if w.Remote, err = s.remoteOf(t.ID); err != nil {
 			return nil, err
 		}
-		if w.Remote, err = s.remoteOf(t.ID); err != nil {
+		if err := s.fillWindowLaunch(&w); err != nil {
 			return nil, err
 		}
 		if w.Usage, err = s.taskUsage(t.ID); err != nil {
@@ -602,18 +608,10 @@ func (s *Store) taskFeedHeader(id string) (TaskFeed, Task, error) {
 	if t.OpenQuestion != nil && t.OpenQuestion.Audience == AudienceOwner {
 		f.Task.OwnerQuestion = t.OpenQuestion
 	}
-	if t.State == "running" {
-		if f.Task.PendingLaunch, err = s.pendingLaunch(t.ID); err != nil {
-			return f, t, err
-		}
-		if f.Task.Quiet, err = s.TaskRunQuiet(t.ID); err != nil {
-			return f, t, err
-		}
-	}
-	if f.Task.StartedAt, err = s.startedAt(t.ID); err != nil {
+	if f.Task.Remote, err = s.remoteOf(t.ID); err != nil {
 		return f, t, err
 	}
-	if f.Task.Remote, err = s.remoteOf(t.ID); err != nil {
+	if err := s.fillWindowLaunch(&f.Task); err != nil {
 		return f, t, err
 	}
 	if f.Task.Usage, err = s.taskUsage(t.ID); err != nil {
