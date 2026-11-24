@@ -236,7 +236,7 @@ func TestCoordinatorHandshakeAndTools(t *testing.T) {
 	for _, tool := range resp["result"].(map[string]any)["tools"].([]any) {
 		names = append(names, tool.(map[string]any)["name"].(string))
 	}
-	if strings.Join(names, ",") != "list_agents,agent_version,start_task,wait,tasks,answer,continue_task,note_task,task_images,task_output,task_messages,cancel,report_feedback,export_feedback,clear_feedback,update_messenger" {
+	if strings.Join(names, ",") != "list_agents,agent_version,start_task,wait,tasks,answer,continue_task,note_task,task_images,task_output,task_messages,cancel,report_feedback,export_feedback,clear_feedback,update_messenger,cancel_messenger_update" {
 		t.Fatalf("tools %v", names)
 	}
 	var agents struct {
@@ -295,6 +295,17 @@ func TestCoordinatorUpdateMessenger(t *testing.T) {
 	}
 	if _, ok := c.tool("list_agents", map[string]any{}, &agents); !ok || len(agents.Computers) == 0 || !agents.Computers[0].UpdatePending {
 		t.Fatalf("list_agents %+v", agents)
+	}
+	var cancelReply map[string]any
+	if text, ok := c.tool("cancel_messenger_update", map[string]any{"computer": agents.Computers[0].Computer}, &cancelReply); !ok || cancelReply["state"] != core.UpdateWaiting {
+		t.Fatalf("cancel request %+v %s", cancelReply, text)
+	}
+	cancels, err := st.UpdateCancellations("")
+	if err != nil || len(cancels) != 1 || cancels[0].ID != cancelReply["request_id"] {
+		t.Fatalf("cancel request was not queued: %+v %v", cancels, err)
+	}
+	if err := st.FinishUpdateCancellation(cancels[0], false); err != nil {
+		t.Fatal(err)
 	}
 	events, _, err := st.TaskEvents("Game", core.AudienceCoordinator, 0, 20)
 	if err != nil {
