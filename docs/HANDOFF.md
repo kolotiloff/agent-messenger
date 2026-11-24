@@ -8,6 +8,10 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-24 by Codex (T-280).
+
+- On `codex/t280-cancel-pending-update`, the coordinator can cancel an exact queued update without stopping workers. A verified already-installed target clears its waiting row before checking live work. The owner's PC-1 still reported 0.99 and update pending when inspected. No live computer or database was modified. See [UPDATES.md](UPDATES.md).
+
 Updated 2026-11-24 by Claude Code (T-278, T-279).
 
 - On `claude/amazing-noether-apbflv`, not released: T-278 (D-192), an old-network task no longer shows as the task of the computer that now has its old peer id (the owner saw ПК-2's tasks on the VPS card); T-279, choosing a computer no longer flashes an empty list and pane. Checked with Go tests (`old_network_test.go`), `scripts/check.sh` and the window checks in Chromium; WebKit runs in CI; not seen in the installed app. The 0.98 release notes above are also only on this branch until a PR is opened.
