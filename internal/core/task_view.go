@@ -190,6 +190,17 @@ type RemoteComputer struct {
 // computer only.
 func (s *Store) TaskRemote(task string) (*RemoteComputer, error) { return s.remoteOf(task) }
 
+// remoteComputer describes the computer that runs a task this computer
+// started.
+func remoteComputer(machine, tx *sql.Tx, task string, link netLink) (*RemoteComputer, error) {
+	id, name, err := linkComputer(machine, link)
+	if err != nil {
+		return nil, err
+	}
+	out := &RemoteComputer{ID: id, Name: name}
+	return out, remoteContact(machine, tx, task, link, out)
+}
+
 // remoteContact fills in whether the computer that runs a task is out of
 // reach (T-126).
 func remoteContact(machine, tx *sql.Tx, task string, link netLink, out *RemoteComputer) error {
@@ -213,8 +224,11 @@ func remoteContact(machine, tx *sql.Tx, task string, link netLink, out *RemoteCo
 	if err != nil {
 		return err
 	}
-	if out.Name == link.peer && name.String != "" {
+	if (out.Name == "" || out.Name == link.peer) && name.String != "" {
 		out.Name = name.String
+	}
+	if out.Name == "" {
+		out.Name = formerComputer
 	}
 	if found && peer.Age >= 0 {
 		out.LastSeen = time.Now().UTC().Add(-time.Duration(peer.Age) * time.Second).Format(time.RFC3339)
@@ -248,10 +262,15 @@ func (s *Store) remoteOf(task string) (*RemoteComputer, error) {
 		}
 		switch {
 		case link.remote != nil:
-			out = &RemoteComputer{ID: link.remote.peer, Name: peerName(machine, link.remote.peer)}
-			return remoteContact(machine, tx, task, *link.remote, out)
+			out, err = remoteComputer(machine, tx, task, *link.remote)
+			return err
 		case link.origin != nil:
-			out = &RemoteComputer{ID: link.origin.peer, Name: peerName(machine, link.origin.peer), From: true}
+			id, name, err := linkComputer(machine, *link.origin)
+			if name == "" {
+				name = formerComputer
+			}
+			out = &RemoteComputer{ID: id, Name: name, From: true}
+			return err
 		}
 		return nil
 	})
@@ -461,7 +480,11 @@ func (s *Store) WindowViewFiltered(project, today, agent, computer, historyVersi
 		return v, err
 	}
 	v.Tasks, v.HistoryPaged = active, true
-	v.HistoryVersion, err = scoped.windowHistoryVersion(project, agent, computer)
+	broker, err := currentBroker(s.db)
+	if err != nil {
+		return v, err
+	}
+	v.HistoryVersion, err = scoped.windowHistoryVersion(project, agent, computer, broker)
 	if err != nil {
 		return v, err
 	}
@@ -469,7 +492,7 @@ func (s *Store) WindowViewFiltered(project, today, agent, computer, historyVersi
 		v.HistoryUnchanged = true
 		return v, nil
 	}
-	history, err := scoped.WindowTaskHistory(project, "", agent, computer)
+	history, err := scoped.windowTaskHistory(project, "", agent, computer, broker)
 	if err != nil {
 		return v, err
 	}

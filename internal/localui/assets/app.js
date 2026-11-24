@@ -828,12 +828,24 @@
     computerChanged();
   }
   function clearComputer(){computerFilter='';computerChanged();}
+  // T-279: with paged history the finished tasks of the new choice come
+  // from the program, so the list and its top task wait for that answer;
+  // the previous list and conversation stay until then instead of flashing
+  // a filtered remainder and an empty pane.
+  let topTaskScope='';
   function computerChanged(){
     renderMachines();
-    if(tab==='tasks')openTopTask();else renderTaskList();
     if(tab==='stats')reloadStats();
     if(tab==='agents')renderAgents();
-    if(view?.history_paged)refresh();
+    if(view?.history_paged){topTaskScope=taskWindowQuery();refresh();return;}
+    if(tab==='tasks')openTopTask();else renderTaskList();
+  }
+  function applyTopTaskScope(){
+    if(!topTaskScope||topTaskScope!==windowHistoryScope)return;
+    topTaskScope='';
+    if(tab!=='tasks'){renderTaskList();return;}
+    const g=taskGroups();
+    openTopTask(!!(g.active.length||g.attention.length||g.done.length));
   }
   function computerName(id){
     return id==='local'?(view?.computer_name||tr('Этот компьютер')):(server?.peers||[]).find(p=>p.id===id)?.name||(view?.tasks||[]).find(t=>taskComputer(t)===id)?.remote?.name||'';
@@ -2219,6 +2231,7 @@
         render();
       }
       else if(cameOnline){renderMachines();renderNotice();}
+      applyTopTaskScope();
       // Nothing chosen yet (the first start, or the chosen task went away):
       // show the top task instead of an empty conversation.
       if(!selectedTask&&!selectedShared&&tab==='tasks'&&view?.project)openTopTask(true);

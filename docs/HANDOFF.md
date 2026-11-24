@@ -8,6 +8,14 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-24 by Claude Code (T-278, T-279).
+
+- On `claude/amazing-noether-apbflv`, not released: T-278 (D-192), an old-network task no longer shows as the task of the computer that now has its old peer id (the owner saw ПК-2's tasks on the VPS card); T-279, choosing a computer no longer flashes an empty list and pane. Checked with Go tests (`old_network_test.go`), `scripts/check.sh` and the window checks in Chromium; WebKit runs in CI; not seen in the installed app. The 0.98 release notes above are also only on this branch until a PR is opened.
+
+Updated 2026-11-24 by Claude Code (0.98 release).
+
+- **0.98 is released** ([release](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.98), [workflow](https://github.com/kolotiloff/agent-messenger/actions/runs/45369041530), [PR #183](https://github.com/kolotiloff/agent-messenger/pull/183), source `1fac081985e74068b2f78c98cd72deca471478df`) with T-268 to T-277 below. Confirmed 22 assets, as in 0.97. Verified all five update manifests against the pinned key (a changed manifest fails), their version and source SHA, and that each archive hash and length names a published asset. The live Mac and VPS were not upgraded, and the automatic update (T-277) has not yet run against a real release on a real computer. The update icon and marks stay as they are for now (Q-031).
+
 Updated 2026-11-24 by Claude Code (T-277).
 
 - On `claude/amazing-noether-apbflv`, not released: «Автообновление» in «Настройки программы» (D-191). Windows, Linux and the server service queue their own update once per newer release and install it when no task runs. Checked with Go tests (`autoupdate_test.go`, with a fake release finder and helper) and the window check in Chromium. Not checked: a real release found on GitHub and installed this way on a real computer, WebKit, the Mac (no switch there; Q-031).

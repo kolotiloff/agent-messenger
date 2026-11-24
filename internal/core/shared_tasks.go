@@ -70,15 +70,19 @@ type NetPeerTasks struct {
 // newest first, at most MaxSharedTasks, with the start of the report.
 func (s *Store) SharedTasks(since time.Time) ([]NetTask, error) {
 	out := []NetTask{}
+	broker, err := currentBroker(s.db)
+	if err != nil {
+		return nil, err
+	}
 	if s.split == nil {
-		tasks, err := tasksForSharing(s.db, since)
+		tasks, err := tasksForSharing(s.db, since, broker)
 		if err != nil {
 			return nil, err
 		}
 		out = tasks
 	} else {
 		err := s.eachProjectStore(func(project *Store) error {
-			tasks, err := tasksForSharing(project.db, since)
+			tasks, err := tasksForSharing(project.db, since, broker)
 			out = append(out, tasks...)
 			return err
 		})
@@ -88,7 +92,7 @@ func (s *Store) SharedTasks(since time.Time) ([]NetTask, error) {
 		sort.SliceStable(out, func(i, j int) bool { return out[i].CreatedAt > out[j].CreatedAt })
 		out = out[:min(len(out), MaxSharedTasks)]
 	}
-	err := s.tx(func(tx *sql.Tx) error {
+	err = s.tx(func(tx *sql.Tx) error {
 		names := make(map[string]string)
 		for i := range out {
 			id := out[i].RunsOnPeer
@@ -107,14 +111,17 @@ func (s *Store) SharedTasks(since time.Time) ([]NetTask, error) {
 	return out, err
 }
 
-func tasksForSharing(db *sql.DB, since time.Time) ([]NetTask, error) {
+// A task sent in an earlier network is left out: its peer id there may
+// name another computer of this one (linkComputer).
+func tasksForSharing(db *sql.DB, since time.Time, broker string) ([]NetTask, error) {
 	rows, err := db.Query(`SELECT t.id,t.project,t.title,t.provider,t.state,t.created_at,COALESCE(t.finished_at,''),t.usage_input+t.usage_output,COALESCE(t.remote_peer,''),
  COALESCE((SELECT MIN(launched_at) FROM task_runs WHERE task_id=t.id),''),
  COALESCE(t.ran_model,''),
  COALESCE((SELECT r.disposition_text FROM task_runs r WHERE r.task_id=t.id AND r.disposition='report' ORDER BY r.ordinal DESC LIMIT 1),
   (SELECT i.text FROM remote_task_items i WHERE i.task_id=t.id AND i.kind='report' ORDER BY i.seq DESC LIMIT 1),'')
- FROM tasks t WHERE t.origin_peer IS NULL AND t.hidden_at IS NULL AND t.created_at>=? ORDER BY t.created_at DESC, t.rowid DESC LIMIT ?`,
-		since.UTC().Format(time.RFC3339Nano), MaxSharedTasks)
+ FROM tasks t WHERE t.origin_peer IS NULL AND t.hidden_at IS NULL AND t.created_at>=?
+ AND (t.remote_peer IS NULL OR t.remote_broker=?) ORDER BY t.created_at DESC, t.rowid DESC LIMIT ?`,
+		since.UTC().Format(time.RFC3339Nano), broker, MaxSharedTasks)
 	if err != nil {
 		return nil, err
 	}

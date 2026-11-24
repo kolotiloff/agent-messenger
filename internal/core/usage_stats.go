@@ -209,7 +209,11 @@ func (s *Store) UsageStatsFiltered(since time.Time, loc *time.Location, computer
 		}
 		models := map[string]*UsageGroup{}
 		var used, dated, timed []UsageTask
-		query := `SELECT t.id,t.title,t.project,t.provider,COALESCE(t.remote_peer,''),
+		broker, err := currentBroker(tx)
+		if err != nil {
+			return err
+		}
+		query := `SELECT t.id,t.title,t.project,t.provider,COALESCE(t.remote_peer,''),COALESCE(t.remote_broker,''),COALESCE(t.remote_name,''),
  COALESCE(t.finished_at,t.updated_at),t.usage_input,t.usage_cached,t.usage_output,
  COALESCE(NULLIF(t.ran_model,''),NULLIF(t.model,''),''),t.usage_seen,
  CASE WHEN t.state IN ('done','failed','cancelled') THEN COALESCE(t.finished_at,'') ELSE '' END,
@@ -224,11 +228,11 @@ func (s *Store) UsageStatsFiltered(since time.Time, loc *time.Location, computer
 		err = s.visitProjectTaskRows(tx, filter.Project, query, []any{out.Since, filter.Project, filter.Project}, func(rows *sql.Rows) error {
 			for rows.Next() {
 				var task UsageTask
-				var peer, finished, started, observedStart string
+				var peer, peerBroker, remoteName, finished, started, observedStart string
 				var in, cached, outTokens int64
 				var usageSeen bool
 				var remoteDuration sql.NullInt64
-				if err := rows.Scan(&task.ID, &task.Title, &task.Project, &task.Agent, &peer, &task.At, &in, &cached, &outTokens,
+				if err := rows.Scan(&task.ID, &task.Title, &task.Project, &task.Agent, &peer, &peerBroker, &remoteName, &task.At, &in, &cached, &outTokens,
 					&task.Model, &usageSeen, &finished, &started, &remoteDuration, &observedStart); err != nil {
 					return err
 				}
@@ -240,6 +244,14 @@ func (s *Store) UsageStatsFiltered(since time.Time, loc *time.Location, computer
 				key, name, this := local, localName, true
 				if peer != "" {
 					key, name, this = peer, peerNames[peer], false
+					if broker == "" || peerBroker != broker {
+						// Sent in an earlier network: that peer id may name
+						// another computer now (linkComputer).
+						key, peer = "old:"+peerBroker+"/"+peer, ""
+						if name = remoteName; name == "" {
+							name = formerComputer
+						}
+					}
 				}
 				if !wanted(key) {
 					continue
