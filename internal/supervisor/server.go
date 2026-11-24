@@ -24,14 +24,17 @@ func (s *Supervisor) Server(_ context.Context, action string, payload json.RawMe
 		return nil, errors.New("сервер недоступен в этом клиенте")
 	}
 	var in struct {
-		Scope   string `json:"scope"`
-		Port    int    `json:"port"`
-		Address string `json:"address"`
-		Public  string `json:"public_address"`
-		Device  string `json:"device"`
-		Code    string `json:"code"`
-		Name    string `json:"name"`
-		On      bool   `json:"on"`
+		Cursor    string `json:"cursor"`
+		RequestID string `json:"request_id"`
+		Broker    string `json:"broker"`
+		Scope     string `json:"scope"`
+		Port      int    `json:"port"`
+		Address   string `json:"address"`
+		Public    string `json:"public_address"`
+		Device    string `json:"device"`
+		Code      string `json:"code"`
+		Name      string `json:"name"`
+		On        bool   `json:"on"`
 	}
 	if len(payload) > 0 {
 		if err := json.Unmarshal(payload, &in); err != nil {
@@ -41,6 +44,12 @@ func (s *Supervisor) Server(_ context.Context, action string, payload json.RawMe
 	ctx, cancel := context.WithTimeout(s.ctx, serverNetworkTimeout)
 	defer cancel()
 	switch action {
+	case "update-watch":
+		return s.server.WatchUpdates(ctx, in.Cursor)
+	case "cancel-update":
+		if _, err := s.store.CancelObservedUpdate(in.Device, in.Broker, in.RequestID); err != nil {
+			return nil, err
+		}
 	case "status":
 	case "enable":
 		if err := s.server.EnableWith(broker.Settings{Scope: in.Scope, Port: in.Port, PublicAddress: in.Public}); err != nil {
@@ -110,6 +119,11 @@ func (s *Supervisor) Server(_ context.Context, action string, payload json.RawMe
 		return nil, errors.New("неизвестное действие сервера")
 	}
 	switch action {
+	case "update", "cancel-update":
+		select {
+		case s.networkWake <- struct{}{}:
+		default:
+		}
 	case "enable", "disable", "connect", "disconnect":
 		// The last exchange's problem belongs to the network before the
 		// change; the next round reports the new one's.
@@ -142,7 +156,7 @@ func (s *Supervisor) Server(_ context.Context, action string, payload json.RawMe
 	now := time.Now()
 	for i := range st.Peers {
 		peer := &st.Peers[i]
-		peer.Version, peer.UpdatePending = byPeer[peer.ID].PeerUpdateState(peer.Version, peer.UpdatePending, peer.Age, now)
+		peer.Version, peer.UpdatePending = byPeer[peer.ID].PeerUpdateState(peer.Version, peer.UpdatePending, peer.UpdateRequestID, peer.Age, now)
 	}
 	auto, err := s.store.AutoUpdate()
 	if err != nil {
@@ -161,6 +175,7 @@ func (s *Supervisor) presence() (broker.Presence, error) {
 	p := broker.Presence{Agents: []broker.PresenceAgent{}, Coordinator: clipName(coordinator), Version: buildinfo.Version}
 	if pending, ok, err := s.store.PendingUpdate(); err == nil && ok {
 		p.UpdatePending, p.UpdateRequestID = true, pending.ID
+		p.UpdateInstalling = s.updateBusy()
 	}
 	for _, a := range agents {
 		pa := broker.PresenceAgent{Agent: a.Agent, Running: a.Running, Waiting: a.Waiting}

@@ -93,6 +93,7 @@ type Supervisor struct {
 	codex          codexOwners
 	tasks          taskRuns
 	taskWake       chan struct{}
+	networkWake    chan struct{}
 	projectStorage bool
 	server         *broker.Service
 	net            netState
@@ -210,7 +211,7 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 	defer cancel()
 	sup := &Supervisor{
 		store: store, root: root, launcher: launcher, cancel: cancel, ctx: ctx, startUpdate: options.StartUpdate, findUpdate: options.FindUpdate,
-		taskWake: make(chan struct{}, 1), projectStorage: options.ProjectStorage,
+		networkWake: make(chan struct{}, 1), taskWake: make(chan struct{}, 1), projectStorage: options.ProjectStorage,
 	}
 	defer sup.bg.Wait()
 	defer sup.codex.closeAll()

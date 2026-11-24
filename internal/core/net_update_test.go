@@ -322,6 +322,19 @@ func TestNetUpdateResultClearsStalePendingFlag(t *testing.T) {
 	if peers, err := p.a.st.NetPeers(); err != nil || len(peers) != 1 || peers[0].Version != "0.0.0-preview.57" {
 		t.Fatalf("version without pending flag: %+v %v", peers, err)
 	}
+	// Another computer can already have queued a different request while
+	// this computer receives the result of the previous one.
+	other := append([]NetPeer(nil), stale...)
+	other[0].UpdatePending, other[0].UpdateRequestID = true, "upd-next"
+	if err := p.a.st.SetNetwork(testBroker, HostPeerID, other); err != nil {
+		t.Fatal(err)
+	}
+	if peers, err := p.a.st.NetPeers(); err != nil || len(peers) != 1 || !peers[0].UpdatePending || peers[0].UpdateRequestID != "upd-next" {
+		t.Fatalf("a previous result hid a different pending request: %+v %v", peers, err)
+	}
+	if _, _, err := p.a.st.StartTask(StartTaskRequest{Project: "Game", OpID: "op-new-update", Provider: "codex", Text: "x", Computer: "dev-b"}); err == nil || !strings.Contains(err.Error(), "update") {
+		t.Fatalf("a different queued update must still refuse tasks: %v", err)
+	}
 	newer := append([]NetPeer(nil), stale...)
 	newer[0].Version, newer[0].UpdatePending = "0.0.0-preview.58", true
 	if err := p.a.st.SetNetwork(testBroker, HostPeerID, newer); err != nil {

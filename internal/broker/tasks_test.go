@@ -85,7 +85,7 @@ func TestSharedTaskDetailsWithLegacyBroker(t *testing.T) {
 		}
 		dec := json.NewDecoder(r.Body)
 		dec.DisallowUnknownFields()
-		if err := dec.Decode(&input); err != nil || len(input.Tasks) != 1 || input.Tasks[0].ID != "task-1" {
+		if err := dec.Decode(&input); err != nil || len(input.Tasks) != 2 || input.Tasks[0].ID != "task-1" {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -94,12 +94,16 @@ func TestSharedTaskDetailsWithLegacyBroker(t *testing.T) {
 	defer server.Close()
 	fingerprint := sha256.Sum256(server.Certificate().Raw)
 	conn := Connection{Address: strings.TrimPrefix(server.URL, "https://"), Fingerprint: hex.EncodeToString(fingerprint[:]), BrokerID: brokerID, DeviceID: deviceID}
-	tasks := []SharedTask{{ID: "task-1", Project: "Game", Title: "Work", Agent: "codex", State: "running",
-		CreatedAt: "2026-11-19T09:19:00Z", StartedAt: "2026-11-19T09:20:00Z", Model: "gpt-6.2-sol[effort=medium]"}}
-	if _, err := PostSharedTasks(ctx(t), conn, tasks); err != nil || calls.Load() != 2 {
+	tasks := []SharedTask{
+		{ID: "task-1", Project: "Game", Title: "Work", Agent: "codex", State: "running",
+			CreatedAt: "2026-11-19T09:19:00Z", StartedAt: "2026-11-19T09:20:00Z", Model: "gpt-6.2-sol[effort=medium]"},
+		{ID: "task-2", Project: "Game", Title: "Follow-up", Agent: "codex", State: "running",
+			CreatedAt: "2026-11-19T09:21:00Z", PendingLaunch: true, WaitsForLock: "shared cache"},
+	}
+	if _, err := PostSharedTasks(ctx(t), conn, tasks); err != nil || calls.Load() != 3 {
 		t.Fatalf("legacy broker fallback: %d posts, %v", calls.Load(), err)
 	}
-	if tasks[0].Model == "" || tasks[0].StartedAt == "" {
+	if tasks[0].Model == "" || tasks[0].StartedAt == "" || !tasks[1].PendingLaunch || tasks[1].WaitsForLock == "" {
 		t.Fatal("fallback modified the caller's snapshot")
 	}
 }

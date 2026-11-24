@@ -93,7 +93,7 @@ func TestSplitWorkerCommitsReportAndDeliveryInItsProject(t *testing.T) {
 	var state string
 	var frames, output int
 	if err := game.QueryRow(`SELECT state,(SELECT COUNT(*) FROM net_outbox),(SELECT COUNT(*) FROM task_outputs)
- FROM tasks WHERE id=?`, task.ID).Scan(&state, &frames, &output); err != nil || state != "running" || frames != 0 || output != 0 {
+ FROM tasks WHERE id=?`, task.ID).Scan(&state, &frames, &output); err != nil || state != "running" || frames != 1 || output != 0 {
 		t.Fatalf("a partial completion escaped: %s %d %d %v", state, frames, output, err)
 	}
 	if change, err := splitWindowChanges(ctx, files.computer, files.project, "Game", task.ID); err != nil || change != before {
@@ -122,14 +122,17 @@ func TestSplitWorkerCommitsReportAndDeliveryInItsProject(t *testing.T) {
 		t.Fatal(err)
 	}
 	pending, err := splitNetPending(ctx, files.computer, files.project, testBroker, 10, nil)
-	if err != nil || len(pending) != 3 {
-		t.Fatalf("accepted, output, report frames: %+v %v", pending, err)
+	if err != nil || len(pending) != 4 {
+		t.Fatalf("accepted, launch, output and report frames: %+v %v", pending, err)
 	}
 	for i, msg := range pending {
 		frame := NetIncoming{Seq: int64(i + 1), From: "dev-b", OpID: msg.OpID, Body: msg.Body}
 		body, valid := decodeNetIncoming(frame)
 		if !valid || body.Task != origin || body.Computer != identity || (i == 0 && msg.file != migrationComputerFile) || (i > 0 && msg.file != gameFile) {
 			t.Fatalf("misrouted frame %d: %+v", i, body)
+		}
+		if i == 1 && body.Event != taskLaunchObserved {
+			t.Fatalf("missing first launch frame: %+v", body)
 		}
 		if err := pair.a.st.ApplyNet(testBroker, frame); err != nil {
 			t.Fatal(err)

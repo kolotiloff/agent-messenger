@@ -91,8 +91,13 @@ func applySplitStart(ctx context.Context, common *sql.Tx, openProject func(strin
 			return err
 		}
 	}
-	var originComputer string
-	if err := project.QueryRowContext(ctx, "SELECT origin_computer FROM tasks WHERE id=?", task.ID).Scan(&originComputer); err != nil {
+	var originComputer, resource string
+	if err := project.QueryRowContext(ctx, "SELECT origin_computer,project,computer,created_at,resource FROM tasks WHERE id=?", task.ID).
+		Scan(&originComputer, &task.Project, &task.Computer, &task.CreatedAt, &resource); err != nil {
+		return err
+	}
+	pending, err := runPendingLaunch(project, task.ID)
+	if err != nil {
 		return err
 	}
 	if err := project.Commit(); err != nil {
@@ -102,7 +107,17 @@ func applySplitStart(ctx context.Context, common *sql.Tx, openProject func(strin
  VALUES (?,?,?,?,?,?)`, task.ID, body.Project, from.broker, from.peer, from.task, originComputer); err != nil {
 		return err
 	}
-	return enqueueStartReply(common, from, "accepted", netBody{Mirror: task.ID, Folder: task.Folder})
+	reply := netBody{Mirror: task.ID, Folder: task.Folder, LaunchPending: pending}
+	if pending && resource != "" {
+		// This is an optional explanation. The dispatcher independently
+		// checks the lock before starting a process.
+		if order, err := splitRouteOrder(ctx, common, task); err == nil {
+			if holder, err := splitTaskResourceHolder(ctx, common, db, file, openProject, task, resource, order); err == nil && holder.ID != "" {
+				reply.Lock = resource
+			}
+		}
+	}
+	return enqueueStartReply(common, from, "accepted", reply)
 }
 
 func refuseSplitStart(common *sql.Tx, from netLink, err error) error {

@@ -117,8 +117,7 @@ func splitNetSent(ctx context.Context, computer *sql.DB, openProject func(string
 	if err != nil {
 		return err
 	}
-	_, err = db.ExecContext(ctx, `DELETE FROM net_outbox WHERE seq=? AND op_id=?`, message.Seq, message.OpID)
-	return err
+	return acknowledgeNetDelivery(ctx, db, message.NetOutgoing)
 }
 
 func splitOutboxDB(ctx context.Context, computer *sql.DB, openProject func(string) (*sql.DB, error), file string) (*sql.DB, error) {

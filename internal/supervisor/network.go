@@ -94,6 +94,7 @@ func (s *Supervisor) runNetwork(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+		case <-s.networkWake:
 		}
 	}
 }

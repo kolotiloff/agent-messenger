@@ -98,7 +98,7 @@ type NetUpdateRequest struct {
 // (queued until live work ends, or the helper still running).
 type PendingUpdate struct {
 	Broker, Peer, ID, Project string
-	Target                    string
+	Target, CreatedAt         string
 }
 
 // RequestNetUpdate asks another computer of the network to install the
@@ -217,7 +217,7 @@ func (s *Store) queueLocalUpdate(tx *sql.Tx, project string) (string, error) {
 	text := ""
 	if n > 0 {
 		if s.split != nil {
-			text = "The update will start when this computer finishes its current work."
+			text = "The computer will wait up to five minutes for its current work to finish."
 		} else {
 			tasks, _ := liveWorkTasks(tx, 3)
 			text = updateQueuedText(n, tasks)
@@ -304,7 +304,7 @@ const updateResultFresh = 10 * time.Minute
 
 // PeerUpdateState reconciles a computer's version and pending flag with the
 // last result for that computer. The same result drives notices and the roster.
-func (u NetUpdate) PeerUpdateState(version string, pending bool, presenceAge int, now time.Time) (string, bool) {
+func (u NetUpdate) PeerUpdateState(version string, pending bool, requestID string, presenceAge int, now time.Time) (string, bool) {
 	if u.State != UpdateDone && u.State != UpdateFailed && u.State != UpdateRefused && u.State != UpdateCancelled {
 		return version, pending
 	}
@@ -313,16 +313,17 @@ func (u NetUpdate) PeerUpdateState(version string, pending bool, presenceAge int
 		return version, pending
 	}
 	before := presenceAge < 0 || now.Add(-time.Duration(presenceAge)*time.Second).Before(at)
+	otherRequest := pending && requestID != "" && requestID != u.ID
 	if u.State == UpdateDone {
 		newBuild, oldBuild := updateBuild(u.Version), updateBuild(version)
 		switch {
 		case newBuild != 0 && oldBuild > newBuild:
 			return version, pending
 		case newBuild != 0 && (oldBuild < newBuild && oldBuild != 0 || version == "" || before && oldBuild == 0):
-			return u.Version, false
+			return u.Version, otherRequest
 		}
 	}
-	return version, pending && !before
+	return version, pending && (!before || otherRequest)
 }
 
 func updateBuild(version string) int {
@@ -362,7 +363,7 @@ func (s *Store) NetUpdateRequests(broker string) ([]NetUpdateRequest, error) {
 // PendingUpdate returns this computer's unfinished update, if any.
 func (s *Store) PendingUpdate() (PendingUpdate, bool, error) {
 	var p PendingUpdate
-	err := s.db.QueryRow(`SELECT id,broker,peer,project,target_version FROM pending_updates ORDER BY created_at, id LIMIT 1`).Scan(&p.ID, &p.Broker, &p.Peer, &p.Project, &p.Target)
+	err := s.db.QueryRow(`SELECT id,broker,peer,project,target_version,created_at FROM pending_updates ORDER BY created_at, id LIMIT 1`).Scan(&p.ID, &p.Broker, &p.Peer, &p.Project, &p.Target, &p.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return PendingUpdate{}, false, nil
 	}
@@ -443,7 +444,7 @@ func finishPendingUpdate(tx *sql.Tx, id, state, version, text string) error {
 		if err != nil || current != broker {
 			return err
 		}
-		return enqueueNet(tx, broker, peer, "update-final."+id, id, netBody{Kind: "update", Task: id, State: state, Detail: clip(version, maxUpdateVersion), Text: clip(text, maxUpdateText)})
+		return enqueueNet(tx, broker, peer, updateReplyOp("update-final", id, state, version), id, netBody{Kind: "update", Task: id, State: state, Detail: clip(version, maxUpdateVersion), Text: clip(text, maxUpdateText)})
 	}
 	if err := touchLocalUpdate(tx, id, state, version, text); err != nil {
 		return err
@@ -470,6 +471,15 @@ func (s *Store) RecordMessengerUpdate(project, state, version, text string) erro
 	})
 }
 
+// The broker can publish these status fields without reading the message body.
+func updateReplyOp(prefix, id, state, version string) string {
+	op := prefix + "." + id + "." + state
+	if state == UpdateDone && updateBuild(version) > 0 && len(version) <= 40 {
+		op += "." + version
+	}
+	return op
+}
+
 // ReplyNetUpdate gives the first answer to a request (updating, or refused
 // or failed with the reason) and forgets the request.
 func (s *Store) ReplyNetUpdate(r NetUpdateRequest, state, version, text string) error {
@@ -484,7 +494,7 @@ func (s *Store) ReplyNetUpdate(r NetUpdateRequest, state, version, text string) 
 		if n, _ := res.RowsAffected(); n == 0 {
 			return nil
 		}
-		return enqueueNet(tx, r.Broker, r.Peer, "update-reply."+r.ID, r.ID, netBody{Kind: "update", Task: r.ID, State: state, Detail: clip(version, maxUpdateVersion), Text: clip(text, maxUpdateText)})
+		return enqueueNet(tx, r.Broker, r.Peer, updateReplyOp("update-reply", r.ID, state, version), r.ID, netBody{Kind: "update", Task: r.ID, State: state, Detail: clip(version, maxUpdateVersion), Text: clip(text, maxUpdateText)})
 	})
 }
 
@@ -521,7 +531,7 @@ func (s *Store) FinishNetUpdate(broker, peer, id, state, version, text string) e
 		if current == "" || current != broker {
 			return nil
 		}
-		return enqueueNet(tx, broker, peer, "update-final."+id, id, netBody{Kind: "update", Task: id, State: state, Detail: clip(version, maxUpdateVersion), Text: clip(text, maxUpdateText)})
+		return enqueueNet(tx, broker, peer, updateReplyOp("update-final", id, state, version), id, netBody{Kind: "update", Task: id, State: state, Detail: clip(version, maxUpdateVersion), Text: clip(text, maxUpdateText)})
 	})
 }
 
@@ -652,7 +662,7 @@ func liveWorkTasks(tx *sql.Tx, limit int) ([]ActiveTask, error) {
 }
 
 func updateQueuedText(n int, tasks []ActiveTask) string {
-	text := fmt.Sprintf("На компьютере идут задачи (%d). Программа обновится, когда они закончатся; до тех пор он не берёт новых задач.", n)
+	text := fmt.Sprintf("На компьютере идут задачи (%d). Компьютер ждёт завершения задач до 5 минут. Если установка не начнётся, запрос будет снят.", n)
 	if len(tasks) == 0 {
 		return text
 	}

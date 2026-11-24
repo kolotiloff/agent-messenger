@@ -260,6 +260,9 @@ func (s *Supervisor) answerUpdateRequests(broker string) string {
 	if err != nil {
 		return "отмена обновления не читается: " + err.Error()
 	}
+	if len(cancellations) > 0 && s.server != nil {
+		defer s.server.NotifyPresence()
+	}
 	for _, r := range cancellations {
 		if err := s.store.FinishUpdateCancellation(r, s.updateBusy()); err != nil {
 			return "отмена обновления не записана: " + err.Error()
@@ -269,6 +272,9 @@ func (s *Supervisor) answerUpdateRequests(broker string) string {
 	if err != nil {
 		return "запросы обновления не читаются: " + err.Error()
 	}
+	if len(reqs) > 0 && s.server != nil {
+		defer s.server.NotifyPresence()
+	}
 	for _, r := range reqs {
 		if p := s.acceptUpdateRequest(r); p != "" {
 			return p
@@ -277,7 +283,7 @@ func (s *Supervisor) answerUpdateRequests(broker string) string {
 	if p := s.autoUpdate(); p != "" {
 		return p
 	}
-	return s.startQueuedUpdate()
+	return s.startQueuedUpdate(time.Now())
 }
 
 // acceptUpdateRequest records a request: a hard refusal, a queue until live
@@ -327,7 +333,7 @@ func (s *Supervisor) acceptUpdateRequest(r core.NetUpdateRequest) string {
 }
 
 func updateQueuedText(n int, tasks []core.ActiveTask) string {
-	return fmt.Sprintf("На компьютере идут задачи (%d). Программа обновится, когда они закончатся; до тех пор он не берёт новых задач.", n) + updateTaskList(n, tasks)
+	return fmt.Sprintf("На компьютере идут задачи (%d). Компьютер ждёт завершения задач до 5 минут. Если установка не начнётся, запрос будет снят.", n) + updateTaskList(n, tasks)
 }
 
 func updateTaskList(n int, tasks []core.ActiveTask) string {
@@ -350,6 +356,9 @@ func updateTaskList(n int, tasks []core.ActiveTask) string {
 }
 
 func (s *Supervisor) launchPendingUpdate(r core.NetUpdateRequest, program string, first bool) string {
+	if s.server != nil {
+		defer s.server.NotifyPresence()
+	}
 	job := RemoteUpdate{Broker: r.Broker, Peer: r.Peer, ID: r.ID}
 	raw, _ := json.Marshal(job)
 	marker := filepath.Join(s.root, remoteUpdateMarker)
@@ -402,7 +411,7 @@ func (s *Supervisor) launchPendingUpdate(r core.NetUpdateRequest, program string
 	return ""
 }
 
-func (s *Supervisor) startQueuedUpdate() string {
+func (s *Supervisor) startQueuedUpdate(now time.Time) string {
 	p, ok, err := s.store.PendingUpdate()
 	if err != nil {
 		return "очередь обновления не читается: " + err.Error()
@@ -413,6 +422,20 @@ func (s *Supervisor) startQueuedUpdate() string {
 	running := selfupdate.Build(buildinfo.Version)
 	if target := selfupdate.Build(p.Target); target > 0 && running >= target {
 		if err := s.store.FinishPendingUpdate(p.ID, core.UpdateDone, buildinfo.Version, "запрошенная версия уже установлена"); err != nil {
+			return "результат обновления не записан: " + err.Error()
+		}
+		return ""
+	}
+	created, err := time.Parse(time.RFC3339Nano, p.CreatedAt)
+	if err != nil {
+		return "время запроса обновления не читается: " + err.Error()
+	}
+	if now.Sub(created) >= 5*time.Minute {
+		if s.server != nil {
+			defer s.server.NotifyPresence()
+		}
+		// Refused is a terminal reply understood even by pre-cancellation clients.
+		if err := s.store.FinishPendingUpdate(p.ID, core.UpdateRefused, "", "Установка не началась за 5 минут. Запрос снят, обновление можно запросить снова."); err != nil {
 			return "результат обновления не записан: " + err.Error()
 		}
 		return ""
@@ -485,6 +508,9 @@ func (s *Supervisor) sendUpdateResult() string {
 	resultPath := filepath.Join(s.root, RemoteUpdateResult)
 	marker := filepath.Join(s.root, remoteUpdateMarker)
 	if _, err := os.Lstat(resultPath); err == nil {
+		if s.server != nil {
+			defer s.server.NotifyPresence()
+		}
 		r, ok := readUpdateFile(resultPath)
 		if ok && r.State != core.UpdateUpdating {
 			var send error

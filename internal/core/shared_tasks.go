@@ -42,17 +42,19 @@ CREATE TABLE IF NOT EXISTS net_tasks_hidden (
 
 // NetTask is one task of a computer's shared list.
 type NetTask struct {
-	ID         string `json:"id"`
-	Project    string `json:"project"`
-	Title      string `json:"title"`
-	Agent      string `json:"agent"`
-	State      string `json:"state"`
-	CreatedAt  string `json:"created_at"`
-	StartedAt  string `json:"started_at,omitempty"`
-	Model      string `json:"model,omitempty"`
-	FinishedAt string `json:"finished_at,omitempty"`
-	Report     string `json:"report,omitempty"`
-	Tokens     int64  `json:"tokens,omitempty"`
+	ID            string `json:"id"`
+	Project       string `json:"project"`
+	Title         string `json:"title"`
+	Agent         string `json:"agent"`
+	State         string `json:"state"`
+	CreatedAt     string `json:"created_at"`
+	StartedAt     string `json:"started_at,omitempty"`
+	PendingLaunch bool   `json:"pending_launch,omitempty"`
+	WaitsForLock  string `json:"waits_for_lock,omitempty"`
+	Model         string `json:"model,omitempty"`
+	FinishedAt    string `json:"finished_at,omitempty"`
+	Report        string `json:"report,omitempty"`
+	Tokens        int64  `json:"tokens,omitempty"`
 	// RunsOnPeer and RunsOn: the computer the task was sent to (T-186).
 	RunsOnPeer string `json:"runs_on_peer,omitempty"`
 	RunsOn     string `json:"runs_on,omitempty"`
@@ -115,11 +117,16 @@ func (s *Store) SharedTasks(since time.Time) ([]NetTask, error) {
 // name another computer of this one (linkComputer).
 func tasksForSharing(db *sql.DB, since time.Time, broker string) ([]NetTask, error) {
 	rows, err := db.Query(`SELECT t.id,t.project,t.title,t.provider,t.state,t.created_at,COALESCE(t.finished_at,''),t.usage_input+t.usage_output,COALESCE(t.remote_peer,''),
- COALESCE((SELECT MIN(launched_at) FROM task_runs WHERE task_id=t.id),''),
+ COALESCE(CASE WHEN launch.kind='launch_observed' THEN launch.text END,
+  (SELECT MIN(launched_at) FROM task_runs WHERE task_id=t.id),''),
+ COALESCE(t.state='running' AND launch.kind='launch_queued',0),
+ CASE WHEN t.state='running' AND launch.kind='launch_queued' THEN launch.text ELSE '' END,
  COALESCE(t.ran_model,''),
  COALESCE((SELECT r.disposition_text FROM task_runs r WHERE r.task_id=t.id AND r.disposition='report' ORDER BY r.ordinal DESC LIMIT 1),
   (SELECT i.text FROM remote_task_items i WHERE i.task_id=t.id AND i.kind='report' ORDER BY i.seq DESC LIMIT 1),'')
- FROM tasks t WHERE t.origin_peer IS NULL AND t.hidden_at IS NULL AND t.created_at>=?
+ FROM tasks t LEFT JOIN task_events launch ON t.remote_peer IS NOT NULL AND launch.seq=(
+  SELECT seq FROM task_events WHERE task_id=t.id AND kind IN ('launch_queued','launch_observed') ORDER BY seq DESC LIMIT 1)
+ WHERE t.origin_peer IS NULL AND t.hidden_at IS NULL AND t.created_at>=?
  AND (t.remote_peer IS NULL OR t.remote_broker=?) ORDER BY t.created_at DESC, t.rowid DESC LIMIT ?`,
 		since.UTC().Format(time.RFC3339Nano), broker, MaxSharedTasks)
 	if err != nil {
@@ -129,7 +136,8 @@ func tasksForSharing(db *sql.DB, since time.Time, broker string) ([]NetTask, err
 	out := []NetTask{}
 	for rows.Next() {
 		var t NetTask
-		if err := rows.Scan(&t.ID, &t.Project, &t.Title, &t.Agent, &t.State, &t.CreatedAt, &t.FinishedAt, &t.Tokens, &t.RunsOnPeer, &t.StartedAt, &t.Model, &t.Report); err != nil {
+		if err := rows.Scan(&t.ID, &t.Project, &t.Title, &t.Agent, &t.State, &t.CreatedAt, &t.FinishedAt, &t.Tokens, &t.RunsOnPeer, &t.StartedAt,
+			&t.PendingLaunch, &t.WaitsForLock, &t.Model, &t.Report); err != nil {
 			return nil, err
 		}
 		if _, _, err := modelcatalog.SplitReported(t.Model); err != nil {
@@ -142,6 +150,23 @@ func tasksForSharing(db *sql.DB, since time.Time, broker string) ([]NetTask, err
 		return nil, err
 	}
 	rows.Close()
+	store := &Store{db: db}
+	for i := range out {
+		task := &out[i]
+		if task.RunsOnPeer == "" && task.State == "running" && task.StartedAt == "" {
+			pending, err := runPendingLaunch(db, task.ID)
+			if err != nil {
+				return nil, err
+			}
+			task.PendingLaunch = pending
+			if pending {
+				task.WaitsForLock, err = store.waitingLock(task.ID)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
 	return out, nil
 }
 

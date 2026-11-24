@@ -60,6 +60,7 @@ const shots = process.env.SCREENSHOT_DIR;
           '/api/machine-order': {order: null},
         };
         if (url.pathname.startsWith('/api/')) return route.fulfill({json: fixtures[url.pathname] || {ok: true}});
+        if (url.pathname === '/blank') return route.fulfill({body: '', contentType: 'text/html'});
         const filename = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
         if (!['index.html', 'app.js', 'app.css', 'i18n.js'].includes(filename)) return route.fulfill({status: 404, body: ''});
         await route.fulfill({body: await fs.readFile(path.join(assets, filename)), contentType:

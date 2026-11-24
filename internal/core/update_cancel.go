@@ -52,6 +52,19 @@ func (s *Store) RequestUpdateCancellation(computer, project string) (string, err
 	if !ValidProjectName(project) {
 		return "", fmt.Errorf("%w: unknown project", ErrRejected)
 	}
+	return s.requestUpdateCancellation(computer, project, "", "")
+}
+
+// CancelObservedUpdate is the owner's action on a specific card. A reconnect
+// or a delayed click must never redirect it to another network or request.
+func (s *Store) CancelObservedUpdate(computer, broker, target string) (string, error) {
+	if !netRef.MatchString(target) || (computer != "" && broker == "") {
+		return "", fmt.Errorf("%w: неизвестный запрос обновления", ErrRejected)
+	}
+	return s.requestUpdateCancellation(computer, "", broker, target)
+}
+
+func (s *Store) requestUpdateCancellation(computer, project, expectedBroker, expectedID string) (string, error) {
 	var id string
 	err := s.tx(func(tx *sql.Tx) error {
 		self, err := localComputer(tx)
@@ -61,12 +74,25 @@ func (s *Store) RequestUpdateCancellation(computer, project string) (string, err
 		r := UpdateCancellation{Project: project}
 		local := computer == "" || computer == self
 		if local {
-			err = tx.QueryRow(`SELECT id FROM pending_updates ORDER BY created_at,id LIMIT 1`).Scan(&r.Target)
-			if errors.Is(err, sql.ErrNoRows) {
-				return fmt.Errorf("%w: этот компьютер не ждёт обновления", ErrRejected)
-			}
-			if err != nil {
-				return err
+			if expectedID != "" {
+				if expectedBroker != "" {
+					current, err := metaValue(tx, "net_broker")
+					if err != nil {
+						return err
+					}
+					if current != expectedBroker {
+						return fmt.Errorf("%w: сеть изменилась", ErrRejected)
+					}
+				}
+				r.Target, r.Broker = expectedID, expectedBroker
+			} else {
+				err = tx.QueryRow(`SELECT id FROM pending_updates ORDER BY created_at,id LIMIT 1`).Scan(&r.Target)
+				if errors.Is(err, sql.ErrNoRows) {
+					return fmt.Errorf("%w: этот компьютер не ждёт обновления", ErrRejected)
+				}
+				if err != nil {
+					return err
+				}
 			}
 		} else {
 			r.Broker, err = metaValue(tx, "net_broker")
@@ -83,7 +109,13 @@ func (s *Store) RequestUpdateCancellation(computer, project string) (string, err
 			if updateBuild(p.Version) < updateCancelMinBuild {
 				return fmt.Errorf("%w: компьютер «%s» пока не поддерживает отмену обновления. Установите Messenger 0.100 или новее на том компьютере", ErrRejected, p.Name)
 			}
+			if expectedBroker != "" && expectedBroker != r.Broker {
+				return fmt.Errorf("%w: сеть изменилась", ErrRejected)
+			}
 			r.Peer, r.Target = computer, p.UpdateRequestID
+			if expectedID != "" {
+				r.Target = expectedID
+			}
 			if p.UpdatePending && r.Target == "" {
 				// An older broker can relay the command but omits the ID.
 				// The original requester still knows its own queued ID.
@@ -93,7 +125,7 @@ func (s *Store) RequestUpdateCancellation(computer, project string) (string, err
 					return err
 				}
 			}
-			if !p.UpdatePending || r.Target == "" {
+			if (expectedID == "" && !p.UpdatePending) || r.Target == "" {
 				return fmt.Errorf("%w: компьютер «%s» не сообщил идентификатор ожидающего обновления", ErrRejected, p.Name)
 			}
 		}
@@ -139,6 +171,18 @@ func (s *Store) UpdateCancellations(broker string) ([]UpdateCancellation, error)
 // also owns helper launch. Installation or an unconsumed result stays fenced.
 func (s *Store) FinishUpdateCancellation(r UpdateCancellation, installing bool) error {
 	return s.tx(func(tx *sql.Tx) error {
+		// The target window can see the broker's event before it has read
+		// the offered request. Keep its exact cancellation until that read.
+		if r.Peer == "" && r.Broker != "" {
+			var awaiting bool
+			err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM net_update_cancels WHERE incoming=1 AND broker=? AND peer='' AND id=?
+				AND unixepoch(created_at)>unixepoch('now')-300)
+				AND NOT EXISTS(SELECT 1 FROM pending_updates WHERE id=?)
+				AND NOT EXISTS(SELECT 1 FROM net_update_requests WHERE broker=? AND id=?)`, r.Broker, r.ID, r.Target, r.Broker, r.Target).Scan(&awaiting)
+			if err != nil || awaiting {
+				return err
+			}
+		}
 		res, err := tx.Exec(`DELETE FROM net_update_cancels WHERE incoming=1 AND broker=? AND peer=? AND id=? AND target=?`,
 			r.Broker, r.Peer, r.ID, r.Target)
 		if err != nil {
@@ -153,6 +197,19 @@ func (s *Store) FinishUpdateCancellation(r UpdateCancellation, installing bool) 
 			return err
 		}
 		state, reason := UpdateRefused, "that update is no longer pending"
+		if !pending && r.Target != "" {
+			// The request and its cancellation can arrive in the same inbox batch.
+			var requester string
+			err := tx.QueryRow(`DELETE FROM net_update_requests WHERE broker=? AND id=? RETURNING peer`, r.Broker, r.Target).Scan(&requester)
+			if err == nil {
+				state, reason = UpdateCancelled, ""
+				if err := enqueueNet(tx, r.Broker, requester, updateReplyOp("update-final", r.Target, state, ""), r.Target, netBody{Kind: "update", Task: r.Target, State: state}); err != nil {
+					return err
+				}
+			} else if !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
+		}
 		if pending && installing {
 			reason = "installation has already started"
 		}
@@ -162,7 +219,7 @@ func (s *Store) FinishUpdateCancellation(r UpdateCancellation, installing bool) 
 			}
 			state, reason = UpdateCancelled, ""
 		}
-		if r.Broker != "" {
+		if r.Peer != "" {
 			return enqueueNet(tx, r.Broker, r.Peer, "update-cancel-result."+r.ID, r.ID,
 				netBody{Kind: "update_cancel_result", Task: r.ID, Question: r.Target, State: state, Text: reason})
 		}

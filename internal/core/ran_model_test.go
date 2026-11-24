@@ -33,6 +33,7 @@ func TestRemoteTaskReceivesReportedModel(t *testing.T) {
 	mirror := p.mirror(t, id)
 	p.carry(t, false)
 	r := p.b.launch(t, mirror.ID, p.b.sessionOf(t, mirror.ID))
+	p.carry(t, false) // first launch observation
 	const reported = "claude-sonnet-test"
 	for _, model := range []string{reported, reported} {
 		if err := p.b.st.SetTaskRunModel(r.ID, model); err != nil {

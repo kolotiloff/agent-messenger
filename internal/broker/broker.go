@@ -106,7 +106,8 @@ type Broker struct {
 	failedAt map[string][]time.Time
 
 	// The current short invitation and its open exchanges (T-052).
-	pair pairState
+	updates updateSignal
+	pair    pairState
 }
 
 // Device is a registered device.
@@ -806,6 +807,7 @@ func (b *Broker) Handler() http.Handler {
 	mux.HandleFunc("/v1/presence", b.handlePresence)
 	mux.HandleFunc("/v1/tasks", b.handleSharedTasks)
 	mux.HandleFunc("/v1/send", b.handleSend)
+	mux.HandleFunc("/v1/update-watch", b.handleUpdateWatch)
 	mux.HandleFunc("/v1/inbox", b.handleInbox)
 	return mux
 }
