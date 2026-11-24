@@ -113,6 +113,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
+| T-287 | Expire unstarted update requests after five minutes, synchronize the sidebar update controls across computers, and use the waiting color for coordinator questions. | agent | Implemented on `codex/t287-update-queue-timeout`, pending release. Three-client integration and browser regression checks. |
 | T-286 | Identify this computer in the computer sidebar. | window | Implemented after 1.0, pending the next release. A thin inset stripe on the left edge of the local card. It follows the computer when reordered, stays on it when another card is selected, and uses a soft white in dark mode and gray in light mode. |
 | T-285 | Group tasks awaiting their first launch under «Запланированные» in the task list. | window | After 1.0. Show the reason (e.g. waiting for a resource) and move the task to active when work starts. A running conversation waiting for an answer keeps its question status. The current product has no calendar-based launch command. |
 | T-281 | In the computer sidebar, show only the running agent name while its model is unknown (owner, 2026-11-24). | window | After 0.100. Applies to every provider. Append the model once it is confirmed, for example «Codex» becomes «Codex Sol 6.2 High». Keep the existing duration and status styling. Cover the transition when a confirmed model arrives. |

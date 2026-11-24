@@ -310,16 +310,20 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept button.am-update-icon:is(:hover,:focus-visible,:active):not(:disabled) { background:var(--am-update-hover); }
 #am-concept button.am-update-icon:disabled { opacity:.6; cursor:default; }
 #am-concept button.am-update-icon[hidden] { display:none; }
-/* While an update downloads, a ring around the same arrow fills from 0 to
-   100% (owner, 2026-11-14). Asked for, waiting for tasks or under way on
-   another computer: the same arrow, dimmed and still. */
+/* Local downloads can report progress. Remote updates show activity until
+   the receiving computer confirms the result. */
 #am-concept button.am-update-icon { position:relative; }
 #am-concept .am-update-icon .am-update-progress { display:none; }
 #am-concept button.am-update-icon.am-update-loading .am-update-progress { display:block; position:absolute; inset:0; width:100%; height:100%; transform:rotate(-90deg); pointer-events:none; }
 #am-concept .am-update-progress circle { fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-dasharray:100; stroke-dashoffset:calc(100 - 100 * var(--am-update-p, 0)); transition:stroke-dashoffset .35s linear; }
 #am-concept button.am-update-icon.am-update-loading:disabled { opacity:1; }
-#am-concept .am-update-icon.am-update-wait { flex-shrink:0; width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background:transparent; color:var(--am-update-arrow); opacity:.6; cursor:default; }
-@media (prefers-reduced-motion:reduce) { #am-concept .am-update-progress circle { transition:none; } }
+#am-concept .am-update-icon.am-update-wait { flex-shrink:0; width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background:transparent; color:var(--am-update-arrow); cursor:default; }
+@keyframes am-update-spin { to { transform:rotate(1turn); } }
+#am-concept .am-update-spin { animation:am-update-spin 1.5s linear infinite; }
+@media (prefers-reduced-motion:reduce) {
+  #am-concept .am-update-progress circle { transition:none; }
+  #am-concept .am-update-spin { animation:none; }
+}
 #am-concept .am-update-icon svg { width:13px; height:13px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
 
 /* Main pane and tabs */
@@ -849,3 +853,9 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 @media (max-width: 720px) { #am-concept .am-chain { flex-direction:column; } #am-concept .am-chain-arrow { transform:rotate(90deg); } }
 
 #am-concept .am-card-update .am-update-icon { width:var(--am-computer-update-size); height:var(--am-computer-update-size); }
+
+#am-concept.am-local-update-pending #app-update-button { display:none; }
+#am-concept .am-update-cancel svg:last-child,
+#am-concept .am-update-cancel:is(:hover,:focus-visible) svg:first-child { display:none; }
+#am-concept .am-update-cancel:is(:hover,:focus-visible) svg:last-child { display:block; color:var(--am-bad); }
+#am-concept button.am-update-cancel:is(:hover,:focus-visible):not(:disabled) { background:color-mix(in srgb,var(--am-bad) 14%,transparent); }

@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-24 — Codex (T-287)
+
+- Bounded the receiver's pre-installation wait and added broker notifications for sidebar update controls. Verified the five-minute boundary, installer protection and cancellation by another observer on a three-computer loopback network.
+- Added a browser check for the download arrow, the rotating circular arrow and red cancel cross, the reduced-motion setting, the installation indicator, and the yellow coordinator-wait status. Captured fictional sidebar and task cards in WebKit. These changes are for the next release.
+
 ## 2026-11-24 — Codex (T-283, T-284, T-286)
 
 - Published [1.0](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.0-preview.103) with 22 assets. All four jobs in the [release workflow](https://github.com/kolotiloff/agent-messenger/actions/runs/45459724676) passed. The shipping 0.99 and 0.101 Mac programs each found and downloaded signed build 103 from the public list. The owner’s Mac staged it without an installation or restart.

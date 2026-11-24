@@ -42,7 +42,8 @@ type windowView struct {
 	FeedbackNew int `json:"feedback_new"`
 	// PendingUpdate is this computer's queued or installing Messenger
 	// update (T-155): "queued" or "updating".
-	PendingUpdate string `json:"pending_update,omitempty"`
+	PendingUpdate   string `json:"pending_update,omitempty"`
+	PendingUpdateID string `json:"pending_update_id,omitempty"`
 	// LocalUpdate is this computer's last update of itself, for the
 	// window notice (T-155).
 	LocalUpdate *core.NetUpdate `json:"local_update,omitempty"`
@@ -79,6 +80,7 @@ func (s *Supervisor) WindowViewFiltered(project, agent, computer, version string
 	out.DataRoot = s.root
 	out.FeedbackCount, out.FeedbackNew, _ = s.store.FeedbackCount()
 	if pending, ok, err := s.store.PendingUpdate(); err == nil && ok {
+		out.PendingUpdateID = pending.ID
 		out.PendingUpdate = core.UpdateQueued
 		if s.updateBusy() && pending.ID != "" {
 			if _, err := os.Lstat(filepath.Join(s.root, remoteUpdateMarker)); err == nil {

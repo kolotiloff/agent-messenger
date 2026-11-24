@@ -313,7 +313,7 @@
     switch(t.state){
       case 'running':return t.pending_launch?[t.waits_for_lock?tr('Ждёт ресурс «')+t.waits_for_lock+'»':tr('Ждёт запуска'),'am-status-wait']:[tr('Работает ')+minutes(from),'am-status-run','',from];
       case 'waiting_owner':return [tr('Ждёт вашего ответа'),'am-status-wait'];
-      case 'waiting_coordinator':return [tr('Ждёт ответа координатора'),'am-status-run'];
+      case 'waiting_coordinator':return [tr('Ждёт ответа координатора'),'am-status-wait'];
       case 'done':return [tr('Работал ')+minutes(from,end),'am-muted'];
       case 'failed':return failureStatus(t)||[tr('Ошибка через ')+minutes(from,end),'am-status-bad'];
       case 'interrupted':return [tr('Прервана через ')+minutes(from,end),'am-status-bad'];
@@ -426,16 +426,74 @@
     catch(error){addNotice('refused-'+peer.id+'-'+Date.now(),'bad',(peer.name||'')+tr(' не обновлён'),capital(error.message));}
     renderMachines();
   }
-  // The update under way for a card's icon: asked for or updating.
-  function updateLine(peer){
-    const u=(server?.updates||[]).find(x=>x.computer===peer.id);
-    if(u&&!u.stale&&Date.now()-Date.parse(u.updated_at)<24*3600*1000){
-      if(u.state==='waiting')return [tr('Обновление запрошено…'),'am-status-wait'];
-      if(u.state==='queued')return [tr('ждёт обновления'),'am-status-wait'];
-      if(u.state==='updating')return [tr('Обновляется…'),'am-status-run'];
+  // The broker wakes all open windows when the same request changes phase.
+  // Keep the last snapshot across ordinary server/status refreshes.
+  let updateBoard=null,watchingUpdates=false,watchRetry=0;
+  function updateNetwork(){
+    return (server?.host?.running?server.host.broker_id:server?.member?.broker_id)||'';
+  }
+  function watchUpdateBoard(){
+    if(watchingUpdates||document.hidden||!updateNetwork()||Date.now()<watchRetry)return;
+    watchingUpdates=true;
+    (async()=>{
+      try{
+        while(!document.hidden&&updateNetwork()){
+          const network=updateNetwork(),cursor=updateBoard?.broker===network?updateBoard.cursor:'';
+          const {result}=await postAPI('/api/server-action',{action:'update-watch',cursor},18000);
+          if(network!==updateNetwork())continue;
+          if(!result?.cursor||result.broker!==network)throw Error('unsupported');
+          if(result.cursor!==cursor){updateBoard=result;renderMachines();}
+        }
+      }catch(_){watchRetry=Date.now()+15000;}
+      finally{watchingUpdates=false;}
+    })();
+  }
+  function sharedUpdate(device){
+    if(!updateBoard||updateBoard.broker!==updateNetwork())return null;
+    return updateBoard.marks?.[device||updateBoard.self];
+  }
+  function updateMark(peer){
+    const device=peer?.id||'', shared=sharedUpdate(device);
+    const own=peer?(server?.updates||[]).find(x=>x.computer===device&&!x.stale):null;
+    const localID=own?.request_id||(!peer?view?.pending_update_id:'');
+    const localState=own?.state||(!peer?view?.pending_update:'');
+    const active=s=>['waiting','queued','updating'].includes(s);
+    if(shared&&shared.state!=='legacy'){
+      // The initiating window can lead the broker by one exchange.
+      const newer=own?.state==='waiting'&&own.request_id!==shared.id&&Date.parse(own.updated_at)>=shared.at*1000;
+      if(!newer){
+        if(active(shared.state)){
+          if(shared.state==='waiting'&&Date.now()-shared.at*1000>=900000)return null;
+          return shared;
+        }
+        if(peer||!localID||shared.id===localID)return null;
+      }
     }
-    if(peer.update_pending)return [tr('ждёт обновления'),'am-status-wait'];
-    return null;
+    if(active(localState))return {state:localState,id:localID};
+    return peer?.update_pending?{state:'queued',id:peer.update_request_id}:null;
+  }
+  function updateControl(peer,mark){
+    const installing=mark.state==='updating';
+    const caption=installing?tr('Обновление устанавливается'):mark.state==='waiting'?tr('Обновление запрошено…'):tr('ждёт обновления');
+    const canCancel=!installing&&!!mark.id&&(!peer||(peerFresh(peer)&&!versionOlder(peer.version,'0.100')&&!!peer.version));
+    const b=el(canCancel?'button':'span',undefined,'am-update-icon am-peer-update '+(canCancel?'am-update-cancel':'am-update-wait'));
+    const label=canCancel?caption.replace(/…$/,'')+'. '+tr('Отменить запрос'):caption;
+    b.title=label;b.setAttribute('aria-label',label);
+    const indicator=svgIcon(checkPath);
+    indicator.classList.add('am-update-spin');
+    b.append(indicator);
+    if(!canCancel){b.setAttribute('role','img');return b;}
+    b.type='button';b.dataset.key='cancel-update-'+(peer?.id||'local');
+    b.append(svgIcon(['M6 6l12 12M18 6L6 18']));
+    const broker=updateNetwork(),device=peer?.id||'';
+    b.addEventListener('keydown',e=>e.stopPropagation());
+    b.addEventListener('click',async e=>{
+      e.stopPropagation();b.disabled=true;
+      try{await postAPI('/api/server-action',{action:'cancel-update',device,broker,request_id:mark.id},28000);}
+      catch(error){addNotice('cancel-'+mark.id,'bad',tr('Отменить запрос'),capital(error.message));}
+      finally{b.disabled=false;}
+    });
+    return b;
   }
   // T-128: notices above the reply box. A good one fades after a few seconds
   // on screen; a bad one stays until the owner closes it, also across
@@ -711,11 +769,9 @@
     if(!lines.children.length)lines.append(el('p',online?tr('Агенты не подключены'):tr('Нет связи'),'am-small am-muted'));
     machine.append(lines);
     const corner=el('div',undefined,'am-card-update am-local-update');
-    if(view?.pending_update==='updating'||view?.pending_update==='queued'){
-      const tip=view.pending_update==='updating'?tr('Обновляется…'):tr('ждёт обновления');
-      const b=el('span',undefined,'am-update-icon am-peer-update am-update-wait');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);appendUpdateGlyphs(b);
-      corner.append(b);
-    }
+    const localMark=updateMark(null);
+    if(localMark)corner.append(updateControl(null,localMark));
+    root.classList.toggle('am-local-update-pending',!!localMark);
     const localMeta=el('div',undefined,'am-machine-meta');localMeta.append(corner,version);head.append(localMeta);box.append(machine);
     // The other computers of this computer's network, with their agents.
     // Only the computer that runs the server can revoke one, from the
@@ -732,16 +788,11 @@
       const corner=el('div',undefined,'am-card-update');
       // T-128: an older computer gets the update icon next to its dot; the
       // owner confirms in a popup.
-      const busy=updateLine(peer);
+      const busy=updateMark(peer),confirmed=sharedUpdate(peer.id)?.version;
+      const installed=confirmed&&versionOlder(peer.version,confirmed)?confirmed:peer.version;
       if(busy){
-        // While an update is asked for, waits for tasks or is under way, the
-        // arrow stays, dimmed and still, and says so on hover: another
-        // computer reports no progress, and a spinning mark looked like a
-        // download that may wait for hours (owner, 2026-11-14).
-        const tip=busy[0];
-        const b=el('span',undefined,'am-update-icon am-peer-update am-update-wait');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);appendUpdateGlyphs(b);
-        corner.append(b);
-      }else if(fresh&&peer.version&&versionOlder(peer.version,newestVersion())){
+        corner.append(updateControl(peer,busy));
+      }else if(fresh&&installed&&versionOlder(installed,newestVersion())){
         const newest=versionName(newestVersion()),label=tr('Обновить до ')+newest;
         const b=el('button',undefined,'am-update-icon am-peer-update');b.type='button';b.title=label;b.setAttribute('aria-label',label);appendUpdateGlyphs(b);
         b.addEventListener('click',event=>{event.stopPropagation();askConfirm(tr('Обновить ')+(peer.name||tr('компьютер'))+tr(' до ')+newest+'?',tr('Программа на том компьютере обновится и перезапустится. Задачи и история сохранятся.')+(peer.host?' '+tr('На нём работает сервер сети: пока он перезапускается, компьютеры не видят друг друга. Если там попросят подтверждение, сервер не вернётся, пока кто-нибудь не ответит у того компьютера.'):''),tr('Обновить'),()=>requestUpdate(peer),true);});
@@ -749,7 +800,7 @@
         corner.append(b);
       }
       if(corner.children.length)meta.append(corner);
-      if(peer.version)meta.append(el('span',versionName(peer.version),'am-version am-machine-version'));
+      if(installed)meta.append(el('span',versionName(installed),'am-version am-machine-version'));
       name.append(meta);card.append(name);
       if(revokeAsk===peer.id&&hosted.has(peer.id)){
         card.append(el('p',tr('Отозвать устройство? Вернуть его можно только новым приглашением.'),'am-small am-muted'));
@@ -2495,7 +2546,7 @@
   }
   function hideInvitation(){invitation=null;clearInterval(inviteTimer);const d=$('invite-dialog');if(d.open)d.close();}
   function renderServer(){
-    renderAccessBar();renderAutoUpdate();
+    renderAccessBar();renderAutoUpdate();watchUpdateBoard();
     if(!server)return;const h=server.host,m=server.member;
     const focused=document.activeElement?.dataset?.key||'';
     badge($('host-badge'),h.running?tr('Работает'):h.enabled?tr('Не запустился'):tr('Остановлен'),h.running?'good':h.enabled?'bad':'');

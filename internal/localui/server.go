@@ -651,7 +651,7 @@ func writeJSON(w http.ResponseWriter, value any) {
 }
 
 // serverActions are the window's server settings actions.
-var serverActions = map[string]bool{"enable": true, "disable": true, "invite": true, "revoke": true, "connect": true, "check": true, "disconnect": true, "accept": true, "log_share": true, "auto_update": true, "net_full_access": true, "rename": true, "update": true}
+var serverActions = map[string]bool{"enable": true, "disable": true, "invite": true, "revoke": true, "connect": true, "check": true, "disconnect": true, "accept": true, "log_share": true, "auto_update": true, "net_full_access": true, "rename": true, "update": true, "update-watch": true, "cancel-update": true}
 
 func taskMutation(path string) bool {
 	switch path {
@@ -743,17 +743,20 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 		return control.Request{Cmd: "task-owner-note", MessageID: in.Task, Confirmation: in.OpID, Text: in.Text}, true
 	case "/api/server-action":
 		var in struct {
-			Action  string `json:"action,omitempty"`
-			Scope   string `json:"scope,omitempty"`
-			Port    int    `json:"port,omitempty"`
-			Address string `json:"address,omitempty"`
-			Public  string `json:"public_address,omitempty"`
-			Device  string `json:"device,omitempty"`
-			Code    string `json:"code,omitempty"`
-			Name    string `json:"name,omitempty"`
-			On      bool   `json:"on,omitempty"`
+			Action    string `json:"action,omitempty"`
+			Cursor    string `json:"cursor,omitempty"`
+			RequestID string `json:"request_id,omitempty"`
+			Broker    string `json:"broker,omitempty"`
+			Scope     string `json:"scope,omitempty"`
+			Port      int    `json:"port,omitempty"`
+			Address   string `json:"address,omitempty"`
+			Public    string `json:"public_address,omitempty"`
+			Device    string `json:"device,omitempty"`
+			Code      string `json:"code,omitempty"`
+			Name      string `json:"name,omitempty"`
+			On        bool   `json:"on,omitempty"`
 		}
-		if decoder.Decode(&in) != nil || !serverActions[in.Action] || len(in.Scope) > 16 || in.Port < 0 || in.Port > 65535 || len(in.Address) > 255 || len(in.Public) > 255 || len(in.Device) > 64 || len(in.Code) > 2048 || len(in.Name) > 256 {
+		if decoder.Decode(&in) != nil || !serverActions[in.Action] || len(in.Cursor) > 64 || len(in.RequestID) > 80 || len(in.Broker) > 80 || len(in.Scope) > 16 || in.Port < 0 || in.Port > 65535 || len(in.Address) > 255 || len(in.Public) > 255 || len(in.Device) > 64 || len(in.Code) > 2048 || len(in.Name) > 256 {
 			return control.Request{}, false
 		}
 		action := in.Action

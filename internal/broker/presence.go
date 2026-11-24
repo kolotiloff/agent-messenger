@@ -298,8 +298,9 @@ type Presence struct {
 	// UpdatePending: this computer is waiting to install a Messenger
 	// update and takes no new tasks (T-155). A host that does not know
 	// the field refuses the report; the client then reports without it.
-	UpdatePending   bool   `json:"update_pending,omitempty"`
-	UpdateRequestID string `json:"update_request_id,omitempty"`
+	UpdatePending    bool   `json:"update_pending,omitempty"`
+	UpdateRequestID  string `json:"update_request_id,omitempty"`
+	UpdateInstalling bool   `json:"update_installing,omitempty"`
 }
 
 // Peer is one computer of the broker as others see it.
@@ -424,7 +425,10 @@ func (b *Broker) Report(peer string, p Presence) error {
 	}
 	raw, _ := json.Marshal(p)
 	_, err := b.db.Exec(`INSERT INTO presence(peer,report,reported_at) VALUES(?,?,?) ON CONFLICT(peer) DO UPDATE SET report=excluded.report, reported_at=excluded.reported_at`, peer, string(raw), b.now().UTC().Format(time.RFC3339))
-	return err
+	if err != nil {
+		return err
+	}
+	return b.recordUpdatePresence(peer, p)
 }
 
 // Roster lists the hosting computer (if it reported) and every device that

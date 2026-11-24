@@ -237,6 +237,7 @@
   'Отозвать устройство':'Revoke device',
   'Обновление запрошено…':'Update requested…',
   'ждёт обновления':'waiting for an update',
+  'Отменить запрос':'Cancel the update request',
   ' ждёт обновления':' waiting for an update',
   'Обновляется…':'Updating…',
   'Программа обновится, когда задачи закончатся; до тех пор компьютер не берёт новых задач.':'The program will update when the tasks end; until then the computer takes no new tasks.',
