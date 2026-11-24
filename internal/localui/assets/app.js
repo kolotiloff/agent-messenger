@@ -2439,6 +2439,21 @@
     const accept=!!server.accept;$('accept-toggle').setAttribute('aria-checked',String(accept));
     $('log-share-toggle').setAttribute('aria-checked',String(!!server.log_share));
   }
+  // Automatic updates are set here only, by the owner, on each computer
+  // (T-277): no coordinator or other computer can turn them on.
+  let autoUpdateBusy=false;
+  function renderAutoUpdate(){
+    $('auto-update-row').hidden=!server?.auto_update_supported;
+    $('auto-update-toggle').setAttribute('aria-checked',String(!!server?.auto_update));
+    $('auto-update-toggle').disabled=autoUpdateBusy;
+  }
+  async function toggleAutoUpdate(){
+    if(!server||autoUpdateBusy)return;
+    const on=!server.auto_update;autoUpdateBusy=true;serverGen++;$('auto-update-status').textContent='';renderAutoUpdate();
+    try{const answer=await postAPI('/api/server-action',{action:'auto_update',on},28000);server=answer.result;renderServer();}
+    catch(error){$('auto-update-status').textContent=capital(error.message);}
+    finally{autoUpdateBusy=false;serverGen++;renderAutoUpdate();}
+  }
   async function loadServer(){
     if(serverBusy||serverPolling)return;
     serverPolling=true;const gen=serverGen;
@@ -2466,7 +2481,7 @@
   }
   function hideInvitation(){invitation=null;clearInterval(inviteTimer);const d=$('invite-dialog');if(d.open)d.close();}
   function renderServer(){
-    renderAccessBar();
+    renderAccessBar();renderAutoUpdate();
     if(!server)return;const h=server.host,m=server.member;
     const focused=document.activeElement?.dataset?.key||'';
     badge($('host-badge'),h.running?tr('Работает'):h.enabled?tr('Не запустился'):tr('Остановлен'),h.running?'good':h.enabled?'bad':'');
@@ -3228,7 +3243,8 @@
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.isComposing&&!$('task-stop').hidden&&!$('compose').hidden&&!document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true]')){e.preventDefault();stopTask();}});
   $('answer-text').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();sendAnswer();}});
   $('project-dialog-close').addEventListener('click',()=>$('project-dialog').close());
-  $('settings-open').addEventListener('click',()=>$('settings-dialog').showModal());
+  $('settings-open').addEventListener('click',()=>{$('auto-update-status').textContent='';$('settings-dialog').showModal();loadServer();});
+  $('auto-update-toggle').addEventListener('click',toggleAutoUpdate);
   $('settings-close').addEventListener('click',()=>$('settings-dialog').close());
   setupPictureViewer();
   $('fb-open').addEventListener('click',openFeedback);

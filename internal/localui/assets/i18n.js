@@ -119,6 +119,8 @@
   'Имя в сети':'Name on the network',
   'Принимать задачи других компьютеров':'Accept tasks from other computers',
   'Отдавать журнал по сети':'Share the log over the network',
+  'Автообновление':'Automatic updates',
+  'Новая версия ставится сама, когда на этом компьютере нет задач. Пока ждёт, компьютер не берёт новых задач.':'A new version installs by itself when no task runs on this computer. While it waits, the computer takes no new tasks.',
   'Ждёт ресурс «':'Waiting for «',
   'Координаторы других компьютеров сети смогут прочитать конец журнала программы на этом компьютере, чтобы разобраться с ошибкой. Идентификаторы сессий, коды и ключи из него убираются.':'Coordinators on other computers of the network can read the end of the program\'s log on this computer to look into an error. Session ids, codes and keys are removed from it.',
   'Координаторы других компьютеров смогут прочитать журнал.':'Coordinators on other computers can read the log.',

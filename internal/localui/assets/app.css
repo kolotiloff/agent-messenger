@@ -292,6 +292,10 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-theme-setting + .am-theme-setting { border-top:1px solid var(--am-line); }
 #am-concept .am-theme-setting > :last-child { flex:0 0 12em; }
 #am-concept .am-theme-setting .am-select-trigger { width:100%; }
+#am-concept .am-theme-setting.am-auto-update { align-items:flex-start; }
+#am-concept .am-theme-setting.am-auto-update > :last-child { flex:0 0 auto; }
+#am-concept .am-auto-update .am-access-text { min-width:0; }
+#am-concept #auto-update-status:empty { display:none; }
 #am-concept .am-version { font-size:var(--am-text-xs); color:var(--am-muted); line-height:1.4; }
 /* An available update is a separate amber arrow next to the version (T-228). */
 #am-concept .am-version-row { display:flex; align-items:center; justify-content:flex-end; gap:var(--am-space-1); min-width:0; }

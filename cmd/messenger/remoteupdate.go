@@ -230,3 +230,34 @@ func (r *remoteUpdate) run(ctx context.Context) (string, string, string) {
 	}
 	return core.UpdateDone, r.running, "уже последняя версия"
 }
+
+// autoUpdateFinder is the client's look for a newer signed release when the
+// owner turned on automatic updates (T-277). It asks GitHub the same way
+// the window does and downloads nothing: the update helper downloads and
+// verifies the release. nil where the program does not update this way.
+func autoUpdateFinder() supervisor.UpdateFinder {
+	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
+		return nil
+	}
+	home, err := platform.DefaultRoot()
+	if err != nil {
+		return nil
+	}
+	channel := updatefeed.Channel{Directory: filepath.Join(home, "updates"), PublicKey: buildinfo.UpdatePublicKey}
+	running := selfupdate.Build(buildinfo.Version)
+	if running <= 0 {
+		return nil
+	}
+	return func(ctx context.Context) (string, error) {
+		// A release already downloaded here counts without asking GitHub,
+		// which would answer "current" for it.
+		if m, err := channel.Load(); err == nil && m.Build > running {
+			return m.Version, nil
+		}
+		r, err := channel.FindGitHub(ctx, running)
+		if err != nil || r.State != "found" || selfupdate.Build(r.Version) <= running {
+			return "", err
+		}
+		return r.Version, nil
+	}
+}

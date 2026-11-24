@@ -263,6 +263,9 @@ func (s *Supervisor) answerUpdateRequests(broker string) string {
 			return p
 		}
 	}
+	if p := s.autoUpdate(); p != "" {
+		return p
+	}
 	return s.startQueuedUpdate()
 }
 

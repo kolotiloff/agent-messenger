@@ -24,6 +24,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       let machineOrder = null, machinePeers = undefined, peerLasting = true;
       let setupStates = [], installed = false;
       let updates = [];
+      let autoUpdate = false, autoSupported = false, autoRefuse = false;
       const writes = [];
       // WebKit reports a background request that a reload cut off as a page
       // error ("… due to access control checks"); the app catches it, so it
@@ -44,6 +45,11 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           if (pathname === '/api/machine-order') {
             ({order: machineOrder, peers: machinePeers} = route.request().postDataJSON());
             return route.fulfill({json: {ok: true}});
+          }
+          if (pathname === '/api/server-action' && route.request().postDataJSON().action === 'auto_update') {
+            if (autoRefuse) return route.fulfill({status: 409, json: {ok: false, detail: 'Fixture refusal'}});
+            autoUpdate = route.request().postDataJSON().on;
+            return route.fulfill({json: {ok: true, result: {host: {running: false, enabled: false, addresses: []}, member: {connected: false}, peers: [], updates, accept: true, auto_update: autoUpdate, auto_update_supported: autoSupported}}});
           }
           if (pathname === '/api/project-create') created = true;
           if (pathname === '/api/agent-install' || pathname === '/api/agent-find') {
@@ -80,7 +86,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           '/api/discovery': {agents: ['claude','codex','cursor'].map(provider => ({provider, state: 'not_found'}))},
           '/api/client-info': {client: 'running', outdated: false},
           '/api/machine-order': {order: machineOrder, peers: machinePeers},
-          '/api/server': {host: {running: false, enabled: false, addresses: []}, member: {connected: false}, peers: connected ? [{id:'fixture-peer',...(peerLasting ? {computer:'computer-fixture'} : {}),name:'Peer fixture',host:true,age:0,agents:[{agent:'cursor'}],coordinator:'cursor-vscode'},{id:'fixture-peer-2',name:'Paused agent fixture',age:0,agents:[],coordinator:'claude-code'}] : [], updates, accept: true},
+          '/api/server': {host: {running: false, enabled: false, addresses: []}, member: {connected: false}, peers: connected ? [{id:'fixture-peer',...(peerLasting ? {computer:'computer-fixture'} : {}),name:'Peer fixture',host:true,age:0,agents:[{agent:'cursor'}],coordinator:'cursor-vscode'},{id:'fixture-peer-2',name:'Paused agent fixture',age:0,agents:[],coordinator:'claude-code'}] : [], updates, accept: true, auto_update: autoUpdate, auto_update_supported: autoSupported},
           '/api/self-update': {current: '0.0.0-preview.test'},
         };
         if (pathname.startsWith('/api/')) return route.fulfill({json: fixtures[pathname] || {ok: true}});
@@ -152,6 +158,34 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.locator('[aria-controls="lang-select-menu"]').click();
       await page.getByRole('option', {name: 'Русский', exact: true}).click();
       await page.waitForFunction(() => document.documentElement.lang === 'ru');
+      // T-277: the automatic update switch shows only where the client can
+      // update itself, and changes only through the owner's click.
+      const autoRow = page.locator('#auto-update-row'), autoToggle = page.locator('#auto-update-toggle');
+      await page.locator('#settings-open').click();
+      await page.waitForResponse(response => new URL(response.url()).pathname === '/api/server');
+      assert.equal(await autoRow.isVisible(), false, 'no switch where automatic updates are unavailable');
+      await page.locator('#settings-close').click();
+      autoSupported = true;
+      await page.locator('#settings-open').click();
+      await autoRow.waitFor();
+      assert.equal(await autoToggle.getAttribute('aria-checked'), 'false');
+      assert.equal(await page.locator('#auto-update-status').isVisible(), false);
+      await autoToggle.click();
+      await page.waitForFunction(() => document.getElementById('auto-update-toggle').getAttribute('aria-checked') === 'true');
+      assert.deepEqual(writes.filter(w => w.body?.action === 'auto_update').map(w => w.body), [{action: 'auto_update', on: true}]);
+      const autoBox = await autoToggle.boundingBox();
+      assert(autoBox.width < 60, 'the switch keeps its own width');
+      autoRefuse = true;
+      await autoToggle.click();
+      await page.locator('#auto-update-status').filter({hasText: 'Fixture refusal'}).waitFor();
+      assert.equal(await autoToggle.getAttribute('aria-checked'), 'true', 'a refused change keeps the switch');
+      autoRefuse = false;
+      await autoToggle.click();
+      await page.waitForFunction(() => document.getElementById('auto-update-toggle').getAttribute('aria-checked') === 'false');
+      await page.locator('#settings-close').click();
+      await page.locator('#settings-open').click();
+      assert.equal(await page.locator('#auto-update-status').isVisible(), false, 'an old refusal is gone when settings open again');
+      await page.locator('#settings-close').click();
       for (const width of [1100, 600]) {
         await page.setViewportSize({width, height: 850});
         for (const [value, label] of [['light', 'Светлая'], ['dark', 'Тёмная']]) {

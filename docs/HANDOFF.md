@@ -8,6 +8,10 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-24 by Claude Code (T-277).
+
+- On `claude/amazing-noether-apbflv`, not released: «Автообновление» in «Настройки программы» (D-191). Windows, Linux and the server service queue their own update once per newer release and install it when no task runs. Checked with Go tests (`autoupdate_test.go`, with a fake release finder and helper) and the window check in Chromium. Not checked: a real release found on GitHub and installed this way on a real computer, WebKit, the Mac (no switch there; Q-031).
+
 Updated 2026-11-24 by Claude Code (T-272 to T-276).
 
 - On `claude/amazing-noether-apbflv`, not released, per D-190: the update's work count reads only current tasks through state indexes (T-272); the computer order survives a report without the lasting id (T-273); readable model names in the statistics filter (T-274); a hidden window stops redrawing and polling statistics (T-275); no «·» between words (T-276). Checked with Go tests and the window checks in Chromium; WebKit is not installed here and runs in CI; nothing seen on the Mac yet.

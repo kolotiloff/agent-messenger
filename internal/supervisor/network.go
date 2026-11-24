@@ -105,7 +105,7 @@ func (s *Supervisor) runNetwork(ctx context.Context) {
 // start, answer or cancel.
 func (s *Supervisor) networkRound(ctx context.Context) {
 	if s.server == nil {
-		s.setNetworkProblem(firstProblem(s.sendUpdateResult(), s.startQueuedUpdate()))
+		s.setNetworkProblem(firstProblem(s.sendUpdateResult(), s.autoUpdate(), s.startQueuedUpdate()))
 		return
 	}
 	n, ok := s.server.Network()
@@ -126,7 +126,7 @@ func (s *Supervisor) networkRound(ctx context.Context) {
 		if changed {
 			_ = s.store.SetNetwork("", "", nil)
 		}
-		s.setNetworkProblem(firstProblem(s.sendUpdateResult(), s.startQueuedUpdate()))
+		s.setNetworkProblem(firstProblem(s.sendUpdateResult(), s.autoUpdate(), s.startQueuedUpdate()))
 		return
 	}
 	if refresh {

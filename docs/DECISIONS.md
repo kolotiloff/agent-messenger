@@ -629,3 +629,7 @@ On Windows, the update relaunch and the installer's handoff to the installed app
 The computer order file keeps, beside the order, which lasting computer id each network peer id had. A report briefly without the lasting id (the fallback after a refused report) no longer changes the card's key.
 
 The window names every model through one rule (`modelName`), the statistics filter included. While the window is hidden it draws no timers, does not ask for statistics and asks for the network once a minute; the task list and the change watch keep running, because notices depend on them. Between words the window uses a comma or a colon, not «·».
+
+## D-191 — Automatic updates per computer, set only by its owner (T-277)
+
+2026-11-24, owner's request. Each computer has «Автообновление» in «Настройки программы», off by default. It is stored in that computer's client and changes only through its window or command line: no network message, coordinator tool or other computer turns it on. While it is on, a Windows or Linux client (and the Linux server service under systemd) looks for a newer signed release every 30 minutes, as the window does, and queues one update of this computer for each newer release through the queue of T-155: no new tasks while it waits, the install when no task runs, then the client restarts. A release whose update was queued once is never queued again on its own, whatever the result (no automatic retry); a newer release is. A failed look changes nothing. The Mac is updated by its app and keeps its button (Q-031).

@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-24 — Claude Code (T-277)
+
+- Automatic updates: a switch in the program settings of each computer (D-191). Windows and Linux clients look for a release every 30 minutes and queue their own update once per release. Mac and the update marks are open in Q-031. Go tests and the Chromium window check pass.
+
 ## 2026-11-24 — Claude Code (T-272 to T-276)
 
 - T-272: the update's work count now uses state indexes; a query-plan test fails with the old query. T-273: found why the computer order was lost after updates (a refused report drops the lasting id for a while) and kept a peer-to-computer map in the order file. T-274: readable model names in the statistics filter. T-275: a hidden window no longer redraws timers or polls statistics, and polls the network once a minute. T-276: replaced «·» separators. Window checks pass in Chromium; WebKit runs in CI.
