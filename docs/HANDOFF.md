@@ -10,9 +10,17 @@ The owner asked the agent to finish the program without them ("доделай б
 
 **[1.0](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.0-preview.103) is released** from `cef286b07290f660b2e34ae4022f7eaeb7e45aa5`. The [release workflow](https://github.com/kolotiloff/agent-messenger/actions/runs/45459724676) passed the public upgrade check for all five platforms. The original macOS 0.99 and 0.101 binaries each found and downloaded the signed release in isolated homes. The owner’s installed 0.99 client also staged 1.0. Existing release assets and links were preserved.
 
+T-289 integrates T-281, T-285, T-287 and T-288 and audits the next release across task delivery, project storage, the window and packaging. It fixes the sidebar's comparison of builds with the same display name, the shared status of a request whose executor has emptied its queue, and reconciliation of a final result when another update is pending. See the [audit report](reports/2026-11-25-t289-release-audit.md) for the checks and remaining live acceptance.
+
+After 1.0, T-287 gives accepted updates five minutes to start and shares the target computer’s update state with open windows via the broker. Waiting tasks use the same yellow status for an owner or coordinator question. Verified with three loopback clients and the real sidebar against browser fixtures. Installation on the owner’s fleet is pending a release.
+
 After 1.0, T-286 adds a thin neutral stripe to the local computer's card. WebKit checks cover selection changes in both themes. T-285 (a planned task section) is queued for a future release.
 
+After 1.0, T-288 keeps the stop button disabled once a remote task’s stop request is queued. The window distinguishes local queuing and broker acceptance and waits for the executing computer to confirm the task outcome. Go network fixtures and Chromium and WebKit window checks cover the transition.
+
 Updated 2026-11-24 by Codex (T-283). The original 0.99 binary still returned current after 0.101 shipped. Added a public-channel check to the release workflow and an opt-in recovery for legacy discovery. Fleet delivery requires verification after publication.
+
+After 1.0, T-285 adds a Planned section for tasks awaiting their first run. A remote acceptance can report that the task is queued, along with a resource if known. The executor's first observed process moves the task to Active. The tests use fixture workers and both storage layouts.
 
 Updated 2026-11-24 by Codex (T-282).
 
@@ -21,7 +29,7 @@ Updated 2026-11-24 by Codex (T-282).
 Updated 2026-11-24 by Codex (T-280).
 
 - **0.100 is released** ([release](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.100), [workflow](https://github.com/kolotiloff/agent-messenger/actions/runs/45428605429), [PR #185](https://github.com/kolotiloff/agent-messenger/pull/185), source `8ca1dfe91455fcd9d0a6b3fb561ce0d2ec739d5b`). The coordinator can cancel an exact queued update without stopping workers. A verified already-installed target clears its waiting row before checking live work. Confirmed 22 uploaded assets and verified the signatures, revision, sizes and hashes for all five update sets. PC-1 reported 0.99 and update pending when inspected before publication. No live computer or database was modified. See [UPDATES.md](UPDATES.md).
-- Next: T-281 simplifies the running-agent label in the sidebar for every provider while its model is unknown.
+- After 1.0, T-281 shows model text in computer cards only once the worker has reported it. A comma separates the agent label from its elapsed time or waiting status. Browser checks cover the label before and after a model is reported.
 
 Updated 2026-11-24 by Claude Code (T-278, T-279).
 

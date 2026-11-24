@@ -303,6 +303,10 @@
     // T-126: an open task on a computer this one lost contact with.
     if(t.remote?.lost&&!t.remote.from&&activeStates.includes(t.state))
       return [tr('Связь потеряна, исход неизвестен'),'am-muted',t.remote.last_seen?'«'+t.remote.name+tr('» не на связи с ')+stamp(t.remote.last_seen):'«'+t.remote.name+tr('» больше нет в сети')];
+    if(activeStates.includes(t.state)&&t.remote?.cancel_state){
+      if(t.remote.silent)return [tr('Остановка не подтверждена'),'am-status-wait'];
+      return [tr('Ждём завершения задачи…'),'am-status-wait'];
+    }
     // T-137: sent to another computer that has not said it took the task.
     // It may run there with its replies lost, so neither «Работает» nor
     // «not accepted»: say what is known.
@@ -313,7 +317,7 @@
     switch(t.state){
       case 'running':return t.pending_launch?[t.waits_for_lock?tr('Ждёт ресурс «')+t.waits_for_lock+'»':tr('Ждёт запуска'),'am-status-wait']:[tr('Работает ')+minutes(from),'am-status-run','',from];
       case 'waiting_owner':return [tr('Ждёт вашего ответа'),'am-status-wait'];
-      case 'waiting_coordinator':return [tr('Ждёт ответа координатора'),'am-status-run'];
+      case 'waiting_coordinator':return [tr('Ждёт ответа координатора'),'am-status-wait'];
       case 'done':return [tr('Работал ')+minutes(from,end),'am-muted'];
       case 'failed':return failureStatus(t)||[tr('Ошибка через ')+minutes(from,end),'am-status-bad'];
       case 'interrupted':return [tr('Прервана через ')+minutes(from,end),'am-status-bad'];
@@ -426,16 +430,74 @@
     catch(error){addNotice('refused-'+peer.id+'-'+Date.now(),'bad',(peer.name||'')+tr(' не обновлён'),capital(error.message));}
     renderMachines();
   }
-  // The update under way for a card's icon: asked for or updating.
-  function updateLine(peer){
-    const u=(server?.updates||[]).find(x=>x.computer===peer.id);
-    if(u&&!u.stale&&Date.now()-Date.parse(u.updated_at)<24*3600*1000){
-      if(u.state==='waiting')return [tr('Обновление запрошено…'),'am-status-wait'];
-      if(u.state==='queued')return [tr('ждёт обновления'),'am-status-wait'];
-      if(u.state==='updating')return [tr('Обновляется…'),'am-status-run'];
+  // The broker wakes all open windows when the same request changes phase.
+  // Keep the last snapshot across ordinary server/status refreshes.
+  let updateBoard=null,watchingUpdates=false,watchRetry=0;
+  function updateNetwork(){
+    return (server?.host?.running?server.host.broker_id:server?.member?.broker_id)||'';
+  }
+  function watchUpdateBoard(){
+    if(watchingUpdates||document.hidden||!updateNetwork()||Date.now()<watchRetry)return;
+    watchingUpdates=true;
+    (async()=>{
+      try{
+        while(!document.hidden&&updateNetwork()){
+          const network=updateNetwork(),cursor=updateBoard?.broker===network?updateBoard.cursor:'';
+          const {result}=await postAPI('/api/server-action',{action:'update-watch',cursor},18000);
+          if(network!==updateNetwork())continue;
+          if(!result?.cursor||result.broker!==network)throw Error('unsupported');
+          if(result.cursor!==cursor){updateBoard=result;renderMachines();}
+        }
+      }catch(_){watchRetry=Date.now()+15000;}
+      finally{watchingUpdates=false;}
+    })();
+  }
+  function sharedUpdate(device){
+    if(!updateBoard||updateBoard.broker!==updateNetwork())return null;
+    return updateBoard.marks?.[device||updateBoard.self];
+  }
+  function updateMark(peer){
+    const device=peer?.id||'', shared=sharedUpdate(device);
+    const own=peer?(server?.updates||[]).find(x=>x.computer===device&&!x.stale):null;
+    const localID=own?.request_id||(!peer?view?.pending_update_id:'');
+    const localState=own?.state||(!peer?view?.pending_update:'');
+    const active=s=>['waiting','queued','updating'].includes(s);
+    if(shared&&shared.state!=='legacy'){
+      // The initiating window can lead the broker by one exchange.
+      const newer=own?.state==='waiting'&&own.request_id!==shared.id&&Date.parse(own.updated_at)>=shared.at*1000;
+      if(!newer){
+        if(active(shared.state)){
+          if(shared.state==='waiting'&&Date.now()-shared.at*1000>=900000)return null;
+          return shared;
+        }
+        if(peer||!localID||shared.id===localID)return null;
+      }
     }
-    if(peer.update_pending)return [tr('ждёт обновления'),'am-status-wait'];
-    return null;
+    if(active(localState))return {state:localState,id:localID};
+    return peer?.update_pending?{state:'queued',id:peer.update_request_id}:null;
+  }
+  function updateControl(peer,mark){
+    const installing=mark.state==='updating';
+    const caption=installing?tr('Обновление устанавливается'):mark.state==='waiting'?tr('Обновление запрошено…'):tr('ждёт обновления');
+    const canCancel=!installing&&!!mark.id&&(!peer||(peerFresh(peer)&&!versionOlder(peer.version,'0.100')&&!!peer.version));
+    const b=el(canCancel?'button':'span',undefined,'am-update-icon am-peer-update '+(canCancel?'am-update-cancel':'am-update-wait'));
+    const label=canCancel?caption.replace(/…$/,'')+'. '+tr('Отменить запрос'):caption;
+    b.title=label;b.setAttribute('aria-label',label);
+    const indicator=svgIcon(checkPath);
+    indicator.classList.add('am-update-spin');
+    b.append(indicator);
+    if(!canCancel){b.setAttribute('role','img');return b;}
+    b.type='button';b.dataset.key='cancel-update-'+(peer?.id||'local');
+    b.append(svgIcon(['M6 6l12 12M18 6L6 18']));
+    const broker=updateNetwork(),device=peer?.id||'';
+    b.addEventListener('keydown',e=>e.stopPropagation());
+    b.addEventListener('click',async e=>{
+      e.stopPropagation();b.disabled=true;
+      try{await postAPI('/api/server-action',{action:'cancel-update',device,broker,request_id:mark.id},28000);}
+      catch(error){addNotice('cancel-'+mark.id,'bad',tr('Отменить запрос'),capital(error.message));}
+      finally{b.disabled=false;}
+    });
+    return b;
   }
   // T-128: notices above the reply box. A good one fades after a few seconds
   // on screen; a bad one stays until the owner closes it, also across
@@ -544,7 +606,8 @@
         const tasks=state==='run'?running:waiting;
         const dates=tasks.map(taskStart).filter(at=>Number.isFinite(Date.parse(at)));
         const first=dates.reduce((old,at)=>!old||Date.parse(at)<Date.parse(old)?at:old,'');
-        const models=[...new Set(tasks.map(t=>t.shared?(t.model?modelName(t.model):''):taskModelLabel(t)).filter(Boolean))];
+        // Shared task lists already put the worker's reported model in model.
+        const models=[...new Set(tasks.map(t=>t.shared?t.model:t.ran_model).filter(Boolean).map(modelName))];
         if(models.length)identity.append(' ',el('span',models.map(m=>m.replace(/ Medium$/,' Med')).join(', '),'am-agent-model'));
         const total=counts.running+counts.waiting_owner;
         const count=total>1?'('+total+')':'';
@@ -711,11 +774,9 @@
     if(!lines.children.length)lines.append(el('p',online?tr('Агенты не подключены'):tr('Нет связи'),'am-small am-muted'));
     machine.append(lines);
     const corner=el('div',undefined,'am-card-update am-local-update');
-    if(view?.pending_update==='updating'||view?.pending_update==='queued'){
-      const tip=view.pending_update==='updating'?tr('Обновляется…'):tr('ждёт обновления');
-      const b=el('span',undefined,'am-update-icon am-peer-update am-update-wait');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);appendUpdateGlyphs(b);
-      corner.append(b);
-    }
+    const localMark=updateMark(null);
+    if(localMark)corner.append(updateControl(null,localMark));
+    root.classList.toggle('am-local-update-pending',!!localMark);
     const localMeta=el('div',undefined,'am-machine-meta');localMeta.append(corner,version);head.append(localMeta);box.append(machine);
     // The other computers of this computer's network, with their agents.
     // Only the computer that runs the server can revoke one, from the
@@ -732,16 +793,11 @@
       const corner=el('div',undefined,'am-card-update');
       // T-128: an older computer gets the update icon next to its dot; the
       // owner confirms in a popup.
-      const busy=updateLine(peer);
+      const busy=updateMark(peer),confirmed=sharedUpdate(peer.id)?.version;
+      const installed=confirmed&&versionOlder(peer.version,confirmed)?confirmed:peer.version;
       if(busy){
-        // While an update is asked for, waits for tasks or is under way, the
-        // arrow stays, dimmed and still, and says so on hover: another
-        // computer reports no progress, and a spinning mark looked like a
-        // download that may wait for hours (owner, 2026-11-14).
-        const tip=busy[0];
-        const b=el('span',undefined,'am-update-icon am-peer-update am-update-wait');b.title=tip;b.setAttribute('role','img');b.setAttribute('aria-label',tip);appendUpdateGlyphs(b);
-        corner.append(b);
-      }else if(fresh&&peer.version&&versionOlder(peer.version,newestVersion())){
+        corner.append(updateControl(peer,busy));
+      }else if(fresh&&installed&&versionOlder(installed,newestVersion())){
         const newest=versionName(newestVersion()),label=tr('Обновить до ')+newest;
         const b=el('button',undefined,'am-update-icon am-peer-update');b.type='button';b.title=label;b.setAttribute('aria-label',label);appendUpdateGlyphs(b);
         b.addEventListener('click',event=>{event.stopPropagation();askConfirm(tr('Обновить ')+(peer.name||tr('компьютер'))+tr(' до ')+newest+'?',tr('Программа на том компьютере обновится и перезапустится. Задачи и история сохранятся.')+(peer.host?' '+tr('На нём работает сервер сети: пока он перезапускается, компьютеры не видят друг друга. Если там попросят подтверждение, сервер не вернётся, пока кто-нибудь не ответит у того компьютера.'):''),tr('Обновить'),()=>requestUpdate(peer),true);});
@@ -749,7 +805,7 @@
         corner.append(b);
       }
       if(corner.children.length)meta.append(corner);
-      if(peer.version)meta.append(el('span',versionName(peer.version),'am-version am-machine-version'));
+      if(installed)meta.append(el('span',versionName(installed),'am-version am-machine-version'));
       name.append(meta);card.append(name);
       if(revokeAsk===peer.id&&hosted.has(peer.id)){
         card.append(el('p',tr('Отозвать устройство? Вернуть его можно только новым приглашением.'),'am-small am-muted'));
@@ -846,7 +902,7 @@
     topTaskScope='';
     if(tab!=='tasks'){renderTaskList();return;}
     const g=taskGroups();
-    openTopTask(!!(g.active.length||g.attention.length||g.done.length));
+    openTopTask(!!(g.active.length||g.planned.length||g.attention.length||g.done.length));
   }
   function computerName(id){
     return id==='local'?(view?.computer_name||tr('Этот компьютер')):(server?.peers||[]).find(p=>p.id===id)?.name||(view?.tasks||[]).find(t=>taskComputer(t)===id)?.remote?.name||'';
@@ -895,9 +951,10 @@
       }
     }
     items.sort((x,y)=>String(y.t.created_at).localeCompare(String(x.t.created_at)));
-    const groups={active:[],attention:[],done:[]};
+    const groups={active:[],planned:[],attention:[],done:[]};
     for(const it of items){
       if(needsDecision(it))groups.attention.push(it);
+      else if(it.t.state==='running'&&!it.t.started_at&&(it.t.pending_launch||it.t.remote?.unaccepted))groups.planned.push(it);
       else if(activeStates.includes(it.t.state))groups.active.push(it);
       else groups.done.push(it);
     }
@@ -963,7 +1020,7 @@
   // On refresh (quiet) the caller loads the conversation itself, and an
   // empty list changes nothing.
   function openTopTask(quiet){
-    const g=taskGroups(),it=g.active[0]||[...g.attention,...g.done].sort((x,y)=>String(y.t.created_at).localeCompare(String(x.t.created_at)))[0];
+    const g=taskGroups(),it=g.active[0]||g.planned[0]||[...g.attention,...g.done].sort((x,y)=>String(y.t.created_at).localeCompare(String(x.t.created_at)))[0];
     if(!it){if(quiet)return;selectedTask='';selectedShared=null;feed=null;feedSignature='';renderTaskList();renderThread();return;}
     if(it.peer){selectedShared={peer:it.peer.peer,id:it.t.id};selectedTask='';feed=null;feedSignature='';renderTaskList();renderThread();startWindowWatch();return;}
     if(selectedTask===it.t.id&&!selectedShared)return;
@@ -1005,7 +1062,7 @@
     const hidden=agentChosen?(view?.tasks||[]).filter(t=>t.agent!==agentChosen&&activeStates.includes(t.state)&&(!computerFilter||taskComputer(t)===computerFilter)).length:0;
     if(hidden){
       const all=el('button',undefined,'am-task am-task-hidden');all.type='button';
-      all.append(el('span',tr('Фильтр «')+(names[agentChosen]||agentChosen)+tr('» скрывает активные задачи: ')+hidden,'am-task-agent'),el('span',tr('Показать всех агентов'),'am-status-run'));
+      all.append(el('span',tr('Фильтр «')+(names[agentChosen]||agentChosen)+tr('» скрывает незавершённые задачи: ')+hidden,'am-task-agent'),el('span',tr('Показать всех агентов'),'am-status-run'));
       all.addEventListener('click',()=>{$('agent-filter').value='';syncSelects();renderTaskList();});
       box.append(all);
     }
@@ -1066,6 +1123,7 @@
     };
     const groups=taskGroups();
     section(tr('Активные'),groups.active);
+    section(tr('Запланированные'),groups.planned);
     // Owner, 2026-11-12: tasks whose outcome is unknown kept «Активные» full
     // for days. They wait here until someone closes them; nothing closes
     // them by itself (unknown is not success).
@@ -1435,7 +1493,18 @@
     }
   }
   // Stop, like in a chat: a square button in the input field, or Esc.
-  let stopping=false;
+  const stopSubmissions=new Map();
+  function renderStopControls(t){
+    const button=$('task-stop'),status=$('task-stop-status');
+    const progress=button.hidden?'':t.remote?.cancel_state||stopSubmissions.get(t.id);
+    button.disabled=!!progress;
+    const text={
+      sending:tr('Отправляем запрос на остановку…'),
+      queued:tr('Запрос на остановку в очереди. Ждём завершения задачи…'),
+      sent:tr('Запрос на остановку принят сервером. Ждём завершения задачи…'),
+    }[progress]||'';
+    if(status.textContent!==text)status.textContent=text;
+  }
   function closeHere(){
     const t=selectedTaskRow();if(!t)return;
     if(!t.remote||t.remote.from){
@@ -1450,11 +1519,23 @@
     });
   }
   async function stopTask(){
-    const t=selectedTaskRow();if(!t||stopping||$('task-stop').hidden)return;
-    stopping=true;$('task-stop').disabled=true;$('task-stop').classList.add('am-tip-off');
-    try{await postAPI('/api/task-cancel',{task:t.id});showError(null);feedSignature='';await refresh();}
-    catch(e){showError(e);}
-    finally{stopping=false;$('task-stop').disabled=false;}
+    const t=selectedTaskRow(),button=$('task-stop');
+    if(!t||$('compose').hidden||button.hidden||t.remote?.cancel_state||stopSubmissions.has(t.id))return;
+    stopSubmissions.set(t.id,'sending');
+    button.classList.add('am-tip-off');
+    renderStopControls(t);
+    try{
+      await postAPI('/api/task-cancel',{task:t.id});
+      if(t.remote&&!t.remote.from)stopSubmissions.set(t.id,'queued');
+      if(selectedTask===t.id)showError(null);
+    }catch(error){
+      if(selectedTask===t.id)showError(error);
+    }finally{
+      if(stopSubmissions.get(t.id)==='sending')stopSubmissions.delete(t.id);
+      if(selectedTask===t.id)renderStopControls(selectedTaskRow()||t);
+      feedSignature='';
+      await refresh();
+    }
   }
   // T-175: the worker's pictures. The page asks for them with its key and
   // shows them from memory; a click opens the viewer (T-268).
@@ -1746,6 +1827,7 @@
     $('compose').hidden=unreachable||(!q&&!active);
     box.disabled=!q&&!note;box.placeholder=q?tr('Ответить исполнителю…'):note&&t.state==='waiting_coordinator'?tr('Ответить вместо координатора…'):note?tr('Написать исполнителю…'):t.remote?.from&&t.owner_question?tr('Отвечают на компьютере «')+t.remote.name+'»':t.pending_launch?tr('Задача ждёт запуска…'):t.remote?.outbox_delayed_minutes&&!t.remote.from?tr('Ответы с «')+t.remote.name+tr('» задерживаются: не уходят уже ')+t.remote.outbox_delayed_minutes+tr(' мин.'):t.remote?.worker==='none'&&!t.remote.from?tr('На «')+t.remote.name+tr('» исполнитель этой задачи сейчас не запущен'):tr('Исполнитель работает…');
     $('answer-send').hidden=!q&&!note;$('task-stop').hidden=!active;
+    renderStopControls(t);
     $('compose').dataset.mode=q?'answer':note?'note':'';
     if($('compose').dataset.task!==t.id){$('compose').dataset.task=t.id;box.value='';$('answer-status').textContent='';}
     if(q&&$('compose').dataset.question!==q.id){$('compose').dataset.question=q.id;$('answer-text').value='';$('answer-status').textContent='';}
@@ -2218,6 +2300,9 @@
         if(view?.history_next)v.history_next=view.history_next;
         delete v.history_unchanged;
       }
+      for(const t of v.tasks){
+        if(stopSubmissions.get(t.id)==='queued'&&(t.remote?.cancel_state||!activeStates.includes(t.state)))stopSubmissions.delete(t.id);
+      }
       windowHistoryScope=taskWindowQuery();
       const signature=JSON.stringify(v);
       if(signature!==viewSignature){
@@ -2495,7 +2580,7 @@
   }
   function hideInvitation(){invitation=null;clearInterval(inviteTimer);const d=$('invite-dialog');if(d.open)d.close();}
   function renderServer(){
-    renderAccessBar();renderAutoUpdate();
+    renderAccessBar();renderAutoUpdate();watchUpdateBoard();
     if(!server)return;const h=server.host,m=server.member;
     const focused=document.activeElement?.dataset?.key||'';
     badge($('host-badge'),h.running?tr('Работает'):h.enabled?tr('Не запустился'):tr('Остановлен'),h.running?'good':h.enabled?'bad':'');
@@ -2995,13 +3080,20 @@
     return release?'v'+release[1].replace(/\.0$/,''):version?'v'+version:'';
   }
   function versionText(installed){return versionName(installed);}
-  // Comparing builds: 0.0.0-preview.41 and 0.41 are the same build.
+  // The signed build number orders updates even when their display names
+  // are identical. Older peer reports can use the short 0.N form.
+  function updateBuildNumber(version){
+    const match=String(version).match(/^v?(?:\d+\.\d+\.\d+-preview\.|0\.)(\d+)$/);
+    return match?Number(match[1]):0;
+  }
   function versionRank(version){
     const v=versionName(String(version||'').replace(/^v/,'')).replace(/^v/,'');
     return v.split(/[.-]/).map(x=>Number(x)||0);
   }
   function versionOlder(a,b){
     if(!a||!b)return false;
+    const aBuild=updateBuildNumber(a),bBuild=updateBuildNumber(b);
+    if(aBuild&&bBuild)return aBuild<bBuild;
     const x=versionRank(a),y=versionRank(b);
     for(let i=0;i<Math.max(x.length,y.length);i++){if((x[i]||0)!==(y[i]||0))return (x[i]||0)<(y[i]||0);}
     return false;

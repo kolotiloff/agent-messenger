@@ -81,6 +81,7 @@ func (b *Broker) initMailbox() error {
  created_at TEXT NOT NULL,
  UNIQUE(sender, op_id)
 );
+CREATE TABLE IF NOT EXISTS update_marks(target TEXT PRIMARY KEY,requester TEXT NOT NULL,id TEXT NOT NULL,state TEXT NOT NULL,version TEXT NOT NULL,at INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS messages_recipient ON messages(recipient, seq);`)
 	return err
 }
@@ -137,7 +138,17 @@ func (b *Broker) Send(from, to, opID string, body []byte) error {
 	if _, err := tx.Exec(`INSERT INTO messages(sender,recipient,op_id,body,created_at) VALUES (?,?,?,?,?)`, from, to, opID, string(body), b.now().UTC().Format(time.RFC3339)); err != nil {
 		return err
 	}
-	return tx.Commit()
+	changed, err := recordUpdateOp(tx, from, to, opID, b.now().Unix())
+	if err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if changed {
+		b.updates.changed()
+	}
+	return nil
 }
 
 // Inbox deletes the recipient's messages up to and including after, which

@@ -170,6 +170,9 @@ type RemoteComputer struct {
 	// Unaccepted: the computer that should run the task has not said it
 	// accepted it (T-137). Until it does, nothing is known to run there.
 	Unaccepted bool `json:"unaccepted,omitempty"`
+	// CancelState distinguishes a durable request in the local outbox
+	// from one the broker accepted. Neither means the worker has stopped.
+	CancelState string `json:"cancel_state,omitempty"`
 	// Silent: that computer is in reach but has not answered: the task was
 	// not accepted within unacceptedAfter, or a cancel went unanswered for
 	// cancelAnswerWait. It can be closed here at once (owner, 2026-11-12:
@@ -206,16 +209,24 @@ func remoteComputer(machine, tx *sql.Tx, task string, link netLink) (*RemoteComp
 func remoteContact(machine, tx *sql.Tx, task string, link netLink, out *RemoteComputer) error {
 	var name, remoteTask sql.NullString
 	var created, updated string
-	var cancel int
-	if err := tx.QueryRow(`SELECT remote_name,remote_task,created_at,updated_at,cancel_requested FROM tasks WHERE id=?`, task).Scan(&name, &remoteTask, &created, &updated, &cancel); err != nil {
+	var cancel, cancelQueued bool
+	if err := tx.QueryRow(`SELECT remote_name,remote_task,created_at,updated_at,cancel_requested,
+ CASE WHEN cancel_requested=1 THEN EXISTS(SELECT 1 FROM net_outbox WHERE op_id=?) ELSE 0 END
+ FROM tasks WHERE id=?`, safeNetOp("cancel."+task), task).Scan(&name, &remoteTask, &created, &updated, &cancel, &cancelQueued); err != nil {
 		return err
+	}
+	if cancel {
+		out.CancelState = "sent"
+		if cancelQueued {
+			out.CancelState = "queued"
+		}
 	}
 	out.Unaccepted = remoteTask.String == ""
 	older := func(at string, d time.Duration) bool {
 		t, err := time.Parse(time.RFC3339Nano, at)
 		return err == nil && time.Since(t) > d
 	}
-	out.Silent = (out.Unaccepted && older(created, unacceptedAfter)) || (cancel != 0 && older(updated, cancelAnswerWait))
+	out.Silent = (out.Unaccepted && older(created, unacceptedAfter)) || (cancel && older(updated, cancelAnswerWait))
 	var broker string
 	if err := machine.QueryRow(`SELECT COALESCE((SELECT value FROM meta WHERE key='net_broker'),'')`).Scan(&broker); err != nil {
 		return err
@@ -293,13 +304,31 @@ func taskStartedAt(q interface{ QueryRow(string, ...any) *sql.Row }, task string
 	return at.String, err
 }
 
-func (s *Store) pendingLaunch(task string) (bool, error) {
-	var state string
-	err := s.db.QueryRow(`SELECT state FROM task_runs WHERE task_id=? ORDER BY ordinal DESC LIMIT 1`, task).Scan(&state)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
+// fillWindowLaunch keeps the list and the open conversation in sync.
+func (s *Store) fillWindowLaunch(t *WindowTask) error {
+	if t.Remote != nil && !t.Remote.From {
+		pending, started, lock, err := remoteLaunch(s.db, t.ID)
+		t.StartedAt = started
+		if t.State == "running" {
+			t.PendingLaunch, t.WaitsForLock = pending, lock
+		}
+		return err
 	}
-	return state == "intent", err
+	var err error
+	t.StartedAt, err = s.startedAt(t.ID)
+	if err != nil || t.State != "running" {
+		return err
+	}
+	t.PendingLaunch, err = runPendingLaunch(s.db, t.ID)
+	if err != nil {
+		return err
+	}
+	if t.PendingLaunch {
+		t.WaitsForLock, err = s.waitingLock(t.ID)
+	} else {
+		t.Quiet, err = s.TaskRunQuiet(t.ID)
+	}
+	return err
 }
 
 // WindowAgent is one agent program of this computer, with its state across
@@ -533,22 +562,10 @@ func (s *Store) windowTaskRows(selection string, args ...any) ([]WindowTask, err
 				w.OwnerQuestion = question
 			}
 		}
-		if t.State == "running" {
-			if w.PendingLaunch, err = s.pendingLaunch(t.ID); err != nil {
-				return nil, err
-			}
-			if w.PendingLaunch {
-				if w.WaitsForLock, err = s.waitingLock(t.ID); err != nil {
-					return nil, err
-				}
-			} else if w.Quiet, err = s.TaskRunQuiet(t.ID); err != nil {
-				return nil, err
-			}
-		}
-		if w.StartedAt, err = s.startedAt(t.ID); err != nil {
+		if w.Remote, err = s.remoteOf(t.ID); err != nil {
 			return nil, err
 		}
-		if w.Remote, err = s.remoteOf(t.ID); err != nil {
+		if err := s.fillWindowLaunch(&w); err != nil {
 			return nil, err
 		}
 		if w.Usage, err = s.taskUsage(t.ID); err != nil {
@@ -602,18 +619,10 @@ func (s *Store) taskFeedHeader(id string) (TaskFeed, Task, error) {
 	if t.OpenQuestion != nil && t.OpenQuestion.Audience == AudienceOwner {
 		f.Task.OwnerQuestion = t.OpenQuestion
 	}
-	if t.State == "running" {
-		if f.Task.PendingLaunch, err = s.pendingLaunch(t.ID); err != nil {
-			return f, t, err
-		}
-		if f.Task.Quiet, err = s.TaskRunQuiet(t.ID); err != nil {
-			return f, t, err
-		}
-	}
-	if f.Task.StartedAt, err = s.startedAt(t.ID); err != nil {
+	if f.Task.Remote, err = s.remoteOf(t.ID); err != nil {
 		return f, t, err
 	}
-	if f.Task.Remote, err = s.remoteOf(t.ID); err != nil {
+	if err := s.fillWindowLaunch(&f.Task); err != nil {
 		return f, t, err
 	}
 	if f.Task.Usage, err = s.taskUsage(t.ID); err != nil {

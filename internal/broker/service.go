@@ -123,8 +123,9 @@ type Service struct {
 	// running workers (T-149), both new in 0.67.
 	outboxSkip time.Time
 	// updatePendingSkip is the same for a queued Messenger update (T-155).
-	updatePendingSkip time.Time
-	updateRequestSkip time.Time
+	updatePendingSkip    time.Time
+	updateRequestSkip    time.Time
+	updateInstallingSkip time.Time
 	// limitSkip is the same for the checked limit fields (T-191).
 	limitSkip time.Time
 	// usageSkip is the same for usage. usageSent is the version of this
@@ -821,11 +822,21 @@ func (s *Service) ReportPresence(ctx context.Context) {
 			p.UsageSeen[peer] = u.Hash
 		}
 	}
+	if p.UpdateRequestID == "" || time.Now().Before(s.updateInstallingSkip) {
+		p.UpdateInstalling = false
+	}
 	s.mu.Unlock()
 	if skipReady {
 		p.Ready = nil
 	}
 	peers, err := Report(call, *c, p)
+	if errors.Is(err, errPresenceRefused) && p.UpdateInstalling {
+		s.mu.Lock()
+		s.updateInstallingSkip = time.Now().Add(readyRetry)
+		s.mu.Unlock()
+		p.UpdateInstalling = false
+		peers, err = Report(call, *c, p)
+	}
 	if errors.Is(err, errPresenceRefused) && p.UpdateRequestID != "" {
 		s.mu.Lock()
 		s.updateRequestSkip = time.Now().Add(readyRetry)

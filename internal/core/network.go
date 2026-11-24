@@ -224,7 +224,8 @@ type netBody struct {
 	Computer string `json:"computer,omitempty"`
 	// Lock is the task's resource lock (T-072). A computer before it
 	// ignores it.
-	Lock string `json:"lock,omitempty"`
+	Lock          string `json:"lock,omitempty"`
+	LaunchPending bool   `json:"launch_pending,omitempty"`
 	// Lines is how many log lines a log request asks for (T-057).
 	Lines     int    `json:"lines,omitempty"`
 	CheckedAt string `json:"checked_at,omitempty"`
@@ -530,7 +531,7 @@ func reconcilePeerUpdates(tx *sql.Tx, peers []NetPeer) error {
 	for i := range peers {
 		peer := &peers[i]
 		pending := peer.UpdatePending
-		peer.Version, peer.UpdatePending = byPeer[peer.ID].PeerUpdateState(peer.Version, peer.UpdatePending, peer.Age, now)
+		peer.Version, peer.UpdatePending = byPeer[peer.ID].PeerUpdateState(peer.Version, peer.UpdatePending, peer.UpdateRequestID, peer.Age, now)
 		if pending && !peer.UpdatePending {
 			peer.UpdateRequestID = ""
 		}
@@ -936,9 +937,38 @@ func (s *Store) NetSent(seq int64) error {
 // NetDeliverySent acknowledges exactly the message selected by NetPending.
 func (s *Store) NetDeliverySent(message NetOutgoing) error {
 	if s.split == nil {
-		return s.NetSent(message.Seq)
+		return acknowledgeNetDelivery(context.Background(), s.db, message)
 	}
 	return splitNetSent(context.Background(), s.db, s.split.open, splitNetMessage{NetOutgoing: message, file: message.file})
+}
+
+func acknowledgeNetDelivery(ctx context.Context, db *sql.DB, message NetOutgoing) error {
+	const remove = `DELETE FROM net_outbox WHERE seq=? AND op_id=?`
+	if message.kind != "cancel" {
+		_, err := db.ExecContext(ctx, remove, message.Seq, message.OpID)
+		return err
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, remove, message.Seq, message.OpID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil || n == 0 {
+		return err
+	}
+	// Wake the task list when the broker accepts a stop request, before the
+	// executing computer sends any task event of its own.
+	if _, err := tx.ExecContext(ctx, `INSERT INTO window_revisions(scope,item,revision)
+ SELECT 'project',project,1 FROM tasks WHERE id=?
+ ON CONFLICT(scope,item) DO UPDATE SET revision=revision+1`, message.task); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // ReleaseAbsentOutbox retires messages aimed at a computer that is not in
@@ -1320,11 +1350,11 @@ func applyStart(tx *sql.Tx, from netLink, b netBody) error {
 	if err != nil {
 		return err
 	}
-	var folder string
-	if err := tx.QueryRow(`SELECT folder FROM tasks WHERE id=?`, id).Scan(&folder); err != nil {
+	var folder, wait string
+	if err := tx.QueryRow(`SELECT t.folder,CASE WHEN t.resource<>'' AND EXISTS(`+lockHolderQuery+`) THEN t.resource ELSE '' END FROM tasks t WHERE t.id=?`, id).Scan(&folder, &wait); err != nil {
 		return err
 	}
-	return enqueueStartReply(tx, from, "accepted", netBody{Mirror: id, Folder: folder})
+	return enqueueStartReply(tx, from, "accepted", netBody{Mirror: id, Folder: folder, LaunchPending: true, Lock: wait})
 }
 
 func remoteStartRequest(tx *sql.Tx, from netLink, b netBody) (StartTaskRequest, error) {
@@ -1447,6 +1477,11 @@ func applyReport(tx *sql.Tx, from netLink, b netBody, name string) error {
 		if _, err := tx.Exec(`UPDATE tasks SET folder=?,remote_task=?,detail=?,updated_at=?,version=version+1 WHERE id=?`, clip(b.Folder, 4096), clip(b.Mirror, 64), "accepted by "+name, now(), t.ID); err != nil {
 			return err
 		}
+		if b.LaunchPending && t.State == "running" {
+			if err := recordRemoteLaunch(tx, t, taskLaunchQueued, b.Lock); err != nil {
+				return err
+			}
+		}
 		return insertTaskEvent(tx, t.Project, t.ID, AudienceLog, "accepted", "accepted by "+name, "")
 	case "refused":
 		if t.State != "running" {
@@ -1485,6 +1520,9 @@ func applyReport(tx *sql.Tx, from netLink, b netBody, name string) error {
 			return err
 		}
 		return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "blocked", why, "")
+	}
+	if b.Kind == "event" && b.Event == taskLaunchObserved && b.Audience == AudienceLog {
+		return recordRemoteLaunch(tx, t, taskLaunchObserved, b.Text)
 	}
 	// An event of the run on the other computer.
 	if !taskStates[b.State] || (b.Audience != AudienceCoordinator && b.Audience != AudienceOwner) || !remoteEventKinds[b.Event] {

@@ -15,6 +15,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
+| T-289 | Integrate the four pending PRs and audit the next release across project storage, task execution, network delivery, the window and distribution. | agent | Integrated on `codex/t289-release-audit`. Three update regressions fixed (D-198). See the [audit report](reports/2026-11-25-t289-release-audit.md). |
 | T-267 | Review of the 0.95 per-project storage: one unroutable network message stopped the inbox; a task whose start failed half-way blocked a shared resource and stayed «running»; a failed storage activation stopped the client from starting (2026-11-23). | agent | Released in 0.97. `claude/amazing-noether-apbflv` (D-188). Unroutable messages are skipped, starts for a project without storage are refused, unpublished tasks are closed at startup, activation that changed nothing keeps the single database. Covered by Go tests with fixture databases (no real models); the inbox fix was found by reading the code, not observed in use. |
 | T-268 | A worker's picture opens in its own large viewer with zoom, drag and arrows between the pictures of one message, instead of growing inside the chat (owner, 2026-11-23). | agent | Released in [0.98](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.98) via [PR #183](https://github.com/kolotiloff/agent-messenger/pull/183). `claude/amazing-noether-apbflv` (D-189). Checked in Chromium with fictional data (`scripts/check-window-pictures.cjs`, in CI for Chromium and WebKit); WebKit runs in CI only; not tried in the installed app. |
 | T-269 | Statistics filters: the period tabs, the lists and the computer chip had different heights and the chip sat at the right edge (owner, 2026-11-24). | agent | Released in [0.98](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.98) via [PR #183](https://github.com/kolotiloff/agent-messenger/pull/183). `claude/amazing-noether-apbflv` (D-189). One control height, all from the left. Seen on a Chromium screenshot with fictional data. |
@@ -111,10 +112,14 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 ## Next
 
+T-281 is implemented on `codex/t281-hide-unconfirmed-sidebar-model` and pending release. Chromium and WebKit checks cover the comma before elapsed time with and without a reported model.
+
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
+| T-287 | Expire unstarted update requests after five minutes, synchronize the sidebar update controls across computers, and use the waiting color for coordinator questions. | agent | Implemented on `codex/t287-update-queue-timeout`, pending release. Three-client integration and browser regression checks. |
 | T-286 | Identify this computer in the computer sidebar. | window | Implemented after 1.0, pending the next release. A thin inset stripe on the left edge of the local card. It follows the computer when reordered, stays on it when another card is selected, and uses a soft white in dark mode and gray in light mode. |
 | T-285 | Group tasks awaiting their first launch under «Запланированные» in the task list. | window | After 1.0. Show the reason (e.g. waiting for a resource) and move the task to active when work starts. A running conversation waiting for an answer keeps its question status. The current product has no calendar-based launch command. |
+| T-288 | Keep the remote task stop action disabled and show its delivery status until the receiver confirms the outcome. | agent | Implemented on `codex/t288-remote-task-stop`, pending release. |
 | T-281 | In the computer sidebar, show only the running agent name while its model is unknown (owner, 2026-11-24). | window | After 0.100. Applies to every provider. Append the model once it is confirmed, for example «Codex» becomes «Codex Sol 6.2 High». Keep the existing duration and status styling. Cover the transition when a confirmed model arrives. |
 | T-234 | Unify text size in the task cards and sidebar agent rows, and simplify elapsed timing (owner, 2026-11-20). | window | Released in [0.90](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.90) via [PR #150](https://github.com/kolotiloff/agent-messenger/pull/150) (D-160). |
 | T-233 | Make conversation text and input lighter and slightly smaller (owner, 2026-11-20). | window | Released in [0.89](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.89) via [PR #148](https://github.com/kolotiloff/agent-messenger/pull/148) (D-159). |
@@ -246,6 +251,8 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 | T-173 | `list_agents` on another computer showed empty Codex and Claude model lists for Ноут-Linux on 0.72, while that computer's own settings had the models and a task with an effort started (coordinator, 2026-11-14). | agent | The lists were not deleted. A refused presence report no longer throws the model names away before the field that was refused. A list longer than the report allows still publishes the names that fit. A stuck mailbox does not stop the report. |
 | T-174 | The journal repeated every few seconds that the mailbox of a computer no longer in the project is full (Ноут-Linux, 2026-11-14). | agent | Messages to a computer that is not listed, once they have waited out the reconnect grace, are parked or dropped and are not sent again. A computer that is listed keeps its mail, even when the mailbox is full. The full-mailbox line is written once, not every round. |
 | T-028 | Close or migrate existing persistent sessions and state, then retire the persistent Claude stream and Codex app-server owners. | agent | blocked: Q-012 |
+
+T-285 is implemented on `codex/t285-planned-tasks`, pending release. Browser checks cover selection and first launch. The network fixture covers a second task waiting for the first task to release a resource in both storage layouts.
 
 ## Backlog
 

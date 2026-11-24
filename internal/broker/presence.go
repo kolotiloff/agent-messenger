@@ -298,8 +298,9 @@ type Presence struct {
 	// UpdatePending: this computer is waiting to install a Messenger
 	// update and takes no new tasks (T-155). A host that does not know
 	// the field refuses the report; the client then reports without it.
-	UpdatePending   bool   `json:"update_pending,omitempty"`
-	UpdateRequestID string `json:"update_request_id,omitempty"`
+	UpdatePending    bool   `json:"update_pending,omitempty"`
+	UpdateRequestID  string `json:"update_request_id,omitempty"`
+	UpdateInstalling bool   `json:"update_installing,omitempty"`
 }
 
 // Peer is one computer of the broker as others see it.
@@ -411,20 +412,44 @@ func (b *Broker) Report(peer string, p Presence) error {
 	p.UsageSeen = nil
 	if p.Usage != nil {
 		p.Usage = &PresenceUsageReport{Hash: UsageHash(p.Usage.Days), Days: p.Usage.Days}
-	} else {
-		var old string
-		err := b.db.QueryRow(`SELECT report FROM presence WHERE peer=?`, peer).Scan(&old)
+	}
+	tx, err := b.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var previous Presence
+	if p.Usage == nil || !p.UpdatePending {
+		var raw string
+		err := tx.QueryRow(`SELECT report FROM presence WHERE peer=?`, peer).Scan(&raw)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
-		var stored Presence
-		if old != "" && json.Unmarshal([]byte(old), &stored) == nil {
-			p.Usage = stored.Usage
+		if raw != "" {
+			if err := json.Unmarshal([]byte(raw), &previous); err != nil {
+				previous = Presence{}
+			}
 		}
 	}
+	if p.Usage == nil {
+		p.Usage = previous.Usage
+	}
+	at := b.now().UTC()
 	raw, _ := json.Marshal(p)
-	_, err := b.db.Exec(`INSERT INTO presence(peer,report,reported_at) VALUES(?,?,?) ON CONFLICT(peer) DO UPDATE SET report=excluded.report, reported_at=excluded.reported_at`, peer, string(raw), b.now().UTC().Format(time.RFC3339))
-	return err
+	if _, err := tx.Exec(`INSERT INTO presence(peer,report,reported_at) VALUES(?,?,?) ON CONFLICT(peer) DO UPDATE SET report=excluded.report, reported_at=excluded.reported_at`, peer, string(raw), at.Format(time.RFC3339)); err != nil {
+		return err
+	}
+	changed, err := recordUpdatePresence(tx, peer, p, previous.UpdateRequestID, at.Unix())
+	if err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if changed {
+		b.updates.changed()
+	}
+	return nil
 }
 
 // Roster lists the hosting computer (if it reported) and every device that

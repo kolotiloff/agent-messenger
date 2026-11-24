@@ -2,10 +2,29 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-25 — Codex (T-289)
+
+- Integrated PRs #192–195 for the next release. Fixed three update state regressions involving equal display versions, an absent requester, and successive requests for one computer. See the [release audit](reports/2026-11-25-t289-release-audit.md) for validation and live acceptance status.
+
+## 2026-11-25 — Codex (T-285)
+
+- Added Planned to the task sidebar for tasks awaiting their first run. Remote executors report queuing on acceptance and confirm the first observed worker process. Shared task snapshots preserve the phase and an available resource name.
+- Checked the transition with two fixture computers in single and split storage. Chromium and WebKit exercise selecting a task while queued and moving it to Active when it starts.
+
+## 2026-11-24 — Codex (T-287)
+
+- Bounded the receiver's pre-installation wait and added broker notifications for sidebar update controls. Verified the five-minute boundary, installer protection and cancellation by another observer on a three-computer loopback network.
+- Added a browser check for the download arrow, the rotating circular arrow and red cancel cross, the reduced-motion setting, the installation indicator, and the yellow coordinator-wait status. Captured fictional sidebar and task cards in WebKit. These changes are for the next release.
+
 ## 2026-11-24 — Codex (T-283, T-284, T-286)
 
 - Published [1.0](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.0-preview.103) with 22 assets. All four jobs in the [release workflow](https://github.com/kolotiloff/agent-messenger/actions/runs/45459724676) passed. The shipping 0.99 and 0.101 Mac programs each found and downloaded signed build 103 from the public list. The owner’s Mac staged it without an installation or restart.
 - After the release, marked the local computer with a thin neutral stripe independent of selection and online state. WebKit computer switching and control checks passed, including light and dark at 600 and 1100 pixels. Added T-285 for the planned task section.
+
+## 2026-11-24 — Codex (T-288)
+
+- The task window sends one stop request and keeps its button disabled while waiting. The task view distinguishes a stop request still queued locally from one accepted by the broker. The receiver’s confirmed outcome determines the final status.
+- The network fixture covers queuing, broker acceptance and final cancellation. The split-storage fixture covers reopening with a pending stop and notifying the correct project after delivery. The Chromium and WebKit controls checks exercise repeated Escape presses during the wait.
 
 ## 2026-11-24 — Codex (T-284)
 
@@ -14,6 +33,10 @@ One entry per work session, newest first. Write what was done, which tool did it
 ## 2026-11-24 — Codex (T-283)
 
 - Confirmed the 0.99 check still returned current in an isolated home. The corrected finder staged signed build 101 on the owner’s Mac. Added independent public release checks for all five platform routes and an optional, reversible archive step for blocking discovery manifests.
+
+## 2026-11-24 — Codex (T-281)
+
+- Computer cards show the agent name and its status while the worker has yet to report a model. Once the reported model arrives, it appears beside the name. A comma precedes the status in both cases. Verified in Chromium and WebKit with fictional local and remote tasks.
 
 ## 2026-11-24 — Codex (T-282)
 

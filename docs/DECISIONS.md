@@ -653,3 +653,11 @@ The window names every model through one rule (`modelName`), the statistics filt
 ## D-196 — Public release 1.0 (T-284)
 
 Show 1.0 in the window, About panel and release title. Its signed version and tag retain the three-component version and numbered preview suffix understood by installed clients. Compare the sequential build for upgrades.
+
+## D-197 — Queued updates and their shared controls (T-287)
+
+Give an accepted update five minutes to start on the receiving computer. Only expiry of the waiting request releases the update gate. The installer owns an update once it starts. Publish request identity and phase through the broker for every open window, independent of the selected project. An available update uses a download arrow. Waiting and installation use a rotating circular arrow. Where cancellation is supported, the waiting arrow switches to a red cross on hover or keyboard focus.
+
+## D-198 — Reconcile update state by request ID and numeric build (T-289)
+
+The window orders numbered builds by their numeric suffix, following D-196. A receiving computer can clear a shared queued or installing mark by reporting an empty queue after it has reported that request's ID as pending. The broker commits both changes together. A result can advance the reported build while an independent update remains pending under its own ID. Neither queue removal nor a notification substitutes for evidence of an installed version.

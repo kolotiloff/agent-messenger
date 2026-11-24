@@ -99,6 +99,9 @@ func (s *Supervisor) autoUpdate() string {
 		return "автообновление не поставлено в очередь: " + err.Error()
 	}
 	if queued {
+		if s.server != nil {
+			s.server.NotifyPresence()
+		}
 		journal.Printf("update: automatic update queued for %s", found)
 	}
 	return ""
