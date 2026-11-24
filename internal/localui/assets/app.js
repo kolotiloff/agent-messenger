@@ -629,7 +629,10 @@
   machineList.addEventListener('dragend',()=>{
     draggedMachine='';clearMachineDrop();renderMachines();
   });
+  // T-271: the computers that have a card in the current render.
+  let pickedComputers=new Set();
   function pickable(card,id,orderKey=id){
+    pickedComputers.add(id);
     card.setAttribute('role','button');card.tabIndex=0;card.setAttribute('aria-pressed',String(computerFilter===id));
     card.dataset.machineOrder=orderKey;card.draggable=machineOrderLoaded;
     card.setAttribute('aria-keyshortcuts','Alt+ArrowUp Alt+ArrowDown');
@@ -663,6 +666,7 @@
   function renderMachines(){
     if(draggedMachine)return;
     collectNotices();
+    pickedComputers=new Set();
     const live=$('machines'),box=live.cloneNode(false),busyTasks=busyTasksByComputer();
     const machine=el('div',undefined,'am-machine-card');machine.setAttribute('aria-current','true');pickable(machine,'local');
     // Every card is laid out the same (owner, 2026-11-18, T-198): the dot
@@ -760,6 +764,9 @@
     for(const id of localParts)copy.querySelector('#'+id)?.remove();
     if(copy.innerHTML!==box.innerHTML){parkLocalParts();live.replaceChildren(...box.childNodes);}
     placeLocalParts();
+    // T-271: only the highlighted card shows the chosen computer, so a
+    // computer that left the list no longer filters anything.
+    if(computerFilter&&!pickedComputers.has(computerFilter))queueMicrotask(()=>{if(computerFilter&&!pickedComputers.has(computerFilter))clearComputer();});
   }
   // This computer's version and update button live in its card; in a narrow
   // window the computer list is hidden and they stay in the bottom row.
@@ -786,8 +793,9 @@
   function fromTag(name){return el('span',tr(' — от ')+name,'am-task-from');}
   function sharedRunsOn(t,p){return t.runs_on_peer||p.peer;}
   function sharedComputer(t,p){return t.runs_on_peer?((server?.peers||[]).find(x=>x.id===t.runs_on_peer)?.name||t.runs_on||t.runs_on_peer):p.name;}
-  // A click on a computer in the sidebar shows only its tasks; a second click,
-  // the chip's cross or a click on empty sidebar space shows all again (T-056).
+  // A click on a computer in the sidebar shows only its tasks; a second click
+  // or a click on empty sidebar space shows all again (T-056). The highlighted
+  // card is the only sign of the choice (T-271).
   let computerFilter='';
   // On the statistics and agents tabs the choice filters that tab (T-076);
   // elsewhere it opens the tasks.
@@ -810,8 +818,6 @@
   function computerName(id){
     return id==='local'?(view?.computer_name||tr('Этот компьютер')):(server?.peers||[]).find(p=>p.id===id)?.name||(view?.tasks||[]).find(t=>taskComputer(t)===id)?.remote?.name||'';
   }
-  // The chip of a tab filtered by computer; its cross shows all again.
-  function computerChip(chip){chip.hidden=!computerFilter;chip.querySelector('span').textContent=computerFilter?tr('Компьютер: ')+computerName(computerFilter):'';}
   let taskHistory=null,windowHistoryScope='';
   function taskWindowQuery(){return new URLSearchParams({project,agent:$('agent-filter').value,computer:computerFilter}).toString();}
   function currentTaskHistory(){return taskHistory?.scope===taskWindowQuery()?taskHistory:null;}
@@ -953,7 +959,6 @@
   }
   function renderTaskList(){
     const live=$('task-list'),box=live.cloneNode(false);
-    computerChip($('computer-chip'));
     // While another project loads, its rows stay in place but cannot be
     // chosen, so the list does not collapse and grow again.
     if(view?.project!==project){if(!live.childElementCount)$('task-count').textContent='';live.inert=true;live.setAttribute('aria-busy','true');return;}
@@ -1075,7 +1080,7 @@
     }
   }
   // The coordinator of the project on this computer (T-152): Claude's link
-  // for the project folder, as one row of the «Проект» page, and the manual
+  // for the project folder, as its own card of the «Проект» page, and the manual
   // command under it. Agents are set up once; the link is per folder.
   function renderCoordinatorRow(){
     const box=$('coord-box');if(!box||!view?.project)return;
@@ -1097,7 +1102,7 @@
     const cursorJSON=JSON.stringify({mcpServers:{messenger:{type:'stdio',command:view.messenger,args:['--root',view.data_root,'coordinator','--project',view.project],env:{AGENT_MESSENGER_WORKER_RUN:'${env:AGENT_MESSENGER_WORKER_RUN}'}}}},null,2);
     manual.append(block('Claude Code',claudeCmd),block('Codex (.codex/config.toml)',codexToml),block(tr('Cursor: добавьте messenger в .cursor/mcp.json, сохранив остальные записи'),cursorJSON));
     manual.hidden=!view.folder||(['claude','codex','cursor'].every(coordinatorAgentOn));
-    const body=el('div',undefined,'am-coord-box am-field-sep');body.id='coord-box';body.append(heading,steps,manual);
+    const body=el('section',undefined,'am-card am-coord-box');body.id='coord-box';body.append(heading,steps,manual);
     if(box.querySelector('details')?.open)manual.open=true;
     if(box.innerHTML!==body.innerHTML)box.replaceWith(body);
   }
@@ -1413,7 +1418,7 @@
     finally{stopping=false;$('task-stop').disabled=false;}
   }
   // T-175: the worker's pictures. The page asks for them with its key and
-  // shows them from memory; a click opens one at full width.
+  // shows them from memory; a click opens the viewer (T-268).
   const pictureURLs=new Map();
   async function loadPicture(id){
     if(pictureURLs.has(id))return pictureURLs.get(id);
@@ -1423,11 +1428,92 @@
       const url=URL.createObjectURL(await response.blob());pictureURLs.set(id,url);return url;
     }catch(_){return '';}
   }
+  // T-268: a picture opens in a large viewer. The wheel, the buttons or a
+  // click zoom in; a zoomed picture is dragged; arrows step through the
+  // pictures of the same message; Escape or a click beside it closes it.
+  const viewer={list:[],at:0,scale:1,x:0,y:0};
+  function viewerApply(){
+    const img=$('picture-image');
+    if(viewer.scale<=1){viewer.scale=1;viewer.x=0;viewer.y=0;}
+    img.style.transform=`translate(${viewer.x}px,${viewer.y}px) scale(${viewer.scale})`;
+    $('picture-stage').classList.toggle('am-zoomed',viewer.scale>1);
+    $('picture-zoom-reset').textContent=Math.round(viewer.scale*100)+'%';
+    $('picture-zoom-out').disabled=viewer.scale<=1;
+    $('picture-zoom-in').disabled=viewer.scale>=8;
+  }
+  // Zoom keeps the point under the cursor (or the centre) in place.
+  function viewerZoom(scale,cx,cy){
+    const next=Math.min(8,Math.max(1,scale));
+    const box=$('picture-stage').getBoundingClientRect();
+    const px=(cx??box.left+box.width/2)-(box.left+box.width/2),py=(cy??box.top+box.height/2)-(box.top+box.height/2);
+    viewer.x=px-(px-viewer.x)*next/viewer.scale;viewer.y=py-(py-viewer.y)*next/viewer.scale;
+    viewer.scale=next;viewerApply();
+  }
+  function viewerShow(at){
+    const n=viewer.list.length;if(!n)return;
+    viewer.at=(at+n)%n;viewer.scale=1;
+    const p=viewer.list[viewer.at],img=$('picture-image');
+    img.alt=p.name||'';img.removeAttribute('src');
+    $('picture-name').textContent=p.name||tr('Картинка');
+    $('picture-count').textContent=n>1?tr('{n} из {total}').replace('{n}',viewer.at+1).replace('{total}',n):'';
+    $('picture-prev').hidden=$('picture-next').hidden=n<2;
+    const known=pictureURLs.get(p.id);
+    if(known)img.src=known;else loadPicture(p.id).then(url=>{if(url&&viewer.list[viewer.at]===p)img.src=url;});
+    viewerApply();
+  }
+  function openPicture(list,at){
+    viewer.list=list;viewerShow(at);
+    const d=$('picture-dialog');if(!d.open)d.showModal();
+    $('picture-close').focus();
+  }
+  function setupPictureViewer(){
+    const d=$('picture-dialog'),stage=$('picture-stage'),img=$('picture-image');
+    $('picture-close').addEventListener('click',()=>d.close());
+    $('picture-prev').addEventListener('click',()=>viewerShow(viewer.at-1));
+    $('picture-next').addEventListener('click',()=>viewerShow(viewer.at+1));
+    $('picture-zoom-in').addEventListener('click',()=>viewerZoom(viewer.scale*1.5));
+    $('picture-zoom-out').addEventListener('click',()=>viewerZoom(viewer.scale/1.5));
+    $('picture-zoom-reset').addEventListener('click',()=>viewerZoom(1));
+    d.addEventListener('close',()=>{viewer.list=[];img.removeAttribute('src');});
+    d.addEventListener('keydown',e=>{
+      if(e.key==='ArrowLeft'){e.preventDefault();viewerShow(viewer.at-1);}
+      else if(e.key==='ArrowRight'){e.preventDefault();viewerShow(viewer.at+1);}
+      else if(e.key==='+'||e.key==='='){e.preventDefault();viewerZoom(viewer.scale*1.5);}
+      else if(e.key==='-'){e.preventDefault();viewerZoom(viewer.scale/1.5);}
+      else if(e.key==='0'){e.preventDefault();viewerZoom(1);}
+    });
+    // A click on the dimmed area outside the window closes it.
+    d.addEventListener('click',e=>{if(e.target===d){const r=d.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)d.close();}});
+    stage.addEventListener('wheel',e=>{e.preventDefault();viewerZoom(viewer.scale*Math.exp(-e.deltaY*(e.ctrlKey?0.01:0.002)),e.clientX,e.clientY);},{passive:false});
+    let drag=null;
+    stage.addEventListener('pointerdown',e=>{
+      if(e.button!==0||e.target.closest('button'))return;
+      drag={id:e.pointerId,sx:e.clientX,sy:e.clientY,x:viewer.x,y:viewer.y,moved:false,onImage:e.target===img};
+      stage.setPointerCapture(e.pointerId);
+    });
+    stage.addEventListener('pointermove',e=>{
+      if(!drag||drag.id!==e.pointerId)return;
+      const dx=e.clientX-drag.sx,dy=e.clientY-drag.sy;
+      if(!drag.moved&&Math.hypot(dx,dy)<4)return;
+      drag.moved=true;
+      if(viewer.scale>1){stage.classList.add('am-dragging');viewer.x=drag.x+dx;viewer.y=drag.y+dy;viewerApply();}
+    });
+    const end=e=>{
+      if(!drag||drag.id!==e.pointerId)return;
+      const was=drag;drag=null;stage.classList.remove('am-dragging');
+      if(e.type!=='pointerup'||was.moved)return;
+      // A plain click: on the picture it zooms in or back; beside it, closes.
+      if(was.onImage)viewerZoom(viewer.scale>1?1:2.5,e.clientX,e.clientY);
+      else if(viewer.scale<=1)d.close();
+    };
+    stage.addEventListener('pointerup',end);
+    stage.addEventListener('pointercancel',end);
+  }
   function pictures(list){
     const box=el('div',undefined,'am-pictures');
     for(const p of list){
       const img=document.createElement('img');img.className='am-picture';img.alt=p.name;img.title=p.name;
-      img.addEventListener('click',()=>img.classList.toggle('am-picture-open'));
+      img.addEventListener('click',()=>openPicture(list,list.indexOf(p)));
       const known=pictureURLs.get(p.id);
       if(known)img.src=known;else loadPicture(p.id).then(url=>{if(url)img.src=url;});
       box.append(img);
@@ -1748,7 +1834,6 @@
   }
   function renderAgents(){
     const live=$('agents'),cards=live.cloneNode(false);
-    computerChip($('agents-computer-chip'));
     if(computerFilter&&computerFilter!=='local'){renderPeerAgents(cards);swapChildren(live,cards);return;}
     for(const provider of ['claude','codex','cursor']){
       const a=(view?.agents||[]).find(x=>x.agent===provider);
@@ -2230,7 +2315,6 @@
   }
   function renderStats(){
     root.querySelectorAll('[data-period]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.period===statsPeriod)));
-    computerChip($('stats-computer-chip'));
     // The card follows the numbers on screen, not the filter still loading.
     $('stats-computers-card').hidden=stats?!!stats.forComputer:!!computerFilter;
     setStatsBusy();
@@ -2569,7 +2653,7 @@
     const name=view?.project||'';
     $('project-none').hidden=!!name;$('project-page').hidden=!name;
     if(!name){projectPageFor='';return;}
-    if(projectPageFor!==name){$('project-page-status').textContent='';clearTimeout(rulesTimer);}
+    if(projectPageFor!==name){$('project-page-status').textContent='';$('project-rules-status').textContent='';clearTimeout(rulesTimer);}
     const fresh=projectPageFor!==name;projectPageFor=name;
     if(fresh||document.activeElement!==$('project-page-name'))$('project-page-name').value=view.project_title||name;
     // Other computers and the coordinator chat know the project by the name it
@@ -2583,7 +2667,7 @@
   }
   function saveProjectField(field){
     const name=view?.project;if(!name)return;
-    const status=$('project-page-status');
+    const status=$(field==='rules'?'project-rules-status':'project-page-status');
     projectSaving=projectSaving.then(async()=>{
       if(view?.project!==name)return;
       try{
@@ -3079,7 +3163,6 @@
     setProject(value);remember('messenger-project',value);selectedTask='';selectedShared=null;feed=null;feedSignature='';viewSignature='';taskHistory=null;if($('device-menu')?.matches(':popover-open'))$('device-menu').hidePopover();renderMachines();if(tab==='agents')renderAgents();renderTaskList();renderThread();refresh();
   });
   $('agent-filter').addEventListener('change',()=>{taskHistory=null;renderTaskList();if(view?.history_paged)refresh();});
-  for(const id of ['computer-chip','stats-computer-chip','agents-computer-chip'])$(id).querySelector('button').addEventListener('click',clearComputer);
   // The sidebar and the task list are as wide as the owner drags them (T-063).
   // A double click or Home restores the usual width; the width is remembered.
   function splitter(pane,name,variable,usual,min,max,side){
@@ -3121,6 +3204,7 @@
   $('project-dialog-close').addEventListener('click',()=>$('project-dialog').close());
   $('settings-open').addEventListener('click',()=>$('settings-dialog').showModal());
   $('settings-close').addEventListener('click',()=>$('settings-dialog').close());
+  setupPictureViewer();
   $('fb-open').addEventListener('click',openFeedback);
   $('fb-close').addEventListener('click',()=>$('fb-dialog').close());
   $('fb-save').addEventListener('click',saveFeedback);

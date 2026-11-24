@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-24 — Claude Code (T-268 to T-271)
+
+- Finished the picture viewer from the draft kept after 0.97 and added the English texts it lacked. On the owner's screenshots: statistics filters now share one height and start at the left, the project page is split into cards, and the computer chip is removed because the highlighted card already shows the choice (D-189). New `scripts/check-window-pictures.cjs` covers the viewer and a chosen computer that leaves the list.
+
 ## 2026-11-23 — Claude Code (0.97 release)
 
 - Published [0.97](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.97) from `5de88fc` with T-264 to T-267. Verified 22 assets and all five signed update sets (signature, version, source SHA, archive hash and length). The owner moved the picture viewer (T-268) to the next release. No installed-app or VPS upgrade was performed.

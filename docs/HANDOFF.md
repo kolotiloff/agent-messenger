@@ -8,6 +8,10 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Updated 2026-11-24 by Claude Code (T-268 to T-271).
+
+- On `claude/amazing-noether-apbflv`, not released: the picture viewer (T-268), one-height statistics filters from the left (T-269), the project page as four cards (T-270), and no computer chip anywhere (T-271), per D-189. Checked in Chromium with fictional data, including the new `scripts/check-window-pictures.cjs`; WebKit runs in CI only; not tried in the installed app.
+
 Updated 2026-11-23 by Claude Code (0.97 release).
 
 - **0.97 is released** ([release](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.97), [workflow](https://github.com/kolotiloff/agent-messenger/actions/runs/45269963629), [PR #182](https://github.com/kolotiloff/agent-messenger/pull/182), source `5de88fcc8d4c7c38e5a0bd395b790c727e5025f9`) with T-264 to T-267 below. Confirmed 22 assets, as in 0.96. Verified all five update manifests against the pinned key (a corrupted signature fails), their version and source SHA, and that each archive hash and length names a published asset. The live Mac and VPS were not upgraded. Next: T-268 (picture viewer); a draft patch was kept outside the repository and must be redone on a branch.
