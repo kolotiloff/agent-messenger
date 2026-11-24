@@ -93,6 +93,11 @@ const shots = process.env.SCREENSHOT_DIR;
         assert.deepEqual(await page.evaluate(() => [...new Set(window.flashes)]), [], `choosing ${name} (delay ${delay} ms) flashed`);
         await page.evaluate(() => { window.watching = false; });
       }
+      // Selecting a peer leaves the local identity marker on this computer.
+      const stripe = await page.locator('#machines .am-machine-card').evaluateAll(cards => cards
+        .filter(card => getComputedStyle(card, '::before').content === '""')
+        .map(card => [card.dataset.machineOrder, card.getAttribute('aria-pressed')]));
+      assert.deepEqual(stripe, [['local', 'false']], 'only the local card has the identity stripe');
       if (shots) await page.screenshot({path: path.join(shots, `computer-switch-${scheme}.png`)});
       assert.deepEqual(errors, []);
       await context.close();
