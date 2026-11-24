@@ -5,6 +5,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 ## 2026-11-24 — Codex (T-282)
 
 - Reproduced the false current-version result from the installed 0.99 binary. The GitHub response listed builds 99, 98, and 100 in that order. Select by numeric preview build and require a signed version matching its tag. The updater race tests passed, and the patched 0.99 test binary found the real signed 0.100 in a separate home directory. Also verified the signature on the direct Mac download. The published 0.100 binaries predate this updater fix.
+- Published [0.101](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.101) from `e84576b`. GitHub cancelled the signing job before it received an ARM runner; the [second attempt](https://github.com/kolotiloff/agent-messenger/actions/runs/45437843015/attempts/2) succeeded. Verified 22 uploaded assets and all five update sets (signatures, hashes, sizes and source revision). The live response put builds 99 and 98 before 101. The original 0.99 check still reported itself current, and the patched test binary found 0.101. No live upgrade was performed.
 
 ## 2026-11-24 — Codex (T-280)
 
