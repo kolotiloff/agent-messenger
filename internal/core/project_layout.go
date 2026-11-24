@@ -43,6 +43,10 @@ func openSplitStore(ctx context.Context, root string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := ensureUpdateCancellation(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return &Store{db: db, split: &projectLayout{root: root, files: make(map[string]*sql.DB), runs: make(map[string]string)}}, nil
 }
 
