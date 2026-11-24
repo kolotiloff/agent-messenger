@@ -134,6 +134,15 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       // engine names its cause.
       console.error(JSON.stringify(await page.evaluate(() => [...document.querySelectorAll('#picture-image, .am-picture')].map(img =>
         ({id: img.id, src: img.getAttribute('src'), complete: img.complete, natural: [img.naturalWidth, img.naturalHeight], box: [img.clientWidth, img.clientHeight]})))));
+      console.error(JSON.stringify(await page.evaluate(async () => {
+        const size = src => new Promise(done => { const img = new Image(); img.onload = () => done([img.naturalWidth, img.naturalHeight]); img.onerror = () => done('error'); img.src = src; });
+        const response = await fetch('/api/task-image?id=img-1', {headers: {Authorization: 'Bearer fixture'}});
+        const blob = await response.blob(), bytes = new Uint8Array(await blob.arrayBuffer());
+        const typed = new Blob([bytes], {type: 'image/png'});
+        const data = await new Promise(done => { const r = new FileReader(); r.onload = () => done(r.result); r.readAsDataURL(typed); });
+        return {status: response.status, header: response.headers.get('content-type'), blobType: blob.type, length: bytes.length, head: [...bytes.slice(0, 8)],
+          plainBlob: await size(URL.createObjectURL(blob)), typedBlob: await size(URL.createObjectURL(typed)), dataURL: await size(data), direct: await size('/api/task-image?id=img-1')};
+      })));
       throw error;
     });
     assert.equal(await page.locator('#picture-count').textContent(), '1 из 2');
