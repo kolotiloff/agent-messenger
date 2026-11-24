@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-24 — Codex (T-282)
+
+- Reproduced the false current-version result from the installed 0.99 binary. The GitHub response listed builds 99, 98, and 100 in that order. Select by numeric preview build and require a signed version matching its tag. The updater race tests passed, and the patched 0.99 test binary found the real signed 0.100 in a separate home directory. Also verified the signature on the direct Mac download. The published 0.100 binaries predate this updater fix.
+
 ## 2026-11-24 — Codex (T-280)
 
 - Confirmed the affected computer still reported 0.99 and a machine-wide queued update. Added safe version reconciliation and a coordinator cancellation tied to the queued request ID. Verified the two-computer and split-store scenarios with fixture data.
