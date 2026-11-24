@@ -645,3 +645,7 @@ The window names every model through one rule (`modelName`), the statistics filt
 ## D-194 — Order release candidates by preview build (T-282)
 
 2026-11-24. The GitHub release list can put a new build behind older builds. Sort preview tags by descending numeric build before selecting the platform package. The signed manifest must match the chosen tag. Keep the existing single API request and signature, archive and downgrade checks.
+
+## D-195 — Verify upgrade discovery from installed clients (T-283)
+
+2026-11-24. Validate both the published release and the first signed package visible to the legacy updater. A route through 0.101 or newer is sufficient for 0.99 to recover numeric release ordering. Recovery is limited to renaming discovery manifests in 0.98 and 0.99 after checking replacement packages.
