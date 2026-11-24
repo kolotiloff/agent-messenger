@@ -280,8 +280,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-agent-running-label { color:var(--am-run); }
 #am-concept :is(.am-agent-running-label,.am-agent-wait) .am-agent-model { color:inherit; }
 #am-concept :is(.am-agent-run,.am-agent-wait) .am-agent-status { margin-left:0; }
-#am-concept :is(.am-agent-run,.am-agent-wait) .am-agent-status::before { content:" "; white-space:pre; }
-#am-concept :is(.am-agent-run,.am-agent-wait):has(.am-agent-model) .am-agent-status::before { content:", "; }
+#am-concept :is(.am-agent-run,.am-agent-wait) .am-agent-status::before { content:", "; white-space:pre; }
 #am-concept .am-agent-run .am-agent-status { color:var(--am-muted); }
 #am-concept .am-agent-line.am-agent-wait { color:var(--am-wait); }
 #am-concept .am-agent-line.am-agent-offline { color:var(--am-disabled-text); }

@@ -111,7 +111,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 ## Next
 
-T-281 is implemented on `codex/t281-hide-unconfirmed-sidebar-model` and pending release. Chromium and WebKit checks cover missing and requested-only models, followed by a reported model.
+T-281 is implemented on `codex/t281-hide-unconfirmed-sidebar-model` and pending release. Chromium and WebKit checks cover the comma before elapsed time with and without a reported model.
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|

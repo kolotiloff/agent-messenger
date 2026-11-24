@@ -21,7 +21,7 @@ Updated 2026-11-24 by Codex (T-282).
 Updated 2026-11-24 by Codex (T-280).
 
 - **0.100 is released** ([release](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.100), [workflow](https://github.com/kolotiloff/agent-messenger/actions/runs/45428605429), [PR #185](https://github.com/kolotiloff/agent-messenger/pull/185), source `8ca1dfe91455fcd9d0a6b3fb561ce0d2ec739d5b`). The coordinator can cancel an exact queued update without stopping workers. A verified already-installed target clears its waiting row before checking live work. Confirmed 22 uploaded assets and verified the signatures, revision, sizes and hashes for all five update sets. PC-1 reported 0.99 and update pending when inspected before publication. No live computer or database was modified. See [UPDATES.md](UPDATES.md).
-- After 1.0, T-281 shows model text in computer cards only once the worker has reported it. The browser checks cover missing and requested-only models and the transition to a reported model.
+- After 1.0, T-281 shows model text in computer cards only once the worker has reported it. A comma separates the agent label from its elapsed time or waiting status. Browser checks cover the label before and after a model is reported.
 
 Updated 2026-11-24 by Claude Code (T-278, T-279).
 

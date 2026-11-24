@@ -532,6 +532,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await overlappingAgent.locator('.am-agent-model').count(),0);
       assert.equal(await overlappingAgent.locator('.am-agent-running-label').innerText(),'Codex');
       assert.equal(await overlappingAgent.locator('.am-agent-status').textContent(),'(2) 3 мин');
+      assert.equal(await overlappingAgent.locator('.am-agent-status').evaluate(node=>getComputedStyle(node,'::before').content),'", "');
       assert.match(await overlappingAgent.getAttribute('title'),/, ждёт ответа \(1\)/);
       const chooseProject = async name => {
         await page.locator('[aria-controls="project-select-menu"]').click();
@@ -811,6 +812,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await remoteHead.getByText(/Astra 6\.2 High/).waitFor();
       assert.equal(await remoteList.locator('.am-task-model').textContent(),'Astra 6.2 High');
       assert.equal(await remoteAgent.locator('.am-agent-model').textContent(),'Astra 6.2 High');
+      assert.equal(await remoteAgent.locator('.am-agent-status').evaluate(node=>getComputedStyle(node,'::before').content),'", "');
       await page.evaluate(() => {
         const now=Date.now.bind(Date);
         window.elapsedSample=document.querySelector('#thread .am-rich');

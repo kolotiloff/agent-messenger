@@ -17,7 +17,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-24 — Codex (T-281)
 
-- Computer cards show the agent name and its status while the worker has yet to report a model. Once the reported model arrives, it appears beside the name. Verified in Chromium and WebKit with fictional local and remote tasks.
+- Computer cards show the agent name and its status while the worker has yet to report a model. Once the reported model arrives, it appears beside the name. A comma precedes the status in both cases. Verified in Chromium and WebKit with fictional local and remote tasks.
 
 ## 2026-11-24 — Codex (T-282)
 
