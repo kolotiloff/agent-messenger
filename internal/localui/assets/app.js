@@ -774,7 +774,7 @@
     mark.setAttribute('role','img');
     mark.setAttribute('aria-label',mark.title);
     mark.append(svgIcon(online
-      ?['M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-7v2h3v2H8v-2h3v-2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z']
+      ?['M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2ZM12 17v3M8 20h8']
       :['M9 4h11a2 2 0 0 1 2 2v8M2 6v9a2 2 0 0 0 2 2h12M12 17v3M8 20h8M2 2l20 20']));
     return mark;
   }
@@ -787,7 +787,7 @@
     // This computer's version and update button are moved into its header
     // by placeLocalParts, alongside the same status icon as on remote cards.
     const head=el('div',undefined,'am-machine-name');
-    head.append(machinePresence(online),el('span',view?.computer_name||tr('Этот компьютер')));
+    head.append(machinePresence(online),el('span',view?.computer_name||tr('Этот компьютер'),'am-machine-label'));
     // The computer that runs the network's server is labelled as such.
     if(server?.host?.running&&server.host.scope!=='local')head.append(serverTag());
     const coordinator=view?.project===project?view?.coordinator:null;
@@ -816,7 +816,7 @@
       const fresh=peerFresh(peer);
       const card=el('div',undefined,'am-machine-card am-peer-card');card.dataset.peer=peer.id;if(peer.host)card.dataset.host='';pickable(card,peer.id,peerOrderKey(peer));
       const name=el('div',undefined,'am-machine-name');
-      name.append(machinePresence(fresh),el('span',peer.name));
+      name.append(machinePresence(fresh),el('span',peer.name,'am-machine-label'));
       if(peer.host)name.append(serverTag());
       const meta=el('div',undefined,'am-machine-meta');
       const corner=el('div',undefined,'am-card-update');

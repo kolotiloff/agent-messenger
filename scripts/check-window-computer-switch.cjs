@@ -114,11 +114,28 @@ const shots = process.env.SCREENSHOT_DIR;
         return [style.paddingTop, style.paddingBottom, style.paddingLeft, style.paddingRight];
       }));
       assert.deepEqual(spacing, Array.from({length: 8}, () => ['4px', '4px', '12px', '12px']));
-      const online = card('ПК-2').getByRole('img', {name: 'На связи'}).locator('svg');
-      const offline = card('Ноутбук').getByRole('img', {name: 'Нет связи'}).locator('svg');
+      const onlineMark = card('ПК-2').getByRole('img', {name: 'На связи'});
+      const offlineMark = card('Ноутбук').getByRole('img', {name: 'Нет связи'});
+      const online = onlineMark.locator('svg');
+      const offline = offlineMark.locator('svg');
       assert.equal((await online.boundingBox()).width, 14);
       assert.equal((await offline.boundingBox()).width, 14);
-      assert.equal(await online.evaluate(svg => getComputedStyle(svg).fill), await online.evaluate(svg => getComputedStyle(svg).color));
+      assert.equal(await online.evaluate(svg => getComputedStyle(svg).fill), 'none');
+      const dot = await onlineMark.evaluate(mark => {
+        const style = getComputedStyle(mark, '::after');
+        return [style.width, style.backgroundColor, style.insetInlineEnd, style.insetBlockEnd];
+      });
+      assert.deepEqual(dot, ['8px', scheme === 'dark' ? 'rgb(76, 219, 134)' : 'rgb(22, 132, 76)', '-3px', '-1px']);
+      assert.equal(await offlineMark.evaluate(mark => getComputedStyle(mark, '::after').content), 'none');
+      assert.equal(await offlineMark.evaluate(mark => getComputedStyle(mark.nextElementSibling).color),
+        await offlineMark.evaluate(mark => getComputedStyle(mark).color));
+      for (const mark of [onlineMark, offlineMark]) {
+        assert.deepEqual(await mark.evaluate(icon => {
+          const frame = icon.getBoundingClientRect();
+          return [frame.left - icon.parentElement.getBoundingClientRect().left,
+            icon.nextElementSibling.getBoundingClientRect().left - frame.right];
+        }), [12, 12]);
+      }
       assert.equal(await offline.evaluate(svg => getComputedStyle(svg).fill), 'none');
       assert.match(await offline.locator('path').getAttribute('d'), /M2 2l20 20/);
       if (shots) await page.screenshot({path: path.join(shots, `computer-switch-${scheme}.png`)});

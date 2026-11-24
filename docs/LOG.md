@@ -9,6 +9,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 ## 2026-11-25 — Codex (T-292, T-293, T-294)
 
 - Refined computer cards in both themes and changed the Mac menu bar click behavior. Verified the cards in Chromium and WebKit and built the native Mac application. Live menu bar clicks remain unverified.
+- Updated [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198) with a larger green dot at the lower right of the monitor, a wider gap before the name, and muted names with crossed monitors for offline computers.
 - Added a pending update cancellation indicator with redraw, reopening and lost response coverage. A three-computer fixture checks repeated submission and receiver confirmation. Branch `codex/t292-computer-card-headers`.
 
 ## 2026-11-25 — Codex (T-285)
