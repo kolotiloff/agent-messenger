@@ -303,6 +303,10 @@
     // T-126: an open task on a computer this one lost contact with.
     if(t.remote?.lost&&!t.remote.from&&activeStates.includes(t.state))
       return [tr('Связь потеряна, исход неизвестен'),'am-muted',t.remote.last_seen?'«'+t.remote.name+tr('» не на связи с ')+stamp(t.remote.last_seen):'«'+t.remote.name+tr('» больше нет в сети')];
+    if(activeStates.includes(t.state)&&t.remote?.cancel_state){
+      if(t.remote.silent)return [tr('Остановка не подтверждена'),'am-status-wait'];
+      return [tr('Ждём завершения задачи…'),'am-status-wait'];
+    }
     // T-137: sent to another computer that has not said it took the task.
     // It may run there with its replies lost, so neither «Работает» nor
     // «not accepted»: say what is known.
@@ -1435,7 +1439,18 @@
     }
   }
   // Stop, like in a chat: a square button in the input field, or Esc.
-  let stopping=false;
+  const stopSubmissions=new Map();
+  function renderStopControls(t){
+    const button=$('task-stop'),status=$('task-stop-status');
+    const progress=button.hidden?'':t.remote?.cancel_state||stopSubmissions.get(t.id);
+    button.disabled=!!progress;
+    const text={
+      sending:tr('Отправляем запрос на остановку…'),
+      queued:tr('Запрос на остановку в очереди. Ждём завершения задачи…'),
+      sent:tr('Запрос на остановку принят сервером. Ждём завершения задачи…'),
+    }[progress]||'';
+    if(status.textContent!==text)status.textContent=text;
+  }
   function closeHere(){
     const t=selectedTaskRow();if(!t)return;
     if(!t.remote||t.remote.from){
@@ -1450,11 +1465,23 @@
     });
   }
   async function stopTask(){
-    const t=selectedTaskRow();if(!t||stopping||$('task-stop').hidden)return;
-    stopping=true;$('task-stop').disabled=true;$('task-stop').classList.add('am-tip-off');
-    try{await postAPI('/api/task-cancel',{task:t.id});showError(null);feedSignature='';await refresh();}
-    catch(e){showError(e);}
-    finally{stopping=false;$('task-stop').disabled=false;}
+    const t=selectedTaskRow(),button=$('task-stop');
+    if(!t||$('compose').hidden||button.hidden||t.remote?.cancel_state||stopSubmissions.has(t.id))return;
+    stopSubmissions.set(t.id,'sending');
+    button.classList.add('am-tip-off');
+    renderStopControls(t);
+    try{
+      await postAPI('/api/task-cancel',{task:t.id});
+      if(t.remote&&!t.remote.from)stopSubmissions.set(t.id,'queued');
+      if(selectedTask===t.id)showError(null);
+    }catch(error){
+      if(selectedTask===t.id)showError(error);
+    }finally{
+      if(stopSubmissions.get(t.id)==='sending')stopSubmissions.delete(t.id);
+      if(selectedTask===t.id)renderStopControls(selectedTaskRow()||t);
+      feedSignature='';
+      await refresh();
+    }
   }
   // T-175: the worker's pictures. The page asks for them with its key and
   // shows them from memory; a click opens the viewer (T-268).
@@ -1746,6 +1773,7 @@
     $('compose').hidden=unreachable||(!q&&!active);
     box.disabled=!q&&!note;box.placeholder=q?tr('Ответить исполнителю…'):note&&t.state==='waiting_coordinator'?tr('Ответить вместо координатора…'):note?tr('Написать исполнителю…'):t.remote?.from&&t.owner_question?tr('Отвечают на компьютере «')+t.remote.name+'»':t.pending_launch?tr('Задача ждёт запуска…'):t.remote?.outbox_delayed_minutes&&!t.remote.from?tr('Ответы с «')+t.remote.name+tr('» задерживаются: не уходят уже ')+t.remote.outbox_delayed_minutes+tr(' мин.'):t.remote?.worker==='none'&&!t.remote.from?tr('На «')+t.remote.name+tr('» исполнитель этой задачи сейчас не запущен'):tr('Исполнитель работает…');
     $('answer-send').hidden=!q&&!note;$('task-stop').hidden=!active;
+    renderStopControls(t);
     $('compose').dataset.mode=q?'answer':note?'note':'';
     if($('compose').dataset.task!==t.id){$('compose').dataset.task=t.id;box.value='';$('answer-status').textContent='';}
     if(q&&$('compose').dataset.question!==q.id){$('compose').dataset.question=q.id;$('answer-text').value='';$('answer-status').textContent='';}
@@ -2217,6 +2245,9 @@
         v.tasks.push(...(view?.tasks||[]).filter(t=>finishedStates.includes(t.state)&&!live.has(t.id)));
         if(view?.history_next)v.history_next=view.history_next;
         delete v.history_unchanged;
+      }
+      for(const t of v.tasks){
+        if(stopSubmissions.get(t.id)==='queued'&&(t.remote?.cancel_state||!activeStates.includes(t.state)))stopSubmissions.delete(t.id);
       }
       windowHistoryScope=taskWindowQuery();
       const signature=JSON.stringify(v);

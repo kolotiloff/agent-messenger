@@ -102,3 +102,48 @@ func TestSplitOutboxKeepsOrderAndAcknowledgesOnlyItsFile(t *testing.T) {
 		t.Fatalf("recipient backoff ignored: %+v %v", remaining, err)
 	}
 }
+
+func TestSplitStopRequestSurvivesReopeningAndWakesItsProject(t *testing.T) {
+	ctx := context.Background()
+	pair := newNetPair(t)
+	if err := pair.b.st.SetNetAccept(true); err != nil {
+		t.Fatal(err)
+	}
+	id := pair.startRemote(t, "stop", "codex", "Long job")
+	pair.carry(t, true)
+	if state, err := pair.a.st.CancelTask(id); err != nil || state != "cancelling" {
+		t.Fatalf("cancel: %s %v", state, err)
+	}
+	if err := ActivateProjectStorage(ctx, pair.a.path); err != nil {
+		t.Fatal(err)
+	}
+	st, err := Open(pair.a.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	assertStop := func(want string) {
+		t.Helper()
+		remote, err := st.TaskRemote(id)
+		if err != nil || remote == nil || remote.CancelState != want {
+			t.Fatalf("stop after reopening: %+v, want %s (%v)", remote, want, err)
+		}
+	}
+	assertStop("queued")
+	before, err := st.WindowChanges(ctx, "Game", id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending, err := st.NetPending(testBroker, 10)
+	if err != nil || len(pending) != 1 || pending[0].OpID != "cancel."+id {
+		t.Fatalf("pending cancellation: %+v %v", pending, err)
+	}
+	if err := st.NetDeliverySent(pending[0]); err != nil {
+		t.Fatal(err)
+	}
+	after, err := st.WindowChanges(ctx, "Game", id)
+	if err != nil || after.Window == before.Window {
+		t.Fatalf("broker receipt did not wake the project: %+v %v", after, err)
+	}
+	assertStop("sent")
+}

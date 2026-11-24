@@ -936,9 +936,38 @@ func (s *Store) NetSent(seq int64) error {
 // NetDeliverySent acknowledges exactly the message selected by NetPending.
 func (s *Store) NetDeliverySent(message NetOutgoing) error {
 	if s.split == nil {
-		return s.NetSent(message.Seq)
+		return acknowledgeNetDelivery(context.Background(), s.db, message)
 	}
 	return splitNetSent(context.Background(), s.db, s.split.open, splitNetMessage{NetOutgoing: message, file: message.file})
+}
+
+func acknowledgeNetDelivery(ctx context.Context, db *sql.DB, message NetOutgoing) error {
+	const remove = `DELETE FROM net_outbox WHERE seq=? AND op_id=?`
+	if message.kind != "cancel" {
+		_, err := db.ExecContext(ctx, remove, message.Seq, message.OpID)
+		return err
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, remove, message.Seq, message.OpID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil || n == 0 {
+		return err
+	}
+	// Wake the task list when the broker accepts a stop request, before the
+	// executing computer sends any task event of its own.
+	if _, err := tx.ExecContext(ctx, `INSERT INTO window_revisions(scope,item,revision)
+ SELECT 'project',project,1 FROM tasks WHERE id=?
+ ON CONFLICT(scope,item) DO UPDATE SET revision=revision+1`, message.task); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // ReleaseAbsentOutbox retires messages aimed at a computer that is not in

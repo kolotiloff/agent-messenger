@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -51,7 +52,7 @@ func (p *netPair) carry(t *testing.T, fromA bool) []NetIncoming {
 		if err := to.ApplyNet(testBroker, in); err != nil {
 			t.Fatal(err)
 		}
-		if err := from.NetSent(m.Seq); err != nil {
+		if err := from.NetDeliverySent(m); err != nil {
 			t.Fatal(err)
 		}
 		out = append(out, in)
@@ -326,8 +327,25 @@ func TestRemoteTaskCancel(t *testing.T) {
 	if task, _ := p.a.st.TaskByID(id); task.State != "running" {
 		t.Fatalf("cancelled before the other computer confirmed: %+v", task)
 	}
+	assertCancelState := func(want string) {
+		t.Helper()
+		feed, err := p.a.st.TaskFeed(id)
+		if err != nil || feed.Task.Remote == nil || feed.Task.Remote.CancelState != want {
+			t.Fatalf("stop status: %+v, want %s (%v)", feed.Task.Remote, want, err)
+		}
+	}
+	assertCancelState("queued")
+	before, err := p.a.st.WindowChanges(context.Background(), "Game", id)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if sent := p.carry(t, true); len(sent) != 1 {
 		t.Fatalf("cancel messages %+v", sent)
+	}
+	assertCancelState("sent")
+	after, err := p.a.st.WindowChanges(context.Background(), "Game", id)
+	if err != nil || after.Window == before.Window {
+		t.Fatalf("broker receipt did not wake the window: %+v %v", after, err)
 	}
 	if runs, _ := p.b.st.CancelRequestedRuns(); len(runs) != 1 || runs[0].ID != r.ID {
 		t.Fatalf("cancel not requested on b %+v", runs)

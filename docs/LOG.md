@@ -7,6 +7,11 @@ One entry per work session, newest first. Write what was done, which tool did it
 - Published [1.0](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.0-preview.103) with 22 assets. All four jobs in the [release workflow](https://github.com/kolotiloff/agent-messenger/actions/runs/45459724676) passed. The shipping 0.99 and 0.101 Mac programs each found and downloaded signed build 103 from the public list. The owner’s Mac staged it without an installation or restart.
 - After the release, marked the local computer with a thin neutral stripe independent of selection and online state. WebKit computer switching and control checks passed, including light and dark at 600 and 1100 pixels. Added T-285 for the planned task section.
 
+## 2026-11-24 — Codex (T-288)
+
+- The task window sends one stop request and keeps its button disabled while waiting. The task view distinguishes a stop request still queued locally from one accepted by the broker. The receiver’s confirmed outcome determines the final status.
+- The network fixture covers queuing, broker acceptance and final cancellation. The split-storage fixture covers reopening with a pending stop and notifying the correct project after delivery. The Chromium and WebKit controls checks exercise repeated Escape presses during the wait.
+
 ## 2026-11-24 — Codex (T-284)
 
 - Prepared public version 1.0 after 0.102 reproduced the legacy discovery issue. The package and tag retain the signed format understood by 0.99 and the ordered updater in 0.101.

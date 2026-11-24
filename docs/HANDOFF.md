@@ -12,6 +12,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 After 1.0, T-286 adds a thin neutral stripe to the local computer's card. WebKit checks cover selection changes in both themes. T-285 (a planned task section) is queued for a future release.
 
+After 1.0, T-288 keeps the stop button disabled once a remote task’s stop request is queued. The window distinguishes local queuing and broker acceptance and waits for the executing computer to confirm the task outcome. Go network fixtures and Chromium and WebKit window checks cover the transition.
+
 Updated 2026-11-24 by Codex (T-283). The original 0.99 binary still returned current after 0.101 shipped. Added a public-channel check to the release workflow and an opt-in recovery for legacy discovery. Fleet delivery requires verification after publication.
 
 Updated 2026-11-24 by Codex (T-282).

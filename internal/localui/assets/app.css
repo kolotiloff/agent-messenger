@@ -518,8 +518,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-stop-btn:is(.am-tip-off,:disabled) .am-tip { display:none; }
 #am-concept .am-compose-foot { margin-top:var(--am-space-2); }
 #am-concept .am-compose-foot:empty { display:none; }
-#am-concept #answer-status { margin:var(--am-space-2) var(--am-space-4) 0; font-size:var(--am-text-s); line-height:1.45; }
-#am-concept #answer-status:empty { display:none; }
+#am-concept :is(#answer-status,#task-stop-status) { margin:var(--am-space-2) var(--am-space-4) 0; font-size:var(--am-text-s); line-height:1.45; }
+#am-concept :is(#answer-status,#task-stop-status):empty { display:none; }
 
 /* Task list panel */
 #am-concept .am-queue-panel { position:relative; display:flex; flex-direction:column; gap:var(--am-gap-content); min-width:0; min-height:0; padding-inline:var(--am-pane-inset); border-left:1px solid var(--am-line); background:var(--am-bg); }

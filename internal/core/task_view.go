@@ -170,6 +170,9 @@ type RemoteComputer struct {
 	// Unaccepted: the computer that should run the task has not said it
 	// accepted it (T-137). Until it does, nothing is known to run there.
 	Unaccepted bool `json:"unaccepted,omitempty"`
+	// CancelState distinguishes a durable request in the local outbox
+	// from one the broker accepted. Neither means the worker has stopped.
+	CancelState string `json:"cancel_state,omitempty"`
 	// Silent: that computer is in reach but has not answered: the task was
 	// not accepted within unacceptedAfter, or a cancel went unanswered for
 	// cancelAnswerWait. It can be closed here at once (owner, 2026-11-12:
@@ -206,16 +209,24 @@ func remoteComputer(machine, tx *sql.Tx, task string, link netLink) (*RemoteComp
 func remoteContact(machine, tx *sql.Tx, task string, link netLink, out *RemoteComputer) error {
 	var name, remoteTask sql.NullString
 	var created, updated string
-	var cancel int
-	if err := tx.QueryRow(`SELECT remote_name,remote_task,created_at,updated_at,cancel_requested FROM tasks WHERE id=?`, task).Scan(&name, &remoteTask, &created, &updated, &cancel); err != nil {
+	var cancel, cancelQueued bool
+	if err := tx.QueryRow(`SELECT remote_name,remote_task,created_at,updated_at,cancel_requested,
+ CASE WHEN cancel_requested=1 THEN EXISTS(SELECT 1 FROM net_outbox WHERE op_id=?) ELSE 0 END
+ FROM tasks WHERE id=?`, safeNetOp("cancel."+task), task).Scan(&name, &remoteTask, &created, &updated, &cancel, &cancelQueued); err != nil {
 		return err
+	}
+	if cancel {
+		out.CancelState = "sent"
+		if cancelQueued {
+			out.CancelState = "queued"
+		}
 	}
 	out.Unaccepted = remoteTask.String == ""
 	older := func(at string, d time.Duration) bool {
 		t, err := time.Parse(time.RFC3339Nano, at)
 		return err == nil && time.Since(t) > d
 	}
-	out.Silent = (out.Unaccepted && older(created, unacceptedAfter)) || (cancel != 0 && older(updated, cancelAnswerWait))
+	out.Silent = (out.Unaccepted && older(created, unacceptedAfter)) || (cancel && older(updated, cancelAnswerWait))
 	var broker string
 	if err := machine.QueryRow(`SELECT COALESCE((SELECT value FROM meta WHERE key='net_broker'),'')`).Scan(&broker); err != nil {
 		return err

@@ -393,6 +393,9 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const remoteTask = {...localTask,id:'remote-task',title:'Remote task',created_at:new Date(Date.now()-8*60*1000).toISOString(),model:'',ran_model:'',remote:{id:'dev-1',name:'Runner',worker:'none'}};
       const waitingTask = {...remoteTask,id:'waiting-task',title:'Waiting for a reply',agent:'claude',state:'waiting_owner',model:'claude-sonnet-5-5[effort=medium]',ran_model:'claude-sonnet-5-5[effort=medium]'};
       let remoteRow = remoteTask;
+      const stopRequests = [];
+      let releaseStop;
+      const stopResponse = new Promise(resolve => { releaseStop = resolve; });
       let codexWaiting = true;
       let runnerAgents = [{agent:'cursor',running:1},{agent:'claude',waiting_owner:1},{agent:'codex',running:1,waiting_owner:1}];
       let runnerWorkers = [];
@@ -470,6 +473,11 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           return route.fulfill({json:{task:remote?remoteTask:localTask,items}});
         }
         if (pathname === '/api/task-note') ownerNotes.push(route.request().postDataJSON());
+        if (pathname === '/api/task-cancel') {
+          stopRequests.push(route.request().postDataJSON());
+          await stopResponse;
+          return route.fulfill({json:{ok:true}});
+        }
         if (pathname === '/api/task-hide') hides.push(route.request().postDataJSON());
         if (pathname === '/api/self-update') {
           if (route.request().method() === 'POST') { updates.push(route.request().postDataJSON()); update.state = 'downloading'; return route.fulfill({json: {ok: true, state: 'downloading'}}); }
@@ -832,6 +840,26 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await remoteAgent.locator('.am-agent-status').count(),0);
       assert.equal(await remoteHead.locator('[data-elapsed-from]').count(),0);
       assert.equal(await remoteList.locator('[data-elapsed-from]').count(),0);
+      remoteRow=remoteTask;
+      await remoteHead.getByText(/Работает/).waitFor();
+      // One click stays locked through both local queuing and broker acceptance.
+      const stopButton=page.locator('#task-stop'),stopStatus=page.locator('#task-stop-status');
+      await stopButton.click();
+      await stopStatus.getByText('Отправляем запрос на остановку…',{exact:true}).waitFor();
+      assert.equal(await stopButton.isDisabled(),true);
+      await page.keyboard.press('Escape');
+      releaseStop();
+      await stopStatus.getByText(/в очереди/).waitFor();
+      assert.equal(await stopButton.isDisabled(),true);
+      remoteRow={...remoteTask,remote:{...remoteTask.remote,cancel_state:'sent'}};
+      await stopStatus.getByText(/принят сервером/).waitFor();
+      assert.match(await remoteList.locator('.am-task-status').innerText(),/Ждём завершения задачи/);
+      assert.equal(await stopButton.isDisabled(),true);
+      await page.keyboard.press('Escape');
+      assert.deepEqual(stopRequests,[{task:remoteTask.id}]);
+      remoteRow={...remoteRow,state:'cancelled',finished_at:new Date().toISOString()};
+      await remoteHead.getByText('Отменена',{exact:true}).waitFor();
+      assert.equal(await stopStatus.isVisible(),false);
       remoteRow=remoteTask;
       await remoteHead.getByText(/Работает/).waitFor();
       // Owner, 2026-11-15: one button removes every finished task from the list.
