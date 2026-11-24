@@ -8,7 +8,9 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
-2026-11-24 (T-284). Release 0.102 was published; the original 0.99 updater still saw itself first on GitHub. The owner chose public version 1.0. Use tag `v1.0.0-preview.103`, signed build 103, with a single public release for existing and new clients.
+**[1.0](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.0-preview.103) is released** from `cef286b07290f660b2e34ae4022f7eaeb7e45aa5`. The [release workflow](https://github.com/kolotiloff/agent-messenger/actions/runs/45459724676) passed the public upgrade check for all five platforms. The original macOS 0.99 and 0.101 binaries each found and downloaded the signed release in isolated homes. The owner’s installed 0.99 client also staged 1.0. Existing release assets and links were preserved.
+
+After 1.0, T-286 adds a thin neutral stripe to the local computer's card. WebKit checks cover selection changes in both themes. T-285 (a planned task section) is queued for a future release.
 
 Updated 2026-11-24 by Codex (T-283). The original 0.99 binary still returned current after 0.101 shipped. Added a public-channel check to the release workflow and an opt-in recovery for legacy discovery. Fleet delivery requires verification after publication.
 

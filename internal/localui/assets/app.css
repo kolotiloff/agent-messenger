@@ -256,6 +256,9 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-computers { display:flex; flex-direction:column; min-height:0; }
 #am-concept .am-machines { display:flex; flex-direction:column; gap:var(--am-space-1); min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; margin-right:calc(-1 * var(--am-space-3)); padding-right:calc(var(--am-space-3) - var(--am-gutter, 0px)); }
 #am-concept .am-machine-card { display:flex; flex-direction:column; align-items:stretch; gap:var(--am-gap-control); padding:var(--am-pad-compact); border:1px solid var(--am-line); border-radius:var(--am-radius-s); background:var(--am-soft); }
+/* aria-current marks this installation; aria-pressed tracks the user's filter. */
+#am-concept .am-machine-card[aria-current=true] { position:relative; }
+#am-concept .am-machine-card[aria-current=true]::before { content:""; position:absolute; inset-block:var(--am-space-2); inset-inline-start:var(--am-gap-line); inline-size:var(--am-gap-line); border-radius:var(--am-radius-xs); background:color-mix(in srgb, var(--am-text) 75%, var(--am-soft)); pointer-events:none; }
 #am-concept .am-machine-card[data-drop-edge=before] { box-shadow:inset 0 var(--am-gap-line) var(--am-text); }
 #am-concept .am-machine-card[data-drop-edge=after] { box-shadow:inset 0 calc(-1 * var(--am-gap-line)) var(--am-text); }
 /* Centre the dot in the full line box; leave room for accents and descenders. */
