@@ -303,20 +303,25 @@ func TestPresenceUpdatePending(t *testing.T) {
 		t.Fatal(err)
 	}
 	member.SetPresence(func() (Presence, error) {
-		return Presence{Agents: []PresenceAgent{{Agent: "codex"}}, Version: "0.0.0-preview.73", UpdatePending: true}, nil
+		return Presence{Agents: []PresenceAgent{{Agent: "codex"}}, Version: "0.0.0-preview.100", UpdatePending: true, UpdateRequestID: "upd-fixture"}, nil
 	})
 	host.SetPresence(func() (Presence, error) { return Presence{Agents: []PresenceAgent{}}, nil })
 	host.ReportPresence(ctx(t))
 	member.ReportPresence(ctx(t))
-	if peers := host.Status().Peers; len(peers) != 1 || !peers[0].UpdatePending {
+	if peers := host.Status().Peers; len(peers) != 1 || !peers[0].UpdatePending || peers[0].UpdateRequestID != "upd-fixture" {
 		t.Fatalf("host sees %+v", peers)
 	}
 
-	olderHost = func(p Presence) bool { return p.UpdatePending }
+	olderHost = func(p Presence) bool { return p.UpdateRequestID != "" }
 	t.Cleanup(func() { olderHost = nil })
 	member.ReportPresence(ctx(t))
+	if peers := host.Status().Peers; len(peers) != 1 || !peers[0].UpdatePending || peers[0].UpdateRequestID != "" {
+		t.Fatalf("0.99 broker sees %+v", peers)
+	}
+	olderHost = func(p Presence) bool { return p.UpdatePending }
+	member.ReportPresence(ctx(t))
 	peers := host.Status().Peers
-	if len(peers) != 1 || peers[0].UpdatePending || peers[0].Version != "0.0.0-preview.73" {
+	if len(peers) != 1 || peers[0].UpdatePending || peers[0].Version != "0.0.0-preview.100" {
 		t.Fatalf("older host sees %+v", peers)
 	}
 	if ms := member.Status().Member; !ms.Reachable || ms.Error != "" {
