@@ -641,3 +641,7 @@ The window names every model through one rule (`modelName`), the statistics filt
 ## D-193 — Cancel only the chosen queued update (T-280)
 
 2026-11-24, the owner reported that an already-updated computer still refused new tasks while another project was running. A queued update is machine-wide. The running build can finish a known target it already satisfies, or a request whose signed channel check shows the running build is current. An unavailable or unverified channel leaves the queue intact. The coordinator can cancel an observed request by its exact ID through the authenticated mailbox. Only the supervisor's update loop removes it, with any launched helper or result fenced. Running tasks, process reservations and the automatic-update setting are unchanged.
+
+## D-194 — Order release candidates by preview build (T-282)
+
+2026-11-24. The GitHub release list can put a new build behind older builds. Sort preview tags by descending numeric build before selecting the platform package. The signed manifest must match the chosen tag. Keep the existing single API request and signature, archive and downgrade checks.
