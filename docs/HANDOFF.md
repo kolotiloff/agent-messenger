@@ -10,7 +10,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Updated 2026-11-24 by Codex (T-280).
 
-- On `codex/t280-cancel-pending-update`, the coordinator can cancel an exact queued update without stopping workers. A verified already-installed target clears its waiting row before checking live work. The owner's PC-1 still reported 0.99 and update pending when inspected. No live computer or database was modified. See [UPDATES.md](UPDATES.md).
+- **0.100 is released** ([release](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.100), [workflow](https://github.com/kolotiloff/agent-messenger/actions/runs/45428605429), [PR #185](https://github.com/kolotiloff/agent-messenger/pull/185), source `8ca1dfe91455fcd9d0a6b3fb561ce0d2ec739d5b`). The coordinator can cancel an exact queued update without stopping workers. A verified already-installed target clears its waiting row before checking live work. Confirmed 22 uploaded assets and verified the signatures, revision, sizes and hashes for all five update sets. PC-1 reported 0.99 and update pending when inspected before publication. No live computer or database was modified. See [UPDATES.md](UPDATES.md).
+- Next: T-281 simplifies the running-agent label in the sidebar for every provider while its model is unknown.
 
 Updated 2026-11-24 by Claude Code (T-278, T-279).
 
