@@ -10,7 +10,7 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Updated 2026-11-24 by Codex (T-282).
 
-- On `codex/t282-update-release-order`, sort the GitHub release response by numeric preview build before choosing the signed update. A live 0.99 Mac repeated the problem when the API put 0.100 after 0.99 and 0.98. The patched updater built as 0.99 found the real signed 0.100 with a separate home directory. Existing 0.99 installations can use the official download links for 0.100. See [UPDATES.md](UPDATES.md).
+- **0.101 is released** ([release](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.101), [workflow](https://github.com/kolotiloff/agent-messenger/actions/runs/45437843015/attempts/2), [PR #187](https://github.com/kolotiloff/agent-messenger/pull/187), source `e84576b90cc5f1159836f8663ae0eb20ffdfd230`). The updater chooses signed packages by numeric build. The live GitHub response still placed 0.101 after 0.99 and 0.98. The unmodified 0.99 updater reports 0.99 as current. The patched test binary found signed 0.101 in a separate home directory. Affected installations need the official 0.101 installer once. No live computer was modified. See [UPDATES.md](UPDATES.md).
 
 Updated 2026-11-24 by Codex (T-280).
 
