@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -45,6 +46,16 @@ type release struct {
 	Tag    string         `json:"tag_name"`
 	Assets []releaseAsset `json:"assets"`
 }
+
+func (r release) previewBuild() int {
+	version, ok := strings.CutPrefix(r.Tag, "v")
+	if !ok || !versionPattern.MatchString(version) {
+		return 0
+	}
+	build, _ := strconv.Atoi(version[strings.LastIndexByte(version, '.')+1:])
+	return build
+}
+
 type SyncResult struct {
 	Updated bool   `json:"updated"`
 	Version string `json:"version,omitempty"`
@@ -253,9 +264,14 @@ func (c Channel) syncGitHub(ctx context.Context, minimumBuild int, client *http.
 	if json.Unmarshal(raw, &releases) != nil {
 		return result, errors.New("invalid GitHub release listing")
 	}
+	// A freshly published release can appear below older releases in the list.
+	// Tags determine the order only. The signed manifest confirms the version.
+	sort.SliceStable(releases, func(i, j int) bool {
+		return releases[i].previewBuild() > releases[j].previewBuild()
+	})
 	manifestName := "update-" + runtime.GOOS + "-" + runtime.GOARCH + ".json"
 	for _, r := range releases {
-		if r.Draft {
+		if r.Draft || r.previewBuild() == 0 {
 			continue
 		}
 		ma, found, err := uniqueAsset(r.Assets, r.Tag, manifestName, 32768)
@@ -287,6 +303,9 @@ func (c Channel) syncGitHub(ctx context.Context, minimumBuild int, client *http.
 		m, err := VerifyManifest(c.PublicKey, manifest, signature)
 		if err != nil {
 			return result, err
+		}
+		if r.Tag != "v"+m.Version {
+			return result, errors.New("signed update version does not match release tag")
 		}
 		if currentErr == nil && m.Build == current.Build && m.SHA256 != current.SHA256 {
 			return result, errors.New("conflicting package for existing build")
