@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-24 — Codex (T-280)
+
+- Confirmed the affected computer still reported 0.99 and a machine-wide queued update. Added safe version reconciliation and a coordinator cancellation tied to the queued request ID. Verified the two-computer and split-store scenarios with fixture data.
+
 ## 2026-11-24 — Claude Code (T-278, T-279)
 
 - T-278 (D-192): the VPS card listed finished tasks sent to ПК-2 in the earlier network, because «host» named ПК-2 then and names the VPS now. Tasks whose broker is not the current network no longer match any current computer in the window, its filter and cleanup, the shared list and the usage page. T-279: choosing a computer waits for the program's list instead of flashing an empty one; new `scripts/check-window-computer-switch.cjs`. Not released.
