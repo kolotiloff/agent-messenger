@@ -13,7 +13,7 @@ import (
 func isProjectResponse(kind string) bool {
 	switch kind {
 	case "accepted", "refused", "event", "answer_refused", "continue_refused",
-		"note_refused", "progress", "ran_model", "output", "image":
+		"note_refused", "progress", "ran_model", "output", "image", "run_usage":
 		return true
 	default:
 		return false
@@ -31,6 +31,8 @@ func isProjectRequest(kind string) bool {
 
 func applyProjectResponseTx(tx *sql.Tx, from netLink, body netBody, peer string) error {
 	switch body.Kind {
+	case "run_usage":
+		return applyTaskAttempt(tx, from, body.Analytics)
 	case "output":
 		return applyOutput(tx, from, body)
 	case "image":

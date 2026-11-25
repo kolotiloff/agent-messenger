@@ -121,6 +121,21 @@ func taskDurationMS(started, finished string) *int64 {
 	return &ms
 }
 
+func usageTaskDuration(local bool, finished, started, observedStart string, remote sql.NullInt64) (*int64, bool) {
+	if finished == "" {
+		return nil, false
+	}
+	if local {
+		return taskDurationMS(started, finished), false
+	}
+	if remote.Valid {
+		return &remote.Int64, false
+	}
+	// Older remote records may only have local receipt times.
+	duration := taskDurationMS(observedStart, finished)
+	return duration, duration != nil
+}
+
 // rankUsageTasks can reuse the input for the next order after copying the page.
 func rankUsageTasks(tasks []UsageTask, less func(a, b UsageTask) bool) []UsageTask {
 	sort.Slice(tasks, func(i, j int) bool { return less(tasks[i], tasks[j]) })
@@ -256,17 +271,7 @@ func (s *Store) UsageStatsFiltered(since time.Time, loc *time.Location, computer
 				if !wanted(key) {
 					continue
 				}
-				if finished != "" {
-					if this {
-						task.DurationMS = taskDurationMS(started, finished)
-					} else if remoteDuration.Valid {
-						task.DurationMS = &remoteDuration.Int64
-					} else if observedStart != "" {
-						// Older remote records may only have local receipt times.
-						task.DurationMS = taskDurationMS(observedStart, finished)
-						task.DurationEstimated = task.DurationMS != nil
-					}
-				}
+				task.DurationMS, task.DurationEstimated = usageTaskDuration(this, finished, started, observedStart, remoteDuration)
 				if !usageSeen && task.DurationMS == nil {
 					continue
 				}

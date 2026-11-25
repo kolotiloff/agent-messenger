@@ -77,10 +77,28 @@ func TestTaskWindowRoutes(t *testing.T) {
 	if code, _ := do("GET", "/api/usage-stats?period=week&agent=other", ""); code != 400 {
 		t.Fatalf("unknown agent %d", code)
 	}
+	if code, _ := do("GET", "/api/usage-efficiency?period=week", ""); code != 400 {
+		t.Fatalf("model comparison without a project %d", code)
+	}
+	if code, _ := do("GET", "/api/usage-efficiency?project=Game&period=month&computer=local&agent=codex", ""); code != 200 ||
+		got[len(got)-1].Cmd != "usage-efficiency" || got[len(got)-1].Project != "Game" || got[len(got)-1].Text != "local" {
+		t.Fatalf("model comparison did not pass filters: %d %+v", code, got[len(got)-1])
+	}
 	if code, _ := do("GET", "/api/usage-stats?period=week&computer="+strings.Repeat("x", 65), ""); code != 400 {
 		t.Fatalf("long computer %d", code)
 	}
-	code, _ := do("POST", "/api/task-answer", `{"task":"task-1","question":"q-1","op_id":"op-1","text":"yes"}`)
+	if code, _ := do("POST", "/api/usage-export", `{"period":"week"}`); code != 400 {
+		t.Fatalf("export without project: %d", code)
+	}
+	if code, _ := do("POST", "/api/usage-export", `{"project":"Game","period":"all"}`); code != 400 {
+		t.Fatalf("export with unknown period: %d", code)
+	}
+	code, _ := do("POST", "/api/usage-export", `{"project":"Game","period":"week","computer":"dev-1","agent":"codex","model":"gpt-6.2-sol[effort=low]"}`)
+	if req := got[len(got)-1]; code != 200 || req.Cmd != "usage-export" || req.Project != "Game" || req.Alias != "week" ||
+		req.Text != "dev-1" || req.Provider != "codex" || req.Model != "gpt-6.2-sol[effort=low]" {
+		t.Fatalf("export did not pass all the filters: %d %+v", code, req)
+	}
+	code, _ = do("POST", "/api/task-answer", `{"task":"task-1","question":"q-1","op_id":"op-1","text":"yes"}`)
 	last := got[len(got)-1]
 	if code != 200 || last.Cmd != "task-owner-answer" || last.MessageID != "task-1" || last.ConversationID != "q-1" || last.Confirmation != "op-1" || last.Text != "yes" {
 		t.Fatalf("answer %d %+v", code, last)

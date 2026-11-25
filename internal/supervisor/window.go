@@ -228,13 +228,45 @@ func (s *Supervisor) UsageStatsForProject(project, period, computer, agent, mode
 	if project != "" && !core.ValidProjectName(project) {
 		return nil, fmt.Errorf("invalid project")
 	}
+	since, err := usagePeriodStart(period, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	return s.store.UsageStatsFiltered(since, time.Local, computer, core.UsageFilter{Project: project, Agent: agent, Model: model})
+}
+
+// ExportUsage writes one project's filtered task history to a local JSON file.
+func (s *Supervisor) ExportUsage(ctx context.Context, project, period, computer, agent, model string) (string, int, error) {
+	at := time.Now()
+	since, err := usagePeriodStart(period, at)
+	if err != nil {
+		return "", 0, err
+	}
+	return s.store.WriteUsageExport(ctx, filepath.Join(s.root, dbName), core.FeedbackDir(s.root), since, at, computer,
+		core.UsageFilter{Project: project, Agent: agent, Model: model})
+}
+
+// UsageEfficiency returns comparable model groups on the user's request.
+func (s *Supervisor) UsageEfficiency(ctx context.Context, project, period, computer, agent, model string) (any, error) {
+	since, err := usagePeriodStart(period, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	groups, err := s.store.UsageEfficiency(ctx, filepath.Join(s.root, dbName), since, computer,
+		core.UsageFilter{Project: project, Agent: agent, Model: model})
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"project": project, "groups": groups[:min(len(groups), 100)], "total_groups": len(groups)}, nil
+}
+
+func usagePeriodStart(period string, at time.Time) (time.Time, error) {
 	days := map[string]int{"day": 1, "week": 7, "month": 30}[period]
 	if days == 0 {
-		return nil, fmt.Errorf("unknown period %q", period)
+		return time.Time{}, fmt.Errorf("unknown period %q", period)
 	}
-	y, m, d := time.Now().Date()
-	since := time.Date(y, m, d-(days-1), 0, 0, 0, 0, time.Local)
-	return s.store.UsageStatsFiltered(since, time.Local, computer, core.UsageFilter{Project: project, Agent: agent, Model: model})
+	y, m, d := at.Date()
+	return time.Date(y, m, d-(days-1), 0, 0, 0, 0, at.Location()), nil
 }
 
 // SetAgentPaused turns an agent off or on from its card (T-061).

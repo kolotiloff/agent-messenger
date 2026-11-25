@@ -122,8 +122,8 @@ func TestSplitWorkerCommitsReportAndDeliveryInItsProject(t *testing.T) {
 		t.Fatal(err)
 	}
 	pending, err := splitNetPending(ctx, files.computer, files.project, testBroker, 10, nil)
-	if err != nil || len(pending) != 4 {
-		t.Fatalf("accepted, launch, output and report frames: %+v %v", pending, err)
+	if err != nil || len(pending) != 5 {
+		t.Fatalf("expected accepted, launch, attempt, output and report frames: %d %v", len(pending), err)
 	}
 	for i, msg := range pending {
 		frame := NetIncoming{Seq: int64(i + 1), From: "dev-b", OpID: msg.OpID, Body: msg.Body}
@@ -133,6 +133,9 @@ func TestSplitWorkerCommitsReportAndDeliveryInItsProject(t *testing.T) {
 		}
 		if i == 1 && body.Event != taskLaunchObserved {
 			t.Fatalf("missing first launch frame: %+v", body)
+		}
+		if i == 2 && body.Kind != "run_usage" || i == 3 && body.Kind != "output" || i == 4 && body.Event != "report" {
+			t.Fatalf("unexpected result frame %d: %s %s", i, body.Kind, body.Event)
 		}
 		if err := pair.a.st.ApplyNet(testBroker, frame); err != nil {
 			t.Fatal(err)

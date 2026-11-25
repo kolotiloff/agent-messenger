@@ -2,6 +2,55 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-26 — Codex (T-311 export verification)
+
+- The write-contention fixture now gives each export its own original three-second deadline while the writer remains held through all requests. The missing-project check must return before its deadline too. GitHub runners exceeded the original single deadline shared by the whole sequence.
+
+## 2026-11-25 — Codex (T-309–T-313 integration)
+
+- Combined pending task menu, computer row and statistics changes on `codex/t309-t313-release-108` for the 1.0.5/108 candidate.
+
+## 2026-11-25 — Codex (T-313 task counts and update preflight)
+
+- Show the group task count on the same baseline and in the same type as the model, using the existing localized task count. Chromium and WebKit fixtures verify the label, spacing, and disclosure.
+- A signed copy of the published 1.0.4 binary created two isolated projects. The local build 108 restarted that background client from the desktop bridge, preserved legacy task history and usage, reopened the window, and exported each project separately. Both project databases passed SQLite integrity checks. This exercised the client handoff only, without a public 1.0.5 update or a real workspace. [PR #209](https://github.com/kolotiloff/agent-messenger/pull/209).
+
+## 2026-11-25 — Codex (T-313 statistics toolbar)
+
+- Kept period, agent and model filters together on the left. Added right-aligned chart and upward export icon buttons with tooltips and keyboard labels. Used the same vertical spacing on both sides of the tab divider and balanced the rules between efficiency groups. [PR #209](https://github.com/kolotiloff/agent-messenger/pull/209).
+
+## 2026-11-25 — Codex (T-313 expanded efficiency panel)
+
+- Applied the outgoing message background, radius and padding to the expanded model details. Group headings and summary rows retain their plain surface. [PR #209](https://github.com/kolotiloff/agent-messenger/pull/209).
+
+## 2026-11-25 — Codex (T-313 efficiency presentation)
+
+- Show exact fractions on hover or keyboard focus. Use a single background, rules between groups and an indented breakdown. Chromium and WebKit fixtures cover both ways of revealing the counts. [PR #209](https://github.com/kolotiloff/agent-messenger/pull/209).
+
+## 2026-11-25 — Codex (T-313 efficiency details)
+
+- Renamed the control to Efficiency. Added rounded acceptance percentages and kept the exact fractions beside them. Moved the disclosure arrow before the model and aligned the detailed numbers in a table with a plain description of the 90% threshold. [PR #209](https://github.com/kolotiloff/agent-messenger/pull/209).
+
+## 2026-11-25 — Codex (T-313 comparison layout)
+
+- Renamed the control to Model comparison and separated the summary from row details. The initial table has acceptance counts and medians. Group headings identify comparable work. Chromium and WebKit fixtures verified row disclosure and filter behavior. [PR #209](https://github.com/kolotiloff/agent-messenger/pull/209).
+
+## 2026-11-25 — Codex (T-312 and T-313)
+
+- Added optional assignment labels, review, replacement lineage and per-attempt observations. Added on-demand model comparison and the same analysis to the JSON export. Fixtures cover a legacy project upgraded without analytics tables, optional MCP fields, replayed attempts and one retry split across computers and models. D-218 gives the comparison and compatibility rules.
+
+## 2026-11-25 — Codex (T-311)
+
+- Added a JSON export to Statistics using the current filters. An independent read-only connection streams the project's known task records to one local file. A fixture exported 1,501 records under an active SQLite writer in legacy and split storage. Chromium and WebKit fixtures exercised the export controls. D-218 records the next stages for review, lineage and comparison by model.
+
+## 2026-11-25 — Codex (T-309)
+
+- Removed the unavailable Remove from list item from task menus. The window fixture covers a task that can be stopped, a shared task with no available action, and removable local and shared tasks.
+
+## 2026-11-25 — Codex (T-310)
+
+- Implemented the approved expanded computer row. Running rows show the agent name, followed by the model when reported, then a comma and gray elapsed time. The window fixture covers missing model data, a model arriving while the group is open, and the inline timer. [PR #207](https://github.com/kolotiloff/agent-messenger/pull/207).
+
 ## 2026-11-25 — Codex (1.0.4 release, T-304, T-306–T-308)
 
 - Combined [PR #202](https://github.com/kolotiloff/agent-messenger/pull/202) and [PR #204](https://github.com/kolotiloff/agent-messenger/pull/204). The full Go check and all six window fixture scripts passed on the integrated source in Chromium and WebKit.

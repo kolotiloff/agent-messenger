@@ -476,7 +476,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const olderStat = {...stat,id:'old-2',title:'Проверить производительность сцены',at:'2026-11-18T10:10:00',tokens:18200000,duration_ms:10800000,duration_estimated:true};
       const untimedStat = {...stat,id:'old-3',title:'Уточнить настройки агента',at:'2026-11-18T09:00:00',tokens:3400000,duration_ms:undefined};
       const otherStat = {...stat,id:'other-1',title:'Собрать сайт',project:'Site',tokens:700};
-      let holdFrameStats, frameStatsRequested;
+      let holdFrameStats, frameStatsRequested, exportedStats, comparedStats;
       const localTask = {id:'local-task',title:'Local task',project:'Frame',agent:'codex',state:'running',created_at:began,started_at:began,model:'gpt-6.2-sol[effort=low]',ran_model:'gpt-6.2-sol[effort=medium]'};
       let localRow = localTask;
       let siteTask = {...localTask,id:'site-task',project:'Site',title:'Site worker task',
@@ -491,6 +491,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       let releaseStop;
       const stopResponse = new Promise(resolve => { releaseStop = resolve; });
       let codexWaiting = true;
+      let waitingCodexModel = '';
       let thirdCodexTask = false;
       let runnerAgents = [{agent:'cursor',running:1},{agent:'claude',waiting_owner:1},{agent:'codex',running:1,waiting_owner:1}];
       let runnerWorkers = [];
@@ -513,12 +514,21 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           agents: [{agent:'codex',running:1,project_running:project==='Frame'?1:0}], coordinator: {connected: false}, computer_name: 'Ёж и Йога', tasks_enabled: true, feedback_count: 5, feedback_new: 2, tasks:project==='Frame'?[localRow,remoteRow,waitingTask]:[],
           shared: project==='Frame'?[{peer: 'host', name: 'Giver', age: 1, tasks: [
             {id: 'sent', project: 'Frame', title: 'Sent task', agent: 'cursor', state: 'running', created_at: began, started_at: sharedPending?undefined:began, pending_launch:sharedPending, waits_for_lock:sharedPending?'shared-cache':undefined, model: 'composer-2.5[effort=medium]', runs_on_peer: 'dev-1', runs_on: 'Old name'},
-            ...(codexWaiting?[{id:'codex-waiting',project:'Frame',title:'Queued answer',agent:'codex',model:'gpt-6-luna[effort=high]',state:'waiting_coordinator',created_at:began,runs_on_peer:'dev-1'}]:[]),
+            ...(codexWaiting?[{id:'codex-waiting',project:'Frame',title:'Queued answer',agent:'codex',model:waitingCodexModel,state:'waiting_coordinator',created_at:began,runs_on_peer:'dev-1'}]:[]),
             ...(thirdCodexTask?[{id:'third-codex',project:'Frame',title:'Third task',agent:'codex',state:'running',created_at:began,model:'gpt-6.2-sol[effort=high]',runs_on_peer:'dev-1'}]:[]),
             {id: 'own', project: 'Frame', title: 'Own task', agent: 'codex', state: 'running', created_at: '2026-11-15T09:00:00Z'},
             {id: 'old-1', project: 'Frame', title: 'Old 1', agent: 'codex', state: 'done', created_at: '2026-11-14T09:00:00Z', finished_at: ended},
             {id: 'old-2', project: 'Frame', title: 'Old 2', agent: 'codex', state: 'failed', created_at: '2026-11-14T08:00:00Z', finished_at: '2026-11-14T08:30:00Z'}]}]:[]}});
         if (pathname === '/api/server') return route.fulfill({json: {host: {running: false, enabled: false, addresses: []}, member: {connected: true, reachable: true, address:'203.0.113.7:47100', connected_at:began}, peers: [{id: 'host', name: 'Giver', age: 0, agents: []}, {id: 'dev-1', name: 'Runner', age: runnerAge, contact_age:runnerContactAge, version:'0.0.0-preview.97', agents: runnerAgents, workers:{runs:runnerWorkers}}], updates: [], accept: true}});
+        if (pathname === '/api/usage-export') {
+          exportedStats=route.request().postDataJSON();
+          return route.fulfill({json:{ok:true,result:{path:'/fictional/messenger-statistics.json',tasks:125}}});
+        }
+        if (pathname === '/api/usage-efficiency') {
+          comparedStats=Object.fromEntries(searchParams);
+          return route.fulfill({json:{project,total_groups:1,groups:[{agent:'codex',model:'gpt-6.2-sol[effort=high]',task_type:'bug_fix',difficulty:'simple',tasks:5,reviewed:4,accepted:3,first_pass_known:4,first_pass_accepted:2,
+            accepted_new_input_plus_output:{samples:2,mean:125000,median:125000,p90:150000},accepted_active_runtime_ms:{samples:0},time_to_acceptance_ms:{samples:1,mean:60000,median:60000,p90:60000}}]}});
+        }
         if (pathname === '/api/usage-stats') {
           if (project === 'Site') return route.fulfill({json:{
             project,total:{tasks:1,tokens:700,input_tokens:600,output_tokens:100},agents:[],computers:[],days:[],
@@ -644,8 +654,21 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await summary.click();
       assert.equal(await details.isVisible(),true);
       assert.equal(await runner.getAttribute('aria-pressed'),cardSelection);
-      assert.match(await details.innerText(),/Remote task\s+3 мин/);
+      const activeRun=details.locator('.am-agent-parallel-running');
+      const activeLabel=activeRun.locator(':scope > span').first(),activeTimer=activeRun.locator('.am-agent-status');
+      assert.equal(await activeLabel.textContent(),'Codex');
+      assert.equal(await activeTimer.textContent(),'3 мин');
+      assert.equal(await activeTimer.evaluate(node=>getComputedStyle(node,'::before').content),'", "');
+      const activeLabelBox=await activeLabel.boundingBox(),activeTimerBox=await activeTimer.boundingBox();
+      assert(Math.abs(activeTimerBox.x-activeLabelBox.x-activeLabelBox.width)<1,'the timer sits immediately after the agent name');
+      const labelColor=await runningLabel.evaluate(node=>getComputedStyle(node).color);
+      assert.equal(await activeLabel.evaluate(node=>getComputedStyle(node).color),labelColor);
+      assert.equal(await activeTimer.evaluate(node=>getComputedStyle(node).color),await runningTimer.evaluate(node=>getComputedStyle(node).color));
       const waitingRun=details.locator('.am-agent-parallel-waiting');
+      assert.equal(await waitingRun.innerText(),'Codex, ждёт ответа');
+      assert.equal(await details.locator('.am-agent-model').count(),0);
+      waitingCodexModel='gpt-6-luna[effort=high]';
+      await waitingRun.getByText('Luna 6 High',{exact:true}).waitFor();
       assert.equal(await waitingRun.innerText(),'Luna 6 High, ждёт ответа');
       assert.equal(await waitingRun.getAttribute('title'),'Ждёт ответа координатора');
       assert.equal(await waitingRun.locator('.am-agent-model').evaluate(node=>getComputedStyle(node).color),
@@ -658,6 +681,9 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await details.isVisible(),true,'an expanded group stays open when another task arrives');
       assert.equal(await summary.evaluate(node=>document.activeElement===node),true);
       assert.equal(await details.getByText('Sol 6.2 High',{exact:true}).isVisible(),true);
+      const confirmedLabel=details.getByText('Sol 6.2 High',{exact:true});
+      assert.equal(await confirmedLabel.evaluate(node=>node.parentElement.textContent),'Codex Sol 6.2 High');
+      assert.equal(await confirmedLabel.evaluate(node=>getComputedStyle(node).color),labelColor);
       assert(await runner.evaluate(node=>{
         node.style.width='166px';
         const body=node.querySelector('.am-machine-body'),arrow=node.querySelector('.am-agent-parallel summary > svg');
@@ -784,6 +810,98 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await page.locator('#stats-top tr').nth(1).locator('td').nth(2).textContent(),'≈ 3 ч');
       assert.equal(await page.locator('#stats-top tr').last().locator('td').nth(2).textContent(),'—');
       assert.deepEqual(await type(page.locator('#stats-top .am-stats-task-title').first()),computerTitle);
+      const unfilteredComputer=await runner.getAttribute('aria-pressed')!=='true';
+      if(unfilteredComputer)await runner.press('Enter');
+      await page.locator('[data-period=month]').click();
+      const chooseStatsOption=async (filter,name)=>{
+        await page.locator('[aria-controls="stats-'+filter+'-menu"]').click();
+        await page.getByRole('option',{name,exact:true}).click();
+      };
+      await chooseStatsOption('agent','Codex');
+      await chooseStatsOption('model','Sol 6.2 High');
+      assert.equal(comparedStats,undefined,'efficiency is queried only on demand');
+      const compareButton=page.getByRole('button',{name:'Эффективность',exact:true});
+      const exportButton=page.getByRole('button',{name:'Экспорт JSON',exact:true});
+      for (const button of [compareButton,exportButton]) {
+        await button.locator('svg').waitFor();
+        assert.equal(await button.innerText(),'');
+        assert.equal(await button.getAttribute('title'),await button.getAttribute('aria-label'));
+      }
+      const statsToolbar=page.locator('.am-stats-head');
+      for (const width of [1100,600]) {
+        await page.setViewportSize({width,height:600});
+        const toolbar=await statsToolbar.boundingBox();
+        const tabs=await page.locator('.am-tabs').boundingBox();
+        const selectedTab=await page.locator('[data-tab=stats]').boundingBox();
+        const border=await page.locator('.am-tabs').evaluate(node=>parseFloat(getComputedStyle(node).borderBottomWidth));
+        const dividerBottom=tabs.y+tabs.height;
+        const spaceAbove=dividerBottom-border-selectedTab.y-selectedTab.height;
+        const spaceBelow=toolbar.y-dividerBottom;
+        assert(Math.abs(spaceAbove-spaceBelow)<=1,'spacing around the tab divider is balanced');
+        const filters=await statsToolbar.locator('.am-stats-scope').boundingBox();
+        const compare=await compareButton.boundingBox();
+        const exportAction=await exportButton.boundingBox();
+        assert(Math.abs(exportAction.x+exportAction.width-toolbar.x-toolbar.width)<=1,'statistics actions stay at the right edge');
+        assert(compare.x+compare.width<=exportAction.x && Math.abs(compare.y-exportAction.y)<=1,'statistics actions stay together');
+        if(width===1100) {
+          assert(filters.x+filters.width<=compare.x && Math.abs(filters.y-compare.y)<=1,'statistics actions share the filter row');
+        } else {
+          assert(filters.y+filters.height<=compare.y || filters.x+filters.width<=compare.x,'statistics actions do not overlap the wrapped filters');
+        }
+      }
+      await page.setViewportSize({width:1100,height:600});
+      await compareButton.click();
+      const compared=page.locator('#stats-efficiency-grid .am-efficiency-row');
+      await compared.getByText('Codex Sol 6.2 High',{exact:true}).waitFor();
+      assert.equal(await compareButton.getAttribute('aria-expanded'),'true');
+      await page.locator('#stats-efficiency-grid .am-efficiency-cohort').getByText('Исправление, простая задача',{exact:true}).waitFor();
+      const tableHeader=page.locator('#stats-efficiency-grid > thead th').first();
+      const cohortHeader=page.locator('#stats-efficiency-grid .am-efficiency-cohort th').first();
+      assert.equal(await tableHeader.evaluate(node=>getComputedStyle(node).paddingBottom),
+        await cohortHeader.evaluate(node=>getComputedStyle(node).paddingTop),'efficiency headers share the vertical inset around the rule');
+      const acceptedRate=compared.locator('.am-efficiency-rate').first();
+      const firstPassRate=compared.locator('.am-efficiency-rate').last();
+      assert.equal(await acceptedRate.innerText(),'60%');
+      assert.equal(await firstPassRate.innerText(),'50%');
+      await acceptedRate.hover();
+      await acceptedRate.getByRole('tooltip').getByText('3/5',{exact:true}).waitFor();
+      assert.equal(await compared.locator('td').nth(2).innerText(),'125 тыс.');
+      const more=compared.getByRole('button',{name:'Codex Sol 6.2 High, 5 задач'}),efficiencyDetails=page.locator('#stats-efficiency-detail-0');
+      const modelName=more.locator('.am-efficiency-model-name'),groupCount=more.getByText(', 5 задач',{exact:true});
+      const modelAndCount=await more.evaluate(button=>Array.from(button.querySelectorAll('.am-efficiency-model > span'),span=>{
+        const style=getComputedStyle(span);
+        return {font:style.font,color:style.color,top:span.getBoundingClientRect().top};
+      }));
+      assert.equal(modelAndCount[0].font,modelAndCount[1].font,'model and count use the same typography');
+      assert.equal(modelAndCount[0].top,modelAndCount[1].top,'model and count share a line');
+      assert.notEqual(modelAndCount[0].color,modelAndCount[1].color,'the count is muted');
+      await page.mouse.move(0,0);
+      await more.press('Tab');
+      await acceptedRate.press('Tab');
+      await firstPassRate.getByRole('tooltip').getByText('2/4',{exact:true}).waitFor();
+      assert((await more.locator('svg').boundingBox()).x<(await modelName.boundingBox()).x);
+      await page.setViewportSize({width:600,height:600});
+      const countBox=await groupCount.boundingBox(),modelCell=await more.boundingBox();
+      assert(countBox.x+countBox.width<=modelCell.x+modelCell.width+1,'the count stays inside the model cell when space is tight');
+      await page.setViewportSize({width:1100,height:600});
+      assert.equal(await efficiencyDetails.isVisible(),false);
+      await more.press('Enter');
+      assert.equal(await more.getAttribute('aria-expanded'),'true');
+      await efficiencyDetails.getByText('150 тыс.',{exact:true}).waitFor();
+      await efficiencyDetails.getByRole('columnheader',{name:'Порог для 90%'}).waitFor();
+      const runtime=efficiencyDetails.getByRole('row',{name:/Активная работа/});
+      assert.equal(await runtime.locator('td').first().innerText(),'—');
+      await more.click();
+      assert.equal(await efficiencyDetails.isVisible(),false);
+      assert.deepEqual(comparedStats,{project:'Frame',period:'month',computer:'dev-1',agent:'codex',model:'gpt-6.2-sol[effort=high]'});
+      await exportButton.click();
+      await page.locator('#stats-export-status').getByText(/125 задач.*messenger-statistics\.json/).waitFor();
+      assert.deepEqual(exportedStats,{project:'Frame',period:'month',computer:'dev-1',agent:'codex',model:'gpt-6.2-sol[effort=high]'});
+      await chooseStatsOption('agent','Все агенты');
+      assert.equal(await page.locator('#stats-efficiency-card').isVisible(),false,'old model groups must disappear after a filter changes');
+      assert.equal(await compareButton.getAttribute('aria-expanded'),'false');
+      await page.locator('[data-period=week]').click();
+      if(unfilteredComputer)await runner.press('Enter');
       await page.locator('[data-tab=project]').click();
       const rules=await type(page.locator('#project-page-rules'));
       const projectName=await type(page.locator('#project-page-name'));
@@ -832,7 +950,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;},previous);
       }
       await page.setViewportSize({width:600,height:600});
-      assert(await page.locator('.am-stats-table-wrap').evaluate(box=>box.scrollWidth===box.clientWidth));
+      assert(await page.locator('[aria-labelledby=stats-top-title] .am-stats-table-wrap').evaluate(box=>box.scrollWidth===box.clientWidth));
       await page.setViewportSize({width:1100,height:600});
             const pendingFrame = new Promise(resolve => { frameStatsRequested = resolve; });
       let releaseFrame;
@@ -1013,12 +1131,13 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.locator('#task-head').getByText(localTask.title,{exact:true}).waitFor();
       const menu=page.locator('#device-menu');
       const stopAction=menu.getByRole('menuitem',{name:'Остановить задачу'});
+      const removeAction=menu.getByRole('menuitem',{name:'Удалить из списка'});
       const readOnlyRow=page.locator('.am-task-shared').filter({hasText:'Sent task'});
       await readOnlyRow.click({button:'right'});
-      assert.equal(await stopAction.count(),0);
-      await page.keyboard.press('Escape');
+      assert.equal(await page.locator('#device-menu:popover-open').count(),0);
       assert.deepEqual(stopRequests,[]);
       await remoteList.click({button:'right'});
+      assert.equal(await removeAction.count(),0);
       await stopAction.click();
       assert.equal(await page.locator('#task-head h3').textContent(),localTask.title);
       assert.match(await remoteList.locator('.am-task-status').innerText(),/Ждём завершения задачи/);
@@ -1051,6 +1170,8 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await stopStatus.isVisible(),false);
       await remoteList.click({button:'right'});
       assert.equal(await stopAction.count(),0);
+      await removeAction.waitFor();
+      assert.equal(await removeAction.isEnabled(),true);
       await page.keyboard.press('Escape');
       remoteRow=remoteTask;
       await remoteHead.getByText(/Работает/).waitFor();
@@ -1074,6 +1195,9 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       localRow=localTask;
       await page.locator('#task-head').getByText(/Работает/).waitFor();
       // Owner, 2026-11-15: one button removes every finished task from the list.
+      await page.locator('.am-task-shared',{hasText:'Old 1'}).click({button:'right'});
+      await removeAction.waitFor();
+      await page.keyboard.press('Escape');
       await page.locator('.am-task-section', {hasText: 'Завершённые'}).locator('.am-task-section-action').click();
       await page.locator('#confirm-go').click();
       await page.waitForFunction(() => !document.querySelector('#confirm-dialog').open);

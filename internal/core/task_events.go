@@ -21,14 +21,10 @@ type TaskEventReader struct {
 }
 
 func OpenTaskEventReader(path string) (*TaskEventReader, error) {
-	db, err := sql.Open("sqlite", sqliteFileURL(path, url.Values{
-		"mode":    {"ro"},
-		"_pragma": {sqliteBusyTimeout},
-	}))
+	db, err := openReadOnlyDatabase(path)
 	if err != nil {
 		return nil, err
 	}
-	db.SetMaxOpenConns(1)
 	return &TaskEventReader{db: db, root: filepath.Dir(path)}, nil
 }
 
@@ -59,7 +55,7 @@ func (r *TaskEventReader) TaskEvents(ctx context.Context, project, audience stri
 		if file != projectMigrationFile(project) {
 			return nil, after, fmt.Errorf("%w: invalid project database route", ErrRejected)
 		}
-		db, err := openEventDatabase(filepath.Join(r.root, r.generation, file))
+		db, err := openReadOnlyDatabase(filepath.Join(r.root, r.generation, file))
 		if err != nil {
 			return nil, after, err
 		}
@@ -71,7 +67,7 @@ func (r *TaskEventReader) TaskEvents(ctx context.Context, project, audience stri
 	return readTaskEvents(ctx, r.project, project, audience, after, limit)
 }
 
-func openEventDatabase(path string) (*sql.DB, error) {
+func openReadOnlyDatabase(path string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite", sqliteFileURL(path, url.Values{"mode": {"ro"}, "_pragma": {sqliteBusyTimeout}}))
 	if err == nil {
 		db.SetMaxOpenConns(1)
@@ -87,7 +83,7 @@ func (r *TaskEventReader) selectGeneration() error {
 	if err != nil || generation == "" {
 		return err
 	}
-	r.computer, err = openEventDatabase(filepath.Join(r.root, generation, migrationComputerFile))
+	r.computer, err = openReadOnlyDatabase(filepath.Join(r.root, generation, migrationComputerFile))
 	r.generation = generation
 	return err
 }
