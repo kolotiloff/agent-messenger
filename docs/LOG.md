@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-25 — Codex (T-305)
+
+- Refreshed the English task window in both themes, statistics, and first-launch screenshots from the 1.0.3 assets with fictional data. Updated the public overview and its setup, task, network and update instructions against the published release.
+
 ## 2026-11-25 — Codex (1.0.3 release, T-296–T-299 and T-301–T-303)
 
 - Merged the seven fixes in [PR #200](https://github.com/kolotiloff/agent-messenger/pull/200) as `bb9afce`. All eight [client jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45570210886) passed, including the final task stop fixture in Chromium and WebKit.
