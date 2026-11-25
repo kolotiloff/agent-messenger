@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-26 — Codex (T-309–T-313 release)
+
+- Merged [PR #210](https://github.com/kolotiloff/agent-messenger/pull/210) with a source tree identical to the verified PR head. Published [1.0.5, build 108](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.5-preview.108) from `4c3c685df2d9e3aa2502deb858b6343c6452294e`. All four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45711532504) passed, including the signed public update channel on five targets.
+- The published Apple Silicon 1.0.4 client found and downloaded the signed 1.0.5 package. The desktop bridge restarted the isolated background client with the published binary and preserved two projects' history and usage. Project-specific JSON exports, reopening the window and integrity checks passed.
+
 ## 2026-11-26 — Codex (T-311 export verification)
 
 - The write-contention fixture now gives each export its own original three-second deadline while the writer remains held through all requests. The missing-project check must return before its deadline too. GitHub runners exceeded the original single deadline shared by the whole sequence.
