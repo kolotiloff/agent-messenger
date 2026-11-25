@@ -476,7 +476,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const olderStat = {...stat,id:'old-2',title:'Проверить производительность сцены',at:'2026-11-18T10:10:00',tokens:18200000,duration_ms:10800000,duration_estimated:true};
       const untimedStat = {...stat,id:'old-3',title:'Уточнить настройки агента',at:'2026-11-18T09:00:00',tokens:3400000,duration_ms:undefined};
       const otherStat = {...stat,id:'other-1',title:'Собрать сайт',project:'Site',tokens:700};
-      let holdFrameStats, frameStatsRequested;
+      let holdFrameStats, frameStatsRequested, exportedStats;
       const localTask = {id:'local-task',title:'Local task',project:'Frame',agent:'codex',state:'running',created_at:began,started_at:began,model:'gpt-6.2-sol[effort=low]',ran_model:'gpt-6.2-sol[effort=medium]'};
       let localRow = localTask;
       let siteTask = {...localTask,id:'site-task',project:'Site',title:'Site worker task',
@@ -519,6 +519,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
             {id: 'old-1', project: 'Frame', title: 'Old 1', agent: 'codex', state: 'done', created_at: '2026-11-14T09:00:00Z', finished_at: ended},
             {id: 'old-2', project: 'Frame', title: 'Old 2', agent: 'codex', state: 'failed', created_at: '2026-11-14T08:00:00Z', finished_at: '2026-11-14T08:30:00Z'}]}]:[]}});
         if (pathname === '/api/server') return route.fulfill({json: {host: {running: false, enabled: false, addresses: []}, member: {connected: true, reachable: true, address:'203.0.113.7:47100', connected_at:began}, peers: [{id: 'host', name: 'Giver', age: 0, agents: []}, {id: 'dev-1', name: 'Runner', age: runnerAge, contact_age:runnerContactAge, version:'0.0.0-preview.97', agents: runnerAgents, workers:{runs:runnerWorkers}}], updates: [], accept: true}});
+        if (pathname === '/api/usage-export') {
+          exportedStats=route.request().postDataJSON();
+          return route.fulfill({json:{ok:true,result:{path:'/fictional/messenger-statistics.json',tasks:125}}});
+        }
         if (pathname === '/api/usage-stats') {
           if (project === 'Site') return route.fulfill({json:{
             project,total:{tasks:1,tokens:700,input_tokens:600,output_tokens:100},agents:[],computers:[],days:[],
@@ -784,6 +788,21 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await page.locator('#stats-top tr').nth(1).locator('td').nth(2).textContent(),'≈ 3 ч');
       assert.equal(await page.locator('#stats-top tr').last().locator('td').nth(2).textContent(),'—');
       assert.deepEqual(await type(page.locator('#stats-top .am-stats-task-title').first()),computerTitle);
+      const unfilteredComputer=await runner.getAttribute('aria-pressed')!=='true';
+      if(unfilteredComputer)await runner.press('Enter');
+      await page.locator('[data-period=month]').click();
+      const chooseStatsOption=async (filter,name)=>{
+        await page.locator('[aria-controls="stats-'+filter+'-menu"]').click();
+        await page.getByRole('option',{name,exact:true}).click();
+      };
+      await chooseStatsOption('agent','Codex');
+      await chooseStatsOption('model','Sol 6.2 High');
+      await page.locator('#stats-export').click();
+      await page.locator('#stats-export-status').getByText(/125 задач.*messenger-statistics\.json/).waitFor();
+      assert.deepEqual(exportedStats,{project:'Frame',period:'month',computer:'dev-1',agent:'codex',model:'gpt-6.2-sol[effort=high]'});
+      await chooseStatsOption('agent','Все агенты');
+      await page.locator('[data-period=week]').click();
+      if(unfilteredComputer)await runner.press('Enter');
       await page.locator('[data-tab=project]').click();
       const rules=await type(page.locator('#project-page-rules'));
       const projectName=await type(page.locator('#project-page-name'));

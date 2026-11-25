@@ -248,6 +248,9 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 		if r.URL.Path == "/api/window-changes" {
 			deadline = 15 * time.Second
 		}
+		if r.URL.Path == "/api/usage-export" {
+			deadline = 20 * time.Second
+		}
 		// A long route must still be able to write its answer.
 		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(deadline + 3*time.Second))
 		ctx, cancel := context.WithTimeout(r.Context(), deadline)
@@ -655,6 +658,8 @@ var serverActions = map[string]bool{"enable": true, "disable": true, "invite": t
 
 func taskMutation(path string) bool {
 	switch path {
+	case "/api/usage-export":
+		return true
 	case "/api/project-create", "/api/project-folder", "/api/task-answer", "/api/task-note", "/api/agent-set", "/api/agent-models", "/api/agent-access", "/api/agent-pause", "/api/agent-remove", "/api/task-cancel", "/api/task-hide", "/api/task-hide-history", "/api/server-action", "/api/coordinator-connect", "/api/project-rules", "/api/project-title", "/api/project-remove", "/api/feedback", "/api/feedback-export", "/api/feedback-clear":
 		return true
 	}
@@ -669,6 +674,19 @@ func validTaskHistoryFilter(agent, computer string) bool {
 
 func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bool) {
 	switch path {
+	case "/api/usage-export":
+		var in struct {
+			Project  string `json:"project"`
+			Period   string `json:"period"`
+			Computer string `json:"computer"`
+			Agent    string `json:"agent"`
+			Model    string `json:"model"`
+		}
+		if decoder.Decode(&in) != nil || !core.ValidProjectName(in.Project) || !validTaskHistoryFilter(in.Agent, in.Computer) ||
+			(in.Period != "day" && in.Period != "week" && in.Period != "month") || len(in.Model) > 128 || strings.ContainsAny(in.Model, "\x00\r\n") {
+			return control.Request{}, false
+		}
+		return control.Request{Cmd: "usage-export", Project: in.Project, Alias: in.Period, Text: in.Computer, Provider: in.Agent, Model: in.Model}, true
 	case "/api/project-create", "/api/project-folder":
 		var in struct {
 			Name   string `json:"name"`

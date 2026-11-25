@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-25 — Codex (T-311)
+
+- Added a JSON export to Statistics using the current filters. An independent read-only connection streams the project's known task records to one local file. A fixture exported 1,501 records under an active SQLite writer in legacy and split storage. Chromium and WebKit fixtures exercised the export controls. D-218 records the next stages for review, lineage and comparison by model.
+
 ## 2026-11-25 — Codex (1.0.4 release, T-304, T-306–T-308)
 
 - Combined [PR #202](https://github.com/kolotiloff/agent-messenger/pull/202) and [PR #204](https://github.com/kolotiloff/agent-messenger/pull/204). The full Go check and all six window fixture scripts passed on the integrated source in Chromium and WebKit.

@@ -2589,20 +2589,32 @@
     if(!name)stats=null;
     if(tab==='stats')reloadStats();
   }
+  function statsFilters(){
+    return {project,period:statsPeriod,computer:computerFilter||'',agent:statsAgent,model:statsModel};
+  }
+  let statsExporting=false;
+  async function exportStats(){
+    if(!project||statsExporting)return;
+    statsExporting=true;$('stats-export').disabled=true;
+    const status=$('stats-export-status');
+    status.textContent=tr('Сохраняем…');
+    try{
+      const {result}=await postAPI('/api/usage-export',statsFilters(),25000);
+      status.textContent=tasksWord(result.tasks)+'. '+tr('Файл сохранён: ')+result.path;
+    }catch(error){status.textContent=error.message;}
+    finally{statsExporting=false;$('stats-export').disabled=!project;}
+  }
   async function loadStats(){
     const gen=++statsGen;
-    const name=project;
+    const filters=statsFilters();
+    const name=filters.project;
     if(!name)return;
-    const params=new URLSearchParams({project:name,period:statsPeriod});
-    const computer=computerFilter;
-    if(computer)params.set('computer',computer);
-    if(statsAgent)params.set('agent',statsAgent);
-    if(statsModel)params.set('model',statsModel);
+    const params=new URLSearchParams(filters);
     try{
       const s=await api('/api/usage-stats?'+params,8000);
       if(gen!==statsGen)return;
       if(s.project!==name){stats=null;statsPending=false;renderStats();throw Error(tr('Фильтр не применён: обновите фоновый клиент.'));}
-      s.forComputer=computer;stats=s;statsPending=false;renderStats();
+      s.forComputer=filters.computer;stats=s;statsPending=false;renderStats();
     }
     catch(error){if(gen===statsGen){statsPending=false;setStatsBusy();$('stats-total-title').textContent=tr('Статистика недоступна');$('stats-total-note').textContent=error.message;}}
   }
@@ -2649,6 +2661,7 @@
     box.append(plot,axis);
   }
   function renderStats(){
+    $('stats-export').disabled=!project||statsExporting;
     root.querySelectorAll('[data-period]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.period===statsPeriod)));
     // The card follows the numbers on screen, not the filter still loading.
     $('stats-computers-card').hidden=stats?!!stats.forComputer:!!computerFilter;
@@ -2722,6 +2735,7 @@
   }
   $('stats-agent').addEventListener('change',()=>{statsAgent=$('stats-agent').value;remember('messenger-stats-agent',statsAgent);statsModel='';reloadStats();});
   $('stats-model').addEventListener('change',()=>{statsModel=$('stats-model').value;reloadStats();});
+  $('stats-export').addEventListener('click',exportStats);
   root.querySelectorAll('[data-stats-sort]').forEach(b=>b.addEventListener('click',()=>{
     statsSort=statsSort===b.dataset.statsSort?b.dataset.statsReverse:b.dataset.statsSort;
     remember('messenger-stats-sort',statsSort);renderStats();

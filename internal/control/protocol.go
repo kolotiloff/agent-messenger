@@ -168,7 +168,7 @@ func ServeDuringStartup(ln net.Listener, handler Handler, startup func(Request) 
 					return
 				}
 			}
-			if request.Cmd == "window-changes" {
+			if request.Cmd == "window-changes" || request.Cmd == "usage-export" {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 				go func() {
@@ -441,6 +441,19 @@ func dispatchContext(ctx context.Context, handler Handler, request Request) Resp
 			return Response{Error: err.Error()}
 		}
 		return Response{OK: true}
+	case "usage-export":
+		h, ok := handler.(interface {
+			ExportUsage(ctx context.Context, project, period, computer, agent, model string) (string, int, error)
+		})
+		if !ok {
+			return Response{Error: "неизвестная команда"}
+		}
+		path, n, err := h.ExportUsage(ctx, request.Project, request.Alias, request.Text, request.Provider, request.Model)
+		if err != nil {
+			return Response{Error: err.Error()}
+		}
+		raw, _ := json.Marshal(map[string]any{"path": path, "tasks": n})
+		return Response{OK: true, Overview: raw}
 	case "feedback-export":
 		h, ok := handler.(interface{ ExportFeedback() (string, int, error) })
 		if !ok {
