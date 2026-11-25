@@ -835,6 +835,8 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-stats-tasks { text-align:right; }
 #am-concept .am-stats-table-wrap { overflow-x:auto; margin-inline:calc(-1 * var(--am-space-3)); }
 #am-concept .am-stats-table { width:100%; min-width:34em; border-collapse:collapse; table-layout:fixed; text-align:left; }
+#am-concept .am-efficiency-table { table-layout:auto; }
+#am-concept .am-efficiency-note { margin-inline:var(--am-space-3); }
 #am-concept .am-stats-date-col { width:21%; }
 #am-concept .am-stats-duration-col { width:21%; }
 #am-concept .am-stats-tokens-col { width:14%; }

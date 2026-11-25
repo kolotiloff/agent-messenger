@@ -726,7 +726,8 @@ type StartTaskRequest struct {
 	// Lock explicitly names a shared resource (T-072): a task with a
 	// lock does not launch while an earlier open task with the same lock
 	// runs on the same computer. Empty means no lock.
-	Lock string
+	Lock       string
+	Assignment TaskAssignment
 }
 
 // MessageSender identifies the coordinator chat that wrote one task message.
@@ -812,6 +813,9 @@ func normalizeStartTask(r StartTaskRequest) (StartTaskRequest, error) {
 		return r, fmt.Errorf("%w: lock must be a short one-line resource name (at most %d characters)", ErrRejected, MaxTaskLock)
 	}
 	r.Lock = lock
+	if !r.Assignment.valid() || r.Assignment.OriginalID != "" {
+		return r, fmt.Errorf("%w: invalid task_type, difficulty or retry_of", ErrRejected)
+	}
 	return r, nil
 }
 
@@ -824,6 +828,14 @@ func existingStartTask(tx *sql.Tx, r StartTaskRequest) (string, error) {
 	}
 	if old.computer != r.Computer || old.provider != r.Provider || old.text != r.Text || old.title != taskTitle(r.Title, r.Text) || old.model != r.Model || old.lock != r.Lock {
 		return id, fmt.Errorf("%w: this operation id was used for a different task", ErrRejected)
+	}
+	assignment, err := readTaskAssignment(tx, id)
+	if err != nil {
+		return id, err
+	}
+	assignment.OriginalID = ""
+	if assignment != r.Assignment {
+		return id, fmt.Errorf("%w: this operation id was used with different task metadata", ErrRejected)
 	}
 	return id, nil
 }
@@ -949,6 +961,9 @@ func recordLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, origin *ne
 		if _, err := tx.Exec(`UPDATE tasks SET origin_broker=?,origin_peer=?,origin_task=? WHERE id=?`, origin.broker, origin.peer, origin.task, id); err != nil {
 			return "", err
 		}
+	}
+	if _, err := storeTaskAssignment(tx, id, r.Project, r.Assignment, origin != nil); err != nil {
+		return "", err
 	}
 	if err := insertTaskRun(tx, id, 1, "start", r.Text); err != nil {
 		return "", err
@@ -1432,7 +1447,10 @@ AND NOT EXISTS (SELECT 1 FROM task_runs newer WHERE newer.task_id=t.id AND newer
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
-	if err != nil || previous == model {
+	if err != nil {
+		return err
+	}
+	if err := recordAttemptModel(tx, run, task, model); err != nil || previous == model {
 		return err
 	}
 	if _, err := tx.Exec(`UPDATE tasks SET ran_model=?,version=version+1 WHERE id=?`, model, task); err != nil {
@@ -1786,6 +1804,9 @@ func (s *Store) FinishTaskRun(run string, ev RunEvidence) (string, error) {
 		if err := addTaskUsage(tx, t.ID, ev.Usage); err != nil {
 			return err
 		}
+		if err := finishTaskAttempt(tx, t, r, final, ev.Usage); err != nil {
+			return err
+		}
 		// T-087: keep the worker's full last message before any event, so
 		// a task of another computer sends it ahead of its report.
 		if final == "finished" || final == "failed" {
@@ -1803,9 +1824,15 @@ func (s *Store) FinishTaskRun(run string, ev RunEvidence) (string, error) {
 			if err := setTaskState(tx, t.ID, "cancelled", "cancelled by request"); err != nil {
 				return err
 			}
+			if err := markAttemptOutcome(tx, t.ID, run); err != nil {
+				return err
+			}
 			return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "cancelled", "the task was cancelled; its report, if any, was not published", "")
 		case "failed":
 			if err := setTaskState(tx, t.ID, "failed", detail); err != nil {
+				return err
+			}
+			if err := markAttemptOutcome(tx, t.ID, run); err != nil {
 				return err
 			}
 			reason, reset := ev.Reason, ev.ResetAt
@@ -1855,6 +1882,9 @@ func publishDisposition(tx *sql.Tx, t Task, r TaskRun) error {
 	switch r.Disposition {
 	case DispositionReport:
 		if err := setTaskState(tx, t.ID, "done", "reported"); err != nil {
+			return err
+		}
+		if err := markAttemptOutcome(tx, t.ID, r.ID); err != nil {
 			return err
 		}
 		text, err := withOutputNote(tx, t.ID, r.DispositionText)

@@ -153,6 +153,17 @@ func writeProjectSnapshot(ctx context.Context, db *sql.DB, project string, withD
 			return fmt.Errorf("copy project table %s: %w", table.name, err)
 		}
 	}
+	for _, name := range []string{"task_assignments", "task_reviews", "task_attempts"} {
+		exists, err := hasAnalyticsTable(ctx, tx, name)
+		if err != nil {
+			return err
+		}
+		if exists {
+			if err := copyProjectTable(ctx, tx, "main", name, "task_id IN (SELECT id FROM snapshot.tasks)", project); err != nil {
+				return fmt.Errorf("copy project table %s: %w", name, err)
+			}
+		}
+	}
 	if withDelivery {
 		// A task frame must use the same machine identity after cutover.
 		// Keep only that identity and the continuation records owned by

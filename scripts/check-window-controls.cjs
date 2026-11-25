@@ -476,7 +476,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const olderStat = {...stat,id:'old-2',title:'Проверить производительность сцены',at:'2026-11-18T10:10:00',tokens:18200000,duration_ms:10800000,duration_estimated:true};
       const untimedStat = {...stat,id:'old-3',title:'Уточнить настройки агента',at:'2026-11-18T09:00:00',tokens:3400000,duration_ms:undefined};
       const otherStat = {...stat,id:'other-1',title:'Собрать сайт',project:'Site',tokens:700};
-      let holdFrameStats, frameStatsRequested, exportedStats;
+      let holdFrameStats, frameStatsRequested, exportedStats, comparedStats;
       const localTask = {id:'local-task',title:'Local task',project:'Frame',agent:'codex',state:'running',created_at:began,started_at:began,model:'gpt-6.2-sol[effort=low]',ran_model:'gpt-6.2-sol[effort=medium]'};
       let localRow = localTask;
       let siteTask = {...localTask,id:'site-task',project:'Site',title:'Site worker task',
@@ -522,6 +522,11 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         if (pathname === '/api/usage-export') {
           exportedStats=route.request().postDataJSON();
           return route.fulfill({json:{ok:true,result:{path:'/fictional/messenger-statistics.json',tasks:125}}});
+        }
+        if (pathname === '/api/usage-efficiency') {
+          comparedStats=Object.fromEntries(searchParams);
+          return route.fulfill({json:{project,total_groups:1,groups:[{agent:'codex',model:'gpt-6.2-sol[effort=high]',task_type:'bug_fix',difficulty:'simple',tasks:5,reviewed:4,accepted:3,first_pass_known:4,first_pass_accepted:2,
+            accepted_new_input_plus_output:{samples:2,mean:125000,median:125000,p90:150000},accepted_active_runtime_ms:{samples:0},time_to_acceptance_ms:{samples:1,mean:60000,median:60000,p90:60000}}]}});
         }
         if (pathname === '/api/usage-stats') {
           if (project === 'Site') return route.fulfill({json:{
@@ -797,10 +802,18 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       };
       await chooseStatsOption('agent','Codex');
       await chooseStatsOption('model','Sol 6.2 High');
+      assert.equal(comparedStats,undefined,'efficiency is queried only on demand');
+      await page.locator('#stats-efficiency').click();
+      const compared=page.locator('#stats-efficiency-rows tr');
+      await compared.getByText('Codex Sol 6.2 High',{exact:true}).waitFor();
+      assert.equal(await compared.locator('td').nth(3).innerText(),'2 / 4');
+      assert.equal(await compared.locator('td').nth(5).innerText(),'—');
+      assert.deepEqual(comparedStats,{project:'Frame',period:'month',computer:'dev-1',agent:'codex',model:'gpt-6.2-sol[effort=high]'});
       await page.locator('#stats-export').click();
       await page.locator('#stats-export-status').getByText(/125 задач.*messenger-statistics\.json/).waitFor();
       assert.deepEqual(exportedStats,{project:'Frame',period:'month',computer:'dev-1',agent:'codex',model:'gpt-6.2-sol[effort=high]'});
       await chooseStatsOption('agent','Все агенты');
+      assert.equal(await page.locator('#stats-efficiency-card').isVisible(),false,'old model groups must disappear after a filter changes');
       await page.locator('[data-period=week]').click();
       if(unfilteredComputer)await runner.press('Enter');
       await page.locator('[data-tab=project]').click();
@@ -851,7 +864,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;},previous);
       }
       await page.setViewportSize({width:600,height:600});
-      assert(await page.locator('.am-stats-table-wrap').evaluate(box=>box.scrollWidth===box.clientWidth));
+      assert(await page.locator('[aria-labelledby=stats-top-title] .am-stats-table-wrap').evaluate(box=>box.scrollWidth===box.clientWidth));
       await page.setViewportSize({width:1100,height:600});
             const pendingFrame = new Promise(resolve => { frameStatsRequested = resolve; });
       let releaseFrame;

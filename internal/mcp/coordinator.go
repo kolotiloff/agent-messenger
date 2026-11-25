@@ -77,6 +77,7 @@ const coordinatorInstructions = `Agent Messenger: start tasks for worker agents 
 - agent_version checks one registered agent CLI on this computer or a computer ID from list_agents. It runs only the CLI version query, with no worker or model call. If it returns waiting, pass only the same request_id to read the answer without starting another check. A missing reply can mean the other computer has older Messenger or is unreachable.
 - start_task takes an optional model. Prefer an explicit selection from that agent's models in list_agents when the list has a suitable option. model_options explains the suggested work, from small edits to hard investigations. Copy selections such as gpt-6.2-astra[effort=high] unchanged. Use the executor's CLI default by omitting model when no suitable option is listed or the owner wants the default. Never invent IDs, guess effort, retry or switch automatically on rejection. The executor must have CLI account access to the selection.
 - start_task and tasks distinguish requested_model and requested_reasoning_effort from ran_model and reasoning_effort. model_selection is default or explicit. The first call usually only confirms the task was queued. Read tasks for the executor's model when it becomes available. A missing reported field means Messenger could not confirm it.
+- To measure model efficiency, label a new assignment with optional task_type (for example bug_fix, feature, refactor, tests, documentation, build, audit, research or maintenance) and difficulty (simple, medium or complex) before work starts. These labels are for statistics. When you have checked a finished result, call review_task to accept or return it, with a reason for a return. Link a new task that replaces earlier work with retry_of set to the closed task's ID. Leave retry_of out for independent work. Review and labels do not change worker instructions or start a run.
 - A report or question that ends with «[N picture(s) attached: read them with task_images]» has pictures from the worker (a screenshot, a chart): look at them with task_images before you judge the result.
 - A report is the worker's short summary. Its full last message is kept too: when a report or failure ends with «[Messenger] The worker's full final message has N characters», read it with task_output before asking the worker again; it is lost nowhere, even if the worker deleted its file.
 - answer answers a worker's question (pass question_id and a unique op_id); the worker continues in the same session.
@@ -147,7 +148,7 @@ type coordinator struct {
 }
 
 // acting tools make this chat the project's coordinator (T-090).
-var actingTools = map[string]bool{"wait": true, "start_task": true, "answer": true, "continue_task": true, "note_task": true, "cancel": true, "update_messenger": true, "cancel_messenger_update": true}
+var actingTools = map[string]bool{"wait": true, "start_task": true, "review_task": true, "answer": true, "continue_task": true, "note_task": true, "cancel": true, "update_messenger": true, "cancel_messenger_update": true}
 
 // claim makes this chat the active coordinator of its project. The new chat
 // is told it replaced another only while that chat's process still runs:
@@ -417,7 +418,18 @@ func coordinatorTools() []map[string]any {
 				"model":             map[string]any{"type": "string", "maxLength": 80, "description": "Choose a suitable exact value from this agent's models in list_agents. Copy effort selections unchanged, e.g. gpt-6.2-astra[effort=high]. Omit to use the executor's CLI default. Never guess a model or retry after rejection."},
 				"lock":              map[string]any{"type": "string", "maxLength": core.MaxTaskLock, "description": "optional name of a shared resource, for example shared-device; set it only if another task must not use that same resource at the same time"},
 				"coordinator_model": map[string]any{"type": "string", "maxLength": 80, "description": "The model of your own coordinator chat, shown in its message header. Include it only when supplied by your client or the owner. Never infer it from the worker model."},
+				"task_type":         map[string]any{"type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$", "description": "Optional statistics label, e.g. bug_fix, feature, refactor, tests, documentation, build, audit, research or maintenance."},
+				"difficulty":        map[string]any{"type": "string", "enum": []string{"simple", "medium", "complex"}, "description": "Optional assessment before work begins."},
+				"retry_of":          str("Closed task ID in this project that this assignment replaces. Omit for independent work."),
 			}, "op_id", "agent", "text")},
+		{"name": "review_task", "description": "Record an explicit assessment of this project's finished task. Acceptance means the work was checked. Return records a reason and does not start another run. Reuse an op_id only for the same review.",
+			"inputSchema": obj(map[string]any{
+				"task_id":   str("task id from this project"),
+				"op_id":     str("unique operation id"),
+				"result":    map[string]any{"type": "string", "enum": []string{"accepted", "returned"}},
+				"reason":    map[string]any{"type": "string", "enum": []string{"implementation_error", "missing_scope", "unclear_assignment", "changed_requirements", "technical_failure", "model_limit", "other"}, "description": "Required for returned. Omit for accepted."},
+				"report_at": str("Optional finished_at from tasks. When supplied, only review that exact outcome."),
+			}, "task_id", "op_id", "result")},
 		{"name": "wait", "description": "Return the events of this project's tasks after the cursor; with none, block until one arrives or timeout_seconds pass (default 60, at most 120). Costs no tokens while blocked. Follow the returned waiting instructions: a background shell session alone does not wake an idle chat. Always pass after. Returns a bounded batch; more: true means further events are ready, so call wait again at once with the new cursor.",
 			"inputSchema": obj(map[string]any{
 				"after":           map[string]any{"type": "integer", "minimum": 0, "description": "cursor from the previous wait"},
@@ -552,12 +564,16 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 			Model       string `json:"model"`
 			SenderModel string `json:"coordinator_model"`
 			Lock        string `json:"lock"`
+			TaskType    string `json:"task_type"`
+			Difficulty  string `json:"difficulty"`
+			RetryOf     string `json:"retry_of"`
 		}
 		if err := strict(&a); err != nil {
 			return nil, err
 		}
 		sender := c.messageSender(a.SenderModel)
-		id, created, err := c.store.StartTask(core.StartTaskRequest{Project: c.project, OpID: a.OpID, Computer: a.Computer, Provider: a.Agent, Title: a.Title, Text: a.Text, Model: a.Model, Lock: a.Lock, SenderAgent: sender.Agent, SenderModel: sender.Model})
+		id, created, err := c.store.StartTask(core.StartTaskRequest{Project: c.project, OpID: a.OpID, Computer: a.Computer, Provider: a.Agent, Title: a.Title, Text: a.Text, Model: a.Model, Lock: a.Lock, SenderAgent: sender.Agent, SenderModel: sender.Model,
+			Assignment: core.TaskAssignment{Type: a.TaskType, Difficulty: a.Difficulty, RetryOf: a.RetryOf}})
 		if err != nil {
 			return nil, err
 		}
@@ -577,6 +593,22 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 			}
 		}
 		return out, nil
+	case "review_task":
+		var a struct {
+			TaskID   string `json:"task_id"`
+			OpID     string `json:"op_id"`
+			Result   string `json:"result"`
+			Reason   string `json:"reason"`
+			ReportAt string `json:"report_at"`
+		}
+		if err := strict(&a); err != nil {
+			return nil, err
+		}
+		review, err := c.store.ReviewTask(c.project, a.TaskID, a.OpID, a.Result, a.Reason, a.ReportAt)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"task_id": a.TaskID, "review": review}, nil
 	case "wait":
 		var a struct {
 			After   *int64 `json:"after"`

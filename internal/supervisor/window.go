@@ -246,6 +246,20 @@ func (s *Supervisor) ExportUsage(ctx context.Context, project, period, computer,
 		core.UsageFilter{Project: project, Agent: agent, Model: model})
 }
 
+// UsageEfficiency returns comparable model groups on the user's request.
+func (s *Supervisor) UsageEfficiency(ctx context.Context, project, period, computer, agent, model string) (any, error) {
+	since, err := usagePeriodStart(period, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	groups, err := s.store.UsageEfficiency(ctx, filepath.Join(s.root, dbName), since, computer,
+		core.UsageFilter{Project: project, Agent: agent, Model: model})
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"project": project, "groups": groups[:min(len(groups), 100)], "total_groups": len(groups)}, nil
+}
+
 func usagePeriodStart(period string, at time.Time) (time.Time, error) {
 	days := map[string]int{"day": 1, "week": 7, "month": 30}[period]
 	if days == 0 {

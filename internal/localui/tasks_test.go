@@ -77,6 +77,13 @@ func TestTaskWindowRoutes(t *testing.T) {
 	if code, _ := do("GET", "/api/usage-stats?period=week&agent=other", ""); code != 400 {
 		t.Fatalf("unknown agent %d", code)
 	}
+	if code, _ := do("GET", "/api/usage-efficiency?period=week", ""); code != 400 {
+		t.Fatalf("model comparison without a project %d", code)
+	}
+	if code, _ := do("GET", "/api/usage-efficiency?project=Game&period=month&computer=local&agent=codex", ""); code != 200 ||
+		got[len(got)-1].Cmd != "usage-efficiency" || got[len(got)-1].Project != "Game" || got[len(got)-1].Text != "local" {
+		t.Fatalf("model comparison did not pass filters: %d %+v", code, got[len(got)-1])
+	}
 	if code, _ := do("GET", "/api/usage-stats?period=week&computer="+strings.Repeat("x", 65), ""); code != 400 {
 		t.Fatalf("long computer %d", code)
 	}

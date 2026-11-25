@@ -8,7 +8,9 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
-**T-311 adds a filtered JSON export to Statistics.** It reads committed records for the selected project, period, computer, agent and model. It includes the full matching history known to this computer, with separate requested and last reported models and explicit missing-usage fields. Fixture databases cover legacy and split storage under a write transaction. T-312 and T-313 track the remaining model-efficiency work in D-218.
+**T-311 adds a filtered JSON export to Statistics.** It reads committed records for the selected project, period, computer, agent and model. It includes the full matching history known to this computer, with separate requested and last reported models and explicit missing-usage fields. Fixture databases cover legacy and split storage under a write transaction.
+
+**T-312 and T-313 add optional assignment labels, review, retry lineage and model efficiency.** The coordinator records review through `review_task`. Finished launches save individual usage observations. The comparison runs on demand in Statistics and travels in the JSON export with labels, attempts and review history. Existing databases and older executors provide the data they already have. D-218 records the definitions and upgrade behavior.
 
 **[1.0.4, build 107](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.4-preview.107) is released** from `4822cfd0e59934734468256dea541ab89060326e`. It includes [PR #202](https://github.com/kolotiloff/agent-messenger/pull/202) and [PR #204](https://github.com/kolotiloff/agent-messenger/pull/204). All four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45626722653) passed. The public release contains 22 assets. The public upgrade route from 0.99 and signed archives were checked for macOS ARM64 and Windows and Linux on both architectures. No owner installation was updated as part of the release.
 

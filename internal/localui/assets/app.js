@@ -2593,6 +2593,57 @@
     return {project,period:statsPeriod,computer:computerFilter||'',agent:statsAgent,model:statsModel};
   }
   let statsExporting=false;
+  let efficiencyScope='',efficiencyGen=0,efficiencyLoading=false;
+  function refreshEfficiencyScope(){
+    if(efficiencyScope&&efficiencyScope!==JSON.stringify(statsFilters())){
+      efficiencyScope='';efficiencyGen++;efficiencyLoading=false;
+      $('stats-efficiency-card').hidden=true;
+    }
+    $('stats-efficiency').disabled=!project||efficiencyLoading;
+  }
+  async function compareModels(){
+    if(!project||efficiencyLoading)return;
+    const filters=statsFilters(),gen=++efficiencyGen;
+    efficiencyScope=JSON.stringify(filters);efficiencyLoading=true;refreshEfficiencyScope();
+    const card=$('stats-efficiency-card'),status=$('stats-efficiency-status'),table=$('stats-efficiency-table');
+    card.hidden=false;table.hidden=true;status.textContent=tr('Загрузка статистики…');
+    try{
+      const result=await api('/api/usage-efficiency?'+new URLSearchParams(filters),25000);
+      if(gen!==efficiencyGen)return;
+      if(result.project!==filters.project||!Array.isArray(result.groups))throw Error(tr('Сравнение моделей недоступно.'));
+      const rows=result.groups.map(efficiencyRow);
+      $('stats-efficiency-rows').replaceChildren(...rows);
+      table.hidden=!rows.length;
+      status.textContent=!rows.length?tr('В этом периоде нет исходных задач для сравнения.'):
+        result.total_groups>rows.length?tr('Показана часть групп. Полный список есть в экспорте JSON.'):
+        tr('Исходные задачи по дате постановки. Расход включает связанные повторные попытки.');
+    }catch(e){if(gen===efficiencyGen)status.textContent=e.message;}
+    finally{if(gen===efficiencyGen){efficiencyLoading=false;refreshEfficiencyScope();}}
+  }
+  function efficiencyRow(group){
+    const row=el('tr');
+    const cell=(value,note)=>{
+      const td=el('td',value);
+      if(note){td.append(document.createElement('br'),el('span',note,'am-small am-muted'));}
+      row.append(td);
+    };
+    const model=group.model?modelName(group.model):tr('Модель неизвестна');
+    cell((names[group.agent]||group.agent)+' '+model);
+    const types={bug_fix:tr('Исправление'),feature:tr('Функция'),refactor:tr('Рефакторинг'),tests:tr('Тесты'),documentation:tr('Документация'),build:tr('Сборка'),audit:tr('Аудит'),research:tr('Исследование'),maintenance:tr('Поддержка')};
+    const type=Object.hasOwn(types,group.task_type)?types[group.task_type]:'';
+    const difficulty={simple:tr('Простая'),medium:tr('Средняя'),complex:tr('Сложная')}[group.difficulty];
+    cell(type||group.task_type||tr('Без типа'),difficulty||tr('Без оценки сложности'));
+    cell(group.accepted+' / '+group.tasks,group.reviewed+' '+tr('проверено'));
+    cell(group.first_pass_known?group.first_pass_accepted+' / '+group.first_pass_known:'—');
+    const summary=(data,format)=>{
+      if(!data?.samples){cell('—');return;}
+      cell([data.mean,data.median,data.p90].map(v=>format(Math.round(v||0))).join(' / '),tasksWord(data.samples));
+    };
+    summary(group.accepted_new_input_plus_output,tokensText);
+    summary(group.accepted_active_runtime_ms,statsDuration);
+    summary(group.time_to_acceptance_ms,statsDuration);
+    return row;
+  }
   async function exportStats(){
     if(!project||statsExporting)return;
     statsExporting=true;$('stats-export').disabled=true;
@@ -2662,6 +2713,7 @@
   }
   function renderStats(){
     $('stats-export').disabled=!project||statsExporting;
+    refreshEfficiencyScope();
     root.querySelectorAll('[data-period]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.period===statsPeriod)));
     // The card follows the numbers on screen, not the filter still loading.
     $('stats-computers-card').hidden=stats?!!stats.forComputer:!!computerFilter;
@@ -2736,6 +2788,7 @@
   $('stats-agent').addEventListener('change',()=>{statsAgent=$('stats-agent').value;remember('messenger-stats-agent',statsAgent);statsModel='';reloadStats();});
   $('stats-model').addEventListener('change',()=>{statsModel=$('stats-model').value;reloadStats();});
   $('stats-export').addEventListener('click',exportStats);
+  $('stats-efficiency').addEventListener('click',compareModels);
   root.querySelectorAll('[data-stats-sort]').forEach(b=>b.addEventListener('click',()=>{
     statsSort=statsSort===b.dataset.statsSort?b.dataset.statsReverse:b.dataset.statsSort;
     remember('messenger-stats-sort',statsSort);renderStats();

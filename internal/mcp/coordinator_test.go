@@ -276,7 +276,7 @@ func TestCoordinatorHandshakeAndTools(t *testing.T) {
 	for _, tool := range resp["result"].(map[string]any)["tools"].([]any) {
 		names = append(names, tool.(map[string]any)["name"].(string))
 	}
-	if strings.Join(names, ",") != "list_agents,agent_version,start_task,wait,tasks,answer,continue_task,note_task,task_images,task_output,task_messages,cancel,report_feedback,export_feedback,clear_feedback,update_messenger,cancel_messenger_update" {
+	if strings.Join(names, ",") != "list_agents,agent_version,start_task,review_task,wait,tasks,answer,continue_task,note_task,task_images,task_output,task_messages,cancel,report_feedback,export_feedback,clear_feedback,update_messenger,cancel_messenger_update" {
 		t.Fatalf("tools %v", names)
 	}
 	var agents struct {
@@ -287,6 +287,27 @@ func TestCoordinatorHandshakeAndTools(t *testing.T) {
 	}
 	if text, ok := c.tool("start_task", map[string]any{"op_id": "o1", "agent": "claude", "text": "x", "path": "/etc"}, nil); ok {
 		t.Fatalf("unknown argument accepted: %s", text)
+	}
+}
+
+func TestCoordinatorOptionalAssignmentAndReview(t *testing.T) {
+	st := newCoordinatorStore(t)
+	c := startCoordinator(t, st, "Game")
+	var task struct {
+		ID string `json:"task_id"`
+	}
+	if text, ok := c.tool("start_task", map[string]any{"op_id": "analytics", "agent": "codex", "text": "Fix a small bug", "task_type": "bug_fix", "difficulty": "simple"}, &task); !ok || task.ID == "" {
+		t.Fatalf("optional labels rejected: %s", text)
+	}
+	finishRun(t, st, task.ID, core.DispositionReport, "Done")
+	var reviewed struct {
+		Review core.TaskReview `json:"review"`
+	}
+	if text, ok := c.tool("review_task", map[string]any{"task_id": task.ID, "op_id": "accept", "result": "accepted"}, &reviewed); !ok || reviewed.Review.Result != "accepted" {
+		t.Fatalf("review rejected: %s", text)
+	}
+	if text, ok := c.tool("start_task", map[string]any{"op_id": "unlabeled", "agent": "codex", "text": "Old request"}, nil); !ok {
+		t.Fatalf("old arguments rejected: %s", text)
 	}
 }
 

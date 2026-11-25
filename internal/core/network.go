@@ -231,6 +231,8 @@ type netBody struct {
 	// Lines is how many log lines a log request asks for (T-057).
 	Lines     int    `json:"lines,omitempty"`
 	CheckedAt string `json:"checked_at,omitempty"`
+	// Optional analytics never participates in decoding a task message.
+	Analytics json.RawMessage `json:"analytics,omitempty"`
 }
 
 // netOpID is the broker's rule for an operation id. An id built from
@@ -752,7 +754,18 @@ func recordRemoteTask(tx *sql.Tx, r StartTaskRequest, self string, cfg remoteTas
 	if err := insertTaskEvent(tx, r.Project, id, AudienceLog, "started", title, ""); err != nil {
 		return "", err
 	}
-	return id, enqueueNetFrom(tx, self, cfg.broker, r.Computer, "start."+id, id, netBody{Kind: "start", Task: id, Project: r.Project, Agent: r.Provider, Title: title, Text: r.Text, Model: r.Model, CoordinatorModel: cfg.centralModels, Rules: r.Rules, Lock: r.Lock, SenderAgent: sender, SenderModel: senderModel})
+	a, err := storeTaskAssignment(tx, id, r.Project, r.Assignment, false)
+	if err != nil {
+		return "", err
+	}
+	var analytics json.RawMessage
+	if a != (TaskAssignment{}) {
+		analytics, err = json.Marshal(a)
+		if err != nil {
+			return "", err
+		}
+	}
+	return id, enqueueNetFrom(tx, self, cfg.broker, r.Computer, "start."+id, id, netBody{Kind: "start", Task: id, Project: r.Project, Agent: r.Provider, Title: title, Text: r.Text, Model: r.Model, CoordinatorModel: cfg.centralModels, Rules: r.Rules, Lock: r.Lock, SenderAgent: sender, SenderModel: senderModel, Analytics: analytics})
 }
 
 // answerRemoteTask sends an answer to the computer that runs the task.
@@ -860,14 +873,23 @@ func forwardTaskEvent(tx *sql.Tx, o netLink, task, audience, kind, text, questio
 		return err
 	}
 	var duration *int64
+	var analytics json.RawMessage
 	if finished.Valid && (state == "done" || state == "failed" || state == "cancelled") {
 		started, err := taskStartedAt(tx, task)
 		if err != nil {
 			return err
 		}
 		duration = taskDurationMS(started, finished.String)
+		var run string
+		err = tx.QueryRow(`SELECT run_id FROM task_attempts WHERE task_id=? AND outcome_at=? ORDER BY ordinal DESC LIMIT 1`, task, finished.String).Scan(&run)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		if run != "" {
+			analytics, _ = json.Marshal(run)
+		}
 	}
-	return enqueueNet(tx, o.broker, o.peer, "event."+id, task, netBody{Kind: "event", Task: o.task, State: state, Detail: clip(detail, 2000), Audience: audience, Event: kind, Text: text, Question: question, Failure: reason.String, Reset: reset.String, Usage: usage, DurationMS: duration})
+	return enqueueNet(tx, o.broker, o.peer, "event."+id, task, netBody{Kind: "event", Task: o.task, State: state, Detail: clip(detail, 2000), Audience: audience, Event: kind, Text: text, Question: question, Failure: reason.String, Reset: reset.String, Usage: usage, DurationMS: duration, Analytics: analytics})
 }
 
 // ---- sending ----
@@ -1381,6 +1403,10 @@ func remoteStartRequest(tx *sql.Tx, from netLink, b netBody) (StartTaskRequest, 
 		return r, fmt.Errorf("%w: this computer is waiting to install a Messenger update and takes no new tasks", ErrRejected)
 	}
 	r = StartTaskRequest{Project: b.Project, OpID: mirrorOp(from), Provider: b.Agent, Title: b.Title, Text: strings.TrimSpace(b.Text), Model: strings.TrimSpace(b.Model), Rules: strings.TrimSpace(b.Rules), SenderAgent: b.SenderAgent, SenderModel: b.SenderModel}
+	var assignment TaskAssignment
+	if json.Unmarshal(b.Analytics, &assignment) == nil && assignment.valid() {
+		r.Assignment = assignment
+	}
 	lock, lockOK := normalizeLock(b.Lock)
 	r.Lock = lock
 	switch {
@@ -1611,6 +1637,12 @@ func applyReport(tx *sql.Tx, from netLink, b netBody, name string) error {
 		return err
 	}
 	if b.State == "done" || b.State == "failed" || b.State == "cancelled" {
+		var run string
+		if json.Unmarshal(b.Analytics, &run) == nil && netRef.MatchString(run) {
+			if err := markAttemptOutcome(tx, t.ID, run); err != nil {
+				return err
+			}
+		}
 		duration := b.DurationMS
 		if duration != nil && (*duration < 0 || *duration > (1<<63-1)/int64(time.Millisecond)) {
 			duration = nil
@@ -1691,7 +1723,7 @@ func NetDescribe(body []byte) (desc string, progress bool) {
 // parkedKinds are the replies of the computer that runs another computer's
 // task. When their recipient is not in the network, they are parked, not
 // dropped (T-146).
-var parkedKinds = map[string]bool{"event": true, "accepted": true, "refused": true, "answer_refused": true, "continue_refused": true, "note_refused": true, "output": true, "ran_model": true}
+var parkedKinds = map[string]bool{"event": true, "accepted": true, "refused": true, "answer_refused": true, "continue_refused": true, "note_refused": true, "output": true, "ran_model": true, "run_usage": true}
 
 // parkedPrefix marks the broker of a parked message, so it is not sent
 // until its recipient is back.

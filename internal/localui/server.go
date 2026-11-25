@@ -248,7 +248,7 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 		if r.URL.Path == "/api/window-changes" {
 			deadline = 15 * time.Second
 		}
-		if r.URL.Path == "/api/usage-export" {
+		if r.URL.Path == "/api/usage-export" || r.URL.Path == "/api/usage-efficiency" {
 			deadline = 20 * time.Second
 		}
 		// A long route must still be able to write its answer.
@@ -514,10 +514,10 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 				http.Error(w, "invalid task list filter", 400)
 				return
 			}
-		case "/api/usage-stats":
-			req.Cmd = "usage-stats"
+		case "/api/usage-stats", "/api/usage-efficiency":
+			req.Cmd = strings.TrimPrefix(r.URL.Path, "/api/")
 			req.Project = r.URL.Query().Get("project")
-			if req.Project != "" && !core.ValidProjectName(req.Project) {
+			if (req.Project != "" || req.Cmd == "usage-efficiency") && !core.ValidProjectName(req.Project) {
 				http.Error(w, "invalid project", http.StatusBadRequest)
 				return
 			}
@@ -608,7 +608,7 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			status := *response.Status
 			status.Detail = ""
 			writeJSON(w, status)
-		case "overview", "window-view", "task-feed", "task-history", "window-changes", "server", "usage-stats":
+		case "overview", "window-view", "task-feed", "task-history", "window-changes", "server", "usage-stats", "usage-efficiency":
 			writeRaw(w, response.Overview)
 		case "timeline":
 			writeRaw(w, response.Timeline)
