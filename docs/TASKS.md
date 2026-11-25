@@ -15,6 +15,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
+| T-308 | Keep remote computer and task status current when agent reports or launch events lag. | agent | `codex/t308-network-task-status`, [PR #204](https://github.com/kolotiloff/agent-messenger/pull/204), D-215. |
 | T-307 | Align computer-card headings and use one size for their visible icons. | agent | `codex/t304-computer-card-roles`, [PR #202](https://github.com/kolotiloff/agent-messenger/pull/202), D-214. |
 | T-306 | Make waiting tasks readable in expanded computer cards. | agent | `codex/t304-computer-card-roles`. The same PR carries the updated compact role labels. |
 | T-304 | Mute idle agents and fit both local computer roles in the heading. | agent | `codex/t304-computer-card-roles`, D-212. |

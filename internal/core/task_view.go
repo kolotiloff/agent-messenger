@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -246,11 +247,15 @@ func remoteContact(machine, tx *sql.Tx, task string, link netLink, out *RemoteCo
 	if out.Name == "" {
 		out.Name = formerComputer
 	}
-	if found && peer.Age >= 0 {
-		out.LastSeen = time.Now().UTC().Add(-time.Duration(peer.Age) * time.Second).Format(time.RFC3339)
+	age := peer.Age
+	if peer.ContactAge != nil && (age < 0 || *peer.ContactAge < age) {
+		age = *peer.ContactAge
 	}
-	out.Lost = broker == "" || broker != link.broker || !found || peer.Age < 0 || peer.Age > PeerFresh
-	if !out.Lost {
+	if found && age >= 0 {
+		out.LastSeen = time.Now().UTC().Add(-time.Duration(age) * time.Second).Format(time.RFC3339)
+	}
+	out.Lost = broker == "" || broker != link.broker || !found || age < 0 || age > PeerFresh
+	if !out.Lost && peer.Age >= 0 && peer.Age <= PeerFresh {
 		out.Delayed = peer.OutboxDelayedMinutes()
 		var state string
 		if err := tx.QueryRow(`SELECT state FROM tasks WHERE id=?`, task).Scan(&state); err != nil {
@@ -314,7 +319,8 @@ func (s *Store) fillWindowLaunch(t *WindowTask) error {
 	if t.Remote != nil && !t.Remote.From {
 		pending, started, lock, err := remoteLaunch(s.db, t.ID)
 		t.StartedAt = started
-		if t.State == "running" {
+		// The executor's live report may arrive before the launch event.
+		if t.State == "running" && t.Remote.Worker != "running" {
 			t.PendingLaunch, t.WaitsForLock = pending, lock
 		}
 		return err
@@ -853,7 +859,13 @@ type AgentPresence struct {
 // coordinator connection, if any.
 func (s *Store) Presence() (agents []AgentPresence, coordinator string, err error) {
 	agents = []AgentPresence{}
-	err = s.tx(func(tx *sql.Tx) error {
+	// A worker writing its progress must not delay reporting this computer.
+	tx, err := s.db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, "", err
+	}
+	defer tx.Rollback()
+	err = func() error {
 		computer, err := localComputer(tx)
 		if err != nil {
 			return err
@@ -907,7 +919,7 @@ func (s *Store) Presence() (agents []AgentPresence, coordinator string, err erro
 			coordinator = "coordinator"
 		}
 		return nil
-	})
+	}()
 	return agents, coordinator, err
 }
 

@@ -342,6 +342,7 @@
   'На этом компьютере открыт чат-координатор выбранного проекта':'This computer has an active coordinator chat for the selected project',
   'На связи':'Online',
   'Агенты не подключены':'No agents connected',
+  'Ждём сведения об агентах':'Waiting for agent status',
   'Отозвать устройство? Вернуть его можно только новым приглашением.':'Revoke the device? Only a new invitation brings it back.',
   'Отозвать':'Revoke',
   'Отмена':'Cancel',

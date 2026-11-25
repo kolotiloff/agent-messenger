@@ -226,6 +226,7 @@ func Open(path string) (*Store, error) {
 		{"net_peers", "computer", "TEXT NOT NULL DEFAULT ''"},
 		{"net_peers", "outbox", "TEXT NOT NULL DEFAULT ''"},
 		{"net_peers", "workers", "TEXT NOT NULL DEFAULT ''"},
+		{"net_peers", "contact_age", "INTEGER"},
 		{"net_peers", "update_pending", "INTEGER NOT NULL DEFAULT 0"},
 		{"net_updates", "project", "TEXT NOT NULL DEFAULT ''"},
 		{"net_update_requests", "project", "TEXT NOT NULL DEFAULT ''"},

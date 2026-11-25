@@ -727,3 +727,7 @@ The owner replaced the second-line role layout in D-212. Show both roles on the 
 ## D-214 — Align the computer-card heading (T-307)
 
 Give the computer name and roles a common text baseline. The labels share a 21 px line box, with 13 px for roles and versions, and 14 px for the computer name. Center the version and draw the monitor, role and update glyphs in centered 14 px squares. Keep the larger clickable update control and the matched online dot and offline cross on the monitor.
+
+## D-215 — Separate computer contact from task launch evidence (T-308)
+
+The broker reports authenticated contact age separately from agent report age. Both ages continue to increase while the viewer receives no new roster. The computer card and a task's remote contact state can use either fresh signal. Worker state still requires a fresh agent report. Presence reads take a read-only SQLite snapshot. The task list uses a fresh worker entry from the assigned computer for the exact task when confirmation of the launch has yet to arrive. This changes the display and leaves task state, reports and resource ownership under the existing mailbox and supervisor rules.

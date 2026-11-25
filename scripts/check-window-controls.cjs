@@ -494,6 +494,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       let thirdCodexTask = false;
       let runnerAgents = [{agent:'cursor',running:1},{agent:'claude',waiting_owner:1},{agent:'codex',running:1,waiting_owner:1}];
       let runnerWorkers = [];
+      let runnerAge = 0, runnerContactAge, sharedPending = false;
       const ownerNotes = [];
       const update = {state: 'found', version: '0.0.0-preview.99'};
       const updates = [];
@@ -511,13 +512,13 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         if (pathname === '/api/window') return route.fulfill({json: {projects: [{name: 'Frame'}, {name: 'Site'}], project, folder: '/fictional/frame',
           agents: [{agent:'codex',running:1,project_running:project==='Frame'?1:0}], coordinator: {connected: false}, computer_name: 'Ёж и Йога', tasks_enabled: true, feedback_count: 5, feedback_new: 2, tasks:project==='Frame'?[localRow,remoteRow,waitingTask]:[],
           shared: project==='Frame'?[{peer: 'host', name: 'Giver', age: 1, tasks: [
-            {id: 'sent', project: 'Frame', title: 'Sent task', agent: 'cursor', state: 'running', created_at: began, started_at: began, model: 'composer-2.5[effort=medium]', runs_on_peer: 'dev-1', runs_on: 'Old name'},
+            {id: 'sent', project: 'Frame', title: 'Sent task', agent: 'cursor', state: 'running', created_at: began, started_at: sharedPending?undefined:began, pending_launch:sharedPending, waits_for_lock:sharedPending?'shared-cache':undefined, model: 'composer-2.5[effort=medium]', runs_on_peer: 'dev-1', runs_on: 'Old name'},
             ...(codexWaiting?[{id:'codex-waiting',project:'Frame',title:'Queued answer',agent:'codex',model:'gpt-6-luna[effort=high]',state:'waiting_coordinator',created_at:began,runs_on_peer:'dev-1'}]:[]),
             ...(thirdCodexTask?[{id:'third-codex',project:'Frame',title:'Third task',agent:'codex',state:'running',created_at:began,model:'gpt-6.2-sol[effort=high]',runs_on_peer:'dev-1'}]:[]),
             {id: 'own', project: 'Frame', title: 'Own task', agent: 'codex', state: 'running', created_at: '2026-11-15T09:00:00Z'},
             {id: 'old-1', project: 'Frame', title: 'Old 1', agent: 'codex', state: 'done', created_at: '2026-11-14T09:00:00Z', finished_at: ended},
             {id: 'old-2', project: 'Frame', title: 'Old 2', agent: 'codex', state: 'failed', created_at: '2026-11-14T08:00:00Z', finished_at: '2026-11-14T08:30:00Z'}]}]:[]}});
-        if (pathname === '/api/server') return route.fulfill({json: {host: {running: false, enabled: false, addresses: []}, member: {connected: true, reachable: true, address:'203.0.113.7:47100', connected_at:began}, peers: [{id: 'host', name: 'Giver', age: 0, agents: []}, {id: 'dev-1', name: 'Runner', age: 0, version:'0.0.0-preview.97', agents: runnerAgents, workers:{runs:runnerWorkers}}], updates: [], accept: true}});
+        if (pathname === '/api/server') return route.fulfill({json: {host: {running: false, enabled: false, addresses: []}, member: {connected: true, reachable: true, address:'203.0.113.7:47100', connected_at:began}, peers: [{id: 'host', name: 'Giver', age: 0, agents: []}, {id: 'dev-1', name: 'Runner', age: runnerAge, contact_age:runnerContactAge, version:'0.0.0-preview.97', agents: runnerAgents, workers:{runs:runnerWorkers}}], updates: [], accept: true}});
         if (pathname === '/api/usage-stats') {
           if (project === 'Site') return route.fulfill({json:{
             project,total:{tasks:1,tokens:700,input_tokens:600,output_tokens:100},agents:[],computers:[],days:[],
@@ -977,6 +978,32 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await remoteAgent.locator('.am-agent-status').count(),0);
       assert.equal(await remoteHead.locator('[data-elapsed-from]').count(),0);
       assert.equal(await remoteList.locator('[data-elapsed-from]').count(),0);
+
+      // The publisher still shows a queued task when its executor reports a live worker.
+      const sentRow=page.locator('.am-task',{hasText:'Sent task'});
+      const loadRoster=async()=>{
+        await Promise.all([page.waitForResponse(r=>new URL(r.url()).pathname==='/api/server'),page.locator('[data-tab=server]').click()]);
+        await page.locator('[data-tab=tasks]').click();
+      };
+      sharedPending=true;
+      await sentRow.getByText(/Ждёт ресурс «shared-cache»/).waitFor();
+      await sentRow.click();
+      runnerAge=60;
+      runnerContactAge=0;
+      runnerWorkers=[{task:'sent',output_age:0}];
+      await loadRoster();
+      await runner.getByText('Ждём сведения об агентах',{exact:true}).waitFor();
+      assert.equal(await runner.locator('.am-machine-presence').getAttribute('aria-label'),'На связи');
+      assert.match(await sentRow.innerText(),/Ждёт ресурс/,'old worker data cannot clear a resource wait');
+      runnerAge=0;
+      await loadRoster();
+      await sentRow.locator('.am-status-run').getByText(/^Работает,/).waitFor();
+      await page.locator('#task-head').getByText('Работает',{exact:true}).waitFor();
+      assert.equal(await sentRow.locator('[data-elapsed-from]').count(),0,'wait for the actual start time');
+      await runner.locator('[data-provider=cursor].am-agent-run').waitFor();
+      sharedPending=false;
+      await page.locator('.am-task-section',{hasText:'Запланированные'}).waitFor({state:'hidden'});
+      await remoteList.click();
       remoteRow=remoteTask;
       await remoteHead.getByText(/Работает/).waitFor();
       // Stop another task from its row without selecting it. The chat button

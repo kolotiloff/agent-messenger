@@ -689,6 +689,10 @@ func (s *Service) Status() Status {
 				if p.Age >= 0 {
 					p.Age += late
 				}
+				if p.ContactAge != nil {
+					age := *p.ContactAge + late
+					p.ContactAge = &age
+				}
 				peers = append(peers, p)
 			}
 		}
