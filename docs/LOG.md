@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-25 — Codex (1.0.2 release, T-290–T-295)
+
+- Merged [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198) as `41dc97c` after all required checks passed. All eight [client jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45519001699) completed successfully. The release also incorporates the verified 1.0.1 record from #197.
+- Published [1.0.2, build 105](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.2-preview.105) with 22 assets. All five signed public update targets passed independent verification. The [post-publication job](https://github.com/kolotiloff/agent-messenger/actions/runs/45521441937/attempts/2) passed on its own retry after a GitHub API rate limit.
+
 ## 2026-11-25 — Codex (T-292)
 
 - Implemented the approved red offline cross. The cross and online dot share an 8 by 8 px footprint and position. The gap to the computer name follows the approved mockup. [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198).

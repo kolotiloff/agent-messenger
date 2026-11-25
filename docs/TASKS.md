@@ -109,12 +109,6 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 | T-016 | Windows and Linux: job-object process groups on Windows (D-043), `.exe` agents only (D-044), the window in the browser (`messenger open`) and zip/tar.gz archives in every release (D-045), Windows CI. Left: the owner's test on real Windows and Linux computers; installer and code signing there (self-update: T-038). | owner | PR #52, preview.32 |
 | T-015 | Done: broker hosted by the client, invitations, joining, check, devices and revoke, the «Сервер» tab ([BROKER.md](BROKER.md), D-033–D-035), computers with agents in the sidebar (T-035), tasks between computers (T-037). Left: Keychain (Q-013). | agent + owner | — |
 
-| T-292 | Give computers consistent compact headers, use monitor icons for presence, and tint the local computer's header. | agent | [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198) (D-199). Both themes checked in Chromium and WebKit, including the equal footprint and position of the green dot and red cross. |
-| T-293 | Open or restore the macOS window with a primary menu bar click and open its menu with a secondary click. | agent | Same branch (D-199). macOS app built. Live menu bar clicks pending. |
-| T-294 | Show that update cancellation is pending and keep repeated clicks from duplicating the request. | agent | Same branch (D-200). Three-client fixture and Chromium and WebKit window checks. |
-| T-295 | Use consistent tooltip wording and capitalization, including the computer update action and status. | agent | [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198) (D-201). |
-| T-290 | Explain prolonged silence and delayed exit for running Codex workers. | agent | Implemented in [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198) (D-202). Tests exercise command timing, quiet episodes, the existing exit warning and scoped coordinator delivery. |
-| T-291 | Stop an eligible task from its context menu in the task list. | window | Implemented in [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198) (D-203). Window tests cover a different selected task, a pending stop, a read-only row and a completed task. |
 
 ## Next
 
@@ -267,6 +261,12 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 
 | ID | Task | PR |
 |---|---|---|
+| T-290 | Show Codex command timing and warn the coordinator about prolonged unexplained silence. | Released in [1.0.2](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.2-preview.105) via [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198). D-202. Local, remote and coordinator fixtures cover the advisory. |
+| T-291 | Stop an eligible task through its task-list context menu. | Released in [1.0.2](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.2-preview.105) via [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198). D-203. Read-only, completed and pending cases checked. |
+| T-292 | Compact computer cards, equal-sized presence markers and the download arrow with a tray. | Released in [1.0.2](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.2-preview.105) via [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198). D-199. Both themes checked in WebKit and Chromium. |
+| T-293 | Open or restore the window with a primary macOS menu bar click and show its menu with a secondary click. | Released in [1.0.2](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.2-preview.105) via [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198). D-199. Packaged app and desktop bridge checked. Live menu bar clicks remain unverified. |
+| T-294 | Show pending update cancellation and deduplicate submissions for the same update. | Released in [1.0.2](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.2-preview.105) via [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198). D-200. Three-client fixture and both browser engines checked. |
+| T-295 | Use consistent wording for window tooltips. | Released in [1.0.2](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.2-preview.105) via [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198). D-201. Window and translation checks passed. |
 | T-289 | Audit the integrated release and fix update state reconciliation. | Released in [1.0.1](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.1-preview.104) via [PR #196](https://github.com/kolotiloff/agent-messenger/pull/196). See the [audit report](reports/2026-11-25-t289-release-audit.md). |
 | T-288 | Show remote stop delivery and send one request until an outcome is known. | Released in 1.0.1 via [PR #193](https://github.com/kolotiloff/agent-messenger/pull/193). |
 | T-287 | Share update status, expire unstarted requests after five minutes, and color coordinator waits yellow. | Released in 1.0.1 via [PR #192](https://github.com/kolotiloff/agent-messenger/pull/192). |
