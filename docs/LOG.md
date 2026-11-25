@@ -2,6 +2,19 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-25 — Codex (T-306)
+
+- Added the short yellow waiting label to expanded computer-card rows. Kept both roles on the heading line, with a short label and an icon fallback. The existing computer-card PR carries these changes and the idle-agent style.
+
+## 2026-11-25 — Codex (T-305)
+
+- Refreshed the English task window in both themes, statistics, and first-launch screenshots from the 1.0.3 assets with fictional data. Updated the public overview and its setup, task, network and update instructions against the published release.
+
+## 2026-11-25 — Codex (1.0.3 release, T-296–T-299 and T-301–T-303)
+
+- Merged the seven fixes in [PR #200](https://github.com/kolotiloff/agent-messenger/pull/200) as `bb9afce`. All eight [client jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45570210886) passed, including the final task stop fixture in Chromium and WebKit.
+- Published [1.0.3, build 106](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.3-preview.106) with 22 assets. All four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45572340945) passed. Independently verified the public upgrade route, signatures, archive hashes and source revision for macOS ARM64 and both architectures of Windows and Linux.
+
 ## 2026-11-25 — Codex (T-303)
 
 - Replaced the composer actions and task context menu actions with the stop status while the request is pending. The context menu keeps up with broker acknowledgement even when the task list retains the original row. Added local, remote and refusal cases to the browser fixture.

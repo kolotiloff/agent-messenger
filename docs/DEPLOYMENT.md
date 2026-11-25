@@ -1,6 +1,6 @@
 # Broker placement: VPS or your own computer
 
-Agreed principle, November 5, 2026: **one broker component and one protocol regardless of where it runs**. A VPS is optional. These are implementation requirements. Parts of this page are still a plan. What is built (a server hosted inside the client on any computer of the network, invitations, joining, tasks between computers; no VPS package) is in [BROKER.md](BROKER.md).
+Agent Messenger uses one broker component and one protocol on both desktop computers and Linux VPS hosts. A VPS is optional. For current setup steps, see [Download and start](DOWNLOAD.md#server-on-a-linux-vps) and the [broker guide](BROKER.md).
 
 ## Application modes
 
@@ -13,7 +13,11 @@ For the first launch on a single Mac, a local broker reachable only from that ma
 
 On a VPS the same broker is installed as a separate server package with no GUI and without Claude/Codex/Cursor. Settings, database format, API and compatibility checks are shared; packaging and OS service integration differ.
 
-## Settings and first launch
+## Historical deployment plan
+
+The remaining sections describe the November 5 design, including a proposed SSH setup wizard. The available VPS installer is the command-line installer documented above.
+
+### Settings and first launch
 
 To connect: server address, device name, a one-time invitation or a device approval procedure, then "Check connection". After registration, a separate revocable device key is stored in a file only the user can read (mode 0600, Q-013).
 

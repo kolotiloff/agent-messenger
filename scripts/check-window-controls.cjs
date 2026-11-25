@@ -87,7 +87,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           '/api/client-info': {client: 'running', outdated: false},
           '/api/machine-order': {order: machineOrder, peers: machinePeers},
           '/api/server': {host: {running: hostRunning, enabled: hostRunning, scope:'lan', addresses: []}, member: {connected: false}, peers: connected ? [{id:'fixture-peer',...(peerLasting ? {computer:'computer-fixture'} : {}),name:'Peer fixture',host:true,age:0,agents:[{agent:'cursor'}],coordinator:'cursor-vscode'},{id:'fixture-peer-2',name:'Paused agent fixture',age:0,agents:[],coordinator:'claude-code'}] : [], updates, accept: true, auto_update: autoUpdate, auto_update_supported: autoSupported},
-          '/api/self-update': {current: '0.0.0-preview.test'},
+          '/api/self-update': {current:'1.0.3-preview.106',installed_version:'1.0.3-preview.106'},
         };
         if (pathname.startsWith('/api/')) return route.fulfill({json: fixtures[pathname] || {ok: true}});
         const filename = pathname === '/' ? 'index.html' : pathname.slice(1);
@@ -264,37 +264,59 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.locator('[data-tab=server]').click();
       const roles=localCard.locator('.am-machine-roles');
       await roles.waitFor();
-      assert.equal(await roles.textContent(),'сервер, координатор');
+      assert.equal(await localCard.locator('.am-machine-version').innerText(),'v1.0.3');
       const splitter=page.getByRole('separator',{name:'Ширина левой панели'});
+      const wide=localCard.locator('.am-machine-roles[data-form=full] > [data-form=full]');
       await splitter.press('Shift+ArrowRight');
       await splitter.press('Shift+ArrowRight');
-      await localCard.locator('.am-machine-name:not(.am-roles-below)').waitFor();
+      await wide.waitFor();
+      assert.equal(await wide.textContent(),'сервер, координатор');
       await splitter.press('Home');
-      await localCard.locator('.am-roles-below .am-machine-roles').waitFor();
+      for(let i=0;i<4;i++)await splitter.press('ArrowRight');
+      const compact=localCard.locator('.am-machine-roles[data-form=short] > [data-form=short]');
+      await compact.waitFor();
+      assert.equal(await compact.textContent(),'сервер, коорд.');
       assert(await roles.evaluate(node=>{
         const head=node.parentElement,name=head.querySelector('.am-machine-label'),meta=head.querySelector('.am-machine-meta');
         const box=node.getBoundingClientRect(),top=name.getBoundingClientRect();
-        return box.top>=top.bottom-1&&meta.getBoundingClientRect().top<box.top&&
-          [...node.children].every(role=>role.scrollWidth<=role.clientWidth+1);
-      }),'fallback must put the full roles below the heading and leave the version in it');
+        return box.top<top.bottom&&box.bottom>top.top&&box.right<=meta.getBoundingClientRect().left;
+      }),'abbreviated roles must sit beside the name and before the version');
       const originalHeading=await localCard.locator('.am-machine-name').elementHandle();
       await page.evaluate(() => window.messengerRefresh());
       assert(await localCard.locator('.am-machine-name').evaluate((node,original)=>node===original,originalHeading));
       await originalHeading.dispose();
-      await splitter.press('Shift+ArrowLeft');
-      await splitter.press('Shift+ArrowLeft');
+      for(let i=0;i<3;i++)await splitter.press('Shift+ArrowLeft');
       assert.equal(await splitter.getAttribute('aria-valuenow'),'160');
-      assert(await roles.evaluate(node=>{
-        const group=node.getBoundingClientRect();
-        return [...node.children].every(role=>{
-          const {left,right}=role.getBoundingClientRect();
-          return left>=group.left&&right<=group.right;
-        });
-      }),'roles remain fully visible at the minimum sidebar width');
+      const icons=localCard.locator('.am-machine-roles[data-form=icons] > [data-form=icons]');
+      await icons.waitFor();
+      assert.equal(await icons.getByRole('img',{name:'сервер',exact:true}).isVisible(),true);
+      assert.equal(await icons.getByRole('img',{name:'координатор',exact:true}).isVisible(),true);
+      const roleFits=()=>roles.evaluate(node=>{
+        const head=node.parentElement,style=getComputedStyle(head);
+        const meta=head.querySelector('.am-machine-meta').getBoundingClientRect();
+        const edge=head.getBoundingClientRect().right-parseFloat(style.paddingRight);
+        return node.getBoundingClientRect().right<=meta.left&&meta.right<=edge+1;
+      });
+      assert(await roleFits(),'both role icons and the version fit in the heading at the minimum width');
+      await page.evaluate(()=>{
+        window.webkit??={};
+        window.webkit.messageHandlers??={};
+        window.webkit.messageHandlers.updates={postMessage(){}};
+        window.messengerUpdateStatus({installedVersion:'1.0.3-preview.106',version:'1.0.4-preview.107'});
+      });
+      const compactIcon=roles.getByRole('img',{name:'сервер, координатор',exact:true});
+      await compactIcon.waitFor();
+      assert(await localCard.locator('#app-update-button').isVisible());
+      assert(await roleFits(),'the role mark fits alongside the version and the available update');
+      await page.evaluate(()=>{
+        window.messengerUpdateStatus({installedVersion:'1.0.3-preview.106'});
+        delete window.webkit.messageHandlers.updates;
+      });
+      await icons.waitFor();
       await splitter.press('Shift+ArrowRight');
       await splitter.press('Shift+ArrowRight');
       await splitter.press('Shift+ArrowRight');
-      await localCard.locator('.am-machine-name:not(.am-roles-below)').waitFor();
+      await wide.waitFor();
       await splitter.press('Home');
       hostRunning = false;
       await page.locator('[data-tab=server]').click();
@@ -462,7 +484,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           agents: [{agent:'codex',running:1,project_running:project==='Frame'?1:0}], coordinator: {connected: false}, computer_name: 'Ёж и Йога', tasks_enabled: true, feedback_count: 5, feedback_new: 2, tasks:project==='Frame'?[localRow,remoteRow,waitingTask]:[],
           shared: project==='Frame'?[{peer: 'host', name: 'Giver', age: 1, tasks: [
             {id: 'sent', project: 'Frame', title: 'Sent task', agent: 'cursor', state: 'running', created_at: began, started_at: began, model: 'composer-2.5[effort=medium]', runs_on_peer: 'dev-1', runs_on: 'Old name'},
-            ...(codexWaiting?[{id:'codex-waiting',project:'Frame',title:'Queued answer',agent:'codex',state:'waiting_coordinator',created_at:began,runs_on_peer:'dev-1'}]:[]),
+            ...(codexWaiting?[{id:'codex-waiting',project:'Frame',title:'Queued answer',agent:'codex',model:'gpt-6-luna[effort=high]',state:'waiting_coordinator',created_at:began,runs_on_peer:'dev-1'}]:[]),
             ...(thirdCodexTask?[{id:'third-codex',project:'Frame',title:'Third task',agent:'codex',state:'running',created_at:began,model:'gpt-6.2-sol[effort=high]',runs_on_peer:'dev-1'}]:[]),
             {id: 'own', project: 'Frame', title: 'Own task', agent: 'codex', state: 'running', created_at: '2026-11-15T09:00:00Z'},
             {id: 'old-1', project: 'Frame', title: 'Old 1', agent: 'codex', state: 'done', created_at: '2026-11-14T09:00:00Z', finished_at: ended},
@@ -584,7 +606,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const waitingLabelBox=await waiting.locator('span').first().boundingBox(),waitingStatusBox=await waitingStatus.boundingBox();
       assert(Math.abs(waitingStatusBox.x-waitingLabelBox.x-waitingLabelBox.width)<1,'waiting status must sit directly beside the model');
       const overlappingAgent=runner.locator('.am-agent-run[data-provider=codex]');
-      assert.equal(await overlappingAgent.locator('.am-agent-model').count(),0);
+      assert.equal(await overlappingAgent.locator('.am-agent-model').first().isVisible(),false);
       const summary=overlappingAgent.locator('summary');
       assert.equal(await summary.innerText(),'Codex, 2 задачи');
       const details=overlappingAgent.locator('.am-agent-parallel-list');
@@ -594,7 +616,13 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await details.isVisible(),true);
       assert.equal(await runner.getAttribute('aria-pressed'),cardSelection);
       assert.match(await details.innerText(),/Remote task\s+3 мин/);
-      assert.match(await details.innerText(),/Queued answer\s+Ждёт ответа координатора/);
+      const waitingRun=details.locator('.am-agent-parallel-waiting');
+      assert.equal(await waitingRun.innerText(),'Luna 6 High, ждёт ответа');
+      assert.equal(await waitingRun.getAttribute('title'),'Ждёт ответа координатора');
+      assert.equal(await waitingRun.locator('.am-agent-model').evaluate(node=>getComputedStyle(node).color),
+        await waitingStatus.evaluate(node=>getComputedStyle(node).color));
+      const waitingRunParts=await waitingRun.locator('span').evaluateAll(nodes=>nodes.map(node=>node.getBoundingClientRect().y));
+      assert.equal(waitingRunParts[0],waitingRunParts[1],'model and waiting status share a line when there is room');
       await summary.focus();
       thirdCodexTask=true;
       await summary.getByText('3 задачи',{exact:false}).waitFor();
@@ -882,18 +910,19 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(ownerNotes[0].text,'Use blue');
       assert.match(ownerNotes[0].op_id,/^window-remote-task-/);
       const remoteAgent=runner.locator('[data-provider=codex]');
+      const remoteRunningModel=remoteAgent.locator('.am-agent-parallel-running .am-agent-model');
       const remoteList=page.locator('.am-task',{hasText:remoteTask.title});
       const remoteHead=page.locator('#task-head');
       assert.equal(await remoteList.locator('.am-task-when').getAttribute('datetime'),began);
       remoteRow={...remoteTask,model:'gpt-6.2-sol[effort=low]'};
       await remoteList.getByText('модель не подтверждена',{exact:true}).waitFor();
-      assert.equal(await remoteAgent.locator('.am-agent-model').count(),0);
+      assert.equal(await remoteRunningModel.count(),0);
       // The feed may not yet have a model. All three surfaces take the model
       // and state from the task row, and tick without a new payload.
       remoteRow={...remoteRow,ran_model:'gpt-6.2-astra[effort=high]'};
       await remoteHead.getByText(/Astra 6\.2 High/).waitFor();
       assert.equal(await remoteList.locator('.am-task-model').textContent(),'Astra 6.2 High');
-      assert.equal(await remoteAgent.locator('.am-agent-model').textContent(),'Astra 6.2 High');
+      assert.equal(await remoteRunningModel.textContent(),'Astra 6.2 High');
       await remoteAgent.locator('summary').click();
       await page.evaluate(() => {
         const now=Date.now.bind(Date);

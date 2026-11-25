@@ -25,7 +25,7 @@ These change all the time. Every tool reads them at the start and updates them a
 | [WINDOWS_LINUX.md](WINDOWS_LINUX.md) | Windows and Linux: the window, agents, job objects, what is verified |
 | [UPDATES.md](UPDATES.md) | Updates on Mac, Windows and Linux, and of another computer of the network |
 | [CLI_CHECK.md](CLI_CHECK.md) | Checking an agent's CLI version and sign-in; the «не проверена» mark |
-| [DEPLOYMENT.md](DEPLOYMENT.md) | Where the server runs: your own computer or, later, a VPS (partly a plan) |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | Where the server runs, with the VPS installation guide and historical plans |
 
 ## Plans
 

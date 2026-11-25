@@ -8,17 +8,15 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
-**T-303 is queued for the next release.** A task stopping locally or remotely shows its request status in place of the composer controls. Its context menu shows the same status. An explicit refusal restores the composer and its draft.
+**T-305 refreshes the public GitHub page for 1.0.3.** The English screenshots use the released window assets and sample devices, projects and tasks. The landing page and its installation, network, task and update guides describe the released behavior.
 
-**T-301 and T-302 are in the release queue.** A ready report can leave coordinator `wait` while SQLite has a concurrent writer, with its project-specific idle computer list intact. A computer with several tasks for one agent shows a compact task count and opens an inline model and status list. The selected group stays open through data refreshes.
+**[1.0.3, build 106](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.3-preview.106) is released** from `bb9afce6f290b4c029669dc8c19efcb8ddb67975`. [PR #200](https://github.com/kolotiloff/agent-messenger/pull/200) and its eight [client checks](https://github.com/kolotiloff/agent-messenger/actions/runs/45570210886) passed. All four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45572340945) passed, including discovery from 0.99. The public release has 22 uploaded assets. An independent check verified the public upgrade route, signatures, archive hashes and source revision for all five targets. Verification used fixture devices and did not install the update on the owner's computers.
+
+- T-303 replaces the composer and task context menu actions with the stop request status. An explicit refusal restores the composer and its draft.
+- T-301 lets coordinator `wait` return a ready report while SQLite has a concurrent writer. T-302 shows a compact count for parallel tasks with expandable model and timing details.
+- T-296 synchronizes the confirmed update response, its notification and the computer card. T-298 keeps exact cancellation available for a queued update during a delayed roster refresh. T-297 shows notice tooltips only when the text is clipped. T-299 prunes update helper logs older than seven days while preserving current output and useful recent diagnostics.
 
 **T-300 is closed.** The owner removed idle Codex wake-up from the plan after the probe confirmed that it needs access to the App Server for the same chat. The current desktop setup did not expose the default control socket. See D-208.
-
-**T-298 and T-299 extend the 1.0.2 follow-up.** A confirmed queued update can be cancelled during a delayed roster refresh. The target still checks the exact request and installation phase. Messenger also checks for helper logs older than seven days on startup and at most once a day while writing the journal. The current output files and the most recent useful diagnostics are kept. The owner's Mac journal showed queued requests but did not record the window's roster snapshot.
-
-**T-296 is ready for review.** The computer card now honors the exact update reply used by its notice even if the shared update watch still shows an older phase. The red cancel cross is available while a supported request waits. Once installation starts, the control shows its phase and the installer owns the request. The new browser fixture reproduced the reported contradiction on the 1.0.2 code and passed with the fix in WebKit and Chromium. Verification used fictional devices.
-
-**T-297** removes duplicated tooltips from notifications whose message fits on the card. Longer messages keep their full text on hover when the three-line limit clips it.
 
 **[1.0.2, build 105](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.2-preview.105) is released** from `41dc97c4b35a943e576d0c362b1638ae1c581d81`. [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198) is merged and its eight [client checks](https://github.com/kolotiloff/agent-messenger/actions/runs/45519001699) passed. The public release has 22 uploaded files. Both the local check and the [release workflow](https://github.com/kolotiloff/agent-messenger/actions/runs/45521441937/attempts/2) verified the signed upgrade route to 1.0.2 on all five targets. The workflow's channel job passed after a retry for an API rate limit.
 
@@ -26,7 +24,7 @@ This release adds T-290 through T-295. The coordinator gets a scoped advisory af
 
 Browser fixtures passed in WebKit and Chromium. The macOS desktop bridge passed the isolated start and reopen check. Live menu bar clicks, the original reported Windows run, and installation on the owner's fleet were not part of these checks.
 
-**T-304 is ready for the next release.** Idle agents use the sidebar's muted text color. When the local computer is both server and coordinator for the selected project, its two labels share a comma-separated group. The group moves below the computer name only when the name, roles, and version or update control do not fit together. See D-212.
+**T-304 and T-306 are ready for review for the next release.** Idle agents use the sidebar's muted text color. An expanded waiting task shows its model and short waiting status together in yellow, with the full reason on hover. When a computer is both the server and the active coordinator of the selected project, its heading shows both roles by name, with an abbreviation or icons when space is tight. See D-212 and D-213.
 
 **[1.0.1](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.1-preview.104) is released** from `f2f6f4ce92740eb6a9973d8b8730ea0462005c47`. All eight [client checks](https://github.com/kolotiloff/agent-messenger/actions/runs/45497895256/attempts/2) and all four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45504161598) passed. The public release has 22 assets and the signed upgrade check passed for all five targets. The installed fleet has not been upgraded as part of this release task.
 

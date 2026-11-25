@@ -21,12 +21,12 @@ On Mac, check **About This Mac** for an Apple chip. Intel Macs do not have a bui
 2. Move the app to your Applications folder, for example `~/Applications`, and open it from there.
 3. If macOS says it cannot verify the developer or check the app for malicious software, dismiss the message. Open **System Settings → Privacy & Security**, scroll down to **Security**, and look for the message about Agent Messenger and **Open Anyway** («Открыть всё равно»). It appears after you have tried opening the app. Click it for the official download and confirm in the next dialog. If it is absent, try opening the app once from its final location and return to that panel. [Apple's first-open instructions](https://support.apple.com/en-us/102445)
 
-The technical preview is ad-hoc signed and is not notarized by Apple. Data lives in `~/Library/Application Support/AgentMessenger`. Use the update arrow next to this computer's version for later releases, or use **Agent Messenger → Проверить обновления…** in the menu. [Mac app](MAC_APP.md)
+The technical preview is ad-hoc signed and is not notarized by Apple. Data lives in `~/Library/Application Support/AgentMessenger`. Use the update arrow next to this computer's version, or choose **Agent Messenger → Проверить обновления…** (Check for updates) in the Mac menu. [Mac app](MAC_APP.md)
 
 ## Windows
 
 1. Download `AgentMessenger-Windows-x64.exe` (or `-ARM64.exe` on ARM).
-2. Double-click it. If SmartScreen blocks the official download, open **More info** («Подробнее») and choose **Run anyway** («Выполнить в любом случае») when Windows offers the option.
+2. Double-click it. A SmartScreen prompt for the official download may offer **More info** and then **Run anyway**. Windows 11 Smart App Control can block an unsigned program without offering that option. [Windows app protection](https://support.microsoft.com/en-us/windows/security/windows-security/app-browser-control-in-the-windows-security-app)
 3. On the first start the program installs itself for the current user, without administrator rights (D-082): it copies itself to `%LOCALAPPDATA%\Programs\Agent Messenger`, adds «Agent Messenger» to the Start menu and to Settings → «Приложения». Then the installed copy opens. The downloaded file is no longer needed. Starting an older download opens the installed newer version instead.
 4. Agent Messenger uses WebView2 for its window and opens in the browser if WebView2 is unavailable. Closing the desktop window hides it in the notification area while the background client and its tasks keep running. Reopen it from the notification area or Start menu.
 5. To remove it: Settings → «Приложения» → Agent Messenger → «Удалить». Removal is refused while tasks run. It stops the background client and removes the program, the shortcut and the entry. The data stays.
@@ -60,19 +60,19 @@ curl -fsSL https://github.com/kolotiloff/agent-messenger/releases/latest/downloa
 
 ![Agent Messenger's welcome screen with steps for creating a project, configuring agents and connecting computers](assets/first-launch.png)
 
-1. On the welcome screen, choose **Новый проект…** (New project), enter a name and select its folder. On other computers use exactly the same project name and select the local folder there.
-2. Under **Агенты** (Agents), choose **Установить** (Install) to run the provider's installer in a terminal, or **Найти** (Find) if the CLI is already installed. Wait for the terminal to finish. If it was closed and Messenger could not confirm installation, use **Найти** to check for the CLI. The agent's graphical app is optional for running workers.
-3. Use **Войти** (Sign in) on the agent card and complete the provider's sign-in. If Codex asks to trust the project folder, use **Доверять** on its card and confirm the exact folder in the terminal.
-4. Under **Проект → MCP-плагин** (Project → MCP plug-in), check the connection for Claude Code, Codex or Cursor. Use **Подключить** (Connect) if needed. Open a **new local chat** in that same folder and ask “Which agents can you see?” Approve the Messenger tool access when your coordinator prompts.
+1. On the welcome screen, choose **New project**, enter a name and select its folder. On other computers use exactly the same project name and select the local folder there.
+2. Under **Agents**, choose **Install** to launch the provider's installer, or **Find** if the CLI is already installed. Wait for the terminal to finish. If it was closed and Messenger could not confirm installation, use **Find** to check for the CLI. Workers use the CLI and can run without the agent's graphical app.
+3. Use **Sign in** on the agent card and complete the provider's sign-in. If Codex asks to trust the project folder, choose **Trust folder** on its card and confirm the exact folder in the terminal.
+4. Under **Project → MCP plugin**, check the connection for Claude Code, Codex or Cursor. Use **Connect** if needed. Open a **new local chat** in that folder, ask it to run `list_agents`, and approve Messenger's tools when prompted.
 
 For Cursor, enable the project's `messenger` connection in its MCP settings if the new chat cannot see the tools. The `messenger_task` connection is for workers. If the tools are missing, reopen the project chat after enabling the source. The coordinator needs access to local project tools. Claude Code can use background notifications while waiting. Codex and Cursor receive updates by keeping a turn active and calling `wait`.
 
 ## Connect more computers
 
-1. On the host, open **Сервер** (Server), choose **Локальная сеть** (Local network) and press **Запустить сервер**.
-2. Click **Пригласить устройство**. On the other computer, paste the six-digit code into **Сервер → Подключение к серверу** (Server → Connect to server). Use a fresh invitation for each computer.
+1. On the host, open **Server**, choose **Local network** and press **Start server**.
+2. Click **Invite a device**. On the other computer, open **Server** and paste the six-digit code into the connection card. Use a fresh invitation for each computer.
 3. If two computers cannot find each other by six digits, try the long `am1:…` invitation with a server address the other computer can reach. Six-digit discovery needs UDP 47100 on the local network, and the connection itself uses the chosen TCP port (47100 by default). Check Windows Firewall on the server computer and make sure the systems are on the intended network. Guest Wi-Fi isolation can block discovery.
-4. On each worker computer, set its project folder and check **Принимать задачи других компьютеров** (Accept tasks from other computers).
+4. On each worker computer, set its project folder and check **Accept tasks from other computers**.
 
 For computers in different networks, use a reachable address in **Интернет** (Internet) mode and the long invitation, or a shared VPN. A home router or a VPS firewall may need an inbound TCP rule for the server port. [Network and invitation details](BROKER.md#computers-in-different-places)
 

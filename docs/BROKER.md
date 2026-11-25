@@ -1,6 +1,6 @@
 # Broker: what is built (T-015, first part)
 
-Status on 2026-11-13 (0.66 released, 0.67 in preparation): the background client can host a broker, a computer can join a broker by invitation or short code, every computer sees the others with their agents and tasks, and a coordinator can give, answer, continue, note and cancel tasks on another computer (T-037, see [TASK_MODEL.md](TASK_MODEL.md#tasks-between-computers-t-037)). The owner can update another computer from the window, and a coordinator can read another computer's log when that computer allows it. The placement principles are in [DEPLOYMENT.md](DEPLOYMENT.md).
+Host a broker on a desktop computer or Linux VPS. Computers join by a long invitation or by six-digit discovery on a local network. A coordinator can give, answer, continue, note and cancel tasks on another computer (T-037, see [TASK_MODEL.md](TASK_MODEL.md#tasks-between-computers-t-037)). The window can request updates on connected Windows and Linux computers. A coordinator can read another computer's log when that computer allows it. For setup, see [Download and start](DOWNLOAD.md#connect-more-computers).
 
 ## What works
 

@@ -274,11 +274,16 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-machine-signal svg { display:block; color:var(--am-bad); stroke-width:7; }
 #am-concept .am-machine-version, #am-concept .am-machine-role { font-weight:400; }
 #am-concept .am-machine-role { flex-shrink:2; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-#am-concept .am-machine-roles { display:flex; flex:none; flex-wrap:wrap; column-gap:var(--am-space-1); }
+#am-concept .am-machine-roles { position:relative; display:flex; flex:none; }
+#am-concept .am-machine-role-option { position:absolute; inset-inline-start:0; visibility:hidden; display:flex; align-items:center; gap:var(--am-space-1); inline-size:max-content; }
+#am-concept .am-machine-roles[data-form=full] > [data-form=full],
+#am-concept .am-machine-roles[data-form=short] > [data-form=short],
+#am-concept .am-machine-roles[data-form=icons] > [data-form=icons],
+#am-concept .am-machine-roles:is([data-form=mark],:not([data-form])) > [data-form=mark] { position:static; visibility:visible; }
+#am-concept .am-machine-name:has(.am-machine-roles[data-form=mark]) { padding-inline:var(--am-space-2); column-gap:var(--am-gap-line); }
 #am-concept .am-machine-roles .am-machine-role { flex:none; }
-#am-concept .am-machine-name.am-roles-below { display:grid; grid-template-columns:auto minmax(0,1fr) auto; row-gap:0; }
-#am-concept .am-roles-below .am-machine-roles { grid-column:1/-1; grid-row:2; }
-#am-concept .am-roles-below .am-machine-meta { grid-column:3; grid-row:1; }
+#am-concept .am-machine-role-icons { gap:var(--am-gap-line); color:var(--am-muted); }
+#am-concept .am-machine-role-icons svg { display:block; width:var(--am-space-3); height:var(--am-space-3); fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
 #am-concept .am-machine-meta { margin-left:auto; display:flex; align-items:center; gap:var(--am-computer-meta-gap); flex:none; }
 #am-concept .am-machine-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #am-concept .am-machine-presence:not(.online) + .am-machine-label { color:var(--am-muted); }
@@ -310,8 +315,9 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-agent-parallel.am-agent-wait :is(summary,.am-agent-count) { color:var(--am-wait); }
 #am-concept .am-agent-parallel-list { display:grid; gap:var(--am-gap-line); margin:var(--am-space-1) 0 0; padding-inline-start:var(--am-space-2); list-style:none; }
 #am-concept .am-agent-parallel-list > li { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:baseline; column-gap:var(--am-space-1); overflow-wrap:anywhere; }
-#am-concept .am-agent-parallel-list .am-agent-model { color:var(--am-text); }
 #am-concept .am-agent-parallel-list .am-agent-parallel-running > span:first-child { color:var(--am-run); }
+#am-concept .am-agent-parallel-list > .am-agent-parallel-waiting { display:block; color:var(--am-wait); }
+#am-concept .am-agent-parallel-waiting .am-agent-model { color:inherit; }
 #am-concept .am-side-bottom { display:flex; flex-direction:column; gap:var(--am-gap-control); margin-top:auto; padding-top:var(--am-space-3); border-top:1px solid var(--am-line); flex-shrink:0; }
 #am-concept .am-side-bottom > button { width:100%; }
 /* Language and theme share one grid: labels in one column, both lists the same width.

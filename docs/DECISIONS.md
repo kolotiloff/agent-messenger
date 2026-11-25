@@ -719,3 +719,7 @@ While stopping a task, show the submission, queue or sent status in place of the
 ## D-212 — Mute idle agents and fit both computer roles (T-304)
 
 Use the same muted color for idle agents and other secondary text in computer cards. When the local computer hosts the network and coordinates the selected project, join the two role labels with a comma. Keep the group beside the computer name if it fits with the presence mark, version, and update action. Otherwise place the group below the name, keeping both labels readable at the minimum width. A card with one role keeps its layout.
+
+## D-213 — Compact waiting rows and computer roles (T-306)
+
+The owner replaced the second-line role layout in D-212. Show both roles on the heading line. Use the full labels when they fit, abbreviate the coordinator label when needed, and show labeled icons when the abbreviation also needs more space. Use a single icon labeled with both roles if the update control leaves less room. Reassess after resizing or an update control changes the available space. In an expanded agent group, the model or task title and the short waiting status share one yellow line when space permits. The detailed reason, including who should reply, stays in the tooltip and in the task pane.
