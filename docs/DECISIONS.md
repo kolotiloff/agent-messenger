@@ -716,6 +716,18 @@ For multiple active tasks of one agent, show the agent and localized task count.
 
 While stopping a task, show the submission, queue or sent status in place of the composer field and its controls. The task context menu shows the same status as text. Resolve a retained menu listener against the current task row so a broker acknowledgement cannot bring back the stop action. Keep the local acknowledgement through refresh until the task records an outcome. An explicit refusal returns the composer with its draft.
 
+## D-212 — Mute idle agents and fit both computer roles (T-304)
+
+Use the same muted color for idle agents and other secondary text in computer cards. When the local computer hosts the network and coordinates the selected project, join the two role labels with a comma. Keep the group beside the computer name if it fits with the presence mark, version, and update action. Otherwise place the group below the name, keeping both labels readable at the minimum width. A card with one role keeps its layout.
+
+## D-213 — Compact waiting rows and computer roles (T-306)
+
+The owner replaced the second-line role layout in D-212. Show both roles on the heading line. Use the full labels when they fit, abbreviate the coordinator label when needed, and show labeled icons when the abbreviation also needs more space. Use a single icon labeled with both roles if the update control leaves less room. Reassess after resizing or an update control changes the available space. In an expanded agent group, the model or task title and the short waiting status share one yellow line when space permits. The detailed reason, including who should reply, stays in the tooltip and in the task pane.
+
+## D-214 — Align the computer-card heading (T-307)
+
+Give the computer name and roles a common text baseline. The labels share a 21 px line box, with 13 px for roles and versions, and 14 px for the computer name. Center the version and draw the monitor, role and update glyphs in centered 14 px squares. Keep the larger clickable update control and the matched online dot and offline cross on the monitor.
+
 ## D-215 — Separate computer contact from task launch evidence (T-308)
 
 The broker reports authenticated contact age separately from agent report age. Both ages continue to increase while the viewer receives no new roster. The computer card and a task's remote contact state can use either fresh signal. Worker state still requires a fresh agent report. Presence reads take a read-only SQLite snapshot. The task list uses a fresh worker entry from the assigned computer for the exact task when confirmation of the launch has yet to arrive. This changes the display and leaves task state, reports and resource ownership under the existing mailbox and supervisor rules.

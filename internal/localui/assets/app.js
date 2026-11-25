@@ -672,12 +672,18 @@
     summary.append(label,svgIcon(['M6 9l6 6 6-6']));
     const list=el('ul',undefined,'am-agent-parallel-list');
     for(const task of [...running,...waiting]){
-      const model=sidebarTaskModel(task),row=el('li',undefined,task.state==='running'?'am-agent-parallel-running':'');
+      const model=sidebarTaskModel(task),working=task.state==='running';
+      const row=el('li',undefined,working?'am-agent-parallel-running':'am-agent-parallel-waiting');
       const name=el('span',model||task.title||shortNames[provider]||provider,model?'am-agent-model':'');
       if(model&&task.title)name.title=task.title;
       const [text,status,,from]=taskStatus(task);
-      const timing=from&&Number.isFinite(Date.parse(from))?elapsedLabel(from,'','am-muted'):el('span',text,status);
-      row.append(name,timing);
+      if(working){
+        const timing=from&&Number.isFinite(Date.parse(from))?elapsedLabel(from,'','am-muted'):el('span',text,status);
+        row.append(name,timing);
+      }else{
+        row.title=text;
+        row.append(name,', ',el('span',tr('ждёт ответа')));
+      }
       list.append(row);
     }
     group.append(summary,list);
@@ -847,6 +853,52 @@
   function serverTag(){
     return machineRole(tr('сервер'),tr('На этом компьютере работает сервер сети'));
   }
+  function combinedMachineRoles(serverRole,coordinatorRole){
+    const group=el('span',undefined,'am-machine-roles');
+    serverRole.append(',');
+    for(const [form,coordinator] of [['full',coordinatorRole],['short',machineRole(tr('коорд.'),coordinatorRole.title)]]){
+      const option=el('span',undefined,'am-machine-role-option');option.dataset.form=form;
+      option.append(serverRole.cloneNode(true),' ',coordinator);
+      group.append(option);
+    }
+    const icons=el('span',undefined,'am-machine-role-option am-machine-role-icons');icons.dataset.form='icons';
+    const roleIcon=(label,tip,paths)=>{
+      const icon=el('span');icon.setAttribute('role','img');icon.setAttribute('aria-label',label);icon.title=tip;
+      icon.append(svgIcon(paths));return icon;
+    };
+    icons.append(
+      roleIcon(tr('сервер'),serverRole.title,['M4 4h16v6H4zM4 14h16v6H4zM8 7h.01M8 17h.01']),
+      roleIcon(tr('координатор'),coordinatorRole.title,['M9 3h6v6H9zM3 15h6v6H3zM15 15h6v6h-6zM12 9v3M6 15v-3h12v3'])
+    );
+    group.append(icons);
+    const compact=el('span',undefined,'am-machine-role-option am-machine-role-icons');compact.dataset.form='mark';
+    compact.append(roleIcon(tr('сервер')+', '+tr('координатор'),serverRole.title+'\n'+coordinatorRole.title,
+      ['M9 3h6v6H9zM3 15h18v6H3zM12 9v6M7 18h.01']));
+    group.append(compact);
+    return group;
+  }
+  function layoutMachineRoles(head){
+    if(!head.clientWidth)return;
+    const [presence,name,roles,meta]=head.children;
+    const style=getComputedStyle(head),gap=parseFloat(style.getPropertyValue('--am-space-1'));
+    const standardInset=parseFloat(style.getPropertyValue('--am-space-3'));
+    const available=head.clientWidth-2*standardInset;
+    const range=document.createRange();
+    range.selectNodeContents(name);
+    const nameWidth=range.getBoundingClientRect().width;
+    const markWidth=presence.getBoundingClientRect().width;
+    const room=available-markWidth-parseFloat(getComputedStyle(presence).marginInlineEnd)
+      -meta.getBoundingClientRect().width-3*gap;
+    const [full,short,icons]=roles.children;
+    const form=full.getBoundingClientRect().width<=room-nameWidth?'full':
+      short.getBoundingClientRect().width<=room-nameWidth?'short':
+      icons.getBoundingClientRect().width<=room?'icons':'mark';
+    if(roles.dataset.form!==form)roles.dataset.form=form;
+  }
+  const machineRolesObserver=new ResizeObserver(()=>requestAnimationFrame(()=>{
+    const head=machineList.querySelector('.am-machine-roles')?.parentElement;
+    if(head)layoutMachineRoles(head);
+  }));
   function machinePresence(online){
     const mark=el('span',undefined,'am-machine-presence'+(online?' online':''));
     mark.title=online?tr('На связи'):tr('Нет связи');
@@ -875,9 +927,11 @@
     const head=el('div',undefined,'am-machine-name');
     head.append(machinePresence(online),el('span',view?.computer_name||tr('Этот компьютер'),'am-machine-label'));
     // The computer that runs the network's server is labelled as such.
-    if(server?.host?.running&&server.host.scope!=='local')head.append(serverTag());
+    const serverRole=server?.host?.running&&server.host.scope!=='local'?serverTag():null;
     const coordinator=view?.project===project?view?.coordinator:null;
-    if(coordinator?.active)head.append(machineRole(tr('координатор'),tr('На этом компьютере открыт чат-координатор выбранного проекта')));
+    const coordinatorRole=coordinator?.active?machineRole(tr('координатор'),tr('На этом компьютере открыт чат-координатор выбранного проекта')):null;
+    if(serverRole&&coordinatorRole)head.append(combinedMachineRoles(serverRole,coordinatorRole));
+    else if(serverRole||coordinatorRole)head.append(serverRole||coordinatorRole);
     const version=el('div',undefined,'am-machine-version am-local-version');
     const body=el('div',undefined,'am-machine-body');
     machine.append(head,body);
@@ -958,8 +1012,15 @@
     // or they would leave the page with the old card.
     const copy=live.cloneNode(true);
     for(const id of localParts)copy.querySelector('#'+id)?.remove();
+    // The measured layout is local to the live card and is not a data change.
+    copy.querySelector('.am-machine-roles')?.removeAttribute('data-form');
     if(copy.innerHTML!==box.innerHTML){
+      machineRolesObserver.disconnect();
       parkLocalParts();live.replaceChildren(...box.childNodes);
+      if(serverRole&&coordinatorRole){
+        machineRolesObserver.observe(head);
+        machineRolesObserver.observe(localMeta);
+      }
       if(focused)live.querySelector('[data-agent-group="'+CSS.escape(focused)+'"] > summary')?.focus({preventScroll:true});
     }
     placeLocalParts();

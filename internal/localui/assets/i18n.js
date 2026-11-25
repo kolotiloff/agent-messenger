@@ -337,6 +337,7 @@
   'Показать задачи этого компьютера':'Show tasks of this computer',
   'Этот компьютер':'This computer',
   'сервер':'server',
+  'коорд.':'coord.',
   'На этом компьютере работает сервер сети':'This computer runs the network server',
   'На этом компьютере открыт чат-координатор выбранного проекта':'This computer has an active coordinator chat for the selected project',
   'На связи':'Online',
