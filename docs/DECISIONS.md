@@ -734,4 +734,4 @@ The broker reports authenticated contact age separately from agent report age. B
 
 ## D-217 — Show the agent while its model is unknown (T-310)
 
-Replace the task-title fallback in expanded computer rows from D-210 and D-213 with the agent name. When the worker reports its model, show that model beside the elapsed time or waiting status.
+Replace the task-title fallback in expanded computer rows from D-210 and D-213 with the agent name. In a running row, append the confirmed model to the blue agent label and follow it with a muted comma and elapsed time. A waiting row uses its confirmed model or the agent name before the yellow waiting status.

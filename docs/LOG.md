@@ -4,7 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-25 — Codex (T-310)
 
-- Replaced the task-title fallback with the agent name. The window fixture covers running and waiting rows with missing model data and a model arriving while the group is open. Previewed elapsed time after a comma and keeping the agent name once the model arrives. The layout is pending review.
+- Implemented the approved expanded computer row. Running rows show the agent name, followed by the model when reported, then a comma and gray elapsed time. The window fixture covers missing model data, a model arriving while the group is open, and the inline timer. [PR #207](https://github.com/kolotiloff/agent-messenger/pull/207).
 
 ## 2026-11-25 — Codex (1.0.4 release, T-304, T-306–T-308)
 

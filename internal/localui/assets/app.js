@@ -663,26 +663,29 @@
     return model?modelName(model).replace(/ Medium$/,' Med'):'';
   }
   function parallelAgentLine(computer,provider,state,running,waiting){
+    const agent=shortNames[provider]||provider;
     const group=el('details',undefined,'am-agent-parallel am-agent-'+state);
     group.dataset.provider=provider;
     group.dataset.agentGroup=JSON.stringify([computer,provider]);
     group.addEventListener('click',event=>event.stopPropagation());
-    const summary=el('summary'),label=el('span',shortNames[provider]||provider,state==='run'?'am-agent-running-label':'');
+    const summary=el('summary'),label=el('span',agent,state==='run'?'am-agent-running-label':'');
     label.append(el('span',', '+tasksWord(running.length+waiting.length),'am-agent-count'));
     summary.append(label,svgIcon(['M6 9l6 6 6-6']));
     const list=el('ul',undefined,'am-agent-parallel-list');
     for(const task of [...running,...waiting]){
       const model=sidebarTaskModel(task),working=task.state==='running';
       const row=el('li',undefined,working?'am-agent-parallel-running':'am-agent-parallel-waiting');
-      const name=el('span',model||shortNames[provider]||provider,model?'am-agent-model':'');
-      if(model&&task.title)name.title=task.title;
+      const modelLabel=model?el('span',model,'am-agent-model'):null;
+      if(modelLabel&&task.title)modelLabel.title=task.title;
       const [text,status,,from]=taskStatus(task);
       if(working){
-        const timing=from&&Number.isFinite(Date.parse(from))?elapsedLabel(from,'','am-muted'):el('span',text,status);
+        const name=el('span',agent);
+        if(modelLabel)name.append(' ',modelLabel);
+        const timing=from&&Number.isFinite(Date.parse(from))?elapsedLabel(from,'','am-agent-status'):el('span',', '+text,status);
         row.append(name,timing);
       }else{
         row.title=text;
-        row.append(name,', ',el('span',tr('ждёт ответа')));
+        row.append(modelLabel||el('span',agent),', ',el('span',tr('ждёт ответа')));
       }
       list.append(row);
     }
