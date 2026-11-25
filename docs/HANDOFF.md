@@ -8,6 +8,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+**T-309 is queued for the next release.** The task context menu shows Remove from list only when the selected task can be removed and opens only when there is an action or a stop request to show. See D-216.
+
 **[1.0.4, build 107](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.4-preview.107) is released** from `4822cfd0e59934734468256dea541ab89060326e`. It includes [PR #202](https://github.com/kolotiloff/agent-messenger/pull/202) and [PR #204](https://github.com/kolotiloff/agent-messenger/pull/204). All four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45626722653) passed. The public release contains 22 assets. The public upgrade route from 0.99 and signed archives were checked for macOS ARM64 and Windows and Linux on both architectures. No owner installation was updated as part of the release.
 
 - T-304, T-306 and T-307 mute idle agents, show waiting tasks in yellow, keep computer names and role labels on one baseline and center the version and icons.

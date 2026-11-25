@@ -361,8 +361,6 @@
       if(!current)return;
       t=current;
     }
-    const ok=p?finishedStates.includes(t.state)||sharedLost(t,p):finishedStates.includes(t.state);
-    const tip=ok?'':p?tr('Задача ещё идёт на компьютере «')+p.name+tr('». Удалить её можно, когда она закончится'):tr('Сначала остановите задачу');
     const entries=[];
     if(!p&&canStopTask(t)){
       const progress=stopProgress(t);
@@ -372,7 +370,9 @@
       }
       entries.push({text:tr('Остановить задачу'),pick:()=>stopTask(t)});
     }
-    entries.push({text:tr('Удалить из списка'),off:!ok,tip,pick:()=>askRemoveTask(t,p)});
+    if(finishedStates.includes(t.state)||(p&&sharedLost(t,p))){
+      entries.push({text:tr('Удалить из списка'),pick:()=>askRemoveTask(t,p)});
+    }
     popMenu(event.clientX,event.clientY,entries);
   }
   function askRemoveTask(t,p){
@@ -418,9 +418,9 @@
   // Right-click menu on another computer of the network. Revoking cannot be
   // undone, so its item only opens a confirmation inside the card. Updating
   // moved to an icon on the card (T-128).
-  // A right-click menu; entries are {text,pick,off,tip}. An entry with off
-  // is shown dimmed with its reason as a tooltip.
+  // A right-click menu; entries are {text,pick}.
   function popMenu(x,y,entries,status=null){
+    if(!entries.length&&!status)return;
     let menu=$('device-menu');
     if(!menu){
       // A manual popover: an automatic one closes on the same right click
@@ -435,13 +435,10 @@
     const items=[];
     for(const it of entries){
       const item=el('div',it.text,'am-select-option');item.setAttribute('role','menuitem');item.tabIndex=0;
-      if(it.tip)item.title=it.tip;
-      if(it.off)item.setAttribute('aria-disabled','true');
-      const run=()=>{if(it.off)return;menu.hidePopover();it.pick();};
+      const run=()=>{menu.hidePopover();it.pick();};
       item.addEventListener('click',run);item.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();run();}});
       items.push(item);
     }
-    if(!items.length&&!status)return;
     menu.setAttribute('role',status?'status':'menu');
     menu.dataset.stopTask=status?.task||'';
     menu.replaceChildren(...(status?[el('div',status.text,'am-context-status')]:items));

@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-25 — Codex (T-309)
+
+- Removed the unavailable Remove from list item from task menus. The window fixture covers a task that can be stopped, a shared task with no available action, and removable local and shared tasks.
+
 ## 2026-11-25 — Codex (1.0.4 release, T-304, T-306–T-308)
 
 - Combined [PR #202](https://github.com/kolotiloff/agent-messenger/pull/202) and [PR #204](https://github.com/kolotiloff/agent-messenger/pull/204). The full Go check and all six window fixture scripts passed on the integrated source in Chromium and WebKit.
