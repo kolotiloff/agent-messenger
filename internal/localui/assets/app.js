@@ -312,7 +312,7 @@
     // «not accepted»: say what is known.
     if(t.remote?.unaccepted&&!t.remote.from&&t.state==='running'){
       if(Date.now()-Date.parse(t.created_at)<5*60*1000)return [tr('Ждёт, когда «')+t.remote.name+tr('» примет'),'am-status-wait'];
-      return [tr('Нет ответа от «')+t.remote.name+'»','am-status-bad',tr('приём не подтверждён. Задача может идти там, но её ответы сюда не доходят; сама она не повторяется')];
+      return [tr('Нет ответа от «')+t.remote.name+'»','am-status-bad',tr('Приём не подтверждён. Задача может выполняться на удалённом компьютере, даже если ответы не доходят. Автоматической повторной отправки не будет.')];
     }
     switch(t.state){
       case 'running':return t.pending_launch?[t.waits_for_lock?tr('Ждёт ресурс «')+t.waits_for_lock+'»':tr('Ждёт запуска'),'am-status-wait']:[tr('Работает ')+minutes(from),'am-status-run','',from];
@@ -493,15 +493,16 @@
       status.addEventListener('click',e=>e.stopPropagation());
       return status;
     }
-    const caption=installing?tr('Обновление устанавливается'):mark.state==='waiting'?tr('Обновление запрошено…'):tr('ждёт обновления');
+    const caption=installing?tr('Обновление устанавливается'):mark.state==='waiting'?tr('Обновление запрошено'):tr('Ждёт обновления');
     const canCancel=!installing&&!!mark.id&&(!peer||(peerFresh(peer)&&!versionOlder(peer.version,'0.100')&&!!peer.version));
     const b=el(canCancel?'button':'span',undefined,'am-update-icon am-peer-update '+(canCancel?'am-update-cancel':'am-update-wait'));
-    const label=canCancel?caption.replace(/…$/,'')+'. '+tr('Отменить запрос'):caption;
+    const label=canCancel?tr('Отменить обновление'):caption;
     b.title=label;b.setAttribute('aria-label',label);
     const indicator=svgIcon(checkPath);
     indicator.classList.add('am-update-spin');
     b.append(indicator);
     if(!canCancel){b.setAttribute('role','img');return b;}
+    b.setAttribute('aria-description',caption);
     b.type='button';b.dataset.key='cancel-update-'+(peer?.id||'local');
     b.append(svgIcon(['M6 6l12 12M18 6L6 18']));
     b.addEventListener('keydown',e=>e.stopPropagation());
@@ -514,7 +515,7 @@
         updateCancelAttempts.set(key,'queued');
       }catch(error){
         updateCancelAttempts.set(key,'unknown');
-        addNotice('cancel-'+mark.id,'bad',tr('Отменить запрос'),capital(error.message));
+        addNotice('cancel-'+mark.id,'bad',tr('Отмена обновления'),capital(error.message));
       }
       renderMachines();void loadServer();
     });
@@ -2628,7 +2629,7 @@
     badge($('host-badge'),h.running?tr('Работает'):h.enabled?tr('Не запустился'):tr('Остановлен'),h.running?'good':h.enabled?'bad':'');
     // Explanations live in the status tooltip so the card does not change
     // height; only a problem the owner must fix stays visible.
-    $('host-badge').title=!h.running?tr('Другие устройства смогут подключаться к этому компьютеру по одноразовому приглашению.'):tr('Принимает устройства: ')+(h.scope==='internet'?tr('из интернета и локальной сети'):h.scope==='lan'?tr('в локальной сети'):tr('только с этого компьютера'))+tr(', порт ')+h.port+'.';
+    $('host-badge').title=!h.running?tr('Подключение по одноразовому приглашению'):tr('Принимает устройства: ')+(h.scope==='internet'?tr('из интернета и локальной сети'):h.scope==='lan'?tr('в локальной сети'):tr('только с этого компьютера'))+tr(', порт ')+h.port;
     $('host-state').textContent=h.enabled&&m.connected?tr('Запущен свой сервер и есть подключение к другому. Задачи идут только через свой сервер. Остановите сервер или отключитесь от другого.'):h.running&&!h.addresses.length?tr('У компьютера нет адреса в локальной сети. Подключитесь к сети или выберите «Только этот компьютер».'):'';
     if(!serverEdited){$('host-scope').value=h.scope||'local';$('host-port').value=h.port||47100;$('host-public').value=h.public_address||'';$('host-public-box').hidden=$('host-scope').value!=='internet';}
     $('host-running').hidden=!h.running;
@@ -2651,7 +2652,7 @@
     $('member-blocked').hidden=!hostOn||m.connected;
     $('host-blocked').hidden=hostOn||!m.connected;
     $('host-running').closest('.am-card').querySelector('.am-server-grid').hidden=!hostOn&&m.connected;
-    $('member-badge').title=m.connected?tr('Этот компьютер входит в сервер ')+m.address+'.':tr('Вставьте код приглашения, который выдал сервер на другом компьютере.');
+    $('member-badge').title=m.connected?tr('Подключение к серверу ')+m.address:tr('Вставьте код приглашения с другого компьютера');
     $('member-state').textContent='';
     const cn=$('computer-name');if(view?.computer_name&&document.activeElement!==cn&&!cn.dataset.edited)cn.value=view.computer_name;
     const dl=$('member-details');dl.replaceChildren();
@@ -3151,7 +3152,7 @@
   // The update icon says in its tooltip which version came out (T-066).
   function updateTip(version,busy){
     const name=versionName(version);
-    let text=busy==='installing'?tr('Обновление устанавливается'):busy?tr('Обновление загружается'):name?tr('Вышла ')+name+tr('. Нажмите, чтобы обновить'):tr('Обновить');
+    let text=busy==='installing'?tr('Обновление устанавливается'):busy?tr('Обновление загружается'):name?tr('Обновить до ')+name:tr('Обновить');
     if(updateProgress)text=tr('Загружается обновление')+(updateProgress.version?' '+versionName(updateProgress.version):'')+': '+Math.floor(100*updateProgress.done/updateProgress.total)+'%';
     $('app-update-button').title=text;$('app-update-button').setAttribute('aria-label',text);
   }
@@ -3358,7 +3359,7 @@
   function splitter(pane,name,variable,usual,min,max,side){
     const handle=el('div',undefined,'am-splitter');
     handle.setAttribute('role','separator');handle.setAttribute('aria-orientation','vertical');handle.tabIndex=0;
-    handle.title=tr('Потяните, чтобы изменить ширину. Двойной щелчок: как было');
+    handle.title=tr('Потяните, чтобы изменить ширину. Дважды щёлкните, чтобы восстановить исходную ширину.');
     handle.setAttribute('aria-label',name);handle.setAttribute('aria-valuemin',String(min));handle.setAttribute('aria-valuemax',String(max));
     const key='messenger-width-'+variable.slice(5);
     const apply=(px,save)=>{px=Math.round(Math.min(max,Math.max(min,px)));root.style.setProperty(variable,px+'px');handle.setAttribute('aria-valuenow',String(px));if(save)remember(key,px===usual?'':String(px));};

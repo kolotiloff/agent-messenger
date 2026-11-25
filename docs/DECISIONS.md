@@ -669,3 +669,7 @@ Use a shared gray header, the same gray body on every computer card, and an acce
 ## D-200 — Show a queued update cancellation (T-294)
 
 The window replaces the cancel control with an hourglass during submission and while the local client has the exact cancellation queued. The server status carries pending cancellation targets, so redraws and reopenings preserve the indicator. A new window submission for the same pending cancellation reuses its operation, including after a lost reply. The target's actual update state still determines when the download arrow returns.
+
+## D-201 — Window tooltip wording (T-295)
+
+Use sentence case without an ending period for short tooltips. Keep normal punctuation for multi-sentence explanations. A button tooltip names the action. A noninteractive update indicator describes its state, and a cancellation button exposes the state as an accessible description.

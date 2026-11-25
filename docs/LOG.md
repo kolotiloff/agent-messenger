@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-25 — Codex (T-295)
+
+- Reviewed window tooltip wording. Gave the cancel-update control a short action label and exposed its status separately. Normalized update, server and task hover text in both dictionaries. [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198).
+
 ## 2026-11-25 — Codex (T-289)
 
 - Integrated PRs #192–195 for the next release. Fixed three update state regressions involving equal display versions, an absent requester, and successive requests for one computer. See the [release audit](reports/2026-11-25-t289-release-audit.md) for validation and live acceptance status.

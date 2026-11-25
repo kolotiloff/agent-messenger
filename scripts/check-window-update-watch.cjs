@@ -15,8 +15,8 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     let cursor = 1, mark, wake, releaseCancel;
     const cancellations=[];
     let cancelResponse='ok';
-    function publish(state, version) {
-      mark = {id: 'upd-fixture', state, version, at: Date.now() / 1000};
+    function publish(state, version, id = 'upd-fixture') {
+      mark = {id, state, version, at: Date.now() / 1000};
       cursor++;
       wake?.();
     }
@@ -61,6 +61,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     }
     const arrow=card.getByRole('button',{name:/Обновить до/});
     await arrow.waitFor();
+    assert.match(await arrow.getAttribute('title'),/^Обновить до v/);
     const row=page.locator('#task-list .am-task').filter({hasText:task.title});
     if(!await row.isVisible() && await page.locator('#list-toggle').getAttribute('aria-expanded')==='false')await page.locator('#list-toggle').click();
     await row.waitFor();
@@ -68,11 +69,19 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     assert.match(await arrow.locator('path').getAttribute('d'),/M5 20h14/);
     await shot('available');
     if(process.env.SCREENSHOT_DIR)await row.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'task-waiting.png')});
+    publish('queued', undefined, '');
+    const waiting=card.getByRole('img',{name:'Ждёт обновления'});
+    await waiting.waitFor();
+    assert.equal(await waiting.getAttribute('title'),'Ждёт обновления');
+    publish('cancelled');
+    await arrow.waitFor();
     await arrow.click();
     await page.locator('#confirm-go').click();
     await page.mouse.move(0,0);
-    const cancelUpdate=card.getByRole('button',{name:/Отменить запрос/});
+    const cancelUpdate=card.getByRole('button',{name:'Отменить обновление'});
     await cancelUpdate.waitFor();
+    assert.equal(await cancelUpdate.getAttribute('title'),'Отменить обновление');
+    assert.equal(await cancelUpdate.getAttribute('aria-description'),'Обновление запрошено');
     const rotation=icon=>icon.evaluate(e=>getComputedStyle(e).animationName);
     assert.equal(await rotation(cancelUpdate.locator('.am-update-spin')),'am-update-spin');
     await shot('waiting');

@@ -113,6 +113,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 | T-292 | Give computers consistent compact headers, use monitor icons for presence, and tint the local computer's header. | agent | [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198) (D-199). Both themes checked in Chromium and WebKit, including the green online dot and the larger gap before the computer name. |
 | T-293 | Open or restore the macOS window with a primary menu bar click and open its menu with a secondary click. | agent | Same branch (D-199). macOS app built. Live menu bar clicks pending. |
 | T-294 | Show that update cancellation is pending and keep repeated clicks from duplicating the request. | agent | Same branch (D-200). Three-client fixture and Chromium and WebKit window checks. |
+| T-295 | Use consistent tooltip wording and capitalization, including the computer update action and status. | agent | [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198) (D-201). |
 
 ## Next
 
