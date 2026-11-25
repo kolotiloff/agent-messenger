@@ -2,9 +2,58 @@ package core
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 )
+
+func TestExactUpdateCancellationCanWaitForAStalePeer(t *testing.T) {
+	p := newUpdatePair(t)
+	peer := NetPeer{ID: "dev-b", Name: "Notebook", Version: "1.0.1-preview.104"}
+	setPeer := func() {
+		t.Helper()
+		if err := p.a.st.SetNetwork(testBroker, HostPeerID, []NetPeer{peer}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	setPeer()
+	id, err := p.a.st.RequestNetUpdate(peer.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.carry(t, true)
+	reqs, err := p.b.st.NetUpdateRequests(testBroker)
+	if err != nil || len(reqs) != 1 {
+		t.Fatalf("requests %+v: %v", reqs, err)
+	}
+	if err := p.b.st.RememberPendingUpdate(reqs[0]); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.b.st.ReplyNetUpdate(reqs[0], UpdateQueued, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	p.carry(t, false)
+	peer.Age, peer.UpdatePending, peer.UpdateRequestID = PeerFresh+10, true, id
+	setPeer()
+	if _, err := p.a.st.RequestUpdateCancellation(peer.ID, "Game"); !errors.Is(err, ErrRejected) {
+		t.Fatalf("implicit cancellation from a stale report: %v", err)
+	}
+	if _, err := p.a.st.CancelObservedUpdate(peer.ID, testBroker, id); err != nil {
+		t.Fatal(err)
+	}
+	p.carry(t, true)
+	cancels, err := p.b.st.UpdateCancellations(testBroker)
+	if err != nil || len(cancels) != 1 || cancels[0].Target != id {
+		t.Fatalf("cancellations %+v: %v", cancels, err)
+	}
+	if err := p.b.st.FinishUpdateCancellation(cancels[0], false); err != nil {
+		t.Fatal(err)
+	}
+	p.carry(t, false)
+	if reply := netUpdate(t, p.a.st, peer.ID); reply.State != UpdateCancelled {
+		t.Fatalf("cancelled update: %+v", reply)
+	}
+}
 
 func TestCancellationCannotTouchAReplacementOrAnInstallingUpdate(t *testing.T) {
 	fixture := newSplitRunFixture(t)

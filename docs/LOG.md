@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-25 — Codex (T-298, T-299)
+
+- The owner reported that update cancellation never appeared. The owner's event journal showed a request queued for five minutes. Reproduced and fixed a separate failure mode where a stale roster hid the cancel control for a confirmed queued request. Tests cover window rendering and exact delivery to the queued receiver.
+- Added seven-day cleanup for generated helper logs, keeping the active outputs and most recent useful diagnostics. T-300 records the owner's requirement to resume a finished Codex turn after sustained worker inactivity. A reminder for an already active wait is insufficient.
+
 ## 2026-11-25 — Codex (T-296, T-297)
 
 - Reproduced the success notice appearing alongside the old installation spinner. Reconciled the update reply and shared watch by request ID so the notice, version and control advance together. The WebKit and Chromium fixture covers out-of-order success and failure, a distinct queued request, and cancellation before the installer starts.

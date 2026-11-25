@@ -8,6 +8,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+**T-298 and T-299 extend the 1.0.2 follow-up.** A confirmed queued update can be cancelled during a delayed roster refresh. The target still checks the exact request and installation phase. Messenger also checks for helper logs older than seven days on startup and at most once a day while writing the journal. The current output files and the most recent useful diagnostics are kept. The owner's Mac journal showed queued requests but did not record the window's roster snapshot.
+
 **T-296 is ready for review.** The computer card now honors the exact update reply used by its notice even if the shared update watch still shows an older phase. The red cancel cross is available while a supported request waits. Once installation starts, the control shows its phase and the installer owns the request. The new browser fixture reproduced the reported contradiction on the 1.0.2 code and passed with the fix in WebKit and Chromium. Verification used fictional devices.
 
 **T-297** removes duplicated tooltips from notifications whose message fits on the card. Longer messages keep their full text on hover when the three-line limit clips it.

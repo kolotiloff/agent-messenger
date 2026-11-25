@@ -27,8 +27,9 @@ const (
 var maxSize int64 = 2 << 20
 
 var (
-	mu   sync.Mutex
-	path string
+	mu          sync.Mutex
+	path        string
+	nextCleanup time.Time
 )
 
 // Open starts writing the journal in root. Until it is called, Printf does
@@ -37,6 +38,7 @@ func Open(root string) {
 	mu.Lock()
 	defer mu.Unlock()
 	path = filepath.Join(root, File)
+	nextCleanup = time.Time{}
 }
 
 // Close stops writing; for tests.
@@ -54,6 +56,13 @@ func Printf(format string, args ...any) {
 	if path == "" {
 		return
 	}
+	now := time.Now()
+	if !now.Before(nextCleanup) {
+		nextCleanup = now.Add(24 * time.Hour)
+		stdout, _ := os.Stdout.Stat()
+		stderr, _ := os.Stderr.Stat()
+		pruneHelperLogs(filepath.Dir(path), now.Add(-7*24*time.Hour), stdout, stderr)
+	}
 	line := fmt.Sprintf(format, args...)
 	line = strings.Join(strings.Fields(line), " ")
 	if r := []rune(line); len(r) > 600 {
@@ -67,5 +76,5 @@ func Printf(format string, args ...any) {
 		return
 	}
 	defer f.Close()
-	_, _ = fmt.Fprintf(f, "%s %s\n", time.Now().UTC().Format("2006-01-02T15:04:05.000Z"), line)
+	_, _ = fmt.Fprintf(f, "%s %s\n", now.UTC().Format("2006-01-02T15:04:05.000Z"), line)
 }

@@ -103,7 +103,11 @@ func (s *Store) requestUpdateCancellation(computer, project, expectedBroker, exp
 			if err != nil {
 				return err
 			}
-			if r.Broker == "" || !ok || p.Age < 0 || p.Age > PeerFresh || p.Reconnecting {
+			// An exact cancellation can wait in the mailbox while the roster
+			// is late. The receiver still checks that it owns the request and
+			// has not started its installer. An implicit selection needs a
+			// fresh report to establish which request is pending.
+			if r.Broker == "" || !ok || p.Reconnecting || (expectedID == "" && (p.Age < 0 || p.Age > PeerFresh)) {
 				return fmt.Errorf("%w: компьютер сейчас не на связи", ErrRejected)
 			}
 			if updateBuild(p.Version) < updateCancelMinBuild {

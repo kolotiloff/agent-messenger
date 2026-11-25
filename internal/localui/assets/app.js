@@ -510,7 +510,8 @@
       return status;
     }
     const caption=installing?tr('Обновление устанавливается'):mark.state==='waiting'?tr('Обновление запрошено'):tr('Ждёт обновления');
-    const canCancel=!installing&&!!mark.id&&(!peer||(peerFresh(peer)&&!versionOlder(peer.version,'0.100')&&!!peer.version));
+    // The update board can confirm the queue while the roster is delayed.
+    const canCancel=!installing&&!!mark.id&&(!peer||updateBuildNumber(peer.version)>=100);
     const b=el(canCancel?'button':'span',undefined,'am-update-icon am-peer-update '+(canCancel?'am-update-cancel':'am-update-wait'));
     const label=canCancel?tr('Отменить обновление'):caption;
     b.title=label;b.setAttribute('aria-label',label);

@@ -691,3 +691,11 @@ A completion reply used by an update notice also advances the phase and confirme
 ## D-205 — Tooltips for clipped notification text (T-297)
 
 Keep the footer's three-line limit from T-181. Expose the full text on that part of the notification only if it is clipped at the current window width. Recheck when the footer changes size.
+
+## D-206 — Exact update cancellation tolerates stale presence (T-298)
+
+The update watch can already identify a waiting request while the roster is late. Keep its cancellation control for a supported device and queue the exact request through the current broker. The receiver checks the request and decides whether cancellation still applies. The implicit coordinator command still needs fresh presence to select a request, and the window hides cancellation during installation.
+
+## D-207 — Retain useful helper logs (T-299)
+
+On the first journal write after startup and at most once per day thereafter, remove generated startup and remote-update logs last modified more than seven days ago. Keep the current process's output files and the newest nonempty file of each kind. The event journal uses its existing size-based rotation.
