@@ -683,3 +683,35 @@ The coordinator's task list reports elapsed time since the latest worker output 
 ## D-203 — Stop from the task list (T-291)
 
 An eligible task row offers Stop the task in its context menu without changing the selected conversation. Both entry points share the existing stop request and pending state. Finished tasks, read-only tasks and unreachable workers have no stop item. While a stop request is pending, its item is disabled.
+
+## D-204 — Resolve the update card against the exact reply (T-296)
+
+A completion reply used by an update notice also advances the phase and confirmed version in the same window render. For the same request ID, a final reply takes precedence over older shared watch or presence data, and an installation reply takes precedence over a waiting phase. The broker still distributes update changes to all windows. A reply cannot close a different request. The cancel cross stays available while a supported request waits. The installing indicator shows when the installer owns the request.
+
+## D-205 — Tooltips for clipped notification text (T-297)
+
+Keep the footer's three-line limit from T-181. Expose the full text on that part of the notification only if it is clipped at the current window width. Recheck when the footer changes size.
+
+## D-206 — Exact update cancellation tolerates stale presence (T-298)
+
+The update watch can already identify a waiting request while the roster is late. Keep its cancellation control for a supported device and queue the exact request through the current broker. The receiver checks the request and decides whether cancellation still applies. The implicit coordinator command still needs fresh presence to select a request, and the window hides cancellation during installation.
+
+## D-207 — Retain useful helper logs (T-299)
+
+On the first journal write after startup and at most once per day thereafter, remove generated startup and remote-update logs last modified more than seven days ago. Keep the current process's output files and the newest nonempty file of each kind. The event journal uses its existing size-based rotation.
+
+## D-208 — Close the idle coordinator timer proposal (T-300)
+
+The owner removed the proposal from the plan. On macOS, `codex queue --resume` started a new turn in the same finished chat with a reachable isolated App Server and simulated model responses. Both the standalone CLI and the CLI bundled with the desktop app passed. The desktop setup under investigation did not expose the default control socket. The isolated no-shared-server run warned that the thread could not be resumed, returned exit code zero, and started no new turn. Keep the waiting behavior in D-124.
+
+## D-209 — Read idle computers without a write lock (T-301)
+
+After reading events for `wait`, look up idle computers in read-only SQLite transactions. Read task state from the selected project and computer identity and names from machine storage. The legacy layout uses the same read snapshot for both. Batches without a completed-task event skip the lookup. In the isolated MCP timing probe, the writer-held case fell from about 1.27 seconds to 0.23 seconds for both client identities. This measures delivery of a committed report through an active wait.
+
+## D-210 — Expand parallel agent tasks in computer cards (T-302)
+
+For multiple active tasks of one agent, show the agent and localized task count. A disclosure reveals each task's confirmed model and elapsed time or waiting status. A task title identifies a run whose model is still unknown. Group opening and focus survive redraws within the current project and network. Single-task lines keep their compact format.
+
+## D-211 — Show the stop request in place of the task controls (T-303)
+
+While stopping a task, show the submission, queue or sent status in place of the composer field and its controls. The task context menu shows the same status as text. Resolve a retained menu listener against the current task row so a broker acknowledgement cannot bring back the stop action. Keep the local acknowledgement through refresh until the task records an outcome. An explicit refusal returns the composer with its draft.

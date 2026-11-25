@@ -261,6 +261,14 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 
 | ID | Task | PR |
 |---|---|---|
+| T-303 | Replace task stop and send controls with a status while cancellation is pending. | Ready for review. D-211. Window fixtures cover submission, acknowledgement, completion and refusal. |
+| T-302 | Show parallel agent tasks as a count with expandable model and timing details. | Ready for review. D-210. The browser fixture covers two and three tasks, live updates, keyboard operation and narrow cards. |
+| T-301 | Keep a ready coordinator report independent of SQLite write locks during idle-computer lookup. | Ready for review. D-209. Tested concurrent writes with legacy and split storage. |
+| T-300 | Resume an idle Codex coordinator after a computer stays ready without assigned work for a project-configured interval. | Closed by the owner. A test confirmed same-thread wake-up with a reachable Codex App Server. The owner's desktop setup did not expose the expected local control socket. D-208. |
+| T-299 | Automatically prune old startup and remote-update helper logs. | Ready for review. D-207. Fixture covers active, recent, and unrelated files and both rotating journal files. |
+| T-298 | Keep exact cancellation available when the shared update queue is known and presence is late. | Ready for review. D-206. Window and store fixtures cover a queued request with stale presence. |
+| T-297 | Remove duplicate tooltips from fully visible notifications. | Ready for review. D-205. The window fixture covers both a visible update failure reason and a clipped reason. |
+| T-296 | Keep the computer card in sync with the update outcome notice and cancellation phase. | Ready for review. D-204. Reproduced the delayed watch in the window fixture and verified the fix in WebKit and Chromium. |
 | T-290 | Show Codex command timing and warn the coordinator about prolonged unexplained silence. | Released in [1.0.2](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.2-preview.105) via [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198). D-202. Local, remote and coordinator fixtures cover the advisory. |
 | T-291 | Stop an eligible task through its task-list context menu. | Released in [1.0.2](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.2-preview.105) via [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198). D-203. Read-only, completed and pending cases checked. |
 | T-292 | Compact computer cards, equal-sized presence markers and the download arrow with a tray. | Released in [1.0.2](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.2-preview.105) via [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198). D-199. Both themes checked in WebKit and Chromium. |

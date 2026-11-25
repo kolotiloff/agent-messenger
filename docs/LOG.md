@@ -2,6 +2,29 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-25 — Codex (T-303)
+
+- Replaced the composer actions and task context menu actions with the stop status while the request is pending. The context menu keeps up with broker acknowledgement even when the task list retains the original row. Added local, remote and refusal cases to the browser fixture.
+
+## 2026-11-25 — Codex (T-301, T-302)
+
+- Replaced the write-locking idle computer lookup in coordinator `wait` with read-only snapshots. Tested a ready report during a concurrent SQLite write and project isolation in split storage. The writer-held delivery probe improved from about 1.27 seconds to 0.23 seconds.
+- Implemented the owner's selected computer-card disclosure. It lists each active task and keeps its state and keyboard focus when the card redraws.
+
+## 2026-11-25 — Codex (T-300)
+
+- Confirmed with both macOS Codex binaries that an isolated App Server can start a new turn in the same chat through `codex queue --resume`, using simulated model responses. A second probe without shared server access returned a warning and left the chat idle. The owner closed T-300 after the current desktop setup did not expose the expected control socket. Recorded D-208.
+
+## 2026-11-25 — Codex (T-298, T-299)
+
+- The owner reported that update cancellation never appeared. The owner's event journal showed a request queued for five minutes. Reproduced and fixed a separate failure mode where a stale roster hid the cancel control for a confirmed queued request. Tests cover window rendering and exact delivery to the queued receiver.
+- Added seven-day cleanup for generated helper logs, keeping the active outputs and most recent useful diagnostics. T-300 records the owner's requirement to resume a finished Codex turn after sustained worker inactivity. A reminder for an already active wait is insufficient.
+
+## 2026-11-25 — Codex (T-296, T-297)
+
+- Reproduced the success notice appearing alongside the old installation spinner. Reconciled the update reply and shared watch by request ID so the notice, version and control advance together. The WebKit and Chromium fixture covers out-of-order success and failure, a distinct queued request, and cancellation before the installer starts.
+- Show the full reason as a tooltip only when the notification actually clips it. The three-notice limit and the existing footer layout still apply.
+
 ## 2026-11-25 — Codex (1.0.2 release, T-290–T-295)
 
 - Merged [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198) as `41dc97c` after all required checks passed. All eight [client jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45519001699) completed successfully. The release also incorporates the verified 1.0.1 record from #197.

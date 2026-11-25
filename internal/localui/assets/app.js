@@ -304,7 +304,7 @@
     if(t.remote?.lost&&!t.remote.from&&activeStates.includes(t.state))
       return [tr('Связь потеряна, исход неизвестен'),'am-muted',t.remote.last_seen?'«'+t.remote.name+tr('» не на связи с ')+stamp(t.remote.last_seen):'«'+t.remote.name+tr('» больше нет в сети')];
     if(activeStates.includes(t.state)&&stopProgress(t)){
-      if(t.remote.silent)return [tr('Остановка не подтверждена'),'am-status-wait'];
+      if(t.remote?.silent)return [tr('Остановка не подтверждена'),'am-status-wait'];
       return [tr('Ждём завершения задачи…'),'am-status-wait'];
     }
     // T-137: sent to another computer that has not said it took the task.
@@ -343,12 +343,23 @@
   function sharedLost(t,p){return activeStates.includes(t.state)&&!(p.age>=0&&p.age<=45);}
   function taskMenu(event,t,p){
     event.preventDefault();
+    // Unchanged rows keep their listeners across refreshes. The underlying
+    // stop request can advance even when its short label stays the same.
+    if(!p){
+      const current=taskRows().find(task=>task.id===t.id);
+      if(!current)return;
+      t=current;
+    }
     const ok=p?finishedStates.includes(t.state)||sharedLost(t,p):finishedStates.includes(t.state);
     const tip=ok?'':p?tr('Задача ещё идёт на компьютере «')+p.name+tr('». Удалить её можно, когда она закончится'):tr('Сначала остановите задачу');
     const entries=[];
     if(!p&&canStopTask(t)){
-      const pending=!!stopProgress(t);
-      entries.push({text:tr('Остановить задачу'),off:pending,tip:pending?tr('Остановка уже запрошена'):'',pick:()=>stopTask(t)});
+      const progress=stopProgress(t);
+      if(progress){
+        popMenu(event.clientX,event.clientY,[],{task:t.id,text:stopMessage(progress)});
+        return;
+      }
+      entries.push({text:tr('Остановить задачу'),pick:()=>stopTask(t)});
     }
     entries.push({text:tr('Удалить из списка'),off:!ok,tip,pick:()=>askRemoveTask(t,p)});
     popMenu(event.clientX,event.clientY,entries);
@@ -398,12 +409,12 @@
   // moved to an icon on the card (T-128).
   // A right-click menu; entries are {text,pick,off,tip}. An entry with off
   // is shown dimmed with its reason as a tooltip.
-  function popMenu(x,y,entries){
+  function popMenu(x,y,entries,status=null){
     let menu=$('device-menu');
     if(!menu){
       // A manual popover: an automatic one closes on the same right click
       // that opened it.
-      menu=el('div',undefined,'am-select-menu am-context-menu');menu.id='device-menu';menu.setAttribute('popover','manual');menu.setAttribute('role','menu');root.append(menu);
+      menu=el('div',undefined,'am-select-menu am-context-menu');menu.id='device-menu';menu.setAttribute('popover','manual');menu.tabIndex=-1;root.append(menu);
       const close=()=>{if(menu.matches(':popover-open'))menu.hidePopover();};
       document.addEventListener('pointerdown',e=>{if(!menu.contains(e.target))close();});
       menu.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close();}});
@@ -419,8 +430,14 @@
       item.addEventListener('click',run);item.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();run();}});
       items.push(item);
     }
-    if(!items.length)return;
-    menu.replaceChildren(...items);menu.style.left=x+'px';menu.style.top=y+'px';menu.showPopover();items[0].focus();
+    if(!items.length&&!status)return;
+    menu.setAttribute('role',status?'status':'menu');
+    menu.dataset.stopTask=status?.task||'';
+    menu.replaceChildren(...(status?[el('div',status.text,'am-context-status')]:items));
+    menu.showPopover();
+    menu.style.left=Math.max(0,Math.min(x,window.innerWidth-menu.offsetWidth))+'px';
+    menu.style.top=Math.max(0,Math.min(y,window.innerHeight-menu.offsetHeight))+'px';
+    (items[0]||menu).focus();
   }
   function deviceMenu(d,x,y,can){
     const items=[];
@@ -462,25 +479,35 @@
     if(!updateBoard||updateBoard.broker!==updateNetwork())return null;
     return updateBoard.marks?.[device||updateBoard.self];
   }
+  function updateInProgress(mark){
+    return mark?.state==='waiting'||mark?.state==='queued'||mark?.state==='updating';
+  }
   function updateMark(peer){
     const device=peer?.id||'', shared=sharedUpdate(device);
-    const own=peer?(server?.updates||[]).find(x=>x.computer===device&&!x.stale):null;
-    const localID=own?.request_id||(!peer?view?.pending_update_id:'');
-    const localState=own?.state||(!peer?view?.pending_update:'');
-    const active=s=>['waiting','queued','updating'].includes(s);
+    const own=peer?(server?.updates||[]).find(x=>x.computer===device&&!x.stale):view?.local_update;
+    const pending=peer?(peer.update_pending?{state:'queued',id:peer.update_request_id}:null):
+      {state:view?.pending_update,id:view?.pending_update_id};
+    const reply=own?.request_id?{state:own.state,id:own.request_id,version:own.version}:null;
+    const final=reply&&!updateInProgress(reply);
+    // The notice and update watch arrive independently. An exact reply
+    // supersedes a lagging snapshot, without closing a different request.
+    if(reply?.id&&reply.id===shared?.id){
+      if(final||reply.state==='updating'&&(shared.state==='legacy'||updateInProgress(shared)))return reply;
+    }
     if(shared&&shared.state!=='legacy'){
       // The initiating window can lead the broker by one exchange.
-      const newer=own?.state==='waiting'&&own.request_id!==shared.id&&Date.parse(own.updated_at)>=shared.at*1000;
+      const newer=peer&&reply?.state==='waiting'&&reply.id!==shared.id&&Date.parse(own.updated_at)>=shared.at*1000;
       if(!newer){
-        if(active(shared.state)){
+        if(updateInProgress(shared)){
           if(shared.state==='waiting'&&Date.now()-shared.at*1000>=900000)return null;
           return shared;
         }
-        if(peer||!localID||shared.id===localID)return null;
+        if(peer||!pending.id||shared.id===pending.id)return shared;
       }
     }
-    if(active(localState))return {state:localState,id:localID};
-    return peer?.update_pending?{state:'queued',id:peer.update_request_id}:null;
+    if(peer&&updateInProgress(reply))return reply;
+    if(updateInProgress(pending)&&(!final||reply.id!==pending.id))return pending;
+    return final?reply:null;
   }
   const updateCancelAttempts=new Map();
   function cancelUpdateKey(broker,device,id){return JSON.stringify([broker,device,id]);}
@@ -500,7 +527,8 @@
       return status;
     }
     const caption=installing?tr('Обновление устанавливается'):mark.state==='waiting'?tr('Обновление запрошено'):tr('Ждёт обновления');
-    const canCancel=!installing&&!!mark.id&&(!peer||(peerFresh(peer)&&!versionOlder(peer.version,'0.100')&&!!peer.version));
+    // The update board can confirm the queue while the roster is delayed.
+    const canCancel=!installing&&!!mark.id&&(!peer||updateBuildNumber(peer.version)>=100);
     const b=el(canCancel?'button':'span',undefined,'am-update-icon am-peer-update '+(canCancel?'am-update-cancel':'am-update-wait'));
     const label=canCancel?tr('Отменить обновление'):caption;
     b.title=label;b.setAttribute('aria-label',label);
@@ -568,6 +596,12 @@
     if(view?.local_update)showUpdate(view.local_update,view.computer_name||tr('Этот компьютер'));
   }
   const noticeIcons={good:'<path d="M8 12.5l2.7 2.7L16 9.8"/>',info:'<path d="M12 11v5M12 8h.01"/>',bad:'<path d="M12 7.5v5.5M12 16.5h.01"/>'};
+  function updateNoticeTooltips(){
+    for(const text of $('notices').querySelectorAll('.am-notice-text')){
+      if(text.clientHeight&&text.scrollHeight>text.clientHeight)text.title=text.textContent;
+      else text.removeAttribute('title');
+    }
+  }
   function renderNotices(){
     const box=$('notices');if(!box)return;
     box.replaceChildren();box.hidden=!notices.length;
@@ -575,7 +609,7 @@
       const card=el('div',undefined,'am-notice am-notice-'+n.kind);card.dataset.key=n.key;
       const icon=document.createElementNS('http://www.w3.org/2000/svg','svg');icon.setAttribute('viewBox','0 0 24 24');icon.setAttribute('aria-hidden','true');icon.classList.add('am-notice-icon');
       icon.innerHTML='<circle cx="12" cy="12" r="9"/>'+noticeIcons[n.kind];
-      const body=el('div',undefined,'am-notice-body');body.append(el('span',n.title,'am-notice-title'));if(n.text){body.append(el('span',n.text,'am-small am-muted am-notice-text'));card.title=n.text;}
+      const body=el('div',undefined,'am-notice-body');body.append(el('span',n.title,'am-notice-title'));if(n.text)body.append(el('span',n.text,'am-small am-muted am-notice-text'));
       const close=el('button','×','am-toast-close');close.type='button';close.setAttribute('aria-label',tr('Закрыть'));close.addEventListener('click',()=>closeNotice(n.key));
       card.append(icon,body,close);
       if(n.kind!=='bad'){
@@ -585,6 +619,7 @@
       }
       box.append(card);
     }
+    updateNoticeTooltips();
   }
   document.addEventListener('visibilitychange',renderNotices);
   // One line per agent program, with its worker state.
@@ -609,6 +644,32 @@
     const running=active.filter(t=>t.state==='running'),waiting=active.filter(t=>t.state!=='running');
     return {running,waiting,counts:{running:running.length,waiting_owner:waiting.length}};
   }
+  function sidebarTaskModel(task){
+    // Shared rows already carry the worker's confirmed model in model.
+    const model=task.shared?task.model:task.ran_model;
+    return model?modelName(model).replace(/ Medium$/,' Med'):'';
+  }
+  function parallelAgentLine(computer,provider,state,running,waiting){
+    const group=el('details',undefined,'am-agent-parallel am-agent-'+state);
+    group.dataset.provider=provider;
+    group.dataset.agentGroup=JSON.stringify([computer,provider]);
+    group.addEventListener('click',event=>event.stopPropagation());
+    const summary=el('summary'),label=el('span',shortNames[provider]||provider,state==='run'?'am-agent-running-label':'');
+    label.append(el('span',', '+tasksWord(running.length+waiting.length),'am-agent-count'));
+    summary.append(label,svgIcon(['M6 9l6 6 6-6']));
+    const list=el('ul',undefined,'am-agent-parallel-list');
+    for(const task of [...running,...waiting]){
+      const model=sidebarTaskModel(task),row=el('li',undefined,task.state==='running'?'am-agent-parallel-running':'');
+      const name=el('span',model||task.title||shortNames[provider]||provider,model?'am-agent-model':'');
+      if(model&&task.title)name.title=task.title;
+      const [text,status,,from]=taskStatus(task);
+      const timing=from&&Number.isFinite(Date.parse(from))?elapsedLabel(from,'','am-muted'):el('span',text,status);
+      row.append(name,timing);
+      list.append(row);
+    }
+    group.append(summary,list);
+    return group;
+  }
   function agentLines(agents,coordinatorClient,live,computer,busyTasks){
     const lines=el('div',undefined,'am-machine-agents');
     const [coordProvider,coordLabel]=coordinatorClient!==null?coordinatorName(coordinatorClient):['',''];
@@ -624,23 +685,21 @@
       // still open.
       const {running,waiting,counts}=agentActivity(busyTasks.get(computer+'\0'+provider)||[]);
       const [state,text]=live?agentState(counts):['offline',tr('Нет связи')];
+      if(live&&running.length+waiting.length>1){
+        lines.append(parallelAgentLine(computer,provider,state,running,waiting));
+        continue;
+      }
       // A busy agent says so to the right of its name: «работает» in blue,
       // «ждёт ответа» in yellow. A free agent is just its name.
       const line=el('div',undefined,'am-agent-line am-agent-'+state);line.dataset.provider=provider;
-      line.title=(names[provider]||provider)+(a?': '+text:'')+(state==='run'&&counts.waiting_owner>0?', '+tr('ждёт ответа')+' ('+counts.waiting_owner+')':'');
+      line.title=(names[provider]||provider)+(a?': '+text:'');
       const identity=el('span',shortNames[provider]||provider,state==='run'?'am-agent-running-label':'');
       line.append(identity);
       if(state==='run'||state==='wait'){
-        const tasks=state==='run'?running:waiting;
-        const dates=tasks.map(taskStart).filter(at=>Number.isFinite(Date.parse(at)));
-        const first=dates.reduce((old,at)=>!old||Date.parse(at)<Date.parse(old)?at:old,'');
-        // Shared task lists already put the worker's reported model in model.
-        const models=[...new Set(tasks.map(t=>t.shared?t.model:t.ran_model).filter(Boolean).map(modelName))];
-        if(models.length)identity.append(' ',el('span',models.map(m=>m.replace(/ Medium$/,' Med')).join(', '),'am-agent-model'));
-        const total=counts.running+counts.waiting_owner;
-        const count=total>1?'('+total+')':'';
-        if(state==='run'&&first)line.append(elapsedLabel(first,count?count+' ':'','am-agent-status'));
-        else line.append(el('span',(state==='wait'?tr('ждёт ответа'):tr('работает'))+(count?' '+count:''),'am-agent-status'));
+        const task=running[0]||waiting[0],model=sidebarTaskModel(task),from=taskStart(task);
+        if(model)identity.append(' ',el('span',model,'am-agent-model'));
+        if(state==='run'&&Number.isFinite(Date.parse(from)))line.append(elapsedLabel(from,'','am-agent-status'));
+        else line.append(el('span',state==='wait'?tr('ждёт ответа'):tr('работает'),'am-agent-status'));
       }else if(!live){
         line.append(el('span',tr('нет связи'),'am-agent-status'));
       }
@@ -792,6 +851,11 @@
     collectNotices();
     pickedComputers=new Set();
     const live=$('machines'),box=live.cloneNode(false),busyTasks=busyTasksByComputer();
+    const scope=JSON.stringify([project,updateNetwork()]);
+    const sameScope=live.dataset.agentScope===scope;
+    const expanded=sameScope?new Set([...live.querySelectorAll('.am-agent-parallel[open]')].map(group=>group.dataset.agentGroup)):new Set();
+    const focused=sameScope&&live.contains(document.activeElement)?document.activeElement.closest('.am-agent-parallel')?.dataset.agentGroup:'';
+    live.dataset.agentScope=scope;
     const machine=el('div',undefined,'am-machine-card');machine.setAttribute('aria-current','true');pickable(machine,'local');
     // This computer's version and update button are moved into its header
     // by placeLocalParts, alongside the same status icon as on remote cards.
@@ -813,9 +877,9 @@
     if(!lines.children.length)lines.append(el('p',online?tr('Агенты не подключены'):tr('Нет связи'),'am-small am-muted'));
     body.append(lines);
     const corner=el('div',undefined,'am-card-update am-local-update');
-    const localMark=updateMark(null);
-    if(localMark)corner.append(updateControl(null,localMark));
-    root.classList.toggle('am-local-update-pending',!!localMark);
+    const localMark=updateMark(null),localBusy=updateInProgress(localMark);
+    if(localBusy)corner.append(updateControl(null,localMark));
+    root.classList.toggle('am-local-update-pending',localBusy);
     const localMeta=el('div',undefined,'am-machine-meta');localMeta.append(corner,version);head.append(localMeta);box.append(machine);
     // The other computers of this computer's network, with their agents.
     // Only the computer that runs the server can revoke one, from the
@@ -831,10 +895,10 @@
       const corner=el('div',undefined,'am-card-update');
       // T-128: an older computer gets the update icon next to its dot; the
       // owner confirms in a popup.
-      const busy=updateMark(peer),confirmed=sharedUpdate(peer.id)?.version;
-      const installed=confirmed&&versionOlder(peer.version,confirmed)?confirmed:peer.version;
-      if(busy){
-        corner.append(updateControl(peer,busy));
+      const mark=updateMark(peer),confirmed=mark?.version||sharedUpdate(peer.id)?.version;
+      const installed=confirmed&&(!peer.version||versionOlder(peer.version,confirmed))?confirmed:peer.version;
+      if(updateInProgress(mark)){
+        corner.append(updateControl(peer,mark));
       }else if(fresh&&installed&&versionOlder(installed,newestVersion())){
         const newest=versionName(newestVersion()),label=tr('Обновить до ')+newest;
         const b=el('button',undefined,'am-update-icon am-peer-update');b.type='button';b.title=label;b.setAttribute('aria-label',label);appendUpdateGlyphs(b);
@@ -873,12 +937,16 @@
     const rank=new Map(machineOrder.map((key,index)=>[key,index]));
     const ranks=card=>rank.get(card.dataset.machineOrder)??machineOrder.length;
     box.append(...[...box.children].sort((a,b)=>ranks(a)-ranks(b)));
+    for(const group of box.querySelectorAll('.am-agent-parallel'))group.open=expanded.has(group.dataset.agentGroup);
     // The moved elements are left out of the comparison, so an unchanged
     // list keeps its nodes; before a rebuild they go back to the bottom row,
     // or they would leave the page with the old card.
     const copy=live.cloneNode(true);
     for(const id of localParts)copy.querySelector('#'+id)?.remove();
-    if(copy.innerHTML!==box.innerHTML){parkLocalParts();live.replaceChildren(...box.childNodes);}
+    if(copy.innerHTML!==box.innerHTML){
+      parkLocalParts();live.replaceChildren(...box.childNodes);
+      if(focused)live.querySelector('[data-agent-group="'+CSS.escape(focused)+'"] > summary')?.focus({preventScroll:true});
+    }
     placeLocalParts();
     // T-271: only the highlighted card shows the chosen computer, so a
     // computer that left the list no longer filters anything.
@@ -1105,7 +1173,14 @@
       all.addEventListener('click',()=>{$('agent-filter').value='';syncSelects();renderTaskList();});
       box.append(all);
     }
-    $('task-count').textContent=taskRows().length+(view?.shared||[]).reduce((n,p)=>n+p.tasks.length,0)||'';
+    const ownTasks=taskRows(),menu=$('device-menu');
+    $('task-count').textContent=ownTasks.length+(view?.shared||[]).reduce((n,p)=>n+p.tasks.length,0)||'';
+    if(menu?.dataset.stopTask&&menu.matches(':popover-open')){
+      const task=ownTasks.find(t=>t.id===menu.dataset.stopTask);
+      const text=task&&canStopTask(task)?stopMessage(stopProgress(task)):'';
+      if(!text)menu.hidePopover();
+      else if(menu.firstElementChild.textContent!==text)menu.firstElementChild.textContent=text;
+    }
     // Another computer's task is read-only and says which computer gave it.
     const ownRow=t=>{
       const row=el('button',undefined,'am-task');row.type='button';row.setAttribute('aria-pressed',String(t.id===selectedTask));
@@ -1538,15 +1613,21 @@
   }
   function canStopTask(t){return activeStates.includes(t.state)&&!taskUnreachable(t);}
   function stopProgress(t){return t.remote?.cancel_state||stopSubmissions.get(t.id);}
-  function renderStopControls(t){
-    const button=$('task-stop'),status=$('task-stop-status');
-    const progress=button.hidden?'':stopProgress(t);
-    button.disabled=!!progress;
-    const text={
+  function stopMessage(progress){
+    return {
       sending:tr('Отправляем запрос на остановку…'),
       queued:tr('Запрос на остановку в очереди. Ждём завершения задачи…'),
-      sent:tr('Запрос на остановку принят сервером. Ждём завершения задачи…'),
+      sent:tr('Запрос на остановку отправлен. Ждём завершения задачи.'),
     }[progress]||'';
+  }
+  function renderStopControls(t){
+    const field=$('answer-text').parentElement,status=$('task-stop-status');
+    const canStop=canStopTask(t),progress=canStop?stopProgress(t):'';
+    const text=stopMessage(progress),wasHidden=field.hidden;
+    $('task-stop').hidden=!canStop||!!text;
+    field.hidden=!!text;
+    $('answer-status').hidden=!!text;
+    if(wasHidden&&!field.hidden)sizeAnswer();
     if(status.textContent!==text)status.textContent=text;
   }
   function closeHere(){
@@ -1570,14 +1651,11 @@
     const t=taskRows().find(task=>task.id===row.id)||(selectedTask===row.id?selectedTaskRow():null);
     if(!t||!canStopTask(t)||stopProgress(t))return;
     stopSubmissions.set(t.id,'sending');
-    if(selectedTask===t.id){
-      $('task-stop').classList.add('am-tip-off');
-      renderStopControls(t);
-    }
+    if(selectedTask===t.id)renderStopControls(t);
     renderTaskList();
     try{
       await postAPI('/api/task-cancel',{task:t.id});
-      if(t.remote&&!t.remote.from)stopSubmissions.set(t.id,'queued');
+      stopSubmissions.set(t.id,t.remote&&!t.remote.from?'queued':'sent');
       if(selectedTask===t.id)showError(null);
     }catch(error){
       if(selectedTask===t.id)showError(error);
@@ -1879,7 +1957,7 @@
     const note=canNote(t),wasNote=$('compose').dataset.mode==='note';
     $('compose').hidden=unreachable||(!q&&!active);
     box.disabled=!q&&!note;box.placeholder=q?tr('Ответить исполнителю…'):note&&t.state==='waiting_coordinator'?tr('Ответить вместо координатора…'):note?tr('Написать исполнителю…'):t.remote?.from&&t.owner_question?tr('Отвечают на компьютере «')+t.remote.name+'»':t.pending_launch?tr('Задача ждёт запуска…'):t.remote?.outbox_delayed_minutes&&!t.remote.from?tr('Ответы с «')+t.remote.name+tr('» задерживаются: не уходят уже ')+t.remote.outbox_delayed_minutes+tr(' мин.'):t.remote?.worker==='none'&&!t.remote.from?tr('На «')+t.remote.name+tr('» исполнитель этой задачи сейчас не запущен'):tr('Исполнитель работает…');
-    $('answer-send').hidden=!q&&!note;$('task-stop').hidden=!active;
+    $('answer-send').hidden=!q&&!note;
     renderStopControls(t);
     $('compose').dataset.mode=q?'answer':note?'note':'';
     if($('compose').dataset.task!==t.id){$('compose').dataset.task=t.id;box.value='';$('answer-status').textContent='';}
@@ -1921,7 +1999,7 @@
   }
   // The reply box is one line and grows only while its text does not fit;
   // the stop and send buttons stay at its bottom.
-  function sizeAnswer(){const f=$('answer-text');f.style.height='';f.style.overflowY='';if(!f.value)return;const full=f.scrollHeight+(f.offsetHeight-f.clientHeight);f.style.height=Math.min(140,full)+'px';if(full>140)f.style.overflowY='auto';}
+  function sizeAnswer(){const f=$('answer-text');f.style.height='';f.style.overflowY='';if(!f.value||f.parentElement.hidden)return;const full=f.scrollHeight+(f.offsetHeight-f.clientHeight);f.style.height=Math.min(140,full)+'px';if(full>140)f.style.overflowY='auto';}
   // Owner notes follow a task given here, including one running on a peer.
   function canNote(t){
     if(!t||t.owner_question)return false;
@@ -1942,6 +2020,7 @@
   }
   async function sendAnswer(){
     const t=selectedTaskRow(),q=t?.owner_question;
+    if(t&&stopProgress(t))return;
     if(!q&&canNote(t))return sendNote();
     if(!q||answering||t.remote?.from)return;
     const text=$('answer-text').value.trim();if(!text)return;
@@ -2354,7 +2433,8 @@
         delete v.history_unchanged;
       }
       for(const t of v.tasks){
-        if(stopSubmissions.get(t.id)==='queued'&&(t.remote?.cancel_state||!activeStates.includes(t.state)))stopSubmissions.delete(t.id);
+        const stopping=stopSubmissions.get(t.id);
+        if(stopping&&stopping!=='sending'&&(t.remote?.cancel_state||!activeStates.includes(t.state)))stopSubmissions.delete(t.id);
       }
       windowHistoryScope=taskWindowQuery();
       const signature=JSON.stringify(v);
@@ -3411,7 +3491,6 @@
   // Enter sends; Shift+Enter adds a line. An IME composition keeps its Enter.
   $('task-stop').addEventListener('click',stopSelectedTask);
   $('lost-close').addEventListener('click',closeHere);
-  $('task-stop').addEventListener('mouseleave',()=>$('task-stop').classList.remove('am-tip-off'));
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.isComposing&&!$('task-stop').hidden&&!$('compose').hidden&&!document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true]')){e.preventDefault();stopSelectedTask();}});
   $('answer-text').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();sendAnswer();}});
   $('project-dialog-close').addEventListener('click',()=>$('project-dialog').close());
@@ -3532,7 +3611,11 @@
   $('thread').addEventListener('scroll',toBottomState,{passive:true});
   $('to-bottom').addEventListener('click',()=>{const t=$('thread');t.scrollTo({top:t.scrollHeight,behavior:'smooth'});});
   // A taller reply box must not pull the owner off the end of the feed.
-  new ResizeObserver(()=>requestAnimationFrame(()=>{chatBody.style.setProperty('--am-footer-height',chatFooter.getBoundingClientRect().height+'px');const t=$('thread');if(feedPinned)t.scrollTop=t.scrollHeight;})).observe(chatFooter);
+  new ResizeObserver(()=>requestAnimationFrame(()=>{
+    updateNoticeTooltips();
+    chatBody.style.setProperty('--am-footer-height',chatFooter.getBoundingClientRect().height+'px');
+    const t=$('thread');if(feedPinned)t.scrollTop=t.scrollHeight;
+  })).observe(chatFooter);
   show('tasks');loadMachineOrder();refresh();loadDiscovery();pollSetup();setInterval(()=>{if(setupPending)pollSetup();},2000);
   setInterval(updateTimers,1000);
   setInterval(()=>{if(!windowWatch||Date.now()-lastWindowRefresh>=15000)refresh();},2000);

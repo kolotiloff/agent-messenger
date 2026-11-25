@@ -357,6 +357,8 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         ['update-fixture-update-3-refused','update-fixture-update-4-refused','update-fixture-update-5-refused']);
       assert.equal(await page.locator('.am-chat-footer').evaluate(n => getComputedStyle(n).overflowY), 'visible');
       assert.equal(await page.locator('#notices').evaluate(n => n.scrollHeight <= n.clientHeight), true);
+      const clippedReason=page.locator('#notices .am-notice-text').first();
+      assert.equal(await clippedReason.getAttribute('title'),await clippedReason.textContent(),'a clipped reason still exposes its full text');
       if(process.env.SCREENSHOT_DIR&&!native) await page.screenshot({animations:'disabled',path:path.join(process.env.SCREENSHOT_DIR,'notices.png')});
       await page.locator('#notices .am-toast-close').first().click();
       assert.equal(await page.locator('#notices .am-notice').count(), 2);
@@ -387,6 +389,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const otherStat = {...stat,id:'other-1',title:'Собрать сайт',project:'Site',tokens:700};
       let holdFrameStats, frameStatsRequested;
       const localTask = {id:'local-task',title:'Local task',project:'Frame',agent:'codex',state:'running',created_at:began,started_at:began,model:'gpt-6.2-sol[effort=low]',ran_model:'gpt-6.2-sol[effort=medium]'};
+      let localRow = localTask;
       let siteTask = {...localTask,id:'site-task',project:'Site',title:'Site worker task',
         pending_launch:true, waits_for_lock:'shared-cache', started_at:undefined};
       let releaseSite, delaySiteView = false;
@@ -395,9 +398,11 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const waitingTask = {...remoteTask,id:'waiting-task',title:'Waiting for a reply',agent:'claude',state:'waiting_owner',model:'claude-sonnet-5-5[effort=medium]',ran_model:'claude-sonnet-5-5[effort=medium]'};
       let remoteRow = remoteTask;
       const stopRequests = [];
+      let refuseStop = false;
       let releaseStop;
       const stopResponse = new Promise(resolve => { releaseStop = resolve; });
       let codexWaiting = true;
+      let thirdCodexTask = false;
       let runnerAgents = [{agent:'cursor',running:1},{agent:'claude',waiting_owner:1},{agent:'codex',running:1,waiting_owner:1}];
       let runnerWorkers = [];
       const ownerNotes = [];
@@ -415,10 +420,11 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           return route.fulfill({json: {projects: [{name: 'Frame'}, {name: 'Site'}], project: 'Site', agents: [], coordinator: {connected: false}, tasks: [siteTask], shared: []}});
         }
         if (pathname === '/api/window') return route.fulfill({json: {projects: [{name: 'Frame'}, {name: 'Site'}], project, folder: '/fictional/frame',
-          agents: [{agent:'codex',running:1,project_running:project==='Frame'?1:0}], coordinator: {connected: false}, computer_name: 'Ёж и Йога', tasks_enabled: true, feedback_count: 5, feedback_new: 2, tasks:project==='Frame'?[localTask,remoteRow,waitingTask]:[],
+          agents: [{agent:'codex',running:1,project_running:project==='Frame'?1:0}], coordinator: {connected: false}, computer_name: 'Ёж и Йога', tasks_enabled: true, feedback_count: 5, feedback_new: 2, tasks:project==='Frame'?[localRow,remoteRow,waitingTask]:[],
           shared: project==='Frame'?[{peer: 'host', name: 'Giver', age: 1, tasks: [
             {id: 'sent', project: 'Frame', title: 'Sent task', agent: 'cursor', state: 'running', created_at: began, started_at: began, model: 'composer-2.5[effort=medium]', runs_on_peer: 'dev-1', runs_on: 'Old name'},
             ...(codexWaiting?[{id:'codex-waiting',project:'Frame',title:'Queued answer',agent:'codex',state:'waiting_coordinator',created_at:began,runs_on_peer:'dev-1'}]:[]),
+            ...(thirdCodexTask?[{id:'third-codex',project:'Frame',title:'Third task',agent:'codex',state:'running',created_at:began,model:'gpt-6.2-sol[effort=high]',runs_on_peer:'dev-1'}]:[]),
             {id: 'own', project: 'Frame', title: 'Own task', agent: 'codex', state: 'running', created_at: '2026-11-15T09:00:00Z'},
             {id: 'old-1', project: 'Frame', title: 'Old 1', agent: 'codex', state: 'done', created_at: '2026-11-14T09:00:00Z', finished_at: ended},
             {id: 'old-2', project: 'Frame', title: 'Old 2', agent: 'codex', state: 'failed', created_at: '2026-11-14T08:00:00Z', finished_at: '2026-11-14T08:30:00Z'}]}]:[]}});
@@ -476,6 +482,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         if (pathname === '/api/task-note') ownerNotes.push(route.request().postDataJSON());
         if (pathname === '/api/task-cancel') {
           stopRequests.push(route.request().postDataJSON());
+          if(refuseStop)return route.fulfill({status:409,json:{ok:false,detail:'Fixture stop refusal'}});
           await stopResponse;
           return route.fulfill({json:{ok:true}});
         }
@@ -539,10 +546,34 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert(Math.abs(waitingStatusBox.x-waitingLabelBox.x-waitingLabelBox.width)<1,'waiting status must sit directly beside the model');
       const overlappingAgent=runner.locator('.am-agent-run[data-provider=codex]');
       assert.equal(await overlappingAgent.locator('.am-agent-model').count(),0);
-      assert.equal(await overlappingAgent.locator('.am-agent-running-label').innerText(),'Codex');
-      assert.equal(await overlappingAgent.locator('.am-agent-status').textContent(),'(2) 3 мин');
-      assert.equal(await overlappingAgent.locator('.am-agent-status').evaluate(node=>getComputedStyle(node,'::before').content),'", "');
-      assert.match(await overlappingAgent.getAttribute('title'),/, ждёт ответа \(1\)/);
+      const summary=overlappingAgent.locator('summary');
+      assert.equal(await summary.innerText(),'Codex, 2 задачи');
+      const details=overlappingAgent.locator('.am-agent-parallel-list');
+      assert.equal(await details.isVisible(),false);
+      const cardSelection=await runner.getAttribute('aria-pressed');
+      await summary.click();
+      assert.equal(await details.isVisible(),true);
+      assert.equal(await runner.getAttribute('aria-pressed'),cardSelection);
+      assert.match(await details.innerText(),/Remote task\s+3 мин/);
+      assert.match(await details.innerText(),/Queued answer\s+Ждёт ответа координатора/);
+      await summary.focus();
+      thirdCodexTask=true;
+      await summary.getByText('3 задачи',{exact:false}).waitFor();
+      assert.equal(await details.isVisible(),true,'an expanded group stays open when another task arrives');
+      assert.equal(await summary.evaluate(node=>document.activeElement===node),true);
+      assert.equal(await details.getByText('Sol 6.2 High',{exact:true}).isVisible(),true);
+      assert(await runner.evaluate(node=>{
+        node.style.width='166px';
+        const body=node.querySelector('.am-machine-body'),arrow=node.querySelector('.am-agent-parallel summary > svg');
+        const gap=body.getBoundingClientRect().right-arrow.getBoundingClientRect().right;
+        const fits=body.scrollWidth<=body.clientWidth&&Math.abs(gap-parseFloat(getComputedStyle(body).paddingRight))<1;
+        node.style.removeProperty('width');
+        return fits;
+      }),'three tasks must retain the right inset on a narrow computer card');
+      await summary.press('Enter');
+      assert.equal(await details.isVisible(),false);
+      thirdCodexTask=false;
+      await summary.getByText('2 задачи',{exact:false}).waitFor();
       const chooseProject = async name => {
         await page.locator('[aria-controls="project-select-menu"]').click();
         await page.getByRole('option',{name,exact:true}).click();
@@ -821,7 +852,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await remoteHead.getByText(/Astra 6\.2 High/).waitFor();
       assert.equal(await remoteList.locator('.am-task-model').textContent(),'Astra 6.2 High');
       assert.equal(await remoteAgent.locator('.am-agent-model').textContent(),'Astra 6.2 High');
-      assert.equal(await remoteAgent.locator('.am-agent-status').evaluate(node=>getComputedStyle(node,'::before').content),'", "');
+      await remoteAgent.locator('summary').click();
       await page.evaluate(() => {
         const now=Date.now.bind(Date);
         window.elapsedSample=document.querySelector('#thread .am-rich');
@@ -832,7 +863,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         const row=[...document.querySelectorAll('.am-task')].find(node=>node.textContent.includes('Remote task'));
         const right=row?.querySelector('[data-elapsed-from]');
         const center=document.querySelector('#task-head [data-elapsed-from]');
-        return sidebar?.textContent==='(2) 4 мин'&&right?.textContent==='Работает 4 мин'&&center?.textContent===right.textContent;
+        return sidebar?.textContent==='4 мин'&&right?.textContent==='Работает 4 мин'&&center?.textContent===right.textContent;
       });
       assert.equal(await page.evaluate(()=>window.elapsedSample===document.querySelector('#thread .am-rich')),true);
       // Keep the broker and feed stale while the task row records completion.
@@ -866,19 +897,27 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await page.locator('#task-head h3').textContent(),localTask.title);
       assert.match(await remoteList.locator('.am-task-status').innerText(),/Ждём завершения задачи/);
       await remoteList.click({button:'right'});
-      assert.equal(await stopAction.getAttribute('aria-disabled'),'true');
+      await menu.getByText('Отправляем запрос на остановку…',{exact:true}).waitFor();
+      assert.equal(await menu.getByRole('menuitem').count(),0);
       await page.keyboard.press('Escape');
       await remoteList.click();
       await stopStatus.getByText('Отправляем запрос на остановку…',{exact:true}).waitFor();
-      assert.equal(await stopButton.isDisabled(),true);
+      assert.equal(await stopButton.isVisible(),false);
+      assert.equal(await reply.isVisible(),false);
+      assert.equal(await page.locator('#answer-send').isVisible(),false);
       await page.keyboard.press('Escape');
       releaseStop();
       await stopStatus.getByText(/в очереди/).waitFor();
-      assert.equal(await stopButton.isDisabled(),true);
+      assert.equal(await stopButton.isVisible(),false);
+      await remoteList.click({button:'right'});
+      await menu.getByText(/в очереди/).waitFor();
       remoteRow={...remoteTask,remote:{...remoteTask.remote,cancel_state:'sent'}};
-      await stopStatus.getByText(/принят сервером/).waitFor();
+      await stopStatus.getByText('Запрос на остановку отправлен. Ждём завершения задачи.',{exact:true}).waitFor();
       assert.match(await remoteList.locator('.am-task-status').innerText(),/Ждём завершения задачи/);
-      assert.equal(await stopButton.isDisabled(),true);
+      assert.equal(await stopButton.isVisible(),false);
+      await menu.getByText('Запрос на остановку отправлен. Ждём завершения задачи.',{exact:true}).waitFor();
+      assert.equal(await menu.getByRole('menuitem').count(),0);
+      await page.keyboard.press('Escape');
       await page.keyboard.press('Escape');
       assert.deepEqual(stopRequests,[{task:remoteTask.id}]);
       remoteRow={...remoteRow,state:'cancelled',finished_at:new Date().toISOString()};
@@ -889,6 +928,25 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.keyboard.press('Escape');
       remoteRow=remoteTask;
       await remoteHead.getByText(/Работает/).waitFor();
+      refuseStop=true;
+      await reply.fill('Unsent draft');
+      await stopButton.click();
+      await page.getByText('Fixture stop refusal',{exact:true}).waitFor();
+      assert.equal(await stopButton.isVisible(),true);
+      assert.equal(await page.locator('#answer-send').isVisible(),true);
+      assert.equal(await reply.inputValue(),'Unsent draft');
+      assert.equal(await stopStatus.isVisible(),false);
+      refuseStop=false;
+      await page.locator('#task-list').getByText(localTask.title,{exact:true}).click();
+      await page.locator('#task-head h3').getByText(localTask.title,{exact:true}).waitFor();
+      await stopButton.click();
+      await stopStatus.getByText('Запрос на остановку отправлен. Ждём завершения задачи.',{exact:true}).waitFor();
+      assert.equal(await reply.isVisible(),false);
+      localRow={...localTask,state:'cancelled',finished_at:new Date().toISOString()};
+      await page.locator('#task-head').getByText('Отменена',{exact:true}).waitFor();
+      assert.equal(await stopStatus.isVisible(),false);
+      localRow=localTask;
+      await page.locator('#task-head').getByText(/Работает/).waitFor();
       // Owner, 2026-11-15: one button removes every finished task from the list.
       await page.locator('.am-task-section', {hasText: 'Завершённые'}).locator('.am-task-section-action').click();
       await page.locator('#confirm-go').click();
