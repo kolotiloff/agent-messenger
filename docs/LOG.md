@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-25 — Codex (T-303)
+
+- Replaced the composer actions and task context menu actions with the stop status while the request is pending. The context menu keeps up with broker acknowledgement even when the task list retains the original row. Added local, remote and refusal cases to the browser fixture.
+
 ## 2026-11-25 — Codex (T-301, T-302)
 
 - Replaced the write-locking idle computer lookup in coordinator `wait` with read-only snapshots. Tested a ready report during a concurrent SQLite write and project isolation in split storage. The writer-held delivery probe improved from about 1.27 seconds to 0.23 seconds.

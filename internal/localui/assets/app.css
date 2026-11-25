@@ -541,11 +541,11 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-tip { position:absolute; top:50%; right:calc(100% + var(--am-space-2)); transform:translateY(-50%); display:none; align-items:center; gap:var(--am-gap-control); padding:var(--am-space-1) var(--am-space-3); border:1px solid var(--am-line); border-radius:var(--am-radius-s); background:var(--am-composer); color:var(--am-text); white-space:nowrap; box-shadow:var(--am-shadow-s); pointer-events:none; }
 #am-concept .am-tip kbd { font:inherit; color:var(--am-muted); }
 #am-concept .am-stop-btn:is(:hover,:focus-visible) .am-tip { display:inline-flex; }
-#am-concept .am-stop-btn:is(.am-tip-off,:disabled) .am-tip { display:none; }
 #am-concept .am-compose-foot { margin-top:var(--am-space-2); }
 #am-concept .am-compose-foot:empty { display:none; }
 #am-concept :is(#answer-status,#task-stop-status) { margin:var(--am-space-2) var(--am-space-4) 0; font-size:var(--am-text-s); line-height:1.45; }
 #am-concept :is(#answer-status,#task-stop-status):empty { display:none; }
+#am-concept #task-stop-status { margin-block:var(--am-space-2); }
 
 /* Task list panel */
 #am-concept .am-queue-panel { position:relative; display:flex; flex-direction:column; gap:var(--am-gap-content); min-width:0; min-height:0; padding-inline:var(--am-pane-inset); border-left:1px solid var(--am-line); background:var(--am-bg); }
@@ -646,6 +646,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-machine-card[aria-pressed=true] { border-color:var(--am-muted); }
 #am-concept .am-device-card:focus-visible { border-color:var(--am-muted); }
 #am-concept .am-context-menu { min-width:180px; }
+#am-concept .am-context-status { max-width:var(--am-queue); padding:var(--am-pad-compact); color:var(--am-muted); }
 #am-concept .am-server .am-check-result { grid-template-columns:max-content minmax(0,1fr); column-gap:var(--am-gap-section); row-gap:var(--am-gap-control); }
 #am-concept .am-card-head h3:focus { outline:none; }
 

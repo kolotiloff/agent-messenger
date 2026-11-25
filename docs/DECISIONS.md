@@ -711,3 +711,7 @@ After reading events for `wait`, look up idle computers in read-only SQLite tran
 ## D-210 — Expand parallel agent tasks in computer cards (T-302)
 
 For multiple active tasks of one agent, show the agent and localized task count. A disclosure reveals each task's confirmed model and elapsed time or waiting status. A task title identifies a run whose model is still unknown. Group opening and focus survive redraws within the current project and network. Single-task lines keep their compact format.
+
+## D-211 — Show the stop request in place of the task controls (T-303)
+
+While stopping a task, show the submission, queue or sent status in place of the composer field and its controls. The task context menu shows the same status as text. Resolve a retained menu listener against the current task row so a broker acknowledgement cannot bring back the stop action. Keep the local acknowledgement through refresh until the task records an outcome. An explicit refusal returns the composer with its draft.

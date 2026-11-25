@@ -261,6 +261,7 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 
 | ID | Task | PR |
 |---|---|---|
+| T-303 | Replace task stop and send controls with a status while cancellation is pending. | Ready for review. D-211. Window fixtures cover submission, acknowledgement, completion and refusal. |
 | T-302 | Show parallel agent tasks as a count with expandable model and timing details. | Ready for review. D-210. The browser fixture covers two and three tasks, live updates, keyboard operation and narrow cards. |
 | T-301 | Keep a ready coordinator report independent of SQLite write locks during idle-computer lookup. | Ready for review. D-209. Tested concurrent writes with legacy and split storage. |
 | T-300 | Resume an idle Codex coordinator after a computer stays ready without assigned work for a project-configured interval. | Closed by the owner. A test confirmed same-thread wake-up with a reachable Codex App Server. The owner's desktop setup did not expose the expected local control socket. D-208. |

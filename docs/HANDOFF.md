@@ -8,6 +8,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+**T-303 is queued for the next release.** A task stopping locally or remotely shows its request status in place of the composer controls. Its context menu shows the same status. An explicit refusal restores the composer and its draft.
+
 **T-301 and T-302 are in the release queue.** A ready report can leave coordinator `wait` while SQLite has a concurrent writer, with its project-specific idle computer list intact. A computer with several tasks for one agent shows a compact task count and opens an inline model and status list. The selected group stays open through data refreshes.
 
 **T-300 is closed.** The owner removed idle Codex wake-up from the plan after the probe confirmed that it needs access to the App Server for the same chat. The current desktop setup did not expose the default control socket. See D-208.

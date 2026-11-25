@@ -343,12 +343,23 @@
   function sharedLost(t,p){return activeStates.includes(t.state)&&!(p.age>=0&&p.age<=45);}
   function taskMenu(event,t,p){
     event.preventDefault();
+    // Unchanged rows keep their listeners across refreshes. The underlying
+    // stop request can advance even when its short label stays the same.
+    if(!p){
+      const current=taskRows().find(task=>task.id===t.id);
+      if(!current)return;
+      t=current;
+    }
     const ok=p?finishedStates.includes(t.state)||sharedLost(t,p):finishedStates.includes(t.state);
     const tip=ok?'':p?tr('Задача ещё идёт на компьютере «')+p.name+tr('». Удалить её можно, когда она закончится'):tr('Сначала остановите задачу');
     const entries=[];
     if(!p&&canStopTask(t)){
-      const pending=!!stopProgress(t);
-      entries.push({text:tr('Остановить задачу'),off:pending,tip:pending?tr('Остановка уже запрошена'):'',pick:()=>stopTask(t)});
+      const progress=stopProgress(t);
+      if(progress){
+        popMenu(event.clientX,event.clientY,[],{task:t.id,text:stopMessage(progress)});
+        return;
+      }
+      entries.push({text:tr('Остановить задачу'),pick:()=>stopTask(t)});
     }
     entries.push({text:tr('Удалить из списка'),off:!ok,tip,pick:()=>askRemoveTask(t,p)});
     popMenu(event.clientX,event.clientY,entries);
@@ -398,12 +409,12 @@
   // moved to an icon on the card (T-128).
   // A right-click menu; entries are {text,pick,off,tip}. An entry with off
   // is shown dimmed with its reason as a tooltip.
-  function popMenu(x,y,entries){
+  function popMenu(x,y,entries,status=null){
     let menu=$('device-menu');
     if(!menu){
       // A manual popover: an automatic one closes on the same right click
       // that opened it.
-      menu=el('div',undefined,'am-select-menu am-context-menu');menu.id='device-menu';menu.setAttribute('popover','manual');menu.setAttribute('role','menu');root.append(menu);
+      menu=el('div',undefined,'am-select-menu am-context-menu');menu.id='device-menu';menu.setAttribute('popover','manual');menu.tabIndex=-1;root.append(menu);
       const close=()=>{if(menu.matches(':popover-open'))menu.hidePopover();};
       document.addEventListener('pointerdown',e=>{if(!menu.contains(e.target))close();});
       menu.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close();}});
@@ -419,8 +430,14 @@
       item.addEventListener('click',run);item.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();run();}});
       items.push(item);
     }
-    if(!items.length)return;
-    menu.replaceChildren(...items);menu.style.left=x+'px';menu.style.top=y+'px';menu.showPopover();items[0].focus();
+    if(!items.length&&!status)return;
+    menu.setAttribute('role',status?'status':'menu');
+    menu.dataset.stopTask=status?.task||'';
+    menu.replaceChildren(...(status?[el('div',status.text,'am-context-status')]:items));
+    menu.showPopover();
+    menu.style.left=Math.max(0,Math.min(x,window.innerWidth-menu.offsetWidth))+'px';
+    menu.style.top=Math.max(0,Math.min(y,window.innerHeight-menu.offsetHeight))+'px';
+    (items[0]||menu).focus();
   }
   function deviceMenu(d,x,y,can){
     const items=[];
@@ -1156,7 +1173,14 @@
       all.addEventListener('click',()=>{$('agent-filter').value='';syncSelects();renderTaskList();});
       box.append(all);
     }
-    $('task-count').textContent=taskRows().length+(view?.shared||[]).reduce((n,p)=>n+p.tasks.length,0)||'';
+    const ownTasks=taskRows(),menu=$('device-menu');
+    $('task-count').textContent=ownTasks.length+(view?.shared||[]).reduce((n,p)=>n+p.tasks.length,0)||'';
+    if(menu?.dataset.stopTask&&menu.matches(':popover-open')){
+      const task=ownTasks.find(t=>t.id===menu.dataset.stopTask);
+      const text=task&&canStopTask(task)?stopMessage(stopProgress(task)):'';
+      if(!text)menu.hidePopover();
+      else if(menu.firstElementChild.textContent!==text)menu.firstElementChild.textContent=text;
+    }
     // Another computer's task is read-only and says which computer gave it.
     const ownRow=t=>{
       const row=el('button',undefined,'am-task');row.type='button';row.setAttribute('aria-pressed',String(t.id===selectedTask));
@@ -1589,15 +1613,21 @@
   }
   function canStopTask(t){return activeStates.includes(t.state)&&!taskUnreachable(t);}
   function stopProgress(t){return t.remote?.cancel_state||stopSubmissions.get(t.id);}
-  function renderStopControls(t){
-    const button=$('task-stop'),status=$('task-stop-status');
-    const progress=button.hidden?'':stopProgress(t);
-    button.disabled=!!progress;
-    const text={
+  function stopMessage(progress){
+    return {
       sending:tr('Отправляем запрос на остановку…'),
       queued:tr('Запрос на остановку в очереди. Ждём завершения задачи…'),
-      sent:tr('Запрос на остановку принят сервером. Ждём завершения задачи…'),
+      sent:tr('Запрос на остановку отправлен. Ждём завершения задачи.'),
     }[progress]||'';
+  }
+  function renderStopControls(t){
+    const field=$('answer-text').parentElement,status=$('task-stop-status');
+    const canStop=canStopTask(t),progress=canStop?stopProgress(t):'';
+    const text=stopMessage(progress),wasHidden=field.hidden;
+    $('task-stop').hidden=!canStop||!!text;
+    field.hidden=!!text;
+    $('answer-status').hidden=!!text;
+    if(wasHidden&&!field.hidden)sizeAnswer();
     if(status.textContent!==text)status.textContent=text;
   }
   function closeHere(){
@@ -1621,14 +1651,11 @@
     const t=taskRows().find(task=>task.id===row.id)||(selectedTask===row.id?selectedTaskRow():null);
     if(!t||!canStopTask(t)||stopProgress(t))return;
     stopSubmissions.set(t.id,'sending');
-    if(selectedTask===t.id){
-      $('task-stop').classList.add('am-tip-off');
-      renderStopControls(t);
-    }
+    if(selectedTask===t.id)renderStopControls(t);
     renderTaskList();
     try{
       await postAPI('/api/task-cancel',{task:t.id});
-      if(t.remote&&!t.remote.from)stopSubmissions.set(t.id,'queued');
+      stopSubmissions.set(t.id,t.remote&&!t.remote.from?'queued':'sent');
       if(selectedTask===t.id)showError(null);
     }catch(error){
       if(selectedTask===t.id)showError(error);
@@ -1930,7 +1957,7 @@
     const note=canNote(t),wasNote=$('compose').dataset.mode==='note';
     $('compose').hidden=unreachable||(!q&&!active);
     box.disabled=!q&&!note;box.placeholder=q?tr('Ответить исполнителю…'):note&&t.state==='waiting_coordinator'?tr('Ответить вместо координатора…'):note?tr('Написать исполнителю…'):t.remote?.from&&t.owner_question?tr('Отвечают на компьютере «')+t.remote.name+'»':t.pending_launch?tr('Задача ждёт запуска…'):t.remote?.outbox_delayed_minutes&&!t.remote.from?tr('Ответы с «')+t.remote.name+tr('» задерживаются: не уходят уже ')+t.remote.outbox_delayed_minutes+tr(' мин.'):t.remote?.worker==='none'&&!t.remote.from?tr('На «')+t.remote.name+tr('» исполнитель этой задачи сейчас не запущен'):tr('Исполнитель работает…');
-    $('answer-send').hidden=!q&&!note;$('task-stop').hidden=!active;
+    $('answer-send').hidden=!q&&!note;
     renderStopControls(t);
     $('compose').dataset.mode=q?'answer':note?'note':'';
     if($('compose').dataset.task!==t.id){$('compose').dataset.task=t.id;box.value='';$('answer-status').textContent='';}
@@ -1972,7 +1999,7 @@
   }
   // The reply box is one line and grows only while its text does not fit;
   // the stop and send buttons stay at its bottom.
-  function sizeAnswer(){const f=$('answer-text');f.style.height='';f.style.overflowY='';if(!f.value)return;const full=f.scrollHeight+(f.offsetHeight-f.clientHeight);f.style.height=Math.min(140,full)+'px';if(full>140)f.style.overflowY='auto';}
+  function sizeAnswer(){const f=$('answer-text');f.style.height='';f.style.overflowY='';if(!f.value||f.parentElement.hidden)return;const full=f.scrollHeight+(f.offsetHeight-f.clientHeight);f.style.height=Math.min(140,full)+'px';if(full>140)f.style.overflowY='auto';}
   // Owner notes follow a task given here, including one running on a peer.
   function canNote(t){
     if(!t||t.owner_question)return false;
@@ -1993,6 +2020,7 @@
   }
   async function sendAnswer(){
     const t=selectedTaskRow(),q=t?.owner_question;
+    if(t&&stopProgress(t))return;
     if(!q&&canNote(t))return sendNote();
     if(!q||answering||t.remote?.from)return;
     const text=$('answer-text').value.trim();if(!text)return;
@@ -2405,7 +2433,8 @@
         delete v.history_unchanged;
       }
       for(const t of v.tasks){
-        if(stopSubmissions.get(t.id)==='queued'&&(t.remote?.cancel_state||!activeStates.includes(t.state)))stopSubmissions.delete(t.id);
+        const stopping=stopSubmissions.get(t.id);
+        if(stopping&&stopping!=='sending'&&(t.remote?.cancel_state||!activeStates.includes(t.state)))stopSubmissions.delete(t.id);
       }
       windowHistoryScope=taskWindowQuery();
       const signature=JSON.stringify(v);
@@ -3462,7 +3491,6 @@
   // Enter sends; Shift+Enter adds a line. An IME composition keeps its Enter.
   $('task-stop').addEventListener('click',stopSelectedTask);
   $('lost-close').addEventListener('click',closeHere);
-  $('task-stop').addEventListener('mouseleave',()=>$('task-stop').classList.remove('am-tip-off'));
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.isComposing&&!$('task-stop').hidden&&!$('compose').hidden&&!document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true]')){e.preventDefault();stopSelectedTask();}});
   $('answer-text').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();sendAnswer();}});
   $('project-dialog-close').addEventListener('click',()=>$('project-dialog').close());
