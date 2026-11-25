@@ -84,3 +84,26 @@ func TestIdleComputersReadsSplitProjectWhileWritersHoldBothDatabases(t *testing.
 		t.Fatalf("Game event appeared in Site: %v %v", idle, err)
 	}
 }
+
+func TestPresenceReadsWhileTheMachineDatabaseHasAWriter(t *testing.T) {
+	f := newSplitRunFixture(t)
+	if _, err := f.computer.Exec(`ALTER TABLE net_peers DROP COLUMN contact_age`); err != nil {
+		t.Fatal(err)
+	}
+	st, err := openSplitStore(context.Background(), f.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if _, err := st.NetPeers(); err != nil {
+		t.Fatal(err)
+	}
+	writer, err := f.computer.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer writer.Rollback()
+	if agents, _, err := st.Presence(); err != nil || len(agents) == 0 {
+		t.Fatalf("presence while a writer holds the database: %+v %v", agents, err)
+	}
+}

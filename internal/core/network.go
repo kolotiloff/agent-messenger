@@ -94,11 +94,13 @@ type NetAgent struct {
 
 // NetPeer is another computer of this computer's network.
 type NetPeer struct {
-	ID     string
-	Name   string
-	Host   bool
-	Age    int // seconds since its last report; -1 if it never reported
-	Agents []NetAgent
+	ID   string
+	Name string
+	Host bool
+	Age  int // seconds since its last report; -1 if it never reported
+	// ContactAge is seconds since authenticated server contact, when known.
+	ContactAge *int
+	Agents     []NetAgent
 	// Ready is what the computer reported about taking tasks (T-070); nil
 	// when it did not (an older version).
 	Ready *NetReady
@@ -360,6 +362,7 @@ func (s *Store) SetNetwork(broker, self string, peers []NetPeer) error {
 			}
 			p := o.p
 			p.Reconnecting, p.Age = true, -1
+			p.ContactAge = nil
 			peers = append(peers, p)
 			if o.since == "" {
 				missing[id] = at
@@ -420,7 +423,7 @@ func (s *Store) SetNetwork(broker, self string, peers []NetPeer) error {
 					p.UpdatePending = false
 				}
 			}
-			if _, err := tx.Exec(`INSERT INTO net_peers(peer,name,host,age,agents,ready,usage,updated_at,missing_since,version,computer,outbox,workers,update_pending,update_request_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, p.ID, p.Name, boolInt(p.Host), p.Age, string(raw), ready, usage, at, missing[p.ID], clip(p.Version, 64), validComputer(p.Computer), outbox, workers, boolInt(p.UpdatePending), request); err != nil {
+			if _, err := tx.Exec(`INSERT INTO net_peers(peer,name,host,age,contact_age,agents,ready,usage,updated_at,missing_since,version,computer,outbox,workers,update_pending,update_request_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, p.ID, p.Name, boolInt(p.Host), p.Age, p.ContactAge, string(raw), ready, usage, at, missing[p.ID], clip(p.Version, 64), validComputer(p.Computer), outbox, workers, boolInt(p.UpdatePending), request); err != nil {
 				return err
 			}
 		}
@@ -462,7 +465,7 @@ func netPeers(tx *sql.Tx) ([]NetPeer, error) {
 }
 
 func readNetPeers(tx *sql.Tx, selection string, args ...any) ([]NetPeer, error) {
-	rows, err := tx.Query(`SELECT peer,name,host,age,agents,ready,usage,updated_at,missing_since!='',version,computer,outbox,workers,update_pending,update_request_id FROM net_peers `+selection, args...)
+	rows, err := tx.Query(`SELECT peer,name,host,age,contact_age,agents,ready,usage,updated_at,missing_since!='',version,computer,outbox,workers,update_pending,update_request_id FROM net_peers `+selection, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -472,7 +475,7 @@ func readNetPeers(tx *sql.Tx, selection string, args ...any) ([]NetPeer, error) 
 		var p NetPeer
 		var host, pending int
 		var agents, ready, usage, at, outbox, workers string
-		if err := rows.Scan(&p.ID, &p.Name, &host, &p.Age, &agents, &ready, &usage, &at, &p.Reconnecting, &p.Version, &p.Computer, &outbox, &workers, &pending, &p.UpdateRequestID); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &host, &p.Age, &p.ContactAge, &agents, &ready, &usage, &at, &p.Reconnecting, &p.Version, &p.Computer, &outbox, &workers, &pending, &p.UpdateRequestID); err != nil {
 			return nil, err
 		}
 		p.Host, p.UpdatePending = host != 0, pending != 0
@@ -500,8 +503,14 @@ func readNetPeers(tx *sql.Tx, selection string, args ...any) ([]NetPeer, error) 
 				p.Workers = &w
 			}
 		}
-		if when, err := time.Parse(time.RFC3339Nano, at); err == nil && p.Age >= 0 {
-			p.Age += int(time.Since(when) / time.Second)
+		if when, err := time.Parse(time.RFC3339Nano, at); err == nil {
+			elapsed := max(0, int(time.Since(when)/time.Second))
+			if p.Age >= 0 {
+				p.Age += elapsed
+			}
+			if p.ContactAge != nil {
+				*p.ContactAge += elapsed
+			}
 		}
 		out = append(out, p)
 	}

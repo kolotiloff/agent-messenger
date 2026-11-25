@@ -88,6 +88,25 @@ func TestRemoteQueueMovesToRunningAfterObservedLaunch(t *testing.T) {
 				t.Fatal(err)
 			}
 			p.b.launch(t, p.mirror(t, second).ID, "")
+			setPeer := func(reportAge int, contact *int, task string) {
+				t.Helper()
+				if err := p.a.st.SetNetwork(testBroker, HostPeerID, []NetPeer{{ID: "dev-b", Age: reportAge, ContactAge: contact, Workers: &NetWorkers{Runs: []NetWorkerRun{{Task: task}}}}}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			fresh := 0
+			setPeer(PeerFresh+1, &fresh, second)
+			feed, err := p.a.st.TaskFeed(second)
+			if err != nil || feed.Task.Remote.Lost || feed.Task.Remote.Worker != "" || !feed.Task.PendingLaunch {
+				t.Fatalf("contact with old worker data: %+v %v", feed.Task, err)
+			}
+			setPeer(0, nil, first)
+			assertWindow(true, "shared cache")
+			setPeer(0, nil, second)
+			view, err := p.a.st.WindowView("Game", "")
+			if err != nil || len(view.Tasks) != 2 || view.Tasks[0].ID != second || view.Tasks[0].PendingLaunch || view.Tasks[0].WaitsForLock != "" {
+				t.Fatalf("observed worker before launch delivery: %+v %v", view.Tasks, err)
+			}
 			p.carry(t, false)
 			assertWindow(false, "")
 		})

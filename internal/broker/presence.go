@@ -310,6 +310,9 @@ type Peer struct {
 	// Host marks the computer that runs the broker.
 	Host     bool   `json:"host,omitempty"`
 	LastSeen string `json:"last_seen,omitempty"`
+	// ContactAge is the age of the last authenticated request, independent
+	// of the agent report. Older brokers omit it.
+	ContactAge *int `json:"contact_age,omitempty"`
 	// Age is how many seconds ago the computer last reported its agents,
 	// by the broker's clock; -1 if it never did. Computers' clocks may
 	// differ, so freshness is never judged from the timestamps alone.
@@ -498,6 +501,10 @@ func (b *Broker) roster() ([]Peer, error) {
 		name := peer.Name
 		fill(&peer, report, at, now)
 		peer.Name = name
+		if seen, err := time.Parse(time.RFC3339, peer.LastSeen); err == nil {
+			age := max(0, int(now.Sub(seen)/time.Second))
+			peer.ContactAge = &age
+		}
 		out = append(out, peer)
 	}
 	if err := rows.Err(); err != nil {

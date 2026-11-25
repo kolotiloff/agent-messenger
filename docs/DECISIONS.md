@@ -715,3 +715,7 @@ For multiple active tasks of one agent, show the agent and localized task count.
 ## D-211 — Show the stop request in place of the task controls (T-303)
 
 While stopping a task, show the submission, queue or sent status in place of the composer field and its controls. The task context menu shows the same status as text. Resolve a retained menu listener against the current task row so a broker acknowledgement cannot bring back the stop action. Keep the local acknowledgement through refresh until the task records an outcome. An explicit refusal returns the composer with its draft.
+
+## D-215 — Separate computer contact from task launch evidence (T-308)
+
+The broker reports authenticated contact age separately from agent report age. Both ages continue to increase while the viewer receives no new roster. The computer card and a task's remote contact state can use either fresh signal. Worker state still requires a fresh agent report. Presence reads take a read-only SQLite snapshot. The task list uses a fresh worker entry from the assigned computer for the exact task when confirmation of the launch has yet to arrive. This changes the display and leaves task state, reports and resource ownership under the existing mailbox and supervisor rules.

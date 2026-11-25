@@ -209,6 +209,7 @@
     return label;
   }
   const taskStart=t=>t.started_at||t.created_at;
+  const waitingForStartTime=t=>!t.started_at&&t.state==='running'&&(t.worker_observed||t.remote?.worker==='running');
   // T-058: what a task spent, as its agent reported it. Claude reports a
   // price; Codex and Cursor only tokens.
   function tokensText(n){
@@ -315,7 +316,9 @@
       return [tr('Нет ответа от «')+t.remote.name+'»','am-status-bad',tr('Приём не подтверждён. Задача может выполняться на удалённом компьютере, даже если ответы не доходят. Автоматической повторной отправки не будет.')];
     }
     switch(t.state){
-      case 'running':return t.pending_launch?[t.waits_for_lock?tr('Ждёт ресурс «')+t.waits_for_lock+'»':tr('Ждёт запуска'),'am-status-wait']:[tr('Работает ')+minutes(from),'am-status-run','',from];
+      case 'running':
+        if(t.pending_launch)return [t.waits_for_lock?tr('Ждёт ресурс «')+t.waits_for_lock+'»':tr('Ждёт запуска'),'am-status-wait'];
+        return waitingForStartTime(t)?[tr('Работает'),'am-status-run']:[tr('Работает ')+minutes(from),'am-status-run','',from];
       case 'waiting_owner':return [tr('Ждёт вашего ответа'),'am-status-wait'];
       case 'waiting_coordinator':return [tr('Ждёт ответа координатора'),'am-status-wait'];
       case 'done':return [tr('Работал ')+minutes(from,end),'am-muted'];
@@ -334,13 +337,21 @@
       const since=p.age>=0?stamp(new Date(Date.now()-p.age*1000).toISOString()):'';
       return [tr('Связь потеряна, исход неизвестен'),'am-muted',since?'«'+p.name+tr('» не на связи с ')+since:'«'+p.name+tr('» больше нет в сети')];
     }
-    return taskStatus(t);
+    return taskStatus(sharedDisplayTask(t));
   }
   // T-131: a task leaves the list only when it no longer runs; a running
   // one is stopped first. Another computer's task can also go when that
   // computer is out of contact, since its last state is stale.
   const finishedStates=['done','failed','cancelled'];
-  function sharedLost(t,p){return activeStates.includes(t.state)&&!(p.age>=0&&p.age<=45);}
+  function sharedLost(t,p){return activeStates.includes(t.state)&&!peerFresh(p)&&!sharedWorkerRunning(t);}
+  function sharedWorkerRunning(t){
+    if(t.state!=='running'||!t.runs_on_peer)return false;
+    const executor=server?.peers?.find(p=>p.id===t.runs_on_peer);
+    return !!executor&&peerFresh(executor)&&!!executor.workers?.runs?.some(r=>r.task===t.id);
+  }
+  function sharedDisplayTask(t){
+    return sharedWorkerRunning(t)?{...t,pending_launch:false,worker_observed:true}:t;
+  }
   function taskMenu(event,t,p){
     event.preventDefault();
     // Unchanged rows keep their listeners across refreshes. The underlying
@@ -634,8 +645,10 @@
     }
     for(const task of view?.tasks||[])add(task,taskComputer(task));
     for(const peer of view?.shared||[]){
-      if(!peerFresh(peer))continue;
-      for(const task of peer.tasks||[])add({...task,shared:true},sharedRunsOn(task,peer));
+      for(const task of peer.tasks||[]){
+        if(!activeStates.includes(task.state)||sharedLost(task,peer))continue;
+        add({...sharedDisplayTask(task),shared:true},sharedRunsOn(task,peer));
+      }
     }
     return byComputer;
   }
@@ -698,7 +711,7 @@
       if(state==='run'||state==='wait'){
         const task=running[0]||waiting[0],model=sidebarTaskModel(task),from=taskStart(task);
         if(model)identity.append(' ',el('span',model,'am-agent-model'));
-        if(state==='run'&&Number.isFinite(Date.parse(from)))line.append(elapsedLabel(from,'','am-agent-status'));
+        if(state==='run'&&!waitingForStartTime(task)&&Number.isFinite(Date.parse(from)))line.append(elapsedLabel(from,'','am-agent-status'));
         else line.append(el('span',state==='wait'?tr('ждёт ответа'):tr('работает'),'am-agent-status'));
       }else if(!live){
         line.append(el('span',tr('нет связи'),'am-agent-status'));
@@ -710,9 +723,9 @@
     }
     return lines;
   }
-  // A computer of the network counts as reachable while its reports arrive:
-  // it reports every 15 s, so three missed reports mean it is not.
+  // Agent reports age independently of authenticated contact with the server.
   const peerFresh=peer=>peer.age>=0&&peer.age<=45;
+  const peerConnected=peer=>peerFresh(peer)||(Number.isFinite(peer.contact_age)&&peer.contact_age>=0&&peer.contact_age<=45);
   // machinePeers maps a network peer id to the computer's lasting id
   // (T-273), so a report that briefly lacks the lasting id keeps the card
   // in its place.
@@ -886,10 +899,10 @@
     // right-click menu.
     const hosted=new Set((server?.host?.devices||[]).filter(d=>!d.revoked_at).map(d=>d.id));
     for(const peer of server?.peers||[]){
-      const fresh=peerFresh(peer);
+      const fresh=peerFresh(peer),connected=peerConnected(peer);
       const card=el('div',undefined,'am-machine-card am-peer-card');card.dataset.peer=peer.id;if(peer.host)card.dataset.host='';pickable(card,peer.id,peerOrderKey(peer));
       const name=el('div',undefined,'am-machine-name');
-      name.append(machinePresence(fresh),el('span',peer.name,'am-machine-label'));
+      name.append(machinePresence(connected),el('span',peer.name,'am-machine-label'));
       if(peer.host)name.append(serverTag());
       const meta=el('div',undefined,'am-machine-meta');
       const corner=el('div',undefined,'am-card-update');
@@ -923,6 +936,8 @@
         const plines=agentLines(peer.agents||[],peer.coordinator?peer.coordinator:null,true,peer.id,busyTasks);
         if(!plines.children.length)plines.append(el('p',tr('Агенты не подключены'),'am-small am-muted'));
         peerBody.append(plines);
+      }else if(connected){
+        peerBody.append(el('p',tr('Ждём сведения об агентах'),'am-small am-muted'));
       }else{
         peerBody.append(el('p',peer.last_seen?tr('Был на связи ')+stamp(peer.last_seen):tr('Ещё не выходил на связь'),'am-small am-muted'));
       }
@@ -1061,7 +1076,7 @@
     const groups={active:[],planned:[],attention:[],done:[]};
     for(const it of items){
       if(needsDecision(it))groups.attention.push(it);
-      else if(it.t.state==='running'&&!it.t.started_at&&(it.t.pending_launch||it.t.remote?.unaccepted))groups.planned.push(it);
+      else if(it.t.state==='running'&&!it.t.started_at&&(it.t.pending_launch||it.t.remote?.unaccepted)&&!(it.peer&&sharedWorkerRunning(it.t)))groups.planned.push(it);
       else if(activeStates.includes(it.t.state))groups.active.push(it);
       else groups.done.push(it);
     }
@@ -1439,11 +1454,12 @@
   // Another computer's task (T-111): the window has only what that computer
   // shares, so the card shows it and says where the full history is.
   function renderSharedTask(t,p){
+    t=sharedDisplayTask(t);
     const thread=$('thread'),head=$('task-head');
     const title=el('div',undefined,'am-task-head');title.append(el('h3',t.title));
     title.append(el('p',(names[t.agent]||t.agent)+(t.model?' ('+modelName(t.model)+')':'')+tr(' на «')+sharedComputer(t,p)+tr('», задачу дал компьютер «')+p.name+'»','am-small am-muted'));
     const [statusText,statusCls,statusTip,from]=sharedStatus(t,p);
-    const when=t.finished_at?', '+clock(taskStart(t))+'–'+clock(t.finished_at):tr(', начата в ')+clock(taskStart(t));
+    const when=waitingForStartTime(t)?'':t.finished_at?', '+clock(taskStart(t))+'–'+clock(t.finished_at):tr(', начата в ')+clock(taskStart(t));
     const line=el('p',undefined,'am-small');line.append(statusLabel(statusText,statusCls,from),el('span',when,'am-muted'));
     if(statusTip)line.append(el('span',', '+statusTip,'am-muted'));
     if(t.tokens)line.append(el('span',', '+tokensText(t.tokens)+tr(' токенов'),'am-muted'));
@@ -1796,7 +1812,7 @@
     const displayModel=taskModelLabel(t);
     title.append(el('p',(names[t.agent]||t.agent)+(displayModel?' ('+displayModel+')':'')+where+tr(', папка ')+(t.folder||tr('ещё не известна'))+(t.remote&&!t.remote.from?'':t.full_access?tr(', любые команды разрешены'):tr(', без «Любых команд»')),'am-small am-muted'));
     const [statusText,statusCls,statusTip,from]=taskStatus(t);
-    const when=t.finished_at?', '+clock(taskStart(t))+'–'+clock(t.finished_at):tr(', начата в ')+clock(taskStart(t));
+    const when=waitingForStartTime(t)?'':t.finished_at?', '+clock(taskStart(t))+'–'+clock(t.finished_at):tr(', начата в ')+clock(taskStart(t));
     const line=el('p',undefined,'am-small');line.append(statusLabel(statusText,statusCls,from),el('span',when,'am-muted'));
     if(statusTip)line.append(el('span',', '+statusTip,'am-muted'));
     if(t.usage){const used=el('span',', '+usageShort(t.usage),'am-muted');used.title=usageLong(t.usage);line.append(used);}
@@ -2693,6 +2709,8 @@
     try{
       const next=await api('/api/server');
       if(gen===serverGen&&!serverBusy){
+        const sharedRuns=()=>JSON.stringify((view?.shared||[]).flatMap(p=>p.tasks.filter(t=>(!t.started_at||t.pending_launch||!peerFresh(p))&&sharedWorkerRunning(t)).map(t=>t.id)));
+        const previous=sharedRuns();
         server=next;
         // This snapshot started after the submission returned. Trust the
         // durable queue from here, regardless of the submission's reply.
@@ -2700,6 +2718,10 @@
           if(state!=='sending'&&updateCancelAttempts.get(key)===state&&(next.update_cancellations||state==='unknown'))updateCancelAttempts.delete(key);
         }
         renderServer();
+        if(previous!==sharedRuns()){
+          renderTaskList();
+          if(selectedShared)renderThread();
+        }
       }
     }
     catch(error){if(gen===serverGen&&!serverBusy){$('host-state').textContent=error.message;$('member-state').textContent='';}}

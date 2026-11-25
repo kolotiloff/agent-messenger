@@ -5,7 +5,37 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestRosterSeparatesContactFromAgentReports(t *testing.T) {
+	r := serve(t, t.TempDir())
+	code, err := r.b.Invite(r.addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	invite, err := ParseInvitation(code.Code)
+	if err != nil {
+		t.Fatal(err)
+	}
+	member, err := Register(ctx(t), invite, "Runner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.b.Report(member.DeviceID, Presence{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.b.db.Exec(`UPDATE presence SET reported_at=? WHERE peer=?`, time.Now().UTC().Add(-time.Minute).Format(time.RFC3339), member.DeviceID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.b.device(member.DeviceKey); err != nil {
+		t.Fatal(err)
+	}
+	peers, err := r.b.Roster(nil)
+	if err != nil || len(peers) != 1 || peers[0].Age < 60 || peers[0].ContactAge == nil || *peers[0].ContactAge >= 5 {
+		t.Fatalf("recent contact with old report: %+v %v", peers, err)
+	}
+}
 
 func TestPresenceRoster(t *testing.T) {
 	host := newService(t, t.TempDir())

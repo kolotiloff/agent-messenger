@@ -8,6 +8,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+**T-308** keeps computer contact separate from agent report freshness and lets fresh executor evidence move a task out of Planned before its launch event arrives. Go fixtures cover a delayed launch, stale worker evidence, and an active SQLite writer. WebKit and Chromium cover the computer card, task list and open thread with delayed data. The reported installation has not been inspected. See D-215.
+
 **T-305 refreshes the public GitHub page for 1.0.3.** The English screenshots use the released window assets and sample devices, projects and tasks. The landing page and its installation, network, task and update guides describe the released behavior.
 
 **[1.0.3, build 106](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.3-preview.106) is released** from `bb9afce6f290b4c029669dc8c19efcb8ddb67975`. [PR #200](https://github.com/kolotiloff/agent-messenger/pull/200) and its eight [client checks](https://github.com/kolotiloff/agent-messenger/actions/runs/45570210886) passed. All four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45572340945) passed, including discovery from 0.99. The public release has 22 uploaded assets. An independent check verified the public upgrade route, signatures, archive hashes and source revision for all five targets. Verification used fixture devices and did not install the update on the owner's computers.
