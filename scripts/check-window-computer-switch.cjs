@@ -120,6 +120,8 @@ const shots = process.env.SCREENSHOT_DIR;
       const offline = offlineMark.locator(':scope > svg');
       assert.equal((await online.boundingBox()).width, 14);
       assert.equal((await offline.boundingBox()).width, 14);
+      assert.equal((await online.boundingBox()).height, 14);
+      assert.equal((await offline.boundingBox()).height, 14);
       assert.equal(await online.evaluate(svg => getComputedStyle(svg).fill), 'none');
       assert.equal(await offline.evaluate(svg => getComputedStyle(svg).fill), 'none');
       assert.equal(await offline.locator('path').getAttribute('d'), await online.locator('path').getAttribute('d'));
@@ -151,6 +153,10 @@ const shots = process.env.SCREENSHOT_DIR;
           return [frame.left - icon.parentElement.getBoundingClientRect().left,
             icon.nextElementSibling.getBoundingClientRect().left - frame.right];
         }), [12, 10]);
+        assert(await mark.evaluate(icon=>{
+          const center=node=>{const box=node.getBoundingClientRect();return box.top+box.height/2;};
+          return Math.abs(center(icon.querySelector('svg'))-center(icon.nextElementSibling))<0.5;
+        }),'the online and offline icons align with their computer names');
       }
       if (shots) await page.screenshot({path: path.join(shots, `computer-switch-${scheme}.png`)});
       assert.deepEqual(errors, []);

@@ -24,6 +24,10 @@ This release adds T-290 through T-295. The coordinator gets a scoped advisory af
 
 Browser fixtures passed in WebKit and Chromium. The macOS desktop bridge passed the isolated start and reopen check. Live menu bar clicks, the original reported Windows run, and installation on the owner's fleet were not part of these checks.
 
+**T-304 and T-306 are ready for review for the next release.** Idle agents use the sidebar's muted text color. An expanded waiting task shows its model and short waiting status together in yellow, with the full reason on hover. When a computer is both the server and the active coordinator of the selected project, its heading shows both roles by name, with an abbreviation or icons when space is tight. See D-212 and D-213.
+
+**T-307** aligns the computer name and roles on a shared text baseline and centers the version and visible icons vertically. The monitor, role and update glyphs share a 14 px square. See D-214.
+
 **[1.0.1](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.1-preview.104) is released** from `f2f6f4ce92740eb6a9973d8b8730ea0462005c47`. All eight [client checks](https://github.com/kolotiloff/agent-messenger/actions/runs/45497895256/attempts/2) and all four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45504161598) passed. The public release has 22 assets and the signed upgrade check passed for all five targets. The installed fleet has not been upgraded as part of this release task.
 
 It includes Planned tasks, the remote stop delivery status, the synchronized update queue with five-minute expiry, the local computer stripe, and the confirmed model label. T-289 fixes three update state regressions. See [PR #196](https://github.com/kolotiloff/agent-messenger/pull/196) and the [audit report](reports/2026-11-25-t289-release-audit.md).

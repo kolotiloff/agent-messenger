@@ -2,6 +2,14 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-25 — Codex (T-307)
+
+- Aligned computer names and roles on a shared baseline, and centered the version and icon viewports. Matched the monitor, role and update glyph sizes. The browser fixtures cover alignment, online and offline markers, and updates on local and remote cards. [PR #202](https://github.com/kolotiloff/agent-messenger/pull/202).
+
+## 2026-11-25 — Codex (T-306)
+
+- Added the short yellow waiting label to expanded computer-card rows. Kept both roles on the heading line, with a short label and an icon fallback. The existing computer-card PR carries these changes and the idle-agent style.
+
 ## 2026-11-25 — Codex (T-305)
 
 - Refreshed the English task window in both themes, statistics, and first-launch screenshots from the 1.0.3 assets with fictional data. Updated the public overview and its setup, task, network and update instructions against the published release.
@@ -14,6 +22,10 @@ One entry per work session, newest first. Write what was done, which tool did it
 ## 2026-11-25 — Codex (T-303)
 
 - Replaced the composer actions and task context menu actions with the stop status while the request is pending. The context menu keeps up with broker acknowledgement even when the task list retains the original row. Added local, remote and refusal cases to the browser fixture.
+
+## 2026-11-25 — Codex (T-304)
+
+- Applied the muted text color to idle agent rows. Grouped the server and project coordinator roles with a comma, keeping them inline when the actual text and update controls fit. The window fixture narrows and widens the sidebar and verifies that the next refresh preserves the card.
 
 ## 2026-11-25 — Codex (T-301, T-302)
 
