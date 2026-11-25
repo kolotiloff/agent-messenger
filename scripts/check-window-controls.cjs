@@ -1250,7 +1250,8 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       // the restart; a failed install says so and offers to try again.
       const updateButton = page.locator('#app-update-button');
       await updateButton.waitFor({state: 'visible'});
-      assert(!(await updateButton.evaluate(b => b.classList.contains('am-update-loading'))), 'a found update shows a download ring');
+      assert.equal(await updateButton.locator('svg:visible').count(),1,'a found update shows one download glyph');
+      assert(await updateButton.locator('.am-update-spin').isHidden(),'a found update must stay still');
       assert.equal(await page.locator('#app-installed-version').innerText(),'v0.98');
       await updateButton.click();
       await page.locator('#update-dialog').waitFor({state: 'visible'});
