@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-25 — Codex (T-313 efficiency presentation)
+
+- Show exact fractions on hover or keyboard focus. Use a single background, rules between groups and an indented breakdown. Chromium and WebKit fixtures cover both ways of revealing the counts. [PR #209](https://github.com/kolotiloff/agent-messenger/pull/209).
+
 ## 2026-11-25 — Codex (T-313 efficiency details)
 
 - Renamed the control to Efficiency. Added rounded acceptance percentages and kept the exact fractions beside them. Moved the disclosure arrow before the model and aligned the detailed numbers in a table with a plain description of the 90% threshold. [PR #209](https://github.com/kolotiloff/agent-messenger/pull/209).

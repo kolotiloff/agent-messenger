@@ -2634,8 +2634,8 @@
       if(!cohorts.has(key)){
         const body=el('tbody'),heading=el('tr',undefined,'am-efficiency-cohort');
         const type=Object.hasOwn(types,group.task_type)?types[group.task_type]:group.task_type||tr('Без типа');
-        const label=el('th',type);label.scope='rowgroup';label.colSpan=5;
-        label.append(el('span',difficulties[group.difficulty]||tr('Без оценки сложности'),'am-small am-muted'));
+        const difficulty=difficulties[group.difficulty]||tr('Без оценки сложности');
+        const label=el('th',type+', '+difficulty.toLocaleLowerCase(amLocale));label.scope='rowgroup';label.colSpan=5;
         heading.append(label);body.append(heading);cohorts.set(key,body);
       }
       cohorts.get(key).append(...efficiencyRows(group,i));
@@ -2651,18 +2651,20 @@
     button.append(svgIcon(['M9 6l6 6-6 6']),el('span',model));
     button.addEventListener('click',()=>{details.hidden=!details.hidden;button.setAttribute('aria-expanded',String(!details.hidden));});
     const name=el('th');name.scope='row';name.append(button);row.append(name);
-    const rate=(value,total)=>{
+    const rate=(value,total,kind)=>{
       const cell=el('td');
       if(!total){cell.textContent='—';return cell;}
-      const label=el('span',undefined,'am-efficiency-rate');
-      label.append(el('span',Math.round(100*value/total)+'%'),el('span',value+'/'+total,'am-small am-muted'));
+      const label=el('span',Math.round(100*value/total)+'%','am-efficiency-rate');label.tabIndex=0;
+      const tip=el('span',value+'/'+total,'am-tip');tip.id='stats-efficiency-count-'+index+'-'+kind;tip.setAttribute('role','tooltip');
+      label.setAttribute('aria-describedby',tip.id);label.append(tip);
       cell.append(label);return cell;
     };
     const metric=(data,format)=>data?.samples?format(Math.round(data.median||0)):'—';
-    row.append(rate(group.accepted,group.tasks),rate(group.first_pass_accepted,group.first_pass_known),
+    row.append(rate(group.accepted,group.tasks,'accepted'),rate(group.first_pass_accepted,group.first_pass_known,'first-pass'),
       el('td',metric(group.accepted_new_input_plus_output,tokensText)),el('td',metric(group.time_to_acceptance_ms,statsDuration)));
 
     const panel=el('td');panel.colSpan=5;
+    const breakdown=el('div',undefined,'am-efficiency-breakdown');
     const metrics=el('table',undefined,'am-efficiency-metrics');
     metrics.setAttribute('aria-label',model);
     const headers=el('tr');metrics.createTHead().append(headers);
@@ -2678,9 +2680,9 @@
     addMetric(tr('Токены до приёмки'),group.accepted_new_input_plus_output,tokensText);
     addMetric(tr('Активная работа'),group.accepted_active_runtime_ms,statsDuration);
     addMetric(tr('Время до приёмки'),group.time_to_acceptance_ms,statsDuration);
-    panel.append(el('p',tr('Проверено ')+group.reviewed+'/'+group.tasks,'am-small am-muted'),metrics,
-      el('p',tr('В 90% задач расход или время были не выше указанного порога.'),'am-small am-muted'));
-    details.append(panel);
+    breakdown.append(metrics,el('p',tr('Проверено ')+group.reviewed+'/'+group.tasks+'. '+
+      tr('В 90% задач расход или время были не выше указанного порога.'),'am-small am-muted'));
+    panel.append(breakdown);details.append(panel);
     return [row,details];
   }
   async function exportStats(){
