@@ -723,3 +723,7 @@ Use the same muted color for idle agents and other secondary text in computer ca
 ## D-213 — Compact waiting rows and computer roles (T-306)
 
 The owner replaced the second-line role layout in D-212. Show both roles on the heading line. Use the full labels when they fit, abbreviate the coordinator label when needed, and show labeled icons when the abbreviation also needs more space. Use a single icon labeled with both roles if the update control leaves less room. Reassess after resizing or an update control changes the available space. In an expanded agent group, the model or task title and the short waiting status share one yellow line when space permits. The detailed reason, including who should reply, stays in the tooltip and in the task pane.
+
+## D-214 — Align the computer-card heading (T-307)
+
+Give the computer name and roles a common text baseline. The labels share a 21 px line box, with 13 px for roles and versions, and 14 px for the computer name. Center the version and draw the monitor, role and update glyphs in centered 14 px squares. Keep the larger clickable update control and the matched online dot and offline cross on the monitor.

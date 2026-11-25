@@ -265,17 +265,43 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const roles=localCard.locator('.am-machine-roles');
       await roles.waitFor();
       assert.equal(await localCard.locator('.am-machine-version').innerText(),'v1.0.3');
+      const checkHeading=async()=>{
+        const layout=await localCard.locator('.am-machine-name').evaluate(head=>{
+          const visible=selector=>[...head.querySelectorAll(selector)].filter(node=>node.getClientRects().length&&getComputedStyle(node).visibility==='visible');
+          const mid=node=>{const box=node.getBoundingClientRect();return box.top+box.height/2;};
+          const labels=visible('.am-machine-label,.am-machine-role,.am-version');
+          const icons=visible('.am-machine-presence > svg,.am-machine-role-icons svg,.am-card-update .am-update-icon > svg:not(.am-update-progress)');
+          const baselines=labels.filter(node=>!node.matches('.am-version')).map(node=>{
+            const marker=document.createElement('span');
+            marker.style.cssText='display:inline-block;width:0;height:0';
+            node.append(marker);const baseline=marker.getBoundingClientRect().top;marker.remove();
+            return baseline;
+          });
+          return {
+            centered:icons.every(node=>Math.abs(mid(node)-mid(head))<0.5)&&labels.every(node=>Math.abs(mid(node)-mid(head))<=1),
+            baselineAligned:Math.max(...baselines)-Math.min(...baselines)<0.5,
+            lineHeights:labels.map(node=>getComputedStyle(node).lineHeight),
+            sizes:icons.map(node=>{const box=node.getBoundingClientRect();return [box.width,box.height];}),
+          };
+        });
+        assert.equal(layout.centered,true,'every visible header item shares one vertical center');
+        assert.equal(layout.baselineAligned,true,'names and visible role labels share one text baseline');
+        assert.deepEqual([...new Set(layout.lineHeights)],['21px']);
+        assert.deepEqual(layout.sizes,Array.from({length:layout.sizes.length},()=>[14,14]));
+      };
       const splitter=page.getByRole('separator',{name:'Ширина левой панели'});
       const wide=localCard.locator('.am-machine-roles[data-form=full] > [data-form=full]');
       await splitter.press('Shift+ArrowRight');
       await splitter.press('Shift+ArrowRight');
       await wide.waitFor();
       assert.equal(await wide.textContent(),'сервер, координатор');
+      await checkHeading();
       await splitter.press('Home');
       for(let i=0;i<4;i++)await splitter.press('ArrowRight');
       const compact=localCard.locator('.am-machine-roles[data-form=short] > [data-form=short]');
       await compact.waitFor();
       assert.equal(await compact.textContent(),'сервер, коорд.');
+      await checkHeading();
       assert(await roles.evaluate(node=>{
         const head=node.parentElement,name=head.querySelector('.am-machine-label'),meta=head.querySelector('.am-machine-meta');
         const box=node.getBoundingClientRect(),top=name.getBoundingClientRect();
@@ -291,6 +317,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await icons.waitFor();
       assert.equal(await icons.getByRole('img',{name:'сервер',exact:true}).isVisible(),true);
       assert.equal(await icons.getByRole('img',{name:'координатор',exact:true}).isVisible(),true);
+      await checkHeading();
       const roleFits=()=>roles.evaluate(node=>{
         const head=node.parentElement,style=getComputedStyle(head);
         const meta=head.querySelector('.am-machine-meta').getBoundingClientRect();
@@ -307,6 +334,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const compactIcon=roles.getByRole('img',{name:'сервер, координатор',exact:true});
       await compactIcon.waitFor();
       assert(await localCard.locator('#app-update-button').isVisible());
+      await checkHeading();
       assert(await roleFits(),'the role mark fits alongside the version and the available update');
       await page.evaluate(()=>{
         window.messengerUpdateStatus({installedVersion:'1.0.3-preview.106'});

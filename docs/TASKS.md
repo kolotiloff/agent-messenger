@@ -15,6 +15,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
+| T-307 | Align computer-card headings and use one size for their visible icons. | agent | `codex/t304-computer-card-roles`, [PR #202](https://github.com/kolotiloff/agent-messenger/pull/202), D-214. |
 | T-306 | Make waiting tasks readable in expanded computer cards. | agent | `codex/t304-computer-card-roles`. The same PR carries the updated compact role labels. |
 | T-304 | Mute idle agents and fit both local computer roles in the heading. | agent | `codex/t304-computer-card-roles`, D-212. |
 | T-305 | Refresh the public GitHub page and English screenshots for the current release. | agent | `codex/t305-public-page-refresh`. Uses 1.0.3 window assets and fictional data. Includes the download, network, task and update guides. |

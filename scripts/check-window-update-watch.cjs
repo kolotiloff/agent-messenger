@@ -69,6 +69,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     const arrow=card.getByRole('button',{name:/Обновить до/});
     await arrow.waitFor();
     assert.match(await arrow.getAttribute('title'),/^Обновить до v/);
+    assert.deepEqual(await arrow.locator('svg').evaluate(svg=>{
+      const box=svg.getBoundingClientRect(),head=svg.closest('.am-machine-name').getBoundingClientRect();
+      return [box.width,box.height,Math.abs(box.top+box.height/2-head.top-head.height/2)<0.5];
+    }),[14,14,true]);
     const row=page.locator('#task-list .am-task').filter({hasText:task.title});
     if(!await row.isVisible() && await page.locator('#list-toggle').getAttribute('aria-expanded')==='false')await page.locator('#list-toggle').click();
     await row.waitFor();

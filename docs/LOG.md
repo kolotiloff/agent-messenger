@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-25 — Codex (T-307)
+
+- Aligned computer names and roles on a shared baseline, and centered the version and icon viewports. Matched the monitor, role and update glyph sizes. The browser fixtures cover alignment, online and offline markers, and updates on local and remote cards. [PR #202](https://github.com/kolotiloff/agent-messenger/pull/202).
+
 ## 2026-11-25 — Codex (T-306)
 
 - Added the short yellow waiting label to expanded computer-card rows. Kept both roles on the heading line, with a short label and an icon fallback. The existing computer-card PR carries these changes and the idle-agent style.
