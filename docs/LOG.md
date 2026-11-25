@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-25 — Codex (1.0.4 release, T-304, T-306–T-308)
+
+- Combined [PR #202](https://github.com/kolotiloff/agent-messenger/pull/202) and [PR #204](https://github.com/kolotiloff/agent-messenger/pull/204). The full Go check and all six window fixture scripts passed on the integrated source in Chromium and WebKit.
+- Published [1.0.4, build 107](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.4-preview.107) from `4822cfd` with 22 assets. All four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45626722653) passed, including the signed upgrade check on all five targets.
+
 ## 2026-11-25 — Codex (T-308)
 
 - Separated authenticated contact from agent report freshness on the broker and in the window. Kept presence reads independent of other SQLite writers. A current worker report takes precedence over a queued launch in the task views for that executor and task ID. [PR #204](https://github.com/kolotiloff/agent-messenger/pull/204).
