@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-25 — Codex (T-313 efficiency details)
+
+- Renamed the control to Efficiency. Added rounded acceptance percentages and kept the exact fractions beside them. Moved the disclosure arrow before the model and aligned the detailed numbers in a table with a plain description of the 90% threshold. [PR #209](https://github.com/kolotiloff/agent-messenger/pull/209).
+
 ## 2026-11-25 — Codex (T-313 comparison layout)
 
 - Renamed the control to Model comparison and separated the summary from row details. The initial table has acceptance counts and medians. Group headings identify comparable work. Chromium and WebKit fixtures verified row disclosure and filter behavior. [PR #209](https://github.com/kolotiloff/agent-messenger/pull/209).

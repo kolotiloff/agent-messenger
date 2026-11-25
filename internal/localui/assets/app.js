@@ -2614,7 +2614,7 @@
     try{
       const result=await api('/api/usage-efficiency?'+new URLSearchParams(filters),25000);
       if(gen!==efficiencyGen)return;
-      if(result.project!==filters.project||!Array.isArray(result.groups))throw Error(tr('Сравнение моделей недоступно.'));
+      if(result.project!==filters.project||!Array.isArray(result.groups))throw Error(tr('Эффективность моделей недоступна.'));
       renderEfficiencyGroups(result.groups);
       wrap.hidden=!result.groups.length;
       status.textContent=!result.groups.length?tr('В этом периоде нет исходных задач для сравнения.'):
@@ -2648,29 +2648,38 @@
     const model=(names[group.agent]||group.agent)+' '+(group.model?modelName(group.model):tr('Модель неизвестна'));
     const button=el('button',undefined,'am-efficiency-expand');button.type='button';button.title=model;
     button.setAttribute('aria-expanded','false');button.setAttribute('aria-controls',details.id);
-    button.append(el('span',model),svgIcon(['M9 6l6 6-6 6']));
+    button.append(svgIcon(['M9 6l6 6-6 6']),el('span',model));
     button.addEventListener('click',()=>{details.hidden=!details.hidden;button.setAttribute('aria-expanded',String(!details.hidden));});
     const name=el('th');name.scope='row';name.append(button);row.append(name);
-    const fraction=(value,total)=>total?value+tr(' из ')+total:'—';
+    const rate=(value,total)=>{
+      const cell=el('td');
+      if(!total){cell.textContent='—';return cell;}
+      const label=el('span',undefined,'am-efficiency-rate');
+      label.append(el('span',Math.round(100*value/total)+'%'),el('span',value+'/'+total,'am-small am-muted'));
+      cell.append(label);return cell;
+    };
     const metric=(data,format)=>data?.samples?format(Math.round(data.median||0)):'—';
-    row.append(el('td',fraction(group.accepted,group.tasks)),el('td',fraction(group.first_pass_accepted,group.first_pass_known)),
+    row.append(rate(group.accepted,group.tasks),rate(group.first_pass_accepted,group.first_pass_known),
       el('td',metric(group.accepted_new_input_plus_output,tokensText)),el('td',metric(group.time_to_acceptance_ms,statsDuration)));
 
     const panel=el('td');panel.colSpan=5;
-    const metrics=el('div',undefined,'am-efficiency-metrics');
+    const metrics=el('table',undefined,'am-efficiency-metrics');
+    metrics.setAttribute('aria-label',model);
+    const headers=el('tr');metrics.createTHead().append(headers);
+    for(const title of [tr('Показатель'),tr('Среднее'),tr('Медиана'),tr('Порог для 90%'),tr('Задач')]){
+      const heading=el('th',title);heading.scope='col';headers.append(heading);
+    }
+    const measurements=metrics.createTBody();
     const addMetric=(title,data,format)=>{
-      const section=el('div');section.append(el('h4',title));
-      if(!data?.samples){section.append(el('p',tr('Нет данных'),'am-small am-muted'));metrics.append(section);return;}
-      const list=el('dl');
-      for(const [label,value] of [[tr('Среднее'),data.mean],[tr('Медиана'),data.median],['P90',data.p90]]){
-        list.append(el('dt',label),el('dd',format(Math.round(value||0))));
-      }
-      section.append(list,el('p',tasksWord(data.samples),'am-small am-muted'));metrics.append(section);
+      const line=el('tr'),name=el('th',title);name.scope='row';line.append(name);
+      for(const value of [data?.mean,data?.median,data?.p90])line.append(el('td',data?.samples?format(Math.round(value||0)):'—'));
+      line.append(el('td',data?.samples?.toLocaleString(amLocale)||'—','am-muted'));measurements.append(line);
     };
     addMetric(tr('Токены до приёмки'),group.accepted_new_input_plus_output,tokensText);
     addMetric(tr('Активная работа'),group.accepted_active_runtime_ms,statsDuration);
     addMetric(tr('Время до приёмки'),group.time_to_acceptance_ms,statsDuration);
-    panel.append(el('p',tr('Проверено ')+fraction(group.reviewed,group.tasks)+' · '+tr('Вход без кэша и выход.'),'am-small am-muted'),metrics);
+    panel.append(el('p',tr('Проверено ')+group.reviewed+'/'+group.tasks,'am-small am-muted'),metrics,
+      el('p',tr('В 90% задач расход или время были не выше указанного порога.'),'am-small am-muted'));
     details.append(panel);
     return [row,details];
   }
