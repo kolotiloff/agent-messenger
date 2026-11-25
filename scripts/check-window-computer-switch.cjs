@@ -116,17 +116,33 @@ const shots = process.env.SCREENSHOT_DIR;
       assert.deepEqual(spacing, Array.from({length: 8}, () => ['4px', '4px', '12px', '12px']));
       const onlineMark = card('ПК-2').getByRole('img', {name: 'На связи'});
       const offlineMark = card('Ноутбук').getByRole('img', {name: 'Нет связи'});
-      const online = onlineMark.locator('svg');
-      const offline = offlineMark.locator('svg');
+      const online = onlineMark.locator(':scope > svg');
+      const offline = offlineMark.locator(':scope > svg');
       assert.equal((await online.boundingBox()).width, 14);
       assert.equal((await offline.boundingBox()).width, 14);
       assert.equal(await online.evaluate(svg => getComputedStyle(svg).fill), 'none');
-      const dot = await onlineMark.evaluate(mark => {
-        const style = getComputedStyle(mark, '::after');
-        return [style.width, style.backgroundColor, style.insetInlineEnd, style.insetBlockEnd];
+      assert.equal(await offline.evaluate(svg => getComputedStyle(svg).fill), 'none');
+      assert.equal(await offline.locator('path').getAttribute('d'), await online.locator('path').getAttribute('d'));
+      const dot = onlineMark.locator('.am-machine-signal');
+      const cross = offlineMark.locator('.am-machine-signal');
+      const geometry = signal => signal.evaluate(node => {
+        const style = getComputedStyle(node);
+        return [style.width, style.height, style.insetInlineEnd, style.insetBlockEnd];
       });
-      assert.deepEqual(dot, ['8px', scheme === 'dark' ? 'rgb(76, 219, 134)' : 'rgb(22, 132, 76)', '-3px', '-1px']);
-      assert.equal(await offlineMark.evaluate(mark => getComputedStyle(mark, '::after').content), 'none');
+      assert.deepEqual(await geometry(dot), ['8px', '8px', '-3px', '-1px']);
+      assert.deepEqual(await geometry(cross), await geometry(dot));
+      assert.equal(await dot.evaluate(node => getComputedStyle(node).backgroundColor),
+        scheme === 'dark' ? 'rgb(76, 219, 134)' : 'rgb(22, 132, 76)');
+      assert.equal(await cross.evaluate(node => getComputedStyle(node).backgroundColor), 'rgba(0, 0, 0, 0)');
+      const crossGlyph = await cross.locator('path').evaluate(path => {
+        const style = getComputedStyle(path), stroke = parseFloat(style.strokeWidth);
+        const shape = path.getBBox(), scale = path.getScreenCTM();
+        return {color: style.stroke, cap: style.strokeLinecap,
+          width: (shape.width + stroke) * scale.a, height: (shape.height + stroke) * scale.d};
+      });
+      assert.equal(crossGlyph.color, scheme === 'dark' ? 'rgb(242, 139, 130)' : 'rgb(180, 35, 24)');
+      assert.equal(crossGlyph.cap, 'round');
+      assert(Math.abs(crossGlyph.width - 8) < 0.001 && Math.abs(crossGlyph.height - 8) < 0.001);
       assert.equal(await offlineMark.evaluate(mark => getComputedStyle(mark.nextElementSibling).color),
         await offlineMark.evaluate(mark => getComputedStyle(mark).color));
       for (const mark of [onlineMark, offlineMark]) {
@@ -134,10 +150,8 @@ const shots = process.env.SCREENSHOT_DIR;
           const frame = icon.getBoundingClientRect();
           return [frame.left - icon.parentElement.getBoundingClientRect().left,
             icon.nextElementSibling.getBoundingClientRect().left - frame.right];
-        }), [12, 12]);
+        }), [12, 10]);
       }
-      assert.equal(await offline.evaluate(svg => getComputedStyle(svg).fill), 'none');
-      assert.match(await offline.locator('path').getAttribute('d'), /M2 2l20 20/);
       if (shots) await page.screenshot({path: path.join(shots, `computer-switch-${scheme}.png`)});
       assert.deepEqual(errors, []);
       await context.close();

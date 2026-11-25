@@ -664,7 +664,7 @@ The window orders numbered builds by their numeric suffix, following D-196. A re
 
 ## D-199 — Compact computer cards and macOS menu bar clicks (T-292, T-293)
 
-Use a shared gray header, the same gray body on every computer card, and an accent tint on the local header. Selection changes the border. Presence uses a gray monitor with a large green dot while online and a gray crossed monitor with a muted computer name while offline. Space the presence icon equally from the left of the header and the computer name. The macOS menu bar button opens or restores the window on primary click. Its context menu supplies Open Window and Quit on secondary click.
+Use a shared gray header, the same gray body on every computer card, and an accent tint on the local header. Selection changes the border. A gray outlined monitor has a green dot while online and a bold red cross while offline. Both markers occupy the same 8 by 8 px area at the lower-right corner. Keep the monitor outline visible through the cross. Mute offline names and use a 10 px gap after the monitor. The macOS menu bar button opens or restores the window on primary click. Its context menu supplies Open Window and Quit on secondary click.
 
 ## D-200 — Show a queued update cancellation (T-294)
 

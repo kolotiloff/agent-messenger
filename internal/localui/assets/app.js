@@ -774,9 +774,11 @@
     mark.title=online?tr('На связи'):tr('Нет связи');
     mark.setAttribute('role','img');
     mark.setAttribute('aria-label',mark.title);
-    mark.append(svgIcon(online
-      ?['M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2ZM12 17v3M8 20h8']
-      :['M9 4h11a2 2 0 0 1 2 2v8M2 6v9a2 2 0 0 0 2 2h12M12 17v3M8 20h8M2 2l20 20']));
+    const signal=el('span',undefined,'am-machine-signal');
+    signal.setAttribute('aria-hidden','true');
+    // With the seven-unit round stroke, both diagonals span the 24-unit view box.
+    if(!online)signal.append(svgIcon(['M3.5 3.5l17 17M20.5 3.5l-17 17']));
+    mark.append(svgIcon(['M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2ZM12 17v3M8 20h8']),signal);
     return mark;
   }
   function renderMachines(){

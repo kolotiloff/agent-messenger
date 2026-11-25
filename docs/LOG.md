@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-25 — Codex (T-292)
+
+- Implemented the approved red offline cross. The cross and online dot share an 8 by 8 px footprint and position. The gap to the computer name follows the approved mockup. [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198).
+
 ## 2026-11-25 — Codex (T-295)
 
 - Reviewed window tooltip wording. Gave the cancel-update control a short action label and exposed its status separately. Normalized update, server and task hover text in both dictionaries. [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198).
