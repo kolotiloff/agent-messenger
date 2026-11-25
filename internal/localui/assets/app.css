@@ -849,7 +849,7 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-stats-table th { font-size:var(--am-text-xs); font-weight:400; color:var(--am-muted); border-bottom:1px solid var(--am-line); }
 #am-concept .am-stats-table td:nth-child(n+3), #am-concept .am-stats-table th:nth-child(n+3) { text-align:right; }
 #am-concept .am-efficiency-table { table-layout:auto; }
-#am-concept .am-efficiency-table > thead th:first-child { width:36%; }
+#am-concept .am-efficiency-table > thead th:first-child { width:42%; }
 #am-concept .am-efficiency-table > thead th { white-space:nowrap; }
 #am-concept .am-efficiency-table > thead th:nth-child(n+2),
 #am-concept .am-efficiency-row > td { text-align:right; }
