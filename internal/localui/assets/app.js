@@ -304,7 +304,7 @@
     if(t.remote?.lost&&!t.remote.from&&activeStates.includes(t.state))
       return [tr('Связь потеряна, исход неизвестен'),'am-muted',t.remote.last_seen?'«'+t.remote.name+tr('» не на связи с ')+stamp(t.remote.last_seen):'«'+t.remote.name+tr('» больше нет в сети')];
     if(activeStates.includes(t.state)&&stopProgress(t)){
-      if(t.remote.silent)return [tr('Остановка не подтверждена'),'am-status-wait'];
+      if(t.remote?.silent)return [tr('Остановка не подтверждена'),'am-status-wait'];
       return [tr('Ждём завершения задачи…'),'am-status-wait'];
     }
     // T-137: sent to another computer that has not said it took the task.
@@ -627,6 +627,32 @@
     const running=active.filter(t=>t.state==='running'),waiting=active.filter(t=>t.state!=='running');
     return {running,waiting,counts:{running:running.length,waiting_owner:waiting.length}};
   }
+  function sidebarTaskModel(task){
+    // Shared rows already carry the worker's confirmed model in model.
+    const model=task.shared?task.model:task.ran_model;
+    return model?modelName(model).replace(/ Medium$/,' Med'):'';
+  }
+  function parallelAgentLine(computer,provider,state,running,waiting){
+    const group=el('details',undefined,'am-agent-parallel am-agent-'+state);
+    group.dataset.provider=provider;
+    group.dataset.agentGroup=JSON.stringify([computer,provider]);
+    group.addEventListener('click',event=>event.stopPropagation());
+    const summary=el('summary'),label=el('span',shortNames[provider]||provider,state==='run'?'am-agent-running-label':'');
+    label.append(el('span',', '+tasksWord(running.length+waiting.length),'am-agent-count'));
+    summary.append(label,svgIcon(['M6 9l6 6 6-6']));
+    const list=el('ul',undefined,'am-agent-parallel-list');
+    for(const task of [...running,...waiting]){
+      const model=sidebarTaskModel(task),row=el('li',undefined,task.state==='running'?'am-agent-parallel-running':'');
+      const name=el('span',model||task.title||shortNames[provider]||provider,model?'am-agent-model':'');
+      if(model&&task.title)name.title=task.title;
+      const [text,status,,from]=taskStatus(task);
+      const timing=from&&Number.isFinite(Date.parse(from))?elapsedLabel(from,'','am-muted'):el('span',text,status);
+      row.append(name,timing);
+      list.append(row);
+    }
+    group.append(summary,list);
+    return group;
+  }
   function agentLines(agents,coordinatorClient,live,computer,busyTasks){
     const lines=el('div',undefined,'am-machine-agents');
     const [coordProvider,coordLabel]=coordinatorClient!==null?coordinatorName(coordinatorClient):['',''];
@@ -642,23 +668,21 @@
       // still open.
       const {running,waiting,counts}=agentActivity(busyTasks.get(computer+'\0'+provider)||[]);
       const [state,text]=live?agentState(counts):['offline',tr('Нет связи')];
+      if(live&&running.length+waiting.length>1){
+        lines.append(parallelAgentLine(computer,provider,state,running,waiting));
+        continue;
+      }
       // A busy agent says so to the right of its name: «работает» in blue,
       // «ждёт ответа» in yellow. A free agent is just its name.
       const line=el('div',undefined,'am-agent-line am-agent-'+state);line.dataset.provider=provider;
-      line.title=(names[provider]||provider)+(a?': '+text:'')+(state==='run'&&counts.waiting_owner>0?', '+tr('ждёт ответа')+' ('+counts.waiting_owner+')':'');
+      line.title=(names[provider]||provider)+(a?': '+text:'');
       const identity=el('span',shortNames[provider]||provider,state==='run'?'am-agent-running-label':'');
       line.append(identity);
       if(state==='run'||state==='wait'){
-        const tasks=state==='run'?running:waiting;
-        const dates=tasks.map(taskStart).filter(at=>Number.isFinite(Date.parse(at)));
-        const first=dates.reduce((old,at)=>!old||Date.parse(at)<Date.parse(old)?at:old,'');
-        // Shared task lists already put the worker's reported model in model.
-        const models=[...new Set(tasks.map(t=>t.shared?t.model:t.ran_model).filter(Boolean).map(modelName))];
-        if(models.length)identity.append(' ',el('span',models.map(m=>m.replace(/ Medium$/,' Med')).join(', '),'am-agent-model'));
-        const total=counts.running+counts.waiting_owner;
-        const count=total>1?'('+total+')':'';
-        if(state==='run'&&first)line.append(elapsedLabel(first,count?count+' ':'','am-agent-status'));
-        else line.append(el('span',(state==='wait'?tr('ждёт ответа'):tr('работает'))+(count?' '+count:''),'am-agent-status'));
+        const task=running[0]||waiting[0],model=sidebarTaskModel(task),from=taskStart(task);
+        if(model)identity.append(' ',el('span',model,'am-agent-model'));
+        if(state==='run'&&Number.isFinite(Date.parse(from)))line.append(elapsedLabel(from,'','am-agent-status'));
+        else line.append(el('span',state==='wait'?tr('ждёт ответа'):tr('работает'),'am-agent-status'));
       }else if(!live){
         line.append(el('span',tr('нет связи'),'am-agent-status'));
       }
@@ -810,6 +834,11 @@
     collectNotices();
     pickedComputers=new Set();
     const live=$('machines'),box=live.cloneNode(false),busyTasks=busyTasksByComputer();
+    const scope=JSON.stringify([project,updateNetwork()]);
+    const sameScope=live.dataset.agentScope===scope;
+    const expanded=sameScope?new Set([...live.querySelectorAll('.am-agent-parallel[open]')].map(group=>group.dataset.agentGroup)):new Set();
+    const focused=sameScope&&live.contains(document.activeElement)?document.activeElement.closest('.am-agent-parallel')?.dataset.agentGroup:'';
+    live.dataset.agentScope=scope;
     const machine=el('div',undefined,'am-machine-card');machine.setAttribute('aria-current','true');pickable(machine,'local');
     // This computer's version and update button are moved into its header
     // by placeLocalParts, alongside the same status icon as on remote cards.
@@ -891,12 +920,16 @@
     const rank=new Map(machineOrder.map((key,index)=>[key,index]));
     const ranks=card=>rank.get(card.dataset.machineOrder)??machineOrder.length;
     box.append(...[...box.children].sort((a,b)=>ranks(a)-ranks(b)));
+    for(const group of box.querySelectorAll('.am-agent-parallel'))group.open=expanded.has(group.dataset.agentGroup);
     // The moved elements are left out of the comparison, so an unchanged
     // list keeps its nodes; before a rebuild they go back to the bottom row,
     // or they would leave the page with the old card.
     const copy=live.cloneNode(true);
     for(const id of localParts)copy.querySelector('#'+id)?.remove();
-    if(copy.innerHTML!==box.innerHTML){parkLocalParts();live.replaceChildren(...box.childNodes);}
+    if(copy.innerHTML!==box.innerHTML){
+      parkLocalParts();live.replaceChildren(...box.childNodes);
+      if(focused)live.querySelector('[data-agent-group="'+CSS.escape(focused)+'"] > summary')?.focus({preventScroll:true});
+    }
     placeLocalParts();
     // T-271: only the highlighted card shows the chosen computer, so a
     // computer that left the list no longer filters anything.

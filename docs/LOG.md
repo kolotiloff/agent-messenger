@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-25 — Codex (T-301, T-302)
+
+- Replaced the write-locking idle computer lookup in coordinator `wait` with read-only snapshots. Tested a ready report during a concurrent SQLite write and project isolation in split storage. The writer-held delivery probe improved from about 1.27 seconds to 0.23 seconds.
+- Implemented the owner's selected computer-card disclosure. It lists each active task and keeps its state and keyboard focus when the card redraws.
+
 ## 2026-11-25 — Codex (T-300)
 
 - Confirmed with both macOS Codex binaries that an isolated App Server can start a new turn in the same chat through `codex queue --resume`, using simulated model responses. A second probe without shared server access returned a warning and left the chat idle. The owner closed T-300 after the current desktop setup did not expose the expected control socket. Recorded D-208.

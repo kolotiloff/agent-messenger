@@ -400,6 +400,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       let releaseStop;
       const stopResponse = new Promise(resolve => { releaseStop = resolve; });
       let codexWaiting = true;
+      let thirdCodexTask = false;
       let runnerAgents = [{agent:'cursor',running:1},{agent:'claude',waiting_owner:1},{agent:'codex',running:1,waiting_owner:1}];
       let runnerWorkers = [];
       const ownerNotes = [];
@@ -421,6 +422,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           shared: project==='Frame'?[{peer: 'host', name: 'Giver', age: 1, tasks: [
             {id: 'sent', project: 'Frame', title: 'Sent task', agent: 'cursor', state: 'running', created_at: began, started_at: began, model: 'composer-2.5[effort=medium]', runs_on_peer: 'dev-1', runs_on: 'Old name'},
             ...(codexWaiting?[{id:'codex-waiting',project:'Frame',title:'Queued answer',agent:'codex',state:'waiting_coordinator',created_at:began,runs_on_peer:'dev-1'}]:[]),
+            ...(thirdCodexTask?[{id:'third-codex',project:'Frame',title:'Third task',agent:'codex',state:'running',created_at:began,model:'gpt-6.2-sol[effort=high]',runs_on_peer:'dev-1'}]:[]),
             {id: 'own', project: 'Frame', title: 'Own task', agent: 'codex', state: 'running', created_at: '2026-11-15T09:00:00Z'},
             {id: 'old-1', project: 'Frame', title: 'Old 1', agent: 'codex', state: 'done', created_at: '2026-11-14T09:00:00Z', finished_at: ended},
             {id: 'old-2', project: 'Frame', title: 'Old 2', agent: 'codex', state: 'failed', created_at: '2026-11-14T08:00:00Z', finished_at: '2026-11-14T08:30:00Z'}]}]:[]}});
@@ -541,10 +543,34 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert(Math.abs(waitingStatusBox.x-waitingLabelBox.x-waitingLabelBox.width)<1,'waiting status must sit directly beside the model');
       const overlappingAgent=runner.locator('.am-agent-run[data-provider=codex]');
       assert.equal(await overlappingAgent.locator('.am-agent-model').count(),0);
-      assert.equal(await overlappingAgent.locator('.am-agent-running-label').innerText(),'Codex');
-      assert.equal(await overlappingAgent.locator('.am-agent-status').textContent(),'(2) 3 мин');
-      assert.equal(await overlappingAgent.locator('.am-agent-status').evaluate(node=>getComputedStyle(node,'::before').content),'", "');
-      assert.match(await overlappingAgent.getAttribute('title'),/, ждёт ответа \(1\)/);
+      const summary=overlappingAgent.locator('summary');
+      assert.equal(await summary.innerText(),'Codex, 2 задачи');
+      const details=overlappingAgent.locator('.am-agent-parallel-list');
+      assert.equal(await details.isVisible(),false);
+      const cardSelection=await runner.getAttribute('aria-pressed');
+      await summary.click();
+      assert.equal(await details.isVisible(),true);
+      assert.equal(await runner.getAttribute('aria-pressed'),cardSelection);
+      assert.match(await details.innerText(),/Remote task\s+3 мин/);
+      assert.match(await details.innerText(),/Queued answer\s+Ждёт ответа координатора/);
+      await summary.focus();
+      thirdCodexTask=true;
+      await summary.getByText('3 задачи',{exact:false}).waitFor();
+      assert.equal(await details.isVisible(),true,'an expanded group stays open when another task arrives');
+      assert.equal(await summary.evaluate(node=>document.activeElement===node),true);
+      assert.equal(await details.getByText('Sol 6.2 High',{exact:true}).isVisible(),true);
+      assert(await runner.evaluate(node=>{
+        node.style.width='166px';
+        const body=node.querySelector('.am-machine-body'),arrow=node.querySelector('.am-agent-parallel summary > svg');
+        const gap=body.getBoundingClientRect().right-arrow.getBoundingClientRect().right;
+        const fits=body.scrollWidth<=body.clientWidth&&Math.abs(gap-parseFloat(getComputedStyle(body).paddingRight))<1;
+        node.style.removeProperty('width');
+        return fits;
+      }),'three tasks must retain the right inset on a narrow computer card');
+      await summary.press('Enter');
+      assert.equal(await details.isVisible(),false);
+      thirdCodexTask=false;
+      await summary.getByText('2 задачи',{exact:false}).waitFor();
       const chooseProject = async name => {
         await page.locator('[aria-controls="project-select-menu"]').click();
         await page.getByRole('option',{name,exact:true}).click();
@@ -823,7 +849,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await remoteHead.getByText(/Astra 6\.2 High/).waitFor();
       assert.equal(await remoteList.locator('.am-task-model').textContent(),'Astra 6.2 High');
       assert.equal(await remoteAgent.locator('.am-agent-model').textContent(),'Astra 6.2 High');
-      assert.equal(await remoteAgent.locator('.am-agent-status').evaluate(node=>getComputedStyle(node,'::before').content),'", "');
+      await remoteAgent.locator('summary').click();
       await page.evaluate(() => {
         const now=Date.now.bind(Date);
         window.elapsedSample=document.querySelector('#thread .am-rich');
@@ -834,7 +860,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         const row=[...document.querySelectorAll('.am-task')].find(node=>node.textContent.includes('Remote task'));
         const right=row?.querySelector('[data-elapsed-from]');
         const center=document.querySelector('#task-head [data-elapsed-from]');
-        return sidebar?.textContent==='(2) 4 мин'&&right?.textContent==='Работает 4 мин'&&center?.textContent===right.textContent;
+        return sidebar?.textContent==='4 мин'&&right?.textContent==='Работает 4 мин'&&center?.textContent===right.textContent;
       });
       assert.equal(await page.evaluate(()=>window.elapsedSample===document.querySelector('#thread .am-rich')),true);
       // Keep the broker and feed stale while the task row records completion.

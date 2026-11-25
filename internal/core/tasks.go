@@ -3200,44 +3200,68 @@ var idleKinds = map[string]bool{"report": true, "failed": true, "cancelled": tru
 // and that run no task of the project now (coordinator list row 31), so
 // machines do not stand still between tasks unnoticed.
 func (s *Store) IdleComputers(project string, events []TaskEvent) ([]string, error) {
+	var completed []string
+	for _, e := range events {
+		if idleKinds[e.Kind] {
+			completed = append(completed, e.TaskID)
+		}
+	}
+	if len(completed) == 0 {
+		return nil, nil
+	}
+	scoped, err := s.projectStore(project)
+	if err != nil {
+		return nil, err
+	}
+	// A report is already committed by this point. Reading its computer
+	// must not wait for a writer just to populate the optional idle list.
+	ctx := context.Background()
+	options := &sql.TxOptions{ReadOnly: true}
+	machine, err := s.db.BeginTx(ctx, options)
+	if err != nil {
+		return nil, err
+	}
+	defer machine.Rollback()
+	tasks := machine
+	if scoped != s {
+		tasks, err = scoped.db.BeginTx(ctx, options)
+		if err != nil {
+			return nil, err
+		}
+		defer tasks.Rollback()
+	}
+	self, err := metaValue(machine, "computer_id")
+	if err != nil {
+		return nil, err
+	}
 	seen := map[string]bool{}
 	var out []string
-	err := s.tx(func(tx *sql.Tx) error {
-		self, err := localComputer(tx)
-		if err != nil {
-			return err
+	for _, id := range completed {
+		var computer string
+		if err := tasks.QueryRow(`SELECT computer FROM tasks WHERE id=? AND project=?`, id, project).Scan(&computer); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				continue
+			}
+			return nil, err
 		}
-		for _, e := range events {
-			if !idleKinds[e.Kind] {
-				continue
-			}
-			var computer string
-			if err := tx.QueryRow(`SELECT computer FROM tasks WHERE id=? AND project=?`, e.TaskID, project).Scan(&computer); err != nil {
-				if errors.Is(err, sql.ErrNoRows) {
-					continue
-				}
-				return err
-			}
-			if seen[computer] {
-				continue
-			}
-			seen[computer] = true
-			var running int
-			if err := tx.QueryRow(`SELECT COUNT(*) FROM tasks WHERE project=? AND computer=? AND state='running' AND COALESCE(origin_broker,'')=''`, project, computer).Scan(&running); err != nil {
-				return err
-			}
-			if running > 0 {
-				continue
-			}
-			name := peerName(tx, computer)
-			if computer == self {
-				if name, err = computerName(tx); err != nil {
-					return err
-				}
-			}
-			out = append(out, name)
+		if seen[computer] {
+			continue
 		}
-		return nil
-	})
-	return out, err
+		seen[computer] = true
+		var running bool
+		if err := tasks.QueryRow(`SELECT EXISTS(SELECT 1 FROM tasks WHERE project=? AND computer=? AND state='running' AND COALESCE(origin_broker,'')='')`, project, computer).Scan(&running); err != nil {
+			return nil, err
+		}
+		if running {
+			continue
+		}
+		name := peerName(machine, computer)
+		if computer == self {
+			if name, err = computerName(machine); err != nil {
+				return nil, err
+			}
+		}
+		out = append(out, name)
+	}
+	return out, nil
 }

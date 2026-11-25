@@ -8,6 +8,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+**T-301 and T-302 are in the release queue.** A ready report can leave coordinator `wait` while SQLite has a concurrent writer, with its project-specific idle computer list intact. A computer with several tasks for one agent shows a compact task count and opens an inline model and status list. The selected group stays open through data refreshes.
+
 **T-300 is closed.** The owner removed idle Codex wake-up from the plan after the probe confirmed that it needs access to the App Server for the same chat. The current desktop setup did not expose the default control socket. See D-208.
 
 **T-298 and T-299 extend the 1.0.2 follow-up.** A confirmed queued update can be cancelled during a delayed roster refresh. The target still checks the exact request and installation phase. Messenger also checks for helper logs older than seven days on startup and at most once a day while writing the journal. The current output files and the most recent useful diagnostics are kept. The owner's Mac journal showed queued requests but did not record the window's roster snapshot.

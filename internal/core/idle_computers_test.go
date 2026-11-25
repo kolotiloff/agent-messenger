@@ -1,6 +1,8 @@
 package core
 
 import (
+	"context"
+	"database/sql"
 	"slices"
 	"testing"
 )
@@ -34,5 +36,51 @@ func TestIdleComputersInListAgents(t *testing.T) {
 	out, _ = f.st.ProjectAgents("Game")
 	if _, ok := out["idle_computers"]; ok {
 		t.Fatalf("a computer with a running task is idle: %v", out["idle_computers"])
+	}
+}
+
+func TestIdleComputersReadsSplitProjectWhileWritersHoldBothDatabases(t *testing.T) {
+	f := newSplitRunFixture(t)
+	st, err := openSplitStore(context.Background(), f.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := st.SetComputerName("Fixture Mac"); err != nil {
+		t.Fatal(err)
+	}
+	start := func(project, op string) string {
+		t.Helper()
+		id, _, err := st.StartTask(StartTaskRequest{Project: project, OpID: op, Provider: "codex", Text: "Fixture"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	finished := start("Game", "finished")
+	stillRunning := start("Game", "another")
+	start("Site", "isolated")
+	if _, err := st.CancelTask(finished); err != nil {
+		t.Fatal(err)
+	}
+	events := []TaskEvent{{TaskID: finished, Kind: "cancelled"}, {TaskID: finished, Kind: "cancelled"}}
+	if idle, err := st.IdleComputers("Game", events); err != nil || len(idle) != 0 {
+		t.Fatalf("computer with a running Game task: %v %v", idle, err)
+	}
+	if _, err := st.CancelTask(stillRunning); err != nil {
+		t.Fatal(err)
+	}
+	for _, db := range []*sql.DB{f.computer, f.projects[projectMigrationFile("Game")]} {
+		tx, err := db.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback()
+	}
+	if idle, err := st.IdleComputers("Game", events); err != nil || !slices.Equal(idle, []string{"Fixture Mac"}) {
+		t.Fatalf("idle in Game while Site runs: %v %v", idle, err)
+	}
+	if idle, err := st.IdleComputers("Site", events); err != nil || len(idle) != 0 {
+		t.Fatalf("Game event appeared in Site: %v %v", idle, err)
 	}
 }

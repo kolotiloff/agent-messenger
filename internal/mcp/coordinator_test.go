@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"bufio"
+	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -62,6 +64,44 @@ func newCoordinatorStoreAt(t *testing.T, root string) *core.Store {
 func startCoordinator(t *testing.T, st *core.Store, project string) *coordClient {
 	t.Helper()
 	return startCoordinatorWithWatch(t, st, project, "")
+}
+
+func TestCoordinatorWaitReturnsCommittedReportDuringWrite(t *testing.T) {
+	root := t.TempDir()
+	st := newCoordinatorStoreAt(t, root)
+	if err := st.SetComputerName("Fixture Mac"); err != nil {
+		t.Fatal(err)
+	}
+	task, _, err := st.StartTask(core.StartTaskRequest{Project: "Game", OpID: "report-during-write", Provider: "codex", Text: "Fixture"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	finishRun(t, st, task, core.DispositionReport, "Fixture report")
+	writer, err := sql.Open("sqlite", filepath.Join(root, "queue.sqlite")+"?_txlock=immediate")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer writer.Close()
+	tx, err := writer.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	c := coordinator{store: st, project: "Game"}
+	result, err := c.wait(ctx, 0, 30*time.Second, nil)
+	if err != nil || ctx.Err() != nil {
+		t.Fatalf("report waited for the writer: %v %v", err, ctx.Err())
+	}
+	reply := result.(map[string]any)
+	if events := reply["events"].([]core.TaskEvent); len(events) != 1 || events[0].TaskID != task || events[0].Kind != "report" {
+		t.Fatalf("report reply: %+v", events)
+	}
+	if idle, _ := reply["idle_computers"].([]string); len(idle) != 1 || idle[0] != "Fixture Mac" {
+		t.Fatalf("the reply lost its idle computer: %v", idle)
+	}
 }
 
 func startCoordinatorWithWatch(t *testing.T, st *core.Store, project, watch string) *coordClient {

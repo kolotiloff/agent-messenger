@@ -703,3 +703,11 @@ On the first journal write after startup and at most once per day thereafter, re
 ## D-208 — Close the idle coordinator timer proposal (T-300)
 
 The owner removed the proposal from the plan. On macOS, `codex queue --resume` started a new turn in the same finished chat with a reachable isolated App Server and simulated model responses. Both the standalone CLI and the CLI bundled with the desktop app passed. The desktop setup under investigation did not expose the default control socket. The isolated no-shared-server run warned that the thread could not be resumed, returned exit code zero, and started no new turn. Keep the waiting behavior in D-124.
+
+## D-209 — Read idle computers without a write lock (T-301)
+
+After reading events for `wait`, look up idle computers in read-only SQLite transactions. Read task state from the selected project and computer identity and names from machine storage. The legacy layout uses the same read snapshot for both. Batches without a completed-task event skip the lookup. In the isolated MCP timing probe, the writer-held case fell from about 1.27 seconds to 0.23 seconds for both client identities. This measures delivery of a committed report through an active wait.
+
+## D-210 — Expand parallel agent tasks in computer cards (T-302)
+
+For multiple active tasks of one agent, show the agent and localized task count. A disclosure reveals each task's confirmed model and elapsed time or waiting status. A task title identifies a run whose model is still unknown. Group opening and focus survive redraws within the current project and network. Single-task lines keep their compact format.
