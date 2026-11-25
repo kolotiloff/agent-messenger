@@ -23,6 +23,9 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     const peer = {id:'dev-pc', name:'ПК-1', age:0, version:'1.0.0-preview.103', agents:[{agent:'codex'}]};
     const task = {id:'task-fixture',project:'Проект',state:'waiting_coordinator',agent:'codex',title:'Проверить переход анимации',ran_model:'gpt-6.2-sol[effort=medium]',usage:{input_tokens:5300000,output_tokens:100000},created_at:new Date().toISOString()};
     const server = {host:{running:true,broker_id:'fixture',addresses:[]}, member:{}, peers:[peer], updates:[], update_cancellations:[]};
+    function reply(state, version, id = 'upd-fixture', text) {
+      server.updates = [{computer:peer.id,request_id:id,state,version,text,updated_at:new Date().toISOString()}];
+    }
     await page.route('**/*', async route => {
       const url = new URL(route.request().url());
       if (url.pathname === '/api/server-action') {
@@ -54,6 +57,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     });
     await page.goto('http://messenger.test/#fixture');
     const card = page.locator('.am-peer-card[data-peer="dev-pc"]');
+    async function refreshServer() {
+      await page.locator('#settings-open').click();
+      await page.locator('#settings-close').click();
+    }
     async function shot(name) {
       if (!process.env.SCREENSHOT_DIR) return;
       await fs.mkdir(process.env.SCREENSHOT_DIR,{recursive:true});
@@ -133,9 +140,47 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     await shot('installing');
     await page.emulateMedia({reducedMotion:'reduce'});
     assert.equal(await rotation(indicator),'none');
-    publish('done','1.0.0-preview.104');
+    // The requester's inbox can confirm the install while the watch and
+    // presence responses still carry the old state.
+    peer.update_pending=true;
+    peer.update_request_id='upd-fixture';
+    reply('done','1.0.1-preview.104');
+    await refreshServer();
+    await page.getByText('ПК-1 обновлён до v1.0.1',{exact:true}).waitFor();
+    assert.equal(await indicator.count(),0,'the success notice and stopped spinner must appear together');
+    assert.equal(await arrow.count(),0,'old presence must not bring back the download button');
+    assert.equal(await card.locator('.am-machine-version').textContent(),'v1.0.1');
+    publish('queued',undefined,'upd-next');
+    await cancelUpdate.waitFor();
+    assert.equal(await cancelUpdate.getAttribute('aria-description'),'Ждёт обновления');
+    publish('updating',undefined,'upd-next');
+    await installing.waitFor();
+    publish('done','1.0.1-preview.104','upd-next');
     await installing.waitFor({state:'hidden'});
+    assert.equal(await arrow.count(),0,'a shared confirmation must also outrank old presence');
+    // Keep the signed build ordering even when the displayed version matches.
+    server.updates=[];
+    peer.update_pending=false;
+    peer.version='1.0.0-preview.103';
+    publish('done','1.0.0-preview.104');
+    await refreshServer();
+    await card.getByText('v1.0',{exact:true}).waitFor();
     assert.equal(await arrow.count(),0,'the confirmation must outrank the older presence build even with the same display name');
+    publish('queued',undefined,'upd-failure');
+    await cancelUpdate.waitFor();
+    reply('updating',undefined,'upd-failure');
+    await refreshServer();
+    await installing.waitFor();
+    assert.equal(await cancelUpdate.count(),0,'the installer has already taken over this request');
+    const reason='Установка не началась за 5 минут. Запрос снят, обновление можно запросить снова.';
+    reply('failed',undefined,'upd-failure',reason);
+    await refreshServer();
+    const failure=page.locator('#notices .am-notice-bad').filter({hasText:'ПК-1 не обновлён'});
+    await failure.waitFor();
+    assert.equal(await failure.locator('.am-notice-text').textContent(),reason);
+    assert.equal(await failure.locator('[title]').count(),0,'a fully visible reason must not show a duplicate tooltip');
+    assert.equal(await indicator.count(),0,'a failed request must also stop the spinner');
+    assert.equal(await arrow.count(),1,'a recorded failure leaves the older version eligible');
     console.log('Sidebar update, hover, exact cancellation and installation states passed.');
     await page.close();
     wake?.();

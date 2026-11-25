@@ -462,25 +462,35 @@
     if(!updateBoard||updateBoard.broker!==updateNetwork())return null;
     return updateBoard.marks?.[device||updateBoard.self];
   }
+  function updateInProgress(mark){
+    return mark?.state==='waiting'||mark?.state==='queued'||mark?.state==='updating';
+  }
   function updateMark(peer){
     const device=peer?.id||'', shared=sharedUpdate(device);
-    const own=peer?(server?.updates||[]).find(x=>x.computer===device&&!x.stale):null;
-    const localID=own?.request_id||(!peer?view?.pending_update_id:'');
-    const localState=own?.state||(!peer?view?.pending_update:'');
-    const active=s=>['waiting','queued','updating'].includes(s);
+    const own=peer?(server?.updates||[]).find(x=>x.computer===device&&!x.stale):view?.local_update;
+    const pending=peer?(peer.update_pending?{state:'queued',id:peer.update_request_id}:null):
+      {state:view?.pending_update,id:view?.pending_update_id};
+    const reply=own?.request_id?{state:own.state,id:own.request_id,version:own.version}:null;
+    const final=reply&&!updateInProgress(reply);
+    // The notice and update watch arrive independently. An exact reply
+    // supersedes a lagging snapshot, without closing a different request.
+    if(reply?.id&&reply.id===shared?.id){
+      if(final||reply.state==='updating'&&(shared.state==='legacy'||updateInProgress(shared)))return reply;
+    }
     if(shared&&shared.state!=='legacy'){
       // The initiating window can lead the broker by one exchange.
-      const newer=own?.state==='waiting'&&own.request_id!==shared.id&&Date.parse(own.updated_at)>=shared.at*1000;
+      const newer=peer&&reply?.state==='waiting'&&reply.id!==shared.id&&Date.parse(own.updated_at)>=shared.at*1000;
       if(!newer){
-        if(active(shared.state)){
+        if(updateInProgress(shared)){
           if(shared.state==='waiting'&&Date.now()-shared.at*1000>=900000)return null;
           return shared;
         }
-        if(peer||!localID||shared.id===localID)return null;
+        if(peer||!pending.id||shared.id===pending.id)return shared;
       }
     }
-    if(active(localState))return {state:localState,id:localID};
-    return peer?.update_pending?{state:'queued',id:peer.update_request_id}:null;
+    if(peer&&updateInProgress(reply))return reply;
+    if(updateInProgress(pending)&&(!final||reply.id!==pending.id))return pending;
+    return final?reply:null;
   }
   const updateCancelAttempts=new Map();
   function cancelUpdateKey(broker,device,id){return JSON.stringify([broker,device,id]);}
@@ -568,6 +578,12 @@
     if(view?.local_update)showUpdate(view.local_update,view.computer_name||tr('Этот компьютер'));
   }
   const noticeIcons={good:'<path d="M8 12.5l2.7 2.7L16 9.8"/>',info:'<path d="M12 11v5M12 8h.01"/>',bad:'<path d="M12 7.5v5.5M12 16.5h.01"/>'};
+  function updateNoticeTooltips(){
+    for(const text of $('notices').querySelectorAll('.am-notice-text')){
+      if(text.clientHeight&&text.scrollHeight>text.clientHeight)text.title=text.textContent;
+      else text.removeAttribute('title');
+    }
+  }
   function renderNotices(){
     const box=$('notices');if(!box)return;
     box.replaceChildren();box.hidden=!notices.length;
@@ -575,7 +591,7 @@
       const card=el('div',undefined,'am-notice am-notice-'+n.kind);card.dataset.key=n.key;
       const icon=document.createElementNS('http://www.w3.org/2000/svg','svg');icon.setAttribute('viewBox','0 0 24 24');icon.setAttribute('aria-hidden','true');icon.classList.add('am-notice-icon');
       icon.innerHTML='<circle cx="12" cy="12" r="9"/>'+noticeIcons[n.kind];
-      const body=el('div',undefined,'am-notice-body');body.append(el('span',n.title,'am-notice-title'));if(n.text){body.append(el('span',n.text,'am-small am-muted am-notice-text'));card.title=n.text;}
+      const body=el('div',undefined,'am-notice-body');body.append(el('span',n.title,'am-notice-title'));if(n.text)body.append(el('span',n.text,'am-small am-muted am-notice-text'));
       const close=el('button','×','am-toast-close');close.type='button';close.setAttribute('aria-label',tr('Закрыть'));close.addEventListener('click',()=>closeNotice(n.key));
       card.append(icon,body,close);
       if(n.kind!=='bad'){
@@ -585,6 +601,7 @@
       }
       box.append(card);
     }
+    updateNoticeTooltips();
   }
   document.addEventListener('visibilitychange',renderNotices);
   // One line per agent program, with its worker state.
@@ -813,9 +830,9 @@
     if(!lines.children.length)lines.append(el('p',online?tr('Агенты не подключены'):tr('Нет связи'),'am-small am-muted'));
     body.append(lines);
     const corner=el('div',undefined,'am-card-update am-local-update');
-    const localMark=updateMark(null);
-    if(localMark)corner.append(updateControl(null,localMark));
-    root.classList.toggle('am-local-update-pending',!!localMark);
+    const localMark=updateMark(null),localBusy=updateInProgress(localMark);
+    if(localBusy)corner.append(updateControl(null,localMark));
+    root.classList.toggle('am-local-update-pending',localBusy);
     const localMeta=el('div',undefined,'am-machine-meta');localMeta.append(corner,version);head.append(localMeta);box.append(machine);
     // The other computers of this computer's network, with their agents.
     // Only the computer that runs the server can revoke one, from the
@@ -831,10 +848,10 @@
       const corner=el('div',undefined,'am-card-update');
       // T-128: an older computer gets the update icon next to its dot; the
       // owner confirms in a popup.
-      const busy=updateMark(peer),confirmed=sharedUpdate(peer.id)?.version;
-      const installed=confirmed&&versionOlder(peer.version,confirmed)?confirmed:peer.version;
-      if(busy){
-        corner.append(updateControl(peer,busy));
+      const mark=updateMark(peer),confirmed=mark?.version||sharedUpdate(peer.id)?.version;
+      const installed=confirmed&&(!peer.version||versionOlder(peer.version,confirmed))?confirmed:peer.version;
+      if(updateInProgress(mark)){
+        corner.append(updateControl(peer,mark));
       }else if(fresh&&installed&&versionOlder(installed,newestVersion())){
         const newest=versionName(newestVersion()),label=tr('Обновить до ')+newest;
         const b=el('button',undefined,'am-update-icon am-peer-update');b.type='button';b.title=label;b.setAttribute('aria-label',label);appendUpdateGlyphs(b);
@@ -3532,7 +3549,11 @@
   $('thread').addEventListener('scroll',toBottomState,{passive:true});
   $('to-bottom').addEventListener('click',()=>{const t=$('thread');t.scrollTo({top:t.scrollHeight,behavior:'smooth'});});
   // A taller reply box must not pull the owner off the end of the feed.
-  new ResizeObserver(()=>requestAnimationFrame(()=>{chatBody.style.setProperty('--am-footer-height',chatFooter.getBoundingClientRect().height+'px');const t=$('thread');if(feedPinned)t.scrollTop=t.scrollHeight;})).observe(chatFooter);
+  new ResizeObserver(()=>requestAnimationFrame(()=>{
+    updateNoticeTooltips();
+    chatBody.style.setProperty('--am-footer-height',chatFooter.getBoundingClientRect().height+'px');
+    const t=$('thread');if(feedPinned)t.scrollTop=t.scrollHeight;
+  })).observe(chatFooter);
   show('tasks');loadMachineOrder();refresh();loadDiscovery();pollSetup();setInterval(()=>{if(setupPending)pollSetup();},2000);
   setInterval(updateTimers,1000);
   setInterval(()=>{if(!windowWatch||Date.now()-lastWindowRefresh>=15000)refresh();},2000);

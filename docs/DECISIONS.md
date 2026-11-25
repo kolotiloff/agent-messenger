@@ -683,3 +683,11 @@ The coordinator's task list reports elapsed time since the latest worker output 
 ## D-203 — Stop from the task list (T-291)
 
 An eligible task row offers Stop the task in its context menu without changing the selected conversation. Both entry points share the existing stop request and pending state. Finished tasks, read-only tasks and unreachable workers have no stop item. While a stop request is pending, its item is disabled.
+
+## D-204 — Resolve the update card against the exact reply (T-296)
+
+A completion reply used by an update notice also advances the phase and confirmed version in the same window render. For the same request ID, a final reply takes precedence over older shared watch or presence data, and an installation reply takes precedence over a waiting phase. The broker still distributes update changes to all windows. A reply cannot close a different request. The cancel cross stays available while a supported request waits. The installing indicator shows when the installer owns the request.
+
+## D-205 — Tooltips for clipped notification text (T-297)
+
+Keep the footer's three-line limit from T-181. Expose the full text on that part of the notification only if it is clipped at the current window width. Recheck when the footer changes size.

@@ -357,6 +357,8 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         ['update-fixture-update-3-refused','update-fixture-update-4-refused','update-fixture-update-5-refused']);
       assert.equal(await page.locator('.am-chat-footer').evaluate(n => getComputedStyle(n).overflowY), 'visible');
       assert.equal(await page.locator('#notices').evaluate(n => n.scrollHeight <= n.clientHeight), true);
+      const clippedReason=page.locator('#notices .am-notice-text').first();
+      assert.equal(await clippedReason.getAttribute('title'),await clippedReason.textContent(),'a clipped reason still exposes its full text');
       if(process.env.SCREENSHOT_DIR&&!native) await page.screenshot({animations:'disabled',path:path.join(process.env.SCREENSHOT_DIR,'notices.png')});
       await page.locator('#notices .am-toast-close').first().click();
       assert.equal(await page.locator('#notices .am-notice').count(), 2);

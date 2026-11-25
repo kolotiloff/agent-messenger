@@ -261,6 +261,8 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 
 | ID | Task | PR |
 |---|---|---|
+| T-297 | Remove duplicate tooltips from fully visible notifications. | Ready for review. D-205. The window fixture covers both a visible update failure reason and a clipped reason. |
+| T-296 | Keep the computer card in sync with the update outcome notice and cancellation phase. | Ready for review. D-204. Reproduced the delayed watch in the window fixture and verified the fix in WebKit and Chromium. |
 | T-290 | Show Codex command timing and warn the coordinator about prolonged unexplained silence. | Released in [1.0.2](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.2-preview.105) via [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198). D-202. Local, remote and coordinator fixtures cover the advisory. |
 | T-291 | Stop an eligible task through its task-list context menu. | Released in [1.0.2](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.2-preview.105) via [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198). D-203. Read-only, completed and pending cases checked. |
 | T-292 | Compact computer cards, equal-sized presence markers and the download arrow with a tray. | Released in [1.0.2](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.2-preview.105) via [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198). D-199. Both themes checked in WebKit and Chromium. |

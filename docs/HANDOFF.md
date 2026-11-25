@@ -8,6 +8,10 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+**T-296 is ready for review.** The computer card now honors the exact update reply used by its notice even if the shared update watch still shows an older phase. The red cancel cross is available while a supported request waits. Once installation starts, the control shows its phase and the installer owns the request. The new browser fixture reproduced the reported contradiction on the 1.0.2 code and passed with the fix in WebKit and Chromium. Verification used fictional devices.
+
+**T-297** removes duplicated tooltips from notifications whose message fits on the card. Longer messages keep their full text on hover when the three-line limit clips it.
+
 **[1.0.2, build 105](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.2-preview.105) is released** from `41dc97c4b35a943e576d0c362b1638ae1c581d81`. [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198) is merged and its eight [client checks](https://github.com/kolotiloff/agent-messenger/actions/runs/45519001699) passed. The public release has 22 uploaded files. Both the local check and the [release workflow](https://github.com/kolotiloff/agent-messenger/actions/runs/45521441937/attempts/2) verified the signed upgrade route to 1.0.2 on all five targets. The workflow's channel job passed after a retry for an API rate limit.
 
 This release adds T-290 through T-295. The coordinator gets a scoped advisory after prolonged unexplained Codex silence and can read a running command when the CLI reports it. The existing completed-turn exit warning is preserved. The task context menu stops the clicked eligible task with the same pending guard as the chat. Computer cards use equal-sized green dots and red crosses. The Mac menu bar uses primary click to open the window and secondary click for its menu. The update controls show a pending cancellation, use a download arrow with a tray and have consistent short tooltips.

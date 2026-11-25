@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-25 — Codex (T-296, T-297)
+
+- Reproduced the success notice appearing alongside the old installation spinner. Reconciled the update reply and shared watch by request ID so the notice, version and control advance together. The WebKit and Chromium fixture covers out-of-order success and failure, a distinct queued request, and cancellation before the installer starts.
+- Show the full reason as a tooltip only when the notification actually clips it. The three-notice limit and the existing footer layout still apply.
+
 ## 2026-11-25 — Codex (1.0.2 release, T-290–T-295)
 
 - Merged [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198) as `41dc97c` after all required checks passed. All eight [client jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45519001699) completed successfully. The release also incorporates the verified 1.0.1 record from #197.
