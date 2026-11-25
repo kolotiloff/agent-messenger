@@ -2646,9 +2646,12 @@
     const row=el('tr',undefined,'am-efficiency-row'),details=el('tr',undefined,'am-efficiency-detail');
     details.id='stats-efficiency-detail-'+index;details.hidden=true;
     const model=(names[group.agent]||group.agent)+' '+(group.model?modelName(group.model):tr('Модель неизвестна'));
-    const button=el('button',undefined,'am-efficiency-expand');button.type='button';button.title=model;
-    button.setAttribute('aria-expanded','false');button.setAttribute('aria-controls',details.id);
-    button.append(svgIcon(['M9 6l6 6-6 6']),el('span',model));
+    const count=', '+tasksWord(group.tasks);
+    const button=el('button',undefined,'am-efficiency-expand');button.type='button';button.title=model+count;
+    button.setAttribute('aria-label',button.title);button.setAttribute('aria-expanded','false');button.setAttribute('aria-controls',details.id);
+    const label=el('span',undefined,'am-efficiency-model');
+    label.append(el('span',model,'am-efficiency-model-name'),el('span',count,'am-muted'));
+    button.append(svgIcon(['M9 6l6 6-6 6']),label);
     button.addEventListener('click',()=>{details.hidden=!details.hidden;button.setAttribute('aria-expanded',String(!details.hidden));});
     const name=el('th');name.scope='row';name.append(button);row.append(name);
     const rate=(value,total,kind)=>{

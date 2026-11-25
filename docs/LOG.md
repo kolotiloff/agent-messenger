@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-25 — Codex (T-313 task counts and update preflight)
+
+- Show the group task count on the same baseline and in the same type as the model, using the existing localized task count. Chromium and WebKit fixtures verify the label, spacing, and disclosure.
+- A signed copy of the published 1.0.4 binary created two isolated projects. The local build 108 restarted that background client from the desktop bridge, preserved legacy task history and usage, reopened the window, and exported each project separately. Both project databases passed SQLite integrity checks. This exercised the client handoff only, without a public 1.0.5 update or a real workspace. [PR #209](https://github.com/kolotiloff/agent-messenger/pull/209).
+
 ## 2026-11-25 — Codex (T-313 statistics toolbar)
 
 - Kept period, agent and model filters together on the left. Added right-aligned chart and upward export icon buttons with tooltips and keyboard labels. Used the same vertical spacing on both sides of the tab divider and balanced the rules between efficiency groups. [PR #209](https://github.com/kolotiloff/agent-messenger/pull/209).

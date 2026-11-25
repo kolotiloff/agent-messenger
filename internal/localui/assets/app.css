@@ -860,7 +860,9 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-efficiency-rate:is(:hover,:focus-visible) > .am-tip { display:inline-flex; }
 #am-concept .am-efficiency-row > th { padding-block:var(--am-space-1); border:0; color:var(--am-text); font:inherit; }
 #am-concept button.am-efficiency-expand { width:100%; min-height:var(--am-control-compact); padding:0; justify-content:flex-start; text-align:left; background:transparent; }
-#am-concept .am-efficiency-expand span { flex:1; min-width:0; width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#am-concept .am-efficiency-model { display:flex; flex:1; min-width:0; width:0; white-space:nowrap; }
+#am-concept .am-efficiency-model-name { overflow:hidden; text-overflow:ellipsis; }
+#am-concept .am-efficiency-model > .am-muted { flex:none; }
 #am-concept .am-efficiency-expand svg { width:var(--am-space-3); height:var(--am-space-3); flex:none; color:var(--am-muted); fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
 #am-concept .am-efficiency-expand[aria-expanded=true] svg { transform:rotate(90deg); }
 #am-concept .am-efficiency-detail > td { padding-block-start:0; padding-inline-start:calc(var(--am-space-3) + var(--am-space-2)); }
