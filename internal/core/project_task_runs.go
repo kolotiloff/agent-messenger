@@ -181,7 +181,7 @@ func beginSplitAdmission(ctx context.Context, computer *sql.DB) (*sql.Tx, error)
 	return tx, nil
 }
 
-func splitTaskProjectFile(ctx context.Context, common *sql.Tx, name string) (string, error) {
+func splitTaskProjectFile(ctx context.Context, common projectRouteQuerier, name string) (string, error) {
 	var file string
 	err := common.QueryRowContext(ctx, "SELECT file FROM project_storage_stage WHERE project=?", name).Scan(&file)
 	if errors.Is(err, sql.ErrNoRows) {

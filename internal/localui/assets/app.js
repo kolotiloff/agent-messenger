@@ -361,8 +361,6 @@
       if(!current)return;
       t=current;
     }
-    const ok=p?finishedStates.includes(t.state)||sharedLost(t,p):finishedStates.includes(t.state);
-    const tip=ok?'':p?tr('Задача ещё идёт на компьютере «')+p.name+tr('». Удалить её можно, когда она закончится'):tr('Сначала остановите задачу');
     const entries=[];
     if(!p&&canStopTask(t)){
       const progress=stopProgress(t);
@@ -372,7 +370,9 @@
       }
       entries.push({text:tr('Остановить задачу'),pick:()=>stopTask(t)});
     }
-    entries.push({text:tr('Удалить из списка'),off:!ok,tip,pick:()=>askRemoveTask(t,p)});
+    if(finishedStates.includes(t.state)||(p&&sharedLost(t,p))){
+      entries.push({text:tr('Удалить из списка'),pick:()=>askRemoveTask(t,p)});
+    }
     popMenu(event.clientX,event.clientY,entries);
   }
   function askRemoveTask(t,p){
@@ -418,9 +418,9 @@
   // Right-click menu on another computer of the network. Revoking cannot be
   // undone, so its item only opens a confirmation inside the card. Updating
   // moved to an icon on the card (T-128).
-  // A right-click menu; entries are {text,pick,off,tip}. An entry with off
-  // is shown dimmed with its reason as a tooltip.
+  // A right-click menu; entries are {text,pick}.
   function popMenu(x,y,entries,status=null){
+    if(!entries.length&&!status)return;
     let menu=$('device-menu');
     if(!menu){
       // A manual popover: an automatic one closes on the same right click
@@ -435,13 +435,10 @@
     const items=[];
     for(const it of entries){
       const item=el('div',it.text,'am-select-option');item.setAttribute('role','menuitem');item.tabIndex=0;
-      if(it.tip)item.title=it.tip;
-      if(it.off)item.setAttribute('aria-disabled','true');
-      const run=()=>{if(it.off)return;menu.hidePopover();it.pick();};
+      const run=()=>{menu.hidePopover();it.pick();};
       item.addEventListener('click',run);item.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();run();}});
       items.push(item);
     }
-    if(!items.length&&!status)return;
     menu.setAttribute('role',status?'status':'menu');
     menu.dataset.stopTask=status?.task||'';
     menu.replaceChildren(...(status?[el('div',status.text,'am-context-status')]:items));
@@ -663,26 +660,29 @@
     return model?modelName(model).replace(/ Medium$/,' Med'):'';
   }
   function parallelAgentLine(computer,provider,state,running,waiting){
+    const agent=shortNames[provider]||provider;
     const group=el('details',undefined,'am-agent-parallel am-agent-'+state);
     group.dataset.provider=provider;
     group.dataset.agentGroup=JSON.stringify([computer,provider]);
     group.addEventListener('click',event=>event.stopPropagation());
-    const summary=el('summary'),label=el('span',shortNames[provider]||provider,state==='run'?'am-agent-running-label':'');
+    const summary=el('summary'),label=el('span',agent,state==='run'?'am-agent-running-label':'');
     label.append(el('span',', '+tasksWord(running.length+waiting.length),'am-agent-count'));
     summary.append(label,svgIcon(['M6 9l6 6 6-6']));
     const list=el('ul',undefined,'am-agent-parallel-list');
     for(const task of [...running,...waiting]){
       const model=sidebarTaskModel(task),working=task.state==='running';
       const row=el('li',undefined,working?'am-agent-parallel-running':'am-agent-parallel-waiting');
-      const name=el('span',model||task.title||shortNames[provider]||provider,model?'am-agent-model':'');
-      if(model&&task.title)name.title=task.title;
+      const modelLabel=model?el('span',model,'am-agent-model'):null;
+      if(modelLabel&&task.title)modelLabel.title=task.title;
       const [text,status,,from]=taskStatus(task);
       if(working){
-        const timing=from&&Number.isFinite(Date.parse(from))?elapsedLabel(from,'','am-muted'):el('span',text,status);
+        const name=el('span',agent);
+        if(modelLabel)name.append(' ',modelLabel);
+        const timing=from&&Number.isFinite(Date.parse(from))?elapsedLabel(from,'','am-agent-status'):el('span',', '+text,status);
         row.append(name,timing);
       }else{
         row.title=text;
-        row.append(name,', ',el('span',tr('ждёт ответа')));
+        row.append(modelLabel||el('span',agent),', ',el('span',tr('ждёт ответа')));
       }
       list.append(row);
     }
@@ -2589,20 +2589,127 @@
     if(!name)stats=null;
     if(tab==='stats')reloadStats();
   }
+  function statsFilters(){
+    return {project,period:statsPeriod,computer:computerFilter||'',agent:statsAgent,model:statsModel};
+  }
+  let statsExporting=false;
+  let efficiencyScope='',efficiencyGen=0;
+  function refreshEfficiencyScope(){
+    const card=$('stats-efficiency-card'),button=$('stats-efficiency');
+    if(efficiencyScope&&efficiencyScope!==JSON.stringify(statsFilters())){
+      efficiencyScope='';efficiencyGen++;card.hidden=true;
+    }
+    button.disabled=!project;
+    button.setAttribute('aria-expanded',String(!card.hidden));
+  }
+  async function compareModels(){
+    if(!project)return;
+    const card=$('stats-efficiency-card'),status=$('stats-efficiency-status'),wrap=$('stats-efficiency-table');
+    if(!card.hidden){
+      efficiencyScope='';efficiencyGen++;card.hidden=true;refreshEfficiencyScope();return;
+    }
+    const filters=statsFilters(),gen=++efficiencyGen;
+    efficiencyScope=JSON.stringify(filters);
+    card.hidden=false;wrap.hidden=true;status.textContent=tr('Загрузка статистики…');refreshEfficiencyScope();
+    try{
+      const result=await api('/api/usage-efficiency?'+new URLSearchParams(filters),25000);
+      if(gen!==efficiencyGen)return;
+      if(result.project!==filters.project||!Array.isArray(result.groups))throw Error(tr('Эффективность моделей недоступна.'));
+      renderEfficiencyGroups(result.groups);
+      wrap.hidden=!result.groups.length;
+      status.textContent=!result.groups.length?tr('В этом периоде нет исходных задач для сравнения.'):
+        result.total_groups>result.groups.length?tr('Показана часть групп. Полный список есть в экспорте JSON.'):
+        tr('Токены и время — медианы по принятым задачам. Расход включает повторные попытки.');
+    }catch(e){if(gen===efficiencyGen)status.textContent=e.message;}
+  }
+  function renderEfficiencyGroups(groups){
+    const table=$('stats-efficiency-grid');
+    for(const body of Array.from(table.tBodies))body.remove();
+    const types={bug_fix:tr('Исправление'),feature:tr('Функция'),refactor:tr('Рефакторинг'),tests:tr('Тесты'),documentation:tr('Документация'),build:tr('Сборка'),audit:tr('Аудит'),research:tr('Исследование'),maintenance:tr('Поддержка')};
+    const difficulties={simple:tr('Простая задача'),medium:tr('Средняя сложность'),complex:tr('Сложная задача')};
+    const cohorts=new Map();
+    const ordered=[...groups].sort((a,b)=>Number(!!b.task_type)-Number(!!a.task_type));
+    ordered.forEach((group,i)=>{
+      const key=JSON.stringify([group.task_type,group.difficulty]);
+      if(!cohorts.has(key)){
+        const body=el('tbody'),heading=el('tr',undefined,'am-efficiency-cohort');
+        const type=Object.hasOwn(types,group.task_type)?types[group.task_type]:group.task_type||tr('Без типа');
+        const difficulty=difficulties[group.difficulty]||tr('Без оценки сложности');
+        const label=el('th',type+', '+difficulty.toLocaleLowerCase(amLocale));label.scope='rowgroup';label.colSpan=5;
+        heading.append(label);body.append(heading);cohorts.set(key,body);
+      }
+      cohorts.get(key).append(...efficiencyRows(group,i));
+    });
+    table.append(...cohorts.values());
+  }
+  function efficiencyRows(group,index){
+    const row=el('tr',undefined,'am-efficiency-row'),details=el('tr',undefined,'am-efficiency-detail');
+    details.id='stats-efficiency-detail-'+index;details.hidden=true;
+    const model=(names[group.agent]||group.agent)+' '+(group.model?modelName(group.model):tr('Модель неизвестна'));
+    const count=', '+tasksWord(group.tasks);
+    const button=el('button',undefined,'am-efficiency-expand');button.type='button';button.title=model+count;
+    button.setAttribute('aria-label',button.title);button.setAttribute('aria-expanded','false');button.setAttribute('aria-controls',details.id);
+    const label=el('span',undefined,'am-efficiency-model');
+    label.append(el('span',model,'am-efficiency-model-name'),el('span',count,'am-muted'));
+    button.append(svgIcon(['M9 6l6 6-6 6']),label);
+    button.addEventListener('click',()=>{details.hidden=!details.hidden;button.setAttribute('aria-expanded',String(!details.hidden));});
+    const name=el('th');name.scope='row';name.append(button);row.append(name);
+    const rate=(value,total,kind)=>{
+      const cell=el('td');
+      if(!total){cell.textContent='—';return cell;}
+      const label=el('span',Math.round(100*value/total)+'%','am-efficiency-rate');label.tabIndex=0;
+      const tip=el('span',value+'/'+total,'am-tip');tip.id='stats-efficiency-count-'+index+'-'+kind;tip.setAttribute('role','tooltip');
+      label.setAttribute('aria-describedby',tip.id);label.append(tip);
+      cell.append(label);return cell;
+    };
+    const metric=(data,format)=>data?.samples?format(Math.round(data.median||0)):'—';
+    row.append(rate(group.accepted,group.tasks,'accepted'),rate(group.first_pass_accepted,group.first_pass_known,'first-pass'),
+      el('td',metric(group.accepted_new_input_plus_output,tokensText)),el('td',metric(group.time_to_acceptance_ms,statsDuration)));
+
+    const panel=el('td');panel.colSpan=5;
+    const breakdown=el('div',undefined,'am-efficiency-breakdown');
+    const metrics=el('table',undefined,'am-efficiency-metrics');
+    metrics.setAttribute('aria-label',model);
+    const headers=el('tr');metrics.createTHead().append(headers);
+    for(const title of [tr('Показатель'),tr('Среднее'),tr('Медиана'),tr('Порог для 90%'),tr('Задач')]){
+      const heading=el('th',title);heading.scope='col';headers.append(heading);
+    }
+    const measurements=metrics.createTBody();
+    const addMetric=(title,data,format)=>{
+      const line=el('tr'),name=el('th',title);name.scope='row';line.append(name);
+      for(const value of [data?.mean,data?.median,data?.p90])line.append(el('td',data?.samples?format(Math.round(value||0)):'—'));
+      line.append(el('td',data?.samples?.toLocaleString(amLocale)||'—','am-muted'));measurements.append(line);
+    };
+    addMetric(tr('Токены до приёмки'),group.accepted_new_input_plus_output,tokensText);
+    addMetric(tr('Активная работа'),group.accepted_active_runtime_ms,statsDuration);
+    addMetric(tr('Время до приёмки'),group.time_to_acceptance_ms,statsDuration);
+    breakdown.append(metrics,el('p',tr('Проверено ')+group.reviewed+'/'+group.tasks+'. '+
+      tr('В 90% задач расход или время были не выше указанного порога.'),'am-small am-muted'));
+    panel.append(breakdown);details.append(panel);
+    return [row,details];
+  }
+  async function exportStats(){
+    if(!project||statsExporting)return;
+    statsExporting=true;$('stats-export').disabled=true;
+    const status=$('stats-export-status');
+    status.textContent=tr('Сохраняем…');
+    try{
+      const {result}=await postAPI('/api/usage-export',statsFilters(),25000);
+      status.textContent=tasksWord(result.tasks)+'. '+tr('Файл сохранён: ')+result.path;
+    }catch(error){status.textContent=error.message;}
+    finally{statsExporting=false;$('stats-export').disabled=!project;}
+  }
   async function loadStats(){
     const gen=++statsGen;
-    const name=project;
+    const filters=statsFilters();
+    const name=filters.project;
     if(!name)return;
-    const params=new URLSearchParams({project:name,period:statsPeriod});
-    const computer=computerFilter;
-    if(computer)params.set('computer',computer);
-    if(statsAgent)params.set('agent',statsAgent);
-    if(statsModel)params.set('model',statsModel);
+    const params=new URLSearchParams(filters);
     try{
       const s=await api('/api/usage-stats?'+params,8000);
       if(gen!==statsGen)return;
       if(s.project!==name){stats=null;statsPending=false;renderStats();throw Error(tr('Фильтр не применён: обновите фоновый клиент.'));}
-      s.forComputer=computer;stats=s;statsPending=false;renderStats();
+      s.forComputer=filters.computer;stats=s;statsPending=false;renderStats();
     }
     catch(error){if(gen===statsGen){statsPending=false;setStatsBusy();$('stats-total-title').textContent=tr('Статистика недоступна');$('stats-total-note').textContent=error.message;}}
   }
@@ -2649,6 +2756,8 @@
     box.append(plot,axis);
   }
   function renderStats(){
+    $('stats-export').disabled=!project||statsExporting;
+    refreshEfficiencyScope();
     root.querySelectorAll('[data-period]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.period===statsPeriod)));
     // The card follows the numbers on screen, not the filter still loading.
     $('stats-computers-card').hidden=stats?!!stats.forComputer:!!computerFilter;
@@ -2722,6 +2831,8 @@
   }
   $('stats-agent').addEventListener('change',()=>{statsAgent=$('stats-agent').value;remember('messenger-stats-agent',statsAgent);statsModel='';reloadStats();});
   $('stats-model').addEventListener('change',()=>{statsModel=$('stats-model').value;reloadStats();});
+  $('stats-export').addEventListener('click',exportStats);
+  $('stats-efficiency').addEventListener('click',compareModels);
   root.querySelectorAll('[data-stats-sort]').forEach(b=>b.addEventListener('click',()=>{
     statsSort=statsSort===b.dataset.statsSort?b.dataset.statsReverse:b.dataset.statsSort;
     remember('messenger-stats-sort',statsSort);renderStats();

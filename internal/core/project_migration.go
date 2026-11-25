@@ -32,7 +32,7 @@ const migrationOutboxRoutes = `SELECT n.seq, CASE
   SELECT CASE WHEN COUNT(DISTINCT t.project)=1 THEN MIN(t.project) END FROM tasks t
   WHERE t.origin_peer=n.recipient AND t.origin_task=n.task_id
     AND (t.origin_broker=n.broker OR 'parked:'||t.origin_broker=n.broker))
- WHEN n.kind IN ('start','answer','answer_refused','continue','continue_refused','note','note_refused','cancel','event','progress','ran_model','output','image')
+ WHEN n.kind IN ('start','answer','answer_refused','continue','continue_refused','note','note_refused','cancel','event','progress','ran_model','output','image','run_usage')
   THEN (SELECT t.project FROM tasks t WHERE t.id=n.task_id)
  END AS project FROM net_outbox n`
 
@@ -260,6 +260,9 @@ func stageComputerDatabase(ctx context.Context, backup, output string, manifest 
  DROP TABLE task_owner_notes;
  DROP TABLE task_questions;
  DROP TABLE task_events;
+ DROP TABLE IF EXISTS task_attempts;
+ DROP TABLE IF EXISTS task_reviews;
+ DROP TABLE IF EXISTS task_assignments;
  DROP TABLE task_runs;
  DROP TABLE tasks;`); err != nil {
 		return err

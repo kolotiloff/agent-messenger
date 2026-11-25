@@ -168,7 +168,7 @@ func ServeDuringStartup(ln net.Listener, handler Handler, startup func(Request) 
 					return
 				}
 			}
-			if request.Cmd == "window-changes" {
+			if request.Cmd == "window-changes" || request.Cmd == "usage-export" || request.Cmd == "usage-efficiency" {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 				go func() {
@@ -338,6 +338,22 @@ func dispatchContext(ctx context.Context, handler Handler, request Request) Resp
 			return Response{Error: "view unavailable"}
 		}
 		return Response{OK: true, Overview: raw}
+	case "usage-efficiency":
+		h, ok := handler.(interface {
+			UsageEfficiency(ctx context.Context, project, period, computer, agent, model string) (any, error)
+		})
+		if !ok {
+			return Response{Error: "неизвестная команда"}
+		}
+		value, err := h.UsageEfficiency(ctx, request.Project, request.Alias, request.Text, request.Provider, request.Model)
+		if err != nil {
+			return Response{Error: err.Error()}
+		}
+		raw, err := json.Marshal(value)
+		if err != nil {
+			return Response{Error: "statistics unavailable"}
+		}
+		return Response{OK: true, Overview: raw}
 	case "usage-stats":
 		var value any
 		var err error
@@ -441,6 +457,19 @@ func dispatchContext(ctx context.Context, handler Handler, request Request) Resp
 			return Response{Error: err.Error()}
 		}
 		return Response{OK: true}
+	case "usage-export":
+		h, ok := handler.(interface {
+			ExportUsage(ctx context.Context, project, period, computer, agent, model string) (string, int, error)
+		})
+		if !ok {
+			return Response{Error: "неизвестная команда"}
+		}
+		path, n, err := h.ExportUsage(ctx, request.Project, request.Alias, request.Text, request.Provider, request.Model)
+		if err != nil {
+			return Response{Error: err.Error()}
+		}
+		raw, _ := json.Marshal(map[string]any{"path": path, "tasks": n})
+		return Response{OK: true, Overview: raw}
 	case "feedback-export":
 		h, ok := handler.(interface{ ExportFeedback() (string, int, error) })
 		if !ok {

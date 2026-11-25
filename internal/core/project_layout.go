@@ -69,6 +69,10 @@ func (p *projectLayout) open(file string) (*sql.DB, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
+	if _, err := db.Exec(taskAnalyticsSchema); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("initialize project statistics: %w", err)
+	}
 	// A project database made before T-272 gets the state indexes once.
 	// They only speed up the work count, so a busy database is not a
 	// reason to refuse it; the next start tries again.
