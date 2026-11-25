@@ -2593,56 +2593,86 @@
     return {project,period:statsPeriod,computer:computerFilter||'',agent:statsAgent,model:statsModel};
   }
   let statsExporting=false;
-  let efficiencyScope='',efficiencyGen=0,efficiencyLoading=false;
+  let efficiencyScope='',efficiencyGen=0;
   function refreshEfficiencyScope(){
+    const card=$('stats-efficiency-card'),button=$('stats-efficiency');
     if(efficiencyScope&&efficiencyScope!==JSON.stringify(statsFilters())){
-      efficiencyScope='';efficiencyGen++;efficiencyLoading=false;
-      $('stats-efficiency-card').hidden=true;
+      efficiencyScope='';efficiencyGen++;card.hidden=true;
     }
-    $('stats-efficiency').disabled=!project||efficiencyLoading;
+    button.disabled=!project;
+    button.setAttribute('aria-expanded',String(!card.hidden));
   }
   async function compareModels(){
-    if(!project||efficiencyLoading)return;
+    if(!project)return;
+    const card=$('stats-efficiency-card'),status=$('stats-efficiency-status'),wrap=$('stats-efficiency-table');
+    if(!card.hidden){
+      efficiencyScope='';efficiencyGen++;card.hidden=true;refreshEfficiencyScope();return;
+    }
     const filters=statsFilters(),gen=++efficiencyGen;
-    efficiencyScope=JSON.stringify(filters);efficiencyLoading=true;refreshEfficiencyScope();
-    const card=$('stats-efficiency-card'),status=$('stats-efficiency-status'),table=$('stats-efficiency-table');
-    card.hidden=false;table.hidden=true;status.textContent=tr('Загрузка статистики…');
+    efficiencyScope=JSON.stringify(filters);
+    card.hidden=false;wrap.hidden=true;status.textContent=tr('Загрузка статистики…');refreshEfficiencyScope();
     try{
       const result=await api('/api/usage-efficiency?'+new URLSearchParams(filters),25000);
       if(gen!==efficiencyGen)return;
       if(result.project!==filters.project||!Array.isArray(result.groups))throw Error(tr('Сравнение моделей недоступно.'));
-      const rows=result.groups.map(efficiencyRow);
-      $('stats-efficiency-rows').replaceChildren(...rows);
-      table.hidden=!rows.length;
-      status.textContent=!rows.length?tr('В этом периоде нет исходных задач для сравнения.'):
-        result.total_groups>rows.length?tr('Показана часть групп. Полный список есть в экспорте JSON.'):
-        tr('Исходные задачи по дате постановки. Расход включает связанные повторные попытки.');
+      renderEfficiencyGroups(result.groups);
+      wrap.hidden=!result.groups.length;
+      status.textContent=!result.groups.length?tr('В этом периоде нет исходных задач для сравнения.'):
+        result.total_groups>result.groups.length?tr('Показана часть групп. Полный список есть в экспорте JSON.'):
+        tr('Токены и время — медианы по принятым задачам. Расход включает повторные попытки.');
     }catch(e){if(gen===efficiencyGen)status.textContent=e.message;}
-    finally{if(gen===efficiencyGen){efficiencyLoading=false;refreshEfficiencyScope();}}
   }
-  function efficiencyRow(group){
-    const row=el('tr');
-    const cell=(value,note)=>{
-      const td=el('td',value);
-      if(note){td.append(document.createElement('br'),el('span',note,'am-small am-muted'));}
-      row.append(td);
-    };
-    const model=group.model?modelName(group.model):tr('Модель неизвестна');
-    cell((names[group.agent]||group.agent)+' '+model);
+  function renderEfficiencyGroups(groups){
+    const table=$('stats-efficiency-grid');
+    for(const body of Array.from(table.tBodies))body.remove();
     const types={bug_fix:tr('Исправление'),feature:tr('Функция'),refactor:tr('Рефакторинг'),tests:tr('Тесты'),documentation:tr('Документация'),build:tr('Сборка'),audit:tr('Аудит'),research:tr('Исследование'),maintenance:tr('Поддержка')};
-    const type=Object.hasOwn(types,group.task_type)?types[group.task_type]:'';
-    const difficulty={simple:tr('Простая'),medium:tr('Средняя'),complex:tr('Сложная')}[group.difficulty];
-    cell(type||group.task_type||tr('Без типа'),difficulty||tr('Без оценки сложности'));
-    cell(group.accepted+' / '+group.tasks,group.reviewed+' '+tr('проверено'));
-    cell(group.first_pass_known?group.first_pass_accepted+' / '+group.first_pass_known:'—');
-    const summary=(data,format)=>{
-      if(!data?.samples){cell('—');return;}
-      cell([data.mean,data.median,data.p90].map(v=>format(Math.round(v||0))).join(' / '),tasksWord(data.samples));
+    const difficulties={simple:tr('Простая задача'),medium:tr('Средняя сложность'),complex:tr('Сложная задача')};
+    const cohorts=new Map();
+    const ordered=[...groups].sort((a,b)=>Number(!!b.task_type)-Number(!!a.task_type));
+    ordered.forEach((group,i)=>{
+      const key=JSON.stringify([group.task_type,group.difficulty]);
+      if(!cohorts.has(key)){
+        const body=el('tbody'),heading=el('tr',undefined,'am-efficiency-cohort');
+        const type=Object.hasOwn(types,group.task_type)?types[group.task_type]:group.task_type||tr('Без типа');
+        const label=el('th',type);label.scope='rowgroup';label.colSpan=5;
+        label.append(el('span',difficulties[group.difficulty]||tr('Без оценки сложности'),'am-small am-muted'));
+        heading.append(label);body.append(heading);cohorts.set(key,body);
+      }
+      cohorts.get(key).append(...efficiencyRows(group,i));
+    });
+    table.append(...cohorts.values());
+  }
+  function efficiencyRows(group,index){
+    const row=el('tr',undefined,'am-efficiency-row'),details=el('tr',undefined,'am-efficiency-detail');
+    details.id='stats-efficiency-detail-'+index;details.hidden=true;
+    const model=(names[group.agent]||group.agent)+' '+(group.model?modelName(group.model):tr('Модель неизвестна'));
+    const button=el('button',undefined,'am-efficiency-expand');button.type='button';button.title=model;
+    button.setAttribute('aria-expanded','false');button.setAttribute('aria-controls',details.id);
+    button.append(el('span',model),svgIcon(['M9 6l6 6-6 6']));
+    button.addEventListener('click',()=>{details.hidden=!details.hidden;button.setAttribute('aria-expanded',String(!details.hidden));});
+    const name=el('th');name.scope='row';name.append(button);row.append(name);
+    const fraction=(value,total)=>total?value+tr(' из ')+total:'—';
+    const metric=(data,format)=>data?.samples?format(Math.round(data.median||0)):'—';
+    row.append(el('td',fraction(group.accepted,group.tasks)),el('td',fraction(group.first_pass_accepted,group.first_pass_known)),
+      el('td',metric(group.accepted_new_input_plus_output,tokensText)),el('td',metric(group.time_to_acceptance_ms,statsDuration)));
+
+    const panel=el('td');panel.colSpan=5;
+    const metrics=el('div',undefined,'am-efficiency-metrics');
+    const addMetric=(title,data,format)=>{
+      const section=el('div');section.append(el('h4',title));
+      if(!data?.samples){section.append(el('p',tr('Нет данных'),'am-small am-muted'));metrics.append(section);return;}
+      const list=el('dl');
+      for(const [label,value] of [[tr('Среднее'),data.mean],[tr('Медиана'),data.median],['P90',data.p90]]){
+        list.append(el('dt',label),el('dd',format(Math.round(value||0))));
+      }
+      section.append(list,el('p',tasksWord(data.samples),'am-small am-muted'));metrics.append(section);
     };
-    summary(group.accepted_new_input_plus_output,tokensText);
-    summary(group.accepted_active_runtime_ms,statsDuration);
-    summary(group.time_to_acceptance_ms,statsDuration);
-    return row;
+    addMetric(tr('Токены до приёмки'),group.accepted_new_input_plus_output,tokensText);
+    addMetric(tr('Активная работа'),group.accepted_active_runtime_ms,statsDuration);
+    addMetric(tr('Время до приёмки'),group.time_to_acceptance_ms,statsDuration);
+    panel.append(el('p',tr('Проверено ')+fraction(group.reviewed,group.tasks)+' · '+tr('Вход без кэша и выход.'),'am-small am-muted'),metrics);
+    details.append(panel);
+    return [row,details];
   }
   async function exportStats(){
     if(!project||statsExporting)return;
