@@ -858,9 +858,9 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-efficiency-expand svg { width:var(--am-space-3); height:var(--am-space-3); flex:none; color:var(--am-muted); fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
 #am-concept .am-efficiency-expand[aria-expanded=true] svg { transform:rotate(90deg); }
 #am-concept .am-efficiency-detail > td { padding-block-start:0; padding-inline-start:calc(var(--am-space-3) + var(--am-space-2)); }
-#am-concept .am-efficiency-breakdown { border-inline-start:1px solid var(--am-line); padding-inline-start:var(--am-space-3); }
+#am-concept .am-efficiency-breakdown { padding:var(--am-space-3) var(--am-space-4); border-radius:var(--am-radius-l); background:var(--am-bubble); }
 #am-concept .am-efficiency-breakdown p { margin:0; }
-#am-concept .am-efficiency-metrics { width:100%; border-collapse:collapse; margin-block:var(--am-space-2); }
+#am-concept .am-efficiency-metrics { width:100%; border-collapse:collapse; margin-block-end:var(--am-space-2); }
 #am-concept .am-efficiency-metrics :is(th,td) { padding:var(--am-space-1) var(--am-space-2); }
 #am-concept .am-efficiency-metrics :first-child:is(th,td) { padding-inline-start:0; }
 #am-concept .am-efficiency-metrics :last-child:is(th,td) { padding-inline-end:0; }

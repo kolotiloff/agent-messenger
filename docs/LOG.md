@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-25 — Codex (T-313 expanded efficiency panel)
+
+- Applied the outgoing message background, radius and padding to the expanded model details. Group headings and summary rows retain their plain surface. [PR #209](https://github.com/kolotiloff/agent-messenger/pull/209).
+
 ## 2026-11-25 — Codex (T-313 efficiency presentation)
 
 - Show exact fractions on hover or keyboard focus. Use a single background, rules between groups and an indented breakdown. Chromium and WebKit fixtures cover both ways of revealing the counts. [PR #209](https://github.com/kolotiloff/agent-messenger/pull/209).
