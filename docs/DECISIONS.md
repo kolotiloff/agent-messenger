@@ -673,3 +673,13 @@ The window replaces the cancel control with an hourglass during submission and w
 ## D-201 — Window tooltip wording (T-295)
 
 Use sentence case without an ending period for short tooltips. Keep normal punctuation for multi-sentence explanations. A button tooltip names the action. A noninteractive update indicator describes its state, and a cancellation button exposes the state as an accessible description.
+
+## D-202 — Observe quiet Codex workers (T-290)
+
+After ten minutes without output, publish one advisory per silent period if the recorded Codex process is still alive and there is no tracked command or ended turn. New output starts a new observation period. Keep the one-minute exit warning from D-173 for a completed turn. Both events follow the same task and project as the report. They do not complete, stop, retry, or unlock a task.
+
+The coordinator's task list reports elapsed time since the latest worker output and names a currently observed command when available. Command timing comes from the existing task feed and stays on that task's route. For a remote command, the time is when this computer received its start. A full timing history or an unknown worker state omits the active command rather than guessing.
+
+## D-203 — Stop from the task list (T-291)
+
+An eligible task row offers Stop the task in its context menu without changing the selected conversation. Both entry points share the existing stop request and pending state. Finished tasks, read-only tasks and unreachable workers have no stop item. While a stop request is pending, its item is disabled.

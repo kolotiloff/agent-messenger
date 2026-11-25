@@ -241,7 +241,7 @@ var netRef = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9:._-]{0,79}$`)
 
 // remoteEventKinds are the task events another computer may forward; any
 // other kind is ignored (audit 2026-11-09).
-var remoteEventKinds = map[string]bool{"report": true, "question": true, "failed": true, "blocked": true, "interrupted": true, "cancelled": true, "answered": true, "continued": true, "started": true, "accepted": true, "cancel_refused": true, TaskEventWorkerStillRunning: true}
+var remoteEventKinds = map[string]bool{"report": true, "question": true, "failed": true, "blocked": true, "interrupted": true, "cancelled": true, "answered": true, "continued": true, "started": true, "accepted": true, "cancel_refused": true, TaskEventWorkerStillRunning: true, TaskEventWorkerQuiet: true}
 
 func safeNetOp(opID string) string {
 	if netOpID.MatchString(opID) {
@@ -1472,6 +1472,9 @@ func applyReport(tx *sql.Tx, from netLink, b netBody, name string) error {
 			return nil
 		}
 		_, err := tx.Exec(`INSERT INTO remote_task_items(task_id,seq,kind,title,text,description,created_at) VALUES (?,?,?,?,?,?,?)`, t.ID, seq+1, b.Event, clip(b.Title, 200), clip(b.Text, maxForwardedItemText), clip(strings.Join(strings.Fields(b.Description), " "), 200), now())
+		if err == nil && activity && t.Provider == "codex" {
+			_, err = tx.Exec(`UPDATE tasks SET version=version+1 WHERE id=?`, t.ID)
+		}
 		return err
 	case "accepted":
 		if _, err := tx.Exec(`UPDATE tasks SET folder=?,remote_task=?,detail=?,updated_at=?,version=version+1 WHERE id=?`, clip(b.Folder, 4096), clip(b.Mirror, 64), "accepted by "+name, now(), t.ID); err != nil {
@@ -1528,7 +1531,7 @@ func applyReport(tx *sql.Tx, from netLink, b netBody, name string) error {
 	if !taskStates[b.State] || (b.Audience != AudienceCoordinator && b.Audience != AudienceOwner) || !remoteEventKinds[b.Event] {
 		return nil
 	}
-	if b.Event == TaskEventWorkerStillRunning {
+	if b.Event == TaskEventWorkerStillRunning || b.Event == TaskEventWorkerQuiet {
 		if b.State != "running" || t.State != "running" || t.CancelRequested || t.Provider != "codex" || b.Audience != AudienceCoordinator {
 			return nil
 		}

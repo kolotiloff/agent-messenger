@@ -52,8 +52,10 @@ type taskRuns struct {
 }
 
 type liveRun struct {
-	task       string
-	lastOutput atomic.Int64 // unix nanoseconds
+	task           string
+	lastOutput     atomic.Int64 // unix nanoseconds
+	activeCommands atomic.Int32
+	turnEnded      atomic.Bool
 }
 
 func (t *taskRuns) started(run, task string) *liveRun {
@@ -286,6 +288,7 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 					// T-172: the worker's turn ended. If its process does not
 					// end too, say what keeps it; nothing is closed here.
 					finalNoted = true
+					live.turnEnded.Store(true)
 					_ = s.store.NoteRunOutput(runID)
 					_ = s.store.NoteRunFinal(runID)
 					go s.watchLinger(runID, task.ID, task.Provider, obs, lingerDone)
@@ -300,12 +303,14 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 							continue
 						}
 						activeCommands[item.Title] = true
+						live.activeCommands.Add(1)
 						item.Title = runID + "/" + item.Title
 					case "command_end":
 						if !activeCommands[item.Title] {
 							continue
 						}
 						delete(activeCommands, item.Title)
+						live.activeCommands.Add(-1)
 						item.Title = runID + "/" + item.Title
 					}
 					_ = s.store.AppendTaskRunItem(runID, item.Kind, item.Title, item.Text, item.Description)
@@ -334,6 +339,9 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	cancelled := false
 	stopWatch := make(chan struct{})
 	watchDone := make(chan struct{})
+	if task.Provider == "codex" {
+		go s.watchCodexSilence(runID, live, obs, stopWatch)
+	}
 	go func() {
 		defer close(watchDone)
 		ticker := time.NewTicker(taskCancelPoll)
@@ -579,6 +587,41 @@ func journalDetail(detail string, err error) string {
 var taskLingerAfter atomic.Int64
 
 func init() { taskLingerAfter.Store(int64(time.Minute)) }
+
+// taskQuietAfter is separate from the grace period for an ended turn.
+const taskQuietAfter = 10 * time.Minute
+
+func (s *Supervisor) watchCodexSilence(run string, live *liveRun, obs platform.Observation, done <-chan struct{}) {
+	tick := time.NewTicker(core.RunOutputStep())
+	defer tick.Stop()
+	var notified int64
+	for {
+		select {
+		case <-done:
+			return
+		case at := <-tick.C:
+			s.observeCodexSilence(run, live, obs, at, &notified)
+		}
+	}
+}
+
+func (s *Supervisor) observeCodexSilence(run string, live *liveRun, obs platform.Observation, at time.Time, notified *int64) {
+	last := live.lastOutput.Load()
+	elapsed := at.Sub(time.Unix(0, last))
+	if last == *notified || elapsed < taskQuietAfter || live.turnEnded.Load() || live.activeCommands.Load() != 0 {
+		return
+	}
+	current, err := platform.ReadObservation(obs.PID)
+	if err != nil || current != obs || live.lastOutput.Load() != last || live.turnEnded.Load() || live.activeCommands.Load() != 0 {
+		return
+	}
+	// Each uninterrupted quiet episode has one advisory. It has no effect
+	// on the task phase or the worker's reservation.
+	*notified = last
+	if err := s.store.NotifyCodexQuiet(run, elapsed); err != nil {
+		journal.Printf("run %s: cannot record worker silence: %v", run, err)
+	}
+}
 
 // watchLinger records which processes keep a run going after the worker's
 // final message. It only describes the run: by D-021 and Q-030 the run still

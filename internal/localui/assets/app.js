@@ -303,7 +303,7 @@
     // T-126: an open task on a computer this one lost contact with.
     if(t.remote?.lost&&!t.remote.from&&activeStates.includes(t.state))
       return [tr('Связь потеряна, исход неизвестен'),'am-muted',t.remote.last_seen?'«'+t.remote.name+tr('» не на связи с ')+stamp(t.remote.last_seen):'«'+t.remote.name+tr('» больше нет в сети')];
-    if(activeStates.includes(t.state)&&t.remote?.cancel_state){
+    if(activeStates.includes(t.state)&&stopProgress(t)){
       if(t.remote.silent)return [tr('Остановка не подтверждена'),'am-status-wait'];
       return [tr('Ждём завершения задачи…'),'am-status-wait'];
     }
@@ -345,7 +345,13 @@
     event.preventDefault();
     const ok=p?finishedStates.includes(t.state)||sharedLost(t,p):finishedStates.includes(t.state);
     const tip=ok?'':p?tr('Задача ещё идёт на компьютере «')+p.name+tr('». Удалить её можно, когда она закончится'):tr('Сначала остановите задачу');
-    popMenu(event.clientX,event.clientY,[{text:tr('Удалить из списка'),off:!ok,tip,pick:()=>askRemoveTask(t,p)}]);
+    const entries=[];
+    if(!p&&canStopTask(t)){
+      const pending=!!stopProgress(t);
+      entries.push({text:tr('Остановить задачу'),off:pending,tip:pending?tr('Остановка уже запрошена'):'',pick:()=>stopTask(t)});
+    }
+    entries.push({text:tr('Удалить из списка'),off:!ok,tip,pick:()=>askRemoveTask(t,p)});
+    popMenu(event.clientX,event.clientY,entries);
   }
   function askRemoveTask(t,p){
     const text=p?tr('Задача пропадёт из списка на этом компьютере. У других она останется, пока её не удалят на компьютере «')+p.name+'».'
@@ -400,7 +406,7 @@
       menu=el('div',undefined,'am-select-menu am-context-menu');menu.id='device-menu';menu.setAttribute('popover','manual');menu.setAttribute('role','menu');root.append(menu);
       const close=()=>{if(menu.matches(':popover-open'))menu.hidePopover();};
       document.addEventListener('pointerdown',e=>{if(!menu.contains(e.target))close();});
-      menu.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();close();}});
+      menu.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close();}});
       menu.addEventListener('focusout',e=>{if(!menu.contains(e.relatedTarget))close();});
       window.addEventListener('resize',close);
     }
@@ -1527,9 +1533,14 @@
   }
   // Stop, like in a chat: a square button in the input field, or Esc.
   const stopSubmissions=new Map();
+  function taskUnreachable(t){
+    return !!t.remote&&!t.remote.from&&(t.state==='blocked'||t.state==='interrupted'||(activeStates.includes(t.state)&&(!!t.remote.lost||!!t.remote.silent)));
+  }
+  function canStopTask(t){return activeStates.includes(t.state)&&!taskUnreachable(t);}
+  function stopProgress(t){return t.remote?.cancel_state||stopSubmissions.get(t.id);}
   function renderStopControls(t){
     const button=$('task-stop'),status=$('task-stop-status');
-    const progress=button.hidden?'':t.remote?.cancel_state||stopSubmissions.get(t.id);
+    const progress=button.hidden?'':stopProgress(t);
     button.disabled=!!progress;
     const text={
       sending:tr('Отправляем запрос на остановку…'),
@@ -1551,21 +1562,30 @@
       await postAPI('/api/task-cancel',{task:t.id});feedSignature='';await refresh();
     });
   }
-  async function stopTask(){
-    const t=selectedTaskRow(),button=$('task-stop');
-    if(!t||$('compose').hidden||button.hidden||t.remote?.cancel_state||stopSubmissions.has(t.id))return;
+  function stopSelectedTask(){
+    if(!$('compose').hidden&&!$('task-stop').hidden)void stopTask(selectedTaskRow());
+  }
+  async function stopTask(row){
+    if(!row)return;
+    const t=taskRows().find(task=>task.id===row.id)||(selectedTask===row.id?selectedTaskRow():null);
+    if(!t||!canStopTask(t)||stopProgress(t))return;
     stopSubmissions.set(t.id,'sending');
-    button.classList.add('am-tip-off');
-    renderStopControls(t);
+    if(selectedTask===t.id){
+      $('task-stop').classList.add('am-tip-off');
+      renderStopControls(t);
+    }
+    renderTaskList();
     try{
       await postAPI('/api/task-cancel',{task:t.id});
       if(t.remote&&!t.remote.from)stopSubmissions.set(t.id,'queued');
       if(selectedTask===t.id)showError(null);
     }catch(error){
       if(selectedTask===t.id)showError(error);
+      else addNotice('task-stop-'+t.id+'-'+Date.now(),'bad',tr('Не удалось подтвердить остановку')+' «'+t.title+'»',capital(error.message));
     }finally{
       if(stopSubmissions.get(t.id)==='sending')stopSubmissions.delete(t.id);
       if(selectedTask===t.id)renderStopControls(selectedTaskRow()||t);
+      renderTaskList();
       feedSignature='';
       await refresh();
     }
@@ -1844,7 +1864,7 @@
     // its outcome there is already unknown.
     // T-131: an own task on another computer that cannot be reached has no
     // input and no stop button: nothing would arrive. One action closes it here.
-    const unreachable=!!t.remote&&!t.remote.from&&(t.state==='blocked'||t.state==='interrupted'||(activeStates.includes(t.state)&&(!!t.remote.lost||!!t.remote.silent)));
+    const unreachable=taskUnreachable(t);
     // D-120: a stuck task of this computer is closed by hand once its worker
     // is certainly gone; the client checks that and refuses otherwise.
     const stuckHere=!unreachable&&(t.state==='blocked'||t.state==='interrupted');
@@ -1940,7 +1960,7 @@
   const checkPath=['M21 12a9 9 0 1 1-3-6.7L21 8','M21 3v5h-5'];
   const gearPath=['M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z'];
   // The update mark: a down arrow.
-  function appendUpdateGlyphs(node){node.append(svgIcon(['M12 4v11M7 10l5 5 5-5M5 20h14']));}
+  function appendUpdateGlyphs(node){node.append(svgIcon(['M12 3v12m-5-5 5 5 5-5M3 15v4a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4']));}
   function svgIcon(paths,circle){
     const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');svg.setAttribute('focusable','false');
     if(circle){const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx','12');c.setAttribute('cy','12');c.setAttribute('r','3');svg.append(c);}
@@ -3389,10 +3409,10 @@
   $('answer-text').addEventListener('input',()=>{sizeAnswer();answerControls();});
   $('answer-send').addEventListener('click',sendAnswer);
   // Enter sends; Shift+Enter adds a line. An IME composition keeps its Enter.
-  $('task-stop').addEventListener('click',stopTask);
+  $('task-stop').addEventListener('click',stopSelectedTask);
   $('lost-close').addEventListener('click',closeHere);
   $('task-stop').addEventListener('mouseleave',()=>$('task-stop').classList.remove('am-tip-off'));
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.isComposing&&!$('task-stop').hidden&&!$('compose').hidden&&!document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true]')){e.preventDefault();stopTask();}});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.isComposing&&!$('task-stop').hidden&&!$('compose').hidden&&!document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true]')){e.preventDefault();stopSelectedTask();}});
   $('answer-text').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();sendAnswer();}});
   $('project-dialog-close').addEventListener('click',()=>$('project-dialog').close());
   $('settings-open').addEventListener('click',()=>{$('auto-update-status').textContent='';$('settings-dialog').showModal();loadServer();});

@@ -88,14 +88,19 @@ func (s *Store) AppendTaskRunItem(run, kind, title, text, description string) er
 		if _, err := tx.Exec(`INSERT INTO task_run_items(run_id,seq,kind,title,text,description,created_at) VALUES (?,?,?,?,?,?,?)`, run, seq+1, kind, clip(title, 200), clip(text, maxRunItemText), description, now()); err != nil {
 			return err
 		}
-		if (!activity && n >= maxForwardedItems) || (activity && seq-n >= 2*maxForwardedItems) {
-			return nil
-		}
 		// A task another computer started shows its progress there too
 		// (D-055), in the same transaction.
 		var task string
 		if err := tx.QueryRow(`SELECT task_id FROM task_runs WHERE id=?`, run).Scan(&task); err != nil {
 			return err
+		}
+		if activity {
+			if _, err := tx.Exec(`UPDATE tasks SET version=version+1 WHERE id=? AND provider='codex'`, task); err != nil {
+				return err
+			}
+		}
+		if (!activity && n >= maxForwardedItems) || (activity && seq-n >= 2*maxForwardedItems) {
+			return nil
 		}
 		link, err := taskLink(tx, task)
 		if err != nil || link.origin == nil {

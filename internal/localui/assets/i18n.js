@@ -164,6 +164,8 @@
   'Разделы':'Sections',
   'Задача':'Task',
   'Остановить задачу':'Stop the task',
+  'Остановка уже запрошена':'Stop already requested',
+  'Не удалось подтвердить остановку':'Could not confirm the stop',
   'Отправляем запрос на остановку…':'Sending the stop request…',
   'Запрос на остановку в очереди. Ждём завершения задачи…':'Stop request queued. Waiting for the task to stop…',
   'Запрос на остановку принят сервером. Ждём завершения задачи…':'The server accepted the stop request. Waiting for the task to stop…',

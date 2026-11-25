@@ -21,6 +21,58 @@ type TaskActivity struct {
 	Tokens int64
 }
 
+// RunningTaskCommand is the last observed start without a matching end.
+// A remote start time is when this computer received the observation.
+type RunningTaskCommand struct {
+	Command string
+	At      string
+}
+
+// TaskRunningCommand reuses the command timing records from the task feed.
+// A full feed may have discarded an ending record, so it supplies no
+// active command once its timing allowance is exhausted.
+func (s *Store) TaskRunningCommand(id string, remote bool) (RunningTaskCommand, error) {
+	store, err := s.storeForTask(id)
+	if err != nil {
+		return RunningTaskCommand{}, err
+	}
+	var row *sql.Row
+	if remote {
+		row = store.db.QueryRow(`WITH timing AS (
+ SELECT seq,kind,title,text,created_at,substr(title,1,instr(title,'/')) AS run
+ FROM remote_task_items WHERE task_id=? AND kind IN ('command_start','command_end')
+), candidate AS (
+ SELECT i.text,i.created_at,i.run FROM timing i
+ WHERE i.kind='command_start' AND i.text<>''
+ AND i.created_at>=COALESCE((SELECT MAX(created_at) FROM task_events
+   WHERE project=(SELECT project FROM tasks WHERE id=?) AND task_id=?
+   AND kind IN ('continued','worker_still_running')), '')
+ AND NOT EXISTS (SELECT 1 FROM timing e WHERE e.seq>i.seq AND e.kind='command_end' AND e.title=i.title)
+ ORDER BY i.seq DESC LIMIT 1
+)
+ SELECT c.text,c.created_at FROM candidate c
+ WHERE (SELECT COUNT(*) FROM timing) < ? AND (SELECT COUNT(*) FROM timing WHERE run=c.run) < ?`,
+			id, id, id, 2*maxRunItems, 2*maxForwardedItems)
+	} else {
+		row = store.db.QueryRow(`SELECT i.text,i.created_at FROM task_run_items i
+ WHERE i.run_id=(SELECT id FROM task_runs WHERE task_id=? AND state='running' AND final_at IS NULL
+   ORDER BY ordinal DESC LIMIT 1)
+ AND i.kind='command_start' AND i.text<>''
+ AND (SELECT COUNT(*) FROM task_run_items x WHERE x.run_id=i.run_id
+   AND x.kind IN ('command_start','command_end')) < ?
+ AND NOT EXISTS (SELECT 1 FROM task_run_items e WHERE e.run_id=i.run_id
+   AND e.seq>i.seq AND e.kind='command_end' AND e.title=i.title)
+ ORDER BY i.seq DESC LIMIT 1`, id, 2*maxRunItems)
+	}
+	var command RunningTaskCommand
+	err = row.Scan(&command.Command, &command.At)
+	if errors.Is(err, sql.ErrNoRows) {
+		return RunningTaskCommand{}, nil
+	}
+	command.Command = clip(command.Command, maxActivityText)
+	return command, err
+}
+
 // TaskActivity returns a task's last worker action and its tokens so far.
 func (s *Store) TaskActivity(id string) (TaskActivity, error) {
 	if s.split != nil {
