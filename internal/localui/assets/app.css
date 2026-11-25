@@ -364,7 +364,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 
 /* Main pane and tabs */
 #am-concept .am-main { display:flex; flex-direction:column; gap:var(--am-gap-content); min-width:0; min-height:0; padding:var(--am-pane-inset) 0; overflow:hidden; }
-#am-concept .am-tabs { display:flex; align-items:center; gap:var(--am-space-1); margin-inline:var(--am-pane-inset); padding-bottom:var(--am-space-3); border-bottom:1px solid var(--am-line); flex-shrink:0; }
+#am-concept .am-tabs { display:flex; align-items:center; gap:var(--am-space-1); margin-inline:var(--am-pane-inset); padding-bottom:var(--am-gap-content); border-bottom:1px solid var(--am-line); flex-shrink:0; }
 #am-concept .am-tab { min-height:var(--am-control-compact); padding:var(--am-text-nudge) var(--am-space-3) 0; color:var(--am-muted); white-space:nowrap; }
 #am-concept .am-panel-toggle { margin-left:auto; flex-shrink:0; }
 /* T-135: the feedback bug sits just left of the task list toggle. */
@@ -813,6 +813,12 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 /* T-201: the agent and model lists next to the period. */
 #am-concept .am-stats-filters { display:flex; flex-wrap:wrap; align-items:center; gap:var(--am-gap-control); }
 #am-concept .am-stats-filters .am-select-trigger { max-width:16em; }
+#am-concept .am-stats-scope { display:flex; flex-wrap:wrap; align-items:center; gap:var(--am-gap-control); min-width:0; }
+#am-concept .am-stats-actions { display:flex; flex:none; gap:var(--am-gap-control); margin-inline-start:auto; }
+#am-concept .am-stats-actions .am-icon-btn { width:var(--am-control); height:var(--am-control); color:var(--am-muted); }
+#am-concept .am-stats-actions .am-icon-btn:disabled { color:var(--am-disabled-text); }
+#am-concept .am-stats-actions .am-icon-btn[aria-expanded=true] { background:var(--am-selected); color:var(--am-text); }
+#am-concept .am-stats-actions .am-icon-btn svg { width:var(--am-text-xl); height:var(--am-text-xl); }
 #am-concept .am-peer-agents-note { grid-column:1/-1; margin:0; }
 #am-concept .am-peer-state { display:inline-flex; align-items:center; gap:var(--am-space-2); white-space:nowrap; }
 #am-concept .am-stats-hero { font-size:var(--am-text-xl); margin:0; }
@@ -846,7 +852,7 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-efficiency-table > thead th { white-space:nowrap; }
 #am-concept .am-efficiency-table > thead th:nth-child(n+2),
 #am-concept .am-efficiency-row > td { text-align:right; }
-#am-concept .am-efficiency-cohort > th { padding-block:var(--am-space-3) var(--am-space-1); border:0; color:var(--am-text); font-size:var(--am-text-s); font-weight:500; }
+#am-concept .am-efficiency-cohort > th { padding-block:var(--am-space-2) var(--am-space-1); border:0; color:var(--am-text); font-size:var(--am-text-s); font-weight:500; }
 #am-concept .am-efficiency-table tbody + tbody > .am-efficiency-cohort > th { border-top:1px solid var(--am-line); }
 #am-concept .am-efficiency-row > td { white-space:nowrap; font-variant-numeric:tabular-nums; }
 #am-concept .am-efficiency-rate { display:inline-block; position:relative; cursor:help; }

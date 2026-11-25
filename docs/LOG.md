@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-25 — Codex (T-313 statistics toolbar)
+
+- Kept period, agent and model filters together on the left. Added right-aligned chart and upward export icon buttons with tooltips and keyboard labels. Used the same vertical spacing on both sides of the tab divider and balanced the rules between efficiency groups. [PR #209](https://github.com/kolotiloff/agent-messenger/pull/209).
+
 ## 2026-11-25 — Codex (T-313 expanded efficiency panel)
 
 - Applied the outgoing message background, radius and padding to the expanded model details. Group headings and summary rows retain their plain surface. [PR #209](https://github.com/kolotiloff/agent-messenger/pull/209).

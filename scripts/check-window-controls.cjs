@@ -804,11 +804,44 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await chooseStatsOption('model','Sol 6.2 High');
       assert.equal(comparedStats,undefined,'efficiency is queried only on demand');
       const compareButton=page.getByRole('button',{name:'Эффективность',exact:true});
+      const exportButton=page.getByRole('button',{name:'Экспорт JSON',exact:true});
+      for (const button of [compareButton,exportButton]) {
+        await button.locator('svg').waitFor();
+        assert.equal(await button.innerText(),'');
+        assert.equal(await button.getAttribute('title'),await button.getAttribute('aria-label'));
+      }
+      const statsToolbar=page.locator('.am-stats-head');
+      for (const width of [1100,600]) {
+        await page.setViewportSize({width,height:600});
+        const toolbar=await statsToolbar.boundingBox();
+        const tabs=await page.locator('.am-tabs').boundingBox();
+        const selectedTab=await page.locator('[data-tab=stats]').boundingBox();
+        const border=await page.locator('.am-tabs').evaluate(node=>parseFloat(getComputedStyle(node).borderBottomWidth));
+        const dividerBottom=tabs.y+tabs.height;
+        const spaceAbove=dividerBottom-border-selectedTab.y-selectedTab.height;
+        const spaceBelow=toolbar.y-dividerBottom;
+        assert(Math.abs(spaceAbove-spaceBelow)<=1,'spacing around the tab divider is balanced');
+        const filters=await statsToolbar.locator('.am-stats-scope').boundingBox();
+        const compare=await compareButton.boundingBox();
+        const exportAction=await exportButton.boundingBox();
+        assert(Math.abs(exportAction.x+exportAction.width-toolbar.x-toolbar.width)<=1,'statistics actions stay at the right edge');
+        assert(compare.x+compare.width<=exportAction.x && Math.abs(compare.y-exportAction.y)<=1,'statistics actions stay together');
+        if(width===1100) {
+          assert(filters.x+filters.width<=compare.x && Math.abs(filters.y-compare.y)<=1,'statistics actions share the filter row');
+        } else {
+          assert(filters.y+filters.height<=compare.y || filters.x+filters.width<=compare.x,'statistics actions do not overlap the wrapped filters');
+        }
+      }
+      await page.setViewportSize({width:1100,height:600});
       await compareButton.click();
       const compared=page.locator('#stats-efficiency-grid .am-efficiency-row');
       await compared.getByText('Codex Sol 6.2 High',{exact:true}).waitFor();
       assert.equal(await compareButton.getAttribute('aria-expanded'),'true');
       await page.locator('#stats-efficiency-grid .am-efficiency-cohort').getByText('Исправление, простая задача',{exact:true}).waitFor();
+      const tableHeader=page.locator('#stats-efficiency-grid > thead th').first();
+      const cohortHeader=page.locator('#stats-efficiency-grid .am-efficiency-cohort th').first();
+      assert.equal(await tableHeader.evaluate(node=>getComputedStyle(node).paddingBottom),
+        await cohortHeader.evaluate(node=>getComputedStyle(node).paddingTop),'efficiency headers share the vertical inset around the rule');
       const acceptedRate=compared.locator('.am-efficiency-rate').first();
       const firstPassRate=compared.locator('.am-efficiency-rate').last();
       assert.equal(await acceptedRate.innerText(),'60%');
@@ -832,7 +865,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await more.click();
       assert.equal(await efficiencyDetails.isVisible(),false);
       assert.deepEqual(comparedStats,{project:'Frame',period:'month',computer:'dev-1',agent:'codex',model:'gpt-6.2-sol[effort=high]'});
-      await page.locator('#stats-export').click();
+      await exportButton.click();
       await page.locator('#stats-export-status').getByText(/125 задач.*messenger-statistics\.json/).waitFor();
       assert.deepEqual(exportedStats,{project:'Frame',period:'month',computer:'dev-1',agent:'codex',model:'gpt-6.2-sol[effort=high]'});
       await chooseStatsOption('agent','Все агенты');
