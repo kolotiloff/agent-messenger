@@ -15,7 +15,6 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
-| T-289 | Integrate the four pending PRs and audit the next release across project storage, task execution, network delivery, the window and distribution. | agent | Integrated on `codex/t289-release-audit`. Three update regressions fixed (D-198). See the [audit report](reports/2026-11-25-t289-release-audit.md). |
 | T-267 | Review of the 0.95 per-project storage: one unroutable network message stopped the inbox; a task whose start failed half-way blocked a shared resource and stayed «running»; a failed storage activation stopped the client from starting (2026-11-23). | agent | Released in 0.97. `claude/amazing-noether-apbflv` (D-188). Unroutable messages are skipped, starts for a project without storage are refused, unpublished tasks are closed at startup, activation that changed nothing keeps the single database. Covered by Go tests with fixture databases (no real models); the inbox fix was found by reading the code, not observed in use. |
 | T-268 | A worker's picture opens in its own large viewer with zoom, drag and arrows between the pictures of one message, instead of growing inside the chat (owner, 2026-11-23). | agent | Released in [0.98](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.98) via [PR #183](https://github.com/kolotiloff/agent-messenger/pull/183). `claude/amazing-noether-apbflv` (D-189). Checked in Chromium with fictional data (`scripts/check-window-pictures.cjs`, in CI for Chromium and WebKit); WebKit runs in CI only; not tried in the installed app. |
 | T-269 | Statistics filters: the period tabs, the lists and the computer chip had different heights and the chip sat at the right edge (owner, 2026-11-24). | agent | Released in [0.98](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.98) via [PR #183](https://github.com/kolotiloff/agent-messenger/pull/183). `claude/amazing-noether-apbflv` (D-189). One control height, all from the left. Seen on a Chromium screenshot with fictional data. |
@@ -110,17 +109,17 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 | T-016 | Windows and Linux: job-object process groups on Windows (D-043), `.exe` agents only (D-044), the window in the browser (`messenger open`) and zip/tar.gz archives in every release (D-045), Windows CI. Left: the owner's test on real Windows and Linux computers; installer and code signing there (self-update: T-038). | owner | PR #52, preview.32 |
 | T-015 | Done: broker hosted by the client, invitations, joining, check, devices and revoke, the «Сервер» tab ([BROKER.md](BROKER.md), D-033–D-035), computers with agents in the sidebar (T-035), tasks between computers (T-037). Left: Keychain (Q-013). | agent + owner | — |
 
-## Next
+| T-292 | Give computers consistent compact headers, use monitor icons for presence, and tint the local computer's header. | agent | [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198) (D-199). Both themes checked in Chromium and WebKit, including the equal footprint and position of the green dot and red cross. |
+| T-293 | Open or restore the macOS window with a primary menu bar click and open its menu with a secondary click. | agent | Same branch (D-199). macOS app built. Live menu bar clicks pending. |
+| T-294 | Show that update cancellation is pending and keep repeated clicks from duplicating the request. | agent | Same branch (D-200). Three-client fixture and Chromium and WebKit window checks. |
+| T-295 | Use consistent tooltip wording and capitalization, including the computer update action and status. | agent | [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198) (D-201). |
+| T-290 | Explain prolonged silence and delayed exit for running Codex workers. | agent | Implemented in [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198) (D-202). Tests exercise command timing, quiet episodes, the existing exit warning and scoped coordinator delivery. |
+| T-291 | Stop an eligible task from its context menu in the task list. | window | Implemented in [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198) (D-203). Window tests cover a different selected task, a pending stop, a read-only row and a completed task. |
 
-T-281 is implemented on `codex/t281-hide-unconfirmed-sidebar-model` and pending release. Chromium and WebKit checks cover the comma before elapsed time with and without a reported model.
+## Next
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
-| T-287 | Expire unstarted update requests after five minutes, synchronize the sidebar update controls across computers, and use the waiting color for coordinator questions. | agent | Implemented on `codex/t287-update-queue-timeout`, pending release. Three-client integration and browser regression checks. |
-| T-286 | Identify this computer in the computer sidebar. | window | Implemented after 1.0, pending the next release. A thin inset stripe on the left edge of the local card. It follows the computer when reordered, stays on it when another card is selected, and uses a soft white in dark mode and gray in light mode. |
-| T-285 | Group tasks awaiting their first launch under «Запланированные» in the task list. | window | After 1.0. Show the reason (e.g. waiting for a resource) and move the task to active when work starts. A running conversation waiting for an answer keeps its question status. The current product has no calendar-based launch command. |
-| T-288 | Keep the remote task stop action disabled and show its delivery status until the receiver confirms the outcome. | agent | Implemented on `codex/t288-remote-task-stop`, pending release. |
-| T-281 | In the computer sidebar, show only the running agent name while its model is unknown (owner, 2026-11-24). | window | After 0.100. Applies to every provider. Append the model once it is confirmed, for example «Codex» becomes «Codex Sol 6.2 High». Keep the existing duration and status styling. Cover the transition when a confirmed model arrives. |
 | T-234 | Unify text size in the task cards and sidebar agent rows, and simplify elapsed timing (owner, 2026-11-20). | window | Released in [0.90](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.90) via [PR #150](https://github.com/kolotiloff/agent-messenger/pull/150) (D-160). |
 | T-233 | Make conversation text and input lighter and slightly smaller (owner, 2026-11-20). | window | Released in [0.89](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.89) via [PR #148](https://github.com/kolotiloff/agent-messenger/pull/148) (D-159). |
 | T-232 | Stop the live command timer on earlier action groups when the worker moves on, and use muted headings and time (owner, 2026-11-20). | window | Released in [0.89](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.89) via [PR #148](https://github.com/kolotiloff/agent-messenger/pull/148) (D-158). |
@@ -252,8 +251,6 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 | T-174 | The journal repeated every few seconds that the mailbox of a computer no longer in the project is full (Ноут-Linux, 2026-11-14). | agent | Messages to a computer that is not listed, once they have waited out the reconnect grace, are parked or dropped and are not sent again. A computer that is listed keeps its mail, even when the mailbox is full. The full-mailbox line is written once, not every round. |
 | T-028 | Close or migrate existing persistent sessions and state, then retire the persistent Claude stream and Codex app-server owners. | agent | blocked: Q-012 |
 
-T-285 is implemented on `codex/t285-planned-tasks`, pending release. Browser checks cover selection and first launch. The network fixture covers a second task waiting for the first task to release a resource in both storage layouts.
-
 ## Backlog
 
 | ID | Task | Owner | Notes |
@@ -270,6 +267,12 @@ T-285 is implemented on `codex/t285-planned-tasks`, pending release. Browser che
 
 | ID | Task | PR |
 |---|---|---|
+| T-289 | Audit the integrated release and fix update state reconciliation. | Released in [1.0.1](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.1-preview.104) via [PR #196](https://github.com/kolotiloff/agent-messenger/pull/196). See the [audit report](reports/2026-11-25-t289-release-audit.md). |
+| T-288 | Show remote stop delivery and send one request until an outcome is known. | Released in 1.0.1 via [PR #193](https://github.com/kolotiloff/agent-messenger/pull/193). |
+| T-287 | Share update status, expire unstarted requests after five minutes, and color coordinator waits yellow. | Released in 1.0.1 via [PR #192](https://github.com/kolotiloff/agent-messenger/pull/192). |
+| T-286 | Mark the local computer with a thin sidebar stripe independent of selection. | Released in 1.0.1 via [PR #191](https://github.com/kolotiloff/agent-messenger/pull/191). |
+| T-285 | Show tasks awaiting their first launch under «Запланированные». | Released in 1.0.1 via [PR #195](https://github.com/kolotiloff/agent-messenger/pull/195). Browser and network fixtures cover the transition to Active. |
+| T-281 | Show only the agent name and status until the worker confirms its model. | Released in 1.0.1 via [PR #194](https://github.com/kolotiloff/agent-messenger/pull/194). |
 | T-284 | Publish Agent Messenger 1.0. | Released in [1.0](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.0-preview.103) via [PR #190](https://github.com/kolotiloff/agent-messenger/pull/190). Unmodified 0.99 and 0.101 both found and downloaded signed build 103. |
 | T-283 | Restore update discovery for installed 0.99 clients. | The post-publication check added in [PR #189](https://github.com/kolotiloff/agent-messenger/pull/189) caught the blocked 0.102 upgrade and passed on all five platforms for 1.0. Original public assets retained. |
 | T-282 | Find new signed updates when GitHub lists an older build first (owner, 2026-11-24). | Released in [0.101](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.101) via [PR #187](https://github.com/kolotiloff/agent-messenger/pull/187) (D-194). The patched check found 0.101 from the live response that put it below 0.99 and 0.98. The public route from older versions was restored in T-284. |

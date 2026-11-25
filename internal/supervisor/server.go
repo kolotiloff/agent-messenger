@@ -124,6 +124,11 @@ func (s *Supervisor) Server(_ context.Context, action string, payload json.RawMe
 		case s.networkWake <- struct{}{}:
 		default:
 		}
+		if action == "cancel-update" {
+			// The action is durably queued. Status reads have a separate
+			// lifetime and cannot turn this acknowledgement into an error.
+			return struct{}{}, nil
+		}
 	case "enable", "disable", "connect", "disconnect":
 		// The last exchange's problem belongs to the network before the
 		// change; the next round reports the new one's.
@@ -147,6 +152,10 @@ func (s *Supervisor) Server(_ context.Context, action string, payload json.RawMe
 	if err != nil {
 		return nil, err
 	}
+	cancellations, err := s.store.PendingUpdateCancellations()
+	if err != nil {
+		return nil, err
+	}
 	// Project the same replies used by notices onto the broker's presence
 	// snapshot so both change in this response, before the next report.
 	byPeer := make(map[string]core.NetUpdate, len(updates))
@@ -162,7 +171,7 @@ func (s *Supervisor) Server(_ context.Context, action string, payload json.RawMe
 	if err != nil {
 		return nil, err
 	}
-	return serverView{Status: st, NetFullAccess: full, Updates: updates, AutoUpdate: auto, AutoUpdateSupported: s.autoUpdateSupported()}, nil
+	return serverView{Status: st, NetFullAccess: full, Updates: updates, UpdateCancellations: cancellations, AutoUpdate: auto, AutoUpdateSupported: s.autoUpdateSupported()}, nil
 }
 
 // presence describes this computer's agents for its network: the agent
@@ -268,6 +277,8 @@ type serverView struct {
 	NetFullAccess bool `json:"net_full_access"`
 	// Updates are the last update requests to the other computers (T-078).
 	Updates []core.NetUpdate `json:"updates"`
+	// UpdateCancellations are exact requests awaiting processing.
+	UpdateCancellations []core.PendingUpdateCancellation `json:"update_cancellations"`
 	// AutoUpdate: this computer installs new releases by itself (T-277).
 	AutoUpdate          bool `json:"auto_update"`
 	AutoUpdateSupported bool `json:"auto_update_supported"`

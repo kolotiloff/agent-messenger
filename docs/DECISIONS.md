@@ -661,3 +661,25 @@ Give an accepted update five minutes to start on the receiving computer. Only ex
 ## D-198 — Reconcile update state by request ID and numeric build (T-289)
 
 The window orders numbered builds by their numeric suffix, following D-196. A receiving computer can clear a shared queued or installing mark by reporting an empty queue after it has reported that request's ID as pending. The broker commits both changes together. A result can advance the reported build while an independent update remains pending under its own ID. Neither queue removal nor a notification substitutes for evidence of an installed version.
+
+## D-199 — Compact computer cards and macOS menu bar clicks (T-292, T-293)
+
+Use a shared gray header, the same gray body on every computer card, and an accent tint on the local header. Selection changes the border. A gray outlined monitor has a green dot while online and a bold red cross while offline. Both markers occupy the same 8 by 8 px area at the lower-right corner. Keep the monitor outline visible through the cross. Mute offline names and use a 10 px gap after the monitor. The macOS menu bar button opens or restores the window on primary click. Its context menu supplies Open Window and Quit on secondary click.
+
+## D-200 — Show a queued update cancellation (T-294)
+
+The window replaces the cancel control with an hourglass during submission and while the local client has the exact cancellation queued. The server status carries pending cancellation targets, so redraws and reopenings preserve the indicator. A new window submission for the same pending cancellation reuses its operation, including after a lost reply. The target's actual update state still determines when the download arrow returns.
+
+## D-201 — Window tooltip wording (T-295)
+
+Use sentence case without an ending period for short tooltips. Keep normal punctuation for multi-sentence explanations. A button tooltip names the action. A noninteractive update indicator describes its state, and a cancellation button exposes the state as an accessible description.
+
+## D-202 — Observe quiet Codex workers (T-290)
+
+After ten minutes without output, publish one advisory per silent period if the recorded Codex process is still alive and there is no tracked command or ended turn. New output starts a new observation period. Keep the one-minute exit warning from D-173 for a completed turn. Both events follow the same task and project as the report. They do not complete, stop, retry, or unlock a task.
+
+The coordinator's task list reports elapsed time since the latest worker output and names a currently observed command when available. Command timing comes from the existing task feed and stays on that task's route. For a remote command, the time is when this computer received its start. A full timing history or an unknown worker state omits the active command rather than guessing.
+
+## D-203 — Stop from the task list (T-291)
+
+An eligible task row offers Stop the task in its context menu without changing the selected conversation. Both entry points share the existing stop request and pending state. Finished tasks, read-only tasks and unreachable workers have no stop item. While a stop request is pending, its item is disabled.

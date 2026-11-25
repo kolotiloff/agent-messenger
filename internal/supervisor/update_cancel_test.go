@@ -240,8 +240,24 @@ func TestAllWindowsWatchAndCancelTheSameRemoteUpdate(t *testing.T) {
 	}
 	t.Logf("three windows received the same request after %s", time.Since(start))
 	// The observer cancels while the receiver has not yet read its inbox.
-	if _, err := observer.Server(ctx, "cancel-update", []byte(fmt.Sprintf(`{"device":%q,"broker":%q,"request_id":%q}`, network.Self, network.BrokerID, id))); err != nil {
+	payload := []byte(fmt.Sprintf(`{"device":%q,"broker":%q,"request_id":%q}`, network.Self, network.BrokerID, id))
+	if _, err := observer.Server(ctx, "cancel-update", payload); err != nil {
 		t.Fatal(err)
+	}
+	first, err := observer.store.CancelObservedUpdate(network.Self, network.BrokerID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := observer.store.CancelObservedUpdate(network.Self, network.BrokerID, id)
+	if err != nil || first == "" || first != second {
+		t.Fatalf("repeat must reuse the queued operation: %q %q %v", first, second, err)
+	}
+	status, err := observer.Server(ctx, "status", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pending := status.(serverView).UpdateCancellations; len(pending) != 1 || pending[0].Computer != network.Self || pending[0].RequestID != id {
+		t.Fatalf("window did not see the pending cancellation: %+v", pending)
 	}
 	observer.networkRound(ctx)
 	target.networkRound(ctx)
@@ -254,5 +270,9 @@ func TestAllWindowsWatchAndCancelTheSameRemoteUpdate(t *testing.T) {
 	}
 	if u, err := host.store.NetUpdates(); err != nil || len(u) != 1 || u[0].State != core.UpdateCancelled {
 		t.Fatalf("requester result: %+v %v", u, err)
+	}
+	observer.networkRound(ctx)
+	if pending, err := observer.store.PendingUpdateCancellations(); err != nil || len(pending) != 0 {
+		t.Fatalf("confirmed cancellation still pending: %+v %v", pending, err)
 	}
 }

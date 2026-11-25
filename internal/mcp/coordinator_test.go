@@ -531,17 +531,48 @@ func TestCoordinatorWaitWakesForCodexExitDelay(t *testing.T) {
 	if err := st.RecordTaskRunProcess(run, platform.Observation{PID: 9, PGID: 9, StartToken: "s", BootID: "b"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.NoteRunFinal(run); err != nil {
+	if err := st.NoteRunOutput(run); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AppendTaskRunItem(run, "command_start", run+"/cmd", "go test ./...", ""); err != nil {
+		t.Fatal(err)
+	}
+	var activity struct {
+		Tasks []coordinatorTask `json:"tasks"`
+	}
+	if _, ok := c.tool("tasks", map[string]any{}, &activity); !ok || len(activity.Tasks) != 1 {
+		t.Fatalf("task list: %+v", activity)
+	}
+	if row := activity.Tasks[0]; row.ActiveCommand != "go test ./..." || row.ActiveCommandObservedAt == "" || row.ActiveCommandElapsedSeconds == nil || row.SecondsSinceWorkerOutput == nil {
+		t.Fatalf("running task observations: %+v", row)
+	}
+	if err := st.AppendTaskRunItem(run, "command_end", run+"/cmd", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	c.next++
 	waitID := c.next
 	c.send(waitID, "tools/call", map[string]any{"name": "wait", "arguments": map[string]any{"after": 0, "timeout_seconds": 30}})
 	c.none(waitID, 300*time.Millisecond)
-	if err := st.NotifyCodexStillRunning(run); err != nil {
+	if err := st.NotifyCodexQuiet(run, 10*time.Minute); err != nil {
 		t.Fatal(err)
 	}
 	resp, _ := c.expect(waitID, 3*time.Second)
+	var quiet waitResult
+	decodeTool(t, resp, &quiet)
+	if quiet.TimedOut || len(quiet.Events) != 1 || quiet.Events[0].Kind != core.TaskEventWorkerQuiet || quiet.Events[0].TaskID != task {
+		t.Fatalf("quiet advisory: %+v", quiet)
+	}
+	if err := st.NoteRunFinal(run); err != nil {
+		t.Fatal(err)
+	}
+	c.next++
+	waitID = c.next
+	c.send(waitID, "tools/call", map[string]any{"name": "wait", "arguments": map[string]any{"after": quiet.Events[0].Seq, "timeout_seconds": 30}})
+	c.none(waitID, 300*time.Millisecond)
+	if err := st.NotifyCodexStillRunning(run); err != nil {
+		t.Fatal(err)
+	}
+	resp, _ = c.expect(waitID, 3*time.Second)
 	var w struct {
 		waitResult
 		Idle []string `json:"idle_computers"`

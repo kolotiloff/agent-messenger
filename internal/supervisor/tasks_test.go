@@ -724,6 +724,64 @@ func TestCodexExitDelayNotifiesOnceThenReports(t *testing.T) {
 	h.stop()
 }
 
+func TestCodexQuietAdvisorySkipsCommandsAndRearmsOnOutput(t *testing.T) {
+	s, _ := netComputer(t, context.Background(), "quiet")
+	task, _, err := s.store.StartTask(core.StartTaskRequest{Project: "Game", OpID: "op", Provider: "codex", Text: "Run the checks"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runs, err := s.store.NextTaskRunIntents(1)
+	if err != nil || len(runs) != 1 {
+		t.Fatalf("run intents %v %v", runs, err)
+	}
+	run := runs[0]
+	if _, _, err := s.store.BeginTaskRun(run, "fixture"); err != nil {
+		t.Fatal(err)
+	}
+	obs, err := platform.ReadObservation(os.Getpid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.store.RecordTaskRunProcess(run, obs); err != nil {
+		t.Fatal(err)
+	}
+	at := time.Now()
+	live := s.tasks.started(run, task)
+	var notified int64
+	assertNotices := func(want int) {
+		t.Helper()
+		count := 0
+		for _, event := range coordinatorEvents(t, s.store) {
+			if event.Kind == core.TaskEventWorkerQuiet {
+				count++
+			}
+		}
+		if count != want {
+			t.Fatalf("got %d quiet advisories, want %d", count, want)
+		}
+	}
+	live.lastOutput.Store(at.UnixNano())
+	live.activeCommands.Store(1)
+	s.observeCodexSilence(run, live, obs, at.Add(taskQuietAfter), &notified)
+	assertNotices(0)
+	live.activeCommands.Store(0)
+	s.observeCodexSilence(run, live, obs, at.Add(taskQuietAfter), &notified)
+	s.observeCodexSilence(run, live, obs, at.Add(taskQuietAfter+time.Minute), &notified)
+	assertNotices(1)
+	resumed := at.Add(taskQuietAfter + 2*time.Minute)
+	live.lastOutput.Store(resumed.UnixNano())
+	s.observeCodexSilence(run, live, obs, resumed.Add(time.Minute), &notified)
+	assertNotices(1)
+	s.observeCodexSilence(run, live, obs, resumed.Add(taskQuietAfter), &notified)
+	live.turnEnded.Store(true)
+	live.lastOutput.Store(resumed.Add(taskQuietAfter).UnixNano())
+	s.observeCodexSilence(run, live, obs, resumed.Add(2*taskQuietAfter), &notified)
+	assertNotices(2)
+	if row, err := s.store.TaskByID(task); err != nil || row.State != "running" || row.CancelRequested {
+		t.Fatalf("quiet advisory changed the task: %+v %v", row, err)
+	}
+}
+
 func TestCancelStopsARunningTask(t *testing.T) {
 	h := newTaskHarness(t, "slow", AdapterLauncher{AllowTasks: true})
 	id := h.startTask("op-1", "claude", "x")

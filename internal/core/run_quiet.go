@@ -9,6 +9,7 @@ import (
 )
 
 const TaskEventWorkerStillRunning = "worker_still_running"
+const TaskEventWorkerQuiet = "worker_quiet"
 
 // T-172: a worker can write its final message and still not end: a child
 // it left (a diff window, a server) or the CLI itself stays up and keeps the
@@ -78,6 +79,15 @@ func (s *Store) NoteRunFinal(run string) error {
 // NotifyCodexStillRunning is called once by the run's watcher after it
 // observes the same Codex process still alive after the exit grace period.
 func (s *Store) NotifyCodexStillRunning(run string) error {
+	return s.notifyCodexRun(run, TaskEventWorkerStillRunning, true, "finished its turn, but the worker process is still running. No report has been published and the task still holds its locks.")
+}
+
+// NotifyCodexQuiet describes a live run whose turn has not ended.
+func (s *Store) NotifyCodexQuiet(run string, elapsed time.Duration) error {
+	return s.notifyCodexRun(run, TaskEventWorkerQuiet, false, fmt.Sprintf("is still running. No new output was observed for %s and no running command is tracked. The task still holds its locks.", elapsed.Round(time.Second)))
+}
+
+func (s *Store) notifyCodexRun(run, kind string, completed bool, detail string) error {
 	store, err := s.storeForRun(run)
 	if err != nil {
 		return err
@@ -92,8 +102,8 @@ func (s *Store) NotifyCodexStillRunning(run string) error {
 	return store.tx(func(tx *sql.Tx) error {
 		var task, project string
 		err := tx.QueryRow(`SELECT t.id,t.project FROM task_runs r JOIN tasks t ON t.id=r.task_id
-WHERE r.id=? AND r.state='running' AND r.final_at IS NOT NULL
-AND t.state='running' AND t.provider='codex' AND t.cancel_requested=0`, run).Scan(&task, &project)
+WHERE r.id=? AND r.state='running' AND (r.final_at IS NOT NULL)=?
+AND t.state='running' AND t.provider='codex' AND t.cancel_requested=0`, run, completed).Scan(&task, &project)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}
@@ -106,8 +116,7 @@ AND t.state='running' AND t.provider='codex' AND t.cancel_requested=0`, run).Sca
 				return err
 			}
 		}
-		msg := fmt.Sprintf("Codex on %s finished its turn, but the worker process is still running. No report has been published and the task still holds its locks.", name)
-		return insertTaskEvent(tx, project, task, AudienceCoordinator, TaskEventWorkerStillRunning, msg, "")
+		return insertTaskEvent(tx, project, task, AudienceCoordinator, kind, fmt.Sprintf("Codex on %s %s", name, detail), "")
 	})
 }
 
@@ -138,6 +147,13 @@ func (s *Store) NoteRunProcesses(run string, procs []RunProcess) error {
 // TaskRunQuiet describes the running run of a task of this computer, or nil
 // when it has none or nothing is recorded about it yet.
 func (s *Store) TaskRunQuiet(task string) (*RunQuiet, error) {
+	if s.split != nil {
+		project, err := s.storeForTask(task)
+		if err != nil {
+			return nil, err
+		}
+		return project.TaskRunQuiet(task)
+	}
 	var output, final, procs, procsAt sql.NullString
 	err := s.db.QueryRow(`SELECT output_at,final_at,processes,processes_at FROM task_runs WHERE task_id=? AND state='running' ORDER BY ordinal DESC LIMIT 1`, task).Scan(&output, &final, &procs, &procsAt)
 	if errors.Is(err, sql.ErrNoRows) {

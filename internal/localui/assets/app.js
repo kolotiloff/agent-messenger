@@ -303,7 +303,7 @@
     // T-126: an open task on a computer this one lost contact with.
     if(t.remote?.lost&&!t.remote.from&&activeStates.includes(t.state))
       return [tr('Связь потеряна, исход неизвестен'),'am-muted',t.remote.last_seen?'«'+t.remote.name+tr('» не на связи с ')+stamp(t.remote.last_seen):'«'+t.remote.name+tr('» больше нет в сети')];
-    if(activeStates.includes(t.state)&&t.remote?.cancel_state){
+    if(activeStates.includes(t.state)&&stopProgress(t)){
       if(t.remote.silent)return [tr('Остановка не подтверждена'),'am-status-wait'];
       return [tr('Ждём завершения задачи…'),'am-status-wait'];
     }
@@ -312,7 +312,7 @@
     // «not accepted»: say what is known.
     if(t.remote?.unaccepted&&!t.remote.from&&t.state==='running'){
       if(Date.now()-Date.parse(t.created_at)<5*60*1000)return [tr('Ждёт, когда «')+t.remote.name+tr('» примет'),'am-status-wait'];
-      return [tr('Нет ответа от «')+t.remote.name+'»','am-status-bad',tr('приём не подтверждён. Задача может идти там, но её ответы сюда не доходят; сама она не повторяется')];
+      return [tr('Нет ответа от «')+t.remote.name+'»','am-status-bad',tr('Приём не подтверждён. Задача может выполняться на удалённом компьютере, даже если ответы не доходят. Автоматической повторной отправки не будет.')];
     }
     switch(t.state){
       case 'running':return t.pending_launch?[t.waits_for_lock?tr('Ждёт ресурс «')+t.waits_for_lock+'»':tr('Ждёт запуска'),'am-status-wait']:[tr('Работает ')+minutes(from),'am-status-run','',from];
@@ -345,7 +345,13 @@
     event.preventDefault();
     const ok=p?finishedStates.includes(t.state)||sharedLost(t,p):finishedStates.includes(t.state);
     const tip=ok?'':p?tr('Задача ещё идёт на компьютере «')+p.name+tr('». Удалить её можно, когда она закончится'):tr('Сначала остановите задачу');
-    popMenu(event.clientX,event.clientY,[{text:tr('Удалить из списка'),off:!ok,tip,pick:()=>askRemoveTask(t,p)}]);
+    const entries=[];
+    if(!p&&canStopTask(t)){
+      const pending=!!stopProgress(t);
+      entries.push({text:tr('Остановить задачу'),off:pending,tip:pending?tr('Остановка уже запрошена'):'',pick:()=>stopTask(t)});
+    }
+    entries.push({text:tr('Удалить из списка'),off:!ok,tip,pick:()=>askRemoveTask(t,p)});
+    popMenu(event.clientX,event.clientY,entries);
   }
   function askRemoveTask(t,p){
     const text=p?tr('Задача пропадёт из списка на этом компьютере. У других она останется, пока её не удалят на компьютере «')+p.name+'».'
@@ -400,7 +406,7 @@
       menu=el('div',undefined,'am-select-menu am-context-menu');menu.id='device-menu';menu.setAttribute('popover','manual');menu.setAttribute('role','menu');root.append(menu);
       const close=()=>{if(menu.matches(':popover-open'))menu.hidePopover();};
       document.addEventListener('pointerdown',e=>{if(!menu.contains(e.target))close();});
-      menu.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();close();}});
+      menu.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close();}});
       menu.addEventListener('focusout',e=>{if(!menu.contains(e.relatedTarget))close();});
       window.addEventListener('resize',close);
     }
@@ -476,26 +482,48 @@
     if(active(localState))return {state:localState,id:localID};
     return peer?.update_pending?{state:'queued',id:peer.update_request_id}:null;
   }
+  const updateCancelAttempts=new Map();
+  function cancelUpdateKey(broker,device,id){return JSON.stringify([broker,device,id]);}
   function updateControl(peer,mark){
+    const broker=updateNetwork(),device=peer?.id||'';
+    const key=cancelUpdateKey(broker,device,mark.id);
+    const attempt=updateCancelAttempts.get(key);
+    const queued=server?.update_cancellations?.some(r=>r.device===device&&r.request_id===mark.id);
     const installing=mark.state==='updating';
-    const caption=installing?tr('Обновление устанавливается'):mark.state==='waiting'?tr('Обновление запрошено…'):tr('ждёт обновления');
+    if(!installing&&(attempt||queued)){
+      const caption=attempt==='sending'?tr('Отправляем запрос на отмену…'):
+        queued||attempt==='queued'?tr('Отмена запрошена, ждём подтверждения'):tr('Проверяем, принят ли запрос на отмену…');
+      const status=el('span',undefined,'am-update-icon am-update-wait am-update-cancelling');
+      status.title=caption;status.setAttribute('role','img');status.setAttribute('aria-label',caption);
+      status.append(svgIcon(['M6 3h12M6 21h12M8 3v5l8 8v5M16 3v5l-8 8v5']));
+      status.addEventListener('click',e=>e.stopPropagation());
+      return status;
+    }
+    const caption=installing?tr('Обновление устанавливается'):mark.state==='waiting'?tr('Обновление запрошено'):tr('Ждёт обновления');
     const canCancel=!installing&&!!mark.id&&(!peer||(peerFresh(peer)&&!versionOlder(peer.version,'0.100')&&!!peer.version));
     const b=el(canCancel?'button':'span',undefined,'am-update-icon am-peer-update '+(canCancel?'am-update-cancel':'am-update-wait'));
-    const label=canCancel?caption.replace(/…$/,'')+'. '+tr('Отменить запрос'):caption;
+    const label=canCancel?tr('Отменить обновление'):caption;
     b.title=label;b.setAttribute('aria-label',label);
     const indicator=svgIcon(checkPath);
     indicator.classList.add('am-update-spin');
     b.append(indicator);
     if(!canCancel){b.setAttribute('role','img');return b;}
+    b.setAttribute('aria-description',caption);
     b.type='button';b.dataset.key='cancel-update-'+(peer?.id||'local');
     b.append(svgIcon(['M6 6l12 12M18 6L6 18']));
-    const broker=updateNetwork(),device=peer?.id||'';
     b.addEventListener('keydown',e=>e.stopPropagation());
     b.addEventListener('click',async e=>{
-      e.stopPropagation();b.disabled=true;
-      try{await postAPI('/api/server-action',{action:'cancel-update',device,broker,request_id:mark.id},28000);}
-      catch(error){addNotice('cancel-'+mark.id,'bad',tr('Отменить запрос'),capital(error.message));}
-      finally{b.disabled=false;}
+      e.stopPropagation();
+      if(updateCancelAttempts.has(key))return;
+      updateCancelAttempts.set(key,'sending');renderMachines();
+      try{
+        await postAPI('/api/server-action',{action:'cancel-update',device,broker,request_id:mark.id},28000);
+        updateCancelAttempts.set(key,'queued');
+      }catch(error){
+        updateCancelAttempts.set(key,'unknown');
+        addNotice('cancel-'+mark.id,'bad',tr('Отмена обновления'),capital(error.message));
+      }
+      renderMachines();void loadServer();
     });
     return b;
   }
@@ -747,24 +775,35 @@
   function serverTag(){
     return machineRole(tr('сервер'),tr('На этом компьютере работает сервер сети'));
   }
+  function machinePresence(online){
+    const mark=el('span',undefined,'am-machine-presence'+(online?' online':''));
+    mark.title=online?tr('На связи'):tr('Нет связи');
+    mark.setAttribute('role','img');
+    mark.setAttribute('aria-label',mark.title);
+    const signal=el('span',undefined,'am-machine-signal');
+    signal.setAttribute('aria-hidden','true');
+    // With the seven-unit round stroke, both diagonals span the 24-unit view box.
+    if(!online)signal.append(svgIcon(['M3.5 3.5l17 17M20.5 3.5l-17 17']));
+    mark.append(svgIcon(['M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2ZM12 17v3M8 20h8']),signal);
+    return mark;
+  }
   function renderMachines(){
     if(draggedMachine)return;
     collectNotices();
     pickedComputers=new Set();
     const live=$('machines'),box=live.cloneNode(false),busyTasks=busyTasksByComputer();
     const machine=el('div',undefined,'am-machine-card');machine.setAttribute('aria-current','true');pickable(machine,'local');
-    // Every card is laid out the same (owner, 2026-11-18, T-198): the dot
-    // before the name, with the update icon and version at the top right. This computer's version and update button
-    // are the window's own elements, moved into its card (placeLocalParts).
+    // This computer's version and update button are moved into its header
+    // by placeLocalParts, alongside the same status icon as on remote cards.
     const head=el('div',undefined,'am-machine-name');
-    const dot=el('span',undefined,'am-dot'+(online?' online':''));dot.title=online?tr('На связи'):tr('Нет связи');head.append(dot);
-    head.append(el('span',view?.computer_name||tr('Этот компьютер')));
+    head.append(machinePresence(online),el('span',view?.computer_name||tr('Этот компьютер'),'am-machine-label'));
     // The computer that runs the network's server is labelled as such.
     if(server?.host?.running&&server.host.scope!=='local')head.append(serverTag());
     const coordinator=view?.project===project?view?.coordinator:null;
     if(coordinator?.active)head.append(machineRole(tr('координатор'),tr('На этом компьютере открыт чат-координатор выбранного проекта')));
     const version=el('div',undefined,'am-machine-version am-local-version');
-    machine.append(head);
+    const body=el('div',undefined,'am-machine-body');
+    machine.append(head,body);
     // A paused agent is left out, as other computers leave it out of what
     // they report (owner, 2026-11-18: two of three agents were off and the
     // Mac still listed all three). One still running a task stays until it
@@ -772,7 +811,7 @@
     const shownAgents=(view?.agents||[]).filter(a=>!a.paused||busyTasks.get('local\0'+a.agent)?.some(t=>activeStates.includes(t.state)));
     const lines=agentLines(shownAgents,coordinator?.connected?(coordinator.client||''):null,online,'local',busyTasks);
     if(!lines.children.length)lines.append(el('p',online?tr('Агенты не подключены'):tr('Нет связи'),'am-small am-muted'));
-    machine.append(lines);
+    body.append(lines);
     const corner=el('div',undefined,'am-card-update am-local-update');
     const localMark=updateMark(null);
     if(localMark)corner.append(updateControl(null,localMark));
@@ -786,8 +825,7 @@
       const fresh=peerFresh(peer);
       const card=el('div',undefined,'am-machine-card am-peer-card');card.dataset.peer=peer.id;if(peer.host)card.dataset.host='';pickable(card,peer.id,peerOrderKey(peer));
       const name=el('div',undefined,'am-machine-name');
-      const pdot=el('span',undefined,'am-dot'+(fresh?' online':''));pdot.title=fresh?tr('На связи'):tr('Нет связи');
-      name.append(pdot,el('span',peer.name));
+      name.append(machinePresence(fresh),el('span',peer.name,'am-machine-label'));
       if(peer.host)name.append(serverTag());
       const meta=el('div',undefined,'am-machine-meta');
       const corner=el('div',undefined,'am-card-update');
@@ -806,22 +844,23 @@
       }
       if(corner.children.length)meta.append(corner);
       if(installed)meta.append(el('span',versionName(installed),'am-version am-machine-version'));
-      name.append(meta);card.append(name);
+      const peerBody=el('div',undefined,'am-machine-body');
+      name.append(meta);card.append(name,peerBody);
       if(revokeAsk===peer.id&&hosted.has(peer.id)){
-        card.append(el('p',tr('Отозвать устройство? Вернуть его можно только новым приглашением.'),'am-small am-muted'));
+        peerBody.append(el('p',tr('Отозвать устройство? Вернуть его можно только новым приглашением.'),'am-small am-muted'));
         const actions=el('div',undefined,'am-actions am-device-confirm');
         const yes=el('button',tr('Отозвать'),'am-danger');yes.type='button';yes.dataset.key='revoke-yes-'+peer.id;
         yes.addEventListener('click',()=>{revokeAsk='';serverAction({action:'revoke',device:peer.id},'host','');});
         const no=el('button',tr('Отмена'));no.type='button';
         no.addEventListener('click',()=>{revokeAsk='';renderMachines();$('machines').querySelector('[data-key="'+CSS.escape('revoke-'+peer.id)+'"]')?.focus();});
-        actions.append(no,yes);card.append(actions);box.append(card);continue;
+        actions.append(no,yes);peerBody.append(actions);box.append(card);continue;
       }
       if(fresh){
         const plines=agentLines(peer.agents||[],peer.coordinator?peer.coordinator:null,true,peer.id,busyTasks);
         if(!plines.children.length)plines.append(el('p',tr('Агенты не подключены'),'am-small am-muted'));
-        card.append(plines);
+        peerBody.append(plines);
       }else{
-        card.append(el('p',peer.last_seen?tr('Был на связи ')+stamp(peer.last_seen):tr('Ещё не выходил на связь'),'am-small am-muted'));
+        peerBody.append(el('p',peer.last_seen?tr('Был на связи ')+stamp(peer.last_seen):tr('Ещё не выходил на связь'),'am-small am-muted'));
       }
       const can={revoke:hosted.has(peer.id)};
       if(can.revoke){
@@ -1494,9 +1533,14 @@
   }
   // Stop, like in a chat: a square button in the input field, or Esc.
   const stopSubmissions=new Map();
+  function taskUnreachable(t){
+    return !!t.remote&&!t.remote.from&&(t.state==='blocked'||t.state==='interrupted'||(activeStates.includes(t.state)&&(!!t.remote.lost||!!t.remote.silent)));
+  }
+  function canStopTask(t){return activeStates.includes(t.state)&&!taskUnreachable(t);}
+  function stopProgress(t){return t.remote?.cancel_state||stopSubmissions.get(t.id);}
   function renderStopControls(t){
     const button=$('task-stop'),status=$('task-stop-status');
-    const progress=button.hidden?'':t.remote?.cancel_state||stopSubmissions.get(t.id);
+    const progress=button.hidden?'':stopProgress(t);
     button.disabled=!!progress;
     const text={
       sending:tr('Отправляем запрос на остановку…'),
@@ -1518,21 +1562,30 @@
       await postAPI('/api/task-cancel',{task:t.id});feedSignature='';await refresh();
     });
   }
-  async function stopTask(){
-    const t=selectedTaskRow(),button=$('task-stop');
-    if(!t||$('compose').hidden||button.hidden||t.remote?.cancel_state||stopSubmissions.has(t.id))return;
+  function stopSelectedTask(){
+    if(!$('compose').hidden&&!$('task-stop').hidden)void stopTask(selectedTaskRow());
+  }
+  async function stopTask(row){
+    if(!row)return;
+    const t=taskRows().find(task=>task.id===row.id)||(selectedTask===row.id?selectedTaskRow():null);
+    if(!t||!canStopTask(t)||stopProgress(t))return;
     stopSubmissions.set(t.id,'sending');
-    button.classList.add('am-tip-off');
-    renderStopControls(t);
+    if(selectedTask===t.id){
+      $('task-stop').classList.add('am-tip-off');
+      renderStopControls(t);
+    }
+    renderTaskList();
     try{
       await postAPI('/api/task-cancel',{task:t.id});
       if(t.remote&&!t.remote.from)stopSubmissions.set(t.id,'queued');
       if(selectedTask===t.id)showError(null);
     }catch(error){
       if(selectedTask===t.id)showError(error);
+      else addNotice('task-stop-'+t.id+'-'+Date.now(),'bad',tr('Не удалось подтвердить остановку')+' «'+t.title+'»',capital(error.message));
     }finally{
       if(stopSubmissions.get(t.id)==='sending')stopSubmissions.delete(t.id);
       if(selectedTask===t.id)renderStopControls(selectedTaskRow()||t);
+      renderTaskList();
       feedSignature='';
       await refresh();
     }
@@ -1811,7 +1864,7 @@
     // its outcome there is already unknown.
     // T-131: an own task on another computer that cannot be reached has no
     // input and no stop button: nothing would arrive. One action closes it here.
-    const unreachable=!!t.remote&&!t.remote.from&&(t.state==='blocked'||t.state==='interrupted'||(activeStates.includes(t.state)&&(!!t.remote.lost||!!t.remote.silent)));
+    const unreachable=taskUnreachable(t);
     // D-120: a stuck task of this computer is closed by hand once its worker
     // is certainly gone; the client checks that and refuses otherwise.
     const stuckHere=!unreachable&&(t.state==='blocked'||t.state==='interrupted');
@@ -1907,7 +1960,7 @@
   const checkPath=['M21 12a9 9 0 1 1-3-6.7L21 8','M21 3v5h-5'];
   const gearPath=['M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z'];
   // The update mark: a down arrow.
-  function appendUpdateGlyphs(node){node.append(svgIcon(['M12 4v11M7 10l5 5 5-5M5 20h14']));}
+  function appendUpdateGlyphs(node){node.append(svgIcon(['M12 3v12m-5-5 5 5 5-5M3 15v4a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4']));}
   function svgIcon(paths,circle){
     const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');svg.setAttribute('focusable','false');
     if(circle){const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx','12');c.setAttribute('cy','12');c.setAttribute('r','3');svg.append(c);}
@@ -2556,7 +2609,19 @@
   async function loadServer(){
     if(serverBusy||serverPolling)return;
     serverPolling=true;const gen=serverGen;
-    try{const next=await api('/api/server');if(gen===serverGen&&!serverBusy){server=next;renderServer();}}
+    const cancelAttempts=[...updateCancelAttempts];
+    try{
+      const next=await api('/api/server');
+      if(gen===serverGen&&!serverBusy){
+        server=next;
+        // This snapshot started after the submission returned. Trust the
+        // durable queue from here, regardless of the submission's reply.
+        for(const [key,state] of cancelAttempts){
+          if(state!=='sending'&&updateCancelAttempts.get(key)===state&&(next.update_cancellations||state==='unknown'))updateCancelAttempts.delete(key);
+        }
+        renderServer();
+      }
+    }
     catch(error){if(gen===serverGen&&!serverBusy){$('host-state').textContent=error.message;$('member-state').textContent='';}}
     finally{serverPolling=false;}
   }
@@ -2586,7 +2651,7 @@
     badge($('host-badge'),h.running?tr('Работает'):h.enabled?tr('Не запустился'):tr('Остановлен'),h.running?'good':h.enabled?'bad':'');
     // Explanations live in the status tooltip so the card does not change
     // height; only a problem the owner must fix stays visible.
-    $('host-badge').title=!h.running?tr('Другие устройства смогут подключаться к этому компьютеру по одноразовому приглашению.'):tr('Принимает устройства: ')+(h.scope==='internet'?tr('из интернета и локальной сети'):h.scope==='lan'?tr('в локальной сети'):tr('только с этого компьютера'))+tr(', порт ')+h.port+'.';
+    $('host-badge').title=!h.running?tr('Подключение по одноразовому приглашению'):tr('Принимает устройства: ')+(h.scope==='internet'?tr('из интернета и локальной сети'):h.scope==='lan'?tr('в локальной сети'):tr('только с этого компьютера'))+tr(', порт ')+h.port;
     $('host-state').textContent=h.enabled&&m.connected?tr('Запущен свой сервер и есть подключение к другому. Задачи идут только через свой сервер. Остановите сервер или отключитесь от другого.'):h.running&&!h.addresses.length?tr('У компьютера нет адреса в локальной сети. Подключитесь к сети или выберите «Только этот компьютер».'):'';
     if(!serverEdited){$('host-scope').value=h.scope||'local';$('host-port').value=h.port||47100;$('host-public').value=h.public_address||'';$('host-public-box').hidden=$('host-scope').value!=='internet';}
     $('host-running').hidden=!h.running;
@@ -2609,7 +2674,7 @@
     $('member-blocked').hidden=!hostOn||m.connected;
     $('host-blocked').hidden=hostOn||!m.connected;
     $('host-running').closest('.am-card').querySelector('.am-server-grid').hidden=!hostOn&&m.connected;
-    $('member-badge').title=m.connected?tr('Этот компьютер входит в сервер ')+m.address+'.':tr('Вставьте код приглашения, который выдал сервер на другом компьютере.');
+    $('member-badge').title=m.connected?tr('Подключение к серверу ')+m.address:tr('Вставьте код приглашения с другого компьютера');
     $('member-state').textContent='';
     const cn=$('computer-name');if(view?.computer_name&&document.activeElement!==cn&&!cn.dataset.edited)cn.value=view.computer_name;
     const dl=$('member-details');dl.replaceChildren();
@@ -3109,7 +3174,7 @@
   // The update icon says in its tooltip which version came out (T-066).
   function updateTip(version,busy){
     const name=versionName(version);
-    let text=busy==='installing'?tr('Обновление устанавливается'):busy?tr('Обновление загружается'):name?tr('Вышла ')+name+tr('. Нажмите, чтобы обновить'):tr('Обновить');
+    let text=busy==='installing'?tr('Обновление устанавливается'):busy?tr('Обновление загружается'):name?tr('Обновить до ')+name:tr('Обновить');
     if(updateProgress)text=tr('Загружается обновление')+(updateProgress.version?' '+versionName(updateProgress.version):'')+': '+Math.floor(100*updateProgress.done/updateProgress.total)+'%';
     $('app-update-button').title=text;$('app-update-button').setAttribute('aria-label',text);
   }
@@ -3316,7 +3381,7 @@
   function splitter(pane,name,variable,usual,min,max,side){
     const handle=el('div',undefined,'am-splitter');
     handle.setAttribute('role','separator');handle.setAttribute('aria-orientation','vertical');handle.tabIndex=0;
-    handle.title=tr('Потяните, чтобы изменить ширину. Двойной щелчок: как было');
+    handle.title=tr('Потяните, чтобы изменить ширину. Дважды щёлкните, чтобы восстановить исходную ширину.');
     handle.setAttribute('aria-label',name);handle.setAttribute('aria-valuemin',String(min));handle.setAttribute('aria-valuemax',String(max));
     const key='messenger-width-'+variable.slice(5);
     const apply=(px,save)=>{px=Math.round(Math.min(max,Math.max(min,px)));root.style.setProperty(variable,px+'px');handle.setAttribute('aria-valuenow',String(px));if(save)remember(key,px===usual?'':String(px));};
@@ -3344,10 +3409,10 @@
   $('answer-text').addEventListener('input',()=>{sizeAnswer();answerControls();});
   $('answer-send').addEventListener('click',sendAnswer);
   // Enter sends; Shift+Enter adds a line. An IME composition keeps its Enter.
-  $('task-stop').addEventListener('click',stopTask);
+  $('task-stop').addEventListener('click',stopSelectedTask);
   $('lost-close').addEventListener('click',closeHere);
   $('task-stop').addEventListener('mouseleave',()=>$('task-stop').classList.remove('am-tip-off'));
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.isComposing&&!$('task-stop').hidden&&!$('compose').hidden&&!document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true]')){e.preventDefault();stopTask();}});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.isComposing&&!$('task-stop').hidden&&!$('compose').hidden&&!document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true]')){e.preventDefault();stopSelectedTask();}});
   $('answer-text').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();sendAnswer();}});
   $('project-dialog-close').addEventListener('click',()=>$('project-dialog').close());
   $('settings-open').addEventListener('click',()=>{$('auto-update-status').textContent='';$('settings-dialog').showModal();loadServer();});

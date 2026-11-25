@@ -462,7 +462,11 @@ func TaskFeedEntries(provider string, line []byte) []FeedEntry {
 	case "codex":
 		item, _ := e["item"].(map[string]any)
 		if e["type"] == "item.started" && item["type"] == "command_execution" {
-			return appendCommandEvent(out, "command_start", item["id"])
+			if id, ok := item["id"].(string); ok && id != "" {
+				command, _ := item["command"].(string)
+				return append(out, FeedEntry{Kind: "command_start", Title: id, Text: command})
+			}
+			return nil
 		}
 		if e["type"] != "item.completed" {
 			return nil

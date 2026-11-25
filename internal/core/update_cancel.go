@@ -129,6 +129,15 @@ func (s *Store) requestUpdateCancellation(computer, project, expectedBroker, exp
 				return fmt.Errorf("%w: компьютер «%s» не сообщил идентификатор ожидающего обновления", ErrRejected, p.Name)
 			}
 		}
+		if expectedID != "" {
+			// A window may lose the reply after the transaction commits.
+			// Reuse the cancellation already queued for this exact update.
+			err := tx.QueryRow(`SELECT id FROM net_update_cancels
+ WHERE incoming=? AND broker=? AND peer=? AND target=? AND project=''`, local, r.Broker, r.Peer, r.Target).Scan(&id)
+			if !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
+		}
 		token, err := randomID()
 		if err != nil {
 			return err
@@ -141,6 +150,31 @@ func (s *Store) requestUpdateCancellation(computer, project, expectedBroker, exp
 		return enqueueNet(tx, r.Broker, r.Peer, "update-cancel."+id, id, netBody{Kind: "update_cancel_request", Task: id, Question: r.Target})
 	})
 	return id, err
+}
+
+type PendingUpdateCancellation struct {
+	Computer  string `json:"device"`
+	RequestID string `json:"request_id"`
+}
+
+// PendingUpdateCancellations shows the owner's queued actions in every local
+// window, even if it was reopened or the submission response was lost.
+func (s *Store) PendingUpdateCancellations() ([]PendingUpdateCancellation, error) {
+	rows, err := s.db.Query(`SELECT DISTINCT peer,target FROM net_update_cancels
+ WHERE (incoming=0 OR peer='') AND (broker='' OR broker=(SELECT value FROM meta WHERE key='net_broker'))`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []PendingUpdateCancellation{}
+	for rows.Next() {
+		var r PendingUpdateCancellation
+		if err := rows.Scan(&r.Computer, &r.RequestID); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 func writeUpdateCancellation(tx *sql.Tx, incoming bool, r UpdateCancellation) error {

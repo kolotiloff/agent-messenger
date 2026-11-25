@@ -151,7 +151,7 @@ func TestTaskFeedEntries(t *testing.T) {
 		t.Fatalf("claude result %+v", got)
 	}
 	got = TaskFeedEntries("codex", []byte(`{"type":"item.started","item":{"type":"command_execution","id":"cmd-1","command":"ls"}}`))
-	if len(got) != 1 || got[0] != (FeedEntry{Kind: "command_start", Title: "cmd-1"}) {
+	if len(got) != 1 || got[0] != (FeedEntry{Kind: "command_start", Title: "cmd-1", Text: "ls"}) {
 		t.Fatalf("codex start %+v", got)
 	}
 	got = TaskFeedEntries("codex", []byte(`{"type":"item.completed","item":{"type":"command_execution","id":"cmd-1","command":"ls","exit_code":0}}`))

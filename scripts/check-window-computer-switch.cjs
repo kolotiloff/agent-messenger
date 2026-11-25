@@ -51,9 +51,10 @@ const shots = process.env.SCREENSHOT_DIR;
           ]}});
         }
         const fixtures = {
-          '/api/client-info': {client: 'running', outdated: false},
+          '/api/client-info': {client: 'running', client_version: '1.0.1-preview.104', outdated: false},
           '/api/server': {host: {running: false, enabled: false, addresses: []}, member: {connected: true}, accept: true, updates: [],
-            peers: [{id: 'vps', name: 'VPS', age: 1, agents: [{agent: 'codex'}]}, {id: 'pc2', name: 'ПК-2', age: 1, agents: [{agent: 'codex'}]}]},
+            peers: [{id: 'vps', name: 'VPS', age: 1, agents: [{agent: 'codex'}]}, {id: 'pc2', name: 'ПК-2', age: 1, agents: [{agent: 'codex'}]},
+              {id: 'laptop', name: 'Ноутбук', age: 90, agents: []}]},
           '/api/discovery': {agents: []},
           '/api/agent-setup-status': [],
           '/api/self-update': {current: '0.0.0-preview.98'},
@@ -79,6 +80,9 @@ const shots = process.env.SCREENSHOT_DIR;
       await page.locator('#thread').getByText('Задача: Собрать сцену').waitFor();
       const card = name => page.locator('#machines .am-machine-card', {hasText: name});
       await card('ПК-2').waitFor();
+      const headerColor = name => card(name).locator('.am-machine-name').evaluate(head => getComputedStyle(head).backgroundColor);
+      const ownHeader = await headerColor('Fixture Mac');
+      const peerHeader = await headerColor('ПК-2');
       // Straight from one chosen computer to another, then to this one: the
       // list the window holds has none of the next computer's tasks.
       const steps = [['VPS', 600, 'Проверить сервер'], ['ПК-2', 600, 'Обновить меню'], ['Fixture Mac', 600, 'Собрать сцену'],
@@ -93,11 +97,61 @@ const shots = process.env.SCREENSHOT_DIR;
         assert.deepEqual(await page.evaluate(() => [...new Set(window.flashes)]), [], `choosing ${name} (delay ${delay} ms) flashed`);
         await page.evaluate(() => { window.watching = false; });
       }
-      // Selecting a peer leaves the local identity marker on this computer.
-      const stripe = await page.locator('#machines .am-machine-card').evaluateAll(cards => cards
-        .filter(card => getComputedStyle(card, '::before').content === '""')
-        .map(card => [card.dataset.machineOrder, card.getAttribute('aria-pressed')]));
-      assert.deepEqual(stripe, [['local', 'false']], 'only the local card has the identity stripe');
+      // The local header stays tinted when a peer is selected. Every header
+      // has the same padding and online/offline uses both color and shape.
+      assert.equal(await card('Fixture Mac').getAttribute('aria-current'), 'true');
+      assert.equal(await card('Fixture Mac').getAttribute('aria-pressed'), 'false');
+      assert.equal(await card('ПК-2').getAttribute('aria-pressed'), 'true');
+      assert.notEqual(ownHeader, peerHeader);
+      assert.equal(await headerColor('Fixture Mac'), ownHeader);
+      assert.equal(await headerColor('ПК-2'), peerHeader);
+      assert.equal(await headerColor('Ноутбук'), peerHeader);
+      const bodyColors = await page.locator('#machines .am-machine-card').evaluateAll(cards =>
+        cards.map(card => getComputedStyle(card).backgroundColor));
+      assert.equal(new Set(bodyColors).size, 1, 'selection changes only the border');
+      const spacing = await page.locator('#machines :is(.am-machine-name,.am-machine-body)').evaluateAll(rows => rows.map(head => {
+        const style = getComputedStyle(head);
+        return [style.paddingTop, style.paddingBottom, style.paddingLeft, style.paddingRight];
+      }));
+      assert.deepEqual(spacing, Array.from({length: 8}, () => ['4px', '4px', '12px', '12px']));
+      const onlineMark = card('ПК-2').getByRole('img', {name: 'На связи'});
+      const offlineMark = card('Ноутбук').getByRole('img', {name: 'Нет связи'});
+      const online = onlineMark.locator(':scope > svg');
+      const offline = offlineMark.locator(':scope > svg');
+      assert.equal((await online.boundingBox()).width, 14);
+      assert.equal((await offline.boundingBox()).width, 14);
+      assert.equal(await online.evaluate(svg => getComputedStyle(svg).fill), 'none');
+      assert.equal(await offline.evaluate(svg => getComputedStyle(svg).fill), 'none');
+      assert.equal(await offline.locator('path').getAttribute('d'), await online.locator('path').getAttribute('d'));
+      const dot = onlineMark.locator('.am-machine-signal');
+      const cross = offlineMark.locator('.am-machine-signal');
+      const geometry = signal => signal.evaluate(node => {
+        const style = getComputedStyle(node);
+        return [style.width, style.height, style.insetInlineEnd, style.insetBlockEnd];
+      });
+      assert.deepEqual(await geometry(dot), ['8px', '8px', '-3px', '-1px']);
+      assert.deepEqual(await geometry(cross), await geometry(dot));
+      assert.equal(await dot.evaluate(node => getComputedStyle(node).backgroundColor),
+        scheme === 'dark' ? 'rgb(76, 219, 134)' : 'rgb(22, 132, 76)');
+      assert.equal(await cross.evaluate(node => getComputedStyle(node).backgroundColor), 'rgba(0, 0, 0, 0)');
+      const crossGlyph = await cross.locator('path').evaluate(path => {
+        const style = getComputedStyle(path), stroke = parseFloat(style.strokeWidth);
+        const shape = path.getBBox(), scale = path.getScreenCTM();
+        return {color: style.stroke, cap: style.strokeLinecap,
+          width: (shape.width + stroke) * scale.a, height: (shape.height + stroke) * scale.d};
+      });
+      assert.equal(crossGlyph.color, scheme === 'dark' ? 'rgb(242, 139, 130)' : 'rgb(180, 35, 24)');
+      assert.equal(crossGlyph.cap, 'round');
+      assert(Math.abs(crossGlyph.width - 8) < 0.001 && Math.abs(crossGlyph.height - 8) < 0.001);
+      assert.equal(await offlineMark.evaluate(mark => getComputedStyle(mark.nextElementSibling).color),
+        await offlineMark.evaluate(mark => getComputedStyle(mark).color));
+      for (const mark of [onlineMark, offlineMark]) {
+        assert.deepEqual(await mark.evaluate(icon => {
+          const frame = icon.getBoundingClientRect();
+          return [frame.left - icon.parentElement.getBoundingClientRect().left,
+            icon.nextElementSibling.getBoundingClientRect().left - frame.right];
+        }), [12, 10]);
+      }
       if (shots) await page.screenshot({path: path.join(shots, `computer-switch-${scheme}.png`)});
       assert.deepEqual(errors, []);
       await context.close();

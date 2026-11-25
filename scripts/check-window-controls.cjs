@@ -849,9 +849,26 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await remoteList.locator('[data-elapsed-from]').count(),0);
       remoteRow=remoteTask;
       await remoteHead.getByText(/Работает/).waitFor();
-      // One click stays locked through both local queuing and broker acceptance.
+      // Stop another task from its row without selecting it. The chat button
+      // shares the pending guard through both queuing and broker acceptance.
       const stopButton=page.locator('#task-stop'),stopStatus=page.locator('#task-stop-status');
-      await stopButton.click();
+      await page.locator('#task-list').getByText(localTask.title,{exact:true}).click();
+      await page.locator('#task-head').getByText(localTask.title,{exact:true}).waitFor();
+      const menu=page.locator('#device-menu');
+      const stopAction=menu.getByRole('menuitem',{name:'Остановить задачу'});
+      const readOnlyRow=page.locator('.am-task-shared').filter({hasText:'Sent task'});
+      await readOnlyRow.click({button:'right'});
+      assert.equal(await stopAction.count(),0);
+      await page.keyboard.press('Escape');
+      assert.deepEqual(stopRequests,[]);
+      await remoteList.click({button:'right'});
+      await stopAction.click();
+      assert.equal(await page.locator('#task-head h3').textContent(),localTask.title);
+      assert.match(await remoteList.locator('.am-task-status').innerText(),/Ждём завершения задачи/);
+      await remoteList.click({button:'right'});
+      assert.equal(await stopAction.getAttribute('aria-disabled'),'true');
+      await page.keyboard.press('Escape');
+      await remoteList.click();
       await stopStatus.getByText('Отправляем запрос на остановку…',{exact:true}).waitFor();
       assert.equal(await stopButton.isDisabled(),true);
       await page.keyboard.press('Escape');
@@ -867,6 +884,9 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       remoteRow={...remoteRow,state:'cancelled',finished_at:new Date().toISOString()};
       await remoteHead.getByText('Отменена',{exact:true}).waitFor();
       assert.equal(await stopStatus.isVisible(),false);
+      await remoteList.click({button:'right'});
+      assert.equal(await stopAction.count(),0);
+      await page.keyboard.press('Escape');
       remoteRow=remoteTask;
       await remoteHead.getByText(/Работает/).waitFor();
       // Owner, 2026-11-15: one button removes every finished task from the list.
