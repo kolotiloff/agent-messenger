@@ -674,7 +674,7 @@
     for(const task of [...running,...waiting]){
       const model=sidebarTaskModel(task),working=task.state==='running';
       const row=el('li',undefined,working?'am-agent-parallel-running':'am-agent-parallel-waiting');
-      const name=el('span',model||task.title||shortNames[provider]||provider,model?'am-agent-model':'');
+      const name=el('span',model||shortNames[provider]||provider,model?'am-agent-model':'');
       if(model&&task.title)name.title=task.title;
       const [text,status,,from]=taskStatus(task);
       if(working){

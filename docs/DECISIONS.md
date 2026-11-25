@@ -731,3 +731,7 @@ Give the computer name and roles a common text baseline. The labels share a 21 p
 ## D-215 — Separate computer contact from task launch evidence (T-308)
 
 The broker reports authenticated contact age separately from agent report age. Both ages continue to increase while the viewer receives no new roster. The computer card and a task's remote contact state can use either fresh signal. Worker state still requires a fresh agent report. Presence reads take a read-only SQLite snapshot. The task list uses a fresh worker entry from the assigned computer for the exact task when confirmation of the launch has yet to arrive. This changes the display and leaves task state, reports and resource ownership under the existing mailbox and supervisor rules.
+
+## D-217 — Show the agent while its model is unknown (T-310)
+
+Replace the task-title fallback in expanded computer rows from D-210 and D-213 with the agent name. When the worker reports its model, show that model beside the elapsed time or waiting status.

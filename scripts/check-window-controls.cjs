@@ -491,6 +491,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       let releaseStop;
       const stopResponse = new Promise(resolve => { releaseStop = resolve; });
       let codexWaiting = true;
+      let waitingCodexModel = '';
       let thirdCodexTask = false;
       let runnerAgents = [{agent:'cursor',running:1},{agent:'claude',waiting_owner:1},{agent:'codex',running:1,waiting_owner:1}];
       let runnerWorkers = [];
@@ -513,7 +514,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           agents: [{agent:'codex',running:1,project_running:project==='Frame'?1:0}], coordinator: {connected: false}, computer_name: 'Ёж и Йога', tasks_enabled: true, feedback_count: 5, feedback_new: 2, tasks:project==='Frame'?[localRow,remoteRow,waitingTask]:[],
           shared: project==='Frame'?[{peer: 'host', name: 'Giver', age: 1, tasks: [
             {id: 'sent', project: 'Frame', title: 'Sent task', agent: 'cursor', state: 'running', created_at: began, started_at: sharedPending?undefined:began, pending_launch:sharedPending, waits_for_lock:sharedPending?'shared-cache':undefined, model: 'composer-2.5[effort=medium]', runs_on_peer: 'dev-1', runs_on: 'Old name'},
-            ...(codexWaiting?[{id:'codex-waiting',project:'Frame',title:'Queued answer',agent:'codex',model:'gpt-6-luna[effort=high]',state:'waiting_coordinator',created_at:began,runs_on_peer:'dev-1'}]:[]),
+            ...(codexWaiting?[{id:'codex-waiting',project:'Frame',title:'Queued answer',agent:'codex',model:waitingCodexModel,state:'waiting_coordinator',created_at:began,runs_on_peer:'dev-1'}]:[]),
             ...(thirdCodexTask?[{id:'third-codex',project:'Frame',title:'Third task',agent:'codex',state:'running',created_at:began,model:'gpt-6.2-sol[effort=high]',runs_on_peer:'dev-1'}]:[]),
             {id: 'own', project: 'Frame', title: 'Own task', agent: 'codex', state: 'running', created_at: '2026-11-15T09:00:00Z'},
             {id: 'old-1', project: 'Frame', title: 'Old 1', agent: 'codex', state: 'done', created_at: '2026-11-14T09:00:00Z', finished_at: ended},
@@ -644,8 +645,12 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await summary.click();
       assert.equal(await details.isVisible(),true);
       assert.equal(await runner.getAttribute('aria-pressed'),cardSelection);
-      assert.match(await details.innerText(),/Remote task\s+3 мин/);
+      assert.match(await details.innerText(),/Codex\s+3 мин/);
       const waitingRun=details.locator('.am-agent-parallel-waiting');
+      assert.equal(await waitingRun.innerText(),'Codex, ждёт ответа');
+      assert.equal(await details.locator('.am-agent-model').count(),0);
+      waitingCodexModel='gpt-6-luna[effort=high]';
+      await waitingRun.getByText('Luna 6 High',{exact:true}).waitFor();
       assert.equal(await waitingRun.innerText(),'Luna 6 High, ждёт ответа');
       assert.equal(await waitingRun.getAttribute('title'),'Ждёт ответа координатора');
       assert.equal(await waitingRun.locator('.am-agent-model').evaluate(node=>getComputedStyle(node).color),

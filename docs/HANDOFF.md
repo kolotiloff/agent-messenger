@@ -8,6 +8,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+**T-310 is a draft for the next release.** The patch replaces the task title with the agent name when the worker's model is unknown. The owner asked to preview a compact running row that keeps the agent name, adds the model on confirmation, and puts the elapsed time immediately after a comma. The compact layout is pending review. See D-217.
+
 **[1.0.4, build 107](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.4-preview.107) is released** from `4822cfd0e59934734468256dea541ab89060326e`. It includes [PR #202](https://github.com/kolotiloff/agent-messenger/pull/202) and [PR #204](https://github.com/kolotiloff/agent-messenger/pull/204). All four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45626722653) passed. The public release contains 22 assets. The public upgrade route from 0.99 and signed archives were checked for macOS ARM64 and Windows and Linux on both architectures. No owner installation was updated as part of the release.
 
 - T-304, T-306 and T-307 mute idle agents, show waiting tasks in yellow, keep computer names and role labels on one baseline and center the version and icons.
