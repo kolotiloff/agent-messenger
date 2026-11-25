@@ -834,6 +834,23 @@
   function serverTag(){
     return machineRole(tr('сервер'),tr('На этом компьютере работает сервер сети'));
   }
+  function layoutMachineRoles(head){
+    if(!head.clientWidth)return;
+    const [presence,name,roles,meta]=head.children;
+    const style=getComputedStyle(head),gap=parseFloat(style.columnGap);
+    const available=head.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight);
+    const range=document.createRange();
+    range.selectNodeContents(name);
+    const nameWidth=range.getBoundingClientRect().width;
+    const rolesWidth=[...roles.children].reduce((width,part)=>width+part.getBoundingClientRect().width,gap);
+    const needed=presence.getBoundingClientRect().width+parseFloat(getComputedStyle(presence).marginInlineEnd)
+      +nameWidth+rolesWidth+meta.getBoundingClientRect().width+3*gap;
+    head.classList.toggle('am-roles-below',needed>available);
+  }
+  const machineRolesObserver=new ResizeObserver(()=>{
+    const head=machineList.querySelector('.am-machine-roles')?.parentElement;
+    if(head)layoutMachineRoles(head);
+  });
   function machinePresence(online){
     const mark=el('span',undefined,'am-machine-presence'+(online?' online':''));
     mark.title=online?tr('На связи'):tr('Нет связи');
@@ -862,9 +879,14 @@
     const head=el('div',undefined,'am-machine-name');
     head.append(machinePresence(online),el('span',view?.computer_name||tr('Этот компьютер'),'am-machine-label'));
     // The computer that runs the network's server is labelled as such.
-    if(server?.host?.running&&server.host.scope!=='local')head.append(serverTag());
+    const serverRole=server?.host?.running&&server.host.scope!=='local'?serverTag():null;
     const coordinator=view?.project===project?view?.coordinator:null;
-    if(coordinator?.active)head.append(machineRole(tr('координатор'),tr('На этом компьютере открыт чат-координатор выбранного проекта')));
+    const coordinatorRole=coordinator?.active?machineRole(tr('координатор'),tr('На этом компьютере открыт чат-координатор выбранного проекта')):null;
+    if(serverRole&&coordinatorRole){
+      const roles=el('span',undefined,'am-machine-roles');
+      serverRole.append(',');
+      roles.append(serverRole,' ',coordinatorRole);head.append(roles);
+    }else if(serverRole||coordinatorRole)head.append(serverRole||coordinatorRole);
     const version=el('div',undefined,'am-machine-version am-local-version');
     const body=el('div',undefined,'am-machine-body');
     machine.append(head,body);
@@ -943,8 +965,15 @@
     // or they would leave the page with the old card.
     const copy=live.cloneNode(true);
     for(const id of localParts)copy.querySelector('#'+id)?.remove();
+    // The measured layout is local to the live card and is not a data change.
+    copy.querySelector('.am-roles-below')?.classList.remove('am-roles-below');
     if(copy.innerHTML!==box.innerHTML){
+      machineRolesObserver.disconnect();
       parkLocalParts();live.replaceChildren(...box.childNodes);
+      if(serverRole&&coordinatorRole){
+        machineRolesObserver.observe(head);
+        machineRolesObserver.observe(localMeta);
+      }
       if(focused)live.querySelector('[data-agent-group="'+CSS.escape(focused)+'"] > summary')?.focus({preventScroll:true});
     }
     placeLocalParts();

@@ -20,7 +20,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const errors = [];
       let created = false, registered = false, connected = false, trusted = false;
       let windowReadFails = true;
-      let coordinatorActive = false;
+      let coordinatorActive = false, hostRunning = false;
       let machineOrder = null, machinePeers = undefined, peerLasting = true;
       let setupStates = [], installed = false;
       let updates = [];
@@ -86,7 +86,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           '/api/discovery': {agents: ['claude','codex','cursor'].map(provider => ({provider, state: 'not_found'}))},
           '/api/client-info': {client: 'running', outdated: false},
           '/api/machine-order': {order: machineOrder, peers: machinePeers},
-          '/api/server': {host: {running: false, enabled: false, addresses: []}, member: {connected: false}, peers: connected ? [{id:'fixture-peer',...(peerLasting ? {computer:'computer-fixture'} : {}),name:'Peer fixture',host:true,age:0,agents:[{agent:'cursor'}],coordinator:'cursor-vscode'},{id:'fixture-peer-2',name:'Paused agent fixture',age:0,agents:[],coordinator:'claude-code'}] : [], updates, accept: true, auto_update: autoUpdate, auto_update_supported: autoSupported},
+          '/api/server': {host: {running: hostRunning, enabled: hostRunning, scope:'lan', addresses: []}, member: {connected: false}, peers: connected ? [{id:'fixture-peer',...(peerLasting ? {computer:'computer-fixture'} : {}),name:'Peer fixture',host:true,age:0,agents:[{agent:'cursor'}],coordinator:'cursor-vscode'},{id:'fixture-peer-2',name:'Paused agent fixture',age:0,agents:[],coordinator:'claude-code'}] : [], updates, accept: true, auto_update: autoUpdate, auto_update_supported: autoSupported},
           '/api/self-update': {current: '0.0.0-preview.test'},
         };
         if (pathname.startsWith('/api/')) return route.fulfill({json: fixtures[pathname] || {ok: true}});
@@ -255,14 +255,53 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await page.locator('#machines [aria-current="true"] .am-machine-role').count(),0);
       await page.setViewportSize({width:1100,height:850});
       const coordinatorLabel = page.locator('#machines [aria-current="true"] .am-machine-role').filter({hasText:/^координатор$/});
+      const localCard=page.locator('#machines [aria-current="true"]');
       coordinatorActive = true;
       await page.evaluate(() => window.messengerRefresh());
       await coordinatorLabel.waitFor();
       assert.equal(await page.locator('#machines [data-peer] .am-machine-role').count(),1);
+      hostRunning = true;
+      await page.locator('[data-tab=server]').click();
+      const roles=localCard.locator('.am-machine-roles');
+      await roles.waitFor();
+      assert.equal(await roles.textContent(),'сервер, координатор');
+      const splitter=page.getByRole('separator',{name:'Ширина левой панели'});
+      await splitter.press('Shift+ArrowRight');
+      await splitter.press('Shift+ArrowRight');
+      await localCard.locator('.am-machine-name:not(.am-roles-below)').waitFor();
+      await splitter.press('Home');
+      await localCard.locator('.am-roles-below .am-machine-roles').waitFor();
+      assert(await roles.evaluate(node=>{
+        const head=node.parentElement,name=head.querySelector('.am-machine-label'),meta=head.querySelector('.am-machine-meta');
+        const box=node.getBoundingClientRect(),top=name.getBoundingClientRect();
+        return box.top>=top.bottom-1&&meta.getBoundingClientRect().top<box.top&&
+          [...node.children].every(role=>role.scrollWidth<=role.clientWidth+1);
+      }),'fallback must put the full roles below the heading and leave the version in it');
+      const originalHeading=await localCard.locator('.am-machine-name').elementHandle();
+      await page.evaluate(() => window.messengerRefresh());
+      assert(await localCard.locator('.am-machine-name').evaluate((node,original)=>node===original,originalHeading));
+      await originalHeading.dispose();
+      await splitter.press('Shift+ArrowLeft');
+      await splitter.press('Shift+ArrowLeft');
+      assert.equal(await splitter.getAttribute('aria-valuenow'),'160');
+      assert(await roles.evaluate(node=>{
+        const group=node.getBoundingClientRect();
+        return [...node.children].every(role=>{
+          const {left,right}=role.getBoundingClientRect();
+          return left>=group.left&&right<=group.right;
+        });
+      }),'roles remain fully visible at the minimum sidebar width');
+      await splitter.press('Shift+ArrowRight');
+      await splitter.press('Shift+ArrowRight');
+      await splitter.press('Shift+ArrowRight');
+      await localCard.locator('.am-machine-name:not(.am-roles-below)').waitFor();
+      await splitter.press('Home');
+      hostRunning = false;
+      await page.locator('[data-tab=server]').click();
+      await roles.waitFor({state:'detached'});
       coordinatorActive = false;
       await page.evaluate(() => window.messengerRefresh());
       await coordinatorLabel.waitFor({state:'detached'});
-      const localCard=page.locator('#machines [aria-current="true"]');
       const peerCard=page.locator('#machines [data-peer="fixture-peer"]');
       await Promise.all([
         page.waitForResponse(response => response.url().endsWith('/api/machine-order') && response.request().method() === 'POST' && response.ok()),
@@ -583,6 +622,9 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await page.locator('#machines .am-agent-run, #machines .am-agent-wait').count(),0);
       await page.waitForFunction(() => document.querySelector('#project-select').value==='Site');
       assert.equal(await runner.locator('.am-agent-idle').count(),3);
+      const emptyHost=page.locator('#machines [data-peer="host"] .am-machine-body .am-muted');
+      assert.equal(await runner.locator('.am-agent-idle').first().evaluate(node=>getComputedStyle(node).color),
+        await emptyHost.evaluate(node=>getComputedStyle(node).color));
       await chooseProject('Frame');
       await runningLabel.waitFor();
       assert.equal(await runningLabel.evaluate(node=>getComputedStyle(node).animationName),'none');

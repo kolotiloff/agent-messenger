@@ -6,6 +6,10 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 - Replaced the composer actions and task context menu actions with the stop status while the request is pending. The context menu keeps up with broker acknowledgement even when the task list retains the original row. Added local, remote and refusal cases to the browser fixture.
 
+## 2026-11-25 — Codex (T-304)
+
+- Applied the muted text color to idle agent rows. Grouped the server and project coordinator roles with a comma, keeping them inline when the actual text and update controls fit. The window fixture narrows and widens the sidebar and verifies that the next refresh preserves the card.
+
 ## 2026-11-25 — Codex (T-301, T-302)
 
 - Replaced the write-locking idle computer lookup in coordinator `wait` with read-only snapshots. Tested a ready report during a concurrent SQLite write and project isolation in split storage. The writer-held delivery probe improved from about 1.27 seconds to 0.23 seconds.

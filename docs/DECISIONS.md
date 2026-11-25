@@ -715,3 +715,7 @@ For multiple active tasks of one agent, show the agent and localized task count.
 ## D-211 — Show the stop request in place of the task controls (T-303)
 
 While stopping a task, show the submission, queue or sent status in place of the composer field and its controls. The task context menu shows the same status as text. Resolve a retained menu listener against the current task row so a broker acknowledgement cannot bring back the stop action. Keep the local acknowledgement through refresh until the task records an outcome. An explicit refusal returns the composer with its draft.
+
+## D-212 — Mute idle agents and fit both computer roles (T-304)
+
+Use the same muted color for idle agents and other secondary text in computer cards. When the local computer hosts the network and coordinates the selected project, join the two role labels with a comma. Keep the group beside the computer name if it fits with the presence mark, version, and update action. Otherwise place the group below the name, keeping both labels readable at the minimum width. A card with one role keeps its layout.

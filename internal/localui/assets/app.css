@@ -274,6 +274,11 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-machine-signal svg { display:block; color:var(--am-bad); stroke-width:7; }
 #am-concept .am-machine-version, #am-concept .am-machine-role { font-weight:400; }
 #am-concept .am-machine-role { flex-shrink:2; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#am-concept .am-machine-roles { display:flex; flex:none; flex-wrap:wrap; column-gap:var(--am-space-1); }
+#am-concept .am-machine-roles .am-machine-role { flex:none; }
+#am-concept .am-machine-name.am-roles-below { display:grid; grid-template-columns:auto minmax(0,1fr) auto; row-gap:0; }
+#am-concept .am-roles-below .am-machine-roles { grid-column:1/-1; grid-row:2; }
+#am-concept .am-roles-below .am-machine-meta { grid-column:3; grid-row:1; }
 #am-concept .am-machine-meta { margin-left:auto; display:flex; align-items:center; gap:var(--am-computer-meta-gap); flex:none; }
 #am-concept .am-machine-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #am-concept .am-machine-presence:not(.online) + .am-machine-label { color:var(--am-muted); }
@@ -294,6 +299,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept :is(.am-agent-run,.am-agent-wait) .am-agent-status::before { content:", "; white-space:pre; }
 #am-concept .am-agent-run .am-agent-status { color:var(--am-muted); }
 #am-concept .am-agent-line.am-agent-wait { color:var(--am-wait); }
+#am-concept .am-agent-line.am-agent-idle { color:var(--am-muted); }
 #am-concept .am-agent-line.am-agent-offline { color:var(--am-disabled-text); }
 #am-concept .am-agent-parallel { min-width:0; font-size:var(--am-text-xs); }
 #am-concept .am-agent-parallel > summary { display:flex; align-items:center; justify-content:space-between; gap:var(--am-space-1); list-style:none; cursor:pointer; }
