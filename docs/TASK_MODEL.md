@@ -9,7 +9,7 @@ A **project** has a name and, on each computer, at most one folder (`project_fol
 - not a temporary folder;
 - not the disk root.
 
-A task records the folder it was started with, so changing the folder affects only new tasks. A computer without a folder for the project refuses the project's tasks. Each computer has a stable random ID (`meta.computer_id`); another computer of the network is addressed by its broker ID (below).
+A task records the folder where it started. Changing the folder affects new tasks. A computer needs a local folder for a project before accepting its tasks. The window and coordinator tools show task activity for the selected project. See [Project storage](PROJECT_STORAGE.md) for the databases and migration. Each computer has a lasting ID (`meta.computer_id`) and a network address assigned by the broker.
 
 **Agents** are registered per computer (`computer_agents`): provider (`claude`, `codex` or `cursor`), the CLI path, an optional profile directory, and the worker profile:
 - `worker`: normal tools and the project's settings (D-023);
@@ -144,29 +144,25 @@ Every tool refuses a project that does not exist. Tools that take a task refuse 
 
 ## Window (T-029)
 
-The window observes tasks; the owner talks to the coordinator in the Claude app (D-024). Layout, from the approved [mockup](mockups/2026-11-06-task-window.html), built from the existing `app.css` components and `app.js` structure:
+The window shows task activity. The owner coordinates from a local Claude Code, Codex or Cursor chat with Messenger connected for the project. See the [setup guide](DOWNLOAD.md#first-steps).
 
 - **Sidebar.**
   - A project switcher (`am-select`) whose last item is «Новый проект». It opens a dialog for the name and the folder on this computer. In the Mac app, «Выбрать» opens a standard folder panel through the `folder` bridge.
-  - The computer cards: this computer and the other computers of its network. A card lists the coordinator (when connected) and each agent program, one line each, with a status dot:
-    - blue: working;
-    - amber: waits for the owner;
-    - hollow: idle;
-    - grey: no connection.
-
-    The full status is in the tooltip. Running and waiting indications follow the selected project's tasks (D-178). A click on a card shows only that computer's tasks and agents. Another computer's card says «Был на связи …» when it stopped reporting, offers «Обновить до …» when it runs an older version, and has a right-click menu to revoke it.
+  - Computer cards mark online and offline computers with a green dot or a red cross on the monitor icon. The server and the local computer's active coordinator have role labels. Blue marks a working agent and amber marks an agent waiting for an answer. The count on a row with parallel tasks expands to show each task's model and timing.
+  - Running and waiting indications follow the selected project's tasks (D-178). Click a card to filter tasks, agents and statistics to that computer. Drag cards to change their order. A remote computer that stopped reporting shows when it was last seen. Compatible remote computers with an older version offer an update on the card.
 - **«Задачи» tab.**
-  - **Task list** on the right, with an agent filter, in three sections:
-    - «Активные»: running and waiting tasks;
-    - «Требуют решения»: tasks whose outcome is unknown: blocked or interrupted tasks, own tasks on another computer with no contact or no answer, and other computers' open tasks while that computer is out of contact. Nothing closes them by itself. The section's «Закрыть все» closes every one of them after a confirmation;
-    - «Завершённые».
+  - **Task list** on the right, with an agent filter and up to four sections:
+    - **Active** shows running tasks and tasks waiting for an answer.
+    - **Planned** shows tasks waiting to start, including ones waiting for a resource held by another task.
+    - **Need a decision** shows blocked, interrupted or unreachable tasks with uncertain outcomes. These tasks require an explicit decision.
+    - **Finished** shows completed, failed and cancelled tasks. Older entries can be loaded in batches.
 
     Each row has three lines: the agent and the computer, the title, and a short coloured status with the time and what the task spent («Работает N мин», «Ждёт вашего ответа», «Готово за N мин», «Связь потеряна, исход неизвестен», …). Other computers' tasks from the shared list are shown read-only (T-111). The right-click menu has «Удалить из списка» (T-131, D-114): it only hides a task that no longer runs; the task stays in the database.
   - **Task feed.** The coordinator's text, answers and notes, and the owner's answers and notes, are shown as outgoing bubbles. A note shows whether the worker got it. The worker's text, its tool actions (collapsible lines from the CLI event stream, stored in `task_run_items`, at most 400 per run), its report or question with a delivery note, and the outcome of a failed, blocked, interrupted or cancelled run are shown in order.
   - **Header.** Title, then the agent with its model, the computer and the folder, then the status line.
-  - **Reply box and stop button.** While a task is active the box is shown with a square stop button, like a chat («Остановить», Esc). Stop cancels the task at once (no second confirmation), through the same `CancelTask` path as the coordinator. The box answers the worker's question to the owner («Ответить исполнителю…»). For a running task of this computer it writes a note to the worker («Написать исполнителю…», T-114, D-096), and for one that waits for the coordinator it answers in the coordinator's place («Ответить вместо координатора…», D-110). Otherwise it is disabled and says why: «Задача ждёт запуска…», «Исполнитель работает…», or that the other computer's replies are late or its worker is not running. Enter sends, Shift+Enter makes a new line. An answer uses a stable `op_id` stored per question, so a retry cannot answer twice.
+  - **Reply and stop controls.** The reply box answers a worker's question, sends a note to a running worker, or answers in the coordinator's place when the task permits it. Enter sends and Shift+Enter adds a new line. Stop an eligible task with the square button, Esc or **Stop the task** in the task list context menu. While cancellation is pending, the composer and context menu show the request status. An explicit refusal restores the draft. An answer uses a stable `op_id` so delivery retries cannot answer twice.
   - **Lost or stuck task bar.** An own task on another computer that cannot be reached, or a blocked or interrupted task, has no reply box. A bar says what is known and offers «Закрыть» (after a confirmation). For another computer's task it closes the task here; the cancel goes there if contact returns. For a stuck task of this computer it follows D-120.
-  - **First steps.** Without a project, the window offers to create one. With no task selected, the task page welcomes the owner, shows how a task flows (you → coordinator → workers) and lists the first steps: agents on this computer, the coordinator (with «Подключить» right there when Claude Code or Codex is set up), other computers. The «Проект» page has a «Координатор» row under the project folder (T-152, T-160): Claude Code and Codex separately, whether this computer's agent has the project folder, with «Подключить» when it does not, the reason when it cannot, and the `claude mcp add …` command or the Codex settings block under «Подключить вручную через Терминал». Other computers are not shown: any computer may have its own coordinator. Agents are set up once for all projects; only this link is per folder.
+  - **First steps.** The welcome screen explains projects, coordinators and workers and offers to create the first project. Use **Project → MCP plugin** to connect a local Claude Code, Codex or Cursor chat. The connection is project-scoped. After first use, an empty project shows its empty task view.
   - **Notices.** One says that tasks are recorded but the client runs without `--allow-tasks`; the client the window starts always allows tasks (D-029), so this shows only for a client started by hand. Another says that the queue is paused, with «Продолжить».
 - **«Агенты» tab.**
   - The «Любые команды» switch for every agent of this computer (D-065), and under it «И для задач с других компьютеров» (D-109).
@@ -174,8 +170,8 @@ The window observes tasks; the owner talks to the coordinator in the Claude app 
   - The tasks button reads «Задачи: N идёт, M сегодня» and filters the list by the agent. Another computer's agents are shown read-only.
 - **«Проект» tab.** The project's name, its folder on this computer («Выбрать»), «Общие указания исполнителям» (the rules copied into each new task, D-062) and «Удалить проект».
 - **«Сервер» tab.** This computer's name in the network, «Принимать задачи других компьютеров», «Отдавать журнал по сети», the server on this computer and the connection to another server ([BROKER.md](BROKER.md)).
-- **«Статистика» tab.** Tokens for today, 7 or 30 days, by agent and by computer, and the most costly tasks.
-- **Removed.** The general composer, the queue panel and the manual refresh button are gone. The window refreshes every 2 s. The Mac menu item «Обновить задачи и статусы» calls `window.messengerRefresh`.
+- **Statistics tab.** Select today, 7 days or 30 days for the current project. Filter by agent, model or computer. Sort the task table by finish time, duration or tokens.
+- **Refresh.** The Mac menu item «Обновить задачи и статусы» calls `window.messengerRefresh`.
 - **No "·" separators** in the window and the Mac shell.
 
 API (authenticated as before):

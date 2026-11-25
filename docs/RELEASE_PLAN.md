@@ -1,12 +1,12 @@
 # Plan to the first release
 
-Written November 6, 2026; the status was last updated on November 21. This is the sequence of work on top of the original [MVP](MVP.md), the [architecture](PLAN.md), the [window](APP.md) requirements and [broker deployment](DEPLOYMENT.md). No release date is set: transitions are decided by checks, not by the percentage of code written.
+Written November 6, 2026. The current status below supplements the original [MVP](MVP.md), [architecture](PLAN.md), [window requirements](APP.md) and [broker deployment](DEPLOYMENT.md). Transitions are decided by checks.
 
 ## Current status
 
-Updated 2026-11-21. The details of each release are in [HANDOFF.md](HANDOFF.md) and [TASKS.md](TASKS.md); this section is the overview.
+Updated 2026-11-25. The details of each release are in [HANDOFF.md](HANDOFF.md) and [TASKS.md).
 
-The program is a technical preview used every day on the owner's Mac, Windows and Linux computers. Releases are numbered 0.N (tag `v0.0.0-preview.N`); [0.94](https://github.com/kolotiloff/agent-messenger/releases/tag/v0.0.0-preview.94) is the newest published one.
+The program is a technical preview used on Mac, Windows and Linux. [Messenger 1.0.3, build 106](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.3-preview.106) is the version covered by this overview. The desktop displays the short version, while the tag and signed manifest retain the numbered build suffix. See [the latest published release](https://github.com/kolotiloff/agent-messenger/releases/latest).
 
 Done since the plan below was written:
 
@@ -14,12 +14,12 @@ Done since the plan below was written:
 - **Network of computers** ([BROKER.md](BROKER.md)): the server runs inside the client on any computer of the network; invitations by code, TLS with a pinned certificate, tasks, answers, notes, logs and updates between computers.
 - **Windows and Linux** ([WINDOWS_LINUX.md](WINDOWS_LINUX.md)): ready downloads for x64 and ARM64, the program's own window, installation for the current user, job objects on Windows.
 - **Updates** ([UPDATES.md](UPDATES.md)) on all three systems from signed GitHub releases; the window restarts an older background client; Windows and Linux computers can be updated from another computer.
-- **Window**: tasks of all computers with progress and tokens, answers and notes to workers, closing stuck tasks, agents with their models and limits, statistics, feedback journal.
+- **Window**: project-scoped task lists and statistics, planned work, alerts for unclear task outcomes, worker notes and answers, elapsed time, reported models and a feedback journal.
 - **CI** on Linux, macOS and Windows, with the downloads built and installed; a daily watch of the worker CLIs.
 
 Not done yet: Developer ID signing and notarization on Mac and code signing on Windows (T-013), an Intel Mac build (T-014), backup and rollback (T-011), coordinator role handover (T-017), a standby server computer, a phone view (T-147).
 
-The stage table below is the plan of November 6 and is kept for its exit conditions; several stages were reached in a different order or replaced by the task model.
+The sections below preserve the November 6 plan and its exit conditions. The current behavior is described in [Task model](TASK_MODEL.md), [Updates](UPDATES.md) and [Download and start](DOWNLOAD.md).
 
 ## Path to release
 

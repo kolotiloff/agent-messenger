@@ -4,7 +4,7 @@
 
 One coordinator agent hands tasks to worker agents (Claude Code, Codex, Cursor Agent CLI) on your own computers: Mac, Windows and Linux, joined into one network. You watch every task in one window, answer the workers' questions and step in when needed.
 
-**Technical preview.** The app runs on macOS (Apple Silicon), Windows and Linux. Updates are signed and verified by Messenger. A fresh download may trigger Gatekeeper on Mac or SmartScreen on Windows. See the [installation guide](docs/DOWNLOAD.md) for each platform.
+**Technical preview.** Messenger runs on Apple Silicon Macs with macOS 15 or later, and on x64 and ARM64 Windows and Linux computers. Messenger verifies signed in-app updates. The Mac app is ad-hoc signed and the Windows executables are unsigned, so a first download can trigger an operating system prompt. See the [installation guide](docs/DOWNLOAD.md) for each platform.
 
 <h3 align="center">Download</h3>
 
@@ -23,16 +23,16 @@ One coordinator agent hands tasks to worker agents (Claude Code, Codex, Cursor A
   <img src="docs/assets/window-light.png" alt="Agent Messenger in English, with Claude Code, Codex and Cursor in the computers and tasks panels">
 </picture>
 
-<sub>The English task window with Claude Code, Codex and Cursor, using fictional data. The settings button at the bottom left changes the theme and language.</sub>
+<sub>Messenger 1.0.3 in English, with Claude Code, Codex and Cursor using sample projects and tasks. Change the theme or language in Settings at the bottom left.</sub>
 
 ## What it does
 
 - **Coordinator and workers.** Use a local Claude Code, Codex or Cursor chat as the coordinator. It assigns work to separate worker sessions in the project folder. Claude Code can receive background-task notifications. Codex and Cursor use `wait` during an active turn to receive worker events.
 - **Several computers.** Host the server on one of your computers or a Linux VPS. Join on the same local network with six digits, or use a long invitation with the server's reachable address. The coordinator can assign tasks to a computer that accepts them and has a folder for the project. Drag computer cards to set the order in your window.
-- **Tasks and replies.** See task progress, the model, elapsed time and token usage. The conversation shows the assigning agent's name and icon when recorded, along with its model when supplied. Open full conversations for tasks tracked by this computer, message a worker during a run or stop work, and browse read-only summaries of other computers' tasks. Workers can attach images to reports and questions.
-- **Run controls.** Interrupted or uncertain tasks appear under «Требуют решения» and are never restarted automatically. The «Любые команды» option is off by default.
-- **Statistics and feedback.** Filter by period, agent, model or computer. The task table shows when each task finished, how long it ran and how many tokens it used. Click a column heading to sort and click again to reverse. The feedback button saves a note and an optional screenshot.
-- **Updates from the window.** The update arrow appears next to the version on the computer card. Windows and Linux can also be updated from another computer on the network.
+- **Projects and tasks.** Switch between projects with separate task histories and statistics. See planned, active, finished and interrupted work, including the worker's reported model when available. A computer card can expand to show multiple tasks for the same agent.
+- **Conversations and run controls.** Write to a worker or answer a question from the task view. Stop eligible tasks from the conversation or the task list and see the request status while Messenger waits for the result. Workers can attach images to reports and questions. Messenger preserves uncertain outcomes for review. **Any commands** is off by default.
+- **Statistics and feedback.** Filter by period, agent, model or computer. Sort the task table by finish time, duration or tokens by clicking the column headings. The feedback button saves a note and an optional screenshot on this computer.
+- **Updates from the window.** The update arrow appears next to the computer version. Request updates remotely on Windows and Linux. A queued request can be cancelled before installation starts.
 
 <details>
   <summary>Statistics screenshot</summary>
@@ -43,9 +43,9 @@ One coordinator agent hands tasks to worker agents (Claude Code, Codex, Cursor A
 
 1. [Download and start](docs/DOWNLOAD.md) the app on each computer.
 2. Create a project from the welcome screen. On each worker computer, use the same project name and choose its local folder.
-3. Open **Агенты** (Agents). Install or find the CLI, sign in and confirm folder trust when prompted.
-4. In **Проект → MCP-плагин** (Project → MCP plug-in), check the connection for your chosen local coordinator. Open a new chat in that project folder and ask which agents it sees.
-5. To join more computers, open **Сервер** (Server), start the server and [invite each computer](docs/DOWNLOAD.md#connect-more-computers).
+3. Open **Agents**. Install or find the CLI, sign in and confirm folder trust when prompted.
+4. In **Project → MCP plugin**, connect Messenger for your coordinator. Open a new chat in that project folder and ask it to run `list_agents`.
+5. For a network of computers, open **Server** on the host and [invite each worker computer](docs/DOWNLOAD.md#connect-more-computers).
 
 ## Status
 
@@ -55,7 +55,7 @@ One coordinator agent hands tasks to worker agents (Claude Code, Codex, Cursor A
 | Windows and Linux | x64 and ARM64 packages. Windows installs for the current user. Linux can run from the downloaded file or install for the current user. Windows previews may trigger SmartScreen. |
 | Workers | Claude Code, Codex and Cursor. Tests use fake CLIs only; real agents are checked in separate acceptance runs. |
 | Network | Local network and internet modes, invitations by code and TLS with a pinned certificate. Use invitations for your own trusted computers. [Server guide](docs/BROKER.md) |
-| Planned | Full remote task conversations, coordinator handover and a phone view. |
+| In development | Full conversations for tasks assigned by another computer, coordinator handover between computers and a phone view. |
 
 The current state and next tasks are in [HANDOFF.md](docs/HANDOFF.md) and [TASKS.md](docs/TASKS.md); the full map of documents is in [docs/README.md](docs/README.md).
 
@@ -69,6 +69,6 @@ The current state and next tasks are in [HANDOFF.md](docs/HANDOFF.md) and [TASKS
 
 ## Project rules
 
-The product is written in Go (`cmd/messenger`, `internal`), with a native Mac shell in `desktop/macos`. Building and running it needs no Python or Node.
+The product is written in Go (`cmd/messenger`, `internal`), with a native Mac shell in `desktop/macos`. The packaged app runs without a Python or Node installation. Agent CLIs have their own prerequisites. The [CI guide](docs/CI.md) lists the tools used for builds and checks.
 
 This repository is public. Keys, local profiles, queues, session IDs and their history are never uploaded here. Rules for coding agents working on the code are in [AGENTS.md](AGENTS.md).
