@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-25 — Codex (T-300)
+
+- Confirmed with both macOS Codex binaries that an isolated App Server can start a new turn in the same chat through `codex queue --resume`, using simulated model responses. A second probe without shared server access returned a warning and left the chat idle. The owner closed T-300 after the current desktop setup did not expose the expected control socket. Recorded D-208.
+
 ## 2026-11-25 — Codex (T-298, T-299)
 
 - The owner reported that update cancellation never appeared. The owner's event journal showed a request queued for five minutes. Reproduced and fixed a separate failure mode where a stale roster hid the cancel control for a confirmed queued request. Tests cover window rendering and exact delivery to the queued receiver.

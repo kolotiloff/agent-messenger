@@ -699,3 +699,7 @@ The update watch can already identify a waiting request while the roster is late
 ## D-207 — Retain useful helper logs (T-299)
 
 On the first journal write after startup and at most once per day thereafter, remove generated startup and remote-update logs last modified more than seven days ago. Keep the current process's output files and the newest nonempty file of each kind. The event journal uses its existing size-based rotation.
+
+## D-208 — Close the idle coordinator timer proposal (T-300)
+
+The owner removed the proposal from the plan. On macOS, `codex queue --resume` started a new turn in the same finished chat with a reachable isolated App Server and simulated model responses. Both the standalone CLI and the CLI bundled with the desktop app passed. The desktop setup under investigation did not expose the default control socket. The isolated no-shared-server run warned that the thread could not be resumed, returned exit code zero, and started no new turn. Keep the waiting behavior in D-124.

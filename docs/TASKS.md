@@ -261,7 +261,7 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 
 | ID | Task | PR |
 |---|---|---|
-| T-300 | Resume an idle Codex coordinator after a computer stays ready without assigned work for a project-configured interval. | Proposed, pending a verified way to resume an ended Codex turn. The owner declined a reminder that only wakes an active `wait` (D-124). |
+| T-300 | Resume an idle Codex coordinator after a computer stays ready without assigned work for a project-configured interval. | Closed by the owner. A test confirmed same-thread wake-up with a reachable Codex App Server. The owner's desktop setup did not expose the expected local control socket. D-208. |
 | T-299 | Automatically prune old startup and remote-update helper logs. | Ready for review. D-207. Fixture covers active, recent, and unrelated files and both rotating journal files. |
 | T-298 | Keep exact cancellation available when the shared update queue is known and presence is late. | Ready for review. D-206. Window and store fixtures cover a queued request with stale presence. |
 | T-297 | Remove duplicate tooltips from fully visible notifications. | Ready for review. D-205. The window fixture covers both a visible update failure reason and a clipped reason. |
