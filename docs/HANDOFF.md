@@ -8,7 +8,10 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
-**T-308** keeps computer contact separate from agent report freshness and lets fresh executor evidence move a task out of Planned before its launch event arrives. Go fixtures cover a delayed launch, stale worker evidence, and an active SQLite writer. WebKit and Chromium cover the computer card, task list and open thread with delayed data. The reported installation has not been inspected. See D-215.
+**[1.0.4, build 107](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.4-preview.107) is released** from `4822cfd0e59934734468256dea541ab89060326e`. It includes [PR #202](https://github.com/kolotiloff/agent-messenger/pull/202) and [PR #204](https://github.com/kolotiloff/agent-messenger/pull/204). All four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45626722653) passed. The public release contains 22 assets. The public upgrade route from 0.99 and signed archives were checked for macOS ARM64 and Windows and Linux on both architectures. No owner installation was updated as part of the release.
+
+- T-304, T-306 and T-307 mute idle agents, show waiting tasks in yellow, keep computer names and role labels on one baseline and center the version and icons.
+- T-308 separates computer contact from agent report freshness. Current worker evidence moves the matching task out of Planned while it waits for the launch event and its timestamp. Go fixtures cover delayed launch, stale worker evidence, and an active SQLite writer. Chromium and WebKit fixtures cover computer cards, the task list, and the open thread. The installation that reported the issue was not inspected. See D-215.
 
 **T-305 refreshes the public GitHub page for 1.0.3.** The English screenshots use the released window assets and sample devices, projects and tasks. The landing page and its installation, network, task and update guides describe the released behavior.
 
@@ -25,10 +28,6 @@ The owner asked the agent to finish the program without them ("доделай б
 This release adds T-290 through T-295. The coordinator gets a scoped advisory after prolonged unexplained Codex silence and can read a running command when the CLI reports it. The existing completed-turn exit warning is preserved. The task context menu stops the clicked eligible task with the same pending guard as the chat. Computer cards use equal-sized green dots and red crosses. The Mac menu bar uses primary click to open the window and secondary click for its menu. The update controls show a pending cancellation, use a download arrow with a tray and have consistent short tooltips.
 
 Browser fixtures passed in WebKit and Chromium. The macOS desktop bridge passed the isolated start and reopen check. Live menu bar clicks, the original reported Windows run, and installation on the owner's fleet were not part of these checks.
-
-**T-304 and T-306 are ready for review for the next release.** Idle agents use the sidebar's muted text color. An expanded waiting task shows its model and short waiting status together in yellow, with the full reason on hover. When a computer is both the server and the active coordinator of the selected project, its heading shows both roles by name, with an abbreviation or icons when space is tight. See D-212 and D-213.
-
-**T-307** aligns the computer name and roles on a shared text baseline and centers the version and visible icons vertically. The monitor, role and update glyphs share a 14 px square. See D-214.
 
 **[1.0.1](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.1-preview.104) is released** from `f2f6f4ce92740eb6a9973d8b8730ea0462005c47`. All eight [client checks](https://github.com/kolotiloff/agent-messenger/actions/runs/45497895256/attempts/2) and all four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45504161598) passed. The public release has 22 assets and the signed upgrade check passed for all five targets. The installed fleet has not been upgraded as part of this release task.
 
