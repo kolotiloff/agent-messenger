@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-26 — Codex (T-311 export verification)
+
+- The write-contention fixture now gives each export its own original three-second deadline while the writer remains held through all requests. The missing-project check must return before its deadline too. GitHub runners exceeded the original single deadline shared by the whole sequence.
+
 ## 2026-11-25 — Codex (T-309–T-313 integration)
 
 - Combined pending task menu, computer row and statistics changes on `codex/t309-t313-release-108` for the 1.0.5/108 candidate.

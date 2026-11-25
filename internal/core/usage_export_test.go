@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -77,12 +78,17 @@ func TestUsageExportReadsOneProjectWithoutWaitingForWriters(t *testing.T) {
 				defer tx.Rollback()
 			}
 			dir := t.TempDir()
-			ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
-			defer cancel()
+			export := func(computer string, filter UsageFilter) (string, int, error) {
+				// Each request must finish before the writer is released. Give
+				// each request its own deadline, as the window API does.
+				request, cancel := context.WithTimeout(ctx, 3*time.Second)
+				defer cancel()
+				return tc.store.WriteUsageExport(request, f.path, dir, since, at, computer, filter)
+			}
 			load := func(computer string, filter UsageFilter, want int) map[string]usageExportTask {
 				t.Helper()
 				start := time.Now()
-				path, count, err := tc.store.WriteUsageExport(ctx, f.path, dir, since, at, computer, filter)
+				path, count, err := export(computer, filter)
 				if err != nil || count != want {
 					t.Fatalf("export count %d, want %d, error %v", count, want, err)
 				}
@@ -132,8 +138,8 @@ func TestUsageExportReadsOneProjectWithoutWaitingForWriters(t *testing.T) {
 			load("local", UsageFilter{Project: "Game", Model: reported}, 1)
 			load("local", UsageFilter{Project: "Game", Model: requested}, 0)
 			load("", UsageFilter{Project: "Site"}, 1)
-			if _, _, err := tc.store.WriteUsageExport(ctx, f.path, dir, since, at, "", UsageFilter{Project: "Missing"}); err == nil {
-				t.Fatal("export accepted an unknown project")
+			if _, _, err := export("", UsageFilter{Project: "Missing"}); err == nil || errors.Is(err, context.DeadlineExceeded) {
+				t.Fatalf("expected a prompt rejection for an unknown project, got %v", err)
 			}
 			if files, err := os.ReadDir(dir); err != nil || len(files) != 5 {
 				t.Fatalf("export should only publish a file for each successful request: %v, %v", files, err)
