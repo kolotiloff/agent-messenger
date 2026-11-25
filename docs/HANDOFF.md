@@ -8,17 +8,17 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+**[1.0.2, build 105](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.2-preview.105) is released** from `41dc97c4b35a943e576d0c362b1638ae1c581d81`. [PR #198](https://github.com/kolotiloff/agent-messenger/pull/198) is merged and its eight [client checks](https://github.com/kolotiloff/agent-messenger/actions/runs/45519001699) passed. The public release has 22 uploaded files. Both the local check and the [release workflow](https://github.com/kolotiloff/agent-messenger/actions/runs/45521441937/attempts/2) verified the signed upgrade route to 1.0.2 on all five targets. The workflow's channel job passed after a retry for an API rate limit.
+
+This release adds T-290 through T-295. The coordinator gets a scoped advisory after prolonged unexplained Codex silence and can read a running command when the CLI reports it. The existing completed-turn exit warning is preserved. The task context menu stops the clicked eligible task with the same pending guard as the chat. Computer cards use equal-sized green dots and red crosses. The Mac menu bar uses primary click to open the window and secondary click for its menu. The update controls show a pending cancellation, use a download arrow with a tray and have consistent short tooltips.
+
+Browser fixtures passed in WebKit and Chromium. The macOS desktop bridge passed the isolated start and reopen check. Live menu bar clicks, the original reported Windows run, and installation on the owner's fleet were not part of these checks.
+
 **[1.0.1](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.1-preview.104) is released** from `f2f6f4ce92740eb6a9973d8b8730ea0462005c47`. All eight [client checks](https://github.com/kolotiloff/agent-messenger/actions/runs/45497895256/attempts/2) and all four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45504161598) passed. The public release has 22 assets and the signed upgrade check passed for all five targets. The installed fleet has not been upgraded as part of this release task.
 
 It includes Planned tasks, the remote stop delivery status, the synchronized update queue with five-minute expiry, the local computer stripe, and the confirmed model label. T-289 fixes three update state regressions. See [PR #196](https://github.com/kolotiloff/agent-messenger/pull/196) and the [audit report](reports/2026-11-25-t289-release-audit.md).
 
 The earlier [1.0 release](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.0-preview.103) passed the [public upgrade check](https://github.com/kolotiloff/agent-messenger/actions/runs/45459724676) for all five platforms. The original macOS 0.99 and 0.101 binaries each downloaded the signed release in isolated homes. The owner’s installed 0.99 client also staged 1.0.
-
-T-292, T-293 and T-294 are on `codex/t292-computer-card-headers` for the next functional release ([PR #198](https://github.com/kolotiloff/agent-messenger/pull/198)). Both presence icons use an outlined monitor. Its lower-right marker is an 8 px green dot while online and an 8 px red cross while offline. Offline names are muted. The local header has a subtle tint. Selection changes the border. The macOS menu bar button opens or restores the window on primary click, with its existing commands on secondary click. An update cancellation now has a separate pending indicator backed by the local queue. A repeated submission reuses the pending operation for that exact update.
-
-T-295 is in the same PR. Short window tooltips use sentence case without an ending period. Update buttons describe their action. An available cancellation also exposes the current state as its accessible description.
-
-The next release also includes T-290 and T-291. Codex has a separate advisory for unexplained silence while its process is observed alive. A running command appears in the coordinator's task list when reported and suppresses the silence advisory. The task list context menu can stop the clicked task using the same pending guard as the chat. Update buttons use a download arrow with a tray.
 
 Updated 2026-11-24 by Codex (T-283). The original 0.99 binary still returned current after 0.101 shipped. Added a public-channel check to the release workflow and an opt-in recovery for legacy discovery. Fleet delivery requires verification after publication.
 
