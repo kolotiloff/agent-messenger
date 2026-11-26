@@ -1107,6 +1107,10 @@
   }
   function appendProjectCells(body,computer,activity,peer){
     const columns=el('div',undefined,'am-machine-projects');
+    // The roster is per computer. Only the task activity belongs to a project.
+    // A paused agent with work in either column stays visible in both.
+    const agents=(peer?peer.agents||[]:view?.agents||[]).filter(a=>!a.paused||activity.some(({tasks})=>
+      tasks.get(computer+'\0'+a.agent)?.some(t=>activeStates.includes(t.state))));
     for(const {name,snapshot,tasks} of activity){
       const cell=el('div',undefined,'am-machine-project');
       const current=project===name&&computerFilter===computer;
@@ -1125,21 +1129,15 @@
       let message='';
       if(!online)message=tr('Нет связи');
       else if(peer&&!peerFresh(peer))message=peerConnected(peer)?tr('Ждём сведения об агентах'):tr('Нет связи');
-      else if(!snapshot)message=auxError===name?tr('Статусы недоступны'):tr('Загружаем статусы…');
       else{
-        const agents=(peer?peer.agents||[]:view?.agents||[]).filter(a=>!a.paused||tasks.get(computer+'\0'+a.agent)?.some(t=>activeStates.includes(t.state)));
-        const hasActivity=agents.some(a=>tasks.get(computer+'\0'+a.agent)?.some(t=>activeStates.includes(t.state)));
-        const projects=peer?.ready?.projects;
-        // Presence caps the reported project list at 64 names of at most 64
-        // characters. An omitted name beyond those limits is not evidence.
-        if(peer&&!hasActivity&&Array.isArray(projects)&&!projects.includes(name)&&projects.length<64&&[...name].length<=64){
-          message=tr('Нет в проекте');cell.title=tr('На компьютере не настроена папка этого проекта');
-        }else{
-          const coord=peer?null:snapshot.coordinator;
-          const lines=agentLines(agents,coord?.connected?(coord.client||''):null,true,computer,tasks,name);
-          if(lines.children.length)cell.append(lines);
-          else message=tr('Агенты не подключены');
+        const coord=peer?null:snapshot?.coordinator;
+        const lines=agentLines(agents,coord?.connected?(coord.client||''):null,true,computer,tasks,name);
+        if(!snapshot&&lines.children.length){
+          cell.title=auxError===name?tr('Статусы недоступны'):tr('Загружаем статусы…');
+          for(const line of lines.children)line.removeAttribute('title');
         }
+        if(lines.children.length)cell.append(lines);
+        else message=tr('Агенты не подключены');
       }
       if(message)cell.append(el('p',message,'am-small am-muted'));
       columns.append(cell);

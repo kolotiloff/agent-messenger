@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-26 — Codex (T-319 shared sidebar agent roster)
+
+- Project columns now use one agent roster per computer. Removed the folder-based replacement of agent rows. Chromium and WebKit checks covered a peer without a configured project folder, a VPS without agents, and project activity arriving after the agent list.
+
 ## 2026-11-26 — Codex (T-317–T-318 release)
 
 - Published [1.0.7, build 110](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.7-preview.110) from `c71dffead7df31e42dcd28517dc59f2348a07f32` with [PR #217](https://github.com/kolotiloff/agent-messenger/pull/217) and [PR #218](https://github.com/kolotiloff/agent-messenger/pull/218). All four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45869548677) passed, including the public upgrade path from 0.99 for all five targets. The latest tag points to the checked revision and has 22 uploaded files.
