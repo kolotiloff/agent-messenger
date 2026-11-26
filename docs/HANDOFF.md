@@ -8,6 +8,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+**T-317 is prepared for the next functional release.** Split project columns share the computer card’s vertical padding. Long status text and collapsed summaries stay on one line. Chromium and WebKit check card heights before and after toggling the split. See D-222.
+
 **[1.0.6, build 109](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.6-preview.109) is released** from `829a0567fc5bee4c965c354d2104e8872de2f178`. [PR #215](https://github.com/kolotiloff/agent-messenger/pull/215) integrated T-314 through T-316. The [eight client checks](https://github.com/kolotiloff/agent-messenger/actions/runs/45841685798) and [four release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45848162519) passed. The public channel serves five verified signed update packages, with 22 files in the release.
 
 The sidebar can display two projects' agent columns on each computer with one active task conversation. Statistics and JSON export can cover both projects or either one. The picture viewer supports closing from the Mac title bar area and copying the selected picture as a full-resolution PNG. The computer card centers the update spinner during a Mac download. The task status and open question use a shared read-only snapshot during concurrent worker output. See D-219 through D-221.

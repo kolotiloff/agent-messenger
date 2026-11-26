@@ -105,10 +105,18 @@ function reply(url,p,available){
     const available=[...projects];
     const page=await open(available,{width:1197,height:706},'dark');
     assert.equal(await card(page,'local').count(),1);
+    await card(page,'pc1').getByText('ждёт ответа').waitFor();
+    const stableCards=['local','pc1','pc2'];
+    const cardSizes=()=>Promise.all(stableCards.map(id=>card(page,id).boundingBox()));
+    const singleSizes=await cardSizes();
     await split(page).click();
     await cells(page,'local').nth(1).getByText('ждёт ответа').waitFor();
     await cells(page,'local').nth(0).locator('.am-agent-parallel summary').waitFor();
     await cells(page,'pc2').nth(1).getByText('Нет в проекте').waitFor();
+    const splitSizes=await cardSizes();
+    assert(splitSizes.every((size,i)=>size.width>singleSizes[i].width));
+    assert.deepEqual(splitSizes.map(size=>size.height),singleSizes.map(size=>size.height),
+      'switching to two project columns should preserve the height of equivalent cards');
     assert.equal(await page.locator('#machines .am-machine-card').count(),4);
     assert.equal(await cells(page,'local').count(),2);
     assert.equal(await chat(page,'game').isVisible(),true);
