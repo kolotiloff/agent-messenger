@@ -79,6 +79,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-computer-update-size:18px;
   --am-computer-meta-gap:6px;
   --am-computer-icon-size:14px;
+  --am-task-inset-start:calc(var(--am-computer-icon-size) + var(--am-space-1));
   --am-computer-heading-line:calc(var(--am-text-m) * 1.5);
   --am-computer-label-gap:10px;
   --am-gap-control:var(--am-space-2);
@@ -330,9 +331,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   #am-concept .am-sidebar-tasks { transition:grid-template-rows .18s ease, margin-block-start .18s ease; }
   #am-concept.am-task-sidebar-preview .am-machine-card { transition:margin-block-start .18s ease; }
 }
-#am-concept .am-sidebar-task { display:grid; grid-template-columns:minmax(0,1fr); gap:0; min-width:0; text-align:start; overflow-wrap:anywhere; border:0; background:transparent; border-radius:var(--am-radius-s); padding-block:var(--am-space-1); padding-inline:calc(var(--am-computer-icon-size) + var(--am-space-1)) var(--am-space-3); }
-#am-concept button.am-sidebar-task:is(:hover,:focus-visible):not(:disabled) { background:var(--am-field-hover); }
-#am-concept button.am-sidebar-task[aria-pressed=true]:not(:disabled) { background:var(--am-selected); }
+#am-concept .am-sidebar-task { display:grid; grid-template-columns:minmax(0,1fr); gap:0; min-width:0; text-align:start; overflow-wrap:anywhere; border:0; }
 @media (max-width:620px) {
   #am-concept.am-task-sidebar-preview .am-sidebar { display:grid; grid-template-columns:minmax(0,1fr) auto; }
   #am-concept.am-task-sidebar-preview .am-project-heading:has(button[hidden]) { display:flex; }
@@ -650,14 +649,15 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-task-project { display:flex; flex-direction:column; gap:var(--am-space-1); min-width:0; }
 #am-concept .am-task-project + .am-task-project { margin-top:var(--am-space-3); padding-top:var(--am-space-3); border-top:1px solid var(--am-line); }
 #am-concept .am-task-project > h3 { color:var(--am-text); overflow-wrap:anywhere; }
-#am-concept .am-task-section { margin:var(--am-space-3) 0 var(--am-space-1); padding-inline:var(--am-space-3); }
+#am-concept .am-task-section { margin:var(--am-space-3) 0 var(--am-space-1); padding-inline:var(--am-task-inset-start) var(--am-space-3); }
 #am-concept .am-task-section:first-child { margin-top:0; }
 #am-concept .am-task-section:has(.am-task-section-action) { display:flex; align-items:center; justify-content:space-between; gap:var(--am-space-2); }
 #am-concept button.am-task-section-action { min-height:0; height:auto; padding:0; background:transparent; font:inherit; letter-spacing:inherit; text-transform:inherit; color:var(--am-muted); }
 #am-concept button.am-task-section-action:is(:hover,:focus-visible) { background:transparent; color:var(--am-text); }
-#am-concept .am-task-list .am-task { display:flex; flex-direction:column; flex-wrap:nowrap; align-items:stretch; flex-shrink:0; gap:var(--am-gap-line); width:100%; min-width:0; max-width:100%; min-height:0; padding:var(--am-pad-compact); border-radius:var(--am-radius-s); background:transparent; text-align:left; font-size:var(--am-text-xs); line-height:1.5; overflow:hidden; }
-#am-concept .am-task-list .am-task:is(:hover,:focus-visible) { background:var(--am-soft); }
-#am-concept .am-task-list .am-task[aria-pressed=true] { background:var(--am-selected); }
+#am-concept .am-task-list .am-task { display:flex; flex-direction:column; flex-wrap:nowrap; align-items:stretch; flex-shrink:0; gap:var(--am-gap-line); width:100%; min-width:0; max-width:100%; min-height:0; text-align:left; font-size:var(--am-text-xs); line-height:1.5; overflow:hidden; }
+#am-concept :is(.am-sidebar-task,.am-task-list .am-task) { padding-block:var(--am-space-1); padding-inline:var(--am-task-inset-start) var(--am-space-3); border-radius:var(--am-radius-s); background:transparent; }
+#am-concept :is(.am-sidebar-task,.am-task-list .am-task):is(:hover,:focus-visible) { background:var(--am-soft); }
+#am-concept :is(.am-sidebar-task,.am-task-list .am-task)[aria-pressed=true] { background:var(--am-selected); }
 #am-concept .am-task-here { color:var(--am-text); font-weight:600; }
 #am-concept .am-task-from { color:var(--am-muted); }
 #am-concept .am-shared-report { white-space:pre-wrap; overflow-wrap:anywhere; }
