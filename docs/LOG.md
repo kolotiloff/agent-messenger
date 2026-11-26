@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-26 — Codex (T-317–T-318 release)
+
+- Published [1.0.7, build 110](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.7-preview.110) from `c71dffead7df31e42dcd28517dc59f2348a07f32` with [PR #217](https://github.com/kolotiloff/agent-messenger/pull/217) and [PR #218](https://github.com/kolotiloff/agent-messenger/pull/218). All four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45869548677) passed, including the public upgrade path from 0.99 for all five targets. The latest tag points to the checked revision and has 22 uploaded files.
+
 ## 2026-11-26 — Codex (T-318 project computer selection)
 
 - Filled the selected sidebar card or its selected half without changing row geometry. Clicks on either side of the shared header select that project's computer. The project split and computer-switch regressions passed in Chromium and WebKit with fictional data. Publication stays on hold.
