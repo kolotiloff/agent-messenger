@@ -2,6 +2,14 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-26 — Codex (T-319 release)
+
+- Published [1.0.8, build 111](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.8-preview.111) from `43535577935cab08cde7c07452b5ca111ff9731f` via [PR #220](https://github.com/kolotiloff/agent-messenger/pull/220). All four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45875009911) passed, including delivery of signed updates on all five supported targets. The public release tag matches the checked revision and contains 22 uploaded files.
+
+## 2026-11-26 — Codex (T-320 split sidebar hover)
+
+- Replaced the split sidebar divider with a subtle right-half tint and gave the hovered half a neutral highlight. The shared header and agent area use the same midpoint as selection. The selection stays blue and the card keeps its size.
+
 ## 2026-11-26 — Codex (T-319 shared sidebar agent roster)
 
 - Project columns now use one agent roster per computer. Removed the folder-based replacement of agent rows. Chromium and WebKit checks covered a peer without a configured project folder, a VPS without agents, and project activity arriving after the agent list.

@@ -92,6 +92,12 @@ function reply(url,p,available){
   const split=page=>page.locator('#split-projects');
   const card=(page,id)=>page.locator('#machines .am-machine-card[data-machine-order="'+id+'"]');
   const cells=(page,id)=>card(page,id).locator('.am-machine-project');
+  const fills=target=>target.evaluate(card=>[card,card.querySelector('.am-machine-name')]
+    .map(row=>getComputedStyle(row).backgroundImage));
+  const directions=fill=>[...fill.matchAll(/linear-gradient\(to (left|right)/g)].map(match=>match[1]);
+  const checkFills=async(target,expected)=>{
+    for(const fill of await fills(target))assert.deepEqual(directions(fill),expected);
+  };
   const chat=(page,name)=>page.locator('#thread').getByText('Сообщение из '+name);
   const total=async(page,n)=>page.waitForFunction(value=>document.querySelector('#stats-total-title').textContent.split(' токен')[0].replace(/[^0-9]/g,'')===value,n);
   try{
@@ -196,9 +202,10 @@ function reply(url,p,available){
     await chat(page,'game').waitFor();
     assert.equal(await card(page,'local').getAttribute('aria-pressed'),null);
     assert.equal(await cells(page,'local').nth(0).getAttribute('aria-pressed'),'true');
-    const fills=() => card(page,'local').evaluate(card=>[card,card.querySelector('.am-machine-name')]
-      .map(row=>getComputedStyle(row).backgroundImage));
-    assert((await fills()).every(fill=>fill.includes('to right')&&fill.includes('50%')));
+    const localCard=card(page,'local');
+    await page.mouse.move(810,5);
+    await checkFills(localCard,['right','right']);
+    await checkFills(card(page,'pc1'),['right']);
     const clickHeading=async(id,right)=>{
       const heading=card(page,id).locator('.am-machine-name');
       const {width,height}=await heading.boundingBox();
@@ -207,7 +214,25 @@ function reply(url,p,available){
     await clickHeading('local',true);
     await chat(page,'tools').waitFor();
     assert.equal(await cells(page,'local').nth(1).getAttribute('aria-pressed'),'true');
-    assert((await fills()).every(fill=>fill.includes('to left')&&fill.includes('50%')));
+    await page.mouse.move(810,5);
+    await checkFills(localCard,['left','right']);
+    const selectedFills=await fills(localCard);
+    const cardBeforeHover=await localCard.boundingBox();
+    const hoverHalf=async(target,right)=>{
+      const {width,height}=await target.boundingBox();
+      await target.hover({position:{x:width*(right ? .75 : .25),y:height/2}});
+      await checkFills(localCard,['left',right?'left':'right','right']);
+      assert.equal(await localCard.evaluate(el=>getComputedStyle(el,'::after').content),'none');
+    };
+    const heading=localCard.locator('.am-machine-name');
+    const body=localCard.locator('.am-machine-body');
+    for(const target of [heading,body]){
+      await hoverHalf(target,false);
+      await hoverHalf(target,true);
+    }
+    assert.deepEqual(await localCard.boundingBox(),cardBeforeHover);
+    await page.mouse.move(810,5);
+    assert.deepEqual(await fills(localCard),selectedFills);
     if(output){
       await page.mouse.move(810,5);
       await page.screenshot({path:path.join(output,'messenger-t318-split.png')});
@@ -230,7 +255,7 @@ function reply(url,p,available){
     await split(page).click();
     assert.equal(await cells(page,'local').count(),0);
     assert.equal(await card(page,'local').getAttribute('aria-pressed'),'true');
-    assert((await fills()).every(fill=>fill==='none'));
+    assert((await fills(localCard)).every(fill=>fill==='none'));
     const selectedBody=await card(page,'local').evaluate(card=>getComputedStyle(card).backgroundColor);
     assert.notEqual(selectedBody,await card(page,'pc1').evaluate(card=>getComputedStyle(card).backgroundColor));
     assert.equal(await chat(page,'game').isVisible(),true);
@@ -254,11 +279,9 @@ function reply(url,p,available){
     assert.equal(await narrow.locator('#project-columns').evaluate(el=>el.scrollWidth>el.clientWidth),false);
     assert.equal(await narrow.locator('body').evaluate(el=>el.scrollWidth>innerWidth),false);
     assert.equal(await split(narrow).evaluate(el=>el.getBoundingClientRect().height),28);
-    const divider=await cells(narrow,'local').nth(1).evaluate(el=>{
-      const style=getComputedStyle(el,'::before');
-      return [style.insetBlockStart,style.insetBlockEnd,style.borderInlineStartWidth];
-    });
-    assert.deepEqual(divider,['4px','4px','1px']);
+    const divider=await cells(narrow,'local').nth(1).evaluate(el=>getComputedStyle(el,'::before').content);
+    assert.equal(divider,'none');
+    await checkFills(card(narrow,'local'),['right']);
     await narrow.locator('[data-tab=agents]').click();
     assert.equal(await narrow.locator('[data-screen=agents]').isVisible(),true);
     await narrow.locator('[data-tab=server]').click();

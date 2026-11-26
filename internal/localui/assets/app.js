@@ -815,6 +815,17 @@
   }
   let draggedMachine='',machineDrop=null;
   const machineList=$('machines');
+  function machineProjectColumn(card,clientX){
+    const rect=card.getBoundingClientRect();
+    return Number(clientX>=rect.left+rect.width/2);
+  }
+  machineList.addEventListener('pointermove',event=>{
+    if(!splitProjects.length||event.pointerType==='touch')return;
+    const card=event.target.closest('.am-machine-card');
+    if(!card)return;
+    const half=machineProjectColumn(card,event.clientX)?'right':'left';
+    if(machineList.dataset.projectHover!==half)machineList.dataset.projectHover=half;
+  });
   function clearMachineDrop(){
     if(machineDrop)delete machineDrop.card.dataset.dropEdge;
     machineDrop=null;
@@ -889,8 +900,7 @@
     card.addEventListener('click',event=>{
       if(event.target.closest('button'))return;
       if(!split){filterComputer(id);return;}
-      const rect=card.getBoundingClientRect();
-      const column=Number(event.clientX>=rect.left+rect.width/2);
+      const column=machineProjectColumn(card,event.clientX);
       card.querySelectorAll('.am-machine-project')[column]?.click();
     });
     card.addEventListener('keydown',event=>{
