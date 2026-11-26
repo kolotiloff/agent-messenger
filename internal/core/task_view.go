@@ -527,8 +527,7 @@ func (s *Store) WindowViewFiltered(project, today, agent, computer, historyVersi
 	if err := scoped.db.QueryRow(`SELECT COUNT(*) FROM task_runs r JOIN tasks t ON t.id=r.task_id WHERE t.project=? AND r.state='intent' AND t.state='running'`, project).Scan(&v.Pending); err != nil {
 		return v, err
 	}
-	active, err := scoped.windowTaskRows(`WHERE project=? AND hidden_at IS NULL AND state NOT IN `+finishedWindowStates+`
- ORDER BY created_at DESC,rowid DESC`, project)
+	active, err := scoped.unfinishedWindowTasks(project)
 	if err != nil {
 		return v, err
 	}
@@ -552,6 +551,11 @@ func (s *Store) WindowViewFiltered(project, today, agent, computer, historyVersi
 	v.Tasks = append(v.Tasks, history.Tasks...)
 	v.HistoryNext = history.Next
 	return v, nil
+}
+
+func (s *Store) unfinishedWindowTasks(project string) ([]WindowTask, error) {
+	return s.windowTaskRows(`WHERE project=? AND hidden_at IS NULL AND state NOT IN `+finishedWindowStates+`
+ ORDER BY created_at DESC,rowid DESC`, project)
 }
 
 func (s *Store) windowTaskRows(selection string, args ...any) ([]WindowTask, error) {

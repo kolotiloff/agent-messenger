@@ -63,6 +63,10 @@ func TestTaskWindowRoutes(t *testing.T) {
 	if code, _ := do("GET", "/api/project-activity?project=Game%2FSite", ""); code != 400 {
 		t.Fatalf("invalid activity project: %d", code)
 	}
+	if code, _ := do("GET", "/api/project-activity?project=Game&history=1&agent=codex", ""); code != 200 ||
+		got[len(got)-1].Action != "1" || got[len(got)-1].Provider != "codex" {
+		t.Fatalf("activity history filter %d %+v", code, got)
+	}
 	if code, _ := do("POST", "/api/task-hide-history", `{"project":"Game","agent":"codex","computer":"local"}`); code != 200 || got[len(got)-1].Cmd != "task-hide-history" || got[len(got)-1].Alias != "Game" {
 		t.Fatalf("hide filtered history %d %+v", code, got[len(got)-1])
 	}

@@ -118,6 +118,13 @@ func (s *Supervisor) ProjectActivity(project string) (any, error) {
 	return s.store.ProjectActivity(project)
 }
 
+func (s *Supervisor) ProjectTaskActivity(project, agent string) (any, error) {
+	if !core.ValidProjectName(project) {
+		return nil, fmt.Errorf("invalid project")
+	}
+	return s.store.ProjectTaskActivity(project, agent)
+}
+
 func (s *Supervisor) HideWindowHistory(project, agent, computer string) error {
 	return s.store.HideWindowHistory(project, agent, computer)
 }

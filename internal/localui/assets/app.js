@@ -352,12 +352,12 @@
   function sharedDisplayTask(t){
     return sharedWorkerRunning(t)?{...t,pending_launch:false,worker_observed:true}:t;
   }
-  function taskMenu(event,t,p){
+  function taskMenu(event,t,p,name){
     event.preventDefault();
     // Unchanged rows keep their listeners across refreshes. The underlying
     // stop request can advance even when its short label stays the same.
     if(!p){
-      const current=taskRows().find(task=>task.id===t.id);
+      const current=taskRows(taskListView(name)).find(task=>task.id===t.id);
       if(!current)return;
       t=current;
     }
@@ -368,24 +368,24 @@
         popMenu(event.clientX,event.clientY,[],{task:t.id,text:stopMessage(progress)});
         return;
       }
-      entries.push({text:tr('Остановить задачу'),pick:()=>stopTask(t)});
+      entries.push({text:tr('Остановить задачу'),pick:()=>stopTask(t,name)});
     }
     if(finishedStates.includes(t.state)||(p&&sharedLost(t,p))){
-      entries.push({text:tr('Удалить из списка'),pick:()=>askRemoveTask(t,p)});
+      entries.push({text:tr('Удалить из списка'),pick:()=>askRemoveTask(t,p,name)});
     }
     popMenu(event.clientX,event.clientY,entries);
   }
-  function askRemoveTask(t,p){
+  function askRemoveTask(t,p,name){
     const text=p?tr('Задача пропадёт из списка на этом компьютере. У других она останется, пока её не удалят на компьютере «')+p.name+'».'
       :tr('Задача пропадёт из списка на всех компьютерах сети. Её история останется в базе этого компьютера.');
     askConfirm(tr('Удалить задачу из списка?'),text,tr('Удалить'),async()=>{
       await postAPI('/api/task-hide',{peer:p?.peer||'',task:t.id});
       if(p){if(selectedShared?.peer===p.peer&&selectedShared?.id===t.id)selectedShared=null;}
       else{
-        if(taskHistory)taskHistory.rows.delete(t.id);
+        taskHistories.get(name)?.rows.delete(t.id);
         if(selectedTask===t.id){selectedTask='';feed=null;feedSignature='';}
       }
-      viewSignature='';await refresh();
+      viewSignature='';await refresh();loadProjectActivity();
     });
   }
   function coordinatorName(client){
@@ -401,7 +401,7 @@
     if(a.waiting_owner>0)return ['wait',tr('Ждёт ответа')];
     return ['idle',tr('Свободен')];
   }
-  let splitProjects=[],auxActivity=null,auxError='',auxRequest=null;
+  let splitProjects=[],auxActivity=null,auxError='',auxRequest=null,auxTaskScope='';
   function projectOptions(select,options,value,disabled=false){
     if(select.options.length!==options.length||options.some(([value,label],i)=>select.options[i].value!==value||select.options[i].textContent!==label)){
       select.replaceChildren(...options.map(([value,label])=>{
@@ -415,31 +415,36 @@
     const before=statsProjectScope();
     splitProjects=next;
     if(!splitProjects.includes(statsProject))statsProject='';
-    if(!next.length){auxRequest?.controller.abort();auxRequest=null;auxActivity=null;auxError='';}
+    if(!next.length){auxRequest?.controller.abort();auxRequest=null;auxActivity=null;auxError='';auxTaskScope='';}
+    for(const name of taskHistories.keys())if(name!==project&&!next.includes(name))taskHistories.delete(name);
     updateStatsProjectScope(before);
   }
   function passiveProject(){return splitProjects.find(name=>name!==project)||'';}
   async function loadProjectActivity(){
     const name=passiveProject();
-    if(auxRequest?.name===name)return;
+    const scope=auxTaskQuery();
+    if(auxRequest?.name===name&&auxRequest.scope===scope)return;
     auxRequest?.controller.abort();
     if(!name||!online||document.hidden)return;
     if(auxError!==name)auxError='';
-    const controller=new AbortController(),request={name,controller};
+    const controller=new AbortController(),request={name,scope,controller};
     auxRequest=request;
     const timeout=setTimeout(()=>controller.abort(),4500);
     try{
-      const result=await api('/api/project-activity?'+new URLSearchParams({project:name}),4500,controller.signal);
-      if(passiveProject()!==name||auxRequest!==request)return;
+      const q=new URLSearchParams(scope||{project:name});
+      if(scope)q.set('history','1');
+      const result=await api('/api/project-activity?'+q,4500,controller.signal);
+      if(passiveProject()!==name||auxTaskQuery()!==scope||auxRequest!==request)return;
       if(result.project!==name)throw Error('unexpected project activity');
-      auxActivity=result;auxError='';
+      auxActivity=result;auxTaskScope=scope;auxError='';
+      if(scope){syncTaskHistory(result);syncStopSubmissions(result.tasks);}
     }catch(_){
-      if(passiveProject()!==name||auxRequest!==request)return;
+      if(passiveProject()!==name||auxTaskQuery()!==scope||auxRequest!==request)return;
       if(auxActivity?.project===name)auxActivity=null;
       auxError=name;
     }finally{
       clearTimeout(timeout);
-      if(auxRequest===request){auxRequest=null;renderMachines();}
+      if(auxRequest===request){auxRequest=null;renderMachines();if(scope)renderTaskList();}
     }
   }
   function projectTitle(name){return view?.projects.find(p=>p.name===name)?.title||name;}
@@ -1203,6 +1208,7 @@
     renderMachines();
     if(tab==='stats'&&!updateStatsProjectScope(before))reloadStats();
     if(tab==='agents')renderAgents();
+    loadProjectActivity();
     if(view?.history_paged){topTaskScope=taskWindowQuery();refresh();return;}
     if(tab==='tasks')openTopTask();else renderTaskList();
   }
@@ -1212,48 +1218,63 @@
     if(tab!=='tasks'){renderTaskList();return;}
     const g=taskGroups();
     openTopTask(!!(g.active.length||g.planned.length||g.attention.length||g.done.length));
+    renderTaskList();
   }
   function computerName(id){
     return id==='local'?(view?.computer_name||tr('Этот компьютер')):(server?.peers||[]).find(p=>p.id===id)?.name||(view?.tasks||[]).find(t=>taskComputer(t)===id)?.remote?.name||'';
   }
-  let taskHistory=null,windowHistoryScope='';
-  function taskWindowQuery(){return new URLSearchParams({project,agent:$('agent-filter').value,computer:computerFilter}).toString();}
-  function currentTaskHistory(){return taskHistory?.scope===taskWindowQuery()?taskHistory:null;}
-  function taskRows(){
-    const recent=view?.tasks||[],history=currentTaskHistory();
+  const taskHistories=new Map();
+  let windowHistoryScope='';
+  function taskWindowQuery(name=project){return new URLSearchParams({project:name,agent:$('agent-filter').value,computer:computerFilter}).toString();}
+  function combinedTasks(){return splitProjects.length===2&&!computerFilter;}
+  function auxTaskQuery(){return tab==='tasks'&&combinedTasks()?taskWindowQuery(passiveProject()):'';}
+  function taskListView(name){
+    if(name===project&&view?.project===name)return view;
+    if(name===passiveProject()&&auxActivity?.project===name&&auxTaskScope&&auxTaskScope===auxTaskQuery())return auxActivity;
+    return null;
+  }
+  function currentTaskHistory(snapshot){
+    if(!snapshot)return null;
+    const history=taskHistories.get(snapshot.project);
+    return history?.scope===taskWindowQuery(snapshot.project)?history:null;
+  }
+  function syncTaskHistory(snapshot){
+    const history=currentTaskHistory(snapshot);
+    if(history&&history.first!==(snapshot.history_next||''))taskHistories.delete(snapshot.project);
+  }
+  function taskRows(snapshot=view){
+    const recent=snapshot?.tasks||[],history=currentTaskHistory(snapshot);
     if(!history?.rows.size)return recent;
     const visible=new Map(history.rows);
     for(const t of recent)visible.set(t.id,t);
     return [...visible.values()];
   }
-  async function loadOlderTasks(){
-    const scope=taskWindowQuery();
-    if(windowHistoryScope!==scope)return;
-    if(!currentTaskHistory())taskHistory={scope,rows:new Map(),next:view?.history_next||'',loading:false};
-    const history=taskHistory;
+  async function loadOlderTasks(name){
+    const snapshot=taskListView(name),scope=taskWindowQuery(name);
+    if(!snapshot||(name===project&&windowHistoryScope!==scope))return;
+    let history=currentTaskHistory(snapshot);
+    if(!history){
+      const first=snapshot.history_next||'';
+      history={scope,rows:new Map(),first,next:first,loading:false};
+      taskHistories.set(name,history);
+    }
     if(history.loading||!history.next)return;
     history.loading=true;renderTaskList();
     try{
       const q=new URLSearchParams(scope);q.set('before',history.next);
       const page=await api('/api/task-history?'+q);
-      if(currentTaskHistory()!==history)return;
+      if(currentTaskHistory(taskListView(name))!==history)return;
       for(const t of page.tasks||[])history.rows.set(t.id,t);
       history.next=page.next||'';
-    }catch(error){if(currentTaskHistory()===history)showError(error);}
-    finally{history.loading=false;if(currentTaskHistory()===history)renderTaskList();}
-  }
-  function visibleTasks(){
-    const filter=$('agent-filter').value;
-    const list=taskRows().filter(t=>(!filter||t.agent===filter)&&(!computerFilter||taskComputer(t)===computerFilter));
-    const active=list.filter(t=>activeStates.includes(t.state)),done=list.filter(t=>!activeStates.includes(t.state));
-    return [active,done];
+    }catch(error){if(currentTaskHistory(taskListView(name))===history)showError(error);}
+    finally{history.loading=false;if(currentTaskHistory(taskListView(name))===history)renderTaskList();}
   }
   // The task list's groups, newest first: own tasks and other computers'
   // tasks of the project together (T-047, T-110).
-  function taskGroups(){
-    const [active,done]=visibleTasks(),agentFilter=$('agent-filter').value;
-    const items=[...active.map(t=>({t})),...done.map(t=>({t}))];
-    for(const p of view?.shared||[]){
+  function taskGroups(snapshot=view){
+    const agentFilter=$('agent-filter').value;
+    const items=taskRows(snapshot).filter(t=>(!agentFilter||t.agent===agentFilter)&&(!computerFilter||taskComputer(t)===computerFilter)).map(t=>({t}));
+    for(const p of snapshot?.shared||[]){
       for(const t of p.tasks){
         if(computerFilter&&computerFilter!==sharedRunsOn(t,p))continue;
         if(!agentFilter||t.agent===agentFilter)items.push({t,peer:p});
@@ -1300,19 +1321,19 @@
           else await postAPI('/api/task-cancel',{task:it.t.id});
         }catch(e){failed.push(e.message);}
       }
-      viewSignature='';await refresh();
+      viewSignature='';await refresh();loadProjectActivity();
       if(failed.length)showError(new Error(tr('Не закрылись: ')+failed.length+'. '+failed[0]));
     });
   }
-  function askClearDone(items){
-    const paged=!!view?.history_paged,scope={project:view?.project,agent:$('agent-filter').value,computer:computerFilter};
+  function askClearDone(items,snapshot){
+    const paged=!!snapshot.history_paged,scope={project:snapshot.project,agent:$('agent-filter').value,computer:computerFilter};
     const text=paged?tr('Из списка пропадут все завершённые задачи по текущему фильтру, включая те, которые ещё не загружены. История задач сохранится.')
       :tr('Из списка на этом компьютере пропадут завершённые задачи: ')+items.length+tr('. Задачи этого компьютера пропадут и у других компьютеров; задачи других компьютеров останутся у них.');
     askConfirm(tr('Убрать все завершённые задачи?'),text,tr('Убрать все'),async()=>{
       const failed=[];
       if(paged){
         await postAPI('/api/task-hide-history',scope);
-        taskHistory=null;
+        taskHistories.delete(scope.project);
         if(items.some(it=>!it.peer&&it.t.id===selectedTask)){selectedTask='';feed=null;feedSignature='';}
       }
       for(const it of items){
@@ -1320,7 +1341,7 @@
         try{await postAPI('/api/task-hide',{peer:it.peer?.peer||'',task:it.t.id});}
         catch(e){failed.push(e.message);}
       }
-      viewSignature='';await refresh();
+      viewSignature='';await refresh();loadProjectActivity();
       if(failed.length)showError(new Error(tr('Не убрались: ')+failed.length+'. '+failed[0]));
     });
   }
@@ -1372,11 +1393,15 @@
     if(hidden){
       const all=el('button',undefined,'am-task am-task-hidden');all.type='button';
       all.append(el('span',tr('Фильтр «')+(names[agentChosen]||agentChosen)+tr('» скрывает незавершённые задачи: ')+hidden,'am-task-agent'),el('span',tr('Показать всех агентов'),'am-status-run'));
-      all.addEventListener('click',()=>{$('agent-filter').value='';syncSelects();renderTaskList();});
+      all.addEventListener('click',()=>{
+        const filter=$('agent-filter');filter.value='';syncSelects();filter.dispatchEvent(new Event('change'));
+      });
       box.append(all);
     }
-    const ownTasks=taskRows(),menu=$('device-menu');
-    $('task-count').textContent=ownTasks.length+(view?.shared||[]).reduce((n,p)=>n+p.tasks.length,0)||'';
+    const combined=combinedTasks(),projects=combined?splitProjects:[project],menu=$('device-menu');
+    const snapshots=projects.map(taskListView).filter(Boolean);
+    const ownTasks=snapshots.flatMap(snapshot=>taskRows(snapshot));
+    $('task-count').textContent=ownTasks.length+snapshots.reduce((n,snapshot)=>n+(snapshot.shared||[]).reduce((count,p)=>count+p.tasks.length,0),0)||'';
     if(menu?.dataset.stopTask&&menu.matches(':popover-open')){
       const task=ownTasks.find(t=>t.id===menu.dataset.stopTask);
       const text=task&&canStopTask(task)?stopMessage(stopProgress(task)):'';
@@ -1384,8 +1409,8 @@
       else if(menu.firstElementChild.textContent!==text)menu.firstElementChild.textContent=text;
     }
     // Another computer's task is read-only and says which computer gave it.
-    const ownRow=t=>{
-      const row=el('button',undefined,'am-task');row.type='button';row.setAttribute('aria-pressed',String(t.id===selectedTask));
+    const ownRow=(t,name)=>{
+      const row=el('button',undefined,'am-task');row.type='button';row.setAttribute('aria-pressed',String(name===project&&t.id===selectedTask));
       // T-119: every own task says where it runs; this computer's name
       // stands out. The model it runs on follows the status below (T-202).
       const here=!(t.remote&&!t.remote.from),label=el('span',(names[t.agent]||t.agent)+tr(' на '));
@@ -1401,16 +1426,23 @@
       if(t.usage){const used=el('span',usageShort(t.usage),'am-task-usage');used.title=usageLong(t.usage);if(model)used.append(el('span',',','am-task-comma'));words.append(used);}
       if(model){const m=el('span',model,'am-task-usage am-task-model');m.title=taskModelDetail(t);words.append(m);}
       row.append(agent,el('span',t.title,'am-task-title'),status);
-      row.addEventListener('click',()=>{selectedTask=t.id;selectedShared=null;feedSignature='';renderTaskList();renderThread();loadFeed();});
-      row.addEventListener('contextmenu',e=>taskMenu(e,t,null));
+      row.addEventListener('click',()=>{
+        if(name!==project){selectProject(name,t.id,'');return;}
+        selectedTask=t.id;selectedShared=null;feedSignature='';renderTaskList();renderThread();loadFeed();
+      });
+      row.addEventListener('contextmenu',e=>taskMenu(e,t,null,name));
       return row;
     };
-    const sharedRow=(t,p)=>{
+    const sharedRow=(t,p,name)=>{
       const row=el('button',undefined,'am-task am-task-shared');row.type='button';row.title=tr('Задачу дал компьютер «')+p.name+tr('». Здесь её можно только посмотреть');
-      row.setAttribute('aria-pressed',String(selectedShared?.peer===p.peer&&selectedShared?.id===t.id));
+      row.setAttribute('aria-pressed',String(name===project&&selectedShared?.peer===p.peer&&selectedShared?.id===t.id));
       // T-111: another computer's task opens as a read-only card.
-      row.addEventListener('click',()=>{selectedShared={peer:p.peer,id:t.id};selectedTask='';feed=null;feedSignature='';renderTaskList();renderThread();startWindowWatch();});
-      row.addEventListener('contextmenu',e=>taskMenu(e,t,p));
+      row.addEventListener('click',()=>{
+        const selection={peer:p.peer,id:t.id};
+        if(name!==project){selectProject(name,'','',selection);return;}
+        selectedShared=selection;selectedTask='';feed=null;feedSignature='';renderTaskList();renderThread();startWindowWatch();
+      });
+      row.addEventListener('contextmenu',e=>taskMenu(e,t,p,name));
       // T-186: like an own task, it says where it runs; the giver is in the
       // tooltip. An older giver does not say, so it shows the giver's name.
       const label=el('span',(names[t.agent]||t.agent)+tr(' на '));label.append(el('span',sharedComputer(t,p)));
@@ -1430,40 +1462,44 @@
       if(t.report)row.append(el('span',t.report,'am-task-report'));
       return row;
     };
-    const section=(label,items,action)=>{
+    const section=(target,name,label,items,action)=>{
       if(!items.length)return;
       const head=el('div',undefined,'am-label am-task-section');head.append(el('span',label));
       if(action)head.append(action);
-      box.append(head);
-      for(const it of items)box.append(it.peer?sharedRow(it.t,it.peer):ownRow(it.t));
+      target.append(head);
+      for(const it of items)target.append(it.peer?sharedRow(it.t,it.peer,name):ownRow(it.t,name));
     };
-    const groups=taskGroups();
-    section(tr('Активные'),groups.active);
-    section(tr('Запланированные'),groups.planned);
-    // Owner, 2026-11-12: tasks whose outcome is unknown kept «Активные» full
-    // for days. They wait here until someone closes them; nothing closes
-    // them by itself (unknown is not success).
-    let closeAll=null;
-    if(groups.attention.some(closable)){
-      closeAll=el('button',tr('Закрыть все'),'am-task-section-action');closeAll.type='button';
-      closeAll.addEventListener('click',()=>askCloseAll(groups.attention.filter(closable)));
+    for(const name of projects){
+      const snapshot=taskListView(name);
+      const target=combined?el('section',undefined,'am-task-project'):box;
+      if(combined){
+        target.dataset.project=name;target.setAttribute('aria-label',projectTitle(name));
+        target.append(el('h3',projectTitle(name),'am-label am-task-section'));
+        box.append(target);
+      }
+      if(!snapshot){
+        if(combined)target.append(el('p',auxError===name?tr('Проекты недоступны'):tr('Загружаем…'),'am-small am-muted'));
+        continue;
+      }
+      const groups=taskGroups(snapshot),before=target.children.length;
+      const actions=(items,label,pick)=>{
+        if(!items.length)return null;
+        const button=el('button',label,'am-task-section-action');button.type='button';
+        button.addEventListener('click',pick);return button;
+      };
+      section(target,name,tr('Активные'),groups.active);
+      section(target,name,tr('Запланированные'),groups.planned);
+      const closableItems=groups.attention.filter(closable);
+      section(target,name,tr('Требуют решения'),groups.attention,actions(closableItems,tr('Закрыть все'),()=>askCloseAll(closableItems)));
+      section(target,name,tr('Завершённые'),groups.done,actions(groups.done.length>1?groups.done:[],tr('Убрать все'),()=>askClearDone(groups.done,snapshot)));
+      const history=currentTaskHistory(snapshot);
+      if(snapshot.history_paged&&(name!==project||windowHistoryScope===taskWindowQuery())&&(history?history.next:snapshot.history_next)){
+        const older=el('button',history?.loading?tr('Загружаем…'):tr('Показать ещё 10'),'am-task-section-action');
+        older.type='button';older.disabled=!!history?.loading;older.addEventListener('click',()=>loadOlderTasks(name));
+        const more=el('div',undefined,'am-label am-task-section');more.append(older);target.append(more);
+      }
+      if(target.children.length===before)target.append(el('p',name?(combined||computerFilter||$('agent-filter').value?tr('Здесь задач нет'):tr('Задач пока нет. Когда координатор раздаст первые, они появятся здесь.')):'','am-small am-muted'));
     }
-    section(tr('Требуют решения'),groups.attention,closeAll);
-    // Owner, 2026-11-15: one button removes every finished task from this
-    // list, as «Удалить» does one by one. Tasks stay in the database.
-    let clearDone=null;
-    if(groups.done.length>1){
-      clearDone=el('button',tr('Убрать все'),'am-task-section-action');clearDone.type='button';
-      clearDone.addEventListener('click',()=>askClearDone(groups.done));
-    }
-    section(tr('Завершённые'),groups.done,clearDone);
-    const history=currentTaskHistory();
-    if(view?.history_paged&&windowHistoryScope===taskWindowQuery()&&(history?history.next:view.history_next)){
-      const older=el('button',history?.loading?tr('Загружаем…'):tr('Показать ещё 10'),'am-task-section-action');
-      older.type='button';older.disabled=!!history?.loading;older.addEventListener('click',loadOlderTasks);
-      const more=el('div',undefined,'am-label am-task-section');more.append(older);box.append(more);
-    }
-    if(!box.children.length)box.append(el('p',view?.project?(computerFilter||$('agent-filter').value?tr('Здесь задач нет'):tr('Задач пока нет. Когда координатор раздаст первые, они появятся здесь.')):'','am-small am-muted'));
     swapChildren(live,box);
   }
   // Coordinator connection (T-039): the client runs Claude's own
@@ -1849,9 +1885,9 @@
   function stopSelectedTask(){
     if(!$('compose').hidden&&!$('task-stop').hidden)void stopTask(selectedTaskRow());
   }
-  async function stopTask(row){
+  async function stopTask(row,name=project){
     if(!row)return;
-    const t=taskRows().find(task=>task.id===row.id)||(selectedTask===row.id?selectedTaskRow():null);
+    const t=taskRows(taskListView(name)).find(task=>task.id===row.id)||(name===project&&selectedTask===row.id?selectedTaskRow():null);
     if(!t||!canStopTask(t)||stopProgress(t))return;
     stopSubmissions.set(t.id,'sending');
     if(selectedTask===t.id)renderStopControls(t);
@@ -1868,7 +1904,7 @@
       if(selectedTask===t.id)renderStopControls(selectedTaskRow()||t);
       renderTaskList();
       feedSignature='';
-      await refresh();
+      await refresh();loadProjectActivity();
     }
   }
   // T-175: the worker's pictures. The page asks for them with its key and
@@ -2618,6 +2654,12 @@
     return false;
   }
   let refreshQueued=false,lastWindowRefresh=0;
+  function syncStopSubmissions(tasks){
+    for(const t of tasks||[]){
+      const stopping=stopSubmissions.get(t.id);
+      if(stopping&&stopping!=='sending'&&(t.remote?.cancel_state||!activeStates.includes(t.state)))stopSubmissions.delete(t.id);
+    }
+  }
   let windowWatch=null,watchRetryAt=0;
   function windowWatchScope(){return new URLSearchParams({project,task:tab==='tasks'?selectedTask:''}).toString();}
   function startWindowWatch(){
@@ -2680,16 +2722,16 @@
         if(view?.history_next)v.history_next=view.history_next;
         delete v.history_unchanged;
       }
-      for(const t of v.tasks){
-        const stopping=stopSubmissions.get(t.id);
-        if(stopping&&stopping!=='sending'&&(t.remote?.cancel_state||!activeStates.includes(t.state)))stopSubmissions.delete(t.id);
-      }
+      syncStopSubmissions(v.tasks);
+      const previousScope=windowHistoryScope;
       windowHistoryScope=taskWindowQuery();
       const signature=JSON.stringify(v);
       if(signature!==viewSignature){
-        const history=currentTaskHistory();
-        if(history&&view?.history_next!==v.history_next)taskHistory=null;
-        if(splitProjects.length&&view?.project===passiveProject()&&auxActivity?.project!==view.project)auxActivity=view;
+        syncTaskHistory(v);
+        if(splitProjects.length&&view?.project===passiveProject()&&auxActivity?.project!==view.project){
+          auxActivity=view;
+          auxTaskScope=previousScope===taskWindowQuery(view.project)?previousScope:'';
+        }
         viewSignature=signature;view=v;noteWelcomeDone();
         if(!v.history_paged&&selectedTask&&!v.tasks.some(t=>t.id===selectedTask)){selectedTask='';feed=null;feedSignature='';}
         if(selectedShared&&!sharedSelection())selectedShared=null;
@@ -2730,6 +2772,7 @@
     tab=next;root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab);renderNotices();renderToasts();
     root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
     $('list-toggle').hidden=tab!=='tasks'||!view?.project;if(tab==='server')loadServer();if(tab==='stats')reloadStats();if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сервер'),stats:tr('Статистика')}[tab];startWindowWatch();
+    if(tab==='tasks'&&combinedTasks()){renderTaskList();loadProjectActivity();}
   }
 
 
@@ -3096,7 +3139,7 @@
     try{
       const next=await api('/api/server');
       if(gen===serverGen&&!serverBusy){
-        const sharedRuns=()=>JSON.stringify((view?.shared||[]).flatMap(p=>p.tasks.filter(t=>(!t.started_at||t.pending_launch||!peerFresh(p))&&sharedWorkerRunning(t)).map(t=>t.id)));
+        const sharedRuns=()=>JSON.stringify([view,taskListView(passiveProject())].flatMap(snapshot=>(snapshot?.shared||[]).flatMap(p=>p.tasks.filter(t=>(!t.started_at||t.pending_launch||!peerFresh(p))&&sharedWorkerRunning(t)).map(t=>t.id))));
         const previous=sharedRuns();
         server=next;
         // This snapshot started after the submission returned. Trust the
@@ -3851,9 +3894,10 @@
     const label=expanded?tr('Скрыть список задач'):tr('Показать список задач');$('list-toggle').setAttribute('aria-label',label);$('list-toggle').title=label;
     $('task-panel').hidden=!expanded;$('task-layout').classList.toggle('am-queue-collapsed',!expanded);
   });
-  function selectProject(name,task='',computer){
+  function selectProject(name,task='',computer,shared=null){
+    if(!combinedTasks()||computer!=='')taskHistories.clear();
     setProject(name,computer);remember('messenger-project',name);
-    selectedTask=task;selectedShared=null;feed=null;feedSignature='';viewSignature='';taskHistory=null;topTaskScope='';
+    selectedTask=task;selectedShared=shared;feed=null;feedSignature='';viewSignature='';topTaskScope='';
     if($('device-menu')?.matches(':popover-open'))$('device-menu').hidePopover();
     renderProjects();renderMachines();if(tab==='agents')renderAgents();renderTaskList();renderThread();loadProjectActivity();refresh();
   }
@@ -3867,7 +3911,7 @@
       const saved=recall('messenger-second-project');
       updateSplitProjects([project,options.find(p=>p.name===saved)?.name||options[0].name]);
     }
-    renderProjects();renderMachines();loadProjectActivity();
+    renderProjects();renderMachines();renderTaskList();loadProjectActivity();
   });
   for(const [index,id] of ['project-select','project-select-second'].entries()){
     $(id).addEventListener('change',()=>{
@@ -3880,11 +3924,11 @@
       const next=[...splitProjects];next[index]=name;
       updateSplitProjects(next);
       if(active)selectProject(name);
-      else{renderProjects();renderMachines();loadProjectActivity();}
+      else{renderProjects();renderMachines();renderTaskList();loadProjectActivity();}
       remember('messenger-second-project',passiveProject());
     });
   }
-  $('agent-filter').addEventListener('change',()=>{taskHistory=null;renderTaskList();if(view?.history_paged)refresh();});
+  $('agent-filter').addEventListener('change',()=>{taskHistories.clear();renderTaskList();loadProjectActivity();if(view?.history_paged)refresh();});
   // The sidebar and the task list are as wide as the owner drags them (T-063).
   // A double click or Home restores the usual width; the width is remembered.
   function splitter(pane,name,variable,usual,min,max,side){

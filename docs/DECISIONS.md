@@ -809,3 +809,7 @@ Each computer keeps one row in the split sidebar. Two independently rounded tile
 ## D-229 — Switch the Statistics project when a computer tile is chosen (T-324)
 
 Statistics opens with the combined project scope until the user picks a project in Statistics or clicks a split computer tile while on that tab. A tile applies its project to the existing Statistics project picker and its computer to the computer filter. Clicking the active tile again leaves the project selected and clears the computer filter. The picker still offers Selected projects for combined totals. The same scope applies to model comparison and JSON export.
+
+## D-230 — Show both displayed projects' tasks with no computer selection (T-325)
+
+In split mode the right panel groups tasks by the two displayed project titles whenever the computer filter is clear. Each group includes all computers, the usual task status sections and its own completed-history pages. The active conversation remains singular. A task from the other group opens in its own project while the combined list remains visible. Selecting a computer tile scopes the list to its project and computer. Deselecting it restores both groups. Bulk actions remain scoped to the group that contains the button.

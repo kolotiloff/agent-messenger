@@ -7,22 +7,45 @@ import (
 
 // ProjectActivity is the sidebar snapshot for an inactive project.
 type ProjectActivity struct {
-	Project     string            `json:"project"`
-	Tasks       []WindowTask      `json:"tasks"`
-	Shared      []NetPeerTasks    `json:"shared"`
-	Coordinator windowCoordinator `json:"coordinator"`
+	Project      string            `json:"project"`
+	Tasks        []WindowTask      `json:"tasks"`
+	Shared       []NetPeerTasks    `json:"shared"`
+	Coordinator  windowCoordinator `json:"coordinator"`
+	HistoryPaged bool              `json:"history_paged,omitempty"`
+	HistoryNext  string            `json:"history_next,omitempty"`
 }
 
 func (s *Store) ProjectActivity(project string) (ProjectActivity, error) {
+	return s.projectActivity(project, "", false)
+}
+
+func (s *Store) ProjectTaskActivity(project, agent string) (ProjectActivity, error) {
+	return s.projectActivity(project, agent, true)
+}
+
+func (s *Store) projectActivity(project, agent string, withHistory bool) (ProjectActivity, error) {
 	out := ProjectActivity{Project: project}
 	scoped, err := s.projectStore(project)
 	if err != nil {
 		return out, err
 	}
-	out.Tasks, err = scoped.windowTaskRows(`WHERE project=? AND hidden_at IS NULL AND state IN ('running','waiting_owner','waiting_coordinator')
+	if withHistory {
+		out.Tasks, err = scoped.unfinishedWindowTasks(project)
+		if err != nil {
+			return out, err
+		}
+		page, err := s.WindowTaskHistory(project, "", agent, "")
+		if err != nil {
+			return out, err
+		}
+		out.Tasks = append(out.Tasks, page.Tasks...)
+		out.HistoryPaged, out.HistoryNext = true, page.Next
+	} else {
+		out.Tasks, err = scoped.windowTaskRows(`WHERE project=? AND hidden_at IS NULL AND state IN ('running','waiting_owner','waiting_coordinator')
  ORDER BY created_at DESC,rowid DESC`, project)
-	if err != nil {
-		return out, err
+		if err != nil {
+			return out, err
+		}
 	}
 	err = s.tx(func(tx *sql.Tx) error {
 		var err error

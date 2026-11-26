@@ -49,6 +49,17 @@ func TestSplitWindowKeepsHistoryAndActivityInItsProject(t *testing.T) {
 	if err != nil || !activity.Coordinator.Active || activity.Coordinator.Client != "codex" {
 		t.Fatalf("Site activity coordinator = %+v: %v", activity.Coordinator, err)
 	}
+	if activity.HistoryPaged || len(activity.Tasks) != 1 {
+		t.Fatalf("sidebar activity unexpectedly includes history: %+v", activity)
+	}
+	gameList, err := s.ProjectTaskActivity("Game", "claude")
+	if err != nil || !gameList.HistoryPaged || len(gameList.Tasks) != 12 || gameList.HistoryNext == "" {
+		t.Fatalf("Game list: tasks %d, next page %q: %v", len(gameList.Tasks), gameList.HistoryNext, err)
+	}
+	filtered, err := s.ProjectTaskActivity("Game", "codex")
+	if err != nil || len(filtered.Tasks) != 2 || filtered.HistoryNext != "" {
+		t.Fatalf("filtered Game list: tasks %d, next page %q: %v", len(filtered.Tasks), filtered.HistoryNext, err)
+	}
 
 	game, err := s.WindowView("Game", "")
 	if err != nil || !game.HistoryPaged || game.Pending != 2 || len(game.Tasks) != 12 || game.HistoryNext == "" {
