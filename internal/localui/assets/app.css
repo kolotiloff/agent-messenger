@@ -40,6 +40,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-selected:light-dark(#e3e3e3,#404040);
   --am-computer-header:color-mix(in srgb, var(--am-soft) 70%, var(--am-selected));
   --am-computer-here-header:color-mix(in srgb, var(--am-computer-header) 92%, var(--am-run));
+  --am-computer-selected-header:color-mix(in srgb, var(--am-computer-header) 70%, var(--am-run));
+  --am-computer-selected-body:color-mix(in srgb, var(--am-soft) 78%, var(--am-run));
   --am-computer-online:light-dark(#16844c,#4cdb86);
   --am-active:light-dark(#303030,#ddd);
   --am-active-hover:light-dark(#484848,#eee);
@@ -277,8 +279,22 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-computers { display:flex; flex-direction:column; min-height:0; }
 #am-concept .am-machines { display:flex; flex-direction:column; gap:var(--am-space-1); min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; margin-right:calc(-1 * var(--am-space-3)); padding-right:calc(var(--am-space-3) - var(--am-gutter, 0px)); }
 #am-concept .am-machine-card { flex:none; border:1px solid var(--am-line); border-radius:var(--am-radius-s); background:var(--am-soft); overflow:hidden; }
-/* aria-current marks this installation; aria-pressed tracks the user's filter. */
+/* aria-current marks this installation. The filter fills the card or one project half. */
 #am-concept .am-machine-card[aria-current=true] .am-machine-name { --am-machine-heading:var(--am-computer-here-header); }
+#am-concept .am-machine-card[aria-pressed=true] { background-color:var(--am-computer-selected-body); }
+#am-concept .am-machine-card[aria-pressed=true] .am-machine-name { --am-machine-heading:var(--am-computer-selected-header); }
+#am-concept .am-machine-card:has(.am-machine-project[aria-pressed=true]) {
+  background-image:linear-gradient(var(--am-computer-selection-direction), var(--am-computer-selected-body) 50%, transparent 50%);
+}
+#am-concept .am-machine-card:has(.am-machine-project:first-child[aria-pressed=true]) {
+  --am-computer-selection-direction:to right;
+  --am-computer-signal-background:var(--am-computer-selected-header);
+}
+#am-concept .am-machine-card:has(.am-machine-project:last-child[aria-pressed=true]) { --am-computer-selection-direction:to left; }
+#am-concept .am-machine-card:has(.am-machine-project[aria-pressed=true]) .am-machine-name {
+  background-image:linear-gradient(var(--am-computer-selection-direction), var(--am-computer-selected-header) 50%, transparent 50%);
+}
+#am-concept .am-machine-card:has(.am-machine-project) { cursor:pointer; }
 #am-concept .am-machine-card[data-drop-edge=before] .am-machine-name { box-shadow:inset 0 var(--am-gap-line) var(--am-text); }
 #am-concept .am-machine-card[data-drop-edge=after] { box-shadow:inset 0 calc(-1 * var(--am-gap-line)) var(--am-text); }
 #am-concept .am-machine-name { --am-machine-heading:var(--am-computer-header); display:flex; align-items:center; gap:var(--am-space-1); padding:var(--am-space-1) var(--am-space-3); line-height:var(--am-computer-heading-line); background:var(--am-machine-heading); }
@@ -286,7 +302,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-machine-presence { position:relative; display:flex; flex:none; width:var(--am-computer-icon-size); height:var(--am-computer-icon-size); margin-inline-end:calc(var(--am-computer-label-gap) - var(--am-space-1)); color:var(--am-muted); }
 #am-concept .am-machine-presence svg { width:100%; height:100%; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
 #am-concept .am-machine-signal { position:absolute; inset-inline-end:calc(-1.5 * var(--am-gap-line)); inset-block-end:calc(-.5 * var(--am-gap-line)); width:var(--am-space-2); height:var(--am-space-2); box-sizing:content-box; border:1px solid transparent; }
-#am-concept .am-machine-presence.online .am-machine-signal { border-color:var(--am-machine-heading); border-radius:50%; background:var(--am-computer-online); }
+#am-concept .am-machine-presence.online .am-machine-signal { border-color:var(--am-computer-signal-background,var(--am-machine-heading)); border-radius:50%; background:var(--am-computer-online); }
 #am-concept .am-machine-signal svg { display:block; color:var(--am-bad); stroke-width:7; }
 #am-concept .am-machine-version, #am-concept .am-machine-role { font-weight:400; }
 #am-concept .am-machine-role { flex-shrink:2; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -670,8 +686,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-device-card { outline:none; }
 /* A computer in the sidebar filters the task list (T-056). */
 #am-concept .am-machine-card[role=button] { cursor:pointer; }
-#am-concept .am-machine-card[role=button]:is(:hover,:focus-visible) { border-color:var(--am-muted); outline:none; }
-#am-concept .am-machine-card[aria-pressed=true] { border-color:var(--am-muted); }
+#am-concept .am-machine-card[role=button]:is(:hover:not([aria-pressed=true]),:focus-visible) { border-color:var(--am-muted); outline:none; }
 #am-concept .am-device-card:focus-visible { border-color:var(--am-muted); }
 #am-concept .am-context-menu { min-width:180px; }
 #am-concept .am-context-status { max-width:var(--am-queue); padding:var(--am-pad-compact); color:var(--am-muted); }

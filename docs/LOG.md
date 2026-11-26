@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-26 — Codex (T-318 project computer selection)
+
+- Filled the selected sidebar card or its selected half without changing row geometry. Clicks on either side of the shared header select that project's computer. The project split and computer-switch regressions passed in Chromium and WebKit with fictional data. Publication stays on hold.
+
 ## 2026-11-26 — Codex (T-317 split sidebar spacing)
 
 - Removed the redundant vertical padding inside split agent columns. Long collapsed labels stay on one line. The existing project split test now verifies stable card heights and a wider sidebar, alongside expansion of parallel task details. Chromium and WebKit passed.
