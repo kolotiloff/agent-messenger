@@ -13,6 +13,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 - Added space below the Projects divider, matched the trailing insets on computer and task rows, and expanded the fictional conversation with multiline messages. Matched the chat roles to the model typography.
 - Kept the current header and messages visible until the next conversation is ready. Chromium and WebKit passed the delayed same-project and cross-project requests in the browser regression check.
 - Gave each of the seven preview tasks a distinct conversation. Added smooth computer disclosure. Chromium and WebKit verified distinct content, task switching, intermediate and final heights, keyboard disclosure and reduced motion.
+- Moved Settings and Feedback to the left of the desktop sidebar footer, used a sliders icon for Settings, and increased the inner padding of both chat role badges. Joined the agent and model with a single space for both roles.
 
 ## 2026-11-27 — Codex (T-324 and T-325 release)
 

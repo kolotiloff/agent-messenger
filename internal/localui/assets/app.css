@@ -410,10 +410,12 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-auto-update .am-access-text { min-width:0; }
 #am-concept #auto-update-status:empty { display:none; }
 #am-concept .am-version { font-size:var(--am-text-xs); color:var(--am-muted); line-height:1.4; }
+#am-concept .am-side-footer { display:flex; align-items:center; justify-content:space-between; gap:var(--am-gap-control); min-width:0; }
+#am-concept .am-side-actions { display:flex; gap:var(--am-space-1); }
 /* An available update is a separate amber arrow next to the version (T-228). */
 #am-concept .am-version-row { display:flex; align-items:center; justify-content:flex-end; gap:var(--am-space-1); min-width:0; }
-/* The round update icon is smaller than the icon buttons; its margins give it
-   the same box so the three icons sit at equal steps (owner, T-152). */
+#am-concept .am-version-row:not(:has(> :not([hidden]))) { display:none; }
+/* Give the smaller round update icon the same slot as other icon buttons. */
 #am-concept .am-version-row .am-update-icon { margin-inline:calc((var(--am-control-compact) - 22px) / 2); }
 #am-concept .am-version-row .am-version { margin:0; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 #am-concept button.am-update-icon { flex-shrink:0; width:22px; height:22px; min-height:0; padding:0; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background:transparent; color:var(--am-update-arrow); }
@@ -437,8 +439,6 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-tabs { display:flex; align-items:center; gap:var(--am-space-1); margin-inline:var(--am-pane-inset); padding-bottom:var(--am-gap-content); border-bottom:1px solid var(--am-line); flex-shrink:0; }
 #am-concept .am-tab { min-height:var(--am-control-compact); padding:var(--am-text-nudge) var(--am-space-3) 0; color:var(--am-muted); white-space:nowrap; }
 #am-concept .am-panel-toggle { margin-left:auto; flex-shrink:0; }
-/* T-135: the feedback bug sits just left of the task list toggle. */
-#am-concept .am-version-row .am-version { margin-right:auto; }
 #am-concept .am-session-dialog.am-settings-dialog { width:min(420px,calc(100vw - 48px)); }
 #am-concept .am-fb-open { flex-shrink:0; width:var(--am-control-compact); height:var(--am-control-compact); min-height:0; padding:0; color:var(--am-muted); }
 #am-concept .am-fb-open:hover { color:var(--am-text); }
@@ -507,8 +507,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-meta strong { font-weight:500; }
 #am-concept .am-meta time { color:var(--am-muted); font-size:var(--am-text-xs); }
 #am-concept :is(.am-meta-model,.am-role) { color:var(--am-muted); font-size:var(--am-text-s); font-weight:400; }
-#am-concept .am-meta-model { min-width:0; overflow-wrap:anywhere; }
-#am-concept .am-role { padding:0 var(--am-space-1); border-radius:var(--am-radius-xs); background:var(--am-soft); }
+#am-concept .am-meta-author { min-width:0; }
+#am-concept .am-role { padding:calc(var(--am-space-1) / 2) var(--am-space-2); border-radius:var(--am-radius-xs); background:var(--am-soft); }
 #am-concept :is(.am-message-content,.am-compose textarea) {
   font-size:var(--am-text-chat);
   font-weight:400;

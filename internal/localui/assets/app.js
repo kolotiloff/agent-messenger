@@ -2241,11 +2241,23 @@
       avatar.append(providerIcon(provider));
       return avatar;
     };
+    const messageAuthor=(name,model,detail)=>{
+      const author=el('span',undefined,'am-meta-author');
+      author.append(el('strong',name));
+      if(model){
+        const label=el('span',model,'am-meta-model');
+        if(detail)label.title=detail;
+        author.append(' ',label);
+      }
+      return author;
+    };
     const outgoing=(author,role,text,at,model,provider)=>{
       group=null;const g=el('article',undefined,'am-message-group');const row=el('div',undefined,'am-message am-outgoing');
       const body=el('div',undefined,'am-message-body');const meta=el('div',undefined,'am-meta');
       if(provider)meta.append(messageAvatar(provider));
-      const who=el('strong',author);meta.append(who);if(model)meta.append(el('span',modelName(model),'am-meta-model'));if(role)meta.append(roleTag(role));meta.append(el('time',clock(at)));
+      meta.append(messageAuthor(author,model?modelName(model):''));
+      if(role)meta.append(roleTag(role));
+      meta.append(el('time',clock(at)));
       const content=el('div',undefined,'am-message-content');content.append(richText(text));body.append(meta,content);row.append(body);g.append(row);out.push(g);
     };
     const outgoingCoordinator=it=>{
@@ -2256,8 +2268,7 @@
       if(group)return group;
       const g=el('article',undefined,'am-message-group');const row=el('div',undefined,'am-message');
       const body=el('div',undefined,'am-message-body');const meta=el('div',undefined,'am-meta');
-      meta.append(messageAvatar(t.agent),el('strong',names[t.agent]||t.agent));
-      if(displayModel){const m=el('span',displayModel,'am-meta-model');m.title=taskModelDetail(t);meta.append(m);}
+      meta.append(messageAvatar(t.agent),messageAuthor(names[t.agent]||t.agent,displayModel,displayModel?taskModelDetail(t):''));
       meta.append(roleTag(tr('исполнитель')),el('time',clock(at)));
       const content=el('div',undefined,'am-message-content');body.append(meta,content);row.append(body);g.append(row);out.push(g);group=content;return content;
     };
