@@ -3,6 +3,7 @@ const http = require('node:http');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { json } = require('node:stream/consumers');
+const { randomUUID } = require('node:crypto');
 const { projects, reply } = require('./check-window-project-split.cjs');
 
 const host = '127.0.0.1';
@@ -61,6 +62,11 @@ const conversations = {
 };
 
 let machineOrder = null;
+const newTasks = new Map();
+const previewTask = ({ task, finish }) => Date.now() >= finish
+  ? { ...task, state: 'done', finished_at: new Date(finish).toISOString() }
+  : task;
+
 const server = http.createServer(async (request, response) => {
   response.setHeader('Cache-Control', 'no-store');
   if (request.headers.host !== host + ':' + server.address().port) {
@@ -69,6 +75,46 @@ const server = http.createServer(async (request, response) => {
   }
   try {
     const url = new URL(request.url, 'http://' + request.headers.host);
+    if (request.method === 'POST' && url.pathname === '/api/task-start') {
+      const length = Number(request.headers['content-length']);
+      if (request.headers['content-type'] !== 'application/json' || !(length > 0 && length <= 262144)) {
+        response.writeHead(400).end();
+        return;
+      }
+      const body = await json(request).catch(() => null);
+      if (!projects.some(p => p.name === body?.project) || typeof body.text !== 'string' ||
+          !body.text.trim() || body.text.length > 20000 || typeof body.op_id !== 'string' || !body.op_id) {
+        response.writeHead(400).end();
+        return;
+      }
+      const folder = projects.find(p => p.name === body.project).folder;
+      const { peers } = reply(new URL('/api/server', url), body.project, projects);
+      const peer = peers.find(p => p.id === body.computer && p.ready?.projects.includes(body.project));
+      const agents = body.computer ? peer?.agents : reply(new URL('/api/window', url), body.project, projects).agents;
+      if (!agents?.some(a => a.agent === body.agent && !a.paused && (!body.model || a.models?.includes(body.model)))) {
+        response.writeHead(400).end();
+        return;
+      }
+
+      const existing = newTasks.get(body.op_id);
+      if (existing && JSON.stringify(existing.request) !== JSON.stringify(body)) {
+        response.writeHead(409).end();
+        return;
+      }
+      if (!existing) {
+        const at = new Date().toISOString();
+        const task = {
+          id: 'preview-' + randomUUID(), project: body.project, folder,
+          agent: body.agent, title: body.text.split('\n')[0].slice(0, 80), state: 'running',
+          ran_model: body.model, created_at: at, started_at: at, worker_observed: true,
+          ...(peer ? { remote: { id: peer.id, name: peer.name } } : {}),
+        };
+        newTasks.set(body.op_id, { task, request: body, finish: Date.now() + 8000 });
+      }
+      response.writeHead(200, { 'Content-Type': 'application/json' })
+        .end(JSON.stringify({ ok: true, result: newTasks.get(body.op_id).task.id }));
+      return;
+    }
     if (request.method === 'POST' && url.pathname === '/api/machine-order') {
       const length = Number(request.headers['content-length']);
       if (request.headers['content-type'] !== 'application/json' || !(length > 0 && length <= 4096)) {
@@ -85,7 +131,7 @@ const server = http.createServer(async (request, response) => {
       return;
     }
     if (request.method !== 'GET') {
-      response.writeHead(405, { Allow: 'GET' }).end();
+      response.writeHead(405, { Allow: 'GET, POST' }).end();
       return;
     }
     if (url.pathname.startsWith('/api/')) {
@@ -94,7 +140,17 @@ const server = http.createServer(async (request, response) => {
         response.writeHead(404).end();
         return;
       }
-      const fixture = url.pathname === '/api/machine-order' ? { order: machineOrder } : reply(url, project, projects);
+      const custom = url.pathname === '/api/task' && [...newTasks.values()].find(entry => entry.task.id === url.searchParams.get('id'));
+      const fixture = custom ? { task: previewTask(custom), items: [
+        { kind: 'task', author: 'owner', text: custom.request.text, at: custom.task.created_at },
+      ] } : url.pathname === '/api/machine-order' ? { order: machineOrder } : reply(url, project, projects);
+      if (custom && fixture.task.finished_at) {
+        fixture.items.push({ kind: 'report', text: 'Это пример ответа в предпросмотре. Задача завершена.', verified: true, audience: 'owner', at: fixture.task.finished_at });
+      }
+      if (url.pathname === '/api/window' || url.pathname === '/api/project-activity') {
+        const created = [...newTasks.values()].filter(entry => entry.task.project === project).map(previewTask).reverse();
+        fixture.tasks = [...created, ...fixture.tasks];
+      }
       const conversation = url.pathname === '/api/task' && conversations[fixture.task?.id];
       if (conversation) {
         const [{ at }] = fixture.items;

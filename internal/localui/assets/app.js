@@ -404,7 +404,7 @@
   }
   let splitProjects=[],auxActivity=null,auxError='',auxRequest=null,auxTaskScope='';
   const sidebarSnapshots=new Map(),collapsedComputers=new Set();
-  let sidebarProject='',sidebarRequest=null;
+  let sidebarProject='',sidebarRequest=null,draftOpen=false,draftSending=false,draftAttempt=null;
   function sidebarProjects(){
     return sidebarProject?[sidebarProject]:(view?.projects||[]).map(entry=>entry.name);
   }
@@ -477,6 +477,7 @@
       if(view&&!options.some(([name])=>name===sidebarProject))sidebarProject='';
       $('project-heading').textContent=tr('Проекты');
       $('split-projects').hidden=true;
+      $('task-new').hidden=!view?.projects.length;
       projectOptions($('project-select'),view?[['__all',tr('Все')],...options,['__new',tr('Новый проект')]]:options,view?sidebarProject||'__all':'',!view);
       syncSelects();
       return;
@@ -1069,7 +1070,7 @@
       const row=el('button',undefined,'am-sidebar-task');row.type='button';
       const selection=peer?{peer:peer.peer,id:t.id}:null;
       row.dataset.sidebarFocus=JSON.stringify([name,peer?.peer||'',t.id]);
-      row.setAttribute('aria-pressed',String(name===project&&(selection?selectedShared?.peer===selection.peer&&selectedShared?.id===selection.id:t.id===selectedTask)));
+      row.setAttribute('aria-pressed',String(!draftOpen&&name===project&&(selection?selectedShared?.peer===selection.peer&&selectedShared?.id===selection.id:t.id===selectedTask)));
       const title=el('span',undefined,'am-sidebar-task-title');
       if(!sidebarProject)title.append(el('span',projectTitle(name)+', ','am-muted'));
       title.append(t.title);
@@ -1551,7 +1552,7 @@
     }
     // Another computer's task is read-only and says which computer gave it.
     const ownRow=(t,name)=>{
-      const row=el('button',undefined,'am-task');row.type='button';row.setAttribute('aria-pressed',String(name===project&&t.id===selectedTask));
+      const row=el('button',undefined,'am-task');row.type='button';row.setAttribute('aria-pressed',String(!draftOpen&&name===project&&t.id===selectedTask));
       // T-119: every own task says where it runs; this computer's name
       // stands out. The model it runs on follows the status below (T-202).
       const here=!(t.remote&&!t.remote.from),label=el('span',(names[t.agent]||t.agent)+tr(' на '));
@@ -1569,6 +1570,7 @@
       row.append(agent,el('span',t.title,'am-task-title'),status);
       row.addEventListener('click',()=>{
         if(name!==project){selectProject(name,t.id,'');return;}
+        if(draftOpen)closeTaskDraft();
         selectedTask=t.id;selectedShared=null;feedSignature='';renderTaskList();renderThread();loadFeed();if(taskSidebarPreview)renderMachines();
       });
       row.addEventListener('contextmenu',e=>taskMenu(e,t,null,name));
@@ -1576,11 +1578,12 @@
     };
     const sharedRow=(t,p,name)=>{
       const row=el('button',undefined,'am-task am-task-shared');row.type='button';row.title=tr('Задачу дал компьютер «')+p.name+tr('». Здесь её можно только посмотреть');
-      row.setAttribute('aria-pressed',String(name===project&&selectedShared?.peer===p.peer&&selectedShared?.id===t.id));
+      row.setAttribute('aria-pressed',String(!draftOpen&&name===project&&selectedShared?.peer===p.peer&&selectedShared?.id===t.id));
       // T-111: another computer's task opens as a read-only card.
       row.addEventListener('click',()=>{
         const selection={peer:p.peer,id:t.id};
         if(name!==project){selectProject(name,'','',selection);return;}
+        if(draftOpen)closeTaskDraft();
         selectedShared=selection;selectedTask='';feed=null;feedSignature='';renderTaskList();renderThread();startWindowWatch();if(taskSidebarPreview)renderMachines();
       });
       row.addEventListener('contextmenu',e=>taskMenu(e,t,p,name));
@@ -1761,11 +1764,101 @@
     if(place&&!codexBare)box.append(el('p',tr('Откройте папку проекта в Claude Code, Codex или Cursor, начните новый чат и спросите: «Каких агентов ты видишь?»'),'am-small am-muted'));
     return box;
   }
+  function renderTaskDraft(){
+    const projectSelect=$('task-draft-project'),computerSelect=$('task-draft-computer'),modelSelect=$('task-draft-model');
+    const projects=(view?.projects||[]).map(p=>[p.name,p.title||p.name]);
+    const name=projects.some(([key])=>key===projectSelect.value)?projectSelect.value:sidebarProject||project;
+    projectOptions(projectSelect,projects,name,draftSending);
+    const local={id:'',name:view?.computer_name||tr('Этот компьютер'),agents:view?.agents||[]};
+    const computers=[...((view?.projects||[]).find(p=>p.name===name)?.folder&&!['queued','updating'].includes(view.local_update?.state)?[local]:[]),
+      ...(server?.peers||[]).filter(p=>peerFresh(p)&&!p.update_pending&&p.ready?.accept!==false&&
+        (!Array.isArray(p.ready?.projects)||p.ready.projects.includes(name)))].filter(p=>p.agents?.some(a=>!a.paused));
+    const computer=computers.find(p=>p.id===computerSelect.value)||computers[0];
+    projectOptions(computerSelect,computers.map(p=>[p.id,p.name]),computer?.id||'',draftSending||!computer);
+    const models=(computer?.agents||[]).filter(a=>!a.paused).flatMap(a=>{
+      const agent=names[a.agent]||a.agent;
+      return [...new Set([...(a.models||[]),''])].map(model=>[a.agent+':'+model,agent+' · '+(model?modelName(model):tr('по умолчанию'))]);
+    });
+    const model=models.some(([key])=>key===modelSelect.value)?modelSelect.value:models[0]?.[0]||'';
+    projectOptions(modelSelect,models,model,draftSending||!models.length);
+    const input=$('task-draft-text');
+    input.readOnly=draftSending;
+    $('task-draft-send').disabled=draftSending||!online||!name||!computer||!model||!input.value.trim();
+    const status=$('task-draft-status');
+    status.textContent=draftSending?tr('Отправляем задачу…'):draftAttempt?.error||(!computer?tr('Для этого проекта нет доступных компьютеров с агентами.'):!online?tr('Клиент недоступен'):'');
+    status.classList.toggle('am-status-bad',!draftSending&&!!draftAttempt?.error);
+    syncSelects();
+  }
+  function closeTaskDraft(){
+    draftOpen=false;
+    $('task-new').setAttribute('aria-expanded','false');
+    $('task-draft').hidden=true;
+    feedSignature='';
+  }
+  function showTaskDraft(open){
+    if(!open)closeTaskDraft();
+    else{
+      draftOpen=true;
+      $('task-new').setAttribute('aria-expanded','true');
+      $('task-draft').hidden=false;
+    }
+    if(open){
+      if(!$('task-draft-text').value)$('task-draft-project').value=sidebarProject||project;
+      renderThread();
+      $('task-draft-text').focus();
+    }else{
+      feedSignature='';
+      renderThread();
+    }
+    renderMachines();renderTaskList();
+  }
+  async function sendTaskDraft(event){
+    event.preventDefault();
+    if(!draftOpen||$('task-draft-send').disabled)return;
+    const selection=$('task-draft-model').value;
+    const split=selection.indexOf(':');
+    const payload={
+      project:$('task-draft-project').value,computer:$('task-draft-computer').value,
+      agent:selection.slice(0,split),model:selection.slice(split+1),text:$('task-draft-text').value.trim()
+    };
+    const key=JSON.stringify(payload);
+    if(draftAttempt?.key!==key)draftAttempt={key,op:'window-'+crypto.randomUUID()};
+    draftSending=true;renderTaskDraft();
+    try{
+      const {result:id}=await postAPI('/api/task-start',{...payload,op_id:draftAttempt.op},10000);
+      if(typeof id!=='string'||!id)throw Error(tr('Действие не подтверждено. Проверьте состояние и повторите.'));
+      draftAttempt=null;
+      const input=$('task-draft-text');input.value='';input.style.height='';
+      if(draftOpen){
+        if(sidebarProject)sidebarProject=payload.project;
+        selectProject(payload.project,id,'');
+        if(tab!=='tasks')show('tasks');
+      }else await refresh();
+    }catch(error){
+      if(draftAttempt)draftAttempt.error=error.message;
+    }finally{
+      draftSending=false;
+      if(draftOpen)renderTaskDraft();
+    }
+  }
   function renderThread(){
     const thread=$('thread'),head=$('task-head');
     const panelOpen=!!view?.project&&$('list-toggle').getAttribute('aria-expanded')==='true';
     $('task-panel').hidden=!panelOpen;$('task-layout').classList.toggle('am-queue-collapsed',!panelOpen);
     $('list-toggle').hidden=tab!=='tasks'||!view?.project;
+    if(draftOpen){
+      $('compose').hidden=true;$('lost-bar').hidden=true;$('to-bottom').hidden=true;
+      if(thread.dataset.draft!=='true'){
+        thread.dataset.draft='true';thread.replaceChildren();thread.setAttribute('aria-busy','false');
+        const heading=el('div',undefined,'am-draft-heading');
+        heading.append(el('h3',tr('Новая задача')),iconButton(tr('Закрыть'),['M6 6l12 12M18 6L6 18'],false,()=>{showTaskDraft(false);$('task-new').focus();}));
+        head.replaceChildren(heading);
+        feedShown='';feedSignature='';
+      }
+      renderTaskDraft();
+      return;
+    }
+    if(thread.dataset.draft==='true'){delete thread.dataset.draft;head.replaceChildren();}
     const sameProject=view?.project===project;
     const task=sameProject&&selectedTask&&feed?.task.id===selectedTask?selectedTaskRow():null;
     const shared=sameProject?sharedSelection():null;
@@ -2237,6 +2330,7 @@
     const displayModel=taskModelLabel(t),quiet=quietLine(t);
     const header=taskSidebarPreview?conversationDate(t):taskFeedHeader(t,displayModel,quiet);
     const opened=new Set(fresh?[]:[...thread.querySelectorAll('details[open][data-key]')].map(d=>d.dataset.key));
+    const direct=feed.items[0]?.author==='owner';
     const out=[];let group=null,tools=null;
     const pending=new Map(), unfinished=new Set();
     for(const [index,it] of feed.items.entries()){
@@ -2335,7 +2429,7 @@
         continue;
       }
       if(it.kind!=='tool')flushTools();
-      if(it.kind==='task'){outgoingCoordinator(it);continue;}
+      if(it.kind==='task'){if(it.author==='owner')outgoing(tr('Вы'),'',it.text,it.at);else outgoingCoordinator(it);continue;}
       if(it.kind==='note'){if(it.author==='coordinator')outgoingCoordinator(it);else outgoing(tr('Вы'),'',it.text,it.at);const c=out[out.length-1].querySelector('.am-message-content');c.append(delivery(...({pending:[tr('Исполнитель прочитает, только когда закончит текущий ход'),'am-status-wait'],delivered:[tr('Передано исполнителю'),'am-status-good'],sent:[it.author==='owner'?tr('Поставлено в очередь для исполнителя'):tr('Отправлено на компьютер исполнителя'),'am-status-wait'],undelivered:[tr('Не передано исполнителю'),'am-status-bad']}[it.state]||[it.state,'am-muted'])));continue;}
       if(it.kind==='answer'){if(it.author==='owner'){outgoing(tr('Вы'),'',it.text,it.at);
         // A hint about this answer lives under it while the worker has not
@@ -2357,8 +2451,8 @@
         let note;
         if(!it.verified)note=delivery(it.kind==='report'?tr('Отчёт сохранён без подтверждения запуска'):tr('Не опубликовано: запуск не прошёл проверку'),'am-status-bad');
         else if(it.kind==='report'&&it.audience==='held')note=delivery(tr('Промежуточный отчёт: исполнитель продолжает с вашим сообщением'),'am-status-wait');
-        else if(it.kind==='report')note=delivery(tr('Отчёт отправлен координатору, сессия закрыта'),'am-delivery-close');
-        else if(it.audience==='owner')note=delivery(tr('Вопрос вам, координатор его не видит'),'am-status-wait');
+        else if(it.kind==='report')note=delivery(direct?tr('Задача завершена'):tr('Отчёт отправлен координатору, сессия закрыта'),'am-delivery-close');
+        else if(it.audience==='owner')note=delivery(direct?tr('Вопрос вам'):tr('Вопрос вам, координатор его не видит'),'am-status-wait');
         else note=delivery(tr('Вопрос координатору'),'am-status-wait');
         if(it.verified)appendEventTime(note,it.at,t.remote&&!t.remote.from);
         c.append(note);
@@ -3342,6 +3436,7 @@
         const sharedRuns=()=>JSON.stringify([view,taskListView(passiveProject())].flatMap(snapshot=>(snapshot?.shared||[]).flatMap(p=>p.tasks.filter(t=>(!t.started_at||t.pending_launch||!peerFresh(p))&&sharedWorkerRunning(t)).map(t=>t.id))));
         const previous=sharedRuns();
         server=next;
+        if(draftOpen)renderTaskDraft();
         // This snapshot started after the submission returned. Trust the
         // durable queue from here, regardless of the submission's reply.
         for(const [key,state] of cancelAttempts){
@@ -4100,6 +4195,7 @@
     toggle.setAttribute('aria-expanded','false');toggle.setAttribute('aria-label',label);toggle.title=label;
   }
   function selectProject(name,task='',computer,shared=null){
+    if(draftOpen)closeTaskDraft();
     if(!taskSidebarPreview&&(!combinedTasks()||computer!==''))taskHistories.clear();
     setProject(name,computer);remember('messenger-project',name);
     selectedTask=task;selectedShared=shared;feed=null;feedSignature='';viewSignature='';topTaskScope='';
@@ -4124,7 +4220,7 @@
       if(name==='__new'){renderProjects();openProjectDialog();return;}
       if(taskSidebarPreview){
         sidebarProject=name==='__all'?'':name;
-        if(sidebarProject&&sidebarProject!==project)selectProject(sidebarProject);
+        if(sidebarProject&&sidebarProject!==project&&!draftOpen)selectProject(sidebarProject);
         else{renderProjects();renderMachines();renderTaskList();loadProjectActivity();}
         return;
       }
@@ -4289,6 +4385,19 @@
   $('lang-select').value=amLang;enhanceSelect($('lang-select'));enhanceSelect($('theme-select'));enhanceSelect($('project-select'));enhanceSelect($('project-select-second'));enhanceSelect($('agent-filter'));enhanceSelect($('stats-project'));enhanceSelect($('stats-agent'));enhanceSelect($('stats-model'));enhanceSelect($('host-scope'));enhanceSelect($('host-address'));
   if(taskSidebarPreview){
     enhanceSelect($('stats-computer'));enhanceSelect($('agents-computer'));
+    for(const id of ['task-draft-project','task-draft-computer','task-draft-model']){
+      enhanceSelect($(id));$(id).addEventListener('change',renderTaskDraft);
+    }
+    $('task-new').addEventListener('click',()=>{show('tasks');showTaskDraft(true);loadServer();});
+    $('task-draft').addEventListener('submit',sendTaskDraft);
+    $('task-draft-text').addEventListener('input',event=>{
+      const input=event.currentTarget;input.style.height='';input.style.height=input.scrollHeight+'px';
+      if(draftAttempt?.error)draftAttempt.error='';
+      renderTaskDraft();
+    });
+    $('task-draft-text').addEventListener('keydown',event=>{
+      if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();$('task-draft').requestSubmit();}
+    });
     $('agents-computer').addEventListener('change',()=>{agentComputer=$('agents-computer').value;renderAgents();});
   }
   centreControlText();

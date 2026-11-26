@@ -94,6 +94,90 @@ func (p *netPair) mirror(t *testing.T, origin string) Task {
 
 // D-056: a computer accepts tasks of its network until its owner turns that
 // off.
+func TestWindowTaskGoesDirectlyToOwner(t *testing.T) {
+	for _, target := range []string{"local", "remote", "older remote"} {
+		t.Run(target, func(t *testing.T) {
+			origin := newTaskFixture(t)
+			worker := origin
+			request := StartTaskRequest{Project: "Game", OpID: "window-1", Provider: "claude", Text: "Build the menu", ByOwner: true}
+			var network *netPair
+			if target != "local" {
+				network = newNetPair(t)
+				origin, worker = network.a, network.b
+				request.Computer = "dev-b"
+			}
+			id, created, err := origin.st.StartTask(request)
+			if err != nil || !created {
+				t.Fatalf("start %q %v: %v", id, created, err)
+			}
+			if again, created, err := origin.st.StartTask(request); again != id || created || err != nil {
+				t.Fatalf("repeated start %q %v: %v", again, created, err)
+			}
+			workerID := id
+			if network != nil {
+				network.carry(t, true)
+				workerID = network.mirror(t, id).ID
+				if target == "older remote" {
+					// An older client ignores the direct-task field on the wire.
+					project, err := worker.st.projectStore("Game")
+					if err != nil {
+						t.Fatal(err)
+					}
+					if _, err := project.db.Exec("UPDATE tasks SET sender_agent='' WHERE id=?", workerID); err != nil {
+						t.Fatal(err)
+					}
+				}
+				network.carry(t, false)
+			}
+			run := worker.launch(t, workerID, worker.sessionOf(t, workerID))
+			worker.dispose(t, run, DispositionAsk, "Use green?")
+			if _, err := worker.st.FinishTaskRun(run.ID, cleanExit); err != nil {
+				t.Fatal(err)
+			}
+			if network != nil {
+				network.carry(t, false)
+			}
+			feed, err := origin.st.TaskFeed(id)
+			if err != nil || feed.Task.State != "waiting_owner" || feed.Task.OwnerQuestion == nil ||
+				feed.Items[0].Author != AudienceOwner || feed.Items[len(feed.Items)-1].Audience != AudienceOwner {
+				t.Fatalf("question feed %+v: %v", feed, err)
+			}
+			question := feed.Task.OwnerQuestion.ID
+			if err := origin.st.AnswerTask(id, question, "external", "blue", AudienceCoordinator); !errors.Is(err, ErrRejected) {
+				t.Fatalf("coordinator answer: %v", err)
+			}
+			if err := origin.st.WindowAnswer(id, question, "window-answer", "green"); err != nil {
+				t.Fatal(err)
+			}
+			if network != nil {
+				network.carry(t, true)
+			}
+			run = worker.launch(t, workerID, worker.sessionOf(t, workerID))
+			brief, err := worker.st.ReadTask(run.ID, run.Receipt, false)
+			if err != nil || brief.Answer != "green" {
+				t.Fatalf("answer %+v: %v", brief, err)
+			}
+			worker.dispose(t, run, DispositionReport, "Menu ready")
+			if _, err := worker.st.FinishTaskRun(run.ID, cleanExit); err != nil {
+				t.Fatal(err)
+			}
+			if network != nil {
+				network.carry(t, false)
+			}
+			feed, err = origin.st.TaskFeed(id)
+			if err != nil || feed.Task.State != "done" || feed.Items[len(feed.Items)-1].Kind != "report" {
+				t.Fatalf("report feed %+v: %v", feed, err)
+			}
+			if events := origin.events(t, AudienceCoordinator, 0); len(events) != 0 {
+				t.Fatalf("coordinator received %+v", events)
+			}
+			if events := origin.events(t, AudienceOwner, 0); !strings.Contains(kinds(events), "report") {
+				t.Fatalf("owner did not receive the report: %+v", events)
+			}
+		})
+	}
+}
+
 func TestRemoteTaskKeepsTheAssigningChat(t *testing.T) {
 	p := newNetPair(t)
 	id, _, err := p.a.st.StartTask(StartTaskRequest{Project: "Game", OpID: "sender", Computer: "dev-b", Provider: "codex", Text: "Build", SenderAgent: "claude", SenderModel: "claude-opus-5-5"})

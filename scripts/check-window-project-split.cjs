@@ -24,7 +24,7 @@ const toolShared={peer:'pc1',name:pc1.name,age:0,tasks:[{...toolDone,id:'tools-s
 
 const counts = {game:1234,tools:2345,site:99999};
 const pc1Counts = {game:321,tools:654,site:0};
-const agents = [{agent:'codex'},{agent:'claude'}];
+const agents = [{agent:'codex',models:['gpt-6.2-sol[effort=medium]','gpt-6.2-astra[effort=high]']},{agent:'claude',models:['claude-opus-4-8']}];
 const coordinator = p=>({connected:true,active:p==='tools',client:'codex'});
 function reply(url,p,available){
   if(url.pathname==='/api/window')return {project:p,projects:available,computer_name:'Мак',agents,tasks:tasks[p],shared:[],tasks_enabled:true,history_paged:true,coordinator:coordinator(p)};
@@ -93,7 +93,7 @@ if (require.main === module) (async()=>{
       if(preview&&url.pathname==='/')body=body.replace('id="am-concept"','id="am-concept" class="am-task-sidebar-preview"');
       return route.fulfill({contentType:file[1],body});
     });
-    await page.goto('http://messenger-preview.test/#preview-only');
+    await page.goto('https://messenger-preview.test/#preview-only');
     await page.getByText('Сообщение из game').waitFor();
     return page;
   }
@@ -177,6 +177,52 @@ if (require.main === module) (async()=>{
       assert.equal(await thread.getAttribute('aria-busy'),'false');
       assert.equal(await preview.locator('#compose').evaluate(node=>node.inert),false);
     }finally{sameFeed.release();otherWindow.release();otherFeed.release();await preview.close();}
+
+    const directTask=makeTask('owner-task','tools','codex','Новая задача в окне',0,{remote:pc1});
+    const draftPage=await open(projects,{width:1150,height:770},'dark',url=>{
+      if(url.pathname==='/api/task-start')return {json:{ok:true,result:directTask.id}};
+      if(url.pathname==='/api/task'&&url.searchParams.get('id')===directTask.id){
+        return {json:{task:directTask,items:[{kind:'task',author:'owner',text:directTask.title,at:directTask.created_at}]}};
+      }
+    },true);
+    try{
+      const plus=draftPage.locator('#task-new');
+      await plus.waitFor();
+      assert.equal(await plus.evaluate(node=>getComputedStyle(node).opacity),'1');
+      await draftPage.locator('#settings-open').click();
+      await draftPage.locator('#settings-dialog').waitFor();
+      await draftPage.locator('#settings-close').click();
+      await plus.click();
+      const form=draftPage.locator('#task-draft');
+      assert.equal(await form.isVisible(),true);
+      assert.equal(await draftPage.locator('#task-draft-send').isDisabled(),true);
+      await select(draftPage,'task-draft-project','Инструменты');
+      await select(draftPage,'task-draft-computer','ПК-1');
+      await select(draftPage,'task-draft-model','Codex · Astra 6.2 High');
+      await form.locator('textarea').fill(directTask.title);
+      const start=draftPage.waitForRequest(req=>new URL(req.url()).pathname==='/api/task-start');
+      await form.locator('textarea').press('Enter');
+      const {op_id,...payload}=(await start).postDataJSON();
+      assert.match(op_id,/^window-/);
+      assert.deepEqual(payload,{project:'tools',computer:'pc1',agent:'codex',model:'gpt-6.2-astra[effort=high]',text:directTask.title});
+      await draftPage.locator('#thread').getByText('Вы',{exact:true}).waitFor();
+      assert.equal(await form.isVisible(),false);
+      const drawer=draftPage.locator('#list-toggle');
+      await drawer.click();
+      const row=draftPage.locator('#task-list .am-task').first();
+      await row.waitFor();
+      const insets=()=>row.evaluate(node=>{
+        const outer=node.getBoundingClientRect(),title=node.querySelector('.am-task-title').getBoundingClientRect();
+        const date=node.querySelector('.am-task-when').getBoundingClientRect();
+        return [title.left-outer.left,outer.right-date.right,outer.width];
+      });
+      const [left,right,width]=await insets();
+      assert.deepEqual([left,right],[12,12]);
+      await draftPage.locator('#task-panel > .am-splitter').press('Shift+ArrowLeft');
+      const [wideLeft,wideRight,wideWidth]=await insets();
+      assert.deepEqual([wideLeft,wideRight],[12,12]);
+      assert(wideWidth>width);
+    }finally{await draftPage.close();}
 
     const single=await open(projects.slice(0,1),{width:1100,height:706},'light');
     assert.equal(await split(single).isVisible(),false);

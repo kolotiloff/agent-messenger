@@ -2,6 +2,13 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-326, T-327)
+
+- Added a subtle resting fill for computer headers, matched computer hover to task and icon-button hover, made task-card horizontal insets equal, and used equal padding around outgoing messages. Chromium and WebKit measured the right task list before and after resizing and verified the matching hover fills.
+- Added a direct task composer, the authenticated window action and owner-side delivery. Fixture tests cover duplicate-safe start, question, answer and report locally and across the network, including the older worker's question audience. Chromium and WebKit sent a fictional task to a selected computer and model and showed the simulated reply. The feature stays in [PR #228](https://github.com/kolotiloff/agent-messenger/pull/228) for a later update.
+
+- Restored a gear icon for Settings and made the new-task plus visible at rest.
+
 ## 2026-11-27 — Codex (T-326 sidebar preview)
 
 - Started the chosen layout in the real window by emphasizing the local monitor outline without moving the label or changing the online dot. Added a loopback preview using the existing window fixtures. Chromium verified the fixture chat, the identical icon dimensions and alignment, the unchanged online dots and the right panel toggle.

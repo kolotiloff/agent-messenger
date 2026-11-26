@@ -581,12 +581,13 @@ func (s *Store) windowTaskRows(selection string, args ...any) ([]WindowTask, err
 		w := WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt, FailureReason: t.FailureReason, FailureReset: t.FailureReset, FullAccess: t.FullAccess}
 		// The row shows the model the worker started on (T-202).
 		w.RanModel = s.ranModel(t.ID)
-		if t.State == "waiting_owner" {
+		if t.State == "waiting_owner" || (t.State == "waiting_coordinator" && t.SenderAgent == AudienceOwner) {
 			question, err := openQuestion(s.db, t.ID)
 			if err != nil {
 				return nil, err
 			}
-			if question != nil && question.Audience == AudienceOwner {
+			if question != nil && (question.Audience == AudienceOwner || t.SenderAgent == AudienceOwner) {
+				w.State = "waiting_owner"
 				w.OwnerQuestion = question
 			}
 		}
@@ -644,7 +645,8 @@ func (s *Store) taskFeedHeader(id string) (TaskFeed, Task, error) {
 		return f, t, err
 	}
 	f.Task = WindowTask{ID: t.ID, Title: t.Title, Agent: t.Provider, State: t.State, Folder: t.Folder, Model: t.Model, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, FinishedAt: t.FinishedAt, RanModel: t.RanModel, FullAccess: t.FullAccess}
-	if t.OpenQuestion != nil && t.OpenQuestion.Audience == AudienceOwner {
+	if t.OpenQuestion != nil && (t.OpenQuestion.Audience == AudienceOwner || t.SenderAgent == AudienceOwner) {
+		f.Task.State = "waiting_owner"
 		f.Task.OwnerQuestion = t.OpenQuestion
 	}
 	if f.Task.Remote, err = s.remoteOf(t.ID); err != nil {
@@ -672,7 +674,11 @@ func (s *Store) TaskFeed(id string) (TaskFeed, error) {
 	if err != nil {
 		return f, err
 	}
-	f.Items = []FeedItem{{Kind: "task", Author: AudienceCoordinator, Text: t.Text, At: t.CreatedAt, Verified: true, SenderAgent: t.SenderAgent, SenderModel: t.SenderModel}}
+	author := AudienceCoordinator
+	if t.SenderAgent == AudienceOwner {
+		author = AudienceOwner
+	}
+	f.Items = []FeedItem{{Kind: "task", Author: author, Text: t.Text, At: t.CreatedAt, Verified: true, SenderAgent: t.SenderAgent, SenderModel: t.SenderModel}}
 	if f.Task.Remote != nil && !f.Task.Remote.From {
 		err = s.remoteFeed(&f)
 		return f, err
@@ -724,7 +730,7 @@ func (s *Store) TaskFeed(id string) (TaskFeed, error) {
 				kind, audience := "report", ""
 				if r.disposition != DispositionReport {
 					kind, audience = "question", AudienceCoordinator
-					if r.disposition == DispositionAskOwner {
+					if r.disposition == DispositionAskOwner || t.SenderAgent == AudienceOwner {
 						audience = AudienceOwner
 					}
 				}

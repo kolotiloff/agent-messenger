@@ -7,6 +7,14 @@
   let lang='ru';
   try{if(localStorage.getItem('messenger-lang')==='en')lang='en';}catch(_){}
   const EN={
+  'Новая задача':'New task',
+  'Описание новой задачи':'New task description',
+  'Напишите, что нужно сделать…':'Describe what needs to be done…',
+  'Запустить задачу':'Start task',
+  'Отправляем задачу…':'Sending the task…',
+  'Для этого проекта нет доступных компьютеров с агентами.':'No computers with agents are available for this project.',
+  'Задача завершена':'Task completed',
+  'Вопрос вам':'Question for you',
   'Через запятую. От быстрых правок к сложным задачам. Доступ зависит от аккаунта.':'Comma-separated, from quick edits to difficult work. Access depends on the account.',
   'Имена из agent --list-models; High требует подходящего тарифа.':'IDs from agent --list-models; High requires a supporting plan.',
   'Уровень: [effort=medium] или [effort=high]. Messenger передаст его отдельным параметром.':'Effort: [effort=medium] or [effort=high]. Messenger passes it as a separate CLI setting.',

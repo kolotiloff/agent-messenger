@@ -127,6 +127,14 @@ func TestTaskWindowRoutes(t *testing.T) {
 		req.Text != "dev-1" || req.Provider != "codex" || req.Model != "gpt-6.2-sol[effort=low]" {
 		t.Fatalf("export did not pass all the filters: %d %+v", code, req)
 	}
+	code, _ = do("POST", "/api/task-start", `{"project":"Game","computer":"dev-1","agent":"codex","model":"gpt-6.2-sol[effort=low]","op_id":"op-start","text":"Build the menu"}`)
+	if req := got[len(got)-1]; code != 200 || req.Cmd != "task-owner-start" || req.Project != "Game" || req.Computer != "dev-1" ||
+		req.Provider != "codex" || req.Model != "gpt-6.2-sol[effort=low]" || req.Confirmation != "op-start" || req.Text != "Build the menu" {
+		t.Fatalf("start %d %+v", code, req)
+	}
+	if code, _ := do("POST", "/api/task-start", `{"project":"Game","agent":"codex","op_id":"op-start","text":""}`); code != 400 {
+		t.Fatalf("start with empty task: %d", code)
+	}
 	code, _ = do("POST", "/api/task-answer", `{"task":"task-1","question":"q-1","op_id":"op-1","text":"yes"}`)
 	last := got[len(got)-1]
 	if code != 200 || last.Cmd != "task-owner-answer" || last.MessageID != "task-1" || last.ConversationID != "q-1" || last.Confirmation != "op-1" || last.Text != "yes" {

@@ -187,6 +187,17 @@ func (s *Supervisor) SetProjectFolder(name, folder string) error {
 	return s.store.SetProjectFolder(name, folder)
 }
 
+// OwnerStartTask records an assignment from the window without a coordinator.
+func (s *Supervisor) OwnerStartTask(project, computer, provider, model, op, text string) (string, error) {
+	id, _, err := s.store.StartTask(core.StartTaskRequest{
+		Project: project, Computer: computer, Provider: provider, Model: model, OpID: op, Text: text, ByOwner: true,
+	})
+	if err == nil {
+		s.wakeTaskDispatch()
+	}
+	return id, err
+}
+
 // OwnerAnswer answers the owner's question of a task.
 func (s *Supervisor) OwnerAnswer(task, question, op, text string) error {
 	if err := s.store.WindowAnswer(task, question, op, text); err != nil {
