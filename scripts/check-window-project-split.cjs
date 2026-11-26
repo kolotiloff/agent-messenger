@@ -3,7 +3,6 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const output = process.env.SCREENSHOT_DIR;
 const assets = path.resolve(__dirname, '../internal/localui/assets');
 const projects = [{name:'game',title:'Игра',folder:'/Проекты/Игра'},{name:'tools',title:'Инструменты',folder:'/Проекты/Инструменты'},{name:'site',title:'Сайт',folder:'/Проекты/Сайт'}];
@@ -62,7 +61,9 @@ function reply(url,p,available){
   if(url.pathname==='/api/usage-export')return {ok:true,result:{path:'/fixtures/statistics.json',tasks:2}};
   return {};
 }
-(async()=>{
+module.exports = { projects, reply };
+if (require.main === module) (async()=>{
+  const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   const engine=process.env.BROWSER_ENGINE||'chromium';
   const browser=await playwright[engine].launch();
   const errors=[],seen=[];

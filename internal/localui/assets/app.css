@@ -298,6 +298,29 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-machine-body { display:grid; grid-template-columns:minmax(0,1fr); gap:var(--am-gap-control); padding:var(--am-space-1) var(--am-space-3); }
 #am-concept .am-machine-presence { position:relative; display:flex; flex:none; width:var(--am-computer-icon-size); height:var(--am-computer-icon-size); margin-inline-end:calc(var(--am-computer-label-gap) - var(--am-space-1)); color:var(--am-muted); }
 #am-concept .am-machine-presence svg { width:100%; height:100%; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+#am-concept .am-machine-presence-local { color:var(--am-run); }
+#am-concept .am-machine-presence-local > svg { stroke-width:2.5; }
+#am-concept.am-task-sidebar-preview .am-computers > .am-label { display:none; }
+#am-concept.am-task-sidebar-preview .am-sidebar { gap:var(--am-gap-section); }
+#am-concept.am-task-sidebar-preview .am-machines { gap:var(--am-gap-content); }
+#am-concept.am-task-sidebar-preview .am-machine-card { border-color:transparent; background:transparent; }
+#am-concept.am-task-sidebar-preview .am-machine-name { background:transparent; padding-inline:var(--am-space-1); }
+#am-concept.am-task-sidebar-preview .am-machine-card:not(.am-sidebar-has-tasks) .am-machine-name { padding-inline-start:calc(var(--am-computer-icon-size) + var(--am-space-2)); }
+#am-concept .am-sidebar-disclosure { display:grid; place-items:center; width:var(--am-computer-icon-size); min-height:var(--am-computer-icon-size); flex:none; background:transparent; border:0; padding:0; color:var(--am-muted); }
+#am-concept .am-sidebar-disclosure svg { width:var(--am-computer-icon-size); height:var(--am-computer-icon-size); }
+#am-concept .am-sidebar-disclosure[aria-expanded=true] svg { transform:rotate(90deg); }
+#am-concept .am-sidebar-tasks { display:grid; gap:var(--am-computer-meta-gap); }
+#am-concept .am-sidebar-task { display:grid; grid-template-columns:minmax(0,1fr); gap:0; min-width:0; text-align:start; overflow-wrap:anywhere; border:0; background:transparent; border-radius:var(--am-radius-s); padding:var(--am-pad-compact); }
+#am-concept .am-sidebar-task:hover { background:var(--am-field-hover); }
+#am-concept .am-sidebar-task[aria-pressed=true] { background:var(--am-selected); }
+#am-concept .am-sidebar-task-title { font-weight:500; }
+@media (max-width:620px) {
+  #am-concept.am-task-sidebar-preview .am-sidebar { display:grid; grid-template-columns:minmax(0,1fr) auto; }
+  #am-concept.am-task-sidebar-preview .am-project-heading:has(button[hidden]) { display:flex; }
+  #am-concept.am-task-sidebar-preview .am-project .am-label { display:block; }
+  #am-concept.am-task-sidebar-preview .am-computers { display:flex; grid-column:1/-1; max-height:34vh; }
+  #am-concept.am-task-sidebar-preview .am-sidebar-disclosure { min-height:var(--am-control-compact); }
+}
 #am-concept .am-machine-signal { position:absolute; inset-inline-end:calc(-1.5 * var(--am-gap-line)); inset-block-end:calc(-.5 * var(--am-gap-line)); width:var(--am-space-2); height:var(--am-space-2); box-sizing:content-box; border:1px solid transparent; }
 #am-concept .am-machine-presence.online .am-machine-signal { border-color:var(--am-computer-signal-background,var(--am-machine-heading)); border-radius:50%; background:var(--am-computer-online); }
 #am-concept .am-machine-signal svg { display:block; color:var(--am-bad); stroke-width:7; }
@@ -507,7 +530,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-rich p:last-child { margin-bottom:0; }
 #am-concept .am-tool { margin:var(--am-space-1) 0; font-size:var(--am-text-s); color:var(--am-muted); }
 #am-concept .am-tool summary { cursor:pointer; list-style:none; }
-#am-concept .am-tool-group { margin:var(--am-space-1) 0; font-size:var(--am-text-s); color:var(--am-muted); }
+#am-concept .am-tool-group { margin:var(--am-gap-section) 0; font-size:var(--am-text-s); color:var(--am-muted); }
 #am-concept .am-tool-group > summary { cursor:pointer; list-style:none; }
 /* Disclosure chevron after the text: right when closed, down when open (owner, 2026-11-12). */
 #am-concept :is(.am-tool > summary, .am-tool-group > summary)::-webkit-details-marker { display:none; }

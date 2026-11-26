@@ -813,3 +813,9 @@ Statistics opens with the combined project scope until the user picks a project 
 ## D-230 — Show both displayed projects' tasks with no computer selection (T-325)
 
 In split mode the right panel groups tasks by the two displayed project titles whenever the computer filter is clear. Each group includes all computers, the usual task status sections and its own completed-history pages. The active conversation remains singular. A task from the other group opens in its own project while the combined list remains visible. Selecting a computer tile scopes the list to its project and computer. Deselecting it restores both groups. Bulk actions remain scoped to the group that contains the button.
+
+## D-231 — Preview the computer-grouped task sidebar (T-326)
+
+The chosen layout groups current tasks by computer under Projects, with an All or single-project scope. Show the project name on task rows in the All scope. Use a neutral gray row for selection, a visible gap between tasks, blue for the model while working and yellow for the model and waiting label. Keep the chat centered and use the existing icon to open the full task list on the right, initially collapsed. Mark the local computer through the existing monitor outline and preserve its connection indicator and header spacing. Verify changes on the real window assets using fictional browser fixtures before bundling them in a later update.
+
+Keep the same leading inset for every task title and subtitle as the left pane is resized. Extra width reduces wrapping. Use the section spacing token above and below grouped command summaries in the conversation, keeping the individual command lines compact. The loopback preview includes two command groups so the expanded and collapsed states can be compared.

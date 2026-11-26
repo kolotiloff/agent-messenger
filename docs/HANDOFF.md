@@ -8,6 +8,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+**T-326 is in local preview on `codex/t326-task-sidebar`.** Run `node scripts/preview-window.cjs` and open the printed loopback URL. The real window assets display the new Projects picker, current tasks grouped by computer, and the full task list behind the existing right-side toggle. The local monitor outline is emphasized and command summaries have more space above and below. Chromium and WebKit verified the preview with fictional tasks. The preview flag is enabled by the loopback server. Desktop rollout and acceptance with real project data are pending. Bundle the sidebar work in a later update.
+
 **[1.0.11, build 114](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.11-preview.114) is released** from `ae5ba1f757d0d1a49139f238fee284fe57dd0de3`. [PR #224](https://github.com/kolotiloff/agent-messenger/pull/224) and [PR #226](https://github.com/kolotiloff/agent-messenger/pull/226) integrated T-324 and T-325. All four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45897527560) passed, including the public upgrade path on all five targets. The release contains 22 files.
 
 In split mode, choosing a computer tile on Statistics applies its project to the project filter. The Tasks panel shows both displayed projects when no computer is selected, including each project's paged history. Choosing a tile restricts the list to its computer and project. Clearing the selection restores both groups, and opening any task shows its own conversation. Chromium and WebKit checked both changes together. See D-229 and D-230.
