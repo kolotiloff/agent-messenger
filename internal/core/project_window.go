@@ -7,9 +7,10 @@ import (
 
 // ProjectActivity is the sidebar snapshot for an inactive project.
 type ProjectActivity struct {
-	Project string         `json:"project"`
-	Tasks   []WindowTask   `json:"tasks"`
-	Shared  []NetPeerTasks `json:"shared"`
+	Project     string            `json:"project"`
+	Tasks       []WindowTask      `json:"tasks"`
+	Shared      []NetPeerTasks    `json:"shared"`
+	Coordinator windowCoordinator `json:"coordinator"`
 }
 
 func (s *Store) ProjectActivity(project string) (ProjectActivity, error) {
@@ -25,9 +26,15 @@ func (s *Store) ProjectActivity(project string) (ProjectActivity, error) {
 	}
 	err = s.tx(func(tx *sql.Tx) error {
 		var err error
+		if out.Coordinator, err = readWindowCoordinator(tx, project); err != nil {
+			return err
+		}
 		out.Shared, err = projectNetTasks(tx, project, s.split != nil)
 		return err
 	})
+	if err == nil {
+		out.Coordinator.checkActive()
+	}
 	return out, err
 }
 

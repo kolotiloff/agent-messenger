@@ -317,6 +317,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-machine-signal svg { display:block; color:var(--am-bad); stroke-width:7; }
 #am-concept .am-machine-version, #am-concept .am-machine-role { font-weight:400; }
 #am-concept .am-machine-role { flex-shrink:2; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#am-concept.am-split-projects .am-machine-card[aria-current=true] .am-machine-role { line-height:normal; }
 #am-concept .am-machine-roles { position:relative; display:flex; flex:none; }
 #am-concept .am-machine-role-option { position:absolute; inset-inline-start:0; visibility:hidden; display:flex; align-items:baseline; gap:var(--am-space-1); inline-size:max-content; }
 #am-concept .am-machine-roles[data-form=full] > [data-form=full],
@@ -727,6 +728,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-restart-ask .am-alert-actions > :last-child { margin-left:0; }
 #am-concept .am-restart-head { display:flex; align-items:center; justify-content:space-between; gap:var(--am-gap-control); }
 #am-concept .am-restart-tasks { display:grid; grid-template-columns:minmax(0,1fr); gap:var(--am-space-1); padding:var(--am-space-2) var(--am-space-3); border-radius:var(--am-radius-m); background:var(--am-soft); }
+#am-concept .am-restart-wait { margin-inline:var(--am-pane-inset); flex:none; }
+#am-concept #restart-wait-show { min-height:var(--am-control-compact); color:var(--am-muted); }
 #am-concept .am-restart-task { min-width:0; display:flex; justify-content:space-between; gap:var(--am-gap-control); }
 #am-concept .am-restart-task > :first-child { min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
 #am-concept .am-restart-task > :last-child { flex:none; }

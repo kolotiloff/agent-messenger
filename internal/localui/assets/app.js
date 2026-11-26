@@ -122,7 +122,7 @@
   let feedShown='',feedStick=false,feedPinned=true,feedCount=0;
   let online=false,offlineReason='',discovery=[],tab='tasks',refreshing=false,answering=false;
   const agentChecks=new Map(),checking=new Set(),rowNote=new Map();let autoChecked=false,discoveryLoaded=false;
-  let clientInfo=null,clientInfoAt=0,restart={busy:false,ask:null,error:'',wait:false},autoRestarted=false;
+  let clientInfo=null,clientInfoAt=0,restart={busy:false,ask:null,error:'',wait:false},autoRestarted=false,restartWaitDetails=false;
   // The start screen covers the window until the client first answers, for
   // at most bootLimit; then the usual notices take over (T-079).
   let booting=true;const bootLimit=20000;setTimeout(()=>{booting=false;renderBoot();},bootLimit);
@@ -1010,7 +1010,13 @@
     // The computer that runs the network's server is labelled as such.
     const serverRole=server?.host?.running&&server.host.scope!=='local'?serverTag():null;
     const coordinator=view?.project===project?view?.coordinator:null;
-    const coordinatorRole=coordinator?.active?machineRole(tr('координатор'),tr('На этом компьютере открыт чат-координатор выбранного проекта')):null;
+    const coordinatorProjects=projectActivity.filter(({snapshot})=>snapshot?.coordinator?.active).map(({name})=>projectTitle(name));
+    let coordinatorRole=null;
+    if(coordinatorProjects.length){
+      coordinatorRole=machineRole(tr('координатор'),tr('На этом компьютере открыт чат-координатор')+': '+coordinatorProjects.join(', '));
+    }else if(!projectActivity.length&&coordinator?.active){
+      coordinatorRole=machineRole(tr('координатор'),tr('На этом компьютере открыт чат-координатор выбранного проекта'));
+    }
     if(serverRole&&coordinatorRole)head.append(combinedMachineRoles(serverRole,coordinatorRole));
     else if(serverRole||coordinatorRole)head.append(serverRole||coordinatorRole);
     const version=el('div',undefined,'am-machine-version am-local-version');
@@ -2517,7 +2523,8 @@
   async function loadClientInfo(){
     clientInfoAt=Date.now();
     try{
-      const info=await api('/api/client-info');clientInfo=info;if(!info.outdated)restart.ask=null;
+      const info=await api('/api/client-info');clientInfo=info;
+      if(info.client==='running'&&!info.outdated){restart.ask=null;restart.wait=false;}
       // T-077: after an update the window restarts the old client itself,
       // once. The client refuses while tasks run or their count is unknown;
       // only then the owner is asked.
@@ -2535,24 +2542,26 @@
     let response,result={};
     try{response=await fetch('/api/restart-client',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({project,confirm}),cache:'no-store',signal:AbortSignal.timeout(50000)});result=await response.json().catch(()=>({}));}
     catch(_){restart={busy:false,ask:null,error:tr('Ответ не получен, результат неизвестен. Подождите немного: окно проверит клиент само.'),wait:false};renderRestart();loadClientInfo();return;}
-    if(response.ok&&result.ok){restart={busy:false,ask:null,error:'',wait:false};showError(null);await loadClientInfo();viewSignature='';refresh();return;}
+    if((response.ok&&result.ok)||result.state==='current'){
+      restart={busy:false,ask:null,error:'',wait:false};clientInfo={...clientInfo,outdated:false};renderRestart();
+      showError(null);await loadClientInfo();viewSignature='';refresh();return;
+    }
     if(result.state==='confirm'){restart={busy:false,ask:{running:result.running||0,known:result.known!==false,tasks:result.tasks||[]},error:'',wait};renderRestart();return;}
     restart={busy:false,ask:null,error:result.detail||tr('Перезапуск не подтверждён. Проверьте состояние.'),wait:false};renderRestart();loadClientInfo();
   }
-  // A window newer than its client cannot work properly, so this dialog
-  // covers the whole window until the client is restarted or the app quits.
-  // Quitting closes only the window; the background client keeps running.
   function renderRestart(){
     renderBoot();
     const dialog=$('restart-dialog');
+    $('restart-wait-status').hidden=!restart.wait;
+    if(!restart.wait)restartWaitDetails=false;
     // While the update installs, the start screen shows it instead (T-079).
-    const show=(!!clientInfo?.outdated&&!restart.busy)||!!restart.ask||!!restart.error;
+    const show=restart.wait?restartWaitDetails:(!!clientInfo?.outdated&&!restart.busy)||!!restart.ask||!!restart.error;
     if(!show){if(dialog.open)dialog.close();return;}
     const ask=restart.ask,canRestart=!!clientInfo?.restart,answering=clientInfo?.client==='running';
     const canQuit=!!window.webkit?.messageHandlers?.app;
     let title=tr('Нужно перезапустить Messenger'),text;
     const version=clientInfo?.window_version?tr('Версия ')+versionName(clientInfo.window_version).slice(1)+tr(' установлена. '):'';
-    if(ask&&restart.wait){title=tr('Ждём окончания задач');text=(ask.known?tr('Задач в работе: ')+ask.running+'. ':'')+tr('Messenger перезапустится сам, когда они закончатся. Если закрыть окно, задачи продолжат работать, но перезапуска не будет до следующего открытия.');}
+    if(ask&&restart.wait){title=tr('Ждём окончания задач');text=(ask.known?tr('Задач в работе: ')+ask.running+'. ':'')+tr('Messenger перезапустится сам, когда они закончатся. Если выйти из приложения, следующая проверка будет при запуске.');}
     else if(ask&&ask.known){title=tr('Обновление ждёт задачи: ')+ask.running;text=version+tr('Чтобы она заработала, Messenger перезапустится и прервёт задачи, которые идут сейчас. Сами они не повторятся.');}
     else if(ask){title=tr('Не удалось проверить задачи');text=version+tr('Если задачи сейчас идут, перезапуск прервёт их. Сами они не повторятся.');}
     else if(restart.busy){title=tr('Обновляем Messenger');text=tr('Останавливаем старую версию и запускаем новую. Это займёт несколько секунд.');}
@@ -2572,9 +2581,11 @@
     const cut=$('restart-cut');
     go.hidden=!canRestart||!answering||(restart.busy&&!restart.wait)||(!!ask&&restart.wait);
     go.textContent=ask?tr('Дождаться и перезапустить'):tr('Перезапустить');go.disabled=restart.busy;
-    cut.hidden=!ask||!canRestart||!answering;cut.disabled=restart.busy&&!restart.wait;
+    cut.hidden=!ask||!canRestart||!answering;cut.disabled=restart.busy;
     cut.textContent=restart.wait?tr('Прервать сейчас'):tr('Прервать и перезапустить');
-    quit.hidden=!canQuit;quit.disabled=restart.busy;
+    quit.hidden=!restart.wait&&!canQuit;quit.disabled=restart.busy&&!restart.wait;
+    quit.setAttribute('aria-label',restart.wait?tr('Закрыть'):tr('Закрыть окно'));
+    quit.title=restart.wait?tr('Закрыть'):tr('Закрыть окно, оставив задачи в работе');
     copy.hidden=canRestart||!shutdownCommand();
     if(!dialog.open){dialog.showModal();(go.hidden?quit.hidden?copy:quit:go).focus();}
   }
@@ -3972,10 +3983,16 @@
   $('agent-cli-find').addEventListener('click',()=>{const provider=setupProvider;$('agent-setup').close();installAgent(provider,'find');});
   $('agent-cli-pick').addEventListener('click',()=>pick('agent-cli','file','agent-save-status'));
   $('agent-profile-pick').addEventListener('click',()=>pick('agent-profile','folder','agent-save-status'));
-  $('restart-dialog').addEventListener('cancel',event=>event.preventDefault());
+  $('restart-dialog').addEventListener('cancel',event=>{
+    event.preventDefault();if(restart.wait){restartWaitDetails=false;renderRestart();}
+  });
   $('restart-go').addEventListener('click',()=>{if(restart.ask){restart.wait=true;renderRestart();restartClient(false);}else restartClient(false);});
   $('restart-cut').addEventListener('click',()=>{restart.wait=false;restartClient(true);});
-  $('restart-quit').addEventListener('click',()=>window.webkit?.messageHandlers?.app?.postMessage('quit'));
+  $('restart-wait-show').addEventListener('click',()=>{restartWaitDetails=true;renderRestart();});
+  $('restart-quit').addEventListener('click',()=>{
+    if(restart.wait){restartWaitDetails=false;renderRestart();return;}
+    window.webkit?.messageHandlers?.app?.postMessage('quit');
+  });
   $('restart-copy').addEventListener('click',async()=>{const b=$('restart-copy');try{await navigator.clipboard.writeText(shutdownCommand());b.textContent=tr('Скопировано');}catch(_){b.textContent=tr('Не удалось скопировать');}setTimeout(()=>b.textContent=tr('Скопировать команду'),2000);});
   $('agent-setup-close').addEventListener('click',()=>$('agent-setup').close());
   $('agent-cli').addEventListener('change',saveAgentPaths);

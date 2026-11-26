@@ -793,3 +793,11 @@ This replaces the sidebar's folder-based filtering in D-221. Reporting configure
 ## D-225 — Distinguish the project halves with color (T-320)
 
 The right half uses a neutral tint in place of the divider. A neutral hover highlight covers the project half under the pointer, including its portion of the shared header. Hover and click use the same card midpoint. The blue selection fill takes precedence. Card geometry and single-project styling stay the same.
+
+## D-226 — Label both visible projects' live local coordinator (T-321)
+
+In the split sidebar, the shared header shows the coordinator label when one or both displayed projects have a live local coordinator. The tooltip lists those projects. Both snapshots use D-165's process identity check. Server roles still come from network status.
+
+## D-227 — Let the workspace stay open while an update is waiting (T-322)
+
+Choosing to wait dismisses the restart prompt and shows a status button. It opens the waiting details and their close button only dismisses those details. The window keeps submitting unforced restart checks while the older client is running. In split storage this checks all projects irrespective of screen selection, and an unknown count keeps waiting. Exiting the desktop app stops the window's checks until it opens again.

@@ -73,12 +73,12 @@ type runningTask struct {
 // client that cannot answer makes the count unknown, never zero. The list
 // holds the running tasks of the project the window shows (T-123); the
 // count covers every project.
-func runningTasks(ctx context.Context, call caller, project string) (int, bool, []runningTask) {
-	response, err := call(ctx, control.Request{Cmd: "window-view", Alias: project})
-	if err != nil || !response.OK || len(response.Overview) == 0 {
-		return 0, false, nil
-	}
-	var view struct {
+func runningTasks(ctx context.Context, call caller, project string, split bool) (int, bool, []runningTask) {
+	type taskView struct {
+		Project  string `json:"project"`
+		Projects []struct {
+			Name string `json:"name"`
+		} `json:"projects"`
 		Agents *[]struct {
 			Running int `json:"running"`
 		} `json:"agents"`
@@ -94,13 +94,24 @@ func runningTasks(ctx context.Context, call caller, project string) (int, bool, 
 			} `json:"remote"`
 		} `json:"tasks"`
 	}
-	if json.Unmarshal(response.Overview, &view) != nil || view.Agents == nil {
+	read := func(name string) (taskView, bool) {
+		var view taskView
+		response, err := call(ctx, control.Request{Cmd: "window-view", Alias: name})
+		ok := err == nil && response.OK && json.Unmarshal(response.Overview, &view) == nil && view.Agents != nil
+		return view, ok
+	}
+	view, known := read(project)
+	if !known {
 		return 0, false, nil
 	}
-	n := 0
-	for _, a := range *view.Agents {
-		n += a.Running
+	count := func(v taskView) int {
+		n := 0
+		for _, a := range *v.Agents {
+			n += a.Running
+		}
+		return n
 	}
+	n := count(view)
 	list := []runningTask{}
 	for _, t := range view.Tasks {
 		// A task this computer sent elsewhere runs there, not here.
@@ -112,6 +123,23 @@ func runningTasks(ctx context.Context, call caller, project string) (int, bool, 
 			at = t.CreatedAt
 		}
 		list = append(list, runningTask{Agent: t.Agent, Title: t.Title, StartedAt: at})
+	}
+	// In split storage, the older client's agent counts are per project.
+	// In legacy storage Running already counts across the whole computer.
+	if split {
+		if view.Projects == nil {
+			return n, false, list
+		}
+		for _, p := range view.Projects {
+			if p.Name == view.Project {
+				continue
+			}
+			other, ok := read(p.Name)
+			if !ok || other.Project != p.Name {
+				return n, false, list
+			}
+			n += count(other)
+		}
 	}
 	return n, true, list
 }
@@ -148,12 +176,14 @@ func serveRestart(w http.ResponseWriter, r *http.Request, decoder *json.Decoder,
 	}
 	// A task run interrupted by the restart stays blocked until the owner
 	// decides; it is never repeated by itself. Ask before doing that.
-	running, known, tasks := runningTasks(ctx, call, input.Project)
-	if !input.Confirm && (!known || running > 0) {
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.WriteHeader(http.StatusConflict)
-		writeJSON(w, map[string]any{"ok": false, "state": "confirm", "running": running, "known": known, "tasks": tasks})
-		return
+	if !input.Confirm {
+		running, known, tasks := runningTasks(ctx, call, input.Project, response.Status.ProjectStorage == "active")
+		if !known || running > 0 {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(http.StatusConflict)
+			writeJSON(w, map[string]any{"ok": false, "state": "confirm", "running": running, "known": known, "tasks": tasks})
+			return
+		}
 	}
 	if err := restart(ctx); err != nil {
 		reject(w, http.StatusBadGateway, "failed", err.Error())

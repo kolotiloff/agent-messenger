@@ -15,6 +15,8 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
+| T-322 | Keep the desktop window usable while an update waits for running tasks. | agent | [PR #221](https://github.com/kolotiloff/agent-messenger/pull/221), prepared for the next functional release. D-227. |
+| T-321 | Label the local live coordinator of either project in the split sidebar. | agent | [PR #221](https://github.com/kolotiloff/agent-messenger/pull/221), prepared for the next functional release. D-226. |
 | T-320 | Tint the right project half and highlight the hovered half of each computer card. | agent | `codex/t320-split-card-hover`, prepared for the next functional release. D-225. |
 | T-305 | Refresh the public GitHub page and English screenshots for the current release. | agent | `codex/t305-public-page-refresh`. Uses 1.0.3 window assets and fictional data. Includes the download, network, task and update guides. |
 | T-267 | Review of the 0.95 per-project storage: one unroutable network message stopped the inbox; a task whose start failed half-way blocked a shared resource and stayed «running»; a failed storage activation stopped the client from starting (2026-11-23). | agent | Released in 0.97. `claude/amazing-noether-apbflv` (D-188). Unroutable messages are skipped, starts for a project without storage are refused, unpublished tasks are closed at startup, activation that changed nothing keeps the single database. Covered by Go tests with fixture databases (no real models); the inbox fix was found by reading the code, not observed in use. |

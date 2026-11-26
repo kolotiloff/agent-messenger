@@ -118,6 +118,42 @@ func TestRestartClientRouteRunsOneAtATime(t *testing.T) {
 	}
 }
 
+func TestRestartWaitChecksEveryProjectInSplitStorage(t *testing.T) {
+	running, available, restarts := 1, true, 0
+	call := func(_ context.Context, req control.Request) (control.Response, error) {
+		if req.Cmd == "status" {
+			return control.Response{OK: true, Status: &control.Status{ProjectStorage: "active"}}, nil
+		}
+		if req.Cmd != "window-view" {
+			t.Fatalf("unexpected request: %s", req.Cmd)
+		}
+		count := 0
+		if req.Alias == "Site" {
+			if !available {
+				return control.Response{}, errors.New("Site unavailable")
+			}
+			count = running
+		}
+		raw, err := json.Marshal(map[string]any{
+			"project": req.Alias, "projects": []map[string]string{{"name": "Game"}, {"name": "Site"}},
+			"agents": []map[string]int{{"running": count}},
+		})
+		return control.Response{OK: true, Overview: raw}, err
+	}
+	restart := func(context.Context) error { restarts++; return nil }
+	if w := restartHandler(call, restart); w.Code != 409 || !strings.Contains(w.Body.String(), `"running":1`) || restarts != 0 {
+		t.Fatalf("restart with another project active: %d %s", w.Code, w.Body)
+	}
+	running, available = 0, false
+	if w := restartHandler(call, restart); w.Code != 409 || !strings.Contains(w.Body.String(), `"known":false`) || restarts != 0 {
+		t.Fatalf("restart with unknown work: %d %s", w.Code, w.Body)
+	}
+	available = true
+	if w := restartHandler(call, restart); w.Code != 200 || restarts != 1 {
+		t.Fatalf("restart after all projects are idle: %d %s", w.Code, w.Body)
+	}
+}
+
 func TestClientInfoReportsVersions(t *testing.T) {
 	for _, tc := range []struct {
 		call    caller
