@@ -262,6 +262,7 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 
 | ID | Task | PR |
 |---|---|---|
+| T-324 | Apply the selected computer tile's project to Statistics. | Implemented and checked in Chromium and WebKit. Targeted for the next release. D-229. |
 | T-323 | Separate the two project tiles in each computer row with the project picker gap. | Implemented and checked in Chromium and WebKit. Awaiting review for the next release. D-228. |
 | T-322 | Keep the desktop window usable while an update waits for running tasks. | Released in [1.0.9, build 112](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.9-preview.112) via [PR #221](https://github.com/kolotiloff/agent-messenger/pull/221). D-227. |
 | T-321 | Label the local live coordinator of either project in the split sidebar. | Released in [1.0.9, build 112](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.9-preview.112) via [PR #221](https://github.com/kolotiloff/agent-messenger/pull/221). D-226. |

@@ -8,6 +8,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+**T-324 makes a split computer tile select its project in Statistics.** Clicking either project tile while Statistics is open changes the existing project filter and queries that project's data for the selected computer, including when switching columns on the same computer. Chromium and WebKit verified project changes, filter clearing and combined totals. See D-229.
+
 **T-323 prepares separate project tiles for the next release.** Both tiles use the same neutral colors and the same gap as the project pickers. The computer name and roles stay left, and update controls and version stay right. Browser fixtures cover stable heights, independent selection, the inactive gap and the update confirmation. See D-228.
 
 **[1.0.9, build 112](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.9-preview.112) is released** from `654ba47651e7cfa5d7ae08af2accdee5b8f73e64`. [PR #221](https://github.com/kolotiloff/agent-messenger/pull/221) integrated T-320 through T-322. All four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45882901446) passed. The public channel serves five verified signed update packages, with 22 files in the release.

@@ -1124,7 +1124,7 @@
       cell.setAttribute('role','button');cell.setAttribute('aria-pressed',String(current));
       cell.setAttribute('aria-label',projectTitle(name)+' — '+computerName(computer));
       const choose=()=>{
-        if(project===name){filterComputer(computer);return;}
+        if(project===name){filterComputer(computer,true);return;}
         if(tab!=='stats'&&tab!=='agents')show('tasks');
         selectProject(name,'',computer);
       };
@@ -1183,13 +1183,15 @@
   const projectComputers=new Map();
   // On the statistics and agents tabs the choice filters that tab (T-076);
   // elsewhere it opens the tasks.
-  function filterComputer(id){
+  function filterComputer(id,projectTile=false){
+    const before=statsProjectScope();
+    if(tab==='stats'&&projectTile)statsProject=project;
     computerFilter=computerFilter===id?'':id;
     // T-096: a new computer starts with all its agents, so an agent chosen
     // earlier cannot hide what runs there.
     if($('agent-filter').value){$('agent-filter').value='';syncSelects();}
     if(computerFilter&&tab!=='stats'&&tab!=='agents')show('tasks');
-    computerChanged();
+    computerChanged(before);
   }
   function clearComputer(){computerFilter='';computerChanged();}
   // T-279: with paged history the finished tasks of the new choice come
@@ -1197,9 +1199,9 @@
   // the previous list and conversation stay until then instead of flashing
   // a filtered remainder and an empty pane.
   let topTaskScope='';
-  function computerChanged(){
+  function computerChanged(before=statsProjectScope()){
     renderMachines();
-    if(tab==='stats')reloadStats();
+    if(tab==='stats'&&!updateStatsProjectScope(before))reloadStats();
     if(tab==='agents')renderAgents();
     if(view?.history_paged){topTaskScope=taskWindowQuery();refresh();return;}
     if(tab==='tasks')openTopTask();else renderTaskList();
@@ -2773,6 +2775,7 @@
     computerFilter=computer??projectComputers.get(name)??'';
     $('agent-filter').value='';
     project=name;
+    if(tab==='stats'&&computer!==undefined&&splitProjects.includes(name))statsProject=name;
     if(!updateStatsProjectScope(before)&&tab==='stats'&&computerFilter!==oldComputer)reloadStats();
   }
   function statsFilters(){
