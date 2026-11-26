@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"slices"
 	"sort"
 	"time"
@@ -63,6 +64,7 @@ func (t *efficiencyTokens) merge(u efficiencyTokens) {
 
 type modelEfficiency struct {
 	efficiencyCohort
+	Project                  string           `json:"project,omitempty"`
 	InitialModel             *exportModel     `json:"initial_model"`
 	Tasks                    int              `json:"tasks"`
 	Reviewed                 int              `json:"reviewed"`
@@ -85,12 +87,31 @@ type modelEfficiency struct {
 // Filters match the initial assignment so retries on other models or
 // computers still contribute to the cost of that assignment.
 func (s *Store) UsageEfficiency(ctx context.Context, queue string, since time.Time, computer string, filter UsageFilter) ([]modelEfficiency, error) {
-	var groups []modelEfficiency
-	err := s.readUsageProject(ctx, queue, filter.Project, func(tx *sql.Tx, broker string) error {
-		var err error
-		groups, err = readModelEfficiency(ctx, tx, since, computer, broker, filter)
-		return err
-	})
+	if !ValidUsageProjects(filter.Project, filter.Projects, false) {
+		return nil, fmt.Errorf("invalid project scope")
+	}
+	groups := []modelEfficiency{}
+	for _, project := range filter.projectNames() {
+		scope := UsageFilter{Project: project, Agent: filter.Agent, Model: filter.Model}
+		err := s.readUsageProject(ctx, queue, project, func(tx *sql.Tx, broker string) error {
+			batch, err := scopedModelEfficiency(ctx, tx, since, computer, broker, scope, len(filter.Projects) != 0)
+			groups = append(groups, batch...)
+			return err
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	return groups, nil
+}
+
+func scopedModelEfficiency(ctx context.Context, db *sql.Tx, since time.Time, computer, broker string, filter UsageFilter, includeProject bool) ([]modelEfficiency, error) {
+	groups, err := readModelEfficiency(ctx, db, since, computer, broker, filter)
+	if includeProject {
+		for i := range groups {
+			groups[i].Project = filter.Project
+		}
+	}
 	return groups, err
 }
 

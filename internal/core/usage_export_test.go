@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 )
@@ -102,15 +103,17 @@ func TestUsageExportReadsOneProjectWithoutWaitingForWriters(t *testing.T) {
 				}
 				var payload struct {
 					Metadata struct {
-						Project string `json:"project"`
-						Since   string `json:"since"`
+						Project  string   `json:"project"`
+						Projects []string `json:"projects"`
+						Since    string   `json:"since"`
 					} `json:"metadata"`
 					Tasks []usageExportTask `json:"tasks"`
 				}
 				if err := json.Unmarshal(data, &payload); err != nil {
 					t.Fatal(err)
 				}
-				if len(payload.Tasks) != want || payload.Metadata.Project != filter.Project || payload.Metadata.Since != since.Format(time.RFC3339) {
+				if len(payload.Tasks) != want || payload.Metadata.Project != filter.Project ||
+					!slices.Equal(payload.Metadata.Projects, filter.Projects) || payload.Metadata.Since != since.Format(time.RFC3339) {
 					t.Fatal("incorrect export metadata or task count")
 				}
 				rows := make(map[string]usageExportTask, len(payload.Tasks))
@@ -138,10 +141,17 @@ func TestUsageExportReadsOneProjectWithoutWaitingForWriters(t *testing.T) {
 			load("local", UsageFilter{Project: "Game", Model: reported}, 1)
 			load("local", UsageFilter{Project: "Game", Model: requested}, 0)
 			load("", UsageFilter{Project: "Site"}, 1)
+			selected := load("local", UsageFilter{Projects: []string{"Game", "Site"}, Agent: "codex"}, 2)
+			if selected[local].Project != "Game" || selected["site"].Project != "Site" {
+				t.Fatalf("project attribution missing from export: %+v", selected)
+			}
 			if _, _, err := export("", UsageFilter{Project: "Missing"}); err == nil || errors.Is(err, context.DeadlineExceeded) {
 				t.Fatalf("expected a prompt rejection for an unknown project, got %v", err)
 			}
-			if files, err := os.ReadDir(dir); err != nil || len(files) != 5 {
+			if _, _, err := export("", UsageFilter{Projects: []string{"Game", "Missing"}}); err == nil {
+				t.Fatal("published an incomplete export")
+			}
+			if files, err := os.ReadDir(dir); err != nil || len(files) != 6 {
 				t.Fatalf("export should only publish a file for each successful request: %v, %v", files, err)
 			}
 		})

@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"sort"
 	"time"
 )
@@ -79,8 +80,9 @@ type UsageDayAgent struct {
 
 // UsageStats is the window's statistics page.
 type UsageStats struct {
-	Since   string `json:"since"`
-	Project string `json:"project,omitempty"`
+	Since    string   `json:"since"`
+	Project  string   `json:"project,omitempty"`
+	Projects []string `json:"projects,omitempty"`
 	// Computer names the computer the page is limited to; empty for the
 	// whole network.
 	Computer  string       `json:"computer,omitempty"`
@@ -103,9 +105,27 @@ type UsageStats struct {
 // UsageFilter limits statistics by project, agent and model. Peer summaries
 // are per agent only, so project or model filters use known task records.
 type UsageFilter struct {
-	Project string
-	Agent   string
-	Model   string
+	Project  string
+	Projects []string
+	Agent    string
+	Model    string
+}
+
+// ValidUsageProjects accepts one named project or the two distinct sidebar
+// projects. Only the original unscoped statistics call allows an empty scope.
+func ValidUsageProjects(project string, projects []string, allowAll bool) bool {
+	if len(projects) == 0 {
+		return (allowAll && project == "") || ValidProjectName(project)
+	}
+	return project == "" && len(projects) == 2 && projects[0] != projects[1] &&
+		ValidProjectName(projects[0]) && ValidProjectName(projects[1])
+}
+
+func (f UsageFilter) projectNames() []string {
+	if len(f.Projects) != 0 {
+		return f.Projects
+	}
+	return []string{f.Project}
 }
 
 // MaxUsageTop is how many tasks the page lists in each order.
@@ -157,7 +177,10 @@ func (s *Store) UsageStats(since time.Time, loc *time.Location, computer string)
 
 // UsageStatsFiltered applies the requested project, agent and model filters.
 func (s *Store) UsageStatsFiltered(since time.Time, loc *time.Location, computer string, filter UsageFilter) (UsageStats, error) {
-	out := UsageStats{Since: since.UTC().Format(time.RFC3339Nano), Project: filter.Project, Agents: []UsageGroup{}, Computers: []UsageGroup{}, Days: []UsageDay{}, Top: []UsageTask{}, Recent: []UsageTask{}, Models: []UsageGroup{}, Agent: filter.Agent, Model: filter.Model}
+	out := UsageStats{Since: since.UTC().Format(time.RFC3339Nano), Project: filter.Project, Projects: filter.Projects, Agents: []UsageGroup{}, Computers: []UsageGroup{}, Days: []UsageDay{}, Top: []UsageTask{}, Recent: []UsageTask{}, Models: []UsageGroup{}, Agent: filter.Agent, Model: filter.Model}
+	if !ValidUsageProjects(filter.Project, filter.Projects, true) {
+		return out, fmt.Errorf("invalid project scope")
+	}
 	err := s.tx(func(tx *sql.Tx) error {
 		local, err := localComputer(tx)
 		if err != nil {
@@ -176,7 +199,7 @@ func (s *Store) UsageStatsFiltered(since time.Time, loc *time.Location, computer
 			peerNames[peer.ID] = peer.Name
 		}
 		reported := map[string]NetPeer{}
-		if filter.Project == "" && filter.Model == "" {
+		if filter.Project == "" && len(filter.Projects) == 0 && filter.Model == "" {
 			for _, p := range peers {
 				if p.Usage != nil {
 					reported[p.ID] = p
@@ -240,7 +263,7 @@ func (s *Store) UsageStatsFiltered(since time.Time, loc *time.Location, computer
  WHERE COALESCE(t.finished_at,t.updated_at)>=?
  AND (?='' OR t.project=?)
  AND (t.usage_seen=1 OR (t.finished_at IS NOT NULL AND t.state IN ('done','failed','cancelled')))`
-		err = s.visitProjectTaskRows(tx, filter.Project, query, []any{out.Since, filter.Project, filter.Project}, func(rows *sql.Rows) error {
+		visit := func(rows *sql.Rows) error {
 			for rows.Next() {
 				var task UsageTask
 				var peer, peerBroker, remoteName, finished, started, observedStart string
@@ -311,9 +334,11 @@ func (s *Store) UsageStatsFiltered(since time.Time, loc *time.Location, computer
 				count(key, name, this, task.Agent, day, 1, in, cached, outTokens)
 			}
 			return rows.Err()
-		})
-		if err != nil {
-			return err
+		}
+		for _, project := range filter.projectNames() {
+			if err := s.visitProjectTaskRows(tx, project, query, []any{out.Since, project, project}, visit); err != nil {
+				return err
+			}
 		}
 		firstDay := since.In(loc).Format("2006-01-02")
 		for _, p := range reported {

@@ -10,7 +10,7 @@
   // visible list is a top-layer popover, so neither pane clips it or grows.
   function enhanceSelect(select) {
     const trigger=document.createElement('button');trigger.type='button';trigger.className='am-select-trigger';
-    const label=select.labels[0]?.textContent||select.getAttribute('aria-label')||tr('Выбор');
+    const label=select.labels[0]?.textContent||tr(select.getAttribute('aria-label')||'')||tr('Выбор');
     trigger.setAttribute('aria-label',label);trigger.setAttribute('aria-haspopup','listbox');trigger.setAttribute('aria-expanded','false');
     const value=document.createElement('span');value.className='am-select-value';
     const chevron=document.createElement('span');chevron.className='am-select-chevron';chevron.setAttribute('aria-hidden','true');trigger.append(value,chevron);
@@ -401,18 +401,75 @@
     if(a.waiting_owner>0)return ['wait',tr('Ждёт ответа')];
     return ['idle',tr('Свободен')];
   }
-  function renderProjects(){
-    const select=$('project-select');
-    const options=view?view.projects.map(p=>[p.name,p.title||p.name]):[['',offlineReason?tr('Проекты недоступны'):tr('Загружаем проекты…')]];
-    if(view)options.push(['__new',tr('Новый проект')]);
+  let splitProjects=[],auxActivity=null,auxError='',auxRequest=null;
+  function projectOptions(select,options,value,disabled=false){
     if(select.options.length!==options.length||options.some(([value,label],i)=>select.options[i].value!==value||select.options[i].textContent!==label)){
       select.replaceChildren(...options.map(([value,label])=>{
         const option=el('option',label);option.value=value;return option;
       }));
     }
-    select.value=view?.project||(view?'__new':'');
-    if(!view?.project&&select.options.length>1)select.selectedIndex=0;
-    if(select.disabled!==!view)select.disabled=!view;
+    select.value=value;
+    if(select.disabled!==disabled)select.disabled=disabled;
+  }
+  function updateSplitProjects(next){
+    const before=statsProjectScope();
+    splitProjects=next;
+    if(!splitProjects.includes(statsProject))statsProject='';
+    if(!next.length){auxRequest?.controller.abort();auxRequest=null;auxActivity=null;auxError='';}
+    updateStatsProjectScope(before);
+  }
+  function passiveProject(){return splitProjects.find(name=>name!==project)||'';}
+  async function loadProjectActivity(){
+    const name=passiveProject();
+    if(auxRequest?.name===name)return;
+    auxRequest?.controller.abort();
+    if(!name||!online||document.hidden)return;
+    if(auxError!==name)auxError='';
+    const controller=new AbortController(),request={name,controller};
+    auxRequest=request;
+    const timeout=setTimeout(()=>controller.abort(),4500);
+    try{
+      const result=await api('/api/project-activity?'+new URLSearchParams({project:name}),4500,controller.signal);
+      if(passiveProject()!==name||auxRequest!==request)return;
+      if(result.project!==name)throw Error('unexpected project activity');
+      auxActivity=result;auxError='';
+    }catch(_){
+      if(passiveProject()!==name||auxRequest!==request)return;
+      if(auxActivity?.project===name)auxActivity=null;
+      auxError=name;
+    }finally{
+      clearTimeout(timeout);
+      if(auxRequest===request){auxRequest=null;renderMachines();}
+    }
+  }
+  function projectTitle(name){return view?.projects.find(p=>p.name===name)?.title||name;}
+  function renderProjects(){
+    const options=view?view.projects.map(p=>[p.name,p.title||p.name]):[['',offlineReason?tr('Проекты недоступны'):tr('Загружаем проекты…')]];
+    const canSplit=!!view&&options.length>1&&options.some(([name])=>name===project);
+    if(splitProjects.length){
+      const other=options.find(([name])=>name===passiveProject())?.[0]||options.find(([name])=>name!==project)?.[0];
+      if(!canSplit)updateSplitProjects([]);
+      else if(!splitProjects.includes(project)||!splitProjects.includes(other)){
+        updateSplitProjects(splitProjects[1]===project?[other,project]:[project,other]);
+        loadProjectActivity();
+      }
+    }
+    const split=splitProjects.length>0;
+    const toggle=$('split-projects');
+    toggle.hidden=!canSplit;
+    toggle.setAttribute('aria-pressed',String(split));
+    $('project-heading').textContent=split?tr('Проекты'):tr('Проект');
+    root.classList.toggle('am-split-projects',split);
+    $('project-column-second').hidden=!split;
+    $('project-column-first').toggleAttribute('data-active-project',split&&splitProjects[0]===project);
+    $('project-column-second').toggleAttribute('data-active-project',split&&splitProjects[1]===project);
+    if(split){
+      projectOptions($('project-select'),options.filter(([name])=>name!==splitProjects[1]),splitProjects[0]);
+      projectOptions($('project-select-second'),options.filter(([name])=>name!==splitProjects[0]),splitProjects[1]);
+    }else{
+      if(view)options.push(['__new',tr('Новый проект')]);
+      projectOptions($('project-select'),options,project||(view?'__new':''),!view);
+    }
     syncSelects();
   }
   // Right-click menu on another computer of the network. Revoking cannot be
@@ -632,16 +689,16 @@
   document.addEventListener('visibilitychange',renderNotices);
   // One line per agent program, with its worker state.
   // live is false when the computer cannot be reached.
-  function busyTasksByComputer(){
+  function busyTasksByComputer(snapshot){
     const byComputer=new Map();
-    if(!project||view?.project!==project)return byComputer;
+    if(!snapshot?.project)return byComputer;
     function add(t,computer){
       const key=computer+'\0'+t.agent;
       if(!byComputer.has(key))byComputer.set(key,[]);
       byComputer.get(key).push(t);
     }
-    for(const task of view?.tasks||[])add(task,taskComputer(task));
-    for(const peer of view?.shared||[]){
+    for(const task of snapshot.tasks||[])add(task,taskComputer(task));
+    for(const peer of snapshot.shared||[]){
       for(const task of peer.tasks||[]){
         if(!activeStates.includes(task.state)||sharedLost(task,peer))continue;
         add({...sharedDisplayTask(task),shared:true},sharedRunsOn(task,peer));
@@ -659,11 +716,11 @@
     const model=task.shared?task.model:task.ran_model;
     return model?modelName(model).replace(/ Medium$/,' Med'):'';
   }
-  function parallelAgentLine(computer,provider,state,running,waiting){
+  function parallelAgentLine(computer,provider,state,running,waiting,name){
     const agent=shortNames[provider]||provider;
     const group=el('details',undefined,'am-agent-parallel am-agent-'+state);
     group.dataset.provider=provider;
-    group.dataset.agentGroup=JSON.stringify([computer,provider]);
+    group.dataset.agentGroup=JSON.stringify([name,computer,provider]);
     group.addEventListener('click',event=>event.stopPropagation());
     const summary=el('summary'),label=el('span',agent,state==='run'?'am-agent-running-label':'');
     label.append(el('span',', '+tasksWord(running.length+waiting.length),'am-agent-count'));
@@ -673,7 +730,7 @@
       const model=sidebarTaskModel(task),working=task.state==='running';
       const row=el('li',undefined,working?'am-agent-parallel-running':'am-agent-parallel-waiting');
       const modelLabel=model?el('span',model,'am-agent-model'):null;
-      if(modelLabel&&task.title)modelLabel.title=task.title;
+      if(!splitProjects.length&&modelLabel&&task.title)modelLabel.title=task.title;
       const [text,status,,from]=taskStatus(task);
       if(working){
         const name=el('span',agent);
@@ -689,7 +746,7 @@
     group.append(summary,list);
     return group;
   }
-  function agentLines(agents,coordinatorClient,live,computer,busyTasks){
+  function agentLines(agents,coordinatorClient,live,computer,busyTasks,name=project){
     const lines=el('div',undefined,'am-machine-agents');
     const [coordProvider,coordLabel]=coordinatorClient!==null?coordinatorName(coordinatorClient):['',''];
     const providers=agents.map(a=>a.agent);
@@ -705,7 +762,7 @@
       const {running,waiting,counts}=agentActivity(busyTasks.get(computer+'\0'+provider)||[]);
       const [state,text]=live?agentState(counts):['offline',tr('Нет связи')];
       if(live&&running.length+waiting.length>1){
-        lines.append(parallelAgentLine(computer,provider,state,running,waiting));
+        lines.append(parallelAgentLine(computer,provider,state,running,waiting,name));
         continue;
       }
       // A busy agent says so to the right of its name: «работает» in blue,
@@ -915,11 +972,17 @@
     if(draggedMachine)return;
     collectNotices();
     pickedComputers=new Set();
-    const live=$('machines'),box=live.cloneNode(false),busyTasks=busyTasksByComputer();
-    const scope=JSON.stringify([project,updateNetwork()]);
+    const live=$('machines'),box=live.cloneNode(false),busyTasks=busyTasksByComputer(view?.project===project?view:null);
+    const projectActivity=splitProjects.map(name=>{
+      const snapshot=view?.project===name?view:auxActivity?.project===name?auxActivity:null;
+      return {name,snapshot,tasks:busyTasksByComputer(snapshot)};
+    });
+    const scope=JSON.stringify([splitProjects.length?null:project,updateNetwork()]);
     const sameScope=live.dataset.agentScope===scope;
     const expanded=sameScope?new Set([...live.querySelectorAll('.am-agent-parallel[open]')].map(group=>group.dataset.agentGroup)):new Set();
-    const focused=sameScope&&live.contains(document.activeElement)?document.activeElement.closest('.am-agent-parallel')?.dataset.agentGroup:'';
+    const focus=live.contains(document.activeElement)?document.activeElement:null;
+    const focused=sameScope?focus?.closest('.am-agent-parallel')?.dataset.agentGroup:'';
+    const focusedCell=focus?.dataset.projectCell;
     live.dataset.agentScope=scope;
     const machine=el('div',undefined,'am-machine-card');machine.setAttribute('aria-current','true');pickable(machine,'local');
     // This computer's version and update button are moved into its header
@@ -939,10 +1002,13 @@
     // they report (owner, 2026-11-18: two of three agents were off and the
     // Mac still listed all three). One still running a task stays until it
     // ends.
-    const shownAgents=(view?.agents||[]).filter(a=>!a.paused||busyTasks.get('local\0'+a.agent)?.some(t=>activeStates.includes(t.state)));
-    const lines=agentLines(shownAgents,coordinator?.connected?(coordinator.client||''):null,online,'local',busyTasks);
-    if(!lines.children.length)lines.append(el('p',online?tr('Агенты не подключены'):tr('Нет связи'),'am-small am-muted'));
-    body.append(lines);
+    if(projectActivity.length)appendProjectCells(body,'local',projectActivity);
+    else{
+      const shownAgents=(view?.agents||[]).filter(a=>!a.paused||busyTasks.get('local\0'+a.agent)?.some(t=>activeStates.includes(t.state)));
+      const lines=agentLines(shownAgents,coordinator?.connected?(coordinator.client||''):null,online,'local',busyTasks);
+      if(!lines.children.length)lines.append(el('p',online?tr('Агенты не подключены'):tr('Нет связи'),'am-small am-muted'));
+      body.append(lines);
+    }
     const corner=el('div',undefined,'am-card-update am-local-update');
     const localMark=updateMark(null),localBusy=updateInProgress(localMark);
     if(localBusy)corner.append(updateControl(null,localMark));
@@ -986,7 +1052,9 @@
         no.addEventListener('click',()=>{revokeAsk='';renderMachines();$('machines').querySelector('[data-key="'+CSS.escape('revoke-'+peer.id)+'"]')?.focus();});
         actions.append(no,yes);peerBody.append(actions);box.append(card);continue;
       }
-      if(fresh){
+      if(projectActivity.length){
+        appendProjectCells(peerBody,peer.id,projectActivity,peer);
+      }else if(fresh){
         const plines=agentLines(peer.agents||[],peer.coordinator?peer.coordinator:null,true,peer.id,busyTasks);
         if(!plines.children.length)plines.append(el('p',tr('Агенты не подключены'),'am-small am-muted'));
         peerBody.append(plines);
@@ -1022,11 +1090,56 @@
         machineRolesObserver.observe(localMeta);
       }
       if(focused)live.querySelector('[data-agent-group="'+CSS.escape(focused)+'"] > summary')?.focus({preventScroll:true});
+      else if(focusedCell)live.querySelector('[data-project-cell="'+CSS.escape(focusedCell)+'"]')?.focus({preventScroll:true});
     }
     placeLocalParts();
     // T-271: only the highlighted card shows the chosen computer, so a
     // computer that left the list no longer filters anything.
     if(computerFilter&&!pickedComputers.has(computerFilter))queueMicrotask(()=>{if(computerFilter&&!pickedComputers.has(computerFilter))clearComputer();});
+  }
+  function appendProjectCells(body,computer,activity,peer){
+    const columns=el('div',undefined,'am-machine-projects');
+    for(const {name,snapshot,tasks} of activity){
+      const cell=el('div',undefined,'am-machine-project');
+      const current=project===name&&computerFilter===computer;
+      cell.dataset.projectCell=JSON.stringify([computer,name]);cell.tabIndex=0;
+      cell.setAttribute('role','button');cell.setAttribute('aria-pressed',String(current));
+      cell.setAttribute('aria-label',projectTitle(name)+' — '+computerName(computer));
+      const choose=()=>{
+        if(project===name){filterComputer(computer);return;}
+        const computerChanged=computerFilter!==computer;
+        computerFilter=computer;$('agent-filter').value='';
+        if(tab!=='stats'&&tab!=='agents')show('tasks');
+        selectProject(name);
+        if(computerChanged&&tab==='stats')reloadStats();
+      };
+      cell.addEventListener('click',event=>{event.stopPropagation();choose();});
+      cell.addEventListener('keydown',event=>{
+        if(event.target===cell&&(event.key==='Enter'||event.key===' ')){event.preventDefault();event.stopPropagation();choose();}
+      });
+      let message='';
+      if(!online)message=tr('Нет связи');
+      else if(peer&&!peerFresh(peer))message=peerConnected(peer)?tr('Ждём сведения об агентах'):tr('Нет связи');
+      else if(!snapshot)message=auxError===name?tr('Статусы недоступны'):tr('Загружаем статусы…');
+      else{
+        const agents=(peer?peer.agents||[]:view?.agents||[]).filter(a=>!a.paused||tasks.get(computer+'\0'+a.agent)?.some(t=>activeStates.includes(t.state)));
+        const hasActivity=agents.some(a=>tasks.get(computer+'\0'+a.agent)?.some(t=>activeStates.includes(t.state)));
+        const projects=peer?.ready?.projects;
+        // Presence caps the reported project list at 64 names of at most 64
+        // characters. An omitted name beyond those limits is not evidence.
+        if(peer&&!hasActivity&&Array.isArray(projects)&&!projects.includes(name)&&projects.length<64&&[...name].length<=64){
+          message=tr('Нет в проекте');cell.title=tr('На компьютере не настроена папка этого проекта');
+        }else{
+          const coord=peer?null:snapshot.coordinator;
+          const lines=agentLines(agents,coord?.connected?(coord.client||''):null,true,computer,tasks,name);
+          if(lines.children.length)cell.append(lines);
+          else message=tr('Агенты не подключены');
+        }
+      }
+      if(message)cell.append(el('p',message,'am-small am-muted'));
+      columns.append(cell);
+    }
+    body.append(columns);
   }
   // This computer's version and update button live in its card; in a narrow
   // window the computer list is hidden and they stay in the bottom row.
@@ -2518,6 +2631,7 @@
       if(signature!==viewSignature){
         const history=currentTaskHistory();
         if(history&&view?.history_next!==v.history_next)taskHistory=null;
+        if(splitProjects.length&&view?.project===passiveProject()&&auxActivity?.project!==view.project)auxActivity=view;
         viewSignature=signature;view=v;noteWelcomeDone();
         if(!v.history_paged&&selectedTask&&!v.tasks.some(t=>t.id===selectedTask)){selectedTask='';feed=null;feedSignature='';}
         if(selectedShared&&!sharedSelection())selectedShared=null;
@@ -2557,7 +2671,7 @@
   function show(next){
     tab=next;root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab);renderNotices();renderToasts();
     root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
-    $('list-toggle').hidden=tab!=='tasks'||!view?.project;if(tab==='server')loadServer();if(tab==='stats'){renderStats();loadStats();}if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сервер'),stats:tr('Статистика')}[tab];startWindowWatch();
+    $('list-toggle').hidden=tab!=='tasks'||!view?.project;if(tab==='server')loadServer();if(tab==='stats')reloadStats();if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сервер'),stats:tr('Статистика')}[tab];startWindowWatch();
   }
 
 
@@ -2582,15 +2696,33 @@
     if(!h)return m+tr(' мин');
     return h+tr(' ч')+(m%60?' '+m%60+tr(' мин'):'');
   }
-  function setProject(name){
-    if(project===name)return;
-    project=name;
+  let statsProject='';
+  function statsProjectScope(){
+    if(splitProjects.length&&!statsProject)return {projects:splitProjects};
+    return {project:statsProject||project};
+  }
+  function updateStatsProjectScope(before){
+    if(JSON.stringify(before)===JSON.stringify(statsProjectScope()))return;
+    if(!project)stats=null;
     statsModel='';statsGen++;
-    if(!name)stats=null;
     if(tab==='stats')reloadStats();
   }
+  function setProject(name){
+    if(project===name)return;
+    const before=statsProjectScope();
+    project=name;
+    updateStatsProjectScope(before);
+  }
   function statsFilters(){
-    return {project,period:statsPeriod,computer:computerFilter||'',agent:statsAgent,model:statsModel};
+    return {...statsProjectScope(),period:statsPeriod,computer:computerFilter||'',agent:statsAgent,model:statsModel};
+  }
+  function statsQuery(filters){
+    const {projects=[],...rest}=filters,query=new URLSearchParams(rest);
+    for(const name of projects)query.append('projects',name);
+    return query;
+  }
+  function matchesStatsProject(result,filters){
+    return filters.projects?JSON.stringify(result.projects)===JSON.stringify(filters.projects):result.project===filters.project;
   }
   let statsExporting=false;
   let efficiencyScope='',efficiencyGen=0;
@@ -2612,9 +2744,9 @@
     efficiencyScope=JSON.stringify(filters);
     card.hidden=false;wrap.hidden=true;status.textContent=tr('Загрузка статистики…');refreshEfficiencyScope();
     try{
-      const result=await api('/api/usage-efficiency?'+new URLSearchParams(filters),25000);
+      const result=await api('/api/usage-efficiency?'+statsQuery(filters),25000);
       if(gen!==efficiencyGen)return;
-      if(result.project!==filters.project||!Array.isArray(result.groups))throw Error(tr('Эффективность моделей недоступна.'));
+      if(!matchesStatsProject(result,filters)||!Array.isArray(result.groups))throw Error(tr('Эффективность моделей недоступна.'));
       renderEfficiencyGroups(result.groups);
       wrap.hidden=!result.groups.length;
       status.textContent=!result.groups.length?tr('В этом периоде нет исходных задач для сравнения.'):
@@ -2630,12 +2762,13 @@
     const cohorts=new Map();
     const ordered=[...groups].sort((a,b)=>Number(!!b.task_type)-Number(!!a.task_type));
     ordered.forEach((group,i)=>{
-      const key=JSON.stringify([group.task_type,group.difficulty]);
+      const key=JSON.stringify([group.project,group.task_type,group.difficulty]);
       if(!cohorts.has(key)){
         const body=el('tbody'),heading=el('tr',undefined,'am-efficiency-cohort');
         const type=Object.hasOwn(types,group.task_type)?types[group.task_type]:group.task_type||tr('Без типа');
         const difficulty=difficulties[group.difficulty]||tr('Без оценки сложности');
-        const label=el('th',type+', '+difficulty.toLocaleLowerCase(amLocale));label.scope='rowgroup';label.colSpan=5;
+        const prefix=group.project?projectTitle(group.project)+' · ':'';
+        const label=el('th',prefix+type+', '+difficulty.toLocaleLowerCase(amLocale));label.scope='rowgroup';label.colSpan=5;
         heading.append(label);body.append(heading);cohorts.set(key,body);
       }
       cohorts.get(key).append(...efficiencyRows(group,i));
@@ -2702,16 +2835,19 @@
   async function loadStats(){
     const gen=++statsGen;
     const filters=statsFilters();
-    const name=filters.project;
-    if(!name)return;
-    const params=new URLSearchParams(filters);
+    if(!filters.project&&!filters.projects)return;
     try{
-      const s=await api('/api/usage-stats?'+params,8000);
+      const s=await api('/api/usage-stats?'+statsQuery(filters),8000);
       if(gen!==statsGen)return;
-      if(s.project!==name){stats=null;statsPending=false;renderStats();throw Error(tr('Фильтр не применён: обновите фоновый клиент.'));}
+      if(!matchesStatsProject(s,filters)){stats=null;statsPending=false;renderStats();throw Error(tr('Фильтр не применён: обновите фоновый клиент.'));}
       s.forComputer=filters.computer;stats=s;statsPending=false;renderStats();
     }
-    catch(error){if(gen===statsGen){statsPending=false;setStatsBusy();$('stats-total-title').textContent=tr('Статистика недоступна');$('stats-total-note').textContent=error.message;}}
+    catch(error){
+      if(gen!==statsGen)return;
+      if(stats&&!matchesStatsProject(stats,filters))stats=null;
+      statsPending=false;renderStats();
+      $('stats-total-title').textContent=tr('Статистика недоступна');$('stats-total-note').textContent=error.message;
+    }
   }
   // A new period, filter, computer or project keeps the shown numbers until
   // the new ones arrive, so the blocks do not collapse and grow again.
@@ -2762,7 +2898,14 @@
     // The card follows the numbers on screen, not the filter still loading.
     $('stats-computers-card').hidden=stats?!!stats.forComputer:!!computerFilter;
     setStatsBusy();
-    $('stats-foot').textContent=project?tr('Учитываются задачи выбранного проекта, известные этому компьютеру. Задача попадает в день, когда закончилась.'):'';
+    $('stats-project-filter').hidden=!splitProjects.length;
+    projectOptions($('stats-project'),[['',tr('Выбранные проекты')],...splitProjects.map(name=>[name,projectTitle(name)])],statsProject);
+    const statsNote=splitProjects.length&&!statsProject?
+      tr('Учитываются задачи выбранных проектов, известные этому компьютеру. Задача попадает в день, когда закончилась.'):
+      tr('Учитываются задачи выбранного проекта, известные этому компьютеру. Задача попадает в день, когда закончилась.');
+    const changingProjects=!!stats&&!matchesStatsProject(stats,statsProjectScope());
+    $('stats-foot').textContent=project?(changingProjects?tr('Загрузка статистики…'):statsNote):'';
+    $('stats-top').inert=changingProjects;
     $('stats-agent').value=statsAgent;
     root.querySelectorAll('[data-stats-sort]').forEach(b=>{
       const down=b.dataset.statsSort===statsSort,up=b.dataset.statsReverse===statsSort;
@@ -2811,7 +2954,7 @@
         const stamp=el('time',date.toLocaleDateString(amLocale,{day:'numeric',month:'short'})+' '+clock(task.at));
         stamp.dateTime=task.at;when.append(stamp);
       }
-      const detail=[task.project,shortNames[task.agent]||task.agent,task.model&&modelName(task.model),task.computer&&tr('на ')+task.computer].filter(Boolean).join(' ');
+      const detail=[task.project&&projectTitle(task.project),shortNames[task.agent]||task.agent,task.model&&modelName(task.model),task.computer&&tr('на ')+task.computer].filter(Boolean).join(' ');
       words.append(el('span',task.title||tr('Без названия'),'am-stats-task-title'),el('span',detail,'am-small am-muted'));
       const titleCell=el('td');titleCell.append(words);
       const duration=el('td','—','am-stats-value am-muted');
@@ -2824,11 +2967,18 @@
       row.append(when,titleCell,duration,tokens);
       words.title=(!task.usage_missing&&typeof task.input_tokens==='number'?usageLong(task)+'\n':'')+tr('Открыть задачу');
       row.addEventListener('click',()=>{
+        if(task.project&&task.project!==project&&splitProjects.includes(task.project)){
+          show('tasks');selectProject(task.project,task.id);return;
+        }
         selectedTask=task.id;selectedShared=null;feed=null;feedSignature='';show('tasks');refresh();
       });
       top.append(row);
     }
   }
+  $('stats-project').addEventListener('change',()=>{
+    const before=statsProjectScope();
+    statsProject=$('stats-project').value;updateStatsProjectScope(before);
+  });
   $('stats-agent').addEventListener('change',()=>{statsAgent=$('stats-agent').value;remember('messenger-stats-agent',statsAgent);statsModel='';reloadStats();});
   $('stats-model').addEventListener('change',()=>{statsModel=$('stats-model').value;reloadStats();});
   $('stats-export').addEventListener('click',exportStats);
@@ -3644,11 +3794,39 @@
     const label=expanded?tr('Скрыть список задач'):tr('Показать список задач');$('list-toggle').setAttribute('aria-label',label);$('list-toggle').title=label;
     $('task-panel').hidden=!expanded;$('task-layout').classList.toggle('am-queue-collapsed',!expanded);
   });
-  $('project-select').addEventListener('change',()=>{
-    const value=$('project-select').value;
-    if(value==='__new'){$('project-select').value=view?.project||'__new';syncSelects();openProjectDialog();return;}
-    setProject(value);remember('messenger-project',value);selectedTask='';selectedShared=null;feed=null;feedSignature='';viewSignature='';taskHistory=null;if($('device-menu')?.matches(':popover-open'))$('device-menu').hidePopover();renderMachines();if(tab==='agents')renderAgents();renderTaskList();renderThread();refresh();
+  function selectProject(name,task=''){
+    setProject(name);remember('messenger-project',name);
+    selectedTask=task;selectedShared=null;feed=null;feedSignature='';viewSignature='';taskHistory=null;topTaskScope='';
+    if($('device-menu')?.matches(':popover-open'))$('device-menu').hidePopover();
+    renderProjects();renderMachines();if(tab==='agents')renderAgents();renderTaskList();renderThread();loadProjectActivity();refresh();
+  }
+  $('split-projects').addEventListener('click',()=>{
+    if(splitProjects.length){
+      remember('messenger-second-project',passiveProject());
+      updateSplitProjects([]);
+    }else{
+      const options=(view?.projects||[]).filter(p=>p.name!==project);
+      if(!project||!options.length)return;
+      const saved=recall('messenger-second-project');
+      updateSplitProjects([project,options.find(p=>p.name===saved)?.name||options[0].name]);
+    }
+    renderProjects();renderMachines();loadProjectActivity();
   });
+  for(const [index,id] of ['project-select','project-select-second'].entries()){
+    $(id).addEventListener('change',()=>{
+      const name=$(id).value;
+      if(name==='__new'){renderProjects();openProjectDialog();return;}
+      if(!name)return;
+      if(!splitProjects.length){selectProject(name);return;}
+      if(splitProjects[index]===name)return;
+      const active=splitProjects[index]===project;
+      const next=[...splitProjects];next[index]=name;
+      updateSplitProjects(next);
+      if(active)selectProject(name);
+      else{renderProjects();renderMachines();loadProjectActivity();}
+      remember('messenger-second-project',passiveProject());
+    });
+  }
   $('agent-filter').addEventListener('change',()=>{taskHistory=null;renderTaskList();if(view?.history_paged)refresh();});
   // The sidebar and the task list are as wide as the owner drags them (T-063).
   // A double click or Home restores the usual width; the width is remembered.
@@ -3675,8 +3853,11 @@
       event.preventDefault();
     });
     pane.append(handle);
+    return handle;
   }
-  splitter(root.querySelector('.am-sidebar'),tr('Ширина левой панели'),'--am-nav',248,160,420,1);
+  const sidebar=root.querySelector('.am-sidebar'),sidebarWidth=tr('Ширина левой панели');
+  splitter(sidebar,sidebarWidth,'--am-nav',248,160,420,1).classList.add('am-nav-splitter');
+  splitter(sidebar,sidebarWidth,'--am-nav-split',384,300,480,1).classList.add('am-projects-splitter');
   splitter($('task-panel'),tr('Ширина списка задач'),'--am-queue',290,200,520,-1);
   // A click on empty space in the sidebar shows all computers' tasks again.
   root.querySelector('.am-sidebar').addEventListener('click',event=>{if(computerFilter&&!event.target.closest('.am-machine-card,.am-project,.am-side-bottom,.am-splitter,button,select,input,a,[popover]'))clearComputer();});
@@ -3784,7 +3965,7 @@
   loadServer();
   let initialTheme=window.messengerInitialTheme;
   if(!initialTheme)try{initialTheme=localStorage.getItem('messenger-theme');}catch(_){}
-  $('lang-select').value=amLang;enhanceSelect($('lang-select'));enhanceSelect($('theme-select'));enhanceSelect($('project-select'));enhanceSelect($('agent-filter'));enhanceSelect($('stats-agent'));enhanceSelect($('stats-model'));enhanceSelect($('host-scope'));enhanceSelect($('host-address'));
+  $('lang-select').value=amLang;enhanceSelect($('lang-select'));enhanceSelect($('theme-select'));enhanceSelect($('project-select'));enhanceSelect($('project-select-second'));enhanceSelect($('agent-filter'));enhanceSelect($('stats-project'));enhanceSelect($('stats-agent'));enhanceSelect($('stats-model'));enhanceSelect($('host-scope'));enhanceSelect($('host-address'));
   centreControlText();
   applyTheme(initialTheme||'system');
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{if(document.documentElement.dataset.theme==='system')applyTheme('system');});
@@ -3812,7 +3993,8 @@
   })).observe(chatFooter);
   show('tasks');loadMachineOrder();refresh();loadDiscovery();pollSetup();setInterval(()=>{if(setupPending)pollSetup();},2000);
   setInterval(updateTimers,1000);
+  setInterval(loadProjectActivity,3000);
   setInterval(()=>{if(!windowWatch||Date.now()-lastWindowRefresh>=15000)refresh();},2000);
   setInterval(loadDiscovery,60000);setInterval(()=>{if(tab==='stats'&&!document.hidden)loadStats();},15000);
-  document.addEventListener('visibilitychange',()=>{if(document.hidden)return;updateTimers();loadServer();if(tab==='stats')loadStats();});
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)return;updateTimers();loadServer();loadProjectActivity();if(tab==='stats')loadStats();});
 })();

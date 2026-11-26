@@ -37,6 +37,7 @@ func usageExportModel(selection string) *exportModel {
 
 type usageExportTask struct {
 	ID                string          `json:"task_id"`
+	Project           string          `json:"project,omitempty"`
 	OriginID          string          `json:"origin_task_id,omitempty"`
 	Title             string          `json:"title"`
 	Agent             string          `json:"agent"`
@@ -56,18 +57,14 @@ type usageExportTask struct {
 	local             bool
 }
 
-// WriteUsageExport saves the task records known to this computer for one
-// project. Its independent read connection can see committed tasks while the
+// WriteUsageExport saves the task records known to this computer for the
+// selected projects. Its independent read connection sees committed tasks while the
 // client writes, and does not queue behind the store's single connection.
 func (s *Store) WriteUsageExport(ctx context.Context, queue, dir string, since, at time.Time, computer string, filter UsageFilter) (string, int, error) {
-	var path string
-	var count int
-	err := s.readUsageProject(ctx, queue, filter.Project, func(tx *sql.Tx, broker string) error {
-		var err error
-		path, count, err = saveUsageExport(ctx, tx, dir, since, at, computer, broker, filter)
-		return err
-	})
-	return path, count, err
+	if !ValidUsageProjects(filter.Project, filter.Projects, false) {
+		return "", 0, fmt.Errorf("invalid project scope")
+	}
+	return s.saveUsageExport(ctx, queue, dir, since, at, computer, filter)
 }
 
 func (s *Store) readUsageProject(ctx context.Context, queue, project string, read func(*sql.Tx, string) error) error {
@@ -116,7 +113,7 @@ func (s *Store) readUsageProject(ctx context.Context, queue, project string, rea
 	return read(tx, broker)
 }
 
-func saveUsageExport(ctx context.Context, db *sql.Tx, dir string, since, at time.Time, computer, broker string, filter UsageFilter) (string, int, error) {
+func (s *Store) saveUsageExport(ctx context.Context, queue, dir string, since, at time.Time, computer string, filter UsageFilter) (string, int, error) {
 	file, err := os.CreateTemp(dir, ".messenger-statistics-"+at.Format("20060102-150405")+"-*.tmp")
 	if err != nil {
 		return "", 0, err
@@ -140,6 +137,10 @@ func saveUsageExport(ctx context.Context, db *sql.Tx, dir string, since, at time
 		"efficiency_time_basis":   "original_task_created_at",
 		"efficiency_model_filter": "initial_reported_else_requested",
 	}
+	if len(filter.Projects) != 0 {
+		delete(header, "project")
+		header["projects"] = filter.Projects
+	}
 	if _, err := out.WriteString("{\"metadata\":"); err != nil {
 		return "", 0, err
 	}
@@ -150,21 +151,32 @@ func saveUsageExport(ctx context.Context, db *sql.Tx, dir string, since, at time
 		return "", 0, err
 	}
 	n := 0
-	err = visitUsageExportTasks(ctx, db, since, computer, broker, filter, false, func(task usageExportTask) error {
-		if n != 0 {
-			if err := out.WriteByte(','); err != nil {
+	groups := []modelEfficiency{}
+	for _, project := range filter.projectNames() {
+		scope := UsageFilter{Project: project, Agent: filter.Agent, Model: filter.Model}
+		err := s.readUsageProject(ctx, queue, project, func(db *sql.Tx, broker string) error {
+			err := visitUsageExportTasks(ctx, db, since, computer, broker, scope, false, func(task usageExportTask) error {
+				if len(filter.Projects) != 0 {
+					task.Project = project
+				}
+				if n != 0 {
+					if err := out.WriteByte(','); err != nil {
+						return err
+					}
+				}
+				n++
+				return encoder.Encode(task)
+			})
+			if err != nil {
 				return err
 			}
+			projectGroups, err := scopedModelEfficiency(ctx, db, since, computer, broker, scope, len(filter.Projects) != 0)
+			groups = append(groups, projectGroups...)
+			return err
+		})
+		if err != nil {
+			return "", 0, err
 		}
-		n++
-		return encoder.Encode(task)
-	})
-	if err != nil {
-		return "", 0, err
-	}
-	groups, err := readModelEfficiency(ctx, db, since, computer, broker, filter)
-	if err != nil {
-		return "", 0, err
 	}
 	if _, err := out.WriteString("],\"model_efficiency\":"); err != nil {
 		return "", 0, err

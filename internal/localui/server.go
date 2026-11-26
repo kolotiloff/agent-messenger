@@ -490,6 +490,12 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			req.Cmd = "overview"
 		case "/api/server":
 			req.Cmd, req.Action = "server", "status"
+		case "/api/project-activity":
+			req.Cmd, req.Project = "project-activity", r.URL.Query().Get("project")
+			if !core.ValidProjectName(req.Project) {
+				http.Error(w, "invalid project", http.StatusBadRequest)
+				return
+			}
 		case "/api/window-changes":
 			q := r.URL.Query()
 			req.Cmd, req.Alias, req.MessageID = "window-changes", q.Get("project"), q.Get("task")
@@ -517,7 +523,8 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 		case "/api/usage-stats", "/api/usage-efficiency":
 			req.Cmd = strings.TrimPrefix(r.URL.Path, "/api/")
 			req.Project = r.URL.Query().Get("project")
-			if (req.Project != "" || req.Cmd == "usage-efficiency") && !core.ValidProjectName(req.Project) {
+			req.Projects = r.URL.Query()["projects"]
+			if !core.ValidUsageProjects(req.Project, req.Projects, req.Cmd == "usage-stats") {
 				http.Error(w, "invalid project", http.StatusBadRequest)
 				return
 			}
@@ -608,7 +615,7 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			status := *response.Status
 			status.Detail = ""
 			writeJSON(w, status)
-		case "overview", "window-view", "task-feed", "task-history", "window-changes", "server", "usage-stats", "usage-efficiency":
+		case "overview", "window-view", "project-activity", "task-feed", "task-history", "window-changes", "server", "usage-stats", "usage-efficiency":
 			writeRaw(w, response.Overview)
 		case "timeline":
 			writeRaw(w, response.Timeline)
@@ -676,17 +683,18 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 	switch path {
 	case "/api/usage-export":
 		var in struct {
-			Project  string `json:"project"`
-			Period   string `json:"period"`
-			Computer string `json:"computer"`
-			Agent    string `json:"agent"`
-			Model    string `json:"model"`
+			Project  string   `json:"project"`
+			Projects []string `json:"projects"`
+			Period   string   `json:"period"`
+			Computer string   `json:"computer"`
+			Agent    string   `json:"agent"`
+			Model    string   `json:"model"`
 		}
-		if decoder.Decode(&in) != nil || !core.ValidProjectName(in.Project) || !validTaskHistoryFilter(in.Agent, in.Computer) ||
+		if decoder.Decode(&in) != nil || !core.ValidUsageProjects(in.Project, in.Projects, false) || !validTaskHistoryFilter(in.Agent, in.Computer) ||
 			(in.Period != "day" && in.Period != "week" && in.Period != "month") || len(in.Model) > 128 || strings.ContainsAny(in.Model, "\x00\r\n") {
 			return control.Request{}, false
 		}
-		return control.Request{Cmd: "usage-export", Project: in.Project, Alias: in.Period, Text: in.Computer, Provider: in.Agent, Model: in.Model}, true
+		return control.Request{Cmd: "usage-export", Project: in.Project, Projects: in.Projects, Alias: in.Period, Text: in.Computer, Provider: in.Agent, Model: in.Model}, true
 	case "/api/project-create", "/api/project-folder":
 		var in struct {
 			Name   string `json:"name"`

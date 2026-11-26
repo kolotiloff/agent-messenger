@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-26 — Codex (T-316 project sidebar)
+
+- Added the split sidebar for two selected projects and a project filter in Statistics. One computer card contains both agent columns, and the window keeps one active conversation. Model comparison preserves per-project cohorts, and a combined JSON export identifies each task's project.
+- Chromium and WebKit exercise the actual window assets with fictional responses. Go fixtures verify the two-project totals, activity, comparison and export, including exclusion of a third project and atomic publication when a selected project cannot be read.
+
 ## 2026-11-26 — Codex (T-309–T-313 release)
 
 - Merged [PR #210](https://github.com/kolotiloff/agent-messenger/pull/210) with a source tree identical to the verified PR head. Published [1.0.5, build 108](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.5-preview.108) from `4c3c685df2d9e3aa2502deb858b6343c6452294e`. All four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45711532504) passed, including the signed public update channel on five targets.

@@ -5,6 +5,32 @@ import (
 	"database/sql"
 )
 
+// ProjectActivity is the sidebar snapshot for an inactive project.
+type ProjectActivity struct {
+	Project string         `json:"project"`
+	Tasks   []WindowTask   `json:"tasks"`
+	Shared  []NetPeerTasks `json:"shared"`
+}
+
+func (s *Store) ProjectActivity(project string) (ProjectActivity, error) {
+	out := ProjectActivity{Project: project}
+	scoped, err := s.projectStore(project)
+	if err != nil {
+		return out, err
+	}
+	out.Tasks, err = scoped.windowTaskRows(`WHERE project=? AND hidden_at IS NULL AND state IN ('running','waiting_owner','waiting_coordinator')
+ ORDER BY created_at DESC,rowid DESC`, project)
+	if err != nil {
+		return out, err
+	}
+	err = s.tx(func(tx *sql.Tx) error {
+		var err error
+		out.Shared, err = projectNetTasks(tx, project, s.split != nil)
+		return err
+	})
+	return out, err
+}
+
 // splitWindowAgents combines machine registration with only the selected
 // project's work. Global availability and worker presence are read by
 // separate network operations.

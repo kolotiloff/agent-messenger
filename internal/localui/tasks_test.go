@@ -56,6 +56,13 @@ func TestTaskWindowRoutes(t *testing.T) {
 	if code, _ := do("GET", "/api/task-history?project=Game", ""); code != 400 {
 		t.Fatalf("missing history cursor %d", code)
 	}
+	if code, body := do("GET", "/api/project-activity?project=Main%20Game", ""); code != 200 ||
+		got[len(got)-1].Cmd != "project-activity" || got[len(got)-1].Project != "Main Game" || body == "" {
+		t.Fatalf("project activity %d %q %+v", code, body, got[len(got)-1])
+	}
+	if code, _ := do("GET", "/api/project-activity?project=Game%2FSite", ""); code != 400 {
+		t.Fatalf("invalid activity project: %d", code)
+	}
 	if code, _ := do("POST", "/api/task-hide-history", `{"project":"Game","agent":"codex","computer":"local"}`); code != 200 || got[len(got)-1].Cmd != "task-hide-history" || got[len(got)-1].Alias != "Game" {
 		t.Fatalf("hide filtered history %d %+v", code, got[len(got)-1])
 	}
@@ -70,6 +77,17 @@ func TestTaskWindowRoutes(t *testing.T) {
 	}
 	if code, _ := do("GET", "/api/usage-stats?period=week&project=Game%2FSite", ""); code != 400 {
 		t.Fatalf("invalid statistics project: %d", code)
+	}
+	for _, path := range []string{"/api/usage-stats", "/api/usage-efficiency"} {
+		if code, _ := do("GET", path+"?period=week&projects=Game&projects=Main%20Site", ""); code != 200 ||
+			strings.Join(got[len(got)-1].Projects, ",") != "Game,Main Site" {
+			t.Fatalf("selected projects: %d %+v", code, got[len(got)-1])
+		}
+		for _, scope := range []string{"projects=Game", "projects=Game&projects=Game", "projects=Game&projects=Main%2FSite", "project=Other&projects=Game&projects=Site"} {
+			if code, _ := do("GET", path+"?period=week&"+scope, ""); code != 400 {
+				t.Fatalf("accepted invalid project scope %q: %d", scope, code)
+			}
+		}
 	}
 	if code, _ := do("GET", "/api/usage-stats?period=week&agent=codex&model=gpt-6.2-sol%5Beffort%3Dlow%5D", ""); code != 200 || got[len(got)-1].Provider != "codex" || got[len(got)-1].Model != "gpt-6.2-sol[effort=low]" {
 		t.Fatalf("usage filter %d %+v", code, got[len(got)-1])
@@ -92,6 +110,13 @@ func TestTaskWindowRoutes(t *testing.T) {
 	}
 	if code, _ := do("POST", "/api/usage-export", `{"project":"Game","period":"all"}`); code != 400 {
 		t.Fatalf("export with unknown period: %d", code)
+	}
+	if code, _ := do("POST", "/api/usage-export", `{"projects":["Game","Site"],"period":"week"}`); code != 200 ||
+		strings.Join(got[len(got)-1].Projects, ",") != "Game,Site" {
+		t.Fatalf("selected projects export: %d %+v", code, got[len(got)-1])
+	}
+	if code, _ := do("POST", "/api/usage-export", `{"projects":["Game","Game"],"period":"week"}`); code != 400 {
+		t.Fatalf("export with repeated project: %d", code)
 	}
 	code, _ := do("POST", "/api/usage-export", `{"project":"Game","period":"week","computer":"dev-1","agent":"codex","model":"gpt-6.2-sol[effort=low]"}`)
 	if req := got[len(got)-1]; code != 200 || req.Cmd != "usage-export" || req.Project != "Game" || req.Alias != "week" ||

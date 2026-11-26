@@ -1,11 +1,73 @@
 package core
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 )
+
+func TestSelectedProjectStatsAndActivity(t *testing.T) {
+	f := newTaskFixture(t)
+	at := time.Now().UTC()
+	active := f.start(t, "sidebar-active", "codex", "Working in Game")
+	for _, name := range []string{"Site", "Other"} {
+		if err := f.st.CreateProject(name, t.TempDir()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i, name := range []string{"Game", "Site", "Other"} {
+		stamp := at.Add(time.Duration(i) * -time.Minute).Format(time.RFC3339Nano)
+		if _, err := f.st.db.Exec(`INSERT INTO tasks(id,project,op_id,computer,provider,cli_path,environment,profile,folder,title,text,state,
+ created_at,updated_at,finished_at,usage_seen,usage_input,ran_model)
+ VALUES (?,?,?,'local','codex','','','','','Completed','','done',?,?,?,1,?,'test-model')`,
+			"done-"+name, name, "done-"+name, stamp, stamp, stamp, (i+1)*100); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ctx := context.Background()
+	layout := filepath.Join(t.TempDir(), "layout")
+	if err := StageProjectMigration(ctx, f.path, layout); err != nil {
+		t.Fatal(err)
+	}
+	split, err := openSplitStore(ctx, layout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer split.Close()
+	for _, tc := range []struct {
+		name  string
+		store *Store
+	}{{"legacy", f.st}, {"split", split}} {
+		t.Run(tc.name, func(t *testing.T) {
+			filter := UsageFilter{Projects: []string{"Game", "Site"}, Agent: "codex", Model: "test-model"}
+			since := at.Add(-time.Hour)
+			stats, err := tc.store.UsageStatsFiltered(since, time.UTC, "", filter)
+			if err != nil || !slices.Equal(stats.Projects, filter.Projects) || stats.Total.Tasks != 2 ||
+				stats.Total.Tokens != 300 || len(stats.Top) != 2 || stats.Top[0].Project != "Site" ||
+				len(stats.Recent) != 2 || stats.Recent[0].Project != "Game" {
+				t.Fatalf("incorrect selected-project statistics: %+v, %v", stats, err)
+			}
+			groups, err := tc.store.UsageEfficiency(ctx, f.path, since, "", UsageFilter{Projects: filter.Projects})
+			if err != nil || !slices.ContainsFunc(groups, func(g modelEfficiency) bool { return g.Project == "Game" }) ||
+				!slices.ContainsFunc(groups, func(g modelEfficiency) bool { return g.Project == "Site" }) ||
+				slices.ContainsFunc(groups, func(g modelEfficiency) bool { return g.Project == "Other" }) {
+				t.Fatalf("incorrect selected-project efficiency: %+v, %v", groups, err)
+			}
+			game, err := tc.store.ProjectActivity("Game")
+			if err != nil || game.Project != "Game" || len(game.Tasks) != 1 || game.Tasks[0].ID != active {
+				t.Fatalf("incorrect Game activity: %+v, %v", game, err)
+			}
+			site, err := tc.store.ProjectActivity("Site")
+			if err != nil || site.Project != "Site" || len(site.Tasks) != 0 {
+				t.Fatalf("another project or completed task leaked into activity: %+v, %v", site, err)
+			}
+		})
+	}
+}
 
 func TestUsageRanksBeforeLimitingTheList(t *testing.T) {
 	f := newTaskFixture(t)

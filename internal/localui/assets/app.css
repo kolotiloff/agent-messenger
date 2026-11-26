@@ -124,6 +124,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-mono:ui-monospace,SFMono-Regular,Menlo,monospace;
   --am-scrollbar:6px;
   --am-nav:248px;
+  --am-nav-split:384px;
 
   height:100%; min-height:0; max-width:1250px; margin:auto;
   font:400 var(--am-text-m)/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
@@ -255,10 +256,24 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-brand { font-size:var(--am-text-l); font-weight:500; }
 #am-concept .am-demo { padding:var(--am-gap-line) var(--am-space-2); border-radius:var(--am-radius-xs); background:var(--am-soft); color:var(--am-muted); font-size:var(--am-text-xs); }
 #am-concept .am-shell { display:grid; grid-template-columns:var(--am-nav) minmax(0,1fr); flex:1; min-height:0; }
+#am-concept.am-split-projects .am-shell { grid-template-columns:min(var(--am-nav-split),45%) minmax(0,1fr); }
 
 /* Sidebar */
 #am-concept .am-sidebar { position:relative; display:flex; flex-direction:column; gap:var(--am-gap-region); min-height:0; padding:var(--am-space-4) var(--am-space-3) var(--am-space-3); background:var(--am-side); border-right:1px solid var(--am-line); overflow:hidden; }
 #am-concept .am-project .am-select-trigger { width:100%; }
+#am-concept .am-project-heading { display:flex; align-items:center; justify-content:space-between; margin-bottom:var(--am-gap-control); }
+#am-concept .am-project-heading .am-label { margin-bottom:0; }
+#am-concept #split-projects { color:var(--am-muted); }
+#am-concept #split-projects[aria-pressed=true] { color:var(--am-text); background:var(--am-selected); }
+#am-concept #split-projects svg { width:var(--am-text-xl); height:var(--am-text-xl); }
+#am-concept :is(.am-project-columns,.am-machine-projects) { display:grid; grid-template-columns:minmax(0,1fr); gap:var(--am-gap-control); }
+#am-concept.am-split-projects :is(.am-project-columns,.am-machine-projects) { grid-template-columns:repeat(2,minmax(0,1fr)); }
+#am-concept .am-project-columns [data-active-project] .am-select-trigger { border-color:var(--am-muted); }
+#am-concept .am-machine-project { min-width:0; position:relative; border-radius:var(--am-radius-xs); padding:var(--am-space-1); cursor:pointer; }
+#am-concept .am-machine-project + .am-machine-project::before { content:""; position:absolute; inset-block:var(--am-space-1); inset-inline-start:calc(-1 * var(--am-space-1)); border-inline-start:1px solid color-mix(in srgb,var(--am-line) 58%,var(--am-muted)); pointer-events:none; }
+#am-concept :is(.am-project-columns,.am-machine-projects) > * { min-width:0; }
+#am-concept:not(.am-split-projects) .am-projects-splitter,
+#am-concept.am-split-projects .am-nav-splitter { display:none; }
 #am-concept .am-computers { display:flex; flex-direction:column; min-height:0; }
 #am-concept .am-machines { display:flex; flex-direction:column; gap:var(--am-space-1); min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; margin-right:calc(-1 * var(--am-space-3)); padding-right:calc(var(--am-space-3) - var(--am-gutter, 0px)); }
 #am-concept .am-machine-card { flex:none; border:1px solid var(--am-line); border-radius:var(--am-radius-s); background:var(--am-soft); overflow:hidden; }
@@ -721,6 +736,11 @@ body.am-native #am-concept .am-titlebar { display:none; }
   #am-concept .am-shell { grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); }
   #am-concept .am-sidebar { flex-direction:row; align-items:center; gap:var(--am-gap-content); padding:var(--am-pad-compact); border-right:0; border-bottom:1px solid var(--am-line); overflow:visible; }
   #am-concept .am-project .am-label, #am-concept .am-computers { display:none; }
+  #am-concept .am-project-heading:has(button[hidden]) { display:none; }
+  #am-concept .am-project-heading:has(button:not([hidden])) .am-label { display:block; }
+  #am-concept.am-split-projects .am-shell { grid-template-columns:minmax(0,1fr); }
+  #am-concept.am-split-projects .am-sidebar { display:grid; grid-template-columns:minmax(0,1fr) auto; }
+  #am-concept.am-split-projects .am-computers { display:flex; grid-area:2 / 1 / auto / -1; max-height:20vh; }
   #am-concept .am-side-bottom { flex-direction:row; align-items:center; gap:var(--am-gap-control); min-width:0; margin:0 0 0 auto; padding:0; border:0; }
   #am-concept .am-side-bottom > button { width:auto; }
   #am-concept .am-main { --am-pane-inset:var(--am-space-3); padding:var(--am-space-3) 0; }

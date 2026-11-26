@@ -111,6 +111,13 @@ func (s *Supervisor) WindowTaskHistory(project, before, agent, computer string) 
 	return s.store.WindowTaskHistory(project, before, agent, computer)
 }
 
+func (s *Supervisor) ProjectActivity(project string) (any, error) {
+	if !core.ValidProjectName(project) {
+		return nil, fmt.Errorf("invalid project")
+	}
+	return s.store.ProjectActivity(project)
+}
+
 func (s *Supervisor) HideWindowHistory(project, agent, computer string) error {
 	return s.store.HideWindowHistory(project, agent, computer)
 }
@@ -220,44 +227,45 @@ func (s *Supervisor) UsageStats(period, computer string) (any, error) {
 
 // UsageStatsFiltered is UsageStats for one agent and one model (T-201).
 func (s *Supervisor) UsageStatsFiltered(period, computer, agent, model string) (any, error) {
-	return s.UsageStatsForProject("", period, computer, agent, model)
+	return s.UsageStatsForProjects("", nil, period, computer, agent, model)
 }
 
-// UsageStatsForProject scopes the window statistics when a project is selected.
-func (s *Supervisor) UsageStatsForProject(project, period, computer, agent, model string) (any, error) {
-	if project != "" && !core.ValidProjectName(project) {
-		return nil, fmt.Errorf("invalid project")
-	}
+// UsageStatsForProjects scopes the statistics to the projects selected in the window.
+func (s *Supervisor) UsageStatsForProjects(project string, projects []string, period, computer, agent, model string) (any, error) {
 	since, err := usagePeriodStart(period, time.Now())
 	if err != nil {
 		return nil, err
 	}
-	return s.store.UsageStatsFiltered(since, time.Local, computer, core.UsageFilter{Project: project, Agent: agent, Model: model})
+	return s.store.UsageStatsFiltered(since, time.Local, computer, core.UsageFilter{Project: project, Projects: projects, Agent: agent, Model: model})
 }
 
-// ExportUsage writes one project's filtered task history to a local JSON file.
-func (s *Supervisor) ExportUsage(ctx context.Context, project, period, computer, agent, model string) (string, int, error) {
+// ExportUsage writes the selected projects' filtered history to a local JSON file.
+func (s *Supervisor) ExportUsage(ctx context.Context, project string, projects []string, period, computer, agent, model string) (string, int, error) {
 	at := time.Now()
 	since, err := usagePeriodStart(period, at)
 	if err != nil {
 		return "", 0, err
 	}
 	return s.store.WriteUsageExport(ctx, filepath.Join(s.root, dbName), core.FeedbackDir(s.root), since, at, computer,
-		core.UsageFilter{Project: project, Agent: agent, Model: model})
+		core.UsageFilter{Project: project, Projects: projects, Agent: agent, Model: model})
 }
 
 // UsageEfficiency returns comparable model groups on the user's request.
-func (s *Supervisor) UsageEfficiency(ctx context.Context, project, period, computer, agent, model string) (any, error) {
+func (s *Supervisor) UsageEfficiency(ctx context.Context, project string, projects []string, period, computer, agent, model string) (any, error) {
 	since, err := usagePeriodStart(period, time.Now())
 	if err != nil {
 		return nil, err
 	}
 	groups, err := s.store.UsageEfficiency(ctx, filepath.Join(s.root, dbName), since, computer,
-		core.UsageFilter{Project: project, Agent: agent, Model: model})
+		core.UsageFilter{Project: project, Projects: projects, Agent: agent, Model: model})
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"project": project, "groups": groups[:min(len(groups), 100)], "total_groups": len(groups)}, nil
+	out := map[string]any{"project": project, "groups": groups[:min(len(groups), 100)], "total_groups": len(groups)}
+	if len(projects) != 0 {
+		out["projects"] = projects
+	}
+	return out, nil
 }
 
 func usagePeriodStart(period string, at time.Time) (time.Time, error) {

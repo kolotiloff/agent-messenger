@@ -8,6 +8,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+**T-316 is implemented on `codex/t316-split-project-sidebar` for a future release.** The window can show two distinct project selections in the sidebar. Each computer keeps one card with project-specific agent activity side by side. The right pane displays one task conversation. Statistics default to the selected projects together and can be narrowed to either. D-221 records the activity read and JSON scope. The browser checks use fictional data and cover Chromium and WebKit. Store fixtures cover the original database and the per-project layout. Release packaging is pending.
+
 **[1.0.5, build 108](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.5-preview.108) is released** from `4c3c685df2d9e3aa2502deb858b6343c6452294e` as of 2026-11-26 (Europe/Moscow). [PR #210](https://github.com/kolotiloff/agent-messenger/pull/210) brings T-309 through T-313 together. All four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45711532504) passed, including the public signed upgrade path from 0.99 on all five targets. The release contains 22 assets.
 
 On Apple Silicon, the published 1.0.4 client found and downloaded 1.0.5 through the normal channel in an isolated home. The published 1.0.5 client restarted the old background client through the desktop bridge, retained two test projects' task histories and statistics, and exported each project separately. Both project databases passed SQLite integrity checks. The test used the extracted app package and left owner installations untouched.
