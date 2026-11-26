@@ -977,14 +977,15 @@
     if(!head.clientWidth)return;
     const [presence,name,roles,meta]=head.children;
     const style=getComputedStyle(head),gap=parseFloat(style.getPropertyValue('--am-space-1'));
-    const standardInset=parseFloat(style.getPropertyValue('--am-space-3'));
-    const available=head.clientWidth-2*standardInset;
+    const standardInset=2*parseFloat(style.getPropertyValue('--am-space-3'));
+    const insets=taskSidebarPreview?parseFloat(style.paddingInlineStart)+parseFloat(style.paddingInlineEnd):standardInset;
+    const available=head.clientWidth-insets;
     const range=document.createRange();
     range.selectNodeContents(name);
     const nameWidth=range.getBoundingClientRect().width;
     const markWidth=presence.getBoundingClientRect().width;
     const room=available-markWidth-parseFloat(getComputedStyle(presence).marginInlineEnd)
-      -(meta?.getBoundingClientRect().width||0)-(head.children.length-1)*gap;
+      -(meta?.getBoundingClientRect().width||0)-(meta?3:2)*gap;
     const [full,short,icons]=roles.children;
     const form=full.getBoundingClientRect().width<=room-nameWidth?'full':
       short.getBoundingClientRect().width<=room-nameWidth?'short':
@@ -1027,31 +1028,36 @@
     if(!items.length)return;
     const disclosure=el('button',undefined,'am-sidebar-disclosure');disclosure.type='button';
     disclosure.dataset.sidebarFocus=JSON.stringify([computer]);
-    disclosure.append(svgIcon(['M9 6l6 6-6 6']));
+    const arrow=svgIcon(['M9 6l6 6-6 6']);
+    arrow.classList.add('am-sidebar-arrow');arrow.setAttribute('aria-hidden','true');
+    disclosure.append(arrow);
     function update(){
       body.hidden=collapsedComputers.has(computer);
       disclosure.setAttribute('aria-expanded',String(!body.hidden));
-      disclosure.setAttribute('aria-label',body.hidden?tr('Показать текущие задачи'):tr('Скрыть текущие задачи'));
+      const action=body.hidden?tr('Показать текущие задачи'):tr('Скрыть текущие задачи');
+      disclosure.setAttribute('aria-label',computerName(computer)+' — '+action);
     }
     disclosure.addEventListener('click',()=>{
       if(collapsedComputers.has(computer))collapsedComputers.delete(computer);
       else collapsedComputers.add(computer);
       update();
     });
-    head.prepend(disclosure);card.classList.add('am-sidebar-has-tasks');update();
+    head.append(disclosure);card.classList.add('am-sidebar-has-tasks');update();
     for(const {t,peer,name} of items){
       const row=el('button',undefined,'am-sidebar-task');row.type='button';
       const selection=peer?{peer:peer.peer,id:t.id}:null;
       row.dataset.sidebarFocus=JSON.stringify([name,peer?.peer||'',t.id]);
       row.setAttribute('aria-pressed',String(name===project&&(selection?selectedShared?.peer===selection.peer&&selectedShared?.id===selection.id:t.id===selectedTask)));
+      const title=el('span',undefined,'am-sidebar-task-title');
+      if(!sidebarProject)title.append(el('span',projectTitle(name)+', ','am-sidebar-task-project am-muted'));
+      title.append(t.title);
       const meta=el('span',undefined,'am-small am-muted am-sidebar-task-meta');
-      if(!sidebarProject)meta.append(projectTitle(name)+', ');
       const running=t.state==='running',model=sidebarTaskModel(peer?{...t,shared:true}:t);
       const identity=(shortNames[t.agent]||t.agent)+(model?' '+model:'');
       meta.append(el('span',identity+(running?'':', '+tr('ждёт ответа')),running?'am-status-run':'am-status-wait'));
       const from=taskStart(t);
       if(running&&Number.isFinite(Date.parse(from)))meta.append(elapsedLabel(from,', '));
-      row.append(el('span',t.title,'am-sidebar-task-title'),meta);
+      row.append(title,meta);
       row.addEventListener('click',()=>{
         if(tab!=='tasks')show('tasks');
         selectProject(name,selection?'':t.id,'',selection);
@@ -1317,6 +1323,9 @@
   }
   function computerName(id){
     return id==='local'?(view?.computer_name||tr('Этот компьютер')):(server?.peers||[]).find(p=>p.id===id)?.name||(view?.tasks||[]).find(t=>taskComputer(t)===id)?.remote?.name||'';
+  }
+  function computerOptions(){
+    return [['local',computerName('local')],...(server?.peers||[]).map(peer=>[peer.id,peer.name||peer.id])];
   }
   const taskHistories=new Map();
   let windowHistoryScope='';
@@ -2463,9 +2472,19 @@
       catch(error){showError(error);}
     });
   }
+  let agentComputer='local';
   function renderAgents(){
     const live=$('agents'),cards=live.cloneNode(false);
-    if(computerFilter&&computerFilter!=='local'){renderPeerAgents(cards);swapChildren(live,cards);return;}
+    if(taskSidebarPreview){
+      const options=computerOptions();
+      if(view?.computer_name)options[0][1]+=' ('+tr('Этот компьютер').toLocaleLowerCase(amLocale)+')';
+      if(!options.some(([id])=>id===agentComputer))agentComputer='local';
+      projectOptions($('agents-computer'),options,agentComputer);
+      $('agents-computer-filter').hidden=false;
+      syncSelects();
+    }
+    const computer=taskSidebarPreview?agentComputer:computerFilter;
+    if(computer&&computer!=='local'){renderPeerAgents(cards,computer);swapChildren(live,cards);return;}
     for(const provider of ['claude','codex','cursor']){
       const a=(view?.agents||[]).find(x=>x.agent===provider);
       const found=discovery.find(d=>d.provider===provider);
@@ -2560,9 +2579,9 @@
     renderAccessBar();
   }
   // Another computer's agents, as its reports show them: view only (T-076).
-  function renderPeerAgents(cards){
+  function renderPeerAgents(cards,computer){
     $('access-bar').hidden=true;
-    const peer=(server?.peers||[]).find(p=>p.id===computerFilter);
+    const peer=(server?.peers||[]).find(p=>p.id===computer);
     const fresh=!!peer&&peerFresh(peer);
     const busyTasks=busyTasksByComputer();
     cards.append(el('p',!peer?tr('Компьютер не найден в сети.'):fresh?tr('Только просмотр: агентов этого компьютера настраивают на нём самом.'):(peer.last_seen?tr('Нет связи. Был на связи ')+stamp(peer.last_seen)+'.':tr('Ещё не выходил на связь.')),'am-small am-muted am-peer-agents-note'));
@@ -2608,7 +2627,7 @@
   }
   // T-056: one «Любые команды» switch for every agent of this computer.
   function renderAccessBar(){
-    const agents=view?.agents||[],bar=$('access-bar');bar.hidden=!agents.length;
+    const agents=view?.agents||[],bar=$('access-bar');bar.hidden=!agents.length||(taskSidebarPreview&&agentComputer!=='local');
     const on=agents.filter(a=>a.full_access).length,all=!!agents.length&&on===agents.length;
     $('access-toggle').setAttribute('aria-checked',all?'true':on?'mixed':'false');
     $('access-title').textContent=on&&!all?tr('Любые команды: разрешены не всем'):tr('Любые команды');
@@ -2897,7 +2916,15 @@
     return h+tr(' ч')+(m%60?' '+m%60+tr(' мин'):'');
   }
   let statsProject='';
+  let statsComputer='';
+  const statsProjects=()=>view?.projects||[];
+  function statisticsComputer(){return taskSidebarPreview?statsComputer:computerFilter;}
   function statsProjectScope(){
+    if(taskSidebarPreview){
+      const names=statsProjects().map(entry=>entry.name);
+      if(names.includes(statsProject))return {project:statsProject};
+      return names.length>1?{projects:names}:{project:names[0]||''};
+    }
     if(splitProjects.length&&!statsProject)return {projects:splitProjects};
     return {project:statsProject||project};
   }
@@ -2921,7 +2948,7 @@
     if(!updateStatsProjectScope(before)&&tab==='stats'&&computerFilter!==oldComputer)reloadStats();
   }
   function statsFilters(){
-    return {...statsProjectScope(),period:statsPeriod,computer:computerFilter||'',agent:statsAgent,model:statsModel};
+    return {...statsProjectScope(),period:statsPeriod,computer:statisticsComputer(),agent:statsAgent,model:statsModel};
   }
   function statsQuery(filters){
     const {projects=[],...rest}=filters,query=new URLSearchParams(rest);
@@ -3103,11 +3130,20 @@
     refreshEfficiencyScope();
     root.querySelectorAll('[data-period]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.period===statsPeriod)));
     // The card follows the numbers on screen, not the filter still loading.
-    $('stats-computers-card').hidden=stats?!!stats.forComputer:!!computerFilter;
+    $('stats-computers-card').hidden=stats?!!stats.forComputer:!!statisticsComputer();
     setStatsBusy();
-    $('stats-project-filter').hidden=!splitProjects.length;
-    projectOptions($('stats-project'),[['',tr('Выбранные проекты')],...splitProjects.map(name=>[name,projectTitle(name)])],statsProject);
-    const statsNote=splitProjects.length&&!statsProject?
+    const projects=taskSidebarPreview?statsProjects().map(entry=>entry.name):splitProjects;
+    const projectChoice=projects.includes(statsProject)?statsProject:'';
+    $('stats-project-filter').hidden=taskSidebarPreview?false:!splitProjects.length;
+    const allProjectsLabel=taskSidebarPreview?tr('Все проекты'):tr('Выбранные проекты');
+    projectOptions($('stats-project'),[['',allProjectsLabel],...projects.map(name=>[name,projectTitle(name)])],projectChoice);
+    $('stats-computer-filter').hidden=!taskSidebarPreview;
+    if(taskSidebarPreview){
+      const computers=[['',tr('Все компьютеры')],...computerOptions()];
+      if(statsComputer&&!computers.some(([id])=>id===statsComputer))computers.push([statsComputer,computerName(statsComputer)||statsComputer]);
+      projectOptions($('stats-computer'),computers,statsComputer);
+    }
+    const statsNote=projects.length>1&&!projectChoice?
       tr('Учитываются задачи выбранных проектов, известные этому компьютеру. Задача попадает в день, когда закончилась.'):
       tr('Учитываются задачи выбранного проекта, известные этому компьютеру. Задача попадает в день, когда закончилась.');
     const changingProjects=!!stats&&!matchesStatsProject(stats,statsProjectScope());
@@ -3186,6 +3222,7 @@
     const before=statsProjectScope();
     statsProject=$('stats-project').value;updateStatsProjectScope(before);
   });
+  $('stats-computer').addEventListener('change',()=>{statsComputer=$('stats-computer').value;statsModel='';reloadStats();});
   $('stats-agent').addEventListener('change',()=>{statsAgent=$('stats-agent').value;remember('messenger-stats-agent',statsAgent);statsModel='';reloadStats();});
   $('stats-model').addEventListener('change',()=>{statsModel=$('stats-model').value;reloadStats();});
   $('stats-export').addEventListener('click',exportStats);
@@ -3295,6 +3332,7 @@
     if(invitation&&(!h.running||!(h.open_invitations||[]).includes(invitation.id)))hideInvitation();
     // Devices that joined this server are listed in the sidebar.
     renderMachines();
+    if(taskSidebarPreview&&tab==='agents')renderAgents();
     // The certificate fingerprint travels inside the invitation code and the
     // joining computer checks it itself, so the window does not show it.
     badge($('member-badge'),m.connected?(m.reachable||!m.checked_at?tr('Подключено'):tr('Нет связи')):tr('Не подключено'),m.connected?(m.reachable?'good':m.checked_at?'bad':''):'');
@@ -4185,6 +4223,10 @@
   let initialTheme=window.messengerInitialTheme;
   if(!initialTheme)try{initialTheme=localStorage.getItem('messenger-theme');}catch(_){}
   $('lang-select').value=amLang;enhanceSelect($('lang-select'));enhanceSelect($('theme-select'));enhanceSelect($('project-select'));enhanceSelect($('project-select-second'));enhanceSelect($('agent-filter'));enhanceSelect($('stats-project'));enhanceSelect($('stats-agent'));enhanceSelect($('stats-model'));enhanceSelect($('host-scope'));enhanceSelect($('host-address'));
+  if(taskSidebarPreview){
+    enhanceSelect($('stats-computer'));enhanceSelect($('agents-computer'));
+    $('agents-computer').addEventListener('change',()=>{agentComputer=$('agents-computer').value;renderAgents();});
+  }
   centreControlText();
   applyTheme(initialTheme||'system');
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{if(document.documentElement.dataset.theme==='system')applyTheme('system');});

@@ -83,11 +83,11 @@ func TestTaskWindowRoutes(t *testing.T) {
 		t.Fatalf("invalid statistics project: %d", code)
 	}
 	for _, path := range []string{"/api/usage-stats", "/api/usage-efficiency"} {
-		if code, _ := do("GET", path+"?period=week&projects=Game&projects=Main%20Site", ""); code != 200 ||
-			strings.Join(got[len(got)-1].Projects, ",") != "Game,Main Site" {
+		if code, _ := do("GET", path+"?period=week&projects=Game&projects=Main%20Site&projects=Tools", ""); code != 200 ||
+			strings.Join(got[len(got)-1].Projects, ",") != "Game,Main Site,Tools" {
 			t.Fatalf("selected projects: %d %+v", code, got[len(got)-1])
 		}
-		for _, scope := range []string{"projects=Game", "projects=Game&projects=Game", "projects=Game&projects=Main%2FSite", "project=Other&projects=Game&projects=Site"} {
+		for _, scope := range []string{"projects=Game", "projects=Game&projects=Site&projects=Game", "projects=Game&projects=Main%2FSite", "project=Other&projects=Game&projects=Site"} {
 			if code, _ := do("GET", path+"?period=week&"+scope, ""); code != 400 {
 				t.Fatalf("accepted invalid project scope %q: %d", scope, code)
 			}

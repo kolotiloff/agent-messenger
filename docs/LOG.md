@@ -7,6 +7,8 @@ One entry per work session, newest first. Write what was done, which tool did it
 - Started the chosen layout in the real window by emphasizing the local monitor outline without moving the label or changing the online dot. Added a loopback preview using the existing window fixtures. Chromium verified the fixture chat, the identical icon dimensions and alignment, the unchanged online dots and the right panel toggle.
 - Moved the chosen layout into the real window assets behind the preview flag. Chromium and WebKit exercised project scope, task opening across projects, gray selection, collapsible computer groups, the full task list, and the narrow layout. Widened spacing around command summaries to the section token and verified that grouped commands still expand.
 - Dragged the sidebar divider in Chromium and WebKit. Every title and subtitle kept its left edge as the extra space reduced wrapping.
+- Refined compact task spacing, moved the project picker beside the heading, and aligned the desktop browser header rows and dividers. Moved the project name before the task title in the All scope. Chromium and WebKit checked alignment, spacing, selection, project filtering and resizing on the loopback preview in [PR #228](https://github.com/kolotiloff/agent-messenger/pull/228).
+- Made computer headers full-width disclosure buttons and removed the dividers between groups. Added independent project and computer filters in Statistics and a local-first computer picker in Agents. Kept efficiency and export beside the Statistics filters as the pane narrows.
 
 ## 2026-11-27 — Codex (T-324 and T-325 release)
 

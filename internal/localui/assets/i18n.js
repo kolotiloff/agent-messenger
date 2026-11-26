@@ -31,6 +31,8 @@
   'Проект справа':'Right project',
   'Разделить проекты':'Split projects',
   'Проекты для статистики':'Projects for statistics',
+  'Компьютеры для статистики':'Computers for statistics',
+  'Все проекты':'All projects',
   'Выбранные проекты':'Selected projects',
   'Статусы недоступны':'Agent status unavailable',
   'Загружаем статусы…':'Loading agent status…',
