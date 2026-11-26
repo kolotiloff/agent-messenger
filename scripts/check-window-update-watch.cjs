@@ -12,7 +12,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
   try {
     const page = await browser.newPage({viewport: {width: 1120, height: 720}, deviceScaleFactor: 2, colorScheme: 'dark'});
     page.setDefaultTimeout(5000);
-    let cursor = 1, mark, wake, releaseCancel;
+    let cursor = 1, mark, wake, releaseCancel, downloadProgress;
     const cancellations=[];
     let cancelResponse='ok';
     function publish(state, version, id = 'upd-fixture') {
@@ -48,6 +48,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         '/api/window':{projects:[{name:'Проект'}],project:'Проект',computer_name:'Мак',agents:[],tasks:[task],coordinator:{},folder:'/fixture'},
         '/api/client-info':{client:'running',client_version:'1.0.0-preview.104'},
         '/api/self-update':{installed_version:'1.0.0-preview.104'},
+        '/api/update-progress':downloadProgress,
         '/api/server':server,
         '/api/task':{task,items:[]},
       };
@@ -142,6 +143,25 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     const indicator=installing.locator('.am-update-spin');
     assert.equal(await rotation(indicator),'am-update-spin');
     await shot('installing');
+    const center=await indicator.evaluate(svg=>{
+      const arc=svg.querySelector('path');
+      const length=arc.getTotalLength();
+      const radiusError=Math.max(...Array.from({length:24},(_,index)=>{
+        const point=arc.getPointAtLength(index*length/23);
+        return Math.abs(Math.hypot(point.x-12,point.y-12)-9);
+      }));
+      const control=svg.parentElement.getBoundingClientRect();
+      const animation=svg.getAnimations()[0];
+      animation.pause();
+      const offsets=[0,375,750,1125].map(time=>{
+        animation.currentTime=time;
+        const point=new DOMPoint(12,12).matrixTransform(svg.getScreenCTM());
+        return Math.hypot(point.x-control.left-control.width/2,point.y-control.top-control.height/2);
+      });
+      return {radiusError,offsets};
+    });
+    assert(center.radiusError<0.05,'the curved segment must stay on a centered circle');
+    assert(center.offsets.every(offset=>offset<0.5),'the rotation axis must stay centered in the control');
     await page.emulateMedia({reducedMotion:'reduce'});
     assert.equal(await rotation(indicator),'none');
     // The requester's inbox can confirm the install while the watch and
@@ -193,6 +213,48 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     assert.equal(await failure.locator('[title]').count(),0,'a fully visible reason must not show a duplicate tooltip');
     assert.equal(await indicator.count(),0,'a failed request must also stop the spinner');
     assert.equal(await arrow.count(),1,'a recorded failure leaves the older version eligible');
+    // Use the actual window with simulated macOS updater callbacks.
+    await page.emulateMedia({reducedMotion:'no-preference'});
+    await page.evaluate(()=>{
+      window.webkit??={};
+      window.webkit.messageHandlers??={};
+      window.webkit.messageHandlers.updates={postMessage(){window.installRequests=(window.installRequests||0)+1;}};
+      window.messengerUpdateStatus({installedVersion:'1.0.4-preview.107',version:'1.0.5-preview.108'});
+    });
+    const localUpdate=page.locator('#app-update-button');
+    const dialog=page.locator('#update-dialog');
+    const localSpin=localUpdate.locator('.am-update-spin');
+    const download=localUpdate.locator('svg').first();
+    await download.waitFor();
+    await localUpdate.click();
+    await dialog.waitFor();
+    assert(await localSpin.isVisible()&&await download.isHidden()&&await localUpdate.isDisabled());
+    assert.equal(await rotation(localSpin),'am-update-spin');
+    downloadProgress={downloading:true,version:'1.0.5-preview.108',done:32,total:100};
+    await page.evaluate(()=>window.messengerUpdateStatus({installedVersion:'1.0.4-preview.107',version:'1.0.5-preview.108',checking:true}));
+    await page.getByText('Загрузка… 32%',{exact:true}).waitFor();
+    const bounds=await dialog.boundingBox();
+    await page.mouse.click(bounds.x+bounds.width+10,bounds.y+10);
+    assert(await dialog.isVisible(),'a backdrop click must keep the active update dialog open');
+    assert.equal(await localUpdate.locator('svg:visible').count(),1,'download progress must keep exactly one visible glyph');
+    await page.keyboard.press('Escape');
+    assert(await dialog.isVisible());
+    downloadProgress=null;
+    await page.evaluate(()=>{
+      window.messengerUpdateStatus({installedVersion:'1.0.4-preview.107'});
+      window.messengerUpdateRun({phase:'installing'});
+    });
+    await page.getByText('Установка…',{exact:true}).waitFor();
+    assert(await localSpin.isVisible()&&await download.isHidden()&&await localUpdate.isDisabled());
+    await page.evaluate(()=>{
+      window.messengerUpdateRun({phase:'error',error:'Пакет не установлен'});
+      window.messengerUpdateStatus({installedVersion:'1.0.4-preview.107',version:'1.0.5-preview.108'});
+    });
+    await page.getByText('Пакет не установлен',{exact:true}).waitFor();
+    await page.mouse.click(bounds.x+bounds.width+10,bounds.y+10);
+    await dialog.waitFor({state:'hidden'});
+    assert(await download.isVisible()&&await localSpin.isHidden()&&await localUpdate.isEnabled());
+    assert.equal(await page.evaluate(()=>window.installRequests),1);
     console.log('Sidebar update, hover, exact cancellation and installation states passed.');
     await page.close();
     wake?.();

@@ -26,15 +26,16 @@ const SocketName = "control.sock"
 const MaxRequestBytes = 4 << 20
 
 type Request struct {
-	Cmd          string `json:"cmd"`
-	Alias        string `json:"alias,omitempty"`
-	MessageID    string `json:"message_id,omitempty"`
-	Sender       string `json:"sender,omitempty"`
-	Text         string `json:"text,omitempty"`
-	Action       string `json:"action,omitempty"`
-	Confirmation string `json:"confirmation,omitempty"`
-	Provider     string `json:"provider,omitempty"`
-	Project      string `json:"project,omitempty"`
+	Cmd          string   `json:"cmd"`
+	Alias        string   `json:"alias,omitempty"`
+	MessageID    string   `json:"message_id,omitempty"`
+	Sender       string   `json:"sender,omitempty"`
+	Text         string   `json:"text,omitempty"`
+	Action       string   `json:"action,omitempty"`
+	Confirmation string   `json:"confirmation,omitempty"`
+	Provider     string   `json:"provider,omitempty"`
+	Project      string   `json:"project,omitempty"`
+	Projects     []string `json:"projects,omitempty"`
 	// Model limits the statistics to one model (T-201).
 	Model          string `json:"model,omitempty"`
 	Environment    string `json:"environment,omitempty"`
@@ -286,6 +287,20 @@ func dispatchContext(ctx context.Context, handler Handler, request Request) Resp
 			return Response{Error: "picture unavailable"}
 		}
 		return Response{OK: true, Overview: raw}
+	case "project-activity":
+		h, ok := handler.(interface{ ProjectActivity(string) (any, error) })
+		if !ok {
+			return Response{Error: "project activity unsupported; update the background client"}
+		}
+		value, err := h.ProjectActivity(request.Project)
+		if err != nil {
+			return Response{Error: err.Error()}
+		}
+		raw, err := json.Marshal(value)
+		if err != nil {
+			return Response{Error: "project activity unavailable"}
+		}
+		return Response{OK: true, Overview: raw}
 	case "window-view", "task-feed", "task-history", "window-changes":
 		reader, ok := handler.(interface {
 			WindowView(string) (any, error)
@@ -340,12 +355,12 @@ func dispatchContext(ctx context.Context, handler Handler, request Request) Resp
 		return Response{OK: true, Overview: raw}
 	case "usage-efficiency":
 		h, ok := handler.(interface {
-			UsageEfficiency(ctx context.Context, project, period, computer, agent, model string) (any, error)
+			UsageEfficiency(context.Context, string, []string, string, string, string, string) (any, error)
 		})
 		if !ok {
 			return Response{Error: "неизвестная команда"}
 		}
-		value, err := h.UsageEfficiency(ctx, request.Project, request.Alias, request.Text, request.Provider, request.Model)
+		value, err := h.UsageEfficiency(ctx, request.Project, request.Projects, request.Alias, request.Text, request.Provider, request.Model)
 		if err != nil {
 			return Response{Error: err.Error()}
 		}
@@ -357,14 +372,14 @@ func dispatchContext(ctx context.Context, handler Handler, request Request) Resp
 	case "usage-stats":
 		var value any
 		var err error
-		if request.Project != "" {
+		if request.Project != "" || len(request.Projects) != 0 {
 			h, ok := handler.(interface {
-				UsageStatsForProject(project, period, computer, agent, model string) (any, error)
+				UsageStatsForProjects(string, []string, string, string, string, string) (any, error)
 			})
 			if !ok {
 				return Response{Error: "project statistics unsupported; update the background client"}
 			}
-			value, err = h.UsageStatsForProject(request.Project, request.Alias, request.Text, request.Provider, request.Model)
+			value, err = h.UsageStatsForProjects(request.Project, request.Projects, request.Alias, request.Text, request.Provider, request.Model)
 		} else if h, ok := handler.(interface {
 			UsageStatsFiltered(period, computer, agent, model string) (any, error)
 		}); ok {
@@ -459,12 +474,12 @@ func dispatchContext(ctx context.Context, handler Handler, request Request) Resp
 		return Response{OK: true}
 	case "usage-export":
 		h, ok := handler.(interface {
-			ExportUsage(ctx context.Context, project, period, computer, agent, model string) (string, int, error)
+			ExportUsage(context.Context, string, []string, string, string, string, string) (string, int, error)
 		})
 		if !ok {
 			return Response{Error: "неизвестная команда"}
 		}
-		path, n, err := h.ExportUsage(ctx, request.Project, request.Alias, request.Text, request.Provider, request.Model)
+		path, n, err := h.ExportUsage(ctx, request.Project, request.Projects, request.Alias, request.Text, request.Provider, request.Model)
 		if err != nil {
 			return Response{Error: err.Error()}
 		}

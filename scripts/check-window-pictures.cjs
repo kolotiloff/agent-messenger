@@ -43,6 +43,26 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     page.setDefaultTimeout(5000);
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
+    await page.addInitScript(() => {
+      window.amMacTitlebar = true;
+      window.webkit = {messageHandlers: {
+        titlebar: {postMessage: message => { window.testTitlebar = message; }},
+        updates: {postMessage() {}},
+      }};
+      // Exercise both browsers' ClipboardItem without replacing the owner's clipboard.
+      Object.defineProperty(navigator.clipboard, 'write', {value: async ([item]) => {
+        if (window.failPictureCopy) throw new Error('Clipboard is unavailable');
+        const blob = await item.getType('image/png');
+        const bitmap = await createImageBitmap(blob);
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = 1;
+        const context = canvas.getContext('2d');
+        context.drawImage(bitmap, 0, 0);
+        window.copiedPicture = {width: bitmap.width, height: bitmap.height, type: blob.type,
+          pixel: [...context.getImageData(0, 0, 1, 1).data]};
+        bitmap.close();
+      }});
+    });
     const now = Date.now();
     const at = minutes => new Date(now - minutes * 60000).toISOString();
     const tasks = {Frame: [], Site: []};
@@ -113,7 +133,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await route.fulfill({body: await fs.readFile(path.join(assets, filename)), contentType:
         filename.endsWith('.js') ? 'text/javascript' : filename.endsWith('.css') ? 'text/css' : 'text/html'});
     });
-    await page.goto('http://messenger.test/#fictional');
+    await page.goto('http://127.0.0.1/#fictional');
     await page.locator('.am-queue-list').getByText('Frame задача 3', {exact: true}).waitFor();
     const card = name => page.locator('#machines [data-machine-order]').filter({hasText: name}).first();
     const result = {engine};
@@ -129,6 +149,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     await page.locator('.am-queue-list').getByText('Frame задача 4', {exact: true}).click();
     const thumbs = page.locator('.am-picture');
     await thumbs.nth(1).waitFor();
+    await page.waitForFunction(() => window.testTitlebar?.zones.length > 0);
     await thumbs.first().click();
     const dialog = page.locator('#picture-dialog');
     await dialog.waitFor();
@@ -148,15 +169,42 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     await page.mouse.wheel(0, -400);
     await page.waitForFunction(() => document.getElementById('picture-zoom-reset').textContent !== '100%');
     assert.equal(await page.locator('#picture-zoom-out').isDisabled(), false);
+    const copy = page.locator('#picture-copy');
+    const copyStatus = page.locator('#picture-copy-status');
+    await copy.click();
+    await copyStatus.filter({hasText: /^Скопировано$/}).waitFor();
+    assert.deepEqual(await page.evaluate(() => window.copiedPicture),
+      {type: 'image/png', width: 1600, height: 1000, pixel: [0xe8, 0xee, 0xf7, 255]});
+    await page.locator('#picture-close').focus();
     await page.keyboard.press('ArrowRight');
     assert.equal(await page.locator('#picture-count').textContent(), '2 из 2');
     assert.equal(await page.locator('#picture-zoom-reset').textContent(), '100%');
+    assert.equal(await copyStatus.textContent(), '');
+    await page.evaluate(() => { window.failPictureCopy = true; });
+    await copy.click();
+    await copyStatus.filter({hasText: /^Не удалось скопировать$/}).waitFor();
+    await page.evaluate(() => { window.failPictureCopy = false; });
+    await copy.click();
+    await copyStatus.filter({hasText: /^Скопировано$/}).waitFor();
+    assert.deepEqual(await page.evaluate(() => window.copiedPicture),
+      {type: 'image/png', width: 1600, height: 1000, pixel: [0x1d, 0x24, 0x30, 255]});
     await page.locator('#picture-zoom-in').click();
     assert.equal(await page.locator('#picture-zoom-reset').textContent(), '150%');
     await page.locator('#picture-zoom-reset').click();
     assert.equal(await page.locator('#picture-zoom-reset').textContent(), '100%');
     await page.keyboard.press('Escape');
     await dialog.waitFor({state: 'hidden'});
+    await page.waitForFunction(() => window.testTitlebar?.zones.length > 0);
+
+    // The native title bar must pass the click through to the modal. After
+    // it closes, dragging the main window from the title bar works again.
+    await thumbs.first().click();
+    await dialog.waitFor();
+    await page.waitForFunction(() => window.testTitlebar?.zones.length === 0);
+    await page.locator('#picture-zoom-in').click();
+    await page.locator('#picture-close').click();
+    await dialog.waitFor({state: 'hidden'});
+    await page.waitForFunction(() => window.testTitlebar?.zones.length > 0);
     result.viewer = true;
 
     // A chosen computer that leaves the list stops filtering.

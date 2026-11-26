@@ -2,10 +2,12 @@ package localui
 
 import (
 	"context"
-	"github.com/kolotiloff/agent-messenger/internal/control"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/kolotiloff/agent-messenger/internal/control"
 )
 
 func TestWindowAuthorizationRequiresExplicitFixedEnvelope(t *testing.T) {
@@ -37,7 +39,7 @@ func TestWindowAuthorizationRequiresExplicitFixedEnvelope(t *testing.T) {
 	if w := postAction(h, "authorize-setup", body); w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	if len(got) != 1 || got[0] != (control.Request{Cmd: "authorize-setup", Alias: "chosen", Confirmation: "allow-model-calls"}) {
+	if len(got) != 1 || !reflect.DeepEqual(got[0], control.Request{Cmd: "authorize-setup", Alias: "chosen", Confirmation: "allow-model-calls"}) {
 		t.Fatal(got)
 	}
 }
