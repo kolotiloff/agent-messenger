@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-26 — Codex (T-323 separated project tiles)
+
+- Replaced the split computer card's tint with two rounded tiles separated by the project picker gap. The left tile carries computer identity, and the right carries update controls and version. Chromium and WebKit exercised matching colors, stable heights, hover, independent selection, the update dialog and single-project behavior.
+
 ## 2026-11-26 — Codex (T-320 through T-322 release)
 
 - Published [1.0.9, build 112](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.9-preview.112) from `654ba47651e7cfa5d7ae08af2accdee5b8f73e64` via [PR #221](https://github.com/kolotiloff/agent-messenger/pull/221). All four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45882901446) passed, including signed update delivery on all five supported targets. The release tag points to the checked revision and has 22 uploaded files.

@@ -815,17 +815,6 @@
   }
   let draggedMachine='',machineDrop=null;
   const machineList=$('machines');
-  function machineProjectColumn(card,clientX){
-    const rect=card.getBoundingClientRect();
-    return Number(clientX>=rect.left+rect.width/2);
-  }
-  machineList.addEventListener('pointermove',event=>{
-    if(!splitProjects.length||event.pointerType==='touch')return;
-    const card=event.target.closest('.am-machine-card');
-    if(!card)return;
-    const half=machineProjectColumn(card,event.clientX)?'right':'left';
-    if(machineList.dataset.projectHover!==half)machineList.dataset.projectHover=half;
-  });
   function clearMachineDrop(){
     if(machineDrop)delete machineDrop.card.dataset.dropEdge;
     machineDrop=null;
@@ -894,15 +883,10 @@
     if(!split){
       card.setAttribute('role','button');card.setAttribute('aria-pressed',String(computerFilter===id));
       card.title=computerFilter===id?tr('Показать все компьютеры'):tr('Показать только этот компьютер');
+      card.addEventListener('click',event=>{if(!event.target.closest('button'))filterComputer(id);});
     }
     card.dataset.machineOrder=orderKey;card.draggable=machineOrderLoaded;
     card.setAttribute('aria-keyshortcuts','Alt+ArrowUp Alt+ArrowDown');
-    card.addEventListener('click',event=>{
-      if(event.target.closest('button'))return;
-      if(!split){filterComputer(id);return;}
-      const column=machineProjectColumn(card,event.clientX);
-      card.querySelectorAll('.am-machine-project')[column]?.click();
-    });
     card.addEventListener('keydown',event=>{
       if(event.target!==card)return;
       if(!split&&(event.key==='Enter'||event.key===' ')){event.preventDefault();filterComputer(id);}
@@ -963,7 +947,7 @@
     const nameWidth=range.getBoundingClientRect().width;
     const markWidth=presence.getBoundingClientRect().width;
     const room=available-markWidth-parseFloat(getComputedStyle(presence).marginInlineEnd)
-      -meta.getBoundingClientRect().width-3*gap;
+      -(meta?.getBoundingClientRect().width||0)-(head.children.length-1)*gap;
     const [full,short,icons]=roles.children;
     const form=full.getBoundingClientRect().width<=room-nameWidth?'full':
       short.getBoundingClientRect().width<=room-nameWidth?'short':
@@ -1020,24 +1004,25 @@
     if(serverRole&&coordinatorRole)head.append(combinedMachineRoles(serverRole,coordinatorRole));
     else if(serverRole||coordinatorRole)head.append(serverRole||coordinatorRole);
     const version=el('div',undefined,'am-machine-version am-local-version');
-    const body=el('div',undefined,'am-machine-body');
-    machine.append(head,body);
-    // A paused agent is left out, as other computers leave it out of what
-    // they report (owner, 2026-11-18: two of three agents were off and the
-    // Mac still listed all three). One still running a task stays until it
-    // ends.
-    if(projectActivity.length)appendProjectCells(body,'local',projectActivity);
-    else{
-      const shownAgents=(view?.agents||[]).filter(a=>!a.paused||busyTasks.get('local\0'+a.agent)?.some(t=>activeStates.includes(t.state)));
-      const lines=agentLines(shownAgents,coordinator?.connected?(coordinator.client||''):null,online,'local',busyTasks);
-      if(!lines.children.length)lines.append(el('p',online?tr('Агенты не подключены'):tr('Нет связи'),'am-small am-muted'));
-      body.append(lines);
-    }
     const corner=el('div',undefined,'am-card-update am-local-update');
     const localMark=updateMark(null),localBusy=updateInProgress(localMark);
     if(localBusy)corner.append(updateControl(null,localMark));
     root.classList.toggle('am-local-update-pending',localBusy);
-    const localMeta=el('div',undefined,'am-machine-meta');localMeta.append(corner,version);head.append(localMeta);box.append(machine);
+    const localMeta=el('div',undefined,'am-machine-meta');localMeta.append(corner,version);
+    // A paused agent is left out, as other computers leave it out of what
+    // they report (owner, 2026-11-18: two of three agents were off and the
+    // Mac still listed all three). One still running a task stays until it
+    // ends.
+    if(projectActivity.length)appendProjectCells(machine,head,localMeta,'local',projectActivity);
+    else{
+      const body=el('div',undefined,'am-machine-body');
+      const shownAgents=(view?.agents||[]).filter(a=>!a.paused||busyTasks.get('local\0'+a.agent)?.some(t=>activeStates.includes(t.state)));
+      const lines=agentLines(shownAgents,coordinator?.connected?(coordinator.client||''):null,online,'local',busyTasks);
+      if(!lines.children.length)lines.append(el('p',online?tr('Агенты не подключены'):tr('Нет связи'),'am-small am-muted'));
+      body.append(lines);
+      head.append(localMeta);machine.append(head,body);
+    }
+    box.append(machine);
     // The other computers of this computer's network, with their agents.
     // Only the computer that runs the server can revoke one, from the
     // right-click menu.
@@ -1066,8 +1051,8 @@
       if(corner.children.length)meta.append(corner);
       if(installed)meta.append(el('span',versionName(installed),'am-version am-machine-version'));
       const peerBody=el('div',undefined,'am-machine-body');
-      name.append(meta);card.append(name,peerBody);
       if(revokeAsk===peer.id&&hosted.has(peer.id)){
+        name.append(meta);card.append(name,peerBody);
         peerBody.append(el('p',tr('Отозвать устройство? Вернуть его можно только новым приглашением.'),'am-small am-muted'));
         const actions=el('div',undefined,'am-actions am-device-confirm');
         const yes=el('button',tr('Отозвать'),'am-danger');yes.type='button';yes.dataset.key='revoke-yes-'+peer.id;
@@ -1077,7 +1062,7 @@
         actions.append(no,yes);peerBody.append(actions);box.append(card);continue;
       }
       if(projectActivity.length){
-        appendProjectCells(peerBody,peer.id,projectActivity,peer);
+        appendProjectCells(card,name,meta,peer.id,projectActivity,peer);
       }else if(fresh){
         const plines=agentLines(peer.agents||[],peer.coordinator?peer.coordinator:null,true,peer.id,busyTasks);
         if(!plines.children.length)plines.append(el('p',tr('Агенты не подключены'),'am-small am-muted'));
@@ -1087,6 +1072,7 @@
       }else{
         peerBody.append(el('p',peer.last_seen?tr('Был на связи ')+stamp(peer.last_seen):tr('Ещё не выходил на связь'),'am-small am-muted'));
       }
+      if(!projectActivity.length){name.append(meta);card.append(name,peerBody);}
       const can={revoke:hosted.has(peer.id)};
       if(can.revoke){
         card.classList.add('am-device-card');card.tabIndex=0;card.dataset.key='revoke-'+peer.id;card.title=tr('Правая кнопка мыши — действия');
@@ -1111,7 +1097,7 @@
       parkLocalParts();live.replaceChildren(...box.childNodes);
       if(serverRole&&coordinatorRole){
         machineRolesObserver.observe(head);
-        machineRolesObserver.observe(localMeta);
+        if(!projectActivity.length)machineRolesObserver.observe(localMeta);
       }
       if(focused)live.querySelector('[data-agent-group="'+CSS.escape(focused)+'"] > summary')?.focus({preventScroll:true});
       else if(focusedCell)live.querySelector('[data-project-cell="'+CSS.escape(focusedCell)+'"]')?.focus({preventScroll:true});
@@ -1121,14 +1107,18 @@
     // computer that left the list no longer filters anything.
     if(computerFilter&&!pickedComputers.has(computerFilter))queueMicrotask(()=>{if(computerFilter&&!pickedComputers.has(computerFilter))clearComputer();});
   }
-  function appendProjectCells(body,computer,activity,peer){
-    const columns=el('div',undefined,'am-machine-projects');
+  function appendProjectCells(card,identity,meta,computer,activity,peer){
+    card.classList.add('am-machine-pair');
+    const status=el('div',undefined,'am-machine-name');status.append(meta);
+    const headings=[identity,status];
     // The roster is per computer. Only the task activity belongs to a project.
     // A paused agent with work in either column stays visible in both.
     const agents=(peer?peer.agents||[]:view?.agents||[]).filter(a=>!a.paused||activity.some(({tasks})=>
       tasks.get(computer+'\0'+a.agent)?.some(t=>activeStates.includes(t.state))));
-    for(const {name,snapshot,tasks} of activity){
+    for(const [index,{name,snapshot,tasks}] of activity.entries()){
       const cell=el('div',undefined,'am-machine-project');
+      const body=el('div',undefined,'am-machine-body');
+      cell.append(headings[index],body);
       const current=project===name&&computerFilter===computer;
       cell.dataset.projectCell=JSON.stringify([computer,name]);cell.tabIndex=0;
       cell.setAttribute('role','button');cell.setAttribute('aria-pressed',String(current));
@@ -1138,7 +1128,9 @@
         if(tab!=='stats'&&tab!=='agents')show('tasks');
         selectProject(name,'',computer);
       };
-      cell.addEventListener('click',event=>{event.stopPropagation();choose();});
+      cell.addEventListener('click',event=>{
+        if(!event.target.closest('button'))choose();
+      });
       cell.addEventListener('keydown',event=>{
         if(event.target===cell&&(event.key==='Enter'||event.key===' ')){event.preventDefault();event.stopPropagation();choose();}
       });
@@ -1152,13 +1144,12 @@
           cell.title=auxError===name?tr('Статусы недоступны'):tr('Загружаем статусы…');
           for(const line of lines.children)line.removeAttribute('title');
         }
-        if(lines.children.length)cell.append(lines);
+        if(lines.children.length)body.append(lines);
         else message=tr('Агенты не подключены');
       }
-      if(message)cell.append(el('p',message,'am-small am-muted'));
-      columns.append(cell);
+      if(message)body.append(el('p',message,'am-small am-muted'));
+      card.append(cell);
     }
-    body.append(columns);
   }
   // This computer's version and update button live in its card; in a narrow
   // window the computer list is hidden and they stay in the bottom row.
