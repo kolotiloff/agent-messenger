@@ -2,6 +2,7 @@
 const http = require('node:http');
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { json } = require('node:stream/consumers');
 const { projects, reply } = require('./check-window-project-split.cjs');
 
 const host = '127.0.0.1';
@@ -59,25 +60,41 @@ const conversations = {
   },
 };
 
+let machineOrder = null;
 const server = http.createServer(async (request, response) => {
   response.setHeader('Cache-Control', 'no-store');
   if (request.headers.host !== host + ':' + server.address().port) {
     response.writeHead(403).end();
     return;
   }
-  if (request.method !== 'GET') {
-    response.writeHead(405, { Allow: 'GET' }).end();
-    return;
-  }
   try {
     const url = new URL(request.url, 'http://' + request.headers.host);
+    if (request.method === 'POST' && url.pathname === '/api/machine-order') {
+      const length = Number(request.headers['content-length']);
+      if (request.headers['content-type'] !== 'application/json' || !(length > 0 && length <= 4096)) {
+        response.writeHead(400).end();
+        return;
+      }
+      const body = await json(request).catch(() => null);
+      if (!Array.isArray(body?.order) || !body.order.every(key => typeof key === 'string')) {
+        response.writeHead(400).end();
+        return;
+      }
+      machineOrder = body.order;
+      response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ ok: true }));
+      return;
+    }
+    if (request.method !== 'GET') {
+      response.writeHead(405, { Allow: 'GET' }).end();
+      return;
+    }
     if (url.pathname.startsWith('/api/')) {
       const project = url.searchParams.get('project') || projects[0].name;
       if (!projects.some(entry => entry.name === project)) {
         response.writeHead(404).end();
         return;
       }
-      const fixture = reply(url, project, projects);
+      const fixture = url.pathname === '/api/machine-order' ? { order: machineOrder } : reply(url, project, projects);
       const conversation = url.pathname === '/api/task' && conversations[fixture.task?.id];
       if (conversation) {
         const [{ at }] = fixture.items;

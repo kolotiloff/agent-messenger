@@ -14,6 +14,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 - Kept the current header and messages visible until the next conversation is ready. Chromium and WebKit passed the delayed same-project and cross-project requests in the browser regression check.
 - Gave each of the seven preview tasks a distinct conversation. Added smooth computer disclosure. Chromium and WebKit verified distinct content, task switching, intermediate and final heights, keyboard disclosure and reduced motion.
 - Moved Settings and Feedback to the left of the desktop sidebar footer, used a sliders icon for Settings, and increased the inner padding of both chat role badges. Joined the agent and model with a single space for both roles.
+- Replaced the preview chat summary with a centered creation timestamp and matched vertical padding on computer and task rows. Restored computer reordering. Chromium and WebKit checked delayed date changes, padding, header drag with its visible name, icon and version, and keyboard reorder. The preview endpoint passed an order round-trip across projects.
 
 ## 2026-11-27 — Codex (T-324 and T-325 release)
 

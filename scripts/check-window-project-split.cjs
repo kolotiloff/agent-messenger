@@ -114,35 +114,66 @@ if (require.main === module) (async()=>{
     const hold=()=>{let release;const response=new Promise(resolve=>{release=resolve;});return {response,release};};
     const sameFeed=hold(),otherWindow=hold(),otherFeed=hold();
     const preview=await open(projects,{width:1100,height:706},'dark',(url,p)=>{
+      if(url.pathname==='/api/machine-order')return {json:{ok:true}};
       if(url.pathname==='/api/window'&&p==='tools')return otherWindow.response;
       if(url.pathname!=='/api/task')return;
       if(url.searchParams.get('id')==='game-1')return sameFeed.response;
       if(url.searchParams.get('id')==='tools-1')return otherFeed.response;
     },true);
-    const header=preview.locator('#task-head h3'),thread=preview.locator('#thread');
-    const oldTitle=await header.innerText();
+    const header=preview.locator('#task-head time'),thread=preview.locator('#thread');
+    const oldDate=await header.getAttribute('datetime');
+    const sameDate=tasks.game.find(t=>t.id==='game-1').created_at;
+    const otherDate=tasks.tools.find(t=>t.id==='tools-1').created_at;
+    assert.equal(await preview.locator('#task-head > :not(time)').count(),0);
+    const localHeader=card(preview,'local').locator('.am-sidebar-disclosure[draggable=true]');
+    const peerHeader=card(preview,'pc1').locator('.am-sidebar-disclosure[draggable=true]');
+    const order=()=>preview.locator('#machines > .am-machine-card').evaluateAll(cards=>cards.map(card=>card.dataset.machineOrder));
+    const padding=target=>target.evaluate(node=>[getComputedStyle(node).paddingBlockStart,getComputedStyle(node).paddingBlockEnd]);
     const sidebarTask=title=>preview.locator('#machines .am-sidebar-task').filter({hasText:title});
-    const expectPrevious=async(title)=>{
-      assert.equal(await header.innerText(),title);
+    const expectPrevious=async(date)=>{
+      assert.equal(await header.getAttribute('datetime'),date);
       assert.equal(await chat(preview,'game').isVisible(),true);
       assert.equal(await thread.locator('[data-pane]').count(),0);
       assert.equal(await thread.getAttribute('aria-busy'),'true');
       assert.equal(await preview.locator('#compose').evaluate(node=>node.inert),true);
     };
     try{
+      await preview.evaluate(()=>{
+        const setDragImage=DataTransfer.prototype.setDragImage;
+        DataTransfer.prototype.setDragImage=function(node,x,y){
+          window.machineDragImage={
+            head:node.matches('.am-machine-name.am-machine-drag-image'),
+            name:node.querySelector('.am-machine-label')?.textContent,
+            icon:!!node.querySelector('.am-machine-presence svg'),
+            version:node.querySelector('.am-machine-version')?.textContent,
+          };
+          return setDragImage.call(this,node,x,y);
+        };
+      });
+      const requestOrder=preview.waitForRequest(req=>req.method()==='POST'&&new URL(req.url()).pathname==='/api/machine-order');
+      await peerHeader.dragTo(localHeader,{sourcePosition:{x:40,y:12},targetPosition:{x:40,y:4}});
+      assert.deepEqual(await preview.evaluate(()=>window.machineDragImage),{head:true,name:'ПК-1',icon:true,version:'v1.0.5'});
+      assert.equal(await preview.locator('.am-machine-drag-image').count(),0);
+      assert.deepEqual((await requestOrder).postDataJSON().order.slice(0,2),['pc1','local']);
+      assert.deepEqual((await order()).slice(0,2),['pc1','local']);
+      await peerHeader.press('Alt+ArrowDown');
+      assert.deepEqual((await order()).slice(0,2),['local','pc1']);
+      assert.equal(await peerHeader.evaluate(node=>node===document.activeElement),true);
+      assert.deepEqual(await padding(card(preview,'pc1').locator('.am-machine-name')),['4px','4px']);
+      assert.deepEqual(await padding(sidebarTask('Проверка навигации')),['4px','4px']);
       await sidebarTask('Экран настроек').click();
-      await expectPrevious(oldTitle);
+      await expectPrevious(oldDate);
       sameFeed.release();
-      await header.getByText('Экран настроек',{exact:true}).waitFor();
+      await preview.locator('#task-head time[datetime="'+sameDate+'"]').waitFor();
       await sidebarTask('Экспорт отчёта').click();
-      await expectPrevious('Экран настроек');
+      await expectPrevious(sameDate);
       const requestedFeed=preview.waitForRequest(req=>new URL(req.url()).searchParams.get('id')==='tools-1');
       otherWindow.release();
       await requestedFeed;
-      await expectPrevious('Экран настроек');
+      await expectPrevious(sameDate);
       otherFeed.release();
       await chat(preview,'tools').waitFor();
-      assert.equal(await header.innerText(),'Экспорт отчёта');
+      assert.equal(await header.getAttribute('datetime'),otherDate);
       assert.equal(await thread.getAttribute('aria-busy'),'false');
       assert.equal(await preview.locator('#compose').evaluate(node=>node.inert),false);
     }finally{sameFeed.release();otherWindow.release();otherFeed.release();await preview.close();}

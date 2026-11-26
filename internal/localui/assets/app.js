@@ -855,6 +855,11 @@
     if(machineDrop)delete machineDrop.card.dataset.dropEdge;
     machineDrop=null;
   }
+  function clearMachineDrag(){
+    draggedMachine='';
+    clearMachineDrop();
+    machineList.querySelector('.am-machine-drag-image')?.classList.remove('am-machine-drag-image');
+  }
   // The order key of a computer of the network: its lasting id, known now
   // or from before, else its peer id. A newly learned id is saved, and an
   // order entry saved under the peer id moves to the lasting id.
@@ -880,11 +885,18 @@
     renderMachines();
   }
   machineList.addEventListener('dragstart',event=>{
-    const card=event.target.closest('[data-machine-order]');
+    const card=event.target.closest('[draggable=true]')?.closest('[data-machine-order]');
     if(!card)return;
     draggedMachine=card.dataset.machineOrder;
     event.dataTransfer.setData('text/plain',draggedMachine);
     event.dataTransfer.effectAllowed='move';
+    if(taskSidebarPreview){
+      // The disclosure is a transparent button over the visible heading.
+      const head=card.querySelector('.am-machine-name');
+      const rect=head.getBoundingClientRect();
+      head.classList.add('am-machine-drag-image');
+      event.dataTransfer.setDragImage(head,event.clientX-rect.left,event.clientY-rect.top);
+    }
   });
   machineList.addEventListener('dragover',event=>{
     if(!draggedMachine)return;
@@ -893,7 +905,8 @@
     if(!card||card.dataset.machineOrder===draggedMachine)return;
     event.preventDefault();
     event.dataTransfer.dropEffect='move';
-    const rect=card.getBoundingClientRect(),after=event.clientY>=rect.top+rect.height/2;
+    const target=taskSidebarPreview?card.querySelector('.am-machine-name'):card;
+    const rect=target.getBoundingClientRect(),after=event.clientY>=rect.top+rect.height/2;
     card.dataset.dropEdge=after?'after':'before';
     machineDrop={card,after};
   });
@@ -904,17 +917,18 @@
     if(!draggedMachine||!machineDrop)return;
     event.preventDefault();
     const from=draggedMachine,{card,after}=machineDrop;
-    draggedMachine='';clearMachineDrop();
+    clearMachineDrag();
     moveMachine(from,card.dataset.machineOrder,after);
   });
   machineList.addEventListener('dragend',()=>{
-    draggedMachine='';clearMachineDrop();renderMachines();
+    clearMachineDrag();renderMachines();
   });
   // T-271: the computers that have a card in the current render.
   let pickedComputers=new Set();
   function pickable(card,id,orderKey=id){
     pickedComputers.add(id);
-    if(taskSidebarPreview){card.dataset.machineOrder=orderKey;return;}
+    card.dataset.machineOrder=orderKey;
+    if(taskSidebarPreview)return;
     const split=splitProjects.length>0;
     card.tabIndex=0;
     if(!split){
@@ -922,18 +936,23 @@
       card.title=computerFilter===id?tr('Показать все компьютеры'):tr('Показать только этот компьютер');
       card.addEventListener('click',event=>{if(!event.target.closest('button'))filterComputer(id);});
     }
-    card.dataset.machineOrder=orderKey;card.draggable=machineOrderLoaded;
-    card.setAttribute('aria-keyshortcuts','Alt+ArrowUp Alt+ArrowDown');
     card.addEventListener('keydown',event=>{
       if(event.target!==card)return;
       if(!split&&(event.key==='Enter'||event.key===' ')){event.preventDefault();filterComputer(id);}
-      if(!machineOrderLoaded||!event.altKey||!['ArrowUp','ArrowDown'].includes(event.key))return;
+    });
+    enableMachineOrder(card,card);
+  }
+  function enableMachineOrder(card,handle){
+    handle.draggable=machineOrderLoaded;
+    handle.setAttribute('aria-keyshortcuts','Alt+ArrowUp Alt+ArrowDown');
+    handle.addEventListener('keydown',event=>{
+      if(event.target!==handle||!machineOrderLoaded||!event.altKey||!['ArrowUp','ArrowDown'].includes(event.key))return;
       event.preventDefault();
       const after=event.key==='ArrowDown',next=after?card.nextElementSibling:card.previousElementSibling;
       if(!next)return;
       const key=card.dataset.machineOrder;
       moveMachine(key,next.dataset.machineOrder,after);
-      machineList.querySelector('[data-machine-order="'+CSS.escape(key)+'"]')?.focus();
+      if(handle===card)machineList.querySelector('[data-machine-order="'+CSS.escape(key)+'"]')?.focus();
     });
   }
   // The window redraws every two seconds. A part whose content did not change
@@ -1192,6 +1211,17 @@
     const rank=new Map(machineOrder.map((key,index)=>[key,index]));
     const ranks=card=>rank.get(card.dataset.machineOrder)??machineOrder.length;
     box.append(...[...box.children].sort((a,b)=>ranks(a)-ranks(b)));
+    if(taskSidebarPreview){
+      for(const card of box.children){
+        const head=card.querySelector('.am-machine-name');
+        const handle=head.querySelector('.am-sidebar-disclosure')||head;
+        if(handle===head){
+          head.tabIndex=0;
+          head.dataset.sidebarFocus=JSON.stringify([card.dataset.machineOrder]);
+        }
+        enableMachineOrder(card,handle);
+      }
+    }
     for(const group of box.querySelectorAll('.am-agent-parallel'))group.open=expanded.has(group.dataset.agentGroup);
     // The moved elements are left out of the comparison, so an unchanged
     // list keeps its nodes; before a rebuild they go back to the bottom row,
@@ -1785,11 +1815,19 @@
     const p=(view?.shared||[]).find(x=>x.peer===selectedShared.peer),t=p?.tasks.find(x=>x.id===selectedShared.id);
     return t?{t,p}:null;
   }
-  // Another computer's task (T-111): the window has only what that computer
-  // shares, so the card shows it and says where the full history is.
-  function renderSharedTask(t,p){
-    t=sharedDisplayTask(t);
-    const thread=$('thread'),head=$('task-head');
+  function conversationDate(t){
+    let at=Date.parse(t.created_at);
+    if(!Number.isFinite(at))at=Date.parse(t.started_at);
+    const date=el('time',undefined,'am-small am-muted am-chat-date');
+    if(!Number.isFinite(at)){date.hidden=true;return date;}
+    const day=new Date(at);
+    const options={weekday:'short',day:'numeric',month:'short'};
+    if(day.getFullYear()!==new Date().getFullYear())options.year='numeric';
+    date.dateTime=day.toISOString();
+    date.textContent=day.toLocaleDateString(amLocale,options)+tr(' в ')+day.toLocaleTimeString(amLocale,{hour:'2-digit',minute:'2-digit'});
+    return date;
+  }
+  function sharedTaskHeader(t,p){
     const title=el('div',undefined,'am-task-head');title.append(el('h3',t.title));
     title.append(el('p',(names[t.agent]||t.agent)+(t.model?' ('+modelName(t.model)+')':'')+tr(' на «')+sharedComputer(t,p)+tr('», задачу дал компьютер «')+p.name+'»','am-small am-muted'));
     const [statusText,statusCls,statusTip,from]=sharedStatus(t,p);
@@ -1799,7 +1837,14 @@
     if(t.tokens)line.append(el('span',', '+tokensText(t.tokens)+tr(' токенов'),'am-muted'));
     title.append(line);
     const headRow=el('div',undefined,'am-task-head-row');headRow.append(title);
-    head.replaceChildren(headRow);
+    return headRow;
+  }
+  // Another computer's task (T-111): the window has only what that computer
+  // shares, so the card shows it and says where the full history is.
+  function renderSharedTask(t,p){
+    t=sharedDisplayTask(t);
+    const thread=$('thread'),head=$('task-head');
+    head.replaceChildren(taskSidebarPreview?conversationDate(t):sharedTaskHeader(t,p));
     const box=el('div',undefined,'am-settings');
     if(t.report){box.append(el('h3',tr('Начало отчёта')),el('p',t.report,'am-shared-report'));}
     else box.append(el('p',tr('Отчёта пока нет.'),'am-muted'));
@@ -2171,13 +2216,9 @@
     const minutes=Math.floor((Date.now()-at)/60000);if(minutes<10)return null;
     return el('p',tr('Исполнитель ничего не пишет уже ')+minutes+tr(' мин.'),'am-small am-muted');
   }
-  function renderFeed(t){
-    const thread=$('thread'),head=$('task-head');
-    const signature=JSON.stringify([t,feed.items,online]);if(signature===feedSignature)return;
-    const count=(feed.items||[]).filter(it=>it.kind!=='command_end').length,fresh=feedShown!==t.id,atBottom=fresh||feedStick||feedPinned,grew=!fresh&&!atBottom&&count>feedCount;feedShown=t.id;feedStick=false;feedCount=count;feedSignature=signature;
+  function taskFeedHeader(t,displayModel,quiet){
     const title=el('div',undefined,'am-task-head');title.append(el('h3',t.title));
     const where=t.remote&&!t.remote.from?tr(' на компьютере «')+t.remote.name+'»':tr(' на ')+(view.computer_name||tr('этом компьютере'))+(t.remote?.from?tr(', по заданию компьютера «')+t.remote.name+'»':'');
-    const displayModel=taskModelLabel(t);
     title.append(el('p',(names[t.agent]||t.agent)+(displayModel?' ('+displayModel+')':'')+where+tr(', папка ')+(t.folder||tr('ещё не известна'))+(t.remote&&!t.remote.from?'':t.full_access?tr(', любые команды разрешены'):tr(', без «Любых команд»')),'am-small am-muted'));
     const [statusText,statusCls,statusTip,from]=taskStatus(t);
     const when=waitingForStartTime(t)?'':t.finished_at?', '+clock(taskStart(t))+'–'+clock(t.finished_at):tr(', начата в ')+clock(taskStart(t));
@@ -2185,8 +2226,16 @@
     if(statusTip)line.append(el('span',', '+statusTip,'am-muted'));
     if(t.usage){const used=el('span',', '+usageShort(t.usage),'am-muted');used.title=usageLong(t.usage);line.append(used);}
     title.append(line);
-    const quiet=quietLine(t);if(quiet)title.append(quiet);
+    if(quiet)title.append(quiet);
     const headRow=el('div',undefined,'am-task-head-row');headRow.append(title);
+    return headRow;
+  }
+  function renderFeed(t){
+    const thread=$('thread'),head=$('task-head');
+    const signature=JSON.stringify([t,feed.items,online]);if(signature===feedSignature)return;
+    const count=(feed.items||[]).filter(it=>it.kind!=='command_end').length,fresh=feedShown!==t.id,atBottom=fresh||feedStick||feedPinned,grew=!fresh&&!atBottom&&count>feedCount;feedShown=t.id;feedStick=false;feedCount=count;feedSignature=signature;
+    const displayModel=taskModelLabel(t),quiet=quietLine(t);
+    const header=taskSidebarPreview?conversationDate(t):taskFeedHeader(t,displayModel,quiet);
     const opened=new Set(fresh?[]:[...thread.querySelectorAll('details[open][data-key]')].map(d=>d.dataset.key));
     const out=[];let group=null,tools=null;
     const pending=new Map(), unfinished=new Set();
@@ -2328,7 +2377,8 @@
       }
     }
     flushTools();
-    head.replaceChildren(headRow);
+    if(taskSidebarPreview&&quiet)out.push(quiet);
+    head.replaceChildren(header);
     thread.replaceChildren(...out);
     for(const d of thread.querySelectorAll('details[data-key]'))if(opened.has(d.dataset.key))d.open=true;
     // A task another computer started is answered there.
