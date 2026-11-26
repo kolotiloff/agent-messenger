@@ -8,9 +8,9 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
-**T-318 is prepared for the next functional release.** Selection fills the whole card in one-project mode and the chosen half, including the shared header, in the split sidebar. Each project keeps its last computer choice for the current window session. See D-223. Publication of 1.0.7 remains on hold at the owner's request.
+**[1.0.7, build 110](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.7-preview.110) is released** from `c71dffead7df31e42dcd28517dc59f2348a07f32`. It includes [T-317](https://github.com/kolotiloff/agent-messenger/pull/217) and [T-318](https://github.com/kolotiloff/agent-messenger/pull/218). All four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45869548677) passed. The public channel serves five verified signed update packages, with 22 files in the release.
 
-**T-317 is prepared for the next functional release.** Split project columns share the computer card’s vertical padding. Long status text and collapsed summaries stay on one line. Chromium and WebKit check card heights before and after toggling the split. See D-222.
+Selection fills the whole computer card in one-project mode and the chosen half, including the shared header, in the split sidebar. Clicking that half opens the tasks of its project and computer. Each project keeps its last computer choice for the current window session. Chromium and WebKit verified switching and equal card heights for equivalent agent rows. See D-222 and D-223.
 
 **[1.0.6, build 109](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.6-preview.109) is released** from `829a0567fc5bee4c965c354d2104e8872de2f178`. [PR #215](https://github.com/kolotiloff/agent-messenger/pull/215) integrated T-314 through T-316. The [eight client checks](https://github.com/kolotiloff/agent-messenger/actions/runs/45841685798) and [four release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45848162519) passed. The public channel serves five verified signed update packages, with 22 files in the release.
 
