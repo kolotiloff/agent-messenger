@@ -8,7 +8,9 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
-**T-321 and T-322 are prepared for the next functional release.** The sidebar shows the live local coordinator of either displayed project, and its tooltip names the projects. Choosing to wait for an update dismisses the dialog and leaves a status button. The background restart checks running work across projects even after the user switches projects. Browser fixtures and Go tests cover those paths. See D-226 and D-227.
+**[1.0.9, build 112](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.9-preview.112) is released** from `654ba47651e7cfa5d7ae08af2accdee5b8f73e64`. [PR #221](https://github.com/kolotiloff/agent-messenger/pull/221) integrated T-320 through T-322. All four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45882901446) passed. The public channel serves five verified signed update packages, with 22 files in the release.
+
+The sidebar shows the live local coordinator of either displayed project, and its tooltip names the projects. Choosing to wait for an update dismisses the dialog and leaves a status button. The background restart checks running work across projects even after the user switches projects. Browser fixtures and Go tests cover those paths. See D-226 and D-227.
 
 **T-320 uses a subtle tint to distinguish the right project in the split sidebar.** Hover brightens the half under the pointer from the shared header through the agent rows. The selected half retains its blue fill. Chromium and WebKit covered both hover positions, the blue selection, stable card sizes and the single-project mode. See D-225.
 
