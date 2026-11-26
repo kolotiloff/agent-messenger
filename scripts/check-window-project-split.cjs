@@ -21,6 +21,7 @@ const tasks = {
 };
 
 const counts = {game:1234,tools:2345,site:99999};
+const pc1Counts = {game:321,tools:654,site:0};
 const agents = [{agent:'codex'},{agent:'claude'}];
 const coordinator = p=>({connected:true,active:p==='tools',client:'codex'});
 function reply(url,p,available){
@@ -40,14 +41,15 @@ function reply(url,p,available){
   if(url.pathname==='/api/client-info')return {client:'running',outdated:false,window_version:'1.0.9'};
   if(url.pathname==='/api/usage-stats'){
     const names=url.searchParams.getAll('projects'), scope=names.length?names:[p];
+    const computer=url.searchParams.get('computer'), visibleCounts=computer==='pc1'?pc1Counts:counts;
     const usage=(tasks,tokens)=>({tasks,tokens,input_tokens:tokens,output_tokens:0,cached_tokens:0});
-    const total=usage(scope.length,scope.reduce((sum,name)=>sum+counts[name],0));
+    const total=usage(scope.length,scope.reduce((sum,name)=>sum+visibleCounts[name],0));
     return {
       ...(names.length?{projects:names}:{project:p}), total,
-      agents:scope.map(name=>({key:tasks[name][0].agent,...usage(1,counts[name])})),
+      agents:scope.map(name=>({key:tasks[name][0].agent,...usage(1,visibleCounts[name])})),
       computers:[{key:'local',name:'Мак',this:true,...total}], models:[],
       days:[{day:iso(1440).slice(0,10),...usage(0,0)},{day:iso(1).slice(0,10),...total}],
-      recent:scope.map(name=>({...tasks[name][0],...usage(1,counts[name]),at:iso(1)}))
+      recent:scope.map(name=>({...tasks[name][0],...usage(1,visibleCounts[name]),at:iso(1)}))
     };
   }
   if(url.pathname==='/api/usage-efficiency'){
@@ -301,6 +303,28 @@ function reply(url,p,available){
     await total(page,'1234');
     assert.equal(await page.locator('#stats-project-filter').isVisible(),false);
     await page.close();
+
+    const statistics=await open(projects,{width:1197,height:706},'dark');
+    await split(statistics).click();
+    await statistics.locator('[data-tab=stats]').click();
+    await total(statistics,'3579');
+    const statisticsProject=statistics.locator('button[aria-controls=stats-project-menu]');
+    const lastStatisticsQuery=()=>seen.findLast(r=>r.path==='/api/usage-stats').params;
+    for(const [index,name,label,tokens] of [[0,'game','Игра','321'],[1,'tools','Инструменты','654'],[0,'game','Игра','321']]){
+      await cells(statistics,'pc1').nth(index).locator('.am-machine-body').click();
+      await total(statistics,tokens);
+      assert.equal(await statisticsProject.innerText(),label);
+      assert.equal(lastStatisticsQuery().get('project'),name);
+      assert.equal(lastStatisticsQuery().get('computer'),'pc1');
+      assert.equal(lastStatisticsQuery().has('projects'),false);
+    }
+    await cells(statistics,'pc1').nth(0).press('Enter');
+    await total(statistics,'1234');
+    assert.equal(await statisticsProject.innerText(),'Игра');
+    assert.equal(lastStatisticsQuery().get('computer'),'');
+    await select(statistics,'stats-project','Выбранные проекты');
+    await total(statistics,'3579');
+    await statistics.close();
 
     const narrow=await open(projects,{width:600,height:720},'light');
     await split(narrow).click();

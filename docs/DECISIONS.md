@@ -805,3 +805,7 @@ Choosing to wait dismisses the restart prompt and shows a status button. It open
 ## D-228 — Separate the project tiles with the picker gap (T-323)
 
 Each computer keeps one row in the split sidebar. Two independently rounded tiles use matching neutral colors and the project pickers' gap from top to bottom. The left header holds the computer name and roles, and the right holds the update control and version. Hover brightens the pointed tile, and selection fills the chosen tile blue. The gap is inactive. This replaces the right-half tint and shared header from D-225.
+
+## D-229 — Switch the Statistics project when a computer tile is chosen (T-324)
+
+Statistics opens with the combined project scope until the user picks a project in Statistics or clicks a split computer tile while on that tab. A tile applies its project to the existing Statistics project picker and its computer to the computer filter. Clicking the active tile again leaves the project selected and clears the computer filter. The picker still offers Selected projects for combined totals. The same scope applies to model comparison and JSON export.
