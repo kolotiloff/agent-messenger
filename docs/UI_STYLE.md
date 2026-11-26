@@ -43,7 +43,9 @@ Buttons that belong together go in one container: `.am-actions` (a row) or `.am-
 
 ## Checking a change
 
-Take screenshots of the tasks, agents and server tabs, a dialog and a menu in both themes at 1100 and 600 px, and measure button and field heights: they must be 32, 28 or 24.
+Review interface changes in a running local preview of the real window assets. Start `node scripts/preview-window.cjs` and open the printed loopback address in the in-app browser. Use fictional data to try the affected interactions and refresh the preview as the changes are made. Share the live preview for design feedback.
+
+Check the tasks, agents and server tabs, a dialog and a menu in both themes at 1100 and 600 px. Measure button and field heights against the 32, 28 and 24 px control tokens. Capture screenshots when needed for a verification report.
 
 Dialogs that ask for a decision (`.am-alert`) use 16 px padding, the standard 16 px section heading, muted text, the leaving or destructive choice on the left and the main action on the right. A destructive button (`.am-danger`) has red text on a soft red fill.
 

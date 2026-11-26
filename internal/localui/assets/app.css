@@ -319,11 +319,10 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-sidebar-arrow { width:var(--am-computer-icon-size); height:var(--am-computer-icon-size); fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
 #am-concept .am-sidebar-disclosure[aria-expanded=true] .am-sidebar-arrow { transform:rotate(90deg); }
 #am-concept .am-sidebar-tasks { display:grid; gap:var(--am-space-1); }
+#am-concept .am-sidebar-has-tasks > .am-sidebar-tasks { margin-block-start:var(--am-space-1); }
 #am-concept .am-sidebar-task { display:grid; grid-template-columns:minmax(0,1fr); gap:0; min-width:0; text-align:start; overflow-wrap:anywhere; border:0; background:transparent; border-radius:var(--am-radius-s); padding:var(--am-space-1) var(--am-space-2); padding-inline-start:calc(var(--am-computer-icon-size) + var(--am-space-1)); }
 #am-concept button.am-sidebar-task:is(:hover,:focus-visible):not(:disabled) { background:var(--am-field-hover); }
 #am-concept button.am-sidebar-task[aria-pressed=true]:not(:disabled) { background:var(--am-selected); }
-#am-concept .am-sidebar-task-title { font-weight:500; }
-#am-concept .am-sidebar-task-project { font-weight:400; }
 @media (max-width:620px) {
   #am-concept.am-task-sidebar-preview .am-sidebar { display:grid; grid-template-columns:minmax(0,1fr) auto; }
   #am-concept.am-task-sidebar-preview .am-project-heading:has(button[hidden]) { display:flex; }

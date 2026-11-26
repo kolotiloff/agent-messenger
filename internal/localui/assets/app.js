@@ -1049,7 +1049,7 @@
       row.dataset.sidebarFocus=JSON.stringify([name,peer?.peer||'',t.id]);
       row.setAttribute('aria-pressed',String(name===project&&(selection?selectedShared?.peer===selection.peer&&selectedShared?.id===selection.id:t.id===selectedTask)));
       const title=el('span',undefined,'am-sidebar-task-title');
-      if(!sidebarProject)title.append(el('span',projectTitle(name)+', ','am-sidebar-task-project am-muted'));
+      if(!sidebarProject)title.append(el('span',projectTitle(name)+', ','am-muted'));
       title.append(t.title);
       const meta=el('span',undefined,'am-small am-muted am-sidebar-task-meta');
       const running=t.state==='running',model=sidebarTaskModel(peer?{...t,shared:true}:t);
