@@ -9,6 +9,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 ## 2026-11-26 — Codex (T-323 separated project tiles)
 
 - Replaced the split computer card's tint with two rounded tiles separated by the project picker gap. The left tile carries computer identity, and the right carries update controls and version. Chromium and WebKit exercised matching colors, stable heights, hover, independent selection, the update dialog and single-project behavior.
+- Published [1.0.10, build 113](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.10-preview.113) from `7810178550ba4caa6ba64553d4312559507ec9d1` via [PR #223](https://github.com/kolotiloff/agent-messenger/pull/223). [Release attempt 2](https://github.com/kolotiloff/agent-messenger/actions/runs/45889431263/attempts/2) passed all four jobs after attempt 1 hit the Linux race suite's time limit. The public channel provides five signed packages and 22 uploaded files.
 
 ## 2026-11-26 — Codex (T-320 through T-322 release)
 
