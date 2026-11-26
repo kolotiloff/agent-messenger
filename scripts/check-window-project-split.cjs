@@ -37,7 +37,7 @@ function reply(url,p,available){
     {id:'vps',name:'VPS-PC2',host:true,ready:{projects:[]},agents:[]}
   ].map(peer=>({age:0,version:'1.0.5',agents,...peer}))};
   if(url.pathname==='/api/discovery')return {agents:[]};
-  if(url.pathname==='/api/client-info')return {client:'running',outdated:false};
+  if(url.pathname==='/api/client-info')return {client:'running',outdated:false,window_version:'1.0.9'};
   if(url.pathname==='/api/usage-stats'){
     const names=url.searchParams.getAll('projects'), scope=names.length?names:[p];
     const usage=(tasks,tokens)=>({tasks,tokens,input_tokens:tokens,output_tokens:0,cached_tokens:0});
@@ -97,12 +97,8 @@ function reply(url,p,available){
   const split=page=>page.locator('#split-projects');
   const card=(page,id)=>page.locator('#machines .am-machine-card[data-machine-order="'+id+'"]');
   const cells=(page,id)=>card(page,id).locator('.am-machine-project');
-  const fills=target=>target.evaluate(card=>[card,card.querySelector('.am-machine-name')]
-    .map(row=>getComputedStyle(row).backgroundImage));
-  const directions=fill=>[...fill.matchAll(/linear-gradient\(to (left|right)/g)].map(match=>match[1]);
-  const checkFills=async(target,expected)=>{
-    for(const fill of await fills(target))assert.deepEqual(directions(fill),expected);
-  };
+  const fills=target=>target.evaluate(tile=>[tile,tile.querySelector('.am-machine-name')]
+    .map(part=>getComputedStyle(part).backgroundColor));
   const chat=(page,name)=>page.locator('#thread').getByText('Сообщение из '+name);
   const total=async(page,n)=>page.waitForFunction(value=>document.querySelector('#stats-total-title').textContent.split(' токен')[0].replace(/[^0-9]/g,'')===value,n);
   try{
@@ -153,6 +149,22 @@ function reply(url,p,available){
       'switching to two project columns should preserve the height of equivalent cards');
     assert.equal(await page.locator('#machines .am-machine-card').count(),5);
     assert.equal(await cells(page,'local').count(),2);
+    const [leftTile,rightTile]=await cells(page,'local').all();
+    const [left,right]=await Promise.all([leftTile.boundingBox(),rightTile.boundingBox()]);
+    const [firstMenu,secondMenu]=await Promise.all(['project-select','project-select-second']
+      .map(id=>page.locator('button[aria-controls="'+id+'-menu"]').boundingBox()));
+    const gap=right.x-left.x-left.width;
+    assert(gap>0);
+    assert(Math.abs(gap-(secondMenu.x-firstMenu.x-firstMenu.width))<0.1);
+    assert.equal(left.height,right.height);
+    assert(await cells(page,'local').evaluateAll(tiles=>tiles.every(tile=>parseFloat(getComputedStyle(tile).borderTopLeftRadius)>0)));
+    assert.equal(await cells(page,'pc1').nth(0).getByText('ПК-1',{exact:true}).count(),1);
+    assert.equal(await cells(page,'pc1').nth(0).locator('.am-machine-version').count(),0);
+    assert.equal(await cells(page,'pc1').nth(1).getByText('v1.0.5',{exact:true}).count(),1);
+    await cells(page,'pc1').nth(1).getByRole('button',{name:'Обновить до v1.0.9'}).click();
+    await page.locator('#confirm-dialog').getByText('Обновить ПК-1 до v1.0.9?').waitFor();
+    await page.locator('#confirm-cancel').click();
+    assert.equal(await cells(page,'pc1').nth(1).getAttribute('aria-pressed'),'false');
     assert.equal(await chat(page,'game').isVisible(),true);
     await page.locator('#list-toggle').click();
     assert.equal(await page.locator('#task-panel').isVisible(),false);
@@ -168,7 +180,7 @@ function reply(url,p,available){
     assert.equal(await cells(page,'local').nth(0).locator('.am-agent-model[title]').count(),0);
     assert((await card(page,'local').boundingBox()).height>closedCard.height);
     assert.equal((await otherAgent.boundingBox()).y,otherAgentTop);
-    assert.equal(await cells(page,'local').nth(0).evaluate(cell=>getComputedStyle(cell).backgroundColor),'rgba(0, 0, 0, 0)');
+    assert.equal(await cells(page,'local').nth(0).getAttribute('aria-pressed'),'false');
     if(output)await page.screenshot({path:path.join(output,'messenger-t316-expanded.png')});
     await cells(page,'local').nth(0).locator('summary').click();
     assert.equal(await chat(page,'game').isVisible(),true);
@@ -216,35 +228,41 @@ function reply(url,p,available){
     assert.equal(await cells(page,'local').nth(0).getAttribute('aria-pressed'),'true');
     const localCard=card(page,'local');
     await page.mouse.move(810,5);
-    await checkFills(localCard,['right','right']);
-    await checkFills(card(page,'pc1'),['right']);
+    const pcTiles=cells(page,'pc1');
+    assert.deepEqual(await fills(pcTiles.nth(0)),await fills(pcTiles.nth(1)));
+    const neutralFill=await fills(rightTile);
+    const selectedFill=await fills(leftTile);
+    assert.notDeepEqual(selectedFill,neutralFill);
     const clickHeading=async(id,right)=>{
-      const heading=card(page,id).locator('.am-machine-name');
+      const heading=cells(page,id).nth(right?1:0).locator('.am-machine-name');
       const {width,height}=await heading.boundingBox();
-      await heading.click({position:{x:width*(right ? .75 : .25),y:height/2}});
+      await heading.click({position:{x:width*.25,y:height/2}});
     };
     await clickHeading('local',true);
     await chat(page,'tools').waitFor();
     assert.equal(await cells(page,'local').nth(1).getAttribute('aria-pressed'),'true');
     await page.mouse.move(810,5);
-    await checkFills(localCard,['left','right']);
-    const selectedFills=await fills(localCard);
+    assert.deepEqual(await fills(leftTile),neutralFill);
+    assert.deepEqual(await fills(rightTile),selectedFill);
     const cardBeforeHover=await localCard.boundingBox();
-    const hoverHalf=async(target,right)=>{
-      const {width,height}=await target.boundingBox();
-      await target.hover({position:{x:width*(right ? .75 : .25),y:height/2}});
-      await checkFills(localCard,['left',right?'left':'right','right']);
-      assert.equal(await localCard.evaluate(el=>getComputedStyle(el,'::after').content),'none');
-    };
-    const heading=localCard.locator('.am-machine-name');
-    const body=localCard.locator('.am-machine-body');
-    for(const target of [heading,body]){
-      await hoverHalf(target,false);
-      await hoverHalf(target,true);
+    for(const part of ['.am-machine-name','.am-machine-body']){
+      await leftTile.locator(part).hover();
+      const hoveredFill=await fills(leftTile);
+      assert(hoveredFill.every((color,index)=>color!==neutralFill[index]));
+      assert.deepEqual(await fills(rightTile),selectedFill);
+      await rightTile.locator(part).hover();
+      assert.deepEqual(await fills(leftTile),neutralFill);
+      assert.deepEqual(await fills(rightTile),selectedFill);
     }
     assert.deepEqual(await localCard.boundingBox(),cardBeforeHover);
-    await page.mouse.move(810,5);
-    assert.deepEqual(await fills(localCard),selectedFills);
+    const gapX=cardBeforeHover.x+cardBeforeHover.width/2;
+    for(const inset of [2,cardBeforeHover.height/2,cardBeforeHover.height-2]){
+      const y=cardBeforeHover.y+inset;
+      assert.equal(await page.evaluate(([x,y])=>!!document.elementFromPoint(x,y)?.closest('.am-machine-project'),[gapX,y]),false);
+      await page.mouse.click(gapX,y);
+      assert.deepEqual(await fills(leftTile),neutralFill);
+      assert.equal(await rightTile.getAttribute('aria-pressed'),'true');
+    }
     if(output){
       await page.mouse.move(810,5);
       await page.screenshot({path:path.join(output,'messenger-t318-split.png')});
@@ -267,7 +285,6 @@ function reply(url,p,available){
     await split(page).click();
     assert.equal(await cells(page,'local').count(),0);
     assert.equal(await card(page,'local').getAttribute('aria-pressed'),'true');
-    assert((await fills(localCard)).every(fill=>fill==='none'));
     const selectedBody=await card(page,'local').evaluate(card=>getComputedStyle(card).backgroundColor);
     assert.notEqual(selectedBody,await card(page,'pc1').evaluate(card=>getComputedStyle(card).backgroundColor));
     assert.equal(await chat(page,'game').isVisible(),true);
@@ -293,7 +310,8 @@ function reply(url,p,available){
     assert.equal(await split(narrow).evaluate(el=>el.getBoundingClientRect().height),28);
     const divider=await cells(narrow,'local').nth(1).evaluate(el=>getComputedStyle(el,'::before').content);
     assert.equal(divider,'none');
-    await checkFills(card(narrow,'local'),['right']);
+    await narrow.mouse.move(590,5);
+    assert.deepEqual(await fills(cells(narrow,'local').nth(0)),await fills(cells(narrow,'local').nth(1)));
     await narrow.locator('[data-tab=agents]').click();
     assert.equal(await narrow.locator('[data-screen=agents]').isVisible(),true);
     await narrow.locator('[data-tab=server]').click();
