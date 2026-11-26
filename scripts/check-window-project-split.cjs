@@ -177,11 +177,50 @@ function reply(url,p,available){
     await chat(page,'tools').waitFor();
     await cells(page,'local').nth(0).press('Enter');
     await chat(page,'game').waitFor();
-    assert.equal(await card(page,'local').getAttribute('aria-pressed'),'true');
+    assert.equal(await card(page,'local').getAttribute('aria-pressed'),null);
+    assert.equal(await cells(page,'local').nth(0).getAttribute('aria-pressed'),'true');
+    const fills=() => card(page,'local').evaluate(card=>[card,card.querySelector('.am-machine-name')]
+      .map(row=>getComputedStyle(row).backgroundImage));
+    assert((await fills()).every(fill=>fill.includes('to right')&&fill.includes('50%')));
+    const clickHeading=async(id,right)=>{
+      const heading=card(page,id).locator('.am-machine-name');
+      const {width,height}=await heading.boundingBox();
+      await heading.click({position:{x:width*(right ? .75 : .25),y:height/2}});
+    };
+    await clickHeading('local',true);
+    await chat(page,'tools').waitFor();
+    assert.equal(await cells(page,'local').nth(1).getAttribute('aria-pressed'),'true');
+    assert((await fills()).every(fill=>fill.includes('to left')&&fill.includes('50%')));
+    if(output){
+      await page.mouse.move(810,5);
+      await page.screenshot({path:path.join(output,'messenger-t318-split.png')});
+    }
+    const selectedSizes=await cardSizes();
+    assert.deepEqual(selectedSizes.map(size=>size.height),splitSizes.map(size=>size.height));
+    await clickHeading('linux',true);
+    await page.locator('#task-list').getByText('Проверка файлов',{exact:true}).waitFor();
+    assert.equal(await cells(page,'linux').nth(1).getAttribute('aria-pressed'),'true');
+    assert.equal(await cells(page,'local').nth(1).getAttribute('aria-pressed'),'false');
+    assert(seen.some(r=>r.path==='/api/window'&&r.params.get('project')==='tools'&&r.params.get('computer')==='linux'));
+    await clickHeading('local',false);
+    await chat(page,'game').waitFor();
+    await select(page,'project-select','Сайт');
+    await chat(page,'site').waitFor();
+    assert.equal(await page.locator('.am-machine-project[aria-pressed=true]').count(),0);
+    await select(page,'project-select','Игра');
+    await chat(page,'game').waitFor();
     assert.equal(await cells(page,'local').nth(0).getAttribute('aria-pressed'),'true');
     await split(page).click();
     assert.equal(await cells(page,'local').count(),0);
+    assert.equal(await card(page,'local').getAttribute('aria-pressed'),'true');
+    assert((await fills()).every(fill=>fill==='none'));
+    const selectedBody=await card(page,'local').evaluate(card=>getComputedStyle(card).backgroundColor);
+    assert.notEqual(selectedBody,await card(page,'pc1').evaluate(card=>getComputedStyle(card).backgroundColor));
     assert.equal(await chat(page,'game').isVisible(),true);
+    if(output){
+      await page.mouse.move(810,5);
+      await page.screenshot({path:path.join(output,'messenger-t318-single.png')});
+    }
     await page.locator('[data-tab=stats]').click();
     await total(page,'1234');
     await split(page).click();

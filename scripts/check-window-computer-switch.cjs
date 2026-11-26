@@ -104,11 +104,11 @@ const shots = process.env.SCREENSHOT_DIR;
       assert.equal(await card('ПК-2').getAttribute('aria-pressed'), 'true');
       assert.notEqual(ownHeader, peerHeader);
       assert.equal(await headerColor('Fixture Mac'), ownHeader);
-      assert.equal(await headerColor('ПК-2'), peerHeader);
+      assert.notEqual(await headerColor('ПК-2'), peerHeader);
       assert.equal(await headerColor('Ноутбук'), peerHeader);
       const bodyColors = await page.locator('#machines .am-machine-card').evaluateAll(cards =>
         cards.map(card => getComputedStyle(card).backgroundColor));
-      assert.equal(new Set(bodyColors).size, 1, 'selection changes only the border');
+      assert.equal(new Set(bodyColors).size, 2, 'the selected card body gets its own fill');
       const spacing = await page.locator('#machines :is(.am-machine-name,.am-machine-body)').evaluateAll(rows => rows.map(head => {
         const style = getComputedStyle(head);
         return [style.paddingTop, style.paddingBottom, style.paddingLeft, style.paddingRight];

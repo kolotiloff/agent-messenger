@@ -777,3 +777,9 @@ With the split open, Statistics starts at Selected projects. Its project picker 
 ## D-222 — Keep sidebar card spacing when showing two projects (T-317)
 
 The computer card body owns the vertical inset in both modes. Project columns add horizontal padding only. Collapsed agent summaries and project status labels truncate within their columns. The taller column determines the space a card needs when there are additional agent rows or expanded parallel task details.
+
+## D-223 — Fill the selected computer and project (T-318)
+
+In split mode the selected project's half is filled from top to bottom, including the shared computer header. Each half selects that project's computer from either the header or the agent area. Controls within the card keep their own actions. In single-project mode the same fill covers the full card. Selection changes the background without changing card geometry.
+
+The window remembers the last computer filter for each project while it is open. Selecting an active half again clears the filter for that project. The task list and conversation still follow one active project and computer.

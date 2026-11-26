@@ -878,14 +878,24 @@
   let pickedComputers=new Set();
   function pickable(card,id,orderKey=id){
     pickedComputers.add(id);
-    card.setAttribute('role','button');card.tabIndex=0;card.setAttribute('aria-pressed',String(computerFilter===id));
+    const split=splitProjects.length>0;
+    card.tabIndex=0;
+    if(!split){
+      card.setAttribute('role','button');card.setAttribute('aria-pressed',String(computerFilter===id));
+      card.title=computerFilter===id?tr('Показать все компьютеры'):tr('Показать только этот компьютер');
+    }
     card.dataset.machineOrder=orderKey;card.draggable=machineOrderLoaded;
     card.setAttribute('aria-keyshortcuts','Alt+ArrowUp Alt+ArrowDown');
-    card.title=computerFilter===id?tr('Показать все компьютеры'):tr('Показать только этот компьютер');
-    card.addEventListener('click',event=>{if(!event.target.closest('button'))filterComputer(id);});
+    card.addEventListener('click',event=>{
+      if(event.target.closest('button'))return;
+      if(!split){filterComputer(id);return;}
+      const rect=card.getBoundingClientRect();
+      const column=Number(event.clientX>=rect.left+rect.width/2);
+      card.querySelectorAll('.am-machine-project')[column]?.click();
+    });
     card.addEventListener('keydown',event=>{
       if(event.target!==card)return;
-      if(event.key==='Enter'||event.key===' '){event.preventDefault();filterComputer(id);}
+      if(!split&&(event.key==='Enter'||event.key===' ')){event.preventDefault();filterComputer(id);}
       if(!machineOrderLoaded||!event.altKey||!['ArrowUp','ArrowDown'].includes(event.key))return;
       event.preventDefault();
       const after=event.key==='ArrowDown',next=after?card.nextElementSibling:card.previousElementSibling;
@@ -1105,11 +1115,8 @@
       cell.setAttribute('aria-label',projectTitle(name)+' — '+computerName(computer));
       const choose=()=>{
         if(project===name){filterComputer(computer);return;}
-        const computerChanged=computerFilter!==computer;
-        computerFilter=computer;$('agent-filter').value='';
         if(tab!=='stats'&&tab!=='agents')show('tasks');
-        selectProject(name);
-        if(computerChanged&&tab==='stats')reloadStats();
+        selectProject(name,'',computer);
       };
       cell.addEventListener('click',event=>{event.stopPropagation();choose();});
       cell.addEventListener('keydown',event=>{
@@ -1168,6 +1175,7 @@
   // or a click on empty sidebar space shows all again (T-056). The highlighted
   // card is the only sign of the choice (T-271).
   let computerFilter='';
+  const projectComputers=new Map();
   // On the statistics and agents tabs the choice filters that tab (T-076);
   // elsewhere it opens the tasks.
   function filterComputer(id){
@@ -2740,16 +2748,22 @@
     return {project:statsProject||project};
   }
   function updateStatsProjectScope(before){
-    if(JSON.stringify(before)===JSON.stringify(statsProjectScope()))return;
+    if(JSON.stringify(before)===JSON.stringify(statsProjectScope()))return false;
     if(!project)stats=null;
     statsModel='';statsGen++;
     if(tab==='stats')reloadStats();
+    return true;
   }
-  function setProject(name){
+  function setProject(name,computer){
     if(project===name)return;
     const before=statsProjectScope();
+    const oldComputer=computerFilter;
+    if(project&&oldComputer)projectComputers.set(project,oldComputer);
+    else projectComputers.delete(project);
+    computerFilter=computer??projectComputers.get(name)??'';
+    $('agent-filter').value='';
     project=name;
-    updateStatsProjectScope(before);
+    if(!updateStatsProjectScope(before)&&tab==='stats'&&computerFilter!==oldComputer)reloadStats();
   }
   function statsFilters(){
     return {...statsProjectScope(),period:statsPeriod,computer:computerFilter||'',agent:statsAgent,model:statsModel};
@@ -3824,8 +3838,8 @@
     const label=expanded?tr('Скрыть список задач'):tr('Показать список задач');$('list-toggle').setAttribute('aria-label',label);$('list-toggle').title=label;
     $('task-panel').hidden=!expanded;$('task-layout').classList.toggle('am-queue-collapsed',!expanded);
   });
-  function selectProject(name,task=''){
-    setProject(name);remember('messenger-project',name);
+  function selectProject(name,task='',computer){
+    setProject(name,computer);remember('messenger-project',name);
     selectedTask=task;selectedShared=null;feed=null;feedSignature='';viewSignature='';taskHistory=null;topTaskScope='';
     if($('device-menu')?.matches(':popover-open'))$('device-menu').hidePopover();
     renderProjects();renderMachines();if(tab==='agents')renderAgents();renderTaskList();renderThread();loadProjectActivity();refresh();
