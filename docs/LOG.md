@@ -6,6 +6,10 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 - Added the two project groups in the task panel when there is no computer filter. The inactive project supplies a bounded history page through its activity request. Task selection, history and bulk actions use the group's project. Chromium and WebKit fixtures passed for deselection in both columns, shared tasks, older history, bulk action scope, replacing a displayed project and returning to one project. Focused store and HTTP route tests passed.
 
+## 2026-11-26 — Codex (T-324 statistics on tile selection)
+
+- On Statistics, clicking a split computer tile applies both the project and computer to the existing filters. Clicking the already active tile clears only the computer selection. Chromium and WebKit fixtures check one computer across both projects and the return to combined totals.
+
 ## 2026-11-26 — Codex (T-323 separated project tiles)
 
 - Replaced the split computer card's tint with two rounded tiles separated by the project picker gap. The left tile carries computer identity, and the right carries update controls and version. Chromium and WebKit exercised matching colors, stable heights, hover, independent selection, the update dialog and single-project behavior.

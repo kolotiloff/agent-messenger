@@ -262,6 +262,7 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 
 | ID | Task | PR |
 |---|---|---|
+| T-324 | Apply the selected computer tile's project to Statistics. | Implemented and checked in Chromium and WebKit. Targeted for the next release. D-229. |
 | T-323 | Separate the two project tiles in each computer row with the project picker gap. | Released in [1.0.10, build 113](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.10-preview.113) via [PR #223](https://github.com/kolotiloff/agent-messenger/pull/223). D-228. |
 | T-325 | Show tasks from both displayed projects in the right panel when no computer is selected. | Implemented for the next release. D-230. |
 | T-322 | Keep the desktop window usable while an update waits for running tasks. | Released in [1.0.9, build 112](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.9-preview.112) via [PR #221](https://github.com/kolotiloff/agent-messenger/pull/221). D-227. |
