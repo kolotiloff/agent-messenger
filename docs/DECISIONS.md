@@ -783,3 +783,9 @@ The computer card body owns the vertical inset in both modes. Project columns ad
 In split mode the selected project's half is filled from top to bottom, including the shared computer header. Each half selects that project's computer from either the header or the agent area. Controls within the card keep their own actions. In single-project mode the same fill covers the full card. Selection changes the background without changing card geometry.
 
 The window remembers the last computer filter for each project while it is open. Selecting an active half again clears the filter for that project. The task list and conversation still follow one active project and computer.
+
+## D-224 — Use one agent roster per computer in split mode (T-319)
+
+Both columns show the computer's enabled agents even when it has no folder for one of the projects. A paused agent with active tasks in either column remains listed in both. A computer that reports no agents shows the existing no-agents message in both columns. Project activity decorates those rows with running or waiting status, model, and time. If activity is still loading or unavailable, the rows remain visible with a status tooltip.
+
+This replaces the sidebar's folder-based filtering in D-221. Reporting configured folders to the coordinator and validating a task's destination continue to use the existing readiness data.

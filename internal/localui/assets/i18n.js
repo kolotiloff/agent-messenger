@@ -29,8 +29,6 @@
   'Разделить проекты':'Split projects',
   'Проекты для статистики':'Projects for statistics',
   'Выбранные проекты':'Selected projects',
-  'Нет в проекте':'Not in project',
-  'На компьютере не настроена папка этого проекта':'This computer has no folder configured for this project',
   'Статусы недоступны':'Agent status unavailable',
   'Загружаем статусы…':'Loading agent status…',
   'Учитываются задачи выбранных проектов, известные этому компьютеру. Задача попадает в день, когда закончилась.':'Includes tasks from the selected projects that are known to this computer. Each task counts on the day it finished.',

@@ -32,8 +32,9 @@ function reply(url,p,available){
   if(url.pathname==='/api/server')return {host:{addresses:[],devices:[]},member:{},peers:[
     {...pc1,ready:{projects:['game','tools']}},
     {...pc2,ready:{projects:['game']}},
-    {...linux,ready:{projects:['tools','site']}}
-  ].map(peer=>({...peer,age:0,version:'1.0.5',agents}))};
+    {...linux,ready:{projects:['tools','site']},agents:[{agent:'codex',paused:true},{agent:'claude'}]},
+    {id:'vps',name:'VPS-PC2',host:true,ready:{projects:[]},agents:[]}
+  ].map(peer=>({age:0,version:'1.0.5',agents,...peer}))};
   if(url.pathname==='/api/discovery')return {agents:[]};
   if(url.pathname==='/api/client-info')return {client:'running',outdated:false};
   if(url.pathname==='/api/usage-stats'){
@@ -59,7 +60,7 @@ function reply(url,p,available){
   const engine=process.env.BROWSER_ENGINE||'chromium';
   const browser=await playwright[engine].launch();
   const errors=[],seen=[];
-  async function open(available,viewport,colorScheme){
+  async function open(available,viewport,colorScheme,beforeReply=()=>{}){
     const context=await browser.newContext({viewport,deviceScaleFactor:1,colorScheme,locale:'ru-RU'});
     await context.addInitScript(scheme=>{window.amDesktop='mac';window.messengerInitialTheme=scheme;},colorScheme);
     const page=await context.newPage();
@@ -71,6 +72,7 @@ function reply(url,p,available){
       if(url.pathname.startsWith('/api/')){
         seen.push({path:url.pathname,params:url.searchParams,body:req.postData()});
         const p=url.searchParams.get('project')||available[0].name;
+        await beforeReply(url,p);
         return route.fulfill({json:reply(url,p,available)});
       }
       const files={'/':['index.html','text/html; charset=utf-8'],'/app.js':['app.js','application/javascript'],'/i18n.js':['i18n.js','application/javascript'],'/app.css':['app.css','text/css'],'/icon.svg':['icon.svg','image/svg+xml']};
@@ -103,21 +105,36 @@ function reply(url,p,available){
     await single.close();
 
     const available=[...projects];
-    const page=await open(available,{width:1197,height:706},'dark');
+    let loadTools;
+    const toolsActivity=new Promise(resolve=>{loadTools=resolve;});
+    const page=await open(available,{width:1197,height:706},'dark',
+      (url,project)=>{if(url.pathname==='/api/project-activity'&&project==='tools')return toolsActivity;});
     assert.equal(await card(page,'local').count(),1);
     await card(page,'pc1').getByText('ждёт ответа').waitFor();
     const stableCards=['local','pc1','pc2'];
     const cardSizes=()=>Promise.all(stableCards.map(id=>card(page,id).boundingBox()));
     const singleSizes=await cardSizes();
     await split(page).click();
+    await cells(page,'pc2').nth(1).getByText('Codex',{exact:true}).waitFor();
+    assert.equal(await cells(page,'pc2').nth(1).getAttribute('title'),'Загружаем статусы…');
+    assert.equal(await card(page,'vps').getByText('Агенты не подключены',{exact:true}).count(),2);
+    loadTools();
     await cells(page,'local').nth(1).getByText('ждёт ответа').waitFor();
     await cells(page,'local').nth(0).locator('.am-agent-parallel summary').waitFor();
-    await cells(page,'pc2').nth(1).getByText('Нет в проекте').waitFor();
+    const roster=cell=>cell.locator('[data-provider]').evaluateAll(lines=>lines.map(line=>line.dataset.provider));
+    for(const id of ['local','pc1','pc2','linux']){
+      assert.deepEqual(await roster(cells(page,id).nth(0)),await roster(cells(page,id).nth(1)),id+' agent roster');
+    }
+    assert.equal(await cells(page,'linux').nth(0).getByText('Codex',{exact:true}).count(),1);
+    assert.equal(await cells(page,'linux').nth(0).locator('.am-agent-run').count(),0);
+    assert.equal(await cells(page,'linux').nth(1).locator('.am-agent-run[data-provider=codex]').count(),1);
+    assert.equal(await card(page,'vps').getByText('Агенты не подключены',{exact:true}).count(),2);
+    assert.equal(await page.locator('#machines').getByText('Нет в проекте',{exact:true}).count(),0);
     const splitSizes=await cardSizes();
     assert(splitSizes.every((size,i)=>size.width>singleSizes[i].width));
     assert.deepEqual(splitSizes.map(size=>size.height),singleSizes.map(size=>size.height),
       'switching to two project columns should preserve the height of equivalent cards');
-    assert.equal(await page.locator('#machines .am-machine-card').count(),4);
+    assert.equal(await page.locator('#machines .am-machine-card').count(),5);
     assert.equal(await cells(page,'local').count(),2);
     assert.equal(await chat(page,'game').isVisible(),true);
     await page.locator('#list-toggle').click();
