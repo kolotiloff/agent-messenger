@@ -773,3 +773,7 @@ Show the split control beside the project heading when there are at least two av
 The inactive column reads only current local and shared activity from the existing project records. Reported project folders and observed work determine which peers are shown as part of each project. A peer with no readiness report keeps its normal agent inventory.
 
 With the split open, Statistics starts at Selected projects. Its project picker can narrow the calculations and JSON export to either project without changing the active conversation. A combined request carries both project keys. Totals and task order are calculated across their available records, and projectless peer totals are excluded. Model comparison preserves separate cohorts per project. The combined JSON includes the selection in metadata and identifies each task and model cohort by project. Single-project export keeps its existing shape.
+
+## D-222 — Keep sidebar card spacing when showing two projects (T-317)
+
+The computer card body owns the vertical inset in both modes. Project columns add horizontal padding only. Collapsed agent summaries and project status labels truncate within their columns. The taller column determines the space a card needs when there are additional agent rows or expanded parallel task details.

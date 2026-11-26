@@ -269,7 +269,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept :is(.am-project-columns,.am-machine-projects) { display:grid; grid-template-columns:minmax(0,1fr); gap:var(--am-gap-control); }
 #am-concept.am-split-projects :is(.am-project-columns,.am-machine-projects) { grid-template-columns:repeat(2,minmax(0,1fr)); }
 #am-concept .am-project-columns [data-active-project] .am-select-trigger { border-color:var(--am-muted); }
-#am-concept .am-machine-project { min-width:0; position:relative; border-radius:var(--am-radius-xs); padding:var(--am-space-1); cursor:pointer; }
+#am-concept .am-machine-project { min-width:0; position:relative; border-radius:var(--am-radius-xs); padding-inline:var(--am-space-1); cursor:pointer; }
 #am-concept .am-machine-project + .am-machine-project::before { content:""; position:absolute; inset-block:var(--am-space-1); inset-inline-start:calc(-1 * var(--am-space-1)); border-inline-start:1px solid color-mix(in srgb,var(--am-line) 58%,var(--am-muted)); pointer-events:none; }
 #am-concept :is(.am-project-columns,.am-machine-projects) > * { min-width:0; }
 #am-concept:not(.am-split-projects) .am-projects-splitter,
@@ -310,7 +310,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-card-update:not(:has(> :not([hidden]))) { display:none; }
 #am-concept .am-machine-agents { display:flex; flex-direction:column; gap:var(--am-space-1); }
 #am-concept .am-agent-line { display:flex; align-items:baseline; gap:var(--am-space-1); min-width:0; font-size:var(--am-text-xs); }
-#am-concept :is(.am-agent-line,.am-agent-parallel-running) > span:first-child { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#am-concept :is(.am-agent-line,.am-agent-parallel-running,.am-agent-parallel > summary) > span:first-child,
+#am-concept .am-machine-project > .am-small { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #am-concept .am-agent-line .am-muted { margin-left:auto; }
 #am-concept .am-agent-model { color:var(--am-muted); }
 #am-concept .am-agent-status { margin-left:auto; flex:none; white-space:nowrap; }

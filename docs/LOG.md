@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-26 — Codex (T-317 split sidebar spacing)
+
+- Removed the redundant vertical padding inside split agent columns. Long collapsed labels stay on one line. The existing project split test now verifies stable card heights and a wider sidebar, alongside expansion of parallel task details. Chromium and WebKit passed.
+
 ## 2026-11-26 — Codex (T-314–T-316 release)
 
 - Published [1.0.6, build 109](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.6-preview.109) from `829a0567fc5bee4c965c354d2104e8872de2f178` via [PR #215](https://github.com/kolotiloff/agent-messenger/pull/215) after the [eight client checks](https://github.com/kolotiloff/agent-messenger/actions/runs/45841685798) passed. The [four release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45848162519) verified the public upgrade route on five platforms.
