@@ -226,6 +226,8 @@
   'Скопировано':'Copied',
   'Не удалось скопировать':'Could not copy',
   'Картинка':'Picture',
+  'Копировать':'Copy',
+  'Копировать картинку':'Copy picture',
   '{n} из {total}':'{n} of {total}',
   'Уменьшить':'Zoom out',
   'Вписать в окно':'Fit to window',

@@ -1760,6 +1760,7 @@
   // click zoom in; a zoomed picture is dragged; arrows step through the
   // pictures of the same message; Escape or a click beside it closes it.
   const viewer={list:[],at:0,scale:1,x:0,y:0};
+  let pictureCopyPending=false;
   function viewerApply(){
     const img=$('picture-image');
     if(viewer.scale<=1){viewer.scale=1;viewer.x=0;viewer.y=0;}
@@ -1782,6 +1783,8 @@
     viewer.at=(at+n)%n;viewer.scale=1;
     const p=viewer.list[viewer.at],img=$('picture-image');
     img.alt=p.name||'';img.removeAttribute('src');
+    $('picture-copy').disabled=true;
+    $('picture-copy-status').textContent='';
     $('picture-name').textContent=p.name||tr('Картинка');
     $('picture-count').textContent=n>1?tr('{n} из {total}').replace('{n}',viewer.at+1).replace('{total}',n):'';
     $('picture-prev').hidden=$('picture-next').hidden=n<2;
@@ -1794,9 +1797,40 @@
     const d=$('picture-dialog');if(!d.open)d.showModal();
     $('picture-close').focus();
   }
+  async function copyPicture(){
+    const img=$('picture-image'),button=$('picture-copy'),status=$('picture-copy-status');
+    if(pictureCopyPending||!img.complete||!img.naturalWidth)return;
+    const source=img.src;
+    pictureCopyPending=true;
+    button.disabled=true;
+    status.textContent='';
+    let message=tr('Скопировано');
+    try{
+      const canvas=document.createElement('canvas');
+      canvas.width=img.naturalWidth;
+      canvas.height=img.naturalHeight;
+      canvas.getContext('2d').drawImage(img,0,0);
+      // WebKit requires write() to start within the click, before PNG encoding finishes.
+      const clipboard=navigator.clipboard,Item=window.ClipboardItem;
+      if(!clipboard?.write||!Item)throw new Error('Image clipboard unavailable');
+      const png=new Promise((resolve,reject)=>canvas.toBlob(blob=>{
+        if(blob)resolve(blob);
+        else reject(new Error('PNG encoding failed'));
+      },'image/png'));
+      await clipboard.write([new Item({'image/png':png})]);
+    }catch(_){
+      message=tr('Не удалось скопировать');
+    }finally{
+      pictureCopyPending=false;
+      button.disabled=!img.complete||!img.naturalWidth;
+      if(img.src===source)status.textContent=message;
+    }
+  }
   function setupPictureViewer(){
     const d=$('picture-dialog'),stage=$('picture-stage'),img=$('picture-image');
     $('picture-close').addEventListener('click',()=>d.close());
+    $('picture-copy').addEventListener('click',copyPicture);
+    img.addEventListener('load',()=>{$('picture-copy').disabled=pictureCopyPending;});
     $('picture-prev').addEventListener('click',()=>viewerShow(viewer.at-1));
     $('picture-next').addEventListener('click',()=>viewerShow(viewer.at+1));
     $('picture-zoom-in').addEventListener('click',()=>viewerZoom(viewer.scale*1.5));
@@ -3377,12 +3411,15 @@
     const send=()=>{
       queued=false;
       const zones=[],holes=[];
-      const tabs=document.querySelector('.am-tabs'),side=document.querySelector('.am-sidebar');
-      if(tabs&&tabs.offsetParent){const r=tabs.getBoundingClientRect();zones.push(new DOMRect(r.left,0,r.width,r.bottom));}
-      if(side){const r=side.getBoundingClientRect(),first=side.firstElementChild?.getBoundingClientRect();zones.push(new DOMRect(r.left,r.top,r.width,Math.max(16,(first?first.top:r.top+40)-r.top)));}
-      for(const parent of [tabs,side])for(const node of parent?parent.querySelectorAll(titleInteractive):[]){
-        const r=node.getBoundingClientRect();
-        if(r.width&&r.height&&zones.some(z=>r.left<z.right&&r.right>z.left&&r.top<z.bottom&&r.bottom>z.top))holes.push(r);
+      // A modal covers the title row, so its controls must receive clicks.
+      if(!root.querySelector('dialog:modal')){
+        const tabs=root.querySelector('.am-tabs'),side=root.querySelector('.am-sidebar');
+        if(tabs&&tabs.offsetParent){const r=tabs.getBoundingClientRect();zones.push(new DOMRect(r.left,0,r.width,r.bottom));}
+        if(side){const r=side.getBoundingClientRect(),first=side.firstElementChild?.getBoundingClientRect();zones.push(new DOMRect(r.left,r.top,r.width,Math.max(16,(first?first.top:r.top+40)-r.top)));}
+        for(const parent of [tabs,side])for(const node of parent?parent.querySelectorAll(titleInteractive):[]){
+          const r=node.getBoundingClientRect();
+          if(r.width&&r.height&&zones.some(z=>r.left<z.right&&r.right>z.left&&r.top<z.bottom&&r.bottom>z.top))holes.push(r);
+        }
       }
       const message={zones:zones.map(box),holes:holes.map(box)},text=JSON.stringify(message);
       if(text!==last){last=text;bridge.postMessage(message);}
@@ -3390,6 +3427,8 @@
     const later=()=>{if(!queued){queued=true;requestAnimationFrame(send);}};
     new ResizeObserver(later).observe(document.documentElement);
     for(const node of document.querySelectorAll('.am-tabs,.am-sidebar'))new MutationObserver(later).observe(node,{childList:true,subtree:true,attributes:true});
+    const modalObserver=new MutationObserver(later);
+    for(const dialog of root.querySelectorAll('dialog'))modalObserver.observe(dialog,{attributeFilter:['open']});
     addEventListener('resize',later);
     later();
   }

@@ -8,6 +8,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+**T-315 is prepared for the next release.** The Mac title bar passes clicks to the picture viewer while it is open, and the viewer can copy the selected picture at its original pixel size. The copy button reports success or failure inside the viewer. See D-220.
+
 **[1.0.5, build 108](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.5-preview.108) is released** from `4c3c685df2d9e3aa2502deb858b6343c6452294e` as of 2026-11-26 (Europe/Moscow). [PR #210](https://github.com/kolotiloff/agent-messenger/pull/210) brings T-309 through T-313 together. All four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45711532504) passed, including the public signed upgrade path from 0.99 on all five targets. The release contains 22 assets.
 
 On Apple Silicon, the published 1.0.4 client found and downloaded 1.0.5 through the normal channel in an isolated home. The published 1.0.5 client restarted the old background client through the desktop bridge, retained two test projects' task histories and statistics, and exported each project separately. Both project databases passed SQLite integrity checks. The test used the extracted app package and left owner installations untouched.

@@ -468,6 +468,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-viewer-head .am-muted { font-size:var(--am-text-s); margin-right:var(--am-space-2); }
 #am-concept button.am-viewer-scale { min-width:calc(var(--am-control) * 1.75); height:var(--am-control-compact); min-height:var(--am-control-compact); padding:0 var(--am-space-2); font-size:var(--am-text-s); font-variant-numeric:tabular-nums; }
 #am-concept .am-viewer-stage { position:relative; flex:1; min-height:0; display:flex; align-items:center; justify-content:center; overflow:hidden; background:var(--am-soft); touch-action:none; }
+#am-concept .am-viewer-copy-status { position:absolute; bottom:var(--am-space-4); left:var(--am-space-4); pointer-events:none; }
+#am-concept .am-viewer-copy-status:not(:empty) { padding:var(--am-pad-compact); border-radius:var(--am-radius-s); background:var(--am-panel); color:var(--am-text); font-size:var(--am-text-s); box-shadow:var(--am-shadow-s); }
 #am-concept .am-viewer-stage img { max-width:100%; max-height:100%; object-fit:contain; transform-origin:center; cursor:zoom-in; user-select:none; transition:transform .15s ease; }
 #am-concept .am-viewer-stage.am-zoomed img { cursor:grab; }
 #am-concept .am-viewer-stage.am-dragging img { cursor:grabbing; transition:none; }
