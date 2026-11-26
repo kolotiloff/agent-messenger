@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-26 — Codex (T-320 through T-322 release)
+
+- Published [1.0.9, build 112](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.9-preview.112) from `654ba47651e7cfa5d7ae08af2accdee5b8f73e64` via [PR #221](https://github.com/kolotiloff/agent-messenger/pull/221). All four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45882901446) passed, including signed update delivery on all five supported targets. The release tag points to the checked revision and has 22 uploaded files.
+
 ## 2026-11-26 — Codex (T-321 coordinator label and T-322 update wait)
 
 - Added live local coordinator status to inactive project snapshots and used both displayed projects for the split card's label. Dismissing the update wait dialog leaves the workspace usable, with details available from a status button. The safe restart check reads every project in split storage. Chromium, WebKit and focused Go tests used fixtures.
