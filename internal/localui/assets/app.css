@@ -308,11 +308,11 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept.am-task-sidebar-preview .am-project-heading { margin:0; }
 #am-concept.am-task-sidebar-preview .am-project .am-label { display:block; color:var(--am-text); font-size:var(--am-text-m); font-weight:600; text-transform:none; letter-spacing:normal; }
 #am-concept.am-task-sidebar-preview :is(.am-project .am-select-trigger,.am-tabs .am-tab) { min-height:var(--am-preview-header-control); }
-#am-concept.am-task-sidebar-preview .am-computers { border-block-start:1px solid var(--am-line); }
+#am-concept.am-task-sidebar-preview .am-computers { border-block-start:1px solid var(--am-line); padding-block-start:var(--am-gap-control); }
 #am-concept.am-task-sidebar-preview .am-machines { gap:var(--am-space-1); }
 #am-concept.am-task-sidebar-preview .am-machine-card { border:0; border-radius:0; background:transparent; }
 #am-concept.am-task-sidebar-preview .am-machine-card:has(.am-sidebar-disclosure[aria-expanded=true]) + .am-machine-card { margin-block-start:var(--am-gap-control); }
-#am-concept.am-task-sidebar-preview .am-machine-card > .am-machine-name { position:relative; background:transparent; border-radius:var(--am-radius-s); padding:var(--am-computer-meta-gap) var(--am-space-1); padding-inline-start:calc(var(--am-computer-icon-size) + var(--am-space-2)); }
+#am-concept.am-task-sidebar-preview .am-machine-card > .am-machine-name { position:relative; background:transparent; border-radius:var(--am-radius-s); padding-block:var(--am-computer-meta-gap); padding-inline:calc(var(--am-computer-icon-size) + var(--am-space-2)) var(--am-space-3); }
 #am-concept .am-sidebar-has-tasks > .am-machine-name:has(> .am-sidebar-disclosure:is(:hover,:focus-visible)) { background:var(--am-field-hover); }
 #am-concept .am-sidebar-has-tasks > .am-machine-name .am-update-icon { position:relative; z-index:2; }
 #am-concept button.am-sidebar-disclosure:not(:disabled) { position:absolute; inset:0; z-index:1; width:100%; min-height:0; justify-content:flex-start; background:transparent; padding:0 var(--am-space-1); color:var(--am-muted); }
@@ -320,7 +320,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-sidebar-disclosure[aria-expanded=true] .am-sidebar-arrow { transform:rotate(90deg); }
 #am-concept .am-sidebar-tasks { display:grid; gap:var(--am-space-1); }
 #am-concept .am-sidebar-has-tasks > .am-sidebar-tasks { margin-block-start:var(--am-space-1); }
-#am-concept .am-sidebar-task { display:grid; grid-template-columns:minmax(0,1fr); gap:0; min-width:0; text-align:start; overflow-wrap:anywhere; border:0; background:transparent; border-radius:var(--am-radius-s); padding:var(--am-space-1) var(--am-space-2); padding-inline-start:calc(var(--am-computer-icon-size) + var(--am-space-1)); }
+#am-concept .am-sidebar-task { display:grid; grid-template-columns:minmax(0,1fr); gap:0; min-width:0; text-align:start; overflow-wrap:anywhere; border:0; background:transparent; border-radius:var(--am-radius-s); padding-block:var(--am-space-1); padding-inline:calc(var(--am-computer-icon-size) + var(--am-space-1)) var(--am-space-3); }
 #am-concept button.am-sidebar-task:is(:hover,:focus-visible):not(:disabled) { background:var(--am-field-hover); }
 #am-concept button.am-sidebar-task[aria-pressed=true]:not(:disabled) { background:var(--am-selected); }
 @media (max-width:620px) {
@@ -499,8 +499,9 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-meta { display:flex; flex-wrap:wrap; align-items:center; gap:var(--am-gap-control); margin-bottom:var(--am-space-1); }
 #am-concept .am-meta strong { font-weight:500; }
 #am-concept .am-meta time { color:var(--am-muted); font-size:var(--am-text-xs); }
-#am-concept .am-meta-model { color:var(--am-muted); font-size:var(--am-text-s); min-width:0; overflow-wrap:anywhere; }
-#am-concept .am-role { padding:0 var(--am-space-1); border-radius:var(--am-radius-xs); background:var(--am-soft); color:var(--am-muted); font-size:var(--am-text-xs); font-weight:400; }
+#am-concept :is(.am-meta-model,.am-role) { color:var(--am-muted); font-size:var(--am-text-s); font-weight:400; }
+#am-concept .am-meta-model { min-width:0; overflow-wrap:anywhere; }
+#am-concept .am-role { padding:0 var(--am-space-1); border-radius:var(--am-radius-xs); background:var(--am-soft); }
 #am-concept :is(.am-message-content,.am-compose textarea) {
   font-size:var(--am-text-chat);
   font-weight:400;

@@ -10,6 +10,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 - Refined compact task spacing, moved the project picker beside the heading, and aligned the desktop browser header rows and dividers. Moved the project name before the task title in the All scope. Chromium and WebKit checked alignment, spacing, selection, project filtering and resizing on the loopback preview in [PR #228](https://github.com/kolotiloff/agent-messenger/pull/228).
 - Made computer headers full-width disclosure buttons and removed the dividers between groups. Added independent project and computer filters in Statistics and a local-first computer picker in Agents. Kept efficiency and export beside the Statistics filters as the pane narrows.
 - Recorded the live loopback preview as the default workflow for reviewing future window changes.
+- Added space below the Projects divider, matched the trailing insets on computer and task rows, and expanded the fictional conversation with multiline messages. Matched the chat roles to the model typography.
 
 ## 2026-11-27 — Codex (T-324 and T-325 release)
 
