@@ -2,10 +2,21 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-26 — Codex (T-314–T-316 integration)
+
+- Combined the update indicator, picture viewer controls and split project sidebar for 1.0.6 build 109.
+
 ## 2026-11-26 — Codex (T-316 project sidebar)
 
 - Added the split sidebar for two selected projects and a project filter in Statistics. One computer card contains both agent columns, and the window keeps one active conversation. Model comparison preserves per-project cohorts, and a combined JSON export identifies each task's project.
 - Chromium and WebKit exercise the actual window assets with fictional responses. Go fixtures verify the two-project totals, activity, comparison and export, including exclusion of a third project and atomic publication when a selected project cannot be read.
+## 2026-11-26 — Codex (T-315 picture viewer)
+
+- The Mac native drag region covered the viewer's close button. The page now suspends native window dragging while a modal is open and restores it when the last modal closes. The viewer copies the selected picture as a full-size PNG, independently of zoom or position, and shows the result inside the viewer. D-220.
+- The Chromium fixture verifies the title-bar bridge, both ways of closing the viewer, the copied dimensions and pixels, and recovery from a clipboard refusal. The focused `internal/localui` race check passed on Apple Silicon. The fixture uses a simulated clipboard writer.
+## 2026-11-26 — Codex (T-314 update indicator)
+
+- Centered the circular update arrow on local and remote computer cards. On macOS, switch from the download glyph to the circular arrow throughout the active update and keep the progress dialog open on backdrop clicks. A failed attempt restores the download glyph when the release is still offered. Chrome reproduces both visual defects with the released assets. Chrome and WebKit check the fixed behavior with simulated macOS updater callbacks. See D-219.
 
 ## 2026-11-26 — Codex (T-309–T-313 release)
 

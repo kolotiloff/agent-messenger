@@ -758,6 +758,14 @@ The comparison uses the original task's creation date and initial reported model
 
 The period tabs, agent and model filters stay together on the left. The chart and upward export buttons sit on the right and can wrap together in a narrow window. Each has a localized tooltip and accessible name. The chart button opens a table grouped by type and difficulty. Each row shows the group task count in muted text beside the model name, accepted and first-pass percentages, median token usage, and median time to acceptance. The count represents the entire group. Each percentage keeps its own denominator. Hover or focus a percentage to see the exact fraction. Groups share one background and have a rule between them, with matching vertical insets above and below the rule. The leading row arrow opens a rounded panel with the outgoing message background and radius. Its table shows the mean, median, 90% threshold and sample size for token usage, active runtime and time to acceptance. The threshold is the value at or below which at least 90% of measured tasks fell. The JSON carries the original counts and `p90` field.
 
+## D-219 — Show one centered update indicator (T-314)
+
+The circular update arrow uses a centered arc and a rotation origin at the center of its SVG view box. Remote update cancellation keeps its existing behavior. During a local Mac download, installation or restart, the visible glyph switches from the download arrow to the circular arrow. Download percentages remain in the progress dialog. Clicking its backdrop keeps the dialog open while the update is active. After an error, the dialog can be dismissed and the download arrow returns if the release is still offered.
+## D-220 — Close and copy pictures in the viewer (T-315)
+
+The Mac title bar pauses its drag zones while a modal is open. This lets the modal receive pointer input across its header and backdrop, including the picture viewer's close button. The main window's drag zones return when the last modal closes.
+
+The picture viewer's Copy button puts a PNG of the selected image at its original pixel dimensions on the system clipboard. The current zoom and position belong to the viewer. Success and failure are reported inside the viewer.
 ## D-221 — Show two selected projects in one computer list (T-316)
 
 Show the split control beside the project heading when there are at least two available projects. Each side has its own project picker. Both selections share the computer list and order. Inside each card, an inset divider separates the two groups of agent names, models and statuses. Expanded agent rows use the computer card's surface. The right pane shows one active project and computer selection. A change to the inactive picker preserves the active conversation and its draft. Closing the split retains the active project and restores the normal layout.

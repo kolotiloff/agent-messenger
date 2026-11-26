@@ -597,9 +597,7 @@
     const b=el(canCancel?'button':'span',undefined,'am-update-icon am-peer-update '+(canCancel?'am-update-cancel':'am-update-wait'));
     const label=canCancel?tr('Отменить обновление'):caption;
     b.title=label;b.setAttribute('aria-label',label);
-    const indicator=svgIcon(checkPath);
-    indicator.classList.add('am-update-spin');
-    b.append(indicator);
+    b.append(updateSpinner());
     if(!canCancel){b.setAttribute('role','img');return b;}
     b.setAttribute('aria-description',caption);
     b.type='button';b.dataset.key='cancel-update-'+(peer?.id||'local');
@@ -1873,6 +1871,7 @@
   // click zoom in; a zoomed picture is dragged; arrows step through the
   // pictures of the same message; Escape or a click beside it closes it.
   const viewer={list:[],at:0,scale:1,x:0,y:0};
+  let pictureCopyPending=false;
   function viewerApply(){
     const img=$('picture-image');
     if(viewer.scale<=1){viewer.scale=1;viewer.x=0;viewer.y=0;}
@@ -1895,6 +1894,8 @@
     viewer.at=(at+n)%n;viewer.scale=1;
     const p=viewer.list[viewer.at],img=$('picture-image');
     img.alt=p.name||'';img.removeAttribute('src');
+    $('picture-copy').disabled=true;
+    $('picture-copy-status').textContent='';
     $('picture-name').textContent=p.name||tr('Картинка');
     $('picture-count').textContent=n>1?tr('{n} из {total}').replace('{n}',viewer.at+1).replace('{total}',n):'';
     $('picture-prev').hidden=$('picture-next').hidden=n<2;
@@ -1907,9 +1908,40 @@
     const d=$('picture-dialog');if(!d.open)d.showModal();
     $('picture-close').focus();
   }
+  async function copyPicture(){
+    const img=$('picture-image'),button=$('picture-copy'),status=$('picture-copy-status');
+    if(pictureCopyPending||!img.complete||!img.naturalWidth)return;
+    const source=img.src;
+    pictureCopyPending=true;
+    button.disabled=true;
+    status.textContent='';
+    let message=tr('Скопировано');
+    try{
+      const canvas=document.createElement('canvas');
+      canvas.width=img.naturalWidth;
+      canvas.height=img.naturalHeight;
+      canvas.getContext('2d').drawImage(img,0,0);
+      // WebKit requires write() to start within the click, before PNG encoding finishes.
+      const clipboard=navigator.clipboard,Item=window.ClipboardItem;
+      if(!clipboard?.write||!Item)throw new Error('Image clipboard unavailable');
+      const png=new Promise((resolve,reject)=>canvas.toBlob(blob=>{
+        if(blob)resolve(blob);
+        else reject(new Error('PNG encoding failed'));
+      },'image/png'));
+      await clipboard.write([new Item({'image/png':png})]);
+    }catch(_){
+      message=tr('Не удалось скопировать');
+    }finally{
+      pictureCopyPending=false;
+      button.disabled=!img.complete||!img.naturalWidth;
+      if(img.src===source)status.textContent=message;
+    }
+  }
   function setupPictureViewer(){
     const d=$('picture-dialog'),stage=$('picture-stage'),img=$('picture-image');
     $('picture-close').addEventListener('click',()=>d.close());
+    $('picture-copy').addEventListener('click',copyPicture);
+    img.addEventListener('load',()=>{$('picture-copy').disabled=pictureCopyPending;});
     $('picture-prev').addEventListener('click',()=>viewerShow(viewer.at-1));
     $('picture-next').addEventListener('click',()=>viewerShow(viewer.at+1));
     $('picture-zoom-in').addEventListener('click',()=>viewerZoom(viewer.scale*1.5));
@@ -2230,6 +2262,12 @@
   const gearPath=['M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z'];
   // The update mark: a down arrow.
   function appendUpdateGlyphs(node){node.append(svgIcon(['M12 3v12m-5-5 5 5 5-5M3 15v4a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4']));}
+  function updateSpinner(){
+    // Both ends of the arc are nine units from the center of the viewBox.
+    const icon=svgIcon(['M21 12A9 9 0 1 1 19.2 6.6','M20 3.5l-.8 3.1-3.2.6']);
+    icon.classList.add('am-update-spin');
+    return icon;
+  }
   function svgIcon(paths,circle){
     const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');svg.setAttribute('focusable','false');
     if(circle){const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx','12');c.setAttribute('cy','12');c.setAttribute('r','3');svg.append(c);}
@@ -3527,12 +3565,15 @@
     const send=()=>{
       queued=false;
       const zones=[],holes=[];
-      const tabs=document.querySelector('.am-tabs'),side=document.querySelector('.am-sidebar');
-      if(tabs&&tabs.offsetParent){const r=tabs.getBoundingClientRect();zones.push(new DOMRect(r.left,0,r.width,r.bottom));}
-      if(side){const r=side.getBoundingClientRect(),first=side.firstElementChild?.getBoundingClientRect();zones.push(new DOMRect(r.left,r.top,r.width,Math.max(16,(first?first.top:r.top+40)-r.top)));}
-      for(const parent of [tabs,side])for(const node of parent?parent.querySelectorAll(titleInteractive):[]){
-        const r=node.getBoundingClientRect();
-        if(r.width&&r.height&&zones.some(z=>r.left<z.right&&r.right>z.left&&r.top<z.bottom&&r.bottom>z.top))holes.push(r);
+      // A modal covers the title row, so its controls must receive clicks.
+      if(!root.querySelector('dialog:modal')){
+        const tabs=root.querySelector('.am-tabs'),side=root.querySelector('.am-sidebar');
+        if(tabs&&tabs.offsetParent){const r=tabs.getBoundingClientRect();zones.push(new DOMRect(r.left,0,r.width,r.bottom));}
+        if(side){const r=side.getBoundingClientRect(),first=side.firstElementChild?.getBoundingClientRect();zones.push(new DOMRect(r.left,r.top,r.width,Math.max(16,(first?first.top:r.top+40)-r.top)));}
+        for(const parent of [tabs,side])for(const node of parent?parent.querySelectorAll(titleInteractive):[]){
+          const r=node.getBoundingClientRect();
+          if(r.width&&r.height&&zones.some(z=>r.left<z.right&&r.right>z.left&&r.top<z.bottom&&r.bottom>z.top))holes.push(r);
+        }
       }
       const message={zones:zones.map(box),holes:holes.map(box)},text=JSON.stringify(message);
       if(text!==last){last=text;bridge.postMessage(message);}
@@ -3540,6 +3581,8 @@
     const later=()=>{if(!queued){queued=true;requestAnimationFrame(send);}};
     new ResizeObserver(later).observe(document.documentElement);
     for(const node of document.querySelectorAll('.am-tabs,.am-sidebar'))new MutationObserver(later).observe(node,{childList:true,subtree:true,attributes:true});
+    const modalObserver=new MutationObserver(later);
+    for(const dialog of root.querySelectorAll('dialog'))modalObserver.observe(dialog,{attributeFilter:['open']});
     addEventListener('resize',later);
     later();
   }
@@ -3599,20 +3642,12 @@
   function updateTip(version,busy){
     const name=versionName(version);
     let text=busy==='installing'?tr('Обновление устанавливается'):busy?tr('Обновление загружается'):name?tr('Обновить до ')+name:tr('Обновить');
-    if(updateProgress)text=tr('Загружается обновление')+(updateProgress.version?' '+versionName(updateProgress.version):'')+': '+Math.floor(100*updateProgress.done/updateProgress.total)+'%';
+    if(busy==='downloading'&&updateProgress)text=tr('Загружается обновление')+(updateProgress.version?' '+versionName(updateProgress.version):'')+': '+Math.floor(100*updateProgress.done/updateProgress.total)+'%';
     $('app-update-button').title=text;$('app-update-button').setAttribute('aria-label',text);
   }
-  // While an update downloads, a ring around the same arrow fills from 0 to
-  // 100% (owner, 2026-11-14). The download writes its progress wherever it
-  // runs (the background check, or the Mac app's fetch helper); the window
-  // asks for it often while it lasts and rarely otherwise.
+  // The download helper writes progress for the dialog. The window checks
+  // often while a transfer is visible and rarely otherwise.
   let updateProgress=null,progressTimer=0;
-  function showUpdateProgress(){
-    const b=$('app-update-button'),p=updateProgress;
-    b.classList.toggle('am-update-loading',!!p);
-    if(p)b.style.setProperty('--am-update-p',String(Math.min(1,Math.max(0,p.done/p.total))));
-    else b.style.removeProperty('--am-update-p');
-  }
   async function pollUpdateProgress(){
     clearTimeout(progressTimer);
     let next=null;
@@ -3622,8 +3657,8 @@
     // The Mac downloads from GitHub before Sparkle installs: the run shows
     // that download (T-213), and progress keeps it from looking stuck.
     if(next&&updateRun?.mac&&!updateRun.error&&updateRun.phase==='downloading'){updateRun.done=next.done;updateRun.total=next.total;if(next.version)updateRun.version=next.version;macRunQuiet();renderMacRun();}
-    if(changed){if(window.webkit?.messageHandlers?.updates)renderMacUpdate();else if(selfUpdate)renderSelfUpdate();else showUpdateProgress();}
-    else if(window.webkit?.messageHandlers?.updates){showUpdateProgress();if(next)updateTip(next.version,true);}
+    else if(window.webkit?.messageHandlers?.updates){if(changed||next)renderMacUpdate();}
+    else if(changed&&selfUpdate)renderSelfUpdate();
     else renderUpdateDialog();
     // A download that just ended may have made an update ready: ask again.
     if(changed&&!next&&!window.webkit?.messageHandlers?.updates)loadSelfUpdate();
@@ -3639,24 +3674,21 @@
     const status=macUpdate||{};
     const version=typeof status?.version==='string'?status.version:'';
     const installed=typeof status?.installedVersion==='string'?status.installedVersion:'';
+    const run=updateRun?.mac?updateRun:null;
+    let busy='';
+    if(run&&!run.error)busy=run.phase==='restarting'?'installing':run.phase;
+    if(!run&&status.checking&&updateProgress&&version)busy='downloading';
+    const button=$('app-update-button');
     $('app-installed-version').hidden=!installed;
     $('app-installed-version').title=installed?tr('Версия ')+versionName(installed).slice(1):'';
-    // Only an update ready to install is shown, as an arrow next to
-    // the version: a download in the background stays quiet, so the icon
-    // does not appear once for the download and again for the install
-    // (owner, 2026-11-15). Background checks and their failures stay quiet.
-    const loading=!!updateProgress&&!!version;
-    const shown=!!version;
     if(version)knownUpdate=version;
-    $('app-update-version').hidden=true;$('app-update-button').hidden=!shown;
+    $('app-update-version').hidden=true;button.hidden=!version&&!busy;
     $('app-installed-version').textContent=versionText(installed);
-    updateTip(version,loading);
-    showUpdateProgress();
-    $('app-update-button').disabled=loading;
+    updateTip(version,busy);
+    button.classList.toggle('am-update-active',!!busy);
+    button.disabled=!!busy;
   }
   // Windows and Linux: the program updates itself from the window (D-048).
-  // While the check downloads, the icon is the ring; the arrow appears when
-  // a release is ready to install.
   let selfUpdate=null,selfUpdateBusy=false,selfUpdateTimer=0;
   function renderSelfUpdate(){
     const s=selfUpdate;if(!s)return;
@@ -3665,22 +3697,18 @@
     $('app-installed-version').title=installed?tr('Версия ')+versionName(installed).slice(1):'';
     const version=typeof s.version==='string'?s.version:'';
     if(version&&s.state==='available')knownUpdate=version;
-    // A check that only asks GitHub shows nothing; a download fills the ring
-    // around the arrow; installing dims the arrow.
-    // The archive downloads only when the owner presses the button, so the
-    // icon has no ring of its own: the update dialog shows the progress.
+    // The dialog shows the progress after the owner presses the button.
     const offered=(s.state==='available'||s.state==='found')&&!!version;
     if(offered)knownUpdate=version;
-    const installing=selfUpdateBusy||s.state==='installing'||s.state==='downloading',loading=false;
+    const installing=selfUpdateBusy||s.state==='installing'||s.state==='downloading';
     const done=s.state==='installed',shown=offered||installing||done||!!s.message;
     // The arrow while an update waits (owner, T-056, T-066). A line appears
     // only for an error or after the update.
     $('app-update-version').hidden=!s.message&&!done;$('app-update-button').hidden=!shown||done;
     $('app-installed-version').textContent=versionText(installed);
     $('app-update-version').textContent=s.message||(done?tr('Обновлено. Окно откроется заново.'):'');
-    updateTip(version,installing?'installing':loading);
-    $('app-update-button').classList.remove('am-update-loading');
-    $('app-update-button').disabled=installing||loading;
+    updateTip(version,s.state==='downloading'?'downloading':installing?'installing':'');
+    $('app-update-button').disabled=installing;
     renderUpdateDialog();
   }
   async function loadSelfUpdate(){
@@ -3742,6 +3770,7 @@
   // (T-199); Sparkle shows no window of its own.
   function renderMacRun(){
     const r=updateRun;
+    renderMacUpdate();
     $('update-title').textContent=tr('Обновление')+(r.version?' '+versionName(r.version):'');
     let step,share;
     if(r.error){step=tr('Не удалось обновить');share=0;}
@@ -3785,6 +3814,7 @@
     if(window.webkit?.messageHandlers?.updates)startMacUpdate();
     else startUpdate();
   });
+  $('app-update-button').append(updateSpinner());
   if(!window.webkit?.messageHandlers?.updates){selfUpdateTimer=setInterval(loadSelfUpdate,60000);loadSelfUpdate();}
   pollUpdateProgress();
   root.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>show(b.dataset.tab)));
@@ -3890,13 +3920,16 @@
   $('invite-close').addEventListener('click',()=>$('invite-dialog').close());
   // A closed invitation is not shown again; a new one can be made at any time.
   // A click on the dimmed area outside an open dialog closes it, like its ✕
-  // (owner, T-152). The restart dialog stays: it waits for the restart.
+  // (owner, T-152). Keep the restart and active update dialogs open.
   for(const dialog of document.querySelectorAll('dialog')){
     if(dialog.id==='restart-dialog')continue;
     let downOutside=false;
     const outside=event=>{const r=dialog.getBoundingClientRect();return event.target===dialog&&(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom);};
     dialog.addEventListener('mousedown',event=>{downOutside=outside(event);});
-    dialog.addEventListener('click',event=>{if(downOutside&&outside(event))dialog.close();downOutside=false;});
+    dialog.addEventListener('click',event=>{
+      if(downOutside&&outside(event)&&(dialog.id!=='update-dialog'||updateRun?.error))dialog.close();
+      downOutside=false;
+    });
   }
   $('invite-dialog').addEventListener('close',()=>{invitation=null;clearInterval(inviteTimer);});
   $('project-save').addEventListener('click',createProject);
