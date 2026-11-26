@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-26 — Codex (T-314–T-316 release)
+
+- Published [1.0.6, build 109](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.6-preview.109) from `829a0567fc5bee4c965c354d2104e8872de2f178` via [PR #215](https://github.com/kolotiloff/agent-messenger/pull/215) after the [eight client checks](https://github.com/kolotiloff/agent-messenger/actions/runs/45841685798) passed. The [four release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45848162519) verified the public upgrade route on five platforms.
+- The published 1.0.5 Mac client found and downloaded 1.0.6. The isolated desktop upgrade retained both projects and reproduced their separate and combined totals and exports. Both project databases passed integrity checks.
+
 ## 2026-11-26 — Codex (T-314–T-316 integration)
 
 - Combined the update indicator, picture viewer controls and split project sidebar for 1.0.6 build 109.
