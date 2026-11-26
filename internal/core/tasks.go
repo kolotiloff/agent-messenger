@@ -1024,19 +1024,20 @@ func (s *Store) TaskByID(id string) (Task, error) {
 		}
 		return project.TaskByID(id)
 	}
-	var t Task
-	err := s.tx(func(tx *sql.Tx) error {
-		var err error
-		t, err = scanTask(tx.QueryRow(`SELECT `+taskColumns+` FROM tasks WHERE id=?`, id).Scan)
-		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("%w: unknown task", ErrRejected)
-		}
-		if err != nil {
-			return err
-		}
-		t.OpenQuestion, err = openQuestion(tx, id)
-		return err
-	})
+	// Read the task and question from one snapshot while a worker writes.
+	tx, err := s.db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return Task{}, err
+	}
+	defer tx.Rollback()
+	t, err := scanTask(tx.QueryRow(`SELECT `+taskColumns+` FROM tasks WHERE id=?`, id).Scan)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Task{}, fmt.Errorf("%w: unknown task", ErrRejected)
+	}
+	if err != nil {
+		return t, err
+	}
+	t.OpenQuestion, err = openQuestion(tx, id)
 	return t, err
 }
 

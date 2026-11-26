@@ -5,6 +5,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 ## 2026-11-26 — Codex (T-314–T-316 integration)
 
 - Combined the update indicator, picture viewer controls and split project sidebar for 1.0.6 build 109.
+- The Windows check exposed a database lock while reading task status during worker output. TaskByID now reads the task and its open question in one read-only snapshot. A held-writer regression reproduced SQLITE_BUSY with the previous code.
 
 ## 2026-11-26 — Codex (T-316 project sidebar)
 

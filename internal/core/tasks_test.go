@@ -63,6 +63,28 @@ func newTaskFixture(t *testing.T) taskFixture {
 
 var taskObs = platform.Observation{PID: 4242, PGID: 4242, StartToken: "start", BootID: "boot"}
 
+func TestTaskByIDReadsCommittedStateDuringWrite(t *testing.T) {
+	f := newTaskFixture(t)
+	id := f.start(t, "read", "codex", "Read task progress")
+	db, err := sql.Open("sqlite", dsn(f.path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	writer, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer writer.Rollback()
+	if _, err := writer.Exec("UPDATE tasks SET title='uncommitted' WHERE id=?", id); err != nil {
+		t.Fatal(err)
+	}
+	task, err := f.st.TaskByID(id)
+	if err != nil || task.ID != id || task.Title != "Read task progress" {
+		t.Fatalf("read during write: %+v, %v", task, err)
+	}
+}
+
 func (f taskFixture) start(t *testing.T, op, provider, text string) string {
 	t.Helper()
 	id, created, err := f.st.StartTask(StartTaskRequest{Project: "Game", OpID: op, Provider: provider, Text: text})
