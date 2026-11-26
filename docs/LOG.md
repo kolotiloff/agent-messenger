@@ -2,6 +2,11 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-324 and T-325 release)
+
+- Integrated the Statistics project filter and combined task list from [PR #224](https://github.com/kolotiloff/agent-messenger/pull/224) and [PR #226](https://github.com/kolotiloff/agent-messenger/pull/226). The final source passed Chromium, WebKit and the local macOS race suite.
+- Published [1.0.11, build 114](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.11-preview.114) from `ae5ba1f757d0d1a49139f238fee284fe57dd0de3`. All four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45897527560) passed. The release contains 22 files and the public upgrade route offers five signed target packages.
+
 ## 2026-11-27 — Codex (T-325 split task list)
 
 - Added the two project groups in the task panel when there is no computer filter. The inactive project supplies a bounded history page through its activity request. Task selection, history and bulk actions use the group's project. Chromium and WebKit fixtures passed for deselection in both columns, shared tasks, older history, bulk action scope, replacing a displayed project and returning to one project. Focused store and HTTP route tests passed.
