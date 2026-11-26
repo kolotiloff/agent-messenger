@@ -1462,7 +1462,7 @@
     if(!it){if(quiet)return;selectedTask='';selectedShared=null;feed=null;feedSignature='';renderTaskList();renderThread();return;}
     if(it.peer){selectedShared={peer:it.peer.peer,id:it.t.id};selectedTask='';feed=null;feedSignature='';renderTaskList();renderThread();startWindowWatch();return;}
     if(selectedTask===it.t.id&&!selectedShared)return;
-    selectedTask=it.t.id;selectedShared=null;feed=null;feedSignature='';renderTaskList();if(!quiet)loadFeed();
+    selectedTask=it.t.id;selectedShared=null;feed=null;feedSignature='';renderTaskList();if(!quiet){renderThread();loadFeed();}
   }
   // A model's display name (T-202): «gpt-6.2-sol[effort=low]»
   // reads «Sol 6.2 Low», «claude-opus-5-5[effort=medium]» «Opus 5.5 Medium».
@@ -1733,22 +1733,22 @@
     const panelOpen=!!view?.project&&$('list-toggle').getAttribute('aria-expanded')==='true';
     $('task-panel').hidden=!panelOpen;$('task-layout').classList.toggle('am-queue-collapsed',!panelOpen);
     $('list-toggle').hidden=tab!=='tasks'||!view?.project;
-    if(view?.project&&selectedTask&&feed?.task.id===selectedTask&&selectedTaskRow()){
-      renderFeed();
-      return;
-    }
+    const sameProject=view?.project===project;
+    const task=sameProject&&selectedTask&&feed?.task.id===selectedTask?selectedTaskRow():null;
+    const shared=sameProject?sharedSelection():null;
+    const pending=!sameProject||!!(selectedTask&&!task)||!!(selectedShared&&!shared);
+    thread.setAttribute('aria-busy',String(pending));
+    $('compose').inert=pending;$('lost-bar').inert=pending;
+    // Keep the last complete conversation and its layout until this one is ready.
+    if(pending){if(!head.firstElementChild)showPane(thread,'loading');return;}
+    if(task){renderFeed(task);return;}
     $('compose').hidden=true;$('lost-bar').hidden=true;feedSignature='';$('to-bottom').hidden=true;
-    if(view?.project!==project){head.replaceChildren();showPane(thread,'loading');return;}
-    if(!view.project){
-      head.replaceChildren();
-      showPane(thread,'welcome');return;
-    }
-    const shared=sharedSelection();
+    feedShown='';
     if(shared){renderSharedTask(shared.t,shared.p);return;}
     head.replaceChildren();
-    // A chosen task whose conversation has not arrived keeps the previous
-    // conversation on screen; an empty pane shows the loading indicator.
-    if(selectedTask){if(!thread.firstElementChild||thread.firstElementChild.dataset.pane)showPane(thread,'loading');return;}
+    if(!view.project){
+      showPane(thread,'welcome');return;
+    }
     showPane(thread,showWelcome()?'welcome':'empty');
   }
   // The welcome explains the setup until this computer has seen its first
@@ -2168,8 +2168,8 @@
     const minutes=Math.floor((Date.now()-at)/60000);if(minutes<10)return null;
     return el('p',tr('Исполнитель ничего не пишет уже ')+minutes+tr(' мин.'),'am-small am-muted');
   }
-  function renderFeed(){
-    const t=selectedTaskRow(),thread=$('thread'),head=$('task-head');
+  function renderFeed(t){
+    const thread=$('thread'),head=$('task-head');
     const signature=JSON.stringify([t,feed.items,online]);if(signature===feedSignature)return;
     const count=(feed.items||[]).filter(it=>it.kind!=='command_end').length,fresh=feedShown!==t.id,atBottom=fresh||feedStick||feedPinned,grew=!fresh&&!atBottom&&count>feedCount;feedShown=t.id;feedStick=false;feedCount=count;feedSignature=signature;
     const title=el('div',undefined,'am-task-head');title.append(el('h3',t.title));
@@ -2184,8 +2184,7 @@
     title.append(line);
     const quiet=quietLine(t);if(quiet)title.append(quiet);
     const headRow=el('div',undefined,'am-task-head-row');headRow.append(title);
-    head.replaceChildren(headRow);
-    const opened=new Set([...thread.querySelectorAll('details[open][data-key]')].map(d=>d.dataset.key));
+    const opened=new Set(fresh?[]:[...thread.querySelectorAll('details[open][data-key]')].map(d=>d.dataset.key));
     const out=[];let group=null,tools=null;
     const pending=new Map(), unfinished=new Set();
     for(const [index,it] of feed.items.entries()){
@@ -2315,6 +2314,7 @@
       }
     }
     flushTools();
+    head.replaceChildren(headRow);
     thread.replaceChildren(...out);
     for(const d of thread.querySelectorAll('details[data-key]'))if(opened.has(d.dataset.key))d.open=true;
     // A task another computer started is answered there.
@@ -3213,7 +3213,7 @@
         if(task.project&&task.project!==project&&splitProjects.includes(task.project)){
           show('tasks');selectProject(task.project,task.id);return;
         }
-        selectedTask=task.id;selectedShared=null;feed=null;feedSignature='';show('tasks');refresh();
+        selectedTask=task.id;selectedShared=null;feed=null;feedSignature='';show('tasks');renderThread();refresh();
       });
       top.append(row);
     }
@@ -4114,7 +4114,7 @@
   // Enter sends; Shift+Enter adds a line. An IME composition keeps its Enter.
   $('task-stop').addEventListener('click',stopSelectedTask);
   $('lost-close').addEventListener('click',closeHere);
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.isComposing&&!$('task-stop').hidden&&!$('compose').hidden&&!document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true]')){e.preventDefault();stopSelectedTask();}});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.isComposing&&!$('task-stop').hidden&&!$('compose').hidden&&!$('compose').inert&&!document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true]')){e.preventDefault();stopSelectedTask();}});
   $('answer-text').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();sendAnswer();}});
   $('project-dialog-close').addEventListener('click',()=>$('project-dialog').close());
   $('settings-open').addEventListener('click',()=>{$('auto-update-status').textContent='';$('settings-dialog').showModal();loadServer();});

@@ -67,7 +67,7 @@ if (require.main === module) (async()=>{
   const engine=process.env.BROWSER_ENGINE||'chromium';
   const browser=await playwright[engine].launch();
   const errors=[],seen=[];
-  async function open(available,viewport,colorScheme,beforeReply=()=>{}){
+  async function open(available,viewport,colorScheme,beforeReply=()=>{},preview=false){
     const context=await browser.newContext({viewport,deviceScaleFactor:1,colorScheme,locale:'ru-RU'});
     await context.addInitScript(scheme=>{
       window.amDesktop='mac';window.messengerInitialTheme=scheme;
@@ -88,7 +88,10 @@ if (require.main === module) (async()=>{
       }
       const files={'/':['index.html','text/html; charset=utf-8'],'/app.js':['app.js','application/javascript'],'/i18n.js':['i18n.js','application/javascript'],'/app.css':['app.css','text/css'],'/icon.svg':['icon.svg','image/svg+xml']};
       const file=files[url.pathname];
-      return file?route.fulfill({contentType:file[1],body:await fs.readFile(path.join(assets,file[0]))}):route.fulfill({status:404,body:''});
+      if(!file)return route.fulfill({status:404,body:''});
+      let body=await fs.readFile(path.join(assets,file[0]),'utf8');
+      if(preview&&url.pathname==='/')body=body.replace('id="am-concept"','id="am-concept" class="am-task-sidebar-preview"');
+      return route.fulfill({contentType:file[1],body});
     });
     await page.goto('http://messenger-preview.test/#preview-only');
     await page.getByText('Сообщение из game').waitFor();
@@ -108,6 +111,42 @@ if (require.main === module) (async()=>{
   const chat=(page,name)=>page.locator('#thread').getByText('Сообщение из '+name);
   const total=async(page,n)=>page.waitForFunction(value=>document.querySelector('#stats-total-title').textContent.split(' токен')[0].replace(/[^0-9]/g,'')===value,n);
   try{
+    const hold=()=>{let release;const response=new Promise(resolve=>{release=resolve;});return {response,release};};
+    const sameFeed=hold(),otherWindow=hold(),otherFeed=hold();
+    const preview=await open(projects,{width:1100,height:706},'dark',(url,p)=>{
+      if(url.pathname==='/api/window'&&p==='tools')return otherWindow.response;
+      if(url.pathname!=='/api/task')return;
+      if(url.searchParams.get('id')==='game-1')return sameFeed.response;
+      if(url.searchParams.get('id')==='tools-1')return otherFeed.response;
+    },true);
+    const header=preview.locator('#task-head h3'),thread=preview.locator('#thread');
+    const oldTitle=await header.innerText();
+    const sidebarTask=title=>preview.locator('#machines .am-sidebar-task').filter({hasText:title});
+    const expectPrevious=async(title)=>{
+      assert.equal(await header.innerText(),title);
+      assert.equal(await chat(preview,'game').isVisible(),true);
+      assert.equal(await thread.locator('[data-pane]').count(),0);
+      assert.equal(await thread.getAttribute('aria-busy'),'true');
+      assert.equal(await preview.locator('#compose').evaluate(node=>node.inert),true);
+    };
+    try{
+      await sidebarTask('Экран настроек').click();
+      await expectPrevious(oldTitle);
+      sameFeed.release();
+      await header.getByText('Экран настроек',{exact:true}).waitFor();
+      await sidebarTask('Экспорт отчёта').click();
+      await expectPrevious('Экран настроек');
+      const requestedFeed=preview.waitForRequest(req=>new URL(req.url()).searchParams.get('id')==='tools-1');
+      otherWindow.release();
+      await requestedFeed;
+      await expectPrevious('Экран настроек');
+      otherFeed.release();
+      await chat(preview,'tools').waitFor();
+      assert.equal(await header.innerText(),'Экспорт отчёта');
+      assert.equal(await thread.getAttribute('aria-busy'),'false');
+      assert.equal(await preview.locator('#compose').evaluate(node=>node.inert),false);
+    }finally{sameFeed.release();otherWindow.release();otherFeed.release();await preview.close();}
+
     const single=await open(projects.slice(0,1),{width:1100,height:706},'light');
     assert.equal(await split(single).isVisible(),false);
     assert.equal(await single.locator('#project-column-second').isVisible(),false);

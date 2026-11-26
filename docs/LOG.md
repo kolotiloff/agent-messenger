@@ -11,6 +11,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 - Made computer headers full-width disclosure buttons and removed the dividers between groups. Added independent project and computer filters in Statistics and a local-first computer picker in Agents. Kept efficiency and export beside the Statistics filters as the pane narrows.
 - Recorded the live loopback preview as the default workflow for reviewing future window changes.
 - Added space below the Projects divider, matched the trailing insets on computer and task rows, and expanded the fictional conversation with multiline messages. Matched the chat roles to the model typography.
+- Kept the current header and messages visible until the next conversation is ready. Chromium and WebKit passed the delayed same-project and cross-project requests in the browser regression check.
 
 ## 2026-11-27 — Codex (T-324 and T-325 release)
 
