@@ -347,6 +347,8 @@
   'Файл сохранён в папке ':'The file is saved in ',
   'работает':'working',
   'Настройки программы':'App settings',
+  'Общие':'General',
+  'К задачам':'Back to tasks',
   'ждёт ответа':'waiting for an answer',
   'модель не подтверждена':'model unconfirmed',
   'по умолчанию':'default',

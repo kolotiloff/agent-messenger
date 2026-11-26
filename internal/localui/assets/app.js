@@ -1291,8 +1291,8 @@
       card.append(cell);
     }
   }
-  // This computer's version and update button live in its card; in a narrow
-  // window the computer list is hidden and they stay in the bottom row.
+  // The grouped sidebar keeps local updates in the footer. The earlier
+  // layout places them in the local card when the window is wide enough.
   const localParts=['app-installed-version','app-update-button'];
   const narrowSidebar=matchMedia('(max-width:620px)');
   function parkLocalParts(){
@@ -1301,7 +1301,7 @@
   }
   function placeLocalParts(){
     const card=$('machines').querySelector('[aria-current="true"]');
-    if(narrowSidebar.matches||!card){parkLocalParts();return;}
+    if(taskSidebarPreview||narrowSidebar.matches||!card){parkLocalParts();return;}
     const version=card.querySelector('.am-local-version'),corner=card.querySelector('.am-local-update');
     if($('app-installed-version').parentNode!==version)version.append($('app-installed-version'));
     if($('app-update-button').parentNode!==corner)corner.append($('app-update-button'));
@@ -2384,8 +2384,18 @@
       avatar.append(providerIcon(provider));
       return avatar;
     };
-    const messageAuthor=(name,model,detail)=>{
+    const messageAuthor=(name,model,role='',detail='')=>{
       const author=el('span',undefined,'am-meta-author');
+      if(taskSidebarPreview&&role){
+        author.append(name);
+        if(model){
+          const label=el('span',model);
+          if(detail)label.title=detail;
+          author.append(' ',label);
+        }
+        author.append(', '+role);
+        return author;
+      }
       author.append(el('strong',name));
       if(model){
         const label=el('span',model,'am-meta-model');
@@ -2398,8 +2408,8 @@
       group=null;const g=el('article',undefined,'am-message-group');const row=el('div',undefined,'am-message am-outgoing');
       const body=el('div',undefined,'am-message-body');const meta=el('div',undefined,'am-meta');
       if(provider)meta.append(messageAvatar(provider));
-      meta.append(messageAuthor(author,model?modelName(model):''));
-      if(role)meta.append(roleTag(role));
+      meta.append(messageAuthor(author,model?modelName(model):'',role));
+      if(role&&!taskSidebarPreview)meta.append(roleTag(role));
       meta.append(el('time',clock(at)));
       const content=el('div',undefined,'am-message-content');content.append(richText(text));body.append(meta,content);row.append(body);g.append(row);out.push(g);
     };
@@ -2411,8 +2421,10 @@
       if(group)return group;
       const g=el('article',undefined,'am-message-group');const row=el('div',undefined,'am-message');
       const body=el('div',undefined,'am-message-body');const meta=el('div',undefined,'am-meta');
-      meta.append(messageAvatar(t.agent),messageAuthor(names[t.agent]||t.agent,displayModel,displayModel?taskModelDetail(t):''));
-      meta.append(roleTag(tr('исполнитель')),el('time',clock(at)));
+      const role=tr('исполнитель');
+      meta.append(messageAvatar(t.agent),messageAuthor(names[t.agent]||t.agent,displayModel,role,displayModel?taskModelDetail(t):''));
+      if(!taskSidebarPreview)meta.append(roleTag(role));
+      meta.append(el('time',clock(at)));
       const content=el('div',undefined,'am-message-content');body.append(meta,content);row.append(body);g.append(row);out.push(g);group=content;return content;
     };
     const delivery=(text,cls)=>el('div',text,'am-delivery '+cls);
@@ -3047,7 +3059,11 @@
   function show(next){
     tab=next;root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab);renderNotices();renderToasts();
     root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
-    $('list-toggle').hidden=tab!=='tasks'||!view?.project;if(tab==='server')loadServer();if(tab==='stats')reloadStats();if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сервер'),stats:tr('Статистика')}[tab];startWindowWatch();
+    if(taskSidebarPreview){
+      root.classList.toggle('am-in-settings',tab!=='tasks');
+      $('settings-general').hidden=$('settings-back').hidden=tab==='tasks';
+    }
+    $('list-toggle').hidden=tab!=='tasks'||!view?.project;if(tab==='server'||tab==='settings')loadServer();if(tab==='stats')reloadStats();if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),settings:tr('Настройки программы'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сервер'),stats:tr('Статистика')}[tab];startWindowWatch();
     if(tab==='tasks'&&combinedTasks()){renderTaskList();loadProjectActivity();}
   }
 
@@ -4274,10 +4290,21 @@
   // Enter sends; Shift+Enter adds a line. An IME composition keeps its Enter.
   $('task-stop').addEventListener('click',stopSelectedTask);
   $('lost-close').addEventListener('click',closeHere);
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.isComposing&&!$('task-stop').hidden&&!$('compose').hidden&&!$('compose').inert&&!document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true]')){e.preventDefault();stopSelectedTask();}});
+  document.addEventListener('keydown',e=>{if(tab==='tasks'&&e.key==='Escape'&&!e.isComposing&&!$('task-stop').hidden&&!$('compose').hidden&&!$('compose').inert&&!document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true]')){e.preventDefault();stopSelectedTask();}});
   $('answer-text').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();sendAnswer();}});
   $('project-dialog-close').addEventListener('click',()=>$('project-dialog').close());
-  $('settings-open').addEventListener('click',()=>{$('auto-update-status').textContent='';$('settings-dialog').showModal();loadServer();});
+  $('settings-open').addEventListener('click',()=>{
+    $('auto-update-status').textContent='';
+    if(taskSidebarPreview){show('settings');$('settings-back').focus();}
+    else{$('settings-dialog').showModal();loadServer();}
+  });
+  $('settings-back').addEventListener('click',()=>{show('tasks');$('settings-open').focus();});
+  if(taskSidebarPreview){
+    const preferences=$('settings-dialog').querySelector('.am-prefs');
+    const panel=el('div',undefined,'am-settings');
+    const card=el('div',undefined,'am-card');
+    card.append(preferences);panel.append(card);$('settings-page').append(panel);
+  }
   $('auto-update-toggle').addEventListener('click',toggleAutoUpdate);
   $('settings-close').addEventListener('click',()=>$('settings-dialog').close());
   setupPictureViewer();

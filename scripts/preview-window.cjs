@@ -115,6 +115,17 @@ const server = http.createServer(async (request, response) => {
         .end(JSON.stringify({ ok: true, result: newTasks.get(body.op_id).task.id }));
       return;
     }
+    if (url.pathname === '/api/self-update') {
+      response.setHeader('Content-Type', 'application/json; charset=utf-8');
+      if (request.method === 'GET') {
+        response.writeHead(200).end(JSON.stringify({ installed_version: '1.0.9', version: '1.0.10', state: 'available' }));
+      } else if (request.method === 'POST') {
+        response.writeHead(409).end(JSON.stringify({ error: 'Это пример обновления в макете.' }));
+      } else {
+        response.writeHead(405, { Allow: 'GET, POST' }).end();
+      }
+      return;
+    }
     if (request.method === 'POST' && url.pathname === '/api/machine-order') {
       const length = Number(request.headers['content-length']);
       if (request.headers['content-type'] !== 'application/json' || !(length > 0 && length <= 4096)) {

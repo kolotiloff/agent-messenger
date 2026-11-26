@@ -41,6 +41,7 @@ function reply(url,p,available){
   ].map(peer=>({age:0,version:'1.0.5',agents,...peer}))};
   if(url.pathname==='/api/discovery')return {agents:[]};
   if(url.pathname==='/api/client-info')return {client:'running',outdated:false,window_version:'1.0.9'};
+  if(url.pathname==='/api/self-update')return {installed_version:'1.0.9',state:'idle'};
   if(url.pathname==='/api/usage-stats'){
     const names=url.searchParams.getAll('projects'), scope=names.length?names:[p];
     const computer=url.searchParams.get('computer'), visibleCounts=computer==='pc1'?pc1Counts:counts;
@@ -139,20 +140,32 @@ if (require.main === module) (async()=>{
     };
     try{
       await preview.evaluate(()=>{
+        document.addEventListener('dragover',()=>{
+          const target=document.querySelector('[data-drop-edge]');
+          if(target){
+            const line=getComputedStyle(target,'::after');
+            window.machineDropLine={edge:target.dataset.dropEdge,height:line.height,color:line.backgroundColor};
+          }
+        });
         const setDragImage=DataTransfer.prototype.setDragImage;
         DataTransfer.prototype.setDragImage=function(node,x,y){
+          const canvas=document.createElement('canvas').getContext('2d');
+          canvas.fillStyle=getComputedStyle(node).backgroundColor;
+          canvas.fillRect(0,0,1,1);
           window.machineDragImage={
             head:node.matches('.am-machine-name.am-machine-drag-image'),
             name:node.querySelector('.am-machine-label')?.textContent,
             icon:!!node.querySelector('.am-machine-presence svg'),
             version:node.querySelector('.am-machine-version')?.textContent,
+            alpha:canvas.getImageData(0,0,1,1).data[3],
           };
           return setDragImage.call(this,node,x,y);
         };
       });
       const requestOrder=preview.waitForRequest(req=>req.method()==='POST'&&new URL(req.url()).pathname==='/api/machine-order');
       await peerHeader.dragTo(localHeader,{sourcePosition:{x:40,y:12},targetPosition:{x:40,y:4}});
-      assert.deepEqual(await preview.evaluate(()=>window.machineDragImage),{head:true,name:'ПК-1',icon:true,version:'v1.0.5'});
+      assert.deepEqual(await preview.evaluate(()=>window.machineDragImage),{head:true,name:'ПК-1',icon:true,version:'v1.0.5',alpha:102});
+      assert.deepEqual(await preview.evaluate(()=>window.machineDropLine),{edge:'before',height:'2px',color:'rgb(103, 170, 249)'});
       assert.equal(await preview.locator('.am-machine-drag-image').count(),0);
       assert.deepEqual((await requestOrder).postDataJSON().order.slice(0,2),['pc1','local']);
       assert.deepEqual((await order()).slice(0,2),['pc1','local']);
@@ -180,6 +193,7 @@ if (require.main === module) (async()=>{
 
     const directTask=makeTask('owner-task','tools','codex','Новая задача в окне',0,{remote:pc1});
     const draftPage=await open(projects,{width:1150,height:770},'dark',url=>{
+      if(url.pathname==='/api/self-update')return {json:{installed_version:'1.0.9',version:'1.0.10',state:'available'}};
       if(url.pathname==='/api/task-start')return {json:{ok:true,result:directTask.id}};
       if(url.pathname==='/api/task'&&url.searchParams.get('id')===directTask.id){
         return {json:{task:directTask,items:[{kind:'task',author:'owner',text:directTask.title,at:directTask.created_at}]}};
@@ -189,9 +203,51 @@ if (require.main === module) (async()=>{
       const plus=draftPage.locator('#task-new');
       await plus.waitFor();
       assert.equal(await plus.evaluate(node=>getComputedStyle(node).opacity),'1');
+      const local=draftPage.locator('.am-machine-card[aria-current=true]');
+      const disclosure=local.locator('.am-sidebar-disclosure');
+      const selected=local.locator('.am-sidebar-task[aria-pressed=true]');
+      const groupGap=()=>local.evaluate(node=>node.nextElementSibling.getBoundingClientRect().top-node.getBoundingClientRect().bottom);
+      const selectedFill=await selected.evaluate(node=>getComputedStyle(node).backgroundColor);
+      assert.equal(await selected.evaluate(node=>getComputedStyle(node).transitionDuration),'0s');
+      assert.equal(await groupGap(),4);
+      await disclosure.click();
+      assert.equal(await disclosure.getAttribute('aria-expanded'),'false');
+      assert.equal(await groupGap(),4);
+      await disclosure.click();
+      assert.equal(await disclosure.getAttribute('aria-expanded'),'true');
+      assert.equal(await selected.evaluate(node=>getComputedStyle(node).backgroundColor),selectedFill);
+      assert.equal(await groupGap(),4);
+      await draftPage.mouse.move(1000,30);
+      const nav=draftPage.locator('.am-tabs');
+      assert.equal(await nav.locator('[data-tab]:visible').count(),0);
+      const footer=draftPage.locator('.am-version-row');
+      await footer.getByText('v1.0.9',{exact:true}).waitFor();
+      await footer.getByRole('button',{name:'Обновить до v1.0.10'}).waitFor();
+      const remote=card(draftPage,'pc1').locator('.am-machine-name');
+      const metadata=remote.locator('.am-machine-meta');
+      const opacity=()=>metadata.evaluate(node=>getComputedStyle(node).opacity);
+      const versionSize=node=>getComputedStyle(node).fontSize;
+      assert.equal(await footer.locator('.am-version').evaluate(versionSize),await metadata.locator('.am-version').evaluate(versionSize));
+      assert.equal(await opacity(),'0');
+      await remote.hover();
+      assert.equal(await opacity(),'1');
+      await remote.locator('.am-sidebar-disclosure').click();
+      await draftPage.locator('#settings-open').hover();
+      assert.equal(await opacity(),'0');
+      await draftPage.keyboard.press('Tab');
+      await remote.getByRole('button',{name:'Обновить до v1.0.10'}).focus();
+      assert.equal(await opacity(),'1');
+      assert.match(await draftPage.locator('#thread .am-meta-author').first().textContent(),/, исполнитель$/);
+      assert.equal(await draftPage.locator('#thread .am-role').count(),0);
       await draftPage.locator('#settings-open').click();
-      await draftPage.locator('#settings-dialog').waitFor();
-      await draftPage.locator('#settings-close').click();
+      await draftPage.locator('#settings-page').waitFor();
+      for(const section of ['agents','project','server','stats']){
+        await nav.locator('[data-tab='+section+']').click();
+        await draftPage.locator('[data-screen='+section+']').waitFor();
+      }
+      await draftPage.locator('#settings-back').click();
+      await draftPage.locator('#thread').waitFor();
+      assert.equal(await nav.locator('[data-tab]:visible').count(),0);
       await plus.click();
       const form=draftPage.locator('#task-draft');
       assert.equal(await form.isVisible(),true);

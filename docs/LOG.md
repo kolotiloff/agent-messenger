@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-326 sidebar refinement)
+
+- Refined the resting and hover fills, moved the local version and updater into the footer with matching version typography and a fictional preview offer, and revealed remote update details on hover and keyboard focus. Grouped the former top tabs under the footer gear. Joined chat roles inline, and added a blue insertion line and translucent drag image for computer sorting. Kept the task fill immediate during disclosure and used the same gap between collapsed and expanded groups. In [PR #228](https://github.com/kolotiloff/agent-messenger/pull/228).
+
 ## 2026-11-27 — Codex (T-326, T-327)
 
 - Added a subtle resting fill for computer headers, matched computer hover to task and icon-button hover, made task-card horizontal insets equal, and used equal padding around outgoing messages. Chromium and WebKit measured the right task list before and after resizing and verified the matching hover fills.
