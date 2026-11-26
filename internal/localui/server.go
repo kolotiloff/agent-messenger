@@ -492,7 +492,8 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			req.Cmd, req.Action = "server", "status"
 		case "/api/project-activity":
 			req.Cmd, req.Project = "project-activity", r.URL.Query().Get("project")
-			if !core.ValidProjectName(req.Project) {
+			req.Action, req.Provider = r.URL.Query().Get("history"), r.URL.Query().Get("agent")
+			if !core.ValidProjectName(req.Project) || (req.Action != "" && req.Action != "1") || !validTaskHistoryFilter(req.Provider, "") {
 				http.Error(w, "invalid project", http.StatusBadRequest)
 				return
 			}

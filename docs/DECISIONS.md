@@ -805,3 +805,7 @@ Choosing to wait dismisses the restart prompt and shows a status button. It open
 ## D-228 — Separate the project tiles with the picker gap (T-323)
 
 Each computer keeps one row in the split sidebar. Two independently rounded tiles use matching neutral colors and the project pickers' gap from top to bottom. The left header holds the computer name and roles, and the right holds the update control and version. Hover brightens the pointed tile, and selection fills the chosen tile blue. The gap is inactive. This replaces the right-half tint and shared header from D-225.
+
+## D-230 — Show both displayed projects' tasks with no computer selection (T-325)
+
+In split mode the right panel groups tasks by the two displayed project titles whenever the computer filter is clear. Each group includes all computers, the usual task status sections and its own completed-history pages. The active conversation remains singular. A task from the other group opens in its own project while the combined list remains visible. Selecting a computer tile scopes the list to its project and computer. Deselecting it restores both groups. Bulk actions remain scoped to the group that contains the button.

@@ -292,7 +292,15 @@ func dispatchContext(ctx context.Context, handler Handler, request Request) Resp
 		if !ok {
 			return Response{Error: "project activity unsupported; update the background client"}
 		}
-		value, err := h.ProjectActivity(request.Project)
+		var value any
+		var err error
+		if withHistory, ok := handler.(interface {
+			ProjectTaskActivity(string, string) (any, error)
+		}); request.Action == "1" && ok {
+			value, err = withHistory.ProjectTaskActivity(request.Project, request.Provider)
+		} else {
+			value, err = h.ProjectActivity(request.Project)
+		}
 		if err != nil {
 			return Response{Error: err.Error()}
 		}

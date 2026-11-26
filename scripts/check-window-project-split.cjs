@@ -19,6 +19,9 @@ const tasks = {
   site:[makeTask('site-1','site','codex','Подготовка сайта',7)],
   tools:[makeTask('tools-1','tools','claude','Экспорт отчёта',21,{state:'waiting_owner'}),makeTask('tools-2','tools','codex','Проверка файлов',3,{remote:linux})]
 };
+const toolDone=makeTask('tools-done','tools','codex','Готовый отчёт',90,{state:'done',finished_at:iso(60)});
+const toolOlder=makeTask('tools-old','tools','codex','Старый отчёт',180,{state:'done',finished_at:iso(150)});
+const toolShared={peer:'pc1',name:pc1.name,age:0,tasks:[{...toolDone,id:'tools-shared',title:'Отчёт другого компьютера',report:'Общий результат'}]};
 
 const counts = {game:1234,tools:2345,site:99999};
 const agents = [{agent:'codex'},{agent:'claude'}];
@@ -110,6 +113,68 @@ function reply(url,p,available){
     await total(single,'1234');
     assert.equal(await single.locator('#stats-project-filter').isVisible(),false);
     await single.close();
+
+    const combined=await open(projects,{width:1197,height:706},'dark',(url,p)=>{
+      if(['/api/task-hide-history','/api/task-hide'].includes(url.pathname))return {json:{ok:true}};
+      if(url.pathname==='/api/task'&&[toolDone.id,toolOlder.id].includes(url.searchParams.get('id'))){
+        const task=url.searchParams.get('id')===toolOlder.id?toolOlder:toolDone;
+        return {json:{task,items:[{kind:'text',author:task.agent,at:iso(2),text:'Сообщение из tools'}]}};
+      }
+      if(p!=='tools')return;
+      const result=reply(url,p,projects),computer=url.searchParams.get('computer');
+      if(url.pathname==='/api/task-history')return {json:{tasks:[toolOlder]}};
+      if(url.pathname==='/api/window'||url.pathname==='/api/project-activity'&&url.searchParams.get('history')==='1'){
+        return {json:{...result,tasks:[...result.tasks,...(!computer?[toolDone]:[])],shared:[toolShared],history_paged:true,history_next:computer?'':toolDone.id}};
+      }
+    });
+    const list=combined.locator('#task-list');
+    const task=(title)=>list.getByText(title,{exact:true});
+    const gameTasks=list.getByRole('region',{name:'Игра'}),toolsTasks=list.getByRole('region',{name:'Инструменты'});
+    assert.equal(await task('Проверка файлов').count(),0);
+    await split(combined).click();
+    await gameTasks.getByText('Звуки меню',{exact:true}).waitFor();
+    await toolsTasks.getByText('Готовый отчёт',{exact:true}).waitFor();
+    await toolsTasks.getByRole('button',{name:'Показать ещё 10'}).click();
+    await task('Старый отчёт').waitFor();
+    assert(seen.some(r=>r.path==='/api/task-history'&&r.params.get('project')==='tools'&&r.params.get('before')==='tools-done'&&!r.params.get('computer')));
+    assert.equal(await chat(combined,'game').isVisible(),true);
+    await task('Старый отчёт').click();
+    await chat(combined,'tools').waitFor();
+    await task('Старый отчёт').waitFor();
+    await task('Экран настроек').click();
+    await chat(combined,'game').waitFor();
+    await toolsTasks.getByText('Отчёт другого компьютера',{exact:true}).click();
+    await combined.locator('#thread').getByText('Общий результат',{exact:true}).waitFor();
+    await gameTasks.getByText('Проверка навигации',{exact:true}).waitFor();
+    await cells(combined,'pc1').nth(0).locator('.am-machine-name').click();
+    await toolsTasks.waitFor({state:'hidden'});
+    await task('Проверка навигации').waitFor();
+    assert.deepEqual(await list.locator('.am-task-title').allTextContents(),['Проверка навигации']);
+    await cells(combined,'pc1').nth(0).locator('.am-machine-name').click();
+    await toolsTasks.getByText('Проверка файлов',{exact:true}).waitFor();
+    await gameTasks.getByText('Экран настроек',{exact:true}).waitFor();
+    await cells(combined,'linux').nth(1).locator('.am-machine-name').click();
+    await gameTasks.waitFor({state:'hidden'});
+    await task('Проверка файлов').waitFor();
+    assert.deepEqual(await list.locator('.am-task-title').allTextContents(),['Проверка файлов']);
+    await cells(combined,'linux').nth(1).locator('.am-machine-name').click();
+    await gameTasks.getByText('Экран настроек',{exact:true}).waitFor();
+    await task('Экран настроек').click();
+    await chat(combined,'game').waitFor();
+    await toolsTasks.getByText('Готовый отчёт',{exact:true}).waitFor();
+    assert.equal(await combined.locator('.am-machine-project[aria-pressed=true]').count(),0);
+    await toolsTasks.getByRole('button',{name:'Убрать все',exact:true}).click();
+    await combined.locator('#confirm-go').click();
+    await combined.locator('#confirm-dialog').waitFor({state:'hidden'});
+    const cleared=seen.findLast(r=>r.path==='/api/task-hide-history');
+    assert.deepEqual(JSON.parse(cleared.body),{project:'tools',agent:'',computer:''});
+    await select(combined,'project-select-second','Сайт');
+    await task('Подготовка сайта').waitFor();
+    assert.equal(await toolsTasks.count(),0);
+    await split(combined).click();
+    assert.equal(await task('Подготовка сайта').count(),0);
+    assert.equal(await task('Экран настроек').count(),1);
+    await combined.close();
 
     const available=[...projects];
     let loadTools;

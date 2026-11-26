@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-325 split task list)
+
+- Added the two project groups in the task panel when there is no computer filter. The inactive project supplies a bounded history page through its activity request. Task selection, history and bulk actions use the group's project. Chromium and WebKit fixtures passed for deselection in both columns, shared tasks, older history, bulk action scope, replacing a displayed project and returning to one project. Focused store and HTTP route tests passed.
+
 ## 2026-11-26 — Codex (T-323 separated project tiles)
 
 - Replaced the split computer card's tint with two rounded tiles separated by the project picker gap. The left tile carries computer identity, and the right carries update controls and version. Chromium and WebKit exercised matching colors, stable heights, hover, independent selection, the update dialog and single-project behavior.
