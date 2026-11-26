@@ -1026,15 +1026,18 @@
   }
   function sidebarTaskRows(body,head,card,computer,items=[]){
     if(!items.length)return;
+    const rows=el('div',undefined,'am-sidebar-task-rows');
+    body.append(rows);
     const disclosure=el('button',undefined,'am-sidebar-disclosure');disclosure.type='button';
     disclosure.dataset.sidebarFocus=JSON.stringify([computer]);
     const arrow=svgIcon(['M9 6l6 6-6 6']);
     arrow.classList.add('am-sidebar-arrow');arrow.setAttribute('aria-hidden','true');
     disclosure.append(arrow);
     function update(){
-      body.hidden=collapsedComputers.has(computer);
-      disclosure.setAttribute('aria-expanded',String(!body.hidden));
-      const action=body.hidden?tr('Показать текущие задачи'):tr('Скрыть текущие задачи');
+      const collapsed=collapsedComputers.has(computer);
+      body.inert=collapsed;
+      disclosure.setAttribute('aria-expanded',String(!collapsed));
+      const action=collapsed?tr('Показать текущие задачи'):tr('Скрыть текущие задачи');
       disclosure.setAttribute('aria-label',computerName(computer)+' — '+action);
     }
     disclosure.addEventListener('click',()=>{
@@ -1062,7 +1065,7 @@
         if(tab!=='tasks')show('tasks');
         selectProject(name,selection?'':t.id,'',selection);
       });
-      body.append(row);
+      rows.append(row);
     }
   }
   function renderMachines(){
