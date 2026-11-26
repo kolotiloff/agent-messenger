@@ -8,7 +8,13 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
-**T-319 is prepared for the next functional release.** Both project columns show the same agents reported by each computer. Task activity stays scoped to its project. A missing project folder or an activity request in flight no longer replaces known agents, and a computer without agents shows the normal empty message in both columns. See D-224.
+**T-321 and T-322 are prepared for the next functional release.** The sidebar shows the live local coordinator of either displayed project, and its tooltip names the projects. Choosing to wait for an update dismisses the dialog and leaves a status button. The background restart checks running work across projects even after the user switches projects. Browser fixtures and Go tests cover those paths. See D-226 and D-227.
+
+**T-320 uses a subtle tint to distinguish the right project in the split sidebar.** Hover brightens the half under the pointer from the shared header through the agent rows. The selected half retains its blue fill. Chromium and WebKit covered both hover positions, the blue selection, stable card sizes and the single-project mode. See D-225.
+
+**[1.0.8, build 111](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.8-preview.111) is released** from `43535577935cab08cde7c07452b5ca111ff9731f`. [PR #220](https://github.com/kolotiloff/agent-messenger/pull/220) integrated T-319. All four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45875009911) passed. The public channel serves five verified signed update packages, with 22 files in the release.
+
+Both project columns show the same agents reported by each computer. Task activity stays scoped to its project. A missing project folder or an activity request in flight no longer replaces known agents, and a computer without agents shows the normal empty message in both columns. See D-224.
 
 **[1.0.7, build 110](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.7-preview.110) is released** from `c71dffead7df31e42dcd28517dc59f2348a07f32`. It includes [T-317](https://github.com/kolotiloff/agent-messenger/pull/217) and [T-318](https://github.com/kolotiloff/agent-messenger/pull/218). All four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45869548677) passed. The public channel serves five verified signed update packages, with 22 files in the release.
 

@@ -3,7 +3,10 @@ package core
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
+
+	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
 
 func TestSplitWindowKeepsHistoryAndActivityInItsProject(t *testing.T) {
@@ -32,6 +35,20 @@ func TestSplitWindowKeepsHistoryAndActivityInItsProject(t *testing.T) {
 	add("Game", "active-2", false)
 	add("Site", "finished", true)
 	add("Site", "active", false)
+	self, err := platform.ReadObservation(os.Getpid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.TouchCoordinatorClient("Site", "codex"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.ClaimCoordinator("Site", "fixture-chat", self); err != nil {
+		t.Fatal(err)
+	}
+	activity, err := s.ProjectActivity("Site")
+	if err != nil || !activity.Coordinator.Active || activity.Coordinator.Client != "codex" {
+		t.Fatalf("Site activity coordinator = %+v: %v", activity.Coordinator, err)
+	}
 
 	game, err := s.WindowView("Game", "")
 	if err != nil || !game.HistoryPaged || game.Pending != 2 || len(game.Tasks) != 12 || game.HistoryNext == "" {

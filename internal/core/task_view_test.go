@@ -25,6 +25,10 @@ func TestWindowShowsOnlyLiveCoordinatorOfSelectedProject(t *testing.T) {
 		if err != nil || view.Coordinator.Active != active {
 			t.Fatalf("%s coordinator = %+v, want active=%t: %v", project, view.Coordinator, active, err)
 		}
+		activity, err := f.st.ProjectActivity(project)
+		if err != nil || activity.Coordinator.Active != active || activity.Coordinator.Client != view.Coordinator.Client {
+			t.Fatalf("%s activity coordinator = %+v, want active=%t and client=%q: %v", project, activity.Coordinator, active, view.Coordinator.Client, err)
+		}
 	}
 	check("Game", false)
 	stale := self

@@ -379,15 +379,10 @@ type WindowView struct {
 	ProjectTitle string `json:"project_title"`
 	Folder       string `json:"folder"`
 	// WorkerRules are the owner's rules for this project's workers (T-050).
-	WorkerRules string `json:"worker_rules"`
-	Computer    string `json:"computer"`
-	Name        string `json:"computer_name"`
-	Coordinator struct {
-		Connected bool   `json:"connected"`
-		Active    bool   `json:"active,omitempty"`
-		Client    string `json:"client,omitempty"`
-		LastSeen  string `json:"last_seen,omitempty"`
-	} `json:"coordinator"`
+	WorkerRules       string              `json:"worker_rules"`
+	Computer          string              `json:"computer"`
+	Name              string              `json:"computer_name"`
+	Coordinator       windowCoordinator   `json:"coordinator"`
 	CoordinatorModels map[string][]string `json:"coordinator_models"`
 	Agents            []WindowAgent       `json:"agents"`
 	Tasks             []WindowTask        `json:"tasks"`
@@ -400,6 +395,35 @@ type WindowView struct {
 	Shared []NetPeerTasks `json:"shared"`
 	// Pending counts this project's runs that are recorded but not launched.
 	Pending int `json:"pending_launch"`
+}
+
+type windowCoordinator struct {
+	Connected bool   `json:"connected"`
+	Active    bool   `json:"active,omitempty"`
+	Client    string `json:"client,omitempty"`
+	LastSeen  string `json:"last_seen,omitempty"`
+	process   platform.Observation
+}
+
+func readWindowCoordinator(tx *sql.Tx, project string) (windowCoordinator, error) {
+	var coordinator windowCoordinator
+	var client sql.NullString
+	err := tx.QueryRow(`SELECT c.last_seen,c.client,COALESCE(a.pid,0),COALESCE(a.start_token,''),COALESCE(a.boot_id,'')
+ FROM coordinator_connections c LEFT JOIN coordinator_chats a ON a.project=c.project WHERE c.project=?`, project).
+		Scan(&coordinator.LastSeen, &client, &coordinator.process.PID, &coordinator.process.StartToken, &coordinator.process.BootID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return coordinator, nil
+	}
+	coordinator.Connected, coordinator.Client = err == nil, client.String
+	return coordinator, err
+}
+
+func (c *windowCoordinator) checkActive() {
+	// A saved connection alone does not mean its chat is still open.
+	if p := c.process; p.PID > 0 && p.StartToken != "" && p.BootID != "" {
+		live, err := platform.ReadObservation(p.PID)
+		c.Active = err == nil && live.StartToken == p.StartToken && live.BootID == p.BootID
+	}
 }
 
 // WindowView builds the window's view of a project. An empty project picks
@@ -430,7 +454,6 @@ func (s *Store) WindowViewFiltered(project, today, agent, computer, historyVersi
 			found, v.Project, v.ProjectTitle, v.Folder = true, p.Name, p.Title, p.Folder
 		}
 	}
-	var coordinator platform.Observation
 	err = s.tx(func(tx *sql.Tx) error {
 		computer, err := localComputer(tx)
 		if err != nil {
@@ -487,13 +510,7 @@ func (s *Store) WindowViewFiltered(project, today, agent, computer, historyVersi
 		if !found {
 			return nil
 		}
-		var client sql.NullString
-		err = tx.QueryRow(`SELECT c.last_seen,c.client,COALESCE(a.pid,0),COALESCE(a.start_token,''),COALESCE(a.boot_id,'')
- FROM coordinator_connections c LEFT JOIN coordinator_chats a ON a.project=c.project WHERE c.project=?`, project).
-			Scan(&v.Coordinator.LastSeen, &client, &coordinator.PID, &coordinator.StartToken, &coordinator.BootID)
-		if err == nil {
-			v.Coordinator.Connected, v.Coordinator.Client = true, client.String
-		} else if !errors.Is(err, sql.ErrNoRows) {
+		if v.Coordinator, err = readWindowCoordinator(tx, project); err != nil {
 			return err
 		}
 		v.Shared, err = projectNetTasks(tx, project, s.split != nil)
@@ -502,11 +519,7 @@ func (s *Store) WindowViewFiltered(project, today, agent, computer, historyVersi
 	if err != nil || !found {
 		return v, err
 	}
-	// A saved connection alone does not mean its chat is still open.
-	if coordinator.PID > 0 && coordinator.StartToken != "" && coordinator.BootID != "" {
-		live, err := platform.ReadObservation(coordinator.PID)
-		v.Coordinator.Active = err == nil && live.StartToken == coordinator.StartToken && live.BootID == coordinator.BootID
-	}
+	v.Coordinator.checkActive()
 	scoped, err := s.projectStore(project)
 	if err != nil {
 		return v, err

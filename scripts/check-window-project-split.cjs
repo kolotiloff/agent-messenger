@@ -22,9 +22,10 @@ const tasks = {
 
 const counts = {game:1234,tools:2345,site:99999};
 const agents = [{agent:'codex'},{agent:'claude'}];
+const coordinator = p=>({connected:true,active:p==='tools',client:'codex'});
 function reply(url,p,available){
-  if(url.pathname==='/api/window')return {project:p,projects:available,computer_name:'Мак',agents,tasks:tasks[p],shared:[],tasks_enabled:true,history_paged:true};
-  if(url.pathname==='/api/project-activity')return {project:p,tasks:tasks[p],shared:[]};
+  if(url.pathname==='/api/window')return {project:p,projects:available,computer_name:'Мак',agents,tasks:tasks[p],shared:[],tasks_enabled:true,history_paged:true,coordinator:coordinator(p)};
+  if(url.pathname==='/api/project-activity')return {project:p,tasks:tasks[p],shared:[],coordinator:coordinator(p)};
   if(url.pathname==='/api/task'){
     const task=Object.values(tasks).flat().find(t=>t.id===url.searchParams.get('id'));
     return {task,items:[{kind:'text',author:task.agent,at:iso(2),text:'Сообщение из '+task.project}]};
@@ -62,7 +63,11 @@ function reply(url,p,available){
   const errors=[],seen=[];
   async function open(available,viewport,colorScheme,beforeReply=()=>{}){
     const context=await browser.newContext({viewport,deviceScaleFactor:1,colorScheme,locale:'ru-RU'});
-    await context.addInitScript(scheme=>{window.amDesktop='mac';window.messengerInitialTheme=scheme;},colorScheme);
+    await context.addInitScript(scheme=>{
+      window.amDesktop='mac';window.messengerInitialTheme=scheme;
+      window.nativeAppMessages=[];
+      window.webkit={messageHandlers:{app:{postMessage:message=>window.nativeAppMessages.push(message)}}};
+    },colorScheme);
     const page=await context.newPage();
     page.setDefaultTimeout(6500);
     page.on('pageerror',error=>errors.push(error.message));
@@ -72,8 +77,8 @@ function reply(url,p,available){
       if(url.pathname.startsWith('/api/')){
         seen.push({path:url.pathname,params:url.searchParams,body:req.postData()});
         const p=url.searchParams.get('project')||available[0].name;
-        await beforeReply(url,p);
-        return route.fulfill({json:reply(url,p,available)});
+        const override=await beforeReply(url,p);
+        return route.fulfill(override||{json:reply(url,p,available)});
       }
       const files={'/':['index.html','text/html; charset=utf-8'],'/app.js':['app.js','application/javascript'],'/i18n.js':['i18n.js','application/javascript'],'/app.css':['app.css','text/css'],'/icon.svg':['icon.svg','image/svg+xml']};
       const file=files[url.pathname];
@@ -92,6 +97,12 @@ function reply(url,p,available){
   const split=page=>page.locator('#split-projects');
   const card=(page,id)=>page.locator('#machines .am-machine-card[data-machine-order="'+id+'"]');
   const cells=(page,id)=>card(page,id).locator('.am-machine-project');
+  const fills=target=>target.evaluate(card=>[card,card.querySelector('.am-machine-name')]
+    .map(row=>getComputedStyle(row).backgroundImage));
+  const directions=fill=>[...fill.matchAll(/linear-gradient\(to (left|right)/g)].map(match=>match[1]);
+  const checkFills=async(target,expected)=>{
+    for(const fill of await fills(target))assert.deepEqual(directions(fill),expected);
+  };
   const chat=(page,name)=>page.locator('#thread').getByText('Сообщение из '+name);
   const total=async(page,n)=>page.waitForFunction(value=>document.querySelector('#stats-total-title').textContent.split(' токен')[0].replace(/[^0-9]/g,'')===value,n);
   try{
@@ -118,8 +129,14 @@ function reply(url,p,available){
     await cells(page,'pc2').nth(1).getByText('Codex',{exact:true}).waitFor();
     assert.equal(await cells(page,'pc2').nth(1).getAttribute('title'),'Загружаем статусы…');
     assert.equal(await card(page,'vps').getByText('Агенты не подключены',{exact:true}).count(),2);
+    const coordinatorRole=card(page,'local').locator('.am-machine-name').getByText('координатор',{exact:true});
+    assert.equal(await coordinatorRole.count(),0);
     loadTools();
     await cells(page,'local').nth(1).getByText('ждёт ответа').waitFor();
+    await coordinatorRole.waitFor();
+    assert.match(await coordinatorRole.getAttribute('title'),/Инструменты$/);
+    assert.equal(await card(page,'vps').getByText('сервер',{exact:true}).count(),1);
+    assert.equal(await chat(page,'game').isVisible(),true);
     await cells(page,'local').nth(0).locator('.am-agent-parallel summary').waitFor();
     const roster=cell=>cell.locator('[data-provider]').evaluateAll(lines=>lines.map(line=>line.dataset.provider));
     for(const id of ['local','pc1','pc2','linux']){
@@ -163,6 +180,7 @@ function reply(url,p,available){
     assert.equal(await page.locator('#project-select-second-menu').getByRole('option',{name:'Игра',exact:true}).count(),0);
     await page.locator('#project-select-second-menu').getByRole('option',{name:'Сайт',exact:true}).click();
     await cells(page,'local').nth(1).locator('.am-agent-run').waitFor();
+    await coordinatorRole.waitFor({state:'detached'});
     assert.equal(await chat(page,'game').isVisible(),true);
     assert.equal(await page.locator('#answer-text').inputValue(),'Черновик в первом проекте');
     await page.locator('#answer-text').fill('');
@@ -196,9 +214,10 @@ function reply(url,p,available){
     await chat(page,'game').waitFor();
     assert.equal(await card(page,'local').getAttribute('aria-pressed'),null);
     assert.equal(await cells(page,'local').nth(0).getAttribute('aria-pressed'),'true');
-    const fills=() => card(page,'local').evaluate(card=>[card,card.querySelector('.am-machine-name')]
-      .map(row=>getComputedStyle(row).backgroundImage));
-    assert((await fills()).every(fill=>fill.includes('to right')&&fill.includes('50%')));
+    const localCard=card(page,'local');
+    await page.mouse.move(810,5);
+    await checkFills(localCard,['right','right']);
+    await checkFills(card(page,'pc1'),['right']);
     const clickHeading=async(id,right)=>{
       const heading=card(page,id).locator('.am-machine-name');
       const {width,height}=await heading.boundingBox();
@@ -207,7 +226,25 @@ function reply(url,p,available){
     await clickHeading('local',true);
     await chat(page,'tools').waitFor();
     assert.equal(await cells(page,'local').nth(1).getAttribute('aria-pressed'),'true');
-    assert((await fills()).every(fill=>fill.includes('to left')&&fill.includes('50%')));
+    await page.mouse.move(810,5);
+    await checkFills(localCard,['left','right']);
+    const selectedFills=await fills(localCard);
+    const cardBeforeHover=await localCard.boundingBox();
+    const hoverHalf=async(target,right)=>{
+      const {width,height}=await target.boundingBox();
+      await target.hover({position:{x:width*(right ? .75 : .25),y:height/2}});
+      await checkFills(localCard,['left',right?'left':'right','right']);
+      assert.equal(await localCard.evaluate(el=>getComputedStyle(el,'::after').content),'none');
+    };
+    const heading=localCard.locator('.am-machine-name');
+    const body=localCard.locator('.am-machine-body');
+    for(const target of [heading,body]){
+      await hoverHalf(target,false);
+      await hoverHalf(target,true);
+    }
+    assert.deepEqual(await localCard.boundingBox(),cardBeforeHover);
+    await page.mouse.move(810,5);
+    assert.deepEqual(await fills(localCard),selectedFills);
     if(output){
       await page.mouse.move(810,5);
       await page.screenshot({path:path.join(output,'messenger-t318-split.png')});
@@ -230,7 +267,7 @@ function reply(url,p,available){
     await split(page).click();
     assert.equal(await cells(page,'local').count(),0);
     assert.equal(await card(page,'local').getAttribute('aria-pressed'),'true');
-    assert((await fills()).every(fill=>fill==='none'));
+    assert((await fills(localCard)).every(fill=>fill==='none'));
     const selectedBody=await card(page,'local').evaluate(card=>getComputedStyle(card).backgroundColor);
     assert.notEqual(selectedBody,await card(page,'pc1').evaluate(card=>getComputedStyle(card).backgroundColor));
     assert.equal(await chat(page,'game').isVisible(),true);
@@ -254,15 +291,42 @@ function reply(url,p,available){
     assert.equal(await narrow.locator('#project-columns').evaluate(el=>el.scrollWidth>el.clientWidth),false);
     assert.equal(await narrow.locator('body').evaluate(el=>el.scrollWidth>innerWidth),false);
     assert.equal(await split(narrow).evaluate(el=>el.getBoundingClientRect().height),28);
-    const divider=await cells(narrow,'local').nth(1).evaluate(el=>{
-      const style=getComputedStyle(el,'::before');
-      return [style.insetBlockStart,style.insetBlockEnd,style.borderInlineStartWidth];
-    });
-    assert.deepEqual(divider,['4px','4px','1px']);
+    const divider=await cells(narrow,'local').nth(1).evaluate(el=>getComputedStyle(el,'::before').content);
+    assert.equal(divider,'none');
+    await checkFills(card(narrow,'local'),['right']);
     await narrow.locator('[data-tab=agents]').click();
     assert.equal(await narrow.locator('[data-screen=agents]').isVisible(),true);
     await narrow.locator('[data-tab=server]').click();
     assert.equal(await narrow.locator('[data-screen=server]').isVisible(),true);
+    await narrow.close();
+
+    let busy=true,outdated=true;
+    const restartPage=await open(projects,{width:1197,height:706},'light',url=>{
+      if(url.pathname==='/api/client-info')return {json:{client:'running',restart:true,outdated}};
+      if(url.pathname==='/api/restart-client'){
+        if(busy)return {status:409,json:{ok:false,state:'confirm',running:1,known:true,tasks:[]}};
+        outdated=false;
+        return {json:{ok:true}};
+      }
+    });
+    const restartDialog=restartPage.locator('#restart-dialog');
+    const waitStatus=restartPage.locator('#restart-wait-show');
+    await restartPage.locator('#restart-go').click();
+    await restartDialog.waitFor({state:'hidden'});
+    await waitStatus.waitFor();
+    await select(restartPage,'project-select','Инструменты');
+    await chat(restartPage,'tools').waitFor();
+    await waitStatus.click();
+    await restartDialog.getByRole('button',{name:'Закрыть',exact:true}).click();
+    await restartDialog.waitFor({state:'hidden'});
+    assert.deepEqual(await restartPage.evaluate(()=>window.nativeAppMessages),[]);
+    busy=false;
+    await waitStatus.waitFor({state:'hidden',timeout:11000});
+    const restartCalls=seen.filter(r=>r.path==='/api/restart-client').map(r=>JSON.parse(r.body));
+    assert(restartCalls.length>=3&&restartCalls.every(call=>call.confirm===false));
+    assert.equal(restartCalls.at(-1).project,'tools');
+    assert.equal(await chat(restartPage,'tools').isVisible(),true);
+    await restartPage.close();
     assert.deepEqual(errors,[]);
     console.log(engine+': project split, active chat, agent groups, project stats/filter/efficiency/export, keyboard and narrow layout passed');
   }finally{await browser.close();}
