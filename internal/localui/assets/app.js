@@ -1849,16 +1849,23 @@
     steps.append(coordinatorAgentRow('codex',view.codex_link||{state:'unknown'}));
     steps.append(coordinatorAgentRow('cursor',view.cursor_link||{state:'unknown'}));
     const manual=el('details',undefined,'am-tool');manual.append(el('summary',tr('Подключить вручную через Терминал')));
-    const claudeCmd='cd '+shellQuote(view.folder)+' && claude mcp add --scope local messenger -- '+shellQuote(view.messenger)+' --root '+shellQuote(view.data_root)+' coordinator --project '+shellQuote(view.project);
-    const codexToml='[mcp_servers.messenger]\ncommand = '+JSON.stringify(view.messenger)+'\nargs = ["--root", '+JSON.stringify(view.data_root)+', "coordinator", "--project", '+JSON.stringify(view.project)+']\ndefault_tools_approval_mode = "approve"\ntool_timeout_sec = 180\n';
+    const claudeCmd='cd '+shellQuote(view.folder)+' && claude mcp add --scope local kotel -- '+shellQuote(view.messenger)+' --root '+shellQuote(view.data_root)+' coordinator --project '+shellQuote(view.project);
+    const codexToml='[mcp_servers.kotel]\ncommand = '+JSON.stringify(view.messenger)+'\nargs = ["--root", '+JSON.stringify(view.data_root)+', "coordinator", "--project", '+JSON.stringify(view.project)+']\ndefault_tools_approval_mode = "approve"\ntool_timeout_sec = 180\n';
     const block=(title,text)=>{
       const copy=el('button',tr('Скопировать команду'));copy.type='button';
       copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(text);copy.textContent=tr('Скопировано');}catch(_){copy.textContent=tr('Скопируйте вручную');}setTimeout(()=>copy.textContent=tr('Скопировать команду'),2000);});
       const wrap=el('div');wrap.append(el('p',title,'am-small am-muted'),el('pre',text,'am-command'),copy);return wrap;
     };
-    const cursorJSON=JSON.stringify({mcpServers:{messenger:{type:'stdio',command:view.messenger,args:['--root',view.data_root,'coordinator','--project',view.project],env:{AGENT_MESSENGER_WORKER_RUN:'${env:AGENT_MESSENGER_WORKER_RUN}'}}}},null,2);
-    manual.append(block('Claude Code',claudeCmd),block('Codex (.codex/config.toml)',codexToml),block(tr('Cursor: добавьте messenger в .cursor/mcp.json, сохранив остальные записи'),cursorJSON));
-    manual.hidden=!view.folder||(['claude','codex','cursor'].every(coordinatorAgentOn));
+    const cursorJSON=JSON.stringify({mcpServers:{kotel:{type:'stdio',command:view.messenger,args:['--root',view.data_root,'coordinator','--project',view.project],env:{AGENT_MESSENGER_WORKER_RUN:'${env:AGENT_MESSENGER_WORKER_RUN}'}}}},null,2);
+    for(const [agent,title,example] of [
+      ['claude','Claude Code',claudeCmd],
+      ['codex','Codex (.codex/config.toml)',codexToml],
+      ['cursor','Cursor (.cursor/mcp.json)',cursorJSON]
+    ]){
+      const state=coordinatorLink(agent)?.state;
+      if(state==='missing'||state==='no_'+agent)manual.append(block(title,example));
+    }
+    manual.hidden=!view.folder||manual.childElementCount===1;
     const body=el('section',undefined,'am-card am-coord-box');body.id='coord-box';body.append(heading,steps,manual);
     if(box.querySelector('details')?.open)manual.open=true;
     if(box.innerHTML!==body.innerHTML)box.replaceWith(body);
@@ -1882,8 +1889,8 @@
     if(failure)return stepRow('no',title,tr('Не получилось: ')+failure.detail,[tr('Повторить'),()=>connectCoordinator(agent)]);
     if(link.state===missing)return stepRow(1,title,tr('Сначала настройте его во вкладке «Агенты»'),[tr('Агенты'),()=>show('agents')]);
     if(link.state==='no_folder')return stepRow(1,title,tr('Сначала укажите папку проекта'),null);
-    if(link.state==='other')return stepRow('no',title,agent==='cursor'?tr('В настройках Cursor этой папки уже есть другое подключение «messenger». Kotel его не меняет'):agent==='codex'?tr('В настройках Codex этой папки уже есть другое подключение «messenger». Kotel его не меняет'):tr('В Claude у этой папки уже есть другое подключение «messenger». Kotel его не меняет'),connect);
-    if(link.state==='off')return stepRow('no',title,agent==='cursor'?tr('Подключение «messenger» в Cursor выключено. Kotel его не включает'):tr('Подключение «messenger» в Codex выключено. Kotel его не включает'),null);
+    if(link.state==='other')return stepRow('no',title,tr('Имя MCP-сервера занято. Проверьте подключения в настройках агента.'),null);
+    if(link.state==='off')return stepRow('no',title,tr('Подключение MCP выключено в настройках агента'),null);
     if(link.state==='unknown')return stepRow('no',title,(agent==='cursor'?tr('Не удалось прочитать настройки Cursor'):agent==='codex'?tr('Не удалось прочитать настройки Codex'):tr('Не удалось прочитать настройки Claude'))+(link.detail?': '+link.detail:''),connect);
     return stepRow(1,title,tr('Не подключён'),connect);
   }

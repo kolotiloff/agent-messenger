@@ -8,6 +8,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+T-338 is in development on a separate branch. Fresh Claude, Codex and Cursor coordinator settings use `kotel`. Existing profiles keep their registered key. MCP initialization reports the Kotel server identity. Both-key collisions stop writes. Isolated Claude connected and Codex read a trusted project configuration. Cursor CLI lists tools when the worker marker is explicitly empty and hides them for a marked worker. An ordinary launch with the marker unset passed an unresolved interpolation and listed no tools. Existing-profile cutover and same-chat provider acceptance remain open.
+
 T-343 integrates T-339 through T-342 for Kotel 1.0.14 (build 117). New Task now has its own left-aligned row above Projects. Both sidebar filters follow the Settings width rule and stack in narrow panels. The owner confirmed the fleet has updated to the bridge. The original repository continues to serve the signed channel for this patch. T-338 tracks the final identifier migration.
 
 T-342 finishes the task window follow-up on top of T-341. The Mac caption divider now spans both sides. Projects, its filter and Add share one horizontal center with Archive and its controls. The conversation date has a fixed 12 px inset outside the scrolling history. Both header rows use the 16 px section spacing token. The archive header inherits its pane surface and has no lower divider. Its clear button sits beside the agent filter. Clearing still asks for confirmation and hides only matching completed tasks. Both author roles have an 8 px gap above their messages. Shared select buttons toggle closed on a second click. Modal opening focus goes to a heading or an appropriate input.

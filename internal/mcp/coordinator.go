@@ -310,7 +310,7 @@ func serveCoordinatorIn(store *core.Store, project, watch, dataRoot string, in i
 			c.respond(req.ID, map[string]any{
 				"protocolVersion": p.ProtocolVersion,
 				"capabilities":    map[string]any{"tools": map[string]any{"listChanged": true}},
-				"serverInfo":      map[string]any{"name": "agent-messenger", "version": "0.2.0"},
+				"serverInfo":      map[string]any{"name": "kotel", "version": "0.2.0"},
 				"instructions":    c.waitingInstructions() + coordinatorInstructions + "\nProject: " + c.project,
 			}, nil)
 		case req.Method == "ping":

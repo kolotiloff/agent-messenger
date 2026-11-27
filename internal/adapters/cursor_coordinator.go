@@ -53,7 +53,11 @@ func EnsureCursorCoordinator(path, messenger, root, project string) error {
 		entry["env"], _ = json.Marshal(map[string]string{WorkerRunVariable: "${env:" + WorkerRunVariable + "}"})
 	}
 	entry["command"], _ = json.Marshal(messenger)
-	servers[CoordinatorServerName], _ = json.Marshal(entry)
+	name := CoordinatorServerName
+	if _, legacy := servers[legacyCoordinatorName]; legacy {
+		name = legacyCoordinatorName
+	}
+	servers[name], _ = json.Marshal(entry)
 	top["mcpServers"], _ = json.Marshal(servers)
 	out, err := json.MarshalIndent(top, "", "  ")
 	if err != nil {
@@ -130,11 +134,11 @@ func readCursorCoordinatorConfig(path string) ([]byte, os.FileMode, error) {
 
 // Decode only the objects we edit, refusing duplicate keys instead of silently
 // choosing one. Unknown values remain RawMessage, including large JSON numbers.
-func cursorConfigObject(raw []byte) (map[string]json.RawMessage, error) {
+func mcpConfigObject(raw []byte) (map[string]json.RawMessage, error) {
 	d := json.NewDecoder(bytes.NewReader(raw))
 	token, err := d.Token()
 	if err != nil || token != json.Delim('{') {
-		return nil, errors.New("cursor config needs a JSON object")
+		return nil, errors.New("MCP settings need a JSON object")
 	}
 	result := map[string]json.RawMessage{}
 	for d.More() {
@@ -144,10 +148,10 @@ func cursorConfigObject(raw []byte) (map[string]json.RawMessage, error) {
 		}
 		key, ok := token.(string)
 		if !ok {
-			return nil, errors.New("cursor config has a non-string key")
+			return nil, errors.New("MCP settings contain a non-string key")
 		}
 		if _, exists := result[key]; exists {
-			return nil, fmt.Errorf("cursor config has duplicate key %q", key)
+			return nil, fmt.Errorf("MCP settings contain duplicate key %q", key)
 		}
 		var value json.RawMessage
 		if err := d.Decode(&value); err != nil {
@@ -159,7 +163,7 @@ func cursorConfigObject(raw []byte) (map[string]json.RawMessage, error) {
 		return nil, err
 	}
 	if _, err := d.Token(); err != io.EOF {
-		return nil, errors.New("cursor config has trailing data")
+		return nil, errors.New("MCP settings contain trailing data")
 	}
 	return result, nil
 }
@@ -168,23 +172,30 @@ func classifyCursorCoordinator(raw []byte, messenger, root, project string) (sta
 	state = LinkUnknown
 	top, servers = map[string]json.RawMessage{}, map[string]json.RawMessage{}
 	if raw != nil {
-		top, err = cursorConfigObject(raw)
+		top, err = mcpConfigObject(raw)
 		if err != nil {
 			return
 		}
 	}
 	if value, ok := top["mcpServers"]; ok {
-		servers, err = cursorConfigObject(value)
+		servers, err = mcpConfigObject(value)
 		if err != nil {
 			return
 		}
 	}
-	value, ok := servers[CoordinatorServerName]
+	_, current := servers[CoordinatorServerName]
+	_, legacy := servers[legacyCoordinatorName]
+	name, err := configuredCoordinatorName(current, legacy)
+	if err != nil {
+		state = LinkOther
+		return
+	}
+	value, ok := servers[name]
 	if !ok {
 		state = LinkMissing
 		return
 	}
-	entry, err = cursorConfigObject(value)
+	entry, err = mcpConfigObject(value)
 	if err != nil {
 		return
 	}

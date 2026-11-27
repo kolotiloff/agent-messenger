@@ -290,3 +290,72 @@ func TestCodexCoordinatorOffStaleIsNotEnabled(t *testing.T) {
 		t.Fatal("a turned-off stale entry was enabled")
 	}
 }
+
+func TestCodexKotelCoordinatorPreservesNamedPermissions(t *testing.T) {
+	program := filepath.Join(t.TempDir(), "kotel")
+	for _, name := range []string{"messenger", "kotel"} {
+		t.Run(name, func(t *testing.T) {
+			path := CodexProjectConfig(t.TempDir())
+			if err := os.Mkdir(filepath.Dir(path), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			before := "[mcp_servers." + name + "]\r\ncommand = '/old/program' # keep\r\nargs = [\"--root\",\"/data\",\"coordinator\",\"--project\",\"Game\"]\r\ndisabled_tools=[\"cancel\"]\r\n[mcp_servers." + name + ".tools.wait]\r\napproval_mode=\"prompt\"\r\n"
+			if err := os.WriteFile(path, []byte(before), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := EnsureCodexCoordinator(path, program, "/data", "Game"); err != nil {
+				t.Fatal(err)
+			}
+			want := strings.Replace(before, "'/old/program'", tomlBasic(program), 1)
+			got, err := os.ReadFile(path)
+			if err != nil || string(got) != want {
+				t.Fatalf("program repair changed policy: %v, %s", err, got)
+			}
+			if err := EnsureCodexCoordinator(path, program, "/data", "Game"); err != nil {
+				t.Fatal(err)
+			}
+			got, err = os.ReadFile(path)
+			if err != nil || string(got) != want {
+				t.Fatal("reconnect changed existing settings", err)
+			}
+		})
+	}
+}
+
+func TestCodexCoordinatorNameCollisionDoesNotWrite(t *testing.T) {
+	path := CodexProjectConfig(t.TempDir())
+	if err := os.Mkdir(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	before := codexCoordinatorBlock("messenger", "/old", "/data", "Game") + codexCoordinatorBlock("kotel", "/foreign", "/other", "Game")
+	if err := os.WriteFile(path, []byte(before), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if state, _ := CodexCoordinatorLink(path, "/new", "/data", "Game"); state != LinkOther {
+		t.Fatal(state)
+	}
+	if err := EnsureCodexCoordinator(path, "/new", "/data", "Game"); err == nil {
+		t.Fatal("accepted a name collision")
+	}
+	if got, err := os.ReadFile(path); err != nil || string(got) != before {
+		t.Fatal("collision changed the file", err)
+	}
+}
+
+func TestQuotedServerNameWithDotIsIndependent(t *testing.T) {
+	path := CodexProjectConfig(t.TempDir())
+	if err := os.Mkdir(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	original := "[mcp_servers.\"kotel.other\"]\ncommand = 'other'\n"
+	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureCodexCoordinator(path, "/program", "/data", "Game"); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || !strings.HasPrefix(string(data), original) || !strings.Contains(string(data), "[mcp_servers.kotel]") {
+		t.Fatal(string(data), err)
+	}
+}

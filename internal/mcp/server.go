@@ -59,7 +59,7 @@ func serveStore(store *core.Store, token string, in io.Reader, out io.Writer) er
 			result = map[string]any{
 				"protocolVersion": "2025-06-18",
 				"capabilities":    map[string]any{"tools": map[string]any{}},
-				"serverInfo":      map[string]any{"name": "agent-messenger", "version": "0.1.0"},
+				"serverInfo":      map[string]any{"name": "kotel", "version": "0.1.0"},
 			}
 		case "ping":
 			result = map[string]any{}

@@ -1,11 +1,14 @@
 package adapters
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/kolotiloff/agent-messenger/internal/platform"
 )
 
 // Codex as a project's coordinator (T-160, D-123).
@@ -32,12 +35,16 @@ func CodexProjectConfig(folder string) string {
 
 // CodexCoordinatorBlock is the table Messenger writes.
 func CodexCoordinatorBlock(messenger, root, project string) string {
+	return codexCoordinatorBlock(CoordinatorServerName, messenger, root, project)
+}
+
+func codexCoordinatorBlock(name, messenger, root, project string) string {
 	args := CoordinatorArgs(root, project)
 	quoted := make([]string, len(args))
 	for i, arg := range args {
 		quoted[i] = tomlBasic(arg)
 	}
-	return "[mcp_servers.messenger]\n" +
+	return "[mcp_servers." + name + "]\n" +
 		"command = " + tomlBasic(messenger) + "\n" +
 		"args = [" + strings.Join(quoted, ", ") + "]\n" +
 		"default_tools_approval_mode = \"approve\"\n" +
@@ -65,7 +72,7 @@ func CodexCoordinatorLink(path, messenger, root, project string) (string, error)
 	if err != nil {
 		return LinkUnknown, err
 	}
-	state, _, err := classifyCodexConfig(string(raw), messenger, root, project)
+	state, _, _, err := configuredCodexServer(string(raw), messenger, root, project)
 	return state, err
 }
 
@@ -83,19 +90,55 @@ func EnsureCodexCoordinator(path, messenger, root, project string) error {
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	state, kept, err := classifyCodexConfig(string(raw), messenger, root, project)
+	state, kept, name, err := configuredCodexServer(string(raw), messenger, root, project)
 	if err != nil {
 		return err
 	}
 	if state != LinkMissing && state != LinkStale {
 		return nil
 	}
+	if state == LinkStale {
+		data, err := replaceCodexProgram(string(raw), name, messenger)
+		if err != nil {
+			return err
+		}
+		return writeCodexConfig(path, []byte(data), raw)
+	}
 	body := strings.Join(kept, "\n")
 	if body != "" {
 		body += "\n\n"
 	}
-	body += CodexCoordinatorBlock(messenger, root, project)
+	body += codexCoordinatorBlock(name, messenger, root, project)
 	return writeCodexConfig(path, []byte(body), raw)
+}
+
+// Update the executable in place. Rebuilding the table would discard
+// tool-level permissions, disabled tools and nested settings.
+func replaceCodexProgram(raw, name, program string) (string, error) {
+	lines := strings.Split(raw, "\n")
+	table := ""
+	for i, line := range lines {
+		_, header, key, _, _ := codexLine(name, table, line)
+		if header != "" {
+			table = header
+		}
+		if key != "command" {
+			// Kotel always writes a separate command field. An inline table
+			// was supplied by the owner and stays under their control.
+			continue
+		}
+		_, after, _ := strings.Cut(line, "=")
+		value := strings.TrimLeft(after, " \t")
+		_, tail, ok := readQuoted(value)
+		if !ok {
+			break
+		}
+		start := len(line) - len(value)
+		end := start + len(strings.TrimSpace(value)) - len(tail)
+		lines[i] = line[:start] + tomlBasic(program) + line[end:]
+		return strings.Join(lines, "\n"), nil
+	}
+	return "", errors.New("cannot safely update the Codex coordinator command")
 }
 
 // codexConfigLink refuses a symlink, so a write cannot leave the project
@@ -130,30 +173,32 @@ func writeCodexConfig(path string, data, previous []byte) error {
 			mode = fi.Mode().Perm()
 		}
 	}
-	tmp := path + ".tmp"
-	_ = os.Remove(tmp)
-	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
+	f, err := os.CreateTemp(dir, ".kotel-mcp-*.tmp")
 	if err != nil {
 		return err
 	}
-	if _, err := f.Write(data); err != nil {
-		f.Close()
-		os.Remove(tmp)
+	defer os.Remove(f.Name())
+	if err = f.Chmod(mode); err == nil {
+		_, err = f.Write(data)
+	}
+	if err == nil {
+		err = f.Sync()
+	}
+	closeErr := f.Close()
+	if err != nil {
 		return err
 	}
-	if err := f.Close(); err != nil {
-		os.Remove(tmp)
+	if closeErr != nil {
+		return closeErr
+	}
+	current, err := os.ReadFile(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	// Rename replaces the file on every system (on Windows with
-	// MOVEFILE_REPLACE_EXISTING). When it fails, for example because Codex
-	// holds the file open, the owner's file stays as it was: it is never
-	// removed first, which could lose it if the second step failed too.
-	if err := os.Rename(tmp, path); err != nil {
-		os.Remove(tmp)
-		return err
+	if (previous == nil) != errors.Is(err, os.ErrNotExist) || !bytes.Equal(current, previous) {
+		return errors.New("Codex config changed while connecting")
 	}
-	return nil
+	return platform.ReplaceFile(f.Name(), path)
 }
 
 func fileExists(path string) bool {
@@ -164,10 +209,30 @@ func fileExists(path string) bool {
 // maxCodexConfig bounds a project config Messenger is willing to rewrite.
 const maxCodexConfig = 1 << 20
 
+// Inspect both project keys before deciding whether a write is safe.
+func configuredCodexServer(raw, messenger, root, project string) (string, []string, string, error) {
+	current, kept, err := classifyCodexConfig(CoordinatorServerName, raw, messenger, root, project)
+	if err != nil {
+		return LinkUnknown, nil, "", err
+	}
+	legacy, oldKept, err := classifyCodexConfig(legacyCoordinatorName, raw, messenger, root, project)
+	if err != nil {
+		return LinkUnknown, nil, "", err
+	}
+	name, err := configuredCoordinatorName(current != LinkMissing, legacy != LinkMissing)
+	if err != nil {
+		return LinkOther, nil, "", err
+	}
+	if name == legacyCoordinatorName {
+		return legacy, oldKept, name, nil
+	}
+	return current, kept, name, nil
+}
+
 // classifyCodexConfig reads a Codex config. kept is every original line that
 // is not part of the messenger server, without its line ending. An unreadable
 // file returns LinkUnknown and no lines, and the caller must not write.
-func classifyCodexConfig(raw, messenger, root, project string) (string, []string, error) {
+func classifyCodexConfig(name, raw, messenger, root, project string) (string, []string, error) {
 	if len(raw) > maxCodexConfig {
 		return LinkUnknown, nil, errors.New("codex config is too large to update safely")
 	}
@@ -191,7 +256,7 @@ func classifyCodexConfig(raw, messenger, root, project string) (string, []string
 		if lineQuoteOpen(line) {
 			return LinkUnknown, nil, errors.New("codex config could not be read safely")
 		}
-		owned, header, key, value, ok := codexLine(table, line)
+		owned, header, key, value, ok := codexLine(name, table, line)
 		if !ok {
 			return LinkUnknown, nil, errors.New("codex config could not be read safely")
 		}
@@ -308,7 +373,7 @@ func lineQuoteOpen(line string) bool {
 // codexLine classifies one line. header is set when the line is a table
 // header. owned is true when the line belongs to mcp_servers.messenger.
 // key and value are set for that server's own command, args and enabled.
-func codexLine(table, line string) (owned bool, header, key, value string, ok bool) {
+func codexLine(name, table, line string) (owned bool, header, key, value string, ok bool) {
 	trim := strings.TrimSpace(strings.TrimRight(line, "\r"))
 	if trim == "" || strings.HasPrefix(trim, "#") {
 		return false, "", "", "", true
@@ -320,11 +385,11 @@ func codexLine(table, line string) (owned bool, header, key, value string, ok bo
 		if !strings.HasSuffix(trim, "]") || strings.Contains(trim, "=") {
 			return false, "", "", "", false
 		}
-		name, good := parseTomlPath(trim[1 : len(trim)-1])
+		section, good := parseTomlPath(trim[1 : len(trim)-1])
 		if !good {
 			return false, "", "", "", false
 		}
-		return messengerTable(name), name, "", "", true
+		return section == "mcp_servers."+name || strings.HasPrefix(section, "mcp_servers."+name+"."), section, "", "", true
 	}
 	keyRaw, valueRaw, cut := strings.Cut(trim, "=")
 	if !cut {
@@ -338,18 +403,19 @@ func codexLine(table, line string) (owned bool, header, key, value string, ok bo
 	if table != "" {
 		full = table + "." + path
 	}
-	if !strings.HasPrefix(full, "mcp_servers.messenger") || (full != "mcp_servers.messenger" && !strings.HasPrefix(full, "mcp_servers.messenger.")) {
+	prefix := "mcp_servers." + name
+	if full != prefix && !strings.HasPrefix(full, prefix+".") {
 		return false, "", "", "", true
 	}
 	// A nested table such as mcp_servers.messenger.env is owned, but its
 	// keys are not the server's command, args or enabled.
 	field := ""
-	if table == "mcp_servers.messenger" && !strings.Contains(path, ".") {
+	if table == prefix && !strings.Contains(path, ".") {
 		field = path
-	} else if table == "mcp_servers" && strings.HasPrefix(path, "messenger.") {
-		field = strings.TrimPrefix(path, "messenger.")
-	} else if table == "" && strings.HasPrefix(path, "mcp_servers.messenger.") {
-		field = strings.TrimPrefix(path, "mcp_servers.messenger.")
+	} else if table == "mcp_servers" && strings.HasPrefix(path, name+".") {
+		field = strings.TrimPrefix(path, name+".")
+	} else if table == "" && strings.HasPrefix(path, prefix+".") {
+		field = strings.TrimPrefix(path, prefix+".")
 	}
 	if strings.Contains(field, ".") {
 		field = ""
@@ -369,17 +435,13 @@ func codexLine(table, line string) (owned bool, header, key, value string, ok bo
 		return true, "", field, strings.TrimSpace(valueRaw), true
 	}
 	// An inline table on the server key itself: messenger = { command = … }.
-	if (table == "mcp_servers" && path == "messenger") || (table == "" && path == "mcp_servers.messenger") {
+	if (table == "mcp_servers" && path == name) || (table == "" && path == prefix) {
 		if _, _, _, _, good := parseInlineServer(valueRaw); !good {
 			return true, "", "", "", false
 		}
 		return true, "", "inline", valueRaw, true
 	}
 	return true, "", "", "", true
-}
-
-func messengerTable(name string) bool {
-	return name == "mcp_servers.messenger" || strings.HasPrefix(name, "mcp_servers.messenger.")
 }
 
 func parseTomlPath(s string) (string, bool) {
@@ -390,7 +452,9 @@ func parseTomlPath(s string) (string, bool) {
 		if !ok || part == "" {
 			return "", false
 		}
-		parts = append(parts, part)
+		// A literal dot inside a quoted key is not a table separator.
+		// This normalized path is only used for matching, never written.
+		parts = append(parts, strings.ReplaceAll(part, ".", "\x00"))
 		rest = strings.TrimSpace(next)
 		if rest == "" {
 			break

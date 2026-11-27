@@ -181,7 +181,7 @@ func TestConnectCoordinatorRunsClaudeInTheProjectFolder(t *testing.T) {
 		t.Fatalf("calls %q", calls)
 	}
 	parts := strings.Split(calls[0], "\x00")
-	want := append([]string{"mcp", "add", "--scope", "local", "messenger", "--", f.messenger}, adapters.CoordinatorArgs(f.sup.root, f.project)...)
+	want := append([]string{"mcp", "add", "--scope", "local", "kotel", "--", f.messenger}, adapters.CoordinatorArgs(f.sup.root, f.project)...)
 	if real, _ := filepath.EvalSymlinks(f.folder); parts[0] != real && parts[0] != f.folder || strings.Join(parts[1:], "\x00") != strings.Join(want, "\x00") {
 		t.Fatalf("call %q", parts)
 	}

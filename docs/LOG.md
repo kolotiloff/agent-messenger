@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-338 coordinator migration development)
+
+Added the new coordinator name for fresh profiles, legacy profile detection, collision handling and named MCP handshake responses. Tested isolated native Claude and Codex configuration. Cursor CLI preserved worker isolation with the configured environment mapping. Ordinary interactive startup with an unset marker still needs a provider-compatible fix.
+
 ## 2026-11-27 — Codex (T-343 patch integration)
 
 Integrated the four window follow-ups and moved New Task above the project selector. Both panel filters share the Settings width rule. Verified project navigation, conversation switching, controls, pictures, update status and window stability in Chromium and WebKit with fictional data. The owner confirmed the fleet has updated to the bridge.

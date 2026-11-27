@@ -9,8 +9,8 @@ import (
 )
 
 func TestClaudeAddCoordinatorArgs(t *testing.T) {
-	got := ClaudeAddCoordinatorArgs("/bin/claude", "/app/messenger", "/data", "My Game")
-	want := []string{"/bin/claude", "mcp", "add", "--scope", "local", "messenger", "--", "/app/messenger", "--root", "/data", "coordinator", "--project", "My Game"}
+	got := ClaudeAddCoordinatorArgs("/bin/claude", "kotel", "/app/messenger", "/data", "My Game")
+	want := []string{"/bin/claude", "mcp", "add", "--scope", "local", "kotel", "--", "/app/messenger", "--root", "/data", "coordinator", "--project", "My Game"}
 	if len(got) != len(want) {
 		t.Fatalf("%q", got)
 	}
@@ -72,6 +72,8 @@ func TestCoordinatorLink(t *testing.T) {
 	check(LinkOther)
 	write(folder, map[string]any{"type": "stdio", "command": "/data/runtimes/old/messenger", "args": CoordinatorArgs("/data", "Game")})
 	check(LinkStale)
+	write(folder, map[string]any{"command": "/custom", "args": CoordinatorArgs("/data", "Game"), "env": map[string]string{"SETTING": "keep"}})
+	check(LinkOther)
 	write(folder, map[string]any{"type": "http", "url": "https://example.invalid"})
 	check(LinkOther)
 	if runtime.GOOS != "windows" {
@@ -88,4 +90,19 @@ func TestCoordinatorLink(t *testing.T) {
 		t.Fatal(err)
 	}
 	check(LinkUnknown)
+}
+
+func TestClaudeCoordinatorNameCollision(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".claude.json")
+	raw, err := json.Marshal(map[string]any{"projects": map[string]any{dir: map[string]any{"mcpServers": map[string]any{"messenger": map[string]string{"command": "old"}, "kotel": map[string]string{"command": "custom"}}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if state, name, err := ClaudeCoordinatorEntry(path, dir, "/kotel", "/data", "Game"); state != LinkOther || name != "" || err == nil {
+		t.Fatal(state, name, err)
+	}
 }
