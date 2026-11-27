@@ -4,7 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-27 — Codex (T-336 window audit)
 
-Consolidated button sizes and neutral fills, added the shared path menu to replies, exposed model and access information with a token popover below the composer, used neutral computer icons, refined Copy, removed worker hover timestamps, and highlighted shell command text. Audited chat constraints, sidebar and archive rows, settings, model selection and Statistics. A pending efficiency request now hides old results. Seven window checks passed in Chromium and WebKit, and the Go check suite passed. The ordinary route serves the new layout in the handler test. Native smoke launch remains unverified. The release remains on hold.
+Consolidated button sizes and neutral fills, added the shared path menu to replies, exposed model and access information with a token popover below the composer, used neutral computer icons, refined Copy, removed worker hover timestamps, and highlighted shell command text. Audited chat constraints, sidebar and archive rows, settings, model selection and Statistics. A pending efficiency request now hides old results. Seven window checks passed in Chromium and WebKit, and the Go check suite passed. The ordinary route serves the new layout in the handler test. Native smoke launch remains unverified. The release remains on hold. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).
 
 ## 2026-11-27 — Codex (T-335 task composer)
 
