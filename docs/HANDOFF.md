@@ -16,7 +16,7 @@ T-365 removes the duplicate computer list from Network settings. The remote comp
 
 T-366 adds four response font choices in General with a live 14 px sample. The macOS shell remembers the selection across windows and launches. The installed build still uses the published icon dimensions.
 
-T-361 through T-363 track clickable paths from plain report file lists and Markdown, the built-in reader, file actions and chronological work progress. Each completed task should show its verified change summary.
+T-361 through T-363 track clickable paths from plain report file lists and Markdown, the built-in reader, file actions and chronological work progress. A completed task with verified file changes should show its change summary.
 
 The T-363 summary belongs directly under the final answer. Its header shows task totals, followed by the first three file rows and a control to reveal the rest. The card has no undo action.
 

@@ -4,7 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-27 — T-363 Change summary layout
 
-Codex recorded the owner's reference for the task summary in [PR #253](https://github.com/kolotiloff/agent-messenger/pull/253). Show task totals prominently below the final answer, with three file rows and a control to reveal the rest. The card is read-only.
+Codex recorded the owner's reference for the task summary in [PR #253](https://github.com/kolotiloff/agent-messenger/pull/253). Show task totals prominently below the final answer, with three file rows and a control to reveal the rest. The card is read-only and appears only when a task has verified file changes, including documentation and other project files.
 
 ## 2026-11-27 — T-364 through T-366 Dock label, update actions, notices and response fonts
 
