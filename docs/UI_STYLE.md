@@ -18,7 +18,7 @@ Scale: 4, 8, 12, 16, 24 (`--am-space-1/2/3/4/6`). Pick the gap by meaning:
 |---|---:|---:|
 | Composer shell | 4 px | 4 px |
 | Computer headings, active task rows, statistics task links and efficiency model rows | 4 px | 12 px, with a 36 px leading inset on active tasks to align the titles |
-| Archive rows and compact notices | 8 px | 12 px |
+| Compact notices | 8 px | 12 px |
 | Report cards, expanded efficiency details and outgoing message bubbles | 12 px | 12 px |
 | Popover menus | 8 px | 8 px |
 | Settings cards | 16 px | 16 px |
@@ -37,6 +37,8 @@ Buttons that belong together go in one container: `.am-actions` (a row) or `.am-
 | `--am-radius-s` | 8 | buttons, fields, list rows, menu options, small boxes |
 | `--am-radius-m` | 12 | cards, panels, notices, menus, error chips, the window |
 | `--am-radius-l` | 16 | dialogs, the composer, message bubbles |
+
+In the wide task window, Projects and Archive use the section inset (`--am-gap-section`, 16 px). The Mac caption divider runs across both panels. The archive header sits directly on its pane surface, with the clear icon beside the agent filter. Both filters use the shared select styles. Active and archived task rows use the same 4 px vertical and 12 px horizontal padding. The active tree adds a 24 px leading indent to align the title with its computer. Task rows use the soft surface on hover and the quieter task selection fill for the current conversation. Author labels sit one control gap (8 px) above their messages.
 
 The composer keeps its surface radius (16 px) at every height. The inset icon controls use the next smaller radius (12 px). Ordinary buttons, one-line inputs and selector triggers share the compact control height (28 px) in the current window layout.
 
@@ -65,3 +67,5 @@ Check the tasks, agents and server tabs, a dialog and a menu in both themes at 1
 Standard dialogs share the 44 px header with 4 px vertical and 16 px horizontal padding. Dialogs that ask for a decision (`.am-alert`) use 16 px padding and a 12 px gap between the heading, text and actions. They use the standard 16 px section heading, muted text, the leaving or destructive choice on the left and the main action on the right. A destructive button (`.am-danger`) has red text on a soft red fill.
 
 Text in a control is centred by eye, not by the line box: system fonts leave more room below the text than above it, so buttons, tabs, select fields and inputs get `--am-text-nudge` (4) as their top padding and none at the bottom. Measured: 11 px above the capitals and 11 below in a 32 px button.
+
+The task sidebar starts with a left-aligned quiet New Task button above Projects. Both sidebar filters use the inline Settings control width (12 em, capped at half the available row). At an inner pane width of 195 px or less, each filter moves to a full-width second row.

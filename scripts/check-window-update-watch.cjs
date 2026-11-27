@@ -56,6 +56,8 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const file = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
       return route.fulfill({body:await fs.readFile(path.join(assets,file)),contentType:file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});
     });
+    const previousTime=new Date(Date.now()-10000).toISOString();
+    server.updates=['refused','failed','waiting'].map((state,i)=>({computer:'old-'+i,request_id:'previous-'+i,state,stale:state==='waiting',updated_at:previousTime}));
     await page.goto('http://messenger.test/#fixture');
     const card = page.locator('.am-peer-card[data-peer="dev-pc"]');
     async function refreshServer() {
@@ -68,6 +70,19 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await card.screenshot({path:path.join(process.env.SCREENSHOT_DIR,name+'.png')});
     }
     const arrow=card.getByRole('button',{name:/Обновить до/});
+    await arrow.waitFor();
+    assert.equal(await page.locator('#notices .am-notice-bad').count(),0,'previous update errors and timeouts must stay quiet on startup');
+    const pending={computer:peer.id,request_id:'previous-pending',state:'waiting',updated_at:previousTime};
+    server.updates.push(pending);
+    await refreshServer();
+    await card.getByRole('button',{name:'Отменить обновление'}).waitFor();
+    pending.stale=true;
+    await refreshServer();
+    const timeout=page.locator('#notices .am-notice-bad').filter({hasText:'ПК-1 не ответил об обновлении'});
+    await timeout.waitFor();
+    await timeout.getByRole('button',{name:'Закрыть'}).click();
+    server.updates=[];
+    await refreshServer();
     await arrow.waitFor();
     assert.match(await arrow.getAttribute('title'),/^Обновить до v/);
     assert.deepEqual(await arrow.locator('svg').evaluate(svg=>{
@@ -213,6 +228,9 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     assert.equal(await failure.locator('[title]').count(),0,'a fully visible reason must not show a duplicate tooltip');
     assert.equal(await indicator.count(),0,'a failed request must also stop the spinner');
     assert.equal(await arrow.count(),1,'a recorded failure leaves the older version eligible');
+    await page.reload();
+    await arrow.waitFor();
+    assert.equal(await failure.count(),0,'opening the window again must not replay the latest failure');
     // Use the actual window with simulated macOS updater callbacks.
     await page.emulateMedia({reducedMotion:'no-preference'});
     await page.evaluate(()=>{

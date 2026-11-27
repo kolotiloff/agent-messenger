@@ -12,6 +12,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
@@ -112,6 +113,7 @@ func refreshWindowsRegistration() {
 // winRegister writes the «Приложения» entry and the Start menu shortcut.
 // Both are conveniences: a failure leaves the program working.
 func winRegister(p winPaths) {
+	updated := winInstalledVersion() != buildinfo.Version
 	if k, _, err := registry.CreateKey(registry.CURRENT_USER, winUninstallKey, registry.SET_VALUE); err == nil {
 		for name, value := range winUninstallValues(p, buildinfo.Version) {
 			_ = k.SetStringValue(name, value)
@@ -124,7 +126,7 @@ func winRegister(p winPaths) {
 		k.Close()
 	}
 	legacy := filepath.Join(filepath.Dir(p.Shortcut), winInstallFolder+".lnk")
-	if _, err := os.Stat(p.Shortcut); err == nil {
+	if _, err := os.Stat(p.Shortcut); err == nil && !updated {
 		if _, oldErr := os.Lstat(legacy); errors.Is(oldErr, os.ErrNotExist) {
 			return
 		}
@@ -132,7 +134,21 @@ func winRegister(p winPaths) {
 	_ = os.MkdirAll(filepath.Dir(p.Shortcut), 0o755)
 	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", winShortcutScript(p))
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NO_WINDOW}
-	_ = cmd.Run()
+	err := cmd.Run()
+	if updated {
+		notifyWindowsIconChange(p.Exe)
+	}
+	if err == nil {
+		notifyWindowsIconChange(p.Shortcut)
+	}
+}
+
+// Ask Explorer to reload the icon for this one updated file (SHCNE_UPDATEITEM,
+// SHCNF_PATHW). Keep the user's pins and the rest of the shell cache intact.
+func notifyWindowsIconChange(path string) {
+	if wide, err := windows.UTF16PtrFromString(path); err == nil {
+		shell32.NewProc("SHChangeNotify").Call(0x2000, 0x0005, uintptr(unsafe.Pointer(wide)), 0)
+	}
 }
 
 func winStart(p winPaths) error {

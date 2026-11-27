@@ -306,6 +306,7 @@ func serveCoordinatorIn(store *core.Store, project, watch, dataRoot string, in i
 			c.clientName = p.ClientInfo.Name
 			c.mu.Unlock()
 			_ = c.store.TouchCoordinatorClient(c.project, p.ClientInfo.Name)
+			_ = c.store.RefreshCoordinatorProcess(c.project, c.chat, c.self)
 			c.respond(req.ID, map[string]any{
 				"protocolVersion": p.ProtocolVersion,
 				"capabilities":    map[string]any{"tools": map[string]any{"listChanged": true}},

@@ -29,7 +29,7 @@ var TaskToolNames = []string{"read_task", "report", "ask", "ask_owner"}
 // TaskWorkerPrompt is the first message of every run. The task itself is read
 // through read_task, after the conversation identity is bound.
 const TaskWorkerPrompt = "You are a worker started by Kotel for one task in this project folder. " +
-	"First call the messenger_task tool read_task to get the task (and, on a resumed run, the answer to your question). " +
+	"First call the messenger_task tool read_task silently to get the task (and, on a resumed run, the answer to your question). " +
 	"Do the work with your normal tools, following this project's own instructions and the owner's rules that read_task returns. " +
 	"If you changed or created files and the project is under version control, commit (or check in) your work before you report: that is how it reaches the project and the other computers. " +
 	"If you cannot commit (files locked by another agent, the copy is behind the server, a conflict) and cannot fix it within your task's limits, do not report: use ask to describe the problem and what you tried, so this conversation stays open; when the answer comes, try again. " +

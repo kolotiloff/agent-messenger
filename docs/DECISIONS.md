@@ -919,3 +919,19 @@ The owner approved the rounded golden tile with a black pot, tilted lid raised o
 ## D-248: Complete the Kotel naming transition after the bridge
 
 Build 116 preserves the existing integrations so installed clients can update. The owner wants the old names retired from the active product, including existing MCP coordinators. Migrate app-managed entries on reconnect, preserve permissions and conversation identity, and resolve custom entries or name collisions with their owner. Verify one tool namespace and successful calls for each actual coordinator before removing its old aliases. Apply the same acceptance to the CLI, installers, services, paths and current downloads. Retire an alias when every dependent installation and offline profile has migrated. Preserve Git history, previously signed releases and the user's existing messages.
+
+## D-249 — Worker reply actions and default archive width
+
+The owner wants a worker reply to offer the same timestamp and full-message copy action as an outgoing message. Place the controls below the reply on the worker's side. Archive and Projects start at equal widths and retain their own saved widths. The revised Mac header remains a proposal.
+
+## D-250 — Put Projects below the Mac caption
+
+On a wide Mac window, place Projects one control gap below the task title bar. Keep the divider under the title and place an independent toggle for the computer and task sidebar at its top right. Closing the sidebar gives the width to the open task and preserves the archive state. Keep the existing stacked layout on narrow windows.
+
+## D-251 — Align the project and archive controls
+
+Extend the Mac caption divider over the Projects sidebar. Use the common 16 px section inset for both Mac sidebar header rows. Keep the archive header on its pane background without a divider below it. Keep the conversation date centered above the scrolling history. Place the archive clear icon beside the agent filter and identify the scope and history retention in the existing confirmation dialog.
+
+## D-252 — Give New Task its own row above Projects
+
+Place the icon and New Task text at the leading edge of the sidebar. Use the shared quiet button feedback and keep the archive toggle icon-only. Both sidebar filters use the Settings width of 12 em capped at half the available row. In narrow panels the filter takes a full row.

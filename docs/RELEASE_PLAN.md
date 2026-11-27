@@ -2,6 +2,14 @@
 
 Written November 6, 2026. The current status below supplements the original [MVP](MVP.md), [architecture](PLAN.md), [window requirements](APP.md) and [broker deployment](DEPLOYMENT.md). Transitions are decided by checks.
 
+## Planned 1.0.14 fixes
+
+- In direct chats, answer the owner's current question in their language. Show one verified reply and let the owner expand the preceding progress text. Keep pending and failed output available.
+- Keep the remote download button in place on hover. Give Archive the same default width as Projects and preserve individually saved widths.
+- Show the time and Copy message action below a worker reply on hover or keyboard focus. Copy its complete source text, including line breaks and Markdown.
+- Suppress historical remote update failures when reopening the window. Show a new failure and report a request observed waiting if it subsequently times out.
+- Restore the active local coordinator label when an update replaces the process serving the project's existing MCP chat.
+
 ## Published 1.0.13 bridge release
 
 - Kotel branding, the approved desktop interface and signed in-place updates from the original GitHub repository.

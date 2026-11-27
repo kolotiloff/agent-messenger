@@ -42,7 +42,7 @@ func TestMenuEntry(t *testing.T) {
 		t.Fatal(string(raw), err)
 	}
 	// The entry has the program's icon (T-045).
-	icon := filepath.Join(data, "icons", "hicolor", "scalable", "apps", "agent-messenger.svg")
+	icon := filepath.Join(data, "icons", "hicolor", "scalable", "apps", "kotel.svg")
 	if svg, err := os.ReadFile(icon); err != nil || !strings.HasPrefix(string(svg), "<svg") || !strings.Contains(string(raw), "Icon="+icon+"\n") {
 		t.Fatal(string(raw), err)
 	}
