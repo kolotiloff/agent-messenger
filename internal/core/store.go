@@ -1409,7 +1409,7 @@ func emptyDetail(detail string) string {
 func ensureRemoteLiveUsage(db *sql.DB) error {
 	var count int
 	if err := db.QueryRow(`SELECT count(*) FROM pragma_table_info('tasks')
- WHERE name IN ('remote_live_tokens','remote_live_ordinal')`).Scan(&count); err != nil || count == 2 {
+ WHERE name IN ('remote_live_tokens','remote_live_ordinal','context_snapshot')`).Scan(&count); err != nil || count == 3 {
 		return err
 	}
 	tx, err := db.Begin()
@@ -1418,6 +1418,9 @@ func ensureRemoteLiveUsage(db *sql.DB) error {
 	}
 	defer tx.Rollback()
 	if err := ensureColumn(tx, "tasks", "remote_live_tokens", "INTEGER"); err != nil {
+		return err
+	}
+	if err := ensureColumn(tx, "tasks", "context_snapshot", "TEXT"); err != nil {
 		return err
 	}
 	if err := ensureColumn(tx, "tasks", "remote_live_ordinal", "INTEGER NOT NULL DEFAULT 0"); err != nil {

@@ -221,8 +221,9 @@ type netBody struct {
 	// computer before it ignores the field.
 	Usage *TaskUsage `json:"usage,omitempty"`
 	// LiveTokens is a cumulative observation for one attempt, never final usage.
-	LiveTokens *int64 `json:"live_tokens,omitempty"`
-	RunOrdinal int    `json:"run_ordinal,omitempty"`
+	LiveTokens      *int64          `json:"live_tokens,omitempty"`
+	RunOrdinal      int             `json:"run_ordinal,omitempty"`
+	ContextSnapshot json.RawMessage `json:"context_snapshot,omitempty"`
 	// DurationMS comes from the executing computer's own clock.
 	DurationMS *int64 `json:"duration_ms,omitempty"`
 	// Computer is the sender's lasting id (T-132), set on every message, so
@@ -1504,6 +1505,13 @@ func applyReport(tx *sql.Tx, from netLink, b netBody, name string) error {
 	}
 	switch b.Kind {
 	case "progress":
+		if b.Event == "context_snapshot" {
+			var next contextSnapshot
+			if json.Unmarshal(b.ContextSnapshot, &next) != nil || !next.valid() {
+				return nil
+			}
+			return applyTaskContext(tx, t.ID, next)
+		}
 		if b.Event == "live_usage" {
 			if t.State != "running" || b.LiveTokens == nil || *b.LiveTokens < 0 || b.RunOrdinal < 1 {
 				return nil

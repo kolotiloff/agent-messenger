@@ -49,17 +49,19 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
-| T-340 | Make direct answers conversational, stabilize the update hover target and match the default sidebar widths. | window | Next patch, `codex/t340-direct-chat-sidebar`. The selected toolbar is implemented in T-341. |
-| T-341 | Place Projects below the Mac caption, toggle the computer sidebar, clarify task access and refresh desktop icons. | window / packaging | Prepared for the next patch on `codex/t341-composer-access`. Actual desktop upgrade icon checks remain open. |
+| T-340 | Make direct answers conversational, stabilize the update hover target and match the default sidebar widths. | window | Published in 1.0.14 (build 117). |
+| T-341 | Place Projects below the Mac caption, toggle the computer sidebar, clarify task access and refresh desktop icons. | window / packaging | Published in 1.0.14 (build 117). |
+| T-352 | Share one archive pagination footer, clarify compact statuses and peer hover, unify list hover, scroll the date with messages, normalize count and role weights and the running Mac icon. | window | Post-117. |
+| T-353 | Select worker access per task while enforcing the executor policy. | agent / window | Applies to the window and coordinator. Unspecified access uses the executor default. |
 | T-348 | Animate changes to the current task list and archive. | window | Exercise additions, removals, group boundaries and reduced motion in Chromium and WebKit. |
 | T-349 | Keep active model choices in the same order as the Settings catalog. | window | Apply one display order to saved and custom model IDs. Preserve the suggested selection and show only enabled choices. |
 | T-350 | Align sidebar heading counts, place Clear before the archive filter and use the task-only Mac divider. | window | The project count is the total configured count. Clear retains its confirmation and current filter scope. |
 | T-351 | Keep Mac update acceptance bundles out of application search. | release | New native Mac fixtures use a persistent .noindex directory. Existing production bundle migration remains in T-338. |
 | T-347 | Use the installed Kotel artwork in the Linux system tray. | window | Window, menu artwork and GTK tray share the same icon name. |
 | T-345 | Shorten remote task acceptance labels and preserve the actual computer name in the conversation. | window | Prepared for the next version on `codex/t345-task-acceptance`. |
-| T-343 | Integrate the window fixes and verify the signed upgrade from build 116 to 117. | release | Window checks in Chromium and WebKit. Four native signed checks passed. Resume the existing draft after correcting the Mac bundle replacement fixture. |
-| T-342 | Align both sidebar headings, stabilize the task date and refine archive, dialog, conversation and select controls. | window | Next patch on `codex/t342-task-date`, following T-341. |
-| T-339 | Fix repeated update failures on window launch and restore the live coordinator label after a relay update. | window | Next patch, `codex/t339-update-notices`. |
+| T-343 | Integrate the window fixes and verify the signed upgrade from build 116 to 117. | release | Published in 1.0.14 (build 117). |
+| T-342 | Align both sidebar headings, stabilize the task date and refine archive, dialog, conversation and select controls. | window | Published in 1.0.14 (build 117). |
+| T-339 | Fix repeated update failures on window launch and restore the live coordinator label after a relay update. | window | Published in 1.0.14 (build 117). |
 | T-338 | Finish Kotel naming for existing and fresh MCP profiles, CLI and deployment. | agent | D-248. After the bridge, migrate managed entries, verify the same chat and permissions on each client, resolve custom settings explicitly, then retire legacy names from current distributions. |
 | T-337 | Ship Kotel as an in-place update of Agent Messenger, preserving history and connected computers. | agent | D-247. Original GitHub channel for the bridge. Includes the Windows 1.0.12 split project schema repair. Build 116 is public. The signed installations on all five native runners and the public channel passed. Fleet confirmation and owner command required for rename. |
 | T-336 | Audit the window refinements, including compact controls, both composers, message actions, settings and statistics. | agent | `codex/t336-window-audit`. Implemented in the shared preview. Browser checks passed on Mac. The isolated Mac window showed the settings order and Statistics. Integrated into the T-337 bridge. |

@@ -172,6 +172,8 @@ if (require.main === module) (async()=>{
       const firstLineCenter=text.getBoundingClientRect().top+parseFloat(getComputedStyle(text).lineHeight)/2;
       return [style.marginBlockStart,style.marginBlockEnd,icon.top+icon.height/2-firstLineCenter];
     }),['16px','16px',0]);
+    const closingGap=await reportStatus.evaluate(n=>n.getBoundingClientRect().top-n.previousElementSibling.getBoundingClientRect().bottom);
+    assert.equal(closingGap,await standalone.evaluate(n=>parseFloat(getComputedStyle(n).marginBlockStart)));
     await standalone.locator('summary').click();
     assert.equal(await standalone.locator('pre').textContent(),'git diff --stat');
     assert.equal(await standalone.locator('pre .am-shell-name').textContent(),'git');
@@ -190,7 +192,7 @@ if (require.main === module) (async()=>{
     await tokenCount.click();
     const tokenMenu=preview.locator('#answer-token-menu');
     await tokenMenu.waitFor();
-    assert.deepEqual(await tokenMenu.locator('p').allTextContents(),[
+    assert.deepEqual(await tokenMenu.locator('p:visible').allTextContents(),[
       'Контекстное окно 89\u00a0% заполнено',
       '212 тыс. / 238 тыс. токенов'
     ]);
@@ -325,12 +327,13 @@ if (require.main === module) (async()=>{
     const draftPage=await open(projects,{width:1150,height:770},'dark',(url,p)=>{
       if(p==='game'&&url.pathname==='/api/window'){
         const window=reply(url,p,projects);
-        return {json:{...window,tasks:window.tasks.map(t=>({...t,full_access:!t.remote,started_at:t.id==='game-1'?justStarted:t.started_at}))}};
+        return {json:{...window,history_paged:true,history_next:!url.searchParams.get('agent')?'game-page':'',tasks:window.tasks.map(t=>({...t,full_access:!t.remote,started_at:t.id==='game-1'?justStarted:t.started_at}))}};
       }
       if(p==='tools'&&['/api/window','/api/project-activity'].includes(url.pathname)){
         const showCodex=!url.searchParams.get('agent')||url.searchParams.get('agent')==='codex';
         return {json:{...reply(url,p,projects),tasks:[...tasks.tools,queued,...(showCodex?[toolDone]:[])],shared:[toolShared],history_paged:true,history_next:showCodex?toolDone.id:''}};
       }
+      if(p==='game'&&url.pathname==='/api/task-history')return {json:{tasks:[]}};
       if(p==='tools'&&url.pathname==='/api/task-history')return {json:{tasks:[toolOlder]}};
       if(url.pathname==='/api/self-update')return {json:{installed_version:'1.0.9',version:'1.0.10',state:'available'}};
       if(url.pathname==='/api/task-start')return {json:{ok:true,result:directTask.id}};
@@ -411,6 +414,7 @@ if (require.main === module) (async()=>{
       await disclosure.click();
       assert.equal(await disclosure.getAttribute('aria-expanded'),'false');
       assert.equal(await local.locator('.am-sidebar-task-count').textContent(),' (4 задачи)');
+      assert.equal(await local.locator('.am-sidebar-task-count').evaluate(n=>getComputedStyle(n).fontWeight),'400');
       assert.match(await disclosure.getAttribute('aria-label'),/4 задачи/);
       assert.equal(await groupGap(),4);
       await disclosure.click();
@@ -478,6 +482,8 @@ if (require.main === module) (async()=>{
       assert.deepEqual(hoverFills,[hoverFills[0],hoverFills[0],hoverFills[0]]);
       await local.getByText('Мак, координатор',{exact:true}).waitFor();
       await card(draftPage,'vps').getByText('VPS-PC2, сервер',{exact:true}).waitFor();
+      const roleWeights=await draftPage.locator('.am-machine-label .am-inline-role').evaluateAll(roles=>roles.map(role=>[getComputedStyle(role).fontWeight,getComputedStyle(role.parentElement).fontWeight]));
+      assert(roleWeights.length>=2 && roleWeights.every(([role,name])=>role==='400'&&Number(name)>400),JSON.stringify(roleWeights));
       const remote=card(draftPage,'pc1').locator('.am-machine-name');
       const metadata=remote.locator('.am-machine-meta');
       const opacity=()=>metadata.evaluate(node=>getComputedStyle(node).opacity);
@@ -493,9 +499,14 @@ if (require.main === module) (async()=>{
       assert.deepEqual(await download.boundingBox(),initialButton,'revealing the controls must keep their hit targets in place');
       assert(await download.evaluate((node,p)=>node.contains(document.elementFromPoint(p.x,p.y)),directPoint),'the button stays under the pointer');
       await draftPage.locator('#settings-open').hover();
+      assert.equal(await opacity(),'0','leaving the download target hides its metadata without selecting the computer');
       await remote.hover();
       assert.equal(await opacity(),'1');
       assert.notEqual(await remote.evaluate(node=>getComputedStyle(node).backgroundColor),await remote.evaluate(node=>getComputedStyle(node.closest('.am-sidebar')).backgroundColor));
+      const machineHover=await remote.evaluate(n=>getComputedStyle(n).backgroundColor);
+      const inactiveTask=local.locator('.am-sidebar-task:not([aria-pressed=true])').first();
+      await inactiveTask.hover();
+      assert.equal(await inactiveTask.evaluate(n=>getComputedStyle(n).backgroundColor),machineHover);
       await remote.locator('.am-sidebar-disclosure').click();
       await draftPage.locator('#settings-open').hover();
       assert.equal(await opacity(),'0');
@@ -516,6 +527,8 @@ if (require.main === module) (async()=>{
       });
       assert.equal(remoteFill,hoverFills[0]);
       assert.match(await draftPage.locator('#thread .am-meta-author').last().textContent(),/, исполнитель$/);
+      const authorWeights=await draftPage.locator('#thread .am-meta-author .am-inline-role').evaluateAll(roles=>roles.map(role=>[getComputedStyle(role).fontWeight,getComputedStyle(role.parentElement).fontWeight]));
+      assert(authorWeights.length&&authorWeights.every(([role,author])=>role==='400'&&Number(author)>400),JSON.stringify(authorWeights));
       assert.equal(await draftPage.locator('#thread .am-role').count(),0);
       for(const panel of [local.locator('.am-machine-label'),...await draftPage.locator('#thread .am-meta-author').all()]){
         const [base,role]=await panel.evaluate(node=>{
@@ -525,7 +538,9 @@ if (require.main === module) (async()=>{
           };
           return [typography(node),typography(node.querySelector('.am-inline-role'))];
         });
-        assert.deepEqual(base.slice(0,3),role.slice(0,3));
+        assert.deepEqual(base.slice(0,2),role.slice(0,2));
+        assert.equal(role[2],'400');
+        assert(Number(base[2])>Number(role[2]));
         assert.notEqual(base[3],role[3]);
       }
       const message=draftPage.locator('#thread .am-message-group').first();
@@ -973,7 +988,10 @@ if (require.main === module) (async()=>{
         assert(Math.abs(baselines[0]-baselines[1])<=1,JSON.stringify(baselines));
       }
       await card(draftPage,'pc1').getByText('Ждёт запуска',{exact:false}).waitFor();
-      await archive.getByRole('button',{name:'Показать ещё 10'}).click();
+      const moreArchive=archive.getByRole('button',{name:/^Показать ещё/});
+      assert.equal(await moreArchive.count(),1);
+      assert(await moreArchive.evaluate(button=>button.parentElement===document.getElementById('task-list').lastElementChild));
+      await moreArchive.click();
       await archive.getByText('Инструменты, Старый отчёт',{exact:true}).waitFor();
       const older=archive.locator('.am-task').filter({hasText:'Старый отчёт'});
       assert.match(await older.locator('time').textContent(),/^\d{1,2} .+ в 03:00$/);
@@ -1122,18 +1140,21 @@ if (require.main === module) (async()=>{
       assert.equal(await mac.locator('.am-sidebar').evaluate(n=>getComputedStyle(n,'::before').content),'none');
       assert.equal(await toolbar.evaluate(n=>getComputedStyle(n).borderBottomWidth),'1px');
       const date=mac.locator('#conversation-date');
+      await mac.locator('#thread').evaluate(n=>n.scrollTop=0);
       const start=await date.boundingBox();
       assert.equal(start.y-box.y-box.height,12);
       await mac.locator('.am-sidebar-task').filter({hasText:'Экран настроек'}).click();
       await mac.locator('#task-head h3').getByText('Экран настроек').waitFor();
       await mac.locator('#thread').getByText('Принято на компьютере ПК-1 $&',{exact:true}).waitFor();
       assert.equal(await date.getAttribute('datetime'),tasks.game[0].created_at);
+      assert(await date.evaluate(n=>n===n.parentNode.firstElementChild&&n.parentNode.id==='thread'));
       const scrolled=await mac.locator('#thread').evaluate(n=>{
-        n.scrollTop=4;
+        n.scrollTop=40;
         return n.scrollTop;
       });
-      assert.equal(scrolled,4);
-      assert.equal((await date.boundingBox()).y,start.y);
+      assert.equal(scrolled,40);
+      assert.equal((await date.boundingBox()).y,start.y-scrolled);
+      assert.equal((await toolbar.boundingBox()).y,box.y);
       await nav.press('Enter');
       assert.equal(await projectsRow.isVisible(),false);
       assert.equal(await nav.getAttribute('aria-expanded'),'false');

@@ -131,26 +131,11 @@ func (s *Supervisor) HideWindowHistory(project, agent, computer string) error {
 
 // TaskFeed returns one task's feed.
 func (s *Supervisor) TaskFeed(id string) (any, error) {
-	return s.withContextWindow(s.store.TaskFeed(id))
+	return s.store.TaskFeed(id)
 }
 
 func (s *Supervisor) TaskFeedDelta(id, cursor string) (any, error) {
-	return s.withContextWindow(s.store.TaskFeedDelta(id, cursor))
-}
-
-func (s *Supervisor) withContextWindow(feed core.TaskFeed, err error) (any, error) {
-	if err != nil {
-		return nil, err
-	}
-	s.tasks.mu.Lock()
-	defer s.tasks.mu.Unlock()
-	for _, live := range s.tasks.live {
-		if live.task == feed.Task.ID {
-			feed.Task.ContextWindow = live.contextWindow.Load()
-			break
-		}
-	}
-	return feed, nil
+	return s.store.TaskFeedDelta(id, cursor)
 }
 
 const windowWatchInterval = 250 * time.Millisecond

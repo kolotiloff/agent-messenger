@@ -52,7 +52,6 @@ type taskRuns struct {
 }
 
 type liveRun struct {
-	contextWindow  atomic.Pointer[core.ContextWindow]
 	task           string
 	lastOutput     atomic.Int64 // unix nanoseconds
 	activeCommands atomic.Int32
@@ -270,6 +269,8 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	readDone := make(chan readOutcome, 1)
 	go func() {
 		var result adapters.TaskEventResult
+		stopUsage, usageDone := make(chan struct{}), make(chan struct{})
+		watchingUsage := false
 		reader := bufio.NewReader(stdout)
 		bound := false
 		var outputNoted time.Time
@@ -326,13 +327,22 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 						// the run will fail verification. Stop it early.
 						_ = platform.SignalGroup(obs.PGID)
 					} else if task.Provider == "codex" {
-						go s.watchCodexTask(ctx, lingerDone, live, runID, task, result.Session, launched, spec.Resume, result.Model != "")
+						watchingUsage = true
+						session, hasModel := result.Session, result.Model != ""
+						go func() {
+							defer close(usageDone)
+							s.watchCodexTask(ctx, stopUsage, runID, task, session, launched, spec.Resume, hasModel)
+						}()
 					}
 				}
 			}
 			if err != nil {
 				if errors.Is(err, io.EOF) {
 					err = nil
+				}
+				if watchingUsage {
+					close(stopUsage)
+					<-usageDone
 				}
 				readDone <- readOutcome{result, err}
 				return
@@ -394,6 +404,9 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	}
 	_ = stdout.Close()
 	result, readErr := read.result, read.err
+	if task.Provider == "claude" && result.ContextCapacity > 0 && !result.Conflicting && result.Session == task.SessionID {
+		_ = s.store.NoteTaskContext(runID, &core.ContextWindow{UsedTokens: result.ContextUsed, CapacityTokens: result.ContextCapacity})
+	}
 	if readErr != nil && result.Completed && waitErr == nil {
 		// D-147: the worker's turn ended and its own process exited; a
 		// process it left keeps the output open, which is no failure.
@@ -480,7 +493,7 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	}
 }
 
-func (s *Supervisor) watchCodexTask(ctx context.Context, done <-chan struct{}, live *liveRun, runID string, task core.Task, thread string, launched time.Time, resumed, modelKnown bool) {
+func (s *Supervisor) watchCodexTask(ctx context.Context, done <-chan struct{}, runID string, task core.Task, thread string, launched time.Time, resumed, modelKnown bool) {
 	profile := task.Environment
 	if profile == "" {
 		profile, _ = defaultProfileDir("codex")
@@ -489,6 +502,8 @@ func (s *Supervisor) watchCodexTask(ctx context.Context, done <-chan struct{}, l
 		return
 	}
 	created, _ := time.Parse(time.RFC3339Nano, task.CreatedAt)
+	var previousWindow *core.ContextWindow
+	haveWindow := false
 	var lastTokens int64 = -1
 	read := func() {
 		if !modelKnown {
@@ -497,10 +512,16 @@ func (s *Supervisor) watchCodexTask(ctx context.Context, done <-chan struct{}, l
 			}
 		}
 		usage := adapters.CodexLiveUsage(profile, thread, launched, created, resumed)
-		if usage.CapacityTokens > 0 {
-			live.contextWindow.Store(&core.ContextWindow{UsedTokens: usage.UsedTokens, CapacityTokens: usage.CapacityTokens})
-		} else {
-			live.contextWindow.Store(nil)
+		if usage.ObservedContext {
+			var window *core.ContextWindow
+			if usage.CapacityTokens > 0 {
+				window = &core.ContextWindow{UsedTokens: usage.UsedTokens, CapacityTokens: usage.CapacityTokens}
+			}
+			if !haveWindow || windowValue(previousWindow) != windowValue(window) {
+				if s.store.NoteTaskContext(runID, window) == nil {
+					previousWindow, haveWindow = window, true
+				}
+			}
 		}
 		if tokens := usage.TurnTokens; tokens != nil && *tokens > lastTokens {
 			if s.store.NoteLiveTokens(runID, *tokens) == nil {
@@ -521,6 +542,13 @@ func (s *Supervisor) watchCodexTask(ctx context.Context, done <-chan struct{}, l
 			return
 		}
 	}
+}
+
+func windowValue(w *core.ContextWindow) core.ContextWindow {
+	if w == nil {
+		return core.ContextWindow{}
+	}
+	return *w
 }
 
 // ensureCursorTaskServer keeps Messenger's worker tools in the Cursor

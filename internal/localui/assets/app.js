@@ -359,7 +359,7 @@
       return [tr('Связь потеряна, исход неизвестен'),'am-muted',t.remote.last_seen?'«'+t.remote.name+tr('» не на связи с ')+stamp(t.remote.last_seen):'«'+t.remote.name+tr('» больше нет в сети')];
     if(activeStates.includes(t.state)&&stopProgress(t)){
       if(t.remote?.silent)return [tr('Остановка не подтверждена'),'am-status-wait'];
-      return [tr('Ждём завершения задачи…'),'am-status-wait'];
+      return [tr('Остановка запрошена'),'am-status-wait'];
     }
     // T-137: sent to another computer that has not said it took the task.
     // It may run there with its replies lost, so neither «Работает» nor
@@ -370,7 +370,7 @@
     }
     switch(t.state){
       case 'running':
-        if(t.pending_launch)return [t.waits_for_lock?tr('Ждёт ресурс «')+t.waits_for_lock+'»':tr('Ждёт запуска'),'am-status-wait'];
+        if(t.pending_launch)return t.waits_for_lock?[tr('Ожидает ресурс'),'am-status-wait',t.waits_for_lock]:[tr('Ждёт запуска'),'am-status-wait'];
         return waitingForStartTime(t)?[tr('Работает'),'am-status-run']:[tr('Работает ')+minutes(from),'am-status-run','',from];
       case 'waiting_owner':return [tr('Ждёт вашего ответа'),'am-status-wait'];
       case 'waiting_coordinator':return [tr('Ждёт ответа координатора'),'am-status-wait'];
@@ -1232,10 +1232,9 @@
         details.append(el('span',identity,color));
         if(timer&&Number.isFinite(Date.parse(from)))details.append(elapsedLabel(from,', '));
       }else{
-        const waiting=t.state==='waiting_owner'||t.state==='waiting_coordinator';
-        const detail=el('span',identity+', '+(waiting&&color==='am-status-wait'?tr('ждёт ответа'):status),color);
+        const detail=el('span',status,color);
         if(tip)detail.title=tip;
-        details.append(detail);
+        details.append(identity+' · ',detail);
       }
       meta.append(providerIcon(t.agent),details);
       title.title=title.textContent;
@@ -1751,7 +1750,7 @@
     const snapshots=projects.map(taskListView).filter(Boolean);
     const ownTasks=snapshots.flatMap(snapshot=>taskRows(snapshot));
     let archived=0;
-    const archiveBatches=[];
+    const archiveBatches=[],archivePages=[];
     if(!taskSidebarPreview)$('task-count').textContent=ownTasks.length+snapshots.reduce((n,snapshot)=>n+(snapshot.shared||[]).reduce((count,p)=>count+p.tasks.length,0),0)||'';
     if(menu?.dataset.stopTask&&menu.matches(':popover-open')){
       const task=ownTasks.find(t=>t.id===menu.dataset.stopTask);
@@ -1832,6 +1831,15 @@
       }
       for(const it of items)target.append(it.peer?sharedRow(it.t,it.peer,name):ownRow(it.t,name));
     };
+    function appendHistoryButton(target,pages){
+      const loading=pages.some(page=>page.loading);
+      const label=pages.length===1?tr('Показать ещё 10'):tr('Показать ещё');
+      const older=el('button',loading?tr('Загружаем…'):label,'am-task-section-action');
+      const names=pages.map(page=>page.name);
+      older.type='button';older.disabled=loading;older.dataset.projects=JSON.stringify(names);
+      older.addEventListener('click',()=>Promise.all(names.map(loadOlderTasks)));
+      const more=el('div',undefined,'am-label am-task-section');more.append(older);target.append(more);
+    }
     for(const name of projects){
       const snapshot=taskListView(name);
       const target=combined?el('section',undefined,'am-task-project'):box;
@@ -1869,15 +1877,15 @@
       }
       const history=currentTaskHistory(snapshot);
       if(snapshot.history_paged&&(name!==project||windowHistoryScope===taskWindowQuery())&&(history?history.next:snapshot.history_next)){
-        const older=el('button',history?.loading?tr('Загружаем…'):tr('Показать ещё 10'),'am-task-section-action');
-        older.type='button';older.disabled=!!history?.loading;older.addEventListener('click',()=>loadOlderTasks(name));
-        const more=el('div',undefined,'am-label am-task-section');more.append(older);target.append(more);
+        if(taskSidebarPreview)archivePages.push({name,loading:!!history?.loading});
+        else appendHistoryButton(target,[{name,loading:!!history?.loading}]);
       }
       if(taskSidebarPreview){
         if(combined&&target.children.length>before)box.append(target);
       }else if(target.children.length===before)target.append(el('p',name?(combined||computerFilter||$('agent-filter').value?tr('Здесь задач нет'):tr('Задач пока нет. Когда координатор раздаст первые, они появятся здесь.')):'','am-small am-muted'));
     }
     if(taskSidebarPreview){
+      if(archivePages.length)appendHistoryButton(box,archivePages);
       $('task-count').textContent=archived||'';
       if(!box.childElementCount)box.append(el('p',tr('В архиве пока нет задач'),'am-small am-muted'));
       const clear=$('archive-clear');
@@ -2193,6 +2201,10 @@
       count=tr('{tokens} по задаче').replace('{tokens}',tokensFull(task.usage.input_tokens+task.usage.output_tokens));
     }
     $('answer-context-summary').textContent=tr('Контекстное окно')+' '+occupancy;
+    const spent=$('answer-task-total');
+    spent.hidden=!hasContext||!task.usage;
+    spent.textContent=spent.hidden?'':tr('{tokens} по задаче').replace('{tokens}',tokensFull(task.usage.input_tokens+task.usage.output_tokens));
+    if(hasContext&&task.state!=='running')$('answer-context-summary').textContent=tr('Последний замер контекста')+' · '+occupancy;
     const details=$('answer-context-count');
     details.textContent=count;
     details.hidden=!count;
@@ -2237,7 +2249,7 @@
       $('answer-token-menu').hidePopover();
       $('compose').hidden=true;$('lost-bar').hidden=true;$('to-bottom').hidden=true;
       if(thread.dataset.draft!=='true'){
-        thread.dataset.draft='true';$('conversation-date').hidden=true;thread.replaceChildren();thread.setAttribute('aria-busy','false');
+        thread.dataset.draft='true';thread.replaceChildren();thread.setAttribute('aria-busy','false');
         head.replaceChildren(conversationTitle(tr('Новая задача')));
         feedShown='';feedSignature='';
       }
@@ -2279,7 +2291,7 @@
   }
   function showWelcome(){noteWelcomeDone();return !welcomeDone;}
   function showPane(thread,kind){
-    $('conversation-date').hidden=true;
+
     if(kind!=='welcome'&&thread.firstElementChild?.dataset.pane===kind&&thread.childElementCount===1)return;
     let pane;
     if(kind==='welcome')pane=welcome();
@@ -2306,17 +2318,18 @@
     heading.title=title;
     return heading;
   }
-  function showConversationDate(t){
+  function conversationDate(t){
     let at=Date.parse(t.created_at);
     if(!Number.isFinite(at))at=Date.parse(t.started_at);
-    const date=$('conversation-date');
-    date.hidden=!Number.isFinite(at);
-    if(date.hidden)return;
+    if(!Number.isFinite(at))return null;
+    const date=el('time',undefined,'am-chat-date am-small am-muted');
+    date.id='conversation-date';
     const day=new Date(at);
     const options={weekday:'short',day:'numeric',month:'short'};
     if(day.getFullYear()!==new Date().getFullYear())options.year='numeric';
     date.dateTime=day.toISOString();
     date.textContent=day.toLocaleDateString(amLocale,options)+tr(' в ')+day.toLocaleTimeString(amLocale,{hour:'2-digit',minute:'2-digit'});
+    return date;
   }
   function sharedTaskHeader(t,p){
     const title=el('div',undefined,'am-task-head');title.append(el('h3',t.title));
@@ -2341,7 +2354,7 @@
     else box.append(el('p',tr('Отчёта пока нет.'),'am-muted'));
     box.append(el('p',tr('Полная история задачи — в окне компьютера «')+p.name+tr('». Здесь её можно только посмотреть.'),'am-small am-muted'));
     thread.replaceChildren(box);
-    if(taskSidebarPreview)showConversationDate(t);
+    if(taskSidebarPreview){const date=conversationDate(t);if(date)thread.prepend(date); }
     $('compose').hidden=true;$('lost-bar').hidden=true;
   }
   function roleTag(text){return el('span',text,'am-role');}
@@ -2986,7 +2999,8 @@
     flushTools();
     if(taskSidebarPreview){
       for(const [article,message] of workerMessages)appendMessageTime(article,null,message.at,message.parts.join('\n\n'));
-      showConversationDate(t);
+      const date=conversationDate(t);
+      if(date)out.unshift(date);
       if(quiet)out.push(quiet);
     }
     head.replaceChildren(header);
@@ -3016,6 +3030,9 @@
     liveTokens.textContent=liveTokens.hidden?'':tokensText(reportedTokens)+tr(' т.');
     compose.hidden=!canDraft&&(!active||unreachable);
     if(taskSidebarPreview){
+      const contextOnly=compose.hidden&&!!(t.context_window||t.usage);
+      compose.toggleAttribute('data-context-only',contextOnly);
+      if(contextOnly)compose.hidden=false;
       const model=$('answer-model');
       model.textContent=displayModel;
       model.title=displayModel?taskModelDetail(t):'';

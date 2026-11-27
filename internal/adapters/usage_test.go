@@ -38,3 +38,23 @@ func TestTaskUsage(t *testing.T) {
 		t.Fatalf("bad usage %+v", bad.Usage)
 	}
 }
+
+func TestClaudeContextUsesMatchingLastMainRequest(t *testing.T) {
+	var r TaskEventResult
+	parse := func(line string) { ParseTaskEvent("claude", []byte(line), &r) }
+	parse(`{"type":"assistant","message":{"model":"primary","usage":{"input_tokens":25,"cache_read_input_tokens":10,"cache_creation_input_tokens":5}}}`)
+	parse(`{"type":"assistant","parent_tool_use_id":"tool","message":{"model":"child","usage":{"input_tokens":777}}}`)
+	parse(`{"type":"result","modelUsage":{"child":{"contextWindow":100}},"usage":{"input_tokens":9999}}`)
+	if r.ContextCapacity != 0 {
+		t.Fatal("used another model's capacity")
+	}
+	parse(`{"type":"result","modelUsage":{"primary":{"contextWindow":200}},"usage":{"input_tokens":9999}}`)
+	if r.ContextUsed != 40 || r.ContextCapacity != 200 {
+		t.Fatalf("context %d/%d", r.ContextUsed, r.ContextCapacity)
+	}
+	parse(`{"type":"system","subtype":"compact_boundary"}`)
+	parse(`{"type":"result","modelUsage":{"primary":{"contextWindow":200}}}`)
+	if r.ContextCapacity != 0 {
+		t.Fatal("kept pre-compaction usage")
+	}
+}

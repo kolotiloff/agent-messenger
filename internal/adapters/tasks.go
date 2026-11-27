@@ -200,6 +200,8 @@ func codexTaskArgs(s TaskRunSpec) ([]string, error) {
 
 // TaskEventResult is what a worker run's event stream showed.
 type TaskEventResult struct {
+	contextModel                 string
+	ContextUsed, ContextCapacity int64
 	// Session is the conversation ID the CLI reported first; Conflicting is
 	// set when it later reported a different one.
 	Session     string
@@ -289,6 +291,7 @@ func ParseTaskEvent(provider string, line []byte, r *TaskEventResult) {
 		id, _ := e["session_id"].(string)
 		note(id)
 		r.noteModel(e)
+		r.noteClaudeContext(e)
 		switch kind {
 		case "result":
 			if text, _ := e["result"].(string); text != "" {

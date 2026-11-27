@@ -2,6 +2,12 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — T-343 public channel, T-346 and T-352
+
+[Release 117](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.14-preview.117) is published. The signed draft resumed without rebuilding or re-signing after correcting the Mac test harness. Five native updates and the public channel passed in [run 106](https://github.com/kolotiloff/agent-messenger/actions/runs/46039004148). A stock Mac 116 discovered and downloaded 117 through its original channel, the bundle signature passed and 117 reported current.
+
+Post-117 changes include durable, per-attempt context measurements and a shared archive pagination action. At 128 pixels the installed Mac bundle icon and the neighboring bundle icons measured 104 by 104 opaque pixels. Assigning the raw Kotel resource produced 116 by 118. The shell now requests the system-framed bundle image for the Dock. The compact labels use regular weight for roles and collapsed task counts. Computers and tasks use the same row hover. The date is the first item in the conversation and scrolls with the messages. The report closing line uses the same section gap as command summaries.
+
 ## 2026-11-27 — T-348 through T-351, post-117 window and packaging
 
 Implemented row transitions and reduced motion, Settings and task model ordering, heading counts, the archive clear placement, the selected Mac divider and non-indexed Mac acceptance directories. Chromium and WebKit exercised actual additions, archive transfer, removal, model selection and both panel layouts. Confirmed the installed Mac bundle path separately from isolated fixture copies.

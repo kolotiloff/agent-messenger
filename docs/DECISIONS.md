@@ -941,3 +941,7 @@ Place the icon and New Task text at the leading edge of the sidebar. Use the sha
 Animate visible membership changes using a short fade and vertical movement. Keep a stable list still on status polls. Respect reduced motion. Count all configured projects independently of the current filter. Place Clear directly before the agent filter and keep the existing scope confirmation. The selected Mac header has a divider under the task only. This updates D-251.
 
 The task model menu and Settings use the same family, numeric generation and effort ordering within each provider. Keep the suggested selection in its normal position. Preserve unknown model IDs and the stored configuration.
+
+## D-254 — Scroll the conversation date with the messages
+
+Keep only the title in the fixed task header. Place the centered date first in the scrolling conversation with the same top inset for each task. This supersedes the date placement in D-251.

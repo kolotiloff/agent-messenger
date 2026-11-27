@@ -8,13 +8,15 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Kotel 1.0.14, build 117, is [published](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.14-preview.117). All five signed upgrade checks and the public channel check [passed](https://github.com/kolotiloff/agent-messenger/actions/runs/46039004148). The stock Mac build 116 discovered and downloaded public 117, the extracted bundle passed strict signature verification and 117 reported current. The production MCP settings and repository address are unchanged.
+
+Post-117 T-346 carries actual context to the sender and history. T-352 covers the shared archive footer, peer hover, concise status copy, a scrolling conversation date, consistent task and computer hover, normal-weight counts and roles and the system-framed running Mac icon. T-353 tracks per-task access with the execution computer's policy as a ceiling.
+
 The post-117 window changes on `codex/t345-task-acceptance` include T-348 through T-351. Rows fade out before the remaining text moves; expanded groups allow complete rows to cross their new boundary. Motion is disabled by the system preference. Enabled task models follow the Settings display order and keep their suggested selection. Projects shows the total number of configured projects. Both heading counts share a text baseline, the archive clear button precedes its filter, and the selected Mac caption divider is under the task only. New Mac release fixtures use a .noindex directory under the acceptance root. The deployed bundle name and managed MCP paths still need a coordinated, in-place transition.
 
 T-347 aligns the Linux tray with the installed icon used in the menu and window. Visual acceptance in a live Linux desktop remains open.
 
 T-345 shortens the remote task acceptance label. T-344 tracks explicit queued-message steering and T-346 tracks provider context snapshots across computers. These are follow-ups to build 117.
-
-The build 117 signed draft passed four native sources on Windows and Linux. The Mac acceptance harness overlaid the bundle, retaining a removed icon. The corrected harness stages and validates the entire bundle before replacing the fixture in place. Resume the existing signed draft at 0efba5a16a5727bb9621909d9d65db263adf73ee.
 
 T-343 integrates T-339 through T-342 for Kotel 1.0.14 (build 117). New Task now has its own left-aligned row above Projects. Both sidebar filters follow the Settings width rule and stack in narrow panels. The owner confirmed the fleet has updated to the bridge. The original repository continues to serve the signed channel for this patch. T-338 tracks the final identifier migration.
 

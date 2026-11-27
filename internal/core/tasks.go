@@ -1234,7 +1234,9 @@ func setTaskState(tx *sql.Tx, task, state, detail string) error {
 		finished = sql.NullString{String: now(), Valid: true}
 	}
 	_, err := tx.Exec(`UPDATE tasks SET state=?,detail=?,updated_at=?,version=version+1,finished_at=COALESCE(?,finished_at),failure_reason=NULL,failure_reset=NULL,
-remote_live_tokens=CASE WHEN ?='running' THEN remote_live_tokens END WHERE id=?`, state, detail, now(), nullString(finished), state, task)
+context_snapshot=CASE WHEN state<>'running' AND ?='running' AND context_snapshot IS NOT NULL
+ THEN json_object('ordinal',json_extract(context_snapshot,'$.ordinal')+1,'sequence',0) ELSE context_snapshot END,
+remote_live_tokens=CASE WHEN ?='running' THEN remote_live_tokens END WHERE id=?`, state, detail, now(), nullString(finished), state, state, task)
 	return err
 }
 
