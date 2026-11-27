@@ -49,6 +49,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
+| T-356 | Confine statistics hover and keyboard focus to the active table row. | window | Combined post-117 branch. System WebKit reproduction and six-row pixel comparison on macOS. |
 | T-340 | Make direct answers conversational, stabilize the update hover target and match the default sidebar widths. | window | Published in 1.0.14 (build 117). |
 | T-341 | Place Projects below the Mac caption, toggle the computer sidebar, clarify task access and refresh desktop icons. | window / packaging | Published in 1.0.14 (build 117). |
 | T-352 | Share one archive pagination footer, clarify compact statuses and peer hover, align New Task with row padding and hover, scroll the date with messages, normalize count and role weights and the running Mac icon. | window | Post-117. |

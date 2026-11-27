@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — T-356 statistics table hover
+
+Reproduced the oversized highlight with the system WKWebView on macOS 26.3.1 using the product stylesheet. The old focus layer changed pixels across a 624 × 402 area. Applying the fill directly to the active row's cells limited the change to 556 × 26 within its 556 × 34 row. All six rows retained their dimensions. Added pointer and keyboard pixel checks to the window suite.
+
 ## 2026-11-27 — T-338, T-346, T-353 and T-355 combined update
 
 Integrated both post-117 branches. An isolated Codex chat retained its project and tool policy across the MCP rename. Verified the Cursor worker guard with the installed CLI. Captured the native Mac window, archive and Network roster with synthetic task data. Kept the local update button and version in the sidebar footer at the owner's request. The [development report](reports/2026-11-27-kotel-combined.md) records the outstanding release gates.

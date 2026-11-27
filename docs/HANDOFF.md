@@ -10,6 +10,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 The active integration branch is `codex/t338-combined-release`. The owner chose one functional release after public build 117. It includes the Graphite window, all three task groupings, the Network roster and per-task access in the window and coordinator MCP. Keep the local update glyph, version and other footer controls at the bottom left. Remote versions and update actions live in Network settings.
 
+T-356 fixes task-row highlighting in Statistics. A system WebKit snapshot of six rows showed the former focus layer expanding across the dialog. The new cell backgrounds stayed within the focused row at the same dimensions.
+
 The isolated stock-117 Codex chat resumed under the new MCP name after an actual tool call on both sides of the transition. The installed Cursor CLI now lists tools with an unset worker marker and hides them in a marked worker. Claude and Cursor same-chat permission migration, live task steering, authenticated provider acceptance and signed platform upgrades remain open. Build 118 is a development build. The original repository and public channel still serve [build 117](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.14-preview.117). See the [combined development report and three native screenshots](reports/2026-11-27-kotel-combined.md).
 
 T-343 integrates T-339 through T-342 for Kotel 1.0.14 (build 117). New Task now has its own left-aligned row above Projects. Both sidebar filters follow the Settings width rule and stack in narrow panels. The owner confirmed the fleet has updated to the bridge. The original repository continues to serve the signed channel for this patch. T-338 tracks the final identifier migration.

@@ -655,7 +655,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.match(await waitingTaskStatus.innerText(),/Ждёт вашего ответа,\s*Sonnet 5\.5 Medium/);
       assert.equal(await waitingTaskStatus.locator('.am-dot').count(),0);
       await page.locator('[data-tab=server]').click();
-      const runner=page.locator('[data-peer="dev-1"]');
+      const runner=page.locator('#machines [data-peer="dev-1"]');
       const running=runner.locator('.am-agent-run[data-provider=cursor]');
       const runningLabel=running.locator('.am-agent-running-label');
       const runningTimer=running.locator('.am-agent-status');
@@ -843,6 +843,35 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await page.locator('#stats-top tr').nth(1).locator('td').nth(2).textContent(),'≈ 3 ч');
       assert.equal(await page.locator('#stats-top tr').last().locator('td').nth(2).textContent(),'—');
       assert.deepEqual(await type(page.locator('#stats-top .am-stats-task-title').first()),computerTitle);
+      // Compare pixels inside each task. CSS selector matches alone cannot
+      // catch a WebKit highlight whose containing block spans the dialog.
+      const statRows=page.locator('#stats-top > tr');
+      await page.locator('#stats-top').scrollIntoViewIfNeeded();
+      const sampleRows=async()=>{
+        const samples=[];
+        for(const row of await statRows.all()){
+          const box=await row.boundingBox();
+          samples.push(await page.screenshot({clip:{
+            x:Math.floor(box.x+6),y:Math.floor(box.y+box.height/2),width:2,height:2,
+          }}));
+        }
+        return samples;
+      };
+      await page.mouse.move(0,0);
+      const resting=await sampleRows();
+      const expectHighlight=async index=>{
+        const samples=await sampleRows();
+        assert.deepEqual(samples.map((sample,i)=>!sample.equals(resting[i])),
+          resting.map((_,i)=>i===index),'only the active statistics row changes color');
+      };
+      await statRows.nth(1).locator('td').last().hover();
+      await expectHighlight(1);
+      await statRows.first().getByRole('button').hover();
+      await expectHighlight(0);
+      await page.mouse.move(0,0);
+      await statRows.first().getByRole('button').focus();
+      await page.keyboard.press('Tab');
+      await expectHighlight(1);
       const unfilteredComputer=await runner.getAttribute('aria-pressed')!=='true';
       if(unfilteredComputer)await runner.press('Enter');
       await page.locator('[data-period=month]').click();

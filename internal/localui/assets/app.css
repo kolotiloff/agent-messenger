@@ -1215,19 +1215,24 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-stats-tasks { text-align:right; }
 #am-concept .am-stats-reports .am-card { padding:var(--am-gap-content); }
 #am-concept .am-stats-table-wrap { overflow-x:auto; }
-#am-concept .am-stats-table { width:100%; border-collapse:collapse; table-layout:fixed; text-align:left; }
+#am-concept .am-stats-table { width:100%; border-collapse:separate; border-spacing:0; table-layout:fixed; text-align:left; }
 #am-concept .am-stats-date-col { width:10em; }
 #am-concept .am-stats-duration-col { width:9.5em; }
 #am-concept .am-stats-tokens-col { width:7em; }
 #am-concept .am-stats-table :is(th,td) { padding:var(--am-pad-compact); }
 #am-concept .am-stats-table th { font-size:var(--am-text-xs); font-weight:400; color:var(--am-muted); border-bottom:1px solid var(--am-line); }
 #am-concept .am-stats-table td:nth-child(n+3), #am-concept .am-stats-table th:nth-child(n+3) { text-align:right; }
-#am-concept :is(.am-stats-task,.am-efficiency-row) { position:relative; isolation:isolate; cursor:pointer; }
-#am-concept :is(.am-stats-task,.am-efficiency-row) > :first-child::before {
-  content:""; position:absolute; z-index:-1; pointer-events:none;
-  inset:var(--am-row-pad-block) 0; border-radius:var(--am-radius-s);
+/* Paint the cells themselves. On system WebKit an absolute layer anchored
+   to a table row can expand to the enclosing statistics dialog. */
+#am-concept :is(.am-stats-task,.am-efficiency-row) { cursor:pointer; }
+#am-concept .am-stats-table :is(.am-stats-task,.am-efficiency-row) > :is(th,td) {
+  border-block:var(--am-row-pad-block) solid transparent;
+  padding-block:calc(var(--am-space-2) - var(--am-row-pad-block));
+  background-clip:padding-box;
 }
-#am-concept :is(.am-stats-task,.am-efficiency-row):is(:hover,:has(:focus-visible)) > :first-child::before { background:var(--am-quiet-hover); }
+#am-concept :is(.am-stats-task,.am-efficiency-row) > :first-child { border-radius:var(--am-radius-s) 0 0 var(--am-radius-s); }
+#am-concept :is(.am-stats-task,.am-efficiency-row) > :last-child { border-radius:0 var(--am-radius-s) var(--am-radius-s) 0; }
+#am-concept :is(.am-stats-task,.am-efficiency-row):is(:hover,:has(:focus-visible)) > :is(th,td) { background-color:var(--am-quiet-hover); }
 #am-concept .am-efficiency-table { min-width:34em; table-layout:auto; }
 #am-concept .am-efficiency-table > thead th:first-child { width:42%; }
 #am-concept .am-efficiency-table > thead th { white-space:nowrap; }
