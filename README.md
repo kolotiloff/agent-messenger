@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/assets/logo.svg" alt="Kotel" width="128" height="128"></p>
+<p align="center"><img src="scripts/gen-icon/kotel.png" alt="Kotel" width="128" height="128"></p>
 
 <h1 align="center">Kotel</h1>
 
@@ -9,34 +9,39 @@ One coordinator agent hands tasks to worker agents (Claude Code, Codex, Cursor A
 <h3 align="center">Download</h3>
 
 <p align="center">
-  <a href="https://github.com/kolotiloff/agent-messenger/releases/latest/download/AgentMessenger-Mac.zip"><img src="docs/assets/download-mac.svg" alt="macOS (Apple Silicon)" height="56"></a>&nbsp;
-  <a href="https://github.com/kolotiloff/agent-messenger/releases/latest/download/AgentMessenger-Windows-x64.exe"><img src="docs/assets/download-windows.svg" alt="Windows 10/11 x64" height="56"></a>&nbsp;
-  <a href="https://github.com/kolotiloff/agent-messenger/releases/latest/download/AgentMessenger-Linux-x64"><img src="docs/assets/download-linux.svg" alt="Linux x64" height="56"></a>
+  <a href="https://github.com/kolotiloff/agent-messenger/releases/latest/download/Kotel-Mac.zip"><img src="docs/assets/download-mac.svg" alt="macOS (Apple Silicon)" height="56"></a>&nbsp;
+  <a href="https://github.com/kolotiloff/agent-messenger/releases/latest/download/Kotel-Windows-x64.exe"><img src="docs/assets/download-windows.svg" alt="Windows 10/11 x64" height="56"></a>&nbsp;
+  <a href="https://github.com/kolotiloff/agent-messenger/releases/latest/download/Kotel-Linux-x64"><img src="docs/assets/download-linux.svg" alt="Linux x64" height="56"></a>
 </p>
 
 <p align="center">
-  <sub>ARM: <a href="https://github.com/kolotiloff/agent-messenger/releases/latest/download/AgentMessenger-Windows-ARM64.exe">Windows</a> · <a href="https://github.com/kolotiloff/agent-messenger/releases/latest/download/AgentMessenger-Linux-ARM64">Linux</a> · <a href="docs/DOWNLOAD.md">Installation and first steps</a> · <a href="https://github.com/kolotiloff/agent-messenger/releases/latest">Latest release</a></sub>
+  <sub>ARM: <a href="https://github.com/kolotiloff/agent-messenger/releases/latest/download/Kotel-Windows-ARM64.exe">Windows</a> · <a href="https://github.com/kolotiloff/agent-messenger/releases/latest/download/Kotel-Linux-ARM64">Linux</a> · <a href="docs/DOWNLOAD.md">Installation and first steps</a> · <a href="https://github.com/kolotiloff/agent-messenger/releases/latest">Latest release</a></sub>
 </p>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/window-dark.png">
-  <img src="docs/assets/window-light.png" alt="Kotel in English, with Claude Code, Codex and Cursor in the computers and tasks panels">
+  <img src="docs/assets/window-light.png" alt="Kotel with active tasks on the left, a worker conversation in the middle and the Archive on the right">
 </picture>
 
-<sub>The Kotel window with English controls and sample projects, computers and conversations. Change the theme or language in Settings at the bottom left.</sub>
+<sub>The Kotel window with English controls and sample projects, computers and conversations. The Archive is open on the right. Change the theme or language in Settings at the bottom left.</sub>
 
 ## What it does
 
 - **Coordinator and workers.** Use a local Claude Code, Codex or Cursor chat as the coordinator. It assigns work to separate worker sessions in the project folder. Claude Code can receive background-task notifications. Codex and Cursor use `wait` during an active turn to receive worker events.
 - **Several computers.** Host the server on one of your computers or a Linux VPS. Join on the same local network with six digits, or use a long invitation with the server's reachable address. The coordinator can assign tasks to a computer that accepts them and has a folder for the project. Drag computer cards to set the order in your window.
-- **Projects and tasks.** Switch between projects with separate task histories and statistics. See planned, active, finished and interrupted work, including the worker's reported model when available. A computer card can expand to show multiple tasks for the same agent.
+- **Projects and tasks.** Switch between projects with separate task histories and statistics. See planned, active, finished and interrupted work, including the worker's reported model when available. Group active tasks by computer or project, or display them as a flat list.
 - **Conversations and run controls.** Write to a worker or answer a question from the task view. Stop eligible tasks from the conversation or the task list and see the request status while Kotel waits for the result. Workers can attach images to reports and questions. Kotel preserves uncertain outcomes for review. **Any commands** is off by default.
-- **Statistics and feedback.** Filter by period, agent, model or computer. Sort the task table by finish time, duration or tokens by clicking the column headings. The feedback button saves a note and an optional screenshot on this computer.
-- **Updates from the window.** The update arrow appears next to the computer version. Request updates remotely on Windows and Linux. A queued request can be cancelled before installation starts.
+- **Statistics and feedback.** Filter by period, project, agent, model or computer. Sort the task table by finish time, duration or tokens by clicking the column headings. The feedback button saves a note and an optional screenshot on this computer.
+- **Updates from the window.** Use the update arrow next to the local version in the sidebar footer. In **Settings → Network → My network**, check versions and request updates on Windows and Linux computers. A queued request can be cancelled before installation starts.
 
 <details>
   <summary>Statistics screenshot</summary>
-  <img src="docs/assets/statistics.png" alt="Kotel statistics showing token usage and a table of tasks sorted by duration">
+  <img src="docs/assets/statistics.png" alt="Kotel statistics showing token usage by agent and computer and a task table sorted by finish time">
+</details>
+
+<details>
+  <summary>Network settings screenshot</summary>
+  <img src="docs/assets/network.webp" alt="Kotel Network settings showing the connection controls and the list of computers with their versions">
 </details>
 
 ## Getting started
@@ -45,7 +50,7 @@ One coordinator agent hands tasks to worker agents (Claude Code, Codex, Cursor A
 2. Create a project from the welcome screen. On each worker computer, use the same project name and choose its local folder.
 3. Open **Agents**. Install or find the CLI, sign in and confirm folder trust when prompted.
 4. In **Project → MCP plugin**, connect Kotel for your coordinator. Open a new chat in that project folder and ask it to run `list_agents`.
-5. For a network of computers, open **Server** on the host and [invite each worker computer](docs/DOWNLOAD.md#connect-more-computers).
+5. For a network of computers, open **Settings → Network → Host a server** on the host and [invite each worker computer](docs/DOWNLOAD.md#connect-more-computers).
 
 ## Status
 

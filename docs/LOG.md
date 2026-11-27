@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — T-358 Build 118 publication and GitHub overview
+
+[Kotel 1.0.15](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.15-preview.118) is public. [Run 109](https://github.com/kolotiloff/agent-messenger/actions/runs/46073340337) verified the signed upgrade from build 117 on macOS arm64, Windows x64 and ARM64, and Linux x64 and ARM64. The GitHub overview uses the approved Kotel icon, window, Statistics and Network screenshots with fictional data, and links to the five current downloads.
+
 ## 2026-11-27 — T-359 Network roster layout
 
 Moved the My network label into its card with the same typography as Connection mode. Grouped the local and remote rows together to remove the extra gap before the first peer. Verified the label and equal spacing for six rows in Chromium and WebKit using fictional data.

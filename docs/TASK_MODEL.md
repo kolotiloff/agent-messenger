@@ -151,7 +151,7 @@ The window shows task activity. The owner coordinates from a local Claude Code, 
 - **Sidebar.**
   - A project switcher (`am-select`) whose last item is «Новый проект». It opens a dialog for the name and the folder on this computer. In the Mac app, «Выбрать» opens a standard folder panel through the `folder` bridge.
   - Computer cards mark online and offline computers with a green dot or a red cross on the monitor icon. The server and the local computer's active coordinator have role labels. Blue marks a working agent and amber marks an agent waiting for an answer. The count on a row with parallel tasks expands to show each task's model and timing.
-  - Running and waiting indications follow the selected project's tasks (D-178). Click a card to filter tasks, agents and statistics to that computer. Drag cards to change their order. A remote computer that stopped reporting shows when it was last seen. Compatible remote computers with an older version offer an update on the card.
+  - Running and waiting indications follow the selected project's tasks (D-178). Click a card to filter tasks, agents and statistics to that computer. Drag cards to change their order. A remote computer that stopped reporting shows when it was last seen. The Network settings list shows available updates for compatible remote computers.
 - **«Задачи» tab.**
   - **Task list** on the right, with an agent filter and up to four sections:
     - **Active** shows running tasks and tasks waiting for an answer.
@@ -171,7 +171,7 @@ The window shows task activity. The owner coordinates from a local Claude Code, 
   - One card per agent (Claude Code, Codex, Cursor). The header has «Проверить снова», «Настройки» and a switch that lets Messenger give the agent tasks. The rows: the CLI («Установить» or «Удалить»), the sign-in («Войти» or «Выйти»), «Работает с Messenger» (or «Не доверяет папке проекта»), and the last reported limit.
   - The tasks button reads «Задачи: N идёт, M сегодня» and filters the list by the agent. Another computer's agents are shown read-only.
 - **«Проект» tab.** The project's name, its folder on this computer («Выбрать»), «Общие указания исполнителям» (the rules copied into each new task, D-062) and «Удалить проект».
-- **«Сервер» tab.** This computer's name in the network, «Принимать задачи других компьютеров», «Отдавать журнал по сети», the server on this computer and the connection to another server ([BROKER.md](BROKER.md)).
+- **Settings → Network.** Set this computer’s name, task and log sharing, and the connection mode. The My network card lists computers with presence, versions and available updates. [Network guide](BROKER.md)
 - **Statistics tab.** Select today, 7 days or 30 days for the current project. Filter by agent, model or computer. Sort the task table by finish time, duration or tokens.
 - **Refresh.** The Mac menu item «Обновить задачи и статусы» calls `window.messengerRefresh`.
 - **No "·" separators** in the window and the Mac shell.
@@ -198,7 +198,7 @@ A coordinator on computer A can give a task to an agent on computer B of the sam
 
 - **On A** the task is a *remote task*: it has no runs and launches nothing. It records `remote_broker` and `remote_peer`, and B's lasting computer ID (`remote_computer`). Its state, questions, report and outcome are what B reports. Its feed is built from those events, B's acceptance, the worker's full last message (`output`) and the worker's text and tool lines that B sends as `progress` (up to 400 per task, for the window only, D-055).
 - **On B** the task is an ordinary task (a *mirror*, with `origin_broker`, `origin_peer`, `origin_task`, `origin_computer`) that runs in B's folder of the project with the same name. It is verified exactly like a local task. Only A answers its questions: B's window shows the question but does not offer to answer it, and B's own coordinator does not see the task (its events are history on B). B's owner may still stop it.
-- **B accepts** a task unless its owner turned off «Принимать задачи других компьютеров» on the «Сервер» tab (on by default, D-056), a project with that name has a folder on B, and the agent is set up there. Otherwise A's task fails with B's reason. Tasks from the network take the agent's «Любые команды» unless B's owner turned off «И для задач с других компьютеров» (D-109).
+- **B accepts** a task unless its owner turned off «Принимать задачи других компьютеров» in Settings → Network (on by default, D-056), a project with that name has a folder on B, and the agent is set up there. Otherwise A's task fails with B's reason. Tasks from the network take the agent's «Любые команды» unless B's owner turned off «И для задач с других компьютеров» (D-109).
 - **Messages** (`net_outbox`, written in the same transaction as the change they report):
   - A→B: `start`, `answer`, `continue` (D-113), `note` (D-122), `cancel`;
   - B→A: `accepted` (with B's folder), `refused`, `progress`, `output`, `event` (an event for the coordinator or the owner with the state after it), `answer_refused`, `continue_refused`, `note_refused`;

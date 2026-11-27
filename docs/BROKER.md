@@ -23,7 +23,7 @@ Host a broker on a desktop computer or Linux VPS. Computers join by a long invit
 
 ## Computers in different places
 
-**Internet scope** (T-182, D-137). On «Сервер» the owner picks «Интернет» and enters the address this computer is reached by from the internet: a public IP or a domain, with the external port after a colon when the router forwards another port. The program does not open router ports, does not find the public address itself and does not get around NAT: the owner forwards the port and allows it in the firewall. The broker then listens on every interface and also lets in peers from public addresses:
+**Internet scope** (T-182, D-137). In Settings → Network → Host a server, the owner picks Internet and enters the address this computer is reached by from the internet: a public IP or a domain, with the external port after a colon when the router forwards another port. The program does not open router ports, does not find the public address itself and does not get around NAT: the owner forwards the port and allows it in the firewall. The broker then listens on every interface and also lets in peers from public addresses:
 
 - The external address is offered first for invitations, followed by the local network addresses (the local network and this computer keep working).
 - Public peers hold at most 32 of the 64 connection slots in all and 8 per source (one IPv4 address or one IPv6 /64), so scanners or a flood from the internet cannot take the slots of this computer and the local network. Special addresses (unspecified, multicast, link-local) stay out.
@@ -42,7 +42,7 @@ It downloads the Linux program of the same release and checks its SHA-256, insta
 
 After that: `agent-messenger-server invite` (a new invitation), `agent-messenger-server status` (state and devices), `agent-messenger-server revoke --device ID`, `agent-messenger-server disable`. The same commands exist as `messenger --root DIR server …` for any data directory; `server enable --internet [--public ADDR] [--port N]` or `--lan`.
 
-`server run` is the client in the foreground for a service: it starts paused, runs no tasks or models and stops on SIGTERM. Under systemd it is updated from any computer's window like the others (the update arrow by «сервер»): it installs the signed update and asks systemd to restart the service (D-139). Started by hand it refuses update requests. `agent-messenger-server rename --name ИМЯ` changes the name the others see. The installer refuses to start while another Messenger client of the same user runs (for example one started with `start`), and says how to stop it.
+`server run` is the client in the foreground for a service: it starts paused, runs no tasks or models and stops on SIGTERM. Under systemd it is updated from any computer's window under Settings → Network → My network: it installs the signed update and asks systemd to restart the service (D-139). Started by hand it refuses update requests. `agent-messenger-server rename --name ИМЯ` changes the name the others see. The installer refuses to start while another Messenger client of the same user runs (for example one started with `start`), and says how to stop it.
 
 The stand-alone server skips the worker dispatch loop and periodic account-limit checks (T-259). The broker saves a device's contact timestamp at the 15-second presence cadence. Each request still checks that the device key is valid and has not been revoked. Delivery and presence use their existing intervals.
 
