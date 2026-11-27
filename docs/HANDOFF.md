@@ -8,6 +8,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+T-367 updates the GitHub README header with the approved tagline and a short explanation of how the coordinator and workers share the work.
+
 [Kotel 1.0.15 (build 118)](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.15-preview.118) is public in the original repository. The [release workflow](https://github.com/kolotiloff/agent-messenger/actions/runs/46073340337) signed the packages, exercised upgrades from build 117 on all five targets and verified the public channel. The release source is `2e5d796efe1a1a7d27cbde54a95fa40d30d58cc4`.
 
 Build 118 includes the monochrome icon, the Graphite theme, task grouping, Network versions and updates, and per-task access controls. The local update button, version and other footer controls are at the bottom left. The My network card uses the same label typography as Connection mode and a uniform row spacing. Statistics row hover matches the Archive’s color and 4 px gap.

@@ -324,6 +324,7 @@ Order of the task model (D-021), following the review's first slice ([RETHINK_RE
 
 | ID | Task | PR |
 |---|---|---|
+| T-367 | Refresh the GitHub README header and explain the coordinator and worker roles. | [README header PR](https://github.com/kolotiloff/agent-messenger/pulls?q=is%3Apr+head%3Acodex%2Ft367-readme-header) |
 | T-332 | Audit spacing, heading hierarchy and visual consistency across the Messenger window against the shared design tokens. | Released in [1.0.12, build 115](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.12-preview.115) via [PR #228](https://github.com/kolotiloff/agent-messenger/pull/228). Checked both themes and multiple widths in Chromium and WebKit and ran an isolated native Mac smoke check. |
 | T-331 | Audit model efficiency with the Messenger's coordinator, window statistics and JSON export. | Released in [1.0.12, build 115](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.12-preview.115) via [PR #228](https://github.com/kolotiloff/agent-messenger/pull/228). Checked historical evidence, model attribution, reviewed-task rates, filters and export with fixtures. |
 | T-330 | Show reported token usage while a worker is still running. | Released in [1.0.12, build 115](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.12-preview.115) via [PR #228](https://github.com/kolotiloff/agent-messenger/pull/228). Live usage uses supported Codex events locally and over the network. Other agents retain final-event accounting. |
