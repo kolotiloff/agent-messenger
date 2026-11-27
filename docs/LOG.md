@@ -1437,3 +1437,7 @@ Reports for each step are in [reports/](reports/). The handoff is in [HANDOFF.md
 - T-337: Both pinned Go 1.22.2 race runners reached the package timeout while still executing separate short SQLite tests. Allow 25 minutes per package on those runners. Current Go keeps its 15-minute budget. The paired Mac remote-update refusal was verified on builds 115 and 116.
 
 - T-337: Reproduced the 1.0.12 missing-column failure on an activated project database and added the in-place upgrade for both the supervisor and worker entry points. The regression covers missing, partially present and manually repaired schema, durable remote task history, a new live measurement and clean project creation.
+
+- T-337: Native signed 115 → 116 succeeded on Mac and Linux x64/ARM64; both Linux remote helpers completed and retained pairing. Both Windows runners stopped in the Python harness while decoding UTF-8 stdout as Windows-1252. Correct the harness and allow a checked draft to resume from its exact signed source revision.
+
+- T-338: The owner clarified that even existing coordinators must eventually use the Kotel name. D-248 records the rollout and the conditions for retiring the transitional identifiers.
