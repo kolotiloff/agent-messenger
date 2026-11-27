@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-335 task composer)
+
+Integrated the compact composer with selectors below the field, path insertion from Add, round button highlights and outgoing message copying. Checked draft sizing, searchable model selection, path insertion, message copying and the task start request using fixture responses. The release remains on hold.
+
 ## 2026-11-27 — Codex (T-334 message and row spacing)
 
 Balanced outgoing bubble, active task and archive row padding in the existing window preview. Reduced the Send and Stop glyphs within their existing hit areas. The browser check measures the padding and icon sizes and still checks the alignment and width of active task rows. [PR #231](https://github.com/kolotiloff/agent-messenger/pull/231).

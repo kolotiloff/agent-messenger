@@ -857,3 +857,7 @@ Use the caption height for the Settings, Statistics, agent settings and model pi
 ## D-234 — Balance message and task insets (T-334)
 
 Use the content spacing token vertically and the section spacing token horizontally in outgoing bubbles to account for the text line's internal space. Use the compact inset for archive rows and a control gap above and below active task text. Active task titles still start at the same position as the computer name, and both lists' highlights span the available row. Use 16 px glyphs for Send and Stop in the existing controls with a local hover fill against the composer background.
+
+## D-235 — Put task context below the composer (T-335)
+
+The New Task composer starts with a one-line draft between Add and Send. Put project and computer selectors below the field on the left, and the model selector on the right. Search configured models for the chosen computer in a popover with a common horizontal inset for its search field and option rows. Mark selected options with a check and reserve the row fill for pointer hover and keyboard focus. Add inserts a path as a line of task text. Offer the system file and folder picker only when the selected worker is local. Preserve task start routing and configured model availability in D-232. Use the composer radius for controls inside the field. Outgoing messages show a text copy action beside their time on hover or keyboard focus.

@@ -418,11 +418,12 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await editModels.textContent(),'Изменить');
       assert(await editModels.evaluate(button=>{
         const action=button.getBoundingClientRect();
-        const label=button.previousElementSibling;
+        const row=button.closest('.am-setting-row');
+        const label=row.querySelector('.am-access-text');
         const text=label.getBoundingClientRect();
         return label.textContent==='Модели'&&action.left>=text.right&&
           Math.abs(action.top+action.height/2-text.top-text.height/2)<1&&
-          button.parentElement.getBoundingClientRect().right===action.right;
+          row.getBoundingClientRect().right===action.right;
       }));
       await editModels.click();
       await page.getByRole('dialog',{name:'Модели',exact:true}).waitFor();
@@ -547,6 +548,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         }
         if (pathname === '/api/usage-efficiency') {
           comparedStats=Object.fromEntries(searchParams);
+          if (!searchParams.get('agent')) return route.fulfill({json:{project,total_groups:0,groups:[]}});
           return route.fulfill({json:{project,total_groups:1,groups:[{agent:'codex',model:'gpt-6.2-sol[effort=high]',task_type:'bug_fix',difficulty:'simple',tasks:5,reviewed:4,accepted:3,first_pass_known:4,first_pass_accepted:2,
             accepted_new_input_plus_output:{samples:2,mean:125000,median:125000,p90:150000},accepted_active_runtime_ms:{samples:0},time_to_acceptance_ms:{samples:1,mean:60000,median:60000,p90:60000}}]}});
         }
@@ -900,7 +902,14 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await more.press('Tab');
       await acceptedRate.press('Tab');
       await firstPassRate.getByRole('tooltip').getByText('2/4',{exact:true}).waitFor();
-      assert((await more.locator('svg').boundingBox()).x<(await modelName.boundingBox()).x);
+      assert.equal(await more.locator('svg').count(),0,'the model row has no disclosure arrow');
+      const cohortLabel=compared.locator('xpath=preceding-sibling::tr[contains(@class,"am-efficiency-cohort")]').first().locator('th');
+      const cohortTextLeft=await cohortLabel.evaluate(node=>{
+        const range=document.createRange();
+        range.selectNodeContents(node);
+        return range.getBoundingClientRect().left;
+      });
+      assert((await modelName.boundingBox()).x>cohortTextLeft,'the model label is indented from the group heading');
       await page.setViewportSize({width:600,height:600});
       const countBox=await groupCount.boundingBox(),modelCell=await more.boundingBox();
       assert(countBox.x+countBox.width<=modelCell.x+modelCell.width+1,'the count stays inside the model cell when space is tight');
@@ -919,8 +928,11 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.locator('#stats-export-status').getByText(/125 задач.*messenger-statistics\.json/).waitFor();
       assert.deepEqual(exportedStats,{project:'Frame',period:'month',computer:'dev-1',agent:'codex',model:'gpt-6.2-sol[effort=high]'});
       await chooseStatsOption('agent','Все агенты');
-      assert.equal(await page.locator('#stats-efficiency-card').isVisible(),false,'old model groups must disappear after a filter changes');
-      assert.equal(await compareButton.getAttribute('aria-expanded'),'false');
+      await page.getByText('В этом периоде нет исходных задач для сравнения.',{exact:true}).waitFor();
+      assert.equal(await compared.count(),0,'old model groups must disappear after the report reloads');
+      assert.equal(await compareButton.getAttribute('aria-expanded'),'true');
+      assert.deepEqual(comparedStats,{project:'Frame',period:'month',computer:'dev-1',agent:'',model:''});
+      await compareButton.click();
       await page.locator('[data-period=week]').click();
       if(unfilteredComputer)await runner.press('Enter');
       await page.locator('[data-tab=project]').click();

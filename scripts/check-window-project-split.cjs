@@ -300,6 +300,7 @@ if (require.main === module) (async()=>{
       if(url.pathname==='/api/self-update')return {json:{installed_version:'1.0.9',version:'1.0.10',state:'available'}};
       if(url.pathname==='/api/task-start')return {json:{ok:true,result:directTask.id}};
       if(url.pathname==='/api/task-note')return {json:{ok:true}};
+      if(url.pathname==='/api/pick')return {json:{ok:true,path:'/fictional/project/notes.txt'}};
       if(url.pathname==='/api/task'&&url.searchParams.get('id')===directTask.id){
         return {json:{task:directTask,items:[{kind:'task',author:'owner',text:directTask.title,at:directTask.created_at}]}};
       }
@@ -426,10 +427,10 @@ if (require.main === module) (async()=>{
       }
       const message=draftPage.locator('#thread .am-message-group').first();
       const timestamp=message.locator('time.am-message-time');
-      assert.deepEqual(await timestamp.evaluate(node=>[getComputedStyle(node).opacity,getComputedStyle(node).fontSize]),['0','12px']);
+      assert.deepEqual(await timestamp.evaluate(node=>[getComputedStyle(node.parentElement).opacity,getComputedStyle(node).fontSize]),['0','12px']);
       await message.hover();
-      assert(await timestamp.evaluate(node=>getComputedStyle(node).opacity==='1'&&
-        node.getBoundingClientRect().top>node.parentElement.getBoundingClientRect().bottom));
+      assert(await timestamp.evaluate(node=>getComputedStyle(node.parentElement).opacity==='1'&&
+        node.getBoundingClientRect().top>node.closest('article').getBoundingClientRect().bottom));
       const workerMessage=draftPage.locator('#thread .am-message-group').last();
       await workerMessage.focus();
       assert(await workerMessage.locator('.am-message-time').evaluate(node=>{
@@ -578,9 +579,13 @@ if (require.main === module) (async()=>{
       await draftPage.locator('#task-head').getByRole('heading',{name:'Новая задача',exact:true}).waitFor();
       assert.equal(await form.locator('.am-compose-field').evaluate(node=>getComputedStyle(node).borderRadius),'16px');
       assert.equal(await draftPage.locator('#compose .am-compose-field').evaluate(node=>getComputedStyle(node).borderRadius),'16px');
+      const oneLineHeight=(await form.locator('textarea').boundingBox()).height;
+      assert.equal(oneLineHeight,32);
       await form.locator('textarea').fill('Первая строка\nВторая строка\nТретья строка');
+      assert((await form.locator('textarea').boundingBox()).height>oneLineHeight);
       assert.equal(await form.locator('.am-compose-field').evaluate(node=>getComputedStyle(node).borderRadius),'16px');
       await form.locator('textarea').fill('');
+      assert.equal((await form.locator('textarea').boundingBox()).height,oneLineHeight);
       await card(draftPage,'linux').locator('.am-sidebar-task').getByText('Проверка файлов',{exact:true}).click();
       await form.waitFor({state:'hidden'});
       await chat(draftPage,'tools').waitFor();
@@ -590,13 +595,59 @@ if (require.main === module) (async()=>{
       await plus.click();
       const modelTrigger=form.getByRole('button',{name:'Модель',exact:true});
       assert.equal(await modelTrigger.evaluate(node=>{
-        const option=node.getBoundingClientRect(),footer=node.parentElement.getBoundingClientRect();
-        return footer.right-option.right;
-      }),0);
+        const context=node.closest('.am-draft-options'),field=context.previousElementSibling;
+        const [plus,text,send]=Array.from(field.children,item=>item.getBoundingClientRect());
+        return plus.right<=text.left&&text.right<=send.left&&plus.top===text.top&&text.top===send.top&&
+          context.querySelectorAll('.am-select-trigger').length===3&&
+          field.getBoundingClientRect().bottom<context.getBoundingClientRect().top;
+      }),true);
       assert.equal(await draftPage.locator('#task-draft-send').isDisabled(),true);
       await select(draftPage,'task-draft-project','Инструменты');
+      const pathMenu=draftPage.getByRole('dialog',{name:'Добавить путь',exact:true});
+      const addPath=form.getByRole('button',{name:'Добавить путь',exact:true});
+      await addPath.hover();
+      assert(await addPath.evaluate(button=>{
+        const style=getComputedStyle(button),field=getComputedStyle(button.closest('.am-compose-field'));
+        return style.borderRadius===field.borderRadius&&style.backgroundColor!=='rgba(0, 0, 0, 0)';
+      }));
+      await select(draftPage,'task-draft-computer','Мак');
+      await addPath.click();
+      const pickRequest=draftPage.waitForRequest(req=>new URL(req.url()).pathname==='/api/pick');
+      await pathMenu.getByRole('button',{name:'Выбрать файл…',exact:true}).click();
+      assert.deepEqual((await pickRequest).postDataJSON(),{kind:'file',current:''});
+      await pathMenu.waitFor({state:'hidden'});
+      assert.equal(await form.locator('textarea').inputValue(),'/fictional/project/notes.txt');
+      await form.locator('textarea').fill('');
       await select(draftPage,'task-draft-computer','ПК-1');
-      await select(draftPage,'task-draft-model','Codex · Astra 6.2 High');
+      await addPath.click();
+      assert.equal(await pathMenu.getByRole('button',{name:'Выбрать файл…'}).isVisible(),false);
+      const remotePath=pathMenu.getByRole('textbox',{name:'Путь на компьютере исполнителя'});
+      await remotePath.fill('docs/notes.md');
+      await remotePath.press('Enter');
+      await pathMenu.waitFor({state:'hidden'});
+      assert.equal(await form.locator('textarea').inputValue(),'docs/notes.md');
+      await form.locator('textarea').fill('');
+      await modelTrigger.click();
+      const modelMenu=draftPage.locator('#task-draft-model-menu');
+      const draftSearch=modelMenu.getByRole('searchbox',{name:'Поиск моделей'});
+      assert.equal(await draftSearch.evaluate(node=>node===document.activeElement),true);
+      const checkedModel=modelMenu.locator('[aria-selected=true]');
+      assert.equal(await checkedModel.locator('.am-select-check svg').count(),1);
+      assert.equal(await checkedModel.evaluate(node=>getComputedStyle(node).backgroundColor),'rgba(0, 0, 0, 0)');
+      const [searchBox,optionBox]=await Promise.all([draftSearch.boundingBox(),checkedModel.boundingBox()]);
+      assert.deepEqual([searchBox.x,searchBox.width],[optionBox.x,optionBox.width]);
+      await draftSearch.fill('неизвестная модель');
+      assert.equal(await modelMenu.getByRole('option').count(),0);
+      assert.equal(await modelMenu.getByRole('status').textContent(),'Модели не найдены');
+      await draftSearch.press('Escape');
+      assert.equal(await modelTrigger.evaluate(node=>node===document.activeElement),true);
+      await modelTrigger.press('ArrowDown');
+      await draftSearch.fill('astra');
+      const astra=modelMenu.getByRole('option',{name:'Codex Astra 6.2 High',exact:true});
+      await draftSearch.press('ArrowDown');
+      assert.equal(await astra.evaluate(node=>node===document.activeElement),true);
+      await astra.press('Enter');
+      await modelMenu.waitFor({state:'hidden'});
       await form.locator('textarea').fill(directTask.title);
       const start=draftPage.waitForRequest(req=>new URL(req.url()).pathname==='/api/task-start');
       await form.locator('textarea').press('Enter');
@@ -606,7 +657,15 @@ if (require.main === module) (async()=>{
       const ownerBubble=draftPage.locator('#thread .am-outgoing').filter({hasText:directTask.title});
       await ownerBubble.waitFor();
       assert.equal(await ownerBubble.locator('.am-meta').count(),0);
-      assert.equal(await draftPage.locator('#thread .am-outgoing + time.am-message-time').count(),1);
+      const ownerMessage=ownerBubble.locator('..');
+      assert.equal(await ownerMessage.locator('.am-message-actions time').count(),1);
+      await draftPage.evaluate(()=>{
+        Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.testCopiedMessage=text;}}});
+      });
+      await ownerBubble.hover();
+      await ownerMessage.getByRole('button',{name:'Скопировать сообщение'}).click();
+      await ownerMessage.getByRole('status').getByText('Скопировано',{exact:true}).waitFor();
+      assert.equal(await draftPage.evaluate(()=>window.testCopiedMessage),directTask.title);
       await draftPage.locator('#answer-text').fill('Уточнение исполнителю');
       const note=draftPage.waitForRequest(req=>new URL(req.url()).pathname==='/api/task-note');
       await draftPage.locator('#answer-send').click();

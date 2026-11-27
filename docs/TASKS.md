@@ -32,6 +32,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
+| T-335 | Put project, computer and searchable model selection below the New Task composer. Insert paths from Add and copy outgoing messages. | agent | `codex/t335-task-composer`. D-235. Implemented in the shared preview. Release held. |
 | T-334 | Separate Statistics, align its report views, make model details open from an indented row, and unify the Settings, agent and model dialogs. | agent | Implemented in the local window preview. Follow-up spacing for outgoing messages and task rows is available in the same preview. |
 | T-333 | Enable the computer-grouped task layout in the packaged desktop window. | agent | Enabled on the normal window route. The owner paused the release for the combined changes. |
 | T-305 | Refresh the public GitHub page and English screenshots for the current release. | agent | `codex/t305-public-page-refresh`. Uses 1.0.3 window assets and fictional data. Includes the download, network, task and update guides. |
