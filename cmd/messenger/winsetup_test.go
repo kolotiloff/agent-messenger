@@ -13,7 +13,7 @@ func TestWindowsInstallPlan(t *testing.T) {
 		local, roaming = `C:\Users\Анна\AppData\Local`, `C:\Users\Анна\AppData\Roaming`
 	}
 	p, ok := winInstallPaths(local, roaming)
-	if !ok || filepath.Base(p.Exe) != "AgentMessenger.exe" || filepath.Base(p.Dir) != "Agent Messenger" || !strings.HasSuffix(p.Shortcut, "Agent Messenger.lnk") {
+	if !ok || filepath.Base(p.Exe) != "AgentMessenger.exe" || filepath.Base(p.Dir) != "Agent Messenger" || !strings.HasSuffix(p.Shortcut, "Kotel.lnk") {
 		t.Fatalf("paths %+v", p)
 	}
 	if _, ok := winInstallPaths("relative", roaming); ok {

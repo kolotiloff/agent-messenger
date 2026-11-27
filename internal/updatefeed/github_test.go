@@ -37,7 +37,7 @@ func fixturePackage(t *testing.T, key ed25519.PrivateKey, build int) (Manifest, 
 	return m, raw, signature, archive
 }
 func TestGitHubDownloadCommitAndFailurePreservePreviousPackage(t *testing.T) {
-	for _, scenario := range []string{"valid", "tampered manifest", "tampered archive", "interrupted", "oversized", "duplicate asset", "missing signature", "http error", "downgrade", "conflict", "tag mismatch", "redirect", "bad redirect", "foreign address", "rate limit"} {
+	for _, scenario := range []string{"valid", "renamed", "mixed repositories", "different repository", "tampered manifest", "tampered archive", "interrupted", "oversized", "duplicate asset", "missing signature", "http error", "downgrade", "conflict", "tag mismatch", "redirect", "bad redirect", "foreign address", "rate limit"} {
 		t.Run(scenario, func(t *testing.T) {
 			pub, key, _ := ed25519.GenerateKey(rand.Reader)
 			c := Channel{Directory: t.TempDir(), PublicKey: base64.StdEncoding.EncodeToString(pub)}
@@ -61,10 +61,20 @@ func TestGitHubDownloadCommitAndFailurePreservePreviousPackage(t *testing.T) {
 			if scenario == "tag mismatch" {
 				tag = "v0.0.0-preview.8"
 			}
-			at := func(n string) string { return releaseDownload + tag + "/" + n }
+			repo := legacyRepository
+			if scenario == "renamed" || scenario == "mixed repositories" {
+				repo = kotelRepository
+			}
+			if scenario == "different repository" {
+				repo = "https://github.com/kolotiloff/test"
+			}
+			at := func(n string) string { return repo + "/releases/download/" + tag + "/" + n }
 			assets := []releaseAsset{{ID: 1, Name: name, State: "uploaded", Size: int64(len(raw)), URL: at(name)}, {ID: 2, Name: name + ".sig", State: "uploaded", Size: int64(len(sig)), URL: at(name + ".sig")}, {ID: 3, Name: m.SHA256 + ".zip", State: "uploaded", Size: int64(len(archive)), URL: at(m.SHA256 + ".zip")}}
 			if scenario == "duplicate asset" {
 				assets = append(assets, assets[0])
+			}
+			if scenario == "mixed repositories" {
+				assets[2].URL = strings.Replace(assets[2].URL, kotelRepository, legacyRepository, 1)
 			}
 			if scenario == "foreign address" {
 				assets[2].URL = "https://github.com/someone/else/releases/download/" + tag + "/" + m.SHA256 + ".zip"
@@ -72,7 +82,7 @@ func TestGitHubDownloadCommitAndFailurePreservePreviousPackage(t *testing.T) {
 			if scenario == "missing signature" {
 				assets = append(assets[:1], assets[2:]...)
 			}
-			list, _ := json.Marshal([]release{{Tag: tag, Assets: assets}})
+			list, _ := json.Marshal([]release{{Tag: tag, Page: repo + "/releases/tag/" + tag, Assets: assets}})
 			client := updateHTTPClient()
 			requests := 0
 			cdn := false
@@ -84,7 +94,7 @@ func TestGitHubDownloadCommitAndFailurePreservePreviousPackage(t *testing.T) {
 				data := list
 				status := 200
 				headers := make(http.Header)
-				if req.URL.Host == "api.github.com" && req.URL.Path != "/repos/kolotiloff/agent-messenger/releases" {
+				if req.URL.Host == "api.github.com" && req.URL.Path != "/repositories/1446727582/releases" {
 					t.Fatalf("release file fetched through the API: %s", req.URL)
 				}
 				if scenario == "rate limit" && req.URL.Host == "api.github.com" {
@@ -92,7 +102,7 @@ func TestGitHubDownloadCommitAndFailurePreservePreviousPackage(t *testing.T) {
 					headers.Set("X-RateLimit-Reset", strconv.FormatInt(time.Now().Add(20*time.Minute).Unix(), 10))
 					status = 403
 				}
-				download := "/kolotiloff/agent-messenger/releases/download/" + tag + "/"
+				download := strings.TrimPrefix(repo, "https://github.com") + "/releases/download/" + tag + "/"
 				switch strings.TrimPrefix(req.URL.Path, download) {
 				case name:
 					data = raw
@@ -143,7 +153,7 @@ func TestGitHubDownloadCommitAndFailurePreservePreviousPackage(t *testing.T) {
 				}
 			}
 			result, err := c.syncGitHub(context.Background(), 6, client, true)
-			success := scenario == "valid" || scenario == "redirect"
+			success := scenario == "valid" || scenario == "renamed" || scenario == "redirect"
 			if _, ok := c.Progress(); ok {
 				t.Fatal("download progress left after the sync")
 			}
@@ -201,12 +211,12 @@ func TestGitHubSelectsHighestBuildInUnorderedList(t *testing.T) {
 	files := map[string][]byte{}
 	for _, build := range []int{99, 98, 100, 101} {
 		m, raw, sig, archive := fixturePackage(t, key, build)
-		r := release{Tag: "v" + m.Version, Draft: build == 101}
+		r := release{Tag: "v" + m.Version, Page: legacyRepository + "/releases/tag/v" + m.Version, Draft: build == 101}
 		for _, asset := range []struct {
 			name string
 			data []byte
 		}{{name, raw}, {name + ".sig", sig}, {m.SHA256 + ".zip", archive}} {
-			address := releaseDownload + r.Tag + "/" + asset.name
+			address := legacyRepository + "/releases/download/" + r.Tag + "/" + asset.name
 			r.Assets = append(r.Assets, releaseAsset{
 				ID: int64(len(r.Assets) + 1), Name: asset.name, State: "uploaded",
 				Size: int64(len(asset.data)), URL: address,
@@ -324,7 +334,7 @@ func TestDownloadEndsOnlyWhenStalled(t *testing.T) {
 	oldStall, oldLimit := downloadStall, downloadLimit
 	downloadStall, downloadLimit = 150*time.Millisecond, time.Minute
 	defer func() { downloadStall, downloadLimit = oldStall, oldLimit }()
-	address := releaseDownload + "v0.0.0-preview.9/archive.zip"
+	address := legacyRepository + "/releases/download/" + "v0.0.0-preview.9/archive.zip"
 	for _, stop := range []bool{false, true} {
 		client := &http.Client{Transport: transportFunc(func(r *http.Request) (*http.Response, error) {
 			body := &trickle{ctx: r.Context(), data: []byte("0123456789"), step: 50 * time.Millisecond, stop: stop}

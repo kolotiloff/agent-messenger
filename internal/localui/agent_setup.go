@@ -255,7 +255,7 @@ try {
 		}
 		script += ` if (!$amCLI) {throw 'CLI not found'}
  Complete-Setup 'found' $amCLI
- Write-Host 'CLI found. Return to Messenger.'
+ Write-Host 'CLI found. Return to Kotel.'
 } catch { Complete-Setup 'failed' ''; Write-Host $_ }
 `
 		return script, []string{filepath.Join(os.Getenv("SystemRoot"), "System32", "WindowsPowerShell", "v1.0", "powershell.exe"), "-ExecutionPolicy", "Bypass", "-File", filepath.Join(dir, "setup.ps1")}
@@ -289,13 +289,13 @@ am_cli=$(find_agent)
 		}
 		script += `if [ -z "$am_cli" ]; then
  if ! curl -fsSL ` + q(urls[provider]) + ` -o "$am_dir/installer.sh" || ! ` + interpreter + ` "$am_dir/installer.sh"; then
-  finish_setup failed ''; printf '\nInstallation failed. Return to Messenger.\n'; exit 1
+  finish_setup failed ''; printf '\nInstallation failed. Return to Kotel.\n'; exit 1
  fi
  am_cli=$(find_agent)
 fi
 `
 	}
-	script += `if [ -n "$am_cli" ]; then finish_setup found "$am_cli"; printf '\nCLI found. Return to Messenger.\n'; else finish_setup failed ''; printf '\nCLI not found. Return to Messenger.\n'; fi
+	script += `if [ -n "$am_cli" ]; then finish_setup found "$am_cli"; printf '\nCLI found. Return to Kotel.\n'; else finish_setup failed ''; printf '\nCLI not found. Return to Kotel.\n'; fi
 `
 	argv := []string{"/bin/sh", filepath.Join(dir, "setup.sh")}
 	return script, argv

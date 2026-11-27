@@ -2,9 +2,85 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-337 Kotel bridge)
+
+Integrated the T-336 interface and the Kotel pot artwork with a raised lid and widely spaced eyes, branded the window and downloads, retained the installed application identities, and bound release discovery to the original repository ID. Updated the README screenshots from fictional projects and checked the packaged Mac window and the Chromium and WebKit suites. Active local Codex workers can report a measured context snapshot. Claude, Cursor and remote workers retain a neutral ring when only cumulative usage is available.
+
+## 2026-11-27 — Codex (T-336 settings order)
+
+Ordered Settings as General, Project, Agents and Server, and verified the order in the shared preview. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).
+
+## 2026-11-27 — Codex (T-336 first-run setup)
+
+Replaced the first-run explanation with an in-window checklist and direct links to setup. The buttons describe their actions, including creating a project, configuring agents, and setting up the network connection. Verified the links and the transition to an enabled New Task composer in Chromium and WebKit, including the narrow layout. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).
+
+## 2026-11-27 — Codex (T-336 clear archive button)
+
+Used the compact filled button for Clear Archive and aligned its leading edge with the archive cards. Measured the 28 px button height and shared left edge in the preview. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).
+
+## 2026-11-27 — Codex (T-336 expanded efficiency details)
+
+Reduced the leading offset of the details panel, aligned its trailing edge with the model row, and used a speedometer icon. Measured the 16 px offset and 12 px inner insets in the shared preview. Window controls passed in Chromium and WebKit at 1100 px and 600 px. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).
+
+## 2026-11-27 — Codex (T-336 task toolbar and footer)
+
+Extended the task toolbar to the right edge and placed Archive below it. Aligned the visible footer edges and measured the laptop update confirmation in the shared preview. Chromium and WebKit checks passed, including the narrow Archive overlay. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).
+
+## 2026-11-27 — Codex (T-336 shared insets and pane headers)
+
+Aligned the three workspace header dividers and normalized insets in report cards, efficiency details, menus and outgoing messages. Measured the header, confirmation, table, menu and server settings spacing in the shared preview. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).
+
+## 2026-11-27 — Codex (T-336 collapsed rows and context formatting)
+
+Show collapsed computer counts in parentheses, move the task date into the thread, left-align the context details and reduce the lower inset in the Statistics task card. Verified the count and context wording in the open preview. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).
+
+## 2026-11-27 — Codex (T-336 statistics rows and context ring)
+
+Extended the Statistics highlight and actions across task and efficiency model rows. Kept date and time on one line, shortened settings headings and gave Efficiency a target icon. Added the two-line context summary and a proportional ring in the shared preview. Production context telemetry is pending. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).
+
+## 2026-11-27 — Codex (T-336 statistics task links)
+
+Matched Statistics task and efficiency highlights to computer rows. Aligned the headings above cards and the first fields across settings sections. Unified the standard dialog headers, including Feedback and New Project. Verified the layouts and navigation in Chromium and WebKit. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).
+
+## 2026-11-27 — Codex (T-336 settings rows)
+
+Removed model-row dividers and moved the network-name field beside its label at the General selector width. Checked alignment and model search in the live preview in Chromium and WebKit. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).
+
+## 2026-11-27 — Codex (T-336 composer labels)
+
+Matched the project, computer and model selectors in a task draft to the regular 13 px model label in a reply. Verified matching typography in the shared preview and the project suite in Chromium and WebKit. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).
+
+## 2026-11-27 — Codex (T-336 control heights and row insets)
+
+Replaced the token chart glyph with a neutral ring, matched settings inputs to the standard 28 px controls, and tightened active task rows to the same 4 px vertical inset as computer headings. Archive rows retain 8 px. Recorded the inset examples in UI_STYLE.md. Verified the example settings and task rows in the shared preview and the project suite in Chromium and WebKit. The Go suite passed for composer parity, and the local UI race tests passed with the new assets. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).
+
+## 2026-11-27 — Codex (T-336 composer parity)
+
+Matched the draft and reply field padding, focus border and Send arrow. Moved the read-only access label to the left above both fields. Verified matching geometry and icons, shared Add menu and access placement in the loopback preview and the Chromium and WebKit window suite. The release remains on hold. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).
+
+## 2026-11-27 — Codex (T-336 window audit)
+
+Consolidated button sizes and neutral fills, added the shared path menu to replies, exposed model and access information with a token popover below the composer, used neutral computer icons, refined Copy, removed worker hover timestamps, and highlighted shell command text. Audited chat constraints, sidebar and archive rows, settings, model selection and Statistics. A pending efficiency request now hides old results. Seven window checks passed in Chromium and WebKit, and the Go check suite passed. The ordinary route serves the new layout in the handler test. Native smoke launch remains unverified. The release remains on hold. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).
+
+## 2026-11-27 — Codex (T-335 task composer)
+
+Integrated the compact composer with selectors below the field, path insertion from Add, round button highlights and outgoing message copying. Checked draft sizing, searchable model selection, path insertion, message copying and the task start request using fixture responses. The release remains on hold.
+
+## 2026-11-27 — Codex (T-334 message and row spacing)
+
+Balanced outgoing bubble, active task and archive row padding in the existing window preview. Reduced the Send and Stop glyphs within their existing hit areas. The browser check measures the padding and icon sizes and still checks the alignment and width of active task rows. [PR #231](https://github.com/kolotiloff/agent-messenger/pull/231).
+
+## 2026-11-27 — Codex (T-334 efficiency row refinement)
+
+Used an outlined robot icon for Agents and removed the model disclosure arrows. The model label and details advance by one control gap each. Verified the indents, mouse expansion and keyboard collapse in the live preview with Chromium and WebKit. Updated [PR #231](https://github.com/kolotiloff/agent-messenger/pull/231).
+
+## 2026-11-27 — Codex (T-334 statistics dialog)
+
+Moved Statistics to a dedicated footer button and dialog. Reordered Settings to General, Server, Project and Agents, added outline section icons, and reduced both dialog footprints. Aligned the report headings and kept filters fixed while switching or reloading an efficiency report. Reused a compact header and the settings row style, and styled the model picker search and scrollbar spacing. Verified the window suite in Chromium and WebKit, the local UI Go race tests, and the running preview at 1150 and 520 px.
+
 ## 2026-11-27 — Codex (T-333 desktop layout activation)
 
-Reproduced the layout difference reported in 1.0.12. The desktop window now activates the approved task layout. The release retains the usual build and publication gates.
+Reproduced the layout difference reported in 1.0.12. The desktop window now activates the approved task layout. The owner cancelled the 1.0.13 release run before publication to bundle the follow-up changes.
 
 ## 2026-11-27 — Codex (1.0.12 release)
 
@@ -1357,3 +1433,7 @@ Reports for each step are in [reports/](reports/). The handoff is in [HANDOFF.md
 ## 2026-11-08 — T-066 update icon, version name
 
 - An available update is a blue round arrow next to the version at the bottom of the sidebar (owner's variant А); tooltip names the version. The window shows «v0.41»; tags stay 0.0.0-preview.N (D-073, Q-020). Checked in Chromium with a stubbed status only.
+
+- T-337: Both pinned Go 1.22.2 race runners reached the package timeout while still executing separate short SQLite tests. Allow 25 minutes per package on those runners. Current Go keeps its 15-minute budget. The paired Mac remote-update refusal was verified on builds 115 and 116.
+
+- T-337: Reproduced the 1.0.12 missing-column failure on an activated project database and added the in-place upgrade for both the supervisor and worker entry points. The regression covers missing, partially present and manually repaired schema, durable remote task history, a new live measurement and clean project creation.

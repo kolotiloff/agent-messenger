@@ -194,7 +194,7 @@ func (c *CodexRPC) Drain(onRequest func()) error {
 // Done is closed when the server's output has ended.
 func (c *CodexRPC) Done() <-chan struct{} { return c.done }
 
-// CodexInitializeParams identifies Messenger and opts into the experimental
+// CodexInitializeParams identifies Kotel and opts into the experimental
 // API, which dynamic tools need.
 func CodexInitializeParams(version string) map[string]any {
 	return map[string]any{
@@ -215,7 +215,7 @@ func CodexThreadStartParams(workspace string) map[string]any {
 		"dynamicTools": []any{map[string]any{
 			"type":        "namespace",
 			"name":        "messenger_bound",
-			"description": "Agent Messenger tools bound to the current message.",
+			"description": "Kotel tools bound to the current message.",
 			"tools": []any{
 				map[string]any{
 					"type":        "function",
@@ -226,7 +226,7 @@ func CodexThreadStartParams(workspace string) map[string]any {
 				map[string]any{
 					"type":        "function",
 					"name":        "reply",
-					"description": "Reply to the current message. The recipient is set by Messenger.",
+					"description": "Reply to the current message. The recipient is set by Kotel.",
 					"inputSchema": map[string]any{
 						"type": "object",
 						"properties": map[string]any{
@@ -310,9 +310,9 @@ func samePath(a, b string) bool {
 	return errA == nil && errB == nil && os.SameFile(ia, ib)
 }
 
-// CodexTurnPrompt is the only model input Messenger sends. The message itself
+// CodexTurnPrompt is the only model input Kotel sends. The message itself
 // is read through the bound tool, so the reply is tied to its receipt.
-const CodexTurnPrompt = "Authorized Messenger message. Use ONLY the messenger_bound tools. First call read_current, then call reply with your response text and the receipt returned for this message. Never reuse a receipt. Do not choose a recipient or message ID. Do not poll or use other tools."
+const CodexTurnPrompt = "Authorized Kotel message. Use ONLY the messenger_bound tools. First call read_current, then call reply with your response text and the receipt returned for this message. Never reuse a receipt. Do not choose a recipient or message ID. Do not poll or use other tools."
 
 // Bound on frames kept while turn/start has not been answered yet.
 const codexMaxEarlyFrames = 256
@@ -406,7 +406,7 @@ func (c *CodexRPC) RunTurn(ctx context.Context, threadID string, hooks CodexTurn
 			}
 			seen[key] = true
 			if frame.Method != "item/tool/call" {
-				return false, c.respond(frame.ID, nil, "not supported by Agent Messenger")
+				return false, c.respond(frame.ID, nil, "not supported by Kotel")
 			}
 			result, toolErr := guard.Tool(frame.Params)
 			if toolErr != nil {

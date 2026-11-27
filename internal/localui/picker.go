@@ -74,7 +74,7 @@ return POSIX path of (` + choose + ` default location (POSIX file p))`
 		return cmd, nil
 	default:
 		if path, err := exec.LookPath("zenity"); err == nil {
-			args := []string{"--file-selection", "--title=Agent Messenger"}
+			args := []string{"--file-selection", "--title=Kotel"}
 			if folder {
 				args = append(args, "--directory")
 			}

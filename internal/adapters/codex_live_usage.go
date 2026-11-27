@@ -6,18 +6,24 @@ import (
 	"time"
 )
 
-// CodexLiveTokens reads the cumulative provider counter for a worker's
-// current turn. Resumed sessions require a prior counter to subtract.
-func CodexLiveTokens(profile, thread string, launched, taskCreated time.Time, resumed bool) *int64 {
-	return codexRollout(profile, thread, launched, taskCreated, func(path string) *int64 {
-		return readCodexLiveTokens(readCodexRolloutTail(path), launched, resumed)
+// CodexUsage separates cumulative work from the last provider context snapshot.
+type CodexUsage struct {
+	TurnTokens     *int64
+	UsedTokens     int64
+	CapacityTokens int64
+}
+
+func CodexLiveUsage(profile, thread string, launched, taskCreated time.Time, resumed bool) CodexUsage {
+	return codexRollout(profile, thread, launched, taskCreated, func(path string) CodexUsage {
+		return readCodexLiveUsage(readCodexRolloutTail(path), launched, resumed)
 	})
 }
 
-func readCodexLiveTokens(raw []byte, launched time.Time, resumed bool) *int64 {
+func readCodexLiveUsage(raw []byte, launched time.Time, resumed bool) CodexUsage {
 	var latest, baseline *int64
+	var usage CodexUsage
 	for _, line := range bytes.Split(raw, []byte{'\n'}) {
-		if !bytes.Contains(line, []byte(`"total_token_usage"`)) {
+		if !bytes.Contains(line, []byte(`"token_count"`)) && !bytes.Contains(line, []byte(`"compacted"`)) {
 			continue
 		}
 		var event struct {
@@ -26,17 +32,35 @@ func readCodexLiveTokens(raw []byte, launched time.Time, resumed bool) *int64 {
 			Payload struct {
 				Type string `json:"type"`
 				Info struct {
+					Capacity int64 `json:"model_context_window"`
+					Last     struct {
+						Tokens *int64 `json:"total_tokens"`
+					} `json:"last_token_usage"`
 					Total struct {
 						Tokens *int64 `json:"total_tokens"`
 					} `json:"total_token_usage"`
 				} `json:"info"`
 			} `json:"payload"`
 		}
-		if json.Unmarshal(line, &event) != nil || event.Type != "event_msg" ||
-			event.Payload.Type != "token_count" || event.At.IsZero() {
+		if json.Unmarshal(line, &event) != nil || event.At.IsZero() {
 			continue
 		}
-		n := event.Payload.Info.Total.Tokens
+		if event.Type == "compacted" && !event.At.Before(launched) {
+			usage.UsedTokens, usage.CapacityTokens = 0, 0
+			continue
+		}
+		if event.Type != "event_msg" ||
+			event.Payload.Type != "token_count" {
+			continue
+		}
+		info := event.Payload.Info
+		if !event.At.Before(launched) {
+			usage.UsedTokens, usage.CapacityTokens = 0, 0
+			if used := info.Last.Tokens; used != nil && *used >= 0 && info.Capacity > 0 {
+				usage.UsedTokens, usage.CapacityTokens = *used, info.Capacity
+			}
+		}
+		n := info.Total.Tokens
 		if n == nil || *n < 0 {
 			continue
 		}
@@ -47,14 +71,16 @@ func readCodexLiveTokens(raw []byte, launched time.Time, resumed bool) *int64 {
 		}
 	}
 	if latest == nil || (resumed && baseline == nil) {
-		return nil
+		return usage
 	}
 	if baseline != nil {
 		if *latest < *baseline {
-			return nil
+			return usage
 		}
 		current := *latest - *baseline
-		return &current
+		usage.TurnTokens = &current
+		return usage
 	}
-	return latest
+	usage.TurnTokens = latest
+	return usage
 }

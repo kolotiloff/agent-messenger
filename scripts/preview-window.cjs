@@ -353,7 +353,10 @@ const server = http.createServer(async (request, response) => {
             : { kind: 'text', text: conversation.followup, at },
         ];
         fixture.task = { ...fixture.task };
-        if (state === 'running' && fixture.task.agent === 'codex') fixture.task.quiet = { live_tokens: 342000 };
+        if (state === 'running' && fixture.task.agent === 'codex') {
+          fixture.task.quiet = { live_tokens: 342000 };
+          fixture.task.context_window = { used_tokens: 212000, capacity_tokens: 238000 };
+        }
       }
       const examples = await previewExamples;
       if (fixture.task) {

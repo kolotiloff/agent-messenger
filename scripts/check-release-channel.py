@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 from release_version import release_info
 import re
@@ -10,7 +11,9 @@ import tempfile
 import time
 from urllib.request import Request, urlopen
 
-REPO = "kolotiloff/agent-messenger"
+REPO = os.environ.get("GITHUB_REPOSITORY", "kolotiloff/agent-messenger")
+if REPO not in {"kolotiloff/agent-messenger", "kolotiloff/kotel"}:
+    raise ValueError("Unexpected release repository")
 API = f"https://api.github.com/repos/{REPO}/releases?per_page=20"
 TARGETS = ("darwin-arm64", "windows-amd64", "windows-arm64", "linux-amd64", "linux-arm64")
 RETIRABLE = {"v0.0.0-preview.98", "v0.0.0-preview.99"}

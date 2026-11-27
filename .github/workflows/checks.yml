@@ -43,7 +43,7 @@ jobs:
   native:
     name: Tests / ${{ matrix.runner }} / Go ${{ matrix.go }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -67,6 +67,8 @@ jobs:
           go-version: ${{ matrix.go }}
           cache: false
       - name: Format, module integrity, vet and native race tests
+        env:
+          GO_TEST_TIMEOUT: ${{ matrix.go == '1.22.2' && '25m' || '15m' }}
         run: bash scripts/check.sh
       - name: Compile targets and test binaries (not runtime acceptance)
         if: matrix.cross == true
@@ -119,6 +121,8 @@ jobs:
           cache: false
       - name: Windows runtime checks (lock, job objects, background client, task runs)
         run: bash scripts/check-windows.sh
+      - name: Upgrade old and manually repaired project databases on Windows
+        run: go test -count=1 -timeout=3m ./internal/core -run "^TestActiveProjectMigratesRemoteLiveUsage$"
       - name: Windows setup and LAN discovery regressions (no real agents)
         run: |
           go test -count=1 -timeout=3m ./internal/localui -run '^(TestWindowsSetupFind|TestWindowsTerminalCreatesInteractiveChild|TestAgentSetupReceiptAndRegistration|TestAgentSetupUnknownIsNotRetried|TestSetupFindRecoversMissingInstallReceipt|TestTrustUsesRegisteredCLIAndExactFolder|TestAgentLoginAndInstallRoutes)$'
@@ -238,12 +242,16 @@ jobs:
           key='HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\AgentMessenger'
           "$exe" install
           installed="$LOCALAPPDATA/Programs/Agent Messenger/AgentMessenger.exe"
-          shortcut="$APPDATA/Microsoft/Windows/Start Menu/Programs/Agent Messenger.lnk"
+          shortcut="$APPDATA/Microsoft/Windows/Start Menu/Programs/Kotel.lnk"
           test -f "$installed"
           "$installed" version
           reg query "$key" /v UninstallString
           reg query "$key" /v DisplayVersion
           test -f "$shortcut"
+          legacy="$(dirname "$shortcut")/Agent Messenger.lnk"
+          mv "$shortcut" "$legacy"
+          "$installed" install
+          test -f "$shortcut" && test ! -e "$legacy"
           mkdir -p "$LOCALAPPDATA/AgentMessenger"
           echo keep > "$LOCALAPPDATA/AgentMessenger/keep.txt"
           "$installed" uninstall < /dev/null

@@ -1,4 +1,4 @@
-// Browser regression checks using fictional HTTP responses only. No Messenger
+// Browser regression checks using fictional HTTP responses only. No Kotel
 // process, registry, model, working chat or user profile is opened.
 // Requires Playwright. Optional: PLAYWRIGHT_MODULE, BROWSER_EXECUTABLE,
 // BROWSER_ENGINE (chromium/webkit), SCREENSHOT_DIR.
@@ -111,11 +111,11 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       windowReadFails = false;
       await page.evaluate(() => window.messengerRefresh());
       const welcome = page.locator('#thread .am-welcome');
-      await welcome.getByRole('heading', {name: 'Добро пожаловать в Agent Messenger', exact: true}).waitFor();
-      assert(await welcome.getByText('Как это работает', {exact: true}).isVisible());
-      assert(await welcome.getByText('Сначала создайте проект', {exact: true}).isVisible());
+      await welcome.getByRole('heading', {name: 'Добро пожаловать в Kotel', exact: true}).waitFor();
+      assert(await welcome.getByText('Задайте название и выберите папку проекта.', {exact: true}).isVisible());
+      assert(await welcome.getByText('Настройте агента и включите хотя бы одну модель.', {exact: true}).isVisible());
       assert.equal(await page.locator('#task-panel').isVisible(), false, 'an empty task pane must not cover onboarding');
-      await welcome.getByRole('button', {name: 'Новый проект', exact: true}).click();
+      await welcome.getByRole('button', {name: 'Создать проект', exact: true}).click();
       assert(await page.locator('#project-dialog').evaluate(node => node.open));
       await page.locator('#project-dialog-close').click();
       assert.equal(writes.length, 0, 'opening/cancelling onboarding must not change backend state');
@@ -216,15 +216,15 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       // Even with an installed agent, connecting a coordinator requires a project.
       registered = true;
       await page.reload();
-      await welcome.getByRole('heading', {name: 'Добро пожаловать в Agent Messenger', exact: true}).waitFor();
+      await welcome.getByRole('heading', {name: 'Добро пожаловать в Kotel', exact: true}).waitFor();
       assert.equal(await welcome.getByRole('button', {name: 'Подключить', exact: true}).count(), 0);
-      await welcome.getByRole('button', {name: 'Новый проект', exact: true}).click();
+      await welcome.getByRole('button', {name: 'Создать проект', exact: true}).click();
       await page.locator('#project-name').fill('Welcome test');
       await page.locator('#project-folder').fill('/fictional/project');
       await page.locator('#project-save').click();
       await welcome.getByText('Подключён: Cursor', {exact: true}).waitFor();
-      assert(await welcome.getByRole('heading', {name: 'Добро пожаловать в Agent Messenger', exact: true}).isVisible());
-      assert.equal(await welcome.getByRole('button', {name: 'Новый проект', exact: true}).count(), 0);
+      assert(await welcome.getByRole('heading', {name: 'Добро пожаловать в Kotel', exact: true}).isVisible());
+      assert.equal(await welcome.getByRole('button', {name: 'Создать проект', exact: true}).count(), 0);
       assert.deepEqual(writes.filter(write => write.path === '/api/project-create'),
         [{path: '/api/project-create', body: {name: 'Welcome test', folder: '/fictional/project'}}]);
       assert.deepEqual(writes.filter(write => write.path === '/api/coordinator-connect'),
@@ -249,7 +249,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await page.locator('#machines .am-agent-line').first().innerText(),'Cursor');
       assert.equal(await page.locator('#machines').getByText('cursor-vscode',{exact:true}).count(),0);
       // An agent paused or removed on a computer is not listed there, even
-      // when a chat of it once used Messenger's tools (owner, 2026-11-15).
+      // when a chat of it once used Kotel's tools (owner, 2026-11-15).
       assert.equal(await page.locator('#machines [data-peer="fixture-peer-2"] .am-agent-line').count(),0);
       // T-036: the computer that runs the server is labelled; this one is not.
       assert.equal(await page.locator('#machines [data-peer="fixture-peer"] .am-machine-role').innerText(),'сервер');
@@ -418,11 +418,12 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await editModels.textContent(),'Изменить');
       assert(await editModels.evaluate(button=>{
         const action=button.getBoundingClientRect();
-        const label=button.previousElementSibling;
+        const row=button.closest('.am-setting-row');
+        const label=row.querySelector('.am-access-text');
         const text=label.getBoundingClientRect();
         return label.textContent==='Модели'&&action.left>=text.right&&
           Math.abs(action.top+action.height/2-text.top-text.height/2)<1&&
-          button.parentElement.getBoundingClientRect().right===action.right;
+          row.getBoundingClientRect().right===action.right;
       }));
       await editModels.click();
       await page.getByRole('dialog',{name:'Модели',exact:true}).waitFor();
@@ -497,7 +498,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const olderStat = {...stat,id:'old-2',title:'Проверить производительность сцены',at:'2026-11-18T10:10:00',tokens:18200000,duration_ms:10800000,duration_estimated:true};
       const untimedStat = {...stat,id:'old-3',title:'Уточнить настройки агента',at:'2026-11-18T09:00:00',tokens:3400000,duration_ms:undefined};
       const otherStat = {...stat,id:'other-1',title:'Собрать сайт',project:'Site',tokens:700};
-      let holdFrameStats, frameStatsRequested, exportedStats, comparedStats;
+      let holdFrameStats, frameStatsRequested, exportedStats, comparedStats, holdEfficiency;
       const localTask = {id:'local-task',title:'Local task',project:'Frame',agent:'codex',state:'running',created_at:began,started_at:began,model:'gpt-6.2-sol[effort=low]',ran_model:'gpt-6.2-sol[effort=medium]'};
       let localRow = localTask;
       let siteTask = {...localTask,id:'site-task',project:'Site',title:'Site worker task',
@@ -547,6 +548,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         }
         if (pathname === '/api/usage-efficiency') {
           comparedStats=Object.fromEntries(searchParams);
+          if (!searchParams.get('agent')) {
+            if(holdEfficiency)await holdEfficiency;
+            return route.fulfill({json:{project,total_groups:0,groups:[]}});
+          }
           return route.fulfill({json:{project,total_groups:1,groups:[{agent:'codex',model:'gpt-6.2-sol[effort=high]',task_type:'bug_fix',difficulty:'simple',tasks:5,reviewed:4,accepted:3,first_pass_known:4,first_pass_accepted:2,
             accepted_new_input_plus_output:{samples:2,mean:125000,median:125000,p90:150000},accepted_active_runtime_ms:{samples:0},time_to_acceptance_ms:{samples:1,mean:60000,median:60000,p90:60000}}]}});
         }
@@ -900,7 +905,14 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await more.press('Tab');
       await acceptedRate.press('Tab');
       await firstPassRate.getByRole('tooltip').getByText('2/4',{exact:true}).waitFor();
-      assert((await more.locator('svg').boundingBox()).x<(await modelName.boundingBox()).x);
+      assert.equal(await more.locator('svg').count(),0,'the model row has no disclosure arrow');
+      const cohortLabel=compared.locator('xpath=preceding-sibling::tr[contains(@class,"am-efficiency-cohort")]').first().locator('th');
+      const cohortTextLeft=await cohortLabel.evaluate(node=>{
+        const range=document.createRange();
+        range.selectNodeContents(node);
+        return range.getBoundingClientRect().left;
+      });
+      assert((await modelName.boundingBox()).x>cohortTextLeft,'the model label is indented from the group heading');
       await page.setViewportSize({width:600,height:600});
       const countBox=await groupCount.boundingBox(),modelCell=await more.boundingBox();
       assert(countBox.x+countBox.width<=modelCell.x+modelCell.width+1,'the count stays inside the model cell when space is tight');
@@ -910,6 +922,22 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await more.getAttribute('aria-expanded'),'true');
       await efficiencyDetails.getByText('150 тыс.',{exact:true}).waitFor();
       await efficiencyDetails.getByRole('columnheader',{name:'Порог для 90%'}).waitFor();
+      for (const width of [1100,600]) {
+        await page.setViewportSize({width,height:600});
+        const insets=await efficiencyDetails.evaluate(detail=>{
+          const summary=detail.previousElementSibling.getBoundingClientRect();
+          const model=detail.previousElementSibling.querySelector('.am-efficiency-model-name').getBoundingClientRect();
+          const box=detail.querySelector('.am-efficiency-breakdown').getBoundingClientRect();
+          const metrics=detail.querySelector('.am-efficiency-metrics').getBoundingClientRect();
+          const note=detail.querySelector('p').getBoundingClientRect();
+          return [box.left-summary.left,summary.right-box.right,metrics.left-model.left,
+            metrics.left-box.left,box.right-metrics.right,metrics.top-box.top,box.bottom-note.bottom];
+        });
+        const expected=[16,0,0,12,12,12,12];
+        assert(insets.every((inset,i)=>Math.abs(inset-expected[i])<0.5),
+          `efficiency insets at ${width}px were ${insets.join(', ')}, expected ${expected.join(', ')}`);
+      }
+      await page.setViewportSize({width:1100,height:600});
       const runtime=efficiencyDetails.getByRole('row',{name:/Активная работа/});
       assert.equal(await runtime.locator('td').first().innerText(),'—');
       await more.click();
@@ -918,9 +946,18 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await exportButton.click();
       await page.locator('#stats-export-status').getByText(/125 задач.*messenger-statistics\.json/).waitFor();
       assert.deepEqual(exportedStats,{project:'Frame',period:'month',computer:'dev-1',agent:'codex',model:'gpt-6.2-sol[effort=high]'});
-      await chooseStatsOption('agent','Все агенты');
-      assert.equal(await page.locator('#stats-efficiency-card').isVisible(),false,'old model groups must disappear after a filter changes');
-      assert.equal(await compareButton.getAttribute('aria-expanded'),'false');
+      let releaseEfficiency;
+      holdEfficiency=new Promise(resolve=>{releaseEfficiency=resolve;});
+      try{
+        await chooseStatsOption('agent','Все агенты');
+        await page.locator('#stats-efficiency-status').getByText('Загрузка статистики…',{exact:true}).waitFor();
+        assert.equal(await page.locator('#stats-efficiency-table').isVisible(),false);
+      }finally{releaseEfficiency();holdEfficiency=null;}
+      await page.getByText('В этом периоде нет исходных задач для сравнения.',{exact:true}).waitFor();
+      assert.equal(await compared.count(),0,'old model groups must disappear after the report reloads');
+      assert.equal(await compareButton.getAttribute('aria-expanded'),'true');
+      assert.deepEqual(comparedStats,{project:'Frame',period:'month',computer:'dev-1',agent:'',model:''});
+      await compareButton.click();
       await page.locator('[data-period=week]').click();
       if(unfilteredComputer)await runner.press('Enter');
       await page.locator('[data-tab=project]').click();
@@ -971,7 +1008,11 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;},previous);
       }
       await page.setViewportSize({width:600,height:600});
-      assert(await page.locator('[aria-labelledby=stats-top-title] .am-stats-table-wrap').evaluate(box=>box.scrollWidth===box.clientWidth));
+      const statsWidth=await page.locator('[aria-labelledby=stats-top-title] .am-stats-table-wrap').evaluate(box=>({
+        available:box.clientWidth,content:box.scrollWidth,
+        headers:[...box.querySelectorAll('th')].map(cell=>({width:cell.clientWidth,content:cell.scrollWidth})),
+      }));
+      assert.equal(statsWidth.content,statsWidth.available,'Statistics table overflow at 600 px: '+JSON.stringify(statsWidth));
       await page.setViewportSize({width:1100,height:600});
             const pendingFrame = new Promise(resolve => { frameStatsRequested = resolve; });
       let releaseFrame;

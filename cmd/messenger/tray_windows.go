@@ -87,7 +87,7 @@ type point struct{ x, y int32 }
 // windowClass and windowTitle name the window go-webview2 creates.
 const (
 	windowClass = "webview"
-	windowTitle = "Agent Messenger"
+	windowTitle = "Kotel"
 )
 
 // showOpenWindow brings forward the window of a copy of the program that
@@ -95,13 +95,16 @@ const (
 // when there is none.
 func showOpenWindow() bool {
 	class, _ := windows.UTF16PtrFromString(windowClass)
-	title, _ := windows.UTF16PtrFromString(windowTitle)
-	hwnd, _, _ := findWindow.Call(uintptr(unsafe.Pointer(class)), uintptr(unsafe.Pointer(title)))
-	if hwnd == 0 {
-		return false
+	// The previous window can remain in the tray while its client updates.
+	for _, name := range []string{windowTitle, "Agent Messenger"} {
+		title, _ := windows.UTF16PtrFromString(name)
+		hwnd, _, _ := findWindow.Call(uintptr(unsafe.Pointer(class)), uintptr(unsafe.Pointer(title)))
+		if hwnd != 0 {
+			trayShowWindow(hwnd)
+			return true
+		}
 	}
-	trayShowWindow(hwnd)
-	return true
+	return false
 }
 
 // addTray puts the program's icon in the notification area. It must run on

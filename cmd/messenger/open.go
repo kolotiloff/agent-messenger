@@ -49,6 +49,7 @@ func runOpen(root string, args []string, out io.Writer) error {
 	defer cancel()
 	// The background client runs from a copy; a remote update (T-078)
 	// replaces the program file the owner installed.
+	refreshWindowsRegistration()
 	recordProgram(root)
 	if err := ensureDesktopClient(ctx, root); err != nil {
 		return err
@@ -126,7 +127,7 @@ func (o *windowOpener) Write(p []byte) (int, error) {
 // page in the default browser, kept until this program is closed.
 func showInBrowser(ctx context.Context, page windowPage, out io.Writer) {
 	opened := openInBrowser(page.file)
-	fmt.Fprintln(out, "Agent Messenger открыт в браузере.")
+	fmt.Fprintln(out, "Kotel открыт в браузере.")
 	if opened != nil {
 		fmt.Fprintf(out, "Браузер не открылся сам. Откройте в браузере этот файл:\n%s\n", page.file)
 	}
@@ -158,7 +159,7 @@ func writeWindowFile(root, address string) (string, error) {
 	}
 	quoted := html.EscapeString(address)
 	page := `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=` + quoted +
-		`"><title>Agent Messenger</title></head><body><a href="` + quoted + `">Открыть Agent Messenger</a></body></html>`
+		`"><title>Kotel</title></head><body><a href="` + quoted + `">Открыть Kotel</a></body></html>`
 	w := bufio.NewWriter(f)
 	if _, err := w.WriteString(page); err != nil {
 		os.Remove(f.Name())

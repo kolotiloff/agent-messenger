@@ -54,16 +54,11 @@ func selfInstall(out io.Writer) bool {
 	_, statErr := os.Stat(p.Exe)
 	switch winInstallAction(exe, p.Exe, buildinfo.Version, winInstalledVersion(), statErr == nil) {
 	case "":
-		// The installed copy: keep the entry's version current after an
-		// update and bring back a removed shortcut.
-		if strings.EqualFold(filepath.Clean(exe), filepath.Clean(p.Exe)) && winInstalledVersion() != "" {
-			winRegister(p)
-		}
 		return false
 	case "open-installed":
 		return winStart(p) == nil
 	}
-	fmt.Fprintln(out, "Устанавливаем Agent Messenger в", p.Dir)
+	fmt.Fprintln(out, "Устанавливаем Kotel в", p.Dir)
 	if err := winCopy(exe, p); err != nil {
 		fmt.Fprintln(out, "Не удалось установить, программа откроется отсюда:", err)
 		return false
@@ -105,6 +100,15 @@ func winCopy(exe string, p winPaths) error {
 	return selfupdate.Replace(p.Exe, temp.Name())
 }
 
+// Refresh the registered copy on both double-click and update-helper relaunch.
+func refreshWindowsRegistration() {
+	p, ok := winPathsNow()
+	exe, err := os.Executable()
+	if ok && err == nil && strings.EqualFold(filepath.Clean(exe), filepath.Clean(p.Exe)) && winInstalledVersion() != "" {
+		winRegister(p)
+	}
+}
+
 // winRegister writes the «Приложения» entry and the Start menu shortcut.
 // Both are conveniences: a failure leaves the program working.
 func winRegister(p winPaths) {
@@ -119,8 +123,11 @@ func winRegister(p winPaths) {
 		}
 		k.Close()
 	}
+	legacy := filepath.Join(filepath.Dir(p.Shortcut), winInstallFolder+".lnk")
 	if _, err := os.Stat(p.Shortcut); err == nil {
-		return
+		if _, oldErr := os.Lstat(legacy); errors.Is(oldErr, os.ErrNotExist) {
+			return
+		}
 	}
 	_ = os.MkdirAll(filepath.Dir(p.Shortcut), 0o755)
 	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", winShortcutScript(p))
@@ -159,7 +166,16 @@ func runUninstall(root string, out io.Writer) error {
 			if err := registry.DeleteKey(registry.CURRENT_USER, winUninstallKey); err != nil && !errors.Is(err, registry.ErrNotExist) {
 				return err
 			}
-			if err := os.Remove(p.Shortcut); err != nil && !errors.Is(err, os.ErrNotExist) {
+			// A user can already have a shortcut named Kotel pointing elsewhere.
+			if _, err := os.Lstat(p.Shortcut); err == nil {
+				script := "$ErrorActionPreference='Stop';$w=New-Object -ComObject WScript.Shell;$path=" + psQuote(p.Shortcut) +
+					";$s=$w.CreateShortcut($path);if($s.TargetPath -eq " + psQuote(p.Exe) + " -and !$s.Arguments){Remove-Item -LiteralPath $path}"
+				cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script)
+				cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NO_WINDOW}
+				if err := cmd.Run(); err != nil {
+					return err
+				}
+			} else if !errors.Is(err, os.ErrNotExist) {
 				return err
 			}
 			return nil
@@ -170,7 +186,7 @@ func runUninstall(root string, out io.Writer) error {
 		time.Sleep(500 * time.Millisecond)
 	}
 	if errors.Is(err, platform.ErrAlreadyRunning) {
-		return errors.New("фоновый клиент не остановился; закройте окно Messenger и повторите удаление. Ничего не удалено")
+		return errors.New("фоновый клиент не остановился; закройте окно Kotel и повторите удаление. Ничего не удалено")
 	}
 	if err != nil {
 		return fmt.Errorf("ничего не удалено: %w", err)
@@ -188,7 +204,7 @@ func runUninstall(root string, out io.Writer) error {
 	} else {
 		fmt.Fprintln(out, "Папку программы удалите вручную:", p.Dir)
 	}
-	fmt.Fprintln(out, "Agent Messenger удалён.")
+	fmt.Fprintln(out, "Kotel удалён.")
 	if data != "" {
 		fmt.Fprintln(out, "Данные остались в папке", data, "— задачи, история и настройки. Если они больше не нужны, удалите папку вручную.")
 	}

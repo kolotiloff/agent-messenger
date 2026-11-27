@@ -847,3 +847,71 @@ In the Projects sidebar, align active-task text with the computer name. Include 
 Put one always-visible New Task plus immediately to the right of the Projects picker. It opens an empty conversation with the project and computer below the message field and the model aligned to their right. Selecting a task leaves the composer. The draft project defaults to the selected filter or current conversation project and the model picker uses the agent models listed by the chosen computer. Sending uses the same task admission and operation ID as other task starts, with the window as the assigning owner.
 
 A direct question or report goes to the owner window. Finishing a report closes the task through the usual run outcome handling. An older worker can still send a question with the coordinator audience; the initiating window owns the answer and forwards it with the audience the worker expects. Coordinator assignments retain their existing routing. The preview uses fictional conversations and a simulated report.
+
+## D-233 — Open Statistics separately from Settings (T-334)
+
+Put a chart icon beside Settings and Feedback. It opens a Statistics dialog with the existing charts, filters, efficiency report, task links and JSON export. Settings opens at General and lists Server, Project and Agents below it. Use the existing outline icons for the section labels. Both dialogs are centered and share a 900 by 640 px cap, with proportional margins on smaller screens and internal scrolling. Closing either dialog returns to the open conversation and keeps its draft. The consumption and efficiency reports occupy the same position below persistent filters and use the shared card heading. Changing filters keeps the selected report open. Model names open the details directly without a disclosure arrow. Models are indented one control gap from the group title and the details panel one more. The Agents section uses an outlined robot icon.
+
+Use the caption height for the Settings, Statistics, agent settings and model picker headers. Agent settings place controls opposite each label and use the standard divider between rows. The model picker uses the standard input style and scrolls its list independently with spacing beside the scrollbar.
+
+## D-234 — Balance message and task insets (T-334)
+
+Use the content spacing token vertically and the section spacing token horizontally in outgoing bubbles to account for the text line's internal space. Use the compact inset for archive rows and a control gap above and below active task text. Active task titles still start at the same position as the computer name, and both lists' highlights span the available row. Use 16 px glyphs for Send and Stop in the existing controls with a local hover fill against the composer background.
+
+## D-235 — Put task context below the composer (T-335)
+
+The New Task composer starts with a one-line draft between Add and Send. Put project and computer selectors below the field on the left, and the model selector on the right. Use the reply model’s secondary text style for all three selector values. Search configured models for the chosen computer in a popover with a common horizontal inset for its search field and option rows. Mark selected options with a check and reserve the row fill for pointer hover and keyboard focus. Add inserts a path as a line of task text. Offer the system file and folder picker only when the selected worker is local. Preserve task start routing and configured model availability in D-232. Use the composer radius for controls inside the field. Outgoing messages show a text copy action beside their time on hover or keyboard focus.
+
+## D-236 — Use compact controls and clarify composer actions (T-336)
+
+Match ordinary actions, one-line inputs and picker triggers to the compact Projects control height and a neutral gray fill. Preserve quiet controls and keep the destructive action distinct. Both composers use the same field padding, focus border and upward Send arrow. The active task retains its separate Stop control. The composer keeps its larger hit areas with corners inset from the field radius. Use its Add menu in both the draft and the reply, with separate file, folder and manual path actions. Insert paths as text. File and folder pickers use the local system dialog.
+
+Show the active model and a neutral ring that opens the token popover below the reply field. Use 4 px vertical insets for computer headings and active tasks and retain 8 px in the Archive. Distinguish the current turn counter, recorded task usage and model context occupancy. Show a missing value when the window has no context occupancy data. Use the same neutral icon for the local computer and its peers, retaining their connection status. Show the local access setting on a draft and the stored access mode for a local run. For a remote worker, explain where its access is configured. These indicators sit at the left above either composer. Show the outgoing message timestamp and copy action together under the message. Omit the worker message's hover timestamp. Apply display-only syntax colors to recognized shell commands. While a new efficiency filter loads, show its loading state with the existing toolbar in place.
+
+## D-237 — Simplify model rows and align the network name (T-336)
+
+Separate model choices with their row padding and keep the model search and list scrolling independent. Place the network-name control at the end of its label row using the 12 em width shared with language and theme. Cap it at half the available row so it stays beside the label on smaller windows.
+
+## D-238 — Align settings openings and inset statistics highlights (T-336)
+
+Place the section headings above their settings cards with a common gap. Place the first control opposite its label on the same baseline across sections. Reserve the same scrollbar space on every settings page so the control's right edge stays fixed. Keep the project name's explanation below the inline field and leave the path control full width. Statistics task links and efficiency model buttons share the computer row's neutral hover fill and 4 by 12 px insets. Keep the task text aligned to its column heading. Use the compact dialog header for Feedback and New Project as well as Settings, Statistics, agent settings and model choices.
+
+## D-239 — Give report rows one action and show measured context use (T-336)
+
+Use the short Settings section names above their cards. Highlight the full row when hovering a Statistics task or an Efficiency model and activate the row's existing action from any column. Keep keyboard actions on native buttons. Use symmetric row insets and keep the date and time together. Use a target for Efficiency and retain the chart for Statistics.
+
+Draw the reply context ring from the used and capacity counts in a context snapshot. Put the percentage on the first line and the used and capacity figures on the second. Keep the ring neutral when a snapshot is unavailable and label any reported cumulative usage by its scope. The loopback preview can use a fictional snapshot.
+
+## D-240 — Refine conversation and report spacing (T-336)
+
+Left-align the context popover, put the percentage beside its label, and separate used tokens and capacity with a slash. Keep the task title as the sole conversation heading and center the date at the start of its scrollable thread. While a computer is collapsed, append a muted parenthesized count of tasks under the current project filter.
+
+## D-241 — Align pane headers and normalize surface insets (T-336)
+
+Align the conversation header divider with Projects and Archive. Keep the title to one line and expose its full text on hover. Use the content gap between the heading, body text and actions in confirmations. Use equal surface insets on all sides, with 12 px for report cards, efficiency details and outgoing message bubbles, 8 px for menus, and 16 px for settings cards and confirmation dialogs.
+
+## D-242 — Span the task toolbar above Archive (T-336)
+
+Use a single toolbar above the conversation and Archive, with its divider aligned to Projects. Place the toggle at the right end of the toolbar and give the Archive its own header below it. Frameless native windows keep the toggle beside the window controls. Match footer text to the visible icon inset. This updates the pane layout in D-241.
+
+## D-243 — Align expanded efficiency details with their model row (T-336)
+
+Use the section inset on the leading side of the expanded panel and align its trailing edge with the parent row. Keep the shared content inset inside the panel and align the first metric with the model label. Use a speedometer for the Efficiency action, superseding its target icon in D-239.
+
+## D-244 — Use a visible Clear Archive button (T-336)
+
+Use the compact filled action and align the button itself with the archive rows. Keep the confirmation and filtered scope.
+
+## D-245 — Guide first-run task setup in the task pane (T-336)
+
+Use the shared card and setting rows for the first-run checklist. Give each button an action label and link it directly to its setup location. Creating a project and choosing an available agent and model enables direct tasks. The network and coordinator can be configured separately. When no conversation is selected and the current project has a dispatch route with an enabled model, open the standard New Task composer. This refines the empty-pane behavior in D-186.
+
+## D-246 — Order the settings sections by setup flow (T-336)
+
+Open Settings at General, followed by Project, Agents and Server. Project and agent setup enable local tasks. Server settings are available after those sections for optional networking. This supersedes the section order in D-233.
+
+## D-247 — Keep the original repository and installation identity through the Kotel bridge (T-337)
+
+Use Kotel in the window, documentation and distribution labels. Keep the existing Ed25519 key, platform bundle and program paths, database directories, broker protocol, active-run registry and MCP keys. This allows mixed-version operation and preserves custom integration commands. Use the original GitHub repository ID for update discovery. A repository rename follows an explicit inventory of every installation running the bridge and the owner's command. The download names for both brands are byte-identical for each binary. Apply release corrections as a higher signed build.
+
+The owner approved the rounded golden tile with a black pot, tilted lid raised on the right and solid right-facing pupils. The window, platform packages and repository use this artwork.

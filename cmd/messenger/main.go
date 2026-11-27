@@ -165,7 +165,7 @@ func run(root string, args []string) error {
 		if errors.Is(err, platform.ErrAlreadyRunning) {
 			// The install command keeps its rule: it activates only while no
 			// client runs. Say what to do instead (owner, 2026-11-12).
-			return errors.New("Messenger сейчас работает, поэтому install не ставит новую версию. Обновите из окна («Обновиться») или откройте новый скачанный файл командой open: он сам обновит установку. Либо остановите клиент (messenger shutdown) и повторите install")
+			return errors.New("Kotel сейчас работает, поэтому install не ставит новую версию. Обновите из окна («Обновиться») или откройте новый скачанный файл командой open: он сам обновит установку. Либо остановите клиент (messenger shutdown) и повторите install")
 		}
 		if err != nil {
 			return err
@@ -190,7 +190,7 @@ func run(root string, args []string) error {
 		fs := flag.NewFlagSet("timeline", flag.ContinueOnError)
 		alias := fs.String("alias", "", "session mailbox alias")
 		limit := fs.Int("limit", 50, "page size 1..100")
-		before := fs.String("before", "", "older than this Messenger request ID")
+		before := fs.String("before", "", "older than this Kotel request ID")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -487,7 +487,7 @@ func splitArgs(args []string) (string, []string) {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, `Agent Messenger — локальный клиент и интерфейс.
+	fmt.Fprintf(os.Stderr, `Kotel — локальный клиент и интерфейс.
 
 --root стоит перед командой. Один пользователь может держать только один serve,
 даже с другим каталогом данных. Реальный CLI запускается только после register-session.

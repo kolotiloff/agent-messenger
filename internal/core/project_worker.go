@@ -54,6 +54,10 @@ func openSplitWorkerStore(ctx context.Context, computer *sql.DB, layout, project
 		}
 		return nil, err
 	}
+	if err := ensureRemoteLiveUsage(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("upgrade project task usage: %w", err)
+	}
 	return &Store{db: db}, nil
 }
 

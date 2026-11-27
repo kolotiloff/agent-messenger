@@ -226,7 +226,7 @@ func hashFile(path string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-const installGuide = `Agent Messenger — macOS technical preview
+const installGuide = `Kotel — macOS technical preview
 
 1. Verify the archive checksum against a trusted source before extraction.
 2. In the extracted directory: shasum -a 256 -c SHA256SUMS

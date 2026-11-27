@@ -194,6 +194,11 @@ func install(source, prefix string, info buildinfo.Info, lease func(func() error
 		if err = os.Symlink(dest, name); err != nil {
 			return err
 		}
+		// A relative alias follows each atomic activation of the legacy CLI.
+		// An existing user command under this name retains ownership.
+		if err = os.Symlink("messenger", filepath.Join(binDir, "kotel")); err != nil && !errors.Is(err, os.ErrExist) {
+			return err
+		}
 		if err = os.Rename(name, link); err != nil {
 			return err
 		}

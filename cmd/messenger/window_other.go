@@ -23,7 +23,7 @@ import (
 var appBrowsers = []string{"google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "microsoft-edge", "microsoft-edge-stable", "brave-browser"}
 
 // showWindow shows the page in a window of its own on Linux: WebKitGTK when
-// the system has it (T-069), otherwise (D-054) a Chromium-based browser in app mode with Messenger's own profile, so the
+// the system has it (T-069), otherwise (D-054) a Chromium-based browser in app mode with Kotel's own profile, so the
 // window has no tabs or address bar and closing it closes the page. Only the
 // private forwarding file is passed, never the page's key. Without such a
 // browser the page opens in the default browser as before.
@@ -73,7 +73,7 @@ func appWindowCommand(profile, file string) *exec.Cmd {
 	return nil
 }
 
-// installMenuEntry puts Agent Messenger into the desktop's application menu
+// installMenuEntry puts Kotel into the desktop's application menu
 // (~/.local/share/applications), pointing at this program, so it starts like
 // any other program. The file is rewritten only when it differs.
 func installMenuEntry() {
@@ -175,7 +175,7 @@ func writeMenuEntry(exe string) {
 		}
 	}
 	dir = filepath.Join(dir, "applications")
-	entry := "[Desktop Entry]\nType=Application\nName=Agent Messenger\nComment=Задачи для агентов\nExec=\"" + exe + "\" open\n" + iconLine + "Terminal=false\nCategories=Development;\nStartupWMClass=AgentMessenger\n"
+	entry := "[Desktop Entry]\nType=Application\nName=Kotel\nComment=Задачи для агентов\nExec=\"" + exe + "\" open\n" + iconLine + "Terminal=false\nCategories=Development;\nStartupWMClass=AgentMessenger\n"
 	path := filepath.Join(dir, "agent-messenger.desktop")
 	if old, err := os.ReadFile(path); err == nil && string(old) == entry {
 		return

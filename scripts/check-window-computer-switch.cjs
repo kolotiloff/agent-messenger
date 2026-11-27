@@ -97,12 +97,12 @@ const shots = process.env.SCREENSHOT_DIR;
         assert.deepEqual(await page.evaluate(() => [...new Set(window.flashes)]), [], `choosing ${name} (delay ${delay} ms) flashed`);
         await page.evaluate(() => { window.watching = false; });
       }
-      // The local header stays tinted when a peer is selected. Every header
-      // has the same padding and online/offline uses both color and shape.
+      // The local header uses the same neutral fill as other unselected
+      // computers. Connection status is still shown by color and shape.
       assert.equal(await card('Fixture Mac').getAttribute('aria-current'), 'true');
       assert.equal(await card('Fixture Mac').getAttribute('aria-pressed'), 'false');
       assert.equal(await card('ПК-2').getAttribute('aria-pressed'), 'true');
-      assert.notEqual(ownHeader, peerHeader);
+      assert.equal(ownHeader, peerHeader);
       assert.equal(await headerColor('Fixture Mac'), ownHeader);
       assert.notEqual(await headerColor('ПК-2'), peerHeader);
       assert.equal(await headerColor('Ноутбук'), peerHeader);

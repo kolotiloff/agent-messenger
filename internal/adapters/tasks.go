@@ -13,8 +13,8 @@ import (
 
 // Worker profiles (D-023). "worker" runs like a session the owner opened in
 // the project folder: the provider's normal tools and the project's own
-// settings, plus the Messenger worker tools. "messenger-only" is the stripped
-// profile for automated tests: Messenger tools only.
+// settings, plus the Kotel worker tools. "messenger-only" is the stripped
+// profile for automated tests: Kotel tools only.
 const (
 	ProfileWorker        = "worker"
 	ProfileMessengerOnly = "messenger-only"
@@ -28,7 +28,7 @@ var TaskToolNames = []string{"read_task", "report", "ask", "ask_owner"}
 
 // TaskWorkerPrompt is the first message of every run. The task itself is read
 // through read_task, after the conversation identity is bound.
-const TaskWorkerPrompt = "You are a worker started by Agent Messenger for one task in this project folder. " +
+const TaskWorkerPrompt = "You are a worker started by Kotel for one task in this project folder. " +
 	"First call the messenger_task tool read_task to get the task (and, on a resumed run, the answer to your question). " +
 	"Do the work with your normal tools, following this project's own instructions and the owner's rules that read_task returns. " +
 	"If you changed or created files and the project is under version control, commit (or check in) your work before you report: that is how it reaches the project and the other computers. " +
@@ -40,7 +40,7 @@ const TaskWorkerPrompt = "You are a worker started by Agent Messenger for one ta
 
 // TaskTestPrompt is the first message in the messenger-only profile, which
 // has no other tools.
-const TaskTestPrompt = "Agent Messenger test run. Use ONLY the messenger_task tools: call read_task, then exactly one of report, ask or ask_owner, then stop."
+const TaskTestPrompt = "Kotel test run. Use ONLY the messenger_task tools: call read_task, then exactly one of report, ask or ask_owner, then stop."
 
 func taskPrompt(profile string) string {
 	if profile == ProfileMessengerOnly {
@@ -118,7 +118,7 @@ func claudeTaskArgs(s TaskRunSpec) ([]string, error) {
 			"--settings", `{"disableAllHooks":true}`, "--disable-slash-commands", "--no-chrome", "--permission-mode", "dontAsk")
 	}
 	// The worker profile keeps the project's settings, permissions and tools;
-	// only the Messenger tools are pre-approved. File edits are accepted
+	// only the Kotel tools are pre-approved. File edits are accepted
 	// (D-028): a headless run cannot ask, and Codex workers may write to the
 	// project folder too. Shell commands still follow the project's rules.
 	if s.Profile == ProfileWorker {
@@ -411,7 +411,7 @@ func toolSummary(input map[string]any) string {
 }
 
 // TaskFeedEntries turns one event line into window items. Calls of the
-// Messenger worker tools are left out: the report and questions are shown
+// Kotel worker tools are left out: the report and questions are shown
 // from their verified records instead.
 func TaskFeedEntries(provider string, line []byte) []FeedEntry {
 	var e map[string]any

@@ -335,7 +335,7 @@ func showGTKWindow(ctx context.Context, home string, page windowPage) bool {
 	g.setIconName("agent-messenger")
 	win := g.windowNew(gtkWindowToplevel)
 	gtkState.window = win
-	g.setTitle(win, "Agent Messenger")
+	g.setTitle(win, "Kotel")
 	g.setDefaultSize(win, 1280, 820)
 	g.setPosition(win, gtkWinPosCenter)
 	removeGTKTitleBar(g, win)
@@ -385,7 +385,7 @@ func addGTKTray(g *gtkAPI) {
 	if icon == 0 {
 		return
 	}
-	g.statusTooltip(icon, "Agent Messenger")
+	g.statusTooltip(icon, "Kotel")
 	g.signalConnect(icon, "activate", gtkState.activate, 0, 0, 0)
 	g.signalConnect(icon, "popup-menu", gtkState.popup, 0, 0, 0)
 	menu := g.menuNew()

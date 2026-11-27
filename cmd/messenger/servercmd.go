@@ -117,7 +117,7 @@ func runServerCommand(root string, args []string, out io.Writer) error {
 		fmt.Fprintln(out)
 		fmt.Fprintln(out, code.Code)
 		fmt.Fprintln(out)
-		fmt.Fprintln(out, "На компьютере: окно Messenger → «Сервер» → «Подключиться», вставьте код целиком.")
+		fmt.Fprintln(out, "На компьютере: окно Kotel → «Сервер» → «Подключиться», вставьте код целиком.")
 		return nil
 	case "status":
 		if len(args) != 1 {
@@ -188,7 +188,7 @@ func runServerService(root string) error {
 	recordProgram(root)
 	err := supervisor.RunWithOptions(ctx, root, supervisor.DisabledLauncher{}, supervisor.RunOptions{StartPaused: true, ProjectStorage: true, StartUpdate: serviceUpdateStarter(root), FindUpdate: autoUpdateFinder()})
 	if errors.Is(err, platform.ErrAlreadyRunning) {
-		return errors.New("клиент Messenger уже запущен у этого пользователя; остановите его командой shutdown с его --root и повторите")
+		return errors.New("клиент Kotel уже запущен у этого пользователя; остановите его командой shutdown с его --root и повторите")
 	}
 	return err
 }
@@ -244,7 +244,7 @@ func serverRaw(root, action string, payload map[string]any) (json.RawMessage, er
 		if ctx.Err() != nil {
 			return nil, errors.New("клиент не ответил вовремя; результат неизвестен. Проверьте server status, прежде чем повторять")
 		}
-		return nil, fmt.Errorf("клиент Messenger не запущен или не отвечает (%v). На сервере: systemctl status agent-messenger", err)
+		return nil, fmt.Errorf("клиент Kotel не запущен или не отвечает (%v). На сервере: systemctl status agent-messenger", err)
 	}
 	if !response.OK {
 		return nil, errors.New(response.Error)

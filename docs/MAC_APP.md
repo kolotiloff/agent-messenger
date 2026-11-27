@@ -6,7 +6,7 @@ The native shell for Mac: AppKit, the system WKWebView and the embedded Go clien
 
 Follow the [Mac download and first-open steps](DOWNLOAD.md#mac) on an Apple Silicon Mac running macOS 15 or later. The app is ad-hoc signed and awaits Developer ID signing and notarization.
 
-Later versions are checked in the background. When a release is available, the update arrow appears next to this computer's version. Press it to open the Messenger update dialog. The manual check is in **Agent Messenger → Проверить обновления…**.
+Later versions are checked in the background. When a release is available, the update arrow appears next to this computer's version. Press it to open the Kotel update dialog. The manual check is in **Kotel → Проверить обновления…**.
 
 On opening, the shell finds the previous database via the existing protective registry, or uses the normal user directory when there are no reservations. Several different directories, a corrupted registry or a missing saved database lead to a refusal. Reservations are not deleted or restored automatically. If the running client uses a different directory without recorded reservations, choose it via the menu «Файл → Выбрать каталог данных…»; there is no search for a "last session".
 
@@ -14,7 +14,7 @@ While the window connects to its client (at every start and after an update) it 
 
 The application connects to an already running client. If there is none, it starts one background client, which runs tasks at once (D-029). The global lock protects this path too. The window itself does not invoke a CLI and does not sign in on the user's behalf.
 
-The red button hides the window in the macOS menu bar. Reopen it from the Messenger icon or by opening the app again. Cmd+Q closes the shell and its local HTTP process. The background client and its tasks keep running. The UI process lives while the inherited stdin channel is open; if the shell crashes, EOF closes its HTTP server.
+The red button hides the window in the macOS menu bar. Reopen it from the Kotel icon or by opening the app again. Cmd+Q closes the shell and its local HTTP process. The background client and its tasks keep running. The UI process lives while the inherited stdin channel is open; if the shell crashes, EOF closes its HTTP server.
 
 ## Interface boundaries
 
@@ -46,7 +46,7 @@ An automated test on a separate HOME verifies launching without models, two UIs 
 
 The owner uses the app daily on a Mac; CI builds the bundle on every pull request. There are no real models in the tests.
 
-Foundations of the shell: [NSApplication](https://developer.apple.com/documentation/appkit/nsapplication), [WKWebView](https://developer.apple.com/documentation/webkit/wkwebview). The Messenger core remains in Go; Swift is only the macOS platform shell.
+Foundations of the shell: [NSApplication](https://developer.apple.com/documentation/appkit/nsapplication), [WKWebView](https://developer.apple.com/documentation/webkit/wkwebview). The Kotel core remains in Go; Swift is only the macOS platform shell.
 
 ## Updates from the window
 

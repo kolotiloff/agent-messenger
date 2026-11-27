@@ -99,7 +99,7 @@ try {
  $folder="` + winFolders + `"
  if ($amCLI -match '\\npm\\|node_modules' -and $npm) {Write-Host ('Будет выполнено: npm uninstall -g '+$npm)}
  else {Write-Host ('Будет удалён файл: '+$amCLI); if ($folder -and (Test-Path -LiteralPath $folder)) {Write-Host ('и папка версий: '+$folder)}}
- Write-Host 'Вход в агент, его настройки и настройки Messenger останутся.'
+ Write-Host 'Вход в агент, его настройки и настройки Kotel останутся.'
  $a=Read-Host 'Удалить? (y/N)'
  if ($a -ne 'y' -and $a -ne 'Y' -and $a -ne 'д' -and $a -ne 'Д') {Write-Host 'Отменено, ничего не удалено.'; return}
  if ($amCLI -match '\\npm\\|node_modules' -and $npm) {& npm uninstall -g $npm; if ($LASTEXITCODE -ne 0) {throw 'npm uninstall failed'}}
@@ -107,7 +107,7 @@ try {
   Remove-Item -LiteralPath $amCLI -Force
   if ($folder -and (Test-Path -LiteralPath $folder)) {Remove-Item -LiteralPath $folder -Recurse -Force}
  }
- Write-Host 'Готово: CLI удалён. Вернитесь в Messenger.'
+ Write-Host 'Готово: CLI удалён. Вернитесь в Kotel.'
 } catch { Write-Host ('Не удалось удалить: '+$_) }
 `
 		_ = dir
@@ -156,7 +156,7 @@ case "$am_how" in
   if [ "$am_real" != "$am_cli" ]; then printf 'и файл, на который он ссылается: %s\n' "$am_real"; fi
   if [ -n "$am_folder" ] && [ -d "$am_folder" ]; then printf 'и папка версий: %s\n' "$am_folder"; fi ;;
 esac
-printf 'Вход в агент, его настройки и настройки Messenger останутся.\n'
+printf 'Вход в агент, его настройки и настройки Kotel останутся.\n'
 printf 'Удалить? (y/N) '
 read am_answer
 case "$am_answer" in y|Y|д|Д) ;; *) printf 'Отменено, ничего не удалено.\n'; exit 0;; esac
@@ -168,7 +168,7 @@ case "$am_how" in
   case "$am_real" in "$HOME"/*) if [ "$am_real" != "$am_cli" ]; then rm -f "$am_real"; fi;; esac
   if [ -n "$am_folder" ] && [ -d "$am_folder" ]; then rm -rf "$am_folder"; fi ;;
 esac
-printf '\nГотово: CLI удалён. Вернитесь в Messenger.\n'
+printf '\nГотово: CLI удалён. Вернитесь в Kotel.\n'
 `
 	return script, []string{"/bin/sh", filepath.Join(dir, "uninstall.sh")}
 }

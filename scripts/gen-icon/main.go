@@ -1,15 +1,15 @@
-// Command gen-icon draws the program's icon (the same shapes as
-// desktop/macos/icon.swift and internal/localui/assets/icon.svg) and writes
+// Command gen-icon scales the shared Kotel artwork and writes
 // it as Windows program resources: cmd/messenger/rsrc_windows_<arch>.syso,
 // which the Go linker puts into messenger.exe. Explorer, the taskbar and the
 // window then show it. Only the standard library is used; edges are
-// smoothed by sampling each pixel 4×4 times.
+// smoothed by averaging source pixels.
 //
 //	go run ./scripts/gen-icon cmd/messenger
 package main
 
 import (
 	"bytes"
+	_ "embed"
 	"encoding/binary"
 	"fmt"
 	"image"
@@ -19,80 +19,42 @@ import (
 	"path/filepath"
 )
 
-type shape struct {
-	inside func(x, y float64) bool
-	c      color.NRGBA
-}
+// The master is a raster export of internal/localui/assets/icon.svg.
+//
+//go:embed kotel.png
+var masterPNG []byte
 
-func roundRect(x, y, w, h, r float64) func(float64, float64) bool {
-	return func(px, py float64) bool {
-		if px < x || px > x+w || py < y || py > y+h {
-			return false
-		}
-		cx := min(max(px, x+r), x+w-r)
-		cy := min(max(py, y+r), y+h-r)
-		dx, dy := px-cx, py-cy
-		return dx*dx+dy*dy <= r*r
+var master = func() image.Image {
+	icon, err := png.Decode(bytes.NewReader(masterPNG))
+	if err != nil {
+		panic(err)
 	}
-}
+	return icon
+}()
 
-// tail is the speech bubble's tail: (158,362), (236,362), (158,426).
-func tail(px, py float64) bool {
-	if px < 158 || py < 362 || py > 426 {
-		return false
-	}
-	return px <= 236-(py-362)*78/64
-}
-
-func circle(cx, cy, r float64) func(float64, float64) bool {
-	return func(px, py float64) bool {
-		dx, dy := px-cx, py-cy
-		return dx*dx+dy*dy <= r*r
-	}
-}
-
-var (
-	yellow = color.NRGBA{0xFF, 0xC5, 0x31, 0xFF}
-	ink    = color.NRGBA{0x1B, 0x1B, 0x2F, 0xFF}
-	white  = color.NRGBA{0xFF, 0xFF, 0xFF, 0xFF}
-)
-
-// shapes are drawn in order; a later one covers an earlier one.
-var shapes = []shape{
-	{roundRect(24, 24, 464, 464, 104), yellow},
-	{roundRect(80, 120, 352, 242, 56), ink},
-	{tail, ink},
-	{circle(200, 236, 34), white},
-	{circle(312, 236, 34), white},
-	{circle(210, 244, 14), ink},
-	{circle(322, 244, 14), ink},
-}
-
+// Average premultiplied samples inside each destination pixel. Transparent
+// corners stay transparent on both the Windows taskbar and the Start menu.
 func draw(size int) *image.NRGBA {
 	img := image.NewNRGBA(image.Rect(0, 0, size, size))
-	const n = 4
-	scale := 512 / float64(size)
+	side := master.Bounds().Dx()
 	for y := 0; y < size; y++ {
 		for x := 0; x < size; x++ {
-			var r, g, b, a float64
-			for sy := 0; sy < n; sy++ {
-				for sx := 0; sx < n; sx++ {
-					px := (float64(x) + (float64(sx)+0.5)/n) * scale
-					py := (float64(y) + (float64(sy)+0.5)/n) * scale
-					for i := len(shapes) - 1; i >= 0; i-- {
-						if shapes[i].inside(px, py) {
-							c := shapes[i].c
-							r, g, b, a = r+float64(c.R), g+float64(c.G), b+float64(c.B), a+255
-							break
-						}
-					}
+			x0, x1 := x*side/size, (x+1)*side/size
+			y0, y1 := y*side/size, (y+1)*side/size
+			count := uint64((x1 - x0) * (y1 - y0))
+			var red, green, blue, alpha uint64
+			for sy := y0; sy < y1; sy++ {
+				for sx := x0; sx < x1; sx++ {
+					r, g, b, a := master.At(sx, sy).RGBA()
+					red += uint64(r)
+					green += uint64(g)
+					blue += uint64(b)
+					alpha += uint64(a)
 				}
 			}
-			if a == 0 {
-				continue
+			if alpha != 0 {
+				img.SetNRGBA(x, y, color.NRGBA{R: uint8(red * 255 / alpha), G: uint8(green * 255 / alpha), B: uint8(blue * 255 / alpha), A: uint8(alpha / count / 257)})
 			}
-			k := a / 255
-			img.SetNRGBA(x, y, color.NRGBA{uint8(r / k), uint8(g / k), uint8(b / k), uint8(a / (n * n))})
 		}
 	}
 	return img

@@ -66,7 +66,7 @@ type UpdateStarter func(program string, job RemoteUpdate) error
 
 // Refusals of a request to update this computer.
 const (
-	updateRefusedMac         = "На Mac обновление ставится кнопкой в самой программе: откройте Messenger на этом компьютере и нажмите «Обновиться»."
+	updateRefusedMac         = "На Mac обновление ставится кнопкой в самой программе: откройте Kotel на этом компьютере и нажмите «Обновиться»."
 	updateRefusedOS          = "Обновление по сети не поддерживается на этой системе."
 	updateRefusedUnsupported = "Этот фоновый клиент не поддерживает обновление по сети: откройте окно программы на том компьютере и повторите."
 	updateRefusedProgram     = "Откройте окно программы на том компьютере один раз и повторите."

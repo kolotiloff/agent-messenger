@@ -7,6 +7,8 @@ import (
 	"io"
 )
 
+func refreshWindowsRegistration() {}
+
 func selfInstall(io.Writer) bool { return false }
 
 func runUninstall(string, io.Writer) error {

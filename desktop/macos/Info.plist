@@ -2,8 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>CFBundleIdentifier</key><string>io.github.kolotiloff.agent-messenger</string>
-<key>CFBundleName</key><string>Agent Messenger</string>
-<key>CFBundleDisplayName</key><string>Agent Messenger</string>
+<key>CFBundleName</key><string>Kotel</string>
+<key>CFBundleDisplayName</key><string>Kotel</string>
 <key>CFBundleExecutable</key><string>AgentMessenger</string>
 <key>CFBundleDevelopmentRegion</key><string>ru</string>
 <key>CFBundleLocalizations</key><array><string>ru</string></array>

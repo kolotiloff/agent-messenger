@@ -16,11 +16,10 @@ fi
 sh -n scripts/install-server.sh
 "$go_bin" mod verify
 "$go_bin" vet ./...
-# The timeout catches a hung test. With -race on a shared CI machine the core
-# package already takes 520-600 seconds and supervisor about 480, so the
-# budget is fifteen minutes per package.
+# Older Go race runners need a longer budget for the complete SQLite suite.
+test_timeout="${GO_TEST_TIMEOUT:-15m}"
 case "$("$go_bin" env GOOS)" in
-  darwin) CGO_ENABLED=1 "$go_bin" test -race -count=1 -timeout=15m -ldflags=-linkmode=external ./... ;;
-  linux) CGO_ENABLED=1 "$go_bin" test -race -count=1 -timeout=15m ./... ;;
+  darwin) CGO_ENABLED=1 "$go_bin" test -race -count=1 -timeout="$test_timeout" -ldflags=-linkmode=external ./... ;;
+  linux) CGO_ENABLED=1 "$go_bin" test -race -count=1 -timeout="$test_timeout" ./... ;;
   *) printf 'Native race checks are currently accepted only on macOS/Linux.\n' >&2; exit 1 ;;
 esac

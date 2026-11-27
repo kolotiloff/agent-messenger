@@ -108,7 +108,7 @@ func waitForProjectStorage(ctx context.Context, root string) error {
 		response, err := control.CallContext(statusCtx, root, control.Request{Cmd: "status"})
 		cancel()
 		if err != nil || !response.OK || response.Status == nil {
-			return errors.New("Не удалось открыть базы Messenger. Проверьте журнал запуска.")
+			return errors.New("Не удалось открыть базы Kotel. Проверьте журнал запуска.")
 		}
 		if response.Status.ProjectStorage != "preparing" {
 			return nil
@@ -195,7 +195,7 @@ func restartClientWithNotice(ctx context.Context, root string, start func() erro
 		}
 		if !strings.Contains(err.Error(), platform.ErrAlreadyRunning.Error()) || i >= 20 || ctx.Err() != nil {
 			// The detail may name local paths; the window shows only the outcome.
-			return errors.New("старый клиент остановлен, а новый не запустился. Закройте и снова откройте Messenger: окно запустит клиент само")
+			return errors.New("старый клиент остановлен, а новый не запустился. Закройте и снова откройте Kotel: окно запустит клиент само")
 		}
 		sleep(ctx, step/2)
 	}

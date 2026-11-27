@@ -1,4 +1,4 @@
-// Browser check with fictional HTTP responses only (T-265). No Messenger
+// Browser check with fictional HTTP responses only (T-265). No Kotel
 // process, model or user profile is opened. Switching projects keeps the
 // previous conversation until the next one is ready, and an
 // empty project on a computer that has seen tasks says that it has none.
@@ -29,11 +29,18 @@ const shots = process.env.SCREENSHOT_DIR;
         Server: [],
       };
       let feedDelay = 0, windowDelay = 0;
+      let firstRun = false, folder = '', modelReady = false;
       const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
       await context.route('**/*', async route => {
         const url = new URL(route.request().url());
-        if (route.request().method() === 'POST') return route.fulfill({json: {ok: true}});
+        if (route.request().method() === 'POST') {
+          if (firstRun && url.pathname === '/api/project-folder') folder = route.request().postDataJSON().folder;
+          return route.fulfill({json: {ok: true}});
+        }
         if (url.pathname === '/api/window') {
+          if (firstRun) return route.fulfill({json: {projects: [{name: 'Frame', folder}], project: 'Frame', folder,
+            agents: modelReady ? [{agent: 'codex', models: ['gpt-6.2-sol[effort=medium]']}] : [],
+            tasks: [], shared: [], computer_name: 'Fixture Mac', tasks_enabled: true}});
           const name = url.searchParams.get('project') || 'Frame';
           if (windowDelay) await wait(windowDelay);
           return route.fulfill({json: {projects: Object.keys(tasks).map(name => ({name})), project: name,
@@ -63,7 +70,10 @@ const shots = process.env.SCREENSHOT_DIR;
         if (url.pathname === '/blank') return route.fulfill({body: '', contentType: 'text/html'});
         const filename = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
         if (!['index.html', 'app.js', 'app.css', 'i18n.js'].includes(filename)) return route.fulfill({status: 404, body: ''});
-        await route.fulfill({body: await fs.readFile(path.join(assets, filename)), contentType:
+        const source = await fs.readFile(path.join(assets, filename), 'utf8');
+        const body = firstRun && filename === 'index.html'
+          ? source.replace('id="am-concept"', 'id="am-concept" class="am-task-sidebar-preview"') : source;
+        await route.fulfill({body, contentType:
           filename.endsWith('.js') ? 'text/javascript' : filename.endsWith('.css') ? 'text/css' : 'text/html'});
       });
       // Record every welcome that is ever attached to the conversation pane.
@@ -116,8 +126,40 @@ const shots = process.env.SCREENSHOT_DIR;
       await page.evaluate(() => localStorage.clear());
       await page.goto('http://messenger.test/#fictional');
       errors.splice(before, Infinity, ...errors.slice(before).filter(message => !/\/api\/[^ ]* due to access control checks\.$/.test(message)));
-      await page.locator('#thread .am-welcome').getByRole('heading', {name: 'Добро пожаловать в Agent Messenger', exact: true}).waitFor();
+      await page.locator('#thread .am-welcome').getByRole('heading', {name: 'Добро пожаловать в Kotel', exact: true}).waitFor();
       if (shots && scheme === 'light') await page.screenshot({path: path.join(shots, `first-run-welcome-${scheme}.png`)});
+
+      // A new desktop window guides setup, then opens the real task composer.
+      firstRun = true;
+      await page.reload();
+      const welcome = page.locator('#thread .am-welcome');
+      await welcome.getByRole('heading', {name: 'Добро пожаловать в Kotel', exact: true}).waitFor();
+      const setup = page.locator('#settings-dialog');
+      const projectStep = welcome.locator('.am-step').filter({hasText: 'Укажите папку проекта на этом компьютере.'});
+      await projectStep.getByRole('button', {name: 'Указать папку', exact: true}).click();
+      await setup.locator('[data-screen=project]').waitFor();
+      const projectFolder = setup.locator('#project-page-folder');
+      await projectFolder.fill('/fictional/Frame');
+      const saving = page.waitForResponse(response => response.url().endsWith('/api/project-folder'));
+      await projectFolder.press('Enter');
+      await saving;
+      await setup.locator('#settings-close').click();
+      await welcome.getByText('Frame', {exact: true}).waitFor();
+      await welcome.getByRole('button', {name: 'Настроить подключение', exact: true}).click();
+      await setup.locator('[data-screen=server]').waitFor();
+      await setup.locator('#settings-close').click();
+      await page.setViewportSize({width: 600, height: 720});
+      await welcome.getByRole('button', {name: 'Настроить агентов', exact: true}).click();
+      await setup.locator('[data-screen=agents]').waitFor();
+      modelReady = true;
+      await page.evaluate(() => window.messengerRefresh());
+      assert.equal(await page.locator('#task-draft').isVisible(), false, 'the settings stay open while setup changes');
+      await setup.locator('#settings-close').click();
+      await page.locator('#task-draft').waitFor();
+      await page.locator('#task-head h3').getByText('Новая задача', {exact: true}).waitFor();
+      assert.equal(await welcome.count(), 0);
+      await page.locator('#task-draft-text').fill('Первая задача');
+      assert.equal(await page.locator('#task-draft-send').isEnabled(), true);
 
       assert.deepEqual(errors, []);
       await context.close();

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Agent Messenger server for a Linux computer without a screen, such as a VPS
+# Kotel server for a Linux computer without a screen, such as a VPS
 # (T-036, D-138). One command installs or updates it:
 #
 #   curl -fsSL https://github.com/kolotiloff/agent-messenger/releases/latest/download/install-server.sh | sh
@@ -42,13 +42,13 @@ else
   BASE="https://github.com/$REPO/releases/latest/download"
 fi
 
-# Another Messenger client of this user (started with `start`) holds the
+# Another Kotel client of this user (started with `start`) holds the
 # client lock; the service would not start next to it. It is not stopped
 # here: its owner decides.
 if ! systemctl is-active --quiet agent-messenger 2>/dev/null; then
   other=$(pgrep -af '_background-serve|messenger.* serve' 2>/dev/null | grep -v ' server run' || true)
   if [ -n "$other" ]; then
-    say "На этом компьютере уже работает другой клиент Messenger:"
+    say "На этом компьютере уже работает другой клиент Kotel:"
     say "$other"
     say "Остановите его (данные сохранятся), подставив его --root, и запустите установку снова:"
     say "  ./messenger --root КАТАЛОГ shutdown"
@@ -71,14 +71,17 @@ mv -f "$tmp/$ASSET" "$BIN"
 
 cat > "$CMD" <<EOF
 #!/bin/sh
-# Agent Messenger server commands: invite, status, enable, disable, revoke.
+# Kotel server commands: invite, status, enable, disable, revoke.
 exec $BIN --root $DATA server "\$@"
 EOF
 chmod 755 "$CMD"
+if [ ! -e /usr/local/bin/kotel-server ] && [ ! -L /usr/local/bin/kotel-server ]; then
+  ln -s agent-messenger-server /usr/local/bin/kotel-server
+fi
 
 cat > "$UNIT" <<EOF
 [Unit]
-Description=Agent Messenger server
+Description=Kotel server
 After=network-online.target
 Wants=network-online.target
 
