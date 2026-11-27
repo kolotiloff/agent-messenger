@@ -17,12 +17,12 @@ Scale: 4, 8, 12, 16, 24 (`--am-space-1/2/3/4/6`). Pick the gap by meaning:
 | Surface | Vertical inset | Horizontal inset |
 |---|---:|---:|
 | Composer shell | 4 px | 4 px |
-| Computer headings and active task rows | 4 px | 12 px, with a 36 px leading inset on active tasks to align the titles |
+| Computer headings, active task rows, statistics task links and efficiency model rows | 4 px | 12 px, with a 36 px leading inset on active tasks to align the titles |
 | Archive rows and compact notices | 8 px | 12 px |
 | Outgoing message bubbles | 12 px | 16 px |
 | Settings cards | 16 px | 16 px |
 
-The General settings card uses the padding of its inner rows directly. Dropdown menus have a 4 px inset and 32 px options with 4 px vertical and 12 px horizontal padding. Only the hovered or keyboard-focused option gets a background, and a check marks the selected value. Panes use `--am-pane-inset` (16 px, or 12 px in a narrow window).
+Settings section headings sit above the first card with the section gap. Computer and statistics rows use the quiet hover fill. Dropdown menus have a 4 px inset and 32 px options with 4 px vertical and 12 px horizontal padding. Only the hovered or keyboard-focused option gets a background, and a check marks the selected value. Panes use `--am-pane-inset` (16 px, or 12 px in a narrow window).
 
 Buttons that belong together go in one container: `.am-actions` (a row) or `.am-actions-stack` (a column). Do not space them with margins.
 
@@ -59,6 +59,6 @@ Review interface changes in a running local preview of the real window assets. S
 
 Check the tasks, agents and server tabs, a dialog and a menu in both themes at 1100 and 600 px. Measure button and field heights against the 32, 28 and 24 px control tokens. Capture screenshots when needed for a verification report.
 
-Dialogs that ask for a decision (`.am-alert`) use 16 px padding, the standard 16 px section heading, muted text, the leaving or destructive choice on the left and the main action on the right. A destructive button (`.am-danger`) has red text on a soft red fill.
+Standard dialogs share the 44 px header with 4 px vertical and 16 px horizontal padding. Dialogs that ask for a decision (`.am-alert`) use 16 px padding, the standard 16 px section heading, muted text, the leaving or destructive choice on the left and the main action on the right. A destructive button (`.am-danger`) has red text on a soft red fill.
 
 Text in a control is centred by eye, not by the line box: system fonts leave more room below the text than above it, so buttons, tabs, select fields and inputs get `--am-text-nudge` (4) as their top padding and none at the bottom. Measured: 11 px above the capitals and 11 below in a 32 px button.

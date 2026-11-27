@@ -482,11 +482,21 @@ if (require.main === module) (async()=>{
         const card=screen.querySelector('.am-card');
         return [getComputedStyle(screen).paddingTop,getComputedStyle(screen).paddingLeft,
           getComputedStyle(card).paddingTop,getComputedStyle(card).paddingLeft];
-      }),['16px','16px','0px','16px']);
+      }),['16px','16px','16px','16px']);
       for(const row of await general.locator('.am-theme-setting:has(.am-select-trigger)').all()){
         await expectCentered(row.locator('label'),row.locator('.am-select-trigger'));
       }
       const settingsControlWidth=(await general.locator('.am-select-trigger').first().boundingBox()).width;
+      const topLeft=async locator=>{
+        const {x,y}=await locator.boundingBox();
+        return [x,y];
+      };
+      const generalTitle=await topLeft(general.getByRole('heading',{name:'Общие настройки'}));
+      const generalField=await topLeft(general.locator('.am-select-trigger').first());
+      assert.equal(await general.locator('.am-card h3').count(),0);
+      const headerHeight=selector=>draftPage.locator(selector).evaluate(node=>node.getBoundingClientRect().height);
+      const dialogHeaderHeight=await headerHeight('#settings-dialog .am-dialog-header');
+      assert.equal(dialogHeaderHeight,44);
       assert.equal(await settingsDialog.evaluate(node=>node.matches(':modal')),true);
       assert.equal(await settingsDialog.locator('.am-sidebar,#project-select').count(),0);
       assert.equal(await draftPage.locator('[data-screen=tasks]').isVisible(),true);
@@ -500,6 +510,11 @@ if (require.main === module) (async()=>{
           return [style.paddingBlockStart,style.paddingInlineStart];
         }),['16px','16px'],section);
         const height=selector=>screen.locator(selector).evaluate(node=>node.getBoundingClientRect().height);
+        const firstHeading={server:'#computer-title',project:'#project-page-title',agents:'#agents-settings-title'}[section];
+        const firstControl={server:'#computer-name',project:'#project-page-name',agents:'#agents-computer + .am-select-trigger'}[section];
+        assert.deepEqual(await topLeft(screen.locator(firstHeading)),generalTitle,section);
+        assert(await screen.locator(firstHeading).evaluate(node=>!node.closest('.am-card')),section);
+        assert.deepEqual(await topLeft(screen.locator(firstControl)),generalField,section);
         if(section==='server'){
           for(const selector of ['#computer-name','#host-scope + .am-select-trigger','#host-port','#host-enable']){
             assert.equal(await height(selector),28,selector);
@@ -516,6 +531,7 @@ if (require.main === module) (async()=>{
           for(const selector of ['#project-page-name','#project-page-folder','#project-page-pick']){
             assert.equal(await height(selector),28,selector);
           }
+          await expectCentered(screen.locator('[for=project-page-name]'),screen.locator('#project-page-name'));
           const rows=screen.locator('#coord-box .am-step:has(> button)');
           assert.equal(await rows.count(),3);
           for(const row of await rows.all()){
@@ -527,10 +543,15 @@ if (require.main === module) (async()=>{
       await draftPage.keyboard.press('Escape');
       await settingsDialog.waitFor({state:'hidden'});
       await draftPage.waitForFunction(()=>document.activeElement?.id==='settings-open');
+      await feedback.click();
+      await draftPage.locator('#fb-dialog').waitFor();
+      assert.equal(await headerHeight('#fb-dialog .am-dialog-header'),dialogHeaderHeight);
+      await draftPage.locator('#fb-close').click();
       const statisticsOpen=draftPage.getByRole('button',{name:'Статистика',exact:true});
       const standaloneStats=draftPage.getByRole('dialog',{name:'Статистика',exact:true});
       await statisticsOpen.click();
       await standaloneStats.waitFor();
+      assert.equal(await headerHeight('#stats-dialog .am-dialog-header'),dialogHeaderHeight);
       assert(await standaloneStats.evaluate(node=>node.matches(':modal')));
       assert(await standaloneStats.evaluate(node=>{
         const {width,height}=node.getBoundingClientRect();
@@ -599,10 +620,7 @@ if (require.main === module) (async()=>{
       const agentSettings=draftPage.locator('#agent-setup');
       await settingsDialog.locator('.am-agent-card[data-provider=codex]').getByRole('button',{name:'Настройки',exact:true}).click();
       await agentSettings.waitFor();
-      const headerHeight=selector=>draftPage.locator(selector).evaluate(node=>node.getBoundingClientRect().height);
-      const agentHeaderHeight=await headerHeight('#agent-setup .am-settings-header');
-      assert.equal(agentHeaderHeight,await headerHeight('#settings-dialog .am-settings-header'));
-      assert.equal(agentHeaderHeight,44);
+      assert.equal(await headerHeight('#agent-setup .am-dialog-header'),dialogHeaderHeight);
       assert(await agentSettings.locator('.am-agent-settings-rows').evaluate(rows=>
         Array.from(rows.children).every(row=>{
           const [label,controls]=row.children;
@@ -613,7 +631,7 @@ if (require.main === module) (async()=>{
       await agentSettings.getByRole('button',{name:'Изменить модели'}).click();
       const modelPicker=draftPage.locator('#agent-model-picker');
       await modelPicker.waitFor();
-      assert.equal(await headerHeight('#agent-model-picker .am-settings-header'),agentHeaderHeight);
+      assert.equal(await headerHeight('#agent-model-picker .am-dialog-header'),dialogHeaderHeight);
       const search=modelPicker.getByRole('searchbox',{name:'Поиск моделей',exact:true});
       assert(await search.evaluate(node=>{
         const style=getComputedStyle(node);
@@ -626,6 +644,10 @@ if (require.main === module) (async()=>{
       await search.fill('учебная-модель');
       await modelPicker.getByRole('button',{name:'Добавить свой вариант',exact:true}).waitFor();
       await search.clear();
+      await draftPage.mouse.move(0,0);
+      await modelPicker.locator('#agent-model-save').evaluate(async button=>{
+        await Promise.all(button.getAnimations().map(animation=>animation.finished));
+      });
       assert.deepEqual(await controlStyle(modelPicker.locator('#agent-model-save')),sidebarControl);
       await modelPicker.getByRole('button',{name:'Отмена',exact:true}).click();
       await agentSettings.getByRole('button',{name:'Закрыть',exact:true}).click();
@@ -1167,7 +1189,18 @@ if (require.main === module) (async()=>{
     await page.locator('[data-tab=stats]').click();
     await select(page,'stats-project','Выбранные проекты');
     await total(page,'3579');
-    await page.locator('#stats-top tr').filter({hasText:'Экспорт отчёта'}).click();
+    const statsTask=page.locator('#stats-top tr').filter({hasText:'Экспорт отчёта'});
+    const taskButton=statsTask.locator('.am-stats-task-text');
+    await taskButton.hover();
+    assert.deepEqual(await taskButton.evaluate(button=>{
+      const box=button.getBoundingClientRect();
+      const title=button.firstElementChild.getBoundingClientRect();
+      const detail=button.lastElementChild.getBoundingClientRect();
+      const header=button.closest('table').tHead.rows[0].cells[1];
+      const titleColumnStart=header.getBoundingClientRect().left+parseFloat(getComputedStyle(header).paddingLeft);
+      return [title.left-box.left,box.right-Math.max(title.right,detail.right),title.top-box.top,box.bottom-detail.bottom,title.left-titleColumnStart];
+    }),[12,12,4,4,0]);
+    await statsTask.click();
     await chat(page,'tools').waitFor();
     await cells(page,'local').nth(0).press('Enter');
     await chat(page,'game').waitFor();

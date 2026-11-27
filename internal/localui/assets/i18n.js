@@ -121,6 +121,8 @@
   'Для всех агентов этого компьютера. Агент выполняет любые команды без подтверждения и без песочницы, с доступом к сети, и может менять файлы за пределами папки проекта.':'For all agents of this computer. The agent runs any command without confirmation and without a sandbox, with network access, and may change files outside the project folder.',
   'Проекта пока нет. Создайте его в списке проектов слева.':'No project yet. Create one in the project list on the left.',
   'Настройки проекта':'Project settings',
+  'Общие настройки':'General settings',
+  'Настройки агентов':'Agent settings',
   'Название':'Name',
   'Папка проекта':'Project folder',
   'Выбрать':'Choose',

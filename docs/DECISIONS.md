@@ -871,3 +871,7 @@ Show the active model and a neutral ring that opens the token popover below the 
 ## D-237 — Simplify model rows and align the network name (T-336)
 
 Separate model choices with their row padding and keep the model search and list scrolling independent. Place the network-name control at the end of its label row using the 12 em width shared with language and theme. Cap it at half the available row so it stays beside the label on smaller windows.
+
+## D-238 — Align settings openings and inset statistics highlights (T-336)
+
+Place the section headings above their settings cards with a common gap. Place the first control opposite its label on the same baseline across sections. Reserve the same scrollbar space on every settings page so the control's right edge stays fixed. Keep the project name's explanation below the inline field and leave the path control full width. Statistics task links and efficiency model buttons share the computer row's neutral hover fill and 4 by 12 px insets. Keep the task text aligned to its column heading. Use the compact dialog header for Feedback and New Project as well as Settings, Statistics, agent settings and model choices.

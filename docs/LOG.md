@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-336 statistics task links)
+
+Matched Statistics task and efficiency highlights to computer rows. Aligned the headings above cards and the first fields across settings sections. Unified the standard dialog headers, including Feedback and New Project. Verified the layouts and navigation in Chromium and WebKit. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).
+
 ## 2026-11-27 — Codex (T-336 settings rows)
 
 Removed model-row dividers and moved the network-name field beside its label at the General selector width. Checked alignment and model search in the live preview in Chromium and WebKit. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).

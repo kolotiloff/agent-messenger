@@ -4751,7 +4751,9 @@
     const preferences=previousBody.querySelector('.am-prefs');
     const panel=el('div',undefined,'am-settings');
     const card=el('div',undefined,'am-card');
-    card.append(preferences);panel.append(card);$('settings-page').append(panel);
+    card.append(preferences);
+    panel.append(el('h3',tr('Общие настройки')),card);
+    $('settings-page').append(panel);
     const layout=el('div',undefined,'am-settings-layout');
     const sections=el('nav',undefined,'am-settings-nav');
     const views=el('div',undefined,'am-settings-views');
@@ -4945,7 +4947,7 @@
       if(target.style.getPropertyValue('--am-gutter')!==value)target.style.setProperty('--am-gutter',value);
     }
   });});
-  root.querySelectorAll('.am-screen,.am-thread,.am-queue-list,.am-dialog-body,.am-machines,.am-stats-reports').forEach(element=>gutterObserver.observe(element));
+  root.querySelectorAll('.am-screen:not(.am-settings-views > .am-screen),.am-thread,.am-queue-list,.am-dialog-body,.am-machines,.am-stats-reports').forEach(element=>gutterObserver.observe(element));
   const chatBody=root.querySelector('.am-chat-body'),chatFooter=root.querySelector('.am-chat-footer');
   $('thread').addEventListener('scroll',toBottomState,{passive:true});
   $('to-bottom').addEventListener('click',()=>{const t=$('thread');t.scrollTo({top:t.scrollHeight,behavior:'smooth'});});
