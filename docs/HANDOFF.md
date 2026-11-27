@@ -8,6 +8,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+The build 117 signed draft passed four native sources on Windows and Linux. The Mac acceptance harness overlaid the bundle, retaining a removed icon. The corrected harness stages and validates the entire bundle before replacing the fixture in place. Resume the existing signed draft at 0efba5a16a5727bb9621909d9d65db263adf73ee.
+
 T-343 integrates T-339 through T-342 for Kotel 1.0.14 (build 117). New Task now has its own left-aligned row above Projects. Both sidebar filters follow the Settings width rule and stack in narrow panels. The owner confirmed the fleet has updated to the bridge. The original repository continues to serve the signed channel for this patch. T-338 tracks the final identifier migration.
 
 T-342 finishes the task window follow-up on top of T-341. The Mac caption divider now spans both sides. Projects, its filter and Add share one horizontal center with Archive and its controls. The conversation date has a fixed 12 px inset outside the scrolling history. Both header rows use the 16 px section spacing token. The archive header inherits its pane surface and has no lower divider. Its clear button sits beside the agent filter. Clearing still asks for confirmation and hides only matching completed tasks. Both author roles have an 8 px gap above their messages. Shared select buttons toggle closed on a second click. Modal opening focus goes to a heading or an appropriate input.

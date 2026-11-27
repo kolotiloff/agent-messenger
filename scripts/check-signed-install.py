@@ -133,7 +133,15 @@ finally:
     stop()
 run(install, channel, key, exe, previous, version, env=env)
 if system == "darwin":
-    exe = unpack(new_zip, dest)
+    # Sparkle installs a whole bundle. Overlaying an archive would retain
+    # resources removed in this version and invalidate the code signature.
+    staged = work / "staged"
+    staged.mkdir()
+    unpack(new_zip, staged)
+    bundle = "Agent Messenger.app"
+    (dest / bundle).rename(work / "previous.app")
+    (staged / bundle).rename(dest / bundle)
+    run("codesign", "--verify", "--deep", "--strict", dest / bundle)
 assert json.loads(run(exe, "version"))["revision"] == new_meta["revision"]
 client("start")
 try:
