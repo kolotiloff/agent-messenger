@@ -17,11 +17,11 @@ On Mac, check **About This Mac** for an Apple chip. Intel Macs do not have a bui
 
 ## Mac
 
-1. Download `Kotel-Mac.zip` and unzip it. If your browser already unpacked it, look for `Agent Messenger.app` in Downloads.
+1. Download `Kotel-Mac.zip` and unzip it. If your browser already unpacked it, look for `Kotel.app` in Downloads.
 2. Move the app to your Applications folder, for example `~/Applications`, and open it from there.
 3. If macOS says it cannot verify the developer or check the app for malicious software, dismiss the message. Open **System Settings → Privacy & Security**, scroll down to **Security**, and look for the message about Kotel and **Open Anyway** («Открыть всё равно»). It appears after you have tried opening the app. Click it for the official download and confirm in the next dialog. If it is absent, try opening the app once from its final location and return to that panel. [Apple's first-open instructions](https://support.apple.com/en-us/102445)
 
-The technical preview is ad-hoc signed and is not notarized by Apple. Data lives in `~/Library/Application Support/AgentMessenger`. Use the update arrow next to this computer's version, or choose **Kotel → Проверить обновления…** (Check for updates) in the Mac menu. [Mac app](MAC_APP.md)
+The technical preview is ad-hoc signed and is not notarized by Apple. Data lives in `~/Library/Application Support/AgentMessenger`. Use the update arrow next to this computer's version at the bottom left, or choose **Kotel → Проверить обновления…** (Check for updates) in the Mac menu. [Mac app](MAC_APP.md)
 
 ## Windows
 
@@ -65,14 +65,16 @@ curl -fsSL https://github.com/kolotiloff/agent-messenger/releases/latest/downloa
 3. Use **Sign in** on the agent card and complete the provider's sign-in. If Codex asks to trust the project folder, choose **Trust folder** on its card and confirm the exact folder in the terminal.
 4. Under **Project → MCP plugin**, check the connection for Claude Code, Codex or Cursor. Use **Connect** if needed. Open a **new local chat** in that folder, ask it to run `list_agents`, and approve Kotel's tools when prompted.
 
-For Cursor, enable the project's `messenger` connection in its MCP settings if the new chat cannot see the tools. The `messenger_task` connection is for workers. If the tools are missing, reopen the project chat after enabling the source. The coordinator needs access to local project tools. Claude Code can use background notifications while waiting. Codex and Cursor receive updates by keeping a turn active and calling `wait`.
+For Cursor, enable the project's `kotel` connection in its MCP settings if the new chat cannot see the tools. Keep any existing legacy entries while using chats with saved permissions. If the tools are missing, reopen the project chat after enabling the source. The coordinator needs access to local project tools. Claude Code can use background notifications while waiting. Codex and Cursor receive updates by keeping a turn active and calling `wait`.
 
 ## Connect more computers
 
-1. On the host, open **Server**, choose **Local network** and press **Start server**.
-2. Click **Invite a device**. On the other computer, open **Server** and paste the six-digit code into the connection card. Use a fresh invitation for each computer.
+1. On the host, open **Settings → Network → Host a server**, choose **Local network** and press **Start server**.
+2. Click **Invite a device**. On the other computer, open **Settings → Network → Join a server**, paste the six-digit code and click **Connect**. Use a fresh invitation for each computer.
 3. If two computers cannot find each other by six digits, try the long `am1:…` invitation with a server address the other computer can reach. Six-digit discovery needs UDP 47100 on the local network, and the connection itself uses the chosen TCP port (47100 by default). Check Windows Firewall on the server computer and make sure the systems are on the intended network. Guest Wi-Fi isolation can block discovery.
 4. On each worker computer, set its project folder and check **Accept tasks from other computers**.
+
+The **My network** section shows each computer’s status and version. You can request updates for Windows and Linux computers from this list.
 
 For computers in different networks, use a reachable address in **Интернет** (Internet) mode and the long invitation, or a shared VPN. A home router or a VPS firewall may need an inbound TCP rule for the server port. [Network and invitation details](BROKER.md#computers-in-different-places)
 

@@ -48,7 +48,7 @@ The window checks for new versions from the same signed channel as the Mac app e
 
 On Windows the background client always runs from `runtimes\messenger.exe` in the data folder, whatever the version (D-118). Windows Firewall remembers the permission by that path, so it asks «Разрешить доступ» once, not after every update; this matters for a computer that hosts the server and is updated from another one.
 
-A Windows or Linux computer can also be updated from another computer of the network: an update icon on its card in the left panel appears when its version is older. [Remote updates](UPDATES.md#from-another-computer-of-the-network-t-078-d-100-t-155-d-133)
+Use **Settings → Network → My network** on another computer to request an available Windows or Linux update. [Remote updates](UPDATES.md#from-another-computer-of-the-network-t-078-d-100-t-155-d-133)
 
 ## Not there yet
 

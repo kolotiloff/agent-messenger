@@ -1,4 +1,4 @@
-# Agent Messenger.app
+# Kotel.app
 
 The native shell for Mac: AppKit, the system WKWebView and the embedded Go client. No browser, Python, Node, Go or terminal is needed. It is a technical preview: the app is signed ad-hoc and not notarized.
 
@@ -22,11 +22,11 @@ The embedded WebView receives only the random private loopback address of its UI
 
 ## The window
 
-The tabs are **«Задачи» → «Агенты» → «Проект» → «Сервер» → «Статистика»**; tasks open first. The same window runs on Windows and Linux; what each tab does is in [TASK_MODEL.md](TASK_MODEL.md).
+The window opens to the current task. The left sidebar shows active work and the Archive opens on the right. The same window runs on Windows and Linux. See the [task model](TASK_MODEL.md).
 
-- The left panel lists the project and computers with their agents. Versions and update arrows are on the computer cards. Busy agents show the model and elapsed time when their task is in the selected project. The gear at the bottom changes the theme and language. The feedback icon saves remarks and optional screenshots on this computer.
-- An icon at the top right shows or hides the task list.
-- «Проект» holds the project folder and «Общие указания исполнителям», copied into every new task.
+- The left sidebar groups active tasks by computer or project and can show a flat list. Busy agents show the model and elapsed time when available. The bottom-left toolbar opens Settings, feedback and Statistics and shows this computer’s version and update arrow. The feedback form saves remarks and optional screenshots on this computer.
+- The button at the top right toggles the Archive.
+- Settings has General, Project, Agents and Network sections. Project holds the local project folder and shared worker instructions. Network shows connection settings and the computers’ versions and update controls.
 - **«Вид → Обновить задачи и статусы»** (⌘R) refreshes the window. It does not install a new version.
 
 The theme set in the window also applies to the app's system windows and is kept across launches and updates.
@@ -37,7 +37,7 @@ From verified sources on a Mac with stable Go and Apple Command Line Tools:
 
 ```sh
 bash scripts/build-mac-app.sh /absolute/new/dir 0.0.0-preview.3 FULL_SHA
-python3 scripts/check-desktop.py '/absolute/new/dir/Agent Messenger.app/Contents/Resources/messenger'
+python3 scripts/check-desktop.py '/absolute/new/dir/Kotel.app/Contents/Resources/kotel'
 ```
 
 The builder refuses to overwrite an existing app/zip, builds Go with CGO_ENABLED=0, compiles Swift, creates the icon, signs its own bundle ad-hoc, verifies the signature, prints version and creates a zip with SHA-256. SOURCE_SHA is set by the caller; a release requires checking that the source tree is clean.
