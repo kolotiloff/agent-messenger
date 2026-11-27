@@ -4059,6 +4059,14 @@
   // connection to a broker. Messages stay next to the section they belong to.
   let server=null,serverBusy=false,serverGen=0,serverPolling=false,serverEdited=false,nameFilled=false,invitation=null,inviteTimer=0,revokeAsk='',revokeTimer=0;
   const notes={host:null,member:null,accept:null},noteTimers={};
+  function connectionTimestamp(at){
+    const date=new Date(at);
+    if(!at||Number.isNaN(date.getTime()))return '';
+    const day=amLocale==='ru-RU'
+      ? date.toLocaleDateString(amLocale,{day:'numeric',month:'long'})+' '+date.getFullYear()+tr(' года')
+      : date.toLocaleDateString(amLocale,{day:'numeric',month:'long',year:'numeric'});
+    return day+', '+date.toLocaleTimeString(amLocale,{hour:'2-digit',minute:'2-digit'});
+  }
   function stamp(at){const d=new Date(at);return isNaN(d.getTime())?'':d.toLocaleString(amLocale,{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});}
   function capital(text){return text?text[0].toUpperCase()+text.slice(1):'';}
   // A status reads like the agents' status: a dot and plain text. state is
@@ -4166,7 +4174,9 @@
     renderAccessBar();renderAutoUpdate();watchUpdateBoard();
     if(!server)return;const h=server.host,m=server.member;
     const focused=document.activeElement?.dataset?.key||'';
-    badge($('host-badge'),h.running?tr('Работает'):h.enabled?tr('Не запустился'):tr('Остановлен'),h.running?'good':h.enabled?'bad':'');
+    const hostBadge=$('host-badge');
+    hostBadge.hidden=!h.running&&!h.enabled;
+    if(!hostBadge.hidden)badge(hostBadge,h.running?tr('Работает'):tr('Не запустился'),h.running?'good':'bad');
     // Explanations live in the status tooltip so the card does not change
     // height; only a problem the owner must fix stays visible.
     $('host-badge').title=!h.running?tr('Подключение по одноразовому приглашению'):tr('Принимает устройства: ')+(h.scope==='internet'?tr('из интернета и локальной сети'):h.scope==='lan'?tr('в локальной сети'):tr('только с этого компьютера'))+tr(', порт ')+h.port;
@@ -4185,9 +4195,8 @@
     if(taskSidebarPreview&&tab==='agents')renderAgents();
     // The certificate fingerprint travels inside the invitation code and the
     // joining computer checks it itself, so the window does not show it.
-    const status=$('member-badge');
-    const connection=!m.reachable&&m.checked_at?tr('Нет связи'):tr('Подключено');
-    badge(status,connection,m.reachable?'good':m.checked_at?'bad':'');
+    $('member-since-label').classList.toggle('am-good',!!m.reachable);
+    $('member-unreachable').hidden=m.reachable||!m.checked_at;
     // A computer hosts its network or joins another one, not both: the
     // inactive role's panel explains how to switch.
     const hostOn=h.enabled||h.running;
@@ -4199,9 +4208,7 @@
     $('member-state').textContent='';
     const cn=$('computer-name');if(view?.computer_name&&document.activeElement!==cn&&!cn.dataset.edited)cn.value=view.computer_name;
     $('member-address').textContent=m.address||'';
-    const since=stamp(m.connected_at);
-    $('member-since').textContent=since;
-    $('member-since').hidden=$('member-since-label').hidden=!since;
+    $('member-since').textContent=connectionTimestamp(m.connected_at)||'—';
     const buttons=root.querySelectorAll('[data-screen=server] button');buttons.forEach(b=>b.disabled=serverBusy);
     if(!serverBusy)$('host-invite').disabled=!h.addresses.length;
     renderHostToggle();

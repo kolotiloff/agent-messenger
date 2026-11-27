@@ -499,11 +499,9 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-main { display:flex; flex-direction:column; gap:var(--am-gap-content); min-width:0; min-height:0; padding:var(--am-pane-inset) 0; overflow:hidden; }
 #am-concept .am-network-mode { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:var(--am-gap-control); }
 #am-concept .am-network-mode .am-segmented-tabs { margin-inline-start:auto; }
-#am-concept .am-member-address { flex-wrap:wrap; }
 #am-concept .am-member-joined .am-check-result :is(dt,dd) { font-size:var(--am-text-m); }
-#am-concept .am-member-status { color:var(--am-muted); }
-#am-concept .am-member-status.am-good { color:var(--am-good); }
-#am-concept .am-member-status.am-bad { color:var(--am-bad); }
+#am-concept .am-network-status.am-good { color:var(--am-good); }
+#am-concept .am-network-status.am-bad { color:var(--am-bad); }
 /* Mutually exclusive settings pages in one compact track. */
 #am-concept .am-segmented-tabs {
   position:relative; isolation:isolate; display:inline-grid; grid-auto-flow:column; grid-auto-columns:1fr; align-self:flex-start; max-inline-size:100%;

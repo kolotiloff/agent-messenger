@@ -815,13 +815,13 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         await page.setViewportSize({width, height: 850});
         const details = await page.locator('#member-details').boundingBox();
         const action = await disconnect.boundingBox();
-        const address = await page.locator('.am-member-address').boundingBox();
-        const badge = await page.locator('#member-badge').boundingBox();
         assert(action.x >= details.x + details.width, 'disconnect action overlaps the connection details');
         assert(Math.abs(action.y + action.height - (details.y + details.height)) <= 1, 'disconnect action is not aligned with the bottom of the connection details');
-        assert(badge.x >= address.x && badge.x + badge.width <= address.x + address.width + 1, 'connection indicator must sit beside the address');
-        assert.equal(await page.locator('#member-badge').innerText(),'Подключено');
-        assert.equal(await page.locator('#member-badge').evaluate(el=>getComputedStyle(el,'::before').content),'none');
+        assert.equal(await page.locator('#member-address').innerText(),'203.0.113.7:47100');
+        assert.equal(await page.locator('#member-details').getByText('Подключено',{exact:true}).count(),1);
+        assert.equal(await page.locator('#member-since-label.am-good').innerText(),'Подключено');
+        assert.match(await page.locator('#member-since').innerText(),/\d{1,2} [а-яё]+ \d{4} года, \d{2}:\d{2}/u);
+        assert.equal(await page.locator('#member-unreachable').isVisible(),false);
         assert.equal(await page.locator('#host-panel').isVisible(),false);
       }
       await page.setViewportSize({width: 1100, height: 600});
