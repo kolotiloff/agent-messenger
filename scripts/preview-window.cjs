@@ -106,9 +106,14 @@ const previewCompleted = row => {
     ...(row.key==='local'?{}:{remote:{id:row.key,name:row.computer}})};
 };
 function previewWindowTask(task){
+  const followups=notes.get(task.id);
+  if(followups?.size){
+    const {item}=Array.from(followups.values()).at(-1);
+    task={...task,updated_at:item.at};
+  }
   if (task.state==='done') return {...task,can_continue:true};
   if (task.state!=='waiting_owner'||!Object.hasOwn(conversations,task.id)) return task;
-  return notes.has(task.id) ? {...task,state:'running'}
+  return followups?.size ? {...task,state:'running'}
     : {...task,owner_question:{id:'q-'+task.id,text:conversations[task.id].followup}};
 }
 const totals=rows=>rows.reduce((sum,row)=>{
@@ -377,7 +382,7 @@ const server = http.createServer(async (request, response) => {
       }
       if (url.pathname === '/api/window' || url.pathname === '/api/project-activity') {
         const completed = sampleResults.filter(row=>row.project===project&&!fixture.tasks.some(task=>task.id===row.id)).map(previewCompleted);
-        fixture.tasks = [...fixture.tasks.map(previewWindowTask), ...completed].filter(task=>!hiddenArchive.has(task.id));
+        fixture.tasks = [...fixture.tasks, ...completed].map(previewWindowTask).filter(task=>!hiddenArchive.has(task.id));
       }
       if (fixture.tasks) fixture.tasks = fixture.tasks.map(task => withPreviewExample(task, examples));
       const body = JSON.stringify(fixture);
