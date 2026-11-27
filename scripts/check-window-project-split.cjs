@@ -1283,8 +1283,14 @@ if (require.main === module) (async()=>{
       const localFolderButton=localGame.locator('.am-folder-heading');
       const machineHeader=card(browserPreview,'local').locator('.am-machine-name');
       assert.equal((await localFolderButton.boundingBox()).height,(await machineHeader.boundingBox()).height);
-      assert.equal((await localFolderButton.locator('svg').boundingBox()).width,(await localMark.locator('svg').boundingBox()).width);
-      assert.equal((await localFolderButton.locator('svg').boundingBox()).width,18);
+      assert.equal((await localMark.locator('svg').boundingBox()).width,16);
+      assert.equal((await localFolderButton.locator('svg').boundingBox()).width,16);
+      const artworkBounds=svg=>svg.evaluate(node=>{
+        const {x,y,width,height}=node.getBBox();
+        return [x,y,width,height].map(v=>Math.round(v*100)/100);
+      });
+      const machineBounds=await artworkBounds(localMark.locator('svg'));
+      assert.deepEqual(await artworkBounds(localFolderButton.locator('svg')),machineBounds);
       const rear=localFolderButton.locator('svg path').first();
       const rearOutline=await rear.getAttribute('d');
       const folderOutline=localFolderButton.locator('svg path').last();
@@ -1292,6 +1298,7 @@ if (require.main === module) (async()=>{
       await localFolderButton.click();
       assert.equal(await rear.getAttribute('d'),rearOutline);
       assert.notEqual(await folderOutline.getAttribute('d'),openedOutline);
+      assert.deepEqual(await artworkBounds(localFolderButton.locator('svg')),machineBounds);
       assert.equal(await localFolderButton.locator('.am-sidebar-task-count:visible').textContent(),'2');
       await localFolderButton.click();
       assert.equal(await folderOutline.getAttribute('d'),openedOutline);

@@ -1260,7 +1260,7 @@
       const folder=el('div',undefined,'am-sidebar-folder');
       const button=el('button',undefined,'am-folder-heading');button.type='button';
       // Keep the tab and rear panel in place as the front opens.
-      const icon=svgIcon(['M2 19V5a2 2 0 0 1 2-2h5l3 3h7a2 2 0 0 1 2 2v3','']);
+      const icon=svgIcon(['M2 20V5a2 2 0 0 1 2-2h5l3 3h8a2 2 0 0 1 2 2v3','']);
       const front=icon.lastElementChild;
       button.append(icon,el('span',projectTitle(name)));
       button.dataset.sidebarFocus='folder:'+key;
@@ -1268,8 +1268,8 @@
       const count=sidebarTaskCount(tasks.length);
       function showFolder(expanded){
         front.setAttribute('d',expanded
-          ? 'M2 19l3-7a2 2 0 0 1 1.8-1.2H22a1 1 0 0 1 .9 1.4l-3 7.4A2 2 0 0 1 18 21H4a2 2 0 0 1-2-2Z'
-          : 'M21 11v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2');
+          ? 'M2 20l3-7.8A2 2 0 0 1 6.9 11H22l-3.5 9.6A2 2 0 0 1 16.6 22H4a2 2 0 0 1-2-2Z'
+          : 'M22 11v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2');
         rows.hidden=!expanded;
         count.hidden=expanded;
         button.setAttribute('aria-expanded',String(expanded));
