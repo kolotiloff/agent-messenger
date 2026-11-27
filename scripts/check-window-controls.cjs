@@ -115,7 +115,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert(await welcome.getByText('Задайте название и выберите папку проекта.', {exact: true}).isVisible());
       assert(await welcome.getByText('Настройте агента и включите хотя бы одну модель.', {exact: true}).isVisible());
       assert.equal(await page.locator('#task-panel').isVisible(), false, 'an empty task pane must not cover onboarding');
-      await welcome.getByRole('button', {name: 'Новый проект', exact: true}).click();
+      await welcome.getByRole('button', {name: 'Создать проект', exact: true}).click();
       assert(await page.locator('#project-dialog').evaluate(node => node.open));
       await page.locator('#project-dialog-close').click();
       assert.equal(writes.length, 0, 'opening/cancelling onboarding must not change backend state');
@@ -218,13 +218,13 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.reload();
       await welcome.getByRole('heading', {name: 'Добро пожаловать в Agent Messenger', exact: true}).waitFor();
       assert.equal(await welcome.getByRole('button', {name: 'Подключить', exact: true}).count(), 0);
-      await welcome.getByRole('button', {name: 'Новый проект', exact: true}).click();
+      await welcome.getByRole('button', {name: 'Создать проект', exact: true}).click();
       await page.locator('#project-name').fill('Welcome test');
       await page.locator('#project-folder').fill('/fictional/project');
       await page.locator('#project-save').click();
       await welcome.getByText('Подключён: Cursor', {exact: true}).waitFor();
       assert(await welcome.getByRole('heading', {name: 'Добро пожаловать в Agent Messenger', exact: true}).isVisible());
-      assert.equal(await welcome.getByRole('button', {name: 'Новый проект', exact: true}).count(), 0);
+      assert.equal(await welcome.getByRole('button', {name: 'Создать проект', exact: true}).count(), 0);
       assert.deepEqual(writes.filter(write => write.path === '/api/project-create'),
         [{path: '/api/project-create', body: {name: 'Welcome test', folder: '/fictional/project'}}]);
       assert.deepEqual(writes.filter(write => write.path === '/api/coordinator-connect'),

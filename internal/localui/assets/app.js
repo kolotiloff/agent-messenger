@@ -1893,7 +1893,7 @@
       el('p',tr('Настройте проект и добавьте агента, чтобы отправить первую задачу.'),'am-muted'));
     const steps=el('div',undefined,'am-card am-steps am-welcome-steps');
     const hasProject=!!view.project,hasFolder=hasProject&&!!view.folder;
-    const projectAction=hasProject?[tr('Проект'),()=>show('project')]:[tr('Новый проект'),openProjectDialog];
+    const projectAction=hasProject?[tr('Указать папку'),()=>show('project')]:[tr('Создать проект'),openProjectDialog];
     steps.append(stepRow(hasFolder?'ok':1,tr('Проект'),
       hasFolder?projectTitle(view.project):hasProject?tr('Укажите папку проекта на этом компьютере.'):tr('Задайте название и выберите папку проекта.'),
       hasFolder?null:projectAction));
@@ -1902,12 +1902,12 @@
     const localModels=taskDraftModels({id:'',agents});
     steps.append(stepRow(localModels.length?'ok':2,tr('Агенты на этом компьютере'),
       localModels.length?tr('Модель для задачи доступна.'):tr('Настройте агента и включите хотя бы одну модель.'),
-      localModels.length?null:[tr('Агенты'),()=>show('agents')]));
+      localModels.length?null:[tr('Настроить агентов'),()=>show('agents')]));
 
     const peers=welcomePeerCount();
     steps.append(stepRow(peers?'ok':3,tr('Другие компьютеры'),
       peers?tr('В сети: ')+peers:tr('По желанию подключите другие компьютеры через сервер.'),
-      peers?null:[tr('Сервер'),()=>show('server')]));
+      peers?null:[tr('Настроить подключение'),()=>show('server')]));
 
     const place=hasProject&&coordinatorPlace();
     const who=[coordinatorAgentOn('claude')&&'Claude Code',coordinatorAgentOn('codex')&&'Codex',coordinatorAgentOn('cursor')&&'Cursor'].filter(Boolean).join(', ');
@@ -1916,7 +1916,7 @@
       place?(who?tr('Подключён: ')+who:tr('Подключён на этом компьютере')):
       tr('По желанию подключите чат, который будет распределять задачи.');
     steps.append(stepRow(place&&!codexBare?'ok':4,tr('Координатор'),coordSub,
-      !hasProject||place&&!codexBare?null:codexBare?[tr('Агенты'),()=>show('agents')]:[tr('Проект'),()=>show('project')]));
+      !hasProject||place&&!codexBare?null:codexBare?[tr('Проверить доверие'),()=>show('agents')]:[tr('Настроить координатора'),()=>show('project')]));
     box.append(intro,steps);
     return box;
   }

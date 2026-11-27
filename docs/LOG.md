@@ -4,7 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-27 — Codex (T-336 first-run setup)
 
-Replaced the first-run explanation with an in-window checklist and direct links to setup. Verified the links and the transition to an enabled New Task composer in Chromium and WebKit, including the narrow layout. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).
+Replaced the first-run explanation with an in-window checklist and direct links to setup. The buttons describe their actions, including creating a project, configuring agents, and setting up the network connection. Verified the links and the transition to an enabled New Task composer in Chromium and WebKit, including the narrow layout. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).
 
 ## 2026-11-27 — Codex (T-336 clear archive button)
 
