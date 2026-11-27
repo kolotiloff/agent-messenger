@@ -337,7 +337,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-list-row-hover:var(--am-soft);
 }
 #am-concept.am-task-sidebar-preview :is(.am-titlebar,.am-computers > .am-label) { display:none; }
-#am-concept.am-task-sidebar-preview .am-sidebar { gap:var(--am-gap-content); padding:var(--am-task-top) var(--am-gap-content) var(--am-gap-content); }
+#am-concept.am-task-sidebar-preview .am-sidebar { gap:var(--am-gap-content); row-gap:var(--am-gap-control); padding:var(--am-task-top) var(--am-gap-content) var(--am-gap-content); }
 #am-concept.am-task-sidebar-preview .am-project { display:grid; grid-template-columns:minmax(0,1fr) min(var(--am-settings-control-width),50%); align-items:center; gap:var(--am-gap-control); }
 #am-concept.am-task-sidebar-preview #project-column-first { display:flex; }
 #am-concept.am-task-sidebar-preview .am-project-heading { margin:0; justify-content:flex-start; gap:var(--am-gap-line); }
@@ -345,8 +345,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept.am-task-sidebar-preview .am-project .am-label { display:block; color:var(--am-text); text-transform:none; letter-spacing:normal; }
 #am-concept.am-task-sidebar-preview :is(.am-project .am-label,.am-queue-header h3,.am-conversation-title) { font-size:var(--am-text-m); font-weight:600; line-height:var(--am-computer-heading-line); }
 #am-concept.am-task-sidebar-preview :is(.am-project .am-select-trigger,.am-task-filter .am-select-trigger) { min-height:var(--am-preview-header-control); }
-#am-concept.am-task-sidebar-preview #task-new { width:100%; height:var(--am-preview-header-control); min-height:var(--am-preview-header-control); justify-content:flex-start; padding:0; gap:var(--am-gap-control); text-align:start; color:var(--am-text); }
-#am-concept.am-task-sidebar-preview #task-new:is(:hover,:focus-visible):not(:disabled) { color:var(--am-text); }
+#am-concept.am-task-sidebar-preview #task-new { width:100%; height:var(--am-preview-header-control); min-height:var(--am-preview-header-control); justify-content:flex-start; padding:var(--am-row-pad-block) var(--am-row-pad-inline); gap:var(--am-gap-control); text-align:start; color:var(--am-text); }
+#am-concept.am-task-sidebar-preview #task-new:is(:hover,:focus-visible):not(:disabled) { background:var(--am-list-row-hover); color:var(--am-text); }
 #am-concept.am-task-sidebar-preview .am-computers { border-block-start:1px solid var(--am-line); padding-block-start:var(--am-gap-control); }
 #am-concept.am-task-sidebar-preview .am-computers { margin-inline:calc(-1 * var(--am-gap-content)); padding-inline:var(--am-gap-content); }
 #am-concept.am-task-sidebar-preview .am-machines { gap:var(--am-space-1); }
@@ -1124,7 +1124,7 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept #computer-sidebar-toggle { display:none; }
 @media (min-width:621px) {
   body.am-mac-titlebar #am-concept.am-task-sidebar-preview .am-shell { position:relative; --am-nav-rail:min(var(--am-nav),46%); }
-  body.am-mac-titlebar #am-concept.am-task-sidebar-preview .am-sidebar { padding-block-start:calc(var(--am-caption-height) + var(--am-gap-section)); row-gap:var(--am-gap-section); }
+  body.am-mac-titlebar #am-concept.am-task-sidebar-preview .am-sidebar { padding-block-start:calc(var(--am-caption-height) + var(--am-gap-section)); }
   body.am-mac-titlebar #am-concept.am-task-sidebar-preview .am-computers { border-block-start:0; padding-block-start:0; }
   body.am-mac-titlebar #am-concept.am-task-sidebar-preview .am-task-toolbar { min-height:var(--am-caption-height); padding-block:0; }
   #am-concept #computer-sidebar-toggle {
@@ -1147,7 +1147,7 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-stats-dialog > .am-screen:not([hidden]) { display:flex; flex-direction:column; overflow:hidden; scrollbar-gutter:auto; padding-inline:var(--am-pane-inset); }
 #am-concept .am-stats-dialog .am-stats { flex:1; min-height:0; }
 #am-concept .am-stats-dialog .am-stats-reports { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; margin-inline-end:calc(-1 * var(--am-gutter, 0px)); }
-#am-concept .am-stats-periods { display:flex; gap:var(--am-space-1); }
+#am-concept .am-stats-periods { display:flex; flex-wrap:wrap; gap:var(--am-gap-control); }
 /* T-076: the period tabs and the chosen computer share one row. */
 #am-concept .am-stats-head { display:flex; flex-wrap:wrap; align-items:center; gap:var(--am-gap-control); }
 /* T-269: the periods and the lists are one height and sit from the left edge. */

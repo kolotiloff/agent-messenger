@@ -429,7 +429,16 @@ if (require.main === module) (async()=>{
       const picker=await draftPage.locator('#project-column-first .am-select-trigger').boundingBox(),plusBox=await plus.boundingBox();
       const projectLabel=await draftPage.locator('#project-heading').boundingBox();
       assert.equal(plusBox.x,projectLabel.x);
-      assert.equal((await plus.locator('svg').boundingBox()).x,plusBox.x);
+      const newTaskInset=await plus.evaluate(n=>getComputedStyle(n).paddingInlineStart);
+      const rowInset=await local.locator('.am-machine-name').evaluate(n=>getComputedStyle(n).paddingInlineStart);
+      assert.equal(newTaskInset,rowInset);
+      assert.equal((await plus.locator('svg').boundingBox()).x-plusBox.x,parseFloat(rowInset));
+      await plus.hover();
+      assert.deepEqual(await plus.boundingBox(),plusBox);
+      const newTaskHover=await plus.evaluate(async n=>{
+        await Promise.all(n.getAnimations().map(a=>a.finished));
+        return getComputedStyle(n).backgroundColor;
+      });
       assert(plusBox.y+plusBox.height<picker.y);
       assert.equal(await plus.innerText(),'Новая задача');
       const plusGlyph=plus.locator('svg');
@@ -504,6 +513,7 @@ if (require.main === module) (async()=>{
       assert.equal(await opacity(),'1');
       assert.notEqual(await remote.evaluate(node=>getComputedStyle(node).backgroundColor),await remote.evaluate(node=>getComputedStyle(node.closest('.am-sidebar')).backgroundColor));
       const machineHover=await remote.evaluate(n=>getComputedStyle(n).backgroundColor);
+      assert.equal(machineHover,newTaskHover);
       const inactiveTask=local.locator('.am-sidebar-task:not([aria-pressed=true])').first();
       await inactiveTask.hover();
       assert.equal(await inactiveTask.evaluate(n=>getComputedStyle(n).backgroundColor),machineHover);
@@ -658,6 +668,11 @@ if (require.main === module) (async()=>{
       });
       assert.equal(await projectPicker.count(),1);
       const sidebarControl=await controlStyle(projectPicker);
+      for(const group of ['.am-stats-periods','.am-stats-filters']){
+        const items=standaloneStats.locator(group+' button:visible');
+        const first=await items.nth(0).boundingBox(),second=await items.nth(1).boundingBox();
+        assert.equal(second.x-first.x-first.width,8);
+      }
       for(const selector of ['#stats-project','#stats-computer','#stats-agent','#stats-model']){
         const control=standaloneStats.locator('[aria-controls="'+selector.slice(1)+'-menu"]');
         assert.deepEqual(await controlStyle(control),sidebarControl);
@@ -899,12 +914,12 @@ if (require.main === module) (async()=>{
           headerEdges:[header.left-bounds.left-panel.clientLeft,bounds.right-header.right],
           fields:[heading.left-bounds.left-panel.clientLeft,bounds.right-filter.right,projects.left-aside.left,aside.right-projects.right-1],
           controls:[filter.height,rect('#project-select + .am-select-trigger').height],
-          toolbar:[toolbar.left-main.left,main.right-toolbar.right,toolbar.bottom-rect('.am-computers').top-1+rect('#task-new').height+parseFloat(getComputedStyle(document.querySelector('.am-sidebar')).rowGap)],
+          toolbar:[toolbar.left-main.left,main.right-toolbar.right,projects.top-rect('#task-new').bottom],
           rowAlignment:[header.top-bounds.top,filter.top-header.top],
         };
       });
       assert.deepEqual(await archiveGeometry(),{
-        matchesWorkspace:[0,0,0],headerEdges:[0,0],fields:[16,16,16,16],controls:[28,28],toolbar:[0,0,0],rowAlignment:[0,16],
+        matchesWorkspace:[0,0,0],headerEdges:[0,0],fields:[16,16,16,16],controls:[28,28],toolbar:[0,0,8],rowAlignment:[0,16],
       });
       assert.equal(await archive.locator('#task-list-heading').textContent(),'Архив');
       const trashBounds=await archive.locator('#archive-clear').boundingBox();
@@ -1103,7 +1118,11 @@ if (require.main === module) (async()=>{
           n.nextElementSibling.getBoundingClientRect().top-n.getBoundingClientRect().bottom),8);
       }
       assert.equal(box.height,44);
-      assert.equal((await mac.locator('#task-new').boundingBox()).y-(box.y+box.height),16);
+      const actionBox=await mac.locator('#task-new').boundingBox();
+      assert.equal(actionBox.y-(box.y+box.height),16);
+      assert.equal(row.y-actionBox.y-actionBox.height,8);
+      const firstComputer=await mac.locator('#machines .am-machine-name').first().boundingBox();
+      assert.equal(firstComputer.y-row.y-row.height,8);
       assert.equal(control.y+control.height/2,box.y+box.height/2);
       assert.equal(await mac.locator('.am-computers').evaluate(n=>getComputedStyle(n).borderBlockStartWidth),'0px');
       await mac.waitForFunction(()=>window.titlebarGeometry?.holes.some(([x,y,w,h])=>{
