@@ -159,6 +159,11 @@ func CoordinatorProgram(root string) (string, error) {
 		if prefix := InstallPrefix(p); prefix != "" {
 			link := filepath.Join(prefix, "bin", "messenger")
 			if fi, err := os.Stat(link); err == nil && fi.Mode().IsRegular() {
+				named := filepath.Join(prefix, "bin", "kotel")
+				// Only select the managed alias. Another command may already own that name.
+				if target, err := os.Readlink(named); err == nil && target == "messenger" {
+					return named, nil
+				}
 				return link, nil
 			}
 		}

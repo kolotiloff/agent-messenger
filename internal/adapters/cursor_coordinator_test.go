@@ -11,8 +11,8 @@ import (
 
 func TestCursorCoordinatorKeepsSettings(t *testing.T) {
 	path := CursorProjectConfig(t.TempDir())
-	messenger := filepath.Join(t.TempDir(), "messenger")
 	root := filepath.Join(t.TempDir(), "data")
+	messenger := filepath.Join(root, "runtimes", strings.Repeat("a", 64), "messenger")
 	if state, err := CursorCoordinatorLink(path, messenger, root, "Game"); err != nil || state != LinkMissing {
 		t.Fatal(state, err)
 	}
@@ -47,11 +47,11 @@ func TestCursorCoordinatorKeepsSettings(t *testing.T) {
 		}
 	}
 	// Replacing our old program preserves custom options inside our entry too.
-	top, _ := cursorConfigObject(raw)
-	servers, _ := cursorConfigObject(top["mcpServers"])
-	entry, _ := cursorConfigObject(servers["messenger"])
+	top, _ := mcpConfigObject(raw)
+	servers, _ := mcpConfigObject(top["mcpServers"])
+	entry, _ := mcpConfigObject(servers[CoordinatorServerName])
 	entry["env"] = json.RawMessage(`{"CUSTOM":"keep"}`)
-	servers["messenger"], _ = json.Marshal(entry)
+	servers[CoordinatorServerName], _ = json.Marshal(entry)
 	top["mcpServers"], _ = json.Marshal(servers)
 	raw, _ = json.Marshal(top)
 	if err := os.WriteFile(path, raw, 0o600); err != nil {
@@ -155,5 +155,26 @@ func TestCursorCoordinatorRefusesSymlinks(t *testing.T) {
 				t.Fatal("followed symlink")
 			}
 		})
+	}
+}
+
+func TestCursorCoordinatorNameCollisionDoesNotWrite(t *testing.T) {
+	path := CursorProjectConfig(t.TempDir())
+	if err := os.Mkdir(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	before := `{"mcpServers":{"messenger":{"command":"old","disabled":true},"kotel":{"command":"custom"}}}`
+	if err := os.WriteFile(path, []byte(before), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	program := filepath.Join(t.TempDir(), "kotel")
+	if state, _ := CursorCoordinatorLink(path, program, "/data", "Game"); state != LinkOther {
+		t.Fatal(state)
+	}
+	if err := EnsureCursorCoordinator(path, program, "/data", "Game"); err == nil {
+		t.Fatal("accepted a name collision")
+	}
+	if got, err := os.ReadFile(path); err != nil || string(got) != before {
+		t.Fatal("collision changed the file", err)
 	}
 }

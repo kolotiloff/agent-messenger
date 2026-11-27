@@ -12,12 +12,12 @@ p.add_argument('--notes',required=True,type=pathlib.Path)
 p.add_argument('--key-file',type=pathlib.Path,help='sign with this exported private key instead of the Keychain (CI)')
 p.add_argument('--directory',type=pathlib.Path,default=pathlib.Path.home()/'Library/Application Support/AgentMessenger/updates')
 a=p.parse_args();source=a.bundle_directory.resolve();target=a.directory.resolve()
-app=source/'Agent Messenger.app';archive=source/'Agent-Messenger-mac.zip'
+app=source/'Kotel.app';archive=source/'Agent-Messenger-mac.zip'
 with (app/'Contents/Info.plist').open('rb') as f: info=plistlib.load(f)
 build=int(info['CFBundleVersion'])
 if info.get('AMClientAPI')!=1: raise SystemExit('Unsupported client API')
 subprocess.run(['/usr/bin/codesign','--verify','--deep','--strict',str(app)],check=True)
-meta=json.loads(subprocess.check_output([str(app/'Contents/Resources/messenger'),'version']))
+meta=json.loads(subprocess.check_output([str(app/'Contents/Resources/kotel'),'version']))
 version = meta['version']
 display, package_build = release_info(version)
 if (info['CFBundleShortVersionString'], build) != (display, package_build):
@@ -37,7 +37,7 @@ digest=hashlib.sha256(raw).hexdigest()
 # Verify that the exact ZIP being signed contains the supplied application.
 with tempfile.TemporaryDirectory(prefix='am-publish-') as d:
  subprocess.run(['/usr/bin/ditto','-x','-k',str(archive),d],check=True)
- unpacked=pathlib.Path(d)/'Agent Messenger.app'
+ unpacked=pathlib.Path(d)/'Kotel.app'
  subprocess.run(['/usr/bin/codesign','--verify','--deep','--strict',str(unpacked)],check=True)
  def files(root):return {str(x.relative_to(root)):('link',os.readlink(x)) if x.is_symlink() else ('file',x.stat().st_mode&0o777,hashlib.sha256(x.read_bytes()).hexdigest()) for x in root.rglob('*') if x.is_file() or x.is_symlink()}
  if files(app)!=files(unpacked):raise SystemExit('ZIP and bundle differ; refusing to sign')

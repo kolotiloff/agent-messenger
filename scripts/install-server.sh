@@ -95,6 +95,7 @@ RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
+Alias=kotel.service
 EOF
 mkdir -p "$DATA"
 chmod 700 "$DATA"
@@ -140,6 +141,6 @@ say ""
 say ""
 "$CMD" invite
 say ""
-say "Новое приглашение для следующего компьютера: agent-messenger-server invite"
-say "Состояние: agent-messenger-server status. Обновить: запустите эту же команду установки ещё раз."
+say "Новое приглашение для следующего компьютера: kotel-server invite"
+say "Состояние: kotel-server status. Обновить: запустите эту же команду установки ещё раз."
 say "Если у хостинга есть свой брандмауэр в панели управления, откройте там порт $PORT (TCP)."

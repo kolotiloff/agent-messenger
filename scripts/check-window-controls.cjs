@@ -444,6 +444,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.deepEqual(writes.filter(w=>w.path==='/api/agent-find').map(w=>w.body),[{provider:'codex',action:'find'},{provider:'codex',action:'find'}]);
       // T-182: the internet scope asks for the external address and sends it.
       await page.locator('[data-tab=server]').click();
+      await page.locator('#host-tab').click();
       assert.equal(await page.locator('#host-public-box').isHidden(), true);
       await page.locator('#host-scope').evaluate(n => {n.value = 'internet'; n.dispatchEvent(new Event('change', {bubbles: true}));});
       assert.equal(await page.locator('#host-public-box').isVisible(), true);
@@ -773,9 +774,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await runningTaskStatus.waitFor({state:'visible'});
       for (const [theme,arrow,muted,runningColor,waitingColor] of [
         ['light','rgb(129, 83, 5)','rgb(107, 107, 107)','rgb(40, 123, 215)','rgb(201, 138, 0)'],
-        ['dark','rgb(242, 198, 91)','rgb(160, 160, 160)','rgb(103, 170, 249)','rgb(242, 201, 76)']
+        ['dark','rgb(242, 198, 91)','rgb(155, 155, 153)','rgb(142, 173, 210)','rgb(206, 178, 113)']
       ]) {
         await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;},theme);
+        assert.equal(await page.locator('#am-concept').evaluate(node=>getComputedStyle(node).color),theme==='dark'?'rgb(194, 194, 192)':'rgb(48, 48, 48)');
         assert.equal(await runningTaskStatus.evaluate(node=>getComputedStyle(node).color),runningColor);
         assert.equal(await runningLabel.evaluate(node=>getComputedStyle(node).color),runningColor);
         assert.equal(await runningLabel.locator('.am-agent-model').evaluate(node=>getComputedStyle(node).color),runningColor);
@@ -800,7 +802,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await peerUpdate.locator('svg').click();
       await page.locator('#confirm-dialog').waitFor({state:'visible'});
       assert.equal(await page.locator('#confirm-title').innerText(),'Обновить Runner до v0.99?');
-      assert.deepEqual(await type(page.locator('#confirm-title')),await type(page.locator('#member-title')));
+      assert.deepEqual(await type(page.locator('#confirm-title')),await type(page.locator('#computer-title')));
       await page.locator('#confirm-cancel').click();
       for (const computer of [page.locator('.am-machine-card[aria-current=true]'),runner]) {
         const name = computer.locator('.am-machine-name > span:nth-child(2)');
@@ -813,15 +815,19 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         await page.setViewportSize({width, height: 850});
         const details = await page.locator('#member-details').boundingBox();
         const action = await disconnect.boundingBox();
-        const badge = await page.locator('#member-badge').boundingBox();
         assert(action.x >= details.x + details.width, 'disconnect action overlaps the connection details');
         assert(Math.abs(action.y + action.height - (details.y + details.height)) <= 1, 'disconnect action is not aligned with the bottom of the connection details');
-        assert(Math.abs(action.x + action.width - (badge.x + badge.width)) <= 1, 'disconnect action is off the right edge of the status');
+        assert.equal(await page.locator('#member-address').innerText(),'203.0.113.7:47100');
+        assert.equal(await page.locator('#member-details').getByText('Подключено',{exact:true}).count(),1);
+        assert.equal(await page.locator('#member-since-label.am-good').innerText(),'Подключено');
+        assert.match(await page.locator('#member-since').innerText(),/\d{1,2} [а-яё]+ \d{4} года, \d{2}:\d{2}/u);
+        assert.equal(await page.locator('#member-unreachable').isVisible(),false);
+        assert.equal(await page.locator('#host-panel').isVisible(),false);
       }
       await page.setViewportSize({width: 1100, height: 600});
       if (process.env.SCREENSHOT_DIR) {
         await page.emulateMedia({colorScheme:'dark'});
-        await page.locator('[aria-labelledby=member-title]').screenshot({path: path.join(process.env.SCREENSHOT_DIR,'server-connected.png')});
+        await page.locator('#member-panel').screenshot({path: path.join(process.env.SCREENSHOT_DIR,'server-connected.png')});
         await page.emulateMedia({colorScheme:'light'});
       }
       await page.locator('[data-tab=stats]').click();
@@ -1182,7 +1188,8 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         await page.locator('[data-tab=tasks]').click();
       };
       sharedPending=true;
-      await sentRow.getByText(/Ждёт ресурс «shared-cache»/).waitFor();
+      await sentRow.getByText(/Ожидает ресурс/).waitFor();
+      assert.equal(await sentRow.locator('.am-task-status').getAttribute('title'),'shared-cache');
       await sentRow.click();
       runnerAge=60;
       runnerContactAge=0;
@@ -1190,7 +1197,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await loadRoster();
       await runner.getByText('Ждём сведения об агентах',{exact:true}).waitFor();
       assert.equal(await runner.locator('.am-machine-presence').getAttribute('aria-label'),'На связи');
-      assert.match(await sentRow.innerText(),/Ждёт ресурс/,'old worker data cannot clear a resource wait');
+      assert.match(await sentRow.innerText(),/Ожидает ресурс/,'old worker data cannot clear a resource wait');
       runnerAge=0;
       await loadRoster();
       await sentRow.locator('.am-status-run').getByText(/^Работает,/).waitFor();
@@ -1219,7 +1226,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await removeAction.count(),0);
       await stopAction.click();
       assert.equal(await page.locator('#task-head h3').textContent(),localTask.title);
-      assert.match(await remoteList.locator('.am-task-status').innerText(),/Ждём завершения задачи/);
+      assert.match(await remoteList.locator('.am-task-status').innerText(),/Остановка запрошена/);
       await remoteList.click({button:'right'});
       await menu.getByText('Отправляем запрос на остановку…',{exact:true}).waitFor();
       assert.equal(await menu.getByRole('menuitem').count(),0);
@@ -1237,7 +1244,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await menu.getByText(/в очереди/).waitFor();
       remoteRow={...remoteTask,remote:{...remoteTask.remote,cancel_state:'sent'}};
       await stopStatus.getByText('Запрос на остановку отправлен. Ждём завершения задачи.',{exact:true}).waitFor();
-      assert.match(await remoteList.locator('.am-task-status').innerText(),/Ждём завершения задачи/);
+      assert.match(await remoteList.locator('.am-task-status').innerText(),/Остановка запрошена/);
       assert.equal(await stopButton.isVisible(),false);
       await menu.getByText('Запрос на остановку отправлен. Ждём завершения задачи.',{exact:true}).waitFor();
       assert.equal(await menu.getByRole('menuitem').count(),0);
@@ -1314,7 +1321,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         return heading?.querySelector('span')?.textContent;
       });
       assert.equal(await taskSection(siteTask.title),'Запланированные');
-      assert.match(await page.locator('#task-head').innerText(),/Ждёт ресурс «shared-cache»/);
+      assert.match(await page.locator('#task-head').innerText(),/Ожидает ресурс.*shared-cache/s);
       await composer.waitFor();
       assert.equal(await composer.inputValue(), '', 'a draft must not follow a task from another project');
       assert(await page.locator('#answer-send').isDisabled());

@@ -185,7 +185,7 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
             return
         }
         guard !fetching, endpoint != nil,
-              let executable = Bundle.main.url(forResource: "messenger", withExtension: nil) else { return }
+              let executable = Bundle.main.url(forResource: "kotel", withExtension: nil) else { return }
         lastRemoteCheck = ProcessInfo.processInfo.systemUptime
         fetching = true; fetchStatus = "Проверяем GitHub…"; onStatus?(shownVersion)
         let process = Process(); process.executableURL = executable; process.arguments = ["update-find"]
@@ -257,7 +257,7 @@ final class DesktopUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
             return
         }
         guard !fetching, endpoint != nil, !updater.sessionInProgress,
-              let executable = Bundle.main.url(forResource: "messenger", withExtension: nil) else { return }
+              let executable = Bundle.main.url(forResource: "kotel", withExtension: nil) else { return }
         busyRetry?.cancel(); waitingForDownload = false
         lastRemoteCheck = ProcessInfo.processInfo.systemUptime
         fetching = true; fetchStatus = "Проверяем GitHub…"; onStatus?(shownVersion)

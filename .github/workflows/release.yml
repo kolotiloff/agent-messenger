@@ -17,6 +17,10 @@ name: Release preview
         description: "Release notes shown in the app (plain text)"
         required: true
 
+      hold_draft:
+        description: "Keep the signed build private after native checks for desktop and provider acceptance"
+        type: boolean
+        default: false
       resume_revision:
         description: "Existing signed draft only: exact 40-character source SHA. Leave empty to build."
         required: false
@@ -134,7 +138,7 @@ jobs:
       - name: Build the app
         run: |
           SPARKLE_DIR="$RUNNER_TEMP/sparkle" bash scripts/build-mac-app.sh "$RUNNER_TEMP/app" "$VERSION" "$GITHUB_SHA"
-          python3 scripts/check-desktop.py "$RUNNER_TEMP/app/Agent Messenger.app/Contents/Resources/messenger"
+          python3 scripts/check-desktop.py "$RUNNER_TEMP/app/Kotel.app/Contents/Resources/kotel"
       - name: Sign
         env:
           SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
@@ -269,7 +273,7 @@ jobs:
   channel:
     name: Publish the verified draft and check the public channel
     needs: signed-install
-    if: always() && !cancelled() && needs.signed-install.result == 'success'
+    if: always() && !cancelled() && !inputs.hold_draft && needs.signed-install.result == 'success'
     permissions:
       contents: write
     runs-on: ubuntu-24.04

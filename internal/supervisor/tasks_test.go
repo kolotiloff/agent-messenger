@@ -261,6 +261,54 @@ func TestTaskWorkerReportsAndIsVerified(t *testing.T) {
 	}
 }
 
+// Start a normal worker through the supervisor so the persisted task policy
+// is checked at the actual process boundary, including the default case.
+func TestRequestedTaskAccessReachesWorkerProcess(t *testing.T) {
+	for _, provider := range []struct {
+		name           string
+		standard, full []string
+	}{
+		{"claude", []string{"--permission-mode", "acceptEdits"}, []string{"--permission-mode", "bypassPermissions"}},
+		{"codex", []string{"--sandbox", "workspace-write"}, []string{"--dangerously-bypass-approvals-and-sandbox"}},
+		{"cursor", []string{"--sandbox", "enabled"}, []string{"--sandbox", "disabled"}},
+	} {
+		t.Run(provider.name, func(t *testing.T) {
+			h := newTaskHarness(t, "report", AdapterLauncher{AllowTasks: true})
+			defer h.stop()
+			cli, err := os.Executable()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := h.st.SetComputerAgent(provider.name, cli, "", "worker"); err != nil {
+				t.Fatal(err)
+			}
+			for index, test := range []struct {
+				access    string
+				allowFull bool
+				want      []string
+			}{
+				{"full", false, provider.standard},
+				{"standard", true, provider.standard},
+				{"", true, provider.full},
+			} {
+				if err := h.st.SetAgentFullAccess(provider.name, test.allowFull); err != nil {
+					t.Fatal(err)
+				}
+				id, _, err := h.st.StartTask(core.StartTaskRequest{Project: "Game", OpID: fmt.Sprintf("access-%d", index), Provider: provider.name, Text: "Report", Access: test.access})
+				if err != nil {
+					t.Fatal(err)
+				}
+				h.waitState(id, "done")
+				runs := h.runs()
+				if len(runs) != index+1 || !hasArgs(runs[index].Args, test.want...) {
+					t.Fatalf("access %q, full allowed %t: missing worker flags %v", test.access, test.allowFull, test.want)
+				}
+			}
+			waitNoTaskReservations(t)
+		})
+	}
+}
+
 // The worker's last line is read even when it exits right after writing it.
 func TestTaskOutputIsReadToTheEnd(t *testing.T) {
 	for i := 0; i < 3; i++ {

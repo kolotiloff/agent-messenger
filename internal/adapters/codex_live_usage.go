@@ -8,9 +8,10 @@ import (
 
 // CodexUsage separates cumulative work from the last provider context snapshot.
 type CodexUsage struct {
-	TurnTokens     *int64
-	UsedTokens     int64
-	CapacityTokens int64
+	ObservedContext bool
+	TurnTokens      *int64
+	UsedTokens      int64
+	CapacityTokens  int64
 }
 
 func CodexLiveUsage(profile, thread string, launched, taskCreated time.Time, resumed bool) CodexUsage {
@@ -23,7 +24,7 @@ func readCodexLiveUsage(raw []byte, launched time.Time, resumed bool) CodexUsage
 	var latest, baseline *int64
 	var usage CodexUsage
 	for _, line := range bytes.Split(raw, []byte{'\n'}) {
-		if !bytes.Contains(line, []byte(`"token_count"`)) && !bytes.Contains(line, []byte(`"compacted"`)) {
+		if !bytes.Contains(line, []byte(`"token_count"`)) && !bytes.Contains(line, []byte(`"compacted"`)) && !bytes.Contains(line, []byte(`"turn_context"`)) {
 			continue
 		}
 		var event struct {
@@ -45,7 +46,8 @@ func readCodexLiveUsage(raw []byte, launched time.Time, resumed bool) CodexUsage
 		if json.Unmarshal(line, &event) != nil || event.At.IsZero() {
 			continue
 		}
-		if event.Type == "compacted" && !event.At.Before(launched) {
+		if (event.Type == "compacted" || event.Type == "turn_context") && !event.At.Before(launched) {
+			usage.ObservedContext = true
 			usage.UsedTokens, usage.CapacityTokens = 0, 0
 			continue
 		}
@@ -55,6 +57,7 @@ func readCodexLiveUsage(raw []byte, launched time.Time, resumed bool) CodexUsage
 		}
 		info := event.Payload.Info
 		if !event.At.Before(launched) {
+			usage.ObservedContext = true
 			usage.UsedTokens, usage.CapacityTokens = 0, 0
 			if used := info.Last.Tokens; used != nil && *used >= 0 && info.Capacity > 0 {
 				usage.UsedTokens, usage.CapacityTokens = *used, info.Capacity

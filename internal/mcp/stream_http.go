@@ -46,7 +46,7 @@ func (g *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if version != "2025-03-26" && version != "2025-06-18" {
 			version = "2025-06-18"
 		}
-		result = map[string]any{"protocolVersion": version, "capabilities": map[string]any{"tools": map[string]any{}}, "serverInfo": map[string]any{"name": "agent-messenger", "version": "0.2"}}
+		result = map[string]any{"protocolVersion": version, "capabilities": map[string]any{"tools": map[string]any{}}, "serverInfo": map[string]any{"name": "kotel", "version": "0.2"}}
 	case "ping":
 		result = map[string]any{}
 	case "tools/list":

@@ -941,3 +941,19 @@ Place the icon and New Task text at the leading edge of the sidebar. Use the sha
 Animate visible membership changes using a short fade and vertical movement. Keep a stable list still on status polls. Respect reduced motion. Count all configured projects independently of the current filter. Place Clear directly before the agent filter and keep the existing scope confirmation. The selected Mac header has a divider under the task only. This updates D-251.
 
 The task model menu and Settings use the same family, numeric generation and effort ordering within each provider. Keep the suggested selection in its normal position. Preserve unknown model IDs and the stored configuration.
+
+## D-254 — Scroll the conversation date with the messages
+
+Keep only the title in the fixed task header. Place the centered date first in the scrolling conversation with the same top inset for each task. This supersedes the date placement in D-251.
+
+## D-255 — Use Graphite for dark appearance
+
+Use the shared Graphite colors for primary text (#c2c2c0), secondary text (#9b9b99), running (#8eadd2) and waiting (#ceb271). Apply the same palette when system appearance selects dark mode.
+
+## D-256 — Compact sidebar grouping and presence
+
+Keep computer grouping as the default. In project folders prefix each task with its executing computer. In the nested view the enclosing computer and project supply both labels. Use the same filter glyph on both sides and a separate grouping control. See [UI_STYLE.md](UI_STYLE.md) for spacing and computer presence.
+
+## D-257 — Ship the combined post-117 release and retain the local updater
+
+The next public release includes the approved window, worker features and managed MCP migration. The owner kept the local computer's version and update button in the bottom-left footer beside the existing controls. Network settings also offer local updates, and provide the versions, update and cancel actions for paired computers. The repository rename still requires the separate instruction recorded in D-247.

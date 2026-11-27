@@ -2,6 +2,24 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — T-338, T-346, T-353 and T-355 combined update
+
+Integrated both post-117 branches. An isolated Codex chat retained its project and tool policy across the MCP rename. Verified the Cursor worker guard with the installed CLI. Captured the native Mac window, archive and Network roster with synthetic task data. Kept the local update button and version in the sidebar footer at the owner's request. The [development report](reports/2026-11-27-kotel-combined.md) records the outstanding release gates.
+
+## 2026-11-27 — T-355 task sidebar
+
+Sidebar computer and folder marks share the original 16 px box. Both folder states match the computer drawing bounds. The rounded open front projects beyond the rear wall while the tab stays in place. Network settings now show one connection panel at a time, with a sliding selection. The connected label beside the date turns green after reachability is confirmed. The connection date includes the full month, year and local time. An idle host has no status row. Running and failed starts retain their status. Implemented the three grouping modes using the existing task selection, status and context-menu paths. The two filter icons open the existing project and agent menus. Chromium and WebKit passed the window checks, including grouping, task selection, folder collapse, filters, spacing and connection icons. Captured WebKit screenshots with fictional tasks in each grouping and with the archive filter open. After visual review, moved the archive controls up, separated Clear from Filter, and tightened the folder headings. Verified in a loopback browser preview that the archive heading shares its text edge with its entries. Collapsed computer and project headings display their scoped task totals. Project folder outlines also show whether their rows are expanded.
+
+## 2026-11-27 — T-354 Graphite dark palette
+
+Applied the approved primary, secondary, running and waiting colors at the window theme root. Verified window controls, project and archive views, and update indicators in Chromium and WebKit with fictional data.
+
+## 2026-11-27 — T-343 public channel, T-346 and T-352
+
+[Release 117](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.14-preview.117) is published. The signed draft resumed without rebuilding or re-signing after correcting the Mac test harness. Five native updates and the public channel passed in [run 106](https://github.com/kolotiloff/agent-messenger/actions/runs/46039004148). A stock Mac 116 discovered and downloaded 117 through its original channel, the bundle signature passed and 117 reported current.
+
+Post-117 changes include durable, per-attempt context measurements and a shared archive pagination action. At 128 pixels the installed Mac bundle icon and the neighboring bundle icons measured 104 by 104 opaque pixels. Assigning the raw Kotel resource produced 116 by 118. The shell now requests the system-framed bundle image for the Dock. The compact labels use regular weight for roles and collapsed task counts. Computers, tasks and the New Task action share their row hover. New Task uses the shared 4 px vertical and 12 px horizontal row padding. The sidebar controls and statistics periods share the filters’ 8 px gap. Compact task and computer lists keep their 4 px gap. The date is the first item in the conversation and scrolls with the messages. The report closing line uses the same section gap as command summaries.
+
 ## 2026-11-27 — T-348 through T-351, post-117 window and packaging
 
 Implemented row transitions and reduced motion, Settings and task model ordering, heading counts, the archive clear placement, the selected Mac divider and non-indexed Mac acceptance directories. Chromium and WebKit exercised actual additions, archive transfer, removal, model selection and both panel layouts. Confirmed the installed Mac bundle path separately from isolated fixture copies.
@@ -17,6 +35,10 @@ Shortened the pending and unconfirmed labels and removed surrounding quotation m
 ## 2026-11-27 — T-343 signed Mac update check
 
 Reproduced the strict signature failure by overlaying 117 on 116. Verified clean extraction in isolation and changed the fixture to replace its bundle as a unit, retaining its original executable path and data checks.
+
+## 2026-11-27 — Codex (T-338 coordinator migration development)
+
+Added the new coordinator name for fresh profiles, legacy profile detection, collision handling and named MCP handshake responses. Tested isolated native Claude and Codex configuration. Cursor CLI preserved worker isolation with the configured environment mapping. Ordinary interactive startup with an unset marker still needs a provider-compatible fix.
 
 ## 2026-11-27 — Codex (T-343 patch integration)
 

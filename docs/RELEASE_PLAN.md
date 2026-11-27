@@ -2,7 +2,9 @@
 
 Written November 6, 2026. The current status below supplements the original [MVP](MVP.md), [architecture](PLAN.md), [window requirements](APP.md) and [broker deployment](DEPLOYMENT.md). Transitions are decided by checks.
 
-## Planned 1.0.14 fixes
+## Published 1.0.14 fixes
+
+[Build 117](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.14-preview.117) passed all five native update checks and public channel verification.
 
 - In direct chats, answer the owner's current question in their language. Show one verified reply and let the owner expand the preceding progress text. Keep pending and failed output available.
 - Keep the remote download button in place on hover. Give Archive the same default width as Projects and preserve individually saved widths.
