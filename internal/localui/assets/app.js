@@ -3354,7 +3354,7 @@
     button.setAttribute('aria-label',button.title);button.setAttribute('aria-expanded','false');button.setAttribute('aria-controls',details.id);
     const label=el('span',undefined,'am-efficiency-model');
     label.append(el('span',model,'am-efficiency-model-name'),el('span',count,'am-muted'));
-    button.append(svgIcon(['M9 6l6 6-6 6']),label);
+    button.append(label);
     button.addEventListener('click',()=>{details.hidden=!details.hidden;button.setAttribute('aria-expanded',String(!details.hidden));});
     const name=el('th');name.scope='row';name.append(button);row.append(name);
     const rate=(value,total,kind)=>{
@@ -4540,7 +4540,7 @@
       ['settings',$('settings-open').querySelector('svg').cloneNode(true)],
       ['server',svgIcon(serverIconPaths)],
       ['project',svgIcon(['M4 6h5l2 2h9a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z'])],
-      ['agents',svgIcon(['M15 7a3 3 0 1 1-6 0 3 3 0 0 1 6 0ZM6 20v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2M18 5a3 3 0 0 1 0 6m4 9v-2a4 4 0 0 0-2-3.5M6 5a3 3 0 0 0 0 6m-4 9v-2a4 4 0 0 1 2-3.5'])],
+      ['agents',svgIcon(['M7 7h10a4 4 0 0 1 4 4v5a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4v-5a4 4 0 0 1 4-4ZM12 7V3m-2 0h4M8.5 12v1m7-1v1M10 16.5h4'])],
     ];
     for(const [section,icon] of sectionIcons){
       const button=root.querySelector(`.am-tabs [data-tab=${section}]`);

@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-334 efficiency row refinement)
+
+Used an outlined robot icon for Agents and removed the model disclosure arrows. The model label and details advance by one control gap each. Verified the indents, mouse expansion and keyboard collapse in the live preview with Chromium and WebKit. Updated [PR #231](https://github.com/kolotiloff/agent-messenger/pull/231).
+
 ## 2026-11-27 — Codex (T-334 statistics dialog)
 
 Moved Statistics to a dedicated footer button and dialog. Reordered Settings to General, Server, Project and Agents, added outline section icons, and reduced both dialog footprints. Aligned the report headings and kept filters fixed while switching or reloading an efficiency report. Reused a compact header and the settings row style, and styled the model picker search and scrollbar spacing. Verified the window suite in Chromium and WebKit, the local UI Go race tests, and the running preview at 1150 and 520 px.

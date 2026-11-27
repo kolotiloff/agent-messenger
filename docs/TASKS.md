@@ -32,7 +32,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
-| T-334 | Separate Statistics, align its report views, and unify the Settings, agent and model dialogs. | agent | Implemented in the local window preview and verified in Chromium and WebKit. |
+| T-334 | Separate Statistics, align its report views, make model details open from an indented row, and unify the Settings, agent and model dialogs. | agent | Implemented in the local window preview and verified in Chromium and WebKit. |
 | T-333 | Enable the computer-grouped task layout in the packaged desktop window. | agent | Enabled on the normal window route. The owner paused the release for the combined changes. |
 | T-305 | Refresh the public GitHub page and English screenshots for the current release. | agent | `codex/t305-public-page-refresh`. Uses 1.0.3 window assets and fictional data. Includes the download, network, task and update guides. |
 | T-267 | Review of the 0.95 per-project storage: one unroutable network message stopped the inbox; a task whose start failed half-way blocked a shared resource and stayed «running»; a failed storage activation stopped the client from starting (2026-11-23). | agent | Released in 0.97. `claude/amazing-noether-apbflv` (D-188). Unroutable messages are skipped, starts for a project without storage are refused, unpublished tasks are closed at startup, activation that changed nothing keeps the single database. Covered by Go tests with fixture databases (no real models); the inbox fix was found by reading the code, not observed in use. |
