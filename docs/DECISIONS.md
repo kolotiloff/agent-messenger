@@ -840,7 +840,7 @@ Start Archive cards with the subdued completion time, using capitalized Today an
 
 Keep the owner composer editable in an active task while Send is temporarily unavailable, including a lost remote connection. Preserve the draft when the same open task changes between a message and a question. Keep routing through the owner window and use the confirmed task state when sending.
 
-In the Projects sidebar, align active-task text with the computer name. Include the computer icon width and label gap in the task's leading inset. Keep the hover, focus, and selection surfaces full width. Align the chat heading with Projects and Archive, showing the full task name above the date or New Task in the draft. Show individual message times below their message on hover and keyboard focus.
+In the Projects sidebar, align active-task text with the computer name. Include the computer icon width and label gap in the task's leading inset. Keep the hover, focus, and selection surfaces full width. Align the chat heading with Projects and Archive, showing the full task name above the date or New Task in the draft. Show individual message times on hover and keyboard focus, above the worker header on the left and below outgoing messages on the right.
 
 ## D-232 — Start a task in the owner window (T-327)
 

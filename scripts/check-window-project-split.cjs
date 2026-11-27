@@ -405,6 +405,12 @@ if (require.main === module) (async()=>{
       await message.hover();
       assert(await timestamp.evaluate(node=>getComputedStyle(node).opacity==='1'&&
         node.getBoundingClientRect().top>node.parentElement.getBoundingClientRect().bottom));
+      const workerMessage=draftPage.locator('#thread .am-message-group').last();
+      await workerMessage.focus();
+      assert(await workerMessage.locator('.am-message-time').evaluate(node=>{
+        const time=node.getBoundingClientRect(),message=node.parentElement.getBoundingClientRect();
+        return getComputedStyle(node).opacity==='1'&&time.bottom<message.top&&time.left===message.left;
+      }));
       const settingsDialog=draftPage.getByRole('dialog',{name:'Настройки программы'});
       const settingsOpen=draftPage.locator('#settings-open');
       const settingsNav=settingsDialog.getByRole('navigation',{name:'Разделы'});

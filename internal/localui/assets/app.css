@@ -550,8 +550,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept :is(.am-meta-model,.am-role) { color:var(--am-muted); font-size:var(--am-text-s); font-weight:400; }
 #am-concept .am-meta-author { min-width:0; }
 #am-concept.am-task-sidebar-preview .am-message-group { position:relative; }
-#am-concept .am-message-time { position:absolute; inset-block-start:calc(100% + var(--am-space-1)); inset-inline-start:0; color:var(--am-muted); font-size:var(--am-text-xs); white-space:nowrap; pointer-events:none; }
-#am-concept .am-outgoing + .am-message-time { inset-inline-start:auto; inset-inline-end:0; }
+#am-concept .am-message-time { position:absolute; inset-block-end:calc(100% + var(--am-space-1)); inset-inline-start:0; color:var(--am-muted); font-size:var(--am-text-xs); white-space:nowrap; pointer-events:none; }
+#am-concept .am-outgoing + .am-message-time { inset-block:calc(100% + var(--am-space-1)) auto; inset-inline:auto 0; }
 @media (hover:hover) {
   #am-concept .am-message-group:not(:hover,:focus-within) > .am-message-time { opacity:0; }
 }
