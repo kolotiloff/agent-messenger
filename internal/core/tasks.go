@@ -2590,17 +2590,29 @@ func (s *Store) ClaimCoordinator(project, chat string, self platform.Observation
 		if old == chat {
 			old, oldProc = "", platform.Observation{}
 			// The relay can replace the process while keeping the same chat.
-			if self.PID > 0 && self.StartToken != "" && self.BootID != "" {
-				_, err = tx.Exec(`UPDATE coordinator_chats SET pid=?,start_token=?,boot_id=? WHERE project=? AND chat=? AND (pid<>? OR start_token<>? OR boot_id<>?)`,
-					self.PID, clip(self.StartToken, 128), clip(self.BootID, 128), project, chat, self.PID, clip(self.StartToken, 128), clip(self.BootID, 128))
-			}
-			return err
+			return refreshCoordinatorProcess(tx, project, chat, self)
 		}
 		_, err = tx.Exec(`INSERT INTO coordinator_chats(project,chat,since,pid,start_token,boot_id) VALUES (?,?,?,?,?,?) ON CONFLICT(project) DO UPDATE SET chat=excluded.chat,since=excluded.since,pid=excluded.pid,start_token=excluded.start_token,boot_id=excluded.boot_id`,
 			project, chat, now(), self.PID, clip(self.StartToken, 128), clip(self.BootID, 128))
 		return err
 	})
 	return old, oldProc, err
+}
+
+// RefreshCoordinatorProcess reconnects a relay to the chat it already owns.
+// Initializing a different chat must never claim the project.
+func (s *Store) RefreshCoordinatorProcess(project, chat string, self platform.Observation) error {
+	return s.tx(func(tx *sql.Tx) error { return refreshCoordinatorProcess(tx, project, chat, self) })
+}
+
+func refreshCoordinatorProcess(tx *sql.Tx, project, chat string, self platform.Observation) error {
+	if self.PID <= 0 || self.StartToken == "" || self.BootID == "" {
+		return nil
+	}
+	start, boot := clip(self.StartToken, 128), clip(self.BootID, 128)
+	_, err := tx.Exec(`UPDATE coordinator_chats SET pid=?,start_token=?,boot_id=? WHERE project=? AND chat=? AND (pid<>? OR start_token<>? OR boot_id<>?)`,
+		self.PID, start, boot, project, chat, self.PID, start, boot)
+	return err
 }
 
 // CoordinatorChat returns the project's active coordinator chat, or "".

@@ -710,6 +710,7 @@
   // reloads of the window. Only answers that came while the window was open
   // are shown as good news; problems of the last day are kept.
   const notices=[],noticeSince=Date.now();
+  const waitingUpdateNotices=new Map();
   function closedNotices(){try{return JSON.parse(localStorage.getItem('messenger-notices-closed')||'{}')||{};}catch(_){return {};}}
   // T-181: no scroll of their own; at most noticeLimit are shown and a new
   // one pushes out the oldest, which then counts as closed.
@@ -730,20 +731,25 @@
     // T-129: the background program was started inside an agent's sandbox.
     if(clientInfo?.sandbox)addNotice('sandbox-'+(clientInfo.client_version||''),'bad',tr('Kotel запущен из песочницы агента'),tr('Исполнители унаследуют её: без сети и без части папок, даже с «Любыми командами». Закройте Kotel полностью и откройте его снова сами, не из агента.'));
     const names=Object.fromEntries((server?.peers||[]).map(p=>[p.id,p.name]));
-    const showUpdate=(u,name)=>{
+    const showUpdate=(u,name,source)=>{
       const at=Date.parse(u.updated_at);
       if(!(Date.now()-at<24*3600*1000))return;
       const key='update-'+u.request_id+'-'+(u.stale?'stale':u.state);
-      if(u.stale)addNotice(key,'bad',name+tr(' не ответил об обновлении'),tr('Проверьте, что программа там запущена, и попросите ещё раз.'));
-      else if(u.state==='done'&&at>=noticeSince-60000){
+      // A waiting row keeps its original timestamp when it becomes stale.
+      const observedWaiting=waitingUpdateNotices.get(source)===u.request_id;
+      if(u.state==='waiting'&&!u.stale)waitingUpdateNotices.set(source,u.request_id);
+      else waitingUpdateNotices.delete(source);
+      if(u.stale){
+        if(at>=noticeSince||observedWaiting)addNotice(key,'bad',name+tr(' не ответил об обновлении'),tr('Проверьте, что программа там запущена, и попросите ещё раз.'));
+      }else if(u.state==='done'&&at>=noticeSince-60000){
         const same=/последн/i.test(u.text||'');
         addNotice(key,same?'info':'good',same?name+tr(': уже последняя версия'):name+tr(' обновлён до ')+versionName(u.version||''),same?'':u.text||'');
       }else if(u.state==='queued'&&at>=noticeSince-60000)addNotice(key,'info',name+tr(' ждёт обновления'),u.text||tr('Программа обновится, когда задачи закончатся; до тех пор компьютер не берёт новых задач.'));
       else if(u.state==='cancelled'&&at>=noticeSince-60000)addNotice(key,'info',name+tr(': обновление отменено'),'');
-      else if(u.state==='refused'||u.state==='failed')addNotice(key,'bad',name+tr(' не обновлён'),capital(u.text||''));
+      else if((u.state==='refused'||u.state==='failed')&&at>=noticeSince)addNotice(key,'bad',name+tr(' не обновлён'),capital(u.text||''));
     };
-    for(const u of server?.updates||[])showUpdate(u,names[u.computer]||tr('Компьютер'));
-    if(view?.local_update)showUpdate(view.local_update,view.computer_name||tr('Этот компьютер'));
+    for(const u of server?.updates||[])showUpdate(u,names[u.computer]||tr('Компьютер'),u.computer);
+    if(view?.local_update)showUpdate(view.local_update,view.computer_name||tr('Этот компьютер'),'local');
   }
   const noticeIcons={good:'<path d="M8 12.5l2.7 2.7L16 9.8"/>',info:'<path d="M12 11v5M12 8h.01"/>',bad:'<path d="M12 7.5v5.5M12 16.5h.01"/>'};
   function updateNoticeTooltips(){

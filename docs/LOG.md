@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-339 update notices and coordinator label)
+
+The installed Mac returned historical refusals for the two other computers. The window replayed refusals from the previous 24 hours. Chromium and WebKit fixtures now cover opening the window, a live timeout, a new failure and reopening after it. The MCP initialization test covers the same relay chat recovering its process identity and a different chat leaving ownership intact. Four compact Mac header proposals were prepared separately for owner review.
+
 ## 2026-11-27 — Codex (T-337 Kotel bridge)
 
 Integrated the T-336 interface and the Kotel pot artwork with a raised lid and widely spaced eyes, branded the window and downloads, retained the installed application identities, and bound release discovery to the original repository ID. Updated the README screenshots from fictional projects and checked the packaged Mac window and the Chromium and WebKit suites. Active local Codex workers can report a measured context snapshot. Claude, Cursor and remote workers retain a neutral ring when only cumulative usage is available.

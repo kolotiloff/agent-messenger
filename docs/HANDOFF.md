@@ -8,6 +8,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+T-339 prepares two fixes for 1.0.14. A window opened after an update skips historical failures and still reports new failures or a waiting request that times out while open. The replacement MCP process refreshes the local coordinator label during initialization if the same relay chat already owns the project. The compact Mac toolbar layout is awaiting the owner's choice.
+
 Kotel 1.0.13, build 116, is [published in the original repository](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.13-preview.116). It includes the T-336 interface, new artwork and the in-place repair for older split project databases. The five native signed-draft checks and public channel verification [passed](https://github.com/kolotiloff/agent-messenger/actions/runs/46011237589). Both Linux architectures also exercised paired remote updates. Stock Mac builds 99, 101, 108, 112 and 115 found the public bridge at the old address. See the [acceptance report](reports/2026-11-27-kotel-transition.md).
 
 The next gate is positive confirmation that every known installation runs build 116, including offline devices and services, followed by the owner's rename command. T-338 tracks migration of existing and new MCP profiles, current packages, CLI, and retirement of old operational names. Keep Git history and the original signed releases.

@@ -49,6 +49,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
+| T-339 | Fix repeated update failures on window launch and restore the live coordinator label after a relay update. | window | Next patch, `codex/t339-update-notices`. Compact Mac header variants are under review. |
 | T-338 | Finish Kotel naming for existing and fresh MCP profiles, CLI and deployment. | agent | D-248. After the bridge, migrate managed entries, verify the same chat and permissions on each client, resolve custom settings explicitly, then retire legacy names from current distributions. |
 | T-337 | Ship Kotel as an in-place update of Agent Messenger, preserving history and connected computers. | agent | D-247. Original GitHub channel for the bridge. Includes the Windows 1.0.12 split project schema repair. Build 116 is public. The signed installations on all five native runners and the public channel passed. Fleet confirmation and owner command required for rename. |
 | T-336 | Audit the window refinements, including compact controls, both composers, message actions, settings and statistics. | agent | `codex/t336-window-audit`. Implemented in the shared preview. Browser checks passed on Mac. The isolated Mac window showed the settings order and Statistics. Integrated into the T-337 bridge. |

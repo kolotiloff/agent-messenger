@@ -1234,6 +1234,31 @@ func TestRestartedCoordinatorChatIsNotATakeover(t *testing.T) {
 	}
 }
 
+func TestRelayInitializeRestoresOnlyItsOwnCoordinatorLabel(t *testing.T) {
+	const owner = "chat-0000000000000001"
+	for _, chat := range []string{owner, "chat-0000000000000002"} {
+		t.Run(chat, func(t *testing.T) {
+			st := newCoordinatorStore(t)
+			gone := selfProcess()
+			gone.StartToken = "exited before the update"
+			if _, _, err := st.ClaimCoordinator("Game", owner, gone); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv(CoordinatorChatVariable, chat)
+			c := startCoordinator(t, st, "Game")
+			c.send(1, "initialize", map[string]any{})
+			c.expect(1, 2*time.Second)
+			v, err := st.ProjectActivity("Game")
+			if err != nil || v.Coordinator.Active != (chat == owner) {
+				t.Fatalf("coordinator after initialization: %+v, %v", v.Coordinator, err)
+			}
+			if got, err := st.CoordinatorChat("Game"); err != nil || got != owner {
+				t.Fatalf("owner changed: %q, %v", got, err)
+			}
+		})
+	}
+}
+
 // T-135: the coordinator records remarks about Messenger and exports the
 // journal, its own remarks and the owner's, as one file.
 func TestCoordinatorFeedback(t *testing.T) {
