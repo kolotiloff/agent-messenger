@@ -24,6 +24,8 @@ These captures are from the real AppKit window running local 118 with synthetic 
 
 [Dark task window](2026-11-27-kotel-window/dark-window.jpg) · [Archive](2026-11-27-kotel-window/archive.jpg) · [My Network](2026-11-27-kotel-window/network.jpg)
 
+The [native Statistics window](2026-11-27-kotel-window/statistics-hover.jpg) shows six completed fixture tasks. Moving the pointer over the third task highlights that row across all four columns. A separate system WebKit pixel comparison confirmed that keyboard focus also stays inside the row.
+
 ## Release gate
 
 Task workers still use one-shot CLI launches. Queuing an owner message for the next run works. Acknowledged delivery to the currently running turn under its original message ID (T-344) remains open. Claude advertises JSON streaming input and replayed user-message acknowledgments. Codex provides a turn-steer RPC in app-server mode. The installed Cursor print interface exposes neither streaming input nor user-message acknowledgments. The isolated provider profiles lack authenticated model access. A signed 117 → 118 platform matrix, desktop icon acceptance and the public 118 channel check remain outstanding. Keep the original repository, release keys and legacy entry points throughout the bridge.
