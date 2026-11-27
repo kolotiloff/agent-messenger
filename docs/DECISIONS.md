@@ -968,8 +968,13 @@ Use the same typography as Connection mode. Place this computer and its peers in
 
 ## D-261 — Keep computer update notices outside the conversation
 
-Show update notices in the upper-right corner of the window, including in the open Settings or Statistics dialog. Keep confirmations modal. Successful and informational notices expire, while errors remain dismissible. The notice area does not change the composer or conversation layout.
+Place update notices above the conversation in a fixed area outside its scrollable history. They stay visible until dismissed, subject to the existing three-notice limit. Keep confirmations modal.
 
 ## D-262 — Manage computers from the sidebar
 
-Keep connection configuration in Network settings. Show the installed version, update and cancellation in the remote computer’s context menu. Keep the local update status and action in the sidebar footer. Use the compact menu spacing tokens.
+Keep the original connection layout in Network settings and remove the duplicate roster. The context menu footer uses the installed version on the right and the shared update control on the left. The local sidebar footer still provides the same controls. Project folders use the enclosing computer, or this computer in the project-only view. Open project settings with the selected project.
+
+
+## D-263 — Brighten dark appearance and apply font preferences throughout the interface
+
+Use #1e1e1e for the sidebar, #dededc for primary text and #a5a5a3 for secondary text in dark appearance. Keep the existing task fills during the visual comparison. Font selection applies to all ordinary interface text. System high contrast keeps the same font and size with brighter text in dark appearance and darker text in light appearance.

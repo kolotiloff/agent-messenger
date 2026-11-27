@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — T-365, T-366 and T-369 Window review follow-up
+
+Codex restored the Connection mode styles, pinned update notices above the conversation, reused update icons in context menu footers, and applied font preferences throughout the window. The dark sidebar is slightly darker and ordinary text is brighter. A combined isolated preview includes the relative timestamp from T-368 and compares both sidebar highlights. Chromium and WebKit checks passed for window controls, project and sidebar behavior, and the update and cancellation paths. The native installed window remains pending.
+
 ## 2026-11-27 — T-363 Change summary layout
 
 Codex recorded the owner's reference for the task summary in [PR #253](https://github.com/kolotiloff/agent-messenger/pull/253). Show task totals prominently below the final answer, with three file rows and a control to reveal the rest. The card is read-only and appears only when a task has verified file changes, including documentation and other project files.

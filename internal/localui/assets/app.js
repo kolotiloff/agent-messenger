@@ -234,7 +234,7 @@
   function renderToasts(){
     const box=$('toasts');
     // An agent action must not report its error inside the hidden Tasks tab.
-    if(tab==='tasks'||(taskSidebarPreview&&tab==='stats'))$('notices').after(box);
+    if(tab==='tasks'||(taskSidebarPreview&&tab==='stats'))root.querySelector('.am-chat-footer').prepend(box);
     else if(taskSidebarPreview)$('settings-dialog').querySelector('.am-settings-views').prepend(box);
     else root.querySelector('.am-main').insertBefore(box,root.querySelector('[data-screen]'));
     box.replaceChildren();box.hidden=!actionError;if(!actionError)return;
@@ -595,8 +595,8 @@
     syncSelects();
   }
   // A right-click menu; entries are {text,pick}.
-  function popMenu(x,y,entries,status=null,detail=''){
-    if(!entries.length&&!status&&!detail)return;
+  function popMenu(x,y,entries,status=null,device=''){
+    if(!entries.length&&!status&&!device)return;
     let menu=$('device-menu');
     if(!menu){
       // A manual popover: an automatic one closes on the same right click
@@ -618,27 +618,56 @@
     menu.setAttribute('role',status?'status':'menu');
     menu.dataset.stopTask=status?.task||'';
     menu.replaceChildren(...(status?[el('div',status.text,'am-context-status')]:items));
-    if(detail)menu.prepend(el('div',detail,'am-context-status'));
+    if(device){
+      const footer=el('div',undefined,'am-context-device');
+      footer.dataset.device=device;
+      menu.append(footer);
+      renderDeviceMenuFooter(footer);
+    }
     menu.showPopover();
     menu.style.left=Math.max(0,Math.min(x,window.innerWidth-menu.offsetWidth))+'px';
     menu.style.top=Math.max(0,Math.min(y,window.innerHeight-menu.offsetHeight))+'px';
-    (items[0]||menu).focus();
+    (items[0]||menu.querySelector('.am-context-device button:not(:disabled)')||menu).focus();
   }
   function deviceMenu(d,x,y,can){
     const peer=(server?.peers||[]).find(other=>other.id===d.id);
     if(!peer)return;
     const items=[];
     const add=(text,pick)=>items.push({text,pick});
-    const installed=peerInstalledVersion(peer),mark=updateMark(peer),offer=peerUpdateOffer(peer,installed,mark);
-    if(offer)add(tr('Обновить до ')+offer,()=>confirmPeerUpdate(peer,offer));
-    let detail=installed?tr('Установлена ')+versionName(installed):tr('Версия неизвестна');
-    if(updateInProgress(mark)){
-      const state=updatePresentation(peer,mark);
-      detail+=' · '+state.caption;
-      if(state.canCancel)add(tr('Отменить обновление'),()=>cancelUpdate(state));
-    }
     if(can.revoke)add(tr('Отозвать устройство'),()=>{revokeAsk=d.id;clearTimeout(revokeTimer);revokeTimer=setTimeout(()=>{revokeAsk='';renderMachines();},8000);renderMachines();$('machines').querySelector('[data-key="'+CSS.escape('revoke-yes-'+d.id)+'"]')?.focus();});
-    popMenu(x,y,items,null,detail);
+    popMenu(x,y,items,null,peer.id);
+  }
+  function renderDeviceMenuFooter(footer=$('device-menu')?.matches(':popover-open')?$('device-menu').querySelector('.am-context-device'):null){
+    if(!footer)return;
+    const device=footer.dataset.device;
+    const local=device==='local';
+    const peer=local?null:server?.peers?.find(item=>item.id===device);
+    const version=local?$('app-installed-version').textContent:(peer?versionName(peerInstalledVersion(peer)||''):'');
+    let control;
+    if(local){
+      const mark=updateMark(null);
+      if(updateInProgress(mark))control=updateControl(null,mark);
+      else{
+        const original=$('app-update-button');
+        if(!original.hidden){
+          control=original.cloneNode(true);
+          control.removeAttribute('id');
+          control.classList.add('am-local-update-copy');
+          control.addEventListener('click',()=>original.click());
+        }
+      }
+    }else if(peer)control=peerUpdateButton(peer,peerInstalledVersion(peer));
+    if(control?.matches('button:not(.am-update-cancel)')){
+      control.addEventListener('click',()=>$('device-menu').hidePopover(),{capture:true});
+    }
+    const label=el('span',version||'—','am-version');
+    label.title=version?tr('Версия ')+version.replace(/^v/,''):tr('Версия неизвестна');
+    const parts=control?[control,label]:[label];
+    if(parts.length===footer.children.length&&parts.every((part,index)=>part.isEqualNode(footer.children[index])))return;
+    const restoreFocus=footer.contains(document.activeElement);
+    if(restoreFocus)$('device-menu').focus({preventScroll:true});
+    footer.replaceChildren(...parts);
+    if(restoreFocus)footer.querySelector('button:not(:disabled)')?.focus({preventScroll:true});
   }
   // Asking another computer to update itself (T-078). Its answers arrive
   // with the server status and show as notices in the window;
@@ -755,10 +784,7 @@
     b.addEventListener('click',e=>{e.stopPropagation();void cancelUpdate(state);});
     return b;
   }
-  // A successful update notice fades after a few seconds
-  // on screen; a bad one stays until the owner closes it, also across
-  // reloads of the window. Only answers that came while the window was open
-  // are shown as good news; problems of the last day are kept.
+  // Update messages sit above the thread until dismissed.
   const notices=[],noticeSince=Date.now();
   const waitingUpdateNotices=new Map();
   function closedNotices(){try{return JSON.parse(localStorage.getItem('messenger-notices-closed')||'{}')||{};}catch(_){return {};}}
@@ -766,7 +792,7 @@
   // one pushes out the oldest, which then counts as closed.
   const noticeLimit=3;
   function closeNotice(key){
-    const i=notices.findIndex(n=>n.key===key);if(i>=0){clearTimeout(notices[i].timer);notices.splice(i,1);}
+    const i=notices.findIndex(n=>n.key===key);if(i>=0)notices.splice(i,1);
     const closed=closedNotices(),cut=Date.now()-2*24*3600*1000;closed[key]=Date.now();
     for(const k of Object.keys(closed))if(closed[k]<cut)delete closed[k];
     remember('messenger-notices-closed',JSON.stringify(closed));renderNotices();
@@ -810,8 +836,6 @@
   }
   function renderNotices(){
     const box=$('notices');if(!box)return;
-    const surface=[$('settings-dialog'),$('stats-dialog')].find(dialog=>dialog.open)||root.querySelector('.am-window');
-    if(box.parentElement!==surface)surface.append(box);
     box.replaceChildren();box.hidden=!notices.length;
     for(const n of notices){
       const card=el('div',undefined,'am-notice am-notice-'+n.kind);card.dataset.key=n.key;
@@ -820,16 +844,10 @@
       const body=el('div',undefined,'am-notice-body');body.append(el('span',n.title,'am-notice-title'));if(n.text)body.append(el('span',n.text,'am-small am-muted am-notice-text'));
       const close=el('button','×','am-toast-close');close.type='button';close.setAttribute('aria-label',tr('Закрыть'));close.addEventListener('click',()=>closeNotice(n.key));
       card.append(icon,body,close);
-      if(n.kind!=='bad'){
-        card.append(el('span',undefined,'am-notice-timer'));
-        // The countdown starts once the notice can be seen.
-        if(!n.timer&&!document.hidden)n.timer=setTimeout(()=>closeNotice(n.key),6000);
-      }
       box.append(card);
     }
     updateNoticeTooltips();
   }
-  document.addEventListener('visibilitychange',renderNotices);
   // One line per agent program, with its worker state.
   // live is false when the computer cannot be reached.
   function busyTasksByComputer(snapshot){
@@ -1314,7 +1332,7 @@
         popMenu(x,y,[
           {text:tr('Настройки проекта'),pick:()=>{if(project!==name)selectProject(name);show('project');}},
           {text:tr('Удалить локальный проект'),pick:()=>askRemoveProject(name)},
-        ]);
+        ],null,computer||'local');
       };
       button.addEventListener('contextmenu',event=>{
         event.preventDefault();
@@ -1465,6 +1483,16 @@
       body.append(lines);
       head.append(localMeta);machine.append(head,body);
     }
+    head.tabIndex=0;
+    head.addEventListener('contextmenu',event=>{
+      event.preventDefault();popMenu(event.clientX,event.clientY,[],null,'local');
+    });
+    head.addEventListener('keydown',event=>{
+      if(event.target!==head||!(event.key==='ContextMenu'||(event.shiftKey&&event.key==='F10')))return;
+      event.preventDefault();
+      const bounds=head.getBoundingClientRect();
+      popMenu(bounds.left,bounds.bottom,[],null,'local');
+    });
     box.append(machine);
     // The other computers of this computer's network, with their agents.
     // Only the computer that runs the server can revoke one, from the
@@ -1561,6 +1589,7 @@
       else if(focusedCell)live.querySelector('[data-project-cell="'+CSS.escape(focusedCell)+'"]')?.focus({preventScroll:true});
     }
     placeLocalParts();
+    renderDeviceMenuFooter();
     // T-271: only the highlighted card shows the chosen computer, so a
     // computer that left the list no longer filters anything.
     if(computerFilter&&!pickedComputers.has(computerFilter))queueMicrotask(()=>{if(computerFilter&&!pickedComputers.has(computerFilter))clearComputer();});
@@ -3789,8 +3818,7 @@
         if(tab==='stats'&&!statistics.open)statistics.showModal();
       }else if(!dialog.open)dialog.showModal();
     }
-    renderNotices();
-    $('list-toggle').hidden=!view?.project||(!taskSidebarPreview&&tab!=='tasks');if(tab==='server'||tab==='settings')loadServer();if(tab==='stats')reloadStats();if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),settings:tr('Настройки программы'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сеть'),stats:tr('Статистика')}[tab];startWindowWatch();
+    $('list-toggle').hidden=!view?.project||(!taskSidebarPreview&&tab!=='tasks');if(tab==='server'||tab==='settings')loadServer();if(tab==='project')renderProjectPage();if(tab==='stats')reloadStats();if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),settings:tr('Настройки программы'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сеть'),stats:tr('Статистика')}[tab];startWindowWatch();
     if(tab==='tasks'&&combinedTasks()){renderTaskList();loadProjectActivity();}
     if(tab==='tasks'&&setupPaneShown())renderThread();
   }
@@ -4479,7 +4507,7 @@
     return row;
   }
   function renderProjectPage(){
-    const name=view?.project||'';
+    const name=view?.project===project?project:'';
     $('project-none').hidden=!!name;$('project-page').hidden=!name;
     if(!name){projectPageFor='';return;}
     if(projectPageFor!==name){$('project-page-status').textContent='';$('project-rules-status').textContent='';clearTimeout(rulesTimer);}
@@ -4495,10 +4523,10 @@
     renderCoordinatorRow();
   }
   function saveProjectField(field){
-    const name=view?.project;if(!name)return;
+    const name=view?.project;if(!name||name!==project)return;
     const status=$(field==='rules'?'project-rules-status':'project-page-status');
     projectSaving=projectSaving.then(async()=>{
-      if(view?.project!==name)return;
+      if(view?.project!==name||project!==name)return;
       try{
         if(field==='title'){
           const title=$('project-page-name').value.trim();
@@ -4938,6 +4966,7 @@
     updateTip(version,busy);
     button.classList.toggle('am-update-active',!!busy);
     button.disabled=!!busy;
+    renderDeviceMenuFooter();
   }
   // Windows and Linux: the program updates itself from the window (D-048).
   let selfUpdate=null,selfUpdateBusy=false,selfUpdateTimer=0;
@@ -4960,6 +4989,7 @@
     $('app-update-version').textContent=s.message||(done?tr('Обновлено. Окно откроется заново.'):'');
     updateTip(version,s.state==='downloading'?'downloading':installing?'installing':'');
     $('app-update-button').disabled=installing;
+    renderDeviceMenuFooter();
     renderUpdateDialog();
   }
   async function loadSelfUpdate(){
@@ -5177,7 +5207,7 @@
   $('settings-open').addEventListener('click',()=>{
     $('auto-update-status').textContent='';
     if(taskSidebarPreview)show('settings');
-    else{$('settings-dialog').showModal();renderNotices();loadServer();}
+    else{$('settings-dialog').showModal();loadServer();}
   });
   $('settings-dialog').addEventListener('close',renderNotices);
   if(taskSidebarPreview){
@@ -5403,6 +5433,10 @@
     chatBody.style.setProperty('--am-footer-height',chatFooter.getBoundingClientRect().height+'px');
     const t=$('thread');if(feedPinned)t.scrollTop=t.scrollHeight;
   })).observe(chatFooter);
+  new ResizeObserver(()=>{
+    updateNoticeTooltips();
+    const thread=$('thread');if(feedPinned)thread.scrollTop=thread.scrollHeight;
+  }).observe($('notices'));
   show('tasks');loadMachineOrder();refresh();loadDiscovery();pollSetup();setInterval(()=>{if(setupPending)pollSetup();},2000);
   setInterval(updateTimers,1000);
   setInterval(loadProjectActivity,3000);

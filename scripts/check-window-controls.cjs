@@ -461,21 +461,19 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.setViewportSize({width:1100,height:850});
       await page.reload();
       updates = [1,2,3,4,5].map(i => ({request_id:'fixture-update-'+i, computer:'fixture-peer-'+i, state:'refused',
-        text:'fixture refusal '+i+' '+'long reason '.repeat(40), updated_at:new Date().toISOString()}));
+        text:'fixture refusal '+i+' '+'long reason '.repeat(80), updated_at:new Date().toISOString()}));
       await page.locator('[data-tab=server]').click();
       await page.locator('[data-tab=tasks]').click();
       await page.locator('#notices .am-notice').nth(2).waitFor({timeout:10000});
       assert.equal(await page.locator('.am-chat-footer #notices').count(),0);
-      assert.equal(await page.locator('#notices').evaluate(node=>{
-        const box=node.getBoundingClientRect(), windowBox=node.parentElement.getBoundingClientRect();
-        return box.top-windowBox.top<windowBox.height/4 && windowBox.right-box.right<=24;
-      }),true,'update messages appear at the top right of the window');
+      assert.equal(await page.locator('.am-chat > #notices').count(),1,'update messages are pinned above the thread');
       assert.equal(await page.locator('#notices .am-notice').count(), 3);
       assert.deepEqual(await page.locator('#notices .am-notice').evaluateAll(n => n.map(c => c.dataset.key)),
         ['update-fixture-update-3-refused','update-fixture-update-4-refused','update-fixture-update-5-refused']);
       assert.equal(await page.locator('.am-chat-footer').evaluate(n => getComputedStyle(n).overflowY), 'visible');
       assert.equal(await page.locator('#notices').evaluate(n => n.scrollHeight <= n.clientHeight), true);
       const clippedReason=page.locator('#notices .am-notice-text').first();
+      await page.locator('#notices .am-notice-text[title]').first().waitFor();
       assert.equal(await clippedReason.getAttribute('title'),await clippedReason.textContent(),'a clipped reason still exposes its full text');
       if(process.env.SCREENSHOT_DIR&&!native) await page.screenshot({animations:'disabled',path:path.join(process.env.SCREENSHOT_DIR,'notices.png')});
       await page.locator('#notices .am-toast-close').first().click();
@@ -779,10 +777,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await runningTaskStatus.waitFor({state:'visible'});
       for (const [theme,arrow,muted,runningColor,waitingColor] of [
         ['light','rgb(129, 83, 5)','rgb(107, 107, 107)','rgb(40, 123, 215)','rgb(201, 138, 0)'],
-        ['dark','rgb(242, 198, 91)','rgb(155, 155, 153)','rgb(142, 173, 210)','rgb(206, 178, 113)']
+        ['dark','rgb(242, 198, 91)','rgb(165, 165, 163)','rgb(142, 173, 210)','rgb(206, 178, 113)']
       ]) {
         await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;},theme);
-        assert.equal(await page.locator('#am-concept').evaluate(node=>getComputedStyle(node).color),theme==='dark'?'rgb(194, 194, 192)':'rgb(48, 48, 48)');
+        assert.equal(await page.locator('#am-concept').evaluate(node=>getComputedStyle(node).color),theme==='dark'?'rgb(222, 222, 220)':'rgb(48, 48, 48)');
         assert.equal(await runningTaskStatus.evaluate(node=>getComputedStyle(node).color),runningColor);
         assert.equal(await runningLabel.evaluate(node=>getComputedStyle(node).color),runningColor);
         assert.equal(await runningLabel.locator('.am-agent-model').evaluate(node=>getComputedStyle(node).color),runningColor);

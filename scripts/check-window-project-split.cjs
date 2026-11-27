@@ -600,7 +600,7 @@ if (require.main === module) (async()=>{
       };
       const generalTitle=await topLeft(general.getByRole('heading',{name:'Общие',exact:true}));
       const generalField=await topLeft(general.locator('.am-select-trigger').first());
-      const fontSample=general.locator('.am-chat-font-example');
+      const fontSample=general.locator('label[for=chat-font-select]');
       for(const [label,key,family] of [['Inter','inter','Inter'],['Source Sans 3','source-sans','Source Sans 3']]){
         await select(draftPage,'chat-font-select',label);
         await fontSample.evaluate(async (sample,face)=>{
@@ -615,12 +615,23 @@ if (require.main === module) (async()=>{
         const css=getComputedStyle(node);
         return {size:css.fontSize,line:parseFloat(css.lineHeight),color:css.color};
       });
-      await select(draftPage,'chat-font-select','Системный, контрастнее');
+      await select(draftPage,'chat-font-select','Системный контрастный');
       const readable=await fontMetrics();
+      const fontLabel=general.locator('#chat-font-select + .am-select-trigger .am-select-value');
+      assert.equal(await fontLabel.evaluate(node=>node.scrollWidth<=node.clientWidth),true);
+      await general.locator('#chat-font-select + .am-select-trigger').click();
+      const readableOption=draftPage.getByRole('option',{name:'Системный контрастный',exact:true});
+      assert.equal(await readableOption.locator('span').first().evaluate(node=>{
+        const range=document.createRange();
+        range.selectNodeContents(node);
+        return range.getClientRects().length;
+      }),1);
+      await draftPage.keyboard.press('Escape');
+
       await select(draftPage,'chat-font-select','Системный');
       const standard=await fontMetrics();
       assert.equal(standard.size,readable.size);
-      assert(readable.line>standard.line);
+      assert.equal(readable.line,standard.line);
       assert.notEqual(readable.color,standard.color);
       assert.equal(await general.locator('.am-card h3').count(),0);
       const headerHeight=selector=>draftPage.locator(selector).evaluate(node=>node.getBoundingClientRect().height);
@@ -1314,6 +1325,7 @@ if (require.main === module) (async()=>{
       await gameButton.click({button:'right'});
       const projectMenu=browserPreview.locator('#device-menu');
       const projectSettings=projectMenu.getByRole('menuitem',{name:'Настройки проекта'});
+      assert.equal(await projectMenu.locator('.am-context-device').getAttribute('data-device'),'local');
       await projectSettings.click();
       await browserPreview.locator('#settings-dialog #project-page-title').waitFor();
       await browserPreview.locator('#settings-close').click();
@@ -1357,8 +1369,8 @@ if (require.main === module) (async()=>{
       await group('По компьютеру');
       await card(browserPreview,'pc1').locator('.am-machine-name').press('Shift+F10');
       const computerMenu=browserPreview.locator('#device-menu');
-      await computerMenu.getByText('Установлена v1.0.5',{exact:true}).waitFor();
-      const peerUpdate=computerMenu.getByRole('menuitem',{name:'Обновить до v1.0.9'});
+      await computerMenu.getByText('v1.0.5',{exact:true}).waitFor();
+      const peerUpdate=computerMenu.getByRole('button',{name:'Обновить до v1.0.9'});
       await peerUpdate.click();
       await browserPreview.locator('#confirm-dialog').getByText('Обновить ПК-1 до v1.0.9?').waitFor();
       await browserPreview.locator('#confirm-cancel').click();
@@ -1574,8 +1586,8 @@ if (require.main === module) (async()=>{
     await page.locator('#confirm-cancel').click();
     await cells(page,'pc1').nth(0).getByText('ПК-1',{exact:true}).click({button:'right'});
     const peerMenu=page.locator('#device-menu');
-    await peerMenu.getByText('Установлена v1.0.5',{exact:true}).waitFor();
-    await peerMenu.getByRole('menuitem',{name:'Обновить до v1.0.9'}).click();
+    await peerMenu.getByText('v1.0.5',{exact:true}).waitFor();
+    await peerMenu.getByRole('button',{name:'Обновить до v1.0.9'}).click();
     await page.locator('#confirm-dialog').getByText('Обновить ПК-1 до v1.0.9?').waitFor();
     await page.locator('#confirm-cancel').click();
     assert.equal(await cells(page,'pc1').nth(1).getAttribute('aria-pressed'),'false');

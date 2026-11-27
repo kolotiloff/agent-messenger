@@ -49,8 +49,9 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
-| T-366 | Improve chat text readability at the current base size. | window | General offers a system font, a higher-contrast system option, Inter and Source Sans 3 at 14 px. The owner can compare them in the app. |
-| T-365 | Move remote update actions to the computer list, remove the duplicate roster, and move update notices to the upper-right corner. | window | Prepared for the next functional release. |
+| T-369 | Adjust the dark palette and compare sidebar task highlights. | window | Dark appearance uses a slightly darker sidebar and brighter text. The preview compares the current highlight with stronger row fills. |
+| T-366 | Improve interface text readability at the current base size. | window | General offers the system font, system high contrast, Inter and Source Sans 3. The selection applies throughout the interface. |
+| T-365 | Move update actions to context menu footers, remove the duplicate roster, and pin update notices above the conversation. | window | Prepared for the next functional release. |
 | T-364 | Complete the macOS Dock name migration for upgraded installations. | packaging | Planned under D-248. Build 118 declares Kotel, while an existing Dock shortcut can keep the legacy bundle path and label. Verify relaunch, Dock pin and subsequent Sparkle updates. |
 | T-363 | Show chronological work progress and summarize verified file changes after completion. | window | Planned. Use a read-only card below the final answer with task totals, three file rows, and expansion to the full list. |
 | T-362 | Add file actions to links and previews. | window / desktop | Planned. Start with available local files and track the source of remote files. |

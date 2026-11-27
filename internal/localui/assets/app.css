@@ -28,9 +28,9 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   /* Colors */
   --am-bg:light-dark(#fff,#191919);
   --am-panel:light-dark(#fff,#202020);
-  --am-side:light-dark(#fafafa,#202020);
-  --am-text:light-dark(#303030,#c2c2c0);
-  --am-muted:light-dark(#6b6b6b,#9b9b99);
+  --am-side:light-dark(#fafafa,#1e1e1e);
+  --am-text:light-dark(#303030,#dededc);
+  --am-muted:light-dark(#6b6b6b,#a5a5a3);
   --am-line:light-dark(#e5e5e5,#333);
   --am-button:light-dark(#efefef,#404040);
   --am-button-hover:light-dark(#e3e3e3,#4b4b4b);
@@ -138,7 +138,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-text-m:14px;
   --am-text-chat:14px;
   --am-line-chat:21px;
-  --am-chat-font:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --am-ui-font:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   --am-text-l:16px;
   --am-text-xl:18px;
   --am-text-display:28px;
@@ -148,7 +148,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-nav-split:384px;
 
   height:100%; min-height:0; max-width:1250px; margin:auto;
-  font:400 var(--am-text-m)/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font:400 var(--am-text-m)/1.5 var(--am-ui-font);
   color:var(--am-text);
 }
 #am-concept * { box-sizing:border-box; }
@@ -488,8 +488,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept.am-task-sidebar-preview .am-card-update:has(> button.am-update-icon) { height:var(--am-computer-update-size); align-items:center; }
 #am-concept button.am-update-icon:disabled { opacity:.6; cursor:default; }
 #am-concept button.am-update-icon[hidden] { display:none; }
-#am-concept #app-update-button:not(.am-update-active) > .am-update-spin,
-#am-concept #app-update-button.am-update-active > svg:first-child { display:none; }
+#am-concept :is(#app-update-button,.am-local-update-copy):not(.am-update-active) > .am-update-spin,
+#am-concept :is(#app-update-button,.am-local-update-copy).am-update-active > svg:first-child { display:none; }
 #am-concept button.am-update-icon.am-update-active:disabled { opacity:1; }
 #am-concept .am-update-icon.am-update-wait { flex-shrink:0; width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background:transparent; color:var(--am-update-arrow); cursor:default; }
 #am-concept .am-update-icon.am-update-cancelling { color:var(--am-muted); }
@@ -504,6 +504,10 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-main { display:flex; flex-direction:column; gap:var(--am-gap-content); min-width:0; min-height:0; padding:var(--am-pane-inset) 0; overflow:hidden; }
 #am-concept .am-member-joined .am-check-result :is(dt,dd) { font-size:var(--am-text-m); }
 /* Mutually exclusive settings pages in one compact track. */
+#am-concept .am-network-mode { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:var(--am-gap-control); }
+#am-concept .am-network-mode .am-segmented-tabs { margin-inline-start:auto; }
+#am-concept .am-network-status.am-good { color:var(--am-good); }
+#am-concept .am-network-status.am-bad { color:var(--am-bad); }
 #am-concept .am-segmented-tabs {
   position:relative; isolation:isolate; display:inline-grid; grid-auto-flow:column; grid-auto-columns:1fr; align-self:flex-start; max-inline-size:100%;
   padding:var(--am-gap-line); border-radius:var(--am-radius-s); background:var(--am-soft);
@@ -628,12 +632,11 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   line-height:var(--am-line-chat);
   -webkit-font-smoothing:antialiased;
 }
-#am-concept[data-chat-font=inter] { --am-chat-font:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
-#am-concept[data-chat-font=source-sans] { --am-chat-font:'Source Sans 3',-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
-#am-concept :is(.am-message:not(.am-outgoing) .am-rich,.am-shared-report,.am-chat-font-example) { font-family:var(--am-chat-font); }
-#am-concept .am-theme-setting.am-chat-font-setting { display:grid; grid-template-columns:minmax(0,1fr) min(var(--am-settings-control-width),50%); row-gap:var(--am-space-2); }
-#am-concept .am-chat-font-example { grid-column:1 / -1; font-size:var(--am-text-chat); line-height:var(--am-line-chat); }
-#am-concept[data-chat-font=system-readable] :is(.am-message:not(.am-outgoing) .am-rich,.am-shared-report,.am-chat-font-example) { color:light-dark(#252525,#dededc); line-height:calc(var(--am-line-chat) + var(--am-gap-line)); }
+#am-concept[data-chat-font=inter] { --am-ui-font:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+#am-concept[data-chat-font=source-sans] { --am-ui-font:'Source Sans 3',-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+#am-concept .am-theme-setting.am-chat-font-setting { --am-settings-control-width:18em; flex-wrap:wrap; }
+#am-concept .am-theme-setting.am-chat-font-setting > .am-select-trigger { min-width:min(100%,var(--am-settings-control-width)); }
+#am-concept[data-chat-font=system-readable] { --am-text:light-dark(#252525,#eeeeec); --am-muted:light-dark(#595959,#b5b5b3); }
 #am-concept .am-avatar { display:flex; align-items:center; justify-content:center; width:24px; height:28px; flex-shrink:0; }
 /* The agent's icon sits in the name line, so its text starts at the pane's
    edge like the rest of the window, not one column further in (owner). */
@@ -705,7 +708,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 
 /* Composer and the error chips above it */
 #am-concept .am-chat-footer { position:absolute; bottom:0; left:var(--am-pane-inset); right:var(--am-pane-inset); background:var(--am-bg); }
-#am-concept .am-notices { position:absolute; z-index:4; inset-block-start:calc(var(--am-caption-height) + var(--am-gap-content)); inset-inline-end:var(--am-gap-section); width:min(360px,calc(100% - 2 * var(--am-gap-section))); display:flex; flex-direction:column; gap:var(--am-gap-control); pointer-events:none; }
+#am-concept .am-notices { display:flex; flex:none; flex-direction:column; gap:var(--am-gap-control); padding:0 var(--am-pane-inset) var(--am-gap-control); }
 #am-concept .am-notices[hidden] { display:none; }
 #am-concept .am-notice { position:relative; display:flex; align-items:center; gap:var(--am-gap-control); width:min(420px,100%); padding:var(--am-space-2) var(--am-space-1) var(--am-space-2) var(--am-space-3); border:1px solid var(--am-line); border-radius:var(--am-radius-m); background:var(--am-composer); color:var(--am-text); line-height:1.35; box-shadow:var(--am-shadow-s); overflow:hidden; }
 #am-concept .am-notices .am-notice { width:100%; max-height:none; margin-inline:0; pointer-events:auto; }
@@ -717,9 +720,6 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-notice-text { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3; line-clamp:3; overflow:hidden; }
 #am-concept .am-notice .am-toast-close { flex:none; width:var(--am-control-chip); min-height:var(--am-control-chip); padding:0; background:transparent; color:var(--am-muted); font-size:var(--am-text-l); line-height:1; }
 #am-concept .am-notice .am-toast-close:hover { background:var(--am-soft); color:var(--am-text); }
-#am-concept .am-notice-timer { position:absolute; left:var(--am-space-3); right:var(--am-space-3); bottom:0; height:2px; border-radius:2px; background:var(--am-muted); opacity:.35; transform-origin:left; animation:am-notice-timer 6s linear forwards; }
-@keyframes am-notice-timer { from { transform:scaleX(1); } to { transform:scaleX(0); } }
-@media (prefers-reduced-motion:reduce) { #am-concept .am-notice-timer { animation:none; } }
 #am-concept .am-toasts { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:var(--am-gap-control); padding-top:var(--am-space-3); }
 #am-concept .am-main > .am-toasts { flex:none; padding-inline:var(--am-pane-inset); }
 #am-concept .am-toast { display:inline-flex; align-items:center; gap:var(--am-gap-control); max-width:min(560px,100%); padding:var(--am-space-1) var(--am-space-1) var(--am-space-1) var(--am-space-3); border:1px solid var(--am-line); border-radius:var(--am-radius-m); background:var(--am-composer); color:var(--am-text); line-height:1.35; box-shadow:var(--am-shadow-s); }
@@ -808,6 +808,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept.am-task-sidebar-preview .am-thread {
   padding-inline:var(--am-chat-inset) calc(var(--am-chat-inset) - var(--am-gutter, 0px));
 }
+#am-concept.am-task-sidebar-preview .am-notices { padding-inline:var(--am-chat-inset); }
 #am-concept.am-task-sidebar-preview .am-chat-footer { inset-inline:var(--am-chat-inset); }
 #am-concept.am-task-sidebar-preview .am-queue-header {
   margin-inline:calc(-1 * var(--am-pane-inset));
@@ -950,6 +951,10 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-device-card:focus-visible { border-color:var(--am-muted); }
 #am-concept .am-context-menu { max-width:min(var(--am-queue),100vw); padding:var(--am-space-1); }
 #am-concept .am-context-menu .am-select-option { padding-inline:var(--am-space-2); }
+#am-concept .am-context-menu:has(.am-context-device) { min-width:min(var(--am-settings-control-width),100vw); }
+#am-concept .am-context-device { display:flex; align-items:center; justify-content:space-between; gap:var(--am-gap-control); min-height:var(--am-control-compact); padding-inline:var(--am-space-2); color:var(--am-muted); font-size:var(--am-text-s); }
+#am-concept .am-context-device:not(:first-child) { border-block-start:1px solid var(--am-menu-line); margin-block-start:var(--am-space-1); padding-block-start:var(--am-space-1); }
+#am-concept .am-context-device .am-version { margin-inline-start:auto; white-space:nowrap; }
 #am-concept .am-context-status { padding:var(--am-space-1) var(--am-space-2); color:var(--am-muted); }
 #am-concept .am-server .am-check-result { grid-template-columns:max-content minmax(0,1fr); column-gap:var(--am-gap-section); row-gap:var(--am-gap-control); }
 #am-concept .am-card-head h3:focus { outline:none; }

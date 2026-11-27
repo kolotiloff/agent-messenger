@@ -12,9 +12,11 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Build 118 includes the monochrome icon, the Graphite theme, task grouping, Network versions and updates, and per-task access controls. The local update button, version and other footer controls are at the bottom left. The My network card uses the same label typography as Connection mode and a uniform row spacing. Statistics row hover matches the Archive’s color and 4 px gap.
 
-T-365 removes the duplicate computer list from Network settings. The remote computer menu in the sidebar shows the installed version and offers update or cancellation when available. Project folders offer project settings and local project removal with confirmation. Update notices appear in the upper-right corner of the active main window, Settings or Statistics. T-364 tracks the legacy macOS bundle path and Dock shortcut after in-place upgrades.
+T-365 removes the duplicate computer list from Network settings while retaining the original Connection mode layout and status colors. Computer and project menus use a divided footer with the installed version on the right and the shared update controls on the left. Project-only folders show the local computer's controls; folders grouped under a computer show that computer. Project settings opens the selected local project's name and folder fields. Update notices stay above the conversation until dismissed. T-364 tracks the legacy macOS bundle path and Dock shortcut after in-place upgrades.
 
-T-366 adds four response font choices in General with a live 14 px sample. The macOS shell remembers the selection across windows and launches. The installed build still uses the published icon dimensions.
+T-366 applies the font choice throughout the interface. The system font uses the platform’s normal fallback chain, and the high-contrast option changes text colors without resizing it. The macOS shell remembers the selection across launches.
+
+T-369 uses a slightly darker sidebar and lighter text in dark appearance. The existing task highlight is the baseline pending comparison with a stronger highlight. The isolated preview shows both fills on the same screen.
 
 T-361 through T-363 track clickable paths from plain report file lists and Markdown, the built-in reader, file actions and chronological work progress. A completed task with verified file changes should show its change summary.
 
