@@ -12,6 +12,12 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Build 118 includes the monochrome icon, the Graphite theme, task grouping, Network versions and updates, and per-task access controls. The local update button, version and other footer controls are at the bottom left. The My network card uses the same label typography as Connection mode and a uniform row spacing. Statistics row hover matches the Archive’s color and 4 px gap.
 
+T-364 is required for the next desktop update. On an upgraded Mac, the bundle already declares Kotel but its installed package can still be named Agent Messenger.app. An isolated in-place rename preserved the bundle's file identity and passed signature verification. Stock-build upgrade, Dock, search and subsequent signed-update acceptance remain open.
+
+T-368 moves the chat timestamp and actions into a visible row below each text message. The localized age updates while the window is visible. Older messages display a date, and the timestamp tooltip shows the full local date and time.
+
+T-338 keeps the existing Claude and Cursor server names on reconnect to preserve name-scoped permissions. New registrations use `kotel`. Kotel checks for conflicting or explicitly disabled Claude entries. In Cursor settings, the connected state identifies an existing legacy registration. The signed-install check verifies the MCP server before and after a stock 117 to public 118 macOS upgrade, including both executable names and the retained project and computer identity. Authenticated Claude and Cursor same-chat transitions remain open.
+
 The isolated stock-117 Codex chat resumed under the new MCP name after a tool call on each side of the transition. The installed Cursor CLI lists tools with an unset worker marker and hides them in a marked worker. Claude and Cursor same-chat permission migration, live task steering and authenticated provider acceptance remain open. See the [development report](reports/2026-11-27-kotel-combined.md).
 
 T-343 integrates T-339 through T-342 for Kotel 1.0.14 (build 117). New Task now has its own left-aligned row above Projects. Both sidebar filters follow the Settings width rule and stack in narrow panels. The owner confirmed the fleet has updated to the bridge. The original repository continues to serve the signed channel for this patch. T-338 tracks the final identifier migration.

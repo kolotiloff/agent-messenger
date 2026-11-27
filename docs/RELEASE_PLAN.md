@@ -2,6 +2,10 @@
 
 Written November 6, 2026. The current status below supplements the original [MVP](MVP.md), [architecture](PLAN.md), [window requirements](APP.md) and [broker deployment](DEPLOYMENT.md). Transitions are decided by checks.
 
+## macOS name in the next desktop update
+
+Upgrade a stock build 118 installation whose bundle is still named Agent Messenger.app. After the update, verify a single Kotel application in Finder and search, the Kotel tooltip and relaunch from the pinned Dock item, the same profile and task history, and successful installation of a second signed update. Preserve existing executable entry points while they have consumers and keep active tasks working through the transition.
+
 ## Published 1.0.14 fixes
 
 [Build 117](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.14-preview.117) passed all five native update checks and public channel verification.

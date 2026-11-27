@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — T-338 provider migration, T-364 macOS name and T-368 message time
+
+Codex verified the isolated Claude and Cursor CLI permission behavior with fresh profiles and no model calls. Reconnect retains their existing server names. The macOS signed-install probe passed from stock 117 to public 118 with the same MCP project, computer and both executable entry points. The next-update acceptance now requires the Kotel name in the Dock and application search. The signed upgraded bundle still needs an end-to-end rename and second-update check. Chromium and WebKit passed the chat footer layout, relative time and keyboard copy checks.
+
 ## 2026-11-27 — T-358 Build 118 publication and GitHub overview
 
 [Kotel 1.0.15](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.15-preview.118) is public. [Run 109](https://github.com/kolotiloff/agent-messenger/actions/runs/46073340337) verified the signed upgrade from build 117 on macOS arm64, Windows x64 and ARM64, and Linux x64 and ARM64. The GitHub overview uses the approved Kotel icon, window, Statistics and Network screenshots with fictional data, and links to the five current downloads.

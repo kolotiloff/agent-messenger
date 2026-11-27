@@ -41,7 +41,7 @@ function reply(url,p,available){
     const task=Object.values(tasks).flat().find(t=>t.id===url.searchParams.get('id'));
     return {task,items:[
       {kind:'task',author:'coordinator',sender_agent:'codex',at:task.created_at,text:task.title},
-      {kind:'text',author:task.agent,at:iso(2),text:'Сообщение из '+task.project},
+      {kind:'text',author:task.agent,at:iso(5),text:'Сообщение из '+task.project},
     ]};
   }
   if(url.pathname==='/api/server')return {host:{addresses:[],devices:[]},member:{},peers:[
@@ -381,7 +381,7 @@ if (require.main === module) (async()=>{
       if(url.pathname==='/api/task-note')return {json:{ok:true}};
       if(url.pathname==='/api/pick')return {json:{ok:true,path:'/fictional/project/notes.txt'}};
       if(url.pathname==='/api/task'&&url.searchParams.get('id')===directTask.id){
-        const at=directTask.created_at;
+        const at=iso(24*60+5);
         return {json:{task:directTask,items:[{kind:'task',author:'owner',text:directTask.title,at},
           {kind:'text',run:1,text:'Проверяю настройки',at},{kind:'text',run:1,text:directReply,at},
           {kind:'report',run:1,verified:true,text:directReply,at},
@@ -564,15 +564,27 @@ if (require.main === module) (async()=>{
       }
       const message=draftPage.locator('#thread .am-message-group').first();
       const timestamp=message.locator('time.am-message-time');
-      assert.deepEqual(await timestamp.evaluate(node=>[getComputedStyle(node.parentElement).opacity,getComputedStyle(node).fontSize]),['0','12px']);
-      await message.hover();
-      assert(await timestamp.evaluate(node=>getComputedStyle(node.parentElement).opacity==='1'&&
-        node.getBoundingClientRect().top>node.closest('article').getBoundingClientRect().bottom));
       const workerMessage=draftPage.locator('#thread .am-message-group').last();
-      await workerMessage.hover();
       const workerActions=workerMessage.locator('.am-message-actions');
-      assert.equal(await workerActions.locator('time').count(),1);
-      assert(await workerActions.evaluate(node=>getComputedStyle(node).opacity==='1'&&node.getBoundingClientRect().left===node.closest('article').getBoundingClientRect().left));
+      const workerTimestamp=workerActions.locator('time');
+      assert.equal(await workerTimestamp.textContent(),'5 минут назад');
+      for(const [time,outgoing] of [[timestamp,true],[workerTimestamp,false]]){
+        const layout=await time.evaluate(node=>{
+          const actions=node.parentElement, body=actions.previousElementSibling;
+          const footer=actions.getBoundingClientRect(), message=body.getBoundingClientRect();
+          return {
+            opacity:getComputedStyle(actions).opacity,fontSize:getComputedStyle(node).fontSize,
+            gap:footer.top-message.bottom,left:footer.left===message.left,right:footer.right===message.right,
+            first:actions.firstElementChild===node,
+          };
+        });
+        assert.equal(layout.opacity,'1');
+        assert.equal(layout.fontSize,'12px');
+        assert.equal(layout.gap,8);
+        assert.equal(outgoing?layout.right:layout.left,true);
+        assert.equal(layout.first,outgoing);
+        assert.match(await time.getAttribute('title'),/\d{2}:\d{2}$/);
+      }
       assert.equal(await workerMessage.evaluate(node=>node.getBoundingClientRect().top-node.previousElementSibling.getBoundingClientRect().bottom),24);
       const settingsDialog=draftPage.getByRole('dialog',{name:'Настройки программы'});
       const settingsOpen=draftPage.locator('#settings-open');
@@ -904,6 +916,7 @@ if (require.main === module) (async()=>{
         Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.testCopiedMessage=text;}}});
       });
       const reply=conversation.locator('article').filter({has:draftPage.getByText('Настройки сохранены',{exact:true})});
+      assert.equal(await reply.locator('.am-message-time').textContent(),'1 день назад');
       const workerCopy=reply.getByRole('button',{name:'Скопировать сообщение'});
       await workerCopy.focus();
       await workerCopy.press('Enter');

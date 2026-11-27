@@ -2118,6 +2118,7 @@
     if(linkBusy===agent)return stepRow(1,title,tr('Подключаем…'),null);
     if(link.state==='connected'){
       let sub=agent==='cursor'?tr('Записано. Откройте новый чат Cursor в этой папке и разрешите подключение Kotel'):tr('Подключён. Откройте папку проекта в новом чате');
+      if(agent==='cursor'&&link.server_name==='messenger')sub=tr('В проекте сохранено подключение «messenger». Для существующего чата оставьте это имя.');
       if(agent==='codex'&&(view.agents||[]).some(a=>a.agent==='codex'&&a.trust?.state==='not_trusted'))sub=tr('Записано. Подтвердите доверие папке кнопкой «Доверять» на карточке Codex во вкладке «Агенты».');
       return stepRow('ok',title,sub,null);
     }
@@ -2696,6 +2697,17 @@
     const minutes=Math.floor(seconds/60);
     return (minutes?minutes+tr(' мин')+' ':'')+(seconds%60)+tr(' с');
   }
+  const messageAgeFormat=new Intl.RelativeTimeFormat(amLocale);
+  function messageAge(sent,now){
+    if(!Number.isFinite(sent))return '';
+    const minutes=Math.max(0,Math.floor((now-sent)/60000));
+    if(!minutes)return tr('Только что');
+    if(minutes<60)return messageAgeFormat.format(-minutes,'minute');
+    if(minutes<1440)return messageAgeFormat.format(-Math.floor(minutes/60),'hour');
+    if(minutes<10080)return messageAgeFormat.format(-Math.floor(minutes/1440),'day');
+    return stamp(sent);
+  }
+  let lastMessageAgeMinute=-1;
   function updateTimers(){
     // T-275: a hidden window draws nothing; it catches up when shown.
     if(document.hidden)return;
@@ -2708,8 +2720,17 @@
         if(meta)meta.title=meta.textContent;
       }
     }
-    for(const timer of $('thread').querySelectorAll('[data-command-start]')){
+    const thread=$('thread');
+    for(const timer of thread.querySelectorAll('[data-command-start]')){
       timer.textContent=commandElapsed(Number(timer.dataset.commandStart));
+    }
+    const minute=Math.floor(now/60000);
+    if(minute!==lastMessageAgeMinute){
+      lastMessageAgeMinute=minute;
+      for(const label of thread.querySelectorAll('.am-message-time')){
+        const age=messageAge(Date.parse(label.dateTime),now);
+        if(age!==label.textContent)label.textContent=age;
+      }
     }
   }
   // Stop, like in a chat: a square button in the input field, or Esc.
@@ -3027,10 +3048,10 @@
       return author;
     };
     const appendMessageTime=(group,meta,at,text)=>{
-      const time=el('time',clock(at),taskSidebarPreview?'am-message-time':'');
-      time.dateTime=at;
+      const time=el('time',taskSidebarPreview?messageAge(Date.parse(at),Date.now()):clock(at),taskSidebarPreview?'am-message-time':'');
+      if(at)time.dateTime=at;
       if(taskSidebarPreview){
-        group.tabIndex=0;
+        time.title=connectionTimestamp(at);
         const actions=el('div',undefined,'am-message-actions');
         const copy=el('button',undefined,'am-quiet-button');copy.type='button';
         const label=tr('Скопировать сообщение');copy.title=label;copy.setAttribute('aria-label',label);
@@ -3053,7 +3074,9 @@
           copy.title=status.textContent;
           reset=setTimeout(()=>{delete copy.dataset.copied;copy.title=label;copy.replaceChildren(svgIcon(copyPaths));status.textContent='';},1500);
         });
-        actions.append(time,copy,status);group.append(actions);
+        if(group.firstElementChild.classList.contains('am-outgoing'))actions.append(time,copy);
+        else actions.append(copy,time);
+        actions.append(status);group.append(actions);
       }else{
         meta.append(time);
       }

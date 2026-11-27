@@ -18,13 +18,19 @@ func CursorProjectConfig(folder string) string { return filepath.Join(folder, ".
 
 // CursorCoordinatorLink only inspects the project entry. Cursor's separate
 // approval/disabled-server lists remain under the owner's control.
-func CursorCoordinatorLink(path, messenger, root, project string) (string, error) {
+func CursorCoordinatorLink(path, messenger, root, project string) (state, serverName string, err error) {
 	raw, _, err := readCursorCoordinatorConfig(path)
 	if err != nil {
-		return LinkUnknown, err
+		return LinkUnknown, "", err
 	}
-	state, _, _, _, err := classifyCursorCoordinator(raw, messenger, root, project)
-	return state, err
+	state, _, servers, _, err := classifyCursorCoordinator(raw, messenger, root, project)
+	if state == LinkConnected {
+		serverName = CoordinatorServerName
+		if _, legacy := servers[legacyCoordinatorName]; legacy {
+			serverName = legacyCoordinatorName
+		}
+	}
+	return state, serverName, err
 }
 
 // EnsureCursorCoordinator changes only our server entry. Other JSON values

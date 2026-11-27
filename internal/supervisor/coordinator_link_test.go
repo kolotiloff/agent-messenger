@@ -402,11 +402,11 @@ func TestConnectCursorWritesOnlyProjectConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err := f.sup.ConnectCoordinator(f.project, "cursor")
-	if err != nil || result.(CoordinatorLinkView).State != adapters.LinkConnected {
+	if err != nil || result.(CoordinatorLinkView).State != adapters.LinkConnected || result.(CoordinatorLinkView).ServerName != adapters.CoordinatorServerName {
 		t.Fatal(result, err)
 	}
 	view, err := f.sup.WindowView(f.project)
-	if err != nil || view.(windowView).CursorLink.State != adapters.LinkConnected {
+	if err != nil || view.(windowView).CursorLink.State != adapters.LinkConnected || view.(windowView).CursorLink.ServerName != adapters.CoordinatorServerName {
 		t.Fatal(view, err)
 	}
 	if len(f.calls(t)) != 0 {
@@ -416,6 +416,20 @@ func TestConnectCursorWritesOnlyProjectConfig(t *testing.T) {
 		t.Fatal("changed global Cursor config", err)
 	}
 	path := adapters.CursorProjectConfig(f.folder)
+	current, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := strings.Replace(string(current), `"kotel":`, `"messenger":`, 1)
+	if err := os.WriteFile(path, []byte(legacy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.sup.connectCursorCoordinator(f.project); got.State != adapters.LinkConnected || got.ServerName != "messenger" {
+		t.Fatal(got)
+	}
+	if raw, _ := os.ReadFile(path); string(raw) != legacy {
+		t.Fatal("legacy connection changed")
+	}
 	foreign := `{"mcpServers":{"messenger":{"command":"other","args":["different"]}}}`
 	if err := os.WriteFile(path, []byte(foreign), 0o600); err != nil {
 		t.Fatal(err)

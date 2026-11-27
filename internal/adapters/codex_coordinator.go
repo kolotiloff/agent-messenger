@@ -16,9 +16,8 @@ import (
 // Codex has no project-scoped "mcp add": that command writes the user
 // config, which every project would share. The documented place for one
 // project is .codex/config.toml in the project folder, read only when the
-// folder is trusted. Messenger writes only the mcp_servers.messenger table
-// there, and only when it is missing or is this Messenger's own entry for
-// an older program file. Any other contents of the file stay byte for byte.
+// folder is trusted. Kotel writes its own server table there when it is
+// missing or needs an update. Any other contents stay byte for byte.
 // A file that cannot be read safely is left untouched.
 //
 // A Codex worker in the same folder loads this file too. Its process carries
@@ -436,10 +435,11 @@ func codexLine(name, table, line string) (owned bool, header, key, value string,
 		return false, "", "", "", false
 	}
 	if strings.HasPrefix(trim, "[") {
-		if !strings.HasSuffix(trim, "]") || strings.Contains(trim, "=") {
+		header := strings.TrimSpace(stripTomlComment(trim))
+		if !strings.HasSuffix(header, "]") || strings.Contains(header, "=") {
 			return false, "", "", "", false
 		}
-		section, good := parseTomlPath(trim[1 : len(trim)-1])
+		section, good := parseTomlPath(header[1 : len(header)-1])
 		if !good {
 			return false, "", "", "", false
 		}

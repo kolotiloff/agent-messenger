@@ -21,6 +21,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       let created = false, registered = false, connected = false, trusted = false;
       let windowReadFails = true;
       let coordinatorActive = false, hostRunning = false;
+      let cursorServerName = 'kotel';
       let machineOrder = null, machinePeers = undefined, peerLasting = true;
       let setupStates = [], installed = false;
       let updates = [];
@@ -80,7 +81,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
             folder: created ? '/fictional/project' : '', messenger: '/fictional/messenger', data_root: '/fictional/data',
             agents: [...(registered ? [{agent: 'cursor', cli: '/fictional/cursor', models: []}] : []), ...(installed ? [{agent:'codex',cli:'/fictional/codex',models:[],trust:{state:trusted?'trusted':'not_trusted'}}] : [])], tasks: [],
             coordinator: {connected, client: 'cursor-vscode', active: coordinatorActive},
-            cursor_link: {state: connected ? 'connected' : created ? 'missing' : 'no_folder'},
+            cursor_link: {state: connected ? 'connected' : created ? 'missing' : 'no_folder', ...(connected ? {server_name: cursorServerName} : {})},
             computer_name: 'Theme test', tasks_enabled: true},
           '/api/agent-setup-status': setupStates,
           '/api/model-catalog': {models: [{model:'gpt-6.2-sol[effort=medium]',name:'GPT-6.2 Sol Medium'}],limit:12},
@@ -230,6 +231,13 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.deepEqual(writes.filter(write => write.path === '/api/coordinator-connect'),
         [{path: '/api/coordinator-connect', body: {project: 'Welcome test', agent: 'cursor'}}]);
       await page.setViewportSize({width:1100,height:850});
+      await page.locator('[data-tab=project]').click();
+      const coordinator = page.locator('#coord-box');
+      await coordinator.getByText('Записано. Откройте новый чат Cursor в этой папке и разрешите подключение Kotel', {exact: true}).waitFor();
+      cursorServerName = 'messenger';
+      await page.evaluate(() => window.messengerRefresh());
+      await coordinator.getByText('В проекте сохранено подключение «messenger». Для существующего чата оставьте это имя.', {exact: true}).waitFor();
+      await page.locator('[data-tab=tasks]').click();
       const projects = page.locator('[aria-controls="project-select-menu"]');
       await projects.click();
       const projectMenu = page.locator('#project-select-menu');

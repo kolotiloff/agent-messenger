@@ -4,17 +4,84 @@ import json
 import os
 from pathlib import Path
 import platform
+from queue import Empty, Queue
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+from threading import Thread
 import time
 import zipfile
 
 
 def run(*args, **kwargs):
     return subprocess.check_output(args, encoding="utf-8", timeout=180, **kwargs).strip()
+
+
+def probe_coordinator(program, root, folder, version, env):
+    """Initialize the real stdio relay and read the installed project's agents."""
+    env = {key: value for key, value in env.items() if key != "AGENT_MESSENGER_WORKER_RUN"}
+    incoming = Queue()
+    with subprocess.Popen([program, "--root", root, "coordinator", "--project", "bridge"],
+                          env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                          encoding="utf-8") as process:
+        def collect_responses():
+            for line in process.stdout:
+                incoming.put(line)
+            incoming.put(None)
+
+        reader = Thread(target=collect_responses, daemon=True)
+        reader.start()
+
+        def send(method, params, request_id=None):
+            message = dict(jsonrpc="2.0", method=method, params=params)
+            if request_id is not None:
+                message["id"] = request_id
+            process.stdin.write(json.dumps(message) + "\n")
+            process.stdin.flush()
+
+        def request(request_id, method, params):
+            send(method, params, request_id)
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                try:
+                    line = incoming.get(timeout=max(0, deadline - time.monotonic()))
+                except Empty:
+                    break
+                assert line is not None, f"coordinator closed stdout during {method}"
+                reply = json.loads(line)
+                if reply.get("id") == request_id:
+                    assert "error" not in reply, f"coordinator rejected {method}: {reply['error']}"
+                    return reply["result"]
+            raise RuntimeError(f"coordinator timed out during {method}")
+
+        try:
+            initialized = request(1, "initialize", dict(protocolVersion="2025-06-18",
+                                                         capabilities={},
+                                                         clientInfo=dict(name="bridge-test", version="1")))
+            assert initialized["protocolVersion"] == "2025-06-18"
+            send("notifications/initialized", {})
+            tools = [tool["name"] for tool in request(2, "tools/list", {})["tools"]]
+            assert len(tools) == len(set(tools)) and "list_agents" in tools
+            result = request(3, "tools/call", dict(name="list_agents", arguments={}))
+            assert not result.get("isError"), result
+            roster = json.loads(result["content"][0]["text"])["computers"]
+            local, = (computer for computer in roster if computer.get("this"))
+            assert Path(local["folder"]).resolve() == folder.resolve()
+            assert local["messenger_version"] == version
+            return initialized["serverInfo"]["name"], local["computer"]
+        finally:
+            process.stdin.close()
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=10)
+                raise
+            finally:
+                reader.join(timeout=5)
+            assert process.returncode == 0, "coordinator did not exit cleanly"
 
 
 repo = Path.cwd()
@@ -122,6 +189,8 @@ def stop():
     raise RuntimeError("isolated client did not stop")
 
 
+client("project-add", "--name", "bridge", "--folder", work)
+_, previous_computer = probe_coordinator(exe, root, work, previous, env)
 client("start")
 try:
     wait_ready()
@@ -146,6 +215,10 @@ if system == "darwin":
     run("codesign", "--verify", "--deep", "--strict", existing)
     assert (existing / "Contents/Resources/kotel").samefile(exe)
 assert json.loads(run(exe, "version"))["revision"] == new_meta["revision"]
+name, computer = probe_coordinator(exe, root, work, version, env)
+assert name == "kotel" and computer == previous_computer
+if system == "darwin":
+    assert probe_coordinator(exe.with_name("kotel"), root, work, version, env) == (name, computer)
 client("start")
 try:
     after = wait_ready()
@@ -158,7 +231,7 @@ try:
     assert after == before
 finally:
     stop()
-print(f"{platform.system()} {target}: {previous} -> {version}, signed package and existing queue verified")
+print(f"{platform.system()} {target}: {previous} -> {version}, signed package, queue and coordinator verified")
 
 if system in ("linux", "darwin"):
     remote = work / "net"

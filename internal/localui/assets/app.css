@@ -611,16 +611,14 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-meta time { color:var(--am-muted); font-size:var(--am-text-xs); }
 #am-concept :is(.am-meta-model,.am-role) { color:var(--am-muted); font-size:var(--am-text-s); font-weight:400; }
 #am-concept .am-meta-author { min-width:0; }
-#am-concept.am-task-sidebar-preview .am-message-group { position:relative; }
-#am-concept .am-message-time { color:var(--am-muted); font-size:var(--am-text-xs); line-height:1.35; white-space:nowrap; pointer-events:none; }
-#am-concept .am-message-actions { position:absolute; inset-block-start:100%; inset-inline-end:0; display:flex; align-items:center; gap:var(--am-gap-control); padding-block-start:var(--am-gap-line); }
-#am-concept .am-message-group:has(> .am-message:not(.am-outgoing)) > .am-message-actions { inset-inline:0 auto; }
+#am-concept.am-task-sidebar-preview .am-message-group:has(> .am-message-actions) { gap:var(--am-gap-control); }
+#am-concept .am-message-time { color:var(--am-muted); font-size:var(--am-text-xs); line-height:1.35; white-space:nowrap; }
+#am-concept .am-message-actions { display:flex; align-items:center; align-self:flex-start; gap:var(--am-gap-control); }
+#am-concept .am-outgoing + .am-message-actions { align-self:flex-end; }
+#am-concept .am-message-group:has(> .am-message-actions) .am-message-content > :is(.am-tool,.am-tool-group):last-child { margin-block-end:0; }
 #am-concept .am-message-actions > button { display:grid; place-items:center; padding:0; width:var(--am-control-chip); min-height:var(--am-control-chip); border-radius:var(--am-radius-m); color:var(--am-muted); }
 #am-concept .am-message-actions > button > svg { width:var(--am-space-4); height:var(--am-space-4); fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
 #am-concept .am-message-actions > button[data-copied] { color:var(--am-good); }
-@media (hover:hover) {
-  #am-concept .am-message-group:not(:hover,:focus-within) > .am-message-actions { opacity:0; }
-}
 #am-concept .am-role { padding:calc(var(--am-space-1) / 2) var(--am-space-2); border-radius:var(--am-radius-xs); background:var(--am-soft); }
 #am-concept :is(.am-message-content,.am-compose textarea) {
   font-size:var(--am-text-chat);
