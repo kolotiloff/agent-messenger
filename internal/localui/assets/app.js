@@ -1215,6 +1215,11 @@
     }
     return computers;
   }
+  function sidebarTaskCount(total){
+    const count=el('span',String(total),'am-sidebar-task-count am-queue-count');
+    count.setAttribute('aria-hidden','true');
+    return count;
+  }
   function sidebarTaskRows(body,head,card,computer,items=[]){
     if(!items.length)return;
     const rows=el('div',undefined,'am-sidebar-task-rows');
@@ -1222,11 +1227,11 @@
     const disclosure=el('button',undefined,'am-sidebar-disclosure');disclosure.type='button';
     disclosure.dataset.sidebarFocus=JSON.stringify([computer]);
     const label=head.querySelector('.am-machine-label'),count=tasksWord(items.length);
-    const countLabel=el('span',' ('+count+')','am-sidebar-task-count am-muted');
+    const countLabel=sidebarTaskCount(items.length);
     function update(){
       const collapsed=collapsedComputers.has(computer);
       body.inert=collapsed;
-      if(collapsed)label.append(countLabel);
+      if(collapsed)label.after(countLabel);
       else countLabel.remove();
       disclosure.setAttribute('aria-expanded',String(!collapsed));
       const action=collapsed?tr('Показать текущие задачи'):tr('Скрыть текущие задачи');
@@ -1254,15 +1259,23 @@
       const key=JSON.stringify([computer,name]);
       const folder=el('div',undefined,'am-sidebar-folder');
       const button=el('button',undefined,'am-folder-heading');button.type='button';
-      button.append(svgIcon(['M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z']),el('span',projectTitle(name)));
+      button.append(svgIcon(['M2 6a3 3 0 0 1 3-3h4l3 3h7a3 3 0 0 1 3 3v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2Z']),el('span',projectTitle(name)));
       button.dataset.sidebarFocus='folder:'+key;
       const rows=el('div',undefined,'am-sidebar-task-rows');
-      rows.hidden=collapsedFolders.has(key);
-      button.setAttribute('aria-expanded',String(!rows.hidden));
+      const count=sidebarTaskCount(tasks.length);
+      function showFolder(expanded){
+        rows.hidden=!expanded;
+        count.hidden=expanded;
+        button.setAttribute('aria-expanded',String(expanded));
+        if(expanded)button.removeAttribute('aria-description');
+        else button.setAttribute('aria-description',tasksWord(tasks.length));
+      }
+      button.append(count);
+      showFolder(!collapsedFolders.has(key));
       button.addEventListener('click',()=>{
-        rows.hidden=!rows.hidden;
-        if(rows.hidden)collapsedFolders.add(key);else collapsedFolders.delete(key);
-        button.setAttribute('aria-expanded',String(!rows.hidden));
+        const expand=rows.hidden;
+        if(expand)collapsedFolders.delete(key);else collapsedFolders.add(key);
+        showFolder(expand);
       });
       appendSidebarRows(rows,tasks);
       folder.append(button,rows);container.append(folder);
@@ -5187,7 +5200,7 @@
   loadServer();
   let initialTheme=window.messengerInitialTheme;
   if(!initialTheme)try{initialTheme=localStorage.getItem('messenger-theme');}catch(_){}
-  const sidebarFilterIcon=taskSidebarPreview?['M3 6h18M6 12h12M9 18h6']:null;
+  const sidebarFilterIcon=taskSidebarPreview?['M3 5h9m4 0h5M14 2v6M3 12h3m4 0h11M8 9v6M3 19h10m4 0h4M15 16v6']:null;
   if(taskSidebarPreview){
     $('sidebar-group-control').hidden=false;
     enhanceSelect(groupSelect,false,['M12 3 2 8l10 5 10-5-10-5ZM2 12l10 5 10-5M2 16l10 5 10-5']);

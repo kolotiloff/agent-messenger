@@ -52,7 +52,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 | T-340 | Make direct answers conversational, stabilize the update hover target and match the default sidebar widths. | window | Published in 1.0.14 (build 117). |
 | T-341 | Place Projects below the Mac caption, toggle the computer sidebar, clarify task access and refresh desktop icons. | window / packaging | Published in 1.0.14 (build 117). |
 | T-352 | Share one archive pagination footer, clarify compact statuses and peer hover, align New Task with row padding and hover, scroll the date with messages, normalize count and role weights and the running Mac icon. | window | Post-117. |
-| T-355 | Group live tasks by computer or project, align sidebar insets and simplify connection icons. | window | Post-117. |
+| T-355 | Group live tasks by computer or project, align row spacing and simplify connection icons, filters and archive selection. | window | Post-117. |
 | T-354 | Apply Graphite to the dark window theme. | window | Post-117. |
 | T-353 | Select worker access per task while enforcing the executor policy. | agent / window | Applies to the window and coordinator. Unspecified access uses the executor default. |
 | T-348 | Animate changes to the current task list and archive. | window | Exercise additions, removals, group boundaries and reduced motion in Chromium and WebKit. |

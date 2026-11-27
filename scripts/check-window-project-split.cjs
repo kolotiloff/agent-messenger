@@ -413,7 +413,7 @@ if (require.main === module) (async()=>{
       assert.equal(await groupGap(),4);
       await disclosure.click();
       assert.equal(await disclosure.getAttribute('aria-expanded'),'false');
-      assert.equal(await local.locator('.am-sidebar-task-count').textContent(),' (4 задачи)');
+      assert.equal(await local.locator('.am-sidebar-task-count').textContent(),'4');
       assert.equal(await local.locator('.am-sidebar-task-count').evaluate(n=>getComputedStyle(n).fontWeight),'400');
       assert.match(await disclosure.getAttribute('aria-label'),/4 задачи/);
       assert.equal(await groupGap(),4);
@@ -920,7 +920,7 @@ if (require.main === module) (async()=>{
         };
       });
       assert.deepEqual(await archiveGeometry(),{
-        matchesWorkspace:[0,0,0],headerEdges:[0,0],fields:[16,16,16,16],controls:[28,28],toolbar:[0,0,4],rowAlignment:[0,48],
+        matchesWorkspace:[0,0,0],headerEdges:[0,0],fields:[28,16,16,16],controls:[28,28],toolbar:[0,0,4],rowAlignment:[0,8],
       });
       assert.equal(await archive.locator('#task-list-heading').textContent(),'Архив');
       const trashBounds=await archive.locator('#archive-clear').boundingBox();
@@ -955,7 +955,9 @@ if (require.main === module) (async()=>{
         await menu.waitFor({state:'hidden'});
       }
       const clearBox=await clearArchive.boundingBox(),filterBox=await archive.locator('.am-select-trigger').boundingBox();
-      assert.equal(filterBox.x-clearBox.x-clearBox.width,8);
+      const archiveTitle=await archive.locator('.am-task-list-head h3').boundingBox();
+      assert.equal(clearBox.x-archiveTitle.x-archiveTitle.width,8);
+      assert(filterBox.x-clearBox.x-clearBox.width>8);
       assert.equal(clearBox.y,filterBox.y);
       assert.equal(clearBox.width,28);
       assert.equal(clearBox.height,28);
@@ -963,7 +965,7 @@ if (require.main === module) (async()=>{
       assert.deepEqual(await archive.locator('.am-queue-header').evaluate(n=>{
         const s=getComputedStyle(n);
         return [s.borderBottomWidth,s.backgroundColor,s.paddingBlockStart,s.paddingBlockEnd,s.paddingInlineStart,s.paddingInlineEnd];
-      }),['0px','rgba(0, 0, 0, 0)','48px','16px','16px','16px']);
+      }),['0px','rgba(0, 0, 0, 0)','8px','4px','16px','16px']);
       const hides=()=>seen.filter(req=>['/api/task-hide','/api/task-hide-history'].includes(req.path)).length;
       const initialHides=hides();
       await clearArchive.click();
@@ -1023,6 +1025,7 @@ if (require.main === module) (async()=>{
       const row=archive.locator('.am-task').filter({hasText:'Звуки меню'});
       await row.waitFor();
       assert.equal(await row.evaluate(node=>getComputedStyle(node).padding),'4px 12px');
+      assert.equal((await row.locator('.am-task-title').boundingBox()).x,(await archive.locator('#task-list-heading').boundingBox()).x);
       for(const rowSelector of ['.am-archive-task','.am-sidebar-task']){
         await draftPage.waitForFunction(selector=>{
           const row=document.querySelector(selector),panel=row?.closest('aside');
@@ -1138,7 +1141,7 @@ if (require.main === module) (async()=>{
       }
       const projectFilter=await mac.locator('#project-column-first .am-select-trigger').boundingBox(),agentFilter=await mac.locator('.am-task-filter .am-select-trigger').boundingBox();
       assert.equal(projectFilter.width,agentFilter.width);
-      assert.equal(agentFilter.y,projectFilter.y);
+      assert.equal(agentFilter.y,(await archive.boundingBox()).y+8);
       if(output){
         await mac.setViewportSize({width:1440,height:840});
         await mac.screenshot({path:path.join(output,'kotel-sidebar-117.png')});
@@ -1270,10 +1273,26 @@ if (require.main === module) (async()=>{
       assert.equal(await gameFolder.locator('.am-sidebar-task-title').filter({hasText:'Мак, Экран настроек'}).count(),1);
       await gameButton.click();
       assert.equal(await gameFolder.locator('.am-sidebar-task:visible').count(),0);
+      assert.equal(await gameButton.locator('.am-sidebar-task-count').textContent(),'3');
+      assert.equal(await gameButton.locator('.am-sidebar-task-count').isVisible(),true);
       await gameButton.click();
+      assert.equal(await gameButton.locator('.am-sidebar-task-count').isVisible(),false);
       await group('По компьютеру, затем по проекту');
       const localGame=card(browserPreview,'local').locator('.am-sidebar-folder').filter({has:browserPreview.getByRole('button',{name:'Игра',exact:true})});
       assert.equal(await localGame.getByText('Экран настроек',{exact:true}).count(),1);
+      const localFolderButton=localGame.locator('.am-folder-heading');
+      const machineHeader=card(browserPreview,'local').locator('.am-machine-name');
+      assert.equal((await localFolderButton.boundingBox()).height,(await machineHeader.boundingBox()).height);
+      assert.equal((await localFolderButton.locator('svg').boundingBox()).width,(await localMark.locator('svg').boundingBox()).width);
+      await localFolderButton.click();
+      assert.equal(await localFolderButton.locator('.am-sidebar-task-count:visible').textContent(),'2');
+      await localFolderButton.click();
+      const treeGaps=await card(browserPreview,'local').evaluate(node=>{
+        const rows=[...node.querySelectorAll('.am-machine-name,.am-folder-heading,.am-sidebar-task')].map(row=>row.getBoundingClientRect());
+        return rows.slice(1).map((row,i)=>row.top-rows[i].bottom);
+      });
+      assert(treeGaps.length>=3);
+      assert(treeGaps.every(gap=>Math.abs(gap-4)<0.1),JSON.stringify(treeGaps));
       await localGame.locator('.am-sidebar-task').filter({hasText:'Экран настроек'}).click();
       await browserPreview.locator('#task-head').getByText('Экран настроек',{exact:true}).waitFor();
       await group('По компьютеру');
