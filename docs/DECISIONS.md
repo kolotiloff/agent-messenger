@@ -884,4 +884,8 @@ Draw the reply context ring from the used and capacity counts in a context snaps
 
 ## D-240 — Refine conversation and report spacing (T-336)
 
-Left-align the context popover, put the percentage beside its label, and separate used tokens and capacity with a slash. Keep the task title as the sole conversation heading and center the date at the start of its scrollable thread. Use the compact spacing token below the Statistics task rows. While a computer is collapsed, append a muted parenthesized count of tasks under the current project filter.
+Left-align the context popover, put the percentage beside its label, and separate used tokens and capacity with a slash. Keep the task title as the sole conversation heading and center the date at the start of its scrollable thread. While a computer is collapsed, append a muted parenthesized count of tasks under the current project filter.
+
+## D-241 — Align pane headers and normalize surface insets (T-336)
+
+Align the conversation header divider with Projects and Archive. Keep the title to one line and expose its full text on hover. Use the content gap between the heading, body text and actions in confirmations. Use equal surface insets on all sides, with 12 px for report cards, efficiency details and outgoing message bubbles, 8 px for menus, and 16 px for settings cards and confirmation dialogs.

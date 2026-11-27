@@ -2190,7 +2190,9 @@
     return t?{t,p}:null;
   }
   function conversationTitle(title){
-    return el('h3',title,'am-conversation-title');
+    const heading=el('h3',title,'am-conversation-title');
+    heading.title=title;
+    return heading;
   }
   function conversationDate(t){
     let at=Date.parse(t.created_at);

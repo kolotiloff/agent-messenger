@@ -8,7 +8,9 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
-The shared preview shows a gray parenthesized task count on collapsed computers. Conversation headers show only the task title, with the date centered at the start of the thread. The reply context popover is left aligned and uses a slash between usage and capacity. The Statistics task card uses an 8 px lower inset. The ring uses fictional telemetry in this preview. Installed-window acceptance and the release remain pending.
+The shared preview shows a gray parenthesized task count on collapsed computers. Conversation headers show only the task title, with the date centered at the start of the thread. The reply context popover is left aligned and uses a slash between usage and capacity. The ring uses fictional telemetry in this preview. Installed-window acceptance and the release remain pending.
+
+T-336 uses one divider baseline across Projects, the chat title and Archive. Confirmation dialogs use a 12 px gap between content sections and 16 px around the dialog. Statistics cards, expanded efficiency details and outgoing message bubbles use 12 px on all sides. Menus use an 8 px inset, and settings cards use 16 px. These insets and the server update confirmation were measured in the shared preview.
 
 The T-336 settings follow-up removes the dividers between model choices. The server's network-name input sits beside its label and uses the same 12 em width as the General selectors, capped at half the row when space is tight.
 
@@ -20,7 +22,7 @@ The Statistics follow-up moves the shared hover fill to the full task and effici
 
 **T-335 puts task context below the composer.** The New Task field starts at one line and grows with the draft. Add and Send sit at its edges. The model selector is on the lower row, to the right of project and computer. All three labels match the reply model’s muted 13 px regular text. The model menu has a search field aligned with its rows, and a check indicates the selection. Add inserts a path as text. The system file and folder pickers are available when the selected computer is local. Outgoing messages expose Copy beside the timestamp on hover or keyboard focus. The loopback preview includes the change. The release remains on hold.
 
-The loopback task preview gives outgoing message bubbles 12 px vertical and 16 px horizontal insets. The difference accounts for the space inside the text line. Archive rows use the compact 8 by 12 px inset. Active task rows and computer headings have symmetric 4 px vertical padding. Their text still aligns with the computer name, and the row background keeps the full width. Send and Stop use 16 px glyphs inside the existing 32 px controls.
+Archive rows use the compact 8 by 12 px inset. Active task rows and computer headings have symmetric 4 px vertical padding. Their text still aligns with the computer name, and the row background keeps the full width. Send and Stop use 16 px glyphs inside the existing 32 px controls.
 
 **T-334 separates Statistics from Settings.** A chart button beside Settings and Feedback opens a dedicated dialog. Settings opens at General and lists Server, Project and Agents below it. Agents uses an outlined robot icon. In the efficiency report, model names open the details directly, with successive indents for models and their details. The preview was checked with a mouse and keyboard in Chromium and WebKit. Both dialogs return to the open conversation. Both reports share the same card typography and fixed controls. Agent settings use aligned setting rows, and the model picker uses the standard search field and a separate scroll area. The compact header is shared by all four dialogs. Chromium and WebKit checks passed. The shared loopback preview includes the changes.
 

@@ -154,7 +154,7 @@ if (require.main === module) (async()=>{
     assert.equal(await preview.locator('#task-head > h3').innerText(),'Параллельная задача');
     assert.deepEqual(await preview.locator('#task-head > *').evaluateAll(nodes=>nodes.map(node=>node.tagName)),['H3']);
     assert.equal(await chatDate.evaluate(node=>getComputedStyle(node).alignSelf),'center');
-    assert.equal(await thread.locator('.am-outgoing .am-message-content').first().evaluate(node=>getComputedStyle(node).padding),'12px 16px');
+    assert.equal(await thread.locator('.am-outgoing .am-message-content').first().evaluate(node=>getComputedStyle(node).padding),'12px');
     const reportStatus=thread.locator('.am-delivery-close');
     await reportStatus.waitFor();
     assert.equal(await reportStatus.locator('time').count(),0);
@@ -811,11 +811,11 @@ if (require.main === module) (async()=>{
           fields:[heading.left-bounds.left-panel.clientLeft,bounds.right-filter.right,projects.left-aside.left,aside.right-projects.right-1],
           controls:[filter.height,rect('#project-select + .am-select-trigger').height],
           rowAlignment:[filter.top-rect('#project-select + .am-select-trigger').top,
-            header.bottom-rect('.am-computers').top-1],
+            header.bottom-rect('.am-computers').top-1,header.bottom-rect('#task-head').bottom],
         };
       });
       assert.deepEqual(await archiveGeometry(),{
-        matchesWorkspace:[0,0,0],headerLine:[0,0],fields:[12,12,12,12],controls:[28,28],rowAlignment:[0,0],
+        matchesWorkspace:[0,0,0],headerLine:[0,0],fields:[12,12,12,12],controls:[28,28],rowAlignment:[0,0,0],
       });
       assert.equal(await archive.locator('#task-list-heading').textContent(),'Архив');
       const clearArchive=archive.getByRole('button',{name:'Очистить архив',exact:true});
@@ -831,6 +831,12 @@ if (require.main === module) (async()=>{
       }),hoverFills[0]);
       await clearArchive.click();
       await draftPage.getByText('Очистить архив?',{exact:true}).waitFor();
+      assert.deepEqual(await draftPage.locator('#confirm-dialog').evaluate(dialog=>{
+        const title=dialog.querySelector('h3').getBoundingClientRect();
+        const text=dialog.querySelector('#confirm-text').getBoundingClientRect();
+        const actions=dialog.querySelector('.am-alert-actions').getBoundingClientRect();
+        return [text.top-title.bottom,actions.top-text.bottom];
+      }),[12,12]);
       await draftPage.getByRole('button',{name:'Отмена',exact:true}).click();
       const headingStyles=()=>draftPage.evaluate(()=>{
         return ['#project-heading','#task-head > h3','#task-list-heading'].map(selector=>{
@@ -1203,6 +1209,7 @@ if (require.main === module) (async()=>{
     await total(page,'3579');
     const statsTask=page.locator('#stats-top tr').filter({hasText:'Экспорт отчёта'});
     const taskButton=statsTask.locator('.am-stats-task-text');
+    assert.equal(await taskButton.evaluate(button=>getComputedStyle(button.closest('.am-card')).padding),'12px');
     const dateCell=statsTask.locator('td').first();
     await dateCell.hover();
     assert.deepEqual(await taskButton.evaluate(button=>{
