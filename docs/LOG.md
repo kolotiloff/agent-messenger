@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — T-364 through T-366 Dock label, update actions, notices and response fonts
+
+Codex confirmed that build 118 declares Kotel and an upgraded bundle can still have the original app path and Dock label. Recorded the remaining naming migration. Removed the duplicate roster from Settings and put update notices above the content in the upper-right corner. Added version and update actions to the remote computer menu. Local project folders offer project settings and removal with confirmation. General offers four response fonts with a fixed 14 px sample. T-361 through T-363 define clickable report paths, file actions, work progress and per-task change summaries. The published Dock tile dimensions remain the reference.
+
 ## 2026-11-27 — T-358 Build 118 publication and GitHub overview
 
 [Kotel 1.0.15](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.15-preview.118) is public. [Run 109](https://github.com/kolotiloff/agent-messenger/actions/runs/46073340337) verified the signed upgrade from build 117 on macOS arm64, Windows x64 and ARM64, and Linux x64 and ARM64. The GitHub overview uses the approved Kotel icon, window, Statistics and Network screenshots with fictional data, and links to the five current downloads.

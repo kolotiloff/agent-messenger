@@ -965,3 +965,11 @@ The owner revised the release scope in D-257 on November 27. Show the Settings w
 ## D-259 — Keep the My network label inside its card
 
 Use the same typography as Connection mode. Place this computer and its peers in one list with the same vertical spacing between all rows. Keep the connection controls in their existing layout.
+
+## D-261 — Keep computer update notices outside the conversation
+
+Show update notices in the upper-right corner of the window, including in the open Settings or Statistics dialog. Keep confirmations modal. Successful and informational notices expire, while errors remain dismissible. The notice area does not change the composer or conversation layout.
+
+## D-262 — Manage computers from the sidebar
+
+Keep connection configuration in Network settings. Show the installed version, update and cancellation in the remote computer’s context menu. Keep the local update status and action in the sidebar footer. Use the compact menu spacing tokens.

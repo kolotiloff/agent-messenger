@@ -135,7 +135,7 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("X-Frame-Options", "DENY")
-		w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; font-src 'self'; img-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
 		if r.Host != host {
 			http.Error(w, "invalid host", http.StatusForbidden)
 			return
@@ -160,7 +160,10 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			return
 		}
 		if !strings.HasPrefix(r.URL.Path, "/api/") {
-			files := map[string]string{"/": "index.html", "/app.js": "app.js", "/i18n.js": "i18n.js", "/app.css": "app.css", "/design-v1.css": "design-v1.css", "/icon.svg": "icon.svg"}
+			files := map[string]string{
+				"/": "index.html", "/app.js": "app.js", "/i18n.js": "i18n.js", "/app.css": "app.css", "/design-v1.css": "design-v1.css", "/icon.svg": "icon.svg",
+				"/fonts/Inter.woff2": "fonts/Inter.woff2", "/fonts/SourceSans3.woff2": "fonts/SourceSans3.woff2",
+			}
 			name, ok := files[r.URL.Path]
 			if !ok {
 				http.NotFound(w, r)
@@ -178,6 +181,8 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 				w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 			case strings.HasSuffix(name, ".svg"):
 				w.Header().Set("Content-Type", "image/svg+xml")
+			case strings.HasSuffix(name, ".woff2"):
+				w.Header().Set("Content-Type", "font/woff2")
 			default:
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				// Enable the task layout for the ordinary window. The separate

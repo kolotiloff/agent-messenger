@@ -21,6 +21,9 @@
 html, body { height:100%; overflow:hidden; }
 body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff,#191919); }
 
+@font-face { font-family:Inter; src:url('/fonts/Inter.woff2') format('woff2'); font-weight:100 900; font-display:swap; }
+@font-face { font-family:'Source Sans 3'; src:url('/fonts/SourceSans3.woff2') format('woff2'); font-weight:200 900; font-display:swap; }
+
 #am-concept {
   /* Colors */
   --am-bg:light-dark(#fff,#191919);
@@ -135,6 +138,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-text-m:14px;
   --am-text-chat:14px;
   --am-line-chat:21px;
+  --am-chat-font:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   --am-text-l:16px;
   --am-text-xl:18px;
   --am-text-display:28px;
@@ -498,11 +502,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 
 /* Main pane and tabs */
 #am-concept .am-main { display:flex; flex-direction:column; gap:var(--am-gap-content); min-width:0; min-height:0; padding:var(--am-pane-inset) 0; overflow:hidden; }
-#am-concept .am-network-mode { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:var(--am-gap-control); }
-#am-concept .am-network-mode .am-segmented-tabs { margin-inline-start:auto; }
 #am-concept .am-member-joined .am-check-result :is(dt,dd) { font-size:var(--am-text-m); }
-#am-concept .am-network-status.am-good { color:var(--am-good); }
-#am-concept .am-network-status.am-bad { color:var(--am-bad); }
 /* Mutually exclusive settings pages in one compact track. */
 #am-concept .am-segmented-tabs {
   position:relative; isolation:isolate; display:inline-grid; grid-auto-flow:column; grid-auto-columns:1fr; align-self:flex-start; max-inline-size:100%;
@@ -628,6 +628,12 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   line-height:var(--am-line-chat);
   -webkit-font-smoothing:antialiased;
 }
+#am-concept[data-chat-font=inter] { --am-chat-font:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+#am-concept[data-chat-font=source-sans] { --am-chat-font:'Source Sans 3',-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+#am-concept :is(.am-message:not(.am-outgoing) .am-rich,.am-shared-report,.am-chat-font-example) { font-family:var(--am-chat-font); }
+#am-concept .am-theme-setting.am-chat-font-setting { display:grid; grid-template-columns:minmax(0,1fr) min(var(--am-settings-control-width),50%); row-gap:var(--am-space-2); }
+#am-concept .am-chat-font-example { grid-column:1 / -1; font-size:var(--am-text-chat); line-height:var(--am-line-chat); }
+#am-concept[data-chat-font=system-readable] :is(.am-message:not(.am-outgoing) .am-rich,.am-shared-report,.am-chat-font-example) { color:light-dark(#252525,#dededc); line-height:calc(var(--am-line-chat) + var(--am-gap-line)); }
 #am-concept .am-avatar { display:flex; align-items:center; justify-content:center; width:24px; height:28px; flex-shrink:0; }
 /* The agent's icon sits in the name line, so its text starts at the pane's
    edge like the rest of the window, not one column further in (owner). */
@@ -699,10 +705,10 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 
 /* Composer and the error chips above it */
 #am-concept .am-chat-footer { position:absolute; bottom:0; left:var(--am-pane-inset); right:var(--am-pane-inset); background:var(--am-bg); }
-#am-concept .am-notices { display:flex; flex-direction:column; align-items:flex-end; gap:var(--am-gap-control); padding-top:var(--am-space-3); }
+#am-concept .am-notices { position:absolute; z-index:4; inset-block-start:calc(var(--am-caption-height) + var(--am-gap-content)); inset-inline-end:var(--am-gap-section); width:min(360px,calc(100% - 2 * var(--am-gap-section))); display:flex; flex-direction:column; gap:var(--am-gap-control); pointer-events:none; }
 #am-concept .am-notices[hidden] { display:none; }
 #am-concept .am-notice { position:relative; display:flex; align-items:center; gap:var(--am-gap-control); width:min(420px,100%); padding:var(--am-space-2) var(--am-space-1) var(--am-space-2) var(--am-space-3); border:1px solid var(--am-line); border-radius:var(--am-radius-m); background:var(--am-composer); color:var(--am-text); line-height:1.35; box-shadow:var(--am-shadow-s); overflow:hidden; }
-#am-concept .am-notices .am-notice { max-height:none; margin-inline:0; }
+#am-concept .am-notices .am-notice { width:100%; max-height:none; margin-inline:0; pointer-events:auto; }
 #am-concept .am-notice-icon { flex:none; width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; color:var(--am-muted); }
 #am-concept .am-notice-good .am-notice-icon { color:var(--am-good); }
 #am-concept .am-notice-bad .am-notice-icon { color:var(--am-bad); }
@@ -942,8 +948,9 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-machine-card[role=button] { cursor:pointer; }
 #am-concept .am-machine-card[role=button]:is(:hover:not([aria-pressed=true]),:focus-visible) { border-color:var(--am-muted); outline:none; }
 #am-concept .am-device-card:focus-visible { border-color:var(--am-muted); }
-#am-concept .am-context-menu { min-width:180px; }
-#am-concept .am-context-status { max-width:var(--am-queue); padding:var(--am-pad-compact); color:var(--am-muted); }
+#am-concept .am-context-menu { max-width:min(var(--am-queue),100vw); padding:var(--am-space-1); }
+#am-concept .am-context-menu .am-select-option { padding-inline:var(--am-space-2); }
+#am-concept .am-context-status { padding:var(--am-space-1) var(--am-space-2); color:var(--am-muted); }
 #am-concept .am-server .am-check-result { grid-template-columns:max-content minmax(0,1fr); column-gap:var(--am-gap-section); row-gap:var(--am-gap-control); }
 #am-concept .am-card-head h3:focus { outline:none; }
 
@@ -1332,15 +1339,3 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept button.am-update-cancel:is(:hover,:focus-visible):not(:disabled) { background:color-mix(in srgb,var(--am-bad) 14%,transparent); }
 
 .am-compose[data-context-only]>:not(#answer-context):not(#answer-token-menu){display:none}
-
-#am-concept #network-roster-heading { display:flex; align-items:baseline; gap:var(--am-gap-control); }
-#am-concept #network-roster-count { font-weight:400; }
-#am-concept .am-network-row { display:grid; grid-template-columns:minmax(0,1fr) 10ch 7ch; gap:var(--am-gap-control); align-items:center; height:var(--am-control); }
-#am-concept .am-network-identity { display:flex; align-items:center; gap:var(--am-space-1); min-width:0; }
-#am-concept .am-network-identity > span:last-child, #am-concept .am-network-status-text { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-#am-concept .am-network-dot { flex:none; width:var(--am-space-2); height:var(--am-space-2); border-radius:50%; background:var(--am-muted); }
-#am-concept .am-network-dot[data-online] { background:var(--am-computer-online); }
-#am-concept .am-network-action, #am-concept .am-network-version { text-align:end; min-width:0; }
-#am-concept .am-network-version { color:var(--am-muted); white-space:nowrap; font-variant-numeric:tabular-nums; }
-#am-concept .am-network-action :is(button.am-update-icon,.am-network-update) { width:auto; padding-inline:var(--am-space-1); background:transparent; color:var(--am-text); }
-#am-concept .am-network-status-text { display:block; color:var(--am-muted); font-size:var(--am-text-s); }

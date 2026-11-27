@@ -66,12 +66,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         config.websiteDataStore = .nonPersistent()
         config.userContentController.add(self, name: "updates")
         config.userContentController.add(self, name: "appearance")
+        config.userContentController.add(self, name: "chatFont")
         config.userContentController.add(self, name: "folder")
         config.userContentController.add(self, name: "app")
         config.userContentController.add(self, name: "titlebar")
-        let savedTheme = UserDefaults.standard.string(forKey: "appearance") ?? "system"
-        let safeTheme = ["system", "light", "dark"].contains(savedTheme) ? savedTheme : "system"
-        addPageScripts(config.userContentController, theme: safeTheme)
+        refreshPageScripts(config.userContentController)
         updates.onStatus = { [weak self] _ in self?.showUpdateStatus() }
         updates.onRun = { [weak self] state in self?.showUpdateRun(state) }
         web = TitlebarWebView(frame: .zero, configuration: config)
@@ -297,9 +296,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             self?.web?.evaluateJavaScript("window.messengerFolderPicked && window.messengerFolderPicked(" + json + "[0])", completionHandler: nil)
         }
     }
-    // theme is one of "system", "light", "dark", checked by the caller.
-    func addPageScripts(_ controller: WKUserContentController, theme: String) {
-        controller.addUserScript(WKUserScript(source: "window.messengerInitialTheme = '\(theme)'; window.amMacTitlebar = true", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+    private static let chatFonts = ["system", "system-readable", "inter", "source-sans"]
+
+    func refreshPageScripts(_ controller: WKUserContentController) {
+        let defaults = UserDefaults.standard
+        let savedTheme = defaults.string(forKey: "appearance") ?? "system"
+        let theme = ["system", "light", "dark"].contains(savedTheme) ? savedTheme : "system"
+        let savedFont = defaults.string(forKey: "chatFont") ?? "system"
+        let font = Self.chatFonts.contains(savedFont) ? savedFont : "system"
+        controller.removeAllUserScripts()
+        let source = "window.messengerInitialTheme = '\(theme)'; window.messengerInitialChatFont = '\(font)'; window.amMacTitlebar = true"
+        controller.addUserScript(WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true))
     }
     func rects(_ value: Any?) -> [NSRect] {
         guard let list = value as? [[Double]] else { return [] }
@@ -320,8 +327,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         if message.name == "appearance", let theme = message.body as? String, ["system", "light", "dark"].contains(theme) {
             UserDefaults.standard.set(theme, forKey: "appearance"); applyTheme(theme)
             // A reconnect creates a new document in the same WebView.
-            web.configuration.userContentController.removeAllUserScripts()
-            addPageScripts(web.configuration.userContentController, theme: theme)
+            refreshPageScripts(userContentController)
+        }
+        if message.name == "chatFont", let font = message.body as? String, Self.chatFonts.contains(font) {
+            UserDefaults.standard.set(font, forKey: "chatFont")
+            refreshPageScripts(userContentController)
         }
         // The empty parts of the page's top that move the window (T-082).
         if message.name == "titlebar", let body = message.body as? [String: Any], let view = web as? TitlebarWebView {

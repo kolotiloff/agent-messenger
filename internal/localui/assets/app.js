@@ -163,6 +163,15 @@
       else try {localStorage.setItem('messenger-theme',theme);} catch(_) {}
     }
   }
+  function applyChatFont(persist=false){
+    const select=$('chat-font-select');
+    if(!select.value)select.value='system';
+    root.dataset.chatFont=select.value;
+    if(persist){
+      if(window.webkit?.messageHandlers?.chatFont)window.webkit.messageHandlers.chatFont.postMessage(select.value);
+      else remember('messenger-chat-font',select.value);
+    }
+  }
   // Task window (D-024, D-026, T-029). The window observes tasks; the owner
   // talks to the coordinator in the Claude app. Its only actions are creating
   // a project, changing the project folder, connecting an agent program and
@@ -585,12 +594,9 @@
     }
     syncSelects();
   }
-  // Right-click menu on another computer of the network. Revoking cannot be
-  // undone, so its item only opens a confirmation inside the card. Updating
-  // moved to an icon on the card (T-128).
   // A right-click menu; entries are {text,pick}.
-  function popMenu(x,y,entries,status=null){
-    if(!entries.length&&!status)return;
+  function popMenu(x,y,entries,status=null,detail=''){
+    if(!entries.length&&!status&&!detail)return;
     let menu=$('device-menu');
     if(!menu){
       // A manual popover: an automatic one closes on the same right click
@@ -612,19 +618,30 @@
     menu.setAttribute('role',status?'status':'menu');
     menu.dataset.stopTask=status?.task||'';
     menu.replaceChildren(...(status?[el('div',status.text,'am-context-status')]:items));
+    if(detail)menu.prepend(el('div',detail,'am-context-status'));
     menu.showPopover();
     menu.style.left=Math.max(0,Math.min(x,window.innerWidth-menu.offsetWidth))+'px';
     menu.style.top=Math.max(0,Math.min(y,window.innerHeight-menu.offsetHeight))+'px';
     (items[0]||menu).focus();
   }
   function deviceMenu(d,x,y,can){
+    const peer=(server?.peers||[]).find(other=>other.id===d.id);
+    if(!peer)return;
     const items=[];
     const add=(text,pick)=>items.push({text,pick});
+    const installed=peerInstalledVersion(peer),mark=updateMark(peer),offer=peerUpdateOffer(peer,installed,mark);
+    if(offer)add(tr('Обновить до ')+offer,()=>confirmPeerUpdate(peer,offer));
+    let detail=installed?tr('Установлена ')+versionName(installed):tr('Версия неизвестна');
+    if(updateInProgress(mark)){
+      const state=updatePresentation(peer,mark);
+      detail+=' · '+state.caption;
+      if(state.canCancel)add(tr('Отменить обновление'),()=>cancelUpdate(state));
+    }
     if(can.revoke)add(tr('Отозвать устройство'),()=>{revokeAsk=d.id;clearTimeout(revokeTimer);revokeTimer=setTimeout(()=>{revokeAsk='';renderMachines();},8000);renderMachines();$('machines').querySelector('[data-key="'+CSS.escape('revoke-yes-'+d.id)+'"]')?.focus();});
-    popMenu(x,y,items);
+    popMenu(x,y,items,null,detail);
   }
   // Asking another computer to update itself (T-078). Its answers arrive
-  // with the server status and show as notices above the reply box (T-128);
+  // with the server status and show as notices in the window;
   // the card only says while it is under way.
   async function requestUpdate(peer){
     try{const answer=await postAPI('/api/server-action',{action:'update',device:peer.id},28000);if(answer?.result)server=answer.result;}
@@ -689,7 +706,7 @@
   }
   const updateCancelAttempts=new Map();
   function cancelUpdateKey(broker,device,id){return JSON.stringify([broker,device,id]);}
-  function updateControl(peer,mark,text=false){
+  function updatePresentation(peer,mark){
     const broker=updateNetwork(),device=peer?.id||'';
     const key=cancelUpdateKey(broker,device,mark.id);
     const attempt=updateCancelAttempts.get(key);
@@ -698,42 +715,47 @@
     if(!installing&&(attempt||queued)){
       const caption=attempt==='sending'?tr('Отправляем запрос на отмену…'):
         queued||attempt==='queued'?tr('Отмена запрошена, ждём подтверждения'):tr('Проверяем, принят ли запрос на отмену…');
-      const status=el('span',undefined,'am-update-icon am-update-wait am-update-cancelling');
-      status.title=caption;status.setAttribute('role','img');status.setAttribute('aria-label',caption);
-      status.append(svgIcon(['M6 3h12M6 21h12M8 3v5l8 8v5M16 3v5l-8 8v5']));
-      if(text){status.className='am-network-status-text';status.textContent=tr('Отмена запрошена');}
-      status.addEventListener('click',e=>e.stopPropagation());
-      return status;
+      return {caption,cancelling:true,canCancel:false};
     }
     const caption=installing?tr('Обновление устанавливается'):mark.state==='waiting'?tr('Обновление запрошено'):tr('Ждёт обновления');
     // The update board can confirm the queue while the roster is delayed.
     const canCancel=!installing&&!!mark.id&&(!peer||updateBuildNumber(peer.version)>=100);
+    return {caption,canCancel,key,device,broker,requestID:mark.id};
+  }
+  async function cancelUpdate({key,device,broker,requestID}){
+    if(updateCancelAttempts.has(key)||broker!==updateNetwork())return;
+    updateCancelAttempts.set(key,'sending');renderMachines();
+    try{
+      await postAPI('/api/server-action',{action:'cancel-update',device,broker,request_id:requestID},28000);
+      updateCancelAttempts.set(key,'queued');
+    }catch(error){
+      updateCancelAttempts.set(key,'unknown');
+      addNotice('cancel-'+requestID,'bad',tr('Отмена обновления'),capital(error.message));
+    }
+    renderMachines();void loadServer();
+  }
+  function updateControl(peer,mark){
+    const state=updatePresentation(peer,mark),{caption,canCancel}=state;
+    if(state.cancelling){
+      const status=el('span',undefined,'am-update-icon am-update-wait am-update-cancelling');
+      status.title=caption;status.setAttribute('role','img');status.setAttribute('aria-label',caption);
+      status.append(svgIcon(['M6 3h12M6 21h12M8 3v5l8 8v5M16 3v5l-8 8v5']));
+      status.addEventListener('click',e=>e.stopPropagation());
+      return status;
+    }
     const b=el(canCancel?'button':'span',undefined,'am-update-icon am-peer-update '+(canCancel?'am-update-cancel':'am-update-wait'));
     const label=canCancel?tr('Отменить обновление'):caption;
     b.title=label;b.setAttribute('aria-label',label);
     b.append(updateSpinner());
-    if(text){b.className=canCancel?'am-network-update':'am-network-status-text';b.textContent=canCancel?tr('Отменить'):caption;}
     if(!canCancel){b.setAttribute('role','img');return b;}
     b.setAttribute('aria-description',caption);
     b.type='button';b.dataset.key='cancel-update-'+(peer?.id||'local');
-    if(!text)b.append(svgIcon(['M6 6l12 12M18 6L6 18']));
+    b.append(svgIcon(['M6 6l12 12M18 6L6 18']));
     b.addEventListener('keydown',e=>e.stopPropagation());
-    b.addEventListener('click',async e=>{
-      e.stopPropagation();
-      if(updateCancelAttempts.has(key))return;
-      updateCancelAttempts.set(key,'sending');renderMachines();
-      try{
-        await postAPI('/api/server-action',{action:'cancel-update',device,broker,request_id:mark.id},28000);
-        updateCancelAttempts.set(key,'queued');
-      }catch(error){
-        updateCancelAttempts.set(key,'unknown');
-        addNotice('cancel-'+mark.id,'bad',tr('Отмена обновления'),capital(error.message));
-      }
-      renderMachines();void loadServer();
-    });
+    b.addEventListener('click',e=>{e.stopPropagation();void cancelUpdate(state);});
     return b;
   }
-  // T-128: notices above the reply box. A good one fades after a few seconds
+  // A successful update notice fades after a few seconds
   // on screen; a bad one stays until the owner closes it, also across
   // reloads of the window. Only answers that came while the window was open
   // are shown as good news; problems of the last day are kept.
@@ -788,6 +810,8 @@
   }
   function renderNotices(){
     const box=$('notices');if(!box)return;
+    const surface=[$('settings-dialog'),$('stats-dialog')].find(dialog=>dialog.open)||root.querySelector('.am-window');
+    if(box.parentElement!==surface)surface.append(box);
     box.replaceChildren();box.hidden=!notices.length;
     for(const n of notices){
       const card=el('div',undefined,'am-notice am-notice-'+n.kind);card.dataset.key=n.key;
@@ -799,7 +823,7 @@
       if(n.kind!=='bad'){
         card.append(el('span',undefined,'am-notice-timer'));
         // The countdown starts once the notice can be seen.
-        if(!n.timer&&tab==='tasks'&&!document.hidden)n.timer=setTimeout(()=>closeNotice(n.key),6000);
+        if(!n.timer&&!document.hidden)n.timer=setTimeout(()=>closeNotice(n.key),6000);
       }
       box.append(card);
     }
@@ -1285,6 +1309,24 @@
         if(expand)collapsedFolders.delete(key);else collapsedFolders.add(key);
         showFolder(expand);
       });
+      const openProjectMenu=(x,y)=>{
+        if(!view?.projects.some(item=>item.name===name))return;
+        popMenu(x,y,[
+          {text:tr('Настройки проекта'),pick:()=>{if(project!==name)selectProject(name);show('project');}},
+          {text:tr('Удалить локальный проект'),pick:()=>askRemoveProject(name)},
+        ]);
+      };
+      button.addEventListener('contextmenu',event=>{
+        event.preventDefault();
+        openProjectMenu(event.clientX,event.clientY);
+      });
+      button.addEventListener('keydown',event=>{
+        if(event.key==='ContextMenu'||(event.shiftKey&&event.key==='F10')){
+          event.preventDefault();
+          const bounds=button.getBoundingClientRect();
+          openProjectMenu(bounds.left,bounds.bottom);
+        }
+      });
       appendSidebarRows(rows,tasks);
       folder.append(button,rows);container.append(folder);
     }
@@ -1333,74 +1375,33 @@
     const confirmed=mark?.state==='done'?mark.version:shared?.state==='done'?shared.version:'';
     return confirmed&&(!peer.version||versionOlder(peer.version,confirmed))?confirmed:peer.version;
   }
-  function peerUpdateButton(peer,installed,text){
+  function peerUpdateOffer(peer,installed,mark){
+    const newest=newestVersion();
+    return peerFresh(peer)&&!updateInProgress(mark)&&installed&&versionOlder(installed,newest)?versionName(newest):'';
+  }
+  function confirmPeerUpdate(peer,newest){
+    askConfirm(tr('Обновить ')+(peer.name||tr('компьютер'))+tr(' до ')+newest+'?',tr('Программа на том компьютере обновится и перезапустится. Задачи и история сохранятся.')+(peer.host?' '+tr('На нём работает сервер сети: пока он перезапускается, компьютеры не видят друг друга. Если там попросят подтверждение, сервер не вернётся, пока кто-нибудь не ответит у того компьютера.'):''),tr('Обновить'),()=>requestUpdate(peer),true);
+  }
+  function peerUpdateButton(peer,installed){
     const mark=updateMark(peer);
-    if(updateInProgress(mark))return updateControl(peer,mark,text);
-    if(!peerFresh(peer)||!installed||!versionOlder(installed,newestVersion()))return null;
-    const newest=versionName(newestVersion()),label=tr('Обновить до ')+newest;
-    const b=el('button',text?tr('Обновить'):undefined,text?'am-network-update':'am-update-icon am-peer-update');
+    if(updateInProgress(mark))return updateControl(peer,mark);
+    const newest=peerUpdateOffer(peer,installed,mark);
+    if(!newest)return null;
+    const label=tr('Обновить до ')+newest;
+    const b=el('button',undefined,'am-update-icon am-peer-update');
     b.type='button';b.title=label;b.setAttribute('aria-label',label);
-    if(!text)appendUpdateGlyphs(b);
-    b.addEventListener('click',event=>{event.stopPropagation();askConfirm(tr('Обновить ')+(peer.name||tr('компьютер'))+tr(' до ')+newest+'?',tr('Программа на том компьютере обновится и перезапустится. Задачи и история сохранятся.')+(peer.host?' '+tr('На нём работает сервер сети: пока он перезапускается, компьютеры не видят друг друга. Если там попросят подтверждение, сервер не вернётся, пока кто-нибудь не ответит у того компьютера.'):''),tr('Обновить'),()=>requestUpdate(peer),true);});
+    appendUpdateGlyphs(b);
+    b.addEventListener('click',event=>{event.stopPropagation();confirmPeerUpdate(peer,newest);});
     b.addEventListener('keydown',event=>event.stopPropagation());
     return b;
   }
-  function networkIdentity(label,connected,roles,lastSeen,local){
-    const identity=el('div',undefined,'am-network-identity');
-    const dot=el('span',undefined,'am-network-dot');dot.toggleAttribute('data-online',connected);
-    const name=el('span',label);
-    if(roles.length)name.append(el('span',', '+roles.join(', '),'am-muted'));
-    if(!connected)name.append(el('span',', '+(lastSeen?tr('Был на связи ')+stamp(lastSeen):tr('Нет связи')),'am-muted'));
-    name.title=name.textContent;
-    identity.append(dot,machinePresence(connected,local),name);
-    return identity;
-  }
-  function syncNetworkLocalUpdate(){
-    const local=$('network-self-update'),footer=$('app-update-button');
-    local.hidden=footer.hidden||!!$('network-local').querySelector('[data-network-mark]');
-    local.disabled=footer.disabled;local.title=footer.title;
-    $('network-local-version').textContent=$('app-installed-version').textContent||
-      versionName(clientInfo?.window_version||clientInfo?.client_version||'')||'—';
-  }
-  function renderLocalUpdateMark(container,mark,text){
+  function renderLocalUpdateMark(container,mark){
     const pending=container.querySelector('[data-network-mark]');
     if(!updateInProgress(mark)){pending?.remove();return;}
-    const next=updateControl(null,mark,text);
+    const next=updateControl(null,mark);
     next.dataset.networkMark='';next.dataset.request=mark.id||'';next.dataset.network=updateNetwork();
     if(!pending)container.prepend(next);
     else if(!pending.isEqualNode(next))pending.replaceWith(next);
-  }
-  function renderNetworkRoster(coordinator,host){
-    const local=$('network-local'),roles=[];
-    if(coordinator)roles.push(tr('координатор'));
-    if(host)roles.push(tr('сервер'));
-    const identity=networkIdentity(view?.computer_name||tr('Этот компьютер'),online,roles,null,true);
-    if(!local.firstElementChild.isEqualNode(identity))local.firstElementChild.replaceWith(identity);
-    const localMark=updateMark(null);
-    renderLocalUpdateMark(local.querySelector('.am-network-action'),localMark,true);
-    if(taskSidebarPreview)renderLocalUpdateMark(document.querySelector('.am-version-row'),localMark,false);
-    syncNetworkLocalUpdate();
-    const peers=server?.peers||[];
-    $('network-roster-count').textContent=String(1+peers.length);
-    const list=$('network-peers'),rows=[];
-    for(const peer of peers){
-      const row=el('div',undefined,'am-network-row');row.dataset.peer=peer.id;
-      const roles=[];
-      if(peer.coordinator)roles.push(tr('координатор'));
-      if(peer.host)roles.push(tr('сервер'));
-      const installed=peerInstalledVersion(peer),action=el('div',undefined,'am-network-action');
-      const control=peerUpdateButton(peer,installed,true);
-      if(control){control.dataset.request=updateMark(peer)?.id||'';action.append(control);}
-      row.dataset.network=updateNetwork();
-      row.append(networkIdentity(peer.name,peerConnected(peer),roles,peer.last_seen,false),action,
-        el('span',installed?versionName(installed):'—','am-network-version'));
-      rows.push(row);
-    }
-    if(rows.length!==list.children.length||rows.some((row,i)=>!row.isEqualNode(list.children[i]))){
-      const focus=list.contains(document.activeElement)?document.activeElement.closest('[data-peer]')?.dataset.peer:'';
-      list.replaceChildren(...rows);
-      if(focus)list.querySelector('[data-peer="'+CSS.escape(focus)+'"] button')?.focus({preventScroll:true});
-    }
   }
   function renderMachines(){
     if(draggedMachine)return;
@@ -1443,8 +1444,8 @@
     const version=el('div',undefined,'am-machine-version am-local-version');
     const corner=el('div',undefined,'am-card-update am-local-update');
     const localMark=updateMark(null),localBusy=updateInProgress(localMark);
+    if(taskSidebarPreview)renderLocalUpdateMark(document.querySelector('.am-version-row'),localMark);
     if(localBusy&&!taskSidebarPreview)corner.append(updateControl(null,localMark));
-    renderNetworkRoster(!!coordinatorRole,!!serverRole);
     root.classList.toggle('am-local-update-pending',localBusy);
     const localMeta=el('div',undefined,'am-machine-meta');localMeta.append(corner,version);
     // A paused agent is left out, as other computers leave it out of what
@@ -1481,7 +1482,7 @@
       // T-128: an older computer gets the update icon next to its dot; the
       // owner confirms in a popup.
       if(!taskSidebarPreview){
-        const installed=peerInstalledVersion(peer),control=peerUpdateButton(peer,installed,false);
+        const installed=peerInstalledVersion(peer),control=peerUpdateButton(peer,installed);
         if(control){corner.append(control);meta.append(corner);}
         if(installed)meta.append(el('span',versionName(installed),'am-version am-machine-version'));
       }
@@ -1512,11 +1513,13 @@
       }
       if(!projectActivity.length){name.append(meta);card.append(name,peerBody);}
       const can={revoke:hosted.has(peer.id)};
-      if(can.revoke){
-        card.classList.add('am-device-card');card.tabIndex=0;card.dataset.key='revoke-'+peer.id;card.title=tr('Правая кнопка мыши — действия');
-        card.addEventListener('contextmenu',event=>{event.preventDefault();deviceMenu(peer,event.clientX,event.clientY,can);});
-        card.addEventListener('keydown',event=>{if(event.key==='ContextMenu'||(event.shiftKey&&event.key==='F10')){event.preventDefault();const r=card.getBoundingClientRect();deviceMenu(peer,r.left+16,r.top+24,can);}});
-      }
+      card.classList.add('am-device-card');
+      if(can.revoke)card.dataset.key='revoke-'+peer.id;
+      const menuTarget=taskSidebarPreview?name:card;
+      menuTarget.tabIndex=0;
+      menuTarget.title=tr('Правая кнопка мыши — действия');
+      card.addEventListener('contextmenu',event=>{if(!event.defaultPrevented){event.preventDefault();deviceMenu(peer,event.clientX,event.clientY,can);}});
+      menuTarget.addEventListener('keydown',event=>{if(event.target===menuTarget&&(event.key==='ContextMenu'||(event.shiftKey&&event.key==='F10'))){event.preventDefault();const r=menuTarget.getBoundingClientRect();deviceMenu(peer,r.left+16,r.top+24,can);}});
       box.append(card);
     }
     const rank=new Map(machineOrder.map((key,index)=>[key,index]));
@@ -3775,7 +3778,7 @@
     }catch(_){}finally{discovering=false;}
   }
   function show(next){
-    tab=next;root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab&&!(taskSidebarPreview&&n.dataset.screen==='tasks'));renderNotices();renderToasts();
+    tab=next;root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab&&!(taskSidebarPreview&&n.dataset.screen==='tasks'));renderToasts();
     root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
     if(taskSidebarPreview){
       const dialog=$('settings-dialog');
@@ -3786,6 +3789,7 @@
         if(tab==='stats'&&!statistics.open)statistics.showModal();
       }else if(!dialog.open)dialog.showModal();
     }
+    renderNotices();
     $('list-toggle').hidden=!view?.project||(!taskSidebarPreview&&tab!=='tasks');if(tab==='server'||tab==='settings')loadServer();if(tab==='stats')reloadStats();if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),settings:tr('Настройки программы'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сеть'),stats:tr('Статистика')}[tab];startWindowWatch();
     if(tab==='tasks'&&combinedTasks()){renderTaskList();loadProjectActivity();}
     if(tab==='tasks'&&setupPaneShown())renderThread();
@@ -4517,11 +4521,15 @@
   }
   // Removing a project asks in a popup first. Its tasks stay in the database;
   // creating the project again brings them back.
-  function askRemoveProject(){
-    const name=view?.project;if(!name)return;
-    askConfirm(tr('Удалить проект «')+(view.project_title||name)+'»?',tr('Проект пропадёт из списка. История задач сохранится и вернётся, если создать проект с тем же именем.'),tr('Удалить'),async()=>{
+  function askRemoveProject(name=view?.project){
+    if(!name)return;
+    askConfirm(tr('Удалить проект «')+(name===view?.project&&view.project_title||projectTitle(name))+'»?',tr('Проект пропадёт из списка. История задач сохранится и вернётся, если создать проект с тем же именем.'),tr('Удалить'),async()=>{
       await postAPI('/api/project-remove',{name});
-      setProject('');remember('messenger-project','');selectedTask='';selectedShared=null;feed=null;feedSignature='';viewSignature='';projectPageFor='';await refresh();
+      if(project===name){
+        setProject('');remember('messenger-project','');selectedTask='';selectedShared=null;feed=null;feedSignature='';projectPageFor='';
+      }
+      if(sidebarProject===name)sidebarProject='';
+      viewSignature='';await refresh();
     });
   }
   // Installation and sign-in use the agent's own terminal commands.
@@ -4930,7 +4938,6 @@
     updateTip(version,busy);
     button.classList.toggle('am-update-active',!!busy);
     button.disabled=!!busy;
-    syncNetworkLocalUpdate();
   }
   // Windows and Linux: the program updates itself from the window (D-048).
   let selfUpdate=null,selfUpdateBusy=false,selfUpdateTimer=0;
@@ -4953,7 +4960,6 @@
     $('app-update-version').textContent=s.message||(done?tr('Обновлено. Окно откроется заново.'):'');
     updateTip(version,s.state==='downloading'?'downloading':installing?'installing':'');
     $('app-update-button').disabled=installing;
-    syncNetworkLocalUpdate();
     renderUpdateDialog();
   }
   async function loadSelfUpdate(){
@@ -5055,7 +5061,6 @@
   $('update-close').addEventListener('click',()=>{updateRun=null;clearTimeout(updateRunTimer);$('update-dialog').close();loadSelfUpdate();});
   // The download and the install are not cancelled halfway.
   $('update-dialog').addEventListener('cancel',event=>{if(!updateRun?.error)event.preventDefault();else{updateRun=null;}});
-  $('network-self-update').addEventListener('click',()=>$('app-update-button').click());
   $('app-update-button').addEventListener('click',()=>{
     if(window.webkit?.messageHandlers?.updates)startMacUpdate();
     else startUpdate();
@@ -5172,8 +5177,9 @@
   $('settings-open').addEventListener('click',()=>{
     $('auto-update-status').textContent='';
     if(taskSidebarPreview)show('settings');
-    else{$('settings-dialog').showModal();loadServer();}
+    else{$('settings-dialog').showModal();renderNotices();loadServer();}
   });
+  $('settings-dialog').addEventListener('close',renderNotices);
   if(taskSidebarPreview){
     const dialog=$('settings-dialog');
     const previousBody=dialog.querySelector('.am-dialog-body');
@@ -5261,7 +5267,7 @@
   $('project-page-name').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();saveProjectField('title');}});
   $('project-page-folder').addEventListener('change',()=>saveProjectField('folder'));
   $('project-page-folder').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();saveProjectField('folder');}});
-  $('project-page-remove').addEventListener('click',askRemoveProject);
+  $('project-page-remove').addEventListener('click',()=>askRemoveProject());
   $('confirm-go').addEventListener('click',runConfirm);
   $('confirm-cancel').addEventListener('click',()=>$('confirm-dialog').close());
   $('access-toggle').addEventListener('click',toggleAllAccess);
@@ -5369,6 +5375,11 @@
   }
   centreControlText();
   applyTheme(initialTheme||'system');
+  const chatFont=$('chat-font-select');
+  chatFont.value=window.messengerInitialChatFont||recall('messenger-chat-font');
+  applyChatFont();
+  enhanceSelect(chatFont);
+  chatFont.addEventListener('change',()=>applyChatFont(true));
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{if(document.documentElement.dataset.theme==='system')applyTheme('system');});
   $('theme-select').addEventListener('change',()=>applyTheme($('theme-select').value,true));
   // The language applies on reload: every text is drawn again in it (T-059).

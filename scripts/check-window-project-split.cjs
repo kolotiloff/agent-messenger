@@ -103,9 +103,11 @@ if (require.main === module) (async()=>{
         const override=await beforeReply(url,p);
         return route.fulfill(override||{json:reply(url,p,available)});
       }
-      const files={'/':['index.html','text/html; charset=utf-8'],'/app.js':['app.js','application/javascript'],'/i18n.js':['i18n.js','application/javascript'],'/app.css':['app.css','text/css'],'/icon.svg':['icon.svg','image/svg+xml']};
+      const files={'/':['index.html','text/html; charset=utf-8'],'/app.js':['app.js','application/javascript'],'/i18n.js':['i18n.js','application/javascript'],'/app.css':['app.css','text/css'],'/icon.svg':['icon.svg','image/svg+xml'],
+        '/fonts/Inter.woff2':['fonts/Inter.woff2','font/woff2'],'/fonts/SourceSans3.woff2':['fonts/SourceSans3.woff2','font/woff2']};
       const file=files[url.pathname];
       if(!file)return route.fulfill({status:404,body:''});
+      if(file[1]==='font/woff2')return route.fulfill({contentType:file[1],body:await fs.readFile(path.join(assets,file[0]))});
       let body=await fs.readFile(path.join(assets,file[0]),'utf8');
       if(preview&&url.pathname==='/')body=body.replace('id="am-concept"','id="am-concept" class="am-task-sidebar-preview"');
       return route.fulfill({contentType:file[1],body});
@@ -361,9 +363,7 @@ if (require.main === module) (async()=>{
       assert.equal(await footerCancel.getAttribute('data-request'),'upd-local');
       await pendingUpdate.locator('#settings-open').click();
       await pendingUpdate.locator('#settings-dialog [data-tab=server]').click();
-      const networkCancel=pendingUpdate.locator('#network-local').getByRole('button',{name:'Отменить обновление'});
-      await networkCancel.waitFor();
-      assert.equal(await networkCancel.getAttribute('data-request'),'upd-local');
+      assert.equal(await pendingUpdate.locator('#network-roster').count(),0);
     }finally{await pendingUpdate.close();}
     const draftPage=await open(projects,{width:1150,height:770},'dark',(url,p)=>{
       if(p==='game'&&url.pathname==='/api/window'){
@@ -600,6 +600,28 @@ if (require.main === module) (async()=>{
       };
       const generalTitle=await topLeft(general.getByRole('heading',{name:'Общие',exact:true}));
       const generalField=await topLeft(general.locator('.am-select-trigger').first());
+      const fontSample=general.locator('.am-chat-font-example');
+      for(const [label,key,family] of [['Inter','inter','Inter'],['Source Sans 3','source-sans','Source Sans 3']]){
+        await select(draftPage,'chat-font-select',label);
+        await fontSample.evaluate(async (sample,face)=>{
+          const fonts=await document.fonts.load(`14px "${face}"`,sample.textContent);
+          if(!fonts.some(font=>font.status==='loaded'))throw Error('The Cyrillic specimen did not load '+face);
+        },family);
+        assert.equal(await draftPage.evaluate(()=>localStorage.getItem('messenger-chat-font')),key);
+        assert.equal(await fontSample.evaluate(node=>getComputedStyle(node).fontSize),'14px');
+        assert.match(await fontSample.evaluate(node=>getComputedStyle(node).fontFamily),new RegExp(family));
+      }
+      const fontMetrics=()=>fontSample.evaluate(node=>{
+        const css=getComputedStyle(node);
+        return {size:css.fontSize,line:parseFloat(css.lineHeight),color:css.color};
+      });
+      await select(draftPage,'chat-font-select','Системный, контрастнее');
+      const readable=await fontMetrics();
+      await select(draftPage,'chat-font-select','Системный');
+      const standard=await fontMetrics();
+      assert.equal(standard.size,readable.size);
+      assert(readable.line>standard.line);
+      assert.notEqual(readable.color,standard.color);
       assert.equal(await general.locator('.am-card h3').count(),0);
       const headerHeight=selector=>draftPage.locator(selector).evaluate(node=>node.getBoundingClientRect().height);
       const dialogHeaderHeight=await headerHeight('#settings-dialog .am-dialog-header');
@@ -623,28 +645,7 @@ if (require.main === module) (async()=>{
         assert(await screen.locator(firstHeading).evaluate(node=>!node.closest('.am-card')),section);
         assert.deepEqual(await topLeft(screen.locator(firstControl)),generalField,section);
         if(section==='server'){
-          const roster=screen.locator('#network-roster');
-          await roster.locator('#network-local').getByText('v1.0.9',{exact:true}).waitFor();
-          const peer=roster.locator('[data-peer="pc1"]');
-          await peer.getByRole('button',{name:'Обновить до v1.0.10'}).waitFor();
-          assert.equal(await peer.locator('.am-network-update').textContent(),'Обновить');
-          const labelStyle=locator=>locator.evaluate(node=>{
-            const style=getComputedStyle(node);
-            return [style.fontSize,style.fontWeight];
-          });
-          const rosterLabel=roster.locator('#network-roster-heading');
-          assert.deepEqual(await labelStyle(rosterLabel),await labelStyle(screen.locator('#network-mode-label')));
-          const rosterRows=await roster.locator('.am-network-row').evaluateAll(rows=>rows.map(row=>{
-            const {top,bottom}=row.getBoundingClientRect();
-            return {top,bottom};
-          }));
-          assert(rosterRows.length>2);
-          for(const [index,row] of rosterRows.slice(1).entries()){
-            const previous=rosterRows[index];
-            assert.equal(row.top,previous.bottom);
-            assert.equal(row.bottom-row.top,previous.bottom-previous.top);
-          }
-
+          assert.equal(await screen.locator('#network-roster').count(),0);
           await screen.getByRole('tab',{name:'Свой сервер'}).click();
           assert.equal(await screen.locator('#member-panel').isVisible(),false);
           for(const selector of ['#computer-name','#host-scope + .am-select-trigger','#host-port','#host-enable']){
@@ -1310,6 +1311,16 @@ if (require.main === module) (async()=>{
       assert.equal(await gameButton.locator('.am-sidebar-task-count').isVisible(),true);
       await gameButton.click();
       assert.equal(await gameButton.locator('.am-sidebar-task-count').isVisible(),false);
+      await gameButton.click({button:'right'});
+      const projectMenu=browserPreview.locator('#device-menu');
+      const projectSettings=projectMenu.getByRole('menuitem',{name:'Настройки проекта'});
+      await projectSettings.click();
+      await browserPreview.locator('#settings-dialog #project-page-title').waitFor();
+      await browserPreview.locator('#settings-close').click();
+      await gameButton.click({button:'right'});
+      await projectMenu.getByRole('menuitem',{name:'Удалить локальный проект'}).click();
+      await browserPreview.locator('#confirm-dialog').getByText('Удалить проект «Игра»?').waitFor();
+      await browserPreview.locator('#confirm-cancel').click();
       await group('По компьютеру, затем по проекту');
       const localGame=card(browserPreview,'local').locator('.am-sidebar-folder').filter({has:browserPreview.getByRole('button',{name:'Игра',exact:true})});
       assert.equal(await localGame.getByText('Экран настроек',{exact:true}).count(),1);
@@ -1344,6 +1355,13 @@ if (require.main === module) (async()=>{
       await localGame.locator('.am-sidebar-task').filter({hasText:'Экран настроек'}).click();
       await browserPreview.locator('#task-head').getByText('Экран настроек',{exact:true}).waitFor();
       await group('По компьютеру');
+      await card(browserPreview,'pc1').locator('.am-machine-name').press('Shift+F10');
+      const computerMenu=browserPreview.locator('#device-menu');
+      await computerMenu.getByText('Установлена v1.0.5',{exact:true}).waitFor();
+      const peerUpdate=computerMenu.getByRole('menuitem',{name:'Обновить до v1.0.9'});
+      await peerUpdate.click();
+      await browserPreview.locator('#confirm-dialog').getByText('Обновить ПК-1 до v1.0.9?').waitFor();
+      await browserPreview.locator('#confirm-cancel').click();
       await offlineMark.locator('svg').waitFor();
       assert.match(await offlineMark.locator('svg path').getAttribute('d'),/M2 2l20 20/);
       for(const mark of [localMark,remoteMark]){
@@ -1552,6 +1570,12 @@ if (require.main === module) (async()=>{
     assert.equal(await cells(page,'pc1').nth(0).locator('.am-machine-version').count(),0);
     assert.equal(await cells(page,'pc1').nth(1).getByText('v1.0.5',{exact:true}).count(),1);
     await cells(page,'pc1').nth(1).getByRole('button',{name:'Обновить до v1.0.9'}).click();
+    await page.locator('#confirm-dialog').getByText('Обновить ПК-1 до v1.0.9?').waitFor();
+    await page.locator('#confirm-cancel').click();
+    await cells(page,'pc1').nth(0).getByText('ПК-1',{exact:true}).click({button:'right'});
+    const peerMenu=page.locator('#device-menu');
+    await peerMenu.getByText('Установлена v1.0.5',{exact:true}).waitFor();
+    await peerMenu.getByRole('menuitem',{name:'Обновить до v1.0.9'}).click();
     await page.locator('#confirm-dialog').getByText('Обновить ПК-1 до v1.0.9?').waitFor();
     await page.locator('#confirm-cancel').click();
     assert.equal(await cells(page,'pc1').nth(1).getAttribute('aria-pressed'),'false');

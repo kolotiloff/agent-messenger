@@ -12,6 +12,12 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Build 118 includes the monochrome icon, the Graphite theme, task grouping, Network versions and updates, and per-task access controls. The local update button, version and other footer controls are at the bottom left. The My network card uses the same label typography as Connection mode and a uniform row spacing. Statistics row hover matches the Archive’s color and 4 px gap.
 
+T-365 removes the duplicate computer list from Network settings. The remote computer menu in the sidebar shows the installed version and offers update or cancellation when available. Project folders offer project settings and local project removal with confirmation. Update notices appear in the upper-right corner of the active main window, Settings or Statistics. T-364 tracks the legacy macOS bundle path and Dock shortcut after in-place upgrades.
+
+T-366 adds four response font choices in General with a live 14 px sample. The macOS shell remembers the selection across windows and launches. The installed build still uses the published icon dimensions.
+
+T-361 through T-363 track clickable paths from plain report file lists and Markdown, the built-in reader, file actions and chronological work progress. Each completed task should show its verified change summary.
+
 The isolated stock-117 Codex chat resumed under the new MCP name after a tool call on each side of the transition. The installed Cursor CLI lists tools with an unset worker marker and hides them in a marked worker. Claude and Cursor same-chat permission migration, live task steering and authenticated provider acceptance remain open. See the [development report](reports/2026-11-27-kotel-combined.md).
 
 T-343 integrates T-339 through T-342 for Kotel 1.0.14 (build 117). New Task now has its own left-aligned row above Projects. Both sidebar filters follow the Settings width rule and stack in narrow panels. The owner confirmed the fleet has updated to the bridge. The original repository continues to serve the signed channel for this patch. T-338 tracks the final identifier migration.

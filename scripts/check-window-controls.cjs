@@ -465,6 +465,11 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.locator('[data-tab=server]').click();
       await page.locator('[data-tab=tasks]').click();
       await page.locator('#notices .am-notice').nth(2).waitFor({timeout:10000});
+      assert.equal(await page.locator('.am-chat-footer #notices').count(),0);
+      assert.equal(await page.locator('#notices').evaluate(node=>{
+        const box=node.getBoundingClientRect(), windowBox=node.parentElement.getBoundingClientRect();
+        return box.top-windowBox.top<windowBox.height/4 && windowBox.right-box.right<=24;
+      }),true,'update messages appear at the top right of the window');
       assert.equal(await page.locator('#notices .am-notice').count(), 3);
       assert.deepEqual(await page.locator('#notices .am-notice').evaluateAll(n => n.map(c => c.dataset.key)),
         ['update-fixture-update-3-refused','update-fixture-update-4-refused','update-fixture-update-5-refused']);

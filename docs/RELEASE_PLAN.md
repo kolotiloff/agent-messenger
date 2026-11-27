@@ -2,6 +2,20 @@
 
 Written November 6, 2026. The current status below supplements the original [MVP](MVP.md), [architecture](PLAN.md), [window requirements](APP.md) and [broker deployment](DEPLOYMENT.md). Transitions are decided by checks.
 
+## Planned conversation and document workflow
+
+- **T-361 — File links and a document reader.** Resolve Markdown file links and plain paths in the report’s Files field against the task’s project on its source computer. Accept both legacy inline lists and Markdown links with optional line or heading references. Show each file as a link with its name, project-relative path and source when relevant. Open Markdown and supported text formats in a read-only viewer and restore the chat position on return. Explain when the path is unavailable. Keep the original report available through Copy message.
+- **T-362 — File actions.** Give links and previews the same menu with Open, Open with, Save as, Copy path, Copy contents, and Reveal in the system file manager as appropriate. Start with files available on the local computer. Remote content requires an authorized project connection. Show the originating computer and preserve the path when its contents are unavailable. Binary files can be opened in an associated application when available.
+- **T-363 — Work progress.** Show a collapsible work section before the final answer in original event order. Start with the worker’s first progress message. Group reads, edits and searches when the underlying events identify them, preserve raw commands in details, and show elapsed time when known.
+
+Accept the workflow with a completed task report that has a legacy Files entry with several paths, a Markdown link to a specific line, an attached image and a file from an unavailable computer. Confirm that each available file can be opened or acted on and that the same links and progress appear after reopening from Archive.
+
+## Chat typography and change summaries
+
+- **T-366 — Chat legibility.** General offers four response font choices at 14 px, with a live sample. The system font with more contrast also increases line spacing. Inter and Source Sans 3 are bundled with their licenses. Validate the owner’s chosen appearance on their desktop.
+- **T-363 follow-up — Change summaries.** Name observed actions such as file edits, commands and searches and keep the raw event available in details. Identify who made edits and on which computer when the activity record carries that information. At the end of each completed task, show a task-scoped change summary. Include the number of distinct files and added or removed lines where a reliable diff is available. Report verified zero changes explicitly and keep missing measurements distinct from zero. Let the user expand the summary to see file names and open the available file or diff.
+- **Project folders.** Consider a pin action that keeps a project accessible when it has no active jobs. Keep local project removal explicit and confirmed.
+
 ## Published 1.0.14 fixes
 
 [Build 117](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.14-preview.117) passed all five native update checks and public channel verification.
