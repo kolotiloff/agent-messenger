@@ -1573,12 +1573,12 @@ if (require.main === module) (async()=>{
     const dateCell=statsTask.locator('td').first();
     await dateCell.hover();
     assert.deepEqual(await taskButton.evaluate(button=>{
-      const row=button.closest('tr'),highlight=getComputedStyle(row.cells[0],'::before');
+      const row=button.closest('tr'),highlight=getComputedStyle(row.cells[0]);
       const title=button.firstElementChild.getBoundingClientRect();
       const header=button.closest('table').tHead.rows[0].cells[1];
       const titleColumnStart=header.getBoundingClientRect().left+parseFloat(getComputedStyle(header).paddingLeft);
-      return [highlight.insetBlockStart,highlight.insetBlockEnd,highlight.insetInlineStart,highlight.insetInlineEnd,title.left-titleColumnStart];
-    }),['4px','4px','0px','0px',0]);
+      return [highlight.borderBlockStartWidth,highlight.borderBlockEndWidth,highlight.borderInlineStartWidth,highlight.borderInlineEndWidth,title.left-titleColumnStart,highlight.backgroundClip];
+    }),['4px','4px','0px','0px',0,'padding-box']);
     await dateCell.click();
     await chat(page,'tools').waitFor();
     await cells(page,'local').nth(0).press('Enter');
