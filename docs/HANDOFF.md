@@ -18,6 +18,10 @@ T-366 applies the font choice throughout the interface. The system font uses the
 
 T-369 uses a slightly darker sidebar and lighter text in dark appearance. The existing task highlight is the baseline pending comparison with a stronger highlight. The isolated preview shows both fills on the same screen.
 
+T-370 reduces the trailing inset in Statistics and uses the Archive's 4 px row gap in Efficiency. Settings has a wider section list. The context popup aligns its text to the end and separates the historical measurement label with a colon. An offline computer has a crossed icon and shows its last contact time on hover when available.
+
+T-371 tracks shared task renaming and the separate Archive and Delete permanently actions. T-372 tracks task tabs and simultaneous conversations within the main window. Both are specified for follow-up.
+
 T-361 through T-363 track clickable paths from plain report file lists and Markdown, the built-in reader, file actions and chronological work progress. A completed task with verified file changes should show its change summary.
 
 The T-363 summary belongs directly under the final answer. Its header shows task totals, followed by the first three file rows and a control to reveal the rest. The card has no undo action.

@@ -1648,7 +1648,12 @@ if (require.main === module) (async()=>{
     await total(page,'3579');
     const statsTask=page.locator('#stats-top tr').filter({hasText:'Экспорт отчёта'});
     const taskButton=statsTask.locator('.am-stats-task-text');
-    assert.equal(await taskButton.evaluate(button=>getComputedStyle(button.closest('.am-card')).padding),'12px');
+    assert.deepEqual(await taskButton.evaluate(button=>{
+      const card=button.closest('.am-card'),style=getComputedStyle(card);
+      const last=card.querySelector('#stats-top tr:last-child').getBoundingClientRect();
+      const bottom=card.getBoundingClientRect().bottom-parseFloat(style.borderBottomWidth);
+      return [style.paddingBlockStart,style.paddingInlineStart,bottom-last.bottom];
+    }),['12px','12px',12]);
     const dateCell=statsTask.locator('td').first();
     await dateCell.hover();
     assert.deepEqual(await taskButton.evaluate(button=>{

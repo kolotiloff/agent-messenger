@@ -1226,9 +1226,10 @@
     if(head)layoutMachineRoles(head);
   }));
   const serverIconPaths=['M4 3h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM4 14h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2ZM6 7h1M6 18h1'];
-  function machinePresence(online,local=false){
+  function machinePresence(online,local=false,lastSeen=''){
     const mark=el('span',undefined,'am-machine-presence'+(online?' online':''));
-    const connection=online?tr('На связи'):tr('Нет связи');
+    const lastOnline=!online&&lastSeen?stamp(lastSeen):'';
+    const connection=online?tr('На связи'):lastOnline?tr('Нет связи. Был на связи ')+lastOnline:tr('Нет связи');
     mark.title=local?tr('Этот компьютер')+' — '+connection:connection;
     mark.setAttribute('role','img');
     mark.setAttribute('aria-label',mark.title);
@@ -1270,6 +1271,7 @@
     body.append(rows);
     const disclosure=el('button',undefined,'am-sidebar-disclosure');disclosure.type='button';
     disclosure.dataset.sidebarFocus=JSON.stringify([computer]);
+    if(head.title)disclosure.title=head.title;
     const label=head.querySelector('.am-machine-label'),count=tasksWord(items.length);
     const countLabel=sidebarTaskCount(items.length);
     function update(){
@@ -1503,7 +1505,9 @@
       const card=el('div',undefined,'am-machine-card am-peer-card');card.dataset.peer=peer.id;if(peer.host)card.dataset.host='';pickable(card,peer.id,peerOrderKey(peer));
       const name=el('div',undefined,'am-machine-name');
       const peerName=el('span',peer.name,'am-machine-label');
-      name.append(machinePresence(connected),peerName);
+      const presence=machinePresence(connected,false,peer.last_seen);
+      if(!connected)name.title=presence.title;
+      name.append(presence,peerName);
       if(peer.host)(taskSidebarPreview?peerName:name).append(serverTag());
       const meta=el('div',undefined,'am-machine-meta');
       const corner=el('div',undefined,'am-card-update');
@@ -1545,7 +1549,7 @@
       if(can.revoke)card.dataset.key='revoke-'+peer.id;
       const menuTarget=taskSidebarPreview?name:card;
       menuTarget.tabIndex=0;
-      menuTarget.title=tr('Правая кнопка мыши — действия');
+      if(!menuTarget.title)menuTarget.title=tr('Правая кнопка мыши — действия');
       card.addEventListener('contextmenu',event=>{if(!event.defaultPrevented){event.preventDefault();deviceMenu(peer,event.clientX,event.clientY,can);}});
       menuTarget.addEventListener('keydown',event=>{if(event.target===menuTarget&&(event.key==='ContextMenu'||(event.shiftKey&&event.key==='F10'))){event.preventDefault();const r=menuTarget.getBoundingClientRect();deviceMenu(peer,r.left+16,r.top+24,can);}});
       box.append(card);
@@ -2407,7 +2411,7 @@
     const spent=$('answer-task-total');
     spent.hidden=!task.usage;
     spent.textContent=spent.hidden?'':tr('{tokens} по задаче').replace('{tokens}',tokensFull(task.usage.input_tokens+task.usage.output_tokens));
-    if(hasContext&&task.state!=='running')$('answer-context-summary').textContent=tr('Последний замер контекста')+' · '+occupancy;
+    if(hasContext&&task.state!=='running')$('answer-context-summary').textContent=tr('Последний замер контекста')+': '+occupancy;
     const details=$('answer-context-count');
     details.textContent=count;
     details.hidden=!count;

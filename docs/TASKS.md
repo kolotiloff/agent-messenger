@@ -49,6 +49,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
+| T-370 | Refine Statistics, Settings navigation, context details and offline presence. | window | [PR #253](https://github.com/kolotiloff/agent-messenger/pull/253). |
 | T-369 | Adjust the dark palette and compare sidebar task highlights. | window | Dark appearance uses a slightly darker sidebar and brighter text. The preview compares the current highlight with stronger row fills. |
 | T-366 | Improve interface text readability at the current base size. | window | General offers the system font, system high contrast, Inter and Source Sans 3. The selection applies throughout the interface. |
 | T-365 | Move update actions to context menu footers, remove the duplicate roster, and pin update notices above the conversation. | window | Prepared for the next functional release. |
@@ -179,6 +180,9 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 
 ## Next
+
+- T-371. Add task rename and archive actions. The originating computer owns the title and lifecycle. Route authorized requests from other devices through the server, acknowledge the committed change, and propagate the result to the sidebar, conversation header, Statistics and Archive. Keep task and session IDs stable. Handle stale or duplicate requests and offline reconnect. Stop is available for eligible active tasks. Archive completed tasks and offer confirmed permanent deletion only in Archive. Define which records and shared copies the deletion covers before enabling it.
+- T-372. Open tasks in tabs and in adjacent conversations. The tab strip shows task titles, close controls and dividers, and supports drag reordering. Add Open in tab and Open alongside to the task menu. Support two columns, stacked conversations and a grid. Give each pane its own selection, scroll, draft and controls while reusing task subscriptions. Opening, rearranging and closing the views leaves task execution and session identity intact. Verify simultaneous activity, routing of input and keyboard focus, reflow on narrow windows and reopening tabs across restart.
 
 - T-344. Let the owner steer a busy worker with an already queued message. Reuse its durable operation ID. Show delivery only on acknowledgment. Verify same-session steering, offline and unsupported peers, completion races, repeated clicks and restart. Task workers currently launch as one-shot CLI processes. Each provider needs a verified input channel before enabling the action.
 - T-346. Retain the latest measured context window on the execution computer and carry the measurement to the originating computer and history. Bind it to the task, session and turn. Invalidate stale live readings on compaction or model change and distinguish the last historical measurement. Verify Codex, Claude and Cursor sources separately. Keep cumulative spend separate.

@@ -978,3 +978,11 @@ Keep the original connection layout in Network settings and remove the duplicate
 ## D-263 — Brighten dark appearance and apply font preferences throughout the interface
 
 Use #1e1e1e for the sidebar, #dededc for primary text and #a5a5a3 for secondary text in dark appearance. Keep the existing task fills during the visual comparison. Font selection applies to all ordinary interface text. System high contrast keeps the same font and size with brighter text in dark appearance and darker text in light appearance.
+
+## D-264 — Keep task lifecycle with the originating computer
+
+The computer that created a task writes its display title to the task record. The server already distributes titles in the shared task list. Reuse that distribution when the title changes. A rename initiated elsewhere requires an authenticated request to the originating computer, a durable result and a capability check for older installations. Archive is a reversible lifecycle state for finished tasks. Keep permanent deletion in Archive with explicit confirmation and define how it reaches disconnected copies. See T-371.
+
+## D-265 — Open concurrent task views inside the main window
+
+Use tabs for switching and closing task views. Use Open alongside to keep concurrent conversations visible in the same workspace, with side-by-side, stacked and grid layouts. Every pane addresses an existing task and keeps its own draft and scroll position. See T-372.

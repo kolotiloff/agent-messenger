@@ -337,7 +337,8 @@ const server = http.createServer(async (request, response) => {
       if (url.pathname === '/api/window') fixture.coordinator_models = coordinatorModels;
       if (url.pathname === '/api/server') {
         for (const peer of fixture.peers) peer.version += '-preview.108';
-        fixture.peers.push({id:'offline',name:'Ноут-Windows',age:600,ready:{projects:[]},agents:[]});
+        fixture.peers.push({id:'offline',name:'Ноут-Windows',age:600,last_seen:new Date(Date.now()-600000).toISOString(),
+          ready:{projects:[]},agents:[]});
       }
       const conversation = url.pathname === '/api/task' && conversations[fixture.task?.id];
       if (conversation) {
