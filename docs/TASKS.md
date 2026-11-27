@@ -26,12 +26,24 @@ How to use it:
 
 These checks cover the browser preview. Acceptance in the installed window remains pending.
 
+## T-336 follow-up checklist
+
+- Shared controls: use the Projects picker height, corners and neutral fill for standard buttons and selectors. Check Settings, Statistics and the model picker save action.
+- New Task: keep the initial input on one line with Add at left and Send at right. Keep project, computer and searchable model below it. Align the search field with its options and use a check as the sole selected marker.
+- Reply: keep Add at the left, the field at the bottom and the active model below. Show a token popover with reported turn and task counts. Showing context occupancy requires provider telemetry. Show the standard or unrestricted access setting for local tasks and indicate that remote permissions are set on the worker computer.
+- Add: use a compact menu for file, folder and manual path actions. Open a system picker only for local tasks; append the chosen or typed path to the relevant draft. Transferring file contents, per-message access changes and editing delivered or queued messages require separate product support.
+- Conversation: use rounded hover fills for the composer and Copy. Give Copy a stroked icon and feedback. Keep outgoing time under the bubble and remove the worker timestamp shown on hover. Use the shared spacing for bubble insets, command headers and opened command details. Highlight recognized command text without changing its contents.
+- Task lists: keep full-width row highlights, single-line truncated titles and metadata, symmetric vertical padding, computer alignment and a left-aligned Clear archive action. Use the same gray computer icon for the local and remote computers. Show full titles with dates in the conversation.
+- Settings and Statistics: keep the compact independent dialogs, section icons and order, row dividers, vertically aligned actions, and independently scrolling model list. Verify stable filters and heading typography, scoped statistics, efficiency row expansion and export. Hide old efficiency results while a new filter loads.
+- Release: the installed 1.0.12 still uses its original desktop layout. Verify the same loopback preview and retain the release hold.
+
 ## Now
 
 Order set by the owner (2026-11-08): design first (T-061 agent cards and settings, T-062 Windows window without the title bar), then T-068 token statistics, T-069 Linux window, T-059 language, T-047 shared task list, T-052 short invitation, T-053 Windows installation, T-057 remote log, T-049 coordinator wishlist.
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
+| T-336 | Audit the window refinements, including compact controls, both composers, message actions, settings and statistics. | agent | `codex/t336-window-audit`. Implemented in the shared preview. Browser and Go checks passed. Native acceptance pending. Release held. |
 | T-335 | Put project, computer and searchable model selection below the New Task composer. Insert paths from Add and copy outgoing messages. | agent | `codex/t335-task-composer`. D-235. Implemented in the shared preview. Release held. |
 | T-334 | Separate Statistics, align its report views, make model details open from an indented row, and unify the Settings, agent and model dialogs. | agent | Implemented in the local window preview. Follow-up spacing for outgoing messages and task rows is available in the same preview. |
 | T-333 | Enable the computer-grouped task layout in the packaged desktop window. | agent | Enabled on the normal window route. The owner paused the release for the combined changes. |

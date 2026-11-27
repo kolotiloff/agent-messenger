@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-336 window audit)
+
+Consolidated button sizes and neutral fills, added the shared path menu to replies, exposed model and access information with a token popover below the composer, used neutral computer icons, refined Copy, removed worker hover timestamps, and highlighted shell command text. Audited chat constraints, sidebar and archive rows, settings, model selection and Statistics. A pending efficiency request now hides old results. Seven window checks passed in Chromium and WebKit, and the Go check suite passed. The ordinary route serves the new layout in the handler test. Native smoke launch remains unverified. The release remains on hold.
+
 ## 2026-11-27 — Codex (T-335 task composer)
 
 Integrated the compact composer with selectors below the field, path insertion from Add, round button highlights and outgoing message copying. Checked draft sizing, searchable model selection, path insertion, message copying and the task start request using fixture responses. The release remains on hold.

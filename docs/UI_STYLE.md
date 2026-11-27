@@ -27,7 +27,7 @@ Buttons that belong together go in one container: `.am-actions` (a row) or `.am-
 | `--am-radius-m` | 12 | cards, panels, notices, menus, error chips, the window |
 | `--am-radius-l` | 16 | dialogs, the composer, message bubbles |
 
-The composer keeps its surface radius (16 px) at every height. Its inset icon buttons use the shared control radius (8 px), just like the sidebar buttons.
+The composer keeps its surface radius (16 px) at every height. The inset icon controls use the next smaller radius (12 px). Ordinary buttons and selector triggers use the compact control height (28 px) and neutral gray fill in the current window layout.
 
 The conversation and composer share a centered column up to `--am-chat-max` (760 px), with a minimum chat gutter of 24 px on each side. The scrollbar stays at the edge of the chat pane.
 

@@ -167,12 +167,23 @@ if (require.main === module) (async()=>{
     }),['16px','16px',0]);
     await standalone.locator('summary').click();
     assert.equal(await standalone.locator('pre').textContent(),'git diff --stat');
+    assert.equal(await standalone.locator('pre .am-shell-name').textContent(),'git');
+    assert.equal(await standalone.locator('pre .am-shell-literal').textContent(),'--stat');
     await standalone.locator('summary').click();
-    const tokenCount=preview.locator('#answer-live-tokens');
+    const tokenCount=preview.locator('#answer-tokens');
     const answerField=preview.locator('#compose .am-compose-field');
     const composerBottom=()=>answerField.evaluate(field=>field.getBoundingClientRect().bottom);
     await tokenCount.waitFor();
-    assert((await tokenCount.boundingBox()).y<(await answerField.boundingBox()).y);
+    assert((await tokenCount.boundingBox()).y>(await answerField.boundingBox()).y);
+    assert.match(await tokenCount.textContent(),/\d/);
+    await tokenCount.click();
+    const tokenMenu=preview.locator('#answer-token-menu');
+    await tokenMenu.waitFor();
+    assert.match(await tokenMenu.locator('dl').innerText(),/Токены за текущий ход\s+[\d\s]+Заполнение контекста\s+Нет данных/);
+    await preview.keyboard.press('Escape');
+    await tokenMenu.waitFor({state:'hidden'});
+    assert.equal(await tokenCount.evaluate(node=>node===document.activeElement),true);
+    assert.match(await preview.locator('#answer-model').textContent(),/Sol 6\.2 Medium/);
     const initialComposerBottom=await composerBottom();
     const localHeader=card(preview,'local').locator('.am-sidebar-disclosure[draggable=true]');
     const peerHeader=card(preview,'pc1').locator('.am-sidebar-disclosure[draggable=true]');
@@ -226,7 +237,10 @@ if (require.main === module) (async()=>{
       await expectPrevious(oldDate);
       assert.equal(await composerBottom(),initialComposerBottom);
       sameFeed.release();
-      await tokenCount.waitFor({state:'hidden'});
+      await preview.locator('#answer-tokens[data-task="game-1"] #answer-token-count:empty').waitFor({state:'attached'});
+      await tokenCount.click();
+      assert.match(await tokenMenu.locator('dl').innerText(),/Токены за текущий ход\s+Нет данных/);
+      await preview.keyboard.press('Escape');
       assert.equal(await composerBottom(),initialComposerBottom);
       await preview.locator('#task-head time[datetime="'+sameDate+'"]').waitFor();
       await sidebarTask('Экспорт отчёта').click();
@@ -432,13 +446,9 @@ if (require.main === module) (async()=>{
       assert(await timestamp.evaluate(node=>getComputedStyle(node.parentElement).opacity==='1'&&
         node.getBoundingClientRect().top>node.closest('article').getBoundingClientRect().bottom));
       const workerMessage=draftPage.locator('#thread .am-message-group').last();
-      await workerMessage.focus();
-      assert(await workerMessage.locator('.am-message-time').evaluate(node=>{
-        const time=node.getBoundingClientRect(),message=node.parentElement.getBoundingClientRect();
-        const previous=node.parentElement.previousElementSibling.getBoundingClientRect();
-        return getComputedStyle(node).opacity==='1'&&message.top-time.bottom===4&&
-          message.top-previous.bottom===24&&time.top>previous.bottom&&time.left===message.left;
-      }));
+      await workerMessage.hover();
+      assert.equal(await workerMessage.locator('time').count(),0);
+      assert.equal(await workerMessage.evaluate(node=>node.getBoundingClientRect().top-node.previousElementSibling.getBoundingClientRect().bottom),24);
       const settingsDialog=draftPage.getByRole('dialog',{name:'Настройки программы'});
       const settingsOpen=draftPage.locator('#settings-open');
       const settingsNav=settingsDialog.getByRole('navigation',{name:'Разделы'});
@@ -497,6 +507,18 @@ if (require.main === module) (async()=>{
         return [node.getBoundingClientRect().top,style.fontSize,style.fontWeight,style.lineHeight];
       });
       const toolbarPosition=await toolbar.boundingBox();
+      const projectPicker=draftPage.locator('[aria-controls="project-select-menu"]');
+      const controlStyle=node=>node.evaluate(item=>{
+        const css=getComputedStyle(item);
+        return [css.height,css.borderRadius,css.backgroundColor];
+      });
+      assert.equal(await projectPicker.count(),1);
+      const sidebarControl=await controlStyle(projectPicker);
+      for(const selector of ['#stats-project','#stats-computer','#stats-agent','#stats-model']){
+        const control=standaloneStats.locator('[aria-controls="'+selector.slice(1)+'-menu"]');
+        assert.deepEqual(await controlStyle(control),sidebarControl);
+      }
+      assert.equal(await standaloneStats.locator('#stats-efficiency').evaluate(node=>node.getBoundingClientRect().height),28);
       const usageTitle=await reportTitle('#stats-total-title');
       const efficiency=standaloneStats.locator('#stats-efficiency');
       await efficiency.click();
@@ -561,6 +583,7 @@ if (require.main === module) (async()=>{
       await search.fill('учебная-модель');
       await modelPicker.getByRole('button',{name:'Добавить свой вариант',exact:true}).waitFor();
       await search.clear();
+      assert.deepEqual(await controlStyle(modelPicker.locator('#agent-model-save')),sidebarControl);
       await modelPicker.getByRole('button',{name:'Отмена',exact:true}).click();
       await agentSettings.getByRole('button',{name:'Закрыть',exact:true}).click();
       await select(draftPage,'agents-computer','ПК-1');
@@ -606,11 +629,13 @@ if (require.main === module) (async()=>{
       const pathMenu=draftPage.getByRole('dialog',{name:'Добавить путь',exact:true});
       const addPath=form.getByRole('button',{name:'Добавить путь',exact:true});
       await addPath.hover();
-      assert(await addPath.evaluate(button=>{
+      assert(await addPath.evaluate(async button=>{
+        await Promise.all(button.getAnimations().map(animation=>animation.finished));
         const style=getComputedStyle(button),field=getComputedStyle(button.closest('.am-compose-field'));
-        return style.borderRadius===field.borderRadius&&style.backgroundColor!=='rgba(0, 0, 0, 0)';
+        return parseFloat(style.borderRadius)===parseFloat(field.borderRadius)-4&&style.backgroundColor!=='rgba(0, 0, 0, 0)';
       }));
       await select(draftPage,'task-draft-computer','Мак');
+      assert.equal(await form.locator('#task-draft-access').textContent(),'Обычный доступ');
       await addPath.click();
       const pickRequest=draftPage.waitForRequest(req=>new URL(req.url()).pathname==='/api/pick');
       await pathMenu.getByRole('button',{name:'Выбрать файл…',exact:true}).click();
@@ -619,8 +644,11 @@ if (require.main === module) (async()=>{
       assert.equal(await form.locator('textarea').inputValue(),'/fictional/project/notes.txt');
       await form.locator('textarea').fill('');
       await select(draftPage,'task-draft-computer','ПК-1');
+      assert.equal(await form.locator('#task-draft-access').textContent(),'Доступ на другом компьютере');
       await addPath.click();
       assert.equal(await pathMenu.getByRole('button',{name:'Выбрать файл…'}).isVisible(),false);
+      assert.equal(await pathMenu.getByRole('textbox').isVisible(),false);
+      await pathMenu.getByRole('button',{name:'Указать путь…'}).click();
       const remotePath=pathMenu.getByRole('textbox',{name:'Путь на компьютере исполнителя'});
       await remotePath.fill('docs/notes.md');
       await remotePath.press('Enter');
@@ -663,14 +691,26 @@ if (require.main === module) (async()=>{
         Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.testCopiedMessage=text;}}});
       });
       await ownerBubble.hover();
-      await ownerMessage.getByRole('button',{name:'Скопировать сообщение'}).click();
+      const copy=ownerMessage.getByRole('button',{name:'Скопировать сообщение'});
+      assert.deepEqual(await copy.locator('svg').evaluate(icon=>{
+        const style=getComputedStyle(icon);
+        return [style.fill,style.stroke===style.color];
+      }),['none',true]);
+      await copy.click();
       await ownerMessage.getByRole('status').getByText('Скопировано',{exact:true}).waitFor();
       assert.equal(await draftPage.evaluate(()=>window.testCopiedMessage),directTask.title);
       await draftPage.locator('#answer-text').fill('Уточнение исполнителю');
+      assert.equal(await draftPage.locator('#answer-access').textContent(),'Доступ на другом компьютере');
+      await draftPage.locator('#answer-add').click();
+      assert.equal(await pathMenu.getByRole('button',{name:'Выбрать файл…'}).isVisible(),false);
+      await pathMenu.getByRole('button',{name:'Указать путь…'}).click();
+      await remotePath.fill('docs/reply.md');
+      await remotePath.press('Enter');
+      assert.equal(await draftPage.locator('#answer-text').inputValue(),'Уточнение исполнителю\ndocs/reply.md');
       const note=draftPage.waitForRequest(req=>new URL(req.url()).pathname==='/api/task-note');
       await draftPage.locator('#answer-send').click();
       const {task:noteTask,text:noteText}=(await note).postDataJSON();
-      assert.deepEqual([noteTask,noteText],[directTask.id,'Уточнение исполнителю']);
+      assert.deepEqual([noteTask,noteText],[directTask.id,'Уточнение исполнителю\ndocs/reply.md']);
       assert.equal(await form.isVisible(),false);
       const drawer=draftPage.locator('#list-toggle');
       assert.equal(await drawer.getAttribute('aria-label'),'Показать архив');
@@ -830,7 +870,9 @@ if (require.main === module) (async()=>{
       for(const mark of [localMark,remoteMark,offlineMark]){
         assert.match(await mark.locator(':scope > svg path').getAttribute('d'),/M4 3.*M4 14/);
       }
-      assert.notEqual(await localMark.evaluate(node=>getComputedStyle(node).color),await remoteMark.evaluate(node=>getComputedStyle(node).color));
+      const markColor=mark=>mark.evaluate(node=>getComputedStyle(node).color);
+      assert.deepEqual(await Promise.all([localMark,remoteMark,offlineMark].map(markColor)),
+        Array(3).fill(await markColor(remoteMark)));
       assert.equal(await remoteMark.locator('.am-machine-signal').evaluate(node=>getComputedStyle(node).borderRadius),'50%');
       assert.equal(await browserPreview.locator('.am-shell').evaluate(shell=>
         shell.getBoundingClientRect().top-shell.closest('.am-window').getBoundingClientRect().top),1);

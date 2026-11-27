@@ -144,6 +144,9 @@ func TestUIAssetsEmbeddedWithoutPrivateCapability(t *testing.T) {
 		if w.Code != http.StatusOK || strings.Contains(w.Body.String(), "secret-token") {
 			t.Fatalf("asset %s invalid", path)
 		}
+		if path == "/" && !strings.Contains(w.Body.String(), `id="am-concept" class="am-task-sidebar-preview"`) {
+			t.Fatal("the regular window route must use the current task layout")
+		}
 	}
 }
 
