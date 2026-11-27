@@ -17,6 +17,10 @@ name: Release preview
         description: "Release notes shown in the app (plain text)"
         required: true
 
+      resume_revision:
+        description: "Existing signed draft only: exact 40-character source SHA. Leave empty to build."
+        required: false
+        type: string
       retire_legacy_manifests:
         description: "Archive blocking 0.98/0.99 update manifests after checking their signed replacement"
         type: boolean
@@ -32,6 +36,7 @@ concurrency:
 jobs:
   others:
     name: Windows and Linux programs
+    if: inputs.resume_revision == ''
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -74,6 +79,7 @@ jobs:
 
   mac-checks:
     name: Mac checks
+    if: inputs.resume_revision == ''
     runs-on: macos-15
     timeout-minutes: 30
     steps:
@@ -219,6 +225,10 @@ jobs:
   signed-install:
     name: Signed update / ${{ matrix.target }}
     needs: release
+    # Resume only a signed draft from main. Never sign a second build of the same version.
+    if: >-
+      always() && !cancelled() && github.ref == 'refs/heads/main' &&
+      (needs.release.result == 'success' || (inputs.resume_revision != '' && needs.release.result == 'skipped'))
     permissions:
       contents: write # read unpublished release assets
     strategy:
@@ -246,13 +256,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
           BRIDGE_TARGET: ${{ matrix.target }}
+          CANDIDATE_REVISION: ${{ inputs.resume_revision || github.sha }}
         run: |
+          python3 scripts/release_version.py "$VERSION"
+          [[ "$CANDIDATE_REVISION" =~ ^[0-9a-f]{40}$ ]]
+          git merge-base --is-ancestor "$CANDIDATE_REVISION" "$GITHUB_SHA"
+          draft_revision=$(gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" --json isDraft,targetCommitish --jq 'select(.isDraft) | .targetCommitish')
+          [[ "$draft_revision" == "$CANDIDATE_REVISION" ]]
           export PREVIOUS_TAG="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
           python3 scripts/check-signed-install.py
 
   channel:
     name: Publish the verified draft and check the public channel
     needs: signed-install
+    if: always() && !cancelled() && needs.signed-install.result == 'success'
     permissions:
       contents: write
     runs-on: ubuntu-24.04

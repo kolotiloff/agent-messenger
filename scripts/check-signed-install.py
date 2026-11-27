@@ -14,7 +14,7 @@ import zipfile
 
 
 def run(*args, **kwargs):
-    return subprocess.check_output(args, text=True, timeout=180, **kwargs).strip()
+    return subprocess.check_output(args, encoding="utf-8", timeout=180, **kwargs).strip()
 
 
 repo = Path.cwd()
@@ -74,7 +74,7 @@ def unpack(archive, dest):
 
 _, old_zip, old_meta = package(previous_tag)
 channel, new_zip, new_meta = package("v" + version)
-assert new_meta["revision"] == os.environ["GITHUB_SHA"]
+assert new_meta["revision"] == os.environ["CANDIDATE_REVISION"]
 assert new_meta["build"] > old_meta["build"]
 # All network access is complete. The packaged programs receive no GitHub token.
 os.environ.pop("GH_TOKEN", None)
