@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — T-363 Change summary layout
+
+Codex recorded the owner's reference for the task summary in [PR #253](https://github.com/kolotiloff/agent-messenger/pull/253). Show task totals prominently below the final answer, with three file rows and a control to reveal the rest. The card is read-only.
+
 ## 2026-11-27 — T-364 through T-366 Dock label, update actions, notices and response fonts
 
 Codex confirmed that build 118 declares Kotel and an upgraded bundle can still have the original app path and Dock label. Recorded the remaining naming migration. Removed the duplicate roster from Settings and put update notices above the content in the upper-right corner. Added version and update actions to the remote computer menu. Local project folders offer project settings and removal with confirmation. General offers four response fonts with a fixed 14 px sample. T-361 through T-363 define clickable report paths, file actions, work progress and per-task change summaries. The published Dock tile dimensions remain the reference.

@@ -18,6 +18,8 @@ T-366 adds four response font choices in General with a live 14 px sample. The m
 
 T-361 through T-363 track clickable paths from plain report file lists and Markdown, the built-in reader, file actions and chronological work progress. Each completed task should show its verified change summary.
 
+The T-363 summary belongs directly under the final answer. Its header shows task totals, followed by the first three file rows and a control to reveal the rest. The card has no undo action.
+
 The isolated stock-117 Codex chat resumed under the new MCP name after a tool call on each side of the transition. The installed Cursor CLI lists tools with an unset worker marker and hides them in a marked worker. Claude and Cursor same-chat permission migration, live task steering and authenticated provider acceptance remain open. See the [development report](reports/2026-11-27-kotel-combined.md).
 
 T-343 integrates T-339 through T-342 for Kotel 1.0.14 (build 117). New Task now has its own left-aligned row above Projects. Both sidebar filters follow the Settings width rule and stack in narrow panels. The owner confirmed the fleet has updated to the bridge. The original repository continues to serve the signed channel for this patch. T-338 tracks the final identifier migration.
