@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-336 task toolbar and footer)
+
+Extended the task toolbar to the right edge and placed Archive below it. Aligned the visible footer edges and measured the laptop update confirmation in the shared preview. Chromium and WebKit checks passed, including the narrow Archive overlay. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).
+
 ## 2026-11-27 — Codex (T-336 shared insets and pane headers)
 
 Aligned the three workspace header dividers and normalized insets in report cards, efficiency details, menus and outgoing messages. Measured the header, confirmation, table, menu and server settings spacing in the shared preview. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).

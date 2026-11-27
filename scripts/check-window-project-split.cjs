@@ -411,6 +411,13 @@ if (require.main === module) (async()=>{
       await localUpdate.waitFor();
       const downloadBox=await localUpdate.boundingBox(),versionBox=await footer.locator('.am-version').boundingBox();
       assert.equal(versionBox.x-downloadBox.x-downloadBox.width,4);
+      assert.deepEqual(await footer.evaluate(node=>{
+        const sidebar=node.closest('.am-sidebar'),bounds=sidebar.getBoundingClientRect();
+        const icon=node.querySelector('#settings-open svg').getBoundingClientRect();
+        const version=node.querySelector('.am-version'),box=version.getBoundingClientRect();
+        return [icon.left-bounds.left,bounds.right-parseFloat(getComputedStyle(sidebar).borderRightWidth)-
+          box.right+parseFloat(getComputedStyle(version).paddingInlineEnd)];
+      }),[17,17]);
       const buttonShape=button=>button.evaluate(node=>{
         const style=getComputedStyle(node);
         return [style.width,style.height,style.borderRadius];
@@ -803,19 +810,19 @@ if (require.main === module) (async()=>{
       const archiveGeometry=()=>archive.evaluate(panel=>{
         const rect=selector=>document.querySelector(selector).getBoundingClientRect();
         const main=rect('.am-main'),aside=rect('.am-sidebar'),bounds=panel.getBoundingClientRect();
-        const header=rect('.am-queue-header'),filter=rect('#agent-filter + .am-select-trigger');
+        const toolbar=rect('.am-task-toolbar'),header=rect('.am-queue-header'),filter=rect('#agent-filter + .am-select-trigger');
         const projects=rect('.am-project'),heading=rect('#task-list-heading');
         return {
-          matchesWorkspace:[bounds.top-main.top,main.bottom-bounds.bottom,main.right-bounds.right],
+          matchesWorkspace:[bounds.top-toolbar.bottom,main.bottom-bounds.bottom,main.right-bounds.right],
           headerLine:[header.left-bounds.left-panel.clientLeft,bounds.right-header.right],
           fields:[heading.left-bounds.left-panel.clientLeft,bounds.right-filter.right,projects.left-aside.left,aside.right-projects.right-1],
           controls:[filter.height,rect('#project-select + .am-select-trigger').height],
-          rowAlignment:[filter.top-rect('#project-select + .am-select-trigger').top,
-            header.bottom-rect('.am-computers').top-1,header.bottom-rect('#task-head').bottom],
+          toolbar:[toolbar.left-main.left,main.right-toolbar.right,toolbar.bottom-rect('.am-computers').top-1],
+          rowAlignment:[header.top-bounds.top,filter.top-header.top],
         };
       });
       assert.deepEqual(await archiveGeometry(),{
-        matchesWorkspace:[0,0,0],headerLine:[0,0],fields:[12,12,12,12],controls:[28,28],rowAlignment:[0,0,0],
+        matchesWorkspace:[0,0,0],headerLine:[0,0],fields:[12,12,12,12],controls:[28,28],toolbar:[0,0,0],rowAlignment:[0,12],
       });
       assert.equal(await archive.locator('#task-list-heading').textContent(),'Архив');
       const clearArchive=archive.getByRole('button',{name:'Очистить архив',exact:true});
@@ -847,7 +854,8 @@ if (require.main === module) (async()=>{
       });
       const [projectHeading,taskHeading,archiveHeading]=await headingStyles();
       assert.deepEqual(taskHeading,projectHeading);
-      assert.deepEqual(archiveHeading,projectHeading);
+      assert.deepEqual(archiveHeading.slice(0,3),projectHeading.slice(0,3));
+      assert(archiveHeading[3]>taskHeading[3]);
       await archive.getByText('Инструменты, Готовый отчёт',{exact:true}).waitFor();
       assert.deepEqual((await archive.locator('.am-task-title').allTextContents()).sort(),['Игра, Звуки меню','Инструменты, Готовый отчёт','Инструменты, Отчёт другого компьютера']);
       assert.equal(await archive.locator('#task-count').textContent(),'3');
@@ -968,7 +976,7 @@ if (require.main === module) (async()=>{
       await toggle.click();
       const filter=await browserPreview.locator('#agent-filter + .am-select-trigger').boundingBox();
       const button=await toggle.boundingBox();
-      assert(filter.x+filter.width<=button.x-8);
+      assert(filter.y>=button.y+button.height+12);
       assert.deepEqual(await browserPreview.locator('#thread .am-message-group').first().evaluate(message=>{
         const pane=message.closest('.am-chat').getBoundingClientRect();
         const chat=message.getBoundingClientRect();
@@ -979,9 +987,13 @@ if (require.main === module) (async()=>{
       await browserPreview.locator('#task-panel').waitFor({state:'hidden'});
       await browserPreview.setViewportSize({width:450,height:720});
       const plus=await browserPreview.locator('#task-new').boundingBox();
-      assert(plus.x+plus.width<=(await toggle.boundingBox()).x-8);
+      const narrowToggle=await toggle.boundingBox();
+      assert(plus.y+plus.height<=narrowToggle.y);
       await toggle.click();
-      await browserPreview.locator('#task-panel').waitFor();
+      const narrowArchive=browserPreview.locator('#task-panel');
+      await narrowArchive.waitFor();
+      const toolbar=await browserPreview.locator('.am-task-toolbar').boundingBox();
+      assert.equal((await narrowArchive.boundingBox()).y,toolbar.y+toolbar.height);
     }finally{await browserPreview.close();}
 
     const compactPreview=await open(projects,{width:450,height:720},'light',(url,p)=>{

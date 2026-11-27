@@ -4672,6 +4672,9 @@
   });
   if(taskSidebarPreview){
     const toggle=$('list-toggle'),label=tr('Показать архив');
+    const toolbar=el('header',undefined,'am-task-toolbar');
+    toolbar.append($('task-head'),toggle);
+    $('task-layout').prepend(toolbar);
     toggle.setAttribute('aria-expanded','false');toggle.setAttribute('aria-label',label);toggle.title=label;
     $('task-panel').setAttribute('aria-label',tr('Архив'));$('task-list-heading').textContent=tr('Архив');
     const plus=$('task-new');

@@ -10,7 +10,7 @@ The owner asked the agent to finish the program without them ("доделай б
 
 The shared preview shows a gray parenthesized task count on collapsed computers. Conversation headers show only the task title, with the date centered at the start of the thread. The reply context popover is left aligned and uses a slash between usage and capacity. The ring uses fictional telemetry in this preview. Installed-window acceptance and the release remain pending.
 
-T-336 uses one divider baseline across Projects, the chat title and Archive. Confirmation dialogs use a 12 px gap between content sections and 16 px around the dialog. Statistics cards, expanded efficiency details and outgoing message bubbles use 12 px on all sides. Menus use an 8 px inset, and settings cards use 16 px. These insets and the server update confirmation were measured in the shared preview.
+T-336 aligns the Projects divider with the full-width task toolbar. The Archive begins in the right column below the toolbar. The bottom bar aligns the visible icon and version edges at 17 px in the shared preview. Confirmation dialogs use a 12 px gap between content sections and 16 px around the dialog. Statistics cards, expanded efficiency details and outgoing message bubbles use 12 px on all sides. Menus use an 8 px inset, and settings cards use 16 px. These insets and the server and laptop update confirmations were measured in the shared preview.
 
 The T-336 settings follow-up removes the dividers between model choices. The server's network-name input sits beside its label and uses the same 12 em width as the General selectors, capped at half the row when space is tight.
 

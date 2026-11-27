@@ -889,3 +889,7 @@ Left-align the context popover, put the percentage beside its label, and separat
 ## D-241 — Align pane headers and normalize surface insets (T-336)
 
 Align the conversation header divider with Projects and Archive. Keep the title to one line and expose its full text on hover. Use the content gap between the heading, body text and actions in confirmations. Use equal surface insets on all sides, with 12 px for report cards, efficiency details and outgoing message bubbles, 8 px for menus, and 16 px for settings cards and confirmation dialogs.
+
+## D-242 — Span the task toolbar above Archive (T-336)
+
+Use a single toolbar above the conversation and Archive, with its divider aligned to Projects. Place the toggle at the right end of the toolbar and give the Archive its own header below it. Frameless native windows keep the toggle beside the window controls. Match footer text to the visible icon inset. This updates the pane layout in D-241.
