@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-333 desktop layout activation)
+
+Reproduced the layout difference reported in 1.0.12. The desktop window now activates the approved task layout. The release retains the usual build and publication gates.
+
 ## 2026-11-27 — Codex (1.0.12 release)
 
 Published [1.0.12, build 115](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.12-preview.115) from `de265537fdea48361593f9efa4a0af86a1c674ea` after merging [PR #228](https://github.com/kolotiloff/agent-messenger/pull/228). All four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45927077746) passed, including the public signed upgrade path from 0.99 on five targets. Verified the public tag and all 22 uploaded files. No real agents ran during verification.

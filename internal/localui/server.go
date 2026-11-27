@@ -180,6 +180,9 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 				w.Header().Set("Content-Type", "image/svg+xml")
 			default:
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				// Enable the task layout for the ordinary window. The separate
+				// fixture server adds its own token, which never belongs here.
+				data = []byte(strings.Replace(string(data), `id="am-concept"`, `id="am-concept" class="am-task-sidebar-preview"`, 1))
 			}
 			_, _ = w.Write(data)
 			return
