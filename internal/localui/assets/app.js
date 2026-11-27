@@ -4804,9 +4804,9 @@
     $('settings-general').hidden=false;
     const sectionIcons=[
       ['settings',$('settings-open').querySelector('svg').cloneNode(true)],
-      ['server',svgIcon(serverIconPaths)],
       ['project',svgIcon(['M4 6h5l2 2h9a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z'])],
       ['agents',svgIcon(['M7 7h10a4 4 0 0 1 4 4v5a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4v-5a4 4 0 0 1 4-4ZM12 7V3m-2 0h4M8.5 12v1m7-1v1M10 16.5h4'])],
+      ['server',svgIcon(serverIconPaths)],
     ];
     for(const [section,icon] of sectionIcons){
       const button=root.querySelector(`.am-tabs [data-tab=${section}]`);

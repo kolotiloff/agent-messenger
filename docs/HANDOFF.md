@@ -8,6 +8,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Settings opens at General and then lists Project, Agents and Server, matching the setup order in the welcome pane. The welcome actions still open their corresponding sections directly.
+
 On first run, the task pane shows a compact checklist with direct links to project creation, project settings, agent settings and server settings. A project with an available model on an eligible computer opens the normal New Task composer when no conversation is selected. Network and coordinator setup are optional for direct tasks. The isolated browser preview and the Chromium and WebKit checks cover this flow.
 
 The shared preview shows a gray parenthesized task count on collapsed computers. Conversation headers show only the task title, with the date centered at the start of the thread. The reply context popover is left aligned and uses a slash between usage and capacity. The ring uses fictional telemetry in this preview. Installed-window acceptance and the release remain pending.
@@ -26,7 +28,7 @@ The Statistics follow-up moves the shared hover fill to the full task and effici
 
 Archive rows use the compact 8 by 12 px inset. Active task rows and computer headings have symmetric 4 px vertical padding. Their text still aligns with the computer name, and the row background keeps the full width. Send and Stop use 16 px glyphs inside the existing 32 px controls.
 
-**T-334 separates Statistics from Settings.** A chart button beside Settings and Feedback opens a dedicated dialog. Settings opens at General and lists Server, Project and Agents below it. Agents uses an outlined robot icon. In the efficiency report, model names open the details directly, with successive indents for models and their details. The preview was checked with a mouse and keyboard in Chromium and WebKit. Both dialogs return to the open conversation. Both reports share the same card typography and fixed controls. Agent settings use aligned setting rows, and the model picker uses the standard search field and a separate scroll area. The compact header is shared by all four dialogs. Chromium and WebKit checks passed. The shared loopback preview includes the changes.
+**T-334 separates Statistics from Settings.** A chart button beside Settings and Feedback opens a dedicated dialog. Agents uses an outlined robot icon. In the efficiency report, model names open the details directly, with successive indents for models and their details. The preview was checked with a mouse and keyboard in Chromium and WebKit. Both dialogs return to the open conversation. Both reports share the same card typography and fixed controls. Agent settings use aligned setting rows, and the model picker uses the standard search field and a separate scroll area. The compact header is shared by all four dialogs. Chromium and WebKit checks passed. The shared loopback preview includes the changes.
 
 **T-333 corrects the 1.0.12 desktop layout.** The 1.0.12 mock server activated the task layout, while the desktop server served the old layout. The window now enables the selected layout on its normal route with its existing authorization. The [1.0.13 workflow](https://github.com/kolotiloff/agent-messenger/actions/runs/45959033880) was cancelled before publication at the owner’s request. Hold the next release for the combined changes.
 

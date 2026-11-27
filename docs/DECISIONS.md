@@ -905,3 +905,7 @@ Use the compact filled action and align the button itself with the archive rows.
 ## D-245 — Guide first-run task setup in the task pane (T-336)
 
 Use the shared card and setting rows for the first-run checklist. Give each button an action label and link it directly to its setup location. Creating a project and choosing an available agent and model enables direct tasks. The network and coordinator can be configured separately. When no conversation is selected and the current project has a dispatch route with an enabled model, open the standard New Task composer. This refines the empty-pane behavior in D-186.
+
+## D-246 — Order the settings sections by setup flow (T-336)
+
+Open Settings at General, followed by Project, Agents and Server. Project and agent setup enable local tasks. Server settings are available after those sections for optional networking. This supersedes the section order in D-233.

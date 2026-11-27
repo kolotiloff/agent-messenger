@@ -1016,7 +1016,7 @@ if (require.main === module) (async()=>{
       const modal=compactPreview.locator('#settings-dialog');
       await modal.waitFor();
       assert.equal(await modal.evaluate(node=>node.scrollWidth>node.clientWidth),false);
-      assert.deepEqual(await modal.locator('.am-settings-nav [data-tab]').evaluateAll(tabs=>tabs.map(tab=>tab.dataset.tab)),['settings','server','project','agents']);
+      assert.deepEqual(await modal.locator('.am-settings-nav [data-tab]').evaluateAll(tabs=>tabs.map(tab=>tab.dataset.tab)),['settings','project','agents','server']);
       assert.deepEqual(await modal.locator('.am-settings-nav [data-tab] > svg').evaluateAll(icons=>icons.map(icon=>{
         const {width,height}=icon.getBoundingClientRect();
         return [width,height,icon.getAttribute('aria-hidden')];
