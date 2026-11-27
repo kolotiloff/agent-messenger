@@ -83,11 +83,11 @@ func TestTaskWindowRoutes(t *testing.T) {
 		t.Fatalf("invalid statistics project: %d", code)
 	}
 	for _, path := range []string{"/api/usage-stats", "/api/usage-efficiency"} {
-		if code, _ := do("GET", path+"?period=week&projects=Game&projects=Main%20Site", ""); code != 200 ||
-			strings.Join(got[len(got)-1].Projects, ",") != "Game,Main Site" {
+		if code, _ := do("GET", path+"?period=week&projects=Game&projects=Main%20Site&projects=Tools", ""); code != 200 ||
+			strings.Join(got[len(got)-1].Projects, ",") != "Game,Main Site,Tools" {
 			t.Fatalf("selected projects: %d %+v", code, got[len(got)-1])
 		}
-		for _, scope := range []string{"projects=Game", "projects=Game&projects=Game", "projects=Game&projects=Main%2FSite", "project=Other&projects=Game&projects=Site"} {
+		for _, scope := range []string{"projects=Game", "projects=Game&projects=Site&projects=Game", "projects=Game&projects=Main%2FSite", "project=Other&projects=Game&projects=Site"} {
 			if code, _ := do("GET", path+"?period=week&"+scope, ""); code != 400 {
 				t.Fatalf("accepted invalid project scope %q: %d", scope, code)
 			}
@@ -126,6 +126,14 @@ func TestTaskWindowRoutes(t *testing.T) {
 	if req := got[len(got)-1]; code != 200 || req.Cmd != "usage-export" || req.Project != "Game" || req.Alias != "week" ||
 		req.Text != "dev-1" || req.Provider != "codex" || req.Model != "gpt-6.2-sol[effort=low]" {
 		t.Fatalf("export did not pass all the filters: %d %+v", code, req)
+	}
+	code, _ = do("POST", "/api/task-start", `{"project":"Game","computer":"dev-1","agent":"codex","model":"gpt-6.2-sol[effort=low]","op_id":"op-start","text":"Build the menu"}`)
+	if req := got[len(got)-1]; code != 200 || req.Cmd != "task-owner-start" || req.Project != "Game" || req.Computer != "dev-1" ||
+		req.Provider != "codex" || req.Model != "gpt-6.2-sol[effort=low]" || req.Confirmation != "op-start" || req.Text != "Build the menu" {
+		t.Fatalf("start %d %+v", code, req)
+	}
+	if code, _ := do("POST", "/api/task-start", `{"project":"Game","agent":"codex","op_id":"op-start","text":""}`); code != 400 {
+		t.Fatalf("start with empty task: %d", code)
 	}
 	code, _ = do("POST", "/api/task-answer", `{"task":"task-1","question":"q-1","op_id":"op-1","text":"yes"}`)
 	last := got[len(got)-1]

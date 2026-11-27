@@ -111,14 +111,23 @@ type UsageFilter struct {
 	Model    string
 }
 
-// ValidUsageProjects accepts one named project or the two distinct sidebar
-// projects. Only the original unscoped statistics call allows an empty scope.
+// ValidUsageProjects accepts one named project or multiple distinct projects.
+// Only the original unscoped statistics call allows an empty scope.
 func ValidUsageProjects(project string, projects []string, allowAll bool) bool {
 	if len(projects) == 0 {
 		return (allowAll && project == "") || ValidProjectName(project)
 	}
-	return project == "" && len(projects) == 2 && projects[0] != projects[1] &&
-		ValidProjectName(projects[0]) && ValidProjectName(projects[1])
+	if project != "" || len(projects) < 2 {
+		return false
+	}
+	seen := make(map[string]bool, len(projects))
+	for _, name := range projects {
+		if seen[name] || !ValidProjectName(name) {
+			return false
+		}
+		seen[name] = true
+	}
+	return true
 }
 
 func (f UsageFilter) projectNames() []string {

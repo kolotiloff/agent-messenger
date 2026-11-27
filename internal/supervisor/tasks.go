@@ -291,6 +291,9 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 					live.turnEnded.Store(true)
 					_ = s.store.NoteRunOutput(runID)
 					_ = s.store.NoteRunFinal(runID)
+					if usage := result.Usage; usage != nil {
+						_ = s.store.NoteLiveTokens(runID, usage.Input+usage.Output)
+					}
 					go s.watchLinger(runID, task.ID, task.Provider, obs, lingerDone)
 				}
 				if result.Model != model {
@@ -321,8 +324,8 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 						// A different conversation: its tools stay closed, and
 						// the run will fail verification. Stop it early.
 						_ = platform.SignalGroup(obs.PGID)
-					} else if task.Provider == "codex" && result.Model == "" {
-						go s.watchCodexTaskModel(ctx, lingerDone, runID, task, result.Session, launched)
+					} else if task.Provider == "codex" {
+						go s.watchCodexTask(ctx, lingerDone, runID, task, result.Session, launched, spec.Resume, result.Model != "")
 					}
 				}
 			}
@@ -476,7 +479,7 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	}
 }
 
-func (s *Supervisor) watchCodexTaskModel(ctx context.Context, done <-chan struct{}, runID string, task core.Task, thread string, launched time.Time) {
+func (s *Supervisor) watchCodexTask(ctx context.Context, done <-chan struct{}, runID string, task core.Task, thread string, launched time.Time, resumed, modelKnown bool) {
 	profile := task.Environment
 	if profile == "" {
 		profile, _ = defaultProfileDir("codex")
@@ -485,24 +488,25 @@ func (s *Supervisor) watchCodexTaskModel(ctx context.Context, done <-chan struct
 		return
 	}
 	created, _ := time.Parse(time.RFC3339Nano, task.CreatedAt)
-	read := func() bool {
-		if model := adapters.CodexTurnModel(profile, thread, launched, created); model != "" {
-			return s.store.SetTaskRunModel(runID, model) == nil
+	var lastTokens int64 = -1
+	read := func() {
+		if !modelKnown {
+			if model := adapters.CodexTurnModel(profile, thread, launched, created); model != "" {
+				modelKnown = s.store.SetTaskRunModel(runID, model) == nil
+			}
 		}
-		return false
+		if tokens := adapters.CodexLiveTokens(profile, thread, launched, created, resumed); tokens != nil && *tokens > lastTokens {
+			if s.store.NoteLiveTokens(runID, *tokens) == nil {
+				lastTokens = *tokens
+			}
+		}
 	}
-	tick := time.NewTicker(500 * time.Millisecond)
+	tick := time.NewTicker(3 * time.Second)
 	defer tick.Stop()
-	deadline := time.NewTimer(20 * time.Second)
-	defer deadline.Stop()
 	for {
-		if read() {
-			return
-		}
+		read()
 		select {
 		case <-tick.C:
-		case <-deadline.C:
-			return
 		case <-ctx.Done():
 			return
 		case <-done:

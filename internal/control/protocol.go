@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
@@ -36,7 +37,8 @@ type Request struct {
 	Provider     string   `json:"provider,omitempty"`
 	Project      string   `json:"project,omitempty"`
 	Projects     []string `json:"projects,omitempty"`
-	// Model limits the statistics to one model (T-201).
+	Computer     string   `json:"computer,omitempty"`
+	// Model selects the worker model or limits statistics to one model.
 	Model          string `json:"model,omitempty"`
 	Environment    string `json:"environment,omitempty"`
 	ConversationID string `json:"conversation_id,omitempty"`
@@ -451,6 +453,18 @@ func dispatchContext(ctx context.Context, handler Handler, request Request) Resp
 			return Response{Error: err.Error()}
 		}
 		return Response{OK: true}
+	case "task-owner-start":
+		h, ok := handler.(interface {
+			OwnerStartTask(project, computer, provider, model, op, text string) (string, error)
+		})
+		if !ok {
+			return Response{Error: "creating tasks from the window requires an updated background client"}
+		}
+		id, err := h.OwnerStartTask(request.Project, request.Computer, request.Provider, request.Model, request.Confirmation, request.Text)
+		if err != nil {
+			return Response{Error: err.Error()}
+		}
+		return Response{OK: true, Overview: json.RawMessage(strconv.Quote(id))}
 	case "task-owner-note":
 		h, ok := handler.(interface {
 			OwnerNote(string, string, string) error

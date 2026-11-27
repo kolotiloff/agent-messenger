@@ -164,14 +164,15 @@ type NetIncoming struct {
 type netLink struct{ broker, peer, task string }
 
 type taskLinks struct {
-	remote *netLink // this computer started it; it runs on remote.peer
-	origin *netLink // another computer started it; it runs here
+	remote  *netLink // this computer started it; it runs on remote.peer
+	origin  *netLink // another computer started it; it runs here
+	byOwner bool
 }
 
 func taskLink(tx *sql.Tx, task string) (taskLinks, error) {
 	var l taskLinks
 	var rb, rp, rt, ob, op, ot sql.NullString
-	err := tx.QueryRow(`SELECT remote_broker,remote_peer,remote_task,origin_broker,origin_peer,origin_task FROM tasks WHERE id=?`, task).Scan(&rb, &rp, &rt, &ob, &op, &ot)
+	err := tx.QueryRow(`SELECT remote_broker,remote_peer,remote_task,origin_broker,origin_peer,origin_task,COALESCE(sender_agent,'')=? FROM tasks WHERE id=?`, AudienceOwner, task).Scan(&rb, &rp, &rt, &ob, &op, &ot, &l.byOwner)
 	if errors.Is(err, sql.ErrNoRows) {
 		return l, fmt.Errorf("%w: unknown task", ErrRejected)
 	}
@@ -200,6 +201,7 @@ type netBody struct {
 	Text             string `json:"text,omitempty"`
 	Model            string `json:"model,omitempty"`
 	CoordinatorModel bool   `json:"coordinator_model,omitempty"`
+	ByOwner          bool   `json:"by_owner,omitempty"`
 	Folder           string `json:"folder,omitempty"`
 	Mirror           string `json:"mirror,omitempty"`
 	Reason           string `json:"reason,omitempty"`
@@ -218,6 +220,9 @@ type netBody struct {
 	// Usage is the running computer's total for the task (T-058). A
 	// computer before it ignores the field.
 	Usage *TaskUsage `json:"usage,omitempty"`
+	// LiveTokens is a cumulative observation for one attempt, never final usage.
+	LiveTokens *int64 `json:"live_tokens,omitempty"`
+	RunOrdinal int    `json:"run_ordinal,omitempty"`
 	// DurationMS comes from the executing computer's own clock.
 	DurationMS *int64 `json:"duration_ms,omitempty"`
 	// Computer is the sender's lasting id (T-132), set on every message, so
@@ -743,7 +748,7 @@ func recordRemoteTask(tx *sql.Tx, r StartTaskRequest, self string, cfg remoteTas
 	id = "task-" + id[:16]
 	at := now()
 	title := taskTitle(r.Title, r.Text)
-	sender, senderModel := taskSender(r.SenderAgent, r.SenderModel)
+	sender, senderModel := startTaskSender(r)
 	if _, err := tx.Exec(`INSERT INTO tasks(id,project,op_id,computer,provider,cli_path,environment,profile,folder,title,text,state,detail,created_at,updated_at,model,remote_broker,remote_peer,resource,remote_name,sender_agent,sender_model) VALUES (?,?,?,?,?,'','','','',?,?,'running',?,?,?,?,?,?,?,?,?,?)`,
 		id, r.Project, r.OpID, r.Computer, r.Provider, title, r.Text, "sent to "+cfg.peer.Name+"; waiting for it to accept", at, at, r.Model, cfg.broker, r.Computer, r.Lock, cfg.peer.Name, sender, senderModel); err != nil {
 		return "", err
@@ -765,7 +770,7 @@ func recordRemoteTask(tx *sql.Tx, r StartTaskRequest, self string, cfg remoteTas
 			return "", err
 		}
 	}
-	return id, enqueueNetFrom(tx, self, cfg.broker, r.Computer, "start."+id, id, netBody{Kind: "start", Task: id, Project: r.Project, Agent: r.Provider, Title: title, Text: r.Text, Model: r.Model, CoordinatorModel: cfg.centralModels, Rules: r.Rules, Lock: r.Lock, SenderAgent: sender, SenderModel: senderModel, Analytics: analytics})
+	return id, enqueueNetFrom(tx, self, cfg.broker, r.Computer, "start."+id, id, netBody{Kind: "start", Task: id, Project: r.Project, Agent: r.Provider, Title: title, Text: r.Text, Model: r.Model, CoordinatorModel: cfg.centralModels, ByOwner: r.ByOwner, Rules: r.Rules, Lock: r.Lock, SenderAgent: sender, SenderModel: senderModel, Analytics: analytics})
 }
 
 // answerRemoteTask sends an answer to the computer that runs the task.
@@ -786,6 +791,11 @@ func answerRemoteTask(machine, tx *sql.Tx, t Task, remote netLink, question, opI
 	}
 	if err := insertTaskEvent(tx, t.Project, t.ID, answeredFor, "answered", text, question, sender); err != nil {
 		return err
+	}
+	// Older workers address their ordinary ask to the coordinator. Use the
+	// audience they expect on the wire, while recording the owner here.
+	if t.SenderAgent == AudienceOwner && t.State == "waiting_coordinator" {
+		by = AudienceCoordinator
 	}
 	// The op id names this answer, not only the question: a question that
 	// opens again after a refusal (row 26) gets a second answer.
@@ -1402,7 +1412,7 @@ func remoteStartRequest(tx *sql.Tx, from netLink, b netBody) (StartTaskRequest, 
 	} else if pending {
 		return r, fmt.Errorf("%w: this computer is waiting to install a Messenger update and takes no new tasks", ErrRejected)
 	}
-	r = StartTaskRequest{Project: b.Project, OpID: mirrorOp(from), Provider: b.Agent, Title: b.Title, Text: strings.TrimSpace(b.Text), Model: strings.TrimSpace(b.Model), Rules: strings.TrimSpace(b.Rules), SenderAgent: b.SenderAgent, SenderModel: b.SenderModel}
+	r = StartTaskRequest{Project: b.Project, OpID: mirrorOp(from), Provider: b.Agent, Title: b.Title, Text: strings.TrimSpace(b.Text), Model: strings.TrimSpace(b.Model), Rules: strings.TrimSpace(b.Rules), SenderAgent: b.SenderAgent, SenderModel: b.SenderModel, ByOwner: b.ByOwner}
 	var assignment TaskAssignment
 	if json.Unmarshal(b.Analytics, &assignment) == nil && assignment.valid() {
 		r.Assignment = assignment
@@ -1494,6 +1504,15 @@ func applyReport(tx *sql.Tx, from netLink, b netBody, name string) error {
 	}
 	switch b.Kind {
 	case "progress":
+		if b.Event == "live_usage" {
+			if t.State != "running" || b.LiveTokens == nil || *b.LiveTokens < 0 || b.RunOrdinal < 1 {
+				return nil
+			}
+			_, err := tx.Exec(`UPDATE tasks SET remote_live_tokens=?,remote_live_ordinal=?
+WHERE id=? AND (remote_live_ordinal<? OR (remote_live_ordinal=? AND remote_live_tokens<?))`,
+				*b.LiveTokens, b.RunOrdinal, t.ID, b.RunOrdinal, b.RunOrdinal, *b.LiveTokens)
+			return err
+		}
 		// A line of the worker's progress, for the window only (D-055).
 		activity := isCommandActivity(b.Event)
 		if b.Event != "text" && b.Event != "tool" && !activity {
@@ -1567,7 +1586,7 @@ func applyReport(tx *sql.Tx, from netLink, b netBody, name string) error {
 		return nil
 	}
 	if b.Event == TaskEventWorkerStillRunning || b.Event == TaskEventWorkerQuiet {
-		if b.State != "running" || t.State != "running" || t.CancelRequested || t.Provider != "codex" || b.Audience != AudienceCoordinator {
+		if b.State != "running" || t.State != "running" || t.CancelRequested || t.Provider != "codex" || (b.Audience != AudienceCoordinator && t.SenderAgent != AudienceOwner) {
 			return nil
 		}
 		return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, b.Event, clip(b.Text, 2000), "")

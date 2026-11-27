@@ -667,6 +667,9 @@ func insertTaskEvent(tx *sql.Tx, project, task, audience, kind, text, question s
 	// The event of a task another computer started is history here: this
 	// computer's coordinator neither started nor manages it. The other
 	// computer gets it with its real audience.
+	if link.byOwner && audience == AudienceCoordinator {
+		audience = AudienceOwner
+	}
 	sent := audience
 	if link.origin != nil {
 		audience = AudienceLog
@@ -680,7 +683,7 @@ func insertTaskEvent(tx *sql.Tx, project, task, audience, kind, text, question s
 	// of the owner's answer, for reading only: the owner answers it
 	// (T-099, coordinator's item 13). It is recorded where the task is
 	// managed, so a task of another computer gets it on that computer.
-	if link.origin == nil && audience == AudienceOwner && (kind == "question" || kind == "answered") {
+	if !link.byOwner && link.origin == nil && audience == AudienceOwner && (kind == "question" || kind == "answered") {
 		copyKind := "owner_question"
 		if kind == "answered" {
 			copyKind = "owner_answered"
@@ -718,6 +721,8 @@ type StartTaskRequest struct {
 	Project, OpID, Computer, Provider, Title, Text string
 	// Sender metadata describe the assigning chat, independently of the worker.
 	SenderAgent, SenderModel string
+	// ByOwner starts a direct conversation from the window.
+	ByOwner bool
 	// Model is the worker's model; empty means the CLI's own default.
 	Model string
 	// Rules are the project's worker rules of the computer that started the
@@ -748,6 +753,13 @@ func taskSender(agent, model string) (string, string) {
 		return "", ""
 	}
 	return agent, clip(strings.Join(strings.Fields(model), " "), 80)
+}
+
+func startTaskSender(r StartTaskRequest) (string, string) {
+	if r.ByOwner {
+		return AudienceOwner, ""
+	}
+	return taskSender(r.SenderAgent, r.SenderModel)
 }
 
 // ValidTaskModel accepts a CLI model ID or an explicit Messenger effort selection.
@@ -821,12 +833,12 @@ func normalizeStartTask(r StartTaskRequest) (StartTaskRequest, error) {
 
 func existingStartTask(tx *sql.Tx, r StartTaskRequest) (string, error) {
 	var id string
-	var old struct{ computer, provider, title, text, model, lock string }
-	err := tx.QueryRow(`SELECT id,computer,provider,title,text,COALESCE(model,''),resource FROM tasks WHERE project=? AND op_id=?`, r.Project, r.OpID).Scan(&id, &old.computer, &old.provider, &old.title, &old.text, &old.model, &old.lock)
+	var old struct{ computer, provider, title, text, model, lock, sender string }
+	err := tx.QueryRow(`SELECT id,computer,provider,title,text,COALESCE(model,''),resource,COALESCE(sender_agent,'') FROM tasks WHERE project=? AND op_id=?`, r.Project, r.OpID).Scan(&id, &old.computer, &old.provider, &old.title, &old.text, &old.model, &old.lock, &old.sender)
 	if err != nil {
 		return id, err
 	}
-	if old.computer != r.Computer || old.provider != r.Provider || old.text != r.Text || old.title != taskTitle(r.Title, r.Text) || old.model != r.Model || old.lock != r.Lock {
+	if old.computer != r.Computer || old.provider != r.Provider || old.text != r.Text || old.title != taskTitle(r.Title, r.Text) || old.model != r.Model || old.lock != r.Lock || (old.sender == AudienceOwner) != r.ByOwner {
 		return id, fmt.Errorf("%w: this operation id was used for a different task", ErrRejected)
 	}
 	assignment, err := readTaskAssignment(tx, id)
@@ -937,7 +949,7 @@ func recordLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, origin *ne
 		session = sql.NullString{String: uuid, Valid: true}
 	}
 	at := now()
-	sender, senderModel := taskSender(r.SenderAgent, r.SenderModel)
+	sender, senderModel := startTaskSender(r)
 	if _, err := tx.Exec(`INSERT INTO tasks(id,project,op_id,computer,provider,cli_path,environment,profile,folder,title,text,state,session_id,created_at,updated_at,model,sender_agent,sender_model) VALUES (?,?,?,?,?,?,?,?,?,?,?,'running',?,?,?,?,?,?)`,
 		id, r.Project, r.OpID, computer, r.Provider, cfg.agent.CLI, cfg.agent.Environment, cfg.agent.Profile, cfg.folder, taskTitle(r.Title, r.Text), r.Text, nullString(session), at, at, r.Model, sender, senderModel); err != nil {
 		return "", err
@@ -982,6 +994,9 @@ func insertTaskRun(tx *sql.Tx, task string, ordinal int, kind, input string, sen
 	}
 	run := "run-" + id[:16]
 	sender := coordinatorSender(AudienceCoordinator, senders)
+	if kind == "continue" && len(senders) > 0 && senders[0].Agent == AudienceOwner {
+		sender = MessageSender{Agent: AudienceOwner}
+	}
 	if _, err = tx.Exec(`INSERT INTO task_runs(id,task_id,ordinal,kind,input,receipt,state,created_at,sender_agent,sender_model) VALUES (?,?,?,?,?,?,'intent',?,?,?)`, run, task, ordinal, kind, input, receipt, now(), sender.Agent, sender.Model); err != nil {
 		return err
 	}
@@ -1218,7 +1233,8 @@ func setTaskState(tx *sql.Tx, task, state, detail string) error {
 	if state == "done" || state == "failed" || state == "cancelled" {
 		finished = sql.NullString{String: now(), Valid: true}
 	}
-	_, err := tx.Exec(`UPDATE tasks SET state=?,detail=?,updated_at=?,version=version+1,finished_at=COALESCE(?,finished_at),failure_reason=NULL,failure_reset=NULL WHERE id=?`, state, detail, now(), nullString(finished), task)
+	_, err := tx.Exec(`UPDATE tasks SET state=?,detail=?,updated_at=?,version=version+1,finished_at=COALESCE(?,finished_at),failure_reason=NULL,failure_reset=NULL,
+remote_live_tokens=CASE WHEN ?='running' THEN remote_live_tokens END WHERE id=?`, state, detail, now(), nullString(finished), state, task)
 	return err
 }
 
@@ -1438,6 +1454,13 @@ func (s *Store) SetTaskRunModel(run, model string) error {
 // ClearTaskRunModel removes the previous observation when a new process
 // resumes a task, since its CLI defaults may have changed.
 func (s *Store) ClearTaskRunModel(run string) error {
+	if s.split != nil {
+		project, err := s.storeForRun(run)
+		if err != nil {
+			return err
+		}
+		return project.ClearTaskRunModel(run)
+	}
 	return s.tx(func(tx *sql.Tx) error { return setTaskRunModel(tx, run, "") })
 }
 
@@ -1643,6 +1666,9 @@ func (s *Store) ReadTask(run, receipt string, includeTask bool) (TaskBrief, erro
 		}
 		if b.OwnerNotes != "" && r.Kind != "note" {
 			b.Note = strings.TrimSpace(b.Note + " " + ownerNotesAlsoNote)
+		}
+		if t.SenderAgent == AudienceOwner {
+			b.Note = strings.TrimSpace(b.Note + " This task came directly from the owner. Use ask_owner if you need an answer and report when finished. Your report goes to the owner.")
 		}
 		_, err = tx.Exec(`UPDATE task_runs SET read_seen=1 WHERE id=?`, run)
 		return err
@@ -1904,7 +1930,7 @@ func publishDisposition(tx *sql.Tx, t Task, r TaskRun) error {
 		return insertTaskEvent(tx, t.Project, t.ID, AudienceCoordinator, "report", text, "")
 	case DispositionAsk, DispositionAskOwner:
 		audience, state := AudienceCoordinator, "waiting_coordinator"
-		if r.Disposition == DispositionAskOwner {
+		if r.Disposition == DispositionAskOwner || t.SenderAgent == AudienceOwner {
 			audience, state = AudienceOwner, "waiting_owner"
 		}
 		id, err := randomID()
@@ -1985,15 +2011,19 @@ func answerTask(machine, tx *sql.Tx, task, question, opID, text, by string, from
 		if state != "open" {
 			return fmt.Errorf("%w: this question is no longer open", ErrRejected)
 		}
-		// The coordinator may answer a question to the owner: the owner often
-		// answers it in the coordinator's chat (T-130, D-112). The task shows
-		// who answered.
-		if audience != by && !(ownerOver && by == AudienceOwner && audience == AudienceCoordinator) && !(by == AudienceCoordinator && audience == AudienceOwner) {
-			return fmt.Errorf("%w: this question is for the %s", ErrRejected, audience)
-		}
 		t, err := scanTask(tx.QueryRow(`SELECT `+taskColumns+` FROM tasks WHERE id=?`, task).Scan)
 		if err != nil {
 			return err
+		}
+		direct := t.SenderAgent == AudienceOwner
+		if direct && by != AudienceOwner {
+			return fmt.Errorf("%w: this question is for the owner", ErrRejected)
+		}
+		// The coordinator may answer a question to the owner: the owner often
+		// answers it in the coordinator's chat (T-130, D-112). The task shows
+		// who answered.
+		if audience != by && !((ownerOver || direct) && by == AudienceOwner && audience == AudienceCoordinator) && !(by == AudienceCoordinator && audience == AudienceOwner) {
+			return fmt.Errorf("%w: this question is for the %s", ErrRejected, audience)
 		}
 		want := "waiting_coordinator"
 		if audience == AudienceOwner {

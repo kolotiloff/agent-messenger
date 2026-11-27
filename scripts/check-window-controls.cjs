@@ -83,6 +83,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
             cursor_link: {state: connected ? 'connected' : created ? 'missing' : 'no_folder'},
             computer_name: 'Theme test', tasks_enabled: true},
           '/api/agent-setup-status': setupStates,
+          '/api/model-catalog': {models: [{model:'gpt-6.2-sol[effort=medium]',name:'GPT-6.2 Sol Medium'}],limit:12},
           '/api/discovery': {agents: ['claude','codex','cursor'].map(provider => ({provider, state: 'not_found'}))},
           '/api/client-info': {client: 'running', outdated: false},
           '/api/machine-order': {order: machineOrder, peers: machinePeers},
@@ -413,8 +414,28 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await codex.getByRole('button',{name:'Доверять',exact:true}).waitFor({state:'detached',timeout:10000});
       assert.deepEqual(writes.filter(w=>w.path==='/api/agent-trust').map(w=>w.body),[{provider:'codex',project:'Welcome test',folder:'/fictional/project'}]);
       await codex.getByRole('button',{name:'Настройки',exact:true}).click();
-      assert.equal(await page.locator('#agent-models').inputValue(),''); // An explicitly empty list stays empty.
-      assert((await page.locator('#agent-models-note').textContent()).includes('[effort=high]'));
+      const editModels=page.getByRole('button',{name:'Изменить модели',exact:true});
+      assert.equal(await editModels.textContent(),'Изменить');
+      assert(await editModels.evaluate(button=>{
+        const action=button.getBoundingClientRect();
+        const label=button.previousElementSibling;
+        const text=label.getBoundingClientRect();
+        return label.textContent==='Модели'&&action.left>=text.right&&
+          Math.abs(action.top+action.height/2-text.top-text.height/2)<1&&
+          button.parentElement.getBoundingClientRect().right===action.right;
+      }));
+      await editModels.click();
+      await page.getByRole('dialog',{name:'Модели',exact:true}).waitFor();
+      const switchModel=page.getByRole('switch',{name:'GPT-6.2 Sol Medium'});
+      await switchModel.waitFor();
+      assert.equal(await switchModel.getAttribute('aria-checked'),'false');
+      await page.locator('#agent-model-search').fill('6.2 Sol');
+      await switchModel.click();
+      assert.equal(await switchModel.getAttribute('aria-checked'),'true');
+      await page.locator('#agent-model-save').click();
+      await page.locator('#agent-model-picker').waitFor({state:'hidden'});
+      assert.deepEqual(writes.filter(w=>w.path==='/api/agent-models').map(w=>w.body),
+        [{provider:'codex',models:['gpt-6.2-sol[effort=medium]']}]);
       if(process.env.SCREENSHOT_DIR&&!native) await page.screenshot({animations:'disabled',path:path.join(process.env.SCREENSHOT_DIR,'600-dark-agent-settings.png')});
       assert.equal(await page.locator('#agent-cli-find').evaluate(n=>n.getBoundingClientRect().height),32);
       await page.locator('#agent-cli-find').click();
@@ -599,7 +620,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       });
       await page.goto('http://127.0.0.1/#fixture-token');
       await page.locator('#list-toggle').waitFor({state: 'visible'});
-      const tab = await page.locator('.am-tab').first().boundingBox();
+      const tab = await page.locator('.am-tab[data-tab=tasks]').boundingBox();
       const toggle = await page.locator('#list-toggle').boundingBox();
       const button = await page.locator('.am-window-btn').first().boundingBox();
       assert(tab.y >= 8 && toggle.y >= 8, `tab row too close to the top: tab ${tab.y}, toggle ${toggle.y}`);
@@ -861,10 +882,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         await cohortHeader.evaluate(node=>getComputedStyle(node).paddingTop),'efficiency headers share the vertical inset around the rule');
       const acceptedRate=compared.locator('.am-efficiency-rate').first();
       const firstPassRate=compared.locator('.am-efficiency-rate').last();
-      assert.equal(await acceptedRate.innerText(),'60%');
+      assert.equal(await acceptedRate.innerText(),'75%');
       assert.equal(await firstPassRate.innerText(),'50%');
       await acceptedRate.hover();
-      await acceptedRate.getByRole('tooltip').getByText('3/5',{exact:true}).waitFor();
+      await acceptedRate.getByRole('tooltip').getByText('3/4',{exact:true}).waitFor();
       assert.equal(await compared.locator('td').nth(2).innerText(),'125 тыс.');
       const more=compared.getByRole('button',{name:'Codex Sol 6.2 High, 5 задач'}),efficiencyDetails=page.locator('#stats-efficiency-detail-0');
       const modelName=more.locator('.am-efficiency-model-name'),groupCount=more.getByText(', 5 задач',{exact:true});
@@ -1028,6 +1049,17 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await actionGroup.getAttribute('open'),'');
       assert.equal(await actionGroup.locator('.am-tool-breakdown').count(),0);
       const labels=actionGroup.locator('.am-action-label');
+      const chatType=element=>element.evaluate(node=>{
+        const style=getComputedStyle(node);
+        return [style.fontFamily,style.fontSize,style.fontWeight,style.lineHeight];
+      });
+      const paragraph=page.locator('#thread .am-message:not(.am-outgoing) .am-rich p').first();
+      assert.deepEqual(await chatType(finishedLabel),await chatType(paragraph));
+      assert.deepEqual(await chatType(labels.first()),await chatType(paragraph));
+      assert.deepEqual(await actionGroup.evaluate(node=>{
+        const group=getComputedStyle(node),row=getComputedStyle(node.querySelector('.am-tool'));
+        return [group.marginBlockStart,group.marginBlockEnd,row.marginBlockStart,row.paddingBlockStart];
+      }),['16px','16px','4px','4px']);
       assert.deepEqual(await labels.allInnerTexts(),['Найти файл RuntimePanelUtils.cs','Найти упоминания Mouse и UIOwnsKeys в файле FreeCamera.cs','Прочитать шаги ручной проверки','Посмотреть файлы в папке Infantry/Client','Запустить скрипт Python']);
       assert.equal(await labels.locator('svg').count(),5);
       await labels.nth(1).click();
@@ -1037,16 +1069,20 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       if (process.env.SCREENSHOT_DIR) await page.screenshot({path: path.join(process.env.SCREENSHOT_DIR, 'frameless.png')});
       await page.locator('.am-task-title',{hasText:remoteTask.title}).click();
       const reply = page.locator('#answer-text');
+      await page.locator('#task-head h3').getByText(remoteTask.title,{exact:true}).waitFor();
       await reply.waitFor({state:'visible'});
-      const chatType=locator=>locator.evaluate(node=>{
-        const {fontSize,fontWeight,lineHeight}=getComputedStyle(node);
-        return [fontSize,fontWeight,lineHeight];
-      });
-      const chatBody=page.locator('#thread .am-message-content').last();
       for(const width of [1100,600]){
         await page.setViewportSize({width,height:600});
-        assert.deepEqual(await chatType(chatBody),['14px','400','21px']);
-        assert.deepEqual(await chatType(reply),await chatType(chatBody));
+        const [body,input]=await page.evaluate(()=>{
+          const typography=node=>{
+            const {fontSize,fontWeight,lineHeight}=getComputedStyle(node);
+            return [fontSize,fontWeight,lineHeight];
+          };
+          const messages=document.querySelectorAll('#thread .am-message-content');
+          return [typography(messages[messages.length-1]),typography(document.querySelector('#answer-text'))];
+        });
+        assert.deepEqual(body,['14px','400','21px']);
+        assert.deepEqual(input,body);
       }
       await page.setViewportSize({width:1100,height:600});
       await reply.fill('Use blue');
@@ -1124,6 +1160,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await remoteList.click();
       remoteRow=remoteTask;
       await remoteHead.getByText(/Работает/).waitFor();
+      await remoteList.locator('.am-task-status').getByText(/^Работает/).waitFor();
       // Stop another task from its row without selecting it. The chat button
       // shares the pending guard through both queuing and broker acceptance.
       const stopButton=page.locator('#task-stop'),stopStatus=page.locator('#task-stop-status');
@@ -1224,7 +1261,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         // The old rows stay in place so the list does not jump, but they
         // cannot be chosen while Site loads (T-266).
         assert(await page.locator('#task-list').evaluate(list => list.inert && list.getAttribute('aria-busy') === 'true'), 'keep the old project list inert while Site loads');
-        assert(await composer.isHidden());
+        assert(await composer.evaluate(input=>input.closest('#compose').inert),'keep the displayed composer inactive while Site loads');
       } finally {
         releaseSite();
       }

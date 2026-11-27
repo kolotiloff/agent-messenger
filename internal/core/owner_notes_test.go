@@ -30,6 +30,43 @@ func TestOwnerNoteWaitsForTheRun(t *testing.T) {
 	if err := f.st.AddOwnerNote(id, "n2", "And bigger cells"); err != nil {
 		t.Fatal(err)
 	}
+	// The whole-second note and the fractional times are deliberately chosen
+	// so sorting the timestamp strings would put later activity above a note.
+	for _, item := range []struct{ kind, text, at string }{
+		{"text", "First update", "2026-01-01T10:00:00.119Z"},
+		{"tool", "Check the grid", "2026-01-01T10:00:00.123Z"},
+		{"text", "Second update", "2026-01-01T10:00:01.1Z"},
+	} {
+		if err := f.st.AppendTaskRunItem(r.ID, item.kind, "", item.text, ""); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.st.db.Exec(`UPDATE task_run_items SET created_at=? WHERE run_id=? AND text=?`, item.at, r.ID, item.text); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for op, at := range map[string]string{"n1": "2026-01-01T10:00:00.12Z", "n2": "2026-01-01T10:00:01Z"} {
+		if _, err := f.st.db.Exec(`UPDATE task_owner_notes SET created_at=? WHERE op_id=?`, at, op); err != nil {
+			t.Fatal(err)
+		}
+	}
+	checkOrder := func(state string) {
+		t.Helper()
+		feed, err := f.st.TaskFeed(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := []string{"First update", "Use blue", "Check the grid", "And bigger cells", "Second update"}
+		if len(feed.Items) < len(want)+1 {
+			t.Fatalf("feed: %+v", feed.Items)
+		}
+		for index, text := range want {
+			item := feed.Items[index+1]
+			if item.Text != text || (item.Kind == "note" && item.State != state) {
+				t.Fatalf("feed item %d: got %+v, want %q (notes %s)", index+1, item, text, state)
+			}
+		}
+	}
+	checkOrder("pending")
 	// The coordinator hears that the owner wrote.
 	events, _, _ := f.st.TaskEvents("Game", AudienceCoordinator, 0, 50)
 	noted := 0
@@ -60,6 +97,7 @@ func TestOwnerNoteWaitsForTheRun(t *testing.T) {
 	if r2.Kind != "note" || r2.Ordinal != 2 {
 		t.Fatalf("run %+v", r2)
 	}
+	checkOrder("delivered")
 	brief, err := f.st.ReadTask(r2.ID, r2.Receipt, false)
 	if err != nil || brief.Task != "" || brief.Note == "" || !strings.Contains(brief.OwnerNotes, "Use blue") || !strings.Contains(brief.OwnerNotes, "And bigger cells") || !strings.Contains(brief.HeldReport, "Grid built") {
 		t.Fatalf("brief %+v %v", brief, err)
@@ -91,8 +129,18 @@ func TestOwnerNoteWaitsForTheRun(t *testing.T) {
 	if task, _ := f.st.TaskByID(id); task.State != "done" {
 		t.Fatalf("task %+v", task)
 	}
-	if err := f.st.AddOwnerNote(id, "n3", "Late"); !errors.Is(err, ErrRejected) {
-		t.Fatalf("note to a finished task: %v", err)
+	session := f.sessionOf(t, id)
+	for range 2 {
+		if err := f.st.AddOwnerNote(id, "n3", "Check the grid again"); err != nil {
+			t.Fatalf("note to a finished task: %v", err)
+		}
+	}
+	if err := f.st.AddOwnerNote(id, "n3", "Different text"); !errors.Is(err, ErrRejected) {
+		t.Fatalf("op reused for a different follow-up: %v", err)
+	}
+	r3 := f.launch(t, id, session)
+	if r3.Kind != "continue" || r3.Ordinal != 3 || r3.Input != "Check the grid again" || f.sessionOf(t, id) != session {
+		t.Fatalf("follow-up did not resume the existing conversation: %+v", r3)
 	}
 }
 

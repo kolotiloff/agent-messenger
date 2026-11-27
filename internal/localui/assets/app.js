@@ -1,6 +1,7 @@
 'use strict';
 (() => {
   const root = document.getElementById('am-concept');
+  const taskSidebarPreview=root.classList.contains('am-task-sidebar-preview');
   // The Mac app and the Windows window draw their own frame and title (D-054).
   if(window.webkit?.messageHandlers?.updates||window.amDesktop)document.body.classList.add('am-native');
   const $ = id => root.querySelector('#' + id);
@@ -111,7 +112,7 @@
     for(const d of providerPaths[provider]){const path=document.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d',d);svg.append(path);}wrap.append(svg);return wrap;
   }
   function notice(node){const n=$('notice');n.replaceChildren();if(node)n.append(node);n.hidden=!node;}
-  let token=location.hash.slice(1);
+  let token=location.hash.slice(1)||root.dataset.previewToken||'';
   try{if(token)sessionStorage.setItem('messenger-ui-token',token);else token=sessionStorage.getItem('messenger-ui-token')||'';}catch(_){}
   if(location.hash)history.replaceState(null,'',location.pathname);
   function remember(key,value){try{localStorage.setItem(key,value);}catch(_){}}
@@ -159,6 +160,7 @@
     const box=$('toasts');
     // An agent action must not report its error inside the hidden Tasks tab.
     if(tab==='tasks')$('notices').after(box);
+    else if(taskSidebarPreview)$('settings-dialog').querySelector('.am-settings-views').prepend(box);
     else root.querySelector('.am-main').insertBefore(box,root.querySelector('[data-screen]'));
     box.replaceChildren();box.hidden=!actionError;if(!actionError)return;
     const chip=el('div',undefined,'am-toast');chip.append(el('span',actionError.text,'am-toast-text'));if(actionError.hint)chip.title=actionError.hint;
@@ -234,20 +236,23 @@
   // Relative dates print the time when recent, or whenever an event ended.
   function sameDay(a,b){return a.toDateString()===b.toDateString();}
   function longDay(d){return d.toLocaleDateString(amLocale,d.getFullYear()===new Date().getFullYear()?{day:'numeric',month:'long'}:{day:'numeric',month:'long',year:'numeric'});}
-  function relativeWhen(at,includeClock){
+  function relativeWhen(at,includeClock,archive=false){
     const d=new Date(at);if(!at||isNaN(d.getTime()))return '';
     const today=new Date(),yesterday=new Date();yesterday.setDate(today.getDate()-1);
-    if(sameDay(d,today))return tr('сегодня ')+clock(at);
-    if(sameDay(d,yesterday))return tr('вчера ')+clock(at);
+    const separator=archive?tr(' в '):' ';
+    const nearby=sameDay(d,today)?tr('сегодня '):sameDay(d,yesterday)?tr('вчера '):'';
+    if(nearby)return (archive?capital(nearby.trim())+separator:nearby)+clock(at);
     const date=d.toLocaleDateString(amLocale,d.getFullYear()===today.getFullYear()?{day:'numeric',month:'short'}:{day:'numeric',month:'short',year:'numeric'});
-    return date+(includeClock?' '+clock(at):'');
+    return date+(includeClock?separator+clock(at):'');
   }
-  function appendTaskWhen(agent,t){
+  function appendTaskWhen(agent,t,archive=false){
     const ended=finishedStates.includes(t.state)||(!activeStates.includes(t.state)&&!!t.finished_at);
-    const at=ended?t.finished_at:taskStart(t),label=relativeWhen(at,ended);
+    const at=ended?t.finished_at:taskStart(t),label=relativeWhen(at,ended,archive);
     if(!label)return;
     const time=el('time',label,'am-task-when');
-    time.dateTime=at;time.title=taskWhenTitle(t);agent.append(time);
+    time.dateTime=at;time.title=taskWhenTitle(t);
+    agent.append(time);
+    return time;
   }
   function appendEventTime(line,at,remote){
     const label=relativeWhen(at,true);
@@ -402,6 +407,27 @@
     return ['idle',tr('Свободен')];
   }
   let splitProjects=[],auxActivity=null,auxError='',auxRequest=null,auxTaskScope='';
+  const sidebarSnapshots=new Map(),collapsedComputers=new Set();
+  let sidebarProject='',sidebarRequest=null,draftOpen=false,draftSending=false,draftAttempt=null;
+  function sidebarProjects(){
+    return sidebarProject?[sidebarProject]:(view?.projects||[]).map(entry=>entry.name);
+  }
+  async function loadSidebarProjects(){
+    if(sidebarRequest||!online||document.hidden)return;
+    const names=sidebarProjects().filter(name=>name!==project),scope=names.map(taskWindowQuery);
+    if(!names.length)return;
+    sidebarRequest=Promise.allSettled(names.map(async(name,index)=>{
+      const query=new URLSearchParams(scope[index]);
+      query.set('history','1');
+      const snapshot=await api('/api/project-activity?'+query,4500);
+      if(snapshot.project!==name||taskWindowQuery(name)!==scope[index])return;
+      sidebarSnapshots.set(name,{snapshot,scope:scope[index]});
+      syncTaskHistory(snapshot);
+    }));
+    await sidebarRequest;
+    sidebarRequest=null;
+    renderMachines();renderTaskList();
+  }
   function projectOptions(select,options,value,disabled=false){
     if(select.options.length!==options.length||options.some(([value,label],i)=>select.options[i].value!==value||select.options[i].textContent!==label)){
       select.replaceChildren(...options.map(([value,label])=>{
@@ -421,6 +447,7 @@
   }
   function passiveProject(){return splitProjects.find(name=>name!==project)||'';}
   async function loadProjectActivity(){
+    if(taskSidebarPreview)return loadSidebarProjects();
     const name=passiveProject();
     const scope=auxTaskQuery();
     if(auxRequest?.name===name&&auxRequest.scope===scope)return;
@@ -450,6 +477,15 @@
   function projectTitle(name){return view?.projects.find(p=>p.name===name)?.title||name;}
   function renderProjects(){
     const options=view?view.projects.map(p=>[p.name,p.title||p.name]):[['',offlineReason?tr('Проекты недоступны'):tr('Загружаем проекты…')]];
+    if(taskSidebarPreview){
+      if(view&&!options.some(([name])=>name===sidebarProject))sidebarProject='';
+      $('project-heading').textContent=tr('Проекты');
+      $('split-projects').hidden=true;
+      projectOptions($('project-select'),view?[['__all',tr('Все')],...options,['__new',tr('Новый проект')]]:options,view?sidebarProject||'__all':'',!view);
+      $('task-new').disabled=!view?.projects.length;
+      syncSelects();
+      return;
+    }
     const canSplit=!!view&&options.length>1&&options.some(([name])=>name===project);
     if(splitProjects.length){
       const other=options.find(([name])=>name===passiveProject())?.[0]||options.find(([name])=>name!==project)?.[0];
@@ -824,6 +860,11 @@
     if(machineDrop)delete machineDrop.card.dataset.dropEdge;
     machineDrop=null;
   }
+  function clearMachineDrag(){
+    draggedMachine='';
+    clearMachineDrop();
+    machineList.querySelector('.am-machine-drag-image')?.classList.remove('am-machine-drag-image');
+  }
   // The order key of a computer of the network: its lasting id, known now
   // or from before, else its peer id. A newly learned id is saved, and an
   // order entry saved under the peer id moves to the lasting id.
@@ -849,40 +890,60 @@
     renderMachines();
   }
   machineList.addEventListener('dragstart',event=>{
-    const card=event.target.closest('[data-machine-order]');
+    const card=event.target.closest('[draggable=true]')?.closest('[data-machine-order]');
     if(!card)return;
     draggedMachine=card.dataset.machineOrder;
     event.dataTransfer.setData('text/plain',draggedMachine);
     event.dataTransfer.effectAllowed='move';
+    if(taskSidebarPreview){
+      // The disclosure is a transparent button over the visible heading.
+      const head=card.querySelector('.am-machine-name');
+      const rect=head.getBoundingClientRect();
+      head.classList.add('am-machine-drag-image');
+      event.dataTransfer.setDragImage(head,event.clientX-rect.left,event.clientY-rect.top);
+    }
   });
   machineList.addEventListener('dragover',event=>{
     if(!draggedMachine)return;
-    const card=event.target.closest('[data-machine-order]');
+    let card=event.target.closest('[data-machine-order]'),gapAfter;
+    if(!card&&taskSidebarPreview){
+      const cards=[...machineList.children].filter(node=>node.dataset.machineOrder!==draggedMachine);
+      card=cards.find(node=>event.clientY<node.getBoundingClientRect().top);
+      gapAfter=!card;
+      card||=cards.at(-1);
+    }
     clearMachineDrop();
     if(!card||card.dataset.machineOrder===draggedMachine)return;
     event.preventDefault();
     event.dataTransfer.dropEffect='move';
-    const rect=card.getBoundingClientRect(),after=event.clientY>=rect.top+rect.height/2;
+    const target=taskSidebarPreview?card.querySelector('.am-machine-name'):card;
+    const rect=target.getBoundingClientRect(),after=gapAfter??event.clientY>=rect.top+rect.height/2;
     card.dataset.dropEdge=after?'after':'before';
     machineDrop={card,after};
   });
   machineList.addEventListener('dragleave',event=>{
-    if(!machineList.contains(event.relatedTarget))clearMachineDrop();
+    if(machineList.contains(event.relatedTarget))return;
+    const rect=machineList.getBoundingClientRect();
+    if(!event.relatedTarget&&event.clientX>=rect.left&&event.clientX<rect.right&&
+        event.clientY>=rect.top&&event.clientY<rect.bottom)return;
+    clearMachineDrop();
   });
   machineList.addEventListener('drop',event=>{
     if(!draggedMachine||!machineDrop)return;
     event.preventDefault();
     const from=draggedMachine,{card,after}=machineDrop;
-    draggedMachine='';clearMachineDrop();
+    clearMachineDrag();
     moveMachine(from,card.dataset.machineOrder,after);
   });
   machineList.addEventListener('dragend',()=>{
-    draggedMachine='';clearMachineDrop();renderMachines();
+    clearMachineDrag();renderMachines();
   });
   // T-271: the computers that have a card in the current render.
   let pickedComputers=new Set();
   function pickable(card,id,orderKey=id){
     pickedComputers.add(id);
+    card.dataset.machineOrder=orderKey;
+    if(taskSidebarPreview)return;
     const split=splitProjects.length>0;
     card.tabIndex=0;
     if(!split){
@@ -890,18 +951,23 @@
       card.title=computerFilter===id?tr('Показать все компьютеры'):tr('Показать только этот компьютер');
       card.addEventListener('click',event=>{if(!event.target.closest('button'))filterComputer(id);});
     }
-    card.dataset.machineOrder=orderKey;card.draggable=machineOrderLoaded;
-    card.setAttribute('aria-keyshortcuts','Alt+ArrowUp Alt+ArrowDown');
     card.addEventListener('keydown',event=>{
       if(event.target!==card)return;
       if(!split&&(event.key==='Enter'||event.key===' ')){event.preventDefault();filterComputer(id);}
-      if(!machineOrderLoaded||!event.altKey||!['ArrowUp','ArrowDown'].includes(event.key))return;
+    });
+    enableMachineOrder(card,card);
+  }
+  function enableMachineOrder(card,handle){
+    handle.draggable=machineOrderLoaded;
+    handle.setAttribute('aria-keyshortcuts','Alt+ArrowUp Alt+ArrowDown');
+    handle.addEventListener('keydown',event=>{
+      if(event.target!==handle||!machineOrderLoaded||!event.altKey||!['ArrowUp','ArrowDown'].includes(event.key))return;
       event.preventDefault();
       const after=event.key==='ArrowDown',next=after?card.nextElementSibling:card.previousElementSibling;
       if(!next)return;
       const key=card.dataset.machineOrder;
       moveMachine(key,next.dataset.machineOrder,after);
-      machineList.querySelector('[data-machine-order="'+CSS.escape(key)+'"]')?.focus();
+      if(handle===card)machineList.querySelector('[data-machine-order="'+CSS.escape(key)+'"]')?.focus();
     });
   }
   // The window redraws every two seconds. A part whose content did not change
@@ -911,7 +977,10 @@
     if(next.innerHTML!==live.innerHTML)live.replaceChildren(...next.childNodes);
   }
   function machineRole(label,tip){
-    const tag=el('span',label,'am-small am-muted am-machine-role');tag.title=tip;
+    const tag=taskSidebarPreview
+      ?el('span',', '+label,'am-muted am-inline-role')
+      :el('span',label,'am-small am-muted am-machine-role');
+    tag.title=tip;
     return tag;
   }
   function serverTag(){
@@ -945,14 +1014,14 @@
     if(!head.clientWidth)return;
     const [presence,name,roles,meta]=head.children;
     const style=getComputedStyle(head),gap=parseFloat(style.getPropertyValue('--am-space-1'));
-    const standardInset=parseFloat(style.getPropertyValue('--am-space-3'));
-    const available=head.clientWidth-2*standardInset;
+    const insets=2*parseFloat(style.getPropertyValue('--am-space-3'));
+    const available=head.clientWidth-insets;
     const range=document.createRange();
     range.selectNodeContents(name);
     const nameWidth=range.getBoundingClientRect().width;
     const markWidth=presence.getBoundingClientRect().width;
     const room=available-markWidth-parseFloat(getComputedStyle(presence).marginInlineEnd)
-      -(meta?.getBoundingClientRect().width||0)-(head.children.length-1)*gap;
+      -(meta?.getBoundingClientRect().width||0)-(meta?3:2)*gap;
     const [full,short,icons]=roles.children;
     const form=full.getBoundingClientRect().width<=room-nameWidth?'full':
       short.getBoundingClientRect().width<=room-nameWidth?'short':
@@ -963,23 +1032,97 @@
     const head=machineList.querySelector('.am-machine-roles')?.parentElement;
     if(head)layoutMachineRoles(head);
   }));
-  function machinePresence(online){
+  function machinePresence(online,local=false){
     const mark=el('span',undefined,'am-machine-presence'+(online?' online':''));
-    mark.title=online?tr('На связи'):tr('Нет связи');
+    if(local)mark.classList.add('am-machine-presence-local');
+    const connection=online?tr('На связи'):tr('Нет связи');
+    mark.title=local?tr('Этот компьютер')+' — '+connection:connection;
     mark.setAttribute('role','img');
     mark.setAttribute('aria-label',mark.title);
     const signal=el('span',undefined,'am-machine-signal');
     signal.setAttribute('aria-hidden','true');
     // With the seven-unit round stroke, both diagonals span the 24-unit view box.
     if(!online)signal.append(svgIcon(['M3.5 3.5l17 17M20.5 3.5l-17 17']));
-    mark.append(svgIcon(['M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2ZM12 17v3M8 20h8']),signal);
+    const glyph=taskSidebarPreview
+      ?['M4 3h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM4 14h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2ZM6 7h1M6 18h1']
+      :['M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2ZM12 17v3M8 20h8'];
+    mark.append(svgIcon(glyph),signal);
     return mark;
+  }
+  function currentTasksByComputer(){
+    const computers=new Map();
+    for(const name of sidebarProjects()){
+      const snapshot=taskListView(name);
+      if(!snapshot)continue;
+      const {active,planned,attention}=taskGroups(snapshot,false);
+      for(const item of [...attention,...active,...planned]){
+        const computer=item.peer?sharedRunsOn(item.t,item.peer):taskComputer(item.t);
+        if(!computers.has(computer))computers.set(computer,[]);
+        computers.get(computer).push({...item,name});
+      }
+    }
+    return computers;
+  }
+  function sidebarTaskRows(body,head,card,computer,items=[]){
+    if(!items.length)return;
+    const rows=el('div',undefined,'am-sidebar-task-rows');
+    body.append(rows);
+    const disclosure=el('button',undefined,'am-sidebar-disclosure');disclosure.type='button';
+    disclosure.dataset.sidebarFocus=JSON.stringify([computer]);
+    function update(){
+      const collapsed=collapsedComputers.has(computer);
+      body.inert=collapsed;
+      disclosure.setAttribute('aria-expanded',String(!collapsed));
+      const action=collapsed?tr('Показать текущие задачи'):tr('Скрыть текущие задачи');
+      disclosure.setAttribute('aria-label',computerName(computer)+' — '+action);
+    }
+    disclosure.addEventListener('click',()=>{
+      if(collapsedComputers.has(computer))collapsedComputers.delete(computer);
+      else collapsedComputers.add(computer);
+      update();
+    });
+    head.append(disclosure);card.classList.add('am-sidebar-has-tasks');update();
+    for(const {t,peer,name} of items){
+      const row=el('button',undefined,'am-sidebar-task');row.type='button';
+      const selection=peer?{peer:peer.peer,id:t.id}:null;
+      row.dataset.sidebarFocus=JSON.stringify([name,peer?.peer||'',t.id]);
+      row.setAttribute('aria-pressed',String(!draftOpen&&name===project&&(selection?selectedShared?.peer===selection.peer&&selectedShared?.id===selection.id:t.id===selectedTask)));
+      const title=el('span',undefined,'am-sidebar-task-title');
+      if(!sidebarProject)title.append(el('span',projectTitle(name)+', ','am-muted'));
+      title.append(t.title);
+      const meta=el('span',undefined,'am-small am-muted am-sidebar-task-meta am-task-model-line');
+      const details=el('span');
+      const model=sidebarTaskModel(peer?{...t,shared:true}:t);
+      const identity=(shortNames[t.agent]||t.agent)+(model?' '+model:'');
+      const from=taskStart(t);
+      const [status,color,tip,timer]=peer?sharedStatus(t,peer):taskStatus(t);
+      if(color==='am-status-run'){
+        details.append(el('span',identity,color));
+        if(timer&&Number.isFinite(Date.parse(from)))details.append(elapsedLabel(from,', '));
+      }else{
+        const waiting=t.state==='waiting_owner'||t.state==='waiting_coordinator';
+        const detail=el('span',identity+', '+(waiting&&color==='am-status-wait'?tr('ждёт ответа'):status),color);
+        if(tip)detail.title=tip;
+        details.append(detail);
+      }
+      meta.append(providerIcon(t.agent),details);
+      title.title=title.textContent;
+      meta.title=meta.textContent;
+      row.append(title,meta);
+      row.addEventListener('click',()=>{
+        if(tab!=='tasks')show('tasks');
+        selectProject(name,selection?'':t.id,'',selection);
+      });
+      row.addEventListener('contextmenu',event=>taskMenu(event,t,peer,name));
+      rows.append(row);
+    }
   }
   function renderMachines(){
     if(draggedMachine)return;
     collectNotices();
     pickedComputers=new Set();
     const live=$('machines'),box=live.cloneNode(false),busyTasks=busyTasksByComputer(view?.project===project?view:null);
+    const sidebarTasks=taskSidebarPreview?currentTasksByComputer():null;
     const projectActivity=splitProjects.map(name=>{
       const snapshot=view?.project===name?view:auxActivity?.project===name?auxActivity:null;
       return {name,snapshot,tasks:busyTasksByComputer(snapshot)};
@@ -990,23 +1133,27 @@
     const focus=live.contains(document.activeElement)?document.activeElement:null;
     const focused=sameScope?focus?.closest('.am-agent-parallel')?.dataset.agentGroup:'';
     const focusedCell=focus?.dataset.projectCell;
+    const focusedSidebar=focus?.dataset.sidebarFocus;
     live.dataset.agentScope=scope;
     const machine=el('div',undefined,'am-machine-card');machine.setAttribute('aria-current','true');pickable(machine,'local');
     // This computer's version and update button are moved into its header
     // by placeLocalParts, alongside the same status icon as on remote cards.
     const head=el('div',undefined,'am-machine-name');
-    head.append(machinePresence(online),el('span',view?.computer_name||tr('Этот компьютер'),'am-machine-label'));
+    const localName=el('span',view?.computer_name||tr('Этот компьютер'),'am-machine-label');
+    head.append(machinePresence(online,true),localName);
     // The computer that runs the network's server is labelled as such.
     const serverRole=server?.host?.running&&server.host.scope!=='local'?serverTag():null;
     const coordinator=view?.project===project?view?.coordinator:null;
-    const coordinatorProjects=projectActivity.filter(({snapshot})=>snapshot?.coordinator?.active).map(({name})=>projectTitle(name));
+    const coordinatorProjects=(taskSidebarPreview?sidebarProjects().map(name=>({name,snapshot:taskListView(name)})):projectActivity)
+      .filter(({snapshot})=>snapshot?.coordinator?.active).map(({name})=>projectTitle(name));
     let coordinatorRole=null;
     if(coordinatorProjects.length){
       coordinatorRole=machineRole(tr('координатор'),tr('На этом компьютере открыт чат-координатор')+': '+coordinatorProjects.join(', '));
     }else if(!projectActivity.length&&coordinator?.active){
       coordinatorRole=machineRole(tr('координатор'),tr('На этом компьютере открыт чат-координатор выбранного проекта'));
     }
-    if(serverRole&&coordinatorRole)head.append(combinedMachineRoles(serverRole,coordinatorRole));
+    if(taskSidebarPreview)localName.append(...[coordinatorRole,serverRole].filter(Boolean));
+    else if(serverRole&&coordinatorRole)head.append(combinedMachineRoles(serverRole,coordinatorRole));
     else if(serverRole||coordinatorRole)head.append(serverRole||coordinatorRole);
     const version=el('div',undefined,'am-machine-version am-local-version');
     const corner=el('div',undefined,'am-card-update am-local-update');
@@ -1018,7 +1165,11 @@
     // they report (owner, 2026-11-18: two of three agents were off and the
     // Mac still listed all three). One still running a task stays until it
     // ends.
-    if(projectActivity.length)appendProjectCells(machine,head,localMeta,'local',projectActivity);
+    if(sidebarTasks){
+      const body=el('div',undefined,'am-sidebar-tasks');
+      head.append(localMeta);machine.append(head,body);
+      sidebarTaskRows(body,head,machine,'local',sidebarTasks.get('local'));
+    }else if(projectActivity.length)appendProjectCells(machine,head,localMeta,'local',projectActivity);
     else{
       const body=el('div',undefined,'am-machine-body');
       const shownAgents=(view?.agents||[]).filter(a=>!a.paused||busyTasks.get('local\0'+a.agent)?.some(t=>activeStates.includes(t.state)));
@@ -1036,8 +1187,9 @@
       const fresh=peerFresh(peer),connected=peerConnected(peer);
       const card=el('div',undefined,'am-machine-card am-peer-card');card.dataset.peer=peer.id;if(peer.host)card.dataset.host='';pickable(card,peer.id,peerOrderKey(peer));
       const name=el('div',undefined,'am-machine-name');
-      name.append(machinePresence(connected),el('span',peer.name,'am-machine-label'));
-      if(peer.host)name.append(serverTag());
+      const peerName=el('span',peer.name,'am-machine-label');
+      name.append(machinePresence(connected),peerName);
+      if(peer.host)(taskSidebarPreview?peerName:name).append(serverTag());
       const meta=el('div',undefined,'am-machine-meta');
       const corner=el('div',undefined,'am-card-update');
       // T-128: an older computer gets the update icon next to its dot; the
@@ -1066,7 +1218,10 @@
         no.addEventListener('click',()=>{revokeAsk='';renderMachines();$('machines').querySelector('[data-key="'+CSS.escape('revoke-'+peer.id)+'"]')?.focus();});
         actions.append(no,yes);peerBody.append(actions);box.append(card);continue;
       }
-      if(projectActivity.length){
+      if(sidebarTasks){
+        peerBody.className='am-sidebar-tasks';
+        sidebarTaskRows(peerBody,name,card,peer.id,sidebarTasks.get(peer.id));
+      }else if(projectActivity.length){
         appendProjectCells(card,name,meta,peer.id,projectActivity,peer);
       }else if(fresh){
         const plines=agentLines(peer.agents||[],peer.coordinator?peer.coordinator:null,true,peer.id,busyTasks);
@@ -1089,6 +1244,17 @@
     const rank=new Map(machineOrder.map((key,index)=>[key,index]));
     const ranks=card=>rank.get(card.dataset.machineOrder)??machineOrder.length;
     box.append(...[...box.children].sort((a,b)=>ranks(a)-ranks(b)));
+    if(taskSidebarPreview){
+      for(const card of box.children){
+        const head=card.querySelector('.am-machine-name');
+        const handle=head.querySelector('.am-sidebar-disclosure')||head;
+        if(handle===head){
+          head.tabIndex=0;
+          head.dataset.sidebarFocus=JSON.stringify([card.dataset.machineOrder]);
+        }
+        enableMachineOrder(card,handle);
+      }
+    }
     for(const group of box.querySelectorAll('.am-agent-parallel'))group.open=expanded.has(group.dataset.agentGroup);
     // The moved elements are left out of the comparison, so an unchanged
     // list keeps its nodes; before a rebuild they go back to the bottom row,
@@ -1100,11 +1266,12 @@
     if(copy.innerHTML!==box.innerHTML){
       machineRolesObserver.disconnect();
       parkLocalParts();live.replaceChildren(...box.childNodes);
-      if(serverRole&&coordinatorRole){
+      if(!taskSidebarPreview&&serverRole&&coordinatorRole){
         machineRolesObserver.observe(head);
         if(!projectActivity.length)machineRolesObserver.observe(localMeta);
       }
-      if(focused)live.querySelector('[data-agent-group="'+CSS.escape(focused)+'"] > summary')?.focus({preventScroll:true});
+      if(focusedSidebar)live.querySelector('[data-sidebar-focus="'+CSS.escape(focusedSidebar)+'"]')?.focus({preventScroll:true});
+      else if(focused)live.querySelector('[data-agent-group="'+CSS.escape(focused)+'"] > summary')?.focus({preventScroll:true});
       else if(focusedCell)live.querySelector('[data-project-cell="'+CSS.escape(focusedCell)+'"]')?.focus({preventScroll:true});
     }
     placeLocalParts();
@@ -1156,8 +1323,8 @@
       card.append(cell);
     }
   }
-  // This computer's version and update button live in its card; in a narrow
-  // window the computer list is hidden and they stay in the bottom row.
+  // The grouped sidebar keeps local updates in the footer. The earlier
+  // layout places them in the local card when the window is wide enough.
   const localParts=['app-installed-version','app-update-button'];
   const narrowSidebar=matchMedia('(max-width:620px)');
   function parkLocalParts(){
@@ -1166,7 +1333,7 @@
   }
   function placeLocalParts(){
     const card=$('machines').querySelector('[aria-current="true"]');
-    if(narrowSidebar.matches||!card){parkLocalParts();return;}
+    if(taskSidebarPreview||narrowSidebar.matches||!card){parkLocalParts();return;}
     const version=card.querySelector('.am-local-version'),corner=card.querySelector('.am-local-update');
     if($('app-installed-version').parentNode!==version)version.append($('app-installed-version'));
     if($('app-update-button').parentNode!==corner)corner.append($('app-update-button'));
@@ -1223,6 +1390,9 @@
   function computerName(id){
     return id==='local'?(view?.computer_name||tr('Этот компьютер')):(server?.peers||[]).find(p=>p.id===id)?.name||(view?.tasks||[]).find(t=>taskComputer(t)===id)?.remote?.name||'';
   }
+  function computerOptions(){
+    return [['local',computerName('local')],...(server?.peers||[]).map(peer=>[peer.id,peer.name||peer.id])];
+  }
   const taskHistories=new Map();
   let windowHistoryScope='';
   function taskWindowQuery(name=project){return new URLSearchParams({project:name,agent:$('agent-filter').value,computer:computerFilter}).toString();}
@@ -1230,6 +1400,10 @@
   function auxTaskQuery(){return tab==='tasks'&&combinedTasks()?taskWindowQuery(passiveProject()):'';}
   function taskListView(name){
     if(name===project&&view?.project===name)return view;
+    if(taskSidebarPreview){
+      const entry=sidebarSnapshots.get(name);
+      return entry?.scope===taskWindowQuery(name)?entry.snapshot:null;
+    }
     if(name===passiveProject()&&auxActivity?.project===name&&auxTaskScope&&auxTaskScope===auxTaskQuery())return auxActivity;
     return null;
   }
@@ -1271,12 +1445,12 @@
   }
   // The task list's groups, newest first: own tasks and other computers'
   // tasks of the project together (T-047, T-110).
-  function taskGroups(snapshot=view){
-    const agentFilter=$('agent-filter').value;
-    const items=taskRows(snapshot).filter(t=>(!agentFilter||t.agent===agentFilter)&&(!computerFilter||taskComputer(t)===computerFilter)).map(t=>({t}));
+  function taskGroups(snapshot=view,filtered=true){
+    const agentFilter=filtered?$('agent-filter').value:'',computer=filtered?computerFilter:'';
+    const items=taskRows(snapshot).filter(t=>(!agentFilter||t.agent===agentFilter)&&(!computer||taskComputer(t)===computer)).map(t=>({t}));
     for(const p of snapshot?.shared||[]){
       for(const t of p.tasks){
-        if(computerFilter&&computerFilter!==sharedRunsOn(t,p))continue;
+        if(computer&&computer!==sharedRunsOn(t,p))continue;
         if(!agentFilter||t.agent===agentFilter)items.push({t,peer:p});
       }
     }
@@ -1294,10 +1468,10 @@
   // out of contact or silent about it, or another computer's task while that
   // computer is out of contact.
   function needsDecision(it){
-    if(it.peer)return sharedLost(it.t,it.peer);
     // Blocked and interrupted tasks hold their computer (it will not update)
     // until someone closes them (D-120).
-    if(it.t.state==='blocked'||it.t.state==='interrupted')return true;
+    if((!it.peer||taskSidebarPreview)&&(it.t.state==='blocked'||it.t.state==='interrupted'))return true;
+    if(it.peer)return sharedLost(it.t,it.peer);
     const r=it.t.remote;
     return !!r&&!r.from&&activeStates.includes(it.t.state)&&!!(r.lost||r.silent);
   }
@@ -1325,21 +1499,30 @@
       if(failed.length)showError(new Error(tr('Не закрылись: ')+failed.length+'. '+failed[0]));
     });
   }
-  function askClearDone(items,snapshot){
-    const paged=!!snapshot.history_paged,scope={project:snapshot.project,agent:$('agent-filter').value,computer:computerFilter};
-    const text=paged?tr('Из списка пропадут все завершённые задачи по текущему фильтру, включая те, которые ещё не загружены. История задач сохранится.')
-      :tr('Из списка на этом компьютере пропадут завершённые задачи: ')+items.length+tr('. Задачи этого компьютера пропадут и у других компьютеров; задачи других компьютеров останутся у них.');
-    askConfirm(tr('Убрать все завершённые задачи?'),text,tr('Убрать все'),async()=>{
+  function askClearDone(batches){
+    const agent=$('agent-filter').value,computer=computerFilter;
+    const count=batches.reduce((total,{items})=>total+items.length,0);
+    const text=batches.some(({snapshot})=>snapshot.history_paged)
+      ?tr('Из списка пропадут все завершённые задачи по текущему фильтру, включая те, которые ещё не загружены. История задач сохранится.')
+      :tr('Из списка на этом компьютере пропадут завершённые задачи: ')+count+tr('. Задачи этого компьютера пропадут и у других компьютеров; задачи других компьютеров останутся у них.');
+    const action=taskSidebarPreview?tr('Очистить архив'):tr('Убрать все');
+    const heading=taskSidebarPreview?tr('Очистить архив?'):tr('Убрать все завершённые задачи?');
+    askConfirm(heading,text,action,async()=>{
       const failed=[];
-      if(paged){
-        await postAPI('/api/task-hide-history',scope);
-        taskHistories.delete(scope.project);
-        if(items.some(it=>!it.peer&&it.t.id===selectedTask)){selectedTask='';feed=null;feedSignature='';}
-      }
-      for(const it of items){
-        if(paged&&!it.peer)continue;
-        try{await postAPI('/api/task-hide',{peer:it.peer?.peer||'',task:it.t.id});}
-        catch(e){failed.push(e.message);}
+      for(const {items,snapshot} of batches){
+        const paged=snapshot.history_paged;
+        if(paged){
+          try{
+            await postAPI('/api/task-hide-history',{project:snapshot.project,agent,computer});
+            taskHistories.delete(snapshot.project);
+            if(items.some(it=>!it.peer&&it.t.id===selectedTask)){selectedTask='';feed=null;feedSignature='';}
+          }catch(e){failed.push(e.message);}
+        }
+        for(const it of items){
+          if(paged&&!it.peer)continue;
+          try{await postAPI('/api/task-hide',{peer:it.peer?.peer||'',task:it.t.id});}
+          catch(e){failed.push(e.message);}
+        }
       }
       viewSignature='';await refresh();loadProjectActivity();
       if(failed.length)showError(new Error(tr('Не убрались: ')+failed.length+'. '+failed[0]));
@@ -1350,11 +1533,11 @@
   // On refresh (quiet) the caller loads the conversation itself, and an
   // empty list changes nothing.
   function openTopTask(quiet){
-    const g=taskGroups(),it=g.active[0]||g.planned[0]||[...g.attention,...g.done].sort((x,y)=>String(y.t.created_at).localeCompare(String(x.t.created_at)))[0];
+    const g=taskGroups(view,!taskSidebarPreview),it=g.active[0]||g.planned[0]||[...g.attention,...g.done].sort((x,y)=>String(y.t.created_at).localeCompare(String(x.t.created_at)))[0];
     if(!it){if(quiet)return;selectedTask='';selectedShared=null;feed=null;feedSignature='';renderTaskList();renderThread();return;}
     if(it.peer){selectedShared={peer:it.peer.peer,id:it.t.id};selectedTask='';feed=null;feedSignature='';renderTaskList();renderThread();startWindowWatch();return;}
     if(selectedTask===it.t.id&&!selectedShared)return;
-    selectedTask=it.t.id;selectedShared=null;feed=null;feedSignature='';renderTaskList();if(!quiet)loadFeed();
+    selectedTask=it.t.id;selectedShared=null;feed=null;feedSignature='';renderTaskList();if(!quiet){renderThread();loadFeed();}
   }
   // A model's display name (T-202): «gpt-6.2-sol[effort=low]»
   // reads «Sol 6.2 Low», «claude-opus-5-5[effort=medium]» «Opus 5.5 Medium».
@@ -1381,6 +1564,39 @@
     if(t.ran_model)return tr('Модель, на которой исполнитель запущен')+': '+t.ran_model;
     return t.model?tr('Модель, которую указал координатор')+': '+t.model:tr('Модель по умолчанию');
   }
+  function appendArchiveTask(row,t,name,computer,status,peer){
+    const time=appendTaskWhen(row,t,true);
+    const computerDetail=tr('Компьютер')+': '+computer;
+    row.setAttribute('aria-description',computerDetail);
+    if(time)time.title=[computerDetail,time.title].filter(Boolean).join('\n');
+    else if(!row.title)row.title=computerDetail;
+    const title=el('span',undefined,'am-task-title am-sidebar-task-title');
+    if(!sidebarProject)title.append(el('span',projectTitle(name)+', ','am-muted'));
+    title.append(t.title);
+    const model=peer?(t.model?modelName(t.model):''):taskModelLabel(t);
+    const author=(shortNames[t.agent]||t.agent)+(model?' '+model:'');
+    const tokens=peer?t.tokens:t.usage&&t.usage.input_tokens+t.usage.output_tokens;
+    const [text,color,tip]=status;
+    const meta=el('span',undefined,'am-archive-task-meta am-muted am-task-model-line');
+    const details=el('span');
+    const identity=el('span',author);
+    if(!peer)identity.title=taskModelDetail(t);
+    const duration=t.state==='done'
+      ?el('span',minutes(taskStart(t),t.finished_at||t.updated_at),'am-task-usage')
+      :el('span',text,color);
+    if(tip)duration.title=tip;
+    details.append(identity,', ',duration);
+    if(tokens!=null){
+      const usage=el('span',tokensText(tokens)+tr(' т.'),'am-task-usage');
+      usage.title=peer?tokensFull(tokens):usageLong(t.usage);
+      details.append(', ',usage);
+    }
+    meta.append(providerIcon(t.agent),details);
+    title.title=title.textContent;
+    meta.title=meta.textContent;
+    row.classList.add('am-archive-task');
+    row.append(title,meta);
+  }
   function renderTaskList(){
     const live=$('task-list'),box=live.cloneNode(false);
     // While another project loads, its rows stay in place but cannot be
@@ -1389,7 +1605,7 @@
     live.inert=false;live.removeAttribute('aria-busy');
     // T-096: say when the agent filter hides active tasks, with a way back.
     const agentChosen=$('agent-filter').value;
-    const hidden=agentChosen?(view?.tasks||[]).filter(t=>t.agent!==agentChosen&&activeStates.includes(t.state)&&(!computerFilter||taskComputer(t)===computerFilter)).length:0;
+    const hidden=!taskSidebarPreview&&agentChosen?(view?.tasks||[]).filter(t=>t.agent!==agentChosen&&activeStates.includes(t.state)&&(!computerFilter||taskComputer(t)===computerFilter)).length:0;
     if(hidden){
       const all=el('button',undefined,'am-task am-task-hidden');all.type='button';
       all.append(el('span',tr('Фильтр «')+(names[agentChosen]||agentChosen)+tr('» скрывает незавершённые задачи: ')+hidden,'am-task-agent'),el('span',tr('Показать всех агентов'),'am-status-run'));
@@ -1398,10 +1614,12 @@
       });
       box.append(all);
     }
-    const combined=combinedTasks(),projects=combined?splitProjects:[project],menu=$('device-menu');
+    const projects=taskSidebarPreview?sidebarProjects():combinedTasks()?splitProjects:[project],combined=projects.length>1,menu=$('device-menu');
     const snapshots=projects.map(taskListView).filter(Boolean);
     const ownTasks=snapshots.flatMap(snapshot=>taskRows(snapshot));
-    $('task-count').textContent=ownTasks.length+snapshots.reduce((n,snapshot)=>n+(snapshot.shared||[]).reduce((count,p)=>count+p.tasks.length,0),0)||'';
+    let archived=0;
+    const archiveBatches=[];
+    if(!taskSidebarPreview)$('task-count').textContent=ownTasks.length+snapshots.reduce((n,snapshot)=>n+(snapshot.shared||[]).reduce((count,p)=>count+p.tasks.length,0),0)||'';
     if(menu?.dataset.stopTask&&menu.matches(':popover-open')){
       const task=ownTasks.find(t=>t.id===menu.dataset.stopTask);
       const text=task&&canStopTask(task)?stopMessage(stopProgress(task)):'';
@@ -1410,63 +1628,75 @@
     }
     // Another computer's task is read-only and says which computer gave it.
     const ownRow=(t,name)=>{
-      const row=el('button',undefined,'am-task');row.type='button';row.setAttribute('aria-pressed',String(name===project&&t.id===selectedTask));
-      // T-119: every own task says where it runs; this computer's name
-      // stands out. The model it runs on follows the status below (T-202).
-      const here=!(t.remote&&!t.remote.from),label=el('span',(names[t.agent]||t.agent)+tr(' на '));
-      label.append(el('span',here?(view.computer_name||tr('этом компьютере')):t.remote.name,here?'am-task-here':''));
-      if(t.remote?.from)label.append(fromTag(t.remote.name));
-      const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),label);
-      if(t.remote)agent.title=t.remote.from?tr('Задачу дал компьютер «')+t.remote.name+'»':tr('Выполняется на компьютере «')+t.remote.name+'»';
-      appendTaskWhen(agent,t);
-      const [text,cls,tip,from]=taskStatus(t);
-      const status=el('span',undefined,'am-task-status '+cls);if(tip)status.title=tip;
-      const model=taskModelLabel(t);
-      const words=el('span');status.append(words);words.append(statusPiece(text,!!t.usage||!!model,from));
-      if(t.usage){const used=el('span',usageShort(t.usage),'am-task-usage');used.title=usageLong(t.usage);if(model)used.append(el('span',',','am-task-comma'));words.append(used);}
-      if(model){const m=el('span',model,'am-task-usage am-task-model');m.title=taskModelDetail(t);words.append(m);}
-      row.append(agent,el('span',t.title,'am-task-title'),status);
+      const row=el('button',undefined,'am-task');row.type='button';row.setAttribute('aria-pressed',String(!draftOpen&&name===project&&t.id===selectedTask));
+      if(taskSidebarPreview){
+        const computer=t.remote&&!t.remote.from?(t.remote.name||t.remote.id):computerName('local');
+        appendArchiveTask(row,t,name,computer,taskStatus(t),null);
+      }else{
+        // T-119: every own task says where it runs; this computer's name
+        // stands out. The model it runs on follows the status below (T-202).
+        const here=!(t.remote&&!t.remote.from),label=el('span',(names[t.agent]||t.agent)+tr(' на '));
+        label.append(el('span',here?(view.computer_name||tr('этом компьютере')):t.remote.name,here?'am-task-here':''));
+        if(t.remote?.from)label.append(fromTag(t.remote.name));
+        const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),label);
+        if(t.remote)agent.title=t.remote.from?tr('Задачу дал компьютер «')+t.remote.name+'»':tr('Выполняется на компьютере «')+t.remote.name+'»';
+        appendTaskWhen(agent,t);
+        const [text,cls,tip,from]=taskStatus(t);
+        const status=el('span',undefined,'am-task-status '+cls);if(tip)status.title=tip;
+        const model=taskModelLabel(t);
+        const words=el('span');status.append(words);words.append(statusPiece(text,!!t.usage||!!model,from));
+        if(t.usage){const used=el('span',usageShort(t.usage),'am-task-usage');used.title=usageLong(t.usage);if(model)used.append(el('span',',','am-task-comma'));words.append(used);}
+        if(model){const m=el('span',model,'am-task-usage am-task-model');m.title=taskModelDetail(t);words.append(m);}
+        row.append(agent,el('span',t.title,'am-task-title'),status);
+      }
       row.addEventListener('click',()=>{
         if(name!==project){selectProject(name,t.id,'');return;}
-        selectedTask=t.id;selectedShared=null;feedSignature='';renderTaskList();renderThread();loadFeed();
+        if(draftOpen)closeTaskDraft();
+        selectedTask=t.id;selectedShared=null;feedSignature='';renderTaskList();renderThread();loadFeed();if(taskSidebarPreview)renderMachines();
       });
       row.addEventListener('contextmenu',e=>taskMenu(e,t,null,name));
       return row;
     };
     const sharedRow=(t,p,name)=>{
       const row=el('button',undefined,'am-task am-task-shared');row.type='button';row.title=tr('Задачу дал компьютер «')+p.name+tr('». Здесь её можно только посмотреть');
-      row.setAttribute('aria-pressed',String(name===project&&selectedShared?.peer===p.peer&&selectedShared?.id===t.id));
+      row.setAttribute('aria-pressed',String(!draftOpen&&name===project&&selectedShared?.peer===p.peer&&selectedShared?.id===t.id));
       // T-111: another computer's task opens as a read-only card.
       row.addEventListener('click',()=>{
         const selection={peer:p.peer,id:t.id};
         if(name!==project){selectProject(name,'','',selection);return;}
-        selectedShared=selection;selectedTask='';feed=null;feedSignature='';renderTaskList();renderThread();startWindowWatch();
+        if(draftOpen)closeTaskDraft();
+        selectedShared=selection;selectedTask='';feed=null;feedSignature='';renderTaskList();renderThread();startWindowWatch();if(taskSidebarPreview)renderMachines();
       });
       row.addEventListener('contextmenu',e=>taskMenu(e,t,p,name));
-      // T-186: like an own task, it says where it runs; the giver is in the
-      // tooltip. An older giver does not say, so it shows the giver's name.
-      const label=el('span',(names[t.agent]||t.agent)+tr(' на '));label.append(el('span',sharedComputer(t,p)));
-      if(t.runs_on_peer)label.append(fromTag(p.name));
-      const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),label);agent.title=tr('Задачу дал компьютер «')+p.name+'»';
-      appendTaskWhen(agent,t);
-      const [text,cls,tip,from]=sharedStatus(t,p);
-      const words=el('span');words.append(statusPiece(text,!!t.tokens||!!t.model,from));
-      if(t.tokens){
-        const used=el('span',tokensText(t.tokens)+tr(' токенов'),'am-task-usage');
-        if(t.model)used.append(el('span',',','am-task-comma'));
-        words.append(used);
+      if(taskSidebarPreview)appendArchiveTask(row,t,name,sharedComputer(t,p),sharedStatus(t,p),p);
+      else{
+        // T-186: like an own task, it says where it runs; the giver is in the
+        // tooltip. An older giver does not say, so it shows the giver's name.
+        const label=el('span',(names[t.agent]||t.agent)+tr(' на '));label.append(el('span',sharedComputer(t,p)));
+        if(t.runs_on_peer)label.append(fromTag(p.name));
+        const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),label);agent.title=tr('Задачу дал компьютер «')+p.name+'»';
+        appendTaskWhen(agent,t);
+        const [text,cls,tip,from]=sharedStatus(t,p);
+        const words=el('span');words.append(statusPiece(text,!!t.tokens||!!t.model,from));
+        if(t.tokens){
+          const used=el('span',tokensText(t.tokens)+tr(' токенов'),'am-task-usage');
+          if(t.model)used.append(el('span',',','am-task-comma'));
+          words.append(used);
+        }
+        if(t.model)words.append(el('span',modelName(t.model),'am-task-usage am-task-model'));
+        const status=el('span',undefined,'am-task-status '+cls);status.append(words);if(tip)status.title=tip;
+        row.append(agent,el('span',t.title,'am-task-title'),status);
+        if(t.report)row.append(el('span',t.report,'am-task-report'));
       }
-      if(t.model)words.append(el('span',modelName(t.model),'am-task-usage am-task-model'));
-      const status=el('span',undefined,'am-task-status '+cls);status.append(words);if(tip)status.title=tip;
-      row.append(agent,el('span',t.title,'am-task-title'),status);
-      if(t.report)row.append(el('span',t.report,'am-task-report'));
       return row;
     };
     const section=(target,name,label,items,action)=>{
       if(!items.length)return;
-      const head=el('div',undefined,'am-label am-task-section');head.append(el('span',label));
-      if(action)head.append(action);
-      target.append(head);
+      if(label){
+        const head=el('div',undefined,'am-label am-task-section');head.append(el('span',label));
+        if(action)head.append(action);
+        target.append(head);
+      }
       for(const it of items)target.append(it.peer?sharedRow(it.t,it.peer,name):ownRow(it.t,name));
     };
     for(const name of projects){
@@ -1474,11 +1704,16 @@
       const target=combined?el('section',undefined,'am-task-project'):box;
       if(combined){
         target.dataset.project=name;target.setAttribute('aria-label',projectTitle(name));
-        target.append(el('h3',projectTitle(name),'am-label am-task-section'));
-        box.append(target);
+        if(!taskSidebarPreview){
+          target.append(el('h3',projectTitle(name),'am-label am-task-section'));
+          box.append(target);
+        }
       }
       if(!snapshot){
-        if(combined)target.append(el('p',auxError===name?tr('Проекты недоступны'):tr('Загружаем…'),'am-small am-muted'));
+        if(combined){
+          target.append(el('p',auxError===name?tr('Проекты недоступны'):tr('Загружаем…'),'am-small am-muted'));
+          if(taskSidebarPreview)box.append(target);
+        }
         continue;
       }
       const groups=taskGroups(snapshot),before=target.children.length;
@@ -1487,18 +1722,36 @@
         const button=el('button',label,'am-task-section-action');button.type='button';
         button.addEventListener('click',pick);return button;
       };
-      section(target,name,tr('Активные'),groups.active);
-      section(target,name,tr('Запланированные'),groups.planned);
-      const closableItems=groups.attention.filter(closable);
-      section(target,name,tr('Требуют решения'),groups.attention,actions(closableItems,tr('Закрыть все'),()=>askCloseAll(closableItems)));
-      section(target,name,tr('Завершённые'),groups.done,actions(groups.done.length>1?groups.done:[],tr('Убрать все'),()=>askClearDone(groups.done,snapshot)));
+      if(taskSidebarPreview){
+        const done=groups.done.filter(({t})=>finishedStates.includes(t.state));
+        archived+=done.length;
+        if(done.length)archiveBatches.push({items:done,snapshot});
+        section(target,name,'',done);
+      }else{
+        section(target,name,tr('Активные'),groups.active);
+        section(target,name,tr('Запланированные'),groups.planned);
+        const closableItems=groups.attention.filter(closable);
+        section(target,name,tr('Требуют решения'),groups.attention,actions(closableItems,tr('Закрыть все'),()=>askCloseAll(closableItems)));
+        section(target,name,tr('Завершённые'),groups.done,actions(groups.done.length>1?groups.done:[],tr('Убрать все'),()=>askClearDone([{items:groups.done,snapshot}])));
+      }
       const history=currentTaskHistory(snapshot);
       if(snapshot.history_paged&&(name!==project||windowHistoryScope===taskWindowQuery())&&(history?history.next:snapshot.history_next)){
         const older=el('button',history?.loading?tr('Загружаем…'):tr('Показать ещё 10'),'am-task-section-action');
         older.type='button';older.disabled=!!history?.loading;older.addEventListener('click',()=>loadOlderTasks(name));
         const more=el('div',undefined,'am-label am-task-section');more.append(older);target.append(more);
       }
-      if(target.children.length===before)target.append(el('p',name?(combined||computerFilter||$('agent-filter').value?tr('Здесь задач нет'):tr('Задач пока нет. Когда координатор раздаст первые, они появятся здесь.')):'','am-small am-muted'));
+      if(taskSidebarPreview){
+        if(combined&&target.children.length>before)box.append(target);
+      }else if(target.children.length===before)target.append(el('p',name?(combined||computerFilter||$('agent-filter').value?tr('Здесь задач нет'):tr('Задач пока нет. Когда координатор раздаст первые, они появятся здесь.')):'','am-small am-muted'));
+    }
+    if(taskSidebarPreview){
+      $('task-count').textContent=archived||'';
+      if(!box.childElementCount)box.append(el('p',tr('В архиве пока нет задач'),'am-small am-muted'));
+      if(archived){
+        const clear=el('button',tr('Очистить архив'),'am-inline-action am-quiet-button');clear.type='button';
+        clear.addEventListener('click',()=>askClearDone(archiveBatches));
+        const controls=el('div',undefined,'am-archive-actions am-small');controls.append(clear);box.prepend(controls);
+      }
     }
     swapChildren(live,box);
   }
@@ -1620,27 +1873,114 @@
     if(place&&!codexBare)box.append(el('p',tr('Откройте папку проекта в Claude Code, Codex или Cursor, начните новый чат и спросите: «Каких агентов ты видишь?»'),'am-small am-muted'));
     return box;
   }
+  function renderTaskDraft(){
+    const projectSelect=$('task-draft-project'),computerSelect=$('task-draft-computer'),modelSelect=$('task-draft-model');
+    const projects=(view?.projects||[]).map(p=>[p.name,p.title||p.name]);
+    const name=projects.some(([key])=>key===projectSelect.value)?projectSelect.value:sidebarProject||project;
+    projectOptions(projectSelect,projects,name,draftSending);
+    const local={id:'',name:view?.computer_name||tr('Этот компьютер'),agents:view?.agents||[]};
+    const computers=[...((view?.projects||[]).find(p=>p.name===name)?.folder&&!['queued','updating'].includes(view.local_update?.state)?[local]:[]),
+      ...(server?.peers||[]).filter(p=>peerFresh(p)&&!p.update_pending&&p.ready?.accept!==false&&
+        (!Array.isArray(p.ready?.projects)||p.ready.projects.includes(name)))].filter(p=>p.agents?.some(a=>!a.paused));
+    const computer=computers.find(p=>p.id===computerSelect.value)||computers[0];
+    projectOptions(computerSelect,computers.map(p=>[p.id,p.name]),computer?.id||'',draftSending||!computer);
+    const usesCoordinatorModels=computer?.version==='dev'||
+      (/^(?:0\.0\.0|[1-9]\d*\.\d+\.\d+)-preview\.\d+$/.test(computer?.version)&&updateBuildNumber(computer.version)>=82);
+    const models=(computer?.agents||[]).filter(a=>!a.paused).flatMap(a=>{
+      const agent=names[a.agent]||a.agent;
+      const configured=view?.coordinator_models?.[a.agent]??a.models??[];
+      const available=computer.id&&!usesCoordinatorModels
+        ?configured.filter(id=>a.models?.includes(id)):configured;
+      const preferred=available.find(id=>id===preferredTaskModels[a.agent])||available.find(id=>/\bmedium\b/.test(id));
+      return (preferred?[preferred,...available.filter(id=>id!==preferred)]:available)
+        .map(model=>[a.agent+':'+model,agent+' · '+modelName(model)]);
+    });
+    const model=models.some(([key])=>key===modelSelect.value)?modelSelect.value:models[0]?.[0]||'';
+    projectOptions(modelSelect,models,model,draftSending||!models.length);
+    const input=$('task-draft-text');
+    input.readOnly=draftSending;
+    $('task-draft-send').disabled=draftSending||!online||!name||!computer||!model||!input.value.trim();
+    const status=$('task-draft-status');
+    status.textContent=draftSending?tr('Отправляем задачу…'):draftAttempt?.error||(!computer?tr('Для этого проекта нет доступных компьютеров с агентами.'):!models.length?tr('Включите модель в настройках агента.'):!online?tr('Клиент недоступен'):'');
+    status.classList.toggle('am-status-bad',!draftSending&&!!draftAttempt?.error);
+    syncSelects();
+  }
+  function closeTaskDraft(){
+    draftOpen=false;
+    $('task-new').setAttribute('aria-expanded','false');
+    $('task-draft').hidden=true;
+    feedSignature='';
+  }
+  function openTaskDraft(){
+    draftOpen=true;
+    $('task-new').setAttribute('aria-expanded','true');
+    $('task-draft').hidden=false;
+    if(!$('task-draft-text').value)$('task-draft-project').value=sidebarProject||project;
+    renderThread();
+    $('task-draft-text').focus();
+    renderMachines();renderTaskList();
+  }
+  async function sendTaskDraft(event){
+    event.preventDefault();
+    if(!draftOpen||$('task-draft-send').disabled)return;
+    const selection=$('task-draft-model').value;
+    const split=selection.indexOf(':');
+    const payload={
+      project:$('task-draft-project').value,computer:$('task-draft-computer').value,
+      agent:selection.slice(0,split),model:selection.slice(split+1),text:$('task-draft-text').value.trim()
+    };
+    const key=JSON.stringify(payload);
+    if(draftAttempt?.key!==key)draftAttempt={key,op:'window-'+crypto.randomUUID()};
+    draftSending=true;renderTaskDraft();
+    try{
+      const {result:id}=await postAPI('/api/task-start',{...payload,op_id:draftAttempt.op},10000);
+      if(typeof id!=='string'||!id)throw Error(tr('Действие не подтверждено. Проверьте состояние и повторите.'));
+      draftAttempt=null;
+      const input=$('task-draft-text');input.value='';sizeComposer(input);
+      if(draftOpen){
+        if(sidebarProject)sidebarProject=payload.project;
+        selectProject(payload.project,id,'');
+        if(tab!=='tasks')show('tasks');
+      }else await refresh();
+    }catch(error){
+      if(draftAttempt)draftAttempt.error=error.message;
+    }finally{
+      draftSending=false;
+      if(draftOpen)renderTaskDraft();
+    }
+  }
   function renderThread(){
     const thread=$('thread'),head=$('task-head');
     const panelOpen=!!view?.project&&$('list-toggle').getAttribute('aria-expanded')==='true';
     $('task-panel').hidden=!panelOpen;$('task-layout').classList.toggle('am-queue-collapsed',!panelOpen);
-    $('list-toggle').hidden=tab!=='tasks'||!view?.project;
-    if(view?.project&&selectedTask&&feed?.task.id===selectedTask&&selectedTaskRow()){
-      renderFeed();
+    $('list-toggle').hidden=!view?.project||(!taskSidebarPreview&&tab!=='tasks');
+    if(draftOpen){
+      $('compose').hidden=true;$('lost-bar').hidden=true;$('to-bottom').hidden=true;
+      if(thread.dataset.draft!=='true'){
+        thread.dataset.draft='true';thread.replaceChildren();thread.setAttribute('aria-busy','false');
+        head.replaceChildren(conversationTitle(tr('Новая задача')));
+        feedShown='';feedSignature='';
+      }
+      renderTaskDraft();
       return;
     }
+    if(thread.dataset.draft==='true'){delete thread.dataset.draft;head.replaceChildren();}
+    const sameProject=view?.project===project;
+    const task=sameProject&&selectedTask&&feed?.task.id===selectedTask?selectedTaskRow():null;
+    const shared=sameProject?sharedSelection():null;
+    const pending=!sameProject||!!(selectedTask&&!task)||!!(selectedShared&&!shared);
+    thread.setAttribute('aria-busy',String(pending));
+    $('compose').inert=pending;$('lost-bar').inert=pending;
+    // Keep the last complete conversation and its layout until this one is ready.
+    if(pending){if(!head.firstElementChild)showPane(thread,'loading');return;}
+    if(task){renderFeed({...task,quiet:feed.task.quiet});return;}
     $('compose').hidden=true;$('lost-bar').hidden=true;feedSignature='';$('to-bottom').hidden=true;
-    if(view?.project!==project){head.replaceChildren();showPane(thread,'loading');return;}
-    if(!view.project){
-      head.replaceChildren();
-      showPane(thread,'welcome');return;
-    }
-    const shared=sharedSelection();
+    feedShown='';
     if(shared){renderSharedTask(shared.t,shared.p);return;}
     head.replaceChildren();
-    // A chosen task whose conversation has not arrived keeps the previous
-    // conversation on screen; an empty pane shows the loading indicator.
-    if(selectedTask){if(!thread.firstElementChild||thread.firstElementChild.dataset.pane)showPane(thread,'loading');return;}
+    if(!view.project){
+      showPane(thread,'welcome');return;
+    }
     showPane(thread,showWelcome()?'welcome':'empty');
   }
   // The welcome explains the setup until this computer has seen its first
@@ -1674,11 +2014,22 @@
     const p=(view?.shared||[]).find(x=>x.peer===selectedShared.peer),t=p?.tasks.find(x=>x.id===selectedShared.id);
     return t?{t,p}:null;
   }
-  // Another computer's task (T-111): the window has only what that computer
-  // shares, so the card shows it and says where the full history is.
-  function renderSharedTask(t,p){
-    t=sharedDisplayTask(t);
-    const thread=$('thread'),head=$('task-head');
+  function conversationTitle(title){
+    return el('h3',title,'am-conversation-title');
+  }
+  function conversationDate(t){
+    let at=Date.parse(t.created_at);
+    if(!Number.isFinite(at))at=Date.parse(t.started_at);
+    const date=el('time',undefined,'am-small am-muted am-chat-date');
+    if(!Number.isFinite(at)){date.hidden=true;return date;}
+    const day=new Date(at);
+    const options={weekday:'short',day:'numeric',month:'short'};
+    if(day.getFullYear()!==new Date().getFullYear())options.year='numeric';
+    date.dateTime=day.toISOString();
+    date.textContent=day.toLocaleDateString(amLocale,options)+tr(' в ')+day.toLocaleTimeString(amLocale,{hour:'2-digit',minute:'2-digit'});
+    return date;
+  }
+  function sharedTaskHeader(t,p){
     const title=el('div',undefined,'am-task-head');title.append(el('h3',t.title));
     title.append(el('p',(names[t.agent]||t.agent)+(t.model?' ('+modelName(t.model)+')':'')+tr(' на «')+sharedComputer(t,p)+tr('», задачу дал компьютер «')+p.name+'»','am-small am-muted'));
     const [statusText,statusCls,statusTip,from]=sharedStatus(t,p);
@@ -1688,7 +2039,14 @@
     if(t.tokens)line.append(el('span',', '+tokensText(t.tokens)+tr(' токенов'),'am-muted'));
     title.append(line);
     const headRow=el('div',undefined,'am-task-head-row');headRow.append(title);
-    head.replaceChildren(headRow);
+    return headRow;
+  }
+  // Another computer's task (T-111): the window has only what that computer
+  // shares, so the card shows it and says where the full history is.
+  function renderSharedTask(t,p){
+    t=sharedDisplayTask(t);
+    const thread=$('thread'),head=$('task-head');
+    head.replaceChildren(...(taskSidebarPreview?[conversationTitle(t.title),conversationDate(t)]:[sharedTaskHeader(t,p)]));
     const box=el('div',undefined,'am-settings');
     if(t.report){box.append(el('h3',tr('Начало отчёта')),el('p',t.report,'am-shared-report'));}
     else box.append(el('p',tr('Отчёта пока нет.'),'am-muted'));
@@ -1817,7 +2175,7 @@
   function toolLine(it,action){
     const icon=svgIcon(actionKinds[action.kind].icon);
     icon.classList.add('am-action-icon');
-    const row=el(it.text?'details':'div',undefined,'am-tool am-action-entry');
+    const row=el(it.text?'details':'div',undefined,'am-tool');
     const label=el(it.text?'summary':'div',undefined,'am-action-label');
     label.append(icon,el('span',action.label,'am-tool-name'));
     row.append(label);
@@ -1839,7 +2197,11 @@
     const now=Date.now();
     for(const label of root.querySelectorAll('[data-elapsed-from]')){
       const text=label.dataset.elapsedPrefix+minutes(label.dataset.elapsedFrom,null,now);
-      if(text!==label.textContent)label.textContent=text;
+      if(text!==label.textContent){
+        label.textContent=text;
+        const meta=label.closest('.am-sidebar-task-meta');
+        if(meta)meta.title=meta.textContent;
+      }
     }
     for(const timer of $('thread').querySelectorAll('[data-command-start]')){
       timer.textContent=commandElapsed(Number(timer.dataset.commandStart));
@@ -2060,13 +2422,9 @@
     const minutes=Math.floor((Date.now()-at)/60000);if(minutes<10)return null;
     return el('p',tr('Исполнитель ничего не пишет уже ')+minutes+tr(' мин.'),'am-small am-muted');
   }
-  function renderFeed(){
-    const t=selectedTaskRow(),thread=$('thread'),head=$('task-head');
-    const signature=JSON.stringify([t,feed.items,online]);if(signature===feedSignature)return;
-    const count=(feed.items||[]).filter(it=>it.kind!=='command_end').length,fresh=feedShown!==t.id,atBottom=fresh||feedStick||feedPinned,grew=!fresh&&!atBottom&&count>feedCount;feedShown=t.id;feedStick=false;feedCount=count;feedSignature=signature;
+  function taskFeedHeader(t,displayModel,quiet){
     const title=el('div',undefined,'am-task-head');title.append(el('h3',t.title));
     const where=t.remote&&!t.remote.from?tr(' на компьютере «')+t.remote.name+'»':tr(' на ')+(view.computer_name||tr('этом компьютере'))+(t.remote?.from?tr(', по заданию компьютера «')+t.remote.name+'»':'');
-    const displayModel=taskModelLabel(t);
     title.append(el('p',(names[t.agent]||t.agent)+(displayModel?' ('+displayModel+')':'')+where+tr(', папка ')+(t.folder||tr('ещё не известна'))+(t.remote&&!t.remote.from?'':t.full_access?tr(', любые команды разрешены'):tr(', без «Любых команд»')),'am-small am-muted'));
     const [statusText,statusCls,statusTip,from]=taskStatus(t);
     const when=waitingForStartTime(t)?'':t.finished_at?', '+clock(taskStart(t))+'–'+clock(t.finished_at):tr(', начата в ')+clock(taskStart(t));
@@ -2074,10 +2432,18 @@
     if(statusTip)line.append(el('span',', '+statusTip,'am-muted'));
     if(t.usage){const used=el('span',', '+usageShort(t.usage),'am-muted');used.title=usageLong(t.usage);line.append(used);}
     title.append(line);
-    const quiet=quietLine(t);if(quiet)title.append(quiet);
+    if(quiet)title.append(quiet);
     const headRow=el('div',undefined,'am-task-head-row');headRow.append(title);
-    head.replaceChildren(headRow);
-    const opened=new Set([...thread.querySelectorAll('details[open][data-key]')].map(d=>d.dataset.key));
+    return headRow;
+  }
+  function renderFeed(t){
+    const thread=$('thread'),head=$('task-head');
+    const signature=JSON.stringify([t,feed.items,online]);if(signature===feedSignature)return;
+    const count=(feed.items||[]).filter(it=>it.kind!=='command_end').length,fresh=feedShown!==t.id,atBottom=fresh||feedStick||feedPinned,grew=!fresh&&!atBottom&&count>feedCount;feedShown=t.id;feedStick=false;feedCount=count;feedSignature=signature;
+    const displayModel=taskModelLabel(t),quiet=quietLine(t);
+    const header=taskSidebarPreview?[conversationTitle(t.title),conversationDate(t)]:[taskFeedHeader(t,displayModel,quiet)];
+    const opened=new Set(fresh?[]:[...thread.querySelectorAll('details[open][data-key]')].map(d=>d.dataset.key));
+    const direct=feed.items[0]?.author==='owner';
     const out=[];let group=null,tools=null;
     const pending=new Map(), unfinished=new Set();
     for(const [index,it] of feed.items.entries()){
@@ -2131,13 +2497,47 @@
       avatar.append(providerIcon(provider));
       return avatar;
     };
+    const messageAuthor=(name,model,role='',detail='')=>{
+      const author=el('span',undefined,'am-meta-author');
+      if(taskSidebarPreview&&role){
+        author.append(name);
+        if(model){
+          const label=el('span',model);
+          if(detail)label.title=detail;
+          author.append(' ',label);
+        }
+        author.append(el('span',', '+role,'am-muted am-inline-role'));
+        return author;
+      }
+      author.append(el('strong',name));
+      if(model){
+        const label=el('span',model,'am-meta-model');
+        if(detail)label.title=detail;
+        author.append(' ',label);
+      }
+      return author;
+    };
+    const appendMessageTime=(group,meta,at)=>{
+      const time=el('time',clock(at),taskSidebarPreview?'am-message-time':'');
+      time.dateTime=at;
+      if(taskSidebarPreview){
+        group.tabIndex=0;
+        group.append(time);
+      }else{
+        meta.append(time);
+      }
+    };
     const outgoing=(author,role,text,at,model,provider)=>{
       group=null;const g=el('article',undefined,'am-message-group');const row=el('div',undefined,'am-message am-outgoing');
       const body=el('div',undefined,'am-message-body');const meta=el('div',undefined,'am-meta');
       if(provider)meta.append(messageAvatar(provider));
-      const who=el('strong',author);meta.append(who);if(model)meta.append(el('span',modelName(model),'am-meta-model'));if(role)meta.append(roleTag(role));meta.append(el('time',clock(at)));
-      const content=el('div',undefined,'am-message-content');content.append(richText(text));body.append(meta,content);row.append(body);g.append(row);out.push(g);
+      if(author)meta.append(messageAuthor(author,model?modelName(model):'',role));
+      if(role&&!taskSidebarPreview)meta.append(roleTag(role));
+      if(author)body.append(meta);
+      const content=el('div',undefined,'am-message-content');content.append(richText(text));body.append(content);row.append(body);g.append(row);
+      appendMessageTime(g,meta,at);out.push(g);
     };
+    const outgoingOwner=it=>outgoing(taskSidebarPreview?'':tr('Вы'),'',it.text,it.at);
     const outgoingCoordinator=it=>{
       const sender=shortNames[it.sender_agent];
       outgoing(sender||tr('Координатор'),sender?tr('координатор'):'',it.text,it.at,sender?it.sender_model:'',sender?it.sender_agent:'');
@@ -2146,10 +2546,11 @@
       if(group)return group;
       const g=el('article',undefined,'am-message-group');const row=el('div',undefined,'am-message');
       const body=el('div',undefined,'am-message-body');const meta=el('div',undefined,'am-meta');
-      meta.append(messageAvatar(t.agent),el('strong',names[t.agent]||t.agent));
-      if(displayModel){const m=el('span',displayModel,'am-meta-model');m.title=taskModelDetail(t);meta.append(m);}
-      meta.append(roleTag(tr('исполнитель')),el('time',clock(at)));
-      const content=el('div',undefined,'am-message-content');body.append(meta,content);row.append(body);g.append(row);out.push(g);group=content;return content;
+      const role=tr('исполнитель');
+      meta.append(messageAvatar(t.agent),messageAuthor(names[t.agent]||t.agent,displayModel,role,displayModel?taskModelDetail(t):''));
+      if(!taskSidebarPreview)meta.append(roleTag(role));
+      const content=el('div',undefined,'am-message-content');body.append(meta,content);row.append(body);g.append(row);
+      appendMessageTime(g,meta,at);out.push(g);group=content;return content;
     };
     const delivery=(text,cls)=>el('div',text,'am-delivery '+cls);
     for(const [index,it] of feed.items.entries()){
@@ -2165,9 +2566,9 @@
         continue;
       }
       if(it.kind!=='tool')flushTools();
-      if(it.kind==='task'){outgoingCoordinator(it);continue;}
-      if(it.kind==='note'){if(it.author==='coordinator')outgoingCoordinator(it);else outgoing(tr('Вы'),'',it.text,it.at);const c=out[out.length-1].querySelector('.am-message-content');c.append(delivery(...({pending:[tr('Исполнитель прочитает, только когда закончит текущий ход'),'am-status-wait'],delivered:[tr('Передано исполнителю'),'am-status-good'],sent:[it.author==='owner'?tr('Поставлено в очередь для исполнителя'):tr('Отправлено на компьютер исполнителя'),'am-status-wait'],undelivered:[tr('Не передано исполнителю'),'am-status-bad']}[it.state]||[it.state,'am-muted'])));continue;}
-      if(it.kind==='answer'){if(it.author==='owner'){outgoing(tr('Вы'),'',it.text,it.at);
+      if(it.kind==='task'){if(it.author==='owner')outgoingOwner(it);else outgoingCoordinator(it);continue;}
+      if(it.kind==='note'){if(it.author==='coordinator')outgoingCoordinator(it);else outgoingOwner(it);const c=out[out.length-1].querySelector('.am-message-content');c.append(delivery(...({pending:[tr('Исполнитель прочитает, только когда закончит текущий ход'),'am-status-wait'],delivered:[tr('Передано исполнителю'),'am-status-good'],sent:[it.author==='owner'?tr('Поставлено в очередь для исполнителя'):tr('Отправлено на компьютер исполнителя'),'am-status-wait'],undelivered:[tr('Не передано исполнителю'),'am-status-bad']}[it.state]||[it.state,'am-muted'])));continue;}
+      if(it.kind==='answer'){if(it.author==='owner'){outgoingOwner(it);
         // A hint about this answer lives under it while the worker has not
         // gone on yet, so it never stays in another task (owner, 2026-11-09).
         if(feed.items.slice(index+1).every(n=>n.kind==='answer'||n.kind==='note')&&activeStates.includes(t.state))out[out.length-1].querySelector('.am-message-content').append(delivery(tr('Ответ записан. Исполнитель продолжит в той же сессии.'),'am-delivery-hint'));}else outgoingCoordinator(it);continue;}
@@ -2187,10 +2588,13 @@
         let note;
         if(!it.verified)note=delivery(it.kind==='report'?tr('Отчёт сохранён без подтверждения запуска'):tr('Не опубликовано: запуск не прошёл проверку'),'am-status-bad');
         else if(it.kind==='report'&&it.audience==='held')note=delivery(tr('Промежуточный отчёт: исполнитель продолжает с вашим сообщением'),'am-status-wait');
-        else if(it.kind==='report')note=delivery(tr('Отчёт отправлен координатору, сессия закрыта'),'am-delivery-close');
-        else if(it.audience==='owner')note=delivery(tr('Вопрос вам, координатор его не видит'),'am-status-wait');
+        else if(it.kind==='report')note=delivery(direct?tr('Задача завершена'):tr('Отчёт отправлен координатору, сессия закрыта'),'am-delivery-close');
+        else if(it.audience==='owner')note=delivery(direct?tr('Вопрос вам'):tr('Вопрос вам, координатор его не видит'),'am-status-wait');
         else note=delivery(tr('Вопрос координатору'),'am-status-wait');
-        if(it.verified)appendEventTime(note,it.at,t.remote&&!t.remote.from);
+        if(it.verified){
+          if(taskSidebarPreview)note.title=relativeWhen(it.at,true);
+          else appendEventTime(note,it.at,t.remote&&!t.remote.from);
+        }
         c.append(note);
         group=null;continue;
       }
@@ -2207,14 +2611,15 @@
       }
     }
     flushTools();
+    if(taskSidebarPreview&&quiet)out.push(quiet);
+    head.replaceChildren(...header);
     thread.replaceChildren(...out);
     for(const d of thread.querySelectorAll('details[data-key]'))if(opened.has(d.dataset.key))d.open=true;
     // A task another computer started is answered there.
     const q=t.remote?.from?null:t.owner_question;
     // T-131: a task sent to another computer can be closed here also when
     // its outcome there is already unknown.
-    // T-131: an own task on another computer that cannot be reached has no
-    // input and no stop button: nothing would arrive. One action closes it here.
+    // T-131: an unreachable task can be closed here. Sending waits for contact.
     const unreachable=taskUnreachable(t);
     // D-120: a stuck task of this computer is closed by hand once its worker
     // is certainly gone; the client checks that and refuses otherwise.
@@ -2226,16 +2631,18 @@
       if(t.remote.silent&&!t.remote.lost)$('lost-text').textContent='«'+t.remote.name+tr('» на связи, но не отвечает по этой задаче. Что с ней там, неизвестно: она могла и выполниться.');
       else $('lost-text').textContent=(since?tr('Связи с «')+t.remote.name+tr('» нет с ')+since+'. ':tr('Связи с «')+t.remote.name+tr('» нет. '))+tr('Что с задачей там, неизвестно.');
     }
-    const active=activeStates.includes(t.state)&&!unreachable,box=$('answer-text');
-    const note=canNote(t),wasNote=$('compose').dataset.mode==='note';
-    $('compose').hidden=unreachable||(!q&&!active);
-    box.disabled=!q&&!note;box.placeholder=q?tr('Ответить исполнителю…'):note&&t.state==='waiting_coordinator'?tr('Ответить вместо координатора…'):note?tr('Написать исполнителю…'):t.remote?.from&&t.owner_question?tr('Отвечают на компьютере «')+t.remote.name+'»':t.pending_launch?tr('Задача ждёт запуска…'):t.remote?.outbox_delayed_minutes&&!t.remote.from?tr('Ответы с «')+t.remote.name+tr('» задерживаются: не уходят уже ')+t.remote.outbox_delayed_minutes+tr(' мин.'):t.remote?.worker==='none'&&!t.remote.from?tr('На «')+t.remote.name+tr('» исполнитель этой задачи сейчас не запущен'):tr('Исполнитель работает…');
-    $('answer-send').hidden=!q&&!note;
+    const active=activeStates.includes(t.state),box=$('answer-text'),compose=$('compose');
+    const note=canNote(t),canDraft=!t.remote?.from&&(!!q||active||note);
+    const liveTokens=$('answer-live-tokens'),reportedTokens=t.quiet?.live_tokens;
+    liveTokens.hidden=reportedTokens==null||t.state!=='running';
+    liveTokens.textContent=liveTokens.hidden?'':tokensText(reportedTokens)+tr(' т.');
+    compose.hidden=!canDraft&&(!active||unreachable);
+    box.disabled=!canDraft;
+    box.placeholder=q?tr('Ответить исполнителю…'):note&&t.state==='waiting_coordinator'?tr('Ответить вместо координатора…'):t.remote?.from?tr('Писать исполнителю можно на компьютере «')+t.remote.name+'»':tr('Написать исполнителю…');
+    $('answer-send').hidden=!canDraft;
+    if(compose.dataset.task!==t.id){compose.dataset.task=t.id;box.value='';$('answer-status').textContent='';}
+    box.title=$('answer-send').title=canDraft&&(unreachable||!q&&!note)?tr('Отправка пока недоступна. Черновик сохранится, пока открыта задача.'):'';
     renderStopControls(t);
-    $('compose').dataset.mode=q?'answer':note?'note':'';
-    if($('compose').dataset.task!==t.id){$('compose').dataset.task=t.id;box.value='';$('answer-status').textContent='';}
-    if(q&&$('compose').dataset.question!==q.id){$('compose').dataset.question=q.id;$('answer-text').value='';$('answer-status').textContent='';}
-    else if(!q&&!note&&wasNote){$('answer-text').value='';}
     sizeAnswer();answerControls();
     if(atBottom){thread.scrollTop=thread.scrollHeight;feedPinned=true;}
     else if(grew)$('to-bottom').classList.add('am-has-new');
@@ -2272,14 +2679,25 @@
   }
   // The reply box is one line and grows only while its text does not fit;
   // the stop and send buttons stay at its bottom.
-  function sizeAnswer(){const f=$('answer-text');f.style.height='';f.style.overflowY='';if(!f.value||f.parentElement.hidden)return;const full=f.scrollHeight+(f.offsetHeight-f.clientHeight);f.style.height=Math.min(140,full)+'px';if(full>140)f.style.overflowY='auto';}
+  function sizeAnswer(){sizeComposer($('answer-text'));}
+  function sizeComposer(input){
+    input.style.height='';input.style.overflowY='';
+    const base=input.offsetHeight;
+    const full=input.scrollHeight+(base-input.clientHeight);
+    const expanded=!!input.value&&base>0&&full>base;
+    if(expanded){
+      input.style.height=Math.min(140,full)+'px';
+      if(full>140)input.style.overflowY='auto';
+    }
+  }
   // Owner notes follow a task given here, including one running on a peer.
   function canNote(t){
     if(!t||t.owner_question)return false;
+    if(t.can_continue)return true;
     if(!t.remote)return t.state==='running'||t.state==='waiting_coordinator';
     return t.state==='running'&&!t.remote.from&&!t.remote.lost&&!t.remote.silent;
   }
-  function answerControls(){const t=selectedTaskRow();$('answer-send').disabled=answering||!$('answer-text').value.trim()||!(t?.owner_question&&!t.remote?.from||canNote(t));}
+  function answerControls(){const t=selectedTaskRow();$('answer-send').disabled=answering||!t||taskUnreachable(t)||!!stopProgress(t)||!$('answer-text').value.trim()||!(t.owner_question&&!t.remote?.from||canNote(t));}
   async function sendNote(){
     const t=selectedTaskRow();if(!canNote(t)||answering)return;
     const text=$('answer-text').value.trim();if(!text)return;
@@ -2293,7 +2711,7 @@
   }
   async function sendAnswer(){
     const t=selectedTaskRow(),q=t?.owner_question;
-    if(t&&stopProgress(t))return;
+    if(!t||$('compose').inert||taskUnreachable(t)||stopProgress(t))return;
     if(!q&&canNote(t))return sendNote();
     if(!q||answering||t.remote?.from)return;
     const text=$('answer-text').value.trim();if(!text)return;
@@ -2364,9 +2782,19 @@
       catch(error){showError(error);}
     });
   }
+  let agentComputer='local';
   function renderAgents(){
     const live=$('agents'),cards=live.cloneNode(false);
-    if(computerFilter&&computerFilter!=='local'){renderPeerAgents(cards);swapChildren(live,cards);return;}
+    if(taskSidebarPreview){
+      const options=computerOptions();
+      if(view?.computer_name)options[0][1]+=' ('+tr('Этот компьютер').toLocaleLowerCase(amLocale)+')';
+      if(!options.some(([id])=>id===agentComputer))agentComputer='local';
+      projectOptions($('agents-computer'),options,agentComputer);
+      $('agents-computer-filter').hidden=false;
+      syncSelects();
+    }
+    const computer=taskSidebarPreview?agentComputer:computerFilter;
+    if(computer&&computer!=='local'){renderPeerAgents(cards,computer);swapChildren(live,cards);return;}
     for(const provider of ['claude','codex','cursor']){
       const a=(view?.agents||[]).find(x=>x.agent===provider);
       const found=discovery.find(d=>d.provider===provider);
@@ -2461,9 +2889,9 @@
     renderAccessBar();
   }
   // Another computer's agents, as its reports show them: view only (T-076).
-  function renderPeerAgents(cards){
+  function renderPeerAgents(cards,computer){
     $('access-bar').hidden=true;
-    const peer=(server?.peers||[]).find(p=>p.id===computerFilter);
+    const peer=(server?.peers||[]).find(p=>p.id===computer);
     const fresh=!!peer&&peerFresh(peer);
     const busyTasks=busyTasksByComputer();
     cards.append(el('p',!peer?tr('Компьютер не найден в сети.'):fresh?tr('Только просмотр: агентов этого компьютера настраивают на нём самом.'):(peer.last_seen?tr('Нет связи. Был на связи ')+stamp(peer.last_seen)+'.':tr('Ещё не выходил на связь.')),'am-small am-muted am-peer-agents-note'));
@@ -2509,7 +2937,7 @@
   }
   // T-056: one «Любые команды» switch for every agent of this computer.
   function renderAccessBar(){
-    const agents=view?.agents||[],bar=$('access-bar');bar.hidden=!agents.length;
+    const agents=view?.agents||[],bar=$('access-bar');bar.hidden=!agents.length||(taskSidebarPreview&&agentComputer!=='local');
     const on=agents.filter(a=>a.full_access).length,all=!!agents.length&&on===agents.length;
     $('access-toggle').setAttribute('aria-checked',all?'true':on?'mixed':'false');
     $('access-title').textContent=on&&!all?tr('Любые команды: разрешены не всем'):tr('Любые команды');
@@ -2738,7 +3166,7 @@
         // Choose the top task before drawing, so a project switch goes from
         // loading straight to the conversation without an empty pane between.
         if(!selectedTask&&!selectedShared&&tab==='tasks'&&v.project)openTopTask(true);
-        render();
+        render();if(taskSidebarPreview)loadSidebarProjects();
       }
       else if(cameOnline){renderMachines();renderNotice();}
       applyTopTaskScope();
@@ -2769,9 +3197,14 @@
     }catch(_){}finally{discovering=false;}
   }
   function show(next){
-    tab=next;root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab);renderNotices();renderToasts();
+    tab=next;root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab&&!(taskSidebarPreview&&n.dataset.screen==='tasks'));renderNotices();renderToasts();
     root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
-    $('list-toggle').hidden=tab!=='tasks'||!view?.project;if(tab==='server')loadServer();if(tab==='stats')reloadStats();if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сервер'),stats:tr('Статистика')}[tab];startWindowWatch();
+    if(taskSidebarPreview){
+      const dialog=$('settings-dialog');
+      if(tab==='tasks'&&dialog.open)dialog.close();
+      else if(tab!=='tasks'&&!dialog.open)dialog.showModal();
+    }
+    $('list-toggle').hidden=!view?.project||(!taskSidebarPreview&&tab!=='tasks');if(tab==='server'||tab==='settings')loadServer();if(tab==='stats')reloadStats();if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),settings:tr('Настройки программы'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сервер'),stats:tr('Статистика')}[tab];startWindowWatch();
     if(tab==='tasks'&&combinedTasks()){renderTaskList();loadProjectActivity();}
   }
 
@@ -2798,7 +3231,15 @@
     return h+tr(' ч')+(m%60?' '+m%60+tr(' мин'):'');
   }
   let statsProject='';
+  let statsComputer='';
+  const statsProjects=()=>view?.projects||[];
+  function statisticsComputer(){return taskSidebarPreview?statsComputer:computerFilter;}
   function statsProjectScope(){
+    if(taskSidebarPreview){
+      const names=statsProjects().map(entry=>entry.name);
+      if(names.includes(statsProject))return {project:statsProject};
+      return names.length>1?{projects:names}:{project:names[0]||''};
+    }
     if(splitProjects.length&&!statsProject)return {projects:splitProjects};
     return {project:statsProject||project};
   }
@@ -2822,7 +3263,7 @@
     if(!updateStatsProjectScope(before)&&tab==='stats'&&computerFilter!==oldComputer)reloadStats();
   }
   function statsFilters(){
-    return {...statsProjectScope(),period:statsPeriod,computer:computerFilter||'',agent:statsAgent,model:statsModel};
+    return {...statsProjectScope(),period:statsPeriod,computer:statisticsComputer(),agent:statsAgent,model:statsModel};
   }
   function statsQuery(filters){
     const {projects=[],...rest}=filters,query=new URLSearchParams(rest);
@@ -2875,7 +3316,7 @@
         const body=el('tbody'),heading=el('tr',undefined,'am-efficiency-cohort');
         const type=Object.hasOwn(types,group.task_type)?types[group.task_type]:group.task_type||tr('Без типа');
         const difficulty=difficulties[group.difficulty]||tr('Без оценки сложности');
-        const prefix=group.project?projectTitle(group.project)+' · ':'';
+        const prefix=group.project?projectTitle(group.project)+', ':'';
         const label=el('th',prefix+type+', '+difficulty.toLocaleLowerCase(amLocale));label.scope='rowgroup';label.colSpan=5;
         heading.append(label);body.append(heading);cohorts.set(key,body);
       }
@@ -2904,7 +3345,7 @@
       cell.append(label);return cell;
     };
     const metric=(data,format)=>data?.samples?format(Math.round(data.median||0)):'—';
-    row.append(rate(group.accepted,group.tasks,'accepted'),rate(group.first_pass_accepted,group.first_pass_known,'first-pass'),
+    row.append(rate(group.accepted,group.reviewed,'accepted'),rate(group.first_pass_accepted,group.first_pass_known,'first-pass'),
       el('td',metric(group.accepted_new_input_plus_output,tokensText)),el('td',metric(group.time_to_acceptance_ms,statsDuration)));
 
     const panel=el('td');panel.colSpan=5;
@@ -2919,7 +3360,7 @@
     const addMetric=(title,data,format)=>{
       const line=el('tr'),name=el('th',title);name.scope='row';line.append(name);
       for(const value of [data?.mean,data?.median,data?.p90])line.append(el('td',data?.samples?format(Math.round(value||0)):'—'));
-      line.append(el('td',data?.samples?.toLocaleString(amLocale)||'—','am-muted'));measurements.append(line);
+      line.append(el('td',(data?.samples??0).toLocaleString(amLocale),'am-muted'));measurements.append(line);
     };
     addMetric(tr('Токены до приёмки'),group.accepted_new_input_plus_output,tokensText);
     addMetric(tr('Активная работа'),group.accepted_active_runtime_ms,statsDuration);
@@ -3004,11 +3445,20 @@
     refreshEfficiencyScope();
     root.querySelectorAll('[data-period]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.period===statsPeriod)));
     // The card follows the numbers on screen, not the filter still loading.
-    $('stats-computers-card').hidden=stats?!!stats.forComputer:!!computerFilter;
+    $('stats-computers-card').hidden=stats?!!stats.forComputer:!!statisticsComputer();
     setStatsBusy();
-    $('stats-project-filter').hidden=!splitProjects.length;
-    projectOptions($('stats-project'),[['',tr('Выбранные проекты')],...splitProjects.map(name=>[name,projectTitle(name)])],statsProject);
-    const statsNote=splitProjects.length&&!statsProject?
+    const projects=taskSidebarPreview?statsProjects().map(entry=>entry.name):splitProjects;
+    const projectChoice=projects.includes(statsProject)?statsProject:'';
+    $('stats-project-filter').hidden=taskSidebarPreview?false:!splitProjects.length;
+    const allProjectsLabel=taskSidebarPreview?tr('Все проекты'):tr('Выбранные проекты');
+    projectOptions($('stats-project'),[['',allProjectsLabel],...projects.map(name=>[name,projectTitle(name)])],projectChoice);
+    $('stats-computer-filter').hidden=!taskSidebarPreview;
+    if(taskSidebarPreview){
+      const computers=[['',tr('Все компьютеры')],...computerOptions()];
+      if(statsComputer&&!computers.some(([id])=>id===statsComputer))computers.push([statsComputer,computerName(statsComputer)||statsComputer]);
+      projectOptions($('stats-computer'),computers,statsComputer);
+    }
+    const statsNote=projects.length>1&&!projectChoice?
       tr('Учитываются задачи выбранных проектов, известные этому компьютеру. Задача попадает в день, когда закончилась.'):
       tr('Учитываются задачи выбранного проекта, известные этому компьютеру. Задача попадает в день, когда закончилась.');
     const changingProjects=!!stats&&!matchesStatsProject(stats,statsProjectScope());
@@ -3075,10 +3525,11 @@
       row.append(when,titleCell,duration,tokens);
       words.title=(!task.usage_missing&&typeof task.input_tokens==='number'?usageLong(task)+'\n':'')+tr('Открыть задачу');
       row.addEventListener('click',()=>{
-        if(task.project&&task.project!==project&&splitProjects.includes(task.project)){
+        if(task.project&&task.project!==project&&(taskSidebarPreview
+          ?statsProjects().some(entry=>entry.name===task.project):splitProjects.includes(task.project))){
           show('tasks');selectProject(task.project,task.id);return;
         }
-        selectedTask=task.id;selectedShared=null;feed=null;feedSignature='';show('tasks');refresh();
+        selectedTask=task.id;selectedShared=null;feed=null;feedSignature='';show('tasks');renderThread();refresh();
       });
       top.append(row);
     }
@@ -3087,6 +3538,7 @@
     const before=statsProjectScope();
     statsProject=$('stats-project').value;updateStatsProjectScope(before);
   });
+  $('stats-computer').addEventListener('change',()=>{statsComputer=$('stats-computer').value;statsModel='';reloadStats();});
   $('stats-agent').addEventListener('change',()=>{statsAgent=$('stats-agent').value;remember('messenger-stats-agent',statsAgent);statsModel='';reloadStats();});
   $('stats-model').addEventListener('change',()=>{statsModel=$('stats-model').value;reloadStats();});
   $('stats-export').addEventListener('click',exportStats);
@@ -3142,6 +3594,7 @@
         const sharedRuns=()=>JSON.stringify([view,taskListView(passiveProject())].flatMap(snapshot=>(snapshot?.shared||[]).flatMap(p=>p.tasks.filter(t=>(!t.started_at||t.pending_launch||!peerFresh(p))&&sharedWorkerRunning(t)).map(t=>t.id))));
         const previous=sharedRuns();
         server=next;
+        if(draftOpen)renderTaskDraft();
         // This snapshot started after the submission returned. Trust the
         // durable queue from here, regardless of the submission's reply.
         for(const [key,state] of cancelAttempts){
@@ -3196,6 +3649,7 @@
     if(invitation&&(!h.running||!(h.open_invitations||[]).includes(invitation.id)))hideInvitation();
     // Devices that joined this server are listed in the sidebar.
     renderMachines();
+    if(taskSidebarPreview&&tab==='agents')renderAgents();
     // The certificate fingerprint travels inside the invitation code and the
     // joining computer checks it itself, so the window does not show it.
     badge($('member-badge'),m.connected?(m.reachable||!m.checked_at?tr('Подключено'):tr('Нет связи')):tr('Не подключено'),m.connected?(m.reachable?'good':m.checked_at?'bad':''):'');
@@ -3498,6 +3952,7 @@
   });
 
   let setupProvider='';
+  const preferredTaskModels={codex:'gpt-6.2-sol[effort=medium]',claude:'claude-sonnet-5-5[effort=medium]',cursor:'cursor-grok-4.6-medium'};
   // Starting lists, the same as the store's (T-061, T-098); shown for an
   // agent whose list is still empty and saved with the dialog.
   const defaultModels={claude:['claude-haiku-5-5[effort=low]','claude-sonnet-5-5[effort=medium]','claude-opus-5-5[effort=medium]','claude-fable-5-2[effort=high]'],codex:['gpt-6-luna[effort=high]','gpt-6.2-sol[effort=low]','gpt-6.2-sol[effort=medium]','gpt-6.2-sol[effort=high]','gpt-6.2-astra[effort=medium]','gpt-6.2-astra[effort=high]'],cursor:['composer-2.5','cursor-grok-4.6-medium','grok-4.7-medium','grok-4.7-high']};
@@ -3510,10 +3965,7 @@
     $('agent-setup-title').textContent=tr('Настройки: ')+names[provider];
     $('agent-setup-note').hidden=provider!=='cursor';
     $('agent-cli').value=a?.cli||found?.cli||'';$('agent-profile').value=a?.environment||found?.environment||'';
-    const models=configuredModels(provider);
-    $('agent-models').value=models.join(', ');$('agent-models').disabled=!view;
-    $('agent-models').placeholder=tr('Пусто: задачи идут на модель по умолчанию');
-    $('agent-models-note').textContent=tr('Через запятую. От быстрых правок к сложным задачам. Доступ зависит от аккаунта.')+' '+(provider==='cursor'?tr('Имена из agent --list-models; High требует подходящего тарифа.'):tr('Уровень: [effort=medium] или [effort=high]. Messenger передаст его отдельным параметром.'));
+    $('agent-models-open').disabled=!view;
     setStatus('agent-save-status','');
     if(!$('agent-setup').open)$('agent-setup').showModal();
   }
@@ -3573,28 +4025,79 @@
       viewSignature='';await refresh();if(setupProvider===provider)openAgentSetup(provider);checkCard(provider);}
     catch(error){setStatus('agent-save-status',error.message);}
   }
-  async function saveAgentModels(){
-    if(!view||!setupProvider)return;
-    const models=$('agent-models').value.split(/[,\n]/).map(m=>m.trim()).filter(Boolean);
-    if(models.join('\n')===configuredModels(setupProvider).join('\n'))return;
-    setStatus('agent-save-status','');
-    try{await postAPI('/api/agent-models',{provider:setupProvider,models});viewSignature='';await refresh();}
-    catch(error){setStatus('agent-save-status',error.message);return;}
-    // A name a letter or two away from a known one is likely a typo
-    // (coordinator, 2026-11-12: «claude-opus-5-thinking-hig»). It is saved
-    // anyway: the agent may know names this window does not.
-    const known=defaultModels[setupProvider]||[];
-    const typos=models.map(m=>[m,known.find(k=>k!==m&&!models.includes(k)&&editDistance(m.toLowerCase(),k.toLowerCase())<=2)]).filter(p=>p[1]);
-    if(typos.length)setStatus('agent-save-status',typos.map(([m,k])=>tr('Похоже на опечатку: «')+m+tr('», может быть «')+k+'»?').join(' '));
-  }
-  function editDistance(a,b){
-    let prev=Array.from({length:b.length+1},(_,j)=>j);
-    for(let i=1;i<=a.length;i++){
-      const cur=[i];
-      for(let j=1;j<=b.length;j++)cur[j]=Math.min(prev[j]+1,cur[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1));
-      prev=cur;
+  const modelPicker=$('agent-model-picker');
+  const modelSearch=$('agent-model-search');
+  let modelEdit=null;
+  function renderModelOptions(){
+    const list=$('agent-model-options'),query=modelSearch.value.trim().toLowerCase();
+    const previouslyFocused=document.activeElement?.dataset.model;
+    const options=new Map(modelEdit.options.map(option=>[option.model,option.name]));
+    for(const id of modelEdit.enabled)if(!options.has(id))options.set(id,modelName(id));
+    const buttons=[];
+    list.replaceChildren();
+    for(const [id,name] of options){
+      if(query&&!name.toLowerCase().includes(query)&&!id.toLowerCase().includes(query))continue;
+      const row=el('div',undefined,'am-model-option');
+      const title=el('span',name);title.title=id;
+      const toggle=el('button',undefined,'am-switch');toggle.type='button';toggle.dataset.model=id;
+      toggle.setAttribute('role','switch');toggle.setAttribute('aria-label',name);
+      toggle.setAttribute('aria-checked',String(modelEdit.enabled.has(id)));
+      toggle.disabled=modelEdit.busy;
+      toggle.addEventListener('click',()=>{
+        if(modelEdit.enabled.delete(id)){toggle.setAttribute('aria-checked','false');modelStatus();return;}
+        if(enableModel(id))toggle.setAttribute('aria-checked','true');
+      });
+      row.append(title,toggle);list.append(row);buttons.push(toggle);
     }
-    return prev[b.length];
+    const add=$('agent-model-add');
+    add.hidden=!query||options.has(modelSearch.value.trim());
+    add.disabled=modelEdit.busy;
+    buttons.find(button=>button.dataset.model===previouslyFocused)?.focus({preventScroll:true});
+  }
+  function modelStatus(message){
+    const count=tr('Включено моделей: ')+modelEdit.enabled.size+' / '+modelEdit.limit;
+    setStatus('agent-model-status',message||count);
+  }
+  function enableModel(id){
+    if(modelEdit.enabled.size>=modelEdit.limit){
+      modelStatus(tr('Достигнут предел. Выключите одну модель.'));
+      return false;
+    }
+    modelEdit.enabled.add(id);modelStatus();return true;
+  }
+  async function openModelPicker(){
+    const provider=setupProvider;
+    const edit={provider,enabled:new Set(configuredModels(provider)),options:[],limit:12,busy:false};
+    modelEdit=edit;modelSearch.value='';
+    renderModelOptions();modelStatus();
+    modelPicker.showModal();
+    try{
+      const catalog=await api('/api/model-catalog?provider='+encodeURIComponent(provider));
+      if(modelEdit!==edit)return;
+      edit.options=catalog.models||[];edit.limit=catalog.limit;
+      renderModelOptions();
+      if(!edit.busy)modelStatus();
+    }catch(error){if(modelEdit===edit&&!edit.busy)modelStatus(error.message);}
+  }
+  async function saveAgentModels(){
+    const edit=modelEdit;
+    if(!edit||edit.busy)return;
+    const models=[...edit.enabled];
+    if(models.join('\n')===configuredModels(edit.provider).join('\n')){modelPicker.close();return;}
+    edit.busy=true;
+    $('agent-model-cancel').disabled=$('agent-model-save').disabled=true;
+    renderModelOptions();
+    try{
+      await postAPI('/api/agent-models',{provider:edit.provider,models});
+      if(view)view.coordinator_models={...view.coordinator_models,[edit.provider]:models};
+      viewSignature='';await refresh();
+      modelPicker.close();
+    }catch(error){modelStatus(error.message);}
+    finally{
+      edit.busy=false;
+      $('agent-model-cancel').disabled=$('agent-model-save').disabled=false;
+      if(modelPicker.open)renderModelOptions();
+    }
   }
   // Windows (T-062) and Linux (T-082) without the system title bar: the page
   // draws minimise, maximise and close at the top right, and the empty top of
@@ -3608,10 +4111,12 @@
     make('minimize',tr('Свернуть'),['M5 12h14']);
     make('maximize',tr('Развернуть'),['M6 6h12v12H6z']);
     make('close',tr('Закрыть'),['M6 6l12 12M18 6L6 18'],'am-window-close');
+    if(taskSidebarPreview)bar.prepend($('list-toggle'));
     root.append(bar);
     const dragZone=e=>{
       if(e.button!==0||e.target.closest(titleInteractive))return false;
       if(e.target.closest('.am-tabs'))return true;
+      if(taskSidebarPreview&&tab==='tasks'&&e.target.closest('.am-main')&&e.clientY<bar.getBoundingClientRect().bottom)return true;
       const side=e.target.closest('.am-sidebar');
       return !!side&&e.clientY<side.getBoundingClientRect().top+40;
     };
@@ -3638,7 +4143,11 @@
       // A modal covers the title row, so its controls must receive clicks.
       if(!root.querySelector('dialog:modal')){
         const tabs=root.querySelector('.am-tabs'),side=root.querySelector('.am-sidebar');
-        if(tabs&&tabs.offsetParent){const r=tabs.getBoundingClientRect();zones.push(new DOMRect(r.left,0,r.width,r.bottom));}
+        if(taskSidebarPreview&&tab==='tasks'){
+          const main=root.querySelector('.am-main'),r=main.getBoundingClientRect();
+          const height=parseFloat(getComputedStyle(main).paddingBlockStart);
+          zones.push(new DOMRect(r.left,0,r.width,height));
+        }else if(tabs&&tabs.offsetParent){const r=tabs.getBoundingClientRect();zones.push(new DOMRect(r.left,0,r.width,r.bottom));}
         if(side){const r=side.getBoundingClientRect(),first=side.firstElementChild?.getBoundingClientRect();zones.push(new DOMRect(r.left,r.top,r.width,Math.max(16,(first?first.top:r.top+40)-r.top)));}
         for(const parent of [tabs,side])for(const node of parent?parent.querySelectorAll(titleInteractive):[]){
           const r=node.getBoundingClientRect();
@@ -3891,11 +4400,24 @@
   $('list-toggle').addEventListener('click',()=>{
     const expanded=$('list-toggle').getAttribute('aria-expanded')!=='true';
     $('list-toggle').setAttribute('aria-expanded',String(expanded));
-    const label=expanded?tr('Скрыть список задач'):tr('Показать список задач');$('list-toggle').setAttribute('aria-label',label);$('list-toggle').title=label;
+    const label=taskSidebarPreview?(expanded?tr('Скрыть архив'):tr('Показать архив')):(expanded?tr('Скрыть список задач'):tr('Показать список задач'));$('list-toggle').setAttribute('aria-label',label);$('list-toggle').title=label;
     $('task-panel').hidden=!expanded;$('task-layout').classList.toggle('am-queue-collapsed',!expanded);
   });
+  if(taskSidebarPreview){
+    const toggle=$('list-toggle'),label=tr('Показать архив');
+    toggle.setAttribute('aria-expanded','false');toggle.setAttribute('aria-label',label);toggle.title=label;
+    $('task-panel').setAttribute('aria-label',tr('Архив'));$('task-list-heading').textContent=tr('Архив');
+    const plus=$('task-new');
+    plus.hidden=false;
+    plus.addEventListener('click',()=>{
+      show('tasks');
+      if(draftOpen){$('task-draft-text').focus();return;}
+      openTaskDraft();loadServer();
+    });
+  }
   function selectProject(name,task='',computer,shared=null){
-    if(!combinedTasks()||computer!=='')taskHistories.clear();
+    if(draftOpen)closeTaskDraft();
+    if(!taskSidebarPreview&&(!combinedTasks()||computer!==''))taskHistories.clear();
     setProject(name,computer);remember('messenger-project',name);
     selectedTask=task;selectedShared=shared;feed=null;feedSignature='';viewSignature='';topTaskScope='';
     if($('device-menu')?.matches(':popover-open'))$('device-menu').hidePopover();
@@ -3917,6 +4439,12 @@
     $(id).addEventListener('change',()=>{
       const name=$(id).value;
       if(name==='__new'){renderProjects();openProjectDialog();return;}
+      if(taskSidebarPreview){
+        sidebarProject=name==='__all'?'':name;
+        if(sidebarProject&&sidebarProject!==project&&!draftOpen)selectProject(sidebarProject);
+        else{renderProjects();renderMachines();renderTaskList();loadProjectActivity();}
+        return;
+      }
       if(!name)return;
       if(!splitProjects.length){selectProject(name);return;}
       if(splitProjects[index]===name)return;
@@ -3957,7 +4485,7 @@
     return handle;
   }
   const sidebar=root.querySelector('.am-sidebar'),sidebarWidth=tr('Ширина левой панели');
-  splitter(sidebar,sidebarWidth,'--am-nav',248,160,420,1).classList.add('am-nav-splitter');
+  splitter(sidebar,sidebarWidth,'--am-nav',taskSidebarPreview?320:248,160,420,1).classList.add('am-nav-splitter');
   splitter(sidebar,sidebarWidth,'--am-nav-split',384,300,480,1).classList.add('am-projects-splitter');
   splitter($('task-panel'),tr('Ширина списка задач'),'--am-queue',290,200,520,-1);
   // A click on empty space in the sidebar shows all computers' tasks again.
@@ -3967,10 +4495,37 @@
   // Enter sends; Shift+Enter adds a line. An IME composition keeps its Enter.
   $('task-stop').addEventListener('click',stopSelectedTask);
   $('lost-close').addEventListener('click',closeHere);
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.isComposing&&!$('task-stop').hidden&&!$('compose').hidden&&!document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true]')){e.preventDefault();stopSelectedTask();}});
+  document.addEventListener('keydown',e=>{if(tab==='tasks'&&e.key==='Escape'&&!e.isComposing&&!$('task-stop').hidden&&!$('compose').hidden&&!$('compose').inert&&!document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true]')){e.preventDefault();stopSelectedTask();}});
   $('answer-text').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();sendAnswer();}});
   $('project-dialog-close').addEventListener('click',()=>$('project-dialog').close());
-  $('settings-open').addEventListener('click',()=>{$('auto-update-status').textContent='';$('settings-dialog').showModal();loadServer();});
+  $('settings-open').addEventListener('click',()=>{
+    $('auto-update-status').textContent='';
+    if(taskSidebarPreview)show('settings');
+    else{$('settings-dialog').showModal();loadServer();}
+  });
+  if(taskSidebarPreview){
+    const dialog=$('settings-dialog');
+    const previousBody=dialog.querySelector('.am-dialog-body');
+    const preferences=previousBody.querySelector('.am-prefs');
+    const panel=el('div',undefined,'am-settings');
+    const card=el('div',undefined,'am-card');
+    card.append(preferences);panel.append(card);$('settings-page').append(panel);
+    const layout=el('div',undefined,'am-settings-layout');
+    const sections=el('nav',undefined,'am-settings-nav');
+    const views=el('div',undefined,'am-settings-views');
+    sections.setAttribute('aria-label',tr('Разделы'));
+    $('settings-general').hidden=false;
+    sections.append(...root.querySelectorAll('.am-tabs [data-tab]:not([data-tab=tasks])'));
+    views.append(...root.querySelectorAll('[data-screen]:not([data-screen=tasks])'));
+    layout.append(sections,views);
+    previousBody.replaceWith(layout);
+    dialog.classList.add('am-settings-wide');
+    dialog.addEventListener('close',()=>{
+      if(dialog.open)return;
+      if(tab!=='tasks')show('tasks');
+      $('settings-open').focus();
+    });
+  }
   $('auto-update-toggle').addEventListener('click',toggleAutoUpdate);
   $('settings-close').addEventListener('click',()=>$('settings-dialog').close());
   setupPictureViewer();
@@ -4035,8 +4590,17 @@
   $('agent-setup-close').addEventListener('click',()=>$('agent-setup').close());
   $('agent-cli').addEventListener('change',saveAgentPaths);
   $('agent-profile').addEventListener('change',saveAgentPaths);
-  $('agent-models').addEventListener('change',saveAgentModels);
-  $('agent-models').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();saveAgentModels();}});
+  $('agent-models-open').addEventListener('click',openModelPicker);
+  modelSearch.addEventListener('input',()=>{renderModelOptions();$('agent-model-options').scrollTop=0;});
+  $('agent-model-add').addEventListener('click',()=>{
+    const id=modelSearch.value.trim();
+    if(!id||modelEdit.busy||!enableModel(id))return;
+    modelSearch.value='';renderModelOptions();modelSearch.focus();
+  });
+  $('agent-model-save').addEventListener('click',saveAgentModels);
+  $('agent-model-cancel').addEventListener('click',()=>modelPicker.close());
+  modelPicker.addEventListener('cancel',event=>{if(modelEdit?.busy)event.preventDefault();});
+  modelPicker.addEventListener('close',()=>{if(!modelPicker.open)modelEdit=null;});
   $('host-scope').addEventListener('change',()=>{serverEdited=true;$('host-public-box').hidden=$('host-scope').value!=='internet';});
   $('host-public').addEventListener('input',()=>{serverEdited=true;});
   $('host-port').addEventListener('input',()=>{serverEdited=true;});
@@ -4076,6 +4640,22 @@
   let initialTheme=window.messengerInitialTheme;
   if(!initialTheme)try{initialTheme=localStorage.getItem('messenger-theme');}catch(_){}
   $('lang-select').value=amLang;enhanceSelect($('lang-select'));enhanceSelect($('theme-select'));enhanceSelect($('project-select'));enhanceSelect($('project-select-second'));enhanceSelect($('agent-filter'));enhanceSelect($('stats-project'));enhanceSelect($('stats-agent'));enhanceSelect($('stats-model'));enhanceSelect($('host-scope'));enhanceSelect($('host-address'));
+  if(taskSidebarPreview){
+    enhanceSelect($('stats-computer'));enhanceSelect($('agents-computer'));
+    for(const id of ['task-draft-project','task-draft-computer','task-draft-model']){
+      enhanceSelect($(id));$(id).addEventListener('change',()=>renderTaskDraft());
+    }
+    $('task-draft').addEventListener('submit',sendTaskDraft);
+    $('task-draft-text').addEventListener('input',event=>{
+      sizeComposer(event.currentTarget);
+      if(draftAttempt?.error)draftAttempt.error='';
+      renderTaskDraft();
+    });
+    $('task-draft-text').addEventListener('keydown',event=>{
+      if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();$('task-draft').requestSubmit();}
+    });
+    $('agents-computer').addEventListener('change',()=>{agentComputer=$('agents-computer').value;renderAgents();});
+  }
   centreControlText();
   applyTheme(initialTheme||'system');
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{if(document.documentElement.dataset.theme==='system')applyTheme('system');});

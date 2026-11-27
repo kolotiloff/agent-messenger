@@ -110,6 +110,9 @@ func applyContinue(machine, tx *sql.Tx, from netLink, b netBody, gone WorkerGone
 	if err != nil || !ok {
 		return err
 	}
+	if b.SenderAgent == AudienceOwner {
+		gone = nil
+	}
 	err = savepoint(tx, func() error {
 		return continueTaskTx(machine, tx, t.ID, "net:"+from.broker+":"+from.peer+":"+b.OpID, b.Text, gone, true, MessageSender{Agent: b.SenderAgent, Model: b.SenderModel})
 	})

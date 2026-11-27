@@ -2,6 +2,68 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-326–T-332 final window checks)
+
+Rechecked the shared spacing scale, pane dividers, list and chat alignment, settings, dialogs, and menus in both themes. The same loopback preview was checked at 600, 1100 and 1440 px. All seven window checks passed on Chromium and WebKit. Targeted usage and efficiency tests passed, including partial historical telemetry, reviewed-task rates and remote attribution. The browser checks exercised the project, computer, agent, model and period filters. Real model runs in the installed application remain outside this verification.
+
+## 2026-11-27 — Codex (T-332 settings rows)
+
+Centered settings actions beside their complete text block and let project plugin status text wrap. Replaced the agent model section with a single Models row and Edit button. The picker still shows how many models are enabled and saves the same selection used by both launch paths.
+
+## 2026-11-27 — Codex (T-332 conversation order and alignment)
+
+Compared chat event times as timestamps to keep unread owner notes before later progress. The loopback preview demonstrates the pending and delivered states. Matched standalone command spacing to grouped commands, aligned their icons, removed the visible owner heading, widened the minimum chat gutter, left-aligned Clear archive, and unified the settings content inset.
+
+## 2026-11-27 — Codex (T-332 command labels and timestamps)
+
+Matched tool summaries and command rows to chat typography while keeping group spacing. The fictional preview separates command captions from the shell text. Report and question status lines keep their timestamp in the tooltip; the chat timestamp retains its place above worker messages or below outgoing messages.
+
+## 2026-11-27 — Codex (T-326–T-332 preview and functional audit)
+
+Aligned Projects, Archive and the full conversation title. Added the date below the title, full-width ellipsized cards, a scoped Clear archive action, consistent provider and hardware icons, message time on hover above the worker header and below outgoing messages, and a capped chat column. Placed delivery status and the live usage counter above the pinned composer so it stays put when switching tasks. Added an optional local file with recent task titles and four conversations. Real tool details are display-only. The public fixture and preview usage reports use sample data. Chromium and WebKit verified layout, the anchored composer, filters, task switches and archive controls. The loopback check also expanded a real command. Kept model settings, task launches and coordinator choices in sync. Continued recorded local and remote worker sessions after completion, displayed reported live Codex usage, and checked the efficiency report's reviewed denominator and historical attribution. Installed-window acceptance is pending.
+
+## 2026-11-27 — Codex (T-332 active-task alignment)
+
+Aligned active-task text with its computer name by reusing the heading's icon width and name gap. Kept the full-width selection and added geometry assertions to the browser fixture. Broke down the remaining visual review into separate checks in TASKS.md.
+
+## 2026-11-27 — Codex (T-326 archive cards and general settings)
+
+Put the completion time above the archive title and moved the computer name to the time tooltip. Put the model, duration, and tokens beneath the title, using t. with exact counts in the tooltip. Showed capitalized Today and Yesterday or a calendar date with the time. Matched provider logo sizes and aligned wrapped archive metadata with the card text edge. Indented current-task text inside full-width rows and compacted the General settings inset. Kept the owner composer editable when delivery is temporarily unavailable and preserved the draft when a question arrives. Chromium and WebKit verified archive metadata, panel spacing, a remote note, an answer after the task changed state, and draft retention across a remote disconnect and reconnect. The local UI race tests passed.
+
+## 2026-11-27 — Codex (T-326 panel alignment and settings modal)
+
+Matched the Archive header and filter insets to Projects, aligned the header rows, and joined the Archive dividers to its borders. Moved General, Agents, Project, Server, and Statistics into the existing settings dialog with an internal section list and preserved the active chat behind it. Removed the disclosure arrows from computer rows, keeping the full header interactive. Verified the preview in Chromium and WebKit, including the matched panel geometry, chat retention, and narrow settings layout. The local UI race tests passed.
+
+## 2026-11-27 — Codex (T-326, T-327 window controls and archive)
+
+- Matched the typography of computer and message roles to their names, using muted comma-separated labels. Kept the updater next to the version at the right and matched the three footer glyphs, button sizes and neutral rounded-square hover fills, and used the same 4px gap between update and version in the footer and computer rows. Put a single New Task plus beside the Projects picker and aligned the model picker to the right below the composer. Selecting another task leaves the composer. Removed the chat tab strip, moved the task-list toggle into the window corner, and matched update buttons and task text spacing across the window. Moved planned and attention-needed tasks into the computer groups and reserved the optional right panel for the archive. Extended the sidebar dividers to the panel edges, matched the composer radius to task cards, and limited the computer fill to hover, focus and the drag image. In [PR #228](https://github.com/kolotiloff/agent-messenger/pull/228).
+
+## 2026-11-27 — Codex (T-326 sidebar refinement)
+
+- Refined the resting and hover fills, moved the local version and updater into the footer with matching version typography and a fictional preview offer, and revealed remote update details on hover and keyboard focus. Grouped the former top tabs under the footer gear. Joined chat roles inline, and added a blue insertion line and translucent drag image for computer sorting. Kept the task fill immediate during disclosure and used the same gap between collapsed and expanded groups. In [PR #228](https://github.com/kolotiloff/agent-messenger/pull/228).
+
+## 2026-11-27 — Codex (T-326, T-327)
+
+- Added a subtle resting fill for computer headers, matched computer hover to task and icon-button hover, made task-card horizontal insets equal, and used equal padding around outgoing messages. Chromium and WebKit measured the right task list before and after resizing and verified the matching hover fills.
+- Added a direct task composer, the authenticated window action and owner-side delivery. Fixture tests cover duplicate-safe start, question, answer and report locally and across the network, including the older worker's question audience. Chromium and WebKit sent a fictional task to a selected computer and model and showed the simulated reply. The feature stays in [PR #228](https://github.com/kolotiloff/agent-messenger/pull/228) for a later update.
+
+- Restored a gear icon for Settings and made the new-task plus visible at rest.
+
+## 2026-11-27 — Codex (T-326 sidebar preview)
+
+- Started the chosen layout in the real window by emphasizing the local monitor outline without moving the label or changing the online dot. Added a loopback preview using the existing window fixtures. Chromium verified the fixture chat, the identical icon dimensions and alignment, the unchanged online dots and the right panel toggle.
+- Moved the chosen layout into the real window assets behind the preview flag. Chromium and WebKit exercised project scope, task opening across projects, gray selection, collapsible computer groups, the full task list, and the narrow layout. Widened spacing around command summaries to the section token and verified that grouped commands still expand.
+- Dragged the sidebar divider in Chromium and WebKit. Every title and subtitle kept its left edge as the extra space reduced wrapping.
+- Refined compact task spacing, moved the project picker beside the heading, and aligned the desktop browser header rows and dividers. Moved the project name before the task title in the All scope. Chromium and WebKit checked alignment, spacing, selection, project filtering and resizing on the loopback preview in [PR #228](https://github.com/kolotiloff/agent-messenger/pull/228).
+- Made computer headers full-width disclosure buttons and removed the dividers between groups. Added independent project and computer filters in Statistics and a local-first computer picker in Agents. Kept efficiency and export beside the Statistics filters as the pane narrows.
+- Recorded the live loopback preview as the default workflow for reviewing future window changes.
+- Added space below the Projects divider, matched the trailing insets on computer and task rows, and expanded the fictional conversation with multiline messages. Matched the chat roles to the model typography.
+- Kept the current header and messages visible until the next conversation is ready. Chromium and WebKit passed the delayed same-project and cross-project requests in the browser regression check.
+- Gave each of the seven preview tasks a distinct conversation. Added smooth computer disclosure. Chromium and WebKit verified distinct content, task switching, intermediate and final heights, keyboard disclosure and reduced motion.
+- Moved Settings and Feedback to the left of the desktop sidebar footer, used a sliders icon for Settings, and increased the inner padding of both chat role badges. Joined the agent and model with a single space for both roles.
+- Replaced the preview chat summary with a centered creation timestamp and matched vertical padding on computer and task rows. Restored computer reordering. Chromium and WebKit checked delayed date changes, padding, header drag with its visible name, icon and version, and keyboard reorder. The preview endpoint passed an order round-trip across projects.
+- Matched the two task lists’ hover and selection fills, card insets, and spacing. Verified computed colors and dimensions in Chromium and WebKit in both themes.
+
 ## 2026-11-27 — Codex (T-324 and T-325 release)
 
 - Integrated the Statistics project filter and combined task list from [PR #224](https://github.com/kolotiloff/agent-messenger/pull/224) and [PR #226](https://github.com/kolotiloff/agent-messenger/pull/226). The final source passed Chromium, WebKit and the local macOS race suite.

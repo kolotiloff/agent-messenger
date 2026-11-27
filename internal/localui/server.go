@@ -26,6 +26,7 @@ import (
 	"github.com/kolotiloff/agent-messenger/internal/control"
 	"github.com/kolotiloff/agent-messenger/internal/core"
 	"github.com/kolotiloff/agent-messenger/internal/diagnostics"
+	"github.com/kolotiloff/agent-messenger/internal/modelcatalog"
 	"github.com/kolotiloff/agent-messenger/internal/updatefeed"
 )
 
@@ -187,6 +188,15 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			http.Error(w, "access denied", http.StatusUnauthorized)
 			return
 		}
+		if r.Method == http.MethodGet && r.URL.Path == "/api/model-catalog" {
+			provider := r.URL.Query().Get("provider")
+			if !core.TaskProviders[provider] {
+				http.Error(w, "unknown agent", http.StatusBadRequest)
+				return
+			}
+			writeJSON(w, map[string]any{"models": modelcatalog.Selections(provider), "limit": core.MaxAgentModels})
+			return
+		}
 		if r.URL.Path == "/api/update-progress" {
 			// How much of an update has downloaded, for the update icon.
 			out := map[string]any{"ok": true, "downloading": false}
@@ -268,6 +278,10 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 				return
 			}
 			limit := int64(64 << 10)
+			if r.URL.Path == "/api/task-start" {
+				// The task may contain 20,000 characters that JSON escapes.
+				limit = 256 << 10
+			}
 			if r.URL.Path == "/api/feedback" {
 				// A remark may carry a picture (T-135).
 				limit = 3 << 20
@@ -668,7 +682,7 @@ func taskMutation(path string) bool {
 	switch path {
 	case "/api/usage-export":
 		return true
-	case "/api/project-create", "/api/project-folder", "/api/task-answer", "/api/task-note", "/api/agent-set", "/api/agent-models", "/api/agent-access", "/api/agent-pause", "/api/agent-remove", "/api/task-cancel", "/api/task-hide", "/api/task-hide-history", "/api/server-action", "/api/coordinator-connect", "/api/project-rules", "/api/project-title", "/api/project-remove", "/api/feedback", "/api/feedback-export", "/api/feedback-clear":
+	case "/api/project-create", "/api/project-folder", "/api/task-start", "/api/task-answer", "/api/task-note", "/api/agent-set", "/api/agent-models", "/api/agent-access", "/api/agent-pause", "/api/agent-remove", "/api/task-cancel", "/api/task-hide", "/api/task-hide-history", "/api/server-action", "/api/coordinator-connect", "/api/project-rules", "/api/project-title", "/api/project-remove", "/api/feedback", "/api/feedback-export", "/api/feedback-clear":
 		return true
 	}
 	return false
@@ -747,6 +761,21 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 			return control.Request{}, false
 		}
 		return control.Request{Cmd: "coordinator-connect", Alias: in.Project, Provider: in.Agent}, true
+	case "/api/task-start":
+		var in struct {
+			Project  string `json:"project"`
+			Computer string `json:"computer"`
+			Agent    string `json:"agent"`
+			Model    string `json:"model"`
+			OpID     string `json:"op_id"`
+			Text     string `json:"text"`
+		}
+		if decoder.Decode(&in) != nil || !core.ValidProjectName(in.Project) || !core.TaskProviders[in.Agent] ||
+			!validTaskHistoryFilter(in.Agent, in.Computer) || !core.ValidTaskModel(in.Model) ||
+			in.OpID == "" || len(in.OpID) > 128 || strings.TrimSpace(in.Text) == "" || len(in.Text) > 4*core.MaxTaskText {
+			return control.Request{}, false
+		}
+		return control.Request{Cmd: "task-owner-start", Project: in.Project, Computer: in.Computer, Provider: in.Agent, Model: in.Model, Confirmation: in.OpID, Text: in.Text}, true
 	case "/api/task-answer":
 		var in struct {
 			Task     string `json:"task"`
