@@ -8,7 +8,7 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
-The owner approved the monochrome Kotel icon for 1.0.15 (build 118). T-357 packages it on Mac, Windows and Linux. The GitHub overview, documentation and screenshots follow publication.
+The owner approved the monochrome Kotel icon for 1.0.15 (build 118). T-357 packages it on Mac, Windows and Linux. The GitHub overview, documentation and screenshots follow publication. T-359 places the My network label inside the card and gives this computer and its peers the same row spacing. The corrected dark Network view was captured before release submission.
 
 The owner subsequently requested a preliminary build with the completed functionality. Show the native Settings captures before submitting it for publication. Remaining MCP and worker features carry forward.
 
