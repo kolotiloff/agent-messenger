@@ -8,7 +8,7 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
-T-355 adds three task groupings, compact slider filters and neutral computer presence indicators to the post-117 window. The archive starts directly below the toolbar with Clear beside its count. In the dark theme, selected live and archived tasks share the same subdued fill.
+T-355 adds three task groupings, compact slider filters, open/closed folder icons and neutral computer presence indicators to the post-117 window. The archive starts directly below the toolbar with Clear beside its count. In the dark theme, selected live and archived tasks share the same subdued fill.
 
 T-354 applies the approved Graphite dark palette through the window theme tokens.
 

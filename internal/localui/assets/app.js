@@ -1259,11 +1259,15 @@
       const key=JSON.stringify([computer,name]);
       const folder=el('div',undefined,'am-sidebar-folder');
       const button=el('button',undefined,'am-folder-heading');button.type='button';
-      button.append(svgIcon(['M2 6a3 3 0 0 1 3-3h4l3 3h7a3 3 0 0 1 3 3v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2Z']),el('span',projectTitle(name)));
+      const icon=svgIcon(['']);
+      button.append(icon,el('span',projectTitle(name)));
       button.dataset.sidebarFocus='folder:'+key;
       const rows=el('div',undefined,'am-sidebar-task-rows');
       const count=sidebarTaskCount(tasks.length);
       function showFolder(expanded){
+        icon.firstElementChild.setAttribute('d',expanded
+          ? 'M2 19V6a2 2 0 0 1 2-2h5l3 3h6a2 2 0 0 1 2 2v2M2 19l4-8h16l-4 9H4a2 2 0 0 1-2-1Z'
+          : 'M2 6a3 3 0 0 1 3-3h4l3 3h7a3 3 0 0 1 3 3v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2Z');
         rows.hidden=!expanded;
         count.hidden=expanded;
         button.setAttribute('aria-expanded',String(expanded));

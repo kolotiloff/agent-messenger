@@ -1284,9 +1284,13 @@ if (require.main === module) (async()=>{
       const machineHeader=card(browserPreview,'local').locator('.am-machine-name');
       assert.equal((await localFolderButton.boundingBox()).height,(await machineHeader.boundingBox()).height);
       assert.equal((await localFolderButton.locator('svg').boundingBox()).width,(await localMark.locator('svg').boundingBox()).width);
+      const folderOutline=localFolderButton.locator('svg path');
+      const openedOutline=await folderOutline.getAttribute('d');
       await localFolderButton.click();
+      assert.notEqual(await folderOutline.getAttribute('d'),openedOutline);
       assert.equal(await localFolderButton.locator('.am-sidebar-task-count:visible').textContent(),'2');
       await localFolderButton.click();
+      assert.equal(await folderOutline.getAttribute('d'),openedOutline);
       const treeGaps=await card(browserPreview,'local').evaluate(node=>{
         const rows=[...node.querySelectorAll('.am-machine-name,.am-folder-heading,.am-sidebar-task')].map(row=>row.getBoundingClientRect());
         return rows.slice(1).map((row,i)=>row.top-rows[i].bottom);

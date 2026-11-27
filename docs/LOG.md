@@ -4,7 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-27 — T-355 task sidebar
 
-Implemented the three grouping modes using the existing task selection, status and context-menu paths. The two filter icons open the existing project and agent menus. Chromium and WebKit passed the window checks, including grouping, task selection, folder collapse, filters, spacing and connection icons. Captured WebKit screenshots with fictional tasks in each grouping and with the archive filter open. After visual review, moved the archive controls up, separated Clear from Filter, and tightened the folder headings. Verified in a loopback browser preview that the archive heading shares its text edge with its entries. Collapsed computer and project headings now display their scoped task totals.
+Implemented the three grouping modes using the existing task selection, status and context-menu paths. The two filter icons open the existing project and agent menus. Chromium and WebKit passed the window checks, including grouping, task selection, folder collapse, filters, spacing and connection icons. Captured WebKit screenshots with fictional tasks in each grouping and with the archive filter open. After visual review, moved the archive controls up, separated Clear from Filter, and tightened the folder headings. Verified in a loopback browser preview that the archive heading shares its text edge with its entries. Collapsed computer and project headings display their scoped task totals. Project folder outlines also show whether their rows are expanded.
 
 ## 2026-11-27 — T-354 Graphite dark palette
 
