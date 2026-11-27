@@ -19,7 +19,7 @@ import (
 	"path/filepath"
 )
 
-// The master is a raster export of internal/localui/assets/icon.svg.
+// The approved 1024 px master is shared with the Mac package.
 //
 //go:embed kotel.png
 var masterPNG []byte
