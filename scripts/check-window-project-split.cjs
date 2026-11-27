@@ -336,6 +336,11 @@ if (require.main === module) (async()=>{
       });
       const replyField=draftPage.locator('#compose .am-compose-field');
       const replyStyle=await composerStyle(replyField);
+      const labelStyle=label=>label.evaluate(node=>{
+        const style=getComputedStyle(node);
+        return [style.fontFamily,style.fontSize,style.fontWeight,style.lineHeight];
+      });
+      const replyModelStyle=await labelStyle(draftPage.locator('#answer-model'));
       const replyAccess=draftPage.locator('#answer-access');
       const accessAbove=access=>access.evaluate(node=>{
         const rect=node.getBoundingClientRect();
@@ -653,6 +658,9 @@ if (require.main === module) (async()=>{
       }),true);
       assert.equal(await draftPage.locator('#task-draft-send').isDisabled(),true);
       assert.deepEqual(await composerStyle(form.locator('.am-compose-field')),replyStyle);
+      const draftLabels=await form.locator('.am-draft-options .am-select-value').all();
+      assert.equal(draftLabels.length,3);
+      for(const label of draftLabels)assert.deepEqual(await labelStyle(label),replyModelStyle);
       await select(draftPage,'task-draft-project','Инструменты');
       const pathMenu=draftPage.getByRole('dialog',{name:'Добавить путь',exact:true});
       const addPath=form.getByRole('button',{name:'Добавить путь',exact:true});

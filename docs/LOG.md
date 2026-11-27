@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-336 composer labels)
+
+Matched the project, computer and model selectors in a task draft to the regular 13 px model label in a reply. Verified matching typography in the shared preview and the project suite in Chromium and WebKit. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).
+
 ## 2026-11-27 — Codex (T-336 control heights and row insets)
 
 Replaced the token chart glyph with a neutral ring, matched settings inputs to the standard 28 px controls, and tightened active task rows to the same 4 px vertical inset as computer headings. Archive rows retain 8 px. Recorded the inset examples in UI_STYLE.md. Verified the example settings and task rows in the shared preview and the project suite in Chromium and WebKit. The Go suite passed for composer parity, and the local UI race tests passed with the new assets. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).

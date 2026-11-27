@@ -860,7 +860,7 @@ Use the content spacing token vertically and the section spacing token horizonta
 
 ## D-235 — Put task context below the composer (T-335)
 
-The New Task composer starts with a one-line draft between Add and Send. Put project and computer selectors below the field on the left, and the model selector on the right. Search configured models for the chosen computer in a popover with a common horizontal inset for its search field and option rows. Mark selected options with a check and reserve the row fill for pointer hover and keyboard focus. Add inserts a path as a line of task text. Offer the system file and folder picker only when the selected worker is local. Preserve task start routing and configured model availability in D-232. Use the composer radius for controls inside the field. Outgoing messages show a text copy action beside their time on hover or keyboard focus.
+The New Task composer starts with a one-line draft between Add and Send. Put project and computer selectors below the field on the left, and the model selector on the right. Use the reply model’s secondary text style for all three selector values. Search configured models for the chosen computer in a popover with a common horizontal inset for its search field and option rows. Mark selected options with a check and reserve the row fill for pointer hover and keyboard focus. Add inserts a path as a line of task text. Offer the system file and folder picker only when the selected worker is local. Preserve task start routing and configured model availability in D-232. Use the composer radius for controls inside the field. Outgoing messages show a text copy action beside their time on hover or keyboard focus.
 
 ## D-236 — Use compact controls and clarify composer actions (T-336)
 
