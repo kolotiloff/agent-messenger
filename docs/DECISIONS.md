@@ -897,3 +897,7 @@ Use a single toolbar above the conversation and Archive, with its divider aligne
 ## D-243 — Align expanded efficiency details with their model row (T-336)
 
 Use the section inset on the leading side of the expanded panel and align its trailing edge with the parent row. Keep the shared content inset inside the panel and align the first metric with the model label. Use a speedometer for the Efficiency action, superseding its target icon in D-239.
+
+## D-244 — Use a visible Clear Archive button (T-336)
+
+Use the compact filled action and align the button itself with the archive rows. Keep the confirmation and filtered scope.

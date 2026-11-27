@@ -1798,7 +1798,7 @@
       $('task-count').textContent=archived||'';
       if(!box.childElementCount)box.append(el('p',tr('В архиве пока нет задач'),'am-small am-muted'));
       if(archived){
-        const clear=el('button',tr('Очистить архив'),'am-inline-action am-quiet-button');clear.type='button';
+        const clear=el('button',tr('Очистить архив'),'am-inline-action');clear.type='button';
         clear.addEventListener('click',()=>askClearDone(archiveBatches));
         const controls=el('div',undefined,'am-archive-actions am-small');controls.append(clear);box.prepend(controls);
       }

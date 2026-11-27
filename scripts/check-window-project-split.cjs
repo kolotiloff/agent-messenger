@@ -826,16 +826,19 @@ if (require.main === module) (async()=>{
       });
       assert.equal(await archive.locator('#task-list-heading').textContent(),'Архив');
       const clearArchive=archive.getByRole('button',{name:'Очистить архив',exact:true});
-      assert.equal(await clearArchive.evaluate(node=>{
-        const firstRow=node.closest('#task-list').querySelector('.am-archive-task .am-task-title');
-        return node.getBoundingClientRect().left+parseFloat(getComputedStyle(node).paddingInlineStart)-firstRow.getBoundingClientRect().left;
-      }),0);
-      assert.equal(await clearArchive.evaluate(node=>getComputedStyle(node).backgroundColor),'rgba(0, 0, 0, 0)');
+      const [leftOffset,height,background]=await clearArchive.evaluate(node=>{
+        const firstRow=node.closest('#task-list').querySelector('.am-archive-task');
+        const box=node.getBoundingClientRect();
+        return [box.left-firstRow.getBoundingClientRect().left,box.height,getComputedStyle(node).backgroundColor];
+      });
+      assert.equal(leftOffset,0);
+      assert.equal(height,28);
+      assert.notEqual(background,'rgba(0, 0, 0, 0)');
       await clearArchive.hover();
-      assert.equal(await clearArchive.evaluate(async node=>{
+      assert.notEqual(await clearArchive.evaluate(async node=>{
         await Promise.all(node.getAnimations().map(animation=>animation.finished));
         return getComputedStyle(node).backgroundColor;
-      }),hoverFills[0]);
+      }),background);
       await clearArchive.click();
       await draftPage.getByText('Очистить архив?',{exact:true}).waitFor();
       assert.deepEqual(await draftPage.locator('#confirm-dialog').evaluate(dialog=>{

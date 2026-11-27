@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-336 clear archive button)
+
+Used the compact filled button for Clear Archive and aligned its leading edge with the archive cards. Measured the 28 px button height and shared left edge in the preview. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).
+
 ## 2026-11-27 — Codex (T-336 expanded efficiency details)
 
 Reduced the leading offset of the details panel, aligned its trailing edge with the model row, and used a speedometer icon. Measured the 16 px offset and 12 px inner insets in the shared preview. Window controls passed in Chromium and WebKit at 1100 px and 600 px. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).

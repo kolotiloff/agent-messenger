@@ -25,7 +25,7 @@ Scale: 4, 8, 12, 16, 24 (`--am-space-1/2/3/4/6`). Pick the gap by meaning:
 
 Expanded efficiency details start 16 px inside the parent row and share its trailing edge. The 12 px inner inset aligns the first metric label with the model name. The detail table adds no extra padding at its outer edges.
 
-Settings section headings sit above the first card with the section gap. Computer and statistics rows use the quiet hover fill. Dropdown options have 4 px vertical and 12 px horizontal padding. Only the hovered or keyboard-focused option gets a background, and a check marks the selected value. Panes use `--am-pane-inset` (16 px, or 12 px in a narrow window). The Projects divider aligns with the full-width task toolbar. The Archive header starts below the toolbar. The footer aligns the visible icon and version text edges by applying the icon's internal inset to the version text.
+Settings section headings sit above the first card with the section gap. Computer and statistics rows use the quiet hover fill. Dropdown options have 4 px vertical and 12 px horizontal padding. Only the hovered or keyboard-focused option gets a background, and a check marks the selected value. Panes use `--am-pane-inset` (16 px, or 12 px in a narrow window). The Projects divider aligns with the full-width task toolbar. The Archive header starts below the toolbar. The Clear Archive button uses the compact filled style and starts at the same inset as the archive rows. The footer aligns the visible icon and version text edges by applying the icon's internal inset to the version text.
 
 Buttons that belong together go in one container: `.am-actions` (a row) or `.am-actions-stack` (a column). Do not space them with margins.
 

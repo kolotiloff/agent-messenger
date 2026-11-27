@@ -783,8 +783,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-task-project { display:flex; flex-direction:column; gap:var(--am-space-1); min-width:0; }
 #am-concept .am-task-project + .am-task-project { margin-top:var(--am-space-3); padding-top:var(--am-space-3); border-top:1px solid var(--am-line); }
 #am-concept.am-task-sidebar-preview .am-task-project + .am-task-project { margin:0; padding:0; border:0; }
-#am-concept .am-archive-actions { display:flex; padding-inline:var(--am-space-1); }
-#am-concept .am-archive-actions > button { color:var(--am-muted); }
+#am-concept .am-archive-actions { display:flex; }
 #am-concept .am-task-project > h3 { color:var(--am-text); overflow-wrap:anywhere; }
 #am-concept .am-task-section { margin:var(--am-space-3) 0 var(--am-space-1); padding-inline:var(--am-space-3); }
 #am-concept .am-task-section:first-child { margin-top:0; }
