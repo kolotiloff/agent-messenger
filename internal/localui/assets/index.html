@@ -41,13 +41,13 @@
 <p class="am-small am-muted">Изменения сохраняются сами.</p>
 <div class="am-field"><label for="agent-cli">Программа CLI</label><div class="am-folder-pick"><input id="agent-cli" type="text" autocomplete="off" spellcheck="false" placeholder="Полный путь к программе"><button id="agent-cli-find" type="button">Найти</button><button id="agent-cli-pick" type="button">Выбрать файл…</button></div></div>
 <div class="am-field"><label for="agent-profile">Каталог профиля</label><div class="am-folder-pick"><input id="agent-profile" type="text" autocomplete="off" spellcheck="false" placeholder="Стандартный профиль агента"><button id="agent-profile-pick" type="button">Выбрать</button></div></div>
-<div class="am-field am-field-sep"><label for="agent-models-open">Модели для координатора</label><button id="agent-models-open" type="button" aria-haspopup="dialog">Выбрать модели</button><p id="agent-models-note" class="am-small am-muted"></p></div>
+<div class="am-setting-row"><span class="am-access-text">Модели</span><button id="agent-models-open" type="button" aria-haspopup="dialog" aria-label="Изменить модели">Изменить</button></div>
 <p id="agent-save-status" class="am-small am-form-status am-bad" role="status" aria-live="polite"></p>
 </div></dialog><dialog id="agent-model-picker" class="am-session-dialog" aria-labelledby="agent-model-picker-title">
-<div class="am-dialog-header"><h3 id="agent-model-picker-title">Модели для координатора</h3></div>
+<div class="am-dialog-header"><h3 id="agent-model-picker-title">Модели</h3></div>
 <div class="am-dialog-body am-setup-body am-model-picker-body">
 <input id="agent-model-search" type="search" maxlength="80" autocomplete="off" spellcheck="false" aria-label="Поиск моделей" placeholder="Поиск моделей" autofocus>
-<div id="agent-model-options" class="am-model-options" aria-label="Модели для координатора"></div>
+<div id="agent-model-options" class="am-model-options"></div>
 <div class="am-actions"><button id="agent-model-add" type="button" hidden>Добавить свой вариант</button></div>
 <p id="agent-model-status" class="am-small am-muted" role="status"></p>
 <div class="am-actions am-model-picker-actions"><button id="agent-model-cancel" type="button">Отмена</button><button id="agent-model-save" class="am-primary" type="button">Сохранить</button></div>

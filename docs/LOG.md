@@ -2,6 +2,14 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-326–T-332 final window checks)
+
+Rechecked the shared spacing scale, pane dividers, list and chat alignment, settings, dialogs, and menus in both themes. The same loopback preview was checked at 600, 1100 and 1440 px. All seven window checks passed on Chromium and WebKit. Targeted usage and efficiency tests passed, including partial historical telemetry, reviewed-task rates and remote attribution. The browser checks exercised the project, computer, agent, model and period filters. Real model runs in the installed application remain outside this verification.
+
+## 2026-11-27 — Codex (T-332 settings rows)
+
+Centered settings actions beside their complete text block and let project plugin status text wrap. Replaced the agent model section with a single Models row and Edit button. The picker still shows how many models are enabled and saves the same selection used by both launch paths.
+
 ## 2026-11-27 — Codex (T-332 conversation order and alignment)
 
 Compared chat event times as timestamps to keep unread owner notes before later progress. The loopback preview demonstrates the pending and delivered states. Matched standalone command spacing to grouped commands, aligned their icons, removed the visible owner heading, widened the minimum chat gutter, left-aligned Clear archive, and unified the settings content inset.

@@ -414,7 +414,18 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await codex.getByRole('button',{name:'Доверять',exact:true}).waitFor({state:'detached',timeout:10000});
       assert.deepEqual(writes.filter(w=>w.path==='/api/agent-trust').map(w=>w.body),[{provider:'codex',project:'Welcome test',folder:'/fictional/project'}]);
       await codex.getByRole('button',{name:'Настройки',exact:true}).click();
-      await page.locator('#agent-models-open').click();
+      const editModels=page.getByRole('button',{name:'Изменить модели',exact:true});
+      assert.equal(await editModels.textContent(),'Изменить');
+      assert(await editModels.evaluate(button=>{
+        const action=button.getBoundingClientRect();
+        const label=button.previousElementSibling;
+        const text=label.getBoundingClientRect();
+        return label.textContent==='Модели'&&action.left>=text.right&&
+          Math.abs(action.top+action.height/2-text.top-text.height/2)<1&&
+          button.parentElement.getBoundingClientRect().right===action.right;
+      }));
+      await editModels.click();
+      await page.getByRole('dialog',{name:'Модели',exact:true}).waitFor();
       const switchModel=page.getByRole('switch',{name:'GPT-6.2 Sol Medium'});
       await switchModel.waitFor();
       assert.equal(await switchModel.getAttribute('aria-checked'),'false');

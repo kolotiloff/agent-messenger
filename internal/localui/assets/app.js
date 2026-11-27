@@ -3965,7 +3965,7 @@
     $('agent-setup-title').textContent=tr('Настройки: ')+names[provider];
     $('agent-setup-note').hidden=provider!=='cursor';
     $('agent-cli').value=a?.cli||found?.cli||'';$('agent-profile').value=a?.environment||found?.environment||'';
-    updateModelSummary(provider);
+    $('agent-models-open').disabled=!view;
     setStatus('agent-save-status','');
     if(!$('agent-setup').open)$('agent-setup').showModal();
   }
@@ -4028,11 +4028,6 @@
   const modelPicker=$('agent-model-picker');
   const modelSearch=$('agent-model-search');
   let modelEdit=null;
-  function updateModelSummary(provider){
-    const models=configuredModels(provider);
-    $('agent-models-open').disabled=!view;
-    $('agent-models-note').textContent=models.length?tr('Включено моделей: ')+models.length:tr('Модели не выбраны');
-  }
   function renderModelOptions(){
     const list=$('agent-model-options'),query=modelSearch.value.trim().toLowerCase();
     const previouslyFocused=document.activeElement?.dataset.model;
@@ -4096,7 +4091,6 @@
       await postAPI('/api/agent-models',{provider:edit.provider,models});
       if(view)view.coordinator_models={...view.coordinator_models,[edit.provider]:models};
       viewSignature='';await refresh();
-      updateModelSummary(edit.provider);
       modelPicker.close();
     }catch(error){modelStatus(error.message);}
     finally{

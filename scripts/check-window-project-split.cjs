@@ -282,6 +282,13 @@ if (require.main === module) (async()=>{
     }finally{sameFeed.release();otherWindow.release();otherFeed.release();await preview.close();}
 
     const directTask=makeTask('owner-task','tools','codex','Новая задача в окне',0,{remote:pc1});
+    const verticalCenter=locator=>locator.evaluate(node=>{
+      const {top,height}=node.getBoundingClientRect();
+      return top+height/2;
+    });
+    const expectCentered=async(text,control)=>{
+      assert(Math.abs(await verticalCenter(text)-await verticalCenter(control))<1);
+    };
     const queued=makeTask('queued-task','tools','codex','Следующая проверка',1,{started_at:null,pending_launch:true,worker_observed:false,remote:pc1});
     const draftPage=await open(projects,{width:1150,height:770},'dark',(url,p)=>{
       if(p==='tools'&&['/api/window','/api/project-activity'].includes(url.pathname)){
@@ -440,6 +447,9 @@ if (require.main === module) (async()=>{
         return [getComputedStyle(screen).paddingTop,getComputedStyle(screen).paddingLeft,
           getComputedStyle(card).paddingTop,getComputedStyle(card).paddingLeft];
       }),['16px','16px','0px','16px']);
+      for(const row of await general.locator('.am-theme-setting:has(.am-select-trigger)').all()){
+        await expectCentered(row.locator('label'),row.locator('.am-select-trigger'));
+      }
       assert.equal(await settingsDialog.evaluate(node=>node.matches(':modal')),true);
       assert.equal(await settingsDialog.locator('.am-sidebar,#project-select').count(),0);
       assert.equal(await draftPage.locator('[data-screen=tasks]').isVisible(),true);
@@ -452,6 +462,14 @@ if (require.main === module) (async()=>{
           const style=getComputedStyle(node);
           return [style.paddingBlockStart,style.paddingInlineStart];
         }),['16px','16px'],section);
+        if(section==='project'){
+          const rows=screen.locator('#coord-box .am-step:has(> button)');
+          assert.equal(await rows.count(),3);
+          for(const row of await rows.all()){
+            await expectCentered(row.locator('.am-step-text'),row.locator(':scope > button'));
+          }
+          assert.equal(await screen.locator('#coord-box summary').evaluate(node=>getComputedStyle(node,'::after').content),'""');
+        }
       }
       await total(draftPage,'103578');
       await select(draftPage,'stats-project','Инструменты');
@@ -703,7 +721,11 @@ if (require.main === module) (async()=>{
       await browserPreview.locator('#task-panel').waitFor();
     }finally{await browserPreview.close();}
 
-    const compactPreview=await open(projects,{width:450,height:720},'light',()=>{},true);
+    const compactPreview=await open(projects,{width:450,height:720},'light',(url,p)=>{
+      if(url.pathname==='/api/window')return {json:{...reply(url,p,projects),coordinator_link:{
+        state:'unknown',detail:'Файл настроек проекта недоступен. Проверьте разрешения на папку проекта и попробуйте подключиться ещё раз.',
+      }}};
+    },true);
     try{
       const plus=compactPreview.getByRole('button',{name:'Новая задача',exact:true});
       await plus.waitFor();
@@ -716,6 +738,12 @@ if (require.main === module) (async()=>{
       const modal=compactPreview.locator('#settings-dialog');
       await modal.waitFor();
       assert.equal(await modal.evaluate(node=>node.scrollWidth>node.clientWidth),false);
+      await modal.locator('[data-tab=project]').click();
+      const plugin=modal.locator('#coord-box .am-step').first();
+      const subtitle=plugin.locator('.am-step-sub');
+      await subtitle.waitFor();
+      assert(await subtitle.evaluate(node=>node.clientHeight>parseFloat(getComputedStyle(node).lineHeight)));
+      await expectCentered(plugin.locator('.am-step-text'),plugin.locator(':scope > button'));
       await modal.locator('[data-tab=stats]').click();
       await total(compactPreview,'103578');
       await modal.locator('#settings-close').click();
