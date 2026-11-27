@@ -264,6 +264,9 @@ func TestCoordinatorHandshakeAndTools(t *testing.T) {
 	c.send(1, "initialize", map[string]any{"protocolVersion": "2025-06-18"})
 	resp, _ := c.expect(1, 2*time.Second)
 	result := resp["result"].(map[string]any)
+	if info := result["serverInfo"].(map[string]any); info["name"] != "kotel" {
+		t.Fatalf("serverInfo = %v", info)
+	}
 	if !strings.Contains(result["instructions"].(string), "Project: Game") {
 		t.Fatalf("instructions %v", result["instructions"])
 	}

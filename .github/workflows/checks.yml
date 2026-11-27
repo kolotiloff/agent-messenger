@@ -92,7 +92,7 @@ jobs:
           SOURCE_REVISION: ${{ github.sha }}
         run: |
           bash scripts/build-mac-app.sh "$RUNNER_TEMP/mac-desktop" 0.0.0-preview.appci "$SOURCE_REVISION"
-          python3 scripts/check-desktop.py "$RUNNER_TEMP/mac-desktop/Agent Messenger.app/Contents/Resources/messenger"
+          python3 scripts/check-desktop.py "$RUNNER_TEMP/mac-desktop/Kotel.app/Contents/Resources/kotel"
       - name: Save tested Mac preview archives (not a release)
         if: matrix.package == true
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

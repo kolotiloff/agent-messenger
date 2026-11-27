@@ -670,6 +670,11 @@ func (s *Store) taskFeedHeader(id string) (TaskFeed, Task, error) {
 	if err := s.fillWindowLaunch(&f.Task); err != nil {
 		return f, t, err
 	}
+	snapshot, err := readTaskContext(s.db, t.ID)
+	if err != nil {
+		return f, t, err
+	}
+	f.Task.ContextWindow = snapshot.Window
 	f.Task.CanContinue = canWindowContinue(f.Task, t.SessionID)
 	if f.Task.Usage, err = s.taskUsage(t.ID); err != nil {
 		return f, t, err

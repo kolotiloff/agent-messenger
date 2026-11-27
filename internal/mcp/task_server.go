@@ -82,7 +82,7 @@ func serveTask(store *core.Store, run, receipt string, in io.Reader, out io.Writ
 			result = map[string]any{
 				"protocolVersion": version,
 				"capabilities":    map[string]any{"tools": map[string]any{}},
-				"serverInfo":      map[string]any{"name": "agent-messenger-task", "version": "0.2.0"},
+				"serverInfo":      map[string]any{"name": "kotel-task", "version": "0.2.0"},
 				"instructions":    taskInstructions,
 			}
 		case "ping":

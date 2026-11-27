@@ -128,6 +128,34 @@ if (require.main === module) (async()=>{
   const chat=(page,name)=>page.locator('#thread').getByText('Сообщение из '+name);
   const total=async(page,n)=>page.waitForFunction(value=>document.querySelector('#stats-total-title').textContent.split(' токен')[0].replace(/[^0-9]/g,'')===value,n);
   try{
+    for(const theme of ['light','dark']){
+      const page=await open(projects,{width:1200,height:800},theme,undefined,true);
+      const machine=card(page,'local').locator('.am-machine-name').first();
+      const background=node=>getComputedStyle(node).backgroundColor;
+      await machine.hover();
+      const rowColor=await machine.evaluate(background);
+      assert.match(rowColor,/^rgb\(/);
+      await page.locator('#list-toggle').click();
+      const archived=page.locator('#task-list .am-archive-task').first();
+      await archived.hover();
+      await page.waitForFunction(color=>{
+        const row=document.querySelector('#task-list .am-archive-task:hover');
+        return row && getComputedStyle(row).backgroundColor===color;
+      },rowColor);
+      const archiveGap=await archived.evaluate(node=>getComputedStyle(node.parentElement).rowGap);
+      await page.locator('#stats-open').click();
+      const row=page.locator('#stats-top .am-stats-task').first();
+      assert.equal(await row.evaluate(node=>getComputedStyle(node.closest('table')).borderSpacing.split(' ').at(-1)),archiveGap);
+      await row.locator('td').first().hover();
+      for(const cell of await row.locator('td').all()){
+        assert.equal(await cell.evaluate(background),rowColor,theme+' statistics');
+      }
+      await page.mouse.move(0,0);
+      await page.keyboard.press('Tab');
+      await row.locator('button').focus();
+      assert.equal(await row.locator('td').first().evaluate(background),rowColor,theme+' keyboard focus');
+      await page.context().close();
+    }
     const hold=()=>{let release;const response=new Promise(resolve=>{release=resolve;});return {response,release};};
     const sameFeed=hold(),otherWindow=hold(),otherFeed=hold();
     let ownerQuestion,remoteLost=false;
@@ -172,6 +200,8 @@ if (require.main === module) (async()=>{
       const firstLineCenter=text.getBoundingClientRect().top+parseFloat(getComputedStyle(text).lineHeight)/2;
       return [style.marginBlockStart,style.marginBlockEnd,icon.top+icon.height/2-firstLineCenter];
     }),['16px','16px',0]);
+    const closingGap=await reportStatus.evaluate(n=>n.getBoundingClientRect().top-n.previousElementSibling.getBoundingClientRect().bottom);
+    assert.equal(closingGap,await standalone.evaluate(n=>parseFloat(getComputedStyle(n).marginBlockStart)));
     await standalone.locator('summary').click();
     assert.equal(await standalone.locator('pre').textContent(),'git diff --stat');
     assert.equal(await standalone.locator('pre .am-shell-name').textContent(),'git');
@@ -190,7 +220,7 @@ if (require.main === module) (async()=>{
     await tokenCount.click();
     const tokenMenu=preview.locator('#answer-token-menu');
     await tokenMenu.waitFor();
-    assert.deepEqual(await tokenMenu.locator('p').allTextContents(),[
+    assert.deepEqual(await tokenMenu.locator('p:visible').allTextContents(),[
       'Контекстное окно 89\u00a0% заполнено',
       '212 тыс. / 238 тыс. токенов'
     ]);
@@ -237,8 +267,8 @@ if (require.main === module) (async()=>{
       });
       const requestOrder=preview.waitForRequest(req=>req.method()==='POST'&&new URL(req.url()).pathname==='/api/machine-order');
       await peerHeader.dragTo(localHeader,{sourcePosition:{x:40,y:12},targetPosition:{x:40,y:4}});
-      assert.deepEqual(await preview.evaluate(()=>window.machineDragImage),{head:true,name:'ПК-1',icon:true,version:'v1.0.5',alpha:102});
-      assert.deepEqual(await preview.evaluate(()=>window.machineDropLine),{edge:'before',height:'2px',color:'rgb(103, 170, 249)'});
+      assert.deepEqual(await preview.evaluate(()=>window.machineDragImage),{head:true,name:'ПК-1',icon:true,version:undefined,alpha:102});
+      assert.deepEqual(await preview.evaluate(()=>window.machineDropLine),{edge:'before',height:'2px',color:'rgb(142, 173, 210)'});
       assert.equal(await preview.locator('.am-machine-drag-image').count(),0);
       assert.deepEqual((await requestOrder).postDataJSON().order.slice(0,2),['pc1','local']);
       assert.deepEqual((await order()).slice(0,2),['pc1','local']);
@@ -322,15 +352,29 @@ if (require.main === module) (async()=>{
     };
     const queued=makeTask('queued-task','tools','codex','Следующая проверка',1,{started_at:null,pending_launch:true,worker_observed:false,remote:pc1});
     const justStarted=new Date().toISOString();
+    const pendingUpdate=await open(projects,{width:1150,height:770},'dark',(url,p)=>{
+      if(url.pathname==='/api/window')return {json:{...reply(url,p,projects),pending_update:'queued',pending_update_id:'upd-local'}};
+    },true);
+    try{
+      const footerCancel=pendingUpdate.locator('.am-side-footer').getByRole('button',{name:'Отменить обновление'});
+      await footerCancel.waitFor();
+      assert.equal(await footerCancel.getAttribute('data-request'),'upd-local');
+      await pendingUpdate.locator('#settings-open').click();
+      await pendingUpdate.locator('#settings-dialog [data-tab=server]').click();
+      const networkCancel=pendingUpdate.locator('#network-local').getByRole('button',{name:'Отменить обновление'});
+      await networkCancel.waitFor();
+      assert.equal(await networkCancel.getAttribute('data-request'),'upd-local');
+    }finally{await pendingUpdate.close();}
     const draftPage=await open(projects,{width:1150,height:770},'dark',(url,p)=>{
       if(p==='game'&&url.pathname==='/api/window'){
         const window=reply(url,p,projects);
-        return {json:{...window,tasks:window.tasks.map(t=>({...t,full_access:!t.remote,started_at:t.id==='game-1'?justStarted:t.started_at}))}};
+        return {json:{...window,history_paged:true,history_next:!url.searchParams.get('agent')?'game-page':'',tasks:window.tasks.map(t=>({...t,full_access:!t.remote,started_at:t.id==='game-1'?justStarted:t.started_at}))}};
       }
       if(p==='tools'&&['/api/window','/api/project-activity'].includes(url.pathname)){
         const showCodex=!url.searchParams.get('agent')||url.searchParams.get('agent')==='codex';
         return {json:{...reply(url,p,projects),tasks:[...tasks.tools,queued,...(showCodex?[toolDone]:[])],shared:[toolShared],history_paged:true,history_next:showCodex?toolDone.id:''}};
       }
+      if(p==='game'&&url.pathname==='/api/task-history')return {json:{tasks:[]}};
       if(p==='tools'&&url.pathname==='/api/task-history')return {json:{tasks:[toolOlder]}};
       if(url.pathname==='/api/self-update')return {json:{installed_version:'1.0.9',version:'1.0.10',state:'available'}};
       if(url.pathname==='/api/task-start')return {json:{ok:true,result:directTask.id}};
@@ -410,7 +454,8 @@ if (require.main === module) (async()=>{
       assert.equal(await groupGap(),4);
       await disclosure.click();
       assert.equal(await disclosure.getAttribute('aria-expanded'),'false');
-      assert.equal(await local.locator('.am-sidebar-task-count').textContent(),' (4 задачи)');
+      assert.equal(await local.locator('.am-sidebar-task-count').textContent(),'4');
+      assert.equal(await local.locator('.am-sidebar-task-count').evaluate(n=>getComputedStyle(n).fontWeight),'400');
       assert.match(await disclosure.getAttribute('aria-label'),/4 задачи/);
       assert.equal(await groupGap(),4);
       await disclosure.click();
@@ -424,8 +469,17 @@ if (require.main === module) (async()=>{
       assert.equal(await draftPage.getByRole('button',{name:'Новая задача',exact:true}).count(),1);
       const picker=await draftPage.locator('#project-column-first .am-select-trigger').boundingBox(),plusBox=await plus.boundingBox();
       const projectLabel=await draftPage.locator('#project-heading').boundingBox();
-      assert.equal(plusBox.x,projectLabel.x);
-      assert.equal((await plus.locator('svg').boundingBox()).x,plusBox.x);
+      assert.equal((await plus.locator('svg').boundingBox()).x,projectLabel.x);
+      const newTaskInset=await plus.evaluate(n=>getComputedStyle(n).paddingInlineStart);
+      const rowInset=await local.locator('.am-machine-name').evaluate(n=>getComputedStyle(n).paddingInlineStart);
+      assert.equal(newTaskInset,rowInset);
+      assert.equal((await plus.locator('svg').boundingBox()).x-plusBox.x,parseFloat(rowInset));
+      await plus.hover();
+      assert.deepEqual(await plus.boundingBox(),plusBox);
+      const newTaskHover=await plus.evaluate(async n=>{
+        await Promise.all(n.getAnimations().map(a=>a.finished));
+        return getComputedStyle(n).backgroundColor;
+      });
       assert(plusBox.y+plusBox.height<picker.y);
       assert.equal(await plus.innerText(),'Новая задача');
       const plusGlyph=plus.locator('svg');
@@ -441,7 +495,7 @@ if (require.main === module) (async()=>{
         for(const selector of ['.am-computers','.am-side-bottom']){
           const divider=sidebar.querySelector(selector);
           const rect=divider.getBoundingClientRect(),style=getComputedStyle(divider);
-          if(rect.left!==left||rect.right!==right-parseFloat(getComputedStyle(sidebar).borderRightWidth)||style.borderTopWidth!=='1px'){
+          if(rect.left!==left||rect.right!==right-parseFloat(getComputedStyle(sidebar).borderRightWidth)||style.borderTopWidth!==(selector==='.am-computers'?'0px':'1px')){
             throw Error('Sidebar divider does not span the panel: '+selector);
           }
         }
@@ -478,44 +532,22 @@ if (require.main === module) (async()=>{
       assert.deepEqual(hoverFills,[hoverFills[0],hoverFills[0],hoverFills[0]]);
       await local.getByText('Мак, координатор',{exact:true}).waitFor();
       await card(draftPage,'vps').getByText('VPS-PC2, сервер',{exact:true}).waitFor();
+      const roleWeights=await draftPage.locator('.am-machine-label .am-inline-role').evaluateAll(roles=>roles.map(role=>[getComputedStyle(role).fontWeight,getComputedStyle(role.parentElement).fontWeight]));
+      assert(roleWeights.length>=2 && roleWeights.every(([role,name])=>role==='400'&&Number(name)>400),JSON.stringify(roleWeights));
       const remote=card(draftPage,'pc1').locator('.am-machine-name');
-      const metadata=remote.locator('.am-machine-meta');
-      const opacity=()=>metadata.evaluate(node=>getComputedStyle(node).opacity);
-      const versionSize=node=>getComputedStyle(node).fontSize;
-      assert.equal(await footer.locator('.am-version').evaluate(versionSize),await metadata.locator('.am-version').evaluate(versionSize));
-      assert.equal(await opacity(),'0');
-      assert(await remote.evaluate(node=>getComputedStyle(node).backgroundColor===getComputedStyle(node.closest('.am-sidebar')).backgroundColor));
-      const download=remote.getByRole('button',{name:'Обновить до v1.0.10'});
-      const initialButton=await download.boundingBox();
-      const directPoint={x:initialButton.x+initialButton.width/2,y:initialButton.y+initialButton.height/2};
-      await draftPage.mouse.move(directPoint.x,directPoint.y);
-      assert.equal(await opacity(),'1','direct entry over the download button reveals it');
-      assert.deepEqual(await download.boundingBox(),initialButton,'revealing the controls must keep their hit targets in place');
-      assert(await download.evaluate((node,p)=>node.contains(document.elementFromPoint(p.x,p.y)),directPoint),'the button stays under the pointer');
-      await draftPage.locator('#settings-open').hover();
+      assert.equal(await remote.locator('.am-version,.am-update-icon').count(),0);
       await remote.hover();
-      assert.equal(await opacity(),'1');
-      assert.notEqual(await remote.evaluate(node=>getComputedStyle(node).backgroundColor),await remote.evaluate(node=>getComputedStyle(node.closest('.am-sidebar')).backgroundColor));
+      const machineHover=await remote.evaluate(n=>getComputedStyle(n).backgroundColor);
+      assert.equal(machineHover,newTaskHover);
+      const inactiveTask=local.locator('.am-sidebar-task:not([aria-pressed=true])').first();
+      await inactiveTask.hover();
+      assert.equal(await inactiveTask.evaluate(n=>getComputedStyle(n).backgroundColor),machineHover);
       await remote.locator('.am-sidebar-disclosure').click();
       await draftPage.locator('#settings-open').hover();
-      assert.equal(await opacity(),'0');
-      await draftPage.keyboard.press('Tab');
-      const remoteUpdate=remote.getByRole('button',{name:'Обновить до v1.0.10'});
-      await remoteUpdate.focus();
-      assert.equal(await opacity(),'1');
-      assert.deepEqual(await buttonShape(remoteUpdate),['28px','28px','8px']);
-      assert.equal(await metadata.evaluate(node=>node.querySelector('.am-version').getBoundingClientRect().left
-        - node.querySelector('.am-update-icon').getBoundingClientRect().right),4);
-      const remoteGlyph=await remoteUpdate.locator('svg').first().boundingBox();
-      assert.deepEqual([remoteGlyph.width,remoteGlyph.height],[18,18]);
       assert.equal(await remote.evaluate(node=>node.getBoundingClientRect().height),29);
-      await remoteUpdate.hover();
-      const remoteFill=await remoteUpdate.evaluate(async node=>{
-        await Promise.all(node.getAnimations().map(animation=>animation.finished));
-        return getComputedStyle(node).backgroundColor;
-      });
-      assert.equal(remoteFill,hoverFills[0]);
       assert.match(await draftPage.locator('#thread .am-meta-author').last().textContent(),/, исполнитель$/);
+      const authorWeights=await draftPage.locator('#thread .am-meta-author .am-inline-role').evaluateAll(roles=>roles.map(role=>[getComputedStyle(role).fontWeight,getComputedStyle(role.parentElement).fontWeight]));
+      assert(authorWeights.length&&authorWeights.every(([role,author])=>role==='400'&&Number(author)>400),JSON.stringify(authorWeights));
       assert.equal(await draftPage.locator('#thread .am-role').count(),0);
       for(const panel of [local.locator('.am-machine-label'),...await draftPage.locator('#thread .am-meta-author').all()]){
         const [base,role]=await panel.evaluate(node=>{
@@ -525,7 +557,9 @@ if (require.main === module) (async()=>{
           };
           return [typography(node),typography(node.querySelector('.am-inline-role'))];
         });
-        assert.deepEqual(base.slice(0,3),role.slice(0,3));
+        assert.deepEqual(base.slice(0,2),role.slice(0,2));
+        assert.equal(role[2],'400');
+        assert(Number(base[2])>Number(role[2]));
         assert.notEqual(base[3],role[3]);
       }
       const message=draftPage.locator('#thread .am-message-group').first();
@@ -554,6 +588,11 @@ if (require.main === module) (async()=>{
       for(const row of await general.locator('.am-theme-setting:has(.am-select-trigger)').all()){
         await expectCentered(row.locator('label'),row.locator('.am-select-trigger'));
       }
+      const controlStyle=node=>node.evaluate(item=>{
+        const css=getComputedStyle(item);
+        return [css.height,css.borderRadius,css.backgroundColor];
+      });
+      const settingsControl=await controlStyle(general.locator('.am-select-trigger').first());
       const settingsControlWidth=(await general.locator('.am-select-trigger').first().boundingBox()).width;
       const topLeft=async locator=>{
         const {x,y}=await locator.boundingBox();
@@ -584,6 +623,15 @@ if (require.main === module) (async()=>{
         assert(await screen.locator(firstHeading).evaluate(node=>!node.closest('.am-card')),section);
         assert.deepEqual(await topLeft(screen.locator(firstControl)),generalField,section);
         if(section==='server'){
+          const roster=screen.locator('#network-roster');
+          await roster.locator('#network-local').getByText('v1.0.9',{exact:true}).waitFor();
+          const peer=roster.locator('[data-peer="pc1"]');
+          await peer.getByRole('button',{name:'Обновить до v1.0.10'}).waitFor();
+          assert.equal(await peer.locator('.am-network-update').textContent(),'Обновить');
+          assert.equal(await peer.evaluate(n=>n.offsetHeight),await roster.locator('#network-local').evaluate(n=>n.offsetHeight));
+
+          await screen.getByRole('tab',{name:'Свой сервер'}).click();
+          assert.equal(await screen.locator('#member-panel').isVisible(),false);
           for(const selector of ['#computer-name','#host-scope + .am-select-trigger','#host-port','#host-enable']){
             assert.equal(await height(selector),28,selector);
           }
@@ -637,15 +685,16 @@ if (require.main === module) (async()=>{
       });
       const toolbarPosition=await toolbar.boundingBox();
       const projectPicker=draftPage.locator('[aria-controls="project-select-menu"]');
-      const controlStyle=node=>node.evaluate(item=>{
-        const css=getComputedStyle(item);
-        return [css.height,css.borderRadius,css.backgroundColor];
-      });
       assert.equal(await projectPicker.count(),1);
-      const sidebarControl=await controlStyle(projectPicker);
+      assert.equal((await controlStyle(projectPicker))[2],'rgba(0, 0, 0, 0)');
+      for(const group of ['.am-stats-periods','.am-stats-filters']){
+        const items=standaloneStats.locator(group+' button:visible');
+        const first=await items.nth(0).boundingBox(),second=await items.nth(1).boundingBox();
+        assert.equal(second.x-first.x-first.width,8);
+      }
       for(const selector of ['#stats-project','#stats-computer','#stats-agent','#stats-model']){
         const control=standaloneStats.locator('[aria-controls="'+selector.slice(1)+'-menu"]');
-        assert.deepEqual(await controlStyle(control),sidebarControl);
+        assert.deepEqual(await controlStyle(control),settingsControl);
       }
       assert.equal(await standaloneStats.locator('#stats-efficiency').evaluate(node=>node.getBoundingClientRect().height),28);
       const usageTitle=await reportTitle('#stats-total-title');
@@ -716,7 +765,7 @@ if (require.main === module) (async()=>{
       await modelPicker.locator('#agent-model-save').evaluate(async button=>{
         await Promise.all(button.getAnimations().map(animation=>animation.finished));
       });
-      assert.deepEqual(await controlStyle(modelPicker.locator('#agent-model-save')),sidebarControl);
+      assert.deepEqual(await controlStyle(modelPicker.locator('#agent-model-save')),settingsControl);
       await modelPicker.getByRole('button',{name:'Отмена',exact:true}).click();
       await agentSettings.getByRole('button',{name:'Закрыть',exact:true}).click();
       await select(draftPage,'agents-computer','ПК-1');
@@ -884,12 +933,12 @@ if (require.main === module) (async()=>{
           headerEdges:[header.left-bounds.left-panel.clientLeft,bounds.right-header.right],
           fields:[heading.left-bounds.left-panel.clientLeft,bounds.right-filter.right,projects.left-aside.left,aside.right-projects.right-1],
           controls:[filter.height,rect('#project-select + .am-select-trigger').height],
-          toolbar:[toolbar.left-main.left,main.right-toolbar.right,toolbar.bottom-rect('.am-computers').top-1+rect('#task-new').height+parseFloat(getComputedStyle(document.querySelector('.am-sidebar')).rowGap)],
+          toolbar:[toolbar.left-main.left,main.right-toolbar.right,projects.top-rect('#task-new').bottom],
           rowAlignment:[header.top-bounds.top,filter.top-header.top],
         };
       });
       assert.deepEqual(await archiveGeometry(),{
-        matchesWorkspace:[0,0,0],headerEdges:[0,0],fields:[16,16,16,16],controls:[28,28],toolbar:[0,0,0],rowAlignment:[0,16],
+        matchesWorkspace:[0,0,0],headerEdges:[0,0],fields:[28,16,16,16],controls:[28,28],toolbar:[0,0,4],rowAlignment:[0,8],
       });
       assert.equal(await archive.locator('#task-list-heading').textContent(),'Архив');
       const trashBounds=await archive.locator('#archive-clear').boundingBox();
@@ -924,7 +973,9 @@ if (require.main === module) (async()=>{
         await menu.waitFor({state:'hidden'});
       }
       const clearBox=await clearArchive.boundingBox(),filterBox=await archive.locator('.am-select-trigger').boundingBox();
-      assert.equal(filterBox.x-clearBox.x-clearBox.width,8);
+      const archiveTitle=await archive.locator('.am-task-list-head h3').boundingBox();
+      assert.equal(clearBox.x-archiveTitle.x-archiveTitle.width,8);
+      assert(filterBox.x-clearBox.x-clearBox.width>8);
       assert.equal(clearBox.y,filterBox.y);
       assert.equal(clearBox.width,28);
       assert.equal(clearBox.height,28);
@@ -932,7 +983,7 @@ if (require.main === module) (async()=>{
       assert.deepEqual(await archive.locator('.am-queue-header').evaluate(n=>{
         const s=getComputedStyle(n);
         return [s.borderBottomWidth,s.backgroundColor,s.paddingBlockStart,s.paddingBlockEnd,s.paddingInlineStart,s.paddingInlineEnd];
-      }),['0px','rgba(0, 0, 0, 0)','16px','16px','16px','16px']);
+      }),['0px','rgba(0, 0, 0, 0)','8px','4px','16px','16px']);
       const hides=()=>seen.filter(req=>['/api/task-hide','/api/task-hide-history'].includes(req.path)).length;
       const initialHides=hides();
       await clearArchive.click();
@@ -973,7 +1024,10 @@ if (require.main === module) (async()=>{
         assert(Math.abs(baselines[0]-baselines[1])<=1,JSON.stringify(baselines));
       }
       await card(draftPage,'pc1').getByText('Ждёт запуска',{exact:false}).waitFor();
-      await archive.getByRole('button',{name:'Показать ещё 10'}).click();
+      const moreArchive=archive.getByRole('button',{name:/^Показать ещё/});
+      assert.equal(await moreArchive.count(),1);
+      assert(await moreArchive.evaluate(button=>button.parentElement===document.getElementById('task-list').lastElementChild));
+      await moreArchive.click();
       await archive.getByText('Инструменты, Старый отчёт',{exact:true}).waitFor();
       const older=archive.locator('.am-task').filter({hasText:'Старый отчёт'});
       assert.match(await older.locator('time').textContent(),/^\d{1,2} .+ в 03:00$/);
@@ -989,12 +1043,13 @@ if (require.main === module) (async()=>{
       const row=archive.locator('.am-task').filter({hasText:'Звуки меню'});
       await row.waitFor();
       assert.equal(await row.evaluate(node=>getComputedStyle(node).padding),'4px 12px');
+      assert.equal((await row.locator('.am-task-title').boundingBox()).x,(await archive.locator('#task-list-heading').boundingBox()).x);
       for(const rowSelector of ['.am-archive-task','.am-sidebar-task']){
         await draftPage.waitForFunction(selector=>{
           const row=document.querySelector(selector),panel=row?.closest('aside');
           if(!row||!panel)return false;
           const box=row.getBoundingClientRect(),outer=panel.getBoundingClientRect(),s=getComputedStyle(panel);
-          return box.width>0 && box.left-outer.left-parseFloat(s.borderLeftWidth)===16 &&
+          return box.width>0 && box.left-outer.left-parseFloat(s.borderLeftWidth)===(selector==='.am-sidebar-task'?40:16) &&
             outer.right-box.right-parseFloat(s.borderRightWidth)===16;
         },rowSelector);
       }
@@ -1034,14 +1089,14 @@ if (require.main === module) (async()=>{
         await task.evaluate(async node=>{
           await Promise.all(node.closest('.am-sidebar-tasks').getAnimations().map(animation=>animation.finished.catch(()=>{})));
         });
-        assert.deepEqual((await metrics(task)).slice(0,4),[2,'18px','36px','12px'],await machine.getAttribute('data-machine-order'));
+        assert.deepEqual((await metrics(task)).slice(0,4),[2,'18px','12px','12px'],await machine.getAttribute('data-machine-order'));
         const [heading,taskTitle]=await Promise.all([
           machine.locator('.am-machine-label').boundingBox(),
           task.locator('.am-sidebar-task-title').boundingBox(),
         ]);
         assert.equal(taskTitle.x,heading.x);
         const [button,machineRow]=await Promise.all([task.boundingBox(),machine.locator('.am-machine-name').boundingBox()]);
-        assert.deepEqual([button.x,button.width],[machineRow.x,machineRow.width]);
+        assert.deepEqual([button.x,button.width],[machineRow.x+24,machineRow.width-24]);
       }
       for(const meta of [local.locator('.am-sidebar-task-meta').first(),row.locator('.am-archive-task-meta')]){
         assert.deepEqual(await meta.evaluate(node=>[getComputedStyle(node).whiteSpace,getComputedStyle(node).textOverflow]),['nowrap','ellipsis']);
@@ -1085,7 +1140,11 @@ if (require.main === module) (async()=>{
           n.nextElementSibling.getBoundingClientRect().top-n.getBoundingClientRect().bottom),8);
       }
       assert.equal(box.height,44);
-      assert.equal((await mac.locator('#task-new').boundingBox()).y-(box.y+box.height),16);
+      const actionBox=await mac.locator('#task-new').boundingBox();
+      assert.equal(actionBox.y-(box.y+box.height),16);
+      assert.equal(row.y-actionBox.y-actionBox.height,4);
+      const firstComputer=await mac.locator('#machines .am-machine-name').first().boundingBox();
+      assert.equal(firstComputer.y-row.y-row.height,4);
       assert.equal(control.y+control.height/2,box.y+box.height/2);
       assert.equal(await mac.locator('.am-computers').evaluate(n=>getComputedStyle(n).borderBlockStartWidth),'0px');
       await mac.waitForFunction(()=>window.titlebarGeometry?.holes.some(([x,y,w,h])=>{
@@ -1100,7 +1159,7 @@ if (require.main === module) (async()=>{
       }
       const projectFilter=await mac.locator('#project-column-first .am-select-trigger').boundingBox(),agentFilter=await mac.locator('.am-task-filter .am-select-trigger').boundingBox();
       assert.equal(projectFilter.width,agentFilter.width);
-      assert.equal(agentFilter.y,(await mac.locator('#task-new').boundingBox()).y);
+      assert.equal(agentFilter.y,(await archive.boundingBox()).y+8);
       if(output){
         await mac.setViewportSize({width:1440,height:840});
         await mac.screenshot({path:path.join(output,'kotel-sidebar-117.png')});
@@ -1114,26 +1173,28 @@ if (require.main === module) (async()=>{
         await pane.evaluate(el=>el.style.inlineSize='180px');
         const trigger=await mac.locator(selector).boundingBox();
         const label=await mac.locator(heading).boundingBox();
-        assert(trigger.y>=label.y+label.height);
-        const innerWidth=await pane.evaluate(el=>el.clientWidth-parseFloat(getComputedStyle(el).paddingLeft)-parseFloat(getComputedStyle(el).paddingRight));
-        assert.equal(trigger.width,innerWidth);
+        assert.equal(trigger.y+trigger.height/2,label.y+label.height/2);
+        assert.equal(trigger.width,28);
         await pane.evaluate(el=>el.style.removeProperty('inline-size'));
       }
       assert.equal(await mac.locator('.am-sidebar').evaluate(n=>getComputedStyle(n,'::before').content),'none');
       assert.equal(await toolbar.evaluate(n=>getComputedStyle(n).borderBottomWidth),'1px');
       const date=mac.locator('#conversation-date');
+      await mac.locator('#thread').evaluate(n=>n.scrollTop=0);
       const start=await date.boundingBox();
       assert.equal(start.y-box.y-box.height,12);
       await mac.locator('.am-sidebar-task').filter({hasText:'Экран настроек'}).click();
       await mac.locator('#task-head h3').getByText('Экран настроек').waitFor();
       await mac.locator('#thread').getByText('Принято на компьютере ПК-1 $&',{exact:true}).waitFor();
       assert.equal(await date.getAttribute('datetime'),tasks.game[0].created_at);
+      assert(await date.evaluate(n=>n===n.parentNode.firstElementChild&&n.parentNode.id==='thread'));
       const scrolled=await mac.locator('#thread').evaluate(n=>{
-        n.scrollTop=4;
+        n.scrollTop=40;
         return n.scrollTop;
       });
-      assert.equal(scrolled,4);
-      assert.equal((await date.boundingBox()).y,start.y);
+      assert.equal(scrolled,40);
+      assert.equal((await date.boundingBox()).y,start.y-scrolled);
+      assert.equal((await toolbar.boundingBox()).y,box.y);
       await nav.press('Enter');
       assert.equal(await projectsRow.isVisible(),false);
       assert.equal(await nav.getAttribute('aria-expanded'),'false');
@@ -1222,14 +1283,61 @@ if (require.main === module) (async()=>{
       const localMark=card(browserPreview,'local').getByRole('img',{name:'Этот компьютер — На связи'});
       const remoteMark=card(browserPreview,'pc1').getByRole('img',{name:'На связи',exact:true});
       const offlineMark=card(browserPreview,'pc2').getByRole('img',{name:'Нет связи',exact:true});
-      await offlineMark.locator('.am-machine-signal svg').waitFor();
-      for(const mark of [localMark,remoteMark,offlineMark]){
+      const group=mode=>select(browserPreview,'sidebar-group',mode);
+      const machines=browserPreview.locator('#machines');
+      await group('По проекту');
+      const gameFolder=machines.locator('.am-sidebar-folder').filter({has:browserPreview.getByRole('button',{name:'Игра',exact:true})});
+      const gameButton=gameFolder.locator('.am-folder-heading');
+      assert.equal(await gameFolder.locator('.am-sidebar-task-title').filter({hasText:'Мак, Экран настроек'}).count(),1);
+      await gameButton.click();
+      assert.equal(await gameFolder.locator('.am-sidebar-task:visible').count(),0);
+      assert.equal(await gameButton.locator('.am-sidebar-task-count').textContent(),'3');
+      assert.equal(await gameButton.locator('.am-sidebar-task-count').isVisible(),true);
+      await gameButton.click();
+      assert.equal(await gameButton.locator('.am-sidebar-task-count').isVisible(),false);
+      await group('По компьютеру, затем по проекту');
+      const localGame=card(browserPreview,'local').locator('.am-sidebar-folder').filter({has:browserPreview.getByRole('button',{name:'Игра',exact:true})});
+      assert.equal(await localGame.getByText('Экран настроек',{exact:true}).count(),1);
+      const localFolderButton=localGame.locator('.am-folder-heading');
+      const machineHeader=card(browserPreview,'local').locator('.am-machine-name');
+      assert.equal((await localFolderButton.boundingBox()).height,(await machineHeader.boundingBox()).height);
+      assert.equal((await localMark.locator('svg').boundingBox()).width,16);
+      assert.equal((await localFolderButton.locator('svg').boundingBox()).width,16);
+      const artworkBounds=svg=>svg.evaluate(node=>{
+        const {x,y,width,height}=node.getBBox();
+        return [x,y,width,height].map(v=>Math.round(v*100)/100);
+      });
+      const machineBounds=await artworkBounds(localMark.locator('svg'));
+      assert.deepEqual(await artworkBounds(localFolderButton.locator('svg')),machineBounds);
+      const rear=localFolderButton.locator('svg path').first();
+      const rearOutline=await rear.getAttribute('d');
+      const folderOutline=localFolderButton.locator('svg path').last();
+      const openedOutline=await folderOutline.getAttribute('d');
+      await localFolderButton.click();
+      assert.equal(await rear.getAttribute('d'),rearOutline);
+      assert.notEqual(await folderOutline.getAttribute('d'),openedOutline);
+      assert.deepEqual(await artworkBounds(localFolderButton.locator('svg')),machineBounds);
+      assert.equal(await localFolderButton.locator('.am-sidebar-task-count:visible').textContent(),'2');
+      await localFolderButton.click();
+      assert.equal(await folderOutline.getAttribute('d'),openedOutline);
+      const treeGaps=await card(browserPreview,'local').evaluate(node=>{
+        const rows=[...node.querySelectorAll('.am-machine-name,.am-folder-heading,.am-sidebar-task')].map(row=>row.getBoundingClientRect());
+        return rows.slice(1).map((row,i)=>row.top-rows[i].bottom);
+      });
+      assert(treeGaps.length>=3);
+      assert(treeGaps.every(gap=>Math.abs(gap-4)<0.1),JSON.stringify(treeGaps));
+      await localGame.locator('.am-sidebar-task').filter({hasText:'Экран настроек'}).click();
+      await browserPreview.locator('#task-head').getByText('Экран настроек',{exact:true}).waitFor();
+      await group('По компьютеру');
+      await offlineMark.locator('svg').waitFor();
+      assert.match(await offlineMark.locator('svg path').getAttribute('d'),/M2 2l20 20/);
+      for(const mark of [localMark,remoteMark]){
         assert.match(await mark.locator(':scope > svg path').getAttribute('d'),/M4 3.*M4 14/);
       }
       const markColor=mark=>mark.evaluate(node=>getComputedStyle(node).color);
       assert.deepEqual(await Promise.all([localMark,remoteMark,offlineMark].map(markColor)),
         Array(3).fill(await markColor(remoteMark)));
-      assert.equal(await remoteMark.locator('.am-machine-signal').evaluate(node=>getComputedStyle(node).borderRadius),'50%');
+      assert.equal(await remoteMark.locator('.am-machine-signal').count(),0);
       assert.equal(await browserPreview.locator('.am-shell').evaluate(shell=>
         shell.getBoundingClientRect().top-shell.closest('.am-window').getBoundingClientRect().top),1);
       await toggle.click();
@@ -1493,12 +1601,14 @@ if (require.main === module) (async()=>{
     const dateCell=statsTask.locator('td').first();
     await dateCell.hover();
     assert.deepEqual(await taskButton.evaluate(button=>{
-      const row=button.closest('tr'),highlight=getComputedStyle(row.cells[0],'::before');
+      const row=button.closest('tr'),highlight=getComputedStyle(row.cells[0]);
       const title=button.firstElementChild.getBoundingClientRect();
       const header=button.closest('table').tHead.rows[0].cells[1];
       const titleColumnStart=header.getBoundingClientRect().left+parseFloat(getComputedStyle(header).paddingLeft);
-      return [highlight.insetBlockStart,highlight.insetBlockEnd,highlight.insetInlineStart,highlight.insetInlineEnd,title.left-titleColumnStart];
-    }),['4px','4px','0px','0px',0]);
+      const [first,second]=row.parentElement.rows;
+      const gap=second.getBoundingClientRect().top-first.getBoundingClientRect().bottom;
+      return [highlight.paddingBlockStart,highlight.paddingBlockEnd,highlight.borderBlockStartWidth,highlight.borderBlockEndWidth,title.left-titleColumnStart,gap];
+    }),['4px','4px','0px','0px',0,4]);
     await dateCell.click();
     await chat(page,'tools').waitFor();
     await cells(page,'local').nth(0).press('Enter');

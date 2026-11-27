@@ -190,6 +190,7 @@ func taskLink(tx *sql.Tx, task string) (taskLinks, error) {
 
 // netBody is the content of a message. Task is always the origin's task ID.
 type netBody struct {
+	Access           string `json:"access,omitempty"`
 	Kind             string `json:"kind"`
 	Task             string `json:"task"`
 	Project          string `json:"project,omitempty"`
@@ -221,8 +222,9 @@ type netBody struct {
 	// computer before it ignores the field.
 	Usage *TaskUsage `json:"usage,omitempty"`
 	// LiveTokens is a cumulative observation for one attempt, never final usage.
-	LiveTokens *int64 `json:"live_tokens,omitempty"`
-	RunOrdinal int    `json:"run_ordinal,omitempty"`
+	LiveTokens      *int64          `json:"live_tokens,omitempty"`
+	RunOrdinal      int             `json:"run_ordinal,omitempty"`
+	ContextSnapshot json.RawMessage `json:"context_snapshot,omitempty"`
 	// DurationMS comes from the executing computer's own clock.
 	DurationMS *int64 `json:"duration_ms,omitempty"`
 	// Computer is the sender's lasting id (T-132), set on every message, so
@@ -716,6 +718,9 @@ func prepareRemoteTask(tx *sql.Tx, r StartTaskRequest) (remoteTaskConfig, error)
 	if !has {
 		return cfg, fmt.Errorf("%w: agent %s is not set up on %s", ErrRejected, r.Provider, peer.Name)
 	}
+	if r.Access != "" && (!previewBuild.MatchString(peer.Version) || !peerBuildAtLeast(peer.Version, 118)) {
+		return cfg, fmt.Errorf("%w: update the executor to build 118 or later before requesting per-task access", ErrRejected)
+	}
 	centralModels := usesCoordinatorModels(peer.Version)
 	if centralModels {
 		self, err := localComputer(tx)
@@ -753,7 +758,7 @@ func recordRemoteTask(tx *sql.Tx, r StartTaskRequest, self string, cfg remoteTas
 		id, r.Project, r.OpID, r.Computer, r.Provider, title, r.Text, "sent to "+cfg.peer.Name+"; waiting for it to accept", at, at, r.Model, cfg.broker, r.Computer, r.Lock, cfg.peer.Name, sender, senderModel); err != nil {
 		return "", err
 	}
-	if _, err := tx.Exec(`UPDATE tasks SET remote_computer=? WHERE id=?`, validComputer(cfg.peer.Computer), id); err != nil {
+	if _, err := tx.Exec(`UPDATE tasks SET remote_computer=?,requested_access=? WHERE id=?`, validComputer(cfg.peer.Computer), r.Access, id); err != nil {
 		return "", err
 	}
 	if err := insertTaskEvent(tx, r.Project, id, AudienceLog, "started", title, ""); err != nil {
@@ -770,7 +775,12 @@ func recordRemoteTask(tx *sql.Tx, r StartTaskRequest, self string, cfg remoteTas
 			return "", err
 		}
 	}
-	return id, enqueueNetFrom(tx, self, cfg.broker, r.Computer, "start."+id, id, netBody{Kind: "start", Task: id, Project: r.Project, Agent: r.Provider, Title: title, Text: r.Text, Model: r.Model, CoordinatorModel: cfg.centralModels, ByOwner: r.ByOwner, Rules: r.Rules, Lock: r.Lock, SenderAgent: sender, SenderModel: senderModel, Analytics: analytics})
+	// An older executor must never run a restricted request with its own defaults.
+	kind := "start"
+	if r.Access != "" {
+		kind = "start_with_access"
+	}
+	return id, enqueueNetFrom(tx, self, cfg.broker, r.Computer, "start."+id, id, netBody{Kind: kind, Access: r.Access, Task: id, Project: r.Project, Agent: r.Provider, Title: title, Text: r.Text, Model: r.Model, CoordinatorModel: cfg.centralModels, ByOwner: r.ByOwner, Rules: r.Rules, Lock: r.Lock, SenderAgent: sender, SenderModel: senderModel, Analytics: analytics})
 }
 
 // answerRemoteTask sends an answer to the computer that runs the task.
@@ -1156,7 +1166,7 @@ func (s *Store) netUndeliverable(seq int64, opID, broker, recipient string) erro
 			return nil
 		}
 		switch kind {
-		case "start":
+		case "start", "start_with_access":
 			const why = "the other computer is no longer in the network; the task never reached it"
 			if err := setTaskState(tx, task, "failed", why); err != nil {
 				return err
@@ -1326,6 +1336,10 @@ func decodeNetIncoming(m NetIncoming) (netBody, bool) {
 	// Ignore IDs that cannot travel back in a reply.
 	valid := json.Unmarshal(m.Body, &b) == nil && netRef.MatchString(b.Task) &&
 		(b.Question == "" || netRef.MatchString(b.Question))
+	if b.Kind == "start_with_access" {
+		valid = valid && b.Access != "" && ValidTaskAccess(b.Access)
+		b.Kind = "start"
+	}
 	return b, valid
 }
 
@@ -1412,7 +1426,10 @@ func remoteStartRequest(tx *sql.Tx, from netLink, b netBody) (StartTaskRequest, 
 	} else if pending {
 		return r, fmt.Errorf("%w: this computer is waiting to install a Messenger update and takes no new tasks", ErrRejected)
 	}
-	r = StartTaskRequest{Project: b.Project, OpID: mirrorOp(from), Provider: b.Agent, Title: b.Title, Text: strings.TrimSpace(b.Text), Model: strings.TrimSpace(b.Model), Rules: strings.TrimSpace(b.Rules), SenderAgent: b.SenderAgent, SenderModel: b.SenderModel, ByOwner: b.ByOwner}
+	if !ValidTaskAccess(b.Access) {
+		return r, fmt.Errorf("%w: invalid task access", ErrRejected)
+	}
+	r = StartTaskRequest{Access: b.Access, Project: b.Project, OpID: mirrorOp(from), Provider: b.Agent, Title: b.Title, Text: strings.TrimSpace(b.Text), Model: strings.TrimSpace(b.Model), Rules: strings.TrimSpace(b.Rules), SenderAgent: b.SenderAgent, SenderModel: b.SenderModel, ByOwner: b.ByOwner}
 	var assignment TaskAssignment
 	if json.Unmarshal(b.Analytics, &assignment) == nil && assignment.valid() {
 		r.Assignment = assignment
@@ -1504,6 +1521,13 @@ func applyReport(tx *sql.Tx, from netLink, b netBody, name string) error {
 	}
 	switch b.Kind {
 	case "progress":
+		if b.Event == "context_snapshot" {
+			var next contextSnapshot
+			if json.Unmarshal(b.ContextSnapshot, &next) != nil || !next.valid() {
+				return nil
+			}
+			return applyTaskContext(tx, t.ID, next)
+		}
 		if b.Event == "live_usage" {
 			if t.State != "running" || b.LiveTokens == nil || *b.LiveTokens < 0 || b.RunOrdinal < 1 {
 				return nil

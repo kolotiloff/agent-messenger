@@ -63,7 +63,7 @@ func splitPendingInFile(ctx context.Context, computer, db *sql.DB, file, broker 
 			return nil, err
 		}
 		for _, m := range pending {
-			if m.kind == "start" {
+			if m.kind == "start" || m.kind == "start_with_access" {
 				// The project can commit before the shared route. Only a
 				// published route makes this assignment eligible to send.
 				var registered bool

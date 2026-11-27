@@ -36,8 +36,9 @@ const (
 
 // CoordinatorLinkView is the coordinator connection as the window shows it.
 type CoordinatorLinkView struct {
-	State  string `json:"state"`
-	Detail string `json:"detail,omitempty"`
+	State      string `json:"state"`
+	Detail     string `json:"detail,omitempty"`
+	serverName string
 }
 
 var coordinatorConnect sync.Mutex
@@ -103,8 +104,8 @@ func (s *Supervisor) resolveCoordinatorTarget(t coordinatorTarget) (coordinatorT
 }
 
 func (s *Supervisor) readCoordinatorLink(project string, t coordinatorTarget) CoordinatorLinkView {
-	state, err := adapters.CoordinatorLink(t.config, t.folder, t.messenger, s.root, project)
-	view := CoordinatorLinkView{State: state}
+	state, name, err := adapters.ClaudeCoordinatorEntry(t.config, t.folder, t.messenger, s.root, project)
+	view := CoordinatorLinkView{State: state, serverName: name}
 	if err != nil {
 		view.Detail = err.Error()
 	}
@@ -150,7 +151,7 @@ func (s *Supervisor) connectCoordinator(project string) CoordinatorLinkView {
 		return view
 	}
 	before := s.readCoordinatorLink(project, t)
-	if before.State != adapters.LinkMissing && before.State != adapters.LinkStale {
+	if t.cli == "" || (before.State != adapters.LinkMissing && before.State != adapters.LinkStale) {
 		return before
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), coordinatorAddTimeout)
@@ -168,10 +169,10 @@ func (s *Supervisor) connectCoordinator(project string) CoordinatorLinkView {
 	if before.State == adapters.LinkStale {
 		// Our own entry for an earlier program file (T-117): Claude's add
 		// does not replace an entry, so it is removed first.
-		runErr = run(adapters.ClaudeRemoveCoordinatorArgs(t.cli))
+		runErr = run(adapters.ClaudeRemoveCoordinatorArgs(t.cli, before.serverName))
 	}
 	if runErr == nil {
-		runErr = run(adapters.ClaudeAddCoordinatorArgs(t.cli, t.messenger, s.root, project))
+		runErr = run(adapters.ClaudeAddCoordinatorArgs(t.cli, before.serverName, t.messenger, s.root, project))
 	}
 	after := s.readCoordinatorLink(project, t)
 	if after.State == adapters.LinkConnected {

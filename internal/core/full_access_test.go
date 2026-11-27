@@ -199,3 +199,86 @@ func TestFailedRunSaysWhy(t *testing.T) {
 		}
 	}
 }
+
+func TestExplicitTaskAccessStaysWithinExecutorPolicy(t *testing.T) {
+	f := newTaskFixture(t)
+	if err := f.st.SetAgentFullAccess("codex", true); err != nil {
+		t.Fatal(err)
+	}
+	req := StartTaskRequest{Project: "Game", OpID: "scoped", Provider: "codex", Text: "Inspect the menu", Access: "standard"}
+	id, _, err := f.st.StartTask(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Access = "full"
+	if _, _, err := f.st.StartTask(req); !errors.Is(err, ErrRejected) {
+		t.Fatal("changed access on replay", err)
+	}
+	run := f.launch(t, id, "019a0000-0000-7000-8000-000000000001")
+	task, err := f.st.TaskByID(id)
+	if err != nil || task.FullAccess {
+		t.Fatal("explicit restriction lost", err)
+	}
+	f.dispose(t, run, DispositionReport, "Inspected")
+	if _, err = f.st.FinishTaskRun(run.ID, cleanExit); err != nil {
+		t.Fatal(err)
+	}
+	if err = f.st.ContinueTask(id, "follow", "Check again", AudienceCoordinator); err != nil {
+		t.Fatal(err)
+	}
+	intents, err := f.st.NextTaskRunIntents(1)
+	if err != nil || len(intents) != 1 {
+		t.Fatal(intents, err)
+	}
+	_, task, err = f.st.BeginTaskRun(intents[0], "fixture-follow")
+	if err != nil || task.FullAccess {
+		t.Fatal("follow-up exceeded requested access", err)
+	}
+}
+
+func TestNetworkTaskAccessRequiresCompatibleExecutor(t *testing.T) {
+	p := newNetPair(t)
+	peer := NetPeer{ID: "dev-b", Name: "Peer", Age: 1, Agents: []NetAgent{{Agent: "codex"}}, Version: "1.0.14-preview.117"}
+	register := func() {
+		t.Helper()
+		if err := p.a.st.SetNetwork(testBroker, HostPeerID, []NetPeer{peer}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	register()
+	req := StartTaskRequest{Project: "Game", Computer: peer.ID, Provider: "codex", OpID: "scoped", Text: "Inspect", Access: "standard"}
+	if _, _, err := p.a.st.StartTask(req); !errors.Is(err, ErrRejected) {
+		t.Fatal("delivered to an older peer", err)
+	}
+	peer.Version = "1.0.15-preview.118"
+	register()
+	if err := p.b.st.SetAgentFullAccess("codex", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.b.st.SetNetFullAccess(true); err != nil {
+		t.Fatal(err)
+	}
+	id, _, err := p.a.st.StartTask(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.carry(t, true)
+	mirror := p.mirror(t, id)
+	if mirror.FullAccess || mirror.RequestedAccess != "standard" {
+		t.Fatal("remote restriction lost")
+	}
+	req.Access = "full"
+	req.OpID = "limited"
+	if err := p.b.st.SetNetFullAccess(false); err != nil {
+		t.Fatal(err)
+	}
+	id, _, err = p.a.st.StartTask(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.carry(t, true)
+	mirror = p.mirror(t, id)
+	if mirror.FullAccess || mirror.RequestedAccess != "full" {
+		t.Fatal("remote policy exceeded")
+	}
+}

@@ -181,7 +181,7 @@ func TestConnectCoordinatorRunsClaudeInTheProjectFolder(t *testing.T) {
 		t.Fatalf("calls %q", calls)
 	}
 	parts := strings.Split(calls[0], "\x00")
-	want := append([]string{"mcp", "add", "--scope", "local", "messenger", "--", f.messenger}, adapters.CoordinatorArgs(f.sup.root, f.project)...)
+	want := append([]string{"mcp", "add", "--scope", "local", "kotel", "--", f.messenger}, adapters.CoordinatorArgs(f.sup.root, f.project)...)
 	if real, _ := filepath.EvalSymlinks(f.folder); parts[0] != real && parts[0] != f.folder || strings.Join(parts[1:], "\x00") != strings.Join(want, "\x00") {
 		t.Fatalf("call %q", parts)
 	}
@@ -284,7 +284,7 @@ func TestWindowRepairsAStaleCodexEntryOnce(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	old := filepath.Join(f.sup.root, "old-messenger")
+	old := filepath.Join(f.sup.root, "runtimes", strings.Repeat("a", 64), "messenger")
 	body := "keep = 1\n[mcp_servers.messenger]\ncommand = \"" + old + "\"\nargs = [\"--root\", \"" + f.sup.root + "\", \"coordinator\", \"--project\", \"Game\"]\n"
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
@@ -348,7 +348,7 @@ func TestStaleCoordinatorEntryIsReplaced(t *testing.T) {
 		t.Fatal(err)
 	}
 	stale := map[string]any{"numStartups": 2, "projects": map[string]any{f.folder: map[string]any{"mcpServers": map[string]any{
-		"messenger": map[string]any{"type": "stdio", "command": filepath.Join(f.sup.root, "runtimes", "old", "messenger"), "args": adapters.CoordinatorArgs(f.sup.root, f.project)},
+		"messenger": map[string]any{"type": "stdio", "command": filepath.Join(f.sup.root, "runtimes", strings.Repeat("a", 64), "messenger"), "args": adapters.CoordinatorArgs(f.sup.root, f.project)},
 		"other":     map[string]any{"command": "keep"},
 	}}}}
 	raw, _ := json.Marshal(stale)

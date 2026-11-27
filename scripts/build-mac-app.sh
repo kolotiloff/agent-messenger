@@ -5,7 +5,7 @@ set -euo pipefail
 [[ $# == 3 ]] || { echo 'Usage: build-mac-app.sh OUTPUT_DIRECTORY PREVIEW_VERSION SOURCE_SHA' >&2; exit 1; }
 out="$1"; version="$2"; revision="$3"
 [[ "$out" == /* && "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-preview[0-9A-Za-z.-]*$ && "$revision" =~ ^[0-9a-f]{40}$ ]] || { echo 'Absolute output, preview version and full SHA required' >&2; exit 1; }
-app="$out/Agent Messenger.app"
+app="$out/Kotel.app"
 [[ ! -e "$app" && ! -e "$out/Agent-Messenger-mac.zip" ]] || { echo 'Output already exists; refusing overwrite' >&2; exit 1; }
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 go_bin="${GO_BIN:-go}"
@@ -13,7 +13,7 @@ sparkle="${SPARKLE_DIR:-$out/sparkle-sdk}"
 bash scripts/fetch-sparkle.sh "$sparkle"
 public_key="$(cat desktop/macos/update-public-key.txt)"
 [[ "$public_key" =~ ^[A-Za-z0-9/+]{43}=$ ]] || { echo 'Invalid update public key' >&2; exit 1; }
-CGO_ENABLED=0 "$go_bin" build -trimpath -buildvcs=false -ldflags "-X github.com/kolotiloff/agent-messenger/internal/buildinfo.Version=$version -X github.com/kolotiloff/agent-messenger/internal/buildinfo.Revision=$revision -X github.com/kolotiloff/agent-messenger/internal/buildinfo.UpdatePublicKey=$public_key" -o "$app/Contents/Resources/messenger" ./cmd/messenger
+CGO_ENABLED=0 "$go_bin" build -trimpath -buildvcs=false -ldflags "-X github.com/kolotiloff/agent-messenger/internal/buildinfo.Version=$version -X github.com/kolotiloff/agent-messenger/internal/buildinfo.Revision=$revision -X github.com/kolotiloff/agent-messenger/internal/buildinfo.UpdatePublicKey=$public_key" -o "$app/Contents/Resources/kotel" ./cmd/messenger
 xcrun swiftc -target "$(uname -m)-apple-macos15.0" -swift-version 5 -O -F "$sparkle" -framework Sparkle -Xlinker -rpath -Xlinker @executable_path/../Frameworks -framework AppKit -framework WebKit desktop/macos/main.swift desktop/macos/Updater.swift -o "$app/Contents/MacOS/AgentMessenger"
 cp desktop/macos/Info.plist "$app/Contents/Info.plist"
 mkdir -p "$app/Contents/Frameworks"
@@ -39,10 +39,11 @@ short_version="$version"
 xcrun swiftc -swift-version 5 desktop/macos/icon.swift -o "$out/icon-generator"
 "$out/icon-generator" internal/localui/assets/icon.svg "$out/AppIcon.iconset"
 iconutil -c icns "$out/AppIcon.iconset" -o "$app/Contents/Resources/KotelIcon.icns"
-codesign --force --sign - "$app/Contents/Resources/messenger"
+codesign --force --sign - "$app/Contents/Resources/kotel"
+ln -s kotel "$app/Contents/Resources/messenger"
 codesign --force --sign - "$app"
 codesign --verify --deep --strict "$app"
-"$app/Contents/Resources/messenger" version
+"$app/Contents/Resources/kotel" version
 /usr/bin/ditto -c -k --keepParent "$app" "$out/Agent-Messenger-mac.zip"
 (cd "$out" && shasum -a 256 Agent-Messenger-mac.zip > Agent-Messenger-mac.zip.sha256)
 printf 'Built: %s\n' "$app"

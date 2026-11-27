@@ -40,7 +40,8 @@ func TestWorkerMCPReadsFromItsProjectFile(t *testing.T) {
 	if err != nil || len(files) != 2 {
 		t.Fatalf("project files: %v %v", files, err)
 	}
-	const request = `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"read_task","arguments":{}}}
+	const request = `{"jsonrpc":"2.0","id":0,"method":"initialize","params":{}}
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"read_task","arguments":{}}}
 `
 	var accepted, rejected int
 	for _, file := range files {
@@ -53,7 +54,7 @@ func TestWorkerMCPReadsFromItsProjectFile(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(output.String(), task.Text) || !strings.Contains(output.String(), `"isError":false`) {
+		if !strings.Contains(output.String(), `"name":"kotel-task"`) || !strings.Contains(output.String(), task.Text) || !strings.Contains(output.String(), `"isError":false`) {
 			t.Fatalf("worker did not read its task: %s", &output)
 		}
 		accepted++

@@ -766,6 +766,7 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 		return control.Request{Cmd: "coordinator-connect", Alias: in.Project, Provider: in.Agent}, true
 	case "/api/task-start":
 		var in struct {
+			Access   string `json:"access"`
 			Project  string `json:"project"`
 			Computer string `json:"computer"`
 			Agent    string `json:"agent"`
@@ -774,11 +775,15 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 			Text     string `json:"text"`
 		}
 		if decoder.Decode(&in) != nil || !core.ValidProjectName(in.Project) || !core.TaskProviders[in.Agent] ||
-			!validTaskHistoryFilter(in.Agent, in.Computer) || !core.ValidTaskModel(in.Model) ||
+			!validTaskHistoryFilter(in.Agent, in.Computer) || !core.ValidTaskModel(in.Model) || !core.ValidTaskAccess(in.Access) ||
 			in.OpID == "" || len(in.OpID) > 128 || strings.TrimSpace(in.Text) == "" || len(in.Text) > 4*core.MaxTaskText {
 			return control.Request{}, false
 		}
-		return control.Request{Cmd: "task-owner-start", Project: in.Project, Computer: in.Computer, Provider: in.Agent, Model: in.Model, Confirmation: in.OpID, Text: in.Text}, true
+		cmd := "task-owner-start"
+		if in.Access != "" {
+			cmd = "task-owner-start-with-access"
+		}
+		return control.Request{Cmd: cmd, Access: in.Access, Project: in.Project, Computer: in.Computer, Provider: in.Agent, Model: in.Model, Confirmation: in.OpID, Text: in.Text}, true
 	case "/api/task-answer":
 		var in struct {
 			Task     string `json:"task"`

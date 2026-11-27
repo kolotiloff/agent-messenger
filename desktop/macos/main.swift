@@ -58,9 +58,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             } else { fatalLaunch("Другое окно Kotel уже запускается. Откройте его через Dock.") }
             return
         }
-        if let icon = Bundle.main.url(forResource: "KotelIcon", withExtension: "icns").flatMap(NSImage.init(contentsOf:)) {
-            NSApp.applicationIconImage = icon
-        }
+        // Use the bundle icon with the same system framing as the application list.
+        NSApp.applicationIconImage = NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath)
         applyTheme(UserDefaults.standard.string(forKey: "appearance") ?? "system")
         buildMenu()
         let config = WKWebViewConfiguration()
@@ -221,7 +220,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         stopUI()
         let version = generation
         showConnecting()
-        guard let executable = Bundle.main.url(forResource: "messenger", withExtension: nil) else { message("В приложении отсутствует клиент. Заново распакуйте проверенную сборку."); return }
+        guard let executable = Bundle.main.url(forResource: "kotel", withExtension: nil) else { message("В приложении отсутствует клиент. Заново распакуйте проверенную сборку."); return }
         let process = Process(); process.executableURL = executable
         var args: [String] = []
         if let root = UserDefaults.standard.string(forKey: "dataRoot"), !root.isEmpty { args += ["--root", root] }

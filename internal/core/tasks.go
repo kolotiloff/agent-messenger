@@ -234,9 +234,10 @@ type Task struct {
 	FromNetwork bool
 	// FullAccess lifts the agent's own permission checks and sandbox for
 	// this task's runs (T-054, D-065), copied from the agent at start.
-	FullAccess   bool
-	Version      int
-	OpenQuestion *TaskQuestion
+	FullAccess      bool
+	RequestedAccess string
+	Version         int
+	OpenQuestion    *TaskQuestion
 }
 
 // TaskQuestion is a question that a verified run asked.
@@ -719,6 +720,8 @@ func taskTitle(title, text string) string {
 // new; the same OpID with different arguments is refused (D-022).
 type StartTaskRequest struct {
 	Project, OpID, Computer, Provider, Title, Text string
+	// Access is empty for the executor default, standard, or full within its policy.
+	Access string
 	// Sender metadata describe the assigning chat, independently of the worker.
 	SenderAgent, SenderModel string
 	// ByOwner starts a direct conversation from the window.
@@ -808,7 +811,14 @@ func (s *Store) StartTask(r StartTaskRequest) (string, bool, error) {
 	return id, created, err
 }
 
+func ValidTaskAccess(access string) bool {
+	return access == "" || access == "standard" || access == "full"
+}
+
 func normalizeStartTask(r StartTaskRequest) (StartTaskRequest, error) {
+	if !ValidTaskAccess(r.Access) {
+		return r, fmt.Errorf("%w: invalid task access", ErrRejected)
+	}
 	r.Text = strings.TrimSpace(r.Text)
 	if r.OpID == "" || len(r.OpID) > 128 || r.Text == "" || utf8.RuneCountInString(r.Text) > MaxTaskText {
 		return r, fmt.Errorf("%w: start_task needs an operation id and a task text of 1..%d characters", ErrRejected, MaxTaskText)
@@ -833,12 +843,12 @@ func normalizeStartTask(r StartTaskRequest) (StartTaskRequest, error) {
 
 func existingStartTask(tx *sql.Tx, r StartTaskRequest) (string, error) {
 	var id string
-	var old struct{ computer, provider, title, text, model, lock, sender string }
-	err := tx.QueryRow(`SELECT id,computer,provider,title,text,COALESCE(model,''),resource,COALESCE(sender_agent,'') FROM tasks WHERE project=? AND op_id=?`, r.Project, r.OpID).Scan(&id, &old.computer, &old.provider, &old.title, &old.text, &old.model, &old.lock, &old.sender)
+	var old struct{ computer, provider, title, text, model, lock, sender, access string }
+	err := tx.QueryRow(`SELECT id,computer,provider,title,text,COALESCE(model,''),resource,COALESCE(sender_agent,''),requested_access FROM tasks WHERE project=? AND op_id=?`, r.Project, r.OpID).Scan(&id, &old.computer, &old.provider, &old.title, &old.text, &old.model, &old.lock, &old.sender, &old.access)
 	if err != nil {
 		return id, err
 	}
-	if old.computer != r.Computer || old.provider != r.Provider || old.text != r.Text || old.title != taskTitle(r.Title, r.Text) || old.model != r.Model || old.lock != r.Lock || (old.sender == AudienceOwner) != r.ByOwner {
+	if old.access != r.Access || old.computer != r.Computer || old.provider != r.Provider || old.text != r.Text || old.title != taskTitle(r.Title, r.Text) || old.model != r.Model || old.lock != r.Lock || (old.sender == AudienceOwner) != r.ByOwner {
 		return id, fmt.Errorf("%w: this operation id was used for a different task", ErrRejected)
 	}
 	assignment, err := readTaskAssignment(tx, id)
@@ -920,7 +930,7 @@ func prepareLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, fromNetwo
 	} else if err := modelAllowed(r.Provider, r.Model, splitModels(models)); err != nil {
 		return cfg, err
 	}
-	cfg.fullAccess = fullAccess != 0
+	cfg.fullAccess = fullAccess != 0 && r.Access != "standard"
 	if cfg.fullAccess && fromNetwork {
 		// Network tasks also need the owner's explicit permission (T-094).
 		on, err := netFullAccess(tx)
@@ -950,8 +960,8 @@ func recordLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, origin *ne
 	}
 	at := now()
 	sender, senderModel := startTaskSender(r)
-	if _, err := tx.Exec(`INSERT INTO tasks(id,project,op_id,computer,provider,cli_path,environment,profile,folder,title,text,state,session_id,created_at,updated_at,model,sender_agent,sender_model) VALUES (?,?,?,?,?,?,?,?,?,?,?,'running',?,?,?,?,?,?)`,
-		id, r.Project, r.OpID, computer, r.Provider, cfg.agent.CLI, cfg.agent.Environment, cfg.agent.Profile, cfg.folder, taskTitle(r.Title, r.Text), r.Text, nullString(session), at, at, r.Model, sender, senderModel); err != nil {
+	if _, err := tx.Exec(`INSERT INTO tasks(id,project,op_id,computer,provider,cli_path,environment,profile,folder,title,text,state,session_id,created_at,updated_at,model,sender_agent,sender_model,requested_access) VALUES (?,?,?,?,?,?,?,?,?,?,?,'running',?,?,?,?,?,?,?)`,
+		id, r.Project, r.OpID, computer, r.Provider, cfg.agent.CLI, cfg.agent.Environment, cfg.agent.Profile, cfg.folder, taskTitle(r.Title, r.Text), r.Text, nullString(session), at, at, r.Model, sender, senderModel, r.Access); err != nil {
 		return "", err
 	}
 	if cfg.fullAccess {
@@ -1008,12 +1018,12 @@ func insertTaskRun(tx *sql.Tx, task string, ordinal int, kind, input string, sen
 	return err
 }
 
-const taskColumns = `id,project,computer,provider,profile,folder,title,text,state,COALESCE(session_id,''),detail,created_at,updated_at,COALESCE(finished_at,''),cli_path,environment,cancel_requested,version,COALESCE(model,''),COALESCE(ran_model,''),COALESCE(failure_reason,''),COALESCE(failure_reset,''),origin_peer IS NOT NULL,full_access,sender_agent,sender_model`
+const taskColumns = `id,project,computer,provider,profile,folder,title,text,state,COALESCE(session_id,''),detail,created_at,updated_at,COALESCE(finished_at,''),cli_path,environment,cancel_requested,version,COALESCE(model,''),COALESCE(ran_model,''),COALESCE(failure_reason,''),COALESCE(failure_reset,''),origin_peer IS NOT NULL,full_access,sender_agent,sender_model,requested_access`
 
 func scanTask(scan func(...any) error) (Task, error) {
 	var t Task
 	var cancel, origin, full int
-	err := scan(&t.ID, &t.Project, &t.Computer, &t.Provider, &t.Profile, &t.Folder, &t.Title, &t.Text, &t.State, &t.SessionID, &t.Detail, &t.CreatedAt, &t.UpdatedAt, &t.FinishedAt, &t.CLI, &t.Environment, &cancel, &t.Version, &t.Model, &t.RanModel, &t.FailureReason, &t.FailureReset, &origin, &full, &t.SenderAgent, &t.SenderModel)
+	err := scan(&t.ID, &t.Project, &t.Computer, &t.Provider, &t.Profile, &t.Folder, &t.Title, &t.Text, &t.State, &t.SessionID, &t.Detail, &t.CreatedAt, &t.UpdatedAt, &t.FinishedAt, &t.CLI, &t.Environment, &cancel, &t.Version, &t.Model, &t.RanModel, &t.FailureReason, &t.FailureReset, &origin, &full, &t.SenderAgent, &t.SenderModel, &t.RequestedAccess)
 	t.CancelRequested, t.FromNetwork, t.FullAccess = cancel != 0, origin != 0, full != 0
 	return t, err
 }
@@ -1234,7 +1244,9 @@ func setTaskState(tx *sql.Tx, task, state, detail string) error {
 		finished = sql.NullString{String: now(), Valid: true}
 	}
 	_, err := tx.Exec(`UPDATE tasks SET state=?,detail=?,updated_at=?,version=version+1,finished_at=COALESCE(?,finished_at),failure_reason=NULL,failure_reset=NULL,
-remote_live_tokens=CASE WHEN ?='running' THEN remote_live_tokens END WHERE id=?`, state, detail, now(), nullString(finished), state, task)
+context_snapshot=CASE WHEN state<>'running' AND ?='running' AND context_snapshot IS NOT NULL
+ THEN json_object('ordinal',json_extract(context_snapshot,'$.ordinal')+1,'sequence',0) ELSE context_snapshot END,
+remote_live_tokens=CASE WHEN ?='running' THEN remote_live_tokens END WHERE id=?`, state, detail, now(), nullString(finished), state, state, task)
 	return err
 }
 
@@ -1345,11 +1357,15 @@ func beginTaskRunTx(machine, tx *sql.Tx, r *TaskRun, t *Task, reservation string
 	// asked for now: it takes the agent's current «Любые команды», so
 	// turning it on helps a task started before (T-056). Without the
 	// agent row the task keeps what it had.
-	if r.Kind == "answer" || r.Kind == "continue" || r.Kind == "note" {
+	if t.RequestedAccess != "" || r.Kind == "answer" || r.Kind == "continue" || r.Kind == "note" {
 		var full int
 		err := machine.QueryRow(`SELECT full_access FROM computer_agents WHERE computer=? AND provider=?`, t.Computer, t.Provider).Scan(&full)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
+		}
+		if t.RequestedAccess == "standard" || (t.RequestedAccess != "" && errors.Is(err, sql.ErrNoRows)) {
+			full = 0
+			err = nil
 		}
 		if err == nil && full != 0 && t.FromNetwork {
 			on, nerr := netFullAccess(machine)

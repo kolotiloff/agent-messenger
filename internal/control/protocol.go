@@ -27,6 +27,7 @@ const SocketName = "control.sock"
 const MaxRequestBytes = 4 << 20
 
 type Request struct {
+	Access       string   `json:"access,omitempty"`
 	Cmd          string   `json:"cmd"`
 	Alias        string   `json:"alias,omitempty"`
 	MessageID    string   `json:"message_id,omitempty"`
@@ -453,14 +454,14 @@ func dispatchContext(ctx context.Context, handler Handler, request Request) Resp
 			return Response{Error: err.Error()}
 		}
 		return Response{OK: true}
-	case "task-owner-start":
+	case "task-owner-start", "task-owner-start-with-access":
 		h, ok := handler.(interface {
-			OwnerStartTask(project, computer, provider, model, op, text string) (string, error)
+			OwnerStartTask(project, computer, provider, model, op, text, access string) (string, error)
 		})
 		if !ok {
 			return Response{Error: "creating tasks from the window requires an updated background client"}
 		}
-		id, err := h.OwnerStartTask(request.Project, request.Computer, request.Provider, request.Model, request.Confirmation, request.Text)
+		id, err := h.OwnerStartTask(request.Project, request.Computer, request.Provider, request.Model, request.Confirmation, request.Text, request.Access)
 		if err != nil {
 			return Response{Error: err.Error()}
 		}

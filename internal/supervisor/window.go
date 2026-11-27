@@ -131,26 +131,11 @@ func (s *Supervisor) HideWindowHistory(project, agent, computer string) error {
 
 // TaskFeed returns one task's feed.
 func (s *Supervisor) TaskFeed(id string) (any, error) {
-	return s.withContextWindow(s.store.TaskFeed(id))
+	return s.store.TaskFeed(id)
 }
 
 func (s *Supervisor) TaskFeedDelta(id, cursor string) (any, error) {
-	return s.withContextWindow(s.store.TaskFeedDelta(id, cursor))
-}
-
-func (s *Supervisor) withContextWindow(feed core.TaskFeed, err error) (any, error) {
-	if err != nil {
-		return nil, err
-	}
-	s.tasks.mu.Lock()
-	defer s.tasks.mu.Unlock()
-	for _, live := range s.tasks.live {
-		if live.task == feed.Task.ID {
-			feed.Task.ContextWindow = live.contextWindow.Load()
-			break
-		}
-	}
-	return feed, nil
+	return s.store.TaskFeedDelta(id, cursor)
 }
 
 const windowWatchInterval = 250 * time.Millisecond
@@ -205,9 +190,9 @@ func (s *Supervisor) SetProjectFolder(name, folder string) error {
 }
 
 // OwnerStartTask records an assignment from the window without a coordinator.
-func (s *Supervisor) OwnerStartTask(project, computer, provider, model, op, text string) (string, error) {
+func (s *Supervisor) OwnerStartTask(project, computer, provider, model, op, text, access string) (string, error) {
 	id, _, err := s.store.StartTask(core.StartTaskRequest{
-		Project: project, Computer: computer, Provider: provider, Model: model, OpID: op, Text: text, ByOwner: true,
+		Project: project, Computer: computer, Provider: provider, Model: model, OpID: op, Text: text, ByOwner: true, Access: access,
 	})
 	if err == nil {
 		s.wakeTaskDispatch()

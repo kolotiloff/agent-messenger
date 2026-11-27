@@ -61,7 +61,9 @@ def package(tag):
 def unpack(archive, dest):
     if system == "darwin":
         run("ditto", "-x", "-k", archive, dest)
-        app = dest / "Agent Messenger.app"
+        bundles = list(dest.glob("*.app"))
+        assert len(bundles) == 1 and bundles[0].name in ("Agent Messenger.app", "Kotel.app")
+        app = bundles[0]
         run("codesign", "--verify", "--deep", "--strict", app)
         return app / "Contents/Resources/messenger"
     exe = dest / ("messenger" + ext)
@@ -137,11 +139,12 @@ if system == "darwin":
     # resources removed in this version and invalidate the code signature.
     staged = work / "staged"
     staged.mkdir()
-    unpack(new_zip, staged)
-    bundle = "Agent Messenger.app"
-    (dest / bundle).rename(work / "previous.app")
-    (staged / bundle).rename(dest / bundle)
-    run("codesign", "--verify", "--deep", "--strict", dest / bundle)
+    candidate = unpack(new_zip, staged).parents[2]
+    existing = exe.parents[2]
+    existing.rename(work / "previous.app")
+    candidate.rename(existing)
+    run("codesign", "--verify", "--deep", "--strict", existing)
+    assert (existing / "Contents/Resources/kotel").samefile(exe)
 assert json.loads(run(exe, "version"))["revision"] == new_meta["revision"]
 client("start")
 try:

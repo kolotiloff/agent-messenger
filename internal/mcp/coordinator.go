@@ -310,7 +310,7 @@ func serveCoordinatorIn(store *core.Store, project, watch, dataRoot string, in i
 			c.respond(req.ID, map[string]any{
 				"protocolVersion": p.ProtocolVersion,
 				"capabilities":    map[string]any{"tools": map[string]any{"listChanged": true}},
-				"serverInfo":      map[string]any{"name": "agent-messenger", "version": "0.2.0"},
+				"serverInfo":      map[string]any{"name": "kotel", "version": "0.2.0"},
 				"instructions":    c.waitingInstructions() + coordinatorInstructions + "\nProject: " + c.project,
 			}, nil)
 		case req.Method == "ping":
@@ -411,6 +411,7 @@ func coordinatorTools() []map[string]any {
 			})},
 		{"name": "start_task", "description": "Queue a task in a new worker session in this project's folder on the chosen computer. Returns the task id and known model settings. Read tasks for the reported model if the worker has not started yet. Repeating a call with the same op_id returns the same task.",
 			"inputSchema": obj(map[string]any{
+				"access":            map[string]any{"type": "string", "enum": []string{"standard", "full"}, "description": "Optional. Omit for executor default. Full access requires permission on the executing computer."},
 				"op_id":             str("unique id of this operation, for safe retries"),
 				"agent":             map[string]any{"type": "string", "enum": []string{"claude", "codex", "cursor"}},
 				"text":              map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxTaskText, "description": "the task: what to do and what to report"},
@@ -557,6 +558,7 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 		return c.agentVersion(ctx, a.Computer, a.Agent, a.RequestID)
 	case "start_task":
 		var a struct {
+			Access      string `json:"access"`
 			OpID        string `json:"op_id"`
 			Agent       string `json:"agent"`
 			Text        string `json:"text"`
@@ -573,7 +575,7 @@ func (c *coordinator) call(ctx context.Context, params json.RawMessage) (any, er
 			return nil, err
 		}
 		sender := c.messageSender(a.SenderModel)
-		id, created, err := c.store.StartTask(core.StartTaskRequest{Project: c.project, OpID: a.OpID, Computer: a.Computer, Provider: a.Agent, Title: a.Title, Text: a.Text, Model: a.Model, Lock: a.Lock, SenderAgent: sender.Agent, SenderModel: sender.Model,
+		id, created, err := c.store.StartTask(core.StartTaskRequest{Project: c.project, Access: a.Access, OpID: a.OpID, Computer: a.Computer, Provider: a.Agent, Title: a.Title, Text: a.Text, Model: a.Model, Lock: a.Lock, SenderAgent: sender.Agent, SenderModel: sender.Model,
 			Assignment: core.TaskAssignment{Type: a.TaskType, Difficulty: a.Difficulty, RetryOf: a.RetryOf}})
 		if err != nil {
 			return nil, err
@@ -1164,7 +1166,9 @@ func CoordinatorMain(dbPath string, args []string) error {
 }
 
 func runCoordinator(dbPath, project, workerRun string, in io.Reader, out io.Writer) error {
-	if workerRun != "" {
+	// Cursor leaves this exact interpolation literal when the variable is absent.
+	// Kotel sets a generated run ID before launching every worker.
+	if workerRun != "" && workerRun != "${env:"+adapters.WorkerRunVariable+"}" {
 		// Started by a worker that loaded the owner's coordinator connection
 		// from the project folder: no tools, no database, no "connected" mark.
 		return serveTask(nil, "", "", in, out)

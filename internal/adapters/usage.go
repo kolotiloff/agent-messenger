@@ -88,3 +88,44 @@ func cursorUsage(e map[string]any, r *TaskEventResult) {
 	read := u["cacheReadTokens"]
 	r.noteUsage([]any{u["inputTokens"], u["cacheWriteTokens"], read}, []any{read}, []any{u["outputTokens"]}, nil, u["cacheWriteTokens"])
 }
+
+// Claude reports a model's capacity on the result. Match it to the latest
+// top-level assistant request; aggregate result.usage spans multiple calls.
+func (r *TaskEventResult) noteClaudeContext(e map[string]any) {
+	if e["parent_tool_use_id"] != nil {
+		return
+	}
+	switch e["type"] {
+	case "system":
+		if e["subtype"] == "compact_boundary" {
+			r.contextModel = ""
+			r.ContextCapacity = 0
+		}
+	case "assistant":
+		r.contextModel = ""
+		r.ContextCapacity = 0
+		m, _ := e["message"].(map[string]any)
+		u, _ := m["usage"].(map[string]any)
+		input, ok := count(u["input_tokens"])
+		if !ok {
+			return
+		}
+		for _, key := range []string{"cache_read_input_tokens", "cache_creation_input_tokens"} {
+			if v, present := u[key]; present {
+				n, ok := count(v)
+				if !ok || n > 1<<53 || input > 1<<53-n {
+					return
+				}
+				input += n
+			}
+		}
+		r.contextModel, _ = m["model"].(string)
+		r.ContextUsed = input
+	case "result":
+		models, _ := e["modelUsage"].(map[string]any)
+		usage, _ := models[r.contextModel].(map[string]any)
+		if limit, ok := count(usage["contextWindow"]); ok && limit > 0 && r.contextModel != "" {
+			r.ContextCapacity = limit
+		}
+	}
+}
