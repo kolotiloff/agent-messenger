@@ -18,6 +18,8 @@ import (
 	"time"
 )
 
+const desktopIconName = "kotel"
+
 // appBrowsers can show a page as a separate window without tabs or an
 // address bar (--app). The first one installed is used.
 var appBrowsers = []string{"google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "microsoft-edge", "microsoft-edge-stable", "brave-browser"}
@@ -165,7 +167,7 @@ func writeMenuEntry(exe string) {
 	}
 	// The icon goes into the user's icon theme folder; the entry names it by
 	// its full path, which every desktop reads without an icon cache.
-	icon := filepath.Join(dir, "icons", "hicolor", "scalable", "apps", "kotel.svg")
+	icon := filepath.Join(dir, "icons", "hicolor", "scalable", "apps", desktopIconName+".svg")
 	iconLine := ""
 	if data := localui.AppIcon(); len(data) > 0 && !strings.ContainsAny(icon, "\n") {
 		if old, err := os.ReadFile(icon); err == nil && string(old) == string(data) {

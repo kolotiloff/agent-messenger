@@ -2,6 +2,18 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — T-348 through T-351, post-117 window and packaging
+
+Implemented row transitions and reduced motion, Settings and task model ordering, heading counts, the archive clear placement, the selected Mac divider and non-indexed Mac acceptance directories. Chromium and WebKit exercised actual additions, archive transfer, removal, model selection and both panel layouts. Confirmed the installed Mac bundle path separately from isolated fixture copies.
+
+## 2026-11-27 — T-347 Linux tray artwork
+
+Reused one desktop icon name in the GTK window, GTK tray and installed menu artwork. The desktop entry keeps its identity for existing pins.
+
+## 2026-11-27 — T-345 remote task acceptance
+
+Shortened the pending and unconfirmed labels and removed surrounding quotation marks from the receipt. Added a browser fixture with punctuation in the computer name. Recorded provider steering and context snapshot follow-ups.
+
 ## 2026-11-27 — T-343 signed Mac update check
 
 Reproduced the strict signature failure by overlaying 117 on 116. Verified clean extraction in isolation and changed the fixture to replace its bundle as a unit, retaining its original executable path and data checks.

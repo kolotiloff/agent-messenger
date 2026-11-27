@@ -30,7 +30,9 @@ const toolShared={peer:'pc1',name:pc1.name,age:0,tasks:[{...toolDone,id:'tools-s
 
 const counts = {game:1234,tools:2345,site:99999};
 const pc1Counts = {game:321,tools:654,site:0};
-const agents = [{agent:'codex',models:['gpt-6.2-sol[effort=medium]','gpt-6.2-astra[effort=high]']},{agent:'claude',models:['claude-opus-4-8']}];
+const orderedCodex=['gpt-6-luna[effort=high]','gpt-6.1-terra[effort=medium]','gpt-6.2-sol[effort=medium]',
+  'gpt-6.2-sol[effort=high]','gpt-6.2-astra[effort=medium]','gpt-6.2-astra[effort=high]'];
+const agents = [{agent:'codex',models:[orderedCodex[2],orderedCodex[5],orderedCodex[0],orderedCodex[4],orderedCodex[3],orderedCodex[1]]},{agent:'claude',models:['claude-opus-4-8']}];
 const coordinator = p=>({connected:true,active:p==='tools',client:'codex'});
 function reply(url,p,available){
   if(url.pathname==='/api/window')return {project:p,projects:available,computer_name:'Мак',agents,tasks:tasks[p],shared:[],tasks_enabled:true,history_paged:true,coordinator:coordinator(p)};
@@ -705,7 +707,7 @@ if (require.main === module) (async()=>{
       }));
       assert.equal(await modelPicker.locator('.am-model-options').evaluate(node=>getComputedStyle(node).paddingInlineEnd),'8px');
       const modelRows=modelPicker.locator('.am-model-option');
-      assert(await modelRows.count()>1);
+      assert.deepEqual(await modelRows.locator('[role=switch][aria-checked=true]').evaluateAll(nodes=>nodes.map(n=>n.dataset.model)),orderedCodex);
       assert(await modelRows.evaluateAll(rows=>rows.every(row=>getComputedStyle(row).borderBlockStartWidth==='0px')));
       await search.fill('учебная-модель');
       await modelPicker.getByRole('button',{name:'Добавить свой вариант',exact:true}).waitFor();
@@ -797,7 +799,9 @@ if (require.main === module) (async()=>{
       const modelMenu=draftPage.locator('#task-draft-model-menu');
       const draftSearch=modelMenu.getByRole('searchbox',{name:'Поиск моделей'});
       assert.equal(await draftSearch.evaluate(node=>node===document.activeElement),true);
+      assert.deepEqual(await form.locator('#task-draft-model option').evaluateAll(nodes=>nodes.map(n=>n.value).filter(key=>key.startsWith('codex:'))),orderedCodex.map(id=>'codex:'+id));
       const checkedModel=modelMenu.locator('[aria-selected=true]');
+      assert.equal(await checkedModel.textContent(),'Codex Sol 6.2 Medium');
       assert.equal(await checkedModel.locator('.am-select-check svg').count(),1);
       assert.equal(await checkedModel.evaluate(node=>getComputedStyle(node).backgroundColor),'rgba(0, 0, 0, 0)');
       const [searchBox,optionBox]=await Promise.all([draftSearch.boundingBox(),checkedModel.boundingBox()]);
@@ -808,7 +812,7 @@ if (require.main === module) (async()=>{
       await draftSearch.press('Escape');
       assert.equal(await modelTrigger.evaluate(node=>node===document.activeElement),true);
       await modelTrigger.press('ArrowDown');
-      await draftSearch.fill('astra');
+      await draftSearch.fill('astra 6.2 high');
       const astra=modelMenu.getByRole('option',{name:'Codex Astra 6.2 High',exact:true});
       await draftSearch.press('ArrowDown');
       assert.equal(await astra.evaluate(node=>node===document.activeElement),true);
@@ -878,7 +882,7 @@ if (require.main === module) (async()=>{
         return {
           matchesWorkspace:[bounds.top-toolbar.bottom,main.bottom-bounds.bottom,main.right-bounds.right],
           headerEdges:[header.left-bounds.left-panel.clientLeft,bounds.right-header.right],
-          fields:[heading.left-bounds.left-panel.clientLeft,bounds.right-rect('#archive-clear').right,projects.left-aside.left,aside.right-projects.right-1],
+          fields:[heading.left-bounds.left-panel.clientLeft,bounds.right-filter.right,projects.left-aside.left,aside.right-projects.right-1],
           controls:[filter.height,rect('#project-select + .am-select-trigger').height],
           toolbar:[toolbar.left-main.left,main.right-toolbar.right,toolbar.bottom-rect('.am-computers').top-1+rect('#task-new').height+parseFloat(getComputedStyle(document.querySelector('.am-sidebar')).rowGap)],
           rowAlignment:[header.top-bounds.top,filter.top-header.top],
@@ -888,6 +892,9 @@ if (require.main === module) (async()=>{
         matchesWorkspace:[0,0,0],headerEdges:[0,0],fields:[16,16,16,16],controls:[28,28],toolbar:[0,0,0],rowAlignment:[0,16],
       });
       assert.equal(await archive.locator('#task-list-heading').textContent(),'Архив');
+      const trashBounds=await archive.locator('#archive-clear').boundingBox();
+      const filterBounds=await archive.locator('#agent-filter + button').boundingBox();
+      assert(trashBounds.x+trashBounds.width<filterBounds.x);
       for(const theme of ['light','dark']){
         const styles=await draftPage.evaluate(async theme=>{
           const doc=document.documentElement,old=doc.dataset.theme;
@@ -917,7 +924,7 @@ if (require.main === module) (async()=>{
         await menu.waitFor({state:'hidden'});
       }
       const clearBox=await clearArchive.boundingBox(),filterBox=await archive.locator('.am-select-trigger').boundingBox();
-      assert.equal(clearBox.x-filterBox.x-filterBox.width,8);
+      assert.equal(filterBox.x-clearBox.x-clearBox.width,8);
       assert.equal(clearBox.y,filterBox.y);
       assert.equal(clearBox.width,28);
       assert.equal(clearBox.height,28);
@@ -953,6 +960,18 @@ if (require.main === module) (async()=>{
       await archive.getByText('Инструменты, Готовый отчёт',{exact:true}).waitFor();
       assert.deepEqual((await archive.locator('.am-task-title').allTextContents()).sort(),['Игра, Звуки меню','Инструменты, Готовый отчёт','Инструменты, Отчёт другого компьютера']);
       assert.equal(await archive.locator('#task-count').textContent(),'3');
+      assert.equal(await draftPage.locator('#project-count').textContent(),String(projects.length));
+      for(const [title,count] of [['#project-heading','#project-count'],['#task-list-heading','#task-count']]){
+        const baselines=await draftPage.evaluate(selectors=>selectors.map(selector=>{
+          const probe=document.createElement('span');
+          probe.style.display='inline-block';
+          document.querySelector(selector).append(probe);
+          const baseline=probe.getBoundingClientRect().bottom;
+          probe.remove();
+          return baseline;
+        }),[title,count]);
+        assert(Math.abs(baselines[0]-baselines[1])<=1,JSON.stringify(baselines));
+      }
       await card(draftPage,'pc1').getByText('Ждёт запуска',{exact:false}).waitFor();
       await archive.getByRole('button',{name:'Показать ещё 10'}).click();
       await archive.getByText('Инструменты, Старый отчёт',{exact:true}).waitFor();
@@ -1039,6 +1058,7 @@ if (require.main === module) (async()=>{
       assert(await row.locator('.am-archive-task-meta').evaluate(node=>node.scrollWidth>node.clientWidth));
       await select(draftPage,'project-select','Игра');
       await row.getByText('Звуки меню',{exact:true}).waitFor();
+      assert.equal(await draftPage.locator('#project-count').textContent(),String(projects.length));
       assert.equal(await shared.count(),0);
       await select(draftPage,'project-select','Все');
       await shared.click();
@@ -1048,6 +1068,7 @@ if (require.main === module) (async()=>{
     const mac=await open(projects,{width:1040,height:780},'dark',(url,p)=>{
       if(url.pathname==='/api/task'&&url.searchParams.get('id')==='game-1'){
         const response=reply(url,p,projects);
+        response.items.splice(1,0,{kind:'accepted',at:response.task.created_at,text:'ПК-1 $&'});
         response.items.push({...response.items.at(-1),text:'Длинное сообщение '.repeat(1000)});
         return {json:response};
       }
@@ -1058,7 +1079,7 @@ if (require.main === module) (async()=>{
     try{
       const toolbar=mac.locator('.am-task-toolbar'),projectsRow=mac.locator('.am-project'),nav=mac.locator('#computer-sidebar-toggle');
       const box=await toolbar.boundingBox(),row=await projectsRow.boundingBox(),control=await nav.boundingBox();
-      assert.match(await mac.locator('.am-sidebar-task').filter({hasText:'Проверка навигации'}).textContent(),/Ждёт, когда ПК-2 примет задачу/);
+      assert.match(await mac.locator('.am-sidebar-task').filter({hasText:'Проверка навигации'}).textContent(),/Ожидает принятия$/);
       for(const selector of ['.am-outgoing','.am-message:not(.am-outgoing)']){
         assert.equal(await mac.locator('#thread '+selector+' .am-meta').first().evaluate(n=>
           n.nextElementSibling.getBoundingClientRect().top-n.getBoundingClientRect().bottom),8);
@@ -1098,15 +1119,14 @@ if (require.main === module) (async()=>{
         assert.equal(trigger.width,innerWidth);
         await pane.evaluate(el=>el.style.removeProperty('inline-size'));
       }
-      assert.equal(await mac.locator('.am-sidebar').evaluate(n=>{
-        const rule=getComputedStyle(n,'::before');
-        return n.getBoundingClientRect().y+parseFloat(rule.top)+parseFloat(rule.borderBottomWidth);
-      }),box.y+box.height);
+      assert.equal(await mac.locator('.am-sidebar').evaluate(n=>getComputedStyle(n,'::before').content),'none');
+      assert.equal(await toolbar.evaluate(n=>getComputedStyle(n).borderBottomWidth),'1px');
       const date=mac.locator('#conversation-date');
       const start=await date.boundingBox();
       assert.equal(start.y-box.y-box.height,12);
       await mac.locator('.am-sidebar-task').filter({hasText:'Экран настроек'}).click();
       await mac.locator('#task-head h3').getByText('Экран настроек').waitFor();
+      await mac.locator('#thread').getByText('Принято на компьютере ПК-1 $&',{exact:true}).waitFor();
       assert.equal(await date.getAttribute('datetime'),tasks.game[0].created_at);
       const scrolled=await mac.locator('#thread').evaluate(n=>{
         n.scrollTop=4;
@@ -1121,7 +1141,63 @@ if (require.main === module) (async()=>{
       assert((await toolbar.boundingBox()).width>box.width);
       await nav.press('Space');
       assert.deepEqual(await projectsRow.boundingBox(),row);
+      await mac.evaluate(()=>localStorage.setItem('messenger-lang','en'));
+      await mac.reload();
+      await mac.locator('.am-sidebar-task-meta').filter({hasText:'Awaiting acceptance'}).waitFor();
+      await mac.locator('.am-sidebar-task').filter({hasText:'Экран настроек'}).click();
+      await mac.locator('#thread').getByText('Accepted on ПК-1 $&',{exact:true}).waitFor();
     }finally{await mac.close();}
+
+    let moving=null;
+    const taskMotion=await open(projects,{width:1260,height:900},'dark',(url,p)=>{
+      if(p!=='game'||!['/api/window','/api/project-activity'].includes(url.pathname))return;
+      const view=reply(url,p,projects);
+      return {json:{...view,tasks:moving?[moving,...view.tasks]:view.tasks}};
+    },true);
+    try{
+      await taskMotion.locator('#list-toggle').click();
+      await taskMotion.locator('#task-list').waitFor();
+      await taskMotion.evaluate(()=>{
+        const animate=Element.prototype.animate;
+        window.taskTransitions=[];
+        window.motionGroupOverflow=[];
+        Element.prototype.animate=function(frames,options){
+          if(this.dataset.motionTask||this.classList.contains('am-task-exits')){
+            window.taskTransitions.push([this.closest('.am-computers')?'left':'archive',this.dataset.motionTask||'exit']);
+          }
+          if(frames[0].transform&&this.classList.contains('am-sidebar-task')){
+            const group=this.parentElement;
+            requestAnimationFrame(()=>{if(group.isConnected)window.motionGroupOverflow.push(getComputedStyle(group).overflow);});
+          }
+          return animate.call(this,frames,options);
+        };
+      });
+      const liveTask=makeTask('motion-probe','game','codex','Новая проверка движения',0);
+      const side=taskMotion.locator('#machines [data-motion-task]').filter({hasText:liveTask.title});
+      const archived=taskMotion.locator('#task-list [data-motion-task]').filter({hasText:liveTask.title});
+      moving=liveTask;
+      await side.waitFor();
+      moving={...moving,state:'done',finished_at:iso(0)};
+      await archived.waitFor();
+      await side.waitFor({state:'detached'});
+      moving=null;
+      await archived.waitFor({state:'detached'});
+      await taskMotion.locator('.am-task-exits').first().waitFor({state:'detached'});
+      const transitions=await taskMotion.evaluate(()=>window.taskTransitions);
+      for(const panel of ['left','archive']){
+        assert(transitions.some(([list,key])=>list===panel&&key.includes('motion-probe')));
+        assert(transitions.some(([list,key])=>list===panel&&key==='exit'));
+      }
+      const groupOverflow=await taskMotion.evaluate(()=>window.motionGroupOverflow);
+      assert(groupOverflow.length>0&&groupOverflow.every(value=>value==='visible'));
+      await taskMotion.emulateMedia({reducedMotion:'reduce'});
+      await taskMotion.evaluate(()=>window.taskTransitions=[]);
+      moving=liveTask;
+      await side.waitFor();
+      moving=null;
+      await side.waitFor({state:'detached'});
+      assert.deepEqual(await taskMotion.evaluate(()=>window.taskTransitions),[]);
+    }finally{await taskMotion.close();}
 
     const windows=await open(projects,{width:1040,height:780},'dark',()=>{},true,'windows');
     try{
