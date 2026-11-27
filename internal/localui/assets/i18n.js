@@ -7,6 +7,11 @@
   let lang='ru';
   try{if(localStorage.getItem('messenger-lang')==='en')lang='en';}catch(_){}
   const EN={
+  'Группировка задач':'Group tasks',
+  'По компьютеру':'By computer',
+  'По проекту':'By project',
+  'По компьютеру, затем по проекту':'By computer, then project',
+  'Нет текущих задач':'No current tasks',
   'Новая задача':'New task',
   'Описание новой задачи':'New task description',
   'Опишите задачу…':'Describe the task…',

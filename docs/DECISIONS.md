@@ -949,3 +949,7 @@ Keep only the title in the fixed task header. Place the centered date first in t
 ## D-255 — Use Graphite for dark appearance
 
 Use the shared Graphite colors for primary text (#c2c2c0), secondary text (#9b9b99), running (#8eadd2) and waiting (#ceb271). Apply the same palette when system appearance selects dark mode.
+
+## D-256 — Compact sidebar grouping and presence
+
+Keep computer grouping as the default. In project folders prefix each task with its executing computer. In the nested view the enclosing computer and project supply both labels. Use the same filter glyph on both sides and a separate grouping control. See [UI_STYLE.md](UI_STYLE.md) for spacing and computer presence.

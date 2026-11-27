@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — T-355 task sidebar
+
+Implemented the three grouping modes using the existing task selection, status and context-menu paths. The two filter icons open the existing project and agent menus. Chromium and WebKit passed the window checks, including grouping, task selection, folder collapse, filters, spacing and connection icons. Captured WebKit screenshots with fictional tasks in each grouping and with the archive filter open.
+
 ## 2026-11-27 — T-354 Graphite dark palette
 
 Applied the approved primary, secondary, running and waiting colors at the window theme root. Verified window controls, project and archive views, and update indicators in Chromium and WebKit with fictional data.

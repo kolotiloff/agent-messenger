@@ -337,17 +337,17 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-list-row-hover:var(--am-soft);
 }
 #am-concept.am-task-sidebar-preview :is(.am-titlebar,.am-computers > .am-label) { display:none; }
-#am-concept.am-task-sidebar-preview .am-sidebar { gap:var(--am-gap-content); row-gap:var(--am-gap-control); padding:var(--am-task-top) var(--am-gap-content) var(--am-gap-content); }
-#am-concept.am-task-sidebar-preview .am-project { display:grid; grid-template-columns:minmax(0,1fr) min(var(--am-settings-control-width),50%); align-items:center; gap:var(--am-gap-control); }
-#am-concept.am-task-sidebar-preview #project-column-first { display:flex; }
-#am-concept.am-task-sidebar-preview .am-project-heading { margin:0; justify-content:flex-start; gap:var(--am-gap-line); }
+#am-concept.am-task-sidebar-preview .am-sidebar { gap:var(--am-gap-content); row-gap:var(--am-space-1); padding:var(--am-task-top) var(--am-gap-content) var(--am-gap-content); }
+#am-concept.am-task-sidebar-preview .am-project { display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap:var(--am-gap-control); }
+#am-concept.am-task-sidebar-preview :is(#project-column-first,#sidebar-group-control,.am-task-filter) { display:flex; align-items:center; }
+#am-concept.am-task-sidebar-preview .am-project-heading { margin:0; padding-inline-start:var(--am-row-pad-inline); justify-content:flex-start; gap:var(--am-gap-line); }
 #am-concept.am-task-sidebar-preview .am-project-heading .am-label { min-width:0; overflow:hidden; text-overflow:ellipsis; }
 #am-concept.am-task-sidebar-preview .am-project .am-label { display:block; color:var(--am-text); text-transform:none; letter-spacing:normal; }
 #am-concept.am-task-sidebar-preview :is(.am-project .am-label,.am-queue-header h3,.am-conversation-title) { font-size:var(--am-text-m); font-weight:600; line-height:var(--am-computer-heading-line); }
 #am-concept.am-task-sidebar-preview :is(.am-project .am-select-trigger,.am-task-filter .am-select-trigger) { min-height:var(--am-preview-header-control); }
 #am-concept.am-task-sidebar-preview #task-new { width:100%; height:var(--am-preview-header-control); min-height:var(--am-preview-header-control); justify-content:flex-start; padding:var(--am-row-pad-block) var(--am-row-pad-inline); gap:var(--am-gap-control); text-align:start; color:var(--am-text); }
 #am-concept.am-task-sidebar-preview #task-new:is(:hover,:focus-visible):not(:disabled) { background:var(--am-list-row-hover); color:var(--am-text); }
-#am-concept.am-task-sidebar-preview .am-computers { border-block-start:1px solid var(--am-line); padding-block-start:var(--am-gap-control); }
+#am-concept.am-task-sidebar-preview .am-computers { border-block-start:0; padding-block-start:0; }
 #am-concept.am-task-sidebar-preview .am-computers { margin-inline:calc(-1 * var(--am-gap-content)); padding-inline:var(--am-gap-content); }
 #am-concept.am-task-sidebar-preview .am-machines { gap:var(--am-space-1); }
 #am-concept.am-task-sidebar-preview .am-machine-card { position:relative; overflow:visible; border:0; border-radius:0; background:transparent; }
@@ -785,6 +785,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   #am-concept.am-task-sidebar-preview .am-computers { margin-inline:calc(-1 * var(--am-gap-section)); padding-inline:var(--am-gap-section); }
   #am-concept.am-task-sidebar-preview .am-machines { margin-inline-end:calc(-1 * var(--am-gap-section)); padding-inline-end:calc(var(--am-gap-section) - var(--am-gutter, 0px)); }
   #am-concept.am-task-sidebar-preview .am-queue-panel { --am-pane-inset:var(--am-gap-section); }
+  #am-concept.am-task-sidebar-preview .am-queue-header { padding-block-start:calc(var(--am-gap-section) + var(--am-preview-header-control) + var(--am-space-1)); }
   #am-concept.am-task-sidebar-preview .am-queue-list { padding-block-start:0; }
   #am-concept.am-task-sidebar-preview [data-screen=tasks] { margin-block-end:calc(-1 * var(--am-task-bottom)); }
   #am-concept.am-task-sidebar-preview .am-main:not(:has(> :is(#notice,#restart-wait-status):not([hidden]))) [data-screen=tasks] { margin-block-start:calc(-1 * var(--am-task-top)); }
@@ -797,14 +798,16 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-task-project + .am-task-project { margin-top:var(--am-space-3); padding-top:var(--am-space-3); border-top:1px solid var(--am-line); }
 #am-concept.am-task-sidebar-preview .am-task-project + .am-task-project { margin:0; padding:0; border:0; }
 #am-concept.am-task-sidebar-preview :is(.am-sidebar,.am-queue-header) { container-type:inline-size; }
-#am-concept.am-task-sidebar-preview .am-task-list-head { display:grid; font-size:var(--am-text-m); grid-template-columns:minmax(0,1fr) auto min(var(--am-settings-control-width),50%); }
-#am-concept.am-task-sidebar-preview .am-task-filter { min-width:0; }
-#am-concept.am-task-sidebar-preview .am-task-filter .am-select-trigger { width:100%; }
-@container (max-width:195px) {
-  #am-concept.am-task-sidebar-preview :is(.am-project,.am-task-list-head) { grid-template-columns:minmax(0,1fr) auto; }
-  #am-concept.am-task-sidebar-preview :is(.am-project-columns,.am-task-filter) { grid-column:1/-1; grid-row:2; }
-  #am-concept.am-task-sidebar-preview #archive-clear { grid-column:2; grid-row:1; }
-}
+#am-concept.am-task-sidebar-preview .am-task-list-head { display:flex; justify-content:flex-end; font-size:var(--am-text-m); }
+#am-concept.am-task-sidebar-preview .am-task-list-head h3 { margin-inline-end:auto; }
+#am-concept.am-task-sidebar-preview button.am-sidebar-picker { width:var(--am-control-compact); height:var(--am-control-compact); justify-content:center; padding:0; border:0; background:transparent; color:var(--am-muted); }
+#am-concept.am-task-sidebar-preview button.am-sidebar-picker:is(:hover,:focus-visible,[aria-expanded=true],.am-filter-active) { background:var(--am-list-row-hover); color:var(--am-text); }
+#am-concept #archive-agent-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#am-concept .am-sidebar-folder { display:grid; gap:var(--am-space-1); min-width:0; }
+#am-concept button.am-folder-heading { display:flex; align-items:center; gap:var(--am-computer-label-gap); padding:var(--am-row-pad-block) var(--am-row-pad-inline); min-height:var(--am-control-compact); justify-content:flex-start; background:transparent; text-align:start; }
+#am-concept button.am-folder-heading:is(:hover,:focus-visible) { background:var(--am-list-row-hover); }
+#am-concept .am-folder-heading svg { flex:none; width:var(--am-computer-icon-size); height:var(--am-computer-icon-size); fill:none; stroke:var(--am-muted); stroke-width:2; stroke-linejoin:round; }
+#am-concept .am-folder-heading span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #am-concept #archive-clear { width:var(--am-control-compact); height:var(--am-control-compact); min-height:var(--am-control-compact); }
 #am-concept .am-task-project > h3 { color:var(--am-text); overflow-wrap:anywhere; }
 #am-concept .am-task-section { margin:var(--am-space-3) 0 var(--am-space-1); padding-inline:var(--am-space-3); }
@@ -814,7 +817,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept button.am-task-section-action:is(:hover,:focus-visible) { background:transparent; color:var(--am-text); }
 #am-concept .am-task-list .am-task { display:flex; flex-direction:column; flex-wrap:nowrap; align-items:stretch; flex-shrink:0; width:100%; min-width:0; max-width:100%; min-height:0; text-align:left; font-size:var(--am-text-xs); overflow:hidden; }
 #am-concept :is(.am-sidebar-task,.am-task-list .am-task) { gap:var(--am-gap-line); line-height:1.5; padding:var(--am-row-pad-block) var(--am-row-pad-inline); border-radius:var(--am-radius-s); background:transparent; }
-#am-concept.am-task-sidebar-preview .am-sidebar-task { padding-inline-start:calc(var(--am-row-pad-inline) + var(--am-computer-icon-size) + var(--am-computer-label-gap)); }
+#am-concept.am-task-sidebar-preview .am-sidebar-task-rows { margin-inline-start:calc(var(--am-computer-icon-size) + var(--am-computer-label-gap)); }
 #am-concept :is(.am-sidebar-task,.am-task-list .am-task):is(:hover,:focus-visible) { background:var(--am-quiet-hover); }
 #am-concept :is(.am-sidebar-task,.am-task-list .am-task)[aria-pressed=true] { background:var(--am-selected); }
 #am-concept.am-task-sidebar-preview :is(.am-sidebar-task,.am-archive-task) { --am-quiet-hover:var(--am-list-row-hover); }

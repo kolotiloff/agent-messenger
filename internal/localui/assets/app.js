@@ -21,12 +21,16 @@
     menu.style.top=upwards?'auto':rect.bottom+gap+'px';
     menu.style.bottom=upwards?innerHeight-rect.top+gap+'px':'auto';
   }
-  function enhanceSelect(select, searchable=false) {
+  function enhanceSelect(select, searchable=false, iconPaths=null) {
     const trigger=document.createElement('button');trigger.type='button';trigger.className='am-select-trigger';
     const label=select.labels[0]?.textContent||tr(select.getAttribute('aria-label')||'')||tr('Выбор');
     trigger.setAttribute('aria-label',label);trigger.setAttribute('aria-haspopup',searchable?'dialog':'listbox');trigger.setAttribute('aria-expanded','false');
     const value=document.createElement('span');value.className='am-select-value';
     const chevron=document.createElement('span');chevron.className='am-select-chevron';chevron.setAttribute('aria-hidden','true');trigger.append(value,chevron);
+    if(iconPaths){
+      trigger.classList.add('am-sidebar-picker','am-card-icon');
+      trigger.replaceChildren(svgIcon(iconPaths));
+    }
     const menu=document.createElement('div');menu.id=select.id+'-menu';menu.className='am-select-menu';menu.setAttribute('popover','auto');menu.setAttribute('role',searchable?'dialog':'listbox');menu.setAttribute('aria-label',label);menu.tabIndex=-1;
     let search,empty;
     const list=searchable?el('div'):menu;
@@ -64,7 +68,21 @@
         node.append(el('span',label.slice(-effort.length),'am-muted'));
       }
     }
-    function sync(){renderLabel(value,select.selectedOptions[0]);trigger.disabled=select.disabled;if(select.disabled)close();}
+    function sync(){
+      renderLabel(value,select.selectedOptions[0]);
+      if(iconPaths){
+        trigger.title=label+' · '+value.textContent;
+        trigger.setAttribute('aria-label',trigger.title);
+        trigger.classList.toggle('am-filter-active',select.id!=='sidebar-group'&&select.selectedIndex>0);
+        if(select.id==='agent-filter'){
+          const chosen=$('archive-agent-name');
+          chosen.hidden=!select.value;
+          chosen.textContent=select.value?value.textContent:'';
+        }
+      }
+      trigger.disabled=select.disabled;
+      if(select.disabled)close();
+    }
     function choose(index){if(select.disabled||select.options[index]?.disabled)return;select.selectedIndex=index;sync();close(true);select.dispatchEvent(new Event('change',{bubbles:true}));}
     function open(keyboard){
       if(select.disabled||isOpen())return;list.replaceChildren();options=[];
@@ -78,7 +96,7 @@
       });
       if(search){search.value='';empty.hidden=options.length>0;}
       menu.showPopover();trigger.setAttribute('aria-expanded','true');
-      positionPopover(menu,trigger,searchable?276:220,searchable);
+      positionPopover(menu,trigger,searchable?276:220,searchable||!!iconPaths);
       if(search){menu.scrollTop=0;search.focus({preventScroll:true});}
       else{
         const row=options[select.selectedIndex]||options[0];row?.scrollIntoView({block:'nearest'});
@@ -455,6 +473,10 @@
     return ['idle',tr('Свободен')];
   }
   let splitProjects=[],auxActivity=null,auxError='',auxRequest=null,auxTaskScope='';
+  const groupSelect=$('sidebar-group');
+  const savedGrouping=recall('kotel-sidebar-group');
+  if([...groupSelect.options].some(option=>option.value===savedGrouping))groupSelect.value=savedGrouping;
+  const collapsedFolders=new Set();
   const sidebarSnapshots=new Map(),collapsedComputers=new Set();
   let sidebarProject='',sidebarRequest=null,draftOpen=false,draftSending=false,draftAttempt=null;
   function sidebarProjects(){
@@ -527,8 +549,8 @@
     const options=view?view.projects.map(p=>[p.name,p.title||p.name]):[['',offlineReason?tr('Проекты недоступны'):tr('Загружаем проекты…')]];
     if(taskSidebarPreview){
       if(view&&!options.some(([name])=>name===sidebarProject))sidebarProject='';
-      $('project-heading').textContent=tr('Проекты');
-      $('project-count').hidden=!view;
+      $('project-heading').textContent=sidebarProject?projectTitle(sidebarProject):tr('Проекты');
+      $('project-count').hidden=!view||!!sidebarProject;
       $('project-count').textContent=view?String(view.projects.length):'';
       $('split-projects').hidden=true;
       projectOptions($('project-select'),view?[['__all',tr('Все')],...options,['__new',tr('Новый проект')]]:options,view?sidebarProject||'__all':'',!view);
@@ -1166,13 +1188,16 @@
     mark.title=local?tr('Этот компьютер')+' — '+connection:connection;
     mark.setAttribute('role','img');
     mark.setAttribute('aria-label',mark.title);
+    if(taskSidebarPreview){
+      const paths=online?serverIconPaths:['M6 3h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-6M9 11H4a2 2 0 0 1-2-2V5M19 14h1a2 2 0 0 1 2 2v2M18 22H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h6M6 18h1M2 2l20 20'];
+      mark.append(svgIcon(paths));
+      return mark;
+    }
     const signal=el('span',undefined,'am-machine-signal');
     signal.setAttribute('aria-hidden','true');
     // With the seven-unit round stroke, both diagonals span the 24-unit view box.
     if(!online)signal.append(svgIcon(['M3.5 3.5l17 17M20.5 3.5l-17 17']));
-    const glyph=taskSidebarPreview
-      ?serverIconPaths
-      :['M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2ZM12 17v3M8 20h8'];
+    const glyph=['M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2ZM12 17v3M8 20h8'];
     mark.append(svgIcon(glyph),signal);
     return mark;
   }
@@ -1213,6 +1238,37 @@
       update();
     });
     head.append(disclosure);card.classList.add('am-sidebar-has-tasks');update();
+    if(groupSelect.value==='nested'){
+      appendProjectFolders(rows,items,computer);
+    }else{
+      appendSidebarRows(rows,items);
+    }
+  }
+  function appendProjectFolders(container,items,computer){
+    const folders=new Map();
+    for(const item of items){
+      if(!folders.has(item.name))folders.set(item.name,[]);
+      folders.get(item.name).push(item);
+    }
+    for(const [name,tasks] of folders){
+      const key=JSON.stringify([computer,name]);
+      const folder=el('div',undefined,'am-sidebar-folder');
+      const button=el('button',undefined,'am-folder-heading');button.type='button';
+      button.append(svgIcon(['M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z']),el('span',projectTitle(name)));
+      button.dataset.sidebarFocus='folder:'+key;
+      const rows=el('div',undefined,'am-sidebar-task-rows');
+      rows.hidden=collapsedFolders.has(key);
+      button.setAttribute('aria-expanded',String(!rows.hidden));
+      button.addEventListener('click',()=>{
+        rows.hidden=!rows.hidden;
+        if(rows.hidden)collapsedFolders.add(key);else collapsedFolders.delete(key);
+        button.setAttribute('aria-expanded',String(!rows.hidden));
+      });
+      appendSidebarRows(rows,tasks);
+      folder.append(button,rows);container.append(folder);
+    }
+  }
+  function appendSidebarRows(rows,items){
     for(const {t,peer,name} of items){
       const row=el('button',undefined,'am-sidebar-task');row.type='button';
       const selection=peer?{peer:peer.peer,id:t.id}:null;
@@ -1220,7 +1276,10 @@
       row.dataset.motionTask=row.dataset.sidebarFocus;
       row.setAttribute('aria-pressed',String(!draftOpen&&name===project&&(selection?selectedShared?.peer===selection.peer&&selectedShared?.id===selection.id:t.id===selectedTask)));
       const title=el('span',undefined,'am-sidebar-task-title');
-      if(!sidebarProject)title.append(el('span',projectTitle(name)+', ','am-muted'));
+      if(groupSelect.value==='project'){
+        const machine=peer?sharedComputer(t,peer):computerName(taskComputer(t))||t.remote?.name||taskComputer(t);
+        title.append(el('span',machine+', ','am-muted'));
+      }else if(groupSelect.value==='computer'&&!sidebarProject)title.append(el('span',projectTitle(name)+', ','am-muted'));
       title.append(t.title);
       const meta=el('span',undefined,'am-small am-muted am-sidebar-task-meta am-task-model-line');
       const details=el('span');
@@ -1299,7 +1358,7 @@
     if(sidebarTasks){
       const body=el('div',undefined,'am-sidebar-tasks');
       head.append(localMeta);machine.append(head,body);
-      sidebarTaskRows(body,head,machine,'local',sidebarTasks.get('local'));
+      if(groupSelect.value!=='project')sidebarTaskRows(body,head,machine,'local',sidebarTasks.get('local'));
     }else if(projectActivity.length)appendProjectCells(machine,head,localMeta,'local',projectActivity);
     else{
       const body=el('div',undefined,'am-machine-body');
@@ -1351,7 +1410,7 @@
       }
       if(sidebarTasks){
         peerBody.className='am-sidebar-tasks';
-        sidebarTaskRows(peerBody,name,card,peer.id,sidebarTasks.get(peer.id));
+        if(groupSelect.value!=='project')sidebarTaskRows(peerBody,name,card,peer.id,sidebarTasks.get(peer.id));
       }else if(projectActivity.length){
         appendProjectCells(card,name,meta,peer.id,projectActivity,peer);
       }else if(fresh){
@@ -1375,7 +1434,11 @@
     const rank=new Map(machineOrder.map((key,index)=>[key,index]));
     const ranks=card=>rank.get(card.dataset.machineOrder)??machineOrder.length;
     box.append(...[...box.children].sort((a,b)=>ranks(a)-ranks(b)));
-    if(taskSidebarPreview){
+    if(taskSidebarPreview&&groupSelect.value==='project'){
+      box.replaceChildren();
+      appendProjectFolders(box,Array.from(sidebarTasks.values()).flat(),'');
+      if(!box.childElementCount)box.append(el('p',tr('Нет текущих задач'),'am-small am-muted'));
+    }else if(taskSidebarPreview){
       for(const card of box.children){
         const head=card.querySelector('.am-machine-name');
         const handle=head.querySelector('.am-sidebar-disclosure')||head;
@@ -1396,7 +1459,7 @@
     copy.querySelector('.am-machine-roles')?.removeAttribute('data-form');
     if(copy.innerHTML!==box.innerHTML){
       machineRolesObserver.disconnect();
-      parkLocalParts();replaceTaskRows(live,box,JSON.stringify([scope,sidebarProject,computerFilter]));
+      parkLocalParts();replaceTaskRows(live,box,JSON.stringify([scope,sidebarProject,computerFilter,groupSelect.value]));
       if(!taskSidebarPreview&&serverRole&&coordinatorRole){
         machineRolesObserver.observe(head);
         if(!projectActivity.length)machineRolesObserver.observe(localMeta);
@@ -5124,7 +5187,13 @@
   loadServer();
   let initialTheme=window.messengerInitialTheme;
   if(!initialTheme)try{initialTheme=localStorage.getItem('messenger-theme');}catch(_){}
-  $('lang-select').value=amLang;enhanceSelect($('lang-select'));enhanceSelect($('theme-select'));enhanceSelect($('project-select'));enhanceSelect($('project-select-second'));enhanceSelect($('agent-filter'));enhanceSelect($('stats-project'));enhanceSelect($('stats-agent'));enhanceSelect($('stats-model'));enhanceSelect($('host-scope'));enhanceSelect($('host-address'));
+  const sidebarFilterIcon=taskSidebarPreview?['M3 6h18M6 12h12M9 18h6']:null;
+  if(taskSidebarPreview){
+    $('sidebar-group-control').hidden=false;
+    enhanceSelect(groupSelect,false,['M12 3 2 8l10 5 10-5-10-5ZM2 12l10 5 10-5M2 16l10 5 10-5']);
+    groupSelect.addEventListener('change',()=>{remember('kotel-sidebar-group',groupSelect.value);renderMachines();});
+  }
+  $('lang-select').value=amLang;enhanceSelect($('lang-select'));enhanceSelect($('theme-select'));enhanceSelect($('project-select'),false,sidebarFilterIcon);enhanceSelect($('project-select-second'));enhanceSelect($('agent-filter'),false,sidebarFilterIcon);enhanceSelect($('stats-project'));enhanceSelect($('stats-agent'));enhanceSelect($('stats-model'));enhanceSelect($('host-scope'));enhanceSelect($('host-address'));
   if(taskSidebarPreview){
     enhanceSelect($('stats-computer'));enhanceSelect($('agents-computer'));
     const draftContextIcons={
