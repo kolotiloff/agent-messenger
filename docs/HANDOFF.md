@@ -8,6 +8,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+**T-333 corrects the 1.0.12 desktop layout.** The 1.0.12 mock server activated the task layout, while the desktop server served the old layout. The window now enables the selected layout on its normal route with its existing authorization. Publication is pending.
+
 **[1.0.12, build 115](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.12-preview.115) is released** from `de265537fdea48361593f9efa4a0af86a1c674ea`. [PR #228](https://github.com/kolotiloff/agent-messenger/pull/228) integrates T-326 through T-332. All four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45927077746) passed, including the public signed upgrade path from 0.99 on all five targets. All 22 release files are published. Seven browser checks passed in Chromium and WebKit, and an isolated native Mac smoke run covered window startup and queue retention. Acceptance with real agents on the installed clients remains pending.
 
 Open the existing loopback preview at `http://127.0.0.1:48126/`, or start it with `node scripts/preview-window.cjs 48126`. The optional third argument is a local JSON file mapping fixture IDs to display fields and feed items. The owner's preview uses recent titles and four local chat excerpts, with simulated routing and usage figures. Keep the private data file outside the repository.
