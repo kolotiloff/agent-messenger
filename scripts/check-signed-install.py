@@ -7,6 +7,7 @@ import platform
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import zipfile
@@ -147,3 +148,13 @@ try:
 finally:
     stop()
 print(f"{platform.system()} {target}: {previous} -> {version}, signed package and existing queue verified")
+
+if system in ("linux", "darwin"):
+    remote = work / "net"
+    remote.mkdir()
+    installed = remote / "installed"
+    installed.mkdir()
+    old_program = unpack(old_zip, installed)
+    subprocess.run([sys.executable, repo / "scripts/check-remote-bridge.py", remote, old_program,
+                    exe, channel, previous, version], check=True, timeout=400)
+    print(f"{target}: remote update reply and device identity verified")
