@@ -609,6 +609,7 @@
   'действий':'actions',
   'Выполняются команды':'Running commands',
   'Выполнено {commands}':'Ran {commands}',
+  'Ход работы':'Work progress',
   ' с':' s',
   'команда':'command',
   'команды':'commands',

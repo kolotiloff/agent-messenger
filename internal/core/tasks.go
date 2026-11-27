@@ -1668,7 +1668,9 @@ func (s *Store) ReadTask(run, receipt string, includeTask bool) (TaskBrief, erro
 			b.Note = strings.TrimSpace(b.Note + " " + ownerNotesAlsoNote)
 		}
 		if t.SenderAgent == AudienceOwner {
-			b.Note = strings.TrimSpace(b.Note + " This task came directly from the owner. Use ask_owner if you need an answer and report when finished. Your report goes to the owner.")
+			b.Note = strings.TrimSpace(b.Note + " This is a direct conversation with the owner. Answer their latest message in their language. " +
+				"For a conversational question, put the actual answer in report.text. Skip task receipts, delivery confirmations and boilerplate about files or tests. " +
+				"For requested work, report the result and relevant checks. Use ask_owner for clarification. The owner sees the report as your reply.")
 		}
 		_, err = tx.Exec(`UPDATE task_runs SET read_seen=1 WHERE id=?`, run)
 		return err

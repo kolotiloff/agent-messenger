@@ -457,10 +457,11 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         [{action: 'enable', scope: 'internet', port: 47100, public_address: '203.0.113.7'}]);
       if(process.env.SCREENSHOT_DIR&&!native) await page.screenshot({animations:'disabled',path:path.join(process.env.SCREENSHOT_DIR,'server-internet.png')});
       // T-181: notices have no scroll of their own; a new one pushes out the oldest.
-      updates = [1,2,3,4,5].map(i => ({request_id:'fixture-update-'+i, computer:'fixture-peer', state:'refused',
-        text:'fixture refusal '+i+' '+'long reason '.repeat(40), updated_at:new Date(Date.now()-(10-i)*1000).toISOString()}));
       await page.setViewportSize({width:1100,height:850});
       await page.reload();
+      updates = [1,2,3,4,5].map(i => ({request_id:'fixture-update-'+i, computer:'fixture-peer-'+i, state:'refused',
+        text:'fixture refusal '+i+' '+'long reason '.repeat(40), updated_at:new Date().toISOString()}));
+      await page.locator('[data-tab=server]').click();
       await page.locator('[data-tab=tasks]').click();
       await page.locator('#notices .am-notice').nth(2).waitFor({timeout:10000});
       assert.equal(await page.locator('#notices .am-notice').count(), 3);

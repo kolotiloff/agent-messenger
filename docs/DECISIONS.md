@@ -919,3 +919,7 @@ The owner approved the rounded golden tile with a black pot, tilted lid raised o
 ## D-248: Complete the Kotel naming transition after the bridge
 
 Build 116 preserves the existing integrations so installed clients can update. The owner wants the old names retired from the active product, including existing MCP coordinators. Migrate app-managed entries on reconnect, preserve permissions and conversation identity, and resolve custom entries or name collisions with their owner. Verify one tool namespace and successful calls for each actual coordinator before removing its old aliases. Apply the same acceptance to the CLI, installers, services, paths and current downloads. Retire an alias when every dependent installation and offline profile has migrated. Preserve Git history, previously signed releases and the user's existing messages.
+
+## D-249 — Worker reply actions and default archive width
+
+The owner wants a worker reply to offer the same timestamp and full-message copy action as an outgoing message. Place the controls below the reply on the worker's side. Archive and Projects start at equal widths and retain their own saved widths. The revised Mac header remains a proposal.

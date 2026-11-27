@@ -2,6 +2,12 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-340 direct chat and sidebar)
+
+Added the existing message footer to worker replies. The copy action uses the reply's full source text. An expanded progress section and the delivery status stay separate from that text.
+
+Updated the worker brief for owner questions and grouped earlier worker text under the verified reply for the same run. Fixed the peer update hover geometry and the initial archive width. Chromium and WebKit exercised direct pointer entry, keyboard focus, independent resizing, reset, a completed direct reply and live text from the following run. No model was called. The Mac header proposal is available for owner review.
+
 ## 2026-11-27 — Codex (T-339 update notices and coordinator label)
 
 The installed Mac returned historical refusals for the two other computers. The window replayed refusals from the previous 24 hours. Chromium and WebKit fixtures now cover opening the window, a live timeout, a new failure and reopening after it. The MCP initialization test covers the same relay chat recovering its process identity and a different chat leaving ownership intact. Four compact Mac header proposals were prepared separately for owner review.

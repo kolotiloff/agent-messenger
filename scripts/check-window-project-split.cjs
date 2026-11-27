@@ -306,6 +306,7 @@ if (require.main === module) (async()=>{
     }finally{sameFeed.release();otherWindow.release();otherFeed.release();await preview.close();}
 
     const directTask=makeTask('owner-task','tools','codex','Новая задача в окне',0,{remote:pc1});
+    const directReply='Настройки сохранены\n\nПроверен **размер окна**.';
     const verticalCenter=locator=>locator.evaluate(node=>{
       const {top,height}=node.getBoundingClientRect();
       return top+height/2;
@@ -325,7 +326,11 @@ if (require.main === module) (async()=>{
       if(url.pathname==='/api/task-note')return {json:{ok:true}};
       if(url.pathname==='/api/pick')return {json:{ok:true,path:'/fictional/project/notes.txt'}};
       if(url.pathname==='/api/task'&&url.searchParams.get('id')===directTask.id){
-        return {json:{task:directTask,items:[{kind:'task',author:'owner',text:directTask.title,at:directTask.created_at}]}};
+        const at=directTask.created_at;
+        return {json:{task:directTask,items:[{kind:'task',author:'owner',text:directTask.title,at},
+          {kind:'text',run:1,text:'Проверяю настройки',at},{kind:'text',run:1,text:directReply,at},
+          {kind:'report',run:1,verified:true,text:directReply,at},
+          {kind:'answer',run:2,author:'owner',text:'А сейчас?',at},{kind:'text',run:2,text:'Ищу последнюю запись',at}]}};
       }
     },true);
     try{
@@ -445,6 +450,14 @@ if (require.main === module) (async()=>{
       assert.equal(await footer.locator('.am-version').evaluate(versionSize),await metadata.locator('.am-version').evaluate(versionSize));
       assert.equal(await opacity(),'0');
       assert(await remote.evaluate(node=>getComputedStyle(node).backgroundColor===getComputedStyle(node.closest('.am-sidebar')).backgroundColor));
+      const download=remote.getByRole('button',{name:'Обновить до v1.0.10'});
+      const initialButton=await download.boundingBox();
+      const directPoint={x:initialButton.x+initialButton.width/2,y:initialButton.y+initialButton.height/2};
+      await draftPage.mouse.move(directPoint.x,directPoint.y);
+      assert.equal(await opacity(),'1','direct entry over the download button reveals it');
+      assert.deepEqual(await download.boundingBox(),initialButton,'revealing the controls must keep their hit targets in place');
+      assert(await download.evaluate((node,p)=>node.contains(document.elementFromPoint(p.x,p.y)),directPoint),'the button stays under the pointer');
+      await draftPage.locator('#settings-open').hover();
       await remote.hover();
       assert.equal(await opacity(),'1');
       assert.notEqual(await remote.evaluate(node=>getComputedStyle(node).backgroundColor),await remote.evaluate(node=>getComputedStyle(node.closest('.am-sidebar')).backgroundColor));
@@ -488,7 +501,9 @@ if (require.main === module) (async()=>{
         node.getBoundingClientRect().top>node.closest('article').getBoundingClientRect().bottom));
       const workerMessage=draftPage.locator('#thread .am-message-group').last();
       await workerMessage.hover();
-      assert.equal(await workerMessage.locator('time').count(),0);
+      const workerActions=workerMessage.locator('.am-message-actions');
+      assert.equal(await workerActions.locator('time').count(),1);
+      assert(await workerActions.evaluate(node=>getComputedStyle(node).opacity==='1'&&node.getBoundingClientRect().left===node.closest('article').getBoundingClientRect().left));
       assert.equal(await workerMessage.evaluate(node=>node.getBoundingClientRect().top-node.previousElementSibling.getBoundingClientRect().bottom),24);
       const settingsDialog=draftPage.getByRole('dialog',{name:'Настройки программы'});
       const settingsOpen=draftPage.locator('#settings-open');
@@ -772,6 +787,13 @@ if (require.main === module) (async()=>{
       assert.match(op_id,/^window-/);
       assert.deepEqual(payload,{project:'tools',computer:'pc1',agent:'codex',model:'gpt-6.2-astra[effort=high]',text:directTask.title});
       const ownerBubble=draftPage.locator('#thread .am-outgoing').filter({hasText:directTask.title});
+      const conversation=draftPage.locator('#thread');
+      await conversation.getByText('Настройки сохранены',{exact:true}).waitFor();
+      assert.equal(await conversation.getByText('Настройки сохранены',{exact:true}).count(),1);
+      assert.equal(await conversation.getByText('Проверяю настройки',{exact:true}).isVisible(),false);
+      await conversation.getByText('Ищу последнюю запись',{exact:true}).waitFor();
+      await conversation.getByText('Ход работы',{exact:true}).click();
+      await conversation.getByText('Проверяю настройки',{exact:true}).waitFor();
       await ownerBubble.waitFor();
       assert.equal(await ownerBubble.locator('.am-meta').count(),0);
       const ownerMessage=ownerBubble.locator('..');
@@ -779,6 +801,12 @@ if (require.main === module) (async()=>{
       await draftPage.evaluate(()=>{
         Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.testCopiedMessage=text;}}});
       });
+      const reply=conversation.locator('article').filter({has:draftPage.getByText('Настройки сохранены',{exact:true})});
+      const workerCopy=reply.getByRole('button',{name:'Скопировать сообщение'});
+      await workerCopy.focus();
+      await workerCopy.press('Enter');
+      await reply.getByRole('status').getByText('Скопировано',{exact:true}).waitFor();
+      assert.equal(await draftPage.evaluate(()=>window.testCopiedMessage),directReply);
       await ownerBubble.hover();
       const copy=ownerMessage.getByRole('button',{name:'Скопировать сообщение'});
       assert.deepEqual(await copy.locator('svg').evaluate(icon=>{
@@ -807,6 +835,7 @@ if (require.main === module) (async()=>{
       await drawer.click();
       assert.equal(await drawer.getAttribute('aria-label'),'Скрыть архив');
       const archive=draftPage.getByRole('complementary',{name:'Архив'});
+      assert.equal((await archive.boundingBox()).width,(await draftPage.locator('.am-sidebar').boundingBox()).width);
       const archiveGeometry=()=>archive.evaluate(panel=>{
         const rect=selector=>document.querySelector(selector).getBoundingClientRect();
         const main=rect('.am-main'),aside=rect('.am-sidebar'),bounds=panel.getBoundingClientRect();
@@ -934,6 +963,8 @@ if (require.main === module) (async()=>{
       assert(wideWidth>width);
       const resize=draftPage.locator('#task-panel > .am-splitter');
       await resize.press('Home');
+      assert.equal((await archive.boundingBox()).width,(await draftPage.locator('.am-sidebar').boundingBox()).width);
+      await resize.press('Shift+ArrowRight');
       assert(await row.locator('.am-archive-task-meta').evaluate(node=>node.scrollWidth>node.clientWidth));
       await select(draftPage,'project-select','Игра');
       await row.getByText('Звуки меню',{exact:true}).waitFor();

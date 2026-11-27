@@ -157,6 +157,9 @@ func TestWindowTaskGoesDirectlyToOwner(t *testing.T) {
 			if err != nil || brief.Answer != "green" {
 				t.Fatalf("answer %+v: %v", brief, err)
 			}
+			if target != "older remote" && !strings.Contains(brief.Note, "Answer their latest message in their language") {
+				t.Fatalf("owner conversation instructions missing: %q", brief.Note)
+			}
 			worker.dispose(t, run, DispositionReport, "Menu ready")
 			if _, err := worker.st.FinishTaskRun(run.ID, cleanExit); err != nil {
 				t.Fatal(err)

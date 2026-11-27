@@ -357,7 +357,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept.am-task-sidebar-preview .am-machine-name:is(:hover,:focus-visible,:has(> .am-sidebar-disclosure:focus-visible)):where(:not(:has(.am-update-icon:is(:hover,:focus-visible)))) { --am-computer-signal-background:var(--am-quiet-hover); }
 #am-concept.am-task-sidebar-preview .am-machine-card > .am-machine-name.am-machine-drag-image { --am-computer-signal-background:color-mix(in srgb, var(--am-field-hover) 40%, transparent); }
 @media (hover:hover) and (pointer:fine) {
-  #am-concept.am-task-sidebar-preview .am-peer-card .am-machine-name:not(:hover,:has(:focus-visible),.am-machine-drag-image) > .am-machine-meta { position:absolute; inset-inline-end:var(--am-space-3); opacity:0; }
+  #am-concept.am-task-sidebar-preview .am-peer-card .am-machine-name:not(:hover,:focus-visible,:has(:focus-visible),.am-machine-drag-image) > .am-machine-meta { opacity:0; pointer-events:none; }
 }
 #am-concept .am-sidebar-has-tasks > .am-machine-name .am-update-icon { position:relative; z-index:2; }
 #am-concept button.am-sidebar-disclosure:not(:disabled) { position:absolute; inset:0; z-index:1; width:100%; min-height:0; background:transparent; padding:0; }
@@ -578,6 +578,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept.am-task-sidebar-preview .am-message-group { position:relative; }
 #am-concept .am-message-time { color:var(--am-muted); font-size:var(--am-text-xs); line-height:1.35; white-space:nowrap; pointer-events:none; }
 #am-concept .am-message-actions { position:absolute; inset-block-start:100%; inset-inline-end:0; display:flex; align-items:center; gap:var(--am-gap-control); padding-block-start:var(--am-gap-line); }
+#am-concept .am-message-group:has(> .am-message:not(.am-outgoing)) > .am-message-actions { inset-inline:0 auto; }
 #am-concept .am-message-actions > button { display:grid; place-items:center; padding:0; width:var(--am-control-chip); min-height:var(--am-control-chip); border-radius:var(--am-radius-m); color:var(--am-muted); }
 #am-concept .am-message-actions > button > svg { width:var(--am-space-4); height:var(--am-space-4); fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
 #am-concept .am-message-actions > button[data-copied] { color:var(--am-good); }

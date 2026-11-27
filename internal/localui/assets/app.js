@@ -2669,6 +2669,11 @@
     const header=taskSidebarPreview?conversationTitle(t.title):taskFeedHeader(t,displayModel,quiet);
     const opened=new Set(fresh?[]:[...thread.querySelectorAll('details[open][data-key]')].map(d=>d.dataset.key));
     const direct=feed.items[0]?.author==='owner';
+    // Keep live output visible until a verified reply for this run is available.
+    const replyProgress=new Map();
+    if(direct)for(const it of feed.items){
+      if(it.run>0&&it.kind==='report'&&it.verified&&it.audience!=='held'&&it.text?.trim())replyProgress.set(it.run,[]);
+    }
     const out=[];let group=null,tools=null;
     const pending=new Map(), unfinished=new Set();
     for(const [index,it] of feed.items.entries()){
@@ -2800,6 +2805,19 @@
       if(!taskSidebarPreview)appendMessageTime(g,meta,at);
       out.push(g);group=content;return content;
     };
+    const workerMessages=new Map();
+    function appendWorkerText(it,cls){
+      const content=workerGroup(it.at);
+      content.append(richText(it.text,cls));
+      if(taskSidebarPreview&&it.text){
+        const article=content.closest('article');
+        const message=workerMessages.get(article)||{parts:[]};
+        message.at=it.at;
+        message.parts.push(it.text);
+        workerMessages.set(article,message);
+      }
+      return content;
+    }
     const delivery=(text,cls)=>el('div',text,'am-delivery '+cls);
     for(const [index,it] of feed.items.entries()){
       if(it.kind==='command_end')continue;
@@ -2821,7 +2839,12 @@
         // gone on yet, so it never stays in another task (owner, 2026-11-09).
         if(feed.items.slice(index+1).every(n=>n.kind==='answer'||n.kind==='note')&&activeStates.includes(t.state))out[out.length-1].querySelector('.am-message-content').append(delivery(tr('Ответ записан. Исполнитель продолжит в той же сессии.'),'am-delivery-hint'));}else outgoingCoordinator(it);continue;}
       if(it.kind==='accepted'){const c=out[out.length-1]?.querySelector('.am-message-content');if(c)c.append(delivery(tr('Принято на компьютере «')+it.text+'»','am-status-good'));group=null;continue;}
-      if(it.kind==='text'){workerGroup(it.at).append(richText(it.text));continue;}
+      if(it.kind==='text'){
+        const progress=replyProgress.get(it.run);
+        if(progress)progress.push(it.text);
+        else appendWorkerText(it);
+        continue;
+      }
       if(it.kind==='tool'){
         const batch=collectTools(index);
         const line=toolLine(it,toolAction(it));line.dataset.key='t'+index;
@@ -2831,8 +2854,17 @@
         continue;
       }
       if(it.kind==='report'||it.kind==='question'){
-        const c=workerGroup(it.at);c.append(richText(it.text,'am-disposition'));
+        const c=appendWorkerText(it,'am-disposition');
         if(it.images?.length)c.append(pictures(it.images));
+        if(it.kind==='report'&&replyProgress.has(it.run)){
+          const earlier=replyProgress.get(it.run).filter(text=>text.trim()&&text.trim()!==it.text.trim());
+          if(earlier.length){
+            const details=el('details',undefined,'am-tool');
+            details.dataset.key='progress-'+it.run;
+            details.append(el('summary',tr('Ход работы')),...earlier.map(text=>richText(text)));
+            c.append(details);
+          }
+        }
         let note;
         if(!it.verified)note=delivery(it.kind==='report'?tr('Отчёт сохранён без подтверждения запуска'):tr('Не опубликовано: запуск не прошёл проверку'),'am-status-bad');
         else if(it.kind==='report'&&it.audience==='held')note=delivery(tr('Промежуточный отчёт: исполнитель продолжает с вашим сообщением'),'am-status-wait');
@@ -2860,6 +2892,7 @@
     }
     flushTools();
     if(taskSidebarPreview){
+      for(const [article,message] of workerMessages)appendMessageTime(article,null,message.at,message.parts.join('\n\n'));
       out.unshift(conversationDate(t));
       if(quiet)out.push(quiet);
     }
@@ -4776,9 +4809,10 @@
     return handle;
   }
   const sidebar=root.querySelector('.am-sidebar'),sidebarWidth=tr('Ширина левой панели');
-  splitter(sidebar,sidebarWidth,'--am-nav',taskSidebarPreview?320:248,160,420,1).classList.add('am-nav-splitter');
+  const sidebarDefault=320;
+  splitter(sidebar,sidebarWidth,'--am-nav',taskSidebarPreview?sidebarDefault:248,160,420,1).classList.add('am-nav-splitter');
   splitter(sidebar,sidebarWidth,'--am-nav-split',384,300,480,1).classList.add('am-projects-splitter');
-  splitter($('task-panel'),tr('Ширина списка задач'),'--am-queue',290,200,520,-1);
+  splitter($('task-panel'),tr('Ширина списка задач'),'--am-queue',taskSidebarPreview?sidebarDefault:290,200,520,-1);
   // A click on empty space in the sidebar shows all computers' tasks again.
   root.querySelector('.am-sidebar').addEventListener('click',event=>{if(computerFilter&&!event.target.closest('.am-machine-card,.am-project,.am-side-bottom,.am-splitter,button,select,input,a,[popover]'))clearComputer();});
   $('answer-text').addEventListener('input',()=>{sizeAnswer();answerControls();});
