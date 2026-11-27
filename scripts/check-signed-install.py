@@ -136,7 +136,14 @@ if system == "darwin":
 assert json.loads(run(exe, "version"))["revision"] == new_meta["revision"]
 client("start")
 try:
-    assert wait_ready() == before
+    after = wait_ready()
+    # Starting a paused client records a new pause event. Every original
+    # event and every row of the durable queue must still be present.
+    old_events = before.pop("Events")
+    new_events = after.pop("Events")
+    assert new_events[:len(old_events)] == old_events
+    assert all(row["kind"] == "pause" for row in new_events[len(old_events):])
+    assert after == before
 finally:
     stop()
 print(f"{platform.system()} {target}: {previous} -> {version}, signed package and existing queue verified")

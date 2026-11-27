@@ -23,7 +23,7 @@ One coordinator agent hands tasks to worker agents (Claude Code, Codex, Cursor A
   <img src="docs/assets/window-light.png" alt="Kotel in English, with Claude Code, Codex and Cursor in the computers and tasks panels">
 </picture>
 
-<sub>Kotel 1.0.3 in English, with Claude Code, Codex and Cursor using sample projects and tasks. Change the theme or language in Settings at the bottom left.</sub>
+<sub>The Kotel window with English controls and sample projects, computers and conversations. Change the theme or language in Settings at the bottom left.</sub>
 
 ## What it does
 
