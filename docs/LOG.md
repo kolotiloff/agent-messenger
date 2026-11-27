@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-336 settings rows)
+
+Removed model-row dividers and moved the network-name field beside its label at the General selector width. Checked alignment and model search in the live preview in Chromium and WebKit. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).
+
 ## 2026-11-27 — Codex (T-336 composer labels)
 
 Matched the project, computer and model selectors in a task draft to the regular 13 px model label in a reply. Verified matching typography in the shared preview and the project suite in Chromium and WebKit. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).

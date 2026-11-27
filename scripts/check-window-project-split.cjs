@@ -486,6 +486,7 @@ if (require.main === module) (async()=>{
       for(const row of await general.locator('.am-theme-setting:has(.am-select-trigger)').all()){
         await expectCentered(row.locator('label'),row.locator('.am-select-trigger'));
       }
+      const settingsControlWidth=(await general.locator('.am-select-trigger').first().boundingBox()).width;
       assert.equal(await settingsDialog.evaluate(node=>node.matches(':modal')),true);
       assert.equal(await settingsDialog.locator('.am-sidebar,#project-select').count(),0);
       assert.equal(await draftPage.locator('[data-screen=tasks]').isVisible(),true);
@@ -500,9 +501,16 @@ if (require.main === module) (async()=>{
         }),['16px','16px'],section);
         const height=selector=>screen.locator(selector).evaluate(node=>node.getBoundingClientRect().height);
         if(section==='server'){
-          for(const selector of ['#host-scope + .am-select-trigger','#host-port','#host-enable']){
+          for(const selector of ['#computer-name','#host-scope + .am-select-trigger','#host-port','#host-enable']){
             assert.equal(await height(selector),28,selector);
           }
+          const name=screen.getByRole('textbox',{name:'Имя в сети',exact:true});
+          const row=screen.locator('label[for=computer-name]');
+          const field=await name.boundingBox();
+          assert.equal(field.width,settingsControlWidth);
+          const rowBox=await row.boundingBox();
+          assert.equal(field.x+field.width,rowBox.x+rowBox.width);
+          await expectCentered(row.locator('span'),name);
         }
         if(section==='project'){
           for(const selector of ['#project-page-name','#project-page-folder','#project-page-pick']){
@@ -612,6 +620,9 @@ if (require.main === module) (async()=>{
         return style.borderRadius==='8px'&&style.height==='28px'&&parseFloat(style.paddingInlineStart)>18;
       }));
       assert.equal(await modelPicker.locator('.am-model-options').evaluate(node=>getComputedStyle(node).paddingInlineEnd),'8px');
+      const modelRows=modelPicker.locator('.am-model-option');
+      assert(await modelRows.count()>1);
+      assert(await modelRows.evaluateAll(rows=>rows.every(row=>getComputedStyle(row).borderBlockStartWidth==='0px')));
       await search.fill('учебная-модель');
       await modelPicker.getByRole('button',{name:'Добавить свой вариант',exact:true}).waitFor();
       await search.clear();
@@ -955,6 +966,11 @@ if (require.main === module) (async()=>{
         const {width,height}=icon.getBoundingClientRect();
         return [width,height,icon.getAttribute('aria-hidden')];
       })),Array(4).fill([18,18,'true']));
+      await modal.locator('[data-tab=server]').click();
+      const name=modal.getByRole('textbox',{name:'Имя в сети',exact:true});
+      const nameLabel=modal.locator('label[for=computer-name] > span');
+      await expectCentered(nameLabel,name);
+      assert((await name.boundingBox()).x>(await nameLabel.boundingBox()).x);
       await modal.locator('[data-tab=project]').click();
       const plugin=modal.locator('#coord-box .am-step').first();
       const subtitle=plugin.locator('.am-step-sub');

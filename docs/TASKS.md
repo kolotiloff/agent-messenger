@@ -35,6 +35,7 @@ These checks cover the browser preview. Acceptance in the installed window remai
 - Conversation: use rounded hover fills for the composer and Copy. Give Copy a stroked icon and feedback. Keep outgoing time under the bubble and remove the worker timestamp shown on hover. Use the shared spacing for bubble insets, command headers and opened command details. Highlight recognized command text without changing its contents.
 - Task lists: keep full-width row highlights, single-line truncated titles and metadata, 4 px of vertical padding on active tasks and computer headings, 8 px on archive rows, computer alignment and a left-aligned Clear archive action. Use the same gray computer icon for the local and remote computers. Show full titles with dates in the conversation.
 - Settings and Statistics: keep the compact independent dialogs, section icons and order, row dividers, vertically aligned actions, and independently scrolling model list. Verify stable filters and heading typography, scoped statistics, efficiency row expansion and export. Hide old efficiency results while a new filter loads.
+- Settings follow-up: use spacing between model choices and place the network-name input beside its label at the standard General selector width.
 - Release: the installed 1.0.12 still uses its original desktop layout. Verify the same loopback preview and retain the release hold.
 
 ## Now
