@@ -965,3 +965,7 @@ The owner revised the release scope in D-257 on November 27. Show the Settings w
 ## D-259 — Keep the My network label inside its card
 
 Use the same typography as Connection mode. Place this computer and its peers in one list with the same vertical spacing between all rows. Keep the connection controls in their existing layout.
+
+## D-260 — Widen the macOS Dock tile
+
+Increase the dark tile from 824 to 864 px on the 1024 px canvas for the Dock. Preserve the white mark's size and position. The macOS package uses its own artwork for this optical adjustment.

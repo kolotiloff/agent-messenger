@@ -2,6 +2,16 @@
 
 Written November 6, 2026. The current status below supplements the original [MVP](MVP.md), [architecture](PLAN.md), [window requirements](APP.md) and [broker deployment](DEPLOYMENT.md). Transitions are decided by checks.
 
+## Planned conversation and document workflow
+
+The owner wants to read the files behind a reply and follow the worker's activity without leaving Kotel.
+
+- **T-361 — File links and an in-app reader.** Render Markdown in conversations, including local links such as `[Roadmap](Docs/ROADMAP.md)`. Resolve relative paths in the task's project and support existing absolute paths within that project. Open Markdown in a read-only panel in Kotel, jump to a referenced line or heading when supplied, and allow navigation back to the same place in the chat. Render Markdown safely, show an explanation for missing or unavailable files, and keep the original Markdown available through Copy message.
+- **T-362 — File actions.** Use one context menu on a file link and in its preview. Offer Open, Open with, Save as, Copy path, Copy file contents when available, and Reveal in the system file manager. Start with local projects. A remote file must be identified by its source computer and project and fetched through the authorized project connection before content-based actions become available.
+- **T-363 — Work progress.** Put a collapsible work section before the final answer, ordered by the original events. Start with the worker's progress message, then show grouped actions in arrival order. Use labels such as Read file and Searched when the event identifies the action, make known file paths openable, and retain shell commands in expandable details. Show elapsed time when known. A live conversation, its completed view and reopening it from the Archive should preserve the same ordering.
+
+Accept the workflow with a conversation that reads and searches a Markdown file and cites both its path and a line. Check that the user can open the citation, read the document, use the file menu, and return to the same reply. Repeat after completion and after reopening the conversation.
+
 ## Published 1.0.14 fixes
 
 [Build 117](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.14-preview.117) passed all five native update checks and public channel verification.

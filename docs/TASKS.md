@@ -49,6 +49,10 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
+| T-361 | Render clickable Markdown file links and open documents inside the conversation. | window | Planned. First implement the local, read-only Markdown viewer and line navigation. |
+| T-362 | Add file actions to links and previews. | window / desktop | Planned after T-361. Treat remote file access as a separate stage. |
+| T-363 | Show worker progress in chronological order before the final answer. | window | Planned. Improve labels for file reads and searches. |
+| T-360 | Increase the apparent size of the macOS Dock tile while keeping the white mark at its current size. | packaging | Prepared for the next functional release. |
 | T-358 | Refresh the GitHub overview, screenshots and user documentation. | docs | Updated for 1.0.15 (build 118). |
 | T-359 | Match the My network card label and computer row spacing to the Network settings layout. | window | Published in 1.0.15 (build 118). Verified in Chromium and WebKit. |
 | T-357 | Package the approved monochrome Kotel icon at the standard Mac Dock size. | release | Published in 1.0.15 (build 118). |

@@ -12,6 +12,10 @@ The owner asked the agent to finish the program without them ("доделай б
 
 Build 118 includes the monochrome icon, the Graphite theme, task grouping, Network versions and updates, and per-task access controls. The local update button, version and other footer controls are at the bottom left. The My network card uses the same label typography as Connection mode and a uniform row spacing. Statistics row hover matches the Archive’s color and 4 px gap.
 
+T-360 widens the black tile in the macOS bundle icon by 40 px on the 1024 px canvas. The white mark retains its exact pixels. The change is prepared for the next functional release.
+
+T-361 through T-363 record the owner's next conversation improvements. Start with local Markdown file links and a document reader, add file actions, and put the ordered work progress above each final reply. The [release plan](RELEASE_PLAN.md#planned-conversation-and-document-workflow) records the expected behavior and acceptance scenario.
+
 The isolated stock-117 Codex chat resumed under the new MCP name after a tool call on each side of the transition. The installed Cursor CLI lists tools with an unset worker marker and hides them in a marked worker. Claude and Cursor same-chat permission migration, live task steering and authenticated provider acceptance remain open. See the [development report](reports/2026-11-27-kotel-combined.md).
 
 T-343 integrates T-339 through T-342 for Kotel 1.0.14 (build 117). New Task now has its own left-aligned row above Projects. Both sidebar filters follow the Settings width rule and stack in narrow panels. The owner confirmed the fleet has updated to the bridge. The original repository continues to serve the signed channel for this patch. T-338 tracks the final identifier migration.

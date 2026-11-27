@@ -19,7 +19,7 @@ import (
 	"path/filepath"
 )
 
-// The approved 1024 px master is shared with the Mac package.
+// The approved 1024 px master supplies the Windows resources.
 //
 //go:embed kotel.png
 var masterPNG []byte

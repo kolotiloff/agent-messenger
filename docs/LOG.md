@@ -2,6 +2,14 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — T-361 through T-363 Conversation and document workflow
+
+Codex recorded the requested Markdown links, document reader, file actions and chronological work progress. Added an acceptance scenario to the release plan.
+
+## 2026-11-27 — T-360 macOS Dock tile
+
+Codex widened the tile from 824 to 864 px on the 1024 px canvas and compared the white mark with build 118 at 64, 128 and 1024 px. The signed local Mac package contains the adjusted icon.
+
 ## 2026-11-27 — T-358 Build 118 publication and GitHub overview
 
 [Kotel 1.0.15](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.15-preview.118) is public. [Run 109](https://github.com/kolotiloff/agent-messenger/actions/runs/46073340337) verified the signed upgrade from build 117 on macOS arm64, Windows x64 and ARM64, and Linux x64 and ARM64. The GitHub overview uses the approved Kotel icon, window, Statistics and Network screenshots with fictional data, and links to the five current downloads.
