@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-336 composer parity)
+
+Matched the draft and reply field padding, focus border and Send arrow. Moved the read-only access label to the left above both fields. Verified matching geometry and icons, shared Add menu and access placement in the loopback preview and the Chromium and WebKit window suite. The release remains on hold. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).
+
 ## 2026-11-27 — Codex (T-336 window audit)
 
 Consolidated button sizes and neutral fills, added the shared path menu to replies, exposed model and access information with a token popover below the composer, used neutral computer icons, refined Copy, removed worker hover timestamps, and highlighted shell command text. Audited chat constraints, sidebar and archive rows, settings, model selection and Statistics. A pending efficiency request now hides old results. Seven window checks passed in Chromium and WebKit, and the Go check suite passed. The ordinary route serves the new layout in the handler test. Native smoke launch remains unverified. The release remains on hold. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).

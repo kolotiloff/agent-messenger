@@ -325,6 +325,23 @@ if (require.main === module) (async()=>{
       assert.equal(await plus.evaluate(node=>getComputedStyle(node).opacity),'1');
       const local=draftPage.locator('.am-machine-card[aria-current=true]');
       await draftPage.locator('#task-stop').waitFor();
+      const composerStyle=field=>field.evaluate(node=>{
+        const style=getComputedStyle(node),input=getComputedStyle(node.querySelector('textarea'));
+        const icons=[node.firstElementChild,node.lastElementChild].map(button=>{
+          const style=getComputedStyle(button);
+          return [style.width,style.height,style.borderRadius,button.querySelector('svg').innerHTML];
+        });
+        return {padding:style.padding,radius:style.borderRadius,gap:style.gap,inputPadding:input.padding,icons};
+      });
+      const replyField=draftPage.locator('#compose .am-compose-field');
+      const replyStyle=await composerStyle(replyField);
+      const replyAccess=draftPage.locator('#answer-access');
+      const accessAbove=access=>access.evaluate(node=>{
+        const rect=node.getBoundingClientRect();
+        const field=node.nextElementSibling.getBoundingClientRect();
+        return rect.height>0&&rect.bottom<field.top&&rect.left===field.left&&rect.width<field.width;
+      });
+      assert.equal(await accessAbove(replyAccess),true);
       assert.deepEqual(await draftPage.locator('#compose .am-compose-field').evaluate(field=>{
         const stop=field.querySelector('#task-stop').getBoundingClientRect();
         const send=field.querySelector('#answer-send').getBoundingClientRect();
@@ -625,6 +642,7 @@ if (require.main === module) (async()=>{
           field.getBoundingClientRect().bottom<context.getBoundingClientRect().top;
       }),true);
       assert.equal(await draftPage.locator('#task-draft-send').isDisabled(),true);
+      assert.deepEqual(await composerStyle(form.locator('.am-compose-field')),replyStyle);
       await select(draftPage,'task-draft-project','Инструменты');
       const pathMenu=draftPage.getByRole('dialog',{name:'Добавить путь',exact:true});
       const addPath=form.getByRole('button',{name:'Добавить путь',exact:true});
@@ -636,6 +654,7 @@ if (require.main === module) (async()=>{
       }));
       await select(draftPage,'task-draft-computer','Мак');
       assert.equal(await form.locator('#task-draft-access').textContent(),'Обычный доступ');
+      assert.equal(await accessAbove(form.locator('#task-draft-access')),true);
       await addPath.click();
       const pickRequest=draftPage.waitForRequest(req=>new URL(req.url()).pathname==='/api/pick');
       await pathMenu.getByRole('button',{name:'Выбрать файл…',exact:true}).click();
@@ -701,6 +720,7 @@ if (require.main === module) (async()=>{
       assert.equal(await draftPage.evaluate(()=>window.testCopiedMessage),directTask.title);
       await draftPage.locator('#answer-text').fill('Уточнение исполнителю');
       assert.equal(await draftPage.locator('#answer-access').textContent(),'Доступ на другом компьютере');
+      assert.equal(await accessAbove(replyAccess),true);
       await draftPage.locator('#answer-add').click();
       assert.equal(await pathMenu.getByRole('button',{name:'Выбрать файл…'}).isVisible(),false);
       await pathMenu.getByRole('button',{name:'Указать путь…'}).click();

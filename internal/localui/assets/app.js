@@ -2850,17 +2850,17 @@
       const model=$('answer-model');
       model.textContent=displayModel;
       model.title=displayModel?taskModelDetail(t):'';
-      const access=$('answer-access');
-      showComposerAccess(access,!!t.full_access,!!(t.remote&&!t.remote.from));
+      showComposerAccess($('answer-access'),!!t.full_access,!!(t.remote&&!t.remote.from));
       renderComposerTokens(t,displayModel,!compose.hidden);
-      $('answer-context').hidden=!displayModel&&access.hidden&&$('answer-tokens').hidden;
+      $('answer-context').hidden=!displayModel&&$('answer-tokens').hidden;
     }
     box.disabled=!canDraft;
     box.placeholder=q?tr('Ответить исполнителю…'):note&&t.state==='waiting_coordinator'?tr('Ответить вместо координатора…'):t.remote?.from?tr('Писать исполнителю можно на компьютере «')+t.remote.name+'»':tr('Написать исполнителю…');
     $('answer-send').hidden=!canDraft;
     $('answer-add').hidden=!taskSidebarPreview||!canDraft;
     if(compose.dataset.task!==t.id){compose.dataset.task=t.id;box.value='';$('answer-status').textContent='';}
-    box.title=$('answer-send').title=canDraft&&(unreachable||!q&&!note)?tr('Отправка пока недоступна. Черновик сохранится, пока открыта задача.'):'';
+    box.title=canDraft&&(unreachable||!q&&!note)?tr('Отправка пока недоступна. Черновик сохранится, пока открыта задача.'):'';
+    $('answer-send').title=box.title||tr('Отправить ответ');
     renderStopControls(t);
     sizeAnswer();answerControls();
     if(atBottom){thread.scrollTop=thread.scrollHeight;feedPinned=true;}
