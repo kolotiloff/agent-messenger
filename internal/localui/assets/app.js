@@ -1259,15 +1259,17 @@
       const key=JSON.stringify([computer,name]);
       const folder=el('div',undefined,'am-sidebar-folder');
       const button=el('button',undefined,'am-folder-heading');button.type='button';
-      const icon=svgIcon(['']);
+      // Keep the tab and rear panel in place as the front opens.
+      const icon=svgIcon(['M2 19V5a2 2 0 0 1 2-2h5l3 3h7a2 2 0 0 1 2 2v3','']);
+      const front=icon.lastElementChild;
       button.append(icon,el('span',projectTitle(name)));
       button.dataset.sidebarFocus='folder:'+key;
       const rows=el('div',undefined,'am-sidebar-task-rows');
       const count=sidebarTaskCount(tasks.length);
       function showFolder(expanded){
-        icon.firstElementChild.setAttribute('d',expanded
-          ? 'M2 19V6a2 2 0 0 1 2-2h5l3 3h6a2 2 0 0 1 2 2v2M2 19l4-8h16l-4 9H4a2 2 0 0 1-2-1Z'
-          : 'M2 6a3 3 0 0 1 3-3h4l3 3h7a3 3 0 0 1 3 3v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2Z');
+        front.setAttribute('d',expanded
+          ? 'M2 19l3-7a2 2 0 0 1 1.8-1.2H22a1 1 0 0 1 .9 1.4l-3 7.4A2 2 0 0 1 18 21H4a2 2 0 0 1-2-2Z'
+          : 'M21 11v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2');
         rows.hidden=!expanded;
         count.hidden=expanded;
         button.setAttribute('aria-expanded',String(expanded));

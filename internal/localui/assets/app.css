@@ -329,8 +329,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-machine-presence { position:relative; display:flex; flex:none; width:var(--am-computer-icon-size); height:var(--am-computer-icon-size); margin-inline-end:calc(var(--am-computer-label-gap) - var(--am-space-1)); color:var(--am-muted); }
 #am-concept .am-machine-presence svg { width:100%; height:100%; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
 #am-concept.am-task-sidebar-preview {
-  --am-computer-icon-size:var(--am-text-l);
-  --am-computer-label-gap:var(--am-gap-control);
+  --am-computer-icon-size:var(--am-text-xl);
+  --am-computer-label-gap:calc(var(--am-gap-control) - var(--am-gap-line));
   --am-preview-header-control:var(--am-button-height);
   --am-button-height:var(--am-control-compact);
   --am-button:var(--am-field);
@@ -809,7 +809,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-sidebar-folder { display:grid; align-content:start; flex:none; gap:var(--am-space-1); min-width:0; }
 #am-concept button.am-folder-heading { display:flex; align-items:center; gap:var(--am-computer-label-gap); padding:var(--am-row-pad-block) var(--am-row-pad-inline); line-height:var(--am-computer-heading-line); min-height:var(--am-preview-header-control); justify-content:flex-start; background:transparent; text-align:start; }
 #am-concept button.am-folder-heading:is(:hover,:focus-visible) { background:var(--am-list-row-hover); }
-#am-concept .am-folder-heading svg { flex:none; width:var(--am-computer-icon-size); height:var(--am-computer-icon-size); fill:none; stroke:var(--am-muted); stroke-width:2; stroke-linejoin:round; }
+#am-concept .am-folder-heading svg { flex:none; width:var(--am-computer-icon-size); height:var(--am-computer-icon-size); fill:none; stroke:var(--am-muted); stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
 #am-concept .am-folder-heading span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #am-concept #archive-clear { width:var(--am-control-compact); height:var(--am-control-compact); min-height:var(--am-control-compact); }
 #am-concept .am-task-project > h3 { color:var(--am-text); overflow-wrap:anywhere; }

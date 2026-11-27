@@ -1284,9 +1284,13 @@ if (require.main === module) (async()=>{
       const machineHeader=card(browserPreview,'local').locator('.am-machine-name');
       assert.equal((await localFolderButton.boundingBox()).height,(await machineHeader.boundingBox()).height);
       assert.equal((await localFolderButton.locator('svg').boundingBox()).width,(await localMark.locator('svg').boundingBox()).width);
-      const folderOutline=localFolderButton.locator('svg path');
+      assert.equal((await localFolderButton.locator('svg').boundingBox()).width,18);
+      const rear=localFolderButton.locator('svg path').first();
+      const rearOutline=await rear.getAttribute('d');
+      const folderOutline=localFolderButton.locator('svg path').last();
       const openedOutline=await folderOutline.getAttribute('d');
       await localFolderButton.click();
+      assert.equal(await rear.getAttribute('d'),rearOutline);
       assert.notEqual(await folderOutline.getAttribute('d'),openedOutline);
       assert.equal(await localFolderButton.locator('.am-sidebar-task-count:visible').textContent(),'2');
       await localFolderButton.click();
