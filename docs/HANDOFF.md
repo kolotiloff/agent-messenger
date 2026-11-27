@@ -8,6 +8,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+T-343 integrates T-339 through T-342 for Kotel 1.0.14 (build 117). New Task now has its own left-aligned row above Projects. Both sidebar filters follow the Settings width rule and stack in narrow panels. The owner confirmed the fleet has updated to the bridge. The original repository continues to serve the signed channel for this patch. T-338 tracks the final identifier migration.
+
 T-342 finishes the task window follow-up on top of T-341. The Mac caption divider now spans both sides. Projects, its filter and Add share one horizontal center with Archive and its controls. The conversation date has a fixed 12 px inset outside the scrolling history. Both header rows use the 16 px section spacing token. The archive header inherits its pane surface and has no lower divider. Its clear button sits beside the agent filter. Clearing still asks for confirmation and hides only matching completed tasks. Both author roles have an 8 px gap above their messages. Shared select buttons toggle closed on a second click. Modal opening focus goes to a heading or an appropriate input.
 
 T-341 follows T-340 for the next patch. The owner selected a compact Mac task title bar. The Projects control starts 8 px below it. The left panel button shares the archive button's vertical alignment and independently frees the sidebar width. T-341 also clarifies the access displayed for remote tasks, aligns the shield, updates the first live minute and the pending acceptance text, and requests an icon refresh during desktop updates. An installed upgrade on the Windows and Linux desktops remains to be observed.
@@ -20,7 +22,7 @@ T-339 prepares two fixes for 1.0.14. A window opened after an update skips histo
 
 Kotel 1.0.13, build 116, is [published in the original repository](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.13-preview.116). It includes the T-336 interface, new artwork and the in-place repair for older split project databases. The five native signed-draft checks and public channel verification [passed](https://github.com/kolotiloff/agent-messenger/actions/runs/46011237589). Both Linux architectures also exercised paired remote updates. Stock Mac builds 99, 101, 108, 112 and 115 found the public bridge at the old address. See the [acceptance report](reports/2026-11-27-kotel-transition.md).
 
-The next gate is positive confirmation that every known installation runs build 116, including offline devices and services, followed by the owner's rename command. T-338 tracks migration of existing and new MCP profiles, current packages, CLI, and retirement of old operational names. Keep Git history and the original signed releases.
+The owner confirmed the installed fleet is updated. Renaming the original repository is a separate cutover. T-338 tracks migration of existing and new MCP profiles, current packages, CLI, and retirement of old operational names. Keep Git history and the original signed releases.
 
 Settings opens at General and then lists Project, Agents and Server, matching the setup order in the welcome pane. The welcome actions still open their corresponding sections directly.
 

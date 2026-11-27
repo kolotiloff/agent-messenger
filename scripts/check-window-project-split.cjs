@@ -418,11 +418,14 @@ if (require.main === module) (async()=>{
       assert.equal(await groupGap(),4);
       await draftPage.mouse.move(1000,30);
       const nav=draftPage.locator('.am-tabs');
-      assert.equal(await draftPage.locator('.am-project #task-new').count(),1);
+      assert.equal(await draftPage.locator('.am-sidebar > #task-new').count(),1);
       assert.equal(await draftPage.getByRole('button',{name:'Новая задача',exact:true}).count(),1);
       const picker=await draftPage.locator('#project-column-first .am-select-trigger').boundingBox(),plusBox=await plus.boundingBox();
-      assert(plusBox.x>=picker.x+picker.width);
-      assert.equal(plusBox.y+plusBox.height/2,picker.y+picker.height/2);
+      const projectLabel=await draftPage.locator('#project-heading').boundingBox();
+      assert.equal(plusBox.x,projectLabel.x);
+      assert.equal((await plus.locator('svg').boundingBox()).x,plusBox.x);
+      assert(plusBox.y+plusBox.height<picker.y);
+      assert.equal(await plus.innerText(),'Новая задача');
       const plusGlyph=plus.locator('svg');
       assert.deepEqual(await plusGlyph.evaluate(icon=>{
         const style=getComputedStyle(icon.querySelector('path'));
@@ -877,7 +880,7 @@ if (require.main === module) (async()=>{
           headerEdges:[header.left-bounds.left-panel.clientLeft,bounds.right-header.right],
           fields:[heading.left-bounds.left-panel.clientLeft,bounds.right-rect('#archive-clear').right,projects.left-aside.left,aside.right-projects.right-1],
           controls:[filter.height,rect('#project-select + .am-select-trigger').height],
-          toolbar:[toolbar.left-main.left,main.right-toolbar.right,toolbar.bottom-rect('.am-computers').top-1],
+          toolbar:[toolbar.left-main.left,main.right-toolbar.right,toolbar.bottom-rect('.am-computers').top-1+rect('#task-new').height+parseFloat(getComputedStyle(document.querySelector('.am-sidebar')).rowGap)],
           rowAlignment:[header.top-bounds.top,filter.top-header.top],
         };
       });
@@ -943,7 +946,8 @@ if (require.main === module) (async()=>{
         });
       });
       const [projectHeading,taskHeading,archiveHeading]=await headingStyles();
-      assert.deepEqual(taskHeading,projectHeading);
+      assert.deepEqual(taskHeading.slice(0,3),projectHeading.slice(0,3));
+      assert.equal(taskHeading[3],await verticalCenter(plus));
       assert.deepEqual(archiveHeading.slice(0,3),projectHeading.slice(0,3));
       assert(archiveHeading[3]>taskHeading[3]);
       await archive.getByText('Инструменты, Готовый отчёт',{exact:true}).waitFor();
@@ -1060,7 +1064,7 @@ if (require.main === module) (async()=>{
           n.nextElementSibling.getBoundingClientRect().top-n.getBoundingClientRect().bottom),8);
       }
       assert.equal(box.height,44);
-      assert.equal(row.y-(box.y+box.height),16);
+      assert.equal((await mac.locator('#task-new').boundingBox()).y-(box.y+box.height),16);
       assert.equal(control.y+control.height/2,box.y+box.height/2);
       assert.equal(await mac.locator('.am-computers').evaluate(n=>getComputedStyle(n).borderBlockStartWidth),'0px');
       await mac.waitForFunction(()=>window.titlebarGeometry?.holes.some(([x,y,w,h])=>{
@@ -1070,8 +1074,29 @@ if (require.main === module) (async()=>{
       await mac.locator('#list-toggle').click();
       const archive=mac.locator('#task-panel');
       await archive.waitFor();
-      for(const selector of ['#project-heading','#project-column-first .am-select-trigger','#task-new','#task-list-heading','.am-task-filter .am-select-trigger']){
+      for(const selector of ['#project-heading','#project-column-first .am-select-trigger']){
         assert.equal(await verticalCenter(mac.locator(selector)),row.y+row.height/2);
+      }
+      const projectFilter=await mac.locator('#project-column-first .am-select-trigger').boundingBox(),agentFilter=await mac.locator('.am-task-filter .am-select-trigger').boundingBox();
+      assert.equal(projectFilter.width,agentFilter.width);
+      assert.equal(agentFilter.y,(await mac.locator('#task-new').boundingBox()).y);
+      if(output){
+        await mac.setViewportSize({width:1440,height:840});
+        await mac.screenshot({path:path.join(output,'kotel-sidebar-117.png')});
+        await mac.setViewportSize({width:1040,height:780});
+      }
+      for(const [container,heading,selector] of [
+        ['.am-sidebar','#project-heading','#project-select + button'],
+        ['.am-queue-header','#task-list-heading','#agent-filter + button']
+      ]){
+        const pane=mac.locator(container);
+        await pane.evaluate(el=>el.style.inlineSize='180px');
+        const trigger=await mac.locator(selector).boundingBox();
+        const label=await mac.locator(heading).boundingBox();
+        assert(trigger.y>=label.y+label.height);
+        const innerWidth=await pane.evaluate(el=>el.clientWidth-parseFloat(getComputedStyle(el).paddingLeft)-parseFloat(getComputedStyle(el).paddingRight));
+        assert.equal(trigger.width,innerWidth);
+        await pane.evaluate(el=>el.style.removeProperty('inline-size'));
       }
       assert.equal(await mac.locator('.am-sidebar').evaluate(n=>{
         const rule=getComputedStyle(n,'::before');

@@ -67,3 +67,5 @@ Check the tasks, agents and server tabs, a dialog and a menu in both themes at 1
 Standard dialogs share the 44 px header with 4 px vertical and 16 px horizontal padding. Dialogs that ask for a decision (`.am-alert`) use 16 px padding and a 12 px gap between the heading, text and actions. They use the standard 16 px section heading, muted text, the leaving or destructive choice on the left and the main action on the right. A destructive button (`.am-danger`) has red text on a soft red fill.
 
 Text in a control is centred by eye, not by the line box: system fonts leave more room below the text than above it, so buttons, tabs, select fields and inputs get `--am-text-nudge` (4) as their top padding and none at the bottom. Measured: 11 px above the capitals and 11 below in a 32 px button.
+
+The task sidebar starts with a left-aligned quiet New Task button above Projects. Both sidebar filters use the inline Settings control width (12 em, capped at half the available row). At an inner pane width of 195 px or less, each filter moves to a full-width second row.

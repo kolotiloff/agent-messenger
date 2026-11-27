@@ -931,3 +931,7 @@ On a wide Mac window, place Projects one control gap below the task title bar. K
 ## D-251 — Align the project and archive controls
 
 Extend the Mac caption divider over the Projects sidebar. Use the common 16 px section inset for both Mac sidebar header rows. Keep the archive header on its pane background without a divider below it. Keep the conversation date centered above the scrolling history. Place the archive clear icon beside the agent filter and identify the scope and history retention in the existing confirmation dialog.
+
+## D-252 — Give New Task its own row above Projects
+
+Place the icon and New Task text at the leading edge of the sidebar. Use the shared quiet button feedback and keep the archive toggle icon-only. Both sidebar filters use the Settings width of 12 em capped at half the available row. In narrow panels the filter takes a full row.

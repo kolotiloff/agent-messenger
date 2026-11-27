@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-343 patch integration)
+
+Integrated the four window follow-ups and moved New Task above the project selector. Both panel filters share the Settings width rule. Verified project navigation, conversation switching, controls, pictures, update status and window stability in Chromium and WebKit with fictional data. The owner confirmed the fleet has updated to the bridge.
+
 ## 2026-11-27 — Codex (T-342 task date and window controls)
 
 Measured a 4 px difference between the Mac project and archive rows. Aligned their controls, extended the caption divider and applied common section spacing to the pane headers. The archive filter row uses its pane background and has no lower divider. Moved the date outside the scroll region and the archive clear action beside its filter. Kept the existing confirmation and history scope. Reduced the task selection fill and kept a distinct softer hover in the sidebar and archive. Both task lists now use the same row padding and 16 px wide-layout outer inset, including while scrollbars are visible. Increased both author-to-message gaps to 8 px. Assigned initial modal focus and fixed repeat clicks on native select popover invokers. Chromium and WebKit verified both filters, heading alignment and fills, date stability across task changes and scrolling, message gaps, modal focus and archive cancellation.
