@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — T-357 Kotel icon
+
+The owner approved the white mark on a black tile with a soft highlight and transparent padding for the Dock. The release build uses the same artwork in the Mac bundle, Windows resources and Linux application menu. The visible tile occupies 824 px on the 1024 px master.
+
 ## 2026-11-27 — T-356 statistics table hover
 
 The owner requested a preliminary release of the completed functionality after reviewing Settings. Statistics tasks now use the Archive’s 4 px gap instead of stacking transparent 4 px edges.

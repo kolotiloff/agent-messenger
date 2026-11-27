@@ -8,6 +8,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+The owner approved the monochrome Kotel icon for 1.0.15 (build 118). T-357 packages it on Mac, Windows and Linux. The GitHub overview, documentation and screenshots follow publication.
+
 The owner subsequently requested a preliminary build with the completed functionality. Show the native Settings captures before submitting it for publication. Remaining MCP and worker features carry forward.
 
 The active integration branch is `codex/t338-combined-release`. The owner chose one functional release after public build 117. It includes the Graphite window, all three task groupings, the Network roster and per-task access in the window and coordinator MCP. Keep the local update glyph, version and other footer controls at the bottom left. Remote versions and update actions live in Network settings.
