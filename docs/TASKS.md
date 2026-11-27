@@ -50,7 +50,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
 | T-337 | Ship Kotel as an in-place update of Agent Messenger, preserving history and connected computers. | agent | D-247. Original GitHub channel for the bridge. Fleet confirmation and owner command required for rename. |
-| T-336 | Audit the window refinements, including compact controls, both composers, message actions, settings and statistics. | agent | `codex/t336-window-audit`. Implemented in the shared preview. Browser and Go checks passed. Native acceptance pending. Release held. |
+| T-336 | Audit the window refinements, including compact controls, both composers, message actions, settings and statistics. | agent | `codex/t336-window-audit`. Implemented in the shared preview. Browser checks passed on Mac. The isolated Mac window showed the settings order and Statistics. Integrated into the T-337 bridge. |
 | T-335 | Put project, computer and searchable model selection below the New Task composer. Insert paths from Add and copy outgoing messages. | agent | `codex/t335-task-composer`. D-235. Implemented in the shared preview. Release held. |
 | T-334 | Separate Statistics, align its report views, make model details open from an indented row, and unify the Settings, agent and model dialogs. | agent | Implemented in the local window preview. Follow-up spacing for outgoing messages and task rows is available in the same preview. |
 | T-333 | Enable the computer-grouped task layout in the packaged desktop window. | agent | Enabled on the normal window route. The owner paused the release for the combined changes. |

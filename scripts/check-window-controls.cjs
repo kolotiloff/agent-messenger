@@ -1008,7 +1008,11 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;},previous);
       }
       await page.setViewportSize({width:600,height:600});
-      assert(await page.locator('[aria-labelledby=stats-top-title] .am-stats-table-wrap').evaluate(box=>box.scrollWidth===box.clientWidth));
+      const statsWidth=await page.locator('[aria-labelledby=stats-top-title] .am-stats-table-wrap').evaluate(box=>({
+        available:box.clientWidth,content:box.scrollWidth,
+        headers:[...box.querySelectorAll('th')].map(cell=>({width:cell.clientWidth,content:cell.scrollWidth})),
+      }));
+      assert.equal(statsWidth.content,statsWidth.available,'Statistics table overflow at 600 px: '+JSON.stringify(statsWidth));
       await page.setViewportSize({width:1100,height:600});
             const pendingFrame = new Promise(resolve => { frameStatsRequested = resolve; });
       let releaseFrame;
