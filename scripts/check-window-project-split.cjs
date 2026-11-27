@@ -7,6 +7,12 @@ const output = process.env.SCREENSHOT_DIR;
 const assets = path.resolve(__dirname, '../internal/localui/assets');
 const projects = [{name:'game',title:'Игра',folder:'/Проекты/Игра'},{name:'tools',title:'Инструменты',folder:'/Проекты/Инструменты'},{name:'site',title:'Сайт',folder:'/Проекты/Сайт'}];
 const iso = minutes => new Date(Date.now() - minutes * 60000).toISOString();
+function archiveDate(days,minutes=0){
+  const date=new Date();
+  date.setDate(date.getDate()-days);
+  date.setHours(3,minutes,0,0);
+  return date.toISOString();
+}
 const makeTask = (id, project, agent, title, minutes, extra = {}) => ({
   id,project,agent,title,state:'running',created_at:iso(minutes),started_at:iso(minutes),
   folder:projects.find(p => p.name===project).folder,worker_observed:true,
@@ -14,13 +20,13 @@ const makeTask = (id, project, agent, title, minutes, extra = {}) => ({
 });
 const pc1 = {id:'pc1',name:'ПК-1'}, pc2 = {id:'pc2',name:'ПК-2'}, linux = {id:'linux',name:'Ноут-Linux'};
 const tasks = {
-  game:[makeTask('game-1','game','codex','Экран настроек',9), makeTask('game-2','game','codex','Проверка навигации',15,{state:'waiting_owner',remote:pc1}), makeTask('game-4','game','codex','Параллельная задача',8), makeTask('game-3','game','codex','Звуки меню',37,{state:'done',finished_at:iso(25),remote:pc2})],
+  game:[makeTask('game-1','game','codex','Экран настроек',9), makeTask('game-2','game','codex','Проверка навигации',15,{state:'waiting_owner',remote:pc1}), makeTask('game-4','game','codex','Параллельная задача',8), makeTask('game-3','game','codex','Звуки меню',37,{state:'done',finished_at:iso(25),remote:pc2,usage:{input_tokens:4100000,output_tokens:200000,cached_tokens:1200000}})],
   site:[makeTask('site-1','site','codex','Подготовка сайта',7)],
   tools:[makeTask('tools-1','tools','claude','Экспорт отчёта',21,{state:'waiting_owner'}),makeTask('tools-2','tools','codex','Проверка файлов',3,{remote:linux})]
 };
 const toolDone=makeTask('tools-done','tools','codex','Готовый отчёт',90,{state:'done',finished_at:iso(60)});
-const toolOlder=makeTask('tools-old','tools','codex','Старый отчёт',180,{state:'done',finished_at:iso(150)});
-const toolShared={peer:'pc1',name:pc1.name,age:0,tasks:[{...toolDone,id:'tools-shared',title:'Отчёт другого компьютера',report:'Общий результат'}]};
+const toolOlder=makeTask('tools-old','tools','codex','Старый отчёт',180,{state:'done',created_at:archiveDate(2,-30),started_at:archiveDate(2,-30),finished_at:archiveDate(2)});
+const toolShared={peer:'pc1',name:pc1.name,age:0,tasks:[{...toolDone,id:'tools-shared',title:'Отчёт другого компьютера',created_at:archiveDate(1,-30),started_at:archiveDate(1,-30),finished_at:archiveDate(1),model:'gpt-6.2-sol[effort=medium]',tokens:342000,report:'Общий результат'}]};
 
 const counts = {game:1234,tools:2345,site:99999};
 const pc1Counts = {game:321,tools:654,site:0};
@@ -115,8 +121,18 @@ if (require.main === module) (async()=>{
   try{
     const hold=()=>{let release;const response=new Promise(resolve=>{release=resolve;});return {response,release};};
     const sameFeed=hold(),otherWindow=hold(),otherFeed=hold();
+    let ownerQuestion,remoteLost=false;
     const preview=await open(projects,{width:1100,height:706},'dark',(url,p)=>{
       if(url.pathname==='/api/machine-order')return {json:{ok:true}};
+      if(url.pathname==='/api/task-answer')return {json:{ok:true}};
+      if(p==='tools'&&url.pathname==='/api/window'&&ownerQuestion){
+        const window=reply(url,p,projects);
+        return {json:{...window,tasks:window.tasks.map(task=>{
+          if(task.id==='tools-1')return {...task,owner_question:ownerQuestion};
+          if(task.id==='tools-2')return {...task,remote:{...task.remote,lost:remoteLost}};
+          return task;
+        })}};
+      }
       if(url.pathname==='/api/window'&&p==='tools')return otherWindow.response;
       if(url.pathname!=='/api/task')return;
       if(url.searchParams.get('id')==='game-1')return sameFeed.response;
@@ -190,6 +206,29 @@ if (require.main === module) (async()=>{
       assert.equal(await header.getAttribute('datetime'),otherDate);
       assert.equal(await thread.getAttribute('aria-busy'),'false');
       assert.equal(await preview.locator('#compose').evaluate(node=>node.inert),false);
+      const answer=preview.locator('#answer-text'),send=preview.locator('#answer-send');
+      await answer.fill('Оставь оба формата');
+      assert.equal(await send.isDisabled(),true);
+      ownerQuestion={id:'question-1',text:'Какой формат оставить?'};
+      await preview.waitForFunction(()=>!document.getElementById('answer-send').disabled);
+      assert.equal(await answer.inputValue(),'Оставь оба формата');
+      const submitted=preview.waitForRequest(req=>new URL(req.url()).pathname==='/api/task-answer');
+      await send.click();
+      const {task,question,text}=(await submitted).postDataJSON();
+      assert.deepEqual([task,question,text],['tools-1','question-1','Оставь оба формата']);
+      await preview.waitForFunction(()=>document.getElementById('answer-text').value==='');
+      await sidebarTask('Проверка файлов').click();
+      await preview.locator('#compose[data-task="tools-2"]').waitFor();
+      await answer.fill('Черновик для удалённого компьютера');
+      assert.equal(await send.isEnabled(),true);
+      remoteLost=true;
+      await preview.locator('#lost-bar').waitFor();
+      assert.equal(await send.isDisabled(),true);
+      await answer.fill('Изменённый черновик без связи');
+      remoteLost=false;
+      await preview.locator('#lost-bar').waitFor({state:'hidden'});
+      assert.equal(await send.isEnabled(),true);
+      assert.equal(await answer.inputValue(),'Изменённый черновик без связи');
     }finally{sameFeed.release();otherWindow.release();otherFeed.release();await preview.close();}
 
     const directTask=makeTask('owner-task','tools','codex','Новая задача в окне',0,{remote:pc1});
@@ -202,6 +241,7 @@ if (require.main === module) (async()=>{
       if(p==='tools'&&url.pathname==='/api/task-history')return {json:{tasks:[toolOlder]}};
       if(url.pathname==='/api/self-update')return {json:{installed_version:'1.0.9',version:'1.0.10',state:'available'}};
       if(url.pathname==='/api/task-start')return {json:{ok:true,result:directTask.id}};
+      if(url.pathname==='/api/task-note')return {json:{ok:true}};
       if(url.pathname==='/api/task'&&url.searchParams.get('id')===directTask.id){
         return {json:{task:directTask,items:[{kind:'task',author:'owner',text:directTask.title,at:directTask.created_at}]}};
       }
@@ -322,7 +362,13 @@ if (require.main === module) (async()=>{
       const settingsOpen=draftPage.locator('#settings-open');
       const settingsNav=settingsDialog.getByRole('navigation',{name:'Разделы'});
       await settingsOpen.click();
-      await settingsDialog.locator('#settings-page').waitFor();
+      const general=settingsDialog.locator('#settings-page');
+      await general.waitFor();
+      assert.deepEqual(await general.evaluate(screen=>{
+        const card=screen.querySelector('.am-card');
+        return [getComputedStyle(screen).paddingTop,getComputedStyle(screen).paddingLeft,
+          getComputedStyle(card).paddingTop,getComputedStyle(card).paddingLeft];
+      }),['12px','12px','0px','12px']);
       assert.equal(await settingsDialog.evaluate(node=>node.matches(':modal')),true);
       assert.equal(await settingsDialog.locator('.am-sidebar,#project-select').count(),0);
       assert.equal(await draftPage.locator('[data-screen=tasks]').isVisible(),true);
@@ -383,6 +429,11 @@ if (require.main === module) (async()=>{
       assert.match(op_id,/^window-/);
       assert.deepEqual(payload,{project:'tools',computer:'pc1',agent:'codex',model:'gpt-6.2-astra[effort=high]',text:directTask.title});
       await draftPage.locator('#thread').getByText('Вы',{exact:true}).waitFor();
+      await draftPage.locator('#answer-text').fill('Уточнение исполнителю');
+      const note=draftPage.waitForRequest(req=>new URL(req.url()).pathname==='/api/task-note');
+      await draftPage.locator('#answer-send').click();
+      const {task:noteTask,text:noteText}=(await note).postDataJSON();
+      assert.deepEqual([noteTask,noteText],[directTask.id,'Уточнение исполнителю']);
       assert.equal(await form.isVisible(),false);
       const drawer=draftPage.locator('#list-toggle');
       assert.equal(await drawer.getAttribute('aria-label'),'Показать архив');
@@ -407,40 +458,67 @@ if (require.main === module) (async()=>{
         matchesWorkspace:[0,0,0],headerLine:[0,0],fields:[12,12,12,12],controls:[28,28],rowAlignment:[0,0],
       });
       assert.equal(await archive.locator('#task-list-heading').textContent(),'Архив');
-      await archive.getByText('Готовый отчёт',{exact:true}).waitFor();
-      assert.deepEqual((await archive.locator('.am-task-title').allTextContents()).sort(),['Готовый отчёт','Звуки меню','Отчёт другого компьютера']);
+      await archive.getByText('Инструменты, Готовый отчёт',{exact:true}).waitFor();
+      assert.deepEqual((await archive.locator('.am-task-title').allTextContents()).sort(),['Игра, Звуки меню','Инструменты, Готовый отчёт','Инструменты, Отчёт другого компьютера']);
       assert.equal(await archive.locator('#task-count').textContent(),'3');
       await card(draftPage,'pc1').getByText('Ждёт запуска',{exact:false}).waitFor();
       await archive.getByRole('button',{name:'Показать ещё 10'}).click();
-      await archive.getByText('Старый отчёт',{exact:true}).waitFor();
+      await archive.getByText('Инструменты, Старый отчёт',{exact:true}).waitFor();
+      const older=archive.locator('.am-task').filter({hasText:'Старый отчёт'});
+      assert.match(await older.locator('time').textContent(),/^\d{1,2} .+ в 03:00$/);
       await select(draftPage,'agent-filter','Claude Code');
       await archive.getByText('В архиве пока нет задач').waitFor();
       assert.equal(await card(draftPage,'pc1').getByText('Ждёт запуска',{exact:false}).count(),1);
       await select(draftPage,'agent-filter','Все агенты');
-      await archive.getByText('Звуки меню',{exact:true}).waitFor();
-      const row=draftPage.locator('#task-list .am-task').first();
+      await archive.getByText('Игра, Звуки меню',{exact:true}).waitFor();
+      const row=archive.locator('.am-task').filter({hasText:'Звуки меню'});
       await row.waitFor();
-      const lineGap=target=>target.evaluate(node=>{
+      const time=row.locator('time');
+      assert.match(await time.textContent(),/^(Сегодня|Вчера) в \d{2}:\d{2}$/);
+      assert.equal(await time.getAttribute('datetime'),tasks.game.find(t=>t.id==='game-3').finished_at);
+      assert.equal(await time.evaluate(node=>node.parentElement.firstElementChild===node),true);
+      assert.match(await time.getAttribute('title'),/^Компьютер: ПК-2\n/);
+      assert.equal(await row.getAttribute('aria-description'),'Компьютер: ПК-2');
+      assert.equal(await row.locator('.am-archive-task-meta').textContent(),'Codex Sol 6.2 Medium, 12 мин, 4,3 млн T.');
+      assert.match(await row.locator('.am-task-usage[title]').getAttribute('title'),/на входе/);
+      const shared=archive.locator('.am-task').filter({hasText:'Отчёт другого компьютера'});
+      assert.equal(await shared.locator('time').textContent(),'Вчера в 03:00');
+      assert.match(await shared.locator('time').getAttribute('title'),/^Компьютер: ПК-1\n/);
+      assert.match(await shared.locator('.am-archive-task-meta').textContent(),/, 342 тыс\. T\.$/);
+      for(const task of [row,local.locator('.am-sidebar-task').first()]){
+        const icon=task.locator('.am-task-model-line [data-provider=codex] svg');
+        assert.deepEqual(await icon.evaluate(node=>{
+          const rect=node.getBoundingClientRect();
+          return [rect.width,rect.height];
+        }),[12,12]);
+      }
+      const metrics=target=>target.evaluate(node=>{
         const title=node.querySelector('.am-task-title,.am-sidebar-task-title');
         const meta=title.nextElementSibling;
-        return [meta.getBoundingClientRect().top-title.getBoundingClientRect().bottom,getComputedStyle(meta).lineHeight];
+        return [meta.getBoundingClientRect().top-title.getBoundingClientRect().bottom,
+          getComputedStyle(meta).lineHeight,getComputedStyle(node).paddingInlineStart,
+          getComputedStyle(node).paddingInlineEnd,node.getBoundingClientRect().width];
       });
-      assert.deepEqual(await lineGap(row),[2,'18px']);
-      assert.deepEqual(await lineGap(local.locator('.am-sidebar-task').first()),[2,'18px']);
-      assert.equal(await draftPage.locator('.am-task-project > h3').first().evaluate(node=>
-        node.nextElementSibling.getBoundingClientRect().top-node.getBoundingClientRect().bottom),8);
-      const insets=()=>row.evaluate(node=>{
-        const outer=node.getBoundingClientRect(),title=node.querySelector('.am-task-title').getBoundingClientRect();
-        const date=node.querySelector('.am-task-when').getBoundingClientRect();
-        return [title.left-outer.left,outer.right-date.right,outer.width];
-      });
-      const [left,right,width]=await insets();
-      assert.deepEqual([left,right],[12,12]);
+      const [gap,line,left,right,width]=await metrics(row);
+      assert.deepEqual([gap,line,left,right],[2,'18px','12px','12px']);
+      assert.deepEqual((await metrics(local.locator('.am-sidebar-task').first())).slice(0,4),[2,'18px','20px','12px']);
       await draftPage.locator('#task-panel > .am-splitter').press('Shift+ArrowLeft');
-      const [wideLeft,wideRight,wideWidth]=await insets();
-      assert.deepEqual([wideLeft,wideRight],[12,12]);
+      const [, ,wideLeft,wideRight,wideWidth]=await metrics(row);
+      assert.deepEqual([wideLeft,wideRight],['12px','12px']);
       assert(wideWidth>width);
-      await archive.getByText('Отчёт другого компьютера',{exact:true}).click();
+      const resize=draftPage.locator('#task-panel > .am-splitter');
+      await resize.press('Home');
+      const metadataWrap=await row.evaluate(node=>{
+        const meta=node.querySelector('.am-archive-task-meta').getBoundingClientRect();
+        const tokens=node.querySelector('.am-task-usage[title]').getBoundingClientRect();
+        return {wrapped:tokens.top>meta.top+2,indent:tokens.left-meta.left};
+      });
+      assert.deepEqual(metadataWrap,{wrapped:true,indent:0});
+      await select(draftPage,'project-select','Игра');
+      await row.getByText('Звуки меню',{exact:true}).waitFor();
+      assert.equal(await shared.count(),0);
+      await select(draftPage,'project-select','Все');
+      await shared.click();
       await draftPage.locator('#thread').getByText('Общий результат',{exact:true}).waitFor();
     }finally{await draftPage.close();}
 

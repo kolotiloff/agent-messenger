@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-326 archive cards and general settings)
+
+Put the completion time above the archive title and moved the computer name to the time tooltip. Put the model, duration, and tokens beneath the title, using T. with exact counts in the tooltip. Showed capitalized Today and Yesterday or a calendar date with the time. Matched provider logo sizes and aligned wrapped archive metadata with the card text edge. Indented current-task text inside full-width rows and compacted the General settings inset. Kept the owner composer editable when delivery is temporarily unavailable and preserved the draft when a question arrives. Chromium and WebKit verified archive metadata, panel spacing, a remote note, an answer after the task changed state, and draft retention across a remote disconnect and reconnect. The local UI race tests passed.
+
 ## 2026-11-27 — Codex (T-326 panel alignment and settings modal)
 
 Matched the Archive header and filter insets to Projects, aligned the header rows, and joined the Archive dividers to its borders. Moved General, Agents, Project, Server, and Statistics into the existing settings dialog with an internal section list and preserved the active chat behind it. Removed the disclosure arrows from computer rows, keeping the full header interactive. Verified the preview in Chromium and WebKit, including the matched panel geometry, chat retention, and narrow settings layout. The local UI race tests passed.

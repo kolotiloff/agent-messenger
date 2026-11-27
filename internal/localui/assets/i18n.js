@@ -626,6 +626,8 @@
   'Клиент перезапустился во время работы; результат неизвестен':'The client restarted during the run; the result is unknown',
   'Задача отменена':'Task cancelled',
   'Ответить исполнителю…':'Reply to the worker…',
+  'Писать исполнителю можно на компьютере «':'You can contact the worker from computer «',
+  'Отправка пока недоступна. Черновик сохранится, пока открыта задача.':'Sending is temporarily unavailable. The draft is kept while this task is open.',
   'Отвечают на компьютере «':'Answered on computer «',
   'Задача ждёт запуска…':'The task is waiting to start…',
   'Исполнитель работает…':'The worker is working…',

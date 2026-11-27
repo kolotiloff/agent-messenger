@@ -236,20 +236,23 @@
   // Relative dates print the time when recent, or whenever an event ended.
   function sameDay(a,b){return a.toDateString()===b.toDateString();}
   function longDay(d){return d.toLocaleDateString(amLocale,d.getFullYear()===new Date().getFullYear()?{day:'numeric',month:'long'}:{day:'numeric',month:'long',year:'numeric'});}
-  function relativeWhen(at,includeClock){
+  function relativeWhen(at,includeClock,archive=false){
     const d=new Date(at);if(!at||isNaN(d.getTime()))return '';
     const today=new Date(),yesterday=new Date();yesterday.setDate(today.getDate()-1);
-    if(sameDay(d,today))return tr('сегодня ')+clock(at);
-    if(sameDay(d,yesterday))return tr('вчера ')+clock(at);
+    const separator=archive?tr(' в '):' ';
+    const nearby=sameDay(d,today)?tr('сегодня '):sameDay(d,yesterday)?tr('вчера '):'';
+    if(nearby)return (archive?capital(nearby.trim())+separator:nearby)+clock(at);
     const date=d.toLocaleDateString(amLocale,d.getFullYear()===today.getFullYear()?{day:'numeric',month:'short'}:{day:'numeric',month:'short',year:'numeric'});
-    return date+(includeClock?' '+clock(at):'');
+    return date+(includeClock?separator+clock(at):'');
   }
-  function appendTaskWhen(agent,t){
+  function appendTaskWhen(agent,t,archive=false){
     const ended=finishedStates.includes(t.state)||(!activeStates.includes(t.state)&&!!t.finished_at);
-    const at=ended?t.finished_at:taskStart(t),label=relativeWhen(at,ended);
+    const at=ended?t.finished_at:taskStart(t),label=relativeWhen(at,ended,archive);
     if(!label)return;
     const time=el('time',label,'am-task-when');
-    time.dateTime=at;time.title=taskWhenTitle(t);agent.append(time);
+    time.dateTime=at;time.title=taskWhenTitle(t);
+    agent.append(time);
+    return time;
   }
   function appendEventTime(line,at,remote){
     const label=relativeWhen(at,true);
@@ -1074,20 +1077,22 @@
       const title=el('span',undefined,'am-sidebar-task-title');
       if(!sidebarProject)title.append(el('span',projectTitle(name)+', ','am-muted'));
       title.append(t.title);
-      const meta=el('span',undefined,'am-small am-muted am-sidebar-task-meta');
+      const meta=el('span',undefined,'am-small am-muted am-sidebar-task-meta am-task-model-line');
+      const details=el('span');
       const model=sidebarTaskModel(peer?{...t,shared:true}:t);
       const identity=(shortNames[t.agent]||t.agent)+(model?' '+model:'');
       const from=taskStart(t);
       const [status,color,tip,timer]=peer?sharedStatus(t,peer):taskStatus(t);
       if(color==='am-status-run'){
-        meta.append(el('span',identity,color));
-        if(timer&&Number.isFinite(Date.parse(from)))meta.append(elapsedLabel(from,', '));
+        details.append(el('span',identity,color));
+        if(timer&&Number.isFinite(Date.parse(from)))details.append(elapsedLabel(from,', '));
       }else{
         const waiting=t.state==='waiting_owner'||t.state==='waiting_coordinator';
         const detail=el('span',identity+', '+(waiting&&color==='am-status-wait'?tr('ждёт ответа'):status),color);
         if(tip)detail.title=tip;
-        meta.append(detail);
+        details.append(detail);
       }
+      meta.append(providerIcon(t.agent),details);
       row.append(title,meta);
       row.addEventListener('click',()=>{
         if(tab!=='tasks')show('tasks');
@@ -1535,6 +1540,37 @@
     if(t.ran_model)return tr('Модель, на которой исполнитель запущен')+': '+t.ran_model;
     return t.model?tr('Модель, которую указал координатор')+': '+t.model:tr('Модель по умолчанию');
   }
+  function appendArchiveTask(row,t,name,computer,status,peer){
+    const time=appendTaskWhen(row,t,true);
+    const computerDetail=tr('Компьютер')+': '+computer;
+    row.setAttribute('aria-description',computerDetail);
+    if(time)time.title=[computerDetail,time.title].filter(Boolean).join('\n');
+    else if(!row.title)row.title=computerDetail;
+    const title=el('span',undefined,'am-task-title am-sidebar-task-title');
+    if(!sidebarProject)title.append(el('span',projectTitle(name)+', ','am-muted'));
+    title.append(t.title);
+    const model=peer?(t.model?modelName(t.model):''):taskModelLabel(t);
+    const author=(shortNames[t.agent]||t.agent)+(model?' '+model:'');
+    const tokens=peer?t.tokens:t.usage&&t.usage.input_tokens+t.usage.output_tokens;
+    const [text,color,tip]=status;
+    const meta=el('span',undefined,'am-archive-task-meta am-muted am-task-model-line');
+    const details=el('span');
+    const identity=el('span',author);
+    if(!peer)identity.title=taskModelDetail(t);
+    const duration=t.state==='done'
+      ?el('span',minutes(taskStart(t),t.finished_at||t.updated_at),'am-task-usage')
+      :el('span',text,color);
+    if(tip)duration.title=tip;
+    details.append(identity,', ',duration);
+    if(tokens!=null){
+      const usage=el('span',tokensText(tokens)+' T.','am-task-usage');
+      usage.title=peer?tokensFull(tokens):usageLong(t.usage);
+      details.append(', ',usage);
+    }
+    meta.append(providerIcon(t.agent),details);
+    row.classList.add('am-archive-task');
+    row.append(title,meta);
+  }
   function renderTaskList(){
     const live=$('task-list'),box=live.cloneNode(false);
     // While another project loads, its rows stay in place but cannot be
@@ -1566,21 +1602,26 @@
     // Another computer's task is read-only and says which computer gave it.
     const ownRow=(t,name)=>{
       const row=el('button',undefined,'am-task');row.type='button';row.setAttribute('aria-pressed',String(!draftOpen&&name===project&&t.id===selectedTask));
-      // T-119: every own task says where it runs; this computer's name
-      // stands out. The model it runs on follows the status below (T-202).
-      const here=!(t.remote&&!t.remote.from),label=el('span',(names[t.agent]||t.agent)+tr(' на '));
-      label.append(el('span',here?(view.computer_name||tr('этом компьютере')):t.remote.name,here?'am-task-here':''));
-      if(t.remote?.from)label.append(fromTag(t.remote.name));
-      const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),label);
-      if(t.remote)agent.title=t.remote.from?tr('Задачу дал компьютер «')+t.remote.name+'»':tr('Выполняется на компьютере «')+t.remote.name+'»';
-      appendTaskWhen(agent,t);
-      const [text,cls,tip,from]=taskStatus(t);
-      const status=el('span',undefined,'am-task-status '+cls);if(tip)status.title=tip;
-      const model=taskModelLabel(t);
-      const words=el('span');status.append(words);words.append(statusPiece(text,!!t.usage||!!model,from));
-      if(t.usage){const used=el('span',usageShort(t.usage),'am-task-usage');used.title=usageLong(t.usage);if(model)used.append(el('span',',','am-task-comma'));words.append(used);}
-      if(model){const m=el('span',model,'am-task-usage am-task-model');m.title=taskModelDetail(t);words.append(m);}
-      row.append(agent,el('span',t.title,'am-task-title'),status);
+      if(taskSidebarPreview){
+        const computer=t.remote&&!t.remote.from?(t.remote.name||t.remote.id):computerName('local');
+        appendArchiveTask(row,t,name,computer,taskStatus(t),null);
+      }else{
+        // T-119: every own task says where it runs; this computer's name
+        // stands out. The model it runs on follows the status below (T-202).
+        const here=!(t.remote&&!t.remote.from),label=el('span',(names[t.agent]||t.agent)+tr(' на '));
+        label.append(el('span',here?(view.computer_name||tr('этом компьютере')):t.remote.name,here?'am-task-here':''));
+        if(t.remote?.from)label.append(fromTag(t.remote.name));
+        const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),label);
+        if(t.remote)agent.title=t.remote.from?tr('Задачу дал компьютер «')+t.remote.name+'»':tr('Выполняется на компьютере «')+t.remote.name+'»';
+        appendTaskWhen(agent,t);
+        const [text,cls,tip,from]=taskStatus(t);
+        const status=el('span',undefined,'am-task-status '+cls);if(tip)status.title=tip;
+        const model=taskModelLabel(t);
+        const words=el('span');status.append(words);words.append(statusPiece(text,!!t.usage||!!model,from));
+        if(t.usage){const used=el('span',usageShort(t.usage),'am-task-usage');used.title=usageLong(t.usage);if(model)used.append(el('span',',','am-task-comma'));words.append(used);}
+        if(model){const m=el('span',model,'am-task-usage am-task-model');m.title=taskModelDetail(t);words.append(m);}
+        row.append(agent,el('span',t.title,'am-task-title'),status);
+      }
       row.addEventListener('click',()=>{
         if(name!==project){selectProject(name,t.id,'');return;}
         if(draftOpen)closeTaskDraft();
@@ -1600,23 +1641,26 @@
         selectedShared=selection;selectedTask='';feed=null;feedSignature='';renderTaskList();renderThread();startWindowWatch();if(taskSidebarPreview)renderMachines();
       });
       row.addEventListener('contextmenu',e=>taskMenu(e,t,p,name));
-      // T-186: like an own task, it says where it runs; the giver is in the
-      // tooltip. An older giver does not say, so it shows the giver's name.
-      const label=el('span',(names[t.agent]||t.agent)+tr(' на '));label.append(el('span',sharedComputer(t,p)));
-      if(t.runs_on_peer)label.append(fromTag(p.name));
-      const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),label);agent.title=tr('Задачу дал компьютер «')+p.name+'»';
-      appendTaskWhen(agent,t);
-      const [text,cls,tip,from]=sharedStatus(t,p);
-      const words=el('span');words.append(statusPiece(text,!!t.tokens||!!t.model,from));
-      if(t.tokens){
-        const used=el('span',tokensText(t.tokens)+tr(' токенов'),'am-task-usage');
-        if(t.model)used.append(el('span',',','am-task-comma'));
-        words.append(used);
+      if(taskSidebarPreview)appendArchiveTask(row,t,name,sharedComputer(t,p),sharedStatus(t,p),p);
+      else{
+        // T-186: like an own task, it says where it runs; the giver is in the
+        // tooltip. An older giver does not say, so it shows the giver's name.
+        const label=el('span',(names[t.agent]||t.agent)+tr(' на '));label.append(el('span',sharedComputer(t,p)));
+        if(t.runs_on_peer)label.append(fromTag(p.name));
+        const agent=el('span',undefined,'am-task-agent');agent.append(providerIcon(t.agent),label);agent.title=tr('Задачу дал компьютер «')+p.name+'»';
+        appendTaskWhen(agent,t);
+        const [text,cls,tip,from]=sharedStatus(t,p);
+        const words=el('span');words.append(statusPiece(text,!!t.tokens||!!t.model,from));
+        if(t.tokens){
+          const used=el('span',tokensText(t.tokens)+tr(' токенов'),'am-task-usage');
+          if(t.model)used.append(el('span',',','am-task-comma'));
+          words.append(used);
+        }
+        if(t.model)words.append(el('span',modelName(t.model),'am-task-usage am-task-model'));
+        const status=el('span',undefined,'am-task-status '+cls);status.append(words);if(tip)status.title=tip;
+        row.append(agent,el('span',t.title,'am-task-title'),status);
+        if(t.report)row.append(el('span',t.report,'am-task-report'));
       }
-      if(t.model)words.append(el('span',modelName(t.model),'am-task-usage am-task-model'));
-      const status=el('span',undefined,'am-task-status '+cls);status.append(words);if(tip)status.title=tip;
-      row.append(agent,el('span',t.title,'am-task-title'),status);
-      if(t.report)row.append(el('span',t.report,'am-task-report'));
       return row;
     };
     const section=(target,name,label,items,action)=>{
@@ -1633,8 +1677,10 @@
       const target=combined?el('section',undefined,'am-task-project'):box;
       if(combined){
         target.dataset.project=name;target.setAttribute('aria-label',projectTitle(name));
-        target.append(el('h3',projectTitle(name),'am-label am-task-section'));
-        if(!taskSidebarPreview)box.append(target);
+        if(!taskSidebarPreview){
+          target.append(el('h3',projectTitle(name),'am-label am-task-section'));
+          box.append(target);
+        }
       }
       if(!snapshot){
         if(combined){
@@ -2516,8 +2562,7 @@
     const q=t.remote?.from?null:t.owner_question;
     // T-131: a task sent to another computer can be closed here also when
     // its outcome there is already unknown.
-    // T-131: an own task on another computer that cannot be reached has no
-    // input and no stop button: nothing would arrive. One action closes it here.
+    // T-131: an unreachable task can be closed here. Sending waits for contact.
     const unreachable=taskUnreachable(t);
     // D-120: a stuck task of this computer is closed by hand once its worker
     // is certainly gone; the client checks that and refuses otherwise.
@@ -2529,16 +2574,15 @@
       if(t.remote.silent&&!t.remote.lost)$('lost-text').textContent='«'+t.remote.name+tr('» на связи, но не отвечает по этой задаче. Что с ней там, неизвестно: она могла и выполниться.');
       else $('lost-text').textContent=(since?tr('Связи с «')+t.remote.name+tr('» нет с ')+since+'. ':tr('Связи с «')+t.remote.name+tr('» нет. '))+tr('Что с задачей там, неизвестно.');
     }
-    const active=activeStates.includes(t.state)&&!unreachable,box=$('answer-text');
-    const note=canNote(t),wasNote=$('compose').dataset.mode==='note';
-    $('compose').hidden=unreachable||(!q&&!active);
-    box.disabled=!q&&!note;box.placeholder=q?tr('Ответить исполнителю…'):note&&t.state==='waiting_coordinator'?tr('Ответить вместо координатора…'):note?tr('Написать исполнителю…'):t.remote?.from&&t.owner_question?tr('Отвечают на компьютере «')+t.remote.name+'»':t.pending_launch?tr('Задача ждёт запуска…'):t.remote?.outbox_delayed_minutes&&!t.remote.from?tr('Ответы с «')+t.remote.name+tr('» задерживаются: не уходят уже ')+t.remote.outbox_delayed_minutes+tr(' мин.'):t.remote?.worker==='none'&&!t.remote.from?tr('На «')+t.remote.name+tr('» исполнитель этой задачи сейчас не запущен'):tr('Исполнитель работает…');
-    $('answer-send').hidden=!q&&!note;
+    const active=activeStates.includes(t.state),box=$('answer-text'),compose=$('compose');
+    const note=canNote(t),canDraft=!t.remote?.from&&(!!q||active);
+    compose.hidden=!canDraft&&(!active||unreachable);
+    box.disabled=!canDraft;
+    box.placeholder=q?tr('Ответить исполнителю…'):note&&t.state==='waiting_coordinator'?tr('Ответить вместо координатора…'):t.remote?.from?tr('Писать исполнителю можно на компьютере «')+t.remote.name+'»':tr('Написать исполнителю…');
+    $('answer-send').hidden=!canDraft;
+    if(compose.dataset.task!==t.id){compose.dataset.task=t.id;box.value='';$('answer-status').textContent='';}
+    box.title=$('answer-send').title=canDraft&&(unreachable||!q&&!note)?tr('Отправка пока недоступна. Черновик сохранится, пока открыта задача.'):'';
     renderStopControls(t);
-    $('compose').dataset.mode=q?'answer':note?'note':'';
-    if($('compose').dataset.task!==t.id){$('compose').dataset.task=t.id;box.value='';$('answer-status').textContent='';}
-    if(q&&$('compose').dataset.question!==q.id){$('compose').dataset.question=q.id;$('answer-text').value='';$('answer-status').textContent='';}
-    else if(!q&&!note&&wasNote){$('answer-text').value='';}
     sizeAnswer();answerControls();
     if(atBottom){thread.scrollTop=thread.scrollHeight;feedPinned=true;}
     else if(grew)$('to-bottom').classList.add('am-has-new');
@@ -2582,7 +2626,7 @@
     if(!t.remote)return t.state==='running'||t.state==='waiting_coordinator';
     return t.state==='running'&&!t.remote.from&&!t.remote.lost&&!t.remote.silent;
   }
-  function answerControls(){const t=selectedTaskRow();$('answer-send').disabled=answering||!$('answer-text').value.trim()||!(t?.owner_question&&!t.remote?.from||canNote(t));}
+  function answerControls(){const t=selectedTaskRow();$('answer-send').disabled=answering||!t||taskUnreachable(t)||!!stopProgress(t)||!$('answer-text').value.trim()||!(t.owner_question&&!t.remote?.from||canNote(t));}
   async function sendNote(){
     const t=selectedTaskRow();if(!canNote(t)||answering)return;
     const text=$('answer-text').value.trim();if(!text)return;
@@ -2596,7 +2640,7 @@
   }
   async function sendAnswer(){
     const t=selectedTaskRow(),q=t?.owner_question;
-    if(t&&stopProgress(t))return;
+    if(!t||$('compose').inert||taskUnreachable(t)||stopProgress(t))return;
     if(!q&&canNote(t))return sendNote();
     if(!q||answering||t.remote?.from)return;
     const text=$('answer-text').value.trim();if(!text)return;
