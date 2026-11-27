@@ -140,6 +140,7 @@ if (require.main === module) (async()=>{
       if(url.pathname!=='/api/task')return;
       if(url.searchParams.get('id')==='game-4'){
         const initial=reply(url,p,projects);
+        initial.items.push({kind:'report',author:'worker',verified:true,text:'Проверка завершена',at:initial.items.at(-1).at});
         return {json:{...initial,task:{...initial.task,quiet:{live_tokens:342000}}}};
       }
       if(url.searchParams.get('id')==='game-1')return sameFeed.response;
@@ -151,6 +152,10 @@ if (require.main === module) (async()=>{
     const otherDate=tasks.tools.find(t=>t.id==='tools-1').created_at;
     assert.equal(await preview.locator('#task-head > h3').innerText(),'Параллельная задача');
     assert.equal(await preview.locator('#task-head > h3 + time').count(),1);
+    const reportStatus=thread.locator('.am-delivery-close');
+    await reportStatus.waitFor();
+    assert.equal(await reportStatus.locator('time').count(),0);
+    assert.match(await reportStatus.getAttribute('title'),/\d{2}:\d{2}/);
     const tokenCount=preview.locator('#answer-live-tokens');
     const answerField=preview.locator('#compose .am-compose-field');
     const composerBottom=()=>answerField.evaluate(field=>field.getBoundingClientRect().bottom);
@@ -409,7 +414,9 @@ if (require.main === module) (async()=>{
       await workerMessage.focus();
       assert(await workerMessage.locator('.am-message-time').evaluate(node=>{
         const time=node.getBoundingClientRect(),message=node.parentElement.getBoundingClientRect();
-        return getComputedStyle(node).opacity==='1'&&time.bottom<message.top&&time.left===message.left;
+        const previous=node.parentElement.previousElementSibling.getBoundingClientRect();
+        return getComputedStyle(node).opacity==='1'&&message.top-time.bottom===4&&
+          message.top-previous.bottom===24&&time.top>previous.bottom&&time.left===message.left;
       }));
       const settingsDialog=draftPage.getByRole('dialog',{name:'Настройки программы'});
       const settingsOpen=draftPage.locator('#settings-open');

@@ -19,7 +19,7 @@ How to use it:
 - [x] Heading and spacing scale: compare the panels, settings, and dialogs at narrow and wide widths in both themes.
 - [x] Active tasks: align task title and metadata with the start of the computer name. Keep the selection and hover area as wide as the computer row.
 - [x] Top edge: remove the browser banner, keep the Archive toggle in the upper-right corner and keep the Windows controls adjacent.
-- [x] New task: show a left-aligned title in the chat header while the draft is open. A selected task uses its full title on the same baseline as Projects and Archive, with the date on the next line. Check expanded command spacing and individual message timestamps.
+- [x] New task: show a left-aligned title in the chat header while the draft is open. A selected task uses its full title on the same baseline as Projects and Archive, with the date on the next line. Check command label typography, command group spacing, and individual message timestamps without an inline repeat in report or question status lines.
 
 These checks cover the browser preview. Acceptance in the installed window remains pending.
 

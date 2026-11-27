@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-332 command labels and timestamps)
+
+Matched tool summaries and command rows to chat typography while keeping group spacing. The fictional preview separates command captions from the shell text. Report and question status lines keep their timestamp in the tooltip; the chat timestamp retains its place above worker messages or below outgoing messages.
+
 ## 2026-11-27 — Codex (T-326–T-332 preview and functional audit)
 
 Aligned Projects, Archive and the full conversation title. Added the date below the title, full-width ellipsized cards, a scoped Clear archive action, consistent provider and hardware icons, message time on hover above the worker header and below outgoing messages, and a capped chat column. Placed delivery status and the live usage counter above the pinned composer so it stays put when switching tasks. Added an optional local file with recent task titles and four conversations. Real tool details are display-only. The public fixture and preview usage reports use sample data. Chromium and WebKit verified layout, the anchored composer, filters, task switches and archive controls. The loopback check also expanded a real command. Kept model settings, task launches and coordinator choices in sync. Continued recorded local and remote worker sessions after completion, displayed reported live Codex usage, and checked the efficiency report's reviewed denominator and historical attribution. Installed-window acceptance is pending.

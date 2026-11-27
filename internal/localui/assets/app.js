@@ -2175,7 +2175,7 @@
   function toolLine(it,action){
     const icon=svgIcon(actionKinds[action.kind].icon);
     icon.classList.add('am-action-icon');
-    const row=el(it.text?'details':'div',undefined,'am-tool am-action-entry');
+    const row=el(it.text?'details':'div',undefined,'am-tool');
     const label=el(it.text?'summary':'div',undefined,'am-action-label');
     label.append(icon,el('span',action.label,'am-tool-name'));
     row.append(label);
@@ -2589,7 +2589,10 @@
         else if(it.kind==='report')note=delivery(direct?tr('Задача завершена'):tr('Отчёт отправлен координатору, сессия закрыта'),'am-delivery-close');
         else if(it.audience==='owner')note=delivery(direct?tr('Вопрос вам'):tr('Вопрос вам, координатор его не видит'),'am-status-wait');
         else note=delivery(tr('Вопрос координатору'),'am-status-wait');
-        if(it.verified)appendEventTime(note,it.at,t.remote&&!t.remote.from);
+        if(it.verified){
+          if(taskSidebarPreview)note.title=relativeWhen(it.at,true);
+          else appendEventTime(note,it.at,t.remote&&!t.remote.from);
+        }
         c.append(note);
         group=null;continue;
       }

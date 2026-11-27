@@ -550,7 +550,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept :is(.am-meta-model,.am-role) { color:var(--am-muted); font-size:var(--am-text-s); font-weight:400; }
 #am-concept .am-meta-author { min-width:0; }
 #am-concept.am-task-sidebar-preview .am-message-group { position:relative; }
-#am-concept .am-message-time { position:absolute; inset-block-end:calc(100% + var(--am-space-1)); inset-inline-start:0; color:var(--am-muted); font-size:var(--am-text-xs); white-space:nowrap; pointer-events:none; }
+#am-concept .am-message-time { position:absolute; inset-block-end:calc(100% + var(--am-space-1)); inset-inline-start:0; color:var(--am-muted); font-size:var(--am-text-xs); line-height:1.35; white-space:nowrap; pointer-events:none; }
 #am-concept .am-outgoing + .am-message-time { inset-block:calc(100% + var(--am-space-1)) auto; inset-inline:auto 0; }
 @media (hover:hover) {
   #am-concept .am-message-group:not(:hover,:focus-within) > .am-message-time { opacity:0; }
@@ -597,17 +597,17 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-outgoing .am-delivery { text-align:right; }
 #am-concept .am-rich p { margin:0 0 var(--am-space-2); }
 #am-concept .am-rich p:last-child { margin-bottom:0; }
-#am-concept .am-tool { margin:var(--am-space-1) 0; font-size:var(--am-text-s); color:var(--am-muted); }
+#am-concept :is(.am-tool,.am-tool-group) { margin:var(--am-gap-control) 0; color:var(--am-muted); }
+#am-concept .am-tool-group { margin-block:var(--am-gap-section); }
 #am-concept .am-tool summary { cursor:pointer; list-style:none; }
-#am-concept .am-tool-group { margin:var(--am-gap-section) 0; font-size:var(--am-text-s); color:var(--am-muted); }
 #am-concept .am-tool-group > summary { cursor:pointer; list-style:none; }
 /* Disclosure chevron after the text: right when closed, down when open (owner, 2026-11-12). */
 #am-concept :is(.am-tool > summary, .am-tool-group > summary)::-webkit-details-marker { display:none; }
 #am-concept :is(.am-tool > summary, .am-tool-group > summary .am-tool-group-title)::after { content:""; display:inline-block; width:6px; height:6px; margin-left:var(--am-space-2); border-right:1.5px solid currentColor; border-bottom:1.5px solid currentColor; vertical-align:middle; transform:translateY(-1px) rotate(-45deg); transition:transform .15s; }
 #am-concept :is(.am-tool[open] > summary, .am-tool-group[open] .am-tool-group-title)::after { transform:translateY(-3px) rotate(45deg); }
 #am-concept :is(.am-tool > summary, .am-tool-group > summary):is(:hover,:focus-visible) { color:var(--am-text); }
-#am-concept .am-tool-group > .am-tool { margin-left:var(--am-space-3); }
-#am-concept .am-tool-group-title { color:var(--am-muted); font-size:var(--am-text-m); font-weight:500; }
+#am-concept .am-tool-group > .am-tool { margin-block:var(--am-space-1); margin-inline-start:var(--am-space-3); padding-block:var(--am-space-1); }
+#am-concept .am-tool-group-title { color:var(--am-muted); }
 @media (prefers-reduced-motion:no-preference) and (forced-colors:none) {
   @supports (background-clip:text) {
     #am-concept .am-tool-running-label {
@@ -621,10 +621,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 }
 @keyframes am-tool-running-sweep { to { background-position:0 0; } }
 #am-concept .am-tool-timer { margin-inline-start:var(--am-space-2); color:var(--am-muted); font-variant-numeric:tabular-nums; }
-#am-concept .am-action-entry { padding-block:var(--am-space-1); }
 #am-concept .am-action-label { overflow-wrap:anywhere; }
 #am-concept .am-action-icon { width:var(--am-space-4); height:var(--am-space-4); margin-right:var(--am-space-2); vertical-align:middle; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
-#am-concept .am-tool-name { color:var(--am-text); }
 #am-concept :is(.am-tool pre, .am-command) { margin:var(--am-space-1) 0 0; padding:var(--am-pad-compact); border-radius:var(--am-radius-s); background:var(--am-soft); white-space:pre-wrap; overflow-wrap:anywhere; font:var(--am-text-s)/1.5 var(--am-mono); color:var(--am-text); }
 #am-concept.am-task-sidebar-preview .am-tool > pre { margin-block-start:var(--am-gap-control); }
 #am-concept .am-disposition { margin-top:var(--am-space-2); }

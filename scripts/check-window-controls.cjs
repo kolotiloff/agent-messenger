@@ -1038,6 +1038,17 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await actionGroup.getAttribute('open'),'');
       assert.equal(await actionGroup.locator('.am-tool-breakdown').count(),0);
       const labels=actionGroup.locator('.am-action-label');
+      const chatType=element=>element.evaluate(node=>{
+        const style=getComputedStyle(node);
+        return [style.fontFamily,style.fontSize,style.fontWeight,style.lineHeight];
+      });
+      const paragraph=page.locator('#thread .am-message:not(.am-outgoing) .am-rich p').first();
+      assert.deepEqual(await chatType(finishedLabel),await chatType(paragraph));
+      assert.deepEqual(await chatType(labels.first()),await chatType(paragraph));
+      assert.deepEqual(await actionGroup.evaluate(node=>{
+        const group=getComputedStyle(node),row=getComputedStyle(node.querySelector('.am-tool'));
+        return [group.marginBlockStart,group.marginBlockEnd,row.marginBlockStart,row.paddingBlockStart];
+      }),['16px','16px','4px','4px']);
       assert.deepEqual(await labels.allInnerTexts(),['Найти файл RuntimePanelUtils.cs','Найти упоминания Mouse и UIOwnsKeys в файле FreeCamera.cs','Прочитать шаги ручной проверки','Посмотреть файлы в папке Infantry/Client','Запустить скрипт Python']);
       assert.equal(await labels.locator('svg').count(),5);
       await labels.nth(1).click();
