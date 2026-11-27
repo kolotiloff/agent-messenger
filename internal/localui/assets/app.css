@@ -569,6 +569,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-outgoing { align-self:flex-end; max-width:82%; }
 #am-concept .am-outgoing .am-meta { justify-content:flex-end; }
 #am-concept .am-outgoing .am-message-content { padding:var(--am-space-3); border-radius:var(--am-radius-l); background:var(--am-bubble); }
+#am-concept.am-task-sidebar-preview .am-outgoing .am-message-content { padding:var(--am-space-3) var(--am-space-4); }
 #am-concept .am-delivery { margin-top:var(--am-space-1); font-size:var(--am-text-xs); font-style:italic; color:var(--am-muted); }
 /* The closing line of a finished task is ordinary text, still grey, so it
    can be read (owner). */
@@ -670,6 +671,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 /* T-124: stop and send light up the same way on hover, with a gap between. */
 #am-concept .am-stop-btn { position:relative; width:var(--am-control); height:var(--am-control); padding:0; flex-shrink:0; border-radius:var(--am-radius-m); background:transparent; }
 #am-concept .am-stop-square { width:20px; height:20px; fill:currentColor; }
+#am-concept.am-task-sidebar-preview :is(.am-send-icon svg,.am-stop-square) { width:var(--am-space-4); height:var(--am-space-4); }
 #am-concept .am-tip { position:absolute; top:50%; right:calc(100% + var(--am-space-2)); transform:translateY(-50%); display:none; align-items:center; gap:var(--am-gap-control); padding:var(--am-space-1) var(--am-space-3); border:1px solid var(--am-line); border-radius:var(--am-radius-s); background:var(--am-composer); color:var(--am-text); white-space:nowrap; box-shadow:var(--am-shadow-s); pointer-events:none; }
 #am-concept .am-tip kbd { font:inherit; color:var(--am-muted); }
 #am-concept .am-stop-btn:is(:hover,:focus-visible) .am-tip { display:inline-flex; }
@@ -734,7 +736,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept button.am-task-section-action:is(:hover,:focus-visible) { background:transparent; color:var(--am-text); }
 #am-concept .am-task-list .am-task { display:flex; flex-direction:column; flex-wrap:nowrap; align-items:stretch; flex-shrink:0; width:100%; min-width:0; max-width:100%; min-height:0; text-align:left; font-size:var(--am-text-xs); overflow:hidden; }
 #am-concept :is(.am-sidebar-task,.am-task-list .am-task) { gap:var(--am-gap-line); line-height:1.5; padding-block:var(--am-space-1); padding-inline:var(--am-space-3); border-radius:var(--am-radius-s); background:transparent; }
-#am-concept.am-task-sidebar-preview .am-sidebar-task { padding-inline-start:calc(var(--am-space-3) + var(--am-computer-icon-size) + var(--am-computer-label-gap)); }
+#am-concept.am-task-sidebar-preview .am-sidebar-task { padding-block:var(--am-space-2); padding-inline-start:calc(var(--am-space-3) + var(--am-computer-icon-size) + var(--am-computer-label-gap)); }
+#am-concept.am-task-sidebar-preview .am-task-list .am-archive-task { padding:var(--am-pad-compact); }
 #am-concept :is(.am-sidebar-task,.am-task-list .am-task):is(:hover,:focus-visible) { background:var(--am-quiet-hover); }
 #am-concept :is(.am-sidebar-task,.am-task-list .am-task)[aria-pressed=true] { background:var(--am-selected); }
 #am-concept .am-task-here { color:var(--am-text); font-weight:600; }

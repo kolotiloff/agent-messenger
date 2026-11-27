@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-334 message and row spacing)
+
+Balanced outgoing bubble, active task and archive row padding in the existing window preview. Reduced the Send and Stop glyphs within their existing hit areas. The browser check measures the padding and icon sizes and still checks the alignment and width of active task rows. [PR #231](https://github.com/kolotiloff/agent-messenger/pull/231).
+
 ## 2026-11-27 — Codex (T-334 efficiency row refinement)
 
 Used an outlined robot icon for Agents and removed the model disclosure arrows. The model label and details advance by one control gap each. Verified the indents, mouse expansion and keyboard collapse in the live preview with Chromium and WebKit. Updated [PR #231](https://github.com/kolotiloff/agent-messenger/pull/231).

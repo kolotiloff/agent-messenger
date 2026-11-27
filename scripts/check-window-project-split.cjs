@@ -153,6 +153,7 @@ if (require.main === module) (async()=>{
     const otherDate=tasks.tools.find(t=>t.id==='tools-1').created_at;
     assert.equal(await preview.locator('#task-head > h3').innerText(),'Параллельная задача');
     assert.equal(await preview.locator('#task-head > h3 + time').count(),1);
+    assert.equal(await thread.locator('.am-outgoing .am-message-content').first().evaluate(node=>getComputedStyle(node).padding),'12px 16px');
     const reportStatus=thread.locator('.am-delivery-close');
     await reportStatus.waitFor();
     assert.equal(await reportStatus.locator('time').count(),0);
@@ -220,7 +221,7 @@ if (require.main === module) (async()=>{
       assert.deepEqual((await order()).slice(0,2),['local','pc1']);
       assert.equal(await peerHeader.evaluate(node=>node===document.activeElement),true);
       assert.deepEqual(await padding(card(preview,'pc1').locator('.am-machine-name')),['4px','4px']);
-      assert.deepEqual(await padding(sidebarTask('Проверка навигации')),['4px','4px']);
+      assert.deepEqual(await padding(sidebarTask('Проверка навигации')),['8px','8px']);
       await sidebarTask('Экран настроек').click();
       await expectPrevious(oldDate);
       assert.equal(await composerBottom(),initialComposerBottom);
@@ -312,9 +313,10 @@ if (require.main === module) (async()=>{
       assert.deepEqual(await draftPage.locator('#compose .am-compose-field').evaluate(field=>{
         const stop=field.querySelector('#task-stop').getBoundingClientRect();
         const send=field.querySelector('#answer-send').getBoundingClientRect();
+        const icons=Array.from(field.querySelectorAll('#task-stop > svg,#answer-send > svg'),svg=>svg.getBoundingClientRect().width);
         const box=field.getBoundingClientRect();
-        return [stop.width,stop.height,send.width,send.height,send.left-stop.right,box.right-send.right];
-      }),[32,32,32,32,4,5]);
+        return [stop.width,stop.height,send.width,send.height,send.left-stop.right,box.right-send.right,...icons];
+      }),[32,32,32,32,4,5,16,16]);
       const disclosure=local.locator('.am-sidebar-disclosure');
       assert.equal(await disclosure.locator('svg').count(),0);
       assert.deepEqual(await disclosure.boundingBox(),await local.locator('.am-machine-name').boundingBox());
@@ -677,6 +679,7 @@ if (require.main === module) (async()=>{
       await archive.getByText('Игра, Звуки меню',{exact:true}).waitFor();
       const row=archive.locator('.am-task').filter({hasText:'Звуки меню'});
       await row.waitFor();
+      assert.equal(await row.evaluate(node=>getComputedStyle(node).padding),'8px 12px');
       const time=row.locator('time');
       assert.match(await time.textContent(),/^(Сегодня|Вчера) в \d{2}:\d{2}$/);
       assert.equal(await time.getAttribute('datetime'),tasks.game.find(t=>t.id==='game-3').finished_at);
