@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -46,6 +47,8 @@ func TestCoordinatorLink(t *testing.T) {
 	if err := os.Mkdir(folder, 0o700); err != nil {
 		t.Fatal(err)
 	}
+	root := filepath.Join(dir, "data")
+	program := filepath.Join(dir, "app", "messenger")
 	config := filepath.Join(dir, ".claude.json")
 	write := func(key string, server any) {
 		raw, _ := json.Marshal(map[string]any{"numStartups": 3, "projects": map[string]any{
@@ -58,21 +61,21 @@ func TestCoordinatorLink(t *testing.T) {
 	}
 	check := func(want string) {
 		t.Helper()
-		if got, _ := CoordinatorLink(config, folder, "/app/messenger", "/data", "Game"); got != want {
+		if got, _ := CoordinatorLink(config, folder, program, root, "Game"); got != want {
 			t.Fatalf("got %s, want %s", got, want)
 		}
 	}
 	check(LinkMissing)
-	ours := map[string]any{"type": "stdio", "command": "/app/messenger", "args": CoordinatorArgs("/data", "Game"), "env": map[string]any{}}
+	ours := map[string]any{"type": "stdio", "command": program, "args": CoordinatorArgs(root, "Game"), "env": map[string]any{}}
 	write(folder, ours)
 	check(LinkConnected)
 	write(filepath.Join(dir, "elsewhere"), ours)
 	check(LinkMissing)
-	write(folder, map[string]any{"type": "stdio", "command": "/app/messenger", "args": CoordinatorArgs("/data", "Other")})
+	write(folder, map[string]any{"type": "stdio", "command": program, "args": CoordinatorArgs(root, "Other")})
 	check(LinkOther)
-	write(folder, map[string]any{"type": "stdio", "command": "/data/runtimes/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/messenger", "args": CoordinatorArgs("/data", "Game")})
+	write(folder, map[string]any{"type": "stdio", "command": filepath.Join(root, "runtimes", strings.Repeat("a", 64), "messenger"), "args": CoordinatorArgs(root, "Game")})
 	check(LinkStale)
-	write(folder, map[string]any{"command": "/custom", "args": CoordinatorArgs("/data", "Game"), "env": map[string]string{"SETTING": "keep"}})
+	write(folder, map[string]any{"command": "/custom", "args": CoordinatorArgs(root, "Game"), "env": map[string]string{"SETTING": "keep"}})
 	check(LinkOther)
 	write(folder, map[string]any{"type": "http", "url": "https://example.invalid"})
 	check(LinkOther)
@@ -82,7 +85,7 @@ func TestCoordinatorLink(t *testing.T) {
 			t.Fatal(err)
 		}
 		write(folder, ours)
-		if got, _ := CoordinatorLink(config, link, "/app/messenger", "/data", "Game"); got != LinkConnected {
+		if got, _ := CoordinatorLink(config, link, program, root, "Game"); got != LinkConnected {
 			t.Fatal("a folder opened through a symlink was not matched")
 		}
 	}
