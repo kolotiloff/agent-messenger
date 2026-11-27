@@ -2064,7 +2064,7 @@
     if(trigger.dataset.task!==task.id||!available)menu.hidePopover();
     trigger.dataset.task=task.id;
     trigger.hidden=!available||(!model&&current==null&&!task.usage);
-    $('answer-token-count').textContent=current==null?'':tokensText(current)+tr(' т.');
+    trigger.title=tr('Токены и контекст')+(current==null?'':' · '+tokensFull(current));
     const rows=$('answer-token-rows');
     rows.replaceChildren();
     const values=[

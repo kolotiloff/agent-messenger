@@ -14,7 +14,15 @@ Scale: 4, 8, 12, 16, 24 (`--am-space-1/2/3/4/6`). Pick the gap by meaning:
 | `--am-gap-region` | 24 | between large regions (sidebar groups, message groups) |
 | `--am-gap-line` | 2 | only between lines of text in one item |
 
-Compact boxes and rows (list rows, hints, code blocks) use `--am-pad-compact` (8 12). Dropdown menus follow the Claude app: a 4 px inset, 32 px options (`--am-control`) with 4 12 padding, only the hovered or keyboard-focused option gets a background, and the chosen option is marked by a thin accent check on the right. Panes are inset by `--am-pane-inset` (16, or 12 in a narrow window).
+| Surface | Vertical inset | Horizontal inset |
+|---|---:|---:|
+| Composer shell | 4 px | 4 px |
+| Computer headings and active task rows | 4 px | 12 px, with a 36 px leading inset on active tasks to align the titles |
+| Archive rows and compact notices | 8 px | 12 px |
+| Outgoing message bubbles | 12 px | 16 px |
+| Settings cards | 16 px | 16 px |
+
+The General settings card uses the padding of its inner rows directly. Dropdown menus have a 4 px inset and 32 px options with 4 px vertical and 12 px horizontal padding. Only the hovered or keyboard-focused option gets a background, and a check marks the selected value. Panes use `--am-pane-inset` (16 px, or 12 px in a narrow window).
 
 Buttons that belong together go in one container: `.am-actions` (a row) or `.am-actions-stack` (a column). Do not space them with margins.
 
@@ -27,13 +35,13 @@ Buttons that belong together go in one container: `.am-actions` (a row) or `.am-
 | `--am-radius-m` | 12 | cards, panels, notices, menus, error chips, the window |
 | `--am-radius-l` | 16 | dialogs, the composer, message bubbles |
 
-The composer keeps its surface radius (16 px) at every height. The inset icon controls use the next smaller radius (12 px). Ordinary buttons and selector triggers use the compact control height (28 px) and neutral gray fill in the current window layout.
+The composer keeps its surface radius (16 px) at every height. The inset icon controls use the next smaller radius (12 px). Ordinary buttons, one-line inputs and selector triggers share the compact control height (28 px) in the current window layout.
 
 The conversation and composer share a centered column up to `--am-chat-max` (760 px), with a minimum chat gutter of 24 px on each side. The scrollbar stays at the edge of the chat pane.
 
 ## Sizes
 
-- Controls: `--am-control` 32 (buttons, fields, select fields, send and stop), the size of buttons in the Claude app; `--am-control-compact` 28 (tabs, square icon buttons, the task filter); `--am-control-chip` 24 (buttons inside an error chip).
+- Controls: `--am-control` 32 (composer controls and drop-down options), `--am-control-compact` 28 (ordinary one-line fields, buttons, tabs and select triggers in the current layout), `--am-control-chip` 24 (buttons inside an error chip).
 - Text: 12 labels and meta, 13 secondary text, 14 body, 16 section and dialog titles (`h3`), 18 page titles (`h2`). Computer names, task names in the list and statistics use 14 px, weight 500, with a 21 px line height. Sidebar agent rows and task card metadata use 12 px. Chat content and input use 14 px regular system text with a 21 px line height.
 - Colors and shadows are tokens too (`--am-shadow-s` for chips and the composer, `--am-shadow-l` for menus and dialogs).
 

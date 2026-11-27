@@ -175,7 +175,8 @@ if (require.main === module) (async()=>{
     const composerBottom=()=>answerField.evaluate(field=>field.getBoundingClientRect().bottom);
     await tokenCount.waitFor();
     assert((await tokenCount.boundingBox()).y>(await answerField.boundingBox()).y);
-    assert.match(await tokenCount.textContent(),/\d/);
+    assert.equal(await tokenCount.locator('svg circle').count(),1);
+    assert.match(await tokenCount.getAttribute('title'),/\d/);
     await tokenCount.click();
     const tokenMenu=preview.locator('#answer-token-menu');
     await tokenMenu.waitFor();
@@ -232,12 +233,12 @@ if (require.main === module) (async()=>{
       assert.deepEqual((await order()).slice(0,2),['local','pc1']);
       assert.equal(await peerHeader.evaluate(node=>node===document.activeElement),true);
       assert.deepEqual(await padding(card(preview,'pc1').locator('.am-machine-name')),['4px','4px']);
-      assert.deepEqual(await padding(sidebarTask('Проверка навигации')),['8px','8px']);
+      assert.deepEqual(await padding(sidebarTask('Проверка навигации')),['4px','4px']);
       await sidebarTask('Экран настроек').click();
       await expectPrevious(oldDate);
       assert.equal(await composerBottom(),initialComposerBottom);
       sameFeed.release();
-      await preview.locator('#answer-tokens[data-task="game-1"] #answer-token-count:empty').waitFor({state:'attached'});
+      await preview.locator('#answer-tokens[data-task="game-1"][title="Токены и контекст"]').waitFor();
       await tokenCount.click();
       assert.match(await tokenMenu.locator('dl').innerText(),/Токены за текущий ход\s+Нет данных/);
       await preview.keyboard.press('Escape');
@@ -492,7 +493,16 @@ if (require.main === module) (async()=>{
           const style=getComputedStyle(node);
           return [style.paddingBlockStart,style.paddingInlineStart];
         }),['16px','16px'],section);
+        const height=selector=>screen.locator(selector).evaluate(node=>node.getBoundingClientRect().height);
+        if(section==='server'){
+          for(const selector of ['#host-scope + .am-select-trigger','#host-port','#host-enable']){
+            assert.equal(await height(selector),28,selector);
+          }
+        }
         if(section==='project'){
+          for(const selector of ['#project-page-name','#project-page-folder','#project-page-pick']){
+            assert.equal(await height(selector),28,selector);
+          }
           const rows=screen.locator('#coord-box .am-step:has(> button)');
           assert.equal(await rows.count(),3);
           for(const row of await rows.all()){
@@ -594,7 +604,7 @@ if (require.main === module) (async()=>{
       const search=modelPicker.getByRole('searchbox',{name:'Поиск моделей',exact:true});
       assert(await search.evaluate(node=>{
         const style=getComputedStyle(node);
-        return style.borderRadius==='8px'&&style.height==='32px'&&parseFloat(style.paddingInlineStart)>18;
+        return style.borderRadius==='8px'&&style.height==='28px'&&parseFloat(style.paddingInlineStart)>18;
       }));
       assert.equal(await modelPicker.locator('.am-model-options').evaluate(node=>getComputedStyle(node).paddingInlineEnd),'8px');
       await search.fill('учебная-модель');
