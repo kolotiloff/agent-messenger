@@ -454,7 +454,7 @@ if (require.main === module) (async()=>{
       assert.equal(await settingsDialog.locator('.am-sidebar,#project-select').count(),0);
       assert.equal(await draftPage.locator('[data-screen=tasks]').isVisible(),true);
       assert((await settingsDialog.boundingBox()).width>600);
-      for(const section of ['agents','project','server','stats']){
+      for(const section of ['server','project','agents']){
         await settingsNav.locator('[data-tab='+section+']').click();
         const screen=settingsDialog.locator('[data-screen='+section+']');
         await screen.waitFor();
@@ -471,18 +471,59 @@ if (require.main === module) (async()=>{
           assert.equal(await screen.locator('#coord-box summary').evaluate(node=>getComputedStyle(node,'::after').content),'""');
         }
       }
+      await draftPage.keyboard.press('Escape');
+      await settingsDialog.waitFor({state:'hidden'});
+      await draftPage.waitForFunction(()=>document.activeElement?.id==='settings-open');
+      const statisticsOpen=draftPage.getByRole('button',{name:'Статистика',exact:true});
+      const standaloneStats=draftPage.getByRole('dialog',{name:'Статистика',exact:true});
+      await statisticsOpen.click();
+      await standaloneStats.waitFor();
+      assert(await standaloneStats.evaluate(node=>node.matches(':modal')));
+      assert(await standaloneStats.evaluate(node=>{
+        const {width,height}=node.getBoundingClientRect();
+        return width<=Math.min(900,innerWidth*.84)+1&&height<=Math.min(640,innerHeight*.8)+1;
+      }));
+      assert.deepEqual(await standaloneStats.locator('[data-screen=stats]').evaluate(node=>{
+        const style=getComputedStyle(node);
+        return [style.paddingBlockStart,style.paddingInlineStart];
+      }),['16px','16px']);
       await total(draftPage,'103578');
+      const toolbar=standaloneStats.locator('.am-stats-head');
+      const reportTitle=selector=>standaloneStats.locator(selector).evaluate(node=>{
+        const style=getComputedStyle(node);
+        return [node.getBoundingClientRect().top,style.fontSize,style.fontWeight,style.lineHeight];
+      });
+      const toolbarPosition=await toolbar.boundingBox();
+      const usageTitle=await reportTitle('#stats-total-title');
+      const efficiency=standaloneStats.locator('#stats-efficiency');
+      await efficiency.click();
+      await standaloneStats.locator('#stats-efficiency-status').getByText('В этом периоде нет исходных задач для сравнения.').waitFor();
+      await standaloneStats.locator('#stats-usage').waitFor({state:'hidden'});
+      assert.deepEqual(await reportTitle('#stats-efficiency-title'),usageTitle);
+      assert.deepEqual(await toolbar.boundingBox(),toolbarPosition);
+      const otherPeriod=standaloneStats.locator('[data-period][aria-pressed=false]').first();
+      const period=await otherPeriod.getAttribute('data-period');
+      await Promise.all([
+        draftPage.waitForResponse(response=>response.url().includes('/api/usage-efficiency?')&&new URL(response.url()).searchParams.get('period')===period),
+        otherPeriod.click()
+      ]);
+      assert.equal(await efficiency.getAttribute('aria-expanded'),'true');
+      assert.deepEqual(await toolbar.boundingBox(),toolbarPosition);
+      await efficiency.click();
+      await standaloneStats.locator('#stats-usage').waitFor();
+      assert.deepEqual(await reportTitle('#stats-total-title'),usageTitle);
       await select(draftPage,'stats-project','Инструменты');
       await select(draftPage,'stats-computer','ПК-1');
       await total(draftPage,'654');
       await draftPage.keyboard.press('Escape');
-      await settingsDialog.waitFor({state:'hidden'});
-      await draftPage.waitForFunction(()=>document.activeElement?.id==='settings-open');
+      await standaloneStats.waitFor({state:'hidden'});
+      await draftPage.waitForFunction(()=>document.activeElement?.id==='stats-open');
       await select(draftPage,'project-select','Игра');
-      await settingsOpen.click();
-      await settingsNav.locator('[data-tab=stats]').click();
+      await statisticsOpen.click();
       assert.equal(await draftPage.locator('#stats-project').inputValue(),'tools');
       assert.equal(await draftPage.locator('#stats-computer').inputValue(),'pc1');
+      await standaloneStats.locator('#stats-close').click();
+      await settingsOpen.click();
       await settingsNav.locator('[data-tab=agents]').click();
       assert.equal(await draftPage.locator('#agents-computer').inputValue(),'local');
       const agentIcon=settingsDialog.locator('.am-provider-heading .am-provider-icon svg').first();
@@ -490,6 +531,35 @@ if (require.main === module) (async()=>{
         const {width,height}=icon.getBoundingClientRect();
         return [width,height];
       }),[16,16]);
+      const agentSettings=draftPage.locator('#agent-setup');
+      await settingsDialog.locator('.am-agent-card[data-provider=codex]').getByRole('button',{name:'Настройки',exact:true}).click();
+      await agentSettings.waitFor();
+      const headerHeight=selector=>draftPage.locator(selector).evaluate(node=>node.getBoundingClientRect().height);
+      const agentHeaderHeight=await headerHeight('#agent-setup .am-settings-header');
+      assert.equal(agentHeaderHeight,await headerHeight('#settings-dialog .am-settings-header'));
+      assert.equal(agentHeaderHeight,44);
+      assert(await agentSettings.locator('.am-agent-settings-rows').evaluate(rows=>
+        Array.from(rows.children).every(row=>{
+          const [label,controls]=row.children;
+          const center=element=>{const box=element.getBoundingClientRect();return box.top+box.height/2;};
+          return getComputedStyle(row).borderTopWidth==='1px'&&Math.abs(center(label)-center(controls))<1;
+        })
+      ));
+      await agentSettings.getByRole('button',{name:'Изменить модели'}).click();
+      const modelPicker=draftPage.locator('#agent-model-picker');
+      await modelPicker.waitFor();
+      assert.equal(await headerHeight('#agent-model-picker .am-settings-header'),agentHeaderHeight);
+      const search=modelPicker.getByRole('searchbox',{name:'Поиск моделей',exact:true});
+      assert(await search.evaluate(node=>{
+        const style=getComputedStyle(node);
+        return style.borderRadius==='8px'&&style.height==='32px'&&parseFloat(style.paddingInlineStart)>18;
+      }));
+      assert.equal(await modelPicker.locator('.am-model-options').evaluate(node=>getComputedStyle(node).paddingInlineEnd),'8px');
+      await search.fill('учебная-модель');
+      await modelPicker.getByRole('button',{name:'Добавить свой вариант',exact:true}).waitFor();
+      await search.clear();
+      await modelPicker.getByRole('button',{name:'Отмена',exact:true}).click();
+      await agentSettings.getByRole('button',{name:'Закрыть',exact:true}).click();
       await select(draftPage,'agents-computer','ПК-1');
       assert.equal(await draftPage.locator('#agents-computer').inputValue(),'pc1');
       const selectedChat=await draftPage.locator('#thread').textContent();
@@ -738,15 +808,24 @@ if (require.main === module) (async()=>{
       const modal=compactPreview.locator('#settings-dialog');
       await modal.waitFor();
       assert.equal(await modal.evaluate(node=>node.scrollWidth>node.clientWidth),false);
+      assert.deepEqual(await modal.locator('.am-settings-nav [data-tab]').evaluateAll(tabs=>tabs.map(tab=>tab.dataset.tab)),['settings','server','project','agents']);
+      assert.deepEqual(await modal.locator('.am-settings-nav [data-tab] > svg').evaluateAll(icons=>icons.map(icon=>{
+        const {width,height}=icon.getBoundingClientRect();
+        return [width,height,icon.getAttribute('aria-hidden')];
+      })),Array(4).fill([18,18,'true']));
       await modal.locator('[data-tab=project]').click();
       const plugin=modal.locator('#coord-box .am-step').first();
       const subtitle=plugin.locator('.am-step-sub');
       await subtitle.waitFor();
       assert(await subtitle.evaluate(node=>node.clientHeight>parseFloat(getComputedStyle(node).lineHeight)));
       await expectCentered(plugin.locator('.am-step-text'),plugin.locator(':scope > button'));
-      await modal.locator('[data-tab=stats]').click();
-      await total(compactPreview,'103578');
       await modal.locator('#settings-close').click();
+      await compactPreview.locator('#stats-open').click();
+      const statisticsDialog=compactPreview.locator('#stats-dialog');
+      await statisticsDialog.waitFor();
+      assert.equal(await modal.isVisible(),false);
+      await total(compactPreview,'103578');
+      await statisticsDialog.locator('#stats-close').click();
       assert.equal(await compactPreview.locator('#task-draft-text').inputValue(),'Черновик');
     }finally{await compactPreview.close();}
 

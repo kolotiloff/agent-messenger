@@ -2,9 +2,13 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-334 statistics dialog)
+
+Moved Statistics to a dedicated footer button and dialog. Reordered Settings to General, Server, Project and Agents, added outline section icons, and reduced both dialog footprints. Aligned the report headings and kept filters fixed while switching or reloading an efficiency report. Reused a compact header and the settings row style, and styled the model picker search and scrollbar spacing. Verified the window suite in Chromium and WebKit, the local UI Go race tests, and the running preview at 1150 and 520 px.
+
 ## 2026-11-27 — Codex (T-333 desktop layout activation)
 
-Reproduced the layout difference reported in 1.0.12. The desktop window now activates the approved task layout. The release retains the usual build and publication gates.
+Reproduced the layout difference reported in 1.0.12. The desktop window now activates the approved task layout. The owner cancelled the 1.0.13 release run before publication to bundle the follow-up changes.
 
 ## 2026-11-27 — Codex (1.0.12 release)
 

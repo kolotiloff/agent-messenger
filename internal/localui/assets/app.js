@@ -159,7 +159,7 @@
   function renderToasts(){
     const box=$('toasts');
     // An agent action must not report its error inside the hidden Tasks tab.
-    if(tab==='tasks')$('notices').after(box);
+    if(tab==='tasks'||(taskSidebarPreview&&tab==='stats'))$('notices').after(box);
     else if(taskSidebarPreview)$('settings-dialog').querySelector('.am-settings-views').prepend(box);
     else root.querySelector('.am-main').insertBefore(box,root.querySelector('[data-screen]'));
     box.replaceChildren();box.hidden=!actionError;if(!actionError)return;
@@ -1032,6 +1032,7 @@
     const head=machineList.querySelector('.am-machine-roles')?.parentElement;
     if(head)layoutMachineRoles(head);
   }));
+  const serverIconPaths=['M4 3h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM4 14h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2ZM6 7h1M6 18h1'];
   function machinePresence(online,local=false){
     const mark=el('span',undefined,'am-machine-presence'+(online?' online':''));
     if(local)mark.classList.add('am-machine-presence-local');
@@ -1044,7 +1045,7 @@
     // With the seven-unit round stroke, both diagonals span the 24-unit view box.
     if(!online)signal.append(svgIcon(['M3.5 3.5l17 17M20.5 3.5l-17 17']));
     const glyph=taskSidebarPreview
-      ?['M4 3h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM4 14h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2ZM6 7h1M6 18h1']
+      ?serverIconPaths
       :['M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2ZM12 17v3M8 20h8'];
     mark.append(svgIcon(glyph),signal);
     return mark;
@@ -3201,8 +3202,12 @@
     root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
     if(taskSidebarPreview){
       const dialog=$('settings-dialog');
-      if(tab==='tasks'&&dialog.open)dialog.close();
-      else if(tab!=='tasks'&&!dialog.open)dialog.showModal();
+      const statistics=$('stats-dialog');
+      if(tab!=='stats'&&statistics.open)statistics.close();
+      if(tab==='tasks'||tab==='stats'){
+        if(dialog.open)dialog.close();
+        if(tab==='stats'&&!statistics.open)statistics.showModal();
+      }else if(!dialog.open)dialog.showModal();
     }
     $('list-toggle').hidden=!view?.project||(!taskSidebarPreview&&tab!=='tasks');if(tab==='server'||tab==='settings')loadServer();if(tab==='stats')reloadStats();if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),settings:tr('Настройки программы'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сервер'),stats:tr('Статистика')}[tab];startWindowWatch();
     if(tab==='tasks'&&combinedTasks()){renderTaskList();loadProjectActivity();}
@@ -3277,21 +3282,33 @@
   let efficiencyScope='',efficiencyGen=0;
   function refreshEfficiencyScope(){
     const card=$('stats-efficiency-card'),button=$('stats-efficiency');
-    if(efficiencyScope&&efficiencyScope!==JSON.stringify(statsFilters())){
-      efficiencyScope='';efficiencyGen++;card.hidden=true;
-    }
+    if(!project)card.hidden=true;
+    $('stats-usage').hidden=!card.hidden;
     button.disabled=!project;
     button.setAttribute('aria-expanded',String(!card.hidden));
-  }
-  async function compareModels(){
-    if(!project)return;
-    const card=$('stats-efficiency-card'),status=$('stats-efficiency-status'),wrap=$('stats-efficiency-table');
-    if(!card.hidden){
-      efficiencyScope='';efficiencyGen++;card.hidden=true;refreshEfficiencyScope();return;
+    if(card.hidden){
+      if(efficiencyScope){efficiencyScope='';efficiencyGen++;}
+      card.removeAttribute('aria-busy');
+      return;
     }
-    const filters=statsFilters(),gen=++efficiencyGen;
-    efficiencyScope=JSON.stringify(filters);
-    card.hidden=false;wrap.hidden=true;status.textContent=tr('Загрузка статистики…');refreshEfficiencyScope();
+    const filters=statsFilters(),scope=JSON.stringify(filters);
+    if(efficiencyScope!==scope)loadEfficiency(filters,scope);
+  }
+  function compareModels(){
+    if(!project)return;
+    const card=$('stats-efficiency-card');
+    card.hidden=!card.hidden;
+    if(!card.hidden){
+      $('stats-efficiency-table').hidden=true;
+      $('stats-efficiency-status').textContent=tr('Загрузка статистики…');
+    }
+    refreshEfficiencyScope();
+  }
+  async function loadEfficiency(filters,scope){
+    const card=$('stats-efficiency-card'),status=$('stats-efficiency-status'),wrap=$('stats-efficiency-table');
+    const gen=++efficiencyGen;
+    efficiencyScope=scope;
+    card.setAttribute('aria-busy','true');
     try{
       const result=await api('/api/usage-efficiency?'+statsQuery(filters),25000);
       if(gen!==efficiencyGen)return;
@@ -3301,7 +3318,11 @@
       status.textContent=!result.groups.length?tr('В этом периоде нет исходных задач для сравнения.'):
         result.total_groups>result.groups.length?tr('Показана часть групп. Полный список есть в экспорте JSON.'):
         tr('Токены и время — медианы по принятым задачам. Расход включает повторные попытки.');
-    }catch(e){if(gen===efficiencyGen)status.textContent=e.message;}
+    }catch(e){
+      if(gen===efficiencyGen){wrap.hidden=true;status.textContent=e.message;}
+    }finally{
+      if(gen===efficiencyGen)card.removeAttribute('aria-busy');
+    }
   }
   function renderEfficiencyGroups(groups){
     const table=$('stats-efficiency-grid');
@@ -4515,15 +4536,38 @@
     const views=el('div',undefined,'am-settings-views');
     sections.setAttribute('aria-label',tr('Разделы'));
     $('settings-general').hidden=false;
-    sections.append(...root.querySelectorAll('.am-tabs [data-tab]:not([data-tab=tasks])'));
-    views.append(...root.querySelectorAll('[data-screen]:not([data-screen=tasks])'));
+    const sectionIcons=[
+      ['settings',$('settings-open').querySelector('svg').cloneNode(true)],
+      ['server',svgIcon(serverIconPaths)],
+      ['project',svgIcon(['M4 6h5l2 2h9a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z'])],
+      ['agents',svgIcon(['M15 7a3 3 0 1 1-6 0 3 3 0 0 1 6 0ZM6 20v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2M18 5a3 3 0 0 1 0 6m4 9v-2a4 4 0 0 0-2-3.5M6 5a3 3 0 0 0 0 6m-4 9v-2a4 4 0 0 1 2-3.5'])],
+    ];
+    for(const [section,icon] of sectionIcons){
+      const button=root.querySelector(`.am-tabs [data-tab=${section}]`);
+      button.prepend(icon);
+      sections.append(button);
+      views.append(root.querySelector(`[data-screen=${section}]`));
+    }
     layout.append(sections,views);
     previousBody.replaceWith(layout);
     dialog.classList.add('am-settings-wide');
     dialog.addEventListener('close',()=>{
       if(dialog.open)return;
-      if(tab!=='tasks')show('tasks');
-      $('settings-open').focus();
+      if(tab!=='stats'){
+        if(tab!=='tasks')show('tasks');
+        $('settings-open').focus();
+      }
+    });
+    const statistics=$('stats-dialog');
+    statistics.append(root.querySelector('[data-screen=stats]'));
+    $('stats-open').hidden=false;
+    $('stats-open').addEventListener('click',()=>show('stats'));
+    $('stats-close').addEventListener('click',()=>statistics.close());
+    statistics.addEventListener('close',()=>{
+      if(!statistics.open&&tab==='stats'){
+        show('tasks');
+        $('stats-open').focus();
+      }
     });
   }
   $('auto-update-toggle').addEventListener('click',toggleAutoUpdate);
@@ -4671,7 +4715,7 @@
       if(target.style.getPropertyValue('--am-gutter')!==value)target.style.setProperty('--am-gutter',value);
     }
   });});
-  root.querySelectorAll('.am-screen,.am-thread,.am-queue-list,.am-dialog-body,.am-machines').forEach(element=>gutterObserver.observe(element));
+  root.querySelectorAll('.am-screen,.am-thread,.am-queue-list,.am-dialog-body,.am-machines,.am-stats-reports').forEach(element=>gutterObserver.observe(element));
   const chatBody=root.querySelector('.am-chat-body'),chatFooter=root.querySelector('.am-chat-footer');
   $('thread').addEventListener('scroll',toBottomState,{passive:true});
   $('to-bottom').addEventListener('click',()=>{const t=$('thread');t.scrollTo({top:t.scrollHeight,behavior:'smooth'});});
