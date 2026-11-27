@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — T-359 Network roster layout
+
+Moved the My network label into its card with the same typography as Connection mode. Grouped the local and remote rows together to remove the extra gap before the first peer. Verified the label and equal spacing for six rows in Chromium and WebKit using fictional data.
+
 ## 2026-11-27 — T-357 Kotel icon
 
 The owner approved the white mark on a black tile with a soft highlight and transparent padding for the Dock. The release build uses the same artwork in the Mac bundle, Windows resources and Linux application menu. The visible tile occupies 824 px on the 1024 px master.

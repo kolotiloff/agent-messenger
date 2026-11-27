@@ -961,3 +961,7 @@ The next public release includes the approved window, worker features and manage
 ## D-258 — Publish the completed work in a preliminary update
 
 The owner revised the release scope in D-257 on November 27. Show the Settings window before submitting the update, include the approved interface and completed functionality, and carry the unfinished provider migration and task steering into subsequent work. The existing signing, native update and public channel checks apply.
+
+## D-259 — Keep the My network label inside its card
+
+Use the same typography as Connection mode. Place this computer and its peers in one list with the same vertical spacing between all rows. Keep the connection controls in their existing layout.

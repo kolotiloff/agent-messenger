@@ -49,6 +49,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
+| T-359 | Match the My network card label and computer row spacing to the Network settings layout. | window | Included in the build 118 candidate. Verified in Chromium and WebKit. |
 | T-357 | Package the approved monochrome Kotel icon at the standard Mac Dock size. | release | Owner approved for build 118. |
 | T-356 | Confine statistics hover and keyboard focus to the active table row. | window | Combined post-117 branch. System WebKit reproduction and six-row pixel comparison on macOS. Statistics uses the Archive and sidebar computer row hover color in both themes and the Archive’s 4 px inter-row gap. |
 | T-340 | Make direct answers conversational, stabilize the update hover target and match the default sidebar widths. | window | Published in 1.0.14 (build 117). |

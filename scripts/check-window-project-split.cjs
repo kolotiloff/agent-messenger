@@ -628,7 +628,22 @@ if (require.main === module) (async()=>{
           const peer=roster.locator('[data-peer="pc1"]');
           await peer.getByRole('button',{name:'Обновить до v1.0.10'}).waitFor();
           assert.equal(await peer.locator('.am-network-update').textContent(),'Обновить');
-          assert.equal(await peer.evaluate(n=>n.offsetHeight),await roster.locator('#network-local').evaluate(n=>n.offsetHeight));
+          const labelStyle=locator=>locator.evaluate(node=>{
+            const style=getComputedStyle(node);
+            return [style.fontSize,style.fontWeight];
+          });
+          const rosterLabel=roster.locator('#network-roster-heading');
+          assert.deepEqual(await labelStyle(rosterLabel),await labelStyle(screen.locator('#network-mode-label')));
+          const rosterRows=await roster.locator('.am-network-row').evaluateAll(rows=>rows.map(row=>{
+            const {top,bottom}=row.getBoundingClientRect();
+            return {top,bottom};
+          }));
+          assert(rosterRows.length>2);
+          for(const [index,row] of rosterRows.slice(1).entries()){
+            const previous=rosterRows[index];
+            assert.equal(row.top,previous.bottom);
+            assert.equal(row.bottom-row.top,previous.bottom-previous.top);
+          }
 
           await screen.getByRole('tab',{name:'Свой сервер'}).click();
           assert.equal(await screen.locator('#member-panel').isVisible(),false);
