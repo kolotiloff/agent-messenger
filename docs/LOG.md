@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-332 conversation order and alignment)
+
+Compared chat event times as timestamps to keep unread owner notes before later progress. The loopback preview demonstrates the pending and delivered states. Matched standalone command spacing to grouped commands, aligned their icons, removed the visible owner heading, widened the minimum chat gutter, left-aligned Clear archive, and unified the settings content inset.
+
 ## 2026-11-27 — Codex (T-332 command labels and timestamps)
 
 Matched tool summaries and command rows to chat typography while keeping group spacing. The fictional preview separates command captions from the shell text. Report and question status lines keep their timestamp in the tooltip; the chat timestamp retains its place above worker messages or below outgoing messages.

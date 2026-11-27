@@ -20,6 +20,8 @@ How to use it:
 - [x] Active tasks: align task title and metadata with the start of the computer name. Keep the selection and hover area as wide as the computer row.
 - [x] Top edge: remove the browser banner, keep the Archive toggle in the upper-right corner and keep the Windows controls adjacent.
 - [x] New task: show a left-aligned title in the chat header while the draft is open. A selected task uses its full title on the same baseline as Projects and Archive, with the date on the next line. Check command label typography, command group spacing, and individual message timestamps without an inline repeat in report or question status lines.
+- [x] Follow-up alignment: use equal chat gutters, a common settings inset, and matching outer spacing for command rows. Left-align the archive action and show owner bubbles without a visible author label.
+- [x] Conversation order: keep an owner's note in its send-time position while later worker activity arrives and the delivery state changes.
 
 These checks cover the browser preview. Acceptance in the installed window remains pending.
 

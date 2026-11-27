@@ -233,8 +233,18 @@ const server = http.createServer(async (request, response) => {
       }
       const thread=notes.get(body.task)||new Map();
       const existing=thread.get(body.op_id);
-      if(existing&&existing.text!==body.text){response.writeHead(409).end();return;}
-      if(!existing)thread.set(body.op_id,{kind:'note',author:'owner',state:'delivered',text:body.text,at:new Date().toISOString()});
+      if(existing&&existing.item.text!==body.text){response.writeHead(409).end();return;}
+      if(!existing){
+        const custom=[...newTasks.values()].find(entry=>entry.task.id===body.task);
+        const task=custom?previewTask(custom):Object.hasOwn(conversations,body.task)
+          ?reply(new URL('/api/task?id='+encodeURIComponent(body.task),url),projects[0].name,projects).task
+          :null;
+        const ongoing=url.pathname==='/api/task-note'&&task?.state==='running';
+        thread.set(body.op_id,{
+          ongoing,
+          item:{kind:'note',author:'owner',text:body.text,at:new Date().toISOString()},
+        });
+      }
       notes.set(body.task,thread);
       response.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify({ok:true}));
       return;
@@ -347,7 +357,23 @@ const server = http.createServer(async (request, response) => {
         fixture.task = withPreviewExample(fixture.task, examples);
         if (Array.isArray(example?.items)) fixture.items = [...example.items];
         const followups=notes.get(fixture.task.id);
-        if (followups) fixture.items.push(...followups.values());
+        if (followups) {
+          const now=Date.now(), appended=[];
+          for (const {ongoing,item} of followups.values()) {
+            const sent=Date.parse(item.at);
+            appended.push({...item,state:ongoing&&now<sent+10000?'pending':'delivered'});
+            if(!ongoing)continue;
+            if(now>=sent+2000)appended.push({
+              kind:'tool',title:'Команда',description:'Проверить изменения в макете',
+              text:'git diff --stat',at:new Date(sent+2000).toISOString(),
+            });
+            if(now>=sent+4000)appended.push({
+              kind:'text',text:'Пример в макете: закончил текущую проверку. Ваше сообщение пока ожидает прочтения.',
+              at:new Date(sent+4000).toISOString(),
+            });
+          }
+          fixture.items.push(...appended.sort((a,b)=>a.at.localeCompare(b.at)));
+        }
       }
       if (url.pathname === '/api/window' || url.pathname === '/api/project-activity') {
         const completed = sampleResults.filter(row=>row.project===project&&!fixture.tasks.some(task=>task.id===row.id)).map(previewCompleted);

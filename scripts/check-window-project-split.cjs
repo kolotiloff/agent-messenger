@@ -140,6 +140,7 @@ if (require.main === module) (async()=>{
       if(url.pathname!=='/api/task')return;
       if(url.searchParams.get('id')==='game-4'){
         const initial=reply(url,p,projects);
+        initial.items.push({kind:'tool',title:'Bash',description:'Проверить изменения в макете',text:'git diff --stat',at:initial.items.at(-1).at});
         initial.items.push({kind:'report',author:'worker',verified:true,text:'Проверка завершена',at:initial.items.at(-1).at});
         return {json:{...initial,task:{...initial.task,quiet:{live_tokens:342000}}}};
       }
@@ -156,6 +157,16 @@ if (require.main === module) (async()=>{
     await reportStatus.waitFor();
     assert.equal(await reportStatus.locator('time').count(),0);
     assert.match(await reportStatus.getAttribute('title'),/\d{2}:\d{2}/);
+    const standalone=thread.locator('.am-message-content > .am-tool');
+    assert.deepEqual(await standalone.evaluate(node=>{
+      const style=getComputedStyle(node),label=node.querySelector('.am-action-label');
+      const icon=label.querySelector('svg').getBoundingClientRect(),text=label.querySelector('.am-tool-name');
+      const firstLineCenter=text.getBoundingClientRect().top+parseFloat(getComputedStyle(text).lineHeight)/2;
+      return [style.marginBlockStart,style.marginBlockEnd,icon.top+icon.height/2-firstLineCenter];
+    }),['16px','16px',0]);
+    await standalone.locator('summary').click();
+    assert.equal(await standalone.locator('pre').textContent(),'git diff --stat');
+    await standalone.locator('summary').click();
     const tokenCount=preview.locator('#answer-live-tokens');
     const answerField=preview.locator('#compose .am-compose-field');
     const composerBottom=()=>answerField.evaluate(field=>field.getBoundingClientRect().bottom);
@@ -242,7 +253,7 @@ if (require.main === module) (async()=>{
           const style=getComputedStyle(feed);
           return Math.abs(field.left-pane.left-parseFloat(style.paddingLeft))<1
             && Math.abs(field.right-pane.right+parseFloat(style.paddingRight)+feed.offsetWidth-feed.clientWidth)<1
-            && Math.abs(field.width-Math.min(760,pane.width-24))<1
+            && Math.abs(field.width-Math.min(760,pane.width-48))<1
             && Math.abs(field.left-pane.left-(pane.right-field.right))<1;
         });
       }
@@ -428,14 +439,19 @@ if (require.main === module) (async()=>{
         const card=screen.querySelector('.am-card');
         return [getComputedStyle(screen).paddingTop,getComputedStyle(screen).paddingLeft,
           getComputedStyle(card).paddingTop,getComputedStyle(card).paddingLeft];
-      }),['12px','12px','0px','12px']);
+      }),['16px','16px','0px','16px']);
       assert.equal(await settingsDialog.evaluate(node=>node.matches(':modal')),true);
       assert.equal(await settingsDialog.locator('.am-sidebar,#project-select').count(),0);
       assert.equal(await draftPage.locator('[data-screen=tasks]').isVisible(),true);
       assert((await settingsDialog.boundingBox()).width>600);
       for(const section of ['agents','project','server','stats']){
         await settingsNav.locator('[data-tab='+section+']').click();
-        await settingsDialog.locator('[data-screen='+section+']').waitFor();
+        const screen=settingsDialog.locator('[data-screen='+section+']');
+        await screen.waitFor();
+        assert.deepEqual(await screen.evaluate(node=>{
+          const style=getComputedStyle(node);
+          return [style.paddingBlockStart,style.paddingInlineStart];
+        }),['16px','16px'],section);
       }
       await total(draftPage,'103578');
       await select(draftPage,'stats-project','Инструменты');
@@ -497,7 +513,10 @@ if (require.main === module) (async()=>{
       const {op_id,...payload}=(await start).postDataJSON();
       assert.match(op_id,/^window-/);
       assert.deepEqual(payload,{project:'tools',computer:'pc1',agent:'codex',model:'gpt-6.2-astra[effort=high]',text:directTask.title});
-      await draftPage.locator('#thread').getByText('Вы',{exact:true}).waitFor();
+      const ownerBubble=draftPage.locator('#thread .am-outgoing').filter({hasText:directTask.title});
+      await ownerBubble.waitFor();
+      assert.equal(await ownerBubble.locator('.am-meta').count(),0);
+      assert.equal(await draftPage.locator('#thread .am-outgoing + time.am-message-time').count(),1);
       await draftPage.locator('#answer-text').fill('Уточнение исполнителю');
       const note=draftPage.waitForRequest(req=>new URL(req.url()).pathname==='/api/task-note');
       await draftPage.locator('#answer-send').click();
@@ -528,6 +547,16 @@ if (require.main === module) (async()=>{
       });
       assert.equal(await archive.locator('#task-list-heading').textContent(),'Архив');
       const clearArchive=archive.getByRole('button',{name:'Очистить архив',exact:true});
+      assert.equal(await clearArchive.evaluate(node=>{
+        const firstRow=node.closest('#task-list').querySelector('.am-archive-task .am-task-title');
+        return node.getBoundingClientRect().left+parseFloat(getComputedStyle(node).paddingInlineStart)-firstRow.getBoundingClientRect().left;
+      }),0);
+      assert.equal(await clearArchive.evaluate(node=>getComputedStyle(node).backgroundColor),'rgba(0, 0, 0, 0)');
+      await clearArchive.hover();
+      assert.equal(await clearArchive.evaluate(async node=>{
+        await Promise.all(node.getAnimations().map(animation=>animation.finished));
+        return getComputedStyle(node).backgroundColor;
+      }),hoverFills[0]);
       await clearArchive.click();
       await draftPage.getByText('Очистить архив?',{exact:true}).waitFor();
       await draftPage.getByRole('button',{name:'Отмена',exact:true}).click();
@@ -659,6 +688,12 @@ if (require.main === module) (async()=>{
       const filter=await browserPreview.locator('#agent-filter + .am-select-trigger').boundingBox();
       const button=await toggle.boundingBox();
       assert(filter.x+filter.width<=button.x-8);
+      assert.deepEqual(await browserPreview.locator('#thread .am-message-group').first().evaluate(message=>{
+        const pane=message.closest('.am-chat').getBoundingClientRect();
+        const chat=message.getBoundingClientRect();
+        const footer=document.querySelector('.am-chat-footer').getBoundingClientRect();
+        return [chat.left-pane.left,pane.right-chat.right,chat.left-footer.left,footer.right-chat.right];
+      }),[24,24,0,0]);
       await toggle.click();
       await browserPreview.locator('#task-panel').waitFor({state:'hidden'});
       await browserPreview.setViewportSize({width:450,height:720});

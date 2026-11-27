@@ -1748,9 +1748,9 @@
       $('task-count').textContent=archived||'';
       if(!box.childElementCount)box.append(el('p',tr('В архиве пока нет задач'),'am-small am-muted'));
       if(archived){
-        const clear=el('button',tr('Очистить архив'),'am-task-section-action');clear.type='button';
+        const clear=el('button',tr('Очистить архив'),'am-inline-action am-quiet-button');clear.type='button';
         clear.addEventListener('click',()=>askClearDone(archiveBatches));
-        const controls=el('div',undefined,'am-archive-actions am-small am-muted');controls.append(clear);box.prepend(controls);
+        const controls=el('div',undefined,'am-archive-actions am-small');controls.append(clear);box.prepend(controls);
       }
     }
     swapChildren(live,box);
@@ -2531,11 +2531,13 @@
       group=null;const g=el('article',undefined,'am-message-group');const row=el('div',undefined,'am-message am-outgoing');
       const body=el('div',undefined,'am-message-body');const meta=el('div',undefined,'am-meta');
       if(provider)meta.append(messageAvatar(provider));
-      meta.append(messageAuthor(author,model?modelName(model):'',role));
+      if(author)meta.append(messageAuthor(author,model?modelName(model):'',role));
       if(role&&!taskSidebarPreview)meta.append(roleTag(role));
-      const content=el('div',undefined,'am-message-content');content.append(richText(text));body.append(meta,content);row.append(body);g.append(row);
+      if(author)body.append(meta);
+      const content=el('div',undefined,'am-message-content');content.append(richText(text));body.append(content);row.append(body);g.append(row);
       appendMessageTime(g,meta,at);out.push(g);
     };
+    const outgoingOwner=it=>outgoing(taskSidebarPreview?'':tr('Вы'),'',it.text,it.at);
     const outgoingCoordinator=it=>{
       const sender=shortNames[it.sender_agent];
       outgoing(sender||tr('Координатор'),sender?tr('координатор'):'',it.text,it.at,sender?it.sender_model:'',sender?it.sender_agent:'');
@@ -2564,9 +2566,9 @@
         continue;
       }
       if(it.kind!=='tool')flushTools();
-      if(it.kind==='task'){if(it.author==='owner')outgoing(tr('Вы'),'',it.text,it.at);else outgoingCoordinator(it);continue;}
-      if(it.kind==='note'){if(it.author==='coordinator')outgoingCoordinator(it);else outgoing(tr('Вы'),'',it.text,it.at);const c=out[out.length-1].querySelector('.am-message-content');c.append(delivery(...({pending:[tr('Исполнитель прочитает, только когда закончит текущий ход'),'am-status-wait'],delivered:[tr('Передано исполнителю'),'am-status-good'],sent:[it.author==='owner'?tr('Поставлено в очередь для исполнителя'):tr('Отправлено на компьютер исполнителя'),'am-status-wait'],undelivered:[tr('Не передано исполнителю'),'am-status-bad']}[it.state]||[it.state,'am-muted'])));continue;}
-      if(it.kind==='answer'){if(it.author==='owner'){outgoing(tr('Вы'),'',it.text,it.at);
+      if(it.kind==='task'){if(it.author==='owner')outgoingOwner(it);else outgoingCoordinator(it);continue;}
+      if(it.kind==='note'){if(it.author==='coordinator')outgoingCoordinator(it);else outgoingOwner(it);const c=out[out.length-1].querySelector('.am-message-content');c.append(delivery(...({pending:[tr('Исполнитель прочитает, только когда закончит текущий ход'),'am-status-wait'],delivered:[tr('Передано исполнителю'),'am-status-good'],sent:[it.author==='owner'?tr('Поставлено в очередь для исполнителя'):tr('Отправлено на компьютер исполнителя'),'am-status-wait'],undelivered:[tr('Не передано исполнителю'),'am-status-bad']}[it.state]||[it.state,'am-muted'])));continue;}
+      if(it.kind==='answer'){if(it.author==='owner'){outgoingOwner(it);
         // A hint about this answer lives under it while the worker has not
         // gone on yet, so it never stays in another task (owner, 2026-11-09).
         if(feed.items.slice(index+1).every(n=>n.kind==='answer'||n.kind==='note')&&activeStates.includes(t.state))out[out.length-1].querySelector('.am-message-content').append(delivery(tr('Ответ записан. Исполнитель продолжит в той же сессии.'),'am-delivery-hint'));}else outgoingCoordinator(it);continue;}

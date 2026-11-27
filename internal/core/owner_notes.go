@@ -4,7 +4,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -214,16 +216,27 @@ func ownerNoteItems(tx *sql.Tx, task string) ([]FeedItem, error) {
 		}
 		out = append(out, it)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// The fractional part of RFC3339Nano is variable-width.
+	sort.SliceStable(out, func(i, j int) bool {
+		first, _ := time.Parse(time.RFC3339Nano, out[i].At)
+		second, _ := time.Parse(time.RFC3339Nano, out[j].At)
+		return first.Before(second)
+	})
+	return out, nil
 }
 
 // mergeByTime puts each note before the first item that came after it.
 func mergeByTime(items, notes []FeedItem) []FeedItem {
 	for _, n := range notes {
 		at := len(items)
-		for i, it := range items {
-			if i > 0 && it.At > n.At {
-				at = i
+		sent, _ := time.Parse(time.RFC3339Nano, n.At)
+		for i, it := range items[1:] {
+			recorded, err := time.Parse(time.RFC3339Nano, it.At)
+			if err == nil && recorded.After(sent) {
+				at = i + 1
 				break
 			}
 		}
