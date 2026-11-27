@@ -923,3 +923,7 @@ Build 116 preserves the existing integrations so installed clients can update. T
 ## D-249 — Worker reply actions and default archive width
 
 The owner wants a worker reply to offer the same timestamp and full-message copy action as an outgoing message. Place the controls below the reply on the worker's side. Archive and Projects start at equal widths and retain their own saved widths. The revised Mac header remains a proposal.
+
+## D-250 — Put Projects below the Mac caption
+
+On a wide Mac window, place Projects one control gap below the task title bar. Keep the divider under the title and place an independent toggle for the computer and task sidebar at its top right. Closing the sidebar gives the width to the open task and preserves the archive state. Keep the existing stacked layout on narrow windows.

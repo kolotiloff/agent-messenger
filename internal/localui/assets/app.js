@@ -246,7 +246,7 @@
     const a=Date.parse(from),b=to?Date.parse(to):now;
     if(isNaN(a)||isNaN(b))return '';
     const m=Math.max(0,Math.round((b-a)/60000));
-    if(m<1)return tr('<1 мин');
+    if(m<1)return to?tr('<1 мин'):'1'+tr(' мин');
     if(m<60)return m+tr(' мин');
     const h=Math.floor(m/60);return h+tr(' ч')+(m%60?' '+m%60+tr(' мин'):'');
   }
@@ -363,7 +363,7 @@
     // It may run there with its replies lost, so neither «Работает» nor
     // «not accepted»: say what is known.
     if(t.remote?.unaccepted&&!t.remote.from&&t.state==='running'){
-      if(Date.now()-Date.parse(t.created_at)<5*60*1000)return [tr('Ждёт, когда «')+t.remote.name+tr('» примет'),'am-status-wait'];
+      if(Date.now()-Date.parse(t.created_at)<5*60*1000)return [tr('Ждёт, когда {computer} примет задачу').replace('{computer}',()=>t.remote.name),'am-status-wait'];
       return [tr('Нет ответа от «')+t.remote.name+'»','am-status-bad',tr('Приём не подтверждён. Задача может выполняться на удалённом компьютере, даже если ответы не доходят. Автоматической повторной отправки не будет.')];
     }
     switch(t.state){
@@ -1926,15 +1926,15 @@
     box.append(intro,steps);
     return box;
   }
-  function showComposerAccess(node,enabled,remote=false){
+  function showComposerAccess(node,enabled,remote=''){
     node.hidden=enabled==null&&!remote;
-    const label=remote?tr('Доступ на другом компьютере'):enabled?tr('Любые команды'):tr('Обычный доступ');
+    const label=remote?tr('Доступ задаётся на {computer}').replace('{computer}',()=>remote):enabled?tr('Любые команды'):tr('Обычный доступ');
     const detail=remote?tr('Разрешения задаются на компьютере исполнителя.'):enabled?label:tr('Используются обычные разрешения агента.');
-    node.classList.toggle('am-status-wait',!remote&&enabled===true);
+    node.classList.toggle('am-full-access',!remote&&enabled===true);
     node.title=node.hidden?'':detail;
     node.replaceChildren();
     if(node.hidden)return;
-    const icon=svgIcon(['M12 3 5 6v5c0 4 2.6 7.2 7 10 4.4-2.8 7-6 7-10V6z']);
+    const icon=svgIcon(['M12 2.25 3.75 6v5.25c0 4.5 3 7.5 8.25 10.5 5.25-3 8.25-6 8.25-10.5V6z']);
     node.append(icon,el('span',label));
   }
   function taskDraftComputers(name){
@@ -1973,7 +1973,7 @@
     projectOptions(modelSelect,models,model,draftSending||!models.length);
     const provider=model.split(':',1)[0];
     const agent=computer?.agents.find(a=>a.agent===provider);
-    showComposerAccess($('task-draft-access'),agent&&!computer.id?!!agent.full_access:null,!!(agent&&computer.id));
+    showComposerAccess($('task-draft-access'),agent&&!computer.id?!!agent.full_access:null,agent&&computer.id?(computer.name||tr('компьютере исполнителя')):'');
     const input=$('task-draft-text');
     input.readOnly=draftSending;
     $('task-draft-add').disabled=draftSending;
@@ -2926,7 +2926,7 @@
       const model=$('answer-model');
       model.textContent=displayModel;
       model.title=displayModel?taskModelDetail(t):'';
-      showComposerAccess($('answer-access'),!!t.full_access,!!(t.remote&&!t.remote.from));
+      showComposerAccess($('answer-access'),!!t.full_access,t.remote&&!t.remote.from?(t.remote.name||tr('компьютере исполнителя')):'');
       renderComposerTokens(t,displayModel,!compose.hidden);
       $('answer-context').hidden=!displayModel&&$('answer-tokens').hidden;
     }
@@ -4451,6 +4451,26 @@
     const bridge=window.webkit?.messageHandlers?.titlebar;
     if(!window.amMacTitlebar||!bridge)return;
     document.body.classList.add('am-mac-titlebar');
+    const sidebar=root.querySelector('.am-sidebar');
+    const toolbar=root.querySelector('.am-task-toolbar');
+    let navToggle;
+    if(taskSidebarPreview&&toolbar){
+      sidebar.id='computer-sidebar';
+      navToggle=$('list-toggle').cloneNode(true);
+      navToggle.id='computer-sidebar-toggle';
+      navToggle.hidden=false;
+      navToggle.setAttribute('aria-controls',sidebar.id);
+      const setExpanded=expanded=>{
+        root.classList.toggle('am-nav-collapsed',!expanded);
+        navToggle.setAttribute('aria-expanded',String(expanded));
+        const label=expanded?tr('Скрыть список компьютеров'):tr('Показать список компьютеров');
+        navToggle.title=label;
+        navToggle.setAttribute('aria-label',label);
+      };
+      setExpanded(true);
+      navToggle.addEventListener('click',()=>setExpanded(navToggle.getAttribute('aria-expanded')!=='true'));
+      sidebar.before(navToggle);
+    }
     const box=r=>[r.left,r.top,r.width,r.height].map(Math.round);
     let last='',queued=false;
     const send=()=>{
@@ -4462,10 +4482,12 @@
         if(taskSidebarPreview&&tab==='tasks'){
           const main=root.querySelector('.am-main'),r=main.getBoundingClientRect();
           const height=parseFloat(getComputedStyle(main).paddingBlockStart);
-          zones.push(new DOMRect(r.left,0,r.width,height));
+          const bar=toolbar?.getBoundingClientRect();
+          zones.push(bar?.width&&matchMedia('(min-width:621px)').matches?bar:new DOMRect(r.left,0,r.width,height));
         }else if(tabs&&tabs.offsetParent){const r=tabs.getBoundingClientRect();zones.push(new DOMRect(r.left,0,r.width,r.bottom));}
         if(side){const r=side.getBoundingClientRect(),first=side.firstElementChild?.getBoundingClientRect();zones.push(new DOMRect(r.left,r.top,r.width,Math.max(16,(first?first.top:r.top+40)-r.top)));}
-        for(const parent of [tabs,side])for(const node of parent?parent.querySelectorAll(titleInteractive):[]){
+        if(navToggle?.offsetWidth)holes.push(navToggle.getBoundingClientRect());
+        for(const parent of [tabs,side,toolbar])for(const node of parent?parent.querySelectorAll(titleInteractive):[]){
           const r=node.getBoundingClientRect();
           if(r.width&&r.height&&zones.some(z=>r.left<z.right&&r.right>z.left&&r.top<z.bottom&&r.bottom>z.top))holes.push(r);
         }
@@ -4475,7 +4497,9 @@
     };
     const later=()=>{if(!queued){queued=true;requestAnimationFrame(send);}};
     new ResizeObserver(later).observe(document.documentElement);
-    for(const node of document.querySelectorAll('.am-tabs,.am-sidebar'))new MutationObserver(later).observe(node,{childList:true,subtree:true,attributes:true});
+    if(toolbar)new ResizeObserver(later).observe(toolbar);
+    if(navToggle)new MutationObserver(later).observe(navToggle,{attributeFilter:['aria-expanded']});
+    for(const node of document.querySelectorAll('.am-tabs,.am-sidebar,.am-task-toolbar'))new MutationObserver(later).observe(node,{childList:true,subtree:true,attributes:true});
     const modalObserver=new MutationObserver(later);
     for(const dialog of root.querySelectorAll('dialog'))modalObserver.observe(dialog,{attributeFilter:['open']});
     addEventListener('resize',later);

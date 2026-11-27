@@ -60,6 +60,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-check:light-dark(#287bd7,#67aaf9);
   --am-good:light-dark(#237449,#8ccda6);
   --am-bad:light-dark(#b42318,#f28b82);
+  --am-full-access:color-mix(in srgb,var(--am-bad) 65%,var(--am-muted));
   --am-run:light-dark(#287bd7,#67aaf9);
   --am-update-arrow:light-dark(#815305,#f2c65b);
   --am-update-hover:color-mix(in srgb,var(--am-update-arrow) 20%,transparent);
@@ -719,7 +720,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-draft-options [aria-controls="task-draft-model-menu"] { margin-inline-start:auto; }
 #am-concept .am-answer-context { display:flex; align-items:center; justify-content:flex-end; gap:var(--am-gap-control); padding-inline:var(--am-space-2); margin-block-start:var(--am-space-2); }
 #am-concept .am-compose-access { display:flex; align-items:center; width:fit-content; max-width:100%; gap:var(--am-space-1); margin-block-end:var(--am-space-2); padding-inline:var(--am-space-2); color:var(--am-muted); }
-#am-concept .am-compose-access.am-status-wait { color:var(--am-wait); }
+#am-concept .am-compose-access.am-full-access { color:var(--am-full-access); }
 #am-concept .am-compose-access > svg { width:var(--am-space-4); height:var(--am-space-4); flex:none; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
 #am-concept :is(.am-answer-context > #answer-model,.am-compose-access > span) { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #am-concept .am-token-indicator { flex:none; width:var(--am-button-height); padding:0; border-radius:50%; color:var(--am-muted); }
@@ -1097,6 +1098,25 @@ body.am-frameless #am-concept.am-task-sidebar-preview .am-window-controls #list-
 }
 body.am-mac-titlebar #am-concept .am-sidebar { padding-top:calc(var(--am-space-4) + var(--am-mac-titlebar)); }
 body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-sidebar { user-select:none; }
+
+#am-concept #computer-sidebar-toggle { display:none; }
+@media (min-width:621px) {
+  body.am-mac-titlebar #am-concept.am-task-sidebar-preview .am-shell { position:relative; --am-nav-rail:min(var(--am-nav),46%); }
+  body.am-mac-titlebar #am-concept.am-task-sidebar-preview .am-sidebar { padding-block-start:calc(var(--am-caption-height) + var(--am-space-2)); }
+  body.am-mac-titlebar #am-concept.am-task-sidebar-preview .am-computers { border-block-start:0; }
+  body.am-mac-titlebar #am-concept.am-task-sidebar-preview .am-task-toolbar { min-height:var(--am-caption-height); padding-block:0; }
+  #am-concept #computer-sidebar-toggle {
+    display:inline-flex; position:absolute; z-index:3;
+    inset-block-start:calc((var(--am-caption-height) - var(--am-control-compact)) / 2);
+    inset-inline-start:calc(var(--am-nav-rail) - var(--am-gap-content) - var(--am-control-compact));
+  }
+  #am-concept #computer-sidebar-toggle svg { transform:scaleX(-1); }
+  body.am-mac-titlebar #am-concept.am-nav-collapsed .am-shell { grid-template-columns:minmax(0,1fr); }
+  #am-concept.am-nav-collapsed .am-sidebar { display:none; }
+  #am-concept.am-nav-collapsed #computer-sidebar-toggle { inset-inline-start:var(--am-mac-caption-reserve); }
+  #am-concept.am-nav-collapsed .am-task-toolbar { padding-inline-start:calc(var(--am-mac-caption-reserve) + var(--am-control-compact) + var(--am-gap-content)); }
+  body.am-mac-titlebar #am-concept { --am-mac-caption-reserve:calc(3 * var(--am-control-compact)); }
+}
 
 /* T-068 statistics: one neutral ink for every bar, so no bar reads as a
    status; names and numbers sit beside the bars in text colors. */

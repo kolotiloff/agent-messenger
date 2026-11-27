@@ -58,6 +58,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             } else { fatalLaunch("Другое окно Kotel уже запускается. Откройте его через Dock.") }
             return
         }
+        if let icon = Bundle.main.url(forResource: "KotelIcon", withExtension: "icns").flatMap(NSImage.init(contentsOf:)) {
+            NSApp.applicationIconImage = icon
+        }
         applyTheme(UserDefaults.standard.string(forKey: "appearance") ?? "system")
         buildMenu()
         let config = WKWebViewConfiguration()

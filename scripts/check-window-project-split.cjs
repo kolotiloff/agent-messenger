@@ -80,10 +80,14 @@ if (require.main === module) (async()=>{
   async function open(available,viewport,colorScheme,beforeReply=()=>{},preview=false,desktop='mac'){
     const context=await browser.newContext({viewport,deviceScaleFactor:1,colorScheme,locale:'ru-RU'});
     await context.addInitScript(({scheme,desktop})=>{
-      window.amDesktop=desktop;window.messengerInitialTheme=scheme;
+      window.amDesktop=desktop==='mac-titlebar'?'mac':desktop;window.messengerInitialTheme=scheme;
       if(desktop==='windows'){window.amFrameless=true;window.amWindow=()=>{};}
       window.nativeAppMessages=[];
       window.webkit={messageHandlers:{app:{postMessage:message=>window.nativeAppMessages.push(message)}}};
+      if(desktop==='mac-titlebar'){
+        window.amMacTitlebar=true;
+        window.webkit.messageHandlers.titlebar={postMessage:geometry=>{window.titlebarGeometry=geometry;}};
+      }
     },{scheme:colorScheme,desktop});
     const page=await context.newPage();
     page.setDefaultTimeout(6500);
@@ -315,7 +319,12 @@ if (require.main === module) (async()=>{
       assert(Math.abs(await verticalCenter(text)-await verticalCenter(control))<1);
     };
     const queued=makeTask('queued-task','tools','codex','Следующая проверка',1,{started_at:null,pending_launch:true,worker_observed:false,remote:pc1});
+    const justStarted=new Date().toISOString();
     const draftPage=await open(projects,{width:1150,height:770},'dark',(url,p)=>{
+      if(p==='game'&&url.pathname==='/api/window'){
+        const window=reply(url,p,projects);
+        return {json:{...window,tasks:window.tasks.map(t=>({...t,full_access:!t.remote,started_at:t.id==='game-1'?justStarted:t.started_at}))}};
+      }
       if(p==='tools'&&['/api/window','/api/project-activity'].includes(url.pathname)){
         const showCodex=!url.searchParams.get('agent')||url.searchParams.get('agent')==='codex';
         return {json:{...reply(url,p,projects),tasks:[...tasks.tools,queued,...(showCodex?[toolDone]:[])],shared:[toolShared],history_paged:true,history_next:showCodex?toolDone.id:''}};
@@ -355,6 +364,27 @@ if (require.main === module) (async()=>{
       });
       const replyModelStyle=await labelStyle(draftPage.locator('#answer-model'));
       const replyAccess=draftPage.locator('#answer-access');
+      await replyAccess.getByText('Любые команды',{exact:true}).waitFor();
+      assert.equal(await local.locator('.am-sidebar-task').filter({hasText:'Экран настроек'}).locator('[data-elapsed-from]').textContent(),', 1 мин');
+      await expectCentered(replyAccess.locator('svg'),replyAccess.locator('span'));
+      for(const theme of ['light','dark']){
+        const colors=await replyAccess.evaluate((node,theme)=>{
+          const root=document.documentElement,original=root.dataset.theme;
+          root.dataset.theme=theme;
+          try{
+            const ctx=document.createElement('canvas').getContext('2d');
+            const rgb=value=>{ctx.fillStyle=value;ctx.fillRect(0,0,1,1);return [...ctx.getImageData(0,0,1,1).data].slice(0,3);};
+            const style=getComputedStyle(node),text=rgb(style.color);
+            return {text,stroke:rgb(getComputedStyle(node.querySelector('svg')).stroke),bg:rgb(getComputedStyle(node.closest('.am-window')).backgroundColor)};
+          }finally{root.dataset.theme=original;}
+        },theme);
+        assert.deepEqual(colors.stroke,colors.text);
+        assert(colors.text[0]>colors.text[1]+35&&colors.text[0]>colors.text[2]+35,'muted red for full access');
+        const luminance=rgb=>rgb.map(channel=>channel/255).map(c=>c<=.04045?c/12.92:((c+.055)/1.055)**2.4)
+          .reduce((sum,c,i)=>sum+c*[.2126,.7152,.0722][i],0);
+        const [dark,light]=[luminance(colors.text),luminance(colors.bg)].sort((a,b)=>a-b);
+        assert((light+.05)/(dark+.05)>=4.5,'readable access label in '+theme);
+      }
       const accessAbove=access=>access.evaluate(node=>{
         const rect=node.getBoundingClientRect();
         const field=node.nextElementSibling.getBoundingClientRect();
@@ -748,7 +778,7 @@ if (require.main === module) (async()=>{
       assert.equal(await form.locator('textarea').inputValue(),'/fictional/project/notes.txt');
       await form.locator('textarea').fill('');
       await select(draftPage,'task-draft-computer','ПК-1');
-      assert.equal(await form.locator('#task-draft-access').textContent(),'Доступ на другом компьютере');
+      assert.equal(await form.locator('#task-draft-access').textContent(),'Доступ задаётся на ПК-1');
       await addPath.click();
       assert.equal(await pathMenu.getByRole('button',{name:'Выбрать файл…'}).isVisible(),false);
       assert.equal(await pathMenu.getByRole('textbox').isVisible(),false);
@@ -817,7 +847,7 @@ if (require.main === module) (async()=>{
       await ownerMessage.getByRole('status').getByText('Скопировано',{exact:true}).waitFor();
       assert.equal(await draftPage.evaluate(()=>window.testCopiedMessage),directTask.title);
       await draftPage.locator('#answer-text').fill('Уточнение исполнителю');
-      assert.equal(await draftPage.locator('#answer-access').textContent(),'Доступ на другом компьютере');
+      assert.equal(await draftPage.locator('#answer-access').textContent(),'Доступ задаётся на ПК-1');
       assert.equal(await accessAbove(replyAccess),true);
       await draftPage.locator('#answer-add').click();
       assert.equal(await pathMenu.getByRole('button',{name:'Выбрать файл…'}).isVisible(),false);
@@ -973,6 +1003,35 @@ if (require.main === module) (async()=>{
       await shared.click();
       await draftPage.locator('#thread').getByText('Общий результат',{exact:true}).waitFor();
     }finally{await draftPage.close();}
+
+    const mac=await open(projects,{width:1040,height:780},'dark',(url,p)=>{
+      if(p!=='game'||!['/api/window','/api/project-activity'].includes(url.pathname))return;
+      const view=reply(url,p,projects);
+      return {json:{...view,tasks:view.tasks.map(t=>t.id==='game-2'?{...t,state:'running',created_at:iso(0),remote:{...pc2,unaccepted:true}}:t)}};
+    },true,'mac-titlebar');
+    try{
+      const toolbar=mac.locator('.am-task-toolbar'),projectsRow=mac.locator('.am-project'),nav=mac.locator('#computer-sidebar-toggle');
+      const box=await toolbar.boundingBox(),row=await projectsRow.boundingBox(),control=await nav.boundingBox();
+      assert.match(await mac.locator('.am-sidebar-task').filter({hasText:'Проверка навигации'}).textContent(),/Ждёт, когда ПК-2 примет задачу/);
+      assert.equal(box.height,44);
+      assert.equal(row.y-(box.y+box.height),8);
+      assert.equal(control.y+control.height/2,box.y+box.height/2);
+      assert.equal(await mac.locator('.am-computers').evaluate(n=>getComputedStyle(n).borderBlockStartWidth),'0px');
+      await mac.waitForFunction(()=>window.titlebarGeometry?.holes.some(([x,y,w,h])=>{
+        const r=document.querySelector('#computer-sidebar-toggle').getBoundingClientRect();
+        return x===Math.round(r.x)&&y===Math.round(r.y)&&w===r.width&&h===r.height;
+      }));
+      await mac.locator('#list-toggle').click();
+      const archive=mac.locator('#task-panel');
+      await archive.waitFor();
+      await nav.press('Enter');
+      assert.equal(await projectsRow.isVisible(),false);
+      assert.equal(await nav.getAttribute('aria-expanded'),'false');
+      assert(await archive.isVisible());
+      assert((await toolbar.boundingBox()).width>box.width);
+      await nav.press('Space');
+      assert.deepEqual(await projectsRow.boundingBox(),row);
+    }finally{await mac.close();}
 
     const windows=await open(projects,{width:1040,height:780},'dark',()=>{},true,'windows');
     try{

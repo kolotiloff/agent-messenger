@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-341 Mac sidebar, access labels and installed icons)
+
+Placed Projects on the second row and added an independent computer sidebar toggle on the native Mac title bar. Chromium and WebKit exercised the caption bridge geometry, keyboard operation and archive independence with fictional tasks. Updated access text and shield styling in both composers, the first live minute, and the pending peer acceptance text. Changed the Mac bundle icon resource, Linux launcher icon and Windows shortcut refresh. Verified the Mac bundle's signature and icon resource. Installed desktop icon refresh still needs observation on each OS.
+
 ## 2026-11-27 — Codex (T-340 direct chat and sidebar)
 
 Added the existing message footer to worker replies. The copy action uses the reply's full source text. An expanded progress section and the delivery status stay separate from that text.
