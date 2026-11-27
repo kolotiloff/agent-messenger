@@ -2,6 +2,14 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (1.0.12 release)
+
+Published [1.0.12, build 115](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.12-preview.115) from `de265537fdea48361593f9efa4a0af86a1c674ea` after merging [PR #228](https://github.com/kolotiloff/agent-messenger/pull/228). All four [release jobs](https://github.com/kolotiloff/agent-messenger/actions/runs/45927077746) passed, including the public signed upgrade path from 0.99 on five targets. Verified the public tag and all 22 uploaded files. No real agents ran during verification.
+
+## 2026-11-27 — Codex (T-332 completion in the window preview)
+
+Confirmed that a completed task moves from Projects to Archive while its conversation and report stay open. The loopback fixture now advances the task revision after a follow-up, so the displayed archive conversation shows that message immediately. Local and remote continuation tests passed, and the native Mac bridge smoke confirmed reopening keeps the queue without starting a second client.
+
 ## 2026-11-27 — Codex (T-326–T-332 final window checks)
 
 Rechecked the shared spacing scale, pane dividers, list and chat alignment, settings, dialogs, and menus in both themes. The same loopback preview was checked at 600, 1100 and 1440 px. All seven window checks passed on Chromium and WebKit. Targeted usage and efficiency tests passed, including partial historical telemetry, reviewed-task rates and remote attribution. The browser checks exercised the project, computer, agent, model and period filters. Real model runs in the installed application remain outside this verification.
