@@ -914,4 +914,4 @@ Open Settings at General, followed by Project, Agents and Server. Project and ag
 
 Use Kotel in the window, documentation and distribution labels. Keep the existing Ed25519 key, platform bundle and program paths, database directories, broker protocol, active-run registry and MCP keys. This allows mixed-version operation and preserves custom integration commands. Use the original GitHub repository ID for update discovery. A repository rename follows an explicit inventory of every installation running the bridge and the owner's command. The download names for both brands are byte-identical for each binary. Apply release corrections as a higher signed build.
 
-The owner approved the rounded golden tile with a black pot, detached lid and solid right-facing pupils. The window, platform packages and repository use this artwork.
+The owner approved the rounded golden tile with a black pot, tilted lid raised on the right and solid right-facing pupils. The window, platform packages and repository use this artwork.

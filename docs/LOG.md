@@ -4,7 +4,7 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-27 — Codex (T-337 Kotel bridge)
 
-Integrated the T-336 interface and the owner-approved Kotel pot artwork, branded the window and downloads, retained the installed application identities, and bound release discovery to the original repository ID. Checked the packaged Mac window and the Chromium and WebKit suites. Active local Codex workers can report a measured context snapshot. Claude, Cursor and remote workers retain a neutral ring when only cumulative usage is available.
+Integrated the T-336 interface and the Kotel pot artwork with a raised lid and widely spaced eyes, branded the window and downloads, retained the installed application identities, and bound release discovery to the original repository ID. Checked the packaged Mac window and the Chromium and WebKit suites. Active local Codex workers can report a measured context snapshot. Claude, Cursor and remote workers retain a neutral ring when only cumulative usage is available.
 
 ## 2026-11-27 — Codex (T-336 settings order)
 
