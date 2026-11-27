@@ -48,11 +48,13 @@
     }
     // A modal dialog makes outside nodes inert, even top-layer popovers.
     // Keep its menus inside the dialog so pointer and keyboard input reach them.
+    // The native light-dismiss algorithm must recognize a second click on its invoker.
+    trigger.setAttribute('popovertarget',menu.id);
     trigger.setAttribute('aria-controls',menu.id);select.after(trigger);(select.closest('dialog')||root).append(menu);select.hidden=true;
     select.labels[0]?.addEventListener('click',event=>{event.preventDefault();trigger.focus();});
     let options=[];
     const isOpen=()=>menu.matches(':popover-open');
-    function close(restore=false){if(isOpen())menu.hidePopover();if(restore)trigger.focus();}
+    function close(restore=false){if(isOpen())menu.hidePopover();trigger.setAttribute('aria-expanded','false');if(restore)trigger.focus();}
     function renderLabel(node,option){
       const label=option?.textContent||tr('Нет данных');
       const effort=searchable&&option?.value.match(/\[effort=([a-z]+)\]$/)?.[1];
@@ -83,7 +85,7 @@
         if(keyboard)row?.focus({preventScroll:true});else menu.focus({preventScroll:true});
       }
     }
-    trigger.addEventListener('click',()=>isOpen()?close():open());
+    trigger.addEventListener('click',event=>{event.preventDefault();if(isOpen())close();else open();});
     trigger.addEventListener('keydown',event=>{if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)){event.preventDefault();open(true);if(search)return;if(event.key==='Home')options[0]?.focus();if(event.key==='End')options.at(-1)?.focus();}});
     menu.addEventListener('keydown',event=>{
       if(event.key==='Escape'){event.preventDefault();close(true);return;}
@@ -1657,7 +1659,7 @@
     const live=$('task-list'),box=live.cloneNode(false);
     // While another project loads, its rows stay in place but cannot be
     // chosen, so the list does not collapse and grow again.
-    if(view?.project!==project){if(!live.childElementCount)$('task-count').textContent='';live.inert=true;live.setAttribute('aria-busy','true');return;}
+    if(view?.project!==project){if(!live.childElementCount)$('task-count').textContent='';$('archive-clear').disabled=true;live.inert=true;live.setAttribute('aria-busy','true');return;}
     live.inert=false;live.removeAttribute('aria-busy');
     // T-096: say when the agent filter hides active tasks, with a way back.
     const agentChosen=$('agent-filter').value;
@@ -1803,11 +1805,10 @@
     if(taskSidebarPreview){
       $('task-count').textContent=archived||'';
       if(!box.childElementCount)box.append(el('p',tr('В архиве пока нет задач'),'am-small am-muted'));
-      if(archived){
-        const clear=el('button',tr('Очистить архив'),'am-inline-action');clear.type='button';
-        clear.addEventListener('click',()=>askClearDone(archiveBatches));
-        const controls=el('div',undefined,'am-archive-actions am-small');controls.append(clear);box.prepend(controls);
-      }
+      const clear=$('archive-clear');
+      clear.hidden=false;
+      clear.disabled=!archived;
+      clear.onclick=archived?()=>askClearDone(archiveBatches):null;
     }
     swapChildren(live,box);
   }
@@ -2144,7 +2145,7 @@
       $('answer-token-menu').hidePopover();
       $('compose').hidden=true;$('lost-bar').hidden=true;$('to-bottom').hidden=true;
       if(thread.dataset.draft!=='true'){
-        thread.dataset.draft='true';thread.replaceChildren();thread.setAttribute('aria-busy','false');
+        thread.dataset.draft='true';$('conversation-date').hidden=true;thread.replaceChildren();thread.setAttribute('aria-busy','false');
         head.replaceChildren(conversationTitle(tr('Новая задача')));
         feedShown='';feedSignature='';
       }
@@ -2186,6 +2187,7 @@
   }
   function showWelcome(){noteWelcomeDone();return !welcomeDone;}
   function showPane(thread,kind){
+    $('conversation-date').hidden=true;
     if(kind!=='welcome'&&thread.firstElementChild?.dataset.pane===kind&&thread.childElementCount===1)return;
     let pane;
     if(kind==='welcome')pane=welcome();
@@ -2212,17 +2214,17 @@
     heading.title=title;
     return heading;
   }
-  function conversationDate(t){
+  function showConversationDate(t){
     let at=Date.parse(t.created_at);
     if(!Number.isFinite(at))at=Date.parse(t.started_at);
-    const date=el('time',undefined,'am-small am-muted am-chat-date');
-    if(!Number.isFinite(at)){date.hidden=true;return date;}
+    const date=$('conversation-date');
+    date.hidden=!Number.isFinite(at);
+    if(date.hidden)return;
     const day=new Date(at);
     const options={weekday:'short',day:'numeric',month:'short'};
     if(day.getFullYear()!==new Date().getFullYear())options.year='numeric';
     date.dateTime=day.toISOString();
     date.textContent=day.toLocaleDateString(amLocale,options)+tr(' в ')+day.toLocaleTimeString(amLocale,{hour:'2-digit',minute:'2-digit'});
-    return date;
   }
   function sharedTaskHeader(t,p){
     const title=el('div',undefined,'am-task-head');title.append(el('h3',t.title));
@@ -2247,7 +2249,7 @@
     else box.append(el('p',tr('Отчёта пока нет.'),'am-muted'));
     box.append(el('p',tr('Полная история задачи — в окне компьютера «')+p.name+tr('». Здесь её можно только посмотреть.'),'am-small am-muted'));
     thread.replaceChildren(box);
-    if(taskSidebarPreview)thread.prepend(conversationDate(t));
+    if(taskSidebarPreview)showConversationDate(t);
     $('compose').hidden=true;$('lost-bar').hidden=true;
   }
   function roleTag(text){return el('span',text,'am-role');}
@@ -2544,7 +2546,6 @@
   function openPicture(list,at){
     viewer.list=list;viewerShow(at);
     const d=$('picture-dialog');if(!d.open)d.showModal();
-    $('picture-close').focus();
   }
   async function copyPicture(){
     const img=$('picture-image'),button=$('picture-copy'),status=$('picture-copy-status');
@@ -2893,7 +2894,7 @@
     flushTools();
     if(taskSidebarPreview){
       for(const [article,message] of workerMessages)appendMessageTime(article,null,message.at,message.parts.join('\n\n'));
-      out.unshift(conversationDate(t));
+      showConversationDate(t);
       if(quiet)out.push(quiet);
     }
     head.replaceChildren(header);

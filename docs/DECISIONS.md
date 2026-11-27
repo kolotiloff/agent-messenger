@@ -927,3 +927,7 @@ The owner wants a worker reply to offer the same timestamp and full-message copy
 ## D-250 — Put Projects below the Mac caption
 
 On a wide Mac window, place Projects one control gap below the task title bar. Keep the divider under the title and place an independent toggle for the computer and task sidebar at its top right. Closing the sidebar gives the width to the open task and preserves the archive state. Keep the existing stacked layout on narrow windows.
+
+## D-251 — Align the project and archive controls
+
+Extend the Mac caption divider over the Projects sidebar. Use the common 16 px section inset for both Mac sidebar header rows. Keep the archive header on its pane background without a divider below it. Keep the conversation date centered above the scrolling history. Place the archive clear icon beside the agent filter and identify the scope and history retention in the existing confirmation dialog.

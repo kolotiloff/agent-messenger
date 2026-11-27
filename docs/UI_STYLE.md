@@ -18,7 +18,7 @@ Scale: 4, 8, 12, 16, 24 (`--am-space-1/2/3/4/6`). Pick the gap by meaning:
 |---|---:|---:|
 | Composer shell | 4 px | 4 px |
 | Computer headings, active task rows, statistics task links and efficiency model rows | 4 px | 12 px, with a 36 px leading inset on active tasks to align the titles |
-| Archive rows and compact notices | 8 px | 12 px |
+| Compact notices | 8 px | 12 px |
 | Report cards, expanded efficiency details and outgoing message bubbles | 12 px | 12 px |
 | Popover menus | 8 px | 8 px |
 | Settings cards | 16 px | 16 px |
@@ -37,6 +37,8 @@ Buttons that belong together go in one container: `.am-actions` (a row) or `.am-
 | `--am-radius-s` | 8 | buttons, fields, list rows, menu options, small boxes |
 | `--am-radius-m` | 12 | cards, panels, notices, menus, error chips, the window |
 | `--am-radius-l` | 16 | dialogs, the composer, message bubbles |
+
+In the wide task window, Projects and Archive use the section inset (`--am-gap-section`, 16 px). The Mac caption divider runs across both panels. The archive header sits directly on its pane surface, with the clear icon beside the agent filter. Both filters use the shared select styles. Active and archived task rows use the same 4 px vertical and 12 px horizontal padding. The active tree adds a 24 px leading indent to align the title with its computer. Task rows use the soft surface on hover and the quieter task selection fill for the current conversation. Author labels sit one control gap (8 px) above their messages.
 
 The composer keeps its surface radius (16 px) at every height. The inset icon controls use the next smaller radius (12 px). Ordinary buttons, one-line inputs and selector triggers share the compact control height (28 px) in the current window layout.
 

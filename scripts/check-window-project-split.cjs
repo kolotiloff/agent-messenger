@@ -151,7 +151,7 @@ if (require.main === module) (async()=>{
       if(url.searchParams.get('id')==='game-1')return sameFeed.response;
       if(url.searchParams.get('id')==='tools-1')return otherFeed.response;
     },true);
-    const thread=preview.locator('#thread'),chatDate=thread.locator(':scope > time.am-chat-date:first-child');
+    const thread=preview.locator('#thread'),chatDate=preview.locator('#conversation-date');
     const oldDate=await chatDate.getAttribute('datetime');
     const sameDate=tasks.game.find(t=>t.id==='game-1').created_at;
     const otherDate=tasks.tools.find(t=>t.id==='tools-1').created_at;
@@ -255,7 +255,7 @@ if (require.main === module) (async()=>{
       assert.equal(await tokenMenu.locator('#answer-context-summary').textContent(),'Контекстное окно нет данных');
       await preview.keyboard.press('Escape');
       assert.equal(await composerBottom(),initialComposerBottom);
-      await thread.locator(':scope > time.am-chat-date:first-child[datetime="'+sameDate+'"]').waitFor();
+      await preview.locator('#conversation-date[datetime="'+sameDate+'"]').waitFor();
       await sidebarTask('Экспорт отчёта').click();
       await expectPrevious(sameDate);
       const requestedFeed=preview.waitForRequest(req=>new URL(req.url()).searchParams.get('id')==='tools-1');
@@ -741,10 +741,11 @@ if (require.main === module) (async()=>{
       await form.waitFor({state:'hidden'});
       await chat(draftPage,'tools').waitFor();
       assert.equal(await plus.getAttribute('aria-expanded'),'false');
-      assert.equal(await draftPage.locator('#thread > time.am-chat-date:first-child').count(),1);
+      assert(await draftPage.locator('#conversation-date').isVisible());
       assert.equal(await draftPage.locator('#task-head time').count(),0);
       await select(draftPage,'project-select','Все');
       await plus.click();
+      assert.equal(await draftPage.locator('#conversation-date').isVisible(),false);
       const modelTrigger=form.getByRole('button',{name:'Модель',exact:true});
       assert.equal(await modelTrigger.evaluate(node=>{
         const context=node.closest('.am-draft-options'),field=context.previousElementSibling;
@@ -873,31 +874,57 @@ if (require.main === module) (async()=>{
         const projects=rect('.am-project'),heading=rect('#task-list-heading');
         return {
           matchesWorkspace:[bounds.top-toolbar.bottom,main.bottom-bounds.bottom,main.right-bounds.right],
-          headerLine:[header.left-bounds.left-panel.clientLeft,bounds.right-header.right],
-          fields:[heading.left-bounds.left-panel.clientLeft,bounds.right-filter.right,projects.left-aside.left,aside.right-projects.right-1],
+          headerEdges:[header.left-bounds.left-panel.clientLeft,bounds.right-header.right],
+          fields:[heading.left-bounds.left-panel.clientLeft,bounds.right-rect('#archive-clear').right,projects.left-aside.left,aside.right-projects.right-1],
           controls:[filter.height,rect('#project-select + .am-select-trigger').height],
           toolbar:[toolbar.left-main.left,main.right-toolbar.right,toolbar.bottom-rect('.am-computers').top-1],
           rowAlignment:[header.top-bounds.top,filter.top-header.top],
         };
       });
       assert.deepEqual(await archiveGeometry(),{
-        matchesWorkspace:[0,0,0],headerLine:[0,0],fields:[12,12,12,12],controls:[28,28],toolbar:[0,0,0],rowAlignment:[0,12],
+        matchesWorkspace:[0,0,0],headerEdges:[0,0],fields:[16,16,16,16],controls:[28,28],toolbar:[0,0,0],rowAlignment:[0,16],
       });
       assert.equal(await archive.locator('#task-list-heading').textContent(),'Архив');
+      for(const theme of ['light','dark']){
+        const styles=await draftPage.evaluate(async theme=>{
+          const doc=document.documentElement,old=doc.dataset.theme;
+          doc.dataset.theme=theme;
+          try{
+            const controls=['#project-column-first button','#agent-filter + button'].map(sel=>document.querySelector(sel));
+            await Promise.all(controls.flatMap(n=>n.getAnimations().map(a=>a.finished)));
+            return controls.map(n=>{
+              const style=getComputedStyle(n);
+              return [style.backgroundColor,style.color,style.borderColor];
+            });
+          }finally{doc.dataset.theme=old;}
+        },theme);
+        assert.deepEqual(styles[0],styles[1]);
+      }
       const clearArchive=archive.getByRole('button',{name:'Очистить архив',exact:true});
-      const [leftOffset,height,background]=await clearArchive.evaluate(node=>{
-        const firstRow=node.closest('#task-list').querySelector('.am-archive-task');
-        const box=node.getBoundingClientRect();
-        return [box.left-firstRow.getBoundingClientRect().left,box.height,getComputedStyle(node).backgroundColor];
-      });
-      assert.equal(leftOffset,0);
-      assert.equal(height,28);
-      assert.notEqual(background,'rgba(0, 0, 0, 0)');
-      await clearArchive.hover();
-      assert.notEqual(await clearArchive.evaluate(async node=>{
-        await Promise.all(node.getAnimations().map(animation=>animation.finished));
-        return getComputedStyle(node).backgroundColor;
-      }),background);
+      for(const id of ['project-select','agent-filter']){
+        const trigger=draftPage.locator('[aria-controls="'+id+'-menu"]'),menu=draftPage.locator('#'+id+'-menu');
+        await trigger.click();
+        await menu.waitFor();
+        await trigger.click();
+        await menu.waitFor({state:'hidden'});
+        assert.equal(await trigger.getAttribute('aria-expanded'),'false');
+        await trigger.press('ArrowDown');
+        await menu.waitFor();
+        await draftPage.keyboard.press('Escape');
+        await menu.waitFor({state:'hidden'});
+      }
+      const clearBox=await clearArchive.boundingBox(),filterBox=await archive.locator('.am-select-trigger').boundingBox();
+      assert.equal(clearBox.x-filterBox.x-filterBox.width,8);
+      assert.equal(clearBox.y,filterBox.y);
+      assert.equal(clearBox.width,28);
+      assert.equal(clearBox.height,28);
+      assert.equal(await clearArchive.locator('svg').count(),1);
+      assert.deepEqual(await archive.locator('.am-queue-header').evaluate(n=>{
+        const s=getComputedStyle(n);
+        return [s.borderBottomWidth,s.backgroundColor,s.paddingBlockStart,s.paddingBlockEnd,s.paddingInlineStart,s.paddingInlineEnd];
+      }),['0px','rgba(0, 0, 0, 0)','16px','16px','16px','16px']);
+      const hides=()=>seen.filter(req=>['/api/task-hide','/api/task-hide-history'].includes(req.path)).length;
+      const initialHides=hides();
       await clearArchive.click();
       await draftPage.getByText('Очистить архив?',{exact:true}).waitFor();
       assert.deepEqual(await draftPage.locator('#confirm-dialog').evaluate(dialog=>{
@@ -907,6 +934,7 @@ if (require.main === module) (async()=>{
         return [text.top-title.bottom,actions.top-text.bottom];
       }),[12,12]);
       await draftPage.getByRole('button',{name:'Отмена',exact:true}).click();
+      assert.equal(hides(),initialHides);
       const headingStyles=()=>draftPage.evaluate(()=>{
         return ['#project-heading','#task-head > h3','#task-list-heading'].map(selector=>{
           const heading=document.querySelector(selector),style=getComputedStyle(heading);
@@ -937,7 +965,16 @@ if (require.main === module) (async()=>{
       await archive.getByText('Игра, Звуки меню',{exact:true}).waitFor();
       const row=archive.locator('.am-task').filter({hasText:'Звуки меню'});
       await row.waitFor();
-      assert.equal(await row.evaluate(node=>getComputedStyle(node).padding),'8px 12px');
+      assert.equal(await row.evaluate(node=>getComputedStyle(node).padding),'4px 12px');
+      for(const rowSelector of ['.am-archive-task','.am-sidebar-task']){
+        await draftPage.waitForFunction(selector=>{
+          const row=document.querySelector(selector),panel=row?.closest('aside');
+          if(!row||!panel)return false;
+          const box=row.getBoundingClientRect(),outer=panel.getBoundingClientRect(),s=getComputedStyle(panel);
+          return box.width>0 && box.left-outer.left-parseFloat(s.borderLeftWidth)===16 &&
+            outer.right-box.right-parseFloat(s.borderRightWidth)===16;
+        },rowSelector);
+      }
       const time=row.locator('time');
       assert.match(await time.textContent(),/^(Сегодня|Вчера) в \d{2}:\d{2}$/);
       assert.equal(await time.getAttribute('datetime'),tasks.game.find(t=>t.id==='game-3').finished_at);
@@ -1005,6 +1042,11 @@ if (require.main === module) (async()=>{
     }finally{await draftPage.close();}
 
     const mac=await open(projects,{width:1040,height:780},'dark',(url,p)=>{
+      if(url.pathname==='/api/task'&&url.searchParams.get('id')==='game-1'){
+        const response=reply(url,p,projects);
+        response.items.push({...response.items.at(-1),text:'Длинное сообщение '.repeat(1000)});
+        return {json:response};
+      }
       if(p!=='game'||!['/api/window','/api/project-activity'].includes(url.pathname))return;
       const view=reply(url,p,projects);
       return {json:{...view,tasks:view.tasks.map(t=>t.id==='game-2'?{...t,state:'running',created_at:iso(0),remote:{...pc2,unaccepted:true}}:t)}};
@@ -1013,8 +1055,12 @@ if (require.main === module) (async()=>{
       const toolbar=mac.locator('.am-task-toolbar'),projectsRow=mac.locator('.am-project'),nav=mac.locator('#computer-sidebar-toggle');
       const box=await toolbar.boundingBox(),row=await projectsRow.boundingBox(),control=await nav.boundingBox();
       assert.match(await mac.locator('.am-sidebar-task').filter({hasText:'Проверка навигации'}).textContent(),/Ждёт, когда ПК-2 примет задачу/);
+      for(const selector of ['.am-outgoing','.am-message:not(.am-outgoing)']){
+        assert.equal(await mac.locator('#thread '+selector+' .am-meta').first().evaluate(n=>
+          n.nextElementSibling.getBoundingClientRect().top-n.getBoundingClientRect().bottom),8);
+      }
       assert.equal(box.height,44);
-      assert.equal(row.y-(box.y+box.height),8);
+      assert.equal(row.y-(box.y+box.height),16);
       assert.equal(control.y+control.height/2,box.y+box.height/2);
       assert.equal(await mac.locator('.am-computers').evaluate(n=>getComputedStyle(n).borderBlockStartWidth),'0px');
       await mac.waitForFunction(()=>window.titlebarGeometry?.holes.some(([x,y,w,h])=>{
@@ -1024,6 +1070,25 @@ if (require.main === module) (async()=>{
       await mac.locator('#list-toggle').click();
       const archive=mac.locator('#task-panel');
       await archive.waitFor();
+      for(const selector of ['#project-heading','#project-column-first .am-select-trigger','#task-new','#task-list-heading','.am-task-filter .am-select-trigger']){
+        assert.equal(await verticalCenter(mac.locator(selector)),row.y+row.height/2);
+      }
+      assert.equal(await mac.locator('.am-sidebar').evaluate(n=>{
+        const rule=getComputedStyle(n,'::before');
+        return n.getBoundingClientRect().y+parseFloat(rule.top)+parseFloat(rule.borderBottomWidth);
+      }),box.y+box.height);
+      const date=mac.locator('#conversation-date');
+      const start=await date.boundingBox();
+      assert.equal(start.y-box.y-box.height,12);
+      await mac.locator('.am-sidebar-task').filter({hasText:'Экран настроек'}).click();
+      await mac.locator('#task-head h3').getByText('Экран настроек').waitFor();
+      assert.equal(await date.getAttribute('datetime'),tasks.game[0].created_at);
+      const scrolled=await mac.locator('#thread').evaluate(n=>{
+        n.scrollTop=4;
+        return n.scrollTop;
+      });
+      assert.equal(scrolled,4);
+      assert.equal((await date.boundingBox()).y,start.y);
       await nav.press('Enter');
       assert.equal(await projectsRow.isVisible(),false);
       assert.equal(await nav.getAttribute('aria-expanded'),'false');
@@ -1103,6 +1168,15 @@ if (require.main === module) (async()=>{
       await compactPreview.locator('#task-draft-text').waitFor();
       await compactPreview.locator('#task-draft-text').fill('Черновик');
       await compactPreview.locator('#settings-open').click();
+      await compactPreview.waitForFunction(()=>document.activeElement.id==='settings-title');
+      const closeSettings=compactPreview.locator('#settings-close');
+      assert.equal(await closeSettings.evaluate(n=>n.matches(':hover,:focus-visible')),false);
+      await closeSettings.hover();
+      assert(await closeSettings.evaluate(n=>n.matches(':hover')));
+      await compactPreview.mouse.move(1,1);
+      // WebKit's default Mac keyboard setting reaches buttons with Option-Tab.
+      await compactPreview.keyboard.press(engine==='webkit'?'Alt+Tab':'Tab');
+      assert(await closeSettings.evaluate(n=>n.matches(':focus-visible')));
       const modal=compactPreview.locator('#settings-dialog');
       await modal.waitFor();
       assert.equal(await modal.evaluate(node=>node.scrollWidth>node.clientWidth),false);
