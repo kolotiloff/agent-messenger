@@ -881,3 +881,7 @@ Place the section headings above their settings cards with a common gap. Place t
 Use the short Settings section names above their cards. Highlight the full row when hovering a Statistics task or an Efficiency model and activate the row's existing action from any column. Keep keyboard actions on native buttons. Use symmetric row insets and keep the date and time together. Use a target for Efficiency and retain the chart for Statistics.
 
 Draw the reply context ring from the used and capacity counts in a context snapshot. Put the percentage on the first line and the used and capacity figures on the second. Keep the ring neutral when a snapshot is unavailable and label any reported cumulative usage by its scope. The loopback preview can use a fictional snapshot.
+
+## D-240 — Refine conversation and report spacing (T-336)
+
+Left-align the context popover, put the percentage beside its label, and separate used tokens and capacity with a slash. Keep the task title as the sole conversation heading and center the date at the start of its scrollable thread. Use the compact spacing token below the Statistics task rows. While a computer is collapsed, append a muted parenthesized count of tasks under the current project filter.

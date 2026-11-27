@@ -147,12 +147,13 @@ if (require.main === module) (async()=>{
       if(url.searchParams.get('id')==='game-1')return sameFeed.response;
       if(url.searchParams.get('id')==='tools-1')return otherFeed.response;
     },true);
-    const header=preview.locator('#task-head time'),thread=preview.locator('#thread');
-    const oldDate=await header.getAttribute('datetime');
+    const thread=preview.locator('#thread'),chatDate=thread.locator(':scope > time.am-chat-date:first-child');
+    const oldDate=await chatDate.getAttribute('datetime');
     const sameDate=tasks.game.find(t=>t.id==='game-1').created_at;
     const otherDate=tasks.tools.find(t=>t.id==='tools-1').created_at;
     assert.equal(await preview.locator('#task-head > h3').innerText(),'Параллельная задача');
-    assert.equal(await preview.locator('#task-head > h3 + time').count(),1);
+    assert.deepEqual(await preview.locator('#task-head > *').evaluateAll(nodes=>nodes.map(node=>node.tagName)),['H3']);
+    assert.equal(await chatDate.evaluate(node=>getComputedStyle(node).alignSelf),'center');
     assert.equal(await thread.locator('.am-outgoing .am-message-content').first().evaluate(node=>getComputedStyle(node).padding),'12px 16px');
     const reportStatus=thread.locator('.am-delivery-close');
     await reportStatus.waitFor();
@@ -184,8 +185,8 @@ if (require.main === module) (async()=>{
     const tokenMenu=preview.locator('#answer-token-menu');
     await tokenMenu.waitFor();
     assert.deepEqual(await tokenMenu.locator('p').allTextContents(),[
-      'Контекстное окно · 89\u00a0% заполнено',
-      '212 тыс. из 238 тыс. токенов'
+      'Контекстное окно 89\u00a0% заполнено',
+      '212 тыс. / 238 тыс. токенов'
     ]);
     await preview.keyboard.press('Escape');
     await tokenMenu.waitFor({state:'hidden'});
@@ -198,7 +199,7 @@ if (require.main === module) (async()=>{
     const padding=target=>target.evaluate(node=>[getComputedStyle(node).paddingBlockStart,getComputedStyle(node).paddingBlockEnd]);
     const sidebarTask=title=>preview.locator('#machines .am-sidebar-task').filter({hasText:title});
     const expectPrevious=async(date)=>{
-      assert.equal(await header.getAttribute('datetime'),date);
+      assert.equal(await chatDate.getAttribute('datetime'),date);
       assert.equal(await chat(preview,'game').isVisible(),true);
       assert.equal(await thread.locator('[data-pane]').count(),0);
       assert.equal(await thread.getAttribute('aria-busy'),'true');
@@ -247,10 +248,10 @@ if (require.main === module) (async()=>{
       await preview.locator('#answer-tokens[data-task="game-1"]').waitFor();
       await contextProgress.waitFor({state:'hidden'});
       await tokenCount.click();
-      assert.equal(await tokenMenu.locator('#answer-context-summary').textContent(),'Контекстное окно · нет данных');
+      assert.equal(await tokenMenu.locator('#answer-context-summary').textContent(),'Контекстное окно нет данных');
       await preview.keyboard.press('Escape');
       assert.equal(await composerBottom(),initialComposerBottom);
-      await preview.locator('#task-head time[datetime="'+sameDate+'"]').waitFor();
+      await thread.locator(':scope > time.am-chat-date:first-child[datetime="'+sameDate+'"]').waitFor();
       await sidebarTask('Экспорт отчёта').click();
       await expectPrevious(sameDate);
       const requestedFeed=preview.waitForRequest(req=>new URL(req.url()).searchParams.get('id')==='tools-1');
@@ -259,7 +260,7 @@ if (require.main === module) (async()=>{
       await expectPrevious(sameDate);
       otherFeed.release();
       await chat(preview,'tools').waitFor();
-      assert.equal(await header.getAttribute('datetime'),otherDate);
+      assert.equal(await chatDate.getAttribute('datetime'),otherDate);
       assert.equal(await thread.getAttribute('aria-busy'),'false');
       assert.equal(await preview.locator('#compose').evaluate(node=>node.inert),false);
       const answer=preview.locator('#answer-text'),send=preview.locator('#answer-send');
@@ -372,9 +373,12 @@ if (require.main === module) (async()=>{
       assert.equal(await groupGap(),4);
       await disclosure.click();
       assert.equal(await disclosure.getAttribute('aria-expanded'),'false');
+      assert.equal(await local.locator('.am-sidebar-task-count').textContent(),' (4 задачи)');
+      assert.match(await disclosure.getAttribute('aria-label'),/4 задачи/);
       assert.equal(await groupGap(),4);
       await disclosure.click();
       assert.equal(await disclosure.getAttribute('aria-expanded'),'true');
+      assert.equal(await local.locator('.am-sidebar-task-count').count(),0);
       assert.equal(await selected.evaluate(node=>getComputedStyle(node).backgroundColor),selectedFill);
       assert.equal(await groupGap(),4);
       await draftPage.mouse.move(1000,30);
@@ -685,7 +689,8 @@ if (require.main === module) (async()=>{
       await form.waitFor({state:'hidden'});
       await chat(draftPage,'tools').waitFor();
       assert.equal(await plus.getAttribute('aria-expanded'),'false');
-      assert.equal(await draftPage.locator('#task-head time').count(),1);
+      assert.equal(await draftPage.locator('#thread > time.am-chat-date:first-child').count(),1);
+      assert.equal(await draftPage.locator('#task-head time').count(),0);
       await select(draftPage,'project-select','Все');
       await plus.click();
       const modelTrigger=form.getByRole('button',{name:'Модель',exact:true});

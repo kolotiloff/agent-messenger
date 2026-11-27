@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-336 collapsed rows and context formatting)
+
+Show collapsed computer counts in parentheses, move the task date into the thread, left-align the context details and reduce the lower inset in the Statistics task card. Verified the count and context wording in the open preview. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).
+
 ## 2026-11-27 — Codex (T-336 statistics rows and context ring)
 
 Extended the Statistics highlight and actions across task and efficiency model rows. Kept date and time on one line, shortened settings headings and gave Efficiency a target icon. Added the two-line context summary and a proportional ring in the shared preview. Production context telemetry is pending. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).

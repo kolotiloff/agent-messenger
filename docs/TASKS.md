@@ -37,7 +37,9 @@ These checks cover the browser preview. Acceptance in the installed window remai
 - Settings and Statistics: keep the compact independent dialogs, section icons and order, row dividers, vertically aligned actions, and independently scrolling model list. Verify stable filters and heading typography, scoped statistics, efficiency row expansion and export. Hide old efficiency results while a new filter loads.
 - Settings follow-up: use spacing between model choices and align the short General, Server, Project and Agents headings above their cards. Place the network name and project name beside their labels at the General selector width. Share the compact header across dialogs, including Feedback and New Project.
 - Statistics follow-up: use the computer hover fill across each task and efficiency model row. Make the whole row activate its action while keeping the keyboard button. Keep the date and time on one line and the task text aligned to the column heading. Use a target icon for Efficiency.
-- Collapsed computer rows: choose a task count treatment for collapsed rows with visible tasks under the current project filter.
+- Collapsed computer rows: show the gray task count in parentheses only when the computer is collapsed. Count tasks under the current project filter.
+- Latest layout follow-up: align context details left and format usage as used / capacity. Move the conversation date to the start of the thread. Use the 8 px bottom inset in the Statistics task card.
+- Open product items: real context telemetry, per-task access and model changes for a running conversation, portable slash commands and integrations, remote file transfer, and editing sent messages. Task titles supplied by a coordinator have no language rule. The UI style guide documents spacing, and a dedicated component showcase is still absent.
 - Release: the installed 1.0.12 still uses its original desktop layout. Verify the same loopback preview and retain the release hold.
 
 ## Now
