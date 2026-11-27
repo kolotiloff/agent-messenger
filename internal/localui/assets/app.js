@@ -365,8 +365,8 @@
     // It may run there with its replies lost, so neither «Работает» nor
     // «not accepted»: say what is known.
     if(t.remote?.unaccepted&&!t.remote.from&&t.state==='running'){
-      if(Date.now()-Date.parse(t.created_at)<5*60*1000)return [tr('Ждёт, когда {computer} примет задачу').replace('{computer}',()=>t.remote.name),'am-status-wait'];
-      return [tr('Нет ответа от «')+t.remote.name+'»','am-status-bad',tr('Приём не подтверждён. Задача может выполняться на удалённом компьютере, даже если ответы не доходят. Автоматической повторной отправки не будет.')];
+      if(Date.now()-Date.parse(t.created_at)<5*60*1000)return [tr('Ожидает принятия'),'am-status-wait'];
+      return [tr('Приём не подтверждён'),'am-status-bad',tr('Приём не подтверждён. Задача может выполняться на удалённом компьютере, даже если ответы не доходят. Автоматической повторной отправки не будет.')];
     }
     switch(t.state){
       case 'running':
@@ -528,6 +528,8 @@
     if(taskSidebarPreview){
       if(view&&!options.some(([name])=>name===sidebarProject))sidebarProject='';
       $('project-heading').textContent=tr('Проекты');
+      $('project-count').hidden=!view;
+      $('project-count').textContent=view?String(view.projects.length):'';
       $('split-projects').hidden=true;
       projectOptions($('project-select'),view?[['__all',tr('Все')],...options,['__new',tr('Новый проект')]]:options,view?sidebarProject||'__all':'',!view);
       $('task-new').disabled=!view?.projects.length;
@@ -1030,6 +1032,77 @@
   function swapChildren(live,next){
     if(next.innerHTML!==live.innerHTML)live.replaceChildren(...next.childNodes);
   }
+  const taskListScopes=new WeakMap();
+  function replaceTaskRows(live,next,scope){
+    const previousScope=taskListScopes.get(live);
+    taskListScopes.set(live,scope);
+    const clip=live.getBoundingClientRect();
+    if(!taskSidebarPreview||previousScope!==scope||!clip.height||document.hidden||
+      matchMedia('(prefers-reduced-motion:reduce)').matches||!live.animate){
+      live.replaceChildren(...next.childNodes);
+      return;
+    }
+    const rows=root=>new Map(Array.from(root.querySelectorAll('[data-motion-task]'),node=>[node.dataset.motionTask,node]));
+    const old=rows(live),incoming=rows(next);
+    const changed=old.size!==incoming.size||Array.from(old.keys()).some(key=>!incoming.has(key));
+    if(!changed){live.replaceChildren(...next.childNodes);return;}
+    if(live.id==='machines'){
+      for(const [container,map] of [[live,old],[next,incoming]]){
+        for(const head of container.querySelectorAll('[data-machine-order] > .am-machine-name')){
+          map.set('computer:'+head.parentElement.dataset.machineOrder,head);
+        }
+      }
+    }
+    const visible=r=>r.height>0&&r.top<clip.bottom&&r.bottom>clip.top;
+    const before=new Map();
+    for(const [key,node] of old){
+      const rect=node.getBoundingClientRect();
+      if(!node.closest('[inert]')&&visible(rect))before.set(key,rect);
+    }
+    live.replaceChildren(...next.childNodes);
+    const leaving=Array.from(before.keys()).some(key=>!incoming.has(key));
+    const delay=leaving?90:0;
+    const timing={duration:180,delay,fill:'backwards',easing:'ease-in-out'};
+    const groups=new Set();
+    for(const [key,node] of incoming){
+      const rect=node.getBoundingClientRect();
+      if(node.closest('[inert]')||!visible(rect))continue;
+      const from=before.get(key);
+      if(from&&Math.abs(from.top-rect.top)>1){
+        node.animate([{transform:'translateY('+(from.top-rect.top)+'px)'},{transform:'translateY(0)'}],timing);
+        if(node.parentElement.classList.contains('am-sidebar-task-rows')&&!node.closest('[inert]'))groups.add(node.parentElement);
+      }else if(!old.has(key)){
+        node.animate([{opacity:0},{opacity:1}],{duration:100,delay:delay+timing.duration,fill:'backwards'});
+      }
+    }
+    // A translated task can cross its group's new edge until the other
+    // computers settle. Disclosure clipping still applies when collapsed.
+    for(const group of groups)group.animate([{overflow:'visible'},{overflow:'visible'}],{duration:delay+timing.duration});
+    // Fade removed rows outside the live list so they never take up space,
+    // receive focus or participate in the next render's HTML comparison.
+    const layer=el('div',undefined,'am-task-exits'+(live.id==='task-list'?' am-task-list':''));
+    layer.inert=true;layer.setAttribute('aria-hidden','true');
+    for(const [key,rect] of before){
+      if(incoming.has(key)||!old.get(key).hasAttribute('data-motion-task'))continue;
+      const node=old.get(key).cloneNode(true);
+      node.removeAttribute('data-motion-task');
+      Object.assign(node.style,{position:'absolute',top:(rect.top-clip.top)+'px',left:(rect.left-clip.left)+'px',
+        width:rect.width+'px',height:rect.height+'px'});
+      layer.append(node);
+    }
+    if(!layer.childElementCount)return;
+    Object.assign(layer.style,{top:clip.top+'px',left:clip.left+'px',width:clip.width+'px',height:clip.height+'px'});
+    live.after(layer);
+    const fade=layer.animate([{opacity:1},{opacity:0}],{duration:delay,easing:'ease-out'});
+    const dismiss=()=>fade.cancel();
+    document.addEventListener('scroll',dismiss,true);
+    window.addEventListener('resize',dismiss);
+    fade.onfinish=fade.oncancel=()=>{
+      layer.remove();
+      document.removeEventListener('scroll',dismiss,true);
+      window.removeEventListener('resize',dismiss);
+    };
+  }
   function machineRole(label,tip){
     const tag=taskSidebarPreview
       ?el('span',', '+label,'am-muted am-inline-role')
@@ -1144,6 +1217,7 @@
       const row=el('button',undefined,'am-sidebar-task');row.type='button';
       const selection=peer?{peer:peer.peer,id:t.id}:null;
       row.dataset.sidebarFocus=JSON.stringify([name,peer?.peer||'',t.id]);
+      row.dataset.motionTask=row.dataset.sidebarFocus;
       row.setAttribute('aria-pressed',String(!draftOpen&&name===project&&(selection?selectedShared?.peer===selection.peer&&selectedShared?.id===selection.id:t.id===selectedTask)));
       const title=el('span',undefined,'am-sidebar-task-title');
       if(!sidebarProject)title.append(el('span',projectTitle(name)+', ','am-muted'));
@@ -1323,7 +1397,7 @@
     copy.querySelector('.am-machine-roles')?.removeAttribute('data-form');
     if(copy.innerHTML!==box.innerHTML){
       machineRolesObserver.disconnect();
-      parkLocalParts();live.replaceChildren(...box.childNodes);
+      parkLocalParts();replaceTaskRows(live,box,JSON.stringify([scope,sidebarProject,computerFilter]));
       if(!taskSidebarPreview&&serverRole&&coordinatorRole){
         machineRolesObserver.observe(head);
         if(!projectActivity.length)machineRolesObserver.observe(localMeta);
@@ -1623,6 +1697,7 @@
     return t.model?tr('Модель, которую указал координатор')+': '+t.model:tr('Модель по умолчанию');
   }
   function appendArchiveTask(row,t,name,computer,status,peer){
+    row.dataset.motionTask=JSON.stringify([name,peer?.peer||'',t.id]);
     const time=appendTaskWhen(row,t,true);
     const computerDetail=tr('Компьютер')+': '+computer;
     row.setAttribute('aria-description',computerDetail);
@@ -1810,7 +1885,7 @@
       clear.disabled=!archived;
       clear.onclick=archived?()=>askClearDone(archiveBatches):null;
     }
-    swapChildren(live,box);
+    if(live.innerHTML!==box.innerHTML)replaceTaskRows(live,box,JSON.stringify([projects,agentChosen,computerFilter]));
   }
   // Coordinator connection (T-039): the client runs Claude's own
   // `claude mcp add` in the project folder; the owner never opens a terminal.
@@ -1944,6 +2019,20 @@
       ...(server?.peers||[]).filter(p=>peerFresh(p)&&!p.update_pending&&p.ready?.accept!==false&&
         (!Array.isArray(p.ready?.projects)||p.ready.projects.includes(name)))].filter(p=>p.agents?.some(a=>!a.paused));
   }
+  // Menu order is a presentation choice. Keep custom IDs and saved defaults intact.
+  const modelFamilies=['auto','composer','grok','luna','terra','sol','astra','haiku','sonnet','opus','fable'];
+  const effortLevels=['','minimal','low','medium','high','xhigh','max','ultra'];
+  const modelCollator=new Intl.Collator('en',{numeric:true});
+  function orderedModels(ids){
+    const entries=Array.from(ids,id=>{
+      const family=id.split(/[-[]/).find(word=>modelFamilies.includes(word));
+      const effort=id.match(/(?:\[effort=|-)(minimal|low|medium|high|xhigh|max|ultra)(?:\]|-fast)?$/);
+      const base=(effort?id.slice(0,effort.index):id).replace(/^cursor-/,'').replace(/-fast$/,'');
+      return {id,base,family:family?modelFamilies.indexOf(family):modelFamilies.length,effort:effortLevels.indexOf(effort?.[1]||'')};
+    });
+    return entries.sort((a,b)=>a.family-b.family||modelCollator.compare(a.base,b.base)||
+      a.effort-b.effort||modelCollator.compare(a.id,b.id)).map(entry=>entry.id);
+  }
   function taskDraftModels(computer){
     const usesCoordinatorModels=computer?.version==='dev'||
       (/^(?:0\.0\.0|[1-9]\d*\.\d+\.\d+)-preview\.\d+$/.test(computer?.version)&&updateBuildNumber(computer.version)>=82);
@@ -1952,8 +2041,7 @@
       const configured=view?.coordinator_models?.[a.agent]??a.models??[];
       const available=computer.id&&!usesCoordinatorModels
         ?configured.filter(id=>a.models?.includes(id)):configured;
-      const preferred=available.find(id=>id===preferredTaskModels[a.agent])||available.find(id=>/\bmedium\b/.test(id));
-      return (preferred?[preferred,...available.filter(id=>id!==preferred)]:available)
+      return orderedModels(available)
         .map(model=>[a.agent+':'+model,agent+' '+modelName(model)]);
     });
   }
@@ -1970,7 +2058,11 @@
     const computer=current||computers.find(p=>taskDraftModels(p).length)||computers[0];
     projectOptions(computerSelect,computers.map(p=>[p.id,p.name]),computer?.id||'',draftSending||!computer);
     const models=taskDraftModels(computer);
-    const model=models.some(([key])=>key===modelSelect.value)?modelSelect.value:models[0]?.[0]||'';
+    const providerName=models[0]?.[0].split(':')[0];
+    const choices=models.map(([key])=>key).filter(key=>key.startsWith(providerName+':'));
+    const preferred=choices.find(key=>key===providerName+':'+preferredTaskModels[providerName])||
+      choices.find(key=>/\bmedium\b/.test(key))||choices[0]||'';
+    const model=models.some(([key])=>key===modelSelect.value)?modelSelect.value:preferred;
     projectOptions(modelSelect,models,model,draftSending||!models.length);
     const provider=model.split(':',1)[0];
     const agent=computer?.agents.find(a=>a.agent===provider);
@@ -2839,7 +2931,7 @@
         // A hint about this answer lives under it while the worker has not
         // gone on yet, so it never stays in another task (owner, 2026-11-09).
         if(feed.items.slice(index+1).every(n=>n.kind==='answer'||n.kind==='note')&&activeStates.includes(t.state))out[out.length-1].querySelector('.am-message-content').append(delivery(tr('Ответ записан. Исполнитель продолжит в той же сессии.'),'am-delivery-hint'));}else outgoingCoordinator(it);continue;}
-      if(it.kind==='accepted'){const c=out[out.length-1]?.querySelector('.am-message-content');if(c)c.append(delivery(tr('Принято на компьютере «')+it.text+'»','am-status-good'));group=null;continue;}
+      if(it.kind==='accepted'){const c=out[out.length-1]?.querySelector('.am-message-content');if(c)c.append(delivery(tr('Принято на компьютере {computer}').replace('{computer}',()=>it.text),'am-status-good'));group=null;continue;}
       if(it.kind==='text'){
         const progress=replyProgress.get(it.run);
         if(progress)progress.push(it.text);
@@ -3214,7 +3306,7 @@
         const sub=[limitWindow(l.window),l.resets_at?tr('сброс ')+resetText(l.resets_at):''].filter(Boolean).join(', ');
         row(limitRing(l),title,sub?sub[0].toUpperCase()+sub.slice(1):l.observed_at?tr('По данным задачи в ')+dayClock(l.observed_at):'');
       }else row(limitRing(null),tr('Лимит'),tr('Появится после задачи исполнителя на том компьютере'));
-      const models=el('span',undefined,'am-agent-models');models.textContent=a.models?.length?a.models.join(', '):tr('Модель по умолчанию');
+      const models=el('span',undefined,'am-agent-models');models.textContent=a.models?.length?orderedModels(a.models).join(', '):tr('Модель по умолчанию');
       const mm=el('span','✓','am-mark am-mark-ok');
       const r=el('div',undefined,'am-step');const t=el('div',undefined,'am-step-text');t.append(el('p',tr('Модели'),'am-step-title'),el('p',models.textContent,'am-step-sub'));r.append(mm,t,el('span'));steps.append(r);
       card.append(steps);
@@ -4352,7 +4444,8 @@
     for(const id of modelEdit.enabled)if(!options.has(id))options.set(id,modelName(id));
     const buttons=[];
     list.replaceChildren();
-    for(const [id,name] of options){
+    for(const id of orderedModels(options.keys())){
+      const name=options.get(id);
       if(query&&!name.toLowerCase().includes(query)&&!id.toLowerCase().includes(query))continue;
       const row=el('div',undefined,'am-model-option');
       const title=el('span',name);title.title=id;

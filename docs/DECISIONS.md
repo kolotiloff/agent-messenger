@@ -935,3 +935,9 @@ Extend the Mac caption divider over the Projects sidebar. Use the common 16 px s
 ## D-252 — Give New Task its own row above Projects
 
 Place the icon and New Task text at the leading edge of the sidebar. Use the shared quiet button feedback and keep the archive toggle icon-only. Both sidebar filters use the Settings width of 12 em capped at half the available row. In narrow panels the filter takes a full row.
+
+## D-253 — Keep live task lists and archive headings stable
+
+Animate visible membership changes using a short fade and vertical movement. Keep a stable list still on status polls. Respect reduced motion. Count all configured projects independently of the current filter. Place Clear directly before the agent filter and keep the existing scope confirmation. The selected Mac header has a divider under the task only. This updates D-251.
+
+The task model menu and Settings use the same family, numeric generation and effort ordering within each provider. Keep the suggested selection in its normal position. Preserve unknown model IDs and the stored configuration.

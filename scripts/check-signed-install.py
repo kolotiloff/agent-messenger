@@ -28,7 +28,7 @@ ext = ".exe" if system == "windows" else ""
 assert run("go", "env", "GOOS") == system and run("go", "env", "GOARCH") == machine
 base = Path.home() / "AgentMessengerTest"
 base.mkdir(exist_ok=True)
-work = Path(tempfile.mkdtemp(prefix="bridge-", dir=base))
+work = Path(tempfile.mkdtemp(prefix="bridge-", suffix=".noindex" if system == "darwin" else "", dir=base))
 verify = work / ("verify" + ext)
 run("go", "build", "-o", verify, "./scripts/verify-update-signature")
 

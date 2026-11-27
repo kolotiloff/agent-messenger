@@ -332,7 +332,7 @@ func showGTKWindow(ctx context.Context, home string, page windowPage) bool {
 	// the class on X11, so the dock shows the entry's icon and name.
 	g.setPrgname("agent-messenger")
 	g.setProgramClass("AgentMessenger")
-	g.setIconName("kotel")
+	g.setIconName(desktopIconName)
 	win := g.windowNew(gtkWindowToplevel)
 	gtkState.window = win
 	g.setTitle(win, "Kotel")
@@ -381,7 +381,7 @@ func addGTKTray(g *gtkAPI) {
 		g.statusVisible(gtkState.icon, true)
 		return
 	}
-	icon := g.statusIconNew("agent-messenger")
+	icon := g.statusIconNew(desktopIconName)
 	if icon == 0 {
 		return
 	}
