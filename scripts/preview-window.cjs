@@ -5,9 +5,11 @@ const path = require('node:path');
 const { json } = require('node:stream/consumers');
 const { randomUUID } = require('node:crypto');
 const { projects, reply } = require('./check-window-project-split.cjs');
+const modelCatalog = require('../internal/modelcatalog/catalog.json');
 
 const host = '127.0.0.1';
 const assets = path.resolve(__dirname, '../internal/localui/assets');
+const previewExamples = process.argv[3] ? fs.readFile(process.argv[3], 'utf8').then(JSON.parse) : Promise.resolve({});
 const files = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
@@ -63,9 +65,94 @@ const conversations = {
 
 let machineOrder = null;
 const newTasks = new Map();
+const notes = new Map();
+const hiddenArchive = new Set();
+const coordinatorModels = Object.fromEntries(
+  reply(new URL('http://127.0.0.1/api/window'), projects[0].name, projects).agents.map(agent => [agent.agent, agent.models]));
 const previewTask = ({ task, finish }) => Date.now() >= finish
-  ? { ...task, state: 'done', finished_at: new Date(finish).toISOString() }
+  ? { ...task, state: 'done', finished_at: new Date(finish).toISOString(), can_continue:true }
   : task;
+
+// Opt-in display data stays outside the repository and never supplies routing IDs.
+function withPreviewExample(task, examples) {
+  const example = examples[task.id];
+  if (!example) return task;
+  const { title, agent, ran_model, created_at, started_at, finished_at } = example;
+  return {
+    ...task,
+    ...(title && { title }),
+    ...(agent && { agent }),
+    ...(ran_model && { ran_model }),
+    ...(created_at && { created_at }),
+    ...(started_at && { started_at }),
+    ...(finished_at && { finished_at }),
+  };
+}
+
+// Fictional results for exercising all report filters in the same preview.
+const sampleResults = [
+  ['game','game-3','Звуки меню','pc2','ПК-2','codex','gpt-6.2-sol[effort=medium]',0,4100000,1200000,200000,12,true],
+  ['tools','tools-done','Готовый отчёт','local','Мак','claude','claude-opus-4-8',0,180000,84000,12000,33,true],
+  ['tools','tools-old','Старый отчёт','linux','Ноут-Linux','codex','gpt-6.2-astra[effort=high]',2,92000,40000,3200,9,false],
+].map(([project,id,title,key,computer,agent,model,days,input,cached,output,minutes,accepted])=>{
+  const at=new Date(Date.now()-(days*24*60+25)*60000);
+  return {project,id,title,key,computer,agent,model,at:at.toISOString(),duration_ms:minutes*60000,
+    accepted,input_tokens:input,cached_tokens:cached,output_tokens:output,tokens:input+output};
+});
+const previewCompleted = row => {
+  const started=new Date(Date.parse(row.at)-row.duration_ms).toISOString();
+  return {...row,folder:projects.find(p=>p.name===row.project).folder,state:'done',can_continue:true,
+    ran_model:row.model,created_at:started,started_at:started,finished_at:row.at,usage:row,
+    ...(row.key==='local'?{}:{remote:{id:row.key,name:row.computer}})};
+};
+function previewWindowTask(task){
+  if (task.state==='done') return {...task,can_continue:true};
+  if (task.state!=='waiting_owner'||!Object.hasOwn(conversations,task.id)) return task;
+  return notes.has(task.id) ? {...task,state:'running'}
+    : {...task,owner_question:{id:'q-'+task.id,text:conversations[task.id].followup}};
+}
+const totals=rows=>rows.reduce((sum,row)=>{
+  sum.tasks++;
+  for(const key of ['tokens','input_tokens','cached_tokens','output_tokens'])sum[key]+=row[key];
+  return sum;
+},{tasks:0,tokens:0,input_tokens:0,cached_tokens:0,output_tokens:0});
+function reportInputs(params){
+  const names=params.getAll('projects'), project=params.get('project')||projects[0].name;
+  const computer=params.get('computer')||'',agent=params.get('agent')||'',model=params.get('model')||'';
+  const since=new Date();
+  since.setHours(0,0,0,0);
+  since.setDate(since.getDate()-({day:0,week:6,month:29}[params.get('period')]??6));
+  const scope=sampleResults.filter(row=>(names.length?names.includes(row.project):row.project===project) &&
+    Date.parse(row.at)>=since && (!computer||computer===row.key) && (!agent||agent===row.agent));
+  return {projects:names.length?{projects:names}:{project}, computer, agent, model, scope,
+    rows:scope.filter(row=>!model||row.model===model)};
+}
+function previewReport(url){
+  const {projects,computer,agent,model,scope,rows}=reportInputs(url.searchParams);
+  if(url.pathname==='/api/usage-efficiency'){
+    const sample=value=>({samples:1,mean:value,median:value,p90:value});
+    const groups=rows.map(row=>({project:url.searchParams.has('projects')?row.project:undefined,
+      agent:row.agent,model:row.model,task_type:'feature',difficulty:'medium',tasks:1,
+      reviewed:Number(row.accepted),accepted:Number(row.accepted),first_pass_known:Number(row.accepted),
+      first_pass_accepted:Number(row.accepted),
+      ...(row.accepted?{
+        accepted_new_input_plus_output:sample(row.tokens-row.cached_tokens),
+        accepted_active_runtime_ms:sample(row.duration_ms),time_to_acceptance_ms:sample(row.duration_ms+60000)
+      }:{})}));
+    return {...projects,groups,total_groups:groups.length};
+  }
+  const by=(items,key,name=key)=>Array.from(new Set(items.map(row=>row[key])),value=>{
+    const matches=items.filter(row=>row[key]===value);
+    return {key:value,name:matches[0][name],this:value==='local',...totals(matches)};
+  });
+  const sorted=(key,sign)=>[...rows].sort((a,b)=>sign*(a[key]-b[key]));
+  const days=rows.map(row=>({...row,day:row.at.slice(0,10)}));
+  return {...projects,computer,agent,model,total:totals(rows),agents:by(rows,'agent'),computers:by(rows,'key','computer'),
+    models:by(scope,'model'),days:by(days,'day').map(row=>({...row,day:row.key})),
+    recent:[...rows].sort((a,b)=>b.at.localeCompare(a.at)),top:sorted('tokens',-1),
+    ranked:{oldest:[...rows].sort((a,b)=>a.at.localeCompare(b.at)),fewest:sorted('tokens',1),
+      longest:sorted('duration_ms',-1),shortest:sorted('duration_ms',1)}};
+}
 
 const server = http.createServer(async (request, response) => {
   response.setHeader('Cache-Control', 'no-store');
@@ -75,6 +162,27 @@ const server = http.createServer(async (request, response) => {
   }
   try {
     const url = new URL(request.url, 'http://' + request.headers.host);
+    if (url.pathname === '/api/model-catalog' && request.method === 'GET') {
+      const provider = url.searchParams.get('provider');
+      if (!Object.hasOwn(modelCatalog, provider)) {
+        response.writeHead(400).end();
+        return;
+      }
+      response.writeHead(200, { 'Content-Type': 'application/json' })
+        .end(JSON.stringify({ models: modelCatalog[provider], limit: 12 }));
+      return;
+    }
+    if (url.pathname === '/api/agent-models' && request.method === 'POST') {
+      const body = await json(request).catch(() => null);
+      if (!Object.hasOwn(modelCatalog, body?.provider) || !Array.isArray(body.models) ||
+          body.models.length > 12 || !body.models.every(model => typeof model === 'string' && model.length <= 80)) {
+        response.writeHead(400).end();
+        return;
+      }
+      coordinatorModels[body.provider] = [...new Set(body.models)];
+      response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ ok: true }));
+      return;
+    }
     if (request.method === 'POST' && url.pathname === '/api/task-start') {
       const length = Number(request.headers['content-length']);
       if (request.headers['content-type'] !== 'application/json' || !(length > 0 && length <= 262144)) {
@@ -91,7 +199,7 @@ const server = http.createServer(async (request, response) => {
       const { peers } = reply(new URL('/api/server', url), body.project, projects);
       const peer = peers.find(p => p.id === body.computer && p.ready?.projects.includes(body.project));
       const agents = body.computer ? peer?.agents : reply(new URL('/api/window', url), body.project, projects).agents;
-      if (!agents?.some(a => a.agent === body.agent && !a.paused && (!body.model || a.models?.includes(body.model)))) {
+      if (!agents?.some(a => a.agent === body.agent && !a.paused && coordinatorModels[a.agent]?.includes(body.model))) {
         response.writeHead(400).end();
         return;
       }
@@ -113,6 +221,44 @@ const server = http.createServer(async (request, response) => {
       }
       response.writeHead(200, { 'Content-Type': 'application/json' })
         .end(JSON.stringify({ ok: true, result: newTasks.get(body.op_id).task.id }));
+      return;
+    }
+    if (request.method === 'POST' && ['/api/task-note','/api/task-answer'].includes(url.pathname)) {
+      const length=Number(request.headers['content-length']);
+      const body=length>0&&length<=262144?await json(request).catch(()=>null):null;
+      if ((!Object.hasOwn(conversations,body?.task)&&!sampleResults.some(row=>row.id===body?.task)&&
+          ![...newTasks.values()].some(entry=>entry.task.id===body?.task)) ||
+          typeof body?.text!=='string'||!body.text.trim()||typeof body.op_id!=='string'||!body.op_id) {
+        response.writeHead(400).end();return;
+      }
+      const thread=notes.get(body.task)||new Map();
+      const existing=thread.get(body.op_id);
+      if(existing&&existing.text!==body.text){response.writeHead(409).end();return;}
+      if(!existing)thread.set(body.op_id,{kind:'note',author:'owner',state:'delivered',text:body.text,at:new Date().toISOString()});
+      notes.set(body.task,thread);
+      response.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify({ok:true}));
+      return;
+    }
+    if (request.method==='POST'&&['/api/task-hide','/api/task-hide-history','/api/usage-export'].includes(url.pathname)) {
+      const length=Number(request.headers['content-length']);
+      const body=length>0&&length<=262144?await json(request).catch(()=>null):null;
+      if(!body||typeof body!=='object'){response.writeHead(400).end();return;}
+      if(url.pathname==='/api/task-hide'&&typeof body.task==='string')hiddenArchive.add(body.task);
+      if(url.pathname==='/api/task-hide-history'){
+        for(const row of sampleResults){
+          if(row.project===body.project&&(!body.agent||row.agent===body.agent)&&(!body.computer||row.key===body.computer))hiddenArchive.add(row.id);
+        }
+        for(const entry of newTasks.values()){
+          const task=previewTask(entry);
+          if(task.state==='done'&&task.project===body.project&&(!body.agent||task.agent===body.agent)&&
+             (!body.computer||(task.remote?.id||'local')===body.computer))hiddenArchive.add(task.id);
+        }
+      }
+      if(url.pathname==='/api/usage-export'){
+        response.writeHead(409,{'Content-Type':'application/json'}).end(JSON.stringify({error:'В предпросмотре используются примеры. Экспорт в файл доступен в программе.'}));
+        return;
+      }
+      response.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify({ok:true}));
       return;
     }
     if (url.pathname === '/api/self-update') {
@@ -151,16 +297,30 @@ const server = http.createServer(async (request, response) => {
         response.writeHead(404).end();
         return;
       }
+      if (url.pathname === '/api/usage-stats' || url.pathname === '/api/usage-efficiency') {
+        response.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify(previewReport(url)));
+        return;
+      }
       const custom = url.pathname === '/api/task' && [...newTasks.values()].find(entry => entry.task.id === url.searchParams.get('id'));
+      const sample = url.pathname === '/api/task' && !Object.hasOwn(conversations,url.searchParams.get('id')) &&
+        sampleResults.find(row=>row.id===url.searchParams.get('id'));
       const fixture = custom ? { task: previewTask(custom), items: [
         { kind: 'task', author: 'owner', text: custom.request.text, at: custom.task.created_at },
-      ] } : url.pathname === '/api/machine-order' ? { order: machineOrder } : reply(url, project, projects);
+      ] } : sample ? {task:previewCompleted(sample),items:[
+        {kind:'task',author:'owner',text:sample.title,at:sample.at},
+        {kind:'report',audience:'owner',verified:true,text:'Готово. Проверил результат и сохранил отчёт.',at:sample.at},
+      ]} : url.pathname === '/api/machine-order' ? { order: machineOrder } : reply(url, project, projects);
       if (custom && fixture.task.finished_at) {
         fixture.items.push({ kind: 'report', text: 'Это пример ответа в предпросмотре. Задача завершена.', verified: true, audience: 'owner', at: fixture.task.finished_at });
       }
       if (url.pathname === '/api/window' || url.pathname === '/api/project-activity') {
         const created = [...newTasks.values()].filter(entry => entry.task.project === project).map(previewTask).reverse();
         fixture.tasks = [...created, ...fixture.tasks];
+      }
+      if (url.pathname === '/api/window') fixture.coordinator_models = coordinatorModels;
+      if (url.pathname === '/api/server') {
+        for (const peer of fixture.peers) peer.version += '-preview.108';
+        fixture.peers.push({id:'offline',name:'Ноут-Windows',age:600,ready:{projects:[]},agents:[]});
       }
       const conversation = url.pathname === '/api/task' && conversations[fixture.task?.id];
       if (conversation) {
@@ -177,7 +337,23 @@ const server = http.createServer(async (request, response) => {
             ? { kind: disposition, text: conversation.followup, verified: true, audience: 'owner', at }
             : { kind: 'text', text: conversation.followup, at },
         ];
+        fixture.task = { ...fixture.task };
+        if (state === 'running' && fixture.task.agent === 'codex') fixture.task.quiet = { live_tokens: 342000 };
       }
+      const examples = await previewExamples;
+      if (fixture.task) {
+        fixture.task = previewWindowTask(fixture.task);
+        const example = examples[fixture.task.id];
+        fixture.task = withPreviewExample(fixture.task, examples);
+        if (Array.isArray(example?.items)) fixture.items = [...example.items];
+        const followups=notes.get(fixture.task.id);
+        if (followups) fixture.items.push(...followups.values());
+      }
+      if (url.pathname === '/api/window' || url.pathname === '/api/project-activity') {
+        const completed = sampleResults.filter(row=>row.project===project&&!fixture.tasks.some(task=>task.id===row.id)).map(previewCompleted);
+        fixture.tasks = [...fixture.tasks.map(previewWindowTask), ...completed].filter(task=>!hiddenArchive.has(task.id));
+      }
+      if (fixture.tasks) fixture.tasks = fixture.tasks.map(task => withPreviewExample(task, examples));
       const body = JSON.stringify(fixture);
       response.writeHead(200, { 'Content-Type': 'application/json' }).end(body);
       return;
@@ -189,7 +365,7 @@ const server = http.createServer(async (request, response) => {
     }
     const [file, contentType] = asset;
     let body = await fs.readFile(path.join(assets, file), 'utf8');
-    if (file === 'index.html') body = body.replace('id="am-concept"', 'id="am-concept" class="am-task-sidebar-preview"');
+    if (file === 'index.html') body = body.replace('id="am-concept"', 'id="am-concept" class="am-task-sidebar-preview" data-preview-token="preview-only"');
     response.writeHead(200, { 'Content-Type': contentType }).end(body);
   } catch (error) {
     console.error(error.message);
@@ -197,6 +373,11 @@ const server = http.createServer(async (request, response) => {
   }
 });
 
-server.listen(Number(process.argv[2] || 0), host, () => {
-  console.log('http://' + host + ':' + server.address().port + '/#preview-only');
+previewExamples.then(() => {
+  server.listen(Number(process.argv[2] || 0), host, () => {
+    console.log('http://' + host + ':' + server.address().port + '/');
+  });
+}).catch(error => {
+  console.error(error.message);
+  process.exitCode = 1;
 });

@@ -60,14 +60,15 @@ func scanWindowRevision(ctx context.Context, db *sql.DB, query string, args []an
 func installWindowChanges(db *sql.DB) error {
 	// The last trigger and table are installed in one SQLite transaction.
 	// Task MCP processes normally take just this read when opening the store.
-	var machine, history, machineInstalled, historyInstalled bool
+	var machine, history, machineInstalled, historyInstalled, liveTokensInstalled bool
 	err := db.QueryRow(`SELECT
  EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='control'),
  EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='tasks'),
  EXISTS(SELECT 1 FROM sqlite_schema WHERE type='trigger' AND name='am_window_control_update'),
- EXISTS(SELECT 1 FROM sqlite_schema WHERE type='trigger' AND name='am_window_task_runs_structure')`).
-		Scan(&machine, &history, &machineInstalled, &historyInstalled)
-	if err != nil || (machine == machineInstalled && history == historyInstalled) {
+ EXISTS(SELECT 1 FROM sqlite_schema WHERE type='trigger' AND name='am_window_task_runs_structure'),
+ EXISTS(SELECT 1 FROM sqlite_schema WHERE type='trigger' AND name='am_window_live_tokens')`).
+		Scan(&machine, &history, &machineInstalled, &historyInstalled, &liveTokensInstalled)
+	if err != nil || (machine == machineInstalled && history == historyInstalled && history == liveTokensInstalled) {
 		return err
 	}
 	var schema strings.Builder
@@ -132,6 +133,11 @@ func installWindowChanges(db *sql.DB) error {
 	}
 	if machine && !machineInstalled {
 		trigger("control", "update", "WHEN OLD.paused IS NOT NEW.paused", bump("window", "''"))
+	}
+	if history && !liveTokensInstalled {
+		fmt.Fprintf(&schema, `CREATE TRIGGER IF NOT EXISTS am_window_live_tokens
+ AFTER UPDATE OF live_tokens ON task_runs WHEN OLD.live_tokens IS NOT NEW.live_tokens
+ BEGIN %s END;`, bump("feed", "NEW.task_id"))
 	}
 
 	tx, err := db.Begin()

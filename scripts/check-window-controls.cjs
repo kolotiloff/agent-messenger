@@ -83,6 +83,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
             cursor_link: {state: connected ? 'connected' : created ? 'missing' : 'no_folder'},
             computer_name: 'Theme test', tasks_enabled: true},
           '/api/agent-setup-status': setupStates,
+          '/api/model-catalog': {models: [{model:'gpt-6.2-sol[effort=medium]',name:'GPT-6.2 Sol Medium'}],limit:12},
           '/api/discovery': {agents: ['claude','codex','cursor'].map(provider => ({provider, state: 'not_found'}))},
           '/api/client-info': {client: 'running', outdated: false},
           '/api/machine-order': {order: machineOrder, peers: machinePeers},
@@ -413,8 +414,17 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await codex.getByRole('button',{name:'Доверять',exact:true}).waitFor({state:'detached',timeout:10000});
       assert.deepEqual(writes.filter(w=>w.path==='/api/agent-trust').map(w=>w.body),[{provider:'codex',project:'Welcome test',folder:'/fictional/project'}]);
       await codex.getByRole('button',{name:'Настройки',exact:true}).click();
-      assert.equal(await page.locator('#agent-models').inputValue(),''); // An explicitly empty list stays empty.
-      assert((await page.locator('#agent-models-note').textContent()).includes('[effort=high]'));
+      await page.locator('#agent-models-open').click();
+      const switchModel=page.getByRole('switch',{name:'GPT-6.2 Sol Medium'});
+      await switchModel.waitFor();
+      assert.equal(await switchModel.getAttribute('aria-checked'),'false');
+      await page.locator('#agent-model-search').fill('6.2 Sol');
+      await switchModel.click();
+      assert.equal(await switchModel.getAttribute('aria-checked'),'true');
+      await page.locator('#agent-model-save').click();
+      await page.locator('#agent-model-picker').waitFor({state:'hidden'});
+      assert.deepEqual(writes.filter(w=>w.path==='/api/agent-models').map(w=>w.body),
+        [{provider:'codex',models:['gpt-6.2-sol[effort=medium]']}]);
       if(process.env.SCREENSHOT_DIR&&!native) await page.screenshot({animations:'disabled',path:path.join(process.env.SCREENSHOT_DIR,'600-dark-agent-settings.png')});
       assert.equal(await page.locator('#agent-cli-find').evaluate(n=>n.getBoundingClientRect().height),32);
       await page.locator('#agent-cli-find').click();
@@ -861,10 +871,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         await cohortHeader.evaluate(node=>getComputedStyle(node).paddingTop),'efficiency headers share the vertical inset around the rule');
       const acceptedRate=compared.locator('.am-efficiency-rate').first();
       const firstPassRate=compared.locator('.am-efficiency-rate').last();
-      assert.equal(await acceptedRate.innerText(),'60%');
+      assert.equal(await acceptedRate.innerText(),'75%');
       assert.equal(await firstPassRate.innerText(),'50%');
       await acceptedRate.hover();
-      await acceptedRate.getByRole('tooltip').getByText('3/5',{exact:true}).waitFor();
+      await acceptedRate.getByRole('tooltip').getByText('3/4',{exact:true}).waitFor();
       assert.equal(await compared.locator('td').nth(2).innerText(),'125 тыс.');
       const more=compared.getByRole('button',{name:'Codex Sol 6.2 High, 5 задач'}),efficiencyDetails=page.locator('#stats-efficiency-detail-0');
       const modelName=more.locator('.am-efficiency-model-name'),groupCount=more.getByText(', 5 задач',{exact:true});

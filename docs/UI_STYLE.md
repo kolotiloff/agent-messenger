@@ -27,6 +27,10 @@ Buttons that belong together go in one container: `.am-actions` (a row) or `.am-
 | `--am-radius-m` | 12 | cards, panels, notices, menus, error chips, the window |
 | `--am-radius-l` | 16 | dialogs, the composer, message bubbles |
 
+The composer keeps its surface radius (16 px) at every height. Its inset icon buttons use the shared control radius (8 px), just like the sidebar buttons.
+
+The conversation and composer share a centered column up to `--am-chat-max` (760 px), with the same pane inset on both sides at narrow widths. The scrollbar stays at the edge of the chat pane.
+
 ## Sizes
 
 - Controls: `--am-control` 32 (buttons, fields, select fields, send and stop), the size of buttons in the Claude app; `--am-control-compact` 28 (tabs, square icon buttons, the task filter); `--am-control-chip` 24 (buttons inside an error chip).

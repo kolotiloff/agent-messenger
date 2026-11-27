@@ -55,6 +55,7 @@ type usageExportTask struct {
 	Reviews           []TaskReview    `json:"reviews,omitempty"`
 	Attempts          []taskAttempt   `json:"attempts,omitempty"`
 	local             bool
+	singleLocalRun    bool
 }
 
 // WriteUsageExport saves the task records known to this computer for the
@@ -226,6 +227,7 @@ func visitUsageExportTasks(ctx context.Context, db *sql.Tx, since time.Time, com
  t.usage_output,t.usage_cache_write,t.usage_cost,COALESCE(t.remote_peer,''),COALESCE(t.remote_broker,''),
  COALESCE((SELECT MIN(r.launched_at) FROM task_runs r WHERE r.task_id=t.id),''),
  t.remote_duration_ms,
+ t.remote_peer IS NULL AND (SELECT COUNT(*) FROM task_runs r WHERE r.task_id=t.id)=1,
  CASE WHEN t.remote_peer IS NOT NULL AND t.remote_duration_ms IS NULL AND t.state IN ('done','failed')
  THEN COALESCE((SELECT i.created_at FROM remote_task_items i WHERE i.task_id=t.id ORDER BY i.seq LIMIT 1),'') ELSE '' END` + analytics + ` FROM tasks t WHERE t.project=?`
 	args := []any{filter.Project, since.UTC().Format(time.RFC3339Nano)}
@@ -256,7 +258,7 @@ func visitUsageExportTasks(ctx context.Context, db *sql.Tx, since time.Time, com
 		if err := rows.Scan(&task.ID, &task.OriginID, &task.Title, &task.Agent, &task.Computer, &task.State,
 			&task.Created, &task.Updated, &task.Finished, &requested, &reported, &seen,
 			&usage.InputTokens, &usage.CachedTokens, &usage.OutputTokens, &usage.CacheWriteTokens, &cost,
-			&peer, &peerBroker, &started, &remoteDuration, &observed, &assignment, &reviews, &attempts); err != nil {
+			&peer, &peerBroker, &started, &remoteDuration, &task.singleLocalRun, &observed, &assignment, &reviews, &attempts); err != nil {
 			return err
 		}
 		task.local = peer == ""

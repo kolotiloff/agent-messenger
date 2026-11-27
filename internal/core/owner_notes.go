@@ -15,7 +15,8 @@ import (
 // answer. A task that stops keeps its waiting notes as undelivered: nothing
 // sends them again by itself.
 
-// AddOwnerNote records the owner's note to a working task given by this computer.
+// AddOwnerNote records the owner's message to a task given by this computer.
+// A finished task with a recorded conversation can start another turn.
 // opID makes it idempotent. A worker that asked the coordinator has ended
 // its step and waits: the owner's message answers that question at once,
 // instead of waiting for the coordinator (T-125).
@@ -83,10 +84,35 @@ func addNoteTx(machine, tx *sql.Tx, task, project, opID, text, author string, vi
 			return err
 		}
 		if link.remote != nil {
+			if author == AudienceOwner {
+				old, err := metaValue(tx, "net_continue:"+opID)
+				if err != nil {
+					return err
+				}
+				if old != "" || t.State == "done" || t.State == "failed" {
+					return continueRemoteTask(machine, tx, task, *link.remote, opID, text, MessageSender{Agent: AudienceOwner})
+				}
+			}
 			return noteRemoteTask(machine, tx, t, *link.remote, opID, text, author, sender)
 		}
 		if link.origin != nil && !viaNet {
 			return fmt.Errorf("%w: this task came from another computer; its coordinator writes to it", ErrRejected)
+		}
+		if author == AudienceOwner {
+			var oldTask, oldText string
+			err := tx.QueryRow(`SELECT task_id,input FROM task_runs WHERE op_id=?`, opID).Scan(&oldTask, &oldText)
+			if err == nil {
+				if oldTask == task && oldText == text {
+					return nil
+				}
+				return fmt.Errorf("%w: this operation id was used for another follow-up", ErrRejected)
+			}
+			if !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
+			if t.State == "done" || t.State == "failed" {
+				return continueTaskTx(machine, tx, task, opID, text, nil, viaNet, MessageSender{Agent: AudienceOwner})
+			}
 		}
 		if t.State == "waiting_owner" {
 			if author == AudienceCoordinator {

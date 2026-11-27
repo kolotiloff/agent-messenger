@@ -994,6 +994,9 @@ func insertTaskRun(tx *sql.Tx, task string, ordinal int, kind, input string, sen
 	}
 	run := "run-" + id[:16]
 	sender := coordinatorSender(AudienceCoordinator, senders)
+	if kind == "continue" && len(senders) > 0 && senders[0].Agent == AudienceOwner {
+		sender = MessageSender{Agent: AudienceOwner}
+	}
 	if _, err = tx.Exec(`INSERT INTO task_runs(id,task_id,ordinal,kind,input,receipt,state,created_at,sender_agent,sender_model) VALUES (?,?,?,?,?,?,'intent',?,?,?)`, run, task, ordinal, kind, input, receipt, now(), sender.Agent, sender.Model); err != nil {
 		return err
 	}
@@ -1230,7 +1233,8 @@ func setTaskState(tx *sql.Tx, task, state, detail string) error {
 	if state == "done" || state == "failed" || state == "cancelled" {
 		finished = sql.NullString{String: now(), Valid: true}
 	}
-	_, err := tx.Exec(`UPDATE tasks SET state=?,detail=?,updated_at=?,version=version+1,finished_at=COALESCE(?,finished_at),failure_reason=NULL,failure_reset=NULL WHERE id=?`, state, detail, now(), nullString(finished), task)
+	_, err := tx.Exec(`UPDATE tasks SET state=?,detail=?,updated_at=?,version=version+1,finished_at=COALESCE(?,finished_at),failure_reason=NULL,failure_reset=NULL,
+remote_live_tokens=CASE WHEN ?='running' THEN remote_live_tokens END WHERE id=?`, state, detail, now(), nullString(finished), state, task)
 	return err
 }
 
@@ -1450,6 +1454,13 @@ func (s *Store) SetTaskRunModel(run, model string) error {
 // ClearTaskRunModel removes the previous observation when a new process
 // resumes a task, since its CLI defaults may have changed.
 func (s *Store) ClearTaskRunModel(run string) error {
+	if s.split != nil {
+		project, err := s.storeForRun(run)
+		if err != nil {
+			return err
+		}
+		return project.ClearTaskRunModel(run)
+	}
 	return s.tx(func(tx *sql.Tx) error { return setTaskRunModel(tx, run, "") })
 }
 

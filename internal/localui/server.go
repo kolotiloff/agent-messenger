@@ -26,6 +26,7 @@ import (
 	"github.com/kolotiloff/agent-messenger/internal/control"
 	"github.com/kolotiloff/agent-messenger/internal/core"
 	"github.com/kolotiloff/agent-messenger/internal/diagnostics"
+	"github.com/kolotiloff/agent-messenger/internal/modelcatalog"
 	"github.com/kolotiloff/agent-messenger/internal/updatefeed"
 )
 
@@ -185,6 +186,15 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 		}
 		if subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte("Bearer "+token)) != 1 {
 			http.Error(w, "access denied", http.StatusUnauthorized)
+			return
+		}
+		if r.Method == http.MethodGet && r.URL.Path == "/api/model-catalog" {
+			provider := r.URL.Query().Get("provider")
+			if !core.TaskProviders[provider] {
+				http.Error(w, "unknown agent", http.StatusBadRequest)
+				return
+			}
+			writeJSON(w, map[string]any{"models": modelcatalog.Selections(provider), "limit": core.MaxAgentModels})
 			return
 		}
 		if r.URL.Path == "/api/update-progress" {

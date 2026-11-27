@@ -26,11 +26,35 @@ func TestRemoteTaskContinue(t *testing.T) {
 		t.Fatalf("continued a running task: %v", err)
 	}
 	r := p.b.launch(t, m.ID, "019a0000-0000-7000-8000-0000000000b1")
+	checkLive := func(want *int64) {
+		t.Helper()
+		feed, err := p.a.st.TaskFeed(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got *int64
+		if feed.Task.Quiet != nil {
+			got = feed.Task.Quiet.LiveTokens
+		}
+		if want == nil && got != nil || want != nil && (got == nil || *got != *want) {
+			t.Fatalf("remote live tokens: quiet=%+v, want %v", feed.Task.Quiet, want)
+		}
+	}
+	tokens := int64(12500)
+	if err := p.b.st.NoteLiveTokens(r.ID, tokens); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.b.st.NoteLiveTokens(r.ID, tokens-1); err != nil {
+		t.Fatal(err)
+	}
+	p.carry(t, false)
+	checkLive(&tokens)
 	p.b.dispose(t, r, DispositionReport, "Level 1 is built")
 	if _, err := p.b.st.FinishTaskRun(r.ID, cleanExit); err != nil {
 		t.Fatal(err)
 	}
 	p.carry(t, false)
+	checkLive(nil)
 	if task, _ := p.a.st.TaskByID(id); task.State != "done" {
 		t.Fatalf("done %+v", task)
 	}
@@ -62,6 +86,12 @@ func TestRemoteTaskContinue(t *testing.T) {
 	assertTaskMessageSender(t, p.a.st, id, "answer", "Add level 2", sender)
 	assertTaskMessageSender(t, p.b.st, m.ID, "answer", "Add level 2", sender)
 	r2 := p.b.launch(t, m.ID, "019a0000-0000-7000-8000-0000000000b1")
+	tokens = 800
+	if err := p.b.st.NoteLiveTokens(r2.ID, tokens); err != nil {
+		t.Fatal(err)
+	}
+	p.carry(t, false)
+	checkLive(&tokens)
 	brief, err := p.b.st.ReadTask(r2.ID, r2.Receipt, false)
 	if err != nil || r2.Kind != "continue" || brief.FollowUp != "Add level 2" {
 		t.Fatalf("brief %+v %+v %v", r2, brief, err)

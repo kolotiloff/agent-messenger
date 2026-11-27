@@ -1,6 +1,6 @@
 // Browser check with fictional HTTP responses only (T-265). No Messenger
-// process, model or user profile is opened. Switching projects must go from a
-// loading indicator to the conversation without showing the welcome, and an
+// process, model or user profile is opened. Switching projects keeps the
+// previous conversation until the next one is ready, and an
 // empty project on a computer that has seen tasks says that it has none.
 // Requires Playwright. Optional: PLAYWRIGHT_MODULE, BROWSER_ENGINE
 // (chromium/webkit), SCREENSHOT_DIR.
@@ -79,14 +79,14 @@ const shots = process.env.SCREENSHOT_DIR;
         await page.locator('#project-select-menu').getByRole('option', {name, exact: true}).click();
       };
 
-      // A slow switch: the pane shows the loading indicator, never the welcome.
+      // A slow switch keeps the old conversation on screen until the feed is ready.
       windowDelay = 700; feedDelay = 700;
       await page.evaluate(() => { window.welcomeSeen = 0; });
       await select('Site');
-      const loading = page.locator('#thread .am-pane-loading');
-      await loading.waitFor();
-      await page.waitForFunction(() => getComputedStyle(document.querySelector('#thread .am-pane-loading')).opacity === '1');
-      if (shots) await page.screenshot({path: path.join(shots, `switch-loading-${scheme}.png`)});
+      await page.waitForFunction(() => document.querySelector('#thread').getAttribute('aria-busy') === 'true');
+      assert.equal(await page.locator('#thread').getByText('Задача: Проверить сборку сцены').count(), 1);
+      assert.equal(await page.locator('#thread .am-pane-loading').count(), 0);
+      if (shots) await page.screenshot({path: path.join(shots, `switch-pending-${scheme}.png`)});
       await page.locator('#thread').getByText('Задача: Собрать страницу загрузки').waitFor();
       assert.equal(await page.evaluate(() => window.welcomeSeen), 0, 'welcome flashed during a slow switch');
 
@@ -122,7 +122,7 @@ const shots = process.env.SCREENSHOT_DIR;
       assert.deepEqual(errors, []);
       await context.close();
     }
-    console.log(JSON.stringify({engine, loading_instead_of_welcome: true, empty_project_message: true, first_run_welcome: true}));
+    console.log(JSON.stringify({engine, retains_previous_conversation: true, empty_project_message: true, first_run_welcome: true}));
   } finally {
     await browser.close();
   }

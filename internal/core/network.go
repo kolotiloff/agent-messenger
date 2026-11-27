@@ -220,6 +220,9 @@ type netBody struct {
 	// Usage is the running computer's total for the task (T-058). A
 	// computer before it ignores the field.
 	Usage *TaskUsage `json:"usage,omitempty"`
+	// LiveTokens is a cumulative observation for one attempt, never final usage.
+	LiveTokens *int64 `json:"live_tokens,omitempty"`
+	RunOrdinal int    `json:"run_ordinal,omitempty"`
 	// DurationMS comes from the executing computer's own clock.
 	DurationMS *int64 `json:"duration_ms,omitempty"`
 	// Computer is the sender's lasting id (T-132), set on every message, so
@@ -713,7 +716,7 @@ func prepareRemoteTask(tx *sql.Tx, r StartTaskRequest) (remoteTaskConfig, error)
 	if !has {
 		return cfg, fmt.Errorf("%w: agent %s is not set up on %s", ErrRejected, r.Provider, peer.Name)
 	}
-	centralModels := !r.ByOwner && usesCoordinatorModels(peer.Version)
+	centralModels := usesCoordinatorModels(peer.Version)
 	if centralModels {
 		self, err := localComputer(tx)
 		if err != nil {
@@ -1501,6 +1504,15 @@ func applyReport(tx *sql.Tx, from netLink, b netBody, name string) error {
 	}
 	switch b.Kind {
 	case "progress":
+		if b.Event == "live_usage" {
+			if t.State != "running" || b.LiveTokens == nil || *b.LiveTokens < 0 || b.RunOrdinal < 1 {
+				return nil
+			}
+			_, err := tx.Exec(`UPDATE tasks SET remote_live_tokens=?,remote_live_ordinal=?
+WHERE id=? AND (remote_live_ordinal<? OR (remote_live_ordinal=? AND remote_live_tokens<?))`,
+				*b.LiveTokens, b.RunOrdinal, t.ID, b.RunOrdinal, b.RunOrdinal, *b.LiveTokens)
+			return err
+		}
 		// A line of the worker's progress, for the window only (D-055).
 		activity := isCommandActivity(b.Event)
 		if b.Event != "text" && b.Event != "tool" && !activity {

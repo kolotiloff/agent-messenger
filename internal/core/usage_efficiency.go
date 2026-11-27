@@ -152,6 +152,14 @@ func readModelEfficiency(ctx context.Context, db *sql.Tx, since time.Time, compu
 		if len(root.Attempts) > 0 && root.Attempts[0].Ordinal == 1 {
 			key.Model = root.Attempts[0].Model
 		}
+		// With only one recorded local run, the last observed model also
+		// describes the first. Older databases may lack attempt records.
+		if key.Model == "" && root.singleLocalRun && root.Reported != nil {
+			key.Model = root.Reported.ID
+			if root.Reported.Effort != "" {
+				key.Model += "[effort=" + root.Reported.Effort + "]"
+			}
+		}
 		selection := key.Model
 		if selection == "" && root.Requested != nil {
 			selection = root.Requested.ID

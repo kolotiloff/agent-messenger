@@ -38,6 +38,7 @@ type RunQuiet struct {
 	// the final message is out and the run still has not ended.
 	Processes   []RunProcess `json:"processes,omitempty"`
 	ProcessesAt string       `json:"processes_at,omitempty"`
+	LiveTokens  *int64       `json:"live_tokens,omitempty"`
 }
 
 // runOutputStep is how often the last-output time is written while a
@@ -49,6 +50,32 @@ const maxRunProcesses = 16
 
 // RunOutputStep is runOutputStep for the supervisor.
 func RunOutputStep() time.Duration { return runOutputStep }
+
+// NoteLiveTokens updates the display for a running attempt only.
+func (s *Store) NoteLiveTokens(run string, tokens int64) error {
+	store, err := s.storeForRun(run)
+	if err != nil {
+		return err
+	}
+	return store.tx(func(tx *sql.Tx) error {
+		var task string
+		var ordinal int
+		err := tx.QueryRow(`UPDATE task_runs SET live_tokens=? WHERE id=? AND state='running'
+AND ?>=0 AND (live_tokens IS NULL OR live_tokens<?) RETURNING task_id,ordinal`, tokens, run, tokens, tokens).Scan(&task, &ordinal)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		link, err := taskLink(tx, task)
+		if err != nil || link.origin == nil {
+			return err
+		}
+		return enqueueNet(tx, link.origin.broker, link.origin.peer, fmt.Sprintf("live-usage.%s.%d", run, tokens), task,
+			netBody{Kind: "progress", Task: link.origin.task, Event: "live_usage", LiveTokens: &tokens, RunOrdinal: ordinal})
+	})
+}
 
 // NoteRunOutput records that a running worker wrote output now.
 func (s *Store) NoteRunOutput(run string) error {
@@ -155,7 +182,8 @@ func (s *Store) TaskRunQuiet(task string) (*RunQuiet, error) {
 		return project.TaskRunQuiet(task)
 	}
 	var output, final, procs, procsAt sql.NullString
-	err := s.db.QueryRow(`SELECT output_at,final_at,processes,processes_at FROM task_runs WHERE task_id=? AND state='running' ORDER BY ordinal DESC LIMIT 1`, task).Scan(&output, &final, &procs, &procsAt)
+	var tokens sql.NullInt64
+	err := s.db.QueryRow(`SELECT output_at,final_at,processes,processes_at,live_tokens FROM task_runs WHERE task_id=? AND state='running' ORDER BY ordinal DESC LIMIT 1`, task).Scan(&output, &final, &procs, &procsAt, &tokens)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -163,12 +191,15 @@ func (s *Store) TaskRunQuiet(task string) (*RunQuiet, error) {
 		return nil, err
 	}
 	q := &RunQuiet{OutputAt: output.String, FinalAt: final.String}
+	if tokens.Valid {
+		q.LiveTokens = &tokens.Int64
+	}
 	if final.String != "" && procs.String != "" {
 		if json.Unmarshal([]byte(procs.String), &q.Processes) == nil {
 			q.ProcessesAt = procsAt.String
 		}
 	}
-	if q.OutputAt == "" && q.FinalAt == "" {
+	if q.OutputAt == "" && q.FinalAt == "" && q.LiveTokens == nil {
 		return nil, nil
 	}
 	return q, nil

@@ -2,9 +2,17 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-326–T-332 preview and functional audit)
+
+Aligned Projects, Archive and the full conversation title. Added the date below the title, full-width ellipsized cards, a scoped Clear archive action, consistent provider and hardware icons, message time on hover, and a capped chat column. Placed delivery status and the live usage counter above the pinned composer so it stays put when switching tasks. Added an optional local file with recent task titles and four conversations. Real tool details are display-only. The public fixture and preview usage reports use sample data. Chromium and WebKit verified layout, the anchored composer, filters, task switches and archive controls. The loopback check also expanded a real command. Kept model settings, task launches and coordinator choices in sync. Continued recorded local and remote worker sessions after completion, displayed reported live Codex usage, and checked the efficiency report's reviewed denominator and historical attribution. Installed-window acceptance is pending.
+
+## 2026-11-27 — Codex (T-332 active-task alignment)
+
+Aligned active-task text with its computer name by reusing the heading's icon width and name gap. Kept the full-width selection and added geometry assertions to the browser fixture. Broke down the remaining visual review into separate checks in TASKS.md.
+
 ## 2026-11-27 — Codex (T-326 archive cards and general settings)
 
-Put the completion time above the archive title and moved the computer name to the time tooltip. Put the model, duration, and tokens beneath the title, using T. with exact counts in the tooltip. Showed capitalized Today and Yesterday or a calendar date with the time. Matched provider logo sizes and aligned wrapped archive metadata with the card text edge. Indented current-task text inside full-width rows and compacted the General settings inset. Kept the owner composer editable when delivery is temporarily unavailable and preserved the draft when a question arrives. Chromium and WebKit verified archive metadata, panel spacing, a remote note, an answer after the task changed state, and draft retention across a remote disconnect and reconnect. The local UI race tests passed.
+Put the completion time above the archive title and moved the computer name to the time tooltip. Put the model, duration, and tokens beneath the title, using t. with exact counts in the tooltip. Showed capitalized Today and Yesterday or a calendar date with the time. Matched provider logo sizes and aligned wrapped archive metadata with the card text edge. Indented current-task text inside full-width rows and compacted the General settings inset. Kept the owner composer editable when delivery is temporarily unavailable and preserved the draft when a question arrives. Chromium and WebKit verified archive metadata, panel spacing, a remote note, an answer after the task changed state, and draft retention across a remote disconnect and reconnect. The local UI race tests passed.
 
 ## 2026-11-27 — Codex (T-326 panel alignment and settings modal)
 

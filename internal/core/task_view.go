@@ -141,6 +141,7 @@ type WindowTask struct {
 	// PendingLaunch is set while the task's latest run is recorded but not
 	// launched (paused queue or tasks not allowed).
 	PendingLaunch bool `json:"pending_launch,omitempty"`
+	CanContinue   bool `json:"can_continue,omitempty"`
 	// WaitsForLock is the lock a pending task waits for (T-072).
 	WaitsForLock string `json:"waits_for_lock,omitempty"`
 	// StartedAt is when the first run was launched; durations count from it.
@@ -322,6 +323,13 @@ func (s *Store) fillWindowLaunch(t *WindowTask) error {
 		// The executor's live report may arrive before the launch event.
 		if t.State == "running" && t.Remote.Worker != "running" {
 			t.PendingLaunch, t.WaitsForLock = pending, lock
+		}
+		if err == nil && t.State == "running" {
+			var tokens sql.NullInt64
+			err = s.db.QueryRow(`SELECT remote_live_tokens FROM tasks WHERE id=?`, t.ID).Scan(&tokens)
+			if tokens.Valid {
+				t.Quiet = &RunQuiet{LiveTokens: &tokens.Int64}
+			}
 		}
 		return err
 	}
@@ -597,6 +605,7 @@ func (s *Store) windowTaskRows(selection string, args ...any) ([]WindowTask, err
 		if err := s.fillWindowLaunch(&w); err != nil {
 			return nil, err
 		}
+		w.CanContinue = canWindowContinue(w, t.SessionID)
 		if w.Usage, err = s.taskUsage(t.ID); err != nil {
 			return nil, err
 		}
@@ -655,10 +664,21 @@ func (s *Store) taskFeedHeader(id string) (TaskFeed, Task, error) {
 	if err := s.fillWindowLaunch(&f.Task); err != nil {
 		return f, t, err
 	}
+	f.Task.CanContinue = canWindowContinue(f.Task, t.SessionID)
 	if f.Task.Usage, err = s.taskUsage(t.ID); err != nil {
 		return f, t, err
 	}
 	return f, t, nil
+}
+
+func canWindowContinue(t WindowTask, session string) bool {
+	if t.State != "done" && t.State != "failed" {
+		return false
+	}
+	if t.Remote == nil {
+		return session != ""
+	}
+	return !t.Remote.From && !t.Remote.Unaccepted && !t.Remote.Lost && !t.Remote.Silent
 }
 
 // TaskFeed builds the feed of one task.
@@ -685,7 +705,8 @@ func (s *Store) TaskFeed(id string) (TaskFeed, error) {
 	}
 	err = s.tx(func(tx *sql.Tx) error {
 		runs, err := tx.Query(`SELECT r.id,r.ordinal,r.kind,r.input,r.state,COALESCE(r.disposition,''),COALESCE(r.disposition_text,''),r.created_at,COALESCE(r.finished_at,''),r.detail,
- CASE WHEN r.kind='answer' AND r.sender_agent='' THEN COALESCE((SELECT answered_by FROM task_questions q WHERE q.task_id=r.task_id AND q.answer=r.input AND q.state='answered' ORDER BY q.rowid DESC LIMIT 1),'coordinator') ELSE 'coordinator' END, r.sender_agent,r.sender_model
+ CASE WHEN r.kind='continue' AND r.sender_agent='owner' THEN 'owner'
+ WHEN r.kind='answer' AND r.sender_agent='' THEN COALESCE((SELECT answered_by FROM task_questions q WHERE q.task_id=r.task_id AND q.answer=r.input AND q.state='answered' ORDER BY q.rowid DESC LIMIT 1),'coordinator') ELSE 'coordinator' END, r.sender_agent,r.sender_model
  FROM task_runs r WHERE r.task_id=? ORDER BY r.ordinal`, id)
 		if err != nil {
 			return err
@@ -843,7 +864,7 @@ func (s *Store) remoteEvents(f *TaskFeed) error {
 			f.Items = append(f.Items, FeedItem{Kind: "question", Author: "worker", Text: text, At: at, Verified: true, Audience: audience, State: "finished", Images: pics[disposed]})
 		case "answered", "continued":
 			by := AudienceCoordinator
-			if audience == AudienceOwner {
+			if audience == AudienceOwner || senderAgent == AudienceOwner {
 				by = AudienceOwner
 			}
 			f.Items = append(f.Items, FeedItem{Kind: "answer", Author: by, Text: text, At: at, Verified: true, SenderAgent: senderAgent, SenderModel: senderModel})

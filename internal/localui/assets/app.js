@@ -112,7 +112,7 @@
     for(const d of providerPaths[provider]){const path=document.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d',d);svg.append(path);}wrap.append(svg);return wrap;
   }
   function notice(node){const n=$('notice');n.replaceChildren();if(node)n.append(node);n.hidden=!node;}
-  let token=location.hash.slice(1);
+  let token=location.hash.slice(1)||root.dataset.previewToken||'';
   try{if(token)sessionStorage.setItem('messenger-ui-token',token);else token=sessionStorage.getItem('messenger-ui-token')||'';}catch(_){}
   if(location.hash)history.replaceState(null,'',location.pathname);
   function remember(key,value){try{localStorage.setItem(key,value);}catch(_){}}
@@ -905,18 +905,28 @@
   });
   machineList.addEventListener('dragover',event=>{
     if(!draggedMachine)return;
-    const card=event.target.closest('[data-machine-order]');
+    let card=event.target.closest('[data-machine-order]'),gapAfter;
+    if(!card&&taskSidebarPreview){
+      const cards=[...machineList.children].filter(node=>node.dataset.machineOrder!==draggedMachine);
+      card=cards.find(node=>event.clientY<node.getBoundingClientRect().top);
+      gapAfter=!card;
+      card||=cards.at(-1);
+    }
     clearMachineDrop();
     if(!card||card.dataset.machineOrder===draggedMachine)return;
     event.preventDefault();
     event.dataTransfer.dropEffect='move';
     const target=taskSidebarPreview?card.querySelector('.am-machine-name'):card;
-    const rect=target.getBoundingClientRect(),after=event.clientY>=rect.top+rect.height/2;
+    const rect=target.getBoundingClientRect(),after=gapAfter??event.clientY>=rect.top+rect.height/2;
     card.dataset.dropEdge=after?'after':'before';
     machineDrop={card,after};
   });
   machineList.addEventListener('dragleave',event=>{
-    if(!machineList.contains(event.relatedTarget))clearMachineDrop();
+    if(machineList.contains(event.relatedTarget))return;
+    const rect=machineList.getBoundingClientRect();
+    if(!event.relatedTarget&&event.clientX>=rect.left&&event.clientX<rect.right&&
+        event.clientY>=rect.top&&event.clientY<rect.bottom)return;
+    clearMachineDrop();
   });
   machineList.addEventListener('drop',event=>{
     if(!draggedMachine||!machineDrop)return;
@@ -1033,7 +1043,10 @@
     signal.setAttribute('aria-hidden','true');
     // With the seven-unit round stroke, both diagonals span the 24-unit view box.
     if(!online)signal.append(svgIcon(['M3.5 3.5l17 17M20.5 3.5l-17 17']));
-    mark.append(svgIcon(['M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2ZM12 17v3M8 20h8']),signal);
+    const glyph=taskSidebarPreview
+      ?['M4 3h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM4 14h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2ZM6 7h1M6 18h1']
+      :['M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2ZM12 17v3M8 20h8'];
+    mark.append(svgIcon(glyph),signal);
     return mark;
   }
   function currentTasksByComputer(){
@@ -1093,6 +1106,8 @@
         details.append(detail);
       }
       meta.append(providerIcon(t.agent),details);
+      title.title=title.textContent;
+      meta.title=meta.textContent;
       row.append(title,meta);
       row.addEventListener('click',()=>{
         if(tab!=='tasks')show('tasks');
@@ -1484,21 +1499,30 @@
       if(failed.length)showError(new Error(tr('Не закрылись: ')+failed.length+'. '+failed[0]));
     });
   }
-  function askClearDone(items,snapshot){
-    const paged=!!snapshot.history_paged,scope={project:snapshot.project,agent:$('agent-filter').value,computer:computerFilter};
-    const text=paged?tr('Из списка пропадут все завершённые задачи по текущему фильтру, включая те, которые ещё не загружены. История задач сохранится.')
-      :tr('Из списка на этом компьютере пропадут завершённые задачи: ')+items.length+tr('. Задачи этого компьютера пропадут и у других компьютеров; задачи других компьютеров останутся у них.');
-    askConfirm(tr('Убрать все завершённые задачи?'),text,tr('Убрать все'),async()=>{
+  function askClearDone(batches){
+    const agent=$('agent-filter').value,computer=computerFilter;
+    const count=batches.reduce((total,{items})=>total+items.length,0);
+    const text=batches.some(({snapshot})=>snapshot.history_paged)
+      ?tr('Из списка пропадут все завершённые задачи по текущему фильтру, включая те, которые ещё не загружены. История задач сохранится.')
+      :tr('Из списка на этом компьютере пропадут завершённые задачи: ')+count+tr('. Задачи этого компьютера пропадут и у других компьютеров; задачи других компьютеров останутся у них.');
+    const action=taskSidebarPreview?tr('Очистить архив'):tr('Убрать все');
+    const heading=taskSidebarPreview?tr('Очистить архив?'):tr('Убрать все завершённые задачи?');
+    askConfirm(heading,text,action,async()=>{
       const failed=[];
-      if(paged){
-        await postAPI('/api/task-hide-history',scope);
-        taskHistories.delete(scope.project);
-        if(items.some(it=>!it.peer&&it.t.id===selectedTask)){selectedTask='';feed=null;feedSignature='';}
-      }
-      for(const it of items){
-        if(paged&&!it.peer)continue;
-        try{await postAPI('/api/task-hide',{peer:it.peer?.peer||'',task:it.t.id});}
-        catch(e){failed.push(e.message);}
+      for(const {items,snapshot} of batches){
+        const paged=snapshot.history_paged;
+        if(paged){
+          try{
+            await postAPI('/api/task-hide-history',{project:snapshot.project,agent,computer});
+            taskHistories.delete(snapshot.project);
+            if(items.some(it=>!it.peer&&it.t.id===selectedTask)){selectedTask='';feed=null;feedSignature='';}
+          }catch(e){failed.push(e.message);}
+        }
+        for(const it of items){
+          if(paged&&!it.peer)continue;
+          try{await postAPI('/api/task-hide',{peer:it.peer?.peer||'',task:it.t.id});}
+          catch(e){failed.push(e.message);}
+        }
       }
       viewSignature='';await refresh();loadProjectActivity();
       if(failed.length)showError(new Error(tr('Не убрались: ')+failed.length+'. '+failed[0]));
@@ -1563,11 +1587,13 @@
     if(tip)duration.title=tip;
     details.append(identity,', ',duration);
     if(tokens!=null){
-      const usage=el('span',tokensText(tokens)+' T.','am-task-usage');
+      const usage=el('span',tokensText(tokens)+tr(' т.'),'am-task-usage');
       usage.title=peer?tokensFull(tokens):usageLong(t.usage);
       details.append(', ',usage);
     }
     meta.append(providerIcon(t.agent),details);
+    title.title=title.textContent;
+    meta.title=meta.textContent;
     row.classList.add('am-archive-task');
     row.append(title,meta);
   }
@@ -1592,6 +1618,7 @@
     const snapshots=projects.map(taskListView).filter(Boolean);
     const ownTasks=snapshots.flatMap(snapshot=>taskRows(snapshot));
     let archived=0;
+    const archiveBatches=[];
     if(!taskSidebarPreview)$('task-count').textContent=ownTasks.length+snapshots.reduce((n,snapshot)=>n+(snapshot.shared||[]).reduce((count,p)=>count+p.tasks.length,0),0)||'';
     if(menu?.dataset.stopTask&&menu.matches(':popover-open')){
       const task=ownTasks.find(t=>t.id===menu.dataset.stopTask);
@@ -1698,18 +1725,14 @@
       if(taskSidebarPreview){
         const done=groups.done.filter(({t})=>finishedStates.includes(t.state));
         archived+=done.length;
+        if(done.length)archiveBatches.push({items:done,snapshot});
         section(target,name,'',done);
-        if(done.length>1){
-          const clear=el('div',undefined,'am-label am-task-section');
-          clear.append(actions(done,tr('Убрать все'),()=>askClearDone(done,snapshot)));
-          target.append(clear);
-        }
       }else{
         section(target,name,tr('Активные'),groups.active);
         section(target,name,tr('Запланированные'),groups.planned);
         const closableItems=groups.attention.filter(closable);
         section(target,name,tr('Требуют решения'),groups.attention,actions(closableItems,tr('Закрыть все'),()=>askCloseAll(closableItems)));
-        section(target,name,tr('Завершённые'),groups.done,actions(groups.done.length>1?groups.done:[],tr('Убрать все'),()=>askClearDone(groups.done,snapshot)));
+        section(target,name,tr('Завершённые'),groups.done,actions(groups.done.length>1?groups.done:[],tr('Убрать все'),()=>askClearDone([{items:groups.done,snapshot}])));
       }
       const history=currentTaskHistory(snapshot);
       if(snapshot.history_paged&&(name!==project||windowHistoryScope===taskWindowQuery())&&(history?history.next:snapshot.history_next)){
@@ -1723,7 +1746,12 @@
     }
     if(taskSidebarPreview){
       $('task-count').textContent=archived||'';
-      if(!box.childElementCount)box.append(el('p',tr('В архиве пока нет задач'),'am-small am-muted am-task-section'));
+      if(!box.childElementCount)box.append(el('p',tr('В архиве пока нет задач'),'am-small am-muted'));
+      if(archived){
+        const clear=el('button',tr('Очистить архив'),'am-task-section-action');clear.type='button';
+        clear.addEventListener('click',()=>askClearDone(archiveBatches));
+        const controls=el('div',undefined,'am-archive-actions am-small am-muted');controls.append(clear);box.prepend(controls);
+      }
     }
     swapChildren(live,box);
   }
@@ -1856,9 +1884,16 @@
         (!Array.isArray(p.ready?.projects)||p.ready.projects.includes(name)))].filter(p=>p.agents?.some(a=>!a.paused));
     const computer=computers.find(p=>p.id===computerSelect.value)||computers[0];
     projectOptions(computerSelect,computers.map(p=>[p.id,p.name]),computer?.id||'',draftSending||!computer);
+    const usesCoordinatorModels=computer?.version==='dev'||
+      (/^(?:0\.0\.0|[1-9]\d*\.\d+\.\d+)-preview\.\d+$/.test(computer?.version)&&updateBuildNumber(computer.version)>=82);
     const models=(computer?.agents||[]).filter(a=>!a.paused).flatMap(a=>{
       const agent=names[a.agent]||a.agent;
-      return [...new Set([...(a.models||[]),''])].map(model=>[a.agent+':'+model,agent+' · '+(model?modelName(model):tr('по умолчанию'))]);
+      const configured=view?.coordinator_models?.[a.agent]??a.models??[];
+      const available=computer.id&&!usesCoordinatorModels
+        ?configured.filter(id=>a.models?.includes(id)):configured;
+      const preferred=available.find(id=>id===preferredTaskModels[a.agent])||available.find(id=>/\bmedium\b/.test(id));
+      return (preferred?[preferred,...available.filter(id=>id!==preferred)]:available)
+        .map(model=>[a.agent+':'+model,agent+' · '+modelName(model)]);
     });
     const model=models.some(([key])=>key===modelSelect.value)?modelSelect.value:models[0]?.[0]||'';
     projectOptions(modelSelect,models,model,draftSending||!models.length);
@@ -1866,7 +1901,7 @@
     input.readOnly=draftSending;
     $('task-draft-send').disabled=draftSending||!online||!name||!computer||!model||!input.value.trim();
     const status=$('task-draft-status');
-    status.textContent=draftSending?tr('Отправляем задачу…'):draftAttempt?.error||(!computer?tr('Для этого проекта нет доступных компьютеров с агентами.'):!online?tr('Клиент недоступен'):'');
+    status.textContent=draftSending?tr('Отправляем задачу…'):draftAttempt?.error||(!computer?tr('Для этого проекта нет доступных компьютеров с агентами.'):!models.length?tr('Включите модель в настройках агента.'):!online?tr('Клиент недоступен'):'');
     status.classList.toggle('am-status-bad',!draftSending&&!!draftAttempt?.error);
     syncSelects();
   }
@@ -1901,7 +1936,7 @@
       const {result:id}=await postAPI('/api/task-start',{...payload,op_id:draftAttempt.op},10000);
       if(typeof id!=='string'||!id)throw Error(tr('Действие не подтверждено. Проверьте состояние и повторите.'));
       draftAttempt=null;
-      const input=$('task-draft-text');input.value='';input.style.height='';
+      const input=$('task-draft-text');input.value='';sizeComposer(input);
       if(draftOpen){
         if(sidebarProject)sidebarProject=payload.project;
         selectProject(payload.project,id,'');
@@ -1923,7 +1958,7 @@
       $('compose').hidden=true;$('lost-bar').hidden=true;$('to-bottom').hidden=true;
       if(thread.dataset.draft!=='true'){
         thread.dataset.draft='true';thread.replaceChildren();thread.setAttribute('aria-busy','false');
-        head.replaceChildren();
+        head.replaceChildren(conversationTitle(tr('Новая задача')));
         feedShown='';feedSignature='';
       }
       renderTaskDraft();
@@ -1938,7 +1973,7 @@
     $('compose').inert=pending;$('lost-bar').inert=pending;
     // Keep the last complete conversation and its layout until this one is ready.
     if(pending){if(!head.firstElementChild)showPane(thread,'loading');return;}
-    if(task){renderFeed(task);return;}
+    if(task){renderFeed({...task,quiet:feed.task.quiet});return;}
     $('compose').hidden=true;$('lost-bar').hidden=true;feedSignature='';$('to-bottom').hidden=true;
     feedShown='';
     if(shared){renderSharedTask(shared.t,shared.p);return;}
@@ -1979,6 +2014,9 @@
     const p=(view?.shared||[]).find(x=>x.peer===selectedShared.peer),t=p?.tasks.find(x=>x.id===selectedShared.id);
     return t?{t,p}:null;
   }
+  function conversationTitle(title){
+    return el('h3',title,'am-conversation-title');
+  }
   function conversationDate(t){
     let at=Date.parse(t.created_at);
     if(!Number.isFinite(at))at=Date.parse(t.started_at);
@@ -2008,7 +2046,7 @@
   function renderSharedTask(t,p){
     t=sharedDisplayTask(t);
     const thread=$('thread'),head=$('task-head');
-    head.replaceChildren(taskSidebarPreview?conversationDate(t):sharedTaskHeader(t,p));
+    head.replaceChildren(...(taskSidebarPreview?[conversationTitle(t.title),conversationDate(t)]:[sharedTaskHeader(t,p)]));
     const box=el('div',undefined,'am-settings');
     if(t.report){box.append(el('h3',tr('Начало отчёта')),el('p',t.report,'am-shared-report'));}
     else box.append(el('p',tr('Отчёта пока нет.'),'am-muted'));
@@ -2159,7 +2197,11 @@
     const now=Date.now();
     for(const label of root.querySelectorAll('[data-elapsed-from]')){
       const text=label.dataset.elapsedPrefix+minutes(label.dataset.elapsedFrom,null,now);
-      if(text!==label.textContent)label.textContent=text;
+      if(text!==label.textContent){
+        label.textContent=text;
+        const meta=label.closest('.am-sidebar-task-meta');
+        if(meta)meta.title=meta.textContent;
+      }
     }
     for(const timer of $('thread').querySelectorAll('[data-command-start]')){
       timer.textContent=commandElapsed(Number(timer.dataset.commandStart));
@@ -2399,7 +2441,7 @@
     const signature=JSON.stringify([t,feed.items,online]);if(signature===feedSignature)return;
     const count=(feed.items||[]).filter(it=>it.kind!=='command_end').length,fresh=feedShown!==t.id,atBottom=fresh||feedStick||feedPinned,grew=!fresh&&!atBottom&&count>feedCount;feedShown=t.id;feedStick=false;feedCount=count;feedSignature=signature;
     const displayModel=taskModelLabel(t),quiet=quietLine(t);
-    const header=taskSidebarPreview?conversationDate(t):taskFeedHeader(t,displayModel,quiet);
+    const header=taskSidebarPreview?[conversationTitle(t.title),conversationDate(t)]:[taskFeedHeader(t,displayModel,quiet)];
     const opened=new Set(fresh?[]:[...thread.querySelectorAll('details[open][data-key]')].map(d=>d.dataset.key));
     const direct=feed.items[0]?.author==='owner';
     const out=[];let group=null,tools=null;
@@ -2475,14 +2517,24 @@
       }
       return author;
     };
+    const appendMessageTime=(group,meta,at)=>{
+      const time=el('time',clock(at),taskSidebarPreview?'am-message-time':'');
+      time.dateTime=at;
+      if(taskSidebarPreview){
+        group.tabIndex=0;
+        group.append(time);
+      }else{
+        meta.append(time);
+      }
+    };
     const outgoing=(author,role,text,at,model,provider)=>{
       group=null;const g=el('article',undefined,'am-message-group');const row=el('div',undefined,'am-message am-outgoing');
       const body=el('div',undefined,'am-message-body');const meta=el('div',undefined,'am-meta');
       if(provider)meta.append(messageAvatar(provider));
       meta.append(messageAuthor(author,model?modelName(model):'',role));
       if(role&&!taskSidebarPreview)meta.append(roleTag(role));
-      meta.append(el('time',clock(at)));
-      const content=el('div',undefined,'am-message-content');content.append(richText(text));body.append(meta,content);row.append(body);g.append(row);out.push(g);
+      const content=el('div',undefined,'am-message-content');content.append(richText(text));body.append(meta,content);row.append(body);g.append(row);
+      appendMessageTime(g,meta,at);out.push(g);
     };
     const outgoingCoordinator=it=>{
       const sender=shortNames[it.sender_agent];
@@ -2495,8 +2547,8 @@
       const role=tr('исполнитель');
       meta.append(messageAvatar(t.agent),messageAuthor(names[t.agent]||t.agent,displayModel,role,displayModel?taskModelDetail(t):''));
       if(!taskSidebarPreview)meta.append(roleTag(role));
-      meta.append(el('time',clock(at)));
-      const content=el('div',undefined,'am-message-content');body.append(meta,content);row.append(body);g.append(row);out.push(g);group=content;return content;
+      const content=el('div',undefined,'am-message-content');body.append(meta,content);row.append(body);g.append(row);
+      appendMessageTime(g,meta,at);out.push(g);group=content;return content;
     };
     const delivery=(text,cls)=>el('div',text,'am-delivery '+cls);
     for(const [index,it] of feed.items.entries()){
@@ -2555,7 +2607,7 @@
     }
     flushTools();
     if(taskSidebarPreview&&quiet)out.push(quiet);
-    head.replaceChildren(header);
+    head.replaceChildren(...header);
     thread.replaceChildren(...out);
     for(const d of thread.querySelectorAll('details[data-key]'))if(opened.has(d.dataset.key))d.open=true;
     // A task another computer started is answered there.
@@ -2575,7 +2627,10 @@
       else $('lost-text').textContent=(since?tr('Связи с «')+t.remote.name+tr('» нет с ')+since+'. ':tr('Связи с «')+t.remote.name+tr('» нет. '))+tr('Что с задачей там, неизвестно.');
     }
     const active=activeStates.includes(t.state),box=$('answer-text'),compose=$('compose');
-    const note=canNote(t),canDraft=!t.remote?.from&&(!!q||active);
+    const note=canNote(t),canDraft=!t.remote?.from&&(!!q||active||note);
+    const liveTokens=$('answer-live-tokens'),reportedTokens=t.quiet?.live_tokens;
+    liveTokens.hidden=reportedTokens==null||t.state!=='running';
+    liveTokens.textContent=liveTokens.hidden?'':tokensText(reportedTokens)+tr(' т.');
     compose.hidden=!canDraft&&(!active||unreachable);
     box.disabled=!canDraft;
     box.placeholder=q?tr('Ответить исполнителю…'):note&&t.state==='waiting_coordinator'?tr('Ответить вместо координатора…'):t.remote?.from?tr('Писать исполнителю можно на компьютере «')+t.remote.name+'»':tr('Написать исполнителю…');
@@ -2619,10 +2674,21 @@
   }
   // The reply box is one line and grows only while its text does not fit;
   // the stop and send buttons stay at its bottom.
-  function sizeAnswer(){const f=$('answer-text');f.style.height='';f.style.overflowY='';if(!f.value||f.parentElement.hidden)return;const full=f.scrollHeight+(f.offsetHeight-f.clientHeight);f.style.height=Math.min(140,full)+'px';if(full>140)f.style.overflowY='auto';}
+  function sizeAnswer(){sizeComposer($('answer-text'));}
+  function sizeComposer(input){
+    input.style.height='';input.style.overflowY='';
+    const base=input.offsetHeight;
+    const full=input.scrollHeight+(base-input.clientHeight);
+    const expanded=!!input.value&&base>0&&full>base;
+    if(expanded){
+      input.style.height=Math.min(140,full)+'px';
+      if(full>140)input.style.overflowY='auto';
+    }
+  }
   // Owner notes follow a task given here, including one running on a peer.
   function canNote(t){
     if(!t||t.owner_question)return false;
+    if(t.can_continue)return true;
     if(!t.remote)return t.state==='running'||t.state==='waiting_coordinator';
     return t.state==='running'&&!t.remote.from&&!t.remote.lost&&!t.remote.silent;
   }
@@ -3245,7 +3311,7 @@
         const body=el('tbody'),heading=el('tr',undefined,'am-efficiency-cohort');
         const type=Object.hasOwn(types,group.task_type)?types[group.task_type]:group.task_type||tr('Без типа');
         const difficulty=difficulties[group.difficulty]||tr('Без оценки сложности');
-        const prefix=group.project?projectTitle(group.project)+' · ':'';
+        const prefix=group.project?projectTitle(group.project)+', ':'';
         const label=el('th',prefix+type+', '+difficulty.toLocaleLowerCase(amLocale));label.scope='rowgroup';label.colSpan=5;
         heading.append(label);body.append(heading);cohorts.set(key,body);
       }
@@ -3274,7 +3340,7 @@
       cell.append(label);return cell;
     };
     const metric=(data,format)=>data?.samples?format(Math.round(data.median||0)):'—';
-    row.append(rate(group.accepted,group.tasks,'accepted'),rate(group.first_pass_accepted,group.first_pass_known,'first-pass'),
+    row.append(rate(group.accepted,group.reviewed,'accepted'),rate(group.first_pass_accepted,group.first_pass_known,'first-pass'),
       el('td',metric(group.accepted_new_input_plus_output,tokensText)),el('td',metric(group.time_to_acceptance_ms,statsDuration)));
 
     const panel=el('td');panel.colSpan=5;
@@ -3289,7 +3355,7 @@
     const addMetric=(title,data,format)=>{
       const line=el('tr'),name=el('th',title);name.scope='row';line.append(name);
       for(const value of [data?.mean,data?.median,data?.p90])line.append(el('td',data?.samples?format(Math.round(value||0)):'—'));
-      line.append(el('td',data?.samples?.toLocaleString(amLocale)||'—','am-muted'));measurements.append(line);
+      line.append(el('td',(data?.samples??0).toLocaleString(amLocale),'am-muted'));measurements.append(line);
     };
     addMetric(tr('Токены до приёмки'),group.accepted_new_input_plus_output,tokensText);
     addMetric(tr('Активная работа'),group.accepted_active_runtime_ms,statsDuration);
@@ -3454,7 +3520,8 @@
       row.append(when,titleCell,duration,tokens);
       words.title=(!task.usage_missing&&typeof task.input_tokens==='number'?usageLong(task)+'\n':'')+tr('Открыть задачу');
       row.addEventListener('click',()=>{
-        if(task.project&&task.project!==project&&splitProjects.includes(task.project)){
+        if(task.project&&task.project!==project&&(taskSidebarPreview
+          ?statsProjects().some(entry=>entry.name===task.project):splitProjects.includes(task.project))){
           show('tasks');selectProject(task.project,task.id);return;
         }
         selectedTask=task.id;selectedShared=null;feed=null;feedSignature='';show('tasks');renderThread();refresh();
@@ -3880,6 +3947,7 @@
   });
 
   let setupProvider='';
+  const preferredTaskModels={codex:'gpt-6.2-sol[effort=medium]',claude:'claude-sonnet-5-5[effort=medium]',cursor:'cursor-grok-4.6-medium'};
   // Starting lists, the same as the store's (T-061, T-098); shown for an
   // agent whose list is still empty and saved with the dialog.
   const defaultModels={claude:['claude-haiku-5-5[effort=low]','claude-sonnet-5-5[effort=medium]','claude-opus-5-5[effort=medium]','claude-fable-5-2[effort=high]'],codex:['gpt-6-luna[effort=high]','gpt-6.2-sol[effort=low]','gpt-6.2-sol[effort=medium]','gpt-6.2-sol[effort=high]','gpt-6.2-astra[effort=medium]','gpt-6.2-astra[effort=high]'],cursor:['composer-2.5','cursor-grok-4.6-medium','grok-4.7-medium','grok-4.7-high']};
@@ -3892,10 +3960,7 @@
     $('agent-setup-title').textContent=tr('Настройки: ')+names[provider];
     $('agent-setup-note').hidden=provider!=='cursor';
     $('agent-cli').value=a?.cli||found?.cli||'';$('agent-profile').value=a?.environment||found?.environment||'';
-    const models=configuredModels(provider);
-    $('agent-models').value=models.join(', ');$('agent-models').disabled=!view;
-    $('agent-models').placeholder=tr('Пусто: задачи идут на модель по умолчанию');
-    $('agent-models-note').textContent=tr('Через запятую. От быстрых правок к сложным задачам. Доступ зависит от аккаунта.')+' '+(provider==='cursor'?tr('Имена из agent --list-models; High требует подходящего тарифа.'):tr('Уровень: [effort=medium] или [effort=high]. Messenger передаст его отдельным параметром.'));
+    updateModelSummary(provider);
     setStatus('agent-save-status','');
     if(!$('agent-setup').open)$('agent-setup').showModal();
   }
@@ -3955,28 +4020,85 @@
       viewSignature='';await refresh();if(setupProvider===provider)openAgentSetup(provider);checkCard(provider);}
     catch(error){setStatus('agent-save-status',error.message);}
   }
-  async function saveAgentModels(){
-    if(!view||!setupProvider)return;
-    const models=$('agent-models').value.split(/[,\n]/).map(m=>m.trim()).filter(Boolean);
-    if(models.join('\n')===configuredModels(setupProvider).join('\n'))return;
-    setStatus('agent-save-status','');
-    try{await postAPI('/api/agent-models',{provider:setupProvider,models});viewSignature='';await refresh();}
-    catch(error){setStatus('agent-save-status',error.message);return;}
-    // A name a letter or two away from a known one is likely a typo
-    // (coordinator, 2026-11-12: «claude-opus-5-thinking-hig»). It is saved
-    // anyway: the agent may know names this window does not.
-    const known=defaultModels[setupProvider]||[];
-    const typos=models.map(m=>[m,known.find(k=>k!==m&&!models.includes(k)&&editDistance(m.toLowerCase(),k.toLowerCase())<=2)]).filter(p=>p[1]);
-    if(typos.length)setStatus('agent-save-status',typos.map(([m,k])=>tr('Похоже на опечатку: «')+m+tr('», может быть «')+k+'»?').join(' '));
+  const modelPicker=$('agent-model-picker');
+  const modelSearch=$('agent-model-search');
+  let modelEdit=null;
+  function updateModelSummary(provider){
+    const models=configuredModels(provider);
+    $('agent-models-open').disabled=!view;
+    $('agent-models-note').textContent=models.length?tr('Включено моделей: ')+models.length:tr('Модели не выбраны');
   }
-  function editDistance(a,b){
-    let prev=Array.from({length:b.length+1},(_,j)=>j);
-    for(let i=1;i<=a.length;i++){
-      const cur=[i];
-      for(let j=1;j<=b.length;j++)cur[j]=Math.min(prev[j]+1,cur[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1));
-      prev=cur;
+  function renderModelOptions(){
+    const list=$('agent-model-options'),query=modelSearch.value.trim().toLowerCase();
+    const previouslyFocused=document.activeElement?.dataset.model;
+    const options=new Map(modelEdit.options.map(option=>[option.model,option.name]));
+    for(const id of modelEdit.enabled)if(!options.has(id))options.set(id,modelName(id));
+    const buttons=[];
+    list.replaceChildren();
+    for(const [id,name] of options){
+      if(query&&!name.toLowerCase().includes(query)&&!id.toLowerCase().includes(query))continue;
+      const row=el('div',undefined,'am-model-option');
+      const title=el('span',name);title.title=id;
+      const toggle=el('button',undefined,'am-switch');toggle.type='button';toggle.dataset.model=id;
+      toggle.setAttribute('role','switch');toggle.setAttribute('aria-label',name);
+      toggle.setAttribute('aria-checked',String(modelEdit.enabled.has(id)));
+      toggle.disabled=modelEdit.busy;
+      toggle.addEventListener('click',()=>{
+        if(modelEdit.enabled.delete(id)){toggle.setAttribute('aria-checked','false');modelStatus();return;}
+        if(enableModel(id))toggle.setAttribute('aria-checked','true');
+      });
+      row.append(title,toggle);list.append(row);buttons.push(toggle);
     }
-    return prev[b.length];
+    const add=$('agent-model-add');
+    add.hidden=!query||options.has(modelSearch.value.trim());
+    add.disabled=modelEdit.busy;
+    buttons.find(button=>button.dataset.model===previouslyFocused)?.focus({preventScroll:true});
+  }
+  function modelStatus(message){
+    const count=tr('Включено моделей: ')+modelEdit.enabled.size+' / '+modelEdit.limit;
+    setStatus('agent-model-status',message||count);
+  }
+  function enableModel(id){
+    if(modelEdit.enabled.size>=modelEdit.limit){
+      modelStatus(tr('Достигнут предел. Выключите одну модель.'));
+      return false;
+    }
+    modelEdit.enabled.add(id);modelStatus();return true;
+  }
+  async function openModelPicker(){
+    const provider=setupProvider;
+    const edit={provider,enabled:new Set(configuredModels(provider)),options:[],limit:12,busy:false};
+    modelEdit=edit;modelSearch.value='';
+    renderModelOptions();modelStatus();
+    modelPicker.showModal();
+    try{
+      const catalog=await api('/api/model-catalog?provider='+encodeURIComponent(provider));
+      if(modelEdit!==edit)return;
+      edit.options=catalog.models||[];edit.limit=catalog.limit;
+      renderModelOptions();
+      if(!edit.busy)modelStatus();
+    }catch(error){if(modelEdit===edit&&!edit.busy)modelStatus(error.message);}
+  }
+  async function saveAgentModels(){
+    const edit=modelEdit;
+    if(!edit||edit.busy)return;
+    const models=[...edit.enabled];
+    if(models.join('\n')===configuredModels(edit.provider).join('\n')){modelPicker.close();return;}
+    edit.busy=true;
+    $('agent-model-cancel').disabled=$('agent-model-save').disabled=true;
+    renderModelOptions();
+    try{
+      await postAPI('/api/agent-models',{provider:edit.provider,models});
+      if(view)view.coordinator_models={...view.coordinator_models,[edit.provider]:models};
+      viewSignature='';await refresh();
+      updateModelSummary(edit.provider);
+      modelPicker.close();
+    }catch(error){modelStatus(error.message);}
+    finally{
+      edit.busy=false;
+      $('agent-model-cancel').disabled=$('agent-model-save').disabled=false;
+      if(modelPicker.open)renderModelOptions();
+    }
   }
   // Windows (T-062) and Linux (T-082) without the system title bar: the page
   // draws minimise, maximise and close at the top right, and the empty top of
@@ -4364,7 +4486,7 @@
     return handle;
   }
   const sidebar=root.querySelector('.am-sidebar'),sidebarWidth=tr('Ширина левой панели');
-  splitter(sidebar,sidebarWidth,'--am-nav',248,160,420,1).classList.add('am-nav-splitter');
+  splitter(sidebar,sidebarWidth,'--am-nav',taskSidebarPreview?320:248,160,420,1).classList.add('am-nav-splitter');
   splitter(sidebar,sidebarWidth,'--am-nav-split',384,300,480,1).classList.add('am-projects-splitter');
   splitter($('task-panel'),tr('Ширина списка задач'),'--am-queue',290,200,520,-1);
   // A click on empty space in the sidebar shows all computers' tasks again.
@@ -4452,7 +4574,6 @@
   $('project-page-pick').addEventListener('click',()=>{folderTarget='project-page-folder';if(window.webkit?.messageHandlers?.folder)window.webkit.messageHandlers.folder.postMessage('pick');else pick('project-page-folder','folder','project-page-status');});
   framelessWindow();
   macTitlebar();
-  if(taskSidebarPreview&&!document.body.classList.contains('am-native'))root.querySelector('.am-titlebar').append($('list-toggle'));
   $('agent-cli-find').addEventListener('click',()=>{const provider=setupProvider;$('agent-setup').close();installAgent(provider,'find');});
   $('agent-cli-pick').addEventListener('click',()=>pick('agent-cli','file','agent-save-status'));
   $('agent-profile-pick').addEventListener('click',()=>pick('agent-profile','folder','agent-save-status'));
@@ -4470,8 +4591,17 @@
   $('agent-setup-close').addEventListener('click',()=>$('agent-setup').close());
   $('agent-cli').addEventListener('change',saveAgentPaths);
   $('agent-profile').addEventListener('change',saveAgentPaths);
-  $('agent-models').addEventListener('change',saveAgentModels);
-  $('agent-models').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();saveAgentModels();}});
+  $('agent-models-open').addEventListener('click',openModelPicker);
+  modelSearch.addEventListener('input',()=>{renderModelOptions();$('agent-model-options').scrollTop=0;});
+  $('agent-model-add').addEventListener('click',()=>{
+    const id=modelSearch.value.trim();
+    if(!id||modelEdit.busy||!enableModel(id))return;
+    modelSearch.value='';renderModelOptions();modelSearch.focus();
+  });
+  $('agent-model-save').addEventListener('click',saveAgentModels);
+  $('agent-model-cancel').addEventListener('click',()=>modelPicker.close());
+  modelPicker.addEventListener('cancel',event=>{if(modelEdit?.busy)event.preventDefault();});
+  modelPicker.addEventListener('close',()=>{if(!modelPicker.open)modelEdit=null;});
   $('host-scope').addEventListener('change',()=>{serverEdited=true;$('host-public-box').hidden=$('host-scope').value!=='internet';});
   $('host-public').addEventListener('input',()=>{serverEdited=true;});
   $('host-port').addEventListener('input',()=>{serverEdited=true;});
@@ -4518,7 +4648,7 @@
     }
     $('task-draft').addEventListener('submit',sendTaskDraft);
     $('task-draft-text').addEventListener('input',event=>{
-      const input=event.currentTarget;input.style.height='';input.style.height=input.scrollHeight+'px';
+      sizeComposer(event.currentTarget);
       if(draftAttempt?.error)draftAttempt.error='';
       renderTaskDraft();
     });

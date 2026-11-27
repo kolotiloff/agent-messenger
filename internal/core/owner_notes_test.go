@@ -91,8 +91,18 @@ func TestOwnerNoteWaitsForTheRun(t *testing.T) {
 	if task, _ := f.st.TaskByID(id); task.State != "done" {
 		t.Fatalf("task %+v", task)
 	}
-	if err := f.st.AddOwnerNote(id, "n3", "Late"); !errors.Is(err, ErrRejected) {
-		t.Fatalf("note to a finished task: %v", err)
+	session := f.sessionOf(t, id)
+	for range 2 {
+		if err := f.st.AddOwnerNote(id, "n3", "Check the grid again"); err != nil {
+			t.Fatalf("note to a finished task: %v", err)
+		}
+	}
+	if err := f.st.AddOwnerNote(id, "n3", "Different text"); !errors.Is(err, ErrRejected) {
+		t.Fatalf("op reused for a different follow-up: %v", err)
+	}
+	r3 := f.launch(t, id, session)
+	if r3.Kind != "continue" || r3.Ordinal != 3 || r3.Input != "Check the grid again" || f.sessionOf(t, id) != session {
+		t.Fatalf("follow-up did not resume the existing conversation: %+v", r3)
 	}
 }
 
