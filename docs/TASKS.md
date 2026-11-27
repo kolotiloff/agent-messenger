@@ -51,7 +51,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 |---|---|---|---|
 | T-340 | Make direct answers conversational, stabilize the update hover target and match the default sidebar widths. | window | Next patch, `codex/t340-direct-chat-sidebar`. The selected toolbar is implemented in T-341. |
 | T-341 | Place Projects below the Mac caption, toggle the computer sidebar, clarify task access and refresh desktop icons. | window / packaging | Prepared for the next patch on `codex/t341-composer-access`. Actual desktop upgrade icon checks remain open. |
-| T-343 | Integrate the window fixes and verify the signed upgrade from build 116 to 117. | release | Window checks in Chromium and WebKit. The release workflow verifies native installation before publication. |
+| T-343 | Integrate the window fixes and verify the signed upgrade from build 116 to 117. | release | Window checks in Chromium and WebKit. Four native signed checks passed. Resume the existing draft after correcting the Mac bundle replacement fixture. |
 | T-342 | Align both sidebar headings, stabilize the task date and refine archive, dialog, conversation and select controls. | window | Next patch on `codex/t342-task-date`, following T-341. |
 | T-339 | Fix repeated update failures on window launch and restore the live coordinator label after a relay update. | window | Next patch, `codex/t339-update-notices`. |
 | T-338 | Finish Kotel naming for existing and fresh MCP profiles, CLI and deployment. | agent | D-248. After the bridge, migrate managed entries, verify the same chat and permissions on each client, resolve custom settings explicitly, then retire legacy names from current distributions. |
