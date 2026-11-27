@@ -26,8 +26,10 @@ These captures are from the real AppKit window running local 118 with synthetic 
 
 [Dark task window](2026-11-27-kotel-window/dark-window.jpg) · [Archive](2026-11-27-kotel-window/archive.jpg) · [My Network](2026-11-27-kotel-window/network.jpg)
 
-The [native Statistics window](2026-11-27-kotel-window/statistics-hover.jpg) shows six completed fixture tasks. Moving the pointer over the third task highlights that row across all four columns. A separate system WebKit pixel comparison confirmed that keyboard focus also stays inside the row.
+The [earlier native Statistics capture](2026-11-27-kotel-window/statistics-hover.jpg) shows six completed fixture tasks. Moving the pointer over the third task highlights that row across all four columns. A separate system WebKit pixel comparison confirmed that keyboard focus also stays inside the row. The current Statistics table also shares the Archive’s 4 px row spacing. Chromium and WebKit measured the gap and compared the rendered hover and focus colors with the Archive and sidebar computers in light and dark themes.
 
-## Release gate
+## Preliminary release scope and outstanding work
+
+Under D-258 the owner requested a preliminary release of the completed functionality. Six private native captures of General, Project, Agents and the Network views were presented for interface review. The remaining provider work below carries forward. The signed platform checks still apply to this build.
 
 Task workers still use one-shot CLI launches. Queuing an owner message for the next run works. Acknowledged delivery to the currently running turn under its original message ID (T-344) remains open. Claude advertises JSON streaming input and replayed user-message acknowledgments. Codex provides a turn-steer RPC in app-server mode. The installed Cursor print interface exposes neither streaming input nor user-message acknowledgments. The isolated provider profiles lack authenticated model access. A signed 117 → 118 platform matrix, desktop icon acceptance and the public 118 channel check remain outstanding. Keep the original repository, release keys and legacy entry points throughout the bridge.

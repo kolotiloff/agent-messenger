@@ -128,6 +128,34 @@ if (require.main === module) (async()=>{
   const chat=(page,name)=>page.locator('#thread').getByText('Сообщение из '+name);
   const total=async(page,n)=>page.waitForFunction(value=>document.querySelector('#stats-total-title').textContent.split(' токен')[0].replace(/[^0-9]/g,'')===value,n);
   try{
+    for(const theme of ['light','dark']){
+      const page=await open(projects,{width:1200,height:800},theme,undefined,true);
+      const machine=card(page,'local').locator('.am-machine-name').first();
+      const background=node=>getComputedStyle(node).backgroundColor;
+      await machine.hover();
+      const rowColor=await machine.evaluate(background);
+      assert.match(rowColor,/^rgb\(/);
+      await page.locator('#list-toggle').click();
+      const archived=page.locator('#task-list .am-archive-task').first();
+      await archived.hover();
+      await page.waitForFunction(color=>{
+        const row=document.querySelector('#task-list .am-archive-task:hover');
+        return row && getComputedStyle(row).backgroundColor===color;
+      },rowColor);
+      const archiveGap=await archived.evaluate(node=>getComputedStyle(node.parentElement).rowGap);
+      await page.locator('#stats-open').click();
+      const row=page.locator('#stats-top .am-stats-task').first();
+      assert.equal(await row.evaluate(node=>getComputedStyle(node.closest('table')).borderSpacing.split(' ').at(-1)),archiveGap);
+      await row.locator('td').first().hover();
+      for(const cell of await row.locator('td').all()){
+        assert.equal(await cell.evaluate(background),rowColor,theme+' statistics');
+      }
+      await page.mouse.move(0,0);
+      await page.keyboard.press('Tab');
+      await row.locator('button').focus();
+      assert.equal(await row.locator('td').first().evaluate(background),rowColor,theme+' keyboard focus');
+      await page.context().close();
+    }
     const hold=()=>{let release;const response=new Promise(resolve=>{release=resolve;});return {response,release};};
     const sameFeed=hold(),otherWindow=hold(),otherFeed=hold();
     let ownerQuestion,remoteLost=false;
@@ -1577,8 +1605,10 @@ if (require.main === module) (async()=>{
       const title=button.firstElementChild.getBoundingClientRect();
       const header=button.closest('table').tHead.rows[0].cells[1];
       const titleColumnStart=header.getBoundingClientRect().left+parseFloat(getComputedStyle(header).paddingLeft);
-      return [highlight.borderBlockStartWidth,highlight.borderBlockEndWidth,highlight.borderInlineStartWidth,highlight.borderInlineEndWidth,title.left-titleColumnStart,highlight.backgroundClip];
-    }),['4px','4px','0px','0px',0,'padding-box']);
+      const [first,second]=row.parentElement.rows;
+      const gap=second.getBoundingClientRect().top-first.getBoundingClientRect().bottom;
+      return [highlight.paddingBlockStart,highlight.paddingBlockEnd,highlight.borderBlockStartWidth,highlight.borderBlockEndWidth,title.left-titleColumnStart,gap];
+    }),['4px','4px','0px','0px',0,4]);
     await dateCell.click();
     await chat(page,'tools').waitFor();
     await cells(page,'local').nth(0).press('Enter');

@@ -957,3 +957,7 @@ Keep computer grouping as the default. In project folders prefix each task with 
 ## D-257 — Ship the combined post-117 release and retain the local updater
 
 The next public release includes the approved window, worker features and managed MCP migration. The owner kept the local computer's version and update button in the bottom-left footer beside the existing controls. Network settings also offer local updates, and provide the versions, update and cancel actions for paired computers. The repository rename still requires the separate instruction recorded in D-247.
+
+## D-258 — Publish the completed work in a preliminary update
+
+The owner revised the release scope in D-257 on November 27. Show the Settings window before submitting the update, include the approved interface and completed functionality, and carry the unfinished provider migration and task steering into subsequent work. The existing signing, native update and public channel checks apply.

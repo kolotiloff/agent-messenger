@@ -4,7 +4,9 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 ## 2026-11-27 — T-356 statistics table hover
 
-Reproduced the oversized highlight with the system WKWebView on macOS 26.3.1 using the product stylesheet. The old focus layer changed pixels across a 624 × 402 area. Applying the fill directly to the active row's cells limited the change to 556 × 26 within its 556 × 34 row. All six rows retained their dimensions. Added pointer and keyboard pixel checks to the window suite.
+The owner requested a preliminary release of the completed functionality after reviewing Settings. Statistics tasks now use the Archive’s 4 px gap instead of stacking transparent 4 px edges.
+
+Reproduced the oversized highlight with the system WKWebView on macOS 26.3.1 using the product stylesheet. The old focus layer changed pixels across a 624 × 402 area. Applying the fill directly to the active row's cells limited the change to 556 × 26 within its 556 × 34 row. All six rows retained their dimensions. Added pointer and keyboard pixel checks to the window suite. Statistics rows had inherited the quiet button hover color. Switched them to the list color and added a light/dark comparison against actual Archive and computer rows.
 
 ## 2026-11-27 — T-338, T-346, T-353 and T-355 combined update
 
