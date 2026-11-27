@@ -1171,11 +1171,12 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-efficiency-model { display:flex; flex:1; min-width:0; width:0; white-space:nowrap; }
 #am-concept .am-efficiency-model-name { overflow:hidden; text-overflow:ellipsis; }
 #am-concept .am-efficiency-model > .am-muted { flex:none; }
-#am-concept .am-efficiency-detail > td { padding-block-start:0; padding-inline-start:calc(var(--am-space-3) + var(--am-space-4)); }
+#am-concept .am-efficiency-detail > td { padding-block-start:0; padding-inline:var(--am-gap-section) 0; }
 #am-concept .am-efficiency-breakdown { padding:var(--am-gap-content); border-radius:var(--am-radius-l); background:var(--am-bubble); }
 #am-concept .am-efficiency-breakdown p { margin:0; }
 #am-concept .am-efficiency-metrics { width:100%; border-collapse:collapse; margin-block-end:var(--am-space-2); }
 #am-concept .am-efficiency-metrics :is(th,td) { padding:var(--am-space-1) var(--am-space-2); }
+#am-concept .am-efficiency-metrics thead th { padding-block-start:0; }
 #am-concept .am-efficiency-metrics :first-child:is(th,td) { padding-inline-start:0; }
 #am-concept .am-efficiency-metrics :last-child:is(th,td) { padding-inline-end:0; }
 #am-concept .am-efficiency-metrics :is(th,td):nth-child(n+2) { text-align:right; white-space:nowrap; }

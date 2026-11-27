@@ -922,6 +922,22 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await more.getAttribute('aria-expanded'),'true');
       await efficiencyDetails.getByText('150 тыс.',{exact:true}).waitFor();
       await efficiencyDetails.getByRole('columnheader',{name:'Порог для 90%'}).waitFor();
+      for (const width of [1100,600]) {
+        await page.setViewportSize({width,height:600});
+        const insets=await efficiencyDetails.evaluate(detail=>{
+          const summary=detail.previousElementSibling.getBoundingClientRect();
+          const model=detail.previousElementSibling.querySelector('.am-efficiency-model-name').getBoundingClientRect();
+          const box=detail.querySelector('.am-efficiency-breakdown').getBoundingClientRect();
+          const metrics=detail.querySelector('.am-efficiency-metrics').getBoundingClientRect();
+          const note=detail.querySelector('p').getBoundingClientRect();
+          return [box.left-summary.left,summary.right-box.right,metrics.left-model.left,
+            metrics.left-box.left,box.right-metrics.right,metrics.top-box.top,box.bottom-note.bottom];
+        });
+        const expected=[16,0,0,12,12,12,12];
+        assert(insets.every((inset,i)=>Math.abs(inset-expected[i])<0.5),
+          `efficiency insets at ${width}px were ${insets.join(', ')}, expected ${expected.join(', ')}`);
+      }
+      await page.setViewportSize({width:1100,height:600});
       const runtime=efficiencyDetails.getByRole('row',{name:/Активная работа/});
       assert.equal(await runtime.locator('td').first().innerText(),'—');
       await more.click();

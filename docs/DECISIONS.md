@@ -893,3 +893,7 @@ Align the conversation header divider with Projects and Archive. Keep the title 
 ## D-242 — Span the task toolbar above Archive (T-336)
 
 Use a single toolbar above the conversation and Archive, with its divider aligned to Projects. Place the toggle at the right end of the toolbar and give the Archive its own header below it. Frameless native windows keep the toggle beside the window controls. Match footer text to the visible icon inset. This updates the pane layout in D-241.
+
+## D-243 — Align expanded efficiency details with their model row (T-336)
+
+Use the section inset on the leading side of the expanded panel and align its trailing edge with the parent row. Keep the shared content inset inside the panel and align the first metric with the model label. Use a speedometer for the Efficiency action, superseding its target icon in D-239.
