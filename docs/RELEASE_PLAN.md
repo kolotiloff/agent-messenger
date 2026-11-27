@@ -2,7 +2,7 @@
 
 Written November 6, 2026. The current status below supplements the original [MVP](MVP.md), [architecture](PLAN.md), [window requirements](APP.md) and [broker deployment](DEPLOYMENT.md). Transitions are decided by checks.
 
-## Upcoming 1.0.13 bridge release
+## Published 1.0.13 bridge release
 
 - Kotel branding, the approved desktop interface and signed in-place updates from the original GitHub repository.
 - Fix opening an older project database after updating, including Windows installations that reported `no such column: remote_live_tokens`. Kotel adds each missing live-usage column, preserves manually repaired values and resumes the same task history and remote connection.
