@@ -210,8 +210,6 @@ func Open(path string) (*Store, error) {
 		{"tasks", "usage_output", "INTEGER NOT NULL DEFAULT 0"},
 		{"tasks", "usage_cost", "REAL"},
 		{"tasks", "remote_duration_ms", "INTEGER"},
-		{"tasks", "remote_live_tokens", "INTEGER"},
-		{"tasks", "remote_live_ordinal", "INTEGER NOT NULL DEFAULT 0"},
 		{"requests", "in_reply_to", "TEXT"},
 		{"projects", "worker_rules", "TEXT NOT NULL DEFAULT ''"},
 		{"projects", "title", "TEXT NOT NULL DEFAULT ''"},
@@ -249,6 +247,10 @@ func Open(path string) (*Store, error) {
 			db.Close()
 			return nil, err
 		}
+	}
+	if err := ensureRemoteLiveUsage(db); err != nil {
+		db.Close()
+		return nil, err
 	}
 	for column, decl := range map[string]string{
 		"session_key":          "TEXT REFERENCES sessions(key)",
@@ -1401,7 +1403,33 @@ func emptyDetail(detail string) string {
 	return detail
 }
 
-func ensureColumn(db *sql.DB, table, column, decl string) error {
+// A selected generation and its worker can open the same project independently.
+// Leave current databases readable without a write lock. Recheck both columns
+// inside the immediate transaction so concurrent upgrades cannot race.
+func ensureRemoteLiveUsage(db *sql.DB) error {
+	var count int
+	if err := db.QueryRow(`SELECT count(*) FROM pragma_table_info('tasks')
+ WHERE name IN ('remote_live_tokens','remote_live_ordinal')`).Scan(&count); err != nil || count == 2 {
+		return err
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := ensureColumn(tx, "tasks", "remote_live_tokens", "INTEGER"); err != nil {
+		return err
+	}
+	if err := ensureColumn(tx, "tasks", "remote_live_ordinal", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func ensureColumn(db interface {
+	Query(string, ...any) (*sql.Rows, error)
+	Exec(string, ...any) (sql.Result, error)
+}, table, column, decl string) error {
 	rows, err := db.Query(`PRAGMA table_info(` + table + `)`)
 	if err != nil {
 		return err

@@ -69,6 +69,10 @@ func (p *projectLayout) open(file string) (*sql.DB, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
+	if err := ensureRemoteLiveUsage(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("upgrade project task usage: %w", err)
+	}
 	if _, err := db.Exec(taskAnalyticsSchema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("initialize project statistics: %w", err)

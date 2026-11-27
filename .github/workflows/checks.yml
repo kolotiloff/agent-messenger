@@ -121,6 +121,8 @@ jobs:
           cache: false
       - name: Windows runtime checks (lock, job objects, background client, task runs)
         run: bash scripts/check-windows.sh
+      - name: Upgrade old and manually repaired project databases on Windows
+        run: go test -count=1 -timeout=3m ./internal/core -run "^TestActiveProjectMigratesRemoteLiveUsage$"
       - name: Windows setup and LAN discovery regressions (no real agents)
         run: |
           go test -count=1 -timeout=3m ./internal/localui -run '^(TestWindowsSetupFind|TestWindowsTerminalCreatesInteractiveChild|TestAgentSetupReceiptAndRegistration|TestAgentSetupUnknownIsNotRetried|TestSetupFindRecoversMissingInstallReceipt|TestTrustUsesRegisteredCLIAndExactFolder|TestAgentLoginAndInstallRoutes)$'

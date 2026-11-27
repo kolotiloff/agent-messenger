@@ -1435,3 +1435,5 @@ Reports for each step are in [reports/](reports/). The handoff is in [HANDOFF.md
 - An available update is a blue round arrow next to the version at the bottom of the sidebar (owner's variant А); tooltip names the version. The window shows «v0.41»; tags stay 0.0.0-preview.N (D-073, Q-020). Checked in Chromium with a stubbed status only.
 
 - T-337: Both pinned Go 1.22.2 race runners reached the package timeout while still executing separate short SQLite tests. Allow 25 minutes per package on those runners. Current Go keeps its 15-minute budget. The paired Mac remote-update refusal was verified on builds 115 and 116.
+
+- T-337: Reproduced the 1.0.12 missing-column failure on an activated project database and added the in-place upgrade for both the supervisor and worker entry points. The regression covers missing, partially present and manually repaired schema, durable remote task history, a new live measurement and clean project creation.

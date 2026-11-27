@@ -16,6 +16,10 @@ The fixtures used independent home directories under the Mac acceptance director
 
 The AppKit candidate showed Kotel, the first-run actions, separate Statistics and the Settings order General, Project, Agents, Server. The final pot icon has widely spaced eyes and the right edge of the lid raised. The Mac icon set includes 16 px through 1024 px. The Windows resource test compared pixels and both architectures' compiled resources.
 
+## Older split project databases
+
+The 1.0.12 Windows failure was reproduced by opening a selected generation with a running remote task after removing its two live-usage columns. Before the fix, opening its conversation failed with `no such column: remote_live_tokens`. The regression exercises neither column, each single column and both columns as after a manual repair. It reopens through the ordinary store twice, compares the task history and peer, checks retained values and defaults, then delivers a live usage message through the mailbox. New project files are also opened directly to check their schema. In separate end-to-end Mac runs, all four test projects created by stock 108 and 112 lacked both columns. The fixed bridge added both on first use. Two fresh 115 projects already contained them. Each version retained its two projects, histories, statistics and exports after restarting the client and reopening the window.
+
 ## Signed delivery
 
 The release workflow creates a draft. Five native runners exercise the previous release's signed-channel parser against its candidate. Windows and Linux run the previous updater's replacement procedure. The Mac check reads its Sparkle feed, verifies the archives and the app's code signature, then opens the existing queue with the new binary. The queue comparison preserves all previous events and permits the additional pause event recorded at startup. This check was rehearsed with published Mac builds 114 and 115.

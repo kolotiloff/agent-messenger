@@ -1509,7 +1509,7 @@ func applyReport(tx *sql.Tx, from netLink, b netBody, name string) error {
 				return nil
 			}
 			_, err := tx.Exec(`UPDATE tasks SET remote_live_tokens=?,remote_live_ordinal=?
-WHERE id=? AND (remote_live_ordinal<? OR (remote_live_ordinal=? AND remote_live_tokens<?))`,
+WHERE id=? AND (remote_live_ordinal<? OR (remote_live_ordinal=? AND (remote_live_tokens IS NULL OR remote_live_tokens<?)))`,
 				*b.LiveTokens, b.RunOrdinal, t.ID, b.RunOrdinal, b.RunOrdinal, *b.LiveTokens)
 			return err
 		}
