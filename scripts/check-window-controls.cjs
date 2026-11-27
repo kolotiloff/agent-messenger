@@ -773,9 +773,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await runningTaskStatus.waitFor({state:'visible'});
       for (const [theme,arrow,muted,runningColor,waitingColor] of [
         ['light','rgb(129, 83, 5)','rgb(107, 107, 107)','rgb(40, 123, 215)','rgb(201, 138, 0)'],
-        ['dark','rgb(242, 198, 91)','rgb(160, 160, 160)','rgb(103, 170, 249)','rgb(242, 201, 76)']
+        ['dark','rgb(242, 198, 91)','rgb(155, 155, 153)','rgb(142, 173, 210)','rgb(206, 178, 113)']
       ]) {
         await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;},theme);
+        assert.equal(await page.locator('#am-concept').evaluate(node=>getComputedStyle(node).color),theme==='dark'?'rgb(194, 194, 192)':'rgb(48, 48, 48)');
         assert.equal(await runningTaskStatus.evaluate(node=>getComputedStyle(node).color),runningColor);
         assert.equal(await runningLabel.evaluate(node=>getComputedStyle(node).color),runningColor);
         assert.equal(await runningLabel.locator('.am-agent-model').evaluate(node=>getComputedStyle(node).color),runningColor);

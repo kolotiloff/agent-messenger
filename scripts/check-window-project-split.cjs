@@ -240,7 +240,7 @@ if (require.main === module) (async()=>{
       const requestOrder=preview.waitForRequest(req=>req.method()==='POST'&&new URL(req.url()).pathname==='/api/machine-order');
       await peerHeader.dragTo(localHeader,{sourcePosition:{x:40,y:12},targetPosition:{x:40,y:4}});
       assert.deepEqual(await preview.evaluate(()=>window.machineDragImage),{head:true,name:'ПК-1',icon:true,version:'v1.0.5',alpha:102});
-      assert.deepEqual(await preview.evaluate(()=>window.machineDropLine),{edge:'before',height:'2px',color:'rgb(103, 170, 249)'});
+      assert.deepEqual(await preview.evaluate(()=>window.machineDropLine),{edge:'before',height:'2px',color:'rgb(142, 173, 210)'});
       assert.equal(await preview.locator('.am-machine-drag-image').count(),0);
       assert.deepEqual((await requestOrder).postDataJSON().order.slice(0,2),['pc1','local']);
       assert.deepEqual((await order()).slice(0,2),['pc1','local']);

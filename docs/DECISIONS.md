@@ -945,3 +945,7 @@ The task model menu and Settings use the same family, numeric generation and eff
 ## D-254 — Scroll the conversation date with the messages
 
 Keep only the title in the fixed task header. Place the centered date first in the scrolling conversation with the same top inset for each task. This supersedes the date placement in D-251.
+
+## D-255 — Use Graphite for dark appearance
+
+Use the shared Graphite colors for primary text (#c2c2c0), secondary text (#9b9b99), running (#8eadd2) and waiting (#ceb271). Apply the same palette when system appearance selects dark mode.

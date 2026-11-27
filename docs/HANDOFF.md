@@ -8,6 +8,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+T-354 applies the approved Graphite dark palette through the window theme tokens.
+
 Kotel 1.0.14, build 117, is [published](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.14-preview.117). All five signed upgrade checks and the public channel check [passed](https://github.com/kolotiloff/agent-messenger/actions/runs/46039004148). The stock Mac build 116 discovered and downloaded public 117, the extracted bundle passed strict signature verification and 117 reported current. The production MCP settings and repository address are unchanged.
 
 Post-117 T-346 carries actual context to the sender and history. T-352 covers the shared archive footer, peer hover, concise status copy, a scrolling conversation date, consistent New Task, task and computer hover with the shared row inset, normal-weight counts and roles and the system-framed running Mac icon. T-353 tracks per-task access with the execution computer's policy as a ceiling.

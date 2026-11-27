@@ -92,7 +92,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     const row=page.locator('#task-list .am-task').filter({hasText:task.title});
     if(!await row.isVisible() && await page.locator('#list-toggle').getAttribute('aria-expanded')==='false')await page.locator('#list-toggle').click();
     await row.waitFor();
-    assert.equal(await row.locator('.am-task-status').evaluate(e=>getComputedStyle(e).color),'rgb(242, 201, 76)');
+    assert.equal(await row.locator('.am-task-status').evaluate(e=>getComputedStyle(e).color),'rgb(206, 178, 113)');
     assert.match(await arrow.locator('path').getAttribute('d'),/M3 15v4/);
     await shot('available');
     if(process.env.SCREENSHOT_DIR)await row.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'task-waiting.png')});

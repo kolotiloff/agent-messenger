@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — T-354 Graphite dark palette
+
+Applied the approved primary, secondary, running and waiting colors at the window theme root. Verified window controls, project and archive views, and update indicators in Chromium and WebKit with fictional data.
+
 ## 2026-11-27 — T-343 public channel, T-346 and T-352
 
 [Release 117](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.14-preview.117) is published. The signed draft resumed without rebuilding or re-signing after correcting the Mac test harness. Five native updates and the public channel passed in [run 106](https://github.com/kolotiloff/agent-messenger/actions/runs/46039004148). A stock Mac 116 discovered and downloaded 117 through its original channel, the bundle signature passed and 117 reported current.

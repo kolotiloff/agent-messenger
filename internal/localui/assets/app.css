@@ -26,8 +26,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-bg:light-dark(#fff,#191919);
   --am-panel:light-dark(#fff,#202020);
   --am-side:light-dark(#fafafa,#202020);
-  --am-text:light-dark(#303030,#ddd);
-  --am-muted:light-dark(#6b6b6b,#a0a0a0);
+  --am-text:light-dark(#303030,#c2c2c0);
+  --am-muted:light-dark(#6b6b6b,#9b9b99);
   --am-line:light-dark(#e5e5e5,#333);
   --am-button:light-dark(#efefef,#404040);
   --am-button-hover:light-dark(#e3e3e3,#4b4b4b);
@@ -62,11 +62,11 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-good:light-dark(#237449,#8ccda6);
   --am-bad:light-dark(#b42318,#f28b82);
   --am-full-access:color-mix(in srgb,var(--am-bad) 65%,var(--am-muted));
-  --am-run:light-dark(#287bd7,#67aaf9);
+  --am-run:light-dark(#287bd7,#8eadd2);
   --am-update-arrow:light-dark(#815305,#f2c65b);
   --am-update-hover:color-mix(in srgb,var(--am-update-arrow) 20%,transparent);
   /* Brighter than a warning brown so "waits for the owner" reads as yellow. */
-  --am-wait:light-dark(#c98a00,#f2c94c);
+  --am-wait:light-dark(#c98a00,#ceb271);
   --am-claude:#d97757;
   --am-scroll-thumb:light-dark(#c9c9c9,#555);
   --am-scroll-thumb-hover:light-dark(#aaa,#777);
