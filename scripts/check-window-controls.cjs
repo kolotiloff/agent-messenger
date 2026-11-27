@@ -444,6 +444,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.deepEqual(writes.filter(w=>w.path==='/api/agent-find').map(w=>w.body),[{provider:'codex',action:'find'},{provider:'codex',action:'find'}]);
       // T-182: the internet scope asks for the external address and sends it.
       await page.locator('[data-tab=server]').click();
+      await page.locator('#host-tab').click();
       assert.equal(await page.locator('#host-public-box').isHidden(), true);
       await page.locator('#host-scope').evaluate(n => {n.value = 'internet'; n.dispatchEvent(new Event('change', {bubbles: true}));});
       assert.equal(await page.locator('#host-public-box').isVisible(), true);
@@ -801,7 +802,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await peerUpdate.locator('svg').click();
       await page.locator('#confirm-dialog').waitFor({state:'visible'});
       assert.equal(await page.locator('#confirm-title').innerText(),'Обновить Runner до v0.99?');
-      assert.deepEqual(await type(page.locator('#confirm-title')),await type(page.locator('#member-title')));
+      assert.deepEqual(await type(page.locator('#confirm-title')),await type(page.locator('#computer-title')));
       await page.locator('#confirm-cancel').click();
       for (const computer of [page.locator('.am-machine-card[aria-current=true]'),runner]) {
         const name = computer.locator('.am-machine-name > span:nth-child(2)');
@@ -814,15 +815,19 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         await page.setViewportSize({width, height: 850});
         const details = await page.locator('#member-details').boundingBox();
         const action = await disconnect.boundingBox();
+        const address = await page.locator('.am-member-address').boundingBox();
         const badge = await page.locator('#member-badge').boundingBox();
         assert(action.x >= details.x + details.width, 'disconnect action overlaps the connection details');
         assert(Math.abs(action.y + action.height - (details.y + details.height)) <= 1, 'disconnect action is not aligned with the bottom of the connection details');
-        assert(Math.abs(action.x + action.width - (badge.x + badge.width)) <= 1, 'disconnect action is off the right edge of the status');
+        assert(badge.x >= address.x && badge.x + badge.width <= address.x + address.width + 1, 'connection indicator must sit beside the address');
+        assert.equal(await page.locator('#member-badge').innerText(),'Подключено');
+        assert.equal(await page.locator('#member-badge').evaluate(el=>getComputedStyle(el,'::before').content),'none');
+        assert.equal(await page.locator('#host-panel').isVisible(),false);
       }
       await page.setViewportSize({width: 1100, height: 600});
       if (process.env.SCREENSHOT_DIR) {
         await page.emulateMedia({colorScheme:'dark'});
-        await page.locator('[aria-labelledby=member-title]').screenshot({path: path.join(process.env.SCREENSHOT_DIR,'server-connected.png')});
+        await page.locator('#member-panel').screenshot({path: path.join(process.env.SCREENSHOT_DIR,'server-connected.png')});
         await page.emulateMedia({colorScheme:'light'});
       }
       await page.locator('[data-tab=stats]').click();

@@ -614,6 +614,8 @@ if (require.main === module) (async()=>{
         assert(await screen.locator(firstHeading).evaluate(node=>!node.closest('.am-card')),section);
         assert.deepEqual(await topLeft(screen.locator(firstControl)),generalField,section);
         if(section==='server'){
+          await screen.getByRole('tab',{name:'Свой сервер'}).click();
+          assert.equal(await screen.locator('#member-panel').isVisible(),false);
           for(const selector of ['#computer-name','#host-scope + .am-select-trigger','#host-port','#host-enable']){
             assert.equal(await height(selector),28,selector);
           }

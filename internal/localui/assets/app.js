@@ -1259,8 +1259,8 @@
       const key=JSON.stringify([computer,name]);
       const folder=el('div',undefined,'am-sidebar-folder');
       const button=el('button',undefined,'am-folder-heading');button.type='button';
-      // Keep the tab and rear panel in place as the front opens.
-      const icon=svgIcon(['M2 20V5a2 2 0 0 1 2-2h5l3 3h8a2 2 0 0 1 2 2v3','']);
+      // Keep the tab in place. The open front extends past the rear wall.
+      const icon=svgIcon(['M2 20V5a2 2 0 0 1 2-2h5l3 3h5','']);
       const front=icon.lastElementChild;
       button.append(icon,el('span',projectTitle(name)));
       button.dataset.sidebarFocus='folder:'+key;
@@ -1268,8 +1268,8 @@
       const count=sidebarTaskCount(tasks.length);
       function showFolder(expanded){
         front.setAttribute('d',expanded
-          ? 'M2 20l3-7.8A2 2 0 0 1 6.9 11H22l-3.5 9.6A2 2 0 0 1 16.6 22H4a2 2 0 0 1-2-2Z'
-          : 'M22 11v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2');
+          ? 'M17 6a2 2 0 0 1 2 2v3M2 20l2.7-7.5Q5.2 11 6.8 11h13.8Q22 11 22 12.3q0 .4-.2.9l-2.7 7.2Q18.6 22 17 22H4a2 2 0 0 1-2-2Z'
+          : 'M17 6h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2');
         rows.hidden=!expanded;
         count.hidden=expanded;
         button.setAttribute('aria-expanded',String(expanded));
@@ -3158,7 +3158,7 @@
   }
   // Known refusals of another computer, explained in the window's language.
   function refusalText(text,name){
-    if(/does not run tasks of other computers/.test(text||''))return tr('Компьютер «')+name+tr('» не принимает задачи других компьютеров. Включите на нём «Принимать задачи других компьютеров» на вкладке «Сервер» и дайте задачу снова.');
+    if(/does not run tasks of other computers/.test(text||''))return tr('Компьютер «')+name+tr('» не принимает задачи других компьютеров. Включите на нём «Принимать задачи других компьютеров» на вкладке «Сеть» и дайте задачу снова.');
     if(/has no project/.test(text||''))return tr('На компьютере «')+name+tr('» нет проекта с таким названием. Создайте его там и выберите папку.');
     if(/has no folder for the project|project folder is missing/.test(text||''))return tr('На компьютере «')+name+tr('» у проекта не выбрана папка или её нет. Выберите папку проекта там и дайте задачу снова.');
     if(/is not set up on this computer/.test(text||''))return tr('На компьютере «')+name+tr('» этот агент не настроен. Настройте его там на вкладке агентов.');
@@ -3695,7 +3695,7 @@
         if(tab==='stats'&&!statistics.open)statistics.showModal();
       }else if(!dialog.open)dialog.showModal();
     }
-    $('list-toggle').hidden=!view?.project||(!taskSidebarPreview&&tab!=='tasks');if(tab==='server'||tab==='settings')loadServer();if(tab==='stats')reloadStats();if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),settings:tr('Настройки программы'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сервер'),stats:tr('Статистика')}[tab];startWindowWatch();
+    $('list-toggle').hidden=!view?.project||(!taskSidebarPreview&&tab!=='tasks');if(tab==='server'||tab==='settings')loadServer();if(tab==='stats')reloadStats();if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),settings:tr('Настройки программы'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сеть'),stats:tr('Статистика')}[tab];startWindowWatch();
     if(tab==='tasks'&&combinedTasks()){renderTaskList();loadProjectActivity();}
     if(tab==='tasks'&&setupPaneShown())renderThread();
   }
@@ -4137,6 +4137,31 @@
     }
   }
   function hideInvitation(){invitation=null;clearInterval(inviteTimer);const d=$('invite-dialog');if(d.open)d.close();}
+  const networkModes=['member','host'];
+  let preferredNetworkMode=null;
+  function showNetworkMode(mode){
+    const group=$('member-tab').parentElement;
+    group.style.setProperty('--am-selected-segment',String(networkModes.indexOf(mode)));
+    for(const name of networkModes){
+      const selected=name===mode,button=$(name+'-tab');
+      button.setAttribute('aria-selected',String(selected));
+      button.tabIndex=selected?0:-1;
+      $(name+'-panel').hidden=!selected;
+    }
+  }
+  for(const mode of networkModes){
+    const button=$(mode+'-tab');
+    button.addEventListener('click',()=>{
+      button.parentElement.dataset.animated='';
+      preferredNetworkMode=mode;showNetworkMode(mode);
+    });
+    button.addEventListener('keydown',event=>{
+      if(!['Home','End','ArrowLeft','ArrowRight'].includes(event.key))return;
+      event.preventDefault();
+      const next=event.key==='Home'?'member':event.key==='End'?'host':mode==='host'?'member':'host';
+      $(next+'-tab').click();$(next+'-tab').focus();
+    });
+  }
   function renderServer(){
     renderAccessBar();renderAutoUpdate();watchUpdateBoard();
     if(!server)return;const h=server.host,m=server.member;
@@ -4160,20 +4185,23 @@
     if(taskSidebarPreview&&tab==='agents')renderAgents();
     // The certificate fingerprint travels inside the invitation code and the
     // joining computer checks it itself, so the window does not show it.
-    badge($('member-badge'),m.connected?(m.reachable||!m.checked_at?tr('Подключено'):tr('Нет связи')):tr('Не подключено'),m.connected?(m.reachable?'good':m.checked_at?'bad':''):'');
+    const status=$('member-badge');
+    const connection=!m.reachable&&m.checked_at?tr('Нет связи'):tr('Подключено');
+    badge(status,connection,m.reachable?'good':m.checked_at?'bad':'');
     // A computer hosts its network or joins another one, not both: the
-    // other card only says how to switch.
+    // inactive role's panel explains how to switch.
     const hostOn=h.enabled||h.running;
+    showNetworkMode(preferredNetworkMode||(hostOn?'host':'member'));
     $('member-join').hidden=m.connected||hostOn;$('member-joined').hidden=!m.connected;
     $('member-blocked').hidden=!hostOn||m.connected;
     $('host-blocked').hidden=hostOn||!m.connected;
-    $('host-running').closest('.am-card').querySelector('.am-server-grid').hidden=!hostOn&&m.connected;
-    $('member-badge').title=m.connected?tr('Подключение к серверу ')+m.address:tr('Вставьте код приглашения с другого компьютера');
+    $('host-panel').querySelector('.am-server-grid').hidden=!hostOn&&m.connected;
     $('member-state').textContent='';
     const cn=$('computer-name');if(view?.computer_name&&document.activeElement!==cn&&!cn.dataset.edited)cn.value=view.computer_name;
-    const dl=$('member-details');dl.replaceChildren();
-    const rows=[[tr('Сервер'),m.address],[tr('Подключено'),stamp(m.connected_at)]];
-    if(m.connected)rows.forEach(([k,v])=>{if(v){dl.append(el('dt',k),el('dd',v));}});
+    $('member-address').textContent=m.address||'';
+    const since=stamp(m.connected_at);
+    $('member-since').textContent=since;
+    $('member-since').hidden=$('member-since-label').hidden=!since;
     const buttons=root.querySelectorAll('[data-screen=server] button');buttons.forEach(b=>b.disabled=serverBusy);
     if(!serverBusy)$('host-invite').disabled=!h.addresses.length;
     renderHostToggle();
@@ -4201,7 +4229,7 @@
       // Start and stop swap places: keep focus on the one now shown.
       if(focused?.getAttribute('aria-hidden')==='true')focused=focused.parentElement.querySelector('[aria-hidden=false]')||focused;
       if(focused?.isConnected&&!focused.hidden&&focused.offsetParent&&focused.getAttribute('aria-hidden')!=='true')focused.focus();
-      else $(section+'-title')?.focus();
+      else ($(section+'-panel')||$(section+'-title'))?.focus();
     }
     return result;
   }
@@ -4243,7 +4271,7 @@
     const code=$('member-code').value.trim(),name=$('computer-name').value.trim()||view?.computer_name||'';
     if(!code){note('member',tr('Вставьте код приглашения.'),true);return;}
     if(!name){note('member',tr('Укажите имя в сети.'),true);return;}
-    if(await serverAction({action:'connect',code,name},'member',tr('Подключено.')))$('member-code').value='';
+    if(await serverAction({action:'connect',code,name},'member',''))$('member-code').value='';
   }
   // «Новый проект» opens a dialog; the current project is set up on its own
   // tab «Проект» (T-064).
@@ -5063,7 +5091,7 @@
       ['settings',$('settings-open').querySelector('svg').cloneNode(true)],
       ['project',svgIcon(['M4 6h5l2 2h9a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z'])],
       ['agents',svgIcon(['M7 7h10a4 4 0 0 1 4 4v5a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4v-5a4 4 0 0 1 4-4ZM12 7V3m-2 0h4M8.5 12v1m7-1v1M10 16.5h4'])],
-      ['server',svgIcon(serverIconPaths)],
+      ['server',svgIcon(['M9 2h6v5H9zM12 7v5M5 16v-4h14v4M2 16h6v5H2zM16 16h6v5h-6z'])],
     ];
     for(const [section,icon] of sectionIcons){
       const button=root.querySelector(`.am-tabs [data-tab=${section}]`);
