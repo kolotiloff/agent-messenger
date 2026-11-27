@@ -28,6 +28,7 @@ These checks cover the browser preview. Acceptance in the installed window remai
 
 ## T-336 follow-up checklist
 
+- First run: show the setup checklist in the task pane and take the user directly to the appropriate settings. Return to the checklist when more setup is needed and open New Task when a route and model are available.
 - Shared controls: use the Projects picker height, corners and neutral fill for standard buttons, one-line inputs and selectors. Check Settings, Statistics and the model picker save action.
 - New Task: keep the initial input on one line with Add at left and Send at right. Keep project, computer and searchable model below it, with the typography of the reply model. Align the search field with its options and use a check as the sole selected marker.
 - Reply: keep Add at the left, the field at the bottom and the active model below. Fill the context ring from an explicit used/capacity snapshot. Show the percentage and token count in two lines. Use a neutral ring and show the turn or task count when only cumulative usage is available. The loopback example is fictional and a production context snapshot requires provider telemetry. Match the New Task composer padding, Add and Send icons and focus styling. Show the standard or unrestricted access setting above either field at the left, or indicate that remote permissions are set on the worker computer.

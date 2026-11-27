@@ -1885,42 +1885,39 @@
   function coordinatorPlace(){
     return view?.coordinator?.connected||coordinatorAgentOn('claude')||coordinatorAgentOn('codex')||coordinatorAgentOn('cursor');
   }
-  // The task pane before the first project or task (T-152, T-164): explain
-  // the program first, then show setup steps with their current state.
+  // First-run setup links to the same settings used during normal work.
   function welcome(){
-    const box=el('div',undefined,'am-settings am-welcome');
+    const box=el('section',undefined,'am-settings am-welcome');
     const intro=el('div',undefined,'am-welcome-intro');
     intro.append(el('h2',tr('Добро пожаловать в Agent Messenger'),'am-welcome-title'),
-      el('p',tr('Ставьте задачи агентам на всех своих компьютерах из одного чата.'),'am-muted'));
-    box.append(intro);
-    const chain=el('div',undefined,'am-chain');
-    const node=(title,sub)=>{const n=el('div',undefined,'am-chain-node');n.append(el('strong',title),el('span',sub,'am-small am-muted'));return n;};
-    const arrow=()=>{const a=el('span','→','am-chain-arrow');a.setAttribute('aria-hidden','true');return a;};
-    chain.append(node(tr('Вы'),tr('Пишете координатору, что нужно сделать.')),arrow(),node(tr('Координатор'),tr('Чат в Claude Code, Codex или Cursor. Раздаёт задачи и собирает отчёты.')),arrow(),node(tr('Исполнители'),tr('Claude Code, Codex и Cursor на ваших компьютерах.')));
-    box.append(el('h3',tr('Как это работает')),chain);
-    const steps=el('div',undefined,'am-steps am-welcome-steps');
-    let number=0;
-    const step=(ok,title,sub,label,go)=>{
-      const row=el('div',undefined,'am-step');number++;
-      row.append(el('span',ok?'✓':String(number),'am-mark '+(ok?'am-mark-ok':'am-mark-off')));
-      const text=el('div',undefined,'am-step-text');text.append(el('p',title,'am-step-title'),el('p',sub,'am-step-sub'));row.append(text);
-      if(label){const b=el('button',label);b.type='button';b.addEventListener('click',go);row.append(b);}else row.append(el('span'));
-      steps.append(row);
-    };
-    const hasProject=!!view.project;
-    step(hasProject,tr('Проект'),hasProject?view.project:tr('Проект связывает чат-координатора, папку проекта на этом компьютере и задачи.'),hasProject?'':tr('Новый проект'),()=>openProjectDialog());
-    const agents=(view.agents||[]).length;
-    step(agents>0,tr('Агенты на этом компьютере'),agents?tr('Подключено: ')+agents:tr('Установите и подключите хотя бы одного'),agents?'':tr('Агенты'),()=>show('agents'));
-    const place=hasProject&&coordinatorPlace(),hasAny=(view.agents||[]).some(a=>(['claude','codex','cursor'].includes(a.agent))&&a.cli),folderOk=hasProject&&!!view.folder;
+      el('p',tr('Настройте проект и добавьте агента, чтобы отправить первую задачу.'),'am-muted'));
+    const steps=el('div',undefined,'am-card am-steps am-welcome-steps');
+    const hasProject=!!view.project,hasFolder=hasProject&&!!view.folder;
+    const projectAction=hasProject?[tr('Проект'),()=>show('project')]:[tr('Новый проект'),openProjectDialog];
+    steps.append(stepRow(hasFolder?'ok':1,tr('Проект'),
+      hasFolder?projectTitle(view.project):hasProject?tr('Укажите папку проекта на этом компьютере.'):tr('Задайте название и выберите папку проекта.'),
+      hasFolder?null:projectAction));
+
+    const agents=view.agents||[];
+    const localModels=taskDraftModels({id:'',agents});
+    steps.append(stepRow(localModels.length?'ok':2,tr('Агенты на этом компьютере'),
+      localModels.length?tr('Модель для задачи доступна.'):tr('Настройте агента и включите хотя бы одну модель.'),
+      localModels.length?null:[tr('Агенты'),()=>show('agents')]));
+
+    const peers=welcomePeerCount();
+    steps.append(stepRow(peers?'ok':3,tr('Другие компьютеры'),
+      peers?tr('В сети: ')+peers:tr('По желанию подключите другие компьютеры через сервер.'),
+      peers?null:[tr('Сервер'),()=>show('server')]));
+
+    const place=hasProject&&coordinatorPlace();
     const who=[coordinatorAgentOn('claude')&&'Claude Code',coordinatorAgentOn('codex')&&'Codex',coordinatorAgentOn('cursor')&&'Cursor'].filter(Boolean).join(', ');
-    const failed=linkFailure?.project===view.project?linkFailure:null;
-    const codexBare=coordinatorAgentOn('codex')&&!coordinatorAgentOn('claude')&&!coordinatorAgentOn('cursor')&&(view.agents||[]).some(a=>a.agent==='codex'&&a.trust?.state==='not_trusted');
-    const coordSub=!hasProject?tr('Сначала создайте проект'):codexBare?tr('Записано. Подтвердите доверие папке кнопкой «Доверять» на карточке Codex во вкладке «Агенты».'):place?(who?tr('Подключён: ')+who:tr('Подключён на этом компьютере')):(failed?tr('Не получилось: ')+failed.detail:tr('Подключите Claude Code, Codex или Cursor координатором, чтобы давать задачи с этого компьютера'));
-    step(!!place&&!codexBare,tr('Координатор'),coordSub,!hasProject||place||codexBare?'':(hasAny&&folderOk&&!linkBusy)?tr('Подключить'):hasAny?tr('Проект'):tr('Агенты'),()=>(hasAny&&folderOk&&!linkBusy)?connectReadyCoordinators():show(hasAny?'project':'agents'));
-    const peers=(server?.peers||[]).length;
-    step(peers>0,tr('Другие компьютеры'),peers?tr('В сети: ')+peers:tr('Необязательно: объедините компьютеры через сервер'),peers?'':tr('Сервер'),()=>show('server'));
-    box.append(el('h3',tr('С чего начать')),steps);
-    if(place&&!codexBare)box.append(el('p',tr('Откройте папку проекта в Claude Code, Codex или Cursor, начните новый чат и спросите: «Каких агентов ты видишь?»'),'am-small am-muted'));
+    const codexBare=coordinatorAgentOn('codex')&&!coordinatorAgentOn('claude')&&!coordinatorAgentOn('cursor')&&agents.some(a=>a.agent==='codex'&&a.trust?.state==='not_trusted');
+    const coordSub=codexBare?tr('Записано. Подтвердите доверие папке кнопкой «Доверять» на карточке Codex во вкладке «Агенты».'):
+      place?(who?tr('Подключён: ')+who:tr('Подключён на этом компьютере')):
+      tr('По желанию подключите чат, который будет распределять задачи.');
+    steps.append(stepRow(place&&!codexBare?'ok':4,tr('Координатор'),coordSub,
+      !hasProject||place&&!codexBare?null:codexBare?[tr('Агенты'),()=>show('agents')]:[tr('Проект'),()=>show('project')]));
+    box.append(intro,steps);
     return box;
   }
   function showComposerAccess(node,enabled,remote=false){
@@ -1934,20 +1931,16 @@
     const icon=svgIcon(['M12 3 5 6v5c0 4 2.6 7.2 7 10 4.4-2.8 7-6 7-10V6z']);
     node.append(icon,el('span',label));
   }
-  function renderTaskDraft(){
-    const projectSelect=$('task-draft-project'),computerSelect=$('task-draft-computer'),modelSelect=$('task-draft-model');
-    const projects=(view?.projects||[]).map(p=>[p.name,p.title||p.name]);
-    const name=projects.some(([key])=>key===projectSelect.value)?projectSelect.value:sidebarProject||project;
-    projectOptions(projectSelect,projects,name,draftSending);
+  function taskDraftComputers(name){
     const local={id:'',name:view?.computer_name||tr('Этот компьютер'),agents:view?.agents||[]};
-    const computers=[...((view?.projects||[]).find(p=>p.name===name)?.folder&&!['queued','updating'].includes(view.local_update?.state)?[local]:[]),
+    return [...((view?.projects||[]).find(p=>p.name===name)?.folder&&!['queued','updating'].includes(view.local_update?.state)?[local]:[]),
       ...(server?.peers||[]).filter(p=>peerFresh(p)&&!p.update_pending&&p.ready?.accept!==false&&
         (!Array.isArray(p.ready?.projects)||p.ready.projects.includes(name)))].filter(p=>p.agents?.some(a=>!a.paused));
-    const computer=computers.find(p=>p.id===computerSelect.value)||computers[0];
-    projectOptions(computerSelect,computers.map(p=>[p.id,p.name]),computer?.id||'',draftSending||!computer);
+  }
+  function taskDraftModels(computer){
     const usesCoordinatorModels=computer?.version==='dev'||
       (/^(?:0\.0\.0|[1-9]\d*\.\d+\.\d+)-preview\.\d+$/.test(computer?.version)&&updateBuildNumber(computer.version)>=82);
-    const models=(computer?.agents||[]).filter(a=>!a.paused).flatMap(a=>{
+    return (computer?.agents||[]).filter(a=>!a.paused).flatMap(a=>{
       const agent=names[a.agent]||a.agent;
       const configured=view?.coordinator_models?.[a.agent]??a.models??[];
       const available=computer.id&&!usesCoordinatorModels
@@ -1956,6 +1949,20 @@
       return (preferred?[preferred,...available.filter(id=>id!==preferred)]:available)
         .map(model=>[a.agent+':'+model,agent+' '+modelName(model)]);
     });
+  }
+  function canDraftTask(name){
+    return online&&taskDraftComputers(name).some(computer=>taskDraftModels(computer).length);
+  }
+  function renderTaskDraft(){
+    const projectSelect=$('task-draft-project'),computerSelect=$('task-draft-computer'),modelSelect=$('task-draft-model');
+    const projects=(view?.projects||[]).map(p=>[p.name,p.title||p.name]);
+    const name=projects.some(([key])=>key===projectSelect.value)?projectSelect.value:sidebarProject||project;
+    projectOptions(projectSelect,projects,name,draftSending);
+    const computers=taskDraftComputers(name);
+    const current=computerSelect.selectedIndex<0?null:computers.find(p=>p.id===computerSelect.value);
+    const computer=current||computers.find(p=>taskDraftModels(p).length)||computers[0];
+    projectOptions(computerSelect,computers.map(p=>[p.id,p.name]),computer?.id||'',draftSending||!computer);
+    const models=taskDraftModels(computer);
     const model=models.some(([key])=>key===modelSelect.value)?modelSelect.value:models[0]?.[0]||'';
     projectOptions(modelSelect,models,model,draftSending||!models.length);
     const provider=model.split(':',1)[0];
@@ -1977,13 +1984,13 @@
     if($('task-draft-add').getAttribute('aria-expanded')==='true')$('task-draft-add-menu').hidePopover();
     feedSignature='';
   }
-  function openTaskDraft(){
+  function openTaskDraft(focus=true){
     draftOpen=true;
     $('task-new').setAttribute('aria-expanded','true');
     $('task-draft').hidden=false;
     if(!$('task-draft-text').value)$('task-draft-project').value=sidebarProject||project;
     renderThread();
-    $('task-draft-text').focus();
+    if(focus)$('task-draft-text').focus();
     renderMachines();renderTaskList();
   }
   function setupComposerPaths(){
@@ -2156,12 +2163,17 @@
     if(!view.project){
       showPane(thread,'welcome');return;
     }
+    if(taskSidebarPreview&&tab==='tasks'&&canDraftTask(sidebarProject||project)){
+      openTaskDraft(false);return;
+    }
     showPane(thread,showWelcome()?'welcome':'empty');
   }
   // The welcome explains the setup until this computer has seen its first
   // task or serves the network; afterwards an empty project just says so
   // (owner, 2026-11-23).
   let welcomeDone=recall('messenger-welcome-done')==='1';
+  const welcomePeerCount=()=>(server?.peers||[]).filter(peerFresh).length;
+  const setupPaneShown=()=>['welcome','empty'].includes($('thread').firstElementChild?.dataset.pane);
   function noteWelcomeDone(){
     if(welcomeDone)return;
     if((view?.tasks||[]).length||(view?.shared||[]).some(p=>(p.tasks||[]).length)||server?.host?.running){welcomeDone=true;remember('messenger-welcome-done','1');}
@@ -3454,6 +3466,7 @@
     }
     $('list-toggle').hidden=!view?.project||(!taskSidebarPreview&&tab!=='tasks');if(tab==='server'||tab==='settings')loadServer();if(tab==='stats')reloadStats();if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),settings:tr('Настройки программы'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сервер'),stats:tr('Статистика')}[tab];startWindowWatch();
     if(tab==='tasks'&&combinedTasks()){renderTaskList();loadProjectActivity();}
+    if(tab==='tasks'&&setupPaneShown())renderThread();
   }
 
 
@@ -3854,9 +3867,11 @@
       const next=await api('/api/server');
       if(gen===serverGen&&!serverBusy){
         const sharedRuns=()=>JSON.stringify([view,taskListView(passiveProject())].flatMap(snapshot=>(snapshot?.shared||[]).flatMap(p=>p.tasks.filter(t=>(!t.started_at||t.pending_launch||!peerFresh(p))&&sharedWorkerRunning(t)).map(t=>t.id))));
-        const previous=sharedRuns();
+        const previous=sharedRuns(),previousPeers=welcomePeerCount(),wasHosting=!!server?.host?.running;
         server=next;
         if(draftOpen)renderTaskDraft();
+        else if(tab==='tasks'&&setupPaneShown()&&(previousPeers!==welcomePeerCount()||wasHosting!==!!next.host?.running||
+          taskSidebarPreview&&view?.project&&canDraftTask(sidebarProject||project)))renderThread();
         // This snapshot started after the submission returned. Trust the
         // durable queue from here, regardless of the submission's reply.
         for(const [key,state] of cancelAttempts){

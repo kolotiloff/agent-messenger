@@ -8,6 +8,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+On first run, the task pane shows a compact checklist with direct links to project creation, project settings, agent settings and server settings. A project with an available model on an eligible computer opens the normal New Task composer when no conversation is selected. Network and coordinator setup are optional for direct tasks. The isolated browser preview and the Chromium and WebKit checks cover this flow.
+
 The shared preview shows a gray parenthesized task count on collapsed computers. Conversation headers show only the task title, with the date centered at the start of the thread. The reply context popover is left aligned and uses a slash between usage and capacity. The ring uses fictional telemetry in this preview. Installed-window acceptance and the release remain pending.
 
 T-336 aligns the Projects divider with the full-width task toolbar. The Archive begins in the right column below the toolbar. Its Clear Archive action uses the compact filled button and aligns with the left edge of the archive cards. The bottom bar aligns the visible icon and version edges at 17 px in the shared preview. Confirmation dialogs use a 12 px gap between content sections and 16 px around the dialog. Statistics cards, expanded efficiency details and outgoing message bubbles use 12 px on all sides. Menus use an 8 px inset, and settings cards use 16 px. These insets and the server and laptop update confirmations were measured in the shared preview.

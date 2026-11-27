@@ -1211,16 +1211,17 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 @keyframes am-pane-appear { to { opacity:1; } }
 #am-concept .am-pane-empty { flex:1; display:flex; align-items:center; justify-content:center; text-align:center; }
 #am-concept .am-pane-empty-title { margin:0; font-size:var(--am-text-m); }
-/* Task pane without a task (T-152): the chain and the first steps. */
-#am-concept .am-welcome { margin:0; max-width:none; width:min(100%,760px); }
-#am-concept .am-welcome h3 { margin:0; }
+/* First-run setup uses the same card and rows as Settings. */
+#am-concept .am-thread:has(> .am-welcome) { padding-block:var(--am-gap-region); }
+#am-concept .am-welcome { align-self:center; margin:0; max-width:var(--am-chat-max); width:100%; padding:0; }
 #am-concept .am-welcome-intro { display:flex; flex-direction:column; gap:var(--am-space-2); }
 #am-concept .am-welcome-intro p { margin:0; }
-#am-concept .am-welcome-title { margin:0; font-size:var(--am-text-display); font-weight:600; line-height:1.2; }
-#am-concept .am-welcome > p { margin:0; }
-#am-concept .am-chain { display:flex; align-items:stretch; gap:var(--am-space-2); }
-#am-concept .am-chain-node { flex:1 1 0; min-width:0; display:flex; flex-direction:column; gap:var(--am-gap-line); padding:var(--am-space-3); border:1px solid var(--am-line); border-radius:var(--am-radius-m); background:var(--am-panel); }
-#am-concept .am-chain-arrow { align-self:center; color:var(--am-muted); }
+#am-concept .am-welcome-title { margin:0; }
+#am-concept .am-welcome-steps { gap:0; }
+#am-concept .am-welcome-steps .am-step:first-child { padding-block-start:0; }
+#am-concept .am-welcome-steps .am-step:last-child { padding-block-end:0; }
+#am-concept .am-welcome-steps .am-step-title { color:var(--am-text); }
+#am-concept .am-welcome-steps .am-step-sub { white-space:normal; overflow-wrap:anywhere; }
 #am-concept .am-coord-box { display:flex; flex-direction:column; gap:var(--am-space-1); }
 #am-concept .am-coord-box .am-step-sub { white-space:normal; overflow-wrap:anywhere; }
 /* T-270: the project page is a column of cards, like the server page. */
@@ -1232,7 +1233,6 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-connect-body p { margin:0; }
 #am-concept .am-connect-body details { align-self:stretch; }
 #am-concept .am-connect-body details button { margin-top:var(--am-space-2); }
-@media (max-width: 720px) { #am-concept .am-chain { flex-direction:column; } #am-concept .am-chain-arrow { transform:rotate(90deg); } }
 
 #am-concept .am-card-update .am-update-icon { width:var(--am-computer-update-size); height:var(--am-computer-update-size); }
 #am-concept .am-card-update .am-update-icon > svg { width:var(--am-computer-icon-size); height:var(--am-computer-icon-size); }

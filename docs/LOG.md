@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-336 first-run setup)
+
+Replaced the first-run explanation with an in-window checklist and direct links to setup. Verified the links and the transition to an enabled New Task composer in Chromium and WebKit, including the narrow layout. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).
+
 ## 2026-11-27 — Codex (T-336 clear archive button)
 
 Used the compact filled button for Clear Archive and aligned its leading edge with the archive cards. Measured the 28 px button height and shared left edge in the preview. [PR #233](https://github.com/kolotiloff/agent-messenger/pull/233).
