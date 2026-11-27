@@ -599,7 +599,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       });
       await page.goto('http://127.0.0.1/#fixture-token');
       await page.locator('#list-toggle').waitFor({state: 'visible'});
-      const tab = await page.locator('.am-tab').first().boundingBox();
+      const tab = await page.locator('.am-tab[data-tab=tasks]').boundingBox();
       const toggle = await page.locator('#list-toggle').boundingBox();
       const button = await page.locator('.am-window-btn').first().boundingBox();
       assert(tab.y >= 8 && toggle.y >= 8, `tab row too close to the top: tab ${tab.y}, toggle ${toggle.y}`);
@@ -1037,16 +1037,20 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       if (process.env.SCREENSHOT_DIR) await page.screenshot({path: path.join(process.env.SCREENSHOT_DIR, 'frameless.png')});
       await page.locator('.am-task-title',{hasText:remoteTask.title}).click();
       const reply = page.locator('#answer-text');
+      await page.locator('#task-head h3').getByText(remoteTask.title,{exact:true}).waitFor();
       await reply.waitFor({state:'visible'});
-      const chatType=locator=>locator.evaluate(node=>{
-        const {fontSize,fontWeight,lineHeight}=getComputedStyle(node);
-        return [fontSize,fontWeight,lineHeight];
-      });
-      const chatBody=page.locator('#thread .am-message-content').last();
       for(const width of [1100,600]){
         await page.setViewportSize({width,height:600});
-        assert.deepEqual(await chatType(chatBody),['14px','400','21px']);
-        assert.deepEqual(await chatType(reply),await chatType(chatBody));
+        const [body,input]=await page.evaluate(()=>{
+          const typography=node=>{
+            const {fontSize,fontWeight,lineHeight}=getComputedStyle(node);
+            return [fontSize,fontWeight,lineHeight];
+          };
+          const messages=document.querySelectorAll('#thread .am-message-content');
+          return [typography(messages[messages.length-1]),typography(document.querySelector('#answer-text'))];
+        });
+        assert.deepEqual(body,['14px','400','21px']);
+        assert.deepEqual(input,body);
       }
       await page.setViewportSize({width:1100,height:600});
       await reply.fill('Use blue');
@@ -1124,6 +1128,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await remoteList.click();
       remoteRow=remoteTask;
       await remoteHead.getByText(/Работает/).waitFor();
+      await remoteList.locator('.am-task-status').getByText(/^Работает/).waitFor();
       // Stop another task from its row without selecting it. The chat button
       // shares the pending guard through both queuing and broker acceptance.
       const stopButton=page.locator('#task-stop'),stopStatus=page.locator('#task-stop-status');
@@ -1224,7 +1229,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         // The old rows stay in place so the list does not jump, but they
         // cannot be chosen while Site loads (T-266).
         assert(await page.locator('#task-list').evaluate(list => list.inert && list.getAttribute('aria-busy') === 'true'), 'keep the old project list inert while Site loads');
-        assert(await composer.isHidden());
+        assert(await composer.evaluate(input=>input.closest('#compose').inert),'keep the displayed composer inactive while Site loads');
       } finally {
         releaseSite();
       }

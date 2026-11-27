@@ -2,6 +2,14 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — Codex (T-326 panel alignment and settings modal)
+
+Matched the Archive header and filter insets to Projects, aligned the header rows, and joined the Archive dividers to its borders. Moved General, Agents, Project, Server, and Statistics into the existing settings dialog with an internal section list and preserved the active chat behind it. Removed the disclosure arrows from computer rows, keeping the full header interactive. Verified the preview in Chromium and WebKit, including the matched panel geometry, chat retention, and narrow settings layout. The local UI race tests passed.
+
+## 2026-11-27 — Codex (T-326, T-327 window controls and archive)
+
+- Matched the typography of computer and message roles to their names, using muted comma-separated labels. Kept the updater next to the version at the right and matched the three footer glyphs, button sizes and neutral rounded-square hover fills, and used the same 4px gap between update and version in the footer and computer rows. Put a single New Task plus beside the Projects picker and aligned the model picker to the right below the composer. Selecting another task leaves the composer. Removed the chat tab strip, moved the task-list toggle into the window corner, and matched update buttons and task text spacing across the window. Moved planned and attention-needed tasks into the computer groups and reserved the optional right panel for the archive. Extended the sidebar dividers to the panel edges, matched the composer radius to task cards, and limited the computer fill to hover, focus and the drag image. In [PR #228](https://github.com/kolotiloff/agent-messenger/pull/228).
+
 ## 2026-11-27 — Codex (T-326 sidebar refinement)
 
 - Refined the resting and hover fills, moved the local version and updater into the footer with matching version typography and a fictional preview offer, and revealed remote update details on hover and keyboard focus. Grouped the former top tabs under the footer gear. Joined chat roles inline, and added a blue insertion line and translucent drag image for computer sorting. Kept the task fill immediate during disclosure and used the same gap between collapsed and expanded groups. In [PR #228](https://github.com/kolotiloff/agent-messenger/pull/228).
