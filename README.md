@@ -1,10 +1,10 @@
-<p align="center"><img src="docs/assets/logo.svg" alt="Agent Messenger" width="128" height="128"></p>
+<p align="center"><img src="docs/assets/logo.svg" alt="Kotel" width="128" height="128"></p>
 
-<h1 align="center">Agent Messenger</h1>
+<h1 align="center">Kotel</h1>
 
 One coordinator agent hands tasks to worker agents (Claude Code, Codex, Cursor Agent CLI) on your own computers: Mac, Windows and Linux, joined into one network. You watch every task in one window, answer the workers' questions and step in when needed.
 
-**Technical preview.** Messenger runs on Apple Silicon Macs with macOS 15 or later, and on x64 and ARM64 Windows and Linux computers. Messenger verifies signed in-app updates. The Mac app is ad-hoc signed and the Windows executables are unsigned, so a first download can trigger an operating system prompt. See the [installation guide](docs/DOWNLOAD.md) for each platform.
+**Technical preview.** Kotel runs on Apple Silicon Macs with macOS 15 or later, and on x64 and ARM64 Windows and Linux computers. Kotel verifies signed in-app updates. The Mac app is ad-hoc signed and the Windows executables are unsigned, so a first download can trigger an operating system prompt. See the [installation guide](docs/DOWNLOAD.md) for each platform.
 
 <h3 align="center">Download</h3>
 
@@ -20,23 +20,23 @@ One coordinator agent hands tasks to worker agents (Claude Code, Codex, Cursor A
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/window-dark.png">
-  <img src="docs/assets/window-light.png" alt="Agent Messenger in English, with Claude Code, Codex and Cursor in the computers and tasks panels">
+  <img src="docs/assets/window-light.png" alt="Kotel in English, with Claude Code, Codex and Cursor in the computers and tasks panels">
 </picture>
 
-<sub>Messenger 1.0.3 in English, with Claude Code, Codex and Cursor using sample projects and tasks. Change the theme or language in Settings at the bottom left.</sub>
+<sub>Kotel 1.0.3 in English, with Claude Code, Codex and Cursor using sample projects and tasks. Change the theme or language in Settings at the bottom left.</sub>
 
 ## What it does
 
 - **Coordinator and workers.** Use a local Claude Code, Codex or Cursor chat as the coordinator. It assigns work to separate worker sessions in the project folder. Claude Code can receive background-task notifications. Codex and Cursor use `wait` during an active turn to receive worker events.
 - **Several computers.** Host the server on one of your computers or a Linux VPS. Join on the same local network with six digits, or use a long invitation with the server's reachable address. The coordinator can assign tasks to a computer that accepts them and has a folder for the project. Drag computer cards to set the order in your window.
 - **Projects and tasks.** Switch between projects with separate task histories and statistics. See planned, active, finished and interrupted work, including the worker's reported model when available. A computer card can expand to show multiple tasks for the same agent.
-- **Conversations and run controls.** Write to a worker or answer a question from the task view. Stop eligible tasks from the conversation or the task list and see the request status while Messenger waits for the result. Workers can attach images to reports and questions. Messenger preserves uncertain outcomes for review. **Any commands** is off by default.
+- **Conversations and run controls.** Write to a worker or answer a question from the task view. Stop eligible tasks from the conversation or the task list and see the request status while Kotel waits for the result. Workers can attach images to reports and questions. Kotel preserves uncertain outcomes for review. **Any commands** is off by default.
 - **Statistics and feedback.** Filter by period, agent, model or computer. Sort the task table by finish time, duration or tokens by clicking the column headings. The feedback button saves a note and an optional screenshot on this computer.
 - **Updates from the window.** The update arrow appears next to the computer version. Request updates remotely on Windows and Linux. A queued request can be cancelled before installation starts.
 
 <details>
   <summary>Statistics screenshot</summary>
-  <img src="docs/assets/statistics.png" alt="Agent Messenger statistics showing token usage and a table of tasks sorted by duration">
+  <img src="docs/assets/statistics.png" alt="Kotel statistics showing token usage and a table of tasks sorted by duration">
 </details>
 
 ## Getting started
@@ -44,7 +44,7 @@ One coordinator agent hands tasks to worker agents (Claude Code, Codex, Cursor A
 1. [Download and start](docs/DOWNLOAD.md) the app on each computer.
 2. Create a project from the welcome screen. On each worker computer, use the same project name and choose its local folder.
 3. Open **Agents**. Install or find the CLI, sign in and confirm folder trust when prompted.
-4. In **Project → MCP plugin**, connect Messenger for your coordinator. Open a new chat in that project folder and ask it to run `list_agents`.
+4. In **Project → MCP plugin**, connect Kotel for your coordinator. Open a new chat in that project folder and ask it to run `list_agents`.
 5. For a network of computers, open **Server** on the host and [invite each worker computer](docs/DOWNLOAD.md#connect-more-computers).
 
 ## Status

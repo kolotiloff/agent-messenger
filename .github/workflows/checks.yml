@@ -238,12 +238,16 @@ jobs:
           key='HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\AgentMessenger'
           "$exe" install
           installed="$LOCALAPPDATA/Programs/Agent Messenger/AgentMessenger.exe"
-          shortcut="$APPDATA/Microsoft/Windows/Start Menu/Programs/Agent Messenger.lnk"
+          shortcut="$APPDATA/Microsoft/Windows/Start Menu/Programs/Kotel.lnk"
           test -f "$installed"
           "$installed" version
           reg query "$key" /v UninstallString
           reg query "$key" /v DisplayVersion
           test -f "$shortcut"
+          legacy="$(dirname "$shortcut")/Agent Messenger.lnk"
+          mv "$shortcut" "$legacy"
+          "$installed" install
+          test -f "$shortcut" && test ! -e "$legacy"
           mkdir -p "$LOCALAPPDATA/AgentMessenger"
           echo keep > "$LOCALAPPDATA/AgentMessenger/keep.txt"
           "$installed" uninstall < /dev/null

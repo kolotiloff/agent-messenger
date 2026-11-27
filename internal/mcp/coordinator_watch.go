@@ -101,10 +101,10 @@ func watchCoordinator(ctx context.Context, read func(context.Context, string, st
 		events, _, err := read(ctx, project, core.AudienceCoordinator, after, coordinatorMaxReturned+1)
 		switch {
 		case errors.Is(err, errWatchProjectNotice):
-			_, err := fmt.Fprintf(out, "Messenger: a notice is ready for project %s. Call wait with after=%d and timeout_seconds 1 to read it.\n", project, after)
+			_, err := fmt.Fprintf(out, "Kotel: a notice is ready for project %s. Call wait with after=%d and timeout_seconds 1 to read it.\n", project, after)
 			return err
 		case errors.Is(err, errWatchUpdateRestartOverdue):
-			_, err := fmt.Fprintf(out, "Messenger: the planned restart deadline passed. Call wait for project %s with after=%d and timeout_seconds 1 to check network contact. Keep the original cursor until wait returns a new one.\n", project, after)
+			_, err := fmt.Fprintf(out, "Kotel: the planned restart deadline passed. Call wait for project %s with after=%d and timeout_seconds 1 to check network contact. Keep the original cursor until wait returns a new one.\n", project, after)
 			return err
 		case err == nil:
 			checked = true
@@ -128,7 +128,7 @@ func watchCoordinator(ctx context.Context, read func(context.Context, string, st
 					names = append(names, e.Kind)
 				}
 			}
-			_, err := fmt.Fprintf(out, "Messenger: %s new event(s) of project %s after cursor %d (%s). Call wait with after=%d and timeout_seconds 1 to read them, act on them, then start this watch again with the new cursor.\n",
+			_, err := fmt.Fprintf(out, "Kotel: %s new event(s) of project %s after cursor %d (%s). Call wait with after=%d and timeout_seconds 1 to read them, act on them, then start this watch again with the new cursor.\n",
 				count, project, after, strings.Join(names, ", "), after)
 			return err
 		}
@@ -138,10 +138,10 @@ func watchCoordinator(ctx context.Context, read func(context.Context, string, st
 		}
 	}
 	if !checked {
-		_, err := fmt.Fprintf(out, "Messenger: could not check new events of project %s after cursor %d before the watch ended. Start this watch again with the same cursor.\n", project, after)
+		_, err := fmt.Fprintf(out, "Kotel: could not check new events of project %s after cursor %d before the watch ended. Start this watch again with the same cursor.\n", project, after)
 		return err
 	}
-	_, err := fmt.Fprintf(out, "Messenger: no new events of project %s after cursor %d. Start this watch again with the same cursor to keep watching.\n", project, after)
+	_, err := fmt.Fprintf(out, "Kotel: no new events of project %s after cursor %d. Start this watch again with the same cursor to keep watching.\n", project, after)
 	return err
 }
 

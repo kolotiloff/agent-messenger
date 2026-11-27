@@ -191,9 +191,9 @@
   function shutdownCommand(){return view?.messenger&&view?.data_root?shellQuote(view.messenger)+' --root '+shellQuote(view.data_root)+' shutdown':'';}
   function outdatedMessage(){
     if(Date.now()-clientInfoAt>3000)loadClientInfo();
-    if(clientInfo?.restart)return Error(tr('В фоне старая версия Messenger.'));
+    if(clientInfo?.restart)return Error(tr('В фоне старая версия Kotel.'));
     const e=Error(tr('В фоне старая версия клиента, перезапустите его'));
-    e.hint=tr('Закройте Messenger, выполните скопированную команду в Терминале и откройте Messenger снова.');
+    e.hint=tr('Закройте Kotel, выполните скопированную команду в Терминале и откройте Kotel снова.');
     e.command=shutdownCommand();
     return e;
   }
@@ -225,8 +225,8 @@
       if(response.status===401)throw Error(tr('Ссылка доступа устарела. Откройте окно заново.'));
       const body=await response.text().catch(()=>'');
       if(body.startsWith('client_outdated'))throw outdatedMessage();
-      if(body.startsWith('client_rejected'))throw Error(tr('Клиент Messenger отклонил запрос окна. Подробности: messenger doctor.'));
-      throw Error(tr('Клиент Messenger не запущен или не отвечает. Данные не обновляются.'));
+      if(body.startsWith('client_rejected'))throw Error(tr('Клиент Kotel отклонил запрос окна. Подробности: messenger doctor.'));
+      throw Error(tr('Клиент Kotel не запущен или не отвечает. Данные не обновляются.'));
     }
     return response.json();
   }
@@ -728,7 +728,7 @@
   }
   function collectNotices(){
     // T-129: the background program was started inside an agent's sandbox.
-    if(clientInfo?.sandbox)addNotice('sandbox-'+(clientInfo.client_version||''),'bad',tr('Messenger запущен из песочницы агента'),tr('Исполнители унаследуют её: без сети и без части папок, даже с «Любыми командами». Закройте Messenger полностью и откройте его снова сами, не из агента.'));
+    if(clientInfo?.sandbox)addNotice('sandbox-'+(clientInfo.client_version||''),'bad',tr('Kotel запущен из песочницы агента'),tr('Исполнители унаследуют её: без сети и без части папок, даже с «Любыми командами». Закройте Kotel полностью и откройте его снова сами, не из агента.'));
     const names=Object.fromEntries((server?.peers||[]).map(p=>[p.id,p.name]));
     const showUpdate=(u,name)=>{
       const at=Date.parse(u.updated_at);
@@ -836,13 +836,13 @@
     const [coordProvider,coordLabel]=coordinatorClient!==null?coordinatorName(coordinatorClient):['',''];
     const providers=agents.map(a=>a.agent);
     // Only agents the owner keeps enabled are listed: a chat of an agent
-    // that was paused or removed once used Messenger's tools, but listing
+    // that was paused or removed once used Kotel's tools, but listing
     // it showed the agent as if it were still there (owner, 2026-11-15).
     // A coordinator chat of a program that is not an agent stays listed.
     for(const provider of providers){
       const a=agents.find(x=>x.agent===provider);
       // Blue means a task is running (T-060). A chat that once used
-      // Messenger's tools is listed but not lit: nothing tells whether it is
+      // Kotel's tools is listed but not lit: nothing tells whether it is
       // still open.
       const {running,waiting,counts}=agentActivity(busyTasks.get(computer+'\0'+provider)||[]);
       const [state,text]=live?agentState(counts):['offline',tr('Нет связи')];
@@ -867,7 +867,7 @@
       lines.append(line);
     }
     if(coordinatorClient!==null&&!coordProvider){
-      const line=el('div',undefined,'am-agent-line am-agent-'+(live?'idle':'offline'));line.title=tr('Чат с инструментами Messenger');line.append(el('span',coordLabel));lines.append(line);
+      const line=el('div',undefined,'am-agent-line am-agent-'+(live?'idle':'offline'));line.title=tr('Чат с инструментами Kotel');line.append(el('span',coordLabel));lines.append(line);
     }
     return lines;
   }
@@ -1868,15 +1868,15 @@
     const missing='no_'+agent;
     if(linkBusy===agent)return stepRow(1,title,tr('Подключаем…'),null);
     if(link.state==='connected'){
-      let sub=agent==='cursor'?tr('Записано. Откройте новый чат Cursor в этой папке и разрешите подключение Messenger'):tr('Подключён. Откройте папку проекта в новом чате');
+      let sub=agent==='cursor'?tr('Записано. Откройте новый чат Cursor в этой папке и разрешите подключение Kotel'):tr('Подключён. Откройте папку проекта в новом чате');
       if(agent==='codex'&&(view.agents||[]).some(a=>a.agent==='codex'&&a.trust?.state==='not_trusted'))sub=tr('Записано. Подтвердите доверие папке кнопкой «Доверять» на карточке Codex во вкладке «Агенты».');
       return stepRow('ok',title,sub,null);
     }
     if(failure)return stepRow('no',title,tr('Не получилось: ')+failure.detail,[tr('Повторить'),()=>connectCoordinator(agent)]);
     if(link.state===missing)return stepRow(1,title,tr('Сначала настройте его во вкладке «Агенты»'),[tr('Агенты'),()=>show('agents')]);
     if(link.state==='no_folder')return stepRow(1,title,tr('Сначала укажите папку проекта'),null);
-    if(link.state==='other')return stepRow('no',title,agent==='cursor'?tr('В настройках Cursor этой папки уже есть другое подключение «messenger». Messenger его не меняет'):agent==='codex'?tr('В настройках Codex этой папки уже есть другое подключение «messenger». Messenger его не меняет'):tr('В Claude у этой папки уже есть другое подключение «messenger». Messenger его не меняет'),connect);
-    if(link.state==='off')return stepRow('no',title,agent==='cursor'?tr('Подключение «messenger» в Cursor выключено. Messenger его не включает'):tr('Подключение «messenger» в Codex выключено. Messenger его не включает'),null);
+    if(link.state==='other')return stepRow('no',title,agent==='cursor'?tr('В настройках Cursor этой папки уже есть другое подключение «messenger». Kotel его не меняет'):agent==='codex'?tr('В настройках Codex этой папки уже есть другое подключение «messenger». Kotel его не меняет'):tr('В Claude у этой папки уже есть другое подключение «messenger». Kotel его не меняет'),connect);
+    if(link.state==='off')return stepRow('no',title,agent==='cursor'?tr('Подключение «messenger» в Cursor выключено. Kotel его не включает'):tr('Подключение «messenger» в Codex выключено. Kotel его не включает'),null);
     if(link.state==='unknown')return stepRow('no',title,(agent==='cursor'?tr('Не удалось прочитать настройки Cursor'):agent==='codex'?tr('Не удалось прочитать настройки Codex'):tr('Не удалось прочитать настройки Claude'))+(link.detail?': '+link.detail:''),connect);
     return stepRow(1,title,tr('Не подключён'),connect);
   }
@@ -1889,7 +1889,7 @@
   function welcome(){
     const box=el('section',undefined,'am-settings am-welcome');
     const intro=el('div',undefined,'am-welcome-intro');
-    intro.append(el('h2',tr('Добро пожаловать в Agent Messenger'),'am-welcome-title'),
+    intro.append(el('h2',tr('Добро пожаловать в Kotel'),'am-welcome-title'),
       el('p',tr('Настройте проект и добавьте агента, чтобы отправить первую задачу.'),'am-muted'));
     const steps=el('div',undefined,'am-card am-steps am-welcome-steps');
     const hasProject=!!view.project,hasFolder=hasProject&&!!view.folder;
@@ -2454,7 +2454,7 @@
     const t=selectedTaskRow();if(!t)return;
     if(!t.remote||t.remote.from){
       if(t.state!=='blocked'&&t.state!=='interrupted')return;
-      askConfirm(tr('Закрыть задачу?'),tr('Messenger проверит, что процесса исполнителя на этом компьютере нет, и закроет задачу. Если процесс ещё есть, задача останется как была.')+(t.remote?.from?' '+tr('Компьютер «')+t.remote.name+tr('» узнает, что задача закрыта.'):''),tr('Закрыть'),async()=>{
+      askConfirm(tr('Закрыть задачу?'),tr('Kotel проверит, что процесса исполнителя на этом компьютере нет, и закроет задачу. Если процесс ещё есть, задача останется как была.')+(t.remote?.from?' '+tr('Компьютер «')+t.remote.name+tr('» узнает, что задача закрыта.'):''),tr('Закрыть'),async()=>{
         await postAPI('/api/task-cancel',{task:t.id});feedSignature='';await refresh();
       });
       return;
@@ -2919,10 +2919,10 @@
     if(capacityFailure(text))return tr('Модель перегружена. Провайдер не подтвердил завершение хода.');
     if(/not signed in/.test(text))return tr('Агент не вошёл в аккаунт на этом компьютере. Войдите на вкладке «Агенты».');
     if(/stopped at a provider limit/.test(text))return tr('Агент упёрся в лимит.');
-    if(/different conversation/.test(text))return tr('Агент ответил не в той сессии, которую запустил Messenger; результату нельзя доверять.');
+    if(/different conversation/.test(text))return tr('Агент ответил не в той сессии, которую запустил Kotel; результату нельзя доверять.');
     if(code)return tr('Программа агента завершилась с ошибкой, код ')+code[1]+'.';
     if(/did not report a successful end/.test(text))return tr('Агент не сообщил об успешном окончании работы: возможно, упал или был остановлен.');
-    if(/ended without sending its report/.test(text))return tr('Исполнитель закончил, но не отправил отчёт через Messenger. Координатор может попросить его прислать отчёт в той же сессии.');
+    if(/ended without sending its report/.test(text))return tr('Исполнитель закончил, но не отправил отчёт через Kotel. Координатор может попросить его прислать отчёт в той же сессии.');
     return '';
   }
   // Known refusals of another computer, explained in the window's language.
@@ -2980,7 +2980,7 @@
   }
   // Agent cards (T-061, D-070): the agent's name with a check, settings and
   // an on/off switch; four steps of the same height (program, sign-in, work
-  // with Messenger, limit) with a mark on the left and one action on the
+  // with Kotel, limit) with a mark on the left and one action on the
   // right; one «Задачи» button under them. Steps that cannot be checked yet
   // are grey and numbered.
   const checkPath=['M21 12a9 9 0 1 1-3-6.7L21 8','M21 3v5h-5'];
@@ -3033,7 +3033,7 @@
   function uninstallAgent(provider){
     // Like installing, removing runs in a terminal: it shows what it will
     // remove and asks there (owner, 2026-11-15: no web pages).
-    askConfirm(tr('Удалить ')+names[provider]+' CLI?',tr('Откроется терминал: он покажет, что будет удалено, и спросит подтверждение. Вход в агент и настройки Messenger сохранятся.'),tr('Открыть терминал'),async()=>{
+    askConfirm(tr('Удалить ')+names[provider]+' CLI?',tr('Откроется терминал: он покажет, что будет удалено, и спросит подтверждение. Вход в агент и настройки Kotel сохранятся.'),tr('Открыть терминал'),async()=>{
       try{await postAPI('/api/agent-uninstall',{provider});noteRow(provider+':auth',tr('Терминал удаления открыт'),15000);}
       catch(error){showError(error);}
     });
@@ -3066,8 +3066,8 @@
       const head=el('div',undefined,'am-agent-head');
       const heading=el('h3',undefined,'am-provider-heading');heading.append(providerIcon(provider),el('span',names[provider]));
       const sw=el('button',undefined,'am-switch');sw.type='button';sw.setAttribute('role','switch');sw.setAttribute('aria-checked',String(on));
-      sw.setAttribute('aria-label',names[provider]+tr(': Messenger даёт задачи'));
-      sw.title=on?tr('Messenger даёт задачи ')+names[provider]+tr(' на этом компьютере'):cli?tr('Включить: Messenger будет давать задачи ')+names[provider]:tr('Сначала установите ')+names[provider]+' CLI';
+      sw.setAttribute('aria-label',names[provider]+tr(': Kotel даёт задачи'));
+      sw.title=on?tr('Kotel даёт задачи ')+names[provider]+tr(' на этом компьютере'):cli?tr('Включить: Kotel будет давать задачи ')+names[provider]:tr('Сначала установите ')+names[provider]+' CLI';
       sw.disabled=!a&&!cli;
       sw.addEventListener('click',async()=>{sw.disabled=true;try{await setAgentOn(provider,!on);}finally{sw.disabled=false;}});
       const recheck=iconButton(busy?tr('Проверяем'):cli?tr('Проверить снова'):tr('Найти'),checkPath,false,()=>{if(cli)checkCard(provider);else installAgent(provider,'find');});
@@ -3088,7 +3088,7 @@
         let sub=check?.version?.value||(busy?tr('Проверяем'):'');
         if(newer){
           const box=document.createDocumentFragment(),mark=el('span',', '+tr('не проверена'),'am-status-wait');
-          mark.title=tr('Messenger проверен с версией ')+check.tested_version+tr('. Новая версия обычно работает, но если задачи этого агента начнут падать, причина может быть в ней.');
+          mark.title=tr('Kotel проверен с версией ')+check.tested_version+tr('. Новая версия обычно работает, но если задачи этого агента начнут падать, причина может быть в ней.');
           box.append(el('span',sub),mark);sub=box;
         }
         step('ok',names[provider]+tr(' CLI установлен'),sub,[tr('Удалить'),()=>uninstallAgent(provider)]);
@@ -3105,11 +3105,11 @@
       }
       else if(auth==='not_authenticated')step('no',tr('Вход не выполнен'),tr('Войдите в аккаунт агента'),[tr('Войти'),()=>loginFromCard(provider,cli,profile)]);
       else step(2,tr('Вход в аккаунт'),check?tr('Не удалось проверить'):tr('Ещё не проверен'),[tr('Войти'),()=>loginFromCard(provider,cli,profile)]);
-      // 3. Work with Messenger: set only by what a task showed (D-070).
+      // 3. Work with Kotel: set only by what a task showed (D-070).
       const trust=a?.trust?.state;
       if(a&&view?.folder&&trust&&trust!=='trusted')step('no',tr('Не доверяет папке проекта'),tr('Подтвердите доверие в терминале'),[tr('Доверять'),()=>trustFolder(provider)],a.trust?.hint);
-      else if(a?.last_done)step('ok',tr('Работает с Messenger'),tr('Последняя задача ')+dayClock(a.last_done));
-      else step(3,tr('Работает с Messenger'),missing?tr('Проверится после установки'):tr('Проверится на первой задаче'));
+      else if(a?.last_done)step('ok',tr('Работает с Kotel'),tr('Последняя задача ')+dayClock(a.last_done));
+      else step(3,tr('Работает с Kotel'),missing?tr('Проверится после установки'):tr('Проверится на первой задаче'));
       // 4. The limit the agent reported during its last task (T-044).
       const l=a?.limit,level=limitLevel(l);
       const today=a?.today_tokens?tr('сегодня ')+tokensText(a.today_tokens)+tr(' токенов'):'';
@@ -3272,13 +3272,13 @@
     if(!show){if(dialog.open)dialog.close();return;}
     const ask=restart.ask,canRestart=!!clientInfo?.restart,answering=clientInfo?.client==='running';
     const canQuit=!!window.webkit?.messageHandlers?.app;
-    let title=tr('Нужно перезапустить Messenger'),text;
+    let title=tr('Нужно перезапустить Kotel'),text;
     const version=clientInfo?.window_version?tr('Версия ')+versionName(clientInfo.window_version).slice(1)+tr(' установлена. '):'';
-    if(ask&&restart.wait){title=tr('Ждём окончания задач');text=(ask.known?tr('Задач в работе: ')+ask.running+'. ':'')+tr('Messenger перезапустится сам, когда они закончатся. Если выйти из приложения, следующая проверка будет при запуске.');}
-    else if(ask&&ask.known){title=tr('Обновление ждёт задачи: ')+ask.running;text=version+tr('Чтобы она заработала, Messenger перезапустится и прервёт задачи, которые идут сейчас. Сами они не повторятся.');}
+    if(ask&&restart.wait){title=tr('Ждём окончания задач');text=(ask.known?tr('Задач в работе: ')+ask.running+'. ':'')+tr('Kotel перезапустится сам, когда они закончатся. Если выйти из приложения, следующая проверка будет при запуске.');}
+    else if(ask&&ask.known){title=tr('Обновление ждёт задачи: ')+ask.running;text=version+tr('Чтобы она заработала, Kotel перезапустится и прервёт задачи, которые идут сейчас. Сами они не повторятся.');}
     else if(ask){title=tr('Не удалось проверить задачи');text=version+tr('Если задачи сейчас идут, перезапуск прервёт их. Сами они не повторятся.');}
-    else if(restart.busy){title=tr('Обновляем Messenger');text=tr('Останавливаем старую версию и запускаем новую. Это займёт несколько секунд.');}
-    else if(canRestart)text=tr('Приложение обновилось до версии ')+clientInfo.window_version+tr(', а в фоне работает ')+(clientInfo.client_version?tr('версия ')+clientInfo.client_version:tr('более ранняя версия'))+tr('. Пока она не перезапущена, Messenger не может работать. Задачи, история и устройства сохранятся.');
+    else if(restart.busy){title=tr('Обновляем Kotel');text=tr('Останавливаем старую версию и запускаем новую. Это займёт несколько секунд.');}
+    else if(canRestart)text=tr('Приложение обновилось до версии ')+clientInfo.window_version+tr(', а в фоне работает ')+(clientInfo.client_version?tr('версия ')+clientInfo.client_version:tr('более ранняя версия'))+tr('. Пока она не перезапущена, Kotel не может работать. Задачи, история и устройства сохранятся.');
     else text=tr('В фоне работает более ранняя версия клиента. Закройте окно, выполните скопированную команду в Терминале и откройте окно снова.');
     $('restart-title').textContent=title;$('restart-text').textContent=text;
     const list=$('restart-tasks');list.replaceChildren();
@@ -3303,7 +3303,7 @@
     if(!dialog.open){dialog.showModal();(go.hidden?quit.hidden?copy:quit:go).focus();}
   }
   function renderNotice(){
-    if(!online){notice(el('p',offlineReason||tr('Клиент Messenger не запущен или не отвечает. Данные не обновляются.')));return;}
+    if(!online){notice(el('p',offlineReason||tr('Клиент Kotel не запущен или не отвечает. Данные не обновляются.')));return;}
     if(view?.pending_launch>0&&!view.tasks_enabled){notice(el('p',tr('Задачи записаны, но этот клиент не запускает исполнителей: он запущен без разрешения --allow-tasks.')));return;}
     if(view?.pending_launch>0&&view.paused){
       const box=el('div',undefined,'am-notice-row');box.append(el('p',tr('Обработка на паузе: новые задачи не запускаются.')));
@@ -3391,7 +3391,7 @@
       const q=new URLSearchParams(requestScope);
       if(windowHistoryScope===requestScope&&view?.history_version)q.set('history_version',view.history_version);
       try{v=await api('/api/window?'+q);}
-      catch(error){if(requestScope!==taskWindowQuery())return;if(Date.now()-clientInfoAt>5000)loadClientInfo();online=false;offlineReason=error.name==='TimeoutError'||error.name==='TypeError'?tr('Окно потеряло связь с программой Messenger. Закройте окно и откройте снова.'):error.message;renderProjects();renderMachines();renderNotice();return false;}
+      catch(error){if(requestScope!==taskWindowQuery())return;if(Date.now()-clientInfoAt>5000)loadClientInfo();online=false;offlineReason=error.name==='TimeoutError'||error.name==='TypeError'?tr('Окно потеряло связь с программой Kotel. Закройте окно и откройте снова.'):error.message;renderProjects();renderMachines();renderNotice();return false;}
       if(requestScope!==taskWindowQuery())return;
       const cameOnline=!online;
       online=true;lastWindowRefresh=Date.now();offlineReason='';if(Date.now()-clientInfoAt>10000)loadClientInfo();

@@ -55,7 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             if let other = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "").first(where: { $0.processIdentifier != getpid() }) {
                 other.activate(options: [.activateAllWindows])
                 NSApp.terminate(nil)
-            } else { fatalLaunch("Другое окно Messenger уже запускается. Откройте его через Dock.") }
+            } else { fatalLaunch("Другое окно Kotel уже запускается. Откройте его через Dock.") }
             return
         }
         applyTheme(UserDefaults.standard.string(forKey: "appearance") ?? "system")
@@ -77,7 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         web.uiDelegate = self
         web.allowsBackForwardNavigationGestures = false
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 850), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
-        window.title = "Agent Messenger"
+        window.title = "Kotel"
         // T-082: no separate title bar; the page runs to the top edge and the
         // system's window buttons stay at the top left over it.
         window.titlebarAppearsTransparent = true
@@ -120,13 +120,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     func buildStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         guard let button = item.button else { return }
-        if let image = NSImage(systemSymbolName: "bubble.left.fill", accessibilityDescription: "Agent Messenger") {
+        if let image = NSImage(systemSymbolName: "bubble.left.fill", accessibilityDescription: "Kotel") {
             image.isTemplate = true
             button.image = image
         } else {
             button.title = "AM"
         }
-        button.toolTip = "Agent Messenger"
+        button.toolTip = "Kotel"
         button.target = self
         button.action = #selector(showWindow)
         let menu = NSMenu()
@@ -146,17 +146,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     }
 
     func fatalLaunch(_ text: String) {
-        let alert = NSAlert(); alert.messageText = "Agent Messenger"; alert.informativeText = text
+        let alert = NSAlert(); alert.messageText = "Kotel"; alert.informativeText = text
         alert.runModal(); NSApp.terminate(nil)
     }
     func buildMenu() {
         let bar = NSMenu()
         let appItem = NSMenuItem(); bar.addItem(appItem)
         let appMenu = NSMenu(); appItem.submenu = appMenu
-        appMenu.addItem(withTitle: "Об Agent Messenger", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: "О Kotel", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
         updates.attach(menu: appMenu)
-        appMenu.addItem(withTitle: "Скрыть Agent Messenger", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        appMenu.addItem(withTitle: "Скрыть Kotel", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(withTitle: "Закрыть приложение", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         let file = NSMenuItem(); file.title = "Файл"; bar.addItem(file)
         let fileMenu = NSMenu(title: "Файл"); file.submenu = fileMenu
@@ -186,7 +186,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     @objc func chooseData() {
         let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
         panel.allowsMultipleSelection = false; panel.canCreateDirectories = false
-        panel.prompt = "Подключить"; panel.message = "Выберите существующий каталог данных Messenger. Файлы и защитные резервы не переносятся и не удаляются."
+        panel.prompt = "Подключить"; panel.message = "Выберите существующий каталог данных Kotel. Файлы и защитные резервы не переносятся и не удаляются."
         if panel.runModal() == .OK, let url = panel.url {
             UserDefaults.standard.set(url.path, forKey: "dataRoot"); connect()
         }

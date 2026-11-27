@@ -52,6 +52,7 @@ type taskRuns struct {
 }
 
 type liveRun struct {
+	contextWindow  atomic.Pointer[core.ContextWindow]
 	task           string
 	lastOutput     atomic.Int64 // unix nanoseconds
 	activeCommands atomic.Int32
@@ -325,7 +326,7 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 						// the run will fail verification. Stop it early.
 						_ = platform.SignalGroup(obs.PGID)
 					} else if task.Provider == "codex" {
-						go s.watchCodexTask(ctx, lingerDone, runID, task, result.Session, launched, spec.Resume, result.Model != "")
+						go s.watchCodexTask(ctx, lingerDone, live, runID, task, result.Session, launched, spec.Resume, result.Model != "")
 					}
 				}
 			}
@@ -479,7 +480,7 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 	}
 }
 
-func (s *Supervisor) watchCodexTask(ctx context.Context, done <-chan struct{}, runID string, task core.Task, thread string, launched time.Time, resumed, modelKnown bool) {
+func (s *Supervisor) watchCodexTask(ctx context.Context, done <-chan struct{}, live *liveRun, runID string, task core.Task, thread string, launched time.Time, resumed, modelKnown bool) {
 	profile := task.Environment
 	if profile == "" {
 		profile, _ = defaultProfileDir("codex")
@@ -495,7 +496,13 @@ func (s *Supervisor) watchCodexTask(ctx context.Context, done <-chan struct{}, r
 				modelKnown = s.store.SetTaskRunModel(runID, model) == nil
 			}
 		}
-		if tokens := adapters.CodexLiveTokens(profile, thread, launched, created, resumed); tokens != nil && *tokens > lastTokens {
+		usage := adapters.CodexLiveUsage(profile, thread, launched, created, resumed)
+		if usage.CapacityTokens > 0 {
+			live.contextWindow.Store(&core.ContextWindow{UsedTokens: usage.UsedTokens, CapacityTokens: usage.CapacityTokens})
+		} else {
+			live.contextWindow.Store(nil)
+		}
+		if tokens := usage.TurnTokens; tokens != nil && *tokens > lastTokens {
 			if s.store.NoteLiveTokens(runID, *tokens) == nil {
 				lastTokens = *tokens
 			}

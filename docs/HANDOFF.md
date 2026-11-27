@@ -8,6 +8,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+T-337 carries the T-336 window into the signed Kotel bridge. The owner authorized publication. The repository rename waits for positive inventory of every installation and a separate owner command. The in-app release listing follows the original GitHub repository ID. See [Updates](UPDATES.md#kotel-transition-build-116). The isolated Mac app opened as Kotel and showed the four Settings sections and separate Statistics. Chromium and WebKit passed the seven window checks. An isolated 115 → local 116 upgrade retained two projects, their tasks and usage totals, exports and SQLite integrity after the background client restarted and the window reopened. The release job verifies the signed draft on each native target before publication. Actual fleet adoption must be recorded separately.
+
 Settings opens at General and then lists Project, Agents and Server, matching the setup order in the welcome pane. The welcome actions still open their corresponding sections directly.
 
 On first run, the task pane shows a compact checklist with direct links to project creation, project settings, agent settings and server settings. A project with an available model on an eligible computer opens the normal New Task composer when no conversation is selected. Network and coordinator setup are optional for direct tasks. The isolated browser preview and the Chromium and WebKit checks cover this flow.

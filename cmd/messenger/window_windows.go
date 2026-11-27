@@ -30,7 +30,7 @@ func showWindow(ctx context.Context, cancel context.CancelFunc, home string, pag
 		DataPath:  filepath.Join(home, "window"),
 		AutoFocus: true,
 		WindowOptions: webview2.WindowOptions{
-			Title: "Agent Messenger", Width: 1280, Height: 820, Center: true,
+			Title: "Kotel", Width: 1280, Height: 820, Center: true,
 			// The icon from rsrc_windows_*.syso (scripts/gen-icon, T-045).
 			IconId: 1,
 		},

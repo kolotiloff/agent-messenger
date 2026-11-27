@@ -1141,7 +1141,7 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-stats-tasks { text-align:right; }
 #am-concept .am-stats-reports .am-card { padding:var(--am-gap-content); }
 #am-concept .am-stats-table-wrap { overflow-x:auto; }
-#am-concept .am-stats-table { width:100%; min-width:34em; border-collapse:collapse; table-layout:fixed; text-align:left; }
+#am-concept .am-stats-table { width:100%; border-collapse:collapse; table-layout:fixed; text-align:left; }
 #am-concept .am-stats-date-col { width:10em; }
 #am-concept .am-stats-duration-col { width:21%; }
 #am-concept .am-stats-tokens-col { width:14%; }
@@ -1154,7 +1154,7 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
   inset:var(--am-row-pad-block) 0; border-radius:var(--am-radius-s);
 }
 #am-concept :is(.am-stats-task,.am-efficiency-row):is(:hover,:has(:focus-visible)) > :first-child::before { background:var(--am-quiet-hover); }
-#am-concept .am-efficiency-table { table-layout:auto; }
+#am-concept .am-efficiency-table { min-width:34em; table-layout:auto; }
 #am-concept .am-efficiency-table > thead th:first-child { width:42%; }
 #am-concept .am-efficiency-table > thead th { white-space:nowrap; }
 #am-concept .am-efficiency-table > thead th:nth-child(n+2),

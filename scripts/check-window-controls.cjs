@@ -1,4 +1,4 @@
-// Browser regression checks using fictional HTTP responses only. No Messenger
+// Browser regression checks using fictional HTTP responses only. No Kotel
 // process, registry, model, working chat or user profile is opened.
 // Requires Playwright. Optional: PLAYWRIGHT_MODULE, BROWSER_EXECUTABLE,
 // BROWSER_ENGINE (chromium/webkit), SCREENSHOT_DIR.
@@ -111,7 +111,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       windowReadFails = false;
       await page.evaluate(() => window.messengerRefresh());
       const welcome = page.locator('#thread .am-welcome');
-      await welcome.getByRole('heading', {name: 'Добро пожаловать в Agent Messenger', exact: true}).waitFor();
+      await welcome.getByRole('heading', {name: 'Добро пожаловать в Kotel', exact: true}).waitFor();
       assert(await welcome.getByText('Задайте название и выберите папку проекта.', {exact: true}).isVisible());
       assert(await welcome.getByText('Настройте агента и включите хотя бы одну модель.', {exact: true}).isVisible());
       assert.equal(await page.locator('#task-panel').isVisible(), false, 'an empty task pane must not cover onboarding');
@@ -216,14 +216,14 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       // Even with an installed agent, connecting a coordinator requires a project.
       registered = true;
       await page.reload();
-      await welcome.getByRole('heading', {name: 'Добро пожаловать в Agent Messenger', exact: true}).waitFor();
+      await welcome.getByRole('heading', {name: 'Добро пожаловать в Kotel', exact: true}).waitFor();
       assert.equal(await welcome.getByRole('button', {name: 'Подключить', exact: true}).count(), 0);
       await welcome.getByRole('button', {name: 'Создать проект', exact: true}).click();
       await page.locator('#project-name').fill('Welcome test');
       await page.locator('#project-folder').fill('/fictional/project');
       await page.locator('#project-save').click();
       await welcome.getByText('Подключён: Cursor', {exact: true}).waitFor();
-      assert(await welcome.getByRole('heading', {name: 'Добро пожаловать в Agent Messenger', exact: true}).isVisible());
+      assert(await welcome.getByRole('heading', {name: 'Добро пожаловать в Kotel', exact: true}).isVisible());
       assert.equal(await welcome.getByRole('button', {name: 'Создать проект', exact: true}).count(), 0);
       assert.deepEqual(writes.filter(write => write.path === '/api/project-create'),
         [{path: '/api/project-create', body: {name: 'Welcome test', folder: '/fictional/project'}}]);
@@ -249,7 +249,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.equal(await page.locator('#machines .am-agent-line').first().innerText(),'Cursor');
       assert.equal(await page.locator('#machines').getByText('cursor-vscode',{exact:true}).count(),0);
       // An agent paused or removed on a computer is not listed there, even
-      // when a chat of it once used Messenger's tools (owner, 2026-11-15).
+      // when a chat of it once used Kotel's tools (owner, 2026-11-15).
       assert.equal(await page.locator('#machines [data-peer="fixture-peer-2"] .am-agent-line').count(),0);
       // T-036: the computer that runs the server is labelled; this one is not.
       assert.equal(await page.locator('#machines [data-peer="fixture-peer"] .am-machine-role').innerText(),'сервер');

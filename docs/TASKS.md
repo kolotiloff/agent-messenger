@@ -40,8 +40,8 @@ These checks cover the browser preview. Acceptance in the installed window remai
 - Statistics follow-up: use the computer hover fill across each task and efficiency model row. Make the whole row activate its action while keeping the keyboard button. Keep the date and time on one line and the task text aligned to the column heading. Use a speedometer icon for Efficiency. Align the expanded metrics with the model label and the panel's trailing edge with its row. Use the shared 12 px inner inset.
 - Collapsed computer rows: show the gray task count in parentheses only when the computer is collapsed. Count tasks under the current project filter.
 - Latest layout follow-up: align context details left and format usage as used / capacity. Move the conversation date to the start of the thread. Align the Projects divider with the full-width task toolbar. Dock Archive below the toolbar, with its toggle at the top right, and align the visible footer edges. Use symmetric insets in Statistics cards, menus and outgoing messages. Keep the gap above and below confirmation text at 12 px.
-- Open product items: real context telemetry, per-task access and model changes for a running conversation, portable slash commands and integrations, remote file transfer, and editing sent messages. Task titles supplied by a coordinator have no language rule. The UI style guide documents spacing, and a dedicated component showcase is still absent.
-- Release: the installed 1.0.12 still uses its original desktop layout. Verify the same loopback preview and retain the release hold.
+- Open product items: context snapshots for providers other than active local Codex workers, per-task access and model changes for a running conversation, portable slash commands and integrations, remote file transfer, and editing sent messages. Task titles supplied by a coordinator have no language rule. The UI style guide documents spacing, and a dedicated component showcase is still absent.
+- Release: the installed 1.0.12 still uses its original desktop layout. Ship the reviewed window in the T-337 bridge.
 
 ## Now
 
@@ -49,6 +49,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
+| T-337 | Ship Kotel as an in-place update of Agent Messenger, preserving history and connected computers. | agent | D-247. Original GitHub channel for the bridge. Fleet confirmation and owner command required for rename. |
 | T-336 | Audit the window refinements, including compact controls, both composers, message actions, settings and statistics. | agent | `codex/t336-window-audit`. Implemented in the shared preview. Browser and Go checks passed. Native acceptance pending. Release held. |
 | T-335 | Put project, computer and searchable model selection below the New Task composer. Insert paths from Add and copy outgoing messages. | agent | `codex/t335-task-composer`. D-235. Implemented in the shared preview. Release held. |
 | T-334 | Separate Statistics, align its report views, make model details open from an indented row, and unify the Settings, agent and model dialogs. | agent | Implemented in the local window preview. Follow-up spacing for outgoing messages and task rows is available in the same preview. |

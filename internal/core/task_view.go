@@ -122,14 +122,20 @@ func (s *Store) TouchCoordinatorClient(project, client string) error {
 	return err
 }
 
+type ContextWindow struct {
+	UsedTokens     int64 `json:"used_tokens"`
+	CapacityTokens int64 `json:"capacity_tokens"`
+}
+
 // WindowTask is one row of the task list.
 type WindowTask struct {
-	ID     string `json:"id"`
-	Title  string `json:"title"`
-	Agent  string `json:"agent"`
-	State  string `json:"state"`
-	Folder string `json:"folder"`
-	Model  string `json:"model,omitempty"`
+	ContextWindow *ContextWindow `json:"context_window,omitempty"`
+	ID            string         `json:"id"`
+	Title         string         `json:"title"`
+	Agent         string         `json:"agent"`
+	State         string         `json:"state"`
+	Folder        string         `json:"folder"`
+	Model         string         `json:"model,omitempty"`
 	// RanModel is the model the worker's CLI reported at its last start
 	// (T-108); Model is the one the coordinator asked for.
 	RanModel   string `json:"ran_model,omitempty"`

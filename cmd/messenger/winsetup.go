@@ -16,9 +16,10 @@ import (
 // The pure parts live here so they are tested on every system.
 
 const (
-	winAppName     = "Agent Messenger"
-	winProgramFile = "AgentMessenger.exe"
-	winUninstallID = "AgentMessenger"
+	winAppName       = "Kotel"
+	winInstallFolder = "Agent Messenger"
+	winProgramFile   = "AgentMessenger.exe"
+	winUninstallID   = "AgentMessenger"
 )
 
 type winPaths struct {
@@ -31,7 +32,7 @@ func winInstallPaths(localAppData, appData string) (winPaths, bool) {
 	if !filepath.IsAbs(localAppData) || !filepath.IsAbs(appData) {
 		return winPaths{}, false
 	}
-	dir := filepath.Join(localAppData, "Programs", winAppName)
+	dir := filepath.Join(localAppData, "Programs", winInstallFolder)
 	return winPaths{
 		Dir:      dir,
 		Exe:      filepath.Join(dir, winProgramFile),
@@ -61,9 +62,14 @@ func psQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + 
 
 // winShortcutScript is the PowerShell that writes the Start menu shortcut.
 func winShortcutScript(p winPaths) string {
-	return "$s=(New-Object -ComObject WScript.Shell).CreateShortcut(" + psQuote(p.Shortcut) + ");" +
+	legacy := filepath.Join(filepath.Dir(p.Shortcut), winInstallFolder+".lnk")
+	return "$ErrorActionPreference='Stop';$w=New-Object -ComObject WScript.Shell;" +
+		"$s=$w.CreateShortcut(" + psQuote(p.Shortcut) + ");" +
+		"if((Test-Path -LiteralPath " + psQuote(p.Shortcut) + ") -and ($s.TargetPath -ne " + psQuote(p.Exe) + " -or $s.Arguments)){exit 1};" +
 		"$s.TargetPath=" + psQuote(p.Exe) + ";$s.WorkingDirectory=" + psQuote(p.Dir) + ";" +
-		"$s.IconLocation=" + psQuote(p.Exe+",0") + ";$s.Description=" + psQuote(winAppName) + ";$s.Save()"
+		"$s.IconLocation=" + psQuote(p.Exe+",0") + ";$s.Description=" + psQuote(winAppName) + ";$s.Save();" +
+		"$old=" + psQuote(legacy) + ";if(Test-Path -LiteralPath $old){" +
+		"$prior=$w.CreateShortcut($old);if($prior.TargetPath -eq $s.TargetPath -and !$prior.Arguments){Remove-Item -LiteralPath $old}}"
 }
 
 // winRemoveCommand is the whole cmd.exe command line that removes the
@@ -74,7 +80,7 @@ func winShortcutScript(p winPaths) string {
 // cmd.exe could misread are refused; the folder then stays and the owner is
 // told.
 func winRemoveCommand(dir string) (string, bool) {
-	if !filepath.IsAbs(dir) || strings.ContainsAny(dir, "\"%^&|<>!\r\n") || filepath.Base(dir) != winAppName {
+	if !filepath.IsAbs(dir) || strings.ContainsAny(dir, "\"%^&|<>!\r\n") || filepath.Base(dir) != winInstallFolder {
 		return "", false
 	}
 	return `cmd.exe /d /s /c "ping -n 4 127.0.0.1 >nul & rmdir /s /q "` + dir + `""`, true

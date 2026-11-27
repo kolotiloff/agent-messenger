@@ -25,12 +25,14 @@ import (
 
 var ErrDownloadBusy = errors.New("another update download owns the channel")
 
-const releaseAPI = "https://api.github.com/repos/kolotiloff/agent-messenger/releases"
+// The numeric API address follows the original repository across its rename.
+// The reserved Kotel repository has a different ID and cannot supply releases.
+const releaseAPI = "https://api.github.com/repositories/1446727582/releases"
 
-// releaseDownload is where release files are downloaded from. Unlike the
-// API, these downloads do not count against GitHub's hourly limit per
-// address, which several computers behind one address shared before.
-const releaseDownload = "https://github.com/kolotiloff/agent-messenger/releases/download/"
+const (
+	legacyRepository = "https://github.com/kolotiloff/agent-messenger"
+	kotelRepository  = "https://github.com/kolotiloff/kotel"
+)
 
 var releaseTag = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
 
@@ -44,6 +46,7 @@ type releaseAsset struct {
 type release struct {
 	Draft  bool           `json:"draft"`
 	Tag    string         `json:"tag_name"`
+	Page   string         `json:"html_url"`
 	Assets []releaseAsset `json:"assets"`
 }
 
@@ -153,7 +156,7 @@ func remoteGetCounted(ctx context.Context, client *http.Client, address, accept 
 	}
 	req.Header.Set("Accept", accept)
 	req.Header.Set("X-GitHub-Api-Version", "2026-03-10")
-	req.Header.Set("User-Agent", "Agent-Messenger-Updater")
+	req.Header.Set("User-Agent", "Kotel-Updater")
 	response, err := client.Do(req)
 	if err != nil {
 		return nil, errors.New("GitHub update download unavailable")
@@ -201,14 +204,16 @@ func (p *progressReader) Read(b []byte) (int, error) {
 
 // uniqueAsset finds the one asset with this name. Its download address must
 // be exactly the release's own download address for that name.
-func uniqueAsset(assets []releaseAsset, tag, name string, max int64) (releaseAsset, bool, error) {
+func (r release) uniqueAsset(name string, max int64) (releaseAsset, bool, error) {
 	var found releaseAsset
 	exists := false
-	for _, a := range assets {
+	repository, ok := strings.CutSuffix(r.Page, "/releases/tag/"+r.Tag)
+	expected := repository + "/releases/download/" + r.Tag + "/" + name
+	for _, a := range r.Assets {
 		if a.Name != name {
 			continue
 		}
-		if exists || a.ID <= 0 || a.Size <= 0 || a.Size > max || a.State != "uploaded" || !releaseTag.MatchString(tag) || strings.ContainsAny(name, "/?#%\\") || a.URL != releaseDownload+tag+"/"+name {
+		if exists || a.ID <= 0 || a.Size <= 0 || a.Size > max || a.State != "uploaded" || !ok || (repository != legacyRepository && repository != kotelRepository) || !releaseTag.MatchString(r.Tag) || strings.ContainsAny(name, "/?#%\\") || a.URL != expected {
 			return found, false, errors.New("invalid or duplicate release asset")
 		}
 		found = a
@@ -274,14 +279,14 @@ func (c Channel) syncGitHub(ctx context.Context, minimumBuild int, client *http.
 		if r.Draft || r.previewBuild() == 0 {
 			continue
 		}
-		ma, found, err := uniqueAsset(r.Assets, r.Tag, manifestName, 32768)
+		ma, found, err := r.uniqueAsset(manifestName, 32768)
 		if err != nil {
 			return result, err
 		}
 		if !found {
 			continue
 		}
-		sa, found, err := uniqueAsset(r.Assets, r.Tag, manifestName+".sig", 256)
+		sa, found, err := r.uniqueAsset(manifestName+".sig", 256)
 		if err != nil || !found {
 			return result, errors.New("release signature asset missing or invalid")
 		}
@@ -313,7 +318,7 @@ func (c Channel) syncGitHub(ctx context.Context, minimumBuild int, client *http.
 		if m.Build <= floor {
 			return SyncResult{State: "current", Version: m.Version}, nil
 		}
-		archive, found, err := uniqueAsset(r.Assets, r.Tag, m.SHA256+".zip", MaxArchive)
+		archive, found, err := r.uniqueAsset(m.SHA256+".zip", MaxArchive)
 		if err != nil || !found || archive.Size != m.Length {
 			return result, errors.New("signed archive missing or wrong size")
 		}

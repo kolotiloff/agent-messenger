@@ -200,7 +200,7 @@ func (s *Store) writeFeedback(dir string, at time.Time, list []FeedbackItem, fre
 	if fresh {
 		which = "new since the last export"
 	}
-	fmt.Fprintf(&md, "# Agent Messenger feedback\n\nComputer: %s. Exported %s. Remarks: %d, %s.\n", computer, at.UTC().Format(time.RFC3339), len(list), which)
+	fmt.Fprintf(&md, "# Kotel feedback\n\nComputer: %s. Exported %s. Remarks: %d, %s.\n", computer, at.UTC().Format(time.RFC3339), len(list), which)
 	for _, item := range list {
 		who := "owner"
 		if item.Author == AudienceCoordinator {

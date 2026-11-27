@@ -1,4 +1,4 @@
-// Browser check with fictional HTTP responses only (T-265). No Messenger
+// Browser check with fictional HTTP responses only (T-265). No Kotel
 // process, model or user profile is opened. Switching projects keeps the
 // previous conversation until the next one is ready, and an
 // empty project on a computer that has seen tasks says that it has none.
@@ -126,14 +126,14 @@ const shots = process.env.SCREENSHOT_DIR;
       await page.evaluate(() => localStorage.clear());
       await page.goto('http://messenger.test/#fictional');
       errors.splice(before, Infinity, ...errors.slice(before).filter(message => !/\/api\/[^ ]* due to access control checks\.$/.test(message)));
-      await page.locator('#thread .am-welcome').getByRole('heading', {name: 'Добро пожаловать в Agent Messenger', exact: true}).waitFor();
+      await page.locator('#thread .am-welcome').getByRole('heading', {name: 'Добро пожаловать в Kotel', exact: true}).waitFor();
       if (shots && scheme === 'light') await page.screenshot({path: path.join(shots, `first-run-welcome-${scheme}.png`)});
 
       // A new desktop window guides setup, then opens the real task composer.
       firstRun = true;
       await page.reload();
       const welcome = page.locator('#thread .am-welcome');
-      await welcome.getByRole('heading', {name: 'Добро пожаловать в Agent Messenger', exact: true}).waitFor();
+      await welcome.getByRole('heading', {name: 'Добро пожаловать в Kotel', exact: true}).waitFor();
       const setup = page.locator('#settings-dialog');
       const projectStep = welcome.locator('.am-step').filter({hasText: 'Укажите папку проекта на этом компьютере.'});
       await projectStep.getByRole('button', {name: 'Указать папку', exact: true}).click();

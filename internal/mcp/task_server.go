@@ -20,7 +20,7 @@ import (
 // conversation identity is confirmed. A report or question is stored
 // provisionally and published only after the run is verified.
 
-const taskInstructions = "Agent Messenger worker tools for one task. Call read_task first. " +
+const taskInstructions = "Kotel worker tools for one task. Call read_task first. " +
 	"End the run with exactly one of report, ask or ask_owner, then stop."
 
 func taskTools() []map[string]any {
@@ -62,7 +62,7 @@ func ServeTask(dbPath, run, receipt string, in io.Reader, out io.Writer) error {
 }
 
 // serveTask answers MCP requests. Without a store it is the idle server of a
-// Cursor session that Messenger did not start: it lists no tools.
+// Cursor session that Kotel did not start: it lists no tools.
 func serveTask(store *core.Store, run, receipt string, in io.Reader, out io.Writer) error {
 	scanner := bufio.NewScanner(in)
 	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
@@ -95,7 +95,7 @@ func serveTask(store *core.Store, run, receipt string, in io.Reader, out io.Writ
 			}
 		case "tools/call":
 			if store == nil {
-				result = map[string]any{"content": []map[string]any{{"type": "text", "text": "not a Messenger task run"}}, "isError": true}
+				result = map[string]any{"content": []map[string]any{{"type": "text", "text": "not a Kotel task run"}}, "isError": true}
 				break
 			}
 			result = callTaskTool(store, run, receipt, request.Params)
@@ -144,7 +144,7 @@ func callTaskTool(store *core.Store, run, receipt string, params map[string]any)
 			break
 		}
 		if err = store.RecordDispositionImages(run, receipt, name, text, pics); err == nil {
-			value = map[string]any{"recorded": name, "next": "Stop now. Messenger publishes this after it verifies the run."}
+			value = map[string]any{"recorded": name, "next": "Stop now. Kotel publishes this after it verifies the run."}
 		}
 	case core.DispositionAsk, core.DispositionAskOwner:
 		var pics []core.TaskImageFile
@@ -158,7 +158,7 @@ func callTaskTool(store *core.Store, run, receipt string, params map[string]any)
 			break
 		}
 		if err = store.RecordDispositionImages(run, receipt, name, text, pics); err == nil {
-			value = map[string]any{"recorded": name, "next": "Stop now. Messenger publishes this after it verifies the run."}
+			value = map[string]any{"recorded": name, "next": "Stop now. Kotel publishes this after it verifies the run."}
 		}
 	default:
 		err = errors.New("unknown tool")
@@ -202,7 +202,7 @@ func reportText(args map[string]any, parts *core.ReportParts) (string, error) {
 
 // TaskEnvVariable carries a Cursor run's database, run and receipt to its
 // worker tools (D-049). Cursor reads MCP servers only from its own mcp.json,
-// so Messenger keeps one stable entry there that names this variable.
+// so Kotel keeps one stable entry there that names this variable.
 const TaskEnvVariable = adapters.TaskEnvVariable
 
 // TaskFromEnv reads the run from the environment value. Anything else, an

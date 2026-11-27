@@ -1,6 +1,6 @@
 # Windows and Linux (T-016)
 
-Agent Messenger runs on Windows and Linux as one program, `messenger` (`messenger.exe` on Windows). The window is the same page the Mac app shows. On Windows it is the program's own window through WebView2; on Linux the program's own GTK window through the system's WebKitGTK (D-078). Without those, a Chromium-based browser in app mode (D-054), then the default browser (D-045).
+Kotel runs on Windows and Linux as one program, `messenger` (`messenger.exe` on Windows). The window is the same page the Mac app shows. On Windows it is the program's own window through WebView2; on Linux the program's own GTK window through the system's WebKitGTK (D-078). Without those, a Chromium-based browser in app mode (D-054), then the default browser (D-045).
 
 ## Download and start
 
@@ -15,8 +15,8 @@ On Windows, starting the program without arguments (a double click) runs `messen
 ## Agents
 
 - **Claude Code**: the installation that provides `claude.exe` on Windows (usually `%USERPROFILE%\.local\bin`), or `claude` in `PATH`, `~/.local/bin`, `/usr/local/bin` or `/usr/bin` on Linux.
-- **Codex**: on Windows the npm command is a `.cmd` script. Messenger does not start `.cmd` or `.bat` files (D-044); it finds the `codex.exe` inside the npm package (`%APPDATA%\npm\node_modules\@openai\codex…\vendor\<target>\codex\codex.exe`, or `…\bin\codex.exe` in newer packages). Any other `codex.exe` can be chosen by path.
-- **Cursor**: on Linux `cursor-agent` in `PATH` or `~/.local/bin` (D-049). On Windows the command is a `.cmd` script (D-044), so Messenger finds `%LOCALAPPDATA%\cursor-agent\versions\<newest>\node.exe` and starts it with its `index.js` (D-052).
+- **Codex**: on Windows the npm command is a `.cmd` script. Kotel does not start `.cmd` or `.bat` files (D-044); it finds the `codex.exe` inside the npm package (`%APPDATA%\npm\node_modules\@openai\codex…\vendor\<target>\codex\codex.exe`, or `…\bin\codex.exe` in newer packages). Any other `codex.exe` can be chosen by path.
+- **Cursor**: on Linux `cursor-agent` in `PATH` or `~/.local/bin` (D-049). On Windows the command is a `.cmd` script (D-044), so Kotel finds `%LOCALAPPDATA%\cursor-agent\versions\<newest>\node.exe` and starts it with its `index.js` (D-052).
 
 ## Process control on Windows (D-043)
 
@@ -52,5 +52,5 @@ A Windows or Linux computer can also be updated from another computer of the net
 
 ## Not there yet
 
-- No autostart. On Windows the first start installs the program for the current user with a Start menu entry and an «Приложения» entry that removes it (D-082, [DOWNLOAD.md](DOWNLOAD.md#windows)). On Linux the first `messenger open` adds Agent Messenger with its icon to the application menu (`~/.local/share/applications`); `messenger install` does too. For an installation made by `messenger install` the entry starts its `bin/messenger` link, which every update moves to the new version, and the background client fixes an existing entry when it starts, so an update from another computer or by hand no longer leaves the menu starting the old version (T-138). There is no package (deb, snap, flatpak).
+- No autostart. On Windows the first start installs the program for the current user with a Start menu entry and an «Приложения» entry that removes it (D-082, [DOWNLOAD.md](DOWNLOAD.md#windows)). On Linux the first `messenger open` adds Kotel with its icon to the application menu (`~/.local/share/applications`); `messenger install` does too. For an installation made by `messenger install` the entry starts its `bin/messenger` link, which every update moves to the new version, and the background client fixes an existing entry when it starts, so an update from another computer or by hand no longer leaves the menu starting the old version (T-138). There is no package (deb, snap, flatpak).
 - The programs are not code-signed.

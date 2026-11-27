@@ -909,3 +909,9 @@ Use the shared card and setting rows for the first-run checklist. Give each butt
 ## D-246 — Order the settings sections by setup flow (T-336)
 
 Open Settings at General, followed by Project, Agents and Server. Project and agent setup enable local tasks. Server settings are available after those sections for optional networking. This supersedes the section order in D-233.
+
+## D-247 — Keep the original repository and installation identity through the Kotel bridge (T-337)
+
+Use Kotel in the window, documentation and distribution labels. Keep the existing Ed25519 key, platform bundle and program paths, database directories, broker protocol, active-run registry and MCP keys. This allows mixed-version operation and preserves custom integration commands. Use the original GitHub repository ID for update discovery. A repository rename follows an explicit inventory of every installation running the bridge and the owner's command. The download names for both brands are byte-identical for each binary. Apply release corrections as a higher signed build.
+
+The owner approved the rounded golden tile with a black pot, detached lid and solid right-facing pupils. The window, platform packages and repository use this artwork.

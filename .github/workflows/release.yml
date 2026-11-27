@@ -181,15 +181,27 @@ jobs:
           # The VPS installer (T-036) downloads the Linux program of the same
           # release and checks it against the checksum file above.
           assets=("${mac[@]}" "$RUNNER_TEMP/download/AgentMessenger-Mac.zip" "${others[@]}" "${updates[@]}" scripts/install-server.sh)
+          # Keep existing installer URLs and add the public Kotel download names.
+          for file in "$RUNNER_TEMP/download/AgentMessenger-Mac.zip" "${others[@]}"; do
+            name=${file##*/}
+            alias="$RUNNER_TEMP/download/Kotel-${name#AgentMessenger-}"
+            if [[ "$name" == *SHA256.txt ]]; then
+              sed 's/AgentMessenger-/Kotel-/g' "$file" > "$alias"
+            else
+              cp "$file" "$alias"
+            fi
+            assets+=("$alias")
+          done
+          (cd "$RUNNER_TEMP/download" && shasum -a 256 -c Kotel-Windows-Linux-SHA256.txt)
           # The page gets the notes and the download links; the app shows only
           # the notes (they are signed into the update above).
           base="https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION"
           {
             cat "$RUNNER_TEMP/notes.txt"
             printf '\n### Скачать\n\n'
-            printf -- '- **Mac** (Apple Silicon): [AgentMessenger-Mac.zip](%s/AgentMessenger-Mac.zip)\n' "$base"
-            printf -- '- **Windows**: [AgentMessenger-Windows-x64.exe](%s/AgentMessenger-Windows-x64.exe) · ARM: [AgentMessenger-Windows-ARM64.exe](%s/AgentMessenger-Windows-ARM64.exe)\n' "$base" "$base"
-            printf -- '- **Linux**: [AgentMessenger-Linux-x64](%s/AgentMessenger-Linux-x64) · ARM: [AgentMessenger-Linux-ARM64](%s/AgentMessenger-Linux-ARM64)\n' "$base" "$base"
+            printf -- '- **Mac** (Apple Silicon): [Kotel-Mac.zip](%s/Kotel-Mac.zip)\n' "$base"
+            printf -- '- **Windows**: [Kotel-Windows-x64.exe](%s/Kotel-Windows-x64.exe) · ARM: [Kotel-Windows-ARM64.exe](%s/Kotel-Windows-ARM64.exe)\n' "$base" "$base"
+            printf -- '- **Linux**: [Kotel-Linux-x64](%s/Kotel-Linux-x64) · ARM: [Kotel-Linux-ARM64](%s/Kotel-Linux-ARM64)\n' "$base" "$base"
             printf -- '- **Сервер на Linux (VPS)**, одной командой от root: `curl -fsSL https://github.com/%s/releases/latest/download/install-server.sh | sh`\n' "$GITHUB_REPOSITORY"
             printf '\nКак запустить: https://github.com/%s/blob/main/docs/DOWNLOAD.md\n' "$GITHUB_REPOSITORY"
           } > "$RUNNER_TEMP/page.md"
@@ -198,16 +210,49 @@ jobs:
           # Not a pre-release, so /releases/latest/download/<name> always
           # points to this build. The in-app updater reads every release.
           gh release create "v$VERSION" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --draft --latest \
-            --target "$GITHUB_SHA" --title "Agent Messenger $(python3 scripts/release_version.py "$VERSION")" --notes-file "$RUNNER_TEMP/page.md"
-          gh release edit "v$VERSION" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease=false --latest
+            --target "$GITHUB_SHA" --title "Kotel $(python3 scripts/release_version.py "$VERSION")" --notes-file "$RUNNER_TEMP/page.md"
           gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" --json url,assets --jq '.url, (.assets[].name)'
       - name: Remove signing material
         if: always()
         run: rm -f "$RUNNER_TEMP/sparkle-key"
 
-  channel:
-    name: Check the upgrade path from 0.99
+  signed-install:
+    name: Signed update / ${{ matrix.target }}
     needs: release
+    permissions:
+      contents: write # read unpublished release assets
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {runner: macos-15, target: darwin-arm64}
+          - {runner: windows-2025, target: windows-amd64}
+          - {runner: windows-11-arm, target: windows-arm64}
+          - {runner: ubuntu-24.04, target: linux-amd64}
+          - {runner: ubuntu-24.04-arm, target: linux-arm64}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: stable
+      - name: Exercise the previous release and the signed draft on this platform
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          BRIDGE_TARGET: ${{ matrix.target }}
+        run: |
+          export PREVIOUS_TAG="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
+          python3 scripts/check-signed-install.py
+
+  channel:
+    name: Publish the verified draft and check the public channel
+    needs: signed-install
     permissions:
       contents: write
     runs-on: ubuntu-24.04
@@ -222,6 +267,10 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: stable
+      - name: Publish the same signed assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "v$VERSION" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease=false --latest
       - name: Verify the public channel on all five targets
         env:
           GH_TOKEN: ${{ github.token }}
