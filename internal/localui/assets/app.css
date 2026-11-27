@@ -711,9 +711,10 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept :is(.am-answer-context > #answer-model,.am-compose-access > span) { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #am-concept .am-token-indicator { flex:none; width:var(--am-button-height); padding:0; border-radius:50%; color:var(--am-muted); }
 #am-concept .am-token-indicator svg { width:var(--am-space-4); height:var(--am-space-4); fill:none; stroke:currentColor; stroke-width:2.5; }
-#am-concept .am-token-popover { padding:var(--am-space-3); }
-#am-concept .am-token-popover dl { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:var(--am-space-2) var(--am-space-3); margin:var(--am-space-2) 0 0; }
-#am-concept .am-token-popover dd { margin:0; text-align:end; font-variant-numeric:tabular-nums; }
+#am-concept .am-token-indicator[data-context-known] .am-context-track { opacity:.35; }
+#am-concept .am-token-popover { padding:var(--am-space-3); text-align:center; font-size:var(--am-text-s); font-variant-numeric:tabular-nums; }
+#am-concept .am-token-popover p { margin:0; }
+#am-concept .am-token-popover p + p { margin-block-start:var(--am-space-1); }
 #am-concept .am-draft-add-menu { --am-quiet-hover:var(--am-menu-hover); padding:var(--am-space-1); }
 #am-concept .am-draft-add-menu :is(#task-draft-local-pick > button,#task-draft-show-path) { width:100%; justify-content:flex-start; padding-block:0; gap:var(--am-gap-control); }
 #am-concept .am-draft-add-menu button > svg { width:var(--am-space-4); height:var(--am-space-4); fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; flex:none; }
@@ -1137,12 +1138,18 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-stats-tasks { text-align:right; }
 #am-concept .am-stats-table-wrap { overflow-x:auto; margin-inline:calc(-1 * var(--am-space-3)); }
 #am-concept .am-stats-table { width:100%; min-width:34em; border-collapse:collapse; table-layout:fixed; text-align:left; }
-#am-concept .am-stats-date-col { width:21%; }
+#am-concept .am-stats-date-col { width:10em; }
 #am-concept .am-stats-duration-col { width:21%; }
 #am-concept .am-stats-tokens-col { width:14%; }
 #am-concept .am-stats-table :is(th,td) { padding:var(--am-pad-compact); }
 #am-concept .am-stats-table th { font-size:var(--am-text-xs); font-weight:400; color:var(--am-muted); border-bottom:1px solid var(--am-line); }
 #am-concept .am-stats-table td:nth-child(n+3), #am-concept .am-stats-table th:nth-child(n+3) { text-align:right; }
+#am-concept :is(.am-stats-task,.am-efficiency-row) { position:relative; isolation:isolate; cursor:pointer; }
+#am-concept :is(.am-stats-task,.am-efficiency-row) > :first-child::before {
+  content:""; position:absolute; z-index:-1; pointer-events:none;
+  inset:var(--am-row-pad-block) 0; border-radius:var(--am-radius-s);
+}
+#am-concept :is(.am-stats-task,.am-efficiency-row):is(:hover,:has(:focus-visible)) > :first-child::before { background:var(--am-quiet-hover); }
 #am-concept .am-efficiency-table { table-layout:auto; }
 #am-concept .am-efficiency-table > thead th:first-child { width:42%; }
 #am-concept .am-efficiency-table > thead th { white-space:nowrap; }
@@ -1151,11 +1158,11 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-efficiency-cohort > th { padding-block:var(--am-space-2) var(--am-space-1); border:0; color:var(--am-text); font-size:var(--am-text-s); font-weight:500; }
 #am-concept .am-efficiency-table tbody + tbody > .am-efficiency-cohort > th { border-top:1px solid var(--am-line); }
 #am-concept .am-efficiency-row > td { white-space:nowrap; font-variant-numeric:tabular-nums; }
-#am-concept .am-efficiency-rate { display:inline-block; position:relative; cursor:help; }
+#am-concept .am-efficiency-rate { display:inline-block; position:relative; }
 #am-concept .am-efficiency-rate > .am-tip { inset:auto 0 calc(100% + var(--am-space-1)) auto; transform:none; z-index:1; font-size:var(--am-text-xs); }
 #am-concept .am-efficiency-rate:is(:hover,:focus-visible) > .am-tip { display:inline-flex; }
-#am-concept .am-efficiency-row > th { padding-block:var(--am-space-1); padding-inline-start:calc(var(--am-space-3) + var(--am-space-1)); border:0; color:var(--am-text); font:inherit; }
-#am-concept button.am-efficiency-expand { width:100%; min-height:var(--am-control-compact); padding:var(--am-row-pad-block) var(--am-row-pad-inline); line-height:var(--am-computer-heading-line); justify-content:flex-start; text-align:start; background:transparent; }
+#am-concept .am-efficiency-row > th { padding-inline-start:calc(var(--am-row-pad-inline) + var(--am-space-4)); border:0; color:var(--am-text); font:inherit; }
+#am-concept button.am-efficiency-expand { width:100%; min-height:0; padding:0; line-height:var(--am-computer-heading-line); justify-content:flex-start; text-align:start; background:transparent; }
 #am-concept .am-efficiency-model { display:flex; flex:1; min-width:0; width:0; white-space:nowrap; }
 #am-concept .am-efficiency-model-name { overflow:hidden; text-overflow:ellipsis; }
 #am-concept .am-efficiency-model > .am-muted { flex:none; }
@@ -1177,14 +1184,12 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 }
 #am-concept .am-stats-sort span { min-width:1ch; }
 #am-concept .am-stats-table th[aria-sort] .am-stats-sort, #am-concept .am-stats-sort:is(:hover,:focus-visible) { color:var(--am-text); }
+#am-concept .am-stats-task > :first-child { white-space:nowrap; }
 #am-concept .am-stats-task-text {
   display:flex; flex-direction:column; align-items:flex-start; gap:var(--am-gap-line);
-  padding:var(--am-row-pad-block) var(--am-row-pad-inline);
-  margin:calc(-1 * var(--am-row-pad-block)) calc(-1 * var(--am-row-pad-inline));
-  max-width:calc(100% + 2 * var(--am-row-pad-inline));
+  max-width:100%;
 }
-#am-concept button:is(.am-efficiency-expand,.am-stats-task-text):is(:hover,:focus-visible),
-#am-concept .am-stats-task:hover .am-stats-task-text { background:var(--am-quiet-hover); }
+#am-concept button:is(.am-efficiency-expand,.am-stats-task-text):is(:hover,:focus-visible) { background:transparent; }
 #am-concept .am-stats-task-text > span { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 /* T-079: while the background part starts or installs an update, the whole
    window shows the app's name, a spinner and one status line. */

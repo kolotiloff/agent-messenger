@@ -875,3 +875,9 @@ Separate model choices with their row padding and keep the model search and list
 ## D-238 — Align settings openings and inset statistics highlights (T-336)
 
 Place the section headings above their settings cards with a common gap. Place the first control opposite its label on the same baseline across sections. Reserve the same scrollbar space on every settings page so the control's right edge stays fixed. Keep the project name's explanation below the inline field and leave the path control full width. Statistics task links and efficiency model buttons share the computer row's neutral hover fill and 4 by 12 px insets. Keep the task text aligned to its column heading. Use the compact dialog header for Feedback and New Project as well as Settings, Statistics, agent settings and model choices.
+
+## D-239 — Give report rows one action and show measured context use (T-336)
+
+Use the short Settings section names above their cards. Highlight the full row when hovering a Statistics task or an Efficiency model and activate the row's existing action from any column. Keep keyboard actions on native buttons. Use symmetric row insets and keep the date and time together. Use a target for Efficiency and retain the chart for Statistics.
+
+Draw the reply context ring from the used and capacity counts in a context snapshot. Put the percentage on the first line and the used and capacity figures on the second. Keep the ring neutral when a snapshot is unavailable and label any reported cumulative usage by its scope. The loopback preview can use a fictional snapshot.

@@ -142,7 +142,7 @@ if (require.main === module) (async()=>{
         const initial=reply(url,p,projects);
         initial.items.push({kind:'tool',title:'Bash',description:'Проверить изменения в макете',text:'git diff --stat',at:initial.items.at(-1).at});
         initial.items.push({kind:'report',author:'worker',verified:true,text:'Проверка завершена',at:initial.items.at(-1).at});
-        return {json:{...initial,task:{...initial.task,quiet:{live_tokens:342000}}}};
+        return {json:{...initial,task:{...initial.task,quiet:{live_tokens:342000},context_window:{used_tokens:212000,capacity_tokens:238000}}}};
       }
       if(url.searchParams.get('id')==='game-1')return sameFeed.response;
       if(url.searchParams.get('id')==='tools-1')return otherFeed.response;
@@ -175,12 +175,18 @@ if (require.main === module) (async()=>{
     const composerBottom=()=>answerField.evaluate(field=>field.getBoundingClientRect().bottom);
     await tokenCount.waitFor();
     assert((await tokenCount.boundingBox()).y>(await answerField.boundingBox()).y);
-    assert.equal(await tokenCount.locator('svg circle').count(),1);
-    assert.match(await tokenCount.getAttribute('title'),/\d/);
+    const contextProgress=tokenCount.locator('#answer-context-progress');
+    await contextProgress.waitFor();
+    const [drawn,track]=(await contextProgress.getAttribute('stroke-dasharray')).split(' ').map(Number);
+    assert.equal(track,100);
+    assert(Math.abs(drawn-212/238*100)<0.01);
     await tokenCount.click();
     const tokenMenu=preview.locator('#answer-token-menu');
     await tokenMenu.waitFor();
-    assert.match(await tokenMenu.locator('dl').innerText(),/Токены за текущий ход\s+[\d\s]+Заполнение контекста\s+Нет данных/);
+    assert.deepEqual(await tokenMenu.locator('p').allTextContents(),[
+      'Контекстное окно · 89\u00a0% заполнено',
+      '212 тыс. из 238 тыс. токенов'
+    ]);
     await preview.keyboard.press('Escape');
     await tokenMenu.waitFor({state:'hidden'});
     assert.equal(await tokenCount.evaluate(node=>node===document.activeElement),true);
@@ -238,9 +244,10 @@ if (require.main === module) (async()=>{
       await expectPrevious(oldDate);
       assert.equal(await composerBottom(),initialComposerBottom);
       sameFeed.release();
-      await preview.locator('#answer-tokens[data-task="game-1"][title="Токены и контекст"]').waitFor();
+      await preview.locator('#answer-tokens[data-task="game-1"]').waitFor();
+      await contextProgress.waitFor({state:'hidden'});
       await tokenCount.click();
-      assert.match(await tokenMenu.locator('dl').innerText(),/Токены за текущий ход\s+Нет данных/);
+      assert.equal(await tokenMenu.locator('#answer-context-summary').textContent(),'Контекстное окно · нет данных');
       await preview.keyboard.press('Escape');
       assert.equal(await composerBottom(),initialComposerBottom);
       await preview.locator('#task-head time[datetime="'+sameDate+'"]').waitFor();
@@ -491,7 +498,7 @@ if (require.main === module) (async()=>{
         const {x,y}=await locator.boundingBox();
         return [x,y];
       };
-      const generalTitle=await topLeft(general.getByRole('heading',{name:'Общие настройки'}));
+      const generalTitle=await topLeft(general.getByRole('heading',{name:'Общие',exact:true}));
       const generalField=await topLeft(general.locator('.am-select-trigger').first());
       assert.equal(await general.locator('.am-card h3').count(),0);
       const headerHeight=selector=>draftPage.locator(selector).evaluate(node=>node.getBoundingClientRect().height);
@@ -1191,16 +1198,16 @@ if (require.main === module) (async()=>{
     await total(page,'3579');
     const statsTask=page.locator('#stats-top tr').filter({hasText:'Экспорт отчёта'});
     const taskButton=statsTask.locator('.am-stats-task-text');
-    await taskButton.hover();
+    const dateCell=statsTask.locator('td').first();
+    await dateCell.hover();
     assert.deepEqual(await taskButton.evaluate(button=>{
-      const box=button.getBoundingClientRect();
+      const row=button.closest('tr'),highlight=getComputedStyle(row.cells[0],'::before');
       const title=button.firstElementChild.getBoundingClientRect();
-      const detail=button.lastElementChild.getBoundingClientRect();
       const header=button.closest('table').tHead.rows[0].cells[1];
       const titleColumnStart=header.getBoundingClientRect().left+parseFloat(getComputedStyle(header).paddingLeft);
-      return [title.left-box.left,box.right-Math.max(title.right,detail.right),title.top-box.top,box.bottom-detail.bottom,title.left-titleColumnStart];
-    }),[12,12,4,4,0]);
-    await statsTask.click();
+      return [highlight.insetBlockStart,highlight.insetBlockEnd,highlight.insetInlineStart,highlight.insetInlineEnd,title.left-titleColumnStart];
+    }),['4px','4px','0px','0px',0]);
+    await dateCell.click();
     await chat(page,'tools').waitFor();
     await cells(page,'local').nth(0).press('Enter');
     await chat(page,'game').waitFor();

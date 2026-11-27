@@ -2048,7 +2048,7 @@
     trigger.addEventListener('click',()=>{
       if(menu.matches(':popover-open')){menu.hidePopover();return;}
       menu.showPopover({source:trigger});
-      positionPopover(menu,trigger,280,true);
+      positionPopover(menu,trigger,300,true);
       menu.focus({preventScroll:true});
     });
     menu.addEventListener('toggle',()=>trigger.setAttribute('aria-expanded',String(menu.matches(':popover-open'))));
@@ -2061,18 +2061,31 @@
   function renderComposerTokens(task,model,available){
     const trigger=$('answer-tokens'),menu=$('answer-token-menu');
     const current=task.state==='running'?task.quiet?.live_tokens:null;
-    if(trigger.dataset.task!==task.id||!available)menu.hidePopover();
+    const {used_tokens:used,capacity_tokens:capacity}=task.context_window??{};
+    const hasContext=Number.isSafeInteger(used)&&used>=0&&Number.isSafeInteger(capacity)&&capacity>0;
+    const hidden=!available||(!model&&!hasContext&&current==null&&!task.usage);
+    if(trigger.dataset.task!==task.id||hidden)menu.hidePopover();
     trigger.dataset.task=task.id;
-    trigger.hidden=!available||(!model&&current==null&&!task.usage);
-    trigger.title=tr('Токены и контекст')+(current==null?'':' · '+tokensFull(current));
-    const rows=$('answer-token-rows');
-    rows.replaceChildren();
-    const values=[
-      [tr('Токены за текущий ход'),current==null?tr('Нет данных'):current.toLocaleString(amLocale)],
-      [tr('Заполнение контекста'),tr('Нет данных')]
-    ];
-    if(task.usage)values.splice(1,0,[tr('Учтено по задаче'),(task.usage.input_tokens+task.usage.output_tokens).toLocaleString(amLocale)]);
-    for(const [label,value] of values)rows.append(el('dt',label,'am-muted'),el('dd',value));
+    trigger.hidden=hidden;
+    trigger.toggleAttribute('data-context-known',hasContext);
+    const progress=$('answer-context-progress');
+    progress.toggleAttribute('hidden',!hasContext);
+    let occupancy=tr('нет данных'),count='';
+    if(hasContext){
+      const fraction=Math.min(used/capacity,1);
+      const percent=fraction.toLocaleString(amLocale,{style:'percent'});
+      progress.setAttribute('stroke-dasharray',fraction*100+' 100');
+      occupancy=tr('{percent} заполнено').replace('{percent}',percent);
+      count=tr('{used} из {capacity} токенов').replace('{used}',tokensText(used)).replace('{capacity}',tokensText(capacity));
+    }else if(current!=null){
+      count=tr('За текущий ход')+' · '+tokensFull(current);
+    }else if(task.usage){
+      count=tr('По задаче')+' · '+tokensFull(task.usage.input_tokens+task.usage.output_tokens);
+    }
+    $('answer-context-summary').textContent=tr('Контекстное окно')+' · '+occupancy;
+    const details=$('answer-context-count');
+    details.textContent=count;
+    details.hidden=!count;
   }
   async function sendTaskDraft(event){
     event.preventDefault();
@@ -2129,7 +2142,7 @@
     $('compose').inert=pending;$('lost-bar').inert=pending;
     // Keep the last complete conversation and its layout until this one is ready.
     if(pending){if($('answer-add').getAttribute('aria-expanded')==='true')$('task-draft-add-menu').hidePopover();$('answer-token-menu').hidePopover();if(!head.firstElementChild)showPane(thread,'loading');return;}
-    if(task){renderFeed({...task,quiet:feed.task.quiet});return;}
+    if(task){renderFeed({...task,quiet:feed.task.quiet,context_window:feed.task.context_window});return;}
     $('answer-token-menu').hidePopover();
     $('compose').hidden=true;$('lost-bar').hidden=true;feedSignature='';$('to-bottom').hidden=true;
     feedShown='';
@@ -3571,7 +3584,7 @@
     const label=el('span',undefined,'am-efficiency-model');
     label.append(el('span',model,'am-efficiency-model-name'),el('span',count,'am-muted'));
     button.append(label);
-    button.addEventListener('click',()=>{details.hidden=!details.hidden;button.setAttribute('aria-expanded',String(!details.hidden));});
+    row.addEventListener('click',()=>{details.hidden=!details.hidden;button.setAttribute('aria-expanded',String(!details.hidden));});
     const name=el('th');name.scope='row';name.append(button);row.append(name);
     const rate=(value,total,kind)=>{
       const cell=el('td');
@@ -4752,7 +4765,7 @@
     const panel=el('div',undefined,'am-settings');
     const card=el('div',undefined,'am-card');
     card.append(preferences);
-    panel.append(el('h3',tr('Общие настройки')),card);
+    panel.append(el('h3',tr('Общие')),card);
     $('settings-page').append(panel);
     const layout=el('div',undefined,'am-settings-layout');
     const sections=el('nav',undefined,'am-settings-nav');
