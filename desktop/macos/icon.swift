@@ -3,21 +3,23 @@ import AppKit
 let source = URL(fileURLWithPath: CommandLine.arguments[1])
 let directory = URL(fileURLWithPath: CommandLine.arguments[2])
 let master = NSImage(data: try Data(contentsOf: source))!
-// The artwork has built-in transparency. Fill about 87% of the Dock tile.
-let dockScale: CGFloat = 1.08
+// The artwork includes transparent margins. Match the footprint of adjacent Dock tiles.
+let dockScale: CGFloat = 1.025
 
 // Follow the existing alpha edge so the reflection scales with the artwork.
 func applyEdgeSheen(to bitmap: NSBitmapImageRep) {
     guard let data = bitmap.bitmapData else { return }
     let width = bitmap.pixelsWide
     let height = bitmap.pixelsHigh
-    let band = max(1, Double(width) * 0.022)
+    let band = max(1, Double(width) * 0.045)
     for y in 0..<height {
         let position = (Double(y) + 0.5) / Double(height)
-        let vertical = max(0, 1 - pow((position - 0.43) / 0.38, 2))
-        guard vertical > 0 else { continue }
         let row = data.advanced(by: y * bitmap.bytesPerRow)
         for direction in [1, -1] {
+            // One reflection rolls over the upper shoulder, the other fades lower on the side.
+            let center = direction > 0 ? 0.32 : 0.58
+            let vertical = max(0, 1 - pow((position - center) / 0.35, 2))
+            guard vertical > 0 else { continue }
             var edge = direction > 0 ? 0 : width - 1
             while edge >= 0, edge < width, row[edge * 4 + 3] < 200 {
                 edge += direction
@@ -28,7 +30,7 @@ func applyEdgeSheen(to bitmap: NSBitmapImageRep) {
                 guard x >= 0, x < width else { break }
                 let pixel = row.advanced(by: x * 4)
                 let alpha = Double(pixel[3])
-                let amount = 0.22 * vertical * pow(1 - Double(offset) / band, 2)
+                let amount = 0.24 * vertical * pow(1 - Double(offset) / band, 3)
                 for channel in 0..<3 {
                     let value = Double(pixel[channel])
                     pixel[channel] = UInt8((value + (max(value, alpha * 0.70) - value) * amount).rounded())

@@ -49,7 +49,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
-| T-372 | Open multiple task conversations and keep separate drafts. | window | Follow-up for build 119 fixes feed decoding and puts tabs in the top toolbar. Three layouts and sidebar drop targets verified in Chromium and WebKit. |
+| T-372 | Open multiple task conversations and keep separate drafts. | window | Draft PR #261 adds edge-based nested splits, pane-local tabs, and the regular conversation in each pane. |
 | T-373 | Resume a saved conversation after Stop and align native window chrome and split dividers. | desktop | Store and browser scenarios verified. Native window appearance remains to be observed on Linux and macOS. |
 | T-374 | Open project files beside the chat and refine settings, models and update menus. | window / desktop | Browser fixtures cover document tabs, file actions, grouped models and update states. Native preview placement needs installed acceptance. |
 | T-375 | Keep the reply area clear and align the task toolbar, archive and main controls. | window | Implemented on PR #257. Browser fixtures cover composer growth, spacing below the connection warning and at the end of the thread, archive controls and a follow-up sent to a stopped task. |
@@ -84,7 +84,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 | T-357 | Package the approved monochrome Kotel icon at the standard Mac Dock size. | release | Published in 1.0.15 (build 118). |
 | T-356 | Confine statistics hover and keyboard focus to the active table row. | window | Combined post-117 branch. System WebKit reproduction and six-row pixel comparison on macOS. Statistics uses the Archive and sidebar computer row hover color in both themes and the Archive’s 4 px inter-row gap. |
 | T-340 | Make direct answers conversational, stabilize the update hover target and match the default sidebar widths. | window | Published in 1.0.14 (build 117). |
-| T-341 | Place Projects below the Mac caption, toggle the computer sidebar, clarify task access and refresh desktop icons. | window / packaging | Published in 1.0.14 (build 117). Dock contour follow-up in local review build 129. |
+| T-341 | Place Projects below the Mac caption, toggle the computer sidebar, clarify task access and refresh desktop icons. | window / packaging | Published in 1.0.14 (build 117). The next Mac preview has a slightly smaller Dock tile and a softer side reflection. |
 | T-352 | Share one archive pagination footer, clarify compact statuses and peer hover, align New Task with row padding and hover, scroll the date with messages, normalize count and role weights and the running Mac icon. | window | Post-117. |
 | T-355 | Group live tasks by computer or project, match the bounds of both folder states to the 16 px computer mark, align row spacing and simplify connection icons, filters, network settings tabs and archive selection. | window | Post-117. |
 | T-354 | Apply Graphite to the dark window theme. | window | Post-117. |

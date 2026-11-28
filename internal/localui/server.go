@@ -135,7 +135,17 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("X-Frame-Options", "DENY")
-		w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; font-src 'self'; img-src 'self' blob:; media-src blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+		policy := "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; font-src 'self'; img-src 'self' blob:; media-src blob:; base-uri 'none'; form-action 'none'"
+		switch r.URL.Path {
+		case "/":
+			policy += "; frame-src 'self'; frame-ancestors 'none'"
+		case "/task-pane":
+			w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+			policy += "; frame-ancestors 'self'"
+		default:
+			policy += "; frame-ancestors 'none'"
+		}
+		w.Header().Set("Content-Security-Policy", policy)
 		if r.Host != host {
 			http.Error(w, "invalid host", http.StatusForbidden)
 			return
@@ -162,7 +172,7 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 		}
 		if !strings.HasPrefix(r.URL.Path, "/api/") {
 			files := map[string]string{
-				"/": "index.html", "/app.js": "app.js", "/i18n.js": "i18n.js", "/app.css": "app.css", "/design-v1.css": "design-v1.css", "/icon.svg": "icon.svg",
+				"/": "index.html", "/task-pane": "index.html", "/app.js": "app.js", "/i18n.js": "i18n.js", "/app.css": "app.css", "/design-v1.css": "design-v1.css", "/icon.svg": "icon.svg",
 				"/file-viewer.js": "file-viewer.js", "/file-viewer.css": "file-viewer.css",
 				"/fonts/Inter.woff2": "fonts/Inter.woff2", "/fonts/SourceSans3.woff2": "fonts/SourceSans3.woff2",
 			}

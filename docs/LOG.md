@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-28 — T-372 Split task workspace and T-341 Dock icon
+
+Codex replaced layout presets with edge-based splits in draft PR #261. Pane-local tabs use the regular conversation and composer. The macOS icon is smaller, with a softer reflection over both sides.
+
 ## 2026-11-28 — T-375 Inline conversation notices
 
 Codex restored the shared content gap between the reply composer and connection warnings or action errors. The window fixture checks the connection warning and the normal layout after reconnection.

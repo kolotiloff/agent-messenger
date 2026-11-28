@@ -416,8 +416,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = navigationAction.request.url, let allowed = origin,
               url.scheme == allowed.scheme, url.host == allowed.host, url.port == allowed.port,
-              url.user == nil, url.password == nil, url.path == "/", url.query == nil,
-              navigationAction.targetFrame?.isMainFrame == true else { decisionHandler(.cancel); return }
+              url.user == nil, url.password == nil, let frame = navigationAction.targetFrame
+        else { decisionHandler(.cancel); return }
+        let allowedPage = frame.isMainFrame ? (url.path == "/" && url.query == nil) : url.path == "/task-pane"
+        guard allowedPage else { decisionHandler(.cancel); return }
         decisionHandler(.allow)
     }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { statusSpinner.stopAnimation(nil); statusView.isHidden = true; web.isHidden = false; showUpdateStatus() }

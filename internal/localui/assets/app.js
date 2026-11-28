@@ -1,6 +1,12 @@
 'use strict';
 (() => {
   const root = document.getElementById('am-concept');
+  const paneLocation=location.pathname==='/task-pane'&&window.parent!==window?new URLSearchParams(location.search):null;
+  const paneHost=paneLocation?window.parent:null;
+  if(paneHost)root.classList.add('am-embedded-chat');
+  // Post native actions from the main document. Native origins and frame guards stay in force.
+  const nativeHandlers=(paneHost||window).webkit?.messageHandlers;
+  let embeddedChatVisible=false;
   const taskSidebarPreview=root.classList.contains('am-task-sidebar-preview');
   // The Mac app and the Windows window draw their own frame and title (D-054).
   if(window.amTransparentWindow)document.body.classList.add('am-transparent-window');
@@ -208,6 +214,7 @@
     document.documentElement.dataset.theme=theme;$('theme-select').value=theme;syncSelects();
     // The Windows window colours its title bar like the page.
     if(window.amTitleBar){const dark=theme==='dark'||(theme==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);try{window.amTitleBar(dark);}catch(_){}}
+    forEachPaneWindow(child=>child.messengerPaneAppearance?.(theme,root.dataset.chatFont));
     if(persist) {
       if(window.webkit?.messageHandlers?.appearance)window.webkit.messageHandlers.appearance.postMessage(theme);
       else try {localStorage.setItem('messenger-theme',theme);} catch(_) {}
@@ -218,6 +225,7 @@
     if(!select.value)select.value='inter';
     root.dataset.chatFont=select.value;
     centreReplyLabels();
+    forEachPaneWindow(child=>child.messengerPaneAppearance?.(document.documentElement.dataset.theme,select.value));
     document.fonts?.ready.then(centreReplyLabels);
     if(persist){
       if(window.webkit?.messageHandlers?.chatFont)window.webkit.messageHandlers.chatFont.postMessage(select.value);
@@ -251,7 +259,7 @@
     }
   }
   function recall(key){if(nativePreferences.has(key)&&window.messengerPreferences?.[key]!=null)return window.messengerPreferences[key];try{return localStorage.getItem(key)||'';}catch(_){return '';}}
-  let view=null,project=recall('messenger-project'),selectedTask='',selectedShared=null,feed=null,feedSignature='',viewSignature='';
+  let view=null,project=paneLocation?.get('project')||recall('messenger-project'),selectedTask=paneLocation?.get('task')||'',selectedShared=null,feed=null,feedSignature='',viewSignature='';
   // T-133: the task shown last, and whether the feed should go to its end on
   // the next render (a new task opened, or the owner just wrote).
   let feedShown='',feedStick=false,feedPinned=true,feedCount=0;
@@ -493,10 +501,10 @@
     return sharedWorkerRunning(t)?{...t,pending_launch:false,worker_observed:true}:t;
   }
   const taskPanes=new Map();
-  const paneLayouts=['columns','stack','grid'];
   const restartOutcome='the client restarted during this run; the outcome is unknown and nothing is retried';
   const restartLabel=()=>tr('Клиент перезапустился во время работы; результат неизвестен');
-  let paneBoard=null,paneStrip=null,paneToolbar=null,paneGrid=null,paneTimer=null,paneActive=null,paneDragging=null;
+  let paneBoard=null,paneStrip=null,paneToolbar=null,paneGrid=null,paneActive=null,paneDragging=null;
+  let paneTree=null,paneLegacy='',paneDropPreview=null;
   function savePanes(){
     remember('kotel-task-panes',JSON.stringify([...taskPanes.values()].map(({id,project,title,placement})=>({id,project,title,placement}))));
     remember('kotel-active-pane',paneActive?.id||'');
@@ -512,19 +520,21 @@
   }
   function closePane(pane){
     const before=[...taskPanes.values()],index=before.indexOf(pane);
-    const hadFocus=pane.tab.contains(document.activeElement)||pane.node.contains(document.activeElement);
-    abortPaneRequest(pane);
+    const primary=$('task-primary-pane');
+    const hadFocus=pane.tab.contains(document.activeElement)||pane.cell.contains(document.activeElement);
+    pane.chat.contentWindow?.messengerCancelDictation?.();
     taskPanes.delete(pane.id);
-    pane.tab.remove();pane.node.remove();
+    paneTree=trimPaneTree(paneTree,new Set(taskPanes.keys()));
+    remember('kotel-pane-layout',JSON.stringify(paneTree));
+    if(primary.parentNode===pane.cell)paneGrid.append(primary);
+    pane.tab.remove();pane.cell.remove();
     if(paneActive===pane)paneActive=before[index+1]||before[index-1]||null;
     if(!taskPanes.size&&paneBoard){
-      const primary=paneGrid.querySelector('.am-chat');
-      primary.hidden=false;primary.style.removeProperty('order');
+      primary.hidden=false;
       primary.removeAttribute('role');primary.removeAttribute('aria-labelledby');
       $('task-head').hidden=false;paneToolbar.remove();
       preservePaneFocus(()=>paneBoard.replaceWith(primary));
       paneBoard=paneStrip=paneToolbar=paneGrid=null;
-      clearInterval(paneTimer);paneTimer=null;
     }
     syncTaskPanes();renderMachines();
     if(hadFocus){
@@ -534,116 +544,122 @@
     }
     savePanes();
   }
-  function paneVisible(pane){
-    return pane.node.isConnected&&!pane.node.hidden&&!document.hidden&&tab==='tasks';
-  }
-  function abortPaneRequest(pane){
-    pane.request?.abort();pane.request=null;
-  }
-  function renderPaneControls(pane){
-    const task=pane.task;
-    const canSend=canSendTaskMessage(task);
-    pane.input.placeholder=taskMessagePlaceholder(task);
-    pane.compose.hidden=!canDraftTaskMessage(task)&&!pane.input.value.trim();
-    pane.input.disabled=!canDraftTaskMessage(task);
-    pane.input.readOnly=pane.busy;
-    pane.send.disabled=!canSend||pane.busy||!pane.input.value.trim();
-  }
-  async function sendPaneReply(pane){
-    if(pane.send.disabled)return;
-    const task=pane.task,text=pane.input.value.trim(),question=task.owner_question;
-    const key=question?'messenger-answer-op:'+question.id:'messenger-note-op:'+task.id+':'+text;
-    let op=recall(key);
-    if(!op){op='window-'+(question?.id||task.id)+'-'+crypto.randomUUID();remember(key,op);}
-    pane.busy=true;pane.status.textContent=tr('Отправляем сообщение…');renderPaneControls(pane);
-    try{
-      await postAPI(question?'/api/task-answer':'/api/task-note',{task:task.id,op_id:op,text,...(question?{question:question.id}:{})});
-      if(!question)try{localStorage.removeItem(key);}catch(_){}
-      pane.input.value='';await updatePane(pane);
-    }catch(error){pane.status.textContent=error.message+tr(' Повтор с тем же текстом безопасен.');}
-    finally{pane.busy=false;renderPaneControls(pane);}
-  }
-  function renderPaneSnapshot(pane,snapshot,offset=0){
-    const scroll=pane.body.scrollTop;
-    const fileSource=taskFileSource(snapshot.task);
-    const stick=pane.body.scrollHeight-scroll-pane.body.clientHeight<32;
-    if(!offset)pane.body.replaceChildren();
-    for(const it of snapshot.items||[]){
-      if(!['task','answer','text','question','report','note','outcome'].includes(it.kind)||(!it.text&&it.kind!=='outcome'))continue;
-      const message=el('div',undefined,'am-pane-message');
-      if(it.kind==='outcome'&&it.state==='cancelled')message.append(stoppedNote(it,snapshot.task));
-      else{
-        const role=it.author==='owner'?tr('Вы'):it.author==='coordinator'?tr('Координатор'):it.kind==='outcome'?tr('Статус'):tr('Исполнитель');
-        message.append(el('span',role,'am-small am-muted'),richText(it.kind==='outcome'&&it.text===restartOutcome?restartLabel():it.text,undefined,fileSource));
-      }
-      pane.body.append(message);
+  function paneVisibility(pane,visible){
+    if(visible&&!pane.chat.hasAttribute('src')){
+      pane.chat.src='/task-pane?'+new URLSearchParams({task:pane.id,project:pane.project});
     }
-    pane.count=offset+(snapshot.items?.length||0);
-    pane.cursor=snapshot.cursor||'';
-    pane.task=snapshot.task;
-    pane.label.textContent=pane.heading.textContent=snapshot.task.title||pane.title;
-    if(pane.title!==pane.label.textContent){pane.title=pane.label.textContent;savePanes();}
-    pane.label.title=pane.title;
-    pane.close.setAttribute('aria-label',tr('Закрыть вкладку')+' '+pane.title);
-    pane.status.textContent=taskStatus(snapshot.task)[0];
-    renderPaneControls(pane);
-    pane.body.scrollTop=stick?pane.body.scrollHeight:scroll;
+    pane.chat.hidden=!visible;
+    pane.chat.contentWindow?.messengerPaneVisible?.(visible&&tab==='tasks'&&!document.hidden);
   }
-  async function updatePane(pane){
-    if(!paneVisible(pane))return;
-    if(pane.request)return;
-    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),5000);
-    pane.request=controller;
-    try{
-      const query=new URLSearchParams({id:pane.id,cursor:pane.cursor||''});
-      const snapshot=await api('/api/task?'+query,5000,controller.signal);
-      if(controller.signal.aborted||!paneVisible(pane)||snapshot.task?.id!==pane.id)return;
-      if(snapshot.append_from&&snapshot.append_from!==pane.count){pane.cursor='';return;}
-      renderPaneSnapshot(pane,snapshot,snapshot.append_from||0);
-    }catch(error){if(!controller.signal.aborted)pane.status.textContent=tr('Не удалось загрузить задачу');}
-    finally{clearTimeout(timer);if(pane.request===controller)pane.request=null;}
+  function trimPaneTree(tree,ids){
+    if(typeof tree==='string')return ids.delete(tree)?tree:null;
+    if(!tree||!['x','y'].includes(tree.axis)||!Array.isArray(tree.children))return null;
+    return paneGroup(tree.axis,tree.children.map(child=>trimPaneTree(child,ids)).filter(Boolean));
+  }
+  function paneGroup(axis,children){
+    return children.length>1?{axis,children}:children[0]||null;
+  }
+  function mapPaneTree(tree,target,replacement){
+    if(typeof tree==='string')return tree===target?replacement:tree;
+    return paneGroup(tree.axis,tree.children.map(child=>mapPaneTree(child,target,replacement)));
+  }
+  function applyPaneTree(visible){
+    if(!visible.length)return;
+    const remaining=new Set(visible);
+    let tree=trimPaneTree(paneTree,remaining);
+    if(paneLegacy&&visible.length>1){
+      const rows=[];
+      for(let i=0;i<visible.length;i+=2)rows.push(paneGroup('x',visible.slice(i,i+2)));
+      tree=paneLegacy==='grid'?paneGroup('y',rows):paneGroup(paneLegacy==='stack'?'y':'x',visible);
+      paneLegacy='';
+    }else if(remaining.size){
+      tree=paneGroup('x',[tree,...remaining].filter(Boolean));
+    }
+    if(visible.length>1&&JSON.stringify(tree)!==JSON.stringify(paneTree)){
+      paneTree=tree;
+      remember('kotel-pane-layout',JSON.stringify(tree));
+    }
+    const positions=[];
+    function place(node,left,top,right,bottom){
+      if(typeof node==='string'){positions.push({node,left,top,right,bottom});return;}
+      const {axis,children}=node;
+      const cuts=Array.from({length:children.length+1},(_,i)=>
+        axis==='x'?left+(right-left)*i/children.length:top+(bottom-top)*i/children.length);
+      children.forEach((child,i)=>{
+        if(axis==='x')place(child,cuts[i],top,cuts[i+1],bottom);
+        else place(child,left,cuts[i],right,cuts[i+1]);
+      });
+    }
+    place(tree,0,0,1,1);
+    const edges=(start,end)=>[...new Set(positions.flatMap(position=>[position[start],position[end]]))].sort((a,b)=>a-b);
+    const xs=edges('left','right'),ys=edges('top','bottom');
+    const tracks=stops=>stops.slice(1).map((stop,i)=>`minmax(0,${stop-stops[i]}fr)`).join(' ');
+    paneGrid.style.gridTemplateColumns=tracks(xs);
+    paneGrid.style.gridTemplateRows=tracks(ys);
+    for(const [i,{node,left,top,right,bottom}] of positions.entries()){
+      const cell=taskPanes.get(node).cell;
+      cell.style.setProperty('--pane-row',String(i+1));
+      cell.style.gridArea=[ys.indexOf(top)+1,xs.indexOf(left)+1,ys.indexOf(bottom)+1,xs.indexOf(right)+1].join(' / ');
+    }
+  }
+  if(!paneHost)window.messengerPaneTitle=(frame,title)=>{
+    const pane=taskPanes.get(frame.closest('.am-pane-cell')?.dataset.taskPane);
+    if(!pane||pane.chat!==frame)return;
+    pane.title=pane.label.textContent=pane.label.title=title;
+    pane.close.setAttribute('aria-label',tr('Закрыть вкладку')+' '+title);
+    savePanes();
+  };
+  function forEachPaneWindow(action){
+    for(const pane of taskPanes.values()){
+      if(pane.chat.hasAttribute('src'))action(pane.chat.contentWindow);
+    }
   }
   function syncTaskPanes(){
     if(!paneBoard)return;
-    const enabled=tab==='tasks'&&!document.hidden;
-    const primary=paneGrid.querySelector('.am-chat');
+    const primary=$('task-primary-pane');
     const current=taskPanes.get(selectedTask);
     const usePrimary=!!current&&current.project===project;
-    const showPrimary=usePrimary&&(current===paneActive||current.placement==='alongside');
+    const showPrimary=!draftOpen&&usePrimary&&(current===paneActive||current.placement==='alongside');
     primary.hidden=!!paneActive&&!draftOpen&&!showPrimary;
     if(showPrimary){
       primary.setAttribute('role','tabpanel');
       primary.setAttribute('aria-labelledby',current.label.id);
     }
-    if(!showPrimary){
-      primary.removeAttribute('role');primary.removeAttribute('aria-labelledby');
-      primary.style.removeProperty('order');
-    }
+    if(!showPrimary){primary.removeAttribute('role');primary.removeAttribute('aria-labelledby');}
     $('task-head').hidden=!draftOpen;
     paneToolbar.hidden=draftOpen;
-    let index=0,visible=0;
-    for(const pane of taskPanes.values()){
-      const active=pane===paneActive;
-      const showing=!draftOpen&&!!paneActive&&(active||pane.placement==='alongside');
-      const full=usePrimary&&pane===current&&showPrimary;
-      pane.node.hidden=!showing||full;
-      pane.node.style.order=index;
-      if(full)primary.style.order=index;
-      pane.label.setAttribute('aria-controls',full?primary.id:pane.node.id);
-      if(showing)visible++;
-      index++;
-      pane.label.setAttribute('aria-selected',String(active));
-      pane.label.tabIndex=active?0:-1;
-      pane.close.tabIndex=active?0:-1;
-      if(!enabled||pane.node.hidden)abortPaneRequest(pane);
-      else updatePane(pane);
-    }
-    paneBoard.style.setProperty('--am-watch-visible',Math.max(1,visible));
+    const shown=pane=>!draftOpen&&!!paneActive&&(pane===paneActive||pane.placement==='alongside');
+    const ordered=[...taskPanes.values()];
+    const visibleIDs=ordered.filter(shown).map(pane=>pane.id),visible=visibleIDs.length;
+    const primaryParent=showPrimary?current.cell:paneGrid;
+    preservePaneFocus(()=>{
+      if(primary.parentNode!==primaryParent)primaryParent.append(primary);
+      let nextTab=null;
+      for(const pane of ordered.slice().reverse()){
+        const active=pane===paneActive,showing=shown(pane);
+        const full=primaryParent===pane.cell;
+        const localTab=visible>1&&showing;
+        pane.cell.hidden=!showing;
+        pane.node.hidden=!showing||full;
+        paneVisibility(pane,showing&&!full);
+        pane.header.hidden=!localTab;
+        if(localTab){
+          if(pane.tab.parentNode!==pane.header)pane.header.append(pane.tab);
+        }else{
+          if(pane.tab.parentNode!==paneStrip||pane.tab.nextElementSibling!==nextTab)paneStrip.insertBefore(pane.tab,nextTab);
+          nextTab=pane.tab;
+        }
+        pane.tab.toggleAttribute('data-active',active);
+        pane.label.setAttribute('aria-controls',full?primary.id:pane.node.id);
+        pane.label.setAttribute('aria-selected',String(active||localTab));
+        pane.label.tabIndex=active||visible>1?0:-1;
+        pane.close.tabIndex=pane.label.tabIndex;
+      }
+      paneStrip.hidden=!nextTab;
+    });
+    if(visible)applyPaneTree(visibleIDs);
+    else{paneGrid.style.gridTemplateColumns='';paneGrid.style.gridTemplateRows='';}
     paneBoard.toggleAttribute('data-single',visible<=1);
-    paneBoard.style.setProperty('--am-watch-order',index);
-    paneBoard.toggleAttribute('data-odd-grid',visible>1&&visible%2!==0);
-    if(!enabled&&paneTimer){clearInterval(paneTimer);paneTimer=null;}
-    if(enabled&&!paneTimer)paneTimer=setInterval(()=>taskPanes.forEach(updatePane),5000);
   }
   function activatePane(pane){
     paneActive=pane;
@@ -655,82 +671,69 @@
     const from=ordered.indexOf(pane),to=ordered.indexOf(target);
     if(from<0||to<0||from===to)return;
     ordered.splice(from,1);ordered.splice(to,0,pane);
-    const next=ordered[to+1];
     taskPanes.clear();
     ordered.forEach(item=>taskPanes.set(item.id,item));
-    preservePaneFocus(()=>{
-      paneStrip.insertBefore(pane.tab,next?.tab||null);
-      paneGrid.insertBefore(pane.node,next?.node||null);
-    });
+    syncTaskPanes();
     savePanes();
   }
-  function setPaneLayout(layout){
-    if(!paneLayouts.includes(layout))layout='grid';
-    paneBoard.dataset.layout=layout;
-    for(const button of paneToolbar.querySelectorAll('[data-pane-layout]')){
-      button.setAttribute('aria-pressed',String(button.dataset.paneLayout===layout));
-    }
-    remember('kotel-pane-layout',layout);
-  }
-  function openTaskPane(task,name,placement='tab',restore=false){
+  function openTaskPane(task,name,placement='tab',restore=false,layout=null,target=''){
     if(!paneBoard){
       paneBoard=el('div',undefined,'am-pane-board');
       paneGrid=el('div',undefined,'am-pane-grid');
       paneStrip=el('div',undefined,'am-pane-strip');
       paneStrip.setAttribute('role','tablist');paneStrip.setAttribute('aria-label',tr('Вкладки задач'));
       paneToolbar=el('div',undefined,'am-pane-toolbar');
-      const layouts=el('div',undefined,'am-pane-layouts');
-      for(const [mode,text] of [['columns',tr('Столбцы')],['stack',tr('Строки')],['grid',tr('Сетка')]]){
-        const button=el('button',text,'am-quiet-button');
-        button.type='button';button.dataset.paneLayout=mode;button.onclick=()=>{
-          for(const pane of taskPanes.values())pane.placement='alongside';
-          setPaneLayout(mode);syncTaskPanes();savePanes();
-        };layouts.append(button);
-      }
-      paneToolbar.append(paneStrip,layouts);paneBoard.append(paneGrid);
+      paneToolbar.append(paneStrip);paneBoard.append(paneGrid);
       $('task-head').after(paneToolbar);
       const primary=$('task-layout').querySelector('.am-chat');
       primary.id='task-primary-pane';
       preservePaneFocus(()=>{primary.replaceWith(paneBoard);paneGrid.append(primary);});
-      setPaneLayout(recall('kotel-pane-layout'));
+      const saved=recall('kotel-pane-layout');
+      paneLegacy=['columns','stack','grid'].includes(saved)?saved:'';
+      try{paneTree=paneLegacy?null:JSON.parse(saved||'null');}catch(_){paneTree=null;}
       const current=selectedTaskRow();
       if(!restore&&current&&current.id!==task.id)openTaskPane(current,project,placement,true);
     }
-    if(placement==='alongside'&&paneActive)paneActive.placement='alongside';
+    if(layout){
+      paneTree=layout;
+      paneLegacy='';
+      remember('kotel-pane-layout',JSON.stringify(paneTree));
+    }
+    if(placement==='alongside'&&!restore){
+      const reference=taskPanes.get(target)||paneActive;
+      if(reference)reference.placement='alongside';
+      if(!layout&&!paneLegacy&&reference&&reference.id!==task.id){
+        const shown=new Set([...taskPanes.values()].filter(pane=>!pane.cell.hidden&&pane.id!==task.id).map(pane=>pane.id));
+        shown.add(reference.id);
+        const existing=trimPaneTree(paneTree,shown);
+        const current=paneGroup('x',[existing,...shown].filter(Boolean));
+        paneTree=mapPaneTree(current,reference.id,paneGroup('x',[reference.id,task.id]));
+        remember('kotel-pane-layout',JSON.stringify(paneTree));
+      }
+    }
     if(taskPanes.has(task.id)){
       const pane=taskPanes.get(task.id);
       pane.placement=placement;activatePane(pane);return;
     }
-    const node=el('section',undefined,'am-watch-pane'), tabNode=el('div',undefined,'am-pane-tab');
+    const cell=el('div',undefined,'am-pane-cell'),header=el('div',undefined,'am-pane-header');
+    const node=el('section',undefined,'am-pane-conversation'), tabNode=el('div',undefined,'am-pane-tab');
     const label=el('button',task.title,'am-quiet-button');
     const close=el('button',undefined,'am-icon-btn am-close-x');
-    const status=el('span',tr('Загружаем задачу…'),'am-small am-muted');
-    const heading=el('h3',task.title);
-    const body=el('div',undefined,'am-watch-body');
-    const input=el('textarea',undefined,'am-watch-input');
-    const compose=el('form',undefined,'am-watch-compose');
-    const send=el('button',tr('Отправить ответ'));
+    const chat=el('iframe',undefined,'am-pane-chat');chat.title=task.title;
     const uid=crypto.randomUUID();
     node.id='kotel-pane-'+uid;node.setAttribute('role','tabpanel');
+    header.setAttribute('role','tablist');header.setAttribute('aria-label',tr('Вкладки задач'));
     label.type=close.type='button';label.id='kotel-tab-'+uid;
     label.title=task.title;label.setAttribute('role','tab');label.setAttribute('aria-controls',node.id);
     node.setAttribute('aria-labelledby',label.id);
     tabNode.setAttribute('role','presentation');tabNode.draggable=true;
     close.setAttribute('aria-label',tr('Закрыть вкладку')+' '+task.title);
     close.append(svgIcon(closeIconPaths));
-    input.rows=1;input.maxLength=20000;input.setAttribute('aria-label',tr('Ответ исполнителю'));
-    input.placeholder=tr('Написать исполнителю…');send.type='submit';
-    compose.hidden=true;compose.append(input,send);
-    status.setAttribute('role','status');
-    body.tabIndex=0;
-    const pane={id:task.id,project:name,title:task.title,placement,node,tab:tabNode,label,close,heading,body,status,input,send,compose,count:0};
+    const pane={id:task.id,project:name,title:task.title,placement,cell,header,node,chat,tab:tabNode,label,close};
+    cell.dataset.taskPane=task.id;
+    chat.addEventListener('load',()=>paneVisibility(pane,!node.hidden));
     label.onclick=()=>activatePane(pane);
     close.onclick=()=>closePane(pane);
-    input.oninput=()=>renderPaneControls(pane);
-    compose.onsubmit=event=>{event.preventDefault();sendPaneReply(pane);};
-    input.onkeydown=event=>{
-      if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();sendPaneReply(pane);}
-    };
     label.onkeydown=event=>{
       const ordered=[...taskPanes.values()],index=ordered.indexOf(pane);
       if(event.key==='Delete'){event.preventDefault();closePane(pane);return;}
@@ -749,12 +752,12 @@
       startPaneDrag(event,pane,pane.project);
     };
     tabNode.ondragover=event=>{
-      if(paneDragging&&paneDragging.task.id!==pane.id){event.preventDefault();event.dataTransfer.dropEffect='move';tabNode.classList.add('am-pane-drop');}
+      if(tabNode.parentNode===paneStrip&&paneDragging&&paneDragging.task.id!==pane.id){event.preventDefault();event.dataTransfer.dropEffect='move';tabNode.classList.add('am-pane-drop');}
     };
     tabNode.ondragleave=()=>tabNode.classList.remove('am-pane-drop');
     tabNode.ondrop=event=>{
-      if(paneDragging){
-        event.preventDefault();
+      if(tabNode.parentNode===paneStrip&&paneDragging){
+        event.preventDefault();event.stopPropagation();
         const source=taskPanes.get(paneDragging.task.id);
         if(source)reorderPane(source,pane);
         else openTaskPane(paneDragging.task,paneDragging.project);
@@ -762,8 +765,9 @@
       }
     };
     tabNode.ondragend=finishPaneDrag;
-    tabNode.append(label,close);node.append(heading,status,body,compose);
-    paneStrip.append(tabNode);paneGrid.append(node);taskPanes.set(task.id,pane);
+    tabNode.append(label,close);node.append(chat);
+    header.hidden=true;cell.hidden=true;cell.append(header,node);
+    paneStrip.append(tabNode);paneGrid.append(cell);taskPanes.set(task.id,pane);
     if(!restore)activatePane(pane);
   }
   function startPaneDrag(event,task,name){
@@ -774,40 +778,60 @@
   }
   function finishPaneDrag(){
     paneDragging=null;
-    $('task-layout').classList.remove('am-pane-dragging');
-    $('task-layout').querySelectorAll('.am-pane-drop').forEach(node=>node.classList.remove('am-pane-drop'));
+    if(paneDropPreview)paneDropPreview.hidden=true;
+    const layout=$('task-layout');
+    layout.classList.remove('am-pane-dragging');
+    layout.querySelectorAll('.am-pane-drop').forEach(node=>node.classList.remove('am-pane-drop'));
   }
   function installPaneDropTargets(){
     const layout=$('task-layout');
-    const targets=el('div',undefined,'am-pane-targets');
-    const layouts=[
-      ['columns',tr('Столбцы'),'M12 5v14'],
-      ['stack',tr('Строки'),'M4 12h16'],
-      ['grid',tr('Сетка'),'M12 5v14M4 12h16'],
-    ];
-    for(const [mode,title,divider] of layouts){
-      const target=el('div',undefined,'am-pane-target');
-      const preview=el('div',undefined,'am-pane-target-preview');
-      preview.append(svgIcon(['M4 5h16v14H4z',divider]),el('span',title));
-      target.append(preview);
-      target.dataset.dropLayout=mode;
-      target.ondragover=event=>{
-        if(!paneDragging)return;
-        event.preventDefault();event.dataTransfer.dropEffect='move';target.classList.add('am-pane-drop');
-      };
-      target.ondragleave=event=>{if(!target.contains(event.relatedTarget))target.classList.remove('am-pane-drop');};
-      target.ondrop=event=>{
-        if(!paneDragging)return;
-        event.preventDefault();
-        const {task,project:name}=paneDragging;
-        finishPaneDrag();
-        openTaskPane(task,name,'alongside');
-        for(const pane of taskPanes.values())pane.placement='alongside';
-        setPaneLayout(mode);syncTaskPanes();savePanes();
-      };
-      targets.append(target);
+    paneDropPreview=el('div',undefined,'am-pane-preview');
+    paneDropPreview.hidden=true;paneDropPreview.setAttribute('aria-hidden','true');
+    layout.append(paneDropPreview);
+    function dropEdge(event){
+      if(!paneDragging||draftOpen)return;
+      const cell=event.target.closest('.am-pane-cell');
+      const chat=cell||event.target.closest('.am-chat');
+      const id=cell?.dataset.taskPane||selectedTask;
+      if(!chat||!id||id===paneDragging.task.id||(!cell&&selectedShared))return;
+      const rect=chat.getBoundingClientRect();
+      const x=(event.clientX-rect.left)/rect.width,y=(event.clientY-rect.top)/rect.height;
+      const distances=[['left',x],['right',1-x],['top',y],['bottom',1-y]];
+      const [edge,distance]=distances.reduce((best,next)=>next[1]<best[1]?next:best);
+      if(distance>=0&&distance<=0.25)return {edge,id,rect};
     }
-    layout.append(targets);
+    layout.addEventListener('dragover',event=>{
+      if(!paneDragging)return;
+      const drop=dropEdge(event);
+      paneDropPreview.hidden=!drop;
+      if(!drop)return;
+      event.preventDefault();event.dataTransfer.dropEffect='move';
+      const {rect,edge}=drop,bounds=layout.getBoundingClientRect();
+      const inline=edge==='left'||edge==='right';
+      const width=inline?rect.width/2:rect.width,height=inline?rect.height:rect.height/2;
+      paneDropPreview.style.left=rect.left-bounds.left+(edge==='right'?width:0)+'px';
+      paneDropPreview.style.top=rect.top-bounds.top+(edge==='bottom'?height:0)+'px';
+      paneDropPreview.style.width=width+'px';paneDropPreview.style.height=height+'px';
+    });
+    layout.addEventListener('dragleave',event=>{
+      if(paneDragging&&!layout.contains(event.relatedTarget))paneDropPreview.hidden=true;
+    });
+    layout.addEventListener('drop',event=>{
+      const drop=dropEdge(event);
+      if(!paneDragging)return;
+      const {task,project:name}=paneDragging;
+      finishPaneDrag();
+      if(!drop)return;
+      event.preventDefault();
+      const {id,edge}=drop;
+      const keep=new Set([...taskPanes.values()].filter(pane=>!pane.cell.hidden&&pane.id!==task.id).map(pane=>pane.id));
+      keep.add(id);
+      const existing=trimPaneTree(paneTree,keep);
+      const base=paneGroup('x',[existing,...keep].filter(Boolean));
+      const split=paneGroup(edge==='left'||edge==='right'?'x':'y',
+        edge==='left'||edge==='top'?[task.id,id]:[id,task.id]);
+      openTaskPane(task,name,'alongside',false,mapPaneTree(base,id,split),id);
+    });
   }
   function taskMenu(event,t,p,name,inArchive=false){
     event.preventDefault();
@@ -3088,6 +3112,12 @@
       report(input,addComposerReferences(input,eligible.map(path=>pathAttachment(path,input.id==='task-draft-text'?'':undefined))));
     }
     window.messengerDropFiles=(paths,x,y)=>{
+      const frame=document.elementFromPoint(x,y)?.closest('.am-pane-chat');
+      if(frame){
+        const rect=frame.getBoundingClientRect();
+        frame.contentWindow?.messengerDropFiles?.(paths,x-rect.left,y-rect.top);
+        return;
+      }
       reset();
       if(Array.isArray(paths)&&chat.contains(document.elementFromPoint(x,y)))addPaths(dropTarget(),paths);
     };
@@ -3981,6 +4011,11 @@
     const count=items.filter(it=>it.kind!=='command_end').length,fresh=feedShown!==t.id,atBottom=fresh||feedStick||feedPinned,grew=!fresh&&!atBottom&&count>feedCount;feedShown=t.id;feedStick=false;feedCount=count;feedSignature=signature;
     const displayModel=taskModelLabel(t),quiet=quietLine(t);
     const header=taskSidebarPreview?conversationTitle(t.title):taskFeedHeader(t,displayModel,quiet);
+    const frame=paneHost?window.frameElement:null;
+    if(frame&&t.title&&frame.title!==t.title){
+      frame.title=t.title;
+      paneHost.messengerPaneTitle?.(frame,t.title);
+    }
     const opened=new Set(fresh?[]:[...thread.querySelectorAll('details[open][data-key]')].map(d=>d.dataset.key));
     const direct=items[0]?.author==='owner';
     // Keep live output visible until a verified reply for this run is available.
@@ -4795,7 +4830,7 @@
     startWindowWatch();
     try{
       const f=await api('/api/task?'+q);
-      if(request!==feedRequest||id!==selectedTask||name!==project||f.task.id!==id)return;
+      if(request!==feedRequest||(paneHost&&!embeddedChatVisible)||id!==selectedTask||name!==project||f.task.id!==id)return;
       if(f.append_from){
         if(!previous||previous.items.length!==f.append_from)return !full&&await loadFeed(true);
         f.items=[...previous.items,...f.items];
@@ -4815,7 +4850,7 @@
   let windowWatch=null,watchRetryAt=0;
   function windowWatchScope(){return new URLSearchParams({project,task:tab==='tasks'?selectedTask:''}).toString();}
   function startWindowWatch(){
-    if(!view?.change_watch||Date.now()<watchRetryAt)return;
+    if(!view?.change_watch||Date.now()<watchRetryAt||(paneHost&&!embeddedChatVisible))return;
     const scope=windowWatchScope();
     if(windowWatch?.scope===scope)return;
     windowWatch?.controller.abort();
@@ -4852,6 +4887,7 @@
     }
   }
   async function refresh(pollFeed=!windowWatch){
+    if(paneHost&&!embeddedChatVisible)return;
     if(refreshing){refreshQueued=true;return;}refreshing=true;
     const requestScope=taskWindowQuery();
     try{
@@ -4859,15 +4895,15 @@
       const q=new URLSearchParams(requestScope);
       if(windowHistoryScope===requestScope&&view?.history_version)q.set('history_version',view.history_version);
       try{v=await api('/api/window?'+q);}
-      catch(error){if(requestScope!==taskWindowQuery())return;if(Date.now()-clientInfoAt>5000)loadClientInfo();online=false;offlineReason=error.name==='TimeoutError'||error.name==='TypeError'?tr('Окно потеряло связь с программой Kotel. Закройте окно и откройте снова.'):error.message;renderProjects();renderMachines();renderNotice();return false;}
-      if(requestScope!==taskWindowQuery())return;
+      catch(error){if(requestScope!==taskWindowQuery())return;if(!paneHost&&Date.now()-clientInfoAt>5000)loadClientInfo();online=false;offlineReason=error.name==='TimeoutError'||error.name==='TypeError'?tr('Окно потеряло связь с программой Kotel. Закройте окно и откройте снова.'):error.message;if(paneHost)renderThread();else{renderProjects();renderMachines();renderNotice();}return false;}
+      if(requestScope!==taskWindowQuery()||(paneHost&&!embeddedChatVisible))return;
       const cameOnline=!online;
-      online=true;lastWindowRefresh=Date.now();offlineReason='';if(Date.now()-clientInfoAt>10000)loadClientInfo();
+      online=true;lastWindowRefresh=Date.now();offlineReason='';if(!paneHost&&Date.now()-clientInfoAt>10000)loadClientInfo();
       // The first answer: learn the client's version before the start screen
       // goes, so an update starts without the old window showing.
-      if(booting){await loadClientInfo();booting=false;renderBoot();}
+      if(booting){if(!paneHost)await loadClientInfo();booting=false;renderBoot();}
       if(requestScope!==taskWindowQuery())return;
-      if(!v.projects.some(p=>p.name===project))setProject(v.project||'');
+      if(!paneHost&&!v.projects.some(p=>p.name===project))setProject(v.project||'');
       if(v.history_unchanged){
         const live=new Set(v.tasks.map(t=>t.id));
         v.tasks.push(...(view?.tasks||[]).filter(t=>finishedStates.includes(t.state)&&!t.keep_open&&!live.has(t.id)));
@@ -4885,16 +4921,16 @@
           auxTaskScope=previousScope===taskWindowQuery(view.project)?previousScope:'';
         }
         viewSignature=signature;view=v;noteWelcomeDone();
-        if(!v.history_paged&&selectedTask&&!v.tasks.some(t=>t.id===selectedTask)){selectedTask='';feed=null;feedSignature='';}
+        if(!paneHost&&!v.history_paged&&selectedTask&&!v.tasks.some(t=>t.id===selectedTask)){selectedTask='';feed=null;feedSignature='';}
         if(selectedShared&&!sharedSelection())selectedShared=null;
         // Choose the top task before drawing, so a project switch goes from
         // loading straight to the conversation without an empty pane between.
         if(!selectedTask&&!selectedShared&&tab==='tasks'&&v.project)openTopTask(true);
-        render();if(taskSidebarPreview)loadSidebarProjects();
+        if(paneHost)renderThread();
+        else{render();if(taskSidebarPreview)loadSidebarProjects();}
       }
-      else if(cameOnline){renderMachines();renderNotice();}
-      updateOpenAgentLimits();
-      applyTopTaskScope();
+      else if(cameOnline){if(paneHost)renderThread();else{renderMachines();renderNotice();}}
+      if(!paneHost){updateOpenAgentLimits();applyTopTaskScope();}
       // Nothing chosen yet (the first start, or the chosen task went away):
       // show the top task instead of an empty conversation.
       if(!selectedTask&&!selectedShared&&tab==='tasks'&&view?.project)openTopTask(true);
@@ -5757,7 +5793,7 @@
   }
   window.addEventListener('focus',()=>{
     for(const [provider,at] of authOpened){if(Date.now()-at>=10*60*1000)authOpened.delete(provider);else if(!checking.has(provider))checkCard(provider,true);}
-    pollSetup();viewSignature='';refresh();
+    if(!paneHost)pollSetup();viewSignature='';refresh();
   });
 
   let setupProvider='';
@@ -6025,13 +6061,16 @@
           if(r.width&&r.height&&zones.some(z=>r.left<z.right&&r.right>z.left&&r.top<z.bottom&&r.bottom>z.top))holes.push(r);
         }
       }
-      const fileDrop=tab==='tasks'&&!root.querySelector('dialog:modal')?[root.querySelector('.am-chat-body')?.getBoundingClientRect()].filter(Boolean):[];
+      const fileDrop=tab==='tasks'&&!root.querySelector('dialog:modal')?
+        [...root.querySelectorAll('.am-chat-body,.am-pane-chat')].filter(node=>node.offsetWidth).map(node=>node.getBoundingClientRect()):[];
       const message={zones:zones.map(box),holes:holes.map(box),fileDrop:fileDrop.map(box),fileDropDraft:draftOpen?draftAttachmentContext:null},text=JSON.stringify(message);
       if(text!==last){last=text;bridge.postMessage(message);}
     };
     const later=()=>{if(!queued){queued=true;requestAnimationFrame(send);}};
     new ResizeObserver(later).observe(document.documentElement);
     if(toolbar)new ResizeObserver(later).observe(toolbar);
+    const layout=$('task-layout');
+    new MutationObserver(later).observe(layout,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden']});
     new MutationObserver(later).observe($('task-draft'),{attributeFilter:['hidden']});
     $('task-draft-computer').addEventListener('change',later);
     if(navToggle)new MutationObserver(later).observe(navToggle,{attributeFilter:['aria-expanded']});
@@ -6041,7 +6080,7 @@
     addEventListener('resize',later);
     later();
   }
-  window.messengerRefresh=()=>{viewSignature='';refresh();};
+  window.messengerRefresh=()=>{viewSignature='';refresh();forEachPaneWindow(child=>child.messengerRefresh?.());};
   // «Выбрать»: the local server opens the system's own dialog (D-053); the
   // Mac app keeps its native folder dialog for the project folder.
   async function choosePath(kind,current){
@@ -6435,8 +6474,10 @@
     else startUpdate();
   });
   $('app-update-button').append(updateSpinner());
-  if(!window.webkit?.messageHandlers?.updates){selfUpdateTimer=setInterval(loadSelfUpdate,60000);loadSelfUpdate();}
-  pollUpdateProgress();
+  if(!paneHost){
+    if(!window.webkit?.messageHandlers?.updates){selfUpdateTimer=setInterval(loadSelfUpdate,60000);loadSelfUpdate();}
+    pollUpdateProgress();
+  }
   root.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>show(b.dataset.tab)));
   $('list-toggle').addEventListener('click',()=>{
     const expanded=$('list-toggle').getAttribute('aria-expanded')!=='true';
@@ -6544,7 +6585,7 @@
   $('lost-close').addEventListener('click',()=>closeHere());
   document.addEventListener('keydown',e=>{
     if(tab==='tasks'&&e.key==='Escape'&&!e.isComposing&&!$('task-stop').hidden&&!$('compose').hidden&&!$('compose').inert&&
-      !document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true],.am-pane-toolbar,.am-watch-pane')){
+      !document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true],.am-pane-toolbar,.am-pane-cell')){
       e.preventDefault();stopSelectedTask();
     }
   });
@@ -6621,7 +6662,7 @@
       sections.append(button);
       views.append(root.querySelector(`[data-screen=${section}]`));
     }
-    if(window.webkit?.messageHandlers?.composerDictation){
+    if(nativeHandlers?.composerDictation){
       const voiceTab=el('button',tr('Голос'),'am-tab');
       voiceTab.type='button';voiceTab.dataset.tab='voice';voiceTab.setAttribute('aria-pressed','false');
       voiceTab.prepend(svgIcon(microphonePaths));
@@ -6761,8 +6802,10 @@
   });
   // T-275: a hidden window asks for the network every minute, not every
   // 5 or 15 s, and catches up when shown.
-  setInterval(()=>{serverPolls++;if(document.hidden?serverPolls%12===0:(tab==='server'||serverPolls%3===0))loadServer();},5000);
-  loadServer();
+  if(!paneHost){
+    setInterval(()=>{serverPolls++;if(document.hidden?serverPolls%12===0:(tab==='server'||serverPolls%3===0))loadServer();},5000);
+    loadServer();
+  }
   let initialTheme=window.messengerInitialTheme;
   if(!initialTheme)try{initialTheme=localStorage.getItem('messenger-theme');}catch(_){}
   const sidebarFilterIcon=taskSidebarPreview?computerFilterIcon:null;
@@ -6906,7 +6949,7 @@
     };
   }
   function setupComposerDictation(){
-    const bridge=window.webkit?.messageHandlers?.composerDictation;
+    const bridge=nativeHandlers?.composerDictation;
     if(!bridge)return null;
     const messages={
       recording:tr('Идёт диктовка'),
@@ -7201,10 +7244,18 @@
     return {cancel,sync,finishFor,refreshModels};
   }
   composerDictation=setupComposerDictation();
+  if(!paneHost){
+    for(const callback of ['messengerDictationEvent','messengerDictationModels','messengerCancelDictation']){
+      const own=window[callback];
+      if(own)window[callback]=(...args)=>{own(...args);forEachPaneWindow(child=>child[callback]?.(...args));};
+    }
+    const saveResult=window.taskFiles.saved;
+    window.taskFiles.saved=(...args)=>{saveResult(...args);forEachPaneWindow(child=>child.taskFiles?.saved(...args));};
+  }
   centreControlText();
-  applyTheme(initialTheme||'system');
+  applyTheme(paneHost?.document.documentElement.dataset.theme||initialTheme||'system');
   const chatFont=$('chat-font-select');
-  chatFont.value=window.messengerInitialChatFont||recall('messenger-chat-font');
+  chatFont.value=paneHost?.document.getElementById('am-concept')?.dataset.chatFont||window.messengerInitialChatFont||recall('messenger-chat-font');
   applyChatFont();
   enhanceSelect(chatFont);
   chatFont.addEventListener('change',()=>applyChatFont(true));
@@ -7240,7 +7291,7 @@
     const t=$('thread');if(feedPinned)t.scrollTop=t.scrollHeight;
   })).observe(chatFooter);
   new ResizeObserver(updateNoticeTooltips).observe($('notices'));
-  if(taskSidebarPreview){
+  if(taskSidebarPreview&&!paneHost){
     try{
       for(const saved of JSON.parse(recall('kotel-task-panes')||'[]')){
         if(saved?.id&&saved.project&&saved.title)openTaskPane(saved,saved.project,saved.placement==='tab'?'tab':'alongside',true);
@@ -7478,6 +7529,29 @@
       if(typeof state?.model==='string'){defaultTaskModel=state.model;if(draftOpen)renderTaskDraft();}
       if(windowSetupEnabled&&(state?.pending||resume==='0')&&!setupDialog.open)showWindowSetup(0);
     }).catch(()=>{});
+  }
+  if(paneHost){
+    window.messengerPaneAppearance=(theme,font)=>{
+      applyTheme(theme);chatFont.value=font;applyChatFont();
+    };
+    window.messengerPaneVisible=visible=>{
+      if(embeddedChatVisible===visible)return;
+      embeddedChatVisible=visible;
+      if(visible)refresh();
+      else{
+        windowWatch?.controller.abort();windowWatch=null;
+        feedRequest++;
+        composerDictation?.cancel();
+      }
+    };
+    // Keep explicit selection even when the task is outside the current history page.
+    setInterval(()=>{if(embeddedChatVisible){updateTimers();if(!windowWatch||Date.now()-lastWindowRefresh>=15000)refresh();}},2000);
+    window.addEventListener('storage',event=>{
+      if(['voice-mode','voice-language','voice-silence'].includes(event.key)&&event.newValue!=null){
+        $(event.key).value=event.newValue;syncSelects();
+      }
+    });
+    return;
   }
   loadSleep();setInterval(loadSleep,5000);
   show('tasks');loadMachineOrder();refresh().then(loadWindowSetup);loadDiscovery();pollSetup();setInterval(()=>{if(setupPending)pollSetup();},2000);

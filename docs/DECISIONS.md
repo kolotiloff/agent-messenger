@@ -989,7 +989,7 @@ The computer that created a task writes its display title to the task record. Th
 
 ## D-265 — Open concurrent task views inside the main window
 
-Use tabs for switching and closing task views. Use Open alongside to keep concurrent conversations visible in the same workspace, with side-by-side, stacked and grid layouts. Every pane addresses an existing task and keeps its own draft and scroll position. See T-372.
+Use tabs for switching and closing task views. Drag an open tab or sidebar task toward any edge of a conversation to divide that pane. Highlight the destination before the drop. Splits can be nested. Open alongside is available from the task menu. Each pane uses the regular conversation and keeps its own draft and scroll position. Remember the split arrangement with the open tabs. See T-372.
 
 ## D-266 — Stop a turn and keep the conversation available
 

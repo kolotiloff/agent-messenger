@@ -293,8 +293,10 @@ window.taskFiles = (() => {
       catch (_) { setStatus(doc, tr('Не удалось скопировать')); }
     };
   }
+  const nativeWindow = location.pathname === '/task-pane' ? window.parent : window;
+
   function save(doc, data, name) {
-    const handler = window.webkit?.messageHandlers?.reportFileSave;
+    const handler = nativeWindow.webkit?.messageHandlers?.reportFileSave;
     if (handler) {
       const id = crypto.randomUUID();
       nativeSaves.set(id, doc);
@@ -351,7 +353,7 @@ window.taskFiles = (() => {
 
   function openSeparate(doc) {
     const {file, ref} = doc;
-    const handler = window.webkit?.messageHandlers?.reportFileWindow;
+    const handler = nativeWindow.webkit?.messageHandlers?.reportFileWindow;
     if (handler) {
       handler.postMessage({name:file.name || ref.name, text:file.text || '', line:ref.line});
       return;

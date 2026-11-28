@@ -8,6 +8,8 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
+Draft PR #261 now splits the conversation under the pointer when a tab or sidebar task is dropped near one of its edges. Every visible pane has its own tab and uses the regular thread and composer. The layout keeps existing open tabs and restores nested splits. This Mac preview reduces the Dock icon footprint and softens the side lighting. Publication remains on hold for the owner's review.
+
 The dictation follow-up in draft PR #261 puts microphone levels, recording status, Cancel, and Stop inside both composers. Stop requests transcription and inserts the result in the draft. Cancel discards it. Chromium and WebKit verified both layouts and the simulated bridge, and the native Swift shell type-checked. Local review build 129 keeps the provider access descriptions and strengthens the Dock icon’s contour reflection. Voice uses regular setting labels inside its cards, with a single page heading. The owner wants a refreshed local build after each set of changes. Live microphone acceptance is pending.
 
 The agent settings dialog renders its CLI and account rows before opening and keeps the content width stable as it scrolls. The CLI path has a manual Choose action alongside Find. The last status row shares the dialog's bottom inset. The reply thread leaves a 32 px scrolling inset below the last message actions, including when a multiline reply grows the composer. A connection warning or action error above the reply composer leaves a 12 px gap.
@@ -46,7 +48,7 @@ T-369 uses a slightly darker sidebar and lighter text in dark appearance. The ex
 
 T-370 reduces the trailing inset in Statistics and uses the Archive's 4 px row gap in Efficiency. Settings has a wider section list. The context popup aligns its text to the end and separates the historical measurement label with a colon. An offline computer has a crossed icon and shows its local last contact time beside its name when available. Statistics gives task rows less vertical padding. Efficiency shows the exact counts within expanded details.
 
-T-371 tracks shared task renaming and the separate Archive and Delete permanently actions. T-372 follows up the build 119 layout: task tabs occupy the existing toolbar, and individual feeds are read by task ID, matching the window endpoint’s schema. Dragging a task owned by this client from the sidebar, or dragging an open tab, reveals the Columns, Rows and Grid drop targets. The primary conversation keeps its full view. Additional panes show their own messages and replies. Shared observer summaries still open in the main view.
+T-371 tracks shared task renaming and the separate Archive and Delete permanently actions. T-372 follows up the build 119 layout: task tabs occupy the existing toolbar, and individual feeds are read by task ID, matching the window endpoint’s schema. Drag a sidebar task or an open tab to an edge of a conversation to split that pane. Additional panes run the normal conversation view. Shared observer summaries still open in the main view.
 
 The T-372 branch also moves computer update notices to the top-right of the window, closes update menus when the pointer leaves, and redraws the spinner around the same fixed center. A recorded restart and a peer’s current connectivity are shown independently. Chromium and WebKit exercised the task feeds and update controls against fictional data.
 
