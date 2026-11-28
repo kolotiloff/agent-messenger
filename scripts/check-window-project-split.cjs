@@ -614,11 +614,14 @@ if (require.main === module) (async()=>{
       const replyInput=draftPage.locator('#answer-text');
       assert.equal(await replySend.isVisible(),false);
       const stopBounds=await replyStop.boundingBox();
-      assert.equal(await replyStop.evaluate(button=>getComputedStyle(button).borderRadius),'16px');
+      assert.equal(await replyStop.evaluate(button=>getComputedStyle(button).borderRadius),'12px');
       await replyInput.fill('Проверка кнопки отправки');
       assert.equal(await replyStop.isVisible(),false);
       assert.deepEqual(await replySend.boundingBox(),stopBounds);
-      assert.equal(await replySend.evaluate(button=>getComputedStyle(button).borderRadius),'16px');
+      assert.deepEqual(await replySend.evaluate(button=>{
+        const style=getComputedStyle(button);
+        return [style.borderRadius,style.backgroundColor,button.querySelector('path').getAttribute('d')];
+      }),['12px','rgba(0, 0, 0, 0)','M12 20V4m-7 7 7-7 7 7']);
       await replyInput.fill('');
       assert.equal(await replySend.isVisible(),false);
       assert.deepEqual(await replyStop.boundingBox(),stopBounds);

@@ -3,6 +3,10 @@
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
 
+## 2026-11-28 — T-380 Keep the existing send button treatment
+
+The owner confirmed the requested change was to Stop and Send behavior. Codex restored the existing arrow, transparent background, and hover treatment in both composers.
+
 ## 2026-11-28 — T-372 Composer context alignment
 
 Codex moved the draft access control below the field and showed the assigned project and computer in the same row of existing conversations. The split fixture checks matching row height and alignment while a task is drafted beside a conversation.
