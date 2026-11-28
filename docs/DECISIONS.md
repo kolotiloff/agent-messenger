@@ -1035,3 +1035,7 @@ A computer heading opens a draft for that computer. A project heading opens a dr
 Agent settings group providers by detected installation on the local computer. Installation remains explicit and remote settings remain read-only. Use 16 px provider artwork in window controls and retain the compact metadata marks.
 
 The composer can add selected paths and UTF-8 browser drops as removable draft inputs. The selected or dropped local path is a reference for the executor on that computer. A path on another computer must be supplied explicitly. The slash picker runs supported window actions. Provider-native commands and opaque attachment transfer are tracked by T-388 and T-389.
+
+## D-276 — Agent limits in the sidebar
+
+Show measured usage windows in a popover beside App settings. Group snapshots by the reporting computer and display a subscription only when the provider reports it. Opening the popover reads the window's existing snapshots. Mark disconnected computers and passed reset times so an old measurement cannot read as a confirmed refill. See T-390.

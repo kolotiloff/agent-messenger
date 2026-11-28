@@ -4248,6 +4248,91 @@
     if(w==='seven_day_sonnet')return tr('Недельный лимит Sonnet');
     return '';
   }
+  function limitPlan(limit){
+    try{
+      const plan=JSON.parse(limit.reported)?.planType;
+      return typeof plan==='string'&&/^[\w -]{1,64}$/.test(plan)&&!/^unknown$/i.test(plan)
+        ?plan.replace(/[_-]+/g,' ').replace(/\b[a-z]/g,c=>c.toUpperCase()):'';
+    }catch(_){return '';}
+  }
+  function limitTime(minutes){
+    const units=[['day',1440],['hour',60],['minute',1]],parts=[];
+    for(const [unit,size] of units){
+      const count=Math.floor(minutes/size);
+      if(count)parts.push(new Intl.NumberFormat(amLocale,{style:'unit',unit,unitDisplay:'short'}).format(count));
+      minutes%=size;
+    }
+    return parts.slice(0,2).join(' ');
+  }
+  const limitsTrigger=$('limits-open'),limitsMenu=$('agent-limits');
+  function renderAgentLimits(){
+    const body=$('agent-limits-body'),now=Date.now();
+    const computers=[
+      {name:view?.computer_name||tr('Этот компьютер'),agents:view?.agents,stale:!online},
+      ...(server?.peers||[]).map(peer=>({...peer,stale:!peerFresh(peer)}))
+    ];
+    const groups=[];
+    for(const {name,agents,stale} of computers){
+      const measured=(agents||[]).filter(agent=>agent.limit);
+      if(!measured.length)continue;
+      const group=el('section',undefined,'am-agent-limits-group');
+      group.append(el('span',name+(stale?' · '+tr('Устаревшие данные'):''),'am-small am-muted'));
+      for(const {agent,limit} of measured){
+        const provider=el('section',undefined,'am-agent-limits-provider');
+        const head=el('header'),plan=limitPlan(limit);
+        head.append(providerIcon(agent),el('span',names[agent]||agent));
+        if(plan)head.append(el('span','· '+plan,'am-small am-muted'));
+        provider.append(head);
+        for(const window of limit.windows?.length?limit.windows:[limit]){
+          const row=el('div'),meta=el('div',undefined,'am-agent-limits-meta am-small');
+          const name=limitWindow(window.window)||tr('Лимит использования');
+          const reset=Date.parse(window.resets_at),expired=window.reset_passed||reset<=now;
+          const minutes=Math.max(1,Math.ceil((reset-now)/60000));
+          meta.append(el('span',name));
+          if(expired||Number.isFinite(reset)){
+            meta.append(el('span',expired?tr('Срок сброса прошёл'):tr('До сброса {time}').replace('{time}',limitTime(minutes)),'am-muted'));
+          }
+          row.append(meta);
+          const used=window.used_percent;
+          if(typeof used==='number'){
+            const share=Math.min(100,Math.max(0,used));
+            const percent=(used/100).toLocaleString(amLocale,{style:'percent',maximumFractionDigits:1});
+            meta.append(el('span',percent,'am-agent-limits-percent'));
+            const track=el('div',undefined,'am-agent-limits-track'),fill=el('span',undefined,'am-agent-limits-fill');
+            track.setAttribute('aria-hidden','true');
+            fill.dataset.level=expired||stale?'stale':limitLevel(window);
+            fill.style.inlineSize=share+'%';
+            track.append(fill);row.append(track);
+          }else if(limit.state==='exhausted'){
+            meta.append(el('span',tr('Лимит исчерпан'),'am-muted'));
+          }
+          provider.append(row);
+        }
+        group.append(provider);
+      }
+      groups.push(group);
+    }
+    body.replaceChildren(...(groups.length?groups:[el('p',tr('Замеров лимитов пока нет.'),'am-agent-limits-empty am-small am-muted')]));
+  }
+  limitsTrigger.addEventListener('click',()=>{
+    if(limitsMenu.matches(':popover-open')){limitsMenu.hidePopover();return;}
+    renderAgentLimits();
+    limitsMenu.showPopover();
+    positionPopover(limitsMenu,limitsTrigger,360,false,true);
+    limitsMenu.focus();
+  });
+  limitsMenu.addEventListener('toggle',()=>limitsTrigger.setAttribute('aria-expanded',String(limitsMenu.matches(':popover-open'))));
+  limitsMenu.addEventListener('keydown',event=>{
+    if(event.key!=='Escape')return;
+    event.preventDefault();event.stopPropagation();
+    limitsMenu.hidePopover();limitsTrigger.focus();
+  });
+  function updateOpenAgentLimits(){
+    if(limitsMenu.matches(':popover-open'))renderAgentLimits();
+  }
+  window.addEventListener('resize',()=>{
+    if(limitsMenu.matches(':popover-open'))positionPopover(limitsMenu,limitsTrigger,360,false,true);
+  });
   function limitRing(l){
     const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 18 18');svg.setAttribute('class','am-ring');svg.setAttribute('aria-hidden','true');
     const ring=(cls,share)=>{const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx','9');c.setAttribute('cy','9');c.setAttribute('r','7');c.setAttribute('class',cls);
@@ -4685,6 +4770,7 @@
         render();if(taskSidebarPreview)loadSidebarProjects();
       }
       else if(cameOnline){renderMachines();renderNotice();}
+      updateOpenAgentLimits();
       applyTopTaskScope();
       // Nothing chosen yet (the first start, or the chosen task went away):
       // show the top task instead of an empty conversation.
@@ -5144,6 +5230,7 @@
         const sharedRuns=()=>JSON.stringify([view,taskListView(passiveProject())].flatMap(snapshot=>(snapshot?.shared||[]).flatMap(p=>p.tasks.filter(t=>(!t.started_at||t.pending_launch||!peerFresh(p))&&sharedWorkerRunning(t)).map(t=>t.id))));
         const previous=sharedRuns(),previousPeers=welcomePeerCount(),wasHosting=!!server?.host?.running;
         server=next;
+        updateOpenAgentLimits();
         if(draftOpen)renderTaskDraft();
         else if(tab==='tasks'&&setupPaneShown()&&(previousPeers!==welcomePeerCount()||wasHosting!==!!next.host?.running||
           taskSidebarPreview&&view?.project&&canDraftTask(sidebarProject||project)))renderThread();

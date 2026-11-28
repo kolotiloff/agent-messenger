@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-28 — T-390 Sidebar limits
+
+Codex added a sidebar popover for recorded agent usage windows and preserved the optional account plan from the existing limit read. Fixture checks in Chromium and WebKit cover usage, reset timing and stale remote snapshots. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).
+
 ## 2026-11-28 — T-387 Group shortcut hover refinement
 
 Codex moved the trailing New Task shortcut to the outermost group headers. It appears on row hover or keyboard focus and shares the row highlight. The button uses the row inset and centers vertically. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).

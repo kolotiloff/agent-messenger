@@ -130,6 +130,34 @@ if (require.main === module) (async()=>{
   const chat=(page,name)=>page.locator('#thread').getByText('Сообщение из '+name);
   const total=async(page,n)=>page.waitForFunction(value=>document.querySelector('#stats-total-title').textContent.split(' токен')[0].replace(/[^0-9]/g,'')===value,n);
   try{
+    const limitsPage=await open(projects,{width:1200,height:800},'dark',(url,p)=>{
+      const fixture=reply(url,p,projects);
+      if(url.pathname==='/api/window')return {json:{...fixture,agents:[
+        {...agents[0],limit:{state:'ok',reported:'{"planType":"pro"}',windows:[
+          {window:'5h',used_percent:28,resets_at:iso(-185)},
+          {window:'7d',used_percent:72,resets_at:iso(60)}
+        ]}},
+        agents[1]
+      ]}};
+      if(url.pathname==='/api/server')return {json:{...fixture,peers:[{...fixture.peers[0],age:100,agents:[
+        {agent:'cursor',limit:{state:'ok',window:'7d',used_percent:0}}
+      ]}]}};
+    },true);
+    const limits=limitsPage.getByRole('dialog',{name:'Лимиты агентов'});
+    const limitsButton=limitsPage.getByRole('button',{name:'Лимиты агентов'});
+    await limitsButton.click();
+    await limits.getByText('· Pro',{exact:true}).waitFor();
+    await limits.getByText('ПК-1 · Устаревшие данные',{exact:true}).waitFor();
+    assert.deepEqual((await limits.locator('.am-agent-limits-percent').allTextContents()).map(x=>x.replace(/\s/g,'')),['28%','72%','0%']);
+    assert.deepEqual(await limits.locator('.am-agent-limits-fill').evaluateAll(nodes=>nodes.map(n=>n.dataset.level)),['good','stale','stale']);
+    assert.match(await limits.getByText(/^До сброса /).textContent(),/3 ч/);
+    await limits.getByText('Срок сброса прошёл',{exact:true}).waitFor();
+    assert.equal(await limits.getByText('Claude Code',{exact:true}).count(),0);
+    assert.ok((await limits.boundingBox()).y<(await limitsButton.boundingBox()).y);
+    await limitsPage.keyboard.press('Escape');
+    await limits.waitFor({state:'hidden'});
+    assert.equal(await limitsButton.evaluate(button=>button===document.activeElement),true);
+    await limitsPage.context().close();
     for(const theme of ['light','dark']){
       const page=await open(projects,{width:1200,height:800},theme,undefined,true);
       const machine=card(page,'local').locator('.am-machine-name').first();
