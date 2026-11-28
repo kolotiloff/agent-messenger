@@ -4516,7 +4516,7 @@
     });
   }
   function renderAgents(){
-    renderAgentSetupActions();
+    if($('agent-setup').open)renderAgentSetupActions(setupProvider);
     const live=$('agents'),cards=live.cloneNode(false);
     const computer=taskSidebarPreview?'':computerFilter;
     if(computer&&computer!=='local'){delete live.dataset.localGroups;renderPeerAgents(cards,computer);swapChildren(live,cards);return;}
@@ -5738,10 +5738,8 @@
     const agent=(view?.agents||[]).find(a=>a.agent===provider);
     return view?.coordinator_models?.[provider]??(agent?agent.models||[]:defaultModels[provider]||[]);
   }
-  function renderAgentSetupActions(){
-    const dialog=$('agent-setup');
-    if(!dialog.open||!setupProvider)return;
-    const provider=setupProvider,{cli,environment}=agentPaths(provider);
+  function renderAgentSetupActions(provider){
+    const {cli,environment}=agentPaths(provider);
     const agent=view?.agents?.find(a=>a.agent===provider);
     const check=agentChecks.get(provider),auth=check?.authentication?.state;
     const steps=el('div',undefined,'am-steps am-agent-setup-actions');
@@ -5784,8 +5782,9 @@
     $('agent-models-open').disabled=!view;
     setStatus('agent-save-status','');
     $('agent-setup-actions')?.remove();
+    renderAgentSetupActions(provider);
     if(!$('agent-setup').open)$('agent-setup').showModal();
-    renderAgentSetupActions();renderToasts();
+    renderToasts();
   }
   // One check at a time: the client refuses a second one while one runs.
   let checkQueue=Promise.resolve();
@@ -6917,7 +6916,7 @@
       if(target.style.getPropertyValue('--am-gutter')!==value)target.style.setProperty('--am-gutter',value);
     }
   });});
-  root.querySelectorAll('.am-screen:not(.am-settings-views > .am-screen),.am-thread,.am-queue-list,.am-dialog-body,.am-machines,.am-stats-reports').forEach(element=>gutterObserver.observe(element));
+  root.querySelectorAll('.am-screen:not(.am-settings-views > .am-screen),.am-thread,.am-queue-list,.am-dialog-body:not(#agent-setup > .am-dialog-body),.am-machines,.am-stats-reports').forEach(element=>gutterObserver.observe(element));
   const chatBody=root.querySelector('.am-chat-body'),chatFooter=root.querySelector('.am-chat-footer');
   $('thread').addEventListener('scroll',toBottomState,{passive:true});
   $('to-bottom').addEventListener('click',()=>{const t=$('thread');t.scrollTo({top:t.scrollHeight,behavior:'smooth'});});

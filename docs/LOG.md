@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-28 — T-368 and T-387 Chat and agent settings
+
+Codex clarified the manual CLI picker label, rendered the status rows before showing the dialog, stabilized its scroll gutter, and removed the extra padding below the last status row. The chat now leaves a 16 px inset between its bottom content and composer.
+
 ## 2026-11-28 — T-369 Dark theme text refinement
 
 The owner approved the regular window typography in local build 120. Codex slightly brightened the main and secondary text in the standard dark palette for the next owner-requested bundle.

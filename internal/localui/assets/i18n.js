@@ -225,6 +225,7 @@
   'Название':'Name',
   'Папка проекта':'Project folder',
   'Выбрать':'Choose',
+  'Выбрать программу CLI':'Choose the CLI executable',
   'Общие указания исполнителям':'Instructions for all workers',
   'Программа добавляет их к каждой новой задаче проекта, в том числе отправленной на другой компьютер. Уже начатые задачи не меняются.':'Kotel adds them to every new task of the project, including tasks sent to another computer. Tasks already started do not change.',
   'Удалить проект':'Remove project',

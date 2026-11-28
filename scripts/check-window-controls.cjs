@@ -53,6 +53,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
             return route.fulfill({json: {ok: true, result: {host: {running: false, enabled: false, addresses: []}, member: {connected: false}, peers: [], updates, accept: true, auto_update: autoUpdate, auto_update_supported: autoSupported}}});
           }
           if (pathname === '/api/project-create') created = true;
+          if (pathname === '/api/pick') return route.fulfill({json: {ok: true}});
           if (pathname === '/api/agent-install' || pathname === '/api/agent-find') {
             const input=route.request().postDataJSON();
             const state={ok:true,...input,id:'fake-'+input.provider+'-'+input.action,state:'unknown'};
@@ -405,9 +406,26 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const codex=page.locator('article[data-provider=codex]');
       const agentSetup=page.locator('#agent-setup');
       const cliRow=agentSetup.locator('.am-step').filter({hasText:'Codex CLI'});
+      await agentSetup.evaluate(dialog=>{
+        const showModal=dialog.showModal;
+        dialog.showModal=function(){
+          showModal.call(this);
+          this.dataset.firstCliWidth=this.querySelector('#agent-cli').getBoundingClientRect().width;
+          this.dataset.firstActionRows=this.querySelectorAll('#agent-setup-actions .am-step').length;
+          delete this.showModal;
+        };
+      });
       await codex.getByRole('button',{name:'Настройки',exact:true}).click();
       assert.equal(await cliRow.locator('.am-mark').textContent(),'–');
       assert(await cliRow.getByRole('button',{name:'Установить',exact:true}).isVisible());
+      assert.equal(await agentSetup.getAttribute('data-first-action-rows'),'1');
+      const executablePicker=agentSetup.getByRole('button',{name:'Выбрать программу CLI',exact:true});
+      assert.equal(await executablePicker.textContent(),'Выбрать');
+      const pickRequest=page.waitForRequest(request=>request.url().endsWith('/api/pick'));
+      await executablePicker.click();
+      assert.deepEqual((await pickRequest).postDataJSON(),{kind:'file',current:''});
+      assert.equal(await agentSetup.locator('#agent-cli').evaluate(input=>input.getBoundingClientRect().width),Number(await agentSetup.getAttribute('data-first-cli-width')));
+      assert.equal(await cliRow.evaluate(row=>getComputedStyle(row).paddingBlockEnd),'0px');
       await page.locator('#agent-setup-close').click();
       await codex.getByRole('button',{name:'Установить',exact:true}).click();
       await agentSetup.getByText('Нет подтверждения из терминала. Если он закрыт, нажмите «Найти».',{exact:true}).waitFor();

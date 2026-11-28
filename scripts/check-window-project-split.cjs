@@ -1238,6 +1238,13 @@ if (require.main === module) (async()=>{
         return [thread.getBoundingClientRect().bottom,field.top,footer.top,getComputedStyle(thread).bottom];
       });
       assert(Math.abs(viewportEnd[0]-viewportEnd[1])<1,JSON.stringify(viewportEnd));
+      const lastMessageGap=await conversation.evaluate(thread=>{
+        thread.scrollTop=thread.scrollHeight;
+        const actions=[...thread.querySelectorAll('.am-message-actions')].at(-1);
+        return document.querySelector('#compose .am-compose-field').getBoundingClientRect().top
+          -actions.getBoundingClientRect().bottom;
+      });
+      assert(lastMessageGap>=15,lastMessageGap+'px between chat actions and composer');
       if(process.env.SCREENSHOT_DIR){
         const field=await draftPage.locator('#compose .am-compose-field').boundingBox();
         const foot=await draftPage.locator('#answer-context').boundingBox();
