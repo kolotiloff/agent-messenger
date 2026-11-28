@@ -372,14 +372,14 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   --am-quiet-hover:color-mix(in srgb, var(--am-soft), var(--am-field-hover) 72%);
 }
 #am-concept.am-task-sidebar-preview :is(.am-titlebar,.am-computers > .am-label) { display:none; }
-#am-concept.am-task-sidebar-preview .am-sidebar { gap:var(--am-gap-content); row-gap:var(--am-space-1); padding:var(--am-task-top) var(--am-gap-content) var(--am-gap-content); }
+#am-concept.am-task-sidebar-preview .am-sidebar { gap:var(--am-gap-content); row-gap:var(--am-space-1); padding:var(--am-task-top) var(--am-gap-content) var(--am-gap-content); -webkit-font-smoothing:antialiased; }
 #am-concept.am-task-sidebar-preview .am-project { display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap:var(--am-gap-control); }
 #am-concept.am-task-sidebar-preview :is(#project-column-first,#sidebar-group-control,.am-task-filter) { display:flex; align-items:center; }
 #am-concept.am-task-sidebar-preview .am-project-heading { margin:0; padding-inline-start:var(--am-row-pad-inline); justify-content:flex-start; gap:var(--am-gap-line); }
 #am-concept.am-task-sidebar-preview .am-project-heading .am-label { min-width:0; overflow:hidden; text-overflow:ellipsis; }
 #am-concept.am-task-sidebar-preview .am-project .am-label { display:block; color:var(--am-text); text-transform:none; letter-spacing:normal; }
 #am-concept.am-task-sidebar-preview :is(.am-project .am-label,.am-queue-header h3,.am-conversation-title) { font-size:var(--am-text-m); font-weight:500; line-height:var(--am-computer-heading-line); }
-#am-concept.am-task-sidebar-preview :is(.am-machine-name,.am-sidebar-task-title) { font-weight:400; }
+#am-concept.am-task-sidebar-preview :is(.am-project .am-label,.am-machine-name,.am-sidebar-task-title) { font-weight:400; }
 #am-concept.am-task-sidebar-preview :is(.am-project,.am-task-filter) .am-select-trigger:not(.am-chrome-icon) { min-height:var(--am-preview-header-control); }
 #am-concept.am-task-sidebar-preview #task-new { width:100%; height:var(--am-preview-header-control); min-height:var(--am-preview-header-control); justify-content:flex-start; padding:var(--am-row-pad-block) var(--am-row-pad-inline); gap:var(--am-gap-control); text-align:start; color:var(--am-text); }
 #am-concept.am-task-sidebar-preview #task-new:is(:hover,:focus-visible):not(:disabled) { background:var(--am-list-row-hover); color:var(--am-text); }

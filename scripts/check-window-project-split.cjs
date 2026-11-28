@@ -959,8 +959,8 @@ if (require.main === module) (async()=>{
       await settingsDialog.locator('.am-agent-card[data-provider=codex]').getByRole('button',{name:'Настройки',exact:true}).click();
       await agentSettings.waitFor();
       assert.equal(await headerHeight('#agent-setup .am-dialog-header'),dialogHeaderHeight);
-      assert(await agentSettings.locator('.am-agent-settings-rows').evaluate(rows=>
-        Array.from(rows.children).every(row=>{
+      assert(await agentSettings.locator('.am-agent-settings-rows > .am-setting-row').evaluateAll(rows=>
+        rows.every(row=>{
           const [label,controls]=row.children;
           const center=element=>{const box=element.getBoundingClientRect();return box.top+box.height/2;};
           return getComputedStyle(row).borderTopWidth==='1px'&&Math.abs(center(label)-center(controls))<1;
@@ -1358,9 +1358,10 @@ if (require.main === module) (async()=>{
         });
       });
       const [projectHeading,taskHeading,archiveHeading]=await headingStyles();
-      assert.deepEqual(taskHeading.slice(0,3),projectHeading.slice(0,3));
+      assert.deepEqual(projectHeading.slice(0,3),['14px','400','21px']);
+      assert.deepEqual(taskHeading.slice(0,3),['14px','500','21px']);
       assert.equal(taskHeading[3],await verticalCenter(plus));
-      assert.deepEqual(archiveHeading.slice(0,3),projectHeading.slice(0,3));
+      assert.deepEqual(archiveHeading.slice(0,3),taskHeading.slice(0,3));
       assert(archiveHeading[3]>taskHeading[3]);
       await archive.getByText('Инструменты, Готовый отчёт',{exact:true}).waitFor();
       assert.deepEqual((await archive.locator('.am-task-title').allTextContents()).sort(),['Игра, Звуки меню','Инструменты, Готовый отчёт','Инструменты, Отчёт другого компьютера']);

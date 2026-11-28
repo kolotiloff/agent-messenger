@@ -53,7 +53,7 @@ Message actions and the timestamp share a visible row one control gap (8 px) bel
 ## Sizes
 
 - Controls: `--am-control` 32 (composer controls and drop-down options), `--am-control-compact` 28 (ordinary one-line fields, buttons, tabs and select triggers in the current layout), `--am-control-chip` 24 (buttons inside an error chip).
-- Text: 12 labels and meta, 13 secondary text, 14 body, 16 section and dialog titles (`h3`), 18 page titles (`h2`). In the task sidebar, computer names and task titles use 14 px at weight 400 and section headings use weight 500. Statistics task titles use weight 500. Sidebar agent rows and task card metadata use 12 px. Chat content and input use 14 px regular system text with a 21 px line height.
+- Text: 12 labels and meta, 13 secondary text, 14 body, 16 section and dialog titles (`h3`), 18 page titles (`h2`). In the task sidebar, the Projects heading, computer names and task titles use 14 px at weight 400. Use grayscale font smoothing where supported. Statistics task titles use weight 500. Sidebar agent rows and task card metadata use 12 px. Chat content and input use 14 px regular system text with a 21 px line height.
 - Use `--am-list-row-hover` for hover and keyboard focus on sidebar computer headers, task rows, Archive rows and interactive Statistics rows.
 - Colors and shadows are tokens too (`--am-shadow-s` for chips and the composer, `--am-shadow-l` for menus and dialogs).
 
