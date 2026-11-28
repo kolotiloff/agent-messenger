@@ -38,8 +38,54 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     await page.getByText('Сообщение из game').waitFor();
     const last = () => page.evaluate(() => window.dictationCommands.at(-1));
     const emit = (id,event,text) => page.evaluate(data => window.messengerDictationEvent(data), {id,event,text});
+    const models = state => page.evaluate(data => window.messengerDictationModels(data), state);
     const answer = page.locator('#answer-text');
     const mic = page.locator('#compose .am-dictation-button');
+    const tiny = {id:'whisper-tiny',name:'Whisper Tiny',size:75000000,state:'available'};
+    const base = {id:'whisper-base',name:'Whisper Base',size:142000000,state:'available'};
+    const state = {enabled:false,ready:false,supported:true,selected:null,models:[tiny,base]};
+    assert.deepEqual(await last(),{action:'models'});
+    assert.equal(await mic.isDisabled(),true);
+    await page.locator('#settings-open').click();
+    await page.locator('#settings-menu-open').click();
+    await page.getByRole('button',{name:'Голос',exact:true}).click();
+    assert.deepEqual(await last(),{action:'models'});
+    const voiceSwitch = page.getByRole('switch',{name:'Диктовка'});
+    await models({...state,supported:false});
+    await page.getByText('Диктовка недоступна в этой версии Kotel').waitFor();
+    assert.equal(await voiceSwitch.isDisabled(),true);
+    await models(state);
+    await voiceSwitch.click();
+    assert.deepEqual(await last(),{action:'set-enabled',enabled:'true'});
+    const enabled = {...state,enabled:true};
+    await models(enabled);
+    assert.equal(await voiceSwitch.getAttribute('aria-checked'),'true');
+    await page.getByRole('button',{name:'Загрузить Whisper Tiny'}).click();
+    assert.deepEqual(await last(),{action:'download',model:tiny.id});
+    await models({...enabled,models:[{...tiny,state:'downloading',progress:.37},base]});
+    const progress = page.getByRole('progressbar',{name:'Загрузка модели Whisper Tiny'});
+    assert.equal(await progress.getAttribute('aria-valuenow'),'37');
+    await page.getByRole('button',{name:'Отменить Whisper Tiny'}).click();
+    assert.deepEqual(await last(),{action:'cancel-download',model:tiny.id});
+    await models({...enabled,models:[{...tiny,state:'error',error:'download-failed'},base]});
+    await page.getByText('Не удалось загрузить модель').waitFor();
+    await page.getByRole('button',{name:'Повторить Whisper Tiny'}).click();
+    assert.deepEqual(await last(),{action:'download',model:tiny.id});
+    const installed = [{...tiny,state:'installed'},{...base,state:'installed'}];
+    await models({...enabled,ready:true,selected:tiny.id,models:installed});
+    await page.getByText('Выбрана',{exact:true}).waitFor();
+    await page.getByRole('button',{name:'Выбрать Whisper Base'}).click();
+    assert.deepEqual(await last(),{action:'select',model:base.id});
+    const ready = {...enabled,ready:true,selected:base.id,models:installed};
+    await models(ready);
+    await voiceSwitch.click();
+    assert.deepEqual(await last(),{action:'set-enabled',enabled:'false'});
+    await models({...ready,enabled:false,ready:false});
+    assert.equal(await mic.isDisabled(),true);
+    await voiceSwitch.click();
+    await models(ready);
+    await page.locator('#settings-close').click();
+    assert.equal(await mic.isEnabled(),true);
     await answer.fill('До после');
     const field = page.locator('#compose .am-compose-field');
     const fieldAtRest = await field.boundingBox();
@@ -62,9 +108,8 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
 
     for (const [event,message] of [
       ['microphone-denied','Разрешите Kotel доступ к микрофону'],
-      ['speech-denied','Разрешите Kotel распознавание речи'],
-      ['dictation-disabled','Служба распознавания Apple недоступна'],
-      ['unavailable','Для языка интерфейса недоступно распознавание'],
+      ['microphone-unavailable','Микрофон недоступен'],
+      ['model-not-ready','Выберите загруженную модель в разделе «Голос»'],
     ]) {
       await mic.click();
       await emit((await last()).id,event);
@@ -80,6 +125,16 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     assert.deepEqual(await last(),{...cancelled,action:'cancel'});
     await emit(cancelled.id,'text','Не вставлять');
     assert.equal(await answer.inputValue(),'До середина после!');
+
+    await mic.click();
+    const interrupted = await last();
+    await emit(interrupted.id,'recording');
+    await models({...ready,enabled:false,ready:false});
+    assert.equal(await mic.isDisabled(),true);
+    assert.deepEqual(await last(),{...interrupted,action:'cancel'});
+    await emit(interrupted.id,'text','Не вставлять');
+    assert.equal(await answer.inputValue(),'До середина после!');
+    await models(ready);
 
     await mic.click();
     const oldChat = await last();
@@ -107,6 +162,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     await page.reload();
     await page.getByText('Сообщение из game').waitFor();
     assert.equal(await page.locator('.am-dictation-button').count(),0);
+    assert.equal(await page.locator('[data-tab=voice]').count(),0);
     console.log(JSON.stringify({engine,result:'passed'}));
   } finally {
     await browser.close();

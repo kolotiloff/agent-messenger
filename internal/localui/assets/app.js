@@ -4906,7 +4906,8 @@
       }else if(!dialog.open)dialog.showModal();
     }
     renderNotices();
-    $('list-toggle').hidden=!view?.project||(!taskSidebarPreview&&tab!=='tasks');if(tab==='server'||tab==='settings')loadServer();if(tab==='project')renderProjectPage();if(tab==='stats')reloadStats();if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),settings:tr('Настройки программы'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сеть'),stats:tr('Статистика')}[tab];startWindowWatch();
+    $('list-toggle').hidden=!view?.project||(!taskSidebarPreview&&tab!=='tasks');if(tab==='server'||tab==='settings')loadServer();if(tab==='project')renderProjectPage();if(tab==='stats')reloadStats();if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),settings:tr('Настройки программы'),agents:tr('Агенты'),voice:tr('Голос'),project:tr('Проект'),server:tr('Сеть'),stats:tr('Статистика')}[tab];startWindowWatch();
+    if(tab==='voice')composerDictation?.refreshModels();
     if(tab==='tasks'&&combinedTasks()){renderTaskList();loadProjectActivity();}
     if(tab==='tasks'&&setupPaneShown())renderThread();
   }
@@ -6563,6 +6564,7 @@
     else{$('settings-dialog').showModal();renderNotices();loadServer();}
   }));
   $('settings-dialog').addEventListener('close',renderNotices);
+  const microphonePaths=['M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z','M5 10v1a7 7 0 0 0 14 0v-1M12 18v3M9 21h6'];
   if(taskSidebarPreview){
     const dialog=$('settings-dialog');
     const previousBody=dialog.querySelector('.am-dialog-body');
@@ -6588,6 +6590,14 @@
       button.prepend(icon);
       sections.append(button);
       views.append(root.querySelector(`[data-screen=${section}]`));
+    }
+    if(window.webkit?.messageHandlers?.composerDictation){
+      const voiceTab=el('button',tr('Голос'),'am-tab');
+      voiceTab.type='button';voiceTab.dataset.tab='voice';voiceTab.setAttribute('aria-pressed','false');
+      voiceTab.prepend(svgIcon(microphonePaths));
+      voiceTab.addEventListener('click',()=>show('voice'));
+      sections.querySelector('[data-tab=agents]').after(voiceTab);
+      views.append($('voice-page'));
     }
     layout.append(sections,views);
     previousBody.replaceWith(layout);
@@ -6763,24 +6773,95 @@
       if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();$('task-draft').requestSubmit();}
     });
   }
+  function setupVoiceSettings(send){
+    const enabled=$('voice-enabled');
+    const note=$('voice-enabled-note');
+    const modelList=$('voice-models');
+    const rows=new Map();
+    const sizes=new Intl.NumberFormat(amLocale,{style:'unit',unit:'megabyte',maximumFractionDigits:0});
+    let snapshot=null;
+    enabled.addEventListener('click',()=>{
+      if(!snapshot?.supported||enabled.getAttribute('aria-disabled')==='true')return;
+      enabled.setAttribute('aria-disabled','true');
+      send('set-enabled',{enabled:String(!snapshot.enabled)});
+    });
+    function createRow(model){
+      const row=el('div',undefined,'am-setting-row');
+      const details=el('div',undefined,'am-access-text am-voice-model-details');
+      const title=el('p',undefined,'am-access-title');
+      const subtitle=el('p',undefined,'am-access-note');
+      const progress=el('div',undefined,'am-update-bar');
+      progress.setAttribute('role','progressbar');
+      progress.append(el('span'));
+      details.append(title,subtitle,progress);
+      const button=el('button');
+      button.type='button';
+      const item={row,title,subtitle,progress,button,action:''};
+      button.addEventListener('click',()=>{
+        if(button.getAttribute('aria-disabled')==='true')return;
+        button.setAttribute('aria-disabled','true');
+        send(item.action,{model:model.id});
+      });
+      row.append(details,button);
+      modelList.append(row);
+      rows.set(model.id,item);
+      return item;
+    }
+    return state=>{
+      snapshot=state;
+      enabled.disabled=!state.supported;
+      enabled.removeAttribute('aria-disabled');
+      enabled.setAttribute('aria-checked',String(state.enabled));
+      note.textContent=!state.supported?tr('Диктовка недоступна в этой версии Kotel'):
+        state.enabled&&!state.ready?tr('Чтобы начать диктовать, загрузите и выберите модель'):
+        tr('Речь распознаётся на этом компьютере');
+      $('voice-models-section').hidden=!state.supported||!state.models.length;
+      for(const model of state.models){
+        const item=rows.get(model.id)||createRow(model);
+        const selected=model.state==='installed'&&state.selected===model.id;
+        const downloading=model.state==='downloading';
+        const fraction=Number.isFinite(model.progress)?Math.min(1,Math.max(0,model.progress)):null;
+        const percent=fraction?.toLocaleString(amLocale,{style:'percent'});
+        const size=sizes.format(model.size/1e6);
+        item.title.textContent=model.name;
+        item.subtitle.textContent=downloading?(percent?`${tr('Загрузка…')} ${percent}`:tr('Загрузка…')):
+          selected?tr('Выбрана'):model.state==='installed'?tr('Установлена'):
+          model.state==='error'?tr('Не удалось загрузить модель'):size;
+        item.subtitle.classList.toggle('am-status-bad',model.state==='error');
+        item.progress.hidden=!downloading;
+        item.progress.setAttribute('aria-label',`${tr('Загрузка модели')} ${model.name}`);
+        if(fraction===null)item.progress.removeAttribute('aria-valuenow');
+        else item.progress.setAttribute('aria-valuenow',String(Math.round(fraction*100)));
+        item.progress.style.setProperty('--am-update-share',fraction??0);
+        item.action=downloading?'cancel-download':model.state==='installed'?'select':'download';
+        const label=downloading?tr('Отменить'):model.state==='installed'?tr('Выбрать'):
+          model.state==='error'?tr('Повторить'):tr('Загрузить');
+        if(item.button.textContent!==label)item.button.textContent=label;
+        item.button.setAttribute('aria-label',`${label} ${model.name}`);
+        item.button.hidden=selected;
+        item.button.removeAttribute('aria-disabled');
+      }
+    };
+  }
   function setupComposerDictation(){
     const bridge=window.webkit?.messageHandlers?.composerDictation;
     if(!bridge)return null;
     const messages={
       recording:tr('Идёт диктовка. Нажмите на микрофон, чтобы вставить текст.'),
       processing:tr('Распознаём речь…'),
-      unavailable:tr('Для языка интерфейса недоступно распознавание речи на этом Mac.'),
       'microphone-denied':tr('Разрешите Kotel доступ к микрофону в настройках macOS.'),
-      'speech-denied':tr('Разрешите Kotel распознавание речи в настройках macOS.'),
-      'dictation-disabled':tr('Служба распознавания Apple недоступна. Проверьте настройки Siri и диктовки в macOS.'),
       'microphone-unavailable':tr('Микрофон недоступен.'),
+      'model-not-ready':tr('Выберите загруженную модель в разделе «Голос»'),
       empty:tr('Не удалось расслышать речь.'),
       failed:tr('Не удалось распознать речь. Попробуйте снова.')
     };
-    const microphone=['M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z','M5 10v1a7 7 0 0 0 14 0v-1M12 18v3M9 21h6'];
     const square=['M7 7h10v10H7z'];
     const targets=[];
+    let ready=false;
     let active=null;
+    function sendModelAction(action,params){bridge.postMessage({action,...params});}
+    function refreshModels(){sendModelAction('models');}
+    const showVoiceSettings=setupVoiceSettings(sendModelAction);
     function context(target){
       const input=target.input;
       if(tab!=='tasks'||input.disabled||input.readOnly||input.closest('[hidden],[inert]'))return '';
@@ -6792,11 +6873,13 @@
     }
     function paint(target,event=''){
       const pressed=active?.target===target;
-      const label=event==='recording'?tr('Завершить диктовку'):pressed?tr('Отменить диктовку'):tr('Диктовать');
+      const label=!ready?tr('Настройте диктовку в разделе «Голос»'):
+        event==='recording'?tr('Завершить диктовку'):pressed?tr('Отменить диктовку'):tr('Диктовать');
+      target.button.disabled=!ready;
       target.button.setAttribute('aria-pressed',String(pressed));
       target.button.setAttribute('aria-label',label);
       target.button.title=label;
-      target.button.replaceChildren(svgIcon(event==='recording'?square:microphone));
+      target.button.replaceChildren(svgIcon(event==='recording'?square:microphonePaths));
       target.status.textContent=messages[event]||'';
       target.status.hidden=!target.status.textContent;
       target.status.classList.toggle('am-status-bad',!!event&&event!=='recording'&&event!=='processing');
@@ -6842,6 +6925,7 @@
       targets.push(target);
       paint(target);
       button.addEventListener('click',()=>{
+        if(!ready)return;
         if(active?.target===target){
           if(active.event==='recording')finishFor(input);else cancel();
           return;
@@ -6854,6 +6938,13 @@
         send('start',active.id);
       });
     }
+    window.messengerDictationModels=state=>{
+      showVoiceSettings(state);
+      if(ready===state.ready)return;
+      ready=state.ready;
+      if(!ready)cancel();
+      for(const target of targets)paint(target);
+    };
     window.messengerDictationEvent=({id,event,text})=>{
       if(active?.id!==id)return;
       const {target,key,value,start,end}=active;
@@ -6886,7 +6977,8 @@
       cancel();
     },true);
     window.addEventListener('pagehide',cancel);
-    return {cancel,sync,finishFor};
+    refreshModels();
+    return {cancel,sync,finishFor,refreshModels};
   }
   composerDictation=setupComposerDictation();
   centreControlText();

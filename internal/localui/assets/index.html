@@ -26,6 +26,24 @@
 </div>
 <p id="connection" hidden>Нет данных</p></div></aside>
 <main class="am-main"><h2 id="screen-title" hidden>Задачи</h2>
+<section id="voice-page" data-screen="voice" class="am-screen" hidden>
+  <div class="am-settings">
+    <h2>Голос</h2>
+    <div class="am-card">
+      <div class="am-setting-row">
+        <div class="am-access-text">
+          <p id="voice-enabled-label" class="am-access-title">Диктовка</p>
+          <p id="voice-enabled-note" class="am-access-note" role="status">Загрузка настроек…</p>
+        </div>
+        <button id="voice-enabled" class="am-switch" type="button" role="switch" aria-checked="false" aria-labelledby="voice-enabled-label" disabled></button>
+      </div>
+    </div>
+    <section id="voice-models-section" class="am-settings-group" aria-labelledby="voice-models-title" hidden>
+      <h3 id="voice-models-title">Модели распознавания</h3>
+      <div id="voice-models" class="am-card"></div>
+    </section>
+  </div>
+</section>
 <nav class="am-tabs" aria-label="Разделы"><button id="settings-general" class="am-tab" type="button" data-tab="settings" aria-pressed="false" hidden>Общие</button><button class="am-tab" data-tab="tasks" aria-pressed="true">Задачи</button><button class="am-tab" data-tab="project" aria-pressed="false">Проект</button><button class="am-tab" data-tab="agents" aria-pressed="false">Агенты</button><button class="am-tab" data-tab="server" aria-pressed="false">Сеть</button><button class="am-tab" data-tab="stats" aria-pressed="false">Статистика</button><button id="list-toggle" class="am-panel-toggle am-icon-btn am-chrome-icon" type="button" aria-label="Скрыть список задач" title="Скрыть список задач" aria-expanded="true" aria-controls="task-panel"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="am-panel-pane" d="M15 4h3a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3h-3z"/><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></svg></button></nav>
 <div id="notice" class="am-notice" role="status" aria-live="polite" hidden></div>
 <div id="restart-wait-status" class="am-restart-wait" role="status" hidden><button id="restart-wait-show" class="am-small" type="button" aria-haspopup="dialog" aria-controls="restart-dialog">Обновление ждёт окончания задач</button></div>

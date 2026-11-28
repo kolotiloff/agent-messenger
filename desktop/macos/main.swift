@@ -190,6 +190,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
                   let json = String(data: data, encoding: .utf8) else { return }
             self?.web?.evaluateJavaScript("window.messengerDictationEvent?.(\(json))")
         }
+        dictation.onModels = { [weak self] models in
+            guard let data = try? JSONSerialization.data(withJSONObject: models),
+                  let json = String(data: data, encoding: .utf8) else { return }
+            self?.web?.evaluateJavaScript("window.messengerDictationModels?.(\(json))")
+        }
         refreshPageScripts(config.userContentController)
         updates.onStatus = { [weak self] _ in self?.showUpdateStatus() }
         updates.onRun = { [weak self] state in self?.showUpdateRun(state) }
@@ -519,6 +524,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             }
         }
     }
+    private func handleDictation(_ body: [String: Any]) {
+        switch body["action"] as? String {
+        case "models": dictation.reportModels()
+        case "download":
+            if let model = body["model"] as? String { dictation.downloadModel(model) }
+        case "select":
+            if let model = body["model"] as? String { dictation.selectModel(model) }
+        case "cancel-download":
+            if let model = body["model"] as? String { dictation.cancelDownload(model) }
+        case "set-enabled":
+            if let enabled = body["enabled"] as? Bool {
+                dictation.setEnabled(enabled)
+            } else if let enabled = body["enabled"] as? String, ["true", "false"].contains(enabled) {
+                dictation.setEnabled(enabled == "true")
+            }
+        case "start", "stop", "cancel":
+            guard let id = body["id"] as? String, UUID(uuidString: id) != nil else { return }
+            switch body["action"] as? String {
+            case "start":
+                guard window.isKeyWindow else { dictation.onEvent?(id, "failed", nil); return }
+                dictation.start(id)
+            case "stop": dictation.stop(id)
+            default: dictation.cancel(id)
+            }
+        default: break
+        }
+    }
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.frameInfo.isMainFrame,
               let page = message.frameInfo.request.url, let origin = origin,
@@ -528,17 +560,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         if message.name == "folder", message.body as? String == "pick" { pickProjectFolder() }
         if message.name == "reportFileWindow", let body = message.body as? [String: Any] { openReportWindow(body) }
         if message.name == "reportFileSave", let body = message.body as? [String: String] { saveReportFile(body) }
-        if message.name == "composerDictation", let body = message.body as? [String: String],
-           let id = body["id"], UUID(uuidString: id) != nil {
-            switch body["action"] {
-            case "start":
-                guard window.isKeyWindow else { dictation.onEvent?(id, "failed", nil); return }
-                let language = body["language"] == "en" ? "en-US" : "ru-RU"
-                dictation.start(id, locale: Locale(identifier: language))
-            case "stop": dictation.stop(id)
-            case "cancel": dictation.cancel(id)
-            default: break
-            }
+        if message.name == "composerDictation", let body = message.body as? [String: Any] {
+            handleDictation(body)
         }
         // Quits only the app; the background client and its reservations stay.
         if message.name == "app", message.body as? String == "quit" { NSApp.terminate(nil) }

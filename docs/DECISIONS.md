@@ -1051,3 +1051,7 @@ Expose system sleep, awake while a local agent runs, and always awake next to Se
 ## D-279 — Composer capabilities
 
 Offer a provider-native action only when the chosen provider and route can execute it. Keep the local Codex usage action backed by the provider’s account limits request. Send binary attachments with a new task only after explicit selection, require a compatible remote executor, and expose an isolated copy through the receipt-scoped worker tool. Follow-up binary uploads require their own transport. See T-388 and T-389.
+
+## D-280 — Downloadable local dictation
+
+Keep model selection in Voice settings and download weights on explicit request. Enable the composer microphone only when a selected local model is ready and dictation is enabled. The native client captures audio and transcribes it on the user's computer. The first implementation uses a bundled, pinned recognizer with separately verified model weights. Review recording interaction against the owner's forthcoming examples before native acceptance. See T-380.
