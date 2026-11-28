@@ -167,6 +167,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
            let icon = NSImage(contentsOf: resource) {
             NSApp.applicationIconImage = icon
         }
+        if localPreview, let installed = UserDefaults.standard.persistentDomain(forName: "io.github.kolotiloff.agent-messenger") {
+            UserDefaults.standard.register(defaults: installed.filter { ["appearance", "chatFont"].contains($0.key) })
+        }
         applyTheme(UserDefaults.standard.string(forKey: "appearance") ?? "system")
         buildMenu()
         let config = WKWebViewConfiguration()

@@ -16,7 +16,7 @@ Scale: 4, 8, 12, 16, 24 (`--am-space-1/2/3/4/6`). Pick the gap by meaning:
 
 | Surface | Vertical inset | Horizontal inset |
 |---|---:|---:|
-| Composer shell | 4 px | 4 px |
+| Composer shell | 8 px | 8 px |
 | Computer headings, active task rows, statistics task links and efficiency model rows | 4 px | 12 px, with a 36 px leading inset on active tasks to align the titles |
 | Compact notices | 8 px | 12 px |
 | Report cards, expanded efficiency details and outgoing message bubbles | 12 px | 12 px |
@@ -24,6 +24,8 @@ Scale: 4, 8, 12, 16, 24 (`--am-space-1/2/3/4/6`). Pick the gap by meaning:
 | Settings cards | 16 px | 16 px |
 
 Expanded efficiency details start 16 px inside the parent row and share its trailing edge. The 12 px inner inset aligns the first metric label with the model name. The detail table adds no extra padding at its outer edges.
+
+Window notices stay in the same upper corner when Settings opens. Leave the final period off short notice titles. Keep punctuation in explanatory text and keep the ellipsis on actions in progress.
 
 The sidebar action and project filter, statistics periods and filter controls use the same 8 px control gap. Compact list rows keep their 4 px gap. The first computer begins 8 px below the Mac project filter. Settings section headings sit above the first card with the section gap. Computer, Archive and Statistics task rows share the list hover fill. Statistics tasks have the same 4 px gap as archived tasks. Dropdown options have 4 px vertical and 12 px horizontal padding. Only the hovered or keyboard-focused option gets a background, and a check marks the selected value. Panes use `--am-pane-inset` (16 px, or 12 px in a narrow window). The Projects divider aligns with the full-width task toolbar. The Archive header starts below the toolbar. The quiet Clear Archive icon sits beside the count and opens a confirmation dialog. The footer aligns the visible icon and version text edges by applying the icon's internal inset to the version text.
 
@@ -42,7 +44,7 @@ Buttons that belong together go in one container: `.am-actions` (a row) or `.am-
 
 In the wide task window, Projects and Archive use the section inset (`--am-gap-section`, 16 px). The Mac caption divider runs across both panels. The archive header starts 8 px below the toolbar, with a 4 px gap before its first row. Align the heading and the empty state with archive row text. Place the clear icon beside the archive count and the horizontal sliders for filtering at the trailing edge. Computer and folder headings share a row height and icon size. Computer, folder and task rows use a 4 px gap at every nesting level. Both filters use the shared select styles. Active and archived task rows use the same 4 px vertical and 12 px horizontal padding. The active tree adds a 24 px leading indent to align the title with its computer. Task rows use the soft surface on hover and the quieter task selection fill for the current conversation. Author labels sit one control gap (8 px) above their messages.
 
-The composer keeps its surface radius (16 px) at every height. The inset icon controls use the next smaller radius (12 px). Ordinary buttons, one-line inputs and selector triggers share the compact control height (28 px) in the current window layout.
+The composer keeps its surface radius (16 px) at every height. Use one control gap (8 px) for padding on all four sides and for spacing between controls. The inset icon controls use the next smaller radius (12 px). Ordinary buttons, one-line inputs and selector triggers share the compact control height (28 px) in the current window layout.
 
 The conversation and composer share a centered column up to `--am-chat-max` (760 px), with a minimum chat gutter of 24 px on each side. The scrollbar stays at the edge of the chat pane and ends at the footer. In an existing conversation the access shield and model sit below the reply field.
 
@@ -51,7 +53,7 @@ Message actions and the timestamp share a visible row one control gap (8 px) bel
 ## Sizes
 
 - Controls: `--am-control` 32 (composer controls and drop-down options), `--am-control-compact` 28 (ordinary one-line fields, buttons, tabs and select triggers in the current layout), `--am-control-chip` 24 (buttons inside an error chip).
-- Text: 12 labels and meta, 13 secondary text, 14 body, 16 section and dialog titles (`h3`), 18 page titles (`h2`). In the task sidebar, computer names and task titles use 14 px at weight 400 and section headings use weight 500. Statistics task titles use weight 500. Sidebar agent rows and task card metadata use 12 px. Chat content and input use 14 px regular system text with a 21 px line height.
+- Text: 12 labels and meta, 13 secondary text, 14 body, 16 section and dialog titles (`h3`), 18 page titles (`h2`). Use regular weight for interface labels, titles and author names, with grayscale font smoothing where supported. The task sidebar uses 14 px for Projects, computer names and task titles. Preserve emphasis authored in chat content. Sidebar agent rows and task card metadata use 12 px. Chat content and input use 14 px regular system text with a 21 px line height.
 - Use `--am-list-row-hover` for hover and keyboard focus on sidebar computer headers, task rows, Archive rows and interactive Statistics rows.
 - Colors and shadows are tokens too (`--am-shadow-s` for chips and the composer, `--am-shadow-l` for menus and dialogs).
 
@@ -73,6 +75,10 @@ Review interface changes in a running local preview of the real window assets. S
 Check the tasks, agents and server tabs, a dialog and a menu in both themes at 1100 and 600 px. Measure button and field heights against the 32, 28 and 24 px control tokens. Capture screenshots when needed for a verification report.
 
 Standard dialogs share the 44 px header with 4 px vertical and 16 px horizontal padding. Dialogs that ask for a decision (`.am-alert`) use 16 px padding and a 12 px gap between the heading, text and actions. They use the standard 16 px section heading, muted text, the leaving or destructive choice on the left and the main action on the right. A destructive button (`.am-danger`) has red text on a soft red fill.
+
+In a dialog or popover with an overflowing list, keep the title, search and filters in a fixed header. Scroll only the content below the header. Keep the scrollbar inside the content area, clear of the top edge and the rounded corners. The model picker and agent limits follow this pattern.
+
+Informational popovers such as agent limits and the context window use `--am-space-3` (12 px) vertically and `--am-space-4` (16 px) horizontally. Compact menu item spacing belongs to action rows.
 
 Text in a control is centred by eye, not by the line box: system fonts leave more room below the text than above it, so buttons, tabs, select fields and inputs get `--am-text-nudge` (4) as their top padding and none at the bottom. Measured: 11 px above the capitals and 11 below in a 32 px button.
 

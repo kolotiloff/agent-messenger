@@ -7,6 +7,7 @@
   if(window.webkit?.messageHandlers?.updates||window.amDesktop)document.body.classList.add('am-native');
   const $ = id => root.querySelector('#' + id);
   const selectViews = new Map();
+  const computerFilterIcon=['M3 5h9m4 0h5M14 2v6M3 12h3m4 0h11M8 9v6M3 19h10m4 0h4M15 16v6'];
   function syncSelects(){selectViews.forEach(view=>view.sync());}
   // Keep the existing select as the source of truth for delivery guards. The
   // visible list is a top-layer popover, so neither pane clips it or grows.
@@ -59,7 +60,7 @@
     // Keep its menus inside the dialog so pointer and keyboard input reach them.
     // The native light-dismiss algorithm must recognize a second click on its invoker.
     trigger.setAttribute('popovertarget',menu.id);
-    trigger.setAttribute('aria-controls',menu.id);select.after(trigger);(select.closest('dialog')||root).append(menu);select.hidden=true;
+    trigger.setAttribute('aria-controls',menu.id);select.after(trigger);(select.closest('dialog,[popover]')||root).append(menu);select.hidden=true;
     select.labels[0]?.addEventListener('click',event=>{event.preventDefault();trigger.focus();});
     let options=[];
     const isOpen=()=>menu.matches(':popover-open');
@@ -1037,10 +1038,6 @@
         options[(index<0?(direction>0?0:options.length-1):(index+direction+options.length)%options.length)].focus();
       });
       menu.addEventListener('focusout',e=>{if(!menu.contains(e.relatedTarget))close();});
-      document.addEventListener('pointermove',event=>{
-        if(event.pointerType==='mouse'&&menu.matches(':popover-open')&&
-          menu.querySelector('.am-context-device')&&!menu.contains(event.target))close();
-      });
       window.addEventListener('blur',close);
       window.addEventListener('resize',close);
     }
@@ -1067,7 +1064,8 @@
     menu.showPopover();
     menu.style.left=Math.max(0,Math.min(x,window.innerWidth-menu.offsetWidth))+'px';
     menu.style.top=Math.max(0,Math.min(y,window.innerHeight-menu.offsetHeight))+'px';
-    (menu.querySelector('[aria-checked=true]')||menu.querySelector('button[role^=menuitem]:not(:disabled)')||menu).focus();
+    const initialItem=device?null:(menu.querySelector('[aria-checked=true]')||menu.querySelector('button[role^=menuitem]:not(:disabled)'));
+    (initialItem||menu).focus({preventScroll:true});
   }
   function contextMenuItem(menu,text,pick){
     const item=el('button',text,'am-select-option');item.type='button';item.setAttribute('role','menuitem');
@@ -1091,7 +1089,10 @@
     const menu=footer.parentNode,mark=local||peer?updateMark(peer):null;
     const original=$('app-update-button');
     let caption='',pick=null;
-    if(updateInProgress(mark)){
+    const checking=updateCheckScope===device,inProgress=updateInProgress(mark);
+    if(checking){
+      caption=tr('Проверка обновлений…');
+    }else if(inProgress){
       const state=updatePresentation(peer,mark);
       caption=state.canCancel?tr('Отменить обновление'):state.caption;
       if(state.canCancel)pick=()=>void cancelUpdate(state);
@@ -1108,22 +1109,23 @@
     const label=el('span',version||'—','am-version');
     label.title=version?tr('Версия ')+version.replace(/^v/,''):tr('Версия неизвестна');
     if(!label.isEqualNode(footer.firstChild))footer.replaceChildren(label);
-    let check=menu.querySelector('[data-device-check]');
-    if(!check){
-      check=contextMenuItem(menu,'',()=>void manualUpdateCheck(device));
-      check.dataset.deviceCheck='';
-      footer.after(check);
+    if(!caption){
+      caption=tr('Проверить обновления');
+      if(!updateCheckScope&&!localUpdateRunning()&&(local||peerFresh(peer||{}))){
+        pick=()=>void manualUpdateCheck(device);
+      }
     }
-    check.textContent=updateCheckScope===device?tr('Проверка обновлений…'):tr('Проверить обновления');
-    check.disabled=!!updateCheckScope||localUpdateRunning()||updateInProgress(mark)||(!local&&!peerFresh(peer||{}));
-    const next=caption?(pick?contextMenuItem(menu,caption,pick):el('div',caption,'am-context-status')):null;
     const previous=menu.querySelector('[data-device-update]');
-    if(next)next.dataset.deviceUpdate=JSON.stringify([device,mark?.id]);
-    if((!next&&!previous)||next?.isEqualNode(previous))return;
+    if(previous?.textContent===caption&&(previous.tagName==='BUTTON')===!!pick){
+      if(pick)previous.onclick=()=>{menu.hidePopover();pick();};
+      return;
+    }
+    const next=pick?contextMenuItem(menu,caption,pick):el('div',caption,'am-context-status');
+    next.dataset.deviceUpdate='';
     const restoreFocus=previous===document.activeElement;
     if(restoreFocus)menu.focus({preventScroll:true});
     previous?.remove();
-    if(next)footer.before(next);
+    footer.before(next);
     if(restoreFocus&&pick)next.focus({preventScroll:true});
   }
   // Asking another computer to update itself (T-078). Its answers arrive
@@ -1322,6 +1324,8 @@
   }
   function renderNotices(){
     const box=$('notices');if(!box)return;
+    // Keep notice controls interactive above the modal backdrop. CSS anchors
+    // them to the application viewport in either layer.
     const layer=$('window-setup-dialog')?.open?$('window-setup-dialog'):$('settings-dialog').open?$('settings-dialog'):noticeHome;
     if(box.parentNode!==layer)layer.prepend(box);
     const visible=notices.filter(n=>noticeMode!=='off'||n.key==='manual-update-check'||n.key.startsWith('window-setup-test-'));
@@ -4408,15 +4412,20 @@
     }
     return parts.slice(0,2).join(' ');
   }
-  const limitsTrigger=$('limits-open'),limitsMenu=$('agent-limits');
+  const limitsTrigger=$('limits-open'),limitsMenu=$('agent-limits'),limitsComputer=$('limits-computer'),limitsBody=$('agent-limits-body');
+  const limitsFilter=enhanceSelect(limitsComputer,false,computerFilterIcon);
   function renderAgentLimits(){
-    const body=$('agent-limits-body'),now=Date.now();
+    const now=Date.now(),scrollTop=limitsBody.scrollTop;
+    const options=computerOptions(),requested=limitsComputer.value;
+    const selected=options.some(([id])=>id===requested)?requested:'';
+    projectOptions(limitsComputer,[['',tr('Все компьютеры')],...options],selected);
     const computers=[
-      {name:view?.computer_name||tr('Этот компьютер'),agents:view?.agents,stale:!online},
-      ...(server?.peers||[]).map(peer=>({...peer,stale:!peerFresh(peer)}))
+      {id:'local',name:computerName('local'),agents:view?.agents,stale:!online},
+      ...(server?.peers||[]).map(peer=>({...peer,name:peer.name||peer.id,stale:!peerFresh(peer)}))
     ];
     const groups=[];
-    for(const {name,agents,stale} of computers){
+    for(const {id,name,agents,stale} of computers){
+      if(selected&&id!==selected)continue;
       const measured=(agents||[]).filter(agent=>agent.limit);
       if(!measured.length)continue;
       const group=el('section',undefined,'am-agent-limits-group');
@@ -4456,8 +4465,14 @@
       }
       groups.push(group);
     }
-    body.replaceChildren(...(groups.length?groups:[el('p',tr('Замеров лимитов пока нет.'),'am-agent-limits-empty am-small am-muted')]));
+    limitsBody.replaceChildren(...(groups.length?groups:[el('p',tr('Замеров лимитов пока нет.'),'am-agent-limits-empty am-small am-muted')]));
+    limitsBody.scrollTop=scrollTop;
   }
+  limitsComputer.addEventListener('change',()=>{
+    limitsBody.scrollTop=0;
+    renderAgentLimits();
+    limitsFilter.focus({preventScroll:true});
+  });
   limitsTrigger.addEventListener('click',()=>{
     if(limitsMenu.matches(':popover-open')){limitsMenu.hidePopover();return;}
     renderAgentLimits();
@@ -4467,7 +4482,7 @@
   });
   limitsMenu.addEventListener('toggle',()=>limitsTrigger.setAttribute('aria-expanded',String(limitsMenu.matches(':popover-open'))));
   limitsMenu.addEventListener('keydown',event=>{
-    if(event.key!=='Escape')return;
+    if(event.key!=='Escape'||event.defaultPrevented)return;
     event.preventDefault();event.stopPropagation();
     limitsMenu.hidePopover();limitsTrigger.focus();
   });
@@ -4500,19 +4515,10 @@
       catch(error){showError(error);}
     });
   }
-  let agentComputer='local';
   function renderAgents(){
-    renderAgentSetupActions();
+    if($('agent-setup').open)renderAgentSetupActions(setupProvider);
     const live=$('agents'),cards=live.cloneNode(false);
-    if(taskSidebarPreview){
-      const options=computerOptions();
-      if(view?.computer_name)options[0][1]+=' ('+tr('Этот компьютер').toLocaleLowerCase(amLocale)+')';
-      if(!options.some(([id])=>id===agentComputer))agentComputer='local';
-      projectOptions($('agents-computer'),options,agentComputer);
-      $('agents-computer-filter').hidden=false;
-      syncSelects();
-    }
-    const computer=taskSidebarPreview?agentComputer:computerFilter;
+    const computer=taskSidebarPreview?'':computerFilter;
     if(computer&&computer!=='local'){delete live.dataset.localGroups;renderPeerAgents(cards,computer);swapChildren(live,cards);return;}
     const groups=new Map([
       ['installed',[tr('Установлено'),[]]],
@@ -4539,16 +4545,8 @@
       sw.disabled=!a&&!cli;
       sw.addEventListener('click',async()=>{sw.disabled=true;try{await setAgentOn(provider,!on);}finally{sw.disabled=false;}});
       head.append(heading);
-      if(cli||a){
-        const running=a?.project_running||0,todayTasks=a?.project_today||0;
-        if(running||todayTasks){
-          const activity=el('button',[running?running+tr(' идёт'):'',todayTasks?todayTasks+tr(' сегодня'):''].filter(Boolean).join(', '),'am-agent-activity am-quiet-button');
-          activity.type='button';activity.title=tr('Задачи');
-          activity.addEventListener('click',()=>{$('agent-filter').value=provider;syncSelects();show('tasks');renderTaskList();});
-          head.append(activity);
-        }
-        head.append(sw);
-      }else if(missing){
+      if(cli||a)head.append(sw);
+      else if(missing){
         const install=el('button',tr('Установить'));
         install.type='button';install.addEventListener('click',()=>{openAgentSetup(provider);installAgent(provider);});
         head.append(install);
@@ -4632,7 +4630,7 @@
   }
   // T-056: one «Любые команды» switch for every agent of this computer.
   function renderAccessBar(){
-    const agents=view?.agents||[],bar=$('access-bar');bar.hidden=!agents.length||(taskSidebarPreview&&agentComputer!=='local');
+    const agents=view?.agents||[],bar=$('access-bar');bar.hidden=!agents.length||(!taskSidebarPreview&&!!computerFilter&&computerFilter!=='local');
     const on=agents.filter(a=>a.full_access).length,all=!!agents.length&&on===agents.length;
     $('access-toggle').setAttribute('aria-checked',all?'true':on?'mixed':'false');
     $('access-title').textContent=on&&!all?tr('Любые команды: разрешены не всем'):tr('Любые команды');
@@ -5113,7 +5111,7 @@
       const s=await api('/api/usage-stats?'+statsQuery(filters),8000);
       if(gen!==statsGen)return;
       if(!matchesStatsProject(s,filters)){stats=null;statsPending=false;renderStats();throw Error(tr('Фильтр не применён: обновите фоновый клиент.'));}
-      s.forComputer=filters.computer;stats=s;statsPending=false;renderStats();
+      s.forComputer=filters.computer;s.forPeriod=filters.period;stats=s;statsPending=false;renderStats();
     }
     catch(error){
       if(gen!==statsGen)return;
@@ -5125,7 +5123,11 @@
   // A new period, filter, computer or project keeps the shown numbers until
   // the new ones arrive, so the blocks do not collapse and grow again.
   let statsPending=false;
-  function reloadStats(){statsPending=!!stats;renderStats();loadStats();}
+  function reloadStats(){
+    const scope=statsProjectScope();
+    statsPending=!!(scope.project||scope.projects);
+    renderStats();loadStats();
+  }
   function setStatsBusy(){
     const screen=root.querySelector('[data-screen="stats"]');
     if(statsPending)screen.setAttribute('aria-busy','true');else screen.removeAttribute('aria-busy');
@@ -5203,11 +5205,18 @@
     select.value=statsModel;
     syncSelects();
     if(!stats){
-      $('stats-total-title').textContent=project?tr('Загрузка статистики…'):tr('Выберите проект, чтобы увидеть статистику.');
+      $('stats-total-title').textContent=statsPending?tr('Загрузка статистики…'):tr('Выберите проект, чтобы увидеть статистику.');
       $('stats-total-note').textContent='';
-      statsDays($('stats-days'),[]);
-      statsBars($('stats-agents'),[],0,true);
-      statsBars($('stats-computers'),[],0);
+      const days=$('stats-days');
+      days.replaceChildren();
+      days.hidden=!statsPending||statsPeriod==='day';
+      if(statsPending){
+        $('stats-agents').replaceChildren();
+        $('stats-computers').replaceChildren();
+      }else{
+        statsBars($('stats-agents'),[],0,true);
+        statsBars($('stats-computers'),[],0);
+      }
       $('stats-top').replaceChildren();
       return;
     }
@@ -5215,9 +5224,10 @@
     const unfiltered=!statsPending&&((stats.agent||'')!==statsAgent||(stats.model||'')!==statsModel);
     if(unfiltered)$('stats-foot').textContent=tr('Фильтр не применён: обновите фоновый клиент.');
     const t=stats.total;
-    $('stats-total-title').textContent=t.tasks?tokensFull(t.tokens)+' '+periodWords[statsPeriod]:tr('Нет задач с расходом ')+periodWords[statsPeriod];
+    const shownPeriod=stats.forPeriod;
+    $('stats-total-title').textContent=t.tasks?tokensFull(t.tokens)+' '+periodWords[shownPeriod]:tr('Нет задач с расходом ')+periodWords[shownPeriod];
     $('stats-total-note').textContent=t.tasks?tasksWord(t.tasks)+tr(', на входе ')+t.input_tokens.toLocaleString(amLocale)+(t.cached_tokens?tr(' (из кэша ')+t.cached_tokens.toLocaleString(amLocale)+')':'')+tr(', на выходе ')+t.output_tokens.toLocaleString(amLocale):tr('Агент сообщает расход, когда задача заканчивается.');
-    statsDays($('stats-days'),statsPeriod==='day'?[]:stats.days);
+    statsDays($('stats-days'),shownPeriod==='day'?[]:stats.days);
     statsBars($('stats-agents'),stats.agents,t.tokens,true);
     statsBars($('stats-computers'),stats.computers,t.tokens);
     const list=statsSort==='recent'?(stats.recent||[]):statsSort==='tokens'?(stats.top||[]):stats.ranked?.[statsSort];
@@ -5728,10 +5738,8 @@
     const agent=(view?.agents||[]).find(a=>a.agent===provider);
     return view?.coordinator_models?.[provider]??(agent?agent.models||[]:defaultModels[provider]||[]);
   }
-  function renderAgentSetupActions(){
-    const dialog=$('agent-setup');
-    if(!dialog.open||!setupProvider)return;
-    const provider=setupProvider,{cli,environment}=agentPaths(provider);
+  function renderAgentSetupActions(provider){
+    const {cli,environment}=agentPaths(provider);
     const agent=view?.agents?.find(a=>a.agent===provider);
     const check=agentChecks.get(provider),auth=check?.authentication?.state;
     const steps=el('div',undefined,'am-steps am-agent-setup-actions');
@@ -5744,15 +5752,17 @@
       newer.title=tr('Kotel проверен с версией ')+check.tested_version+tr('. Новая версия обычно работает, но если задачи этого агента начнут падать, причина может быть в ней.');
       version.append(newer);program=version;
     }
-    const programRow=stepRow(cli?'ok':1,names[provider]+' CLI',program,programNote?null:
+    const programRow=stepRow(cli?'ok':'–',names[provider]+' CLI',program,programNote?null:
       cli?[tr('Удалить'),()=>uninstallAgent(provider)]:[tr('Установить'),()=>installAgent(provider)]);
+    programRow.firstElementChild.setAttribute('aria-hidden','true');
     programRow.querySelector('.am-step-sub')?.setAttribute('role','status');
     steps.append(programRow);
     if(cli){
       const authNote=rowNote.get(provider+':auth');
-      const authRow=stepRow(auth==='authenticated'?'ok':2,tr('Вход в аккаунт'),
+      const authRow=stepRow(auth==='authenticated'?'ok':auth==='not_authenticated'?'–':'?',tr('Вход в аккаунт'),
         authNote||(auth==='authenticated'?tr('Вход выполнен'):auth==='not_authenticated'?tr('Вход не выполнен'):tr('Ещё не проверен')),
         authNote||checking.has(provider)?null:auth==='authenticated'?[tr('Выйти'),()=>logoutFromCard(provider,cli,environment)]:[tr('Войти'),()=>loginFromCard(provider,cli,environment)]);
+      authRow.firstElementChild.setAttribute('aria-hidden','true');
       authRow.querySelector('.am-step-sub')?.setAttribute('role','status');
       steps.append(authRow);
       if(view?.folder&&agent?.trust?.state&&agent.trust.state!=='trusted'){
@@ -5762,7 +5772,7 @@
     const previous=$('agent-setup-actions');
     if(previous?.outerHTML===steps.outerHTML)return;
     if(previous)previous.replaceWith(steps);
-    else $('agent-models-open').closest('.am-agent-settings-rows').after(steps);
+    else $('agent-models-open').closest('.am-agent-settings-rows').append(steps);
   }
   function openAgentSetup(provider){
     setupProvider=provider;const a=(view?.agents||[]).find(x=>x.agent===provider),found=discovery.find(d=>d.provider===provider);
@@ -5772,8 +5782,9 @@
     $('agent-models-open').disabled=!view;
     setStatus('agent-save-status','');
     $('agent-setup-actions')?.remove();
+    renderAgentSetupActions(provider);
     if(!$('agent-setup').open)$('agent-setup').showModal();
-    renderAgentSetupActions();renderToasts();
+    renderToasts();
   }
   // One check at a time: the client refuses a second one while one runs.
   let checkQueue=Promise.resolve();
@@ -6086,10 +6097,14 @@
   async function manualUpdateCheck(scope){
     if(updateCheckScope||localUpdateRunning()||(scope==='network'&&networkUpdatesSending))return;
     const network=updateNetwork();
-    const target=scope==='local'||scope==='network'?null:server?.peers?.find(peer=>peer.id===scope);
+    const review=scope==='network'?$('network-update-dialog'):null;
+    const target=scope==='local'||review?null:server?.peers?.find(peer=>peer.id===scope);
     updateCheckScope=scope;
     renderManualUpdateControls();
-    updateNotice('updating',tr('Проверка обновлений…'),target?.name||'');
+    if(review){
+      renderNetworkUpdateReview('',network);
+      review.showModal();
+    }else updateNotice('updating',tr('Проверка обновлений…'),target?.name||'');
     try{
       const result=await postAPI('/api/update-check',{},24500);
       const published=result.version;
@@ -6099,13 +6114,12 @@
         renderManualUpdateControls(result.installed_version);
         checkedLocalUpdate=versionOlder(result.installed_version,published)?published:'';
         if(checkedLocalUpdate)updateNotice('info',tr('Доступна версия ')+versionName(published),'',startCheckedLocalUpdate);
-        else updateNotice('info',tr('Установлена последняя версия.'));
+        else updateNotice('info',tr('Установлена последняя версия'));
       }else{
         await loadServer();
         if(!network||updateNetwork()!==network)throw Error(tr('Сеть недоступна.'));
-        if(scope==='network'){
-          updateNotice('info','','');
-          showNetworkUpdateReview(published,network);
+        if(review){
+          if(review.open)renderNetworkUpdateReview(published,network);
         }else{
           const peer=server?.peers?.find(item=>item.id===scope);
           if(!peer||!peerFresh(peer))throw Error(tr('Компьютер не в сети.'));
@@ -6121,7 +6135,10 @@
       if(!knownUpdate||versionOlder(knownUpdate,published))knownUpdate=published;
       renderMachines();
     }catch(error){
-      updateNotice('bad',tr('Не удалось проверить обновления.'),error.message===tr('Не удалось проверить обновления.')?'':tr(error.message));
+      const title=tr('Не удалось проверить обновления');
+      const detail=error.message===tr('Не удалось проверить обновления.')?'':tr(error.message);
+      if(review)$('network-update-note').textContent=[title,detail].filter(Boolean).join('. ');
+      else updateNotice('bad',title,detail);
     }finally{
       updateCheckScope='';
       renderManualUpdateControls();
@@ -6137,11 +6154,12 @@
     if(!peerFresh(peer)||peer.reconnecting)return {installed,status:tr('Не в сети')};
     if(updateInProgress(updateMark(peer)))return {installed,status:tr('Обновление уже идёт')};
     if(!installed||installed==='dev')return {installed,status:tr('Версия неизвестна')};
+    if(!published)return {installed,status:'—'};
     if(versionOlder(installed,published))return {installed,status:tr('Опубликована ')+versionName(published),available:true};
     return {installed,status:tr('Установлена последняя версия')};
   }
-  function showNetworkUpdateReview(published,network){
-    const dialog=$('network-update-dialog'),rows=$('network-update-rows'),submit=$('network-update-send');
+  function renderNetworkUpdateReview(published,network){
+    const rows=$('network-update-rows'),submit=$('network-update-send');
     const peers=[...(server?.peers||[])].sort((a,b)=>Number(!!a.host)-Number(!!b.host));
     const targets=[];
     rows.replaceChildren();
@@ -6149,21 +6167,32 @@
       const {installed,status,available}=networkUpdateStatus(peer,published);
       const feedback=el('span',status,'am-muted');
       const row=el('li',undefined,'am-network-update-row');
-      row.append(el('span',peer.name||tr('Компьютер')),el('span',versionName(installed)||'—','am-muted'),feedback);
+      const outcome=el('div',undefined,'am-network-update-outcome');
+      outcome.append(feedback);
+      if(available){
+        const button=el('button',tr('Обновить'));button.type='button';
+        const target={peer,feedback,button};
+        button.onclick=()=>void send([target]);
+        outcome.append(button);
+        targets.push(target);
+      }
+      row.append(el('span',peer.name||tr('Компьютер')),el('span',versionName(installed)||'—','am-muted'),outcome);
       rows.append(row);
-      if(available)targets.push({peer,feedback});
     }
-    $('network-update-note').textContent=!rows.children.length?tr('В сети нет других компьютеров.'):targets.length?
+    $('network-update-note').textContent=!published?tr('Проверка обновлений…'):!rows.children.length?tr('В сети нет других компьютеров.'):targets.length?
       tr('Компьютеры проверят обновление перед установкой. Если есть выполняющиеся задачи, установка подождёт.')+(targets.some(({peer})=>peer.host)?' '+tr('Запрос серверу уйдёт последним. При перезапуске сервера связь временно пропадёт.'):''):'';
     submit.hidden=!targets.length;
     submit.disabled=false;
-    submit.onclick=async()=>{
+    submit.onclick=()=>void send(targets.filter(target=>!target.button.hidden));
+    async function send(selected){
       if(networkUpdatesSending)return;
       networkUpdatesSending=true;
       submit.disabled=true;
+      for(const {button} of targets)button.disabled=true;
       renderManualUpdateControls();
       try{
-        for(const {peer,feedback} of targets){
+        for(const {peer,feedback,button} of selected){
+          button.hidden=true;
           const current=server?.peers?.find(item=>item.id===peer.id);
           if(!current||updateNetwork()!==network||!networkUpdateStatus(current,published).available){
             feedback.textContent=tr('Пропущено: состояние изменилось');
@@ -6175,12 +6204,12 @@
         }
       }finally{
         networkUpdatesSending=false;
-        submit.hidden=true;
+        for(const {button} of targets)button.disabled=false;
+        submit.hidden=targets.every(({button})=>button.hidden);
+        submit.disabled=false;
         renderManualUpdateControls();
       }
-    };
-    dialog.showModal();
-    renderNotices();
+    }
   }
   $('settings-update-check').onclick=()=>void manualUpdateCheck('local');
   $('settings-update-install').onclick=startCheckedLocalUpdate;
@@ -6493,17 +6522,18 @@
   const settingsTrigger=$('settings-open'),settingsMenu=$('settings-menu');
   const settingsMenuItems=()=>[...settingsMenu.querySelectorAll('button:not(:disabled)')];
   const positionSettingsMenu=()=>positionPopover(settingsMenu,settingsTrigger,null,false,true);
-  function toggleSettingsMenu(){
+  function toggleSettingsMenu(keyboard){
     if(settingsMenu.matches(':popover-open')){settingsMenu.hidePopover();return;}
     settingsMenu.showPopover();
     positionSettingsMenu();
-    settingsMenuItems()[0].focus();
+    (keyboard?settingsMenuItems()[0]:settingsMenu).focus({preventScroll:true});
   }
-  settingsTrigger.addEventListener('click',toggleSettingsMenu);
+  settingsMenu.tabIndex=-1;
+  settingsTrigger.addEventListener('click',event=>toggleSettingsMenu(event.detail===0));
   settingsTrigger.addEventListener('keydown',event=>{
     if(event.key!=='ArrowDown')return;
     event.preventDefault();
-    if(!settingsMenu.matches(':popover-open'))toggleSettingsMenu();
+    if(!settingsMenu.matches(':popover-open'))toggleSettingsMenu(true);
   });
   settingsMenu.addEventListener('toggle',()=>settingsTrigger.setAttribute('aria-expanded',String(settingsMenu.matches(':popover-open'))));
   settingsMenu.addEventListener('keydown',event=>{
@@ -6694,7 +6724,7 @@
   loadServer();
   let initialTheme=window.messengerInitialTheme;
   if(!initialTheme)try{initialTheme=localStorage.getItem('messenger-theme');}catch(_){}
-  const sidebarFilterIcon=taskSidebarPreview?['M3 5h9m4 0h5M14 2v6M3 12h3m4 0h11M8 9v6M3 19h10m4 0h4M15 16v6']:null;
+  const sidebarFilterIcon=taskSidebarPreview?computerFilterIcon:null;
   if(taskSidebarPreview){
     $('sidebar-group-control').hidden=false;
     enhanceSelect(groupSelect,false,['M12 3 2 8l10 5 10-5-10-5ZM2 12l10 5 10-5M2 16l10 5 10-5']);
@@ -6702,7 +6732,7 @@
   }
   $('lang-select').value=amLang;enhanceSelect($('lang-select'));enhanceSelect($('theme-select'));enhanceSelect($('project-select'),false,sidebarFilterIcon);enhanceSelect($('project-select-second'));enhanceSelect($('agent-filter'),false,sidebarFilterIcon);enhanceSelect($('stats-project'));enhanceSelect($('stats-agent'));enhanceSelect($('stats-model'));enhanceSelect($('host-scope'));enhanceSelect($('host-address'));
   if(taskSidebarPreview){
-    enhanceSelect($('stats-computer'));enhanceSelect($('agents-computer'));
+    enhanceSelect($('stats-computer'));
     const draftContextIcons={
       'task-draft-project':folderIconPaths,
       'task-draft-computer':serverIconPaths
@@ -6731,7 +6761,6 @@
     $('task-draft-text').addEventListener('keydown',event=>{
       if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();$('task-draft').requestSubmit();}
     });
-    $('agents-computer').addEventListener('change',()=>{agentComputer=$('agents-computer').value;renderAgents();});
   }
   function setupComposerDictation(){
     const bridge=window.webkit?.messageHandlers?.composerDictation;
@@ -6887,7 +6916,7 @@
       if(target.style.getPropertyValue('--am-gutter')!==value)target.style.setProperty('--am-gutter',value);
     }
   });});
-  root.querySelectorAll('.am-screen:not(.am-settings-views > .am-screen),.am-thread,.am-queue-list,.am-dialog-body,.am-machines,.am-stats-reports').forEach(element=>gutterObserver.observe(element));
+  root.querySelectorAll('.am-screen:not(.am-settings-views > .am-screen),.am-thread,.am-queue-list,.am-dialog-body:not(#agent-setup > .am-dialog-body),.am-machines,.am-stats-reports').forEach(element=>gutterObserver.observe(element));
   const chatBody=root.querySelector('.am-chat-body'),chatFooter=root.querySelector('.am-chat-footer');
   $('thread').addEventListener('scroll',toBottomState,{passive:true});
   $('to-bottom').addEventListener('click',()=>{const t=$('thread');t.scrollTo({top:t.scrollHeight,behavior:'smooth'});});
@@ -6986,6 +7015,8 @@
   window.addEventListener('resize',()=>{if(sleepMenu.matches(':popover-open'))positionPopover(sleepMenu,sleepButton,234,false,true);});
   sleepSelect.addEventListener('change',()=>saveSleep(sleepSelect.value));
 
+  // T-384: keep the wizard out of the window until its flow is ready for review.
+  const windowSetupEnabled=false;
   const setupDialog=el('dialog',undefined,'am-session-dialog am-window-setup');
   setupDialog.id='window-setup-dialog';
   const setupTitle=el('h3');setupTitle.id='window-setup-title';setupTitle.tabIndex=-1;
@@ -6994,7 +7025,7 @@
   const setupClose=iconButton(tr('Закрыть'),closeIconPaths,false,()=>finishWindowSetup(false));
   setupHeader.append(setupTitle,setupClose);
   const setupBody=el('div',undefined,'am-dialog-body');
-  setupDialog.append(setupHeader,setupBody);root.append(setupDialog);
+  setupDialog.append(setupHeader,setupBody);
   function setupButton(label,action,primary=false){
     const button=el('button',label,primary?'am-primary':undefined);button.type='button';
     button.addEventListener('click',action);return button;
@@ -7003,7 +7034,10 @@
   const openSetup=setupButton(tr('Открыть'),()=>showWindowSetup(setupPage));
   openSetup.classList.add('am-settings-action');
   setupSetting.append(el('span',tr('Первоначальная настройка')),openSetup);
-  preferencesPanel.append(setupSetting);
+  if(windowSetupEnabled){
+    root.append(setupDialog);
+    preferencesPanel.append(setupSetting);
+  }
   let setupPage=0,setupBusy=false,setupChoice='',defaultTaskModel='';
   function setupSelect(label,values,selected,pick){
     const wrapper=el('label',label,'am-theme-setting');
@@ -7129,7 +7163,7 @@
     try{resume=sessionStorage.getItem('kotel-setup-resume');sessionStorage.removeItem('kotel-setup-resume');}catch(_){}
     api('/api/onboarding').then(state=>{
       if(typeof state?.model==='string'){defaultTaskModel=state.model;if(draftOpen)renderTaskDraft();}
-      if((state?.pending||resume==='0')&&!setupDialog.open)showWindowSetup(0);
+      if(windowSetupEnabled&&(state?.pending||resume==='0')&&!setupDialog.open)showWindowSetup(0);
     }).catch(()=>{});
   }
   loadSleep();setInterval(loadSleep,5000);

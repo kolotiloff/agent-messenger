@@ -86,6 +86,7 @@ if (require.main === module) (async()=>{
       if(desktop==='windows'){window.amFrameless=true;window.amWindow=()=>{};}
       window.nativeAppMessages=[];
       window.webkit={messageHandlers:{app:{postMessage:message=>window.nativeAppMessages.push(message)}}};
+      if(window.amDesktop==='mac')window.webkit.messageHandlers.composerDictation={postMessage:()=>{}};
       if(desktop==='mac-titlebar'){
         window.amMacTitlebar=true;
         window.webkit.messageHandlers.titlebar={postMessage:geometry=>{window.titlebarGeometry=geometry;}};
@@ -139,9 +140,13 @@ if (require.main === module) (async()=>{
         ]}},
         agents[1]
       ]}};
-      if(url.pathname==='/api/server')return {json:{...fixture,peers:[{...fixture.peers[0],age:100,agents:[
-        {agent:'cursor',limit:{state:'ok',window:'7d',used_percent:0}}
-      ]}]}};
+      if(url.pathname==='/api/server')return {json:{...fixture,peers:[
+        {...fixture.peers[0],age:100,agents:[{agent:'cursor',limit:{state:'ok',window:'7d',used_percent:0}}]},
+        {id:'empty',name:'Без замеров',age:0,agents:[]},
+        ...Array.from({length:6},(_,index)=>({id:'limits-'+index,name:'Компьютер '+index,age:0,agents:[
+          {agent:'cursor',limit:{state:'ok',window:'7d'}}
+        ]}))
+      ]}};
     },true);
     const limits=limitsPage.getByRole('dialog',{name:'Лимиты агентов'});
     const limitsButton=limitsPage.getByRole('button',{name:'Лимиты агентов'});
@@ -154,6 +159,34 @@ if (require.main === module) (async()=>{
     await limits.getByText('Срок сброса прошёл',{exact:true}).waitFor();
     assert.equal(await limits.getByText('Claude Code',{exact:true}).count(),0);
     assert.ok((await limits.boundingBox()).y<(await limitsButton.boundingBox()).y);
+    const limitsHeader=limits.locator('.am-agent-limits-header');
+    const limitsContent=limits.locator('#agent-limits-body');
+    const insets=node=>{const style=getComputedStyle(node);return [style.paddingBlock,style.paddingInline];};
+    const limitsInsets=await limitsHeader.evaluate(insets);
+    const headerBefore=await limitsHeader.boundingBox();
+    assert.ok((await limitsContent.boundingBox()).y>=headerBefore.y+headerBefore.height-1);
+    assert.ok(await limitsContent.evaluate(node=>node.scrollHeight>node.clientHeight));
+    await limitsContent.evaluate(node=>{node.scrollTop=node.scrollHeight;});
+    assert.ok(await limitsContent.evaluate(node=>node.scrollTop>0));
+    assert.equal(await limits.evaluate(node=>node.scrollTop),0);
+    assert.equal((await limitsHeader.boundingBox()).y,headerBefore.y);
+    const limitsFilter=limits.locator('button[aria-controls="limits-computer-menu"]');
+    const limitChoices=limits.getByRole('listbox',{name:'Фильтр по компьютеру'});
+    await limitsFilter.press('ArrowDown');
+    await limitChoices.waitFor();
+    await limitsPage.keyboard.press('Escape');
+    await limitChoices.waitFor({state:'hidden'});
+    assert.equal(await limitsFilter.evaluate(button=>button===document.activeElement),true);
+    assert.equal(await limits.isVisible(),true);
+    await select(limitsPage,'limits-computer','ПК-1');
+    assert.equal(await limits.locator('.am-agent-limits-group').count(),1);
+    assert.equal(await limitsContent.evaluate(node=>node.scrollTop),0);
+    await limits.getByText('ПК-1 · Устаревшие данные',{exact:true}).waitFor();
+    assert.match(await limitsFilter.getAttribute('aria-label'),/ПК-1/);
+    await select(limitsPage,'limits-computer','Без замеров');
+    await limits.getByText('Замеров лимитов пока нет.').waitFor();
+    await select(limitsPage,'limits-computer','Все компьютеры');
+    assert.equal(await limits.locator('.am-agent-limits-group').count(),8);
     await limitsPage.keyboard.press('Escape');
     await limits.waitFor({state:'hidden'});
     assert.equal(await limitsButton.evaluate(button=>button===document.activeElement),true);
@@ -311,6 +344,7 @@ if (require.main === module) (async()=>{
     await tokenCount.click();
     const tokenMenu=preview.locator('#answer-token-menu');
     await tokenMenu.waitFor();
+    assert.deepEqual(await tokenMenu.evaluate(insets),limitsInsets);
     assert.deepEqual(await tokenMenu.locator('p:visible').allTextContents(),[
       'Контекстное окно 89\u00a0% заполнено',
       '212 тыс. / 238 тыс. токенов'
@@ -514,7 +548,8 @@ if (require.main === module) (async()=>{
       await draftPage.locator('#task-stop').waitFor();
       const composerStyle=field=>field.evaluate(node=>{
         const style=getComputedStyle(node),input=getComputedStyle(node.querySelector('textarea'));
-        const icons=[node.firstElementChild,node.lastElementChild].map(button=>{
+        const buttons=node.querySelectorAll(':scope > button');
+        const icons=[buttons[0],buttons[buttons.length-1]].map(button=>{
           const style=getComputedStyle(button);
           return [style.width,style.height,style.borderRadius,button.querySelector('svg').innerHTML];
         });
@@ -558,12 +593,14 @@ if (require.main === module) (async()=>{
       });
       assert.equal(await accessBelow(replyAccess),true);
       assert.deepEqual(await draftPage.locator('#compose .am-compose-field').evaluate(field=>{
-        const stop=field.querySelector('#task-stop').getBoundingClientRect();
-        const send=field.querySelector('#answer-send').getBoundingClientRect();
+        const stopButton=field.querySelector('#task-stop'),sendButton=field.querySelector('#answer-send');
+        const stop=stopButton.getBoundingClientRect(),send=sendButton.getBoundingClientRect();
         const icons=Array.from(field.querySelectorAll('#task-stop > svg,#answer-send > svg'),svg=>svg.getBoundingClientRect().width);
         const box=field.getBoundingClientRect();
-        return [stop.width,stop.height,send.width,send.height,send.left-stop.right,box.right-send.right,...icons];
-      }),[32,32,32,32,4,5,16,16]);
+        return [stop.width,stop.height,send.width,send.height,send.left-stop.right,
+          box.right-send.right,box.bottom-send.bottom,send.top-box.top,
+          ...icons,getComputedStyle(sendButton).borderRadius,getComputedStyle(stopButton).borderRadius];
+      }),[32,32,32,32,8,9,9,9,16,16,'12px','12px']);
       const disclosure=local.locator('.am-sidebar-disclosure');
       assert.equal(await disclosure.locator('svg').count(),0);
       assert.deepEqual(await disclosure.boundingBox(),await local.locator('.am-machine-name').boundingBox());
@@ -667,7 +704,7 @@ if (require.main === module) (async()=>{
       assert.equal(await remote.evaluate(node=>node.getBoundingClientRect().height),29);
       assert.match(await draftPage.locator('#thread .am-meta-author').last().textContent(),/, исполнитель$/);
       const authorWeights=await draftPage.locator('#thread .am-meta-author .am-inline-role').evaluateAll(roles=>roles.map(role=>[getComputedStyle(role).fontWeight,getComputedStyle(role.parentElement).fontWeight]));
-      assert(authorWeights.length&&authorWeights.every(([role,author])=>role==='400'&&Number(author)>400),JSON.stringify(authorWeights));
+      assert(authorWeights.length&&authorWeights.every(([role,author])=>role==='400'&&author==='400'),JSON.stringify(authorWeights));
       assert.equal(await draftPage.locator('#thread .am-role').count(),0);
       for(const panel of [local.locator('.am-machine-label'),...await draftPage.locator('#thread .am-meta-author').all()]){
         const [base,role]=await panel.evaluate(node=>{
@@ -733,13 +770,8 @@ if (require.main === module) (async()=>{
         const css=getComputedStyle(item);
         return [css.height,css.borderRadius,css.backgroundColor];
       });
-      const openSetup=general.getByRole('button',{name:'Открыть',exact:true});
-      assert(await openSetup.evaluate(button=>{
-        const label=document.createRange();label.selectNodeContents(button);
-        const style=getComputedStyle(button);
-        return Math.abs(button.getBoundingClientRect().width-label.getBoundingClientRect().width-
-          parseFloat(style.paddingInlineStart)-parseFloat(style.paddingInlineEnd))<1;
-      }),'first-run setup button should fit its label and insets');
+      assert.equal(await general.getByText('Первоначальная настройка',{exact:true}).count(),0,
+        'General must not offer the paused setup wizard');
       const settingsControl=await controlStyle(general.locator('.am-select-trigger').first());
       const settingsControlWidth=(await general.locator('.am-select-trigger').first().boundingBox()).width;
       const topLeft=async locator=>{
@@ -807,10 +839,10 @@ if (require.main === module) (async()=>{
         }),['16px','16px'],section);
         const height=selector=>screen.locator(selector).evaluate(node=>node.getBoundingClientRect().height);
         const firstHeading={server:'#computer-title',project:'#project-page-title',agents:'#agents-settings-title'}[section];
-        const firstControl={server:'#computer-name',project:'#project-page-name',agents:'#agents-computer + .am-select-trigger'}[section];
+        const firstControl={server:'#computer-name',project:'#project-page-name'}[section];
         assert.deepEqual(await topLeft(screen.locator(firstHeading)),generalTitle,section);
         assert(await screen.locator(firstHeading).evaluate(node=>!node.closest('.am-card')),section);
-        assert.deepEqual(await topLeft(screen.locator(firstControl)),generalField,section);
+        if(firstControl)assert.deepEqual(await topLeft(screen.locator(firstControl)),generalField,section);
         if(section==='server'){
           assert.equal(await screen.locator('#network-roster').count(),0);
           await screen.getByRole('tab',{name:'Свой сервер'}).click();
@@ -913,7 +945,7 @@ if (require.main === module) (async()=>{
       await settingsOpen.click();
       await draftPage.locator('#settings-menu-open').click();
       await settingsNav.locator('[data-tab=agents]').click();
-      assert.equal(await draftPage.locator('#agents-computer').inputValue(),'local');
+      assert.equal(await settingsDialog.getByRole('button',{name:'Компьютер',exact:true}).count(),0);
       assert.deepEqual(await settingsDialog.locator('[data-agent-group=installed] .am-agent-card').evaluateAll(cards=>
         cards.map(card=>card.dataset.provider)),['claude','codex']);
       await settingsDialog.locator('[data-agent-group=available] .am-agent-card[data-provider=cursor]')
@@ -927,8 +959,8 @@ if (require.main === module) (async()=>{
       await settingsDialog.locator('.am-agent-card[data-provider=codex]').getByRole('button',{name:'Настройки',exact:true}).click();
       await agentSettings.waitFor();
       assert.equal(await headerHeight('#agent-setup .am-dialog-header'),dialogHeaderHeight);
-      assert(await agentSettings.locator('.am-agent-settings-rows').evaluate(rows=>
-        Array.from(rows.children).every(row=>{
+      assert(await agentSettings.locator('.am-agent-settings-rows > .am-setting-row').evaluateAll(rows=>
+        rows.every(row=>{
           const [label,controls]=row.children;
           const center=element=>{const box=element.getBoundingClientRect();return box.top+box.height/2;};
           return getComputedStyle(row).borderTopWidth==='1px'&&Math.abs(center(label)-center(controls))<1;
@@ -957,8 +989,6 @@ if (require.main === module) (async()=>{
       assert.deepEqual(await controlStyle(modelPicker.locator('#agent-model-save')),settingsControl);
       await modelPicker.getByRole('button',{name:'Отмена',exact:true}).click();
       await agentSettings.getByRole('button',{name:'Закрыть',exact:true}).click();
-      await select(draftPage,'agents-computer','ПК-1');
-      assert.equal(await draftPage.locator('#agents-computer').inputValue(),'pc1');
       const selectedChat=await draftPage.locator('#thread').textContent();
       await settingsDialog.locator('#settings-close').click();
       await settingsDialog.waitFor({state:'hidden'});
@@ -1025,7 +1055,7 @@ if (require.main === module) (async()=>{
       assert(await addPath.evaluate(async button=>{
         await Promise.all(button.getAnimations().map(animation=>animation.finished));
         const style=getComputedStyle(button),icon=getComputedStyle(button.querySelector('svg'));
-        return style.borderRadius==='8px'&&style.width==='32px'&&style.height==='32px'&&
+        return style.borderRadius==='12px'&&style.width==='32px'&&style.height==='32px'&&
           icon.width==='16px'&&icon.height==='16px'&&style.backgroundColor!=='rgba(0, 0, 0, 0)';
       }));
       await select(draftPage,'task-draft-computer','Мак');
@@ -1208,6 +1238,13 @@ if (require.main === module) (async()=>{
         return [thread.getBoundingClientRect().bottom,field.top,footer.top,getComputedStyle(thread).bottom];
       });
       assert(Math.abs(viewportEnd[0]-viewportEnd[1])<1,JSON.stringify(viewportEnd));
+      const lastMessageGap=await conversation.evaluate(thread=>{
+        thread.scrollTop=thread.scrollHeight;
+        const actions=[...thread.querySelectorAll('.am-message-actions')].at(-1);
+        return document.querySelector('#compose .am-compose-field').getBoundingClientRect().top
+          -actions.getBoundingClientRect().bottom;
+      });
+      assert(lastMessageGap>=15,lastMessageGap+'px between chat actions and composer');
       if(process.env.SCREENSHOT_DIR){
         const field=await draftPage.locator('#compose .am-compose-field').boundingBox();
         const foot=await draftPage.locator('#answer-context').boundingBox();
@@ -1328,9 +1365,10 @@ if (require.main === module) (async()=>{
         });
       });
       const [projectHeading,taskHeading,archiveHeading]=await headingStyles();
-      assert.deepEqual(taskHeading.slice(0,3),projectHeading.slice(0,3));
+      assert.deepEqual(projectHeading.slice(0,3),['14px','400','21px']);
+      assert.deepEqual(taskHeading.slice(0,3),['14px','400','21px']);
       assert.equal(taskHeading[3],await verticalCenter(plus));
-      assert.deepEqual(archiveHeading.slice(0,3),projectHeading.slice(0,3));
+      assert.deepEqual(archiveHeading.slice(0,3),taskHeading.slice(0,3));
       assert(archiveHeading[3]>taskHeading[3]);
       await archive.getByText('Инструменты, Готовый отчёт',{exact:true}).waitFor();
       assert.deepEqual((await archive.locator('.am-task-title').allTextContents()).sort(),['Игра, Звуки меню','Инструменты, Готовый отчёт','Инструменты, Отчёт другого компьютера']);
@@ -1749,6 +1787,9 @@ if (require.main === module) (async()=>{
       const computerMenu=browserPreview.locator('#device-menu');
       await computerMenu.getByText('v1.0.5',{exact:true}).waitFor();
       const peerUpdate=computerMenu.getByRole('menuitem',{name:'Обновить версию'});
+      assert.deepEqual(await computerMenu.getByRole('menuitem').allTextContents(),['Обновить версию']);
+      await browserPreview.mouse.move(0,0);
+      await computerMenu.waitFor();
       await peerUpdate.hover();
       const spacing=await peerUpdate.evaluate(async row=>{
         await Promise.all(row.getAnimations().map(animation=>animation.finished));
@@ -1869,6 +1910,16 @@ if (require.main === module) (async()=>{
       assert.deepEqual(addedProject,{name:'Черновики',folder:'/Проекты/Черновики'});
       assert.equal(await compactPreview.locator('#task-draft-text').inputValue(),'Черновик');
       assert.equal(await compactPreview.locator('#task-draft-send').isEnabled(),true);
+      assert.deepEqual(await compactPreview.locator('#task-draft .am-compose-field').evaluate(field=>{
+        const box=field.getBoundingClientRect();
+        const add=field.querySelector('#task-draft-add').getBoundingClientRect();
+        const send=field.querySelector('#task-draft-send').getBoundingClientRect();
+        const microphone=field.querySelector('.am-dictation-button');
+        const mic=microphone.getBoundingClientRect();
+        const input=field.querySelector('textarea').getBoundingClientRect();
+        return [add.left-box.left,box.right-send.right,box.bottom-send.bottom,add.top-box.top,input.width>32,
+          mic.width,send.left-mic.right,getComputedStyle(microphone).borderRadius];
+      }),[9,9,9,9,true,32,8,'12px']);
     }finally{await compactPreview.close();}
 
     const single=await open(projects.slice(0,1),{width:1100,height:706},'light');

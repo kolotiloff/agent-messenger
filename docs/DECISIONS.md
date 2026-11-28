@@ -612,7 +612,7 @@ On Windows, the update relaunch and the installer's handoff to the installed app
 
 ## D-187 — Keep shown data in place while new data loads (T-266)
 
-2026-11-23, after the window became faster the owner saw blocks jump: choosing a computer, a period or a project emptied the statistics and the task list for a moment, so the page shrank, its scroll bar vanished and both came back. The statistics now keep the shown numbers until the new ones arrive (the computers card follows the numbers on screen), and a project switch keeps the previous rows in the task list, inert and marked busy, until the new project's view arrives. Nothing new is shown as loaded before it is, and the old rows cannot be chosen.
+2026-11-23, after the window became faster the owner saw blocks jump: choosing a computer, a period or a project emptied the statistics and the task list for a moment, so the page shrank, its scroll bar vanished and both came back. The statistics now keep the shown numbers until the new ones arrive (the computers card and chart period follow the numbers on screen), and a project switch keeps the previous rows in the task list, inert and marked busy, until the new project's view arrives. Nothing new is shown as loaded before it is, and the old rows cannot be chosen.
 
 ## D-188 — Unroutable network messages are skipped; unpublished tasks are closed (T-267)
 
@@ -1020,7 +1020,7 @@ The task owner can draft the next message while a stop is pending and after the 
 
 ## D-273 — Optional first-run setup
 
-Offer a short setup on a new installation and let users close or skip it at any step. Use the same settings for language and appearance, agent and model, optional workspace, network and coordinator, and notifications. Direct chat is available after skipping. Keep the dismissal on that installation and reopen setup from Settings. Upgrades and migrated installations retain their existing configuration and do not trigger setup. See T-384.
+Offer a short setup on a new installation and let users close or skip it at any step. Use the same settings for language and appearance, agent and model, optional workspace, network and coordinator, and notifications. Direct chat is available after skipping. Keep the dismissal on that installation and reopen setup from Settings. Upgrades and migrated installations retain their existing configuration and do not trigger setup. See T-384. The owner paused the wizard after native review. Hide both entry points until the step layout and the agent selection flow have been reviewed again. Leave saved preferences and direct chat available.
 
 ## D-274 — Keep personal chats open after a reply
 
@@ -1032,7 +1032,7 @@ Show turn activity while waiting for public text and use partial text when the p
 
 A computer heading opens a draft for that computer. A project heading opens a draft for that project. Show the shortcut only on the outermost groups in the current sidebar grouping. Reveal it on row hover or keyboard focus and use the row highlight. Use the standard row inset. Keep it visible on devices without hover. Keep the existing project, model and availability rules. The context indicator labels the reported window percentage consistently across live and saved turns.
 
-Agent settings group providers by detected installation on the local computer. Installation remains explicit and remote settings remain read-only. Use 16 px provider artwork in window controls and retain the compact metadata marks.
+Agent settings group providers by detected installation on the local computer. Installation remains explicit and remote settings remain read-only. Installed rows show the provider, its enable switch and its settings action. In the agent dialog, use the standard divider after Models and status marks for CLI installation and sign-in in place of step numbers. Use 16 px provider artwork in window controls and retain the compact metadata marks.
 
 The composer can add selected paths and UTF-8 browser drops as removable draft inputs. The selected or dropped local path is a reference for the executor on that computer. A path on another computer must be supplied explicitly. The slash picker runs supported window actions. Provider-native commands and opaque attachment transfer are tracked by T-388 and T-389.
 

@@ -53,6 +53,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
             return route.fulfill({json: {ok: true, result: {host: {running: false, enabled: false, addresses: []}, member: {connected: false}, peers: [], updates, accept: true, auto_update: autoUpdate, auto_update_supported: autoSupported}}});
           }
           if (pathname === '/api/project-create') created = true;
+          if (pathname === '/api/pick') return route.fulfill({json: {ok: true}});
           if (pathname === '/api/agent-install' || pathname === '/api/agent-find') {
             const input=route.request().postDataJSON();
             const state={ok:true,...input,id:'fake-'+input.provider+'-'+input.action,state:'unknown'};
@@ -79,7 +80,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         const fixtures = {
           '/api/window': {projects: created ? [{name: 'Welcome test'}] : [], project: created ? 'Welcome test' : '',
             folder: created ? '/fictional/project' : '', messenger: '/fictional/messenger', data_root: '/fictional/data',
-            agents: [...(registered ? [{agent: 'cursor', cli: '/fictional/cursor', models: []}] : []), ...(installed ? [{agent:'codex',cli:'/fictional/codex',models:[],trust:{state:trusted?'trusted':'not_trusted'}}] : [])], tasks: [],
+            agents: [...(registered ? [{agent: 'cursor', cli: '/fictional/cursor', models: []}] : []), ...(installed ? [{agent:'codex',cli:'/fictional/codex',models:[],project_running:1,project_today:21,trust:{state:trusted?'trusted':'not_trusted'}}] : [])], tasks: [],
             coordinator: {connected, client: 'cursor-vscode', active: coordinatorActive},
             cursor_link: {state: connected ? 'connected' : created ? 'missing' : 'no_folder', ...(connected ? {server_name: cursorServerName} : {})},
             computer_name: 'Theme test', tasks_enabled: true},
@@ -87,6 +88,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           '/api/model-catalog': {models: [{model:'gpt-6.2-sol[effort=medium]',name:'GPT-6.2 Sol Medium'}],limit:12},
           '/api/discovery': {agents: ['claude','codex','cursor'].map(provider => ({provider, state: 'not_found'}))},
           '/api/client-info': {client: 'running', outdated: false},
+          '/api/onboarding': {pending: true, model: ''},
           '/api/machine-order': {order: machineOrder, peers: machinePeers},
           '/api/server': {host: {running: hostRunning, enabled: hostRunning, scope:'lan', addresses: []}, member: {connected: false}, peers: connected ? [{id:'fixture-peer',...(peerLasting ? {computer:'computer-fixture'} : {}),name:'Peer fixture',host:true,age:0,agents:[{agent:'cursor'}],coordinator:'cursor-vscode'},{id:'fixture-peer-2',name:'Paused agent fixture',age:0,agents:[],coordinator:'claude-code'}] : [], updates, accept: true, auto_update: autoUpdate, auto_update_supported: autoSupported},
           '/api/self-update': {current:'1.0.3-preview.106',installed_version:'1.0.3-preview.106'},
@@ -106,16 +108,20 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         assert(await settings.evaluate(node => node.open), 'choosing an option must not close settings');
         assert.equal(await trigger.evaluate(node => node.getBoundingClientRect().height), 32);
       }
+      await page.addInitScript(() => sessionStorage.setItem('kotel-setup-resume', '0'));
+      const pendingSetup = page.waitForResponse(response => new URL(response.url()).pathname === '/api/onboarding');
       await page.goto('http://messenger.test/#fictional');
       await page.locator('#project-select option').filter({hasText: 'Проекты недоступны'}).waitFor({state: 'attached'});
       assert(await page.locator('#project-select').isDisabled());
       windowReadFails = false;
       await page.evaluate(() => window.messengerRefresh());
+      await pendingSetup;
       const welcome = page.locator('#thread .am-welcome');
       await welcome.getByRole('heading', {name: 'Добро пожаловать в Kotel', exact: true}).waitFor();
       assert(await welcome.getByText('Задайте название и выберите папку проекта.', {exact: true}).isVisible());
       assert(await welcome.getByText('Настройте агента и включите хотя бы одну модель.', {exact: true}).isVisible());
       assert.equal(await page.locator('#task-panel').isVisible(), false, 'an empty task pane must not cover onboarding');
+      assert.equal(await page.locator('#window-setup-dialog').count(), 0, 'pending and resumed setup must leave the wizard unavailable');
       await welcome.getByRole('button', {name: 'Создать проект', exact: true}).click();
       assert(await page.locator('#project-dialog').evaluate(node => node.open));
       await page.locator('#project-dialog-close').click();
@@ -399,6 +405,28 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.locator('[data-tab=agents]').click();
       const codex=page.locator('article[data-provider=codex]');
       const agentSetup=page.locator('#agent-setup');
+      const cliRow=agentSetup.locator('.am-step').filter({hasText:'Codex CLI'});
+      await agentSetup.evaluate(dialog=>{
+        const showModal=dialog.showModal;
+        dialog.showModal=function(){
+          showModal.call(this);
+          this.dataset.firstCliWidth=this.querySelector('#agent-cli').getBoundingClientRect().width;
+          this.dataset.firstActionRows=this.querySelectorAll('#agent-setup-actions .am-step').length;
+          delete this.showModal;
+        };
+      });
+      await codex.getByRole('button',{name:'Настройки',exact:true}).click();
+      assert.equal(await cliRow.locator('.am-mark').textContent(),'–');
+      assert(await cliRow.getByRole('button',{name:'Установить',exact:true}).isVisible());
+      assert.equal(await agentSetup.getAttribute('data-first-action-rows'),'1');
+      const executablePicker=agentSetup.getByRole('button',{name:'Выбрать программу CLI',exact:true});
+      assert.equal(await executablePicker.textContent(),'Выбрать');
+      const pickRequest=page.waitForRequest(request=>request.url().endsWith('/api/pick'));
+      await executablePicker.click();
+      assert.deepEqual((await pickRequest).postDataJSON(),{kind:'file',current:''});
+      assert.equal(await agentSetup.locator('#agent-cli').evaluate(input=>input.getBoundingClientRect().width),Number(await agentSetup.getAttribute('data-first-cli-width')));
+      assert.equal(await cliRow.evaluate(row=>getComputedStyle(row).paddingBlockEnd),'0px');
+      await page.locator('#agent-setup-close').click();
       await codex.getByRole('button',{name:'Установить',exact:true}).click();
       await agentSetup.getByText('Нет подтверждения из терминала. Если он закрыт, нажмите «Найти».',{exact:true}).waitFor();
       assert.deepEqual(writes.filter(w=>w.path==='/api/agent-install').map(w=>w.body),[{provider:'codex',action:'install'}]);
@@ -414,7 +442,17 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.reload();
       await page.locator('[data-tab=agents]').click();
       await page.locator('[data-agent-group=installed] article[data-provider=codex]').waitFor({timeout:10000});
+      assert.equal((await codex.innerText()).trim(),'Codex');
+      assert(await codex.getByRole('switch').isVisible());
       await codex.getByRole('button',{name:'Настройки',exact:true}).click();
+      const setupRows=agentSetup.locator('.am-agent-settings-rows');
+      const setupActions=setupRows.locator('#agent-setup-actions');
+      assert.equal(await cliRow.locator('.am-mark').textContent(),'✓');
+      assert(await cliRow.getByRole('button',{name:'Удалить',exact:true}).isVisible());
+      assert.equal(await setupActions.evaluate(node=>getComputedStyle(node).borderBlockStart),await setupRows.locator('.am-setting-row').last().evaluate(node=>getComputedStyle(node).borderBlockStart));
+      const account=setupActions.locator('.am-step').filter({hasText:'Вход в аккаунт'});
+      assert.equal(await account.locator('.am-mark').textContent(),'?');
+      await account.getByText('Ещё не проверен',{exact:true}).waitFor();
       await agentSetup.getByRole('button',{name:'Войти',exact:true}).click();
       assert.deepEqual(writes.filter(w=>w.path==='/api/agent-login').map(w=>w.body),[{provider:'codex',cli:'/fictional/codex',environment:''}]);
       await page.locator('#toasts').getByText('Fixture terminal failed',{exact:true}).waitFor();
@@ -591,7 +629,8 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
             await holdFrameStats;
           }
           return route.fulfill({json:{
-            project,total:{tasks:3,tokens:22020000,input_tokens:21100000,output_tokens:920000},agents:[],computers:[],days:[],
+            project,total:{tasks:3,tokens:22020000,input_tokens:21100000,output_tokens:920000},agents:[],computers:[],
+            days:[{day:'2026-11-18',tokens:21600000,tasks:2},{day:'2026-11-19',tokens:420000,tasks:1}],
             models:['gpt-6.2-sol[effort=high]','claude-opus-5-5[effort=medium]','opus','grok-4.7-high-fast','cursor-grok-4.6-medium'].map(key=>({key,name:key,tokens:1})),
             recent:[stat,olderStat,untimedStat],top:[olderStat,untimedStat,stat],
             ranked:{oldest:[untimedStat,olderStat,stat],fewest:[stat,untimedStat,olderStat],longest:[olderStat,stat],shortest:[stat,olderStat]},
@@ -675,7 +714,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const computerTitle=await type(page.locator('.am-machine-card[aria-current=true] .am-machine-name > span:nth-child(2)'));
       assert.deepEqual(await type(taskRow.locator('.am-task-title')),computerTitle);
       assert.equal(computerTitle.fontSize,'14px');
-      assert.equal(computerTitle.fontWeight,'500');
+      assert.equal(computerTitle.fontWeight,'400');
       const waitingTaskStatus=page.locator('.am-task',{hasText:waitingTask.title}).locator('.am-task-status');
       assert.match(await waitingTaskStatus.innerText(),/Ждёт вашего ответа,\s*Sonnet 5\.5 Medium/);
       assert.equal(await waitingTaskStatus.locator('.am-dot').count(),0);
@@ -799,10 +838,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await runningTaskStatus.waitFor({state:'visible'});
       for (const [theme,arrow,muted,runningColor,waitingColor] of [
         ['light','rgb(129, 83, 5)','rgb(107, 107, 107)','rgb(40, 123, 215)','rgb(201, 138, 0)'],
-        ['dark','rgb(242, 198, 91)','rgb(165, 165, 163)','rgb(142, 173, 210)','rgb(206, 178, 113)']
+        ['dark','rgb(242, 198, 91)','rgb(172, 172, 170)','rgb(142, 173, 210)','rgb(206, 178, 113)']
       ]) {
         await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;},theme);
-        assert.equal(await page.locator('#am-concept').evaluate(node=>getComputedStyle(node).color),theme==='dark'?'rgb(222, 222, 220)':'rgb(48, 48, 48)');
+        assert.equal(await page.locator('#am-concept').evaluate(node=>getComputedStyle(node).color),theme==='dark'?'rgb(229, 229, 227)':'rgb(48, 48, 48)');
         assert.equal(await runningTaskStatus.evaluate(node=>getComputedStyle(node).color),runningColor);
         assert.equal(await runningLabel.evaluate(node=>getComputedStyle(node).color),runningColor);
         assert.equal(await runningLabel.locator('.am-agent-model').evaluate(node=>getComputedStyle(node).color),runningColor);
@@ -830,8 +869,8 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const confirmationHeading=await type(page.locator('#confirm-title'));
       const computerHeading=await type(page.locator('#computer-title'));
       assert.equal(confirmationHeading.fontFamily,computerHeading.fontFamily);
-      assert.deepEqual([confirmationHeading.fontSize,confirmationHeading.fontWeight],['16px','500']);
-      assert.deepEqual([computerHeading.fontSize,computerHeading.fontWeight],['18px','500']);
+      assert.deepEqual([confirmationHeading.fontSize,confirmationHeading.fontWeight],['16px','400']);
+      assert.deepEqual([computerHeading.fontSize,computerHeading.fontWeight],['18px','400']);
       assert.equal(parseFloat(confirmationHeading.lineHeight).toFixed(1),'21.6');
       assert.equal(parseFloat(computerHeading.lineHeight).toFixed(1),'24.3');
       await page.locator('#confirm-cancel').click();
@@ -861,7 +900,22 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         await page.locator('#member-panel').screenshot({path: path.join(process.env.SCREENSHOT_DIR,'server-connected.png')});
         await page.emulateMedia({colorScheme:'light'});
       }
+      const firstStatsRequested=new Promise(resolve=>{frameStatsRequested=resolve;});
+      let releaseFirstStats;
+      holdFrameStats=new Promise(resolve=>{releaseFirstStats=resolve;});
       await page.locator('[data-tab=stats]').click();
+      await firstStatsRequested;
+      const statsSummary=page.locator('[aria-labelledby=stats-total-title]');
+      const reportGroup=page.locator('.am-stats-pair');
+      assert.equal(await page.locator('#stats-total-title').innerText(),'Загрузка статистики…');
+      assert.equal(await page.locator('#stats-agents').textContent(),'');
+      const beforeLoad=await Promise.all([statsSummary.boundingBox(),reportGroup.boundingBox()]);
+      holdFrameStats=null;
+      releaseFirstStats();
+      await page.locator('#stats-days .am-stats-plot').waitFor();
+      const afterLoad=await Promise.all([statsSummary.boundingBox(),reportGroup.boundingBox()]);
+      assert(Math.abs(beforeLoad[0].height-afterLoad[0].height)<=1,'summary height changed during first load');
+      assert(Math.abs(beforeLoad[1].y-afterLoad[1].y)<=1,'breakdown cards moved during first load');
       const detail = page.locator('#stats-top .am-stats-task-text .am-muted').first();
       // T-274: the model filter uses the same names as tasks and messages.
       await page.locator('#stats-model option[value=opus]').waitFor({state:'attached'});
@@ -1388,6 +1442,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.keyboard.press('Escape');
       assert.equal(await page.locator('#settings-open').evaluate(node=>node===document.activeElement),true);
       await page.locator('#settings-open').click();
+      const settingsItems=page.locator('#settings-menu button');
+      await settingsItems.nth(1).hover();
+      assert.deepEqual(await settingsItems.evaluateAll(items=>items.map(item=>getComputedStyle(item).backgroundColor==='rgba(0, 0, 0, 0)')),
+        [true,false,true], 'only the hovered settings menu item should have a fill');
       await page.locator('#fb-open').click();
       assert.equal(await page.locator('#fb-export').innerText(), 'Выгрузить новые отзывы (2)');
       await page.locator('#fb-export').click();
