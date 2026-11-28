@@ -2,6 +2,14 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-28 — T-056 Task access menu
+
+Codex added provider-specific access descriptions to the task menu and simplified the wording of both access switches. The remote menu describes full access as a request. Preview 126 uses a thin reflection along the existing macOS Dock icon contour after the side-lighting review.
+
+## 2026-11-28 — T-380 Inline dictation
+
+Codex added a microphone-level history, separate Cancel and Stop controls, and an inline recognition state to both composers in draft PR #261. Chromium and WebKit verified stable composer geometry and the recording interactions. The native Swift shell type-checked. Build 122 predates the change.
+
 ## 2026-11-28 — T-380 and T-387 Review follow-up
 
 Codex moved Voice section headings inside their cards, added status and removal for downloaded models, and hid sidebar task shortcuts for groups without a launchable model. The native removal fixture checked removal of selected and unselected models and refusal during recording. Build 122 predates these changes.

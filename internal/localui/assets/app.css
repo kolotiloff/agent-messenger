@@ -791,7 +791,25 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 /* T-124: a drawn icon, so it sits in the middle like the stop square. */
 #am-concept .am-send-icon svg { width:var(--am-action-icon-size); height:var(--am-action-icon-size); fill:none; stroke:currentColor; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; }
 #am-concept .am-send-icon:disabled { background:transparent; color:var(--am-disabled-text); }
-#am-concept .am-dictation-button[aria-pressed=true] { background:var(--am-quiet-hover); color:var(--am-bad); }
+#am-concept .am-dictation-entry { position:relative; flex:1; min-width:0; }
+#am-concept .am-dictation-entry:has(.am-dictation-display:not([hidden])) textarea { opacity:0; }
+#am-concept .am-dictation-display {
+  position:absolute; inset-inline:0; inset-block-end:0; display:flex; align-items:center;
+  gap:var(--am-gap-control); min-block-size:var(--am-control);
+}
+#am-concept .am-dictation-display [role=status] { min-inline-size:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#am-concept .am-dictation-meter {
+  display:flex; align-items:center; justify-content:flex-end; flex:1; min-inline-size:0;
+  block-size:var(--am-control-chip); gap:var(--am-gap-line); overflow:hidden;
+}
+#am-concept .am-dictation-meter > span {
+  flex:0 0 var(--am-bar-thin); border-radius:var(--am-radius-xs); background:var(--am-muted);
+  block-size:calc(var(--am-bar-thin) + var(--am-dictation-level,0) * var(--am-control-chip) * .75);
+  opacity:calc(.3 + var(--am-dictation-level,0) * .7);
+}
+#am-concept .am-compose-field .am-dictation-stop { border:1px solid var(--am-line); background:var(--am-soft); border-radius:50%; }
+#am-concept .am-compose-field .am-dictation-stop:enabled:is(:hover,:focus-visible) { background:var(--am-quiet-hover); }
+#am-concept .am-compose-field .am-dictation-stop > svg { fill:currentColor; stroke:none; }
 #am-concept .am-dictation-status {
   position:absolute; z-index:1; inset-inline-end:0; inset-block-end:calc(100% + var(--am-space-2));
   max-inline-size:100%; margin:0; padding:var(--am-pad-compact);
@@ -1004,6 +1022,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-machine-card[role=button]:is(:hover:not([aria-pressed=true]),:focus-visible) { border-color:var(--am-muted); outline:none; }
 #am-concept .am-device-card:focus-visible { border-color:var(--am-muted); }
 #am-concept .am-context-menu { max-width:min(var(--am-queue),100vw); }
+#am-concept .am-context-menu:has(.am-menu-option-detail) { inline-size:min(100vw,var(--am-settings-control-width) * 2); max-inline-size:100vw; }
+#am-concept .am-menu-option-copy { display:grid; gap:var(--am-gap-line); min-inline-size:0; white-space:normal; }
 #am-concept .am-context-menu:has(.am-context-device) { min-width:min(var(--am-settings-control-width),100vw); }
 #am-concept .am-context-device { min-height:var(--am-control-compact); padding-inline:var(--am-space-2); }
 #am-concept .am-context-device:not(:first-child) { border-block-start:1px solid var(--am-menu-line); margin-block-start:var(--am-space-1); padding-block-start:var(--am-space-1); }
@@ -1512,7 +1532,8 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-model-group-title { display:flex; align-items:center; gap:var(--am-gap-control); padding:var(--am-space-1) var(--am-space-3); color:var(--am-muted); font-size:var(--am-text-s); }
 #am-concept .am-model-group-title svg { width:var(--am-space-4); height:var(--am-space-4); }
 #am-concept .am-model-group:not([hidden]) ~ .am-model-group:not([hidden]) { border-block-start:1px solid var(--am-menu-line); }
-#am-concept .am-compose-field > :is(#task-draft-add,#answer-add,#task-draft-access):not([hidden]) ~ textarea { padding-inline-start:0; }
+#am-concept .am-compose-field > :is(#task-draft-add,#answer-add,#task-draft-access):not([hidden]) ~ textarea,
+#am-concept .am-compose-field > :is(#task-draft-add,#answer-add,#task-draft-access):not([hidden]) ~ .am-dictation-entry > textarea { padding-inline-start:0; }
 #am-concept .am-context-menu > button.am-select-option { width:100%; text-align:start; }
 @media (hover:hover) {
   #am-concept .am-message-group:not(:hover):not(:focus-within) > .am-message-actions { opacity:0; }

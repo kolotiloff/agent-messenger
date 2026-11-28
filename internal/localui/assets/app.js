@@ -1044,6 +1044,15 @@
     const items=[];
     for(const it of entries){
       const item=contextMenuItem(menu,it.text,it.pick);
+      if(it.detail){
+        const detail=el('span',it.detail,'am-small am-muted am-menu-option-detail');
+        detail.id='device-menu-detail-'+items.length;
+        const copy=el('span',undefined,'am-menu-option-copy');
+        copy.append(el('span',it.text),detail);
+        item.replaceChildren(copy);
+        item.setAttribute('aria-label',it.text);
+        item.setAttribute('aria-describedby',detail.id);
+      }
       if(typeof it.selected==='boolean'){
         item.setAttribute('role','menuitemradio');
         item.setAttribute('aria-checked',String(it.selected));
@@ -2799,12 +2808,21 @@
     if(!hasProject)box.append(setupButton(tr('Начать личный чат'),()=>openPersonalChat().catch(showError)));
     return box;
   }
-  function showComposerAccess(node,enabled,remote='',compact=false){
+  function restrictedAccessDetail(provider){
+    switch(provider){
+      case 'codex':return tr('Работает в песочнице с записью в папку проекта.');
+      case 'claude':return tr('Может редактировать проект. Команды проверяются по правилам Claude Code.');
+      case 'cursor':return tr('Работает в песочнице Cursor.');
+      default:return tr('Применяются ограничения агента.');
+    }
+  }
+  function showComposerAccess(node,enabled,remote='',compact=false,provider='',requestedFull=false){
     node.hidden=enabled==null&&!remote;
     const remoteDetail=tr('Доступ задаётся на {computer}').replace('{computer}',()=>remote);
-    const label=remote?(compact?tr('Доступ на {computer}').replace('{computer}',()=>remote):remoteDetail):enabled?tr('Любые команды'):tr('Обычный доступ');
-    const detail=remote?(compact?remoteDetail:tr('Разрешения задаются на компьютере исполнителя.')):enabled?label:tr('Используются обычные разрешения агента.');
-    node.classList.toggle('am-full-access',!remote&&enabled===true);
+    const label=requestedFull?tr('Запрошен полный доступ'):remote?(compact?tr('Доступ на {computer}').replace('{computer}',()=>remote):remoteDetail):enabled?tr('Полный доступ'):tr('С ограничениями');
+    const detail=requestedFull?tr('Полный доступ действует, только если его разрешил компьютер исполнителя.'):
+      remote?remoteDetail:enabled?tr('Доступ к сети и файлам за пределами проекта без подтверждения.'):restrictedAccessDetail(provider);
+    node.classList.toggle('am-full-access',!requestedFull&&!remote&&enabled===true);
     node.title=node.hidden?'':detail;
     node.setAttribute('aria-label',label);
     node.replaceChildren();
@@ -2873,9 +2891,11 @@
     const access=$('task-draft-access');
     const route=JSON.stringify([name,computer?.id,provider]);
     if(access.dataset.route!==route){access.dataset.route=route;access.value='';}
+    if(access.value==='full'&&!computer?.id&&!agent?.full_access)access.value='';
     access.disabled=draftSending;
     showComposerAccess(access,access.value?access.value==='full':agent&&!computer.id?!!agent.full_access:null,
-      !access.value&&agent&&computer.id?(computer.name||tr('компьютере исполнителя')):'');
+      !access.value&&agent&&computer.id?(computer.name||tr('компьютере исполнителя')):'',false,provider,
+      access.value==='full'&&!!computer?.id);
     const input=$('task-draft-text');
     input.readOnly=draftSending;
     $('task-draft-add').disabled=draftSending;
@@ -2889,11 +2909,18 @@
   }
   $('task-draft-access').addEventListener('click',event=>{
     const button=event.currentTarget,rect=button.getBoundingClientRect();
-    const choices=[['',tr('По настройкам исполнителя')],['standard',tr('Обычный доступ')]];
     const provider=$('task-draft-model').value.split(':')[0];
-    if($('task-draft-computer').value||view?.agents?.some(a=>a.agent===provider&&a.full_access))
-      choices.push(['full',tr('Любые команды в пределах разрешений')]);
-    popMenu(rect.left,rect.bottom,choices.map(([value,text])=>({text,selected:value===button.value,pick:()=>{button.value=value;renderTaskDraft();button.focus();}})),null,'',button);
+    const remote=!!$('task-draft-computer').value;
+    const choices=[
+      ['',tr('Как на компьютере исполнителя'),tr('Использовать доступ, заданный для этого агента.')],
+      ['standard',tr('С ограничениями'),restrictedAccessDetail(provider)]
+    ];
+    if(remote||view?.agents?.some(a=>a.agent===provider&&a.full_access)){
+      const detail=remote?tr('Полный доступ действует, только если его разрешил компьютер исполнителя.'):
+        tr('Доступ к сети и файлам за пределами проекта без подтверждения.');
+      choices.push(['full',tr('Полный доступ'),detail]);
+    }
+    popMenu(rect.left,rect.bottom,choices.map(([value,text,detail])=>({text,detail,selected:value===button.value,pick:()=>{button.value=value;renderTaskDraft();button.focus();}})),null,'',button);
   });
   function closeTaskDraft(){
     draftAttachmentContext++;
@@ -4245,7 +4272,7 @@
       const model=$('answer-model');
       model.textContent=displayModel;
       model.title=displayModel?taskModelDetail(t):'';
-      showComposerAccess($('answer-access'),!!t.full_access,t.remote&&!t.remote.from?(t.remote.name||tr('компьютере исполнителя')):'',true);
+      showComposerAccess($('answer-access'),!!t.full_access,t.remote&&!t.remote.from?(t.remote.name||tr('компьютере исполнителя')):'',true,t.agent);
       renderComposerTokens(t,displayModel,!compose.hidden);
       $('answer-context').hidden=!displayModel&&$('answer-tokens').hidden&&$('answer-access').hidden;
     }
@@ -4636,7 +4663,7 @@
     const agents=view?.agents||[],bar=$('access-bar');bar.hidden=!agents.length||(!taskSidebarPreview&&!!computerFilter&&computerFilter!=='local');
     const on=agents.filter(a=>a.full_access).length,all=!!agents.length&&on===agents.length;
     $('access-toggle').setAttribute('aria-checked',all?'true':on?'mixed':'false');
-    $('access-title').textContent=on&&!all?tr('Любые команды: разрешены не всем'):tr('Любые команды');
+    $('access-title').textContent=on&&!all?tr('Полный доступ у части агентов'):tr('Полный доступ для агентов');
     // D-109: other computers' tasks follow this computer's agents unless the
     // owner turns it off; on until the window has heard otherwise.
     const net=!server||server.net_full_access!==false;
@@ -6874,7 +6901,7 @@
         item.remove.hidden=!installed;
         item.remove.removeAttribute('aria-disabled');
         item.selectedLabel.hidden=!selected;
-        item.selection.textContent=selected?tr(state.enabled?'Используется':'Выбрана'):'';
+        item.selection.textContent=selected?(state.enabled?tr('Используется'):tr('Выбрана')):'';
       }
     };
   }
@@ -6882,7 +6909,7 @@
     const bridge=window.webkit?.messageHandlers?.composerDictation;
     if(!bridge)return null;
     const messages={
-      recording:tr('Идёт диктовка. Нажмите на микрофон, чтобы вставить текст.'),
+      recording:tr('Идёт диктовка'),
       processing:tr('Распознаём речь…'),
       'microphone-denied':tr('Разрешите Kotel доступ к микрофону в настройках macOS.'),
       'microphone-unavailable':tr('Микрофон недоступен.'),
@@ -6890,7 +6917,7 @@
       empty:tr('Не удалось расслышать речь.'),
       failed:tr('Не удалось распознать речь. Попробуйте снова.')
     };
-    const square=['M7 7h10v10H7z'];
+    const square=['M8 6h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z'];
     const targets=[];
     let ready=false;
     let active=null;
@@ -6917,16 +6944,28 @@
     }
     function paint(target,event=''){
       const pressed=active?.target===target;
+      const recording=pressed&&event==='recording';
+      const processing=pressed&&event==='processing';
       const label=!ready?tr('Настройте диктовку в разделе «Голос»'):
-        event==='recording'?tr('Завершить диктовку'):pressed?tr('Отменить диктовку'):tr('Диктовать');
-      target.button.disabled=!ready;
+        recording||processing?tr('Завершить диктовку'):pressed?tr('Отменить диктовку'):tr('Диктовать');
+      target.button.disabled=!ready||processing;
       target.button.setAttribute('aria-pressed',String(pressed));
       target.button.setAttribute('aria-label',label);
       target.button.title=label;
-      target.button.replaceChildren(svgIcon(event==='recording'?square:microphonePaths));
-      target.status.textContent=messages[event]||'';
+      target.button.classList.toggle('am-dictation-stop',recording||processing);
+      target.button.replaceChildren(svgIcon(recording||processing?square:microphonePaths));
+      target.display.hidden=!(recording||processing);
+      target.meter.hidden=!recording;
+      target.caption.textContent=recording||processing?messages[event]:'';
+      target.status.textContent=recording||processing?'':messages[event]||'';
       target.status.hidden=!target.status.textContent;
-      target.status.classList.toggle('am-status-bad',!!event&&event!=='recording'&&event!=='processing');
+    }
+    function paintLevel(target,level){
+      const bars=target.meter.children;
+      for(let index=0;index<bars.length-1;index++){
+        bars[index].style.setProperty('--am-dictation-level',bars[index+1].style.getPropertyValue('--am-dictation-level'));
+      }
+      bars[bars.length-1].style.setProperty('--am-dictation-level',String(level/100));
     }
     function send(action,id){
       bridge.postMessage({action,id,language:language.value,silence:Number(silence.value)});
@@ -6964,6 +7003,7 @@
       clearMicrophoneTest();
       const {input}=target;
       active={id:crypto.randomUUID(),target,key,event:'',value:input.value,start:input.selectionStart,end:input.selectionEnd};
+      for(const bar of target.meter.children)bar.style.removeProperty('--am-dictation-level');
       paint(target);
       send('start',active.id);
       return true;
@@ -7016,14 +7056,33 @@
     });
     for(const input of [$('task-draft-text'),$('answer-text')]){
       const button=el('button',undefined,'am-send-icon am-quiet-button am-dictation-button');
-      const status=el('p',undefined,'am-small am-muted am-dictation-status');
+      const status=el('p',undefined,'am-small am-muted am-status-bad am-dictation-status');
+      const entry=el('div',undefined,'am-dictation-entry');
+      const display=el('div',undefined,'am-dictation-display');
+      const caption=el('span',undefined,'am-small am-muted');
+      caption.setAttribute('role','status');
+      const meter=el('span',undefined,'am-dictation-meter');
+      meter.setAttribute('aria-hidden','true');
+      meter.append(...Array.from({length:36},()=>el('span')));
+      const cancelButton=el('button',undefined,'am-send-icon am-quiet-button am-dictation-cancel');
+      cancelButton.type='button';
+      cancelButton.title=tr('Отменить диктовку');
+      cancelButton.setAttribute('aria-label',cancelButton.title);
+      cancelButton.append(svgIcon(closeIconPaths));
+      cancelButton.addEventListener('click',()=>{
+        cancel();
+        input.focus({preventScroll:true});
+      });
+      display.append(cancelButton,caption,meter);
       button.type='button';
       button.hidden=true;
       status.setAttribute('role','status');
-      input.after(button);
-      const statusAnchor=input.form||input.parentElement;
+      input.before(entry);
+      entry.append(input,display);
+      entry.after(button);
+      const statusAnchor=input.form||entry.parentElement;
       statusAnchor.append(status);
-      const target={input,button,status,key:''};
+      const target={input,button,status,display,caption,meter,key:''};
       targets.push(target);
       paint(target);
       button.addEventListener('click',()=>{
@@ -7035,7 +7094,7 @@
         const key=context(target);
         if(!key)return;
         cancel();
-        start(target);
+        if(start(target))input.focus({preventScroll:true});
       });
     }
     window.messengerDictationModels=state=>{
@@ -7080,6 +7139,11 @@
         return;
       }
       if(active?.id!==id)return;
+      if(event==='level'){
+        const level=Number(text);
+        if(active.event==='recording'&&Number.isFinite(level))paintLevel(active.target,Math.max(0,Math.min(100,level)));
+        return;
+      }
       const {target,key,value,start,end}=active;
       if(context(target)!==key){cancel();return;}
       if(event==='recording'||event==='processing'){

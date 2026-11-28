@@ -565,7 +565,7 @@ if (require.main === module) (async()=>{
       const replyModelStyle=await labelStyle(draftPage.locator('#answer-model'));
       const replyAccess=draftPage.locator('#answer-access');
       await replyAccess.waitFor();
-      assert.equal(await replyAccess.getAttribute('aria-label'),'Любые команды');
+      assert.equal(await replyAccess.getAttribute('aria-label'),'Полный доступ');
       assert.equal(await local.locator('.am-sidebar-task').filter({hasText:'Экран настроек'}).locator('[data-elapsed-from]').textContent(),', 1 мин');
       for(const theme of ['light','dark']){
         const colors=await replyAccess.evaluate((node,theme)=>{
@@ -1006,7 +1006,7 @@ if (require.main === module) (async()=>{
       const balanced=field=>field.evaluate(node=>{
         const text=node.querySelector('textarea');
         const textLeft=text.getBoundingClientRect().left;
-        const leading=[...node.querySelectorAll('button:not([hidden]) svg')].map(icon=>icon.getBoundingClientRect()).filter(icon=>icon.right<textLeft);
+        const leading=[...node.querySelectorAll('button svg')].map(icon=>icon.getBoundingClientRect()).filter(icon=>icon.width>0&&icon.right<textLeft);
         const start=textLeft+parseFloat(getComputedStyle(text).paddingLeft);
         return Math.abs((leading[0].left-node.getBoundingClientRect().left)-(start-leading.at(-1).right))<=1;
       });
@@ -1059,15 +1059,16 @@ if (require.main === module) (async()=>{
           icon.width==='16px'&&icon.height==='16px'&&style.backgroundColor!=='rgba(0, 0, 0, 0)';
       }));
       await select(draftPage,'task-draft-computer','Мак');
-      assert.equal(await form.locator('#task-draft-access').getAttribute('aria-label'),'Обычный доступ');
+      assert.equal(await form.locator('#task-draft-access').getAttribute('aria-label'),'С ограничениями');
       assert.equal(await form.locator('.am-compose-field > #task-draft-access').isVisible(),true);
       const shield=form.locator('#task-draft-access');
       await shield.press('Space');
-      const defaultAccess=draftPage.getByRole('menuitemradio',{name:'По настройкам исполнителя'});
+      const defaultAccess=draftPage.getByRole('menuitemradio',{name:'Как на компьютере исполнителя'});
       await defaultAccess.waitFor();
       assert.equal(await defaultAccess.getAttribute('aria-checked'),'true');
       await defaultAccess.press('ArrowDown');
-      const standardAccess=draftPage.getByRole('menuitemradio',{name:'Обычный доступ'});
+      const standardAccess=draftPage.getByRole('menuitemradio',{name:'С ограничениями'});
+      assert.match(await standardAccess.locator('.am-menu-option-detail').textContent(),/песочнице|правилам Claude Code/);
       assert.equal(await standardAccess.evaluate(node=>node===document.activeElement),true);
       await standardAccess.press('Escape');
       assert.equal(await shield.evaluate(node=>node===document.activeElement),true);

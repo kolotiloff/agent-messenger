@@ -22,6 +22,7 @@ private final class DictationAudio {
     private var samples: [Float] = []
     private var hasVoiceLevel = false
     private var lastAudibleFrame = 0
+    private var peakPower: Float = 0
     private var sealed = false
 
     init(sampleRate: Double) {
@@ -43,10 +44,23 @@ private final class DictationAudio {
             samples.append(value)
             power += value * value
         }
-        if count > 0, power / Float(count) > 0.0000063 {
+        guard count > 0 else { return }
+        let meanPower = power / Float(count)
+        peakPower = max(peakPower, meanPower)
+        if meanPower > 0.0000063 {
             hasVoiceLevel = true
             lastAudibleFrame = samples.count
         }
+    }
+
+    func takeLevel() -> Int {
+        lock.lock()
+        let power = peakPower
+        peakPower = 0
+        lock.unlock()
+        guard power > 0.0000063 else { return 0 }
+        let decibels = 10 * log10(power)
+        return Int(min(100, max(0, (decibels + 52) * 2.5)))
     }
 
     func silenceDuration() -> Double {
@@ -334,8 +348,17 @@ final class ComposerDictation: NSObject, URLSessionDownloadDelegate, @unchecked 
         self.language = language
         let duration = microphoneTest ? 10 : 60
         onEvent?(id, "recording", microphoneTest ? String(duration) : nil)
+        if !microphoneTest { watchLevel(id) }
         DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(duration)) { [weak self] in self?.stop(id) }
         if silence > 0 { watchSilence(id, seconds: Double(silence)) }
+    }
+
+    private func watchLevel(_ id: String) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard let self, self.id == id, let audio = self.audio else { return }
+            self.onEvent?(id, "level", String(audio.takeLevel()))
+            self.watchLevel(id)
+        }
     }
 
     private func watchSilence(_ id: String, seconds: Double) {
