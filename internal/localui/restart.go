@@ -58,7 +58,8 @@ func clientInfo(ctx context.Context, call caller, restart Restarter) map[string]
 	if response.Status.Sandbox != "" {
 		info["sandbox"] = response.Status.Sandbox
 	}
-	info["outdated"] = clientOutdated(response.Status.Version, buildinfo.Version)
+	// The local review window deliberately attaches to the installed client.
+	info["outdated"] = buildinfo.LocalDesktopPreview != "1" && clientOutdated(response.Status.Version, buildinfo.Version)
 	return info
 }
 

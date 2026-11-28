@@ -110,6 +110,7 @@ private enum DraftDrop: String, Error {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+    private let localPreview = Bundle.main.object(forInfoDictionaryKey: "AMLocalDesktopPreview") as? Bool == true
     var window: NSWindow!
     var web: WKWebView!
     var statusView: NSStackView!
@@ -152,7 +153,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         let folder = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/AgentMessenger")
         do { try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700]) }
         catch { fatalLaunch("Не удалось открыть каталог приложения."); return }
-        lockFD = Darwin.open(folder.appendingPathComponent("desktop.lock").path, O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW, 0o600)
+        let lockName = localPreview ? "desktop-preview.lock" : "desktop.lock"
+        lockFD = Darwin.open(folder.appendingPathComponent(lockName).path, O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW, 0o600)
         guard lockFD >= 0, flock(lockFD, LOCK_EX | LOCK_NB) == 0 else {
             if let other = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "").first(where: { $0.processIdentifier != getpid() }) {
                 other.activate(options: [.activateAllWindows])
@@ -358,7 +360,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         guard let executable = Bundle.main.url(forResource: "kotel", withExtension: nil) else { message("В приложении отсутствует клиент. Заново распакуйте проверенную сборку."); return }
         let process = Process(); process.executableURL = executable
         var args: [String] = []
-        if let root = UserDefaults.standard.string(forKey: "dataRoot"), !root.isEmpty { args += ["--root", root] }
+        let installedRoot = localPreview ? UserDefaults.standard.persistentDomain(forName: "io.github.kolotiloff.agent-messenger")?["dataRoot"] as? String : nil
+        if let root = UserDefaults.standard.string(forKey: "dataRoot") ?? installedRoot, !root.isEmpty { args += ["--root", root] }
         args.append("desktop"); process.arguments = args
         let output = Pipe(), errors = Pipe(), lifetime = Pipe()
         process.standardOutput = output; process.standardError = errors; process.standardInput = lifetime
