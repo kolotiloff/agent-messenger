@@ -60,10 +60,12 @@ func runOpen(root string, args []string, out io.Writer) error {
 		return err
 	}
 	desktop := localui.Desktop{Restart: desktopRestart(root)}
+	channel := &updatefeed.Channel{Directory: filepath.Join(home, "updates"), PublicKey: buildinfo.UpdatePublicKey}
 	var next relaunch
 	if runtime.GOOS == "darwin" {
-		desktop.Channel = &updatefeed.Channel{Directory: filepath.Join(home, "updates"), PublicKey: buildinfo.UpdatePublicKey}
+		desktop.Channel = channel
 	} else {
+		desktop.CheckChannel = channel
 		desktop.SelfUpdate = windowSelfUpdate(ctx, root, home, cancel, &next)
 	}
 	opener := &windowOpener{root: root, out: out, ready: make(chan windowPage, 1)}

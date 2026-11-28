@@ -1039,3 +1039,15 @@ The composer can add selected paths and UTF-8 browser drops as removable draft i
 ## D-276 — Agent limits in the sidebar
 
 Show measured usage windows in a popover beside App settings. Group snapshots by the reporting computer and display a subscription only when the provider reports it. Opening the popover reads the window's existing snapshots. Mark disconnected computers and passed reset times so an old measurement cannot read as a confirmed refill. See T-390.
+
+## D-277 — Update checks and window notices
+
+Expose a manual check in General settings, the window menu and a computer’s context menu. A selected computer’s menu displays its version without repeating its name. Review the list of eligible connected computers before requesting a network update. Each target verifies that its own signed artifact is compatible. Keep update feedback in the window’s notification area across navigation. See T-391.
+
+## D-278 — Sleep modes
+
+Expose system sleep, awake while a local agent runs, and always awake next to Settings. Persist the selected mode locally and release the operating system assertion when its condition ends. See T-392.
+
+## D-279 — Composer capabilities
+
+Offer a provider-native action only when the chosen provider and route can execute it. Keep the local Codex usage action backed by the provider’s account limits request. Send binary attachments with a new task only after explicit selection, require a compatible remote executor, and expose an isolated copy through the receipt-scoped worker tool. Follow-up binary uploads require their own transport. See T-388 and T-389.

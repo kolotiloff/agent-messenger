@@ -172,12 +172,12 @@ func TestRemoteFeedDeltaMatchesFullAndResetsForOlderItem(t *testing.T) {
 	if err != nil || feed.Cursor == "" || len(feed.Items) < 2 {
 		t.Fatalf("initial remote feed: %+v %v", feed, err)
 	}
-	if err := p.b.st.AppendTaskRunItem(run.ID, "text", "", "remote progress", ""); err != nil {
+	if err := p.b.st.AppendTaskRunItem(run.ID, "text_delta", "", "remote progress", ""); err != nil {
 		t.Fatal(err)
 	}
 	p.carry(t, false)
 	delta, err := p.a.st.TaskFeedDelta(id, feed.Cursor)
-	if err != nil || delta.AppendFrom != len(feed.Items) || len(delta.Items) != 1 {
+	if err != nil || delta.AppendFrom != len(feed.Items) || len(delta.Items) != 1 || delta.Items[0].Kind != "text_delta" {
 		t.Fatalf("remote progress must append: %+v %v", delta, err)
 	}
 	full, err := p.a.st.TaskFeed(id)

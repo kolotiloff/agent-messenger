@@ -133,6 +133,10 @@ func (c *CodexRPC) Call(ctx context.Context, method string, params any) (json.Ra
 	if !codexSetupMethods[method] {
 		return nil, fmt.Errorf("%w: method %q not allowed during setup", ErrCodexProtocol, method)
 	}
+	return c.call(ctx, method, params, nil)
+}
+
+func (c *CodexRPC) call(ctx context.Context, method string, params any, onNotification func(codexFrame) error) (json.RawMessage, error) {
 	c.next++
 	id := c.next
 	if err := c.write(map[string]any{"id": id, "method": method, "params": params}); err != nil {
@@ -158,6 +162,12 @@ func (c *CodexRPC) Call(ctx context.Context, method string, params any) (json.Ra
 				if skipped > codexMaxSkippedNotifications {
 					c.closed = true
 					return nil, fmt.Errorf("%w: too many notifications before %s response", ErrCodexProtocol, method)
+				}
+				if onNotification != nil {
+					if err := onNotification(frame); err != nil {
+						c.closed = true
+						return nil, err
+					}
 				}
 				continue
 			}

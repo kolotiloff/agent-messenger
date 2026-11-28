@@ -495,7 +495,7 @@ if (require.main === module) (async()=>{
       if(url.pathname==='/api/self-update')return {json:{installed_version:'1.0.9',version:'1.0.10',state:'available'}};
       if(url.pathname==='/api/task-start')return {json:{ok:true,result:directTask.id}};
       if(url.pathname==='/api/task-note')return {json:{ok:true}};
-      if(url.pathname==='/api/pick')return {json:{ok:true,path:'/fictional/project/notes.txt'}};
+      if(url.pathname==='/api/pick')return {json:{ok:true,path:'/fictional/project/notes.txt',attachments:[{path:'notes.txt',data:'AAH/'}]}};
       if(url.pathname==='/api/task'&&url.searchParams.get('id')===directTask.id){
         const at=iso(24*60+5);
         return {json:{task:directTask,items:[{kind:'task',author:'owner',text:directTask.title,at},
@@ -528,9 +528,9 @@ if (require.main === module) (async()=>{
       assert.equal(await draftPage.locator('#am-concept').getAttribute('data-chat-font'),'inter');
       const replyModelStyle=await labelStyle(draftPage.locator('#answer-model'));
       const replyAccess=draftPage.locator('#answer-access');
-      await replyAccess.getByText('Любые команды',{exact:true}).waitFor();
+      await replyAccess.waitFor();
+      assert.equal(await replyAccess.getAttribute('aria-label'),'Любые команды');
       assert.equal(await local.locator('.am-sidebar-task').filter({hasText:'Экран настроек'}).locator('[data-elapsed-from]').textContent(),', 1 мин');
-      await expectCentered(replyAccess.locator('svg'),replyAccess.locator('span'));
       for(const theme of ['light','dark']){
         const colors=await replyAccess.evaluate((node,theme)=>{
           const root=document.documentElement,original=root.dataset.theme;
@@ -549,11 +549,6 @@ if (require.main === module) (async()=>{
         const [dark,light]=[luminance(colors.text),luminance(colors.bg)].sort((a,b)=>a-b);
         assert((light+.05)/(dark+.05)>=4.5,'readable access label in '+theme);
       }
-      const accessAbove=access=>access.evaluate(node=>{
-        const rect=node.getBoundingClientRect();
-        const field=node.nextElementSibling.getBoundingClientRect();
-        return rect.height>0&&rect.bottom<field.top&&rect.left===field.left&&rect.width<field.width;
-      });
       const accessBelow=access=>access.evaluate(node=>{
         const field=node.closest('.am-compose').querySelector('.am-compose-field').getBoundingClientRect();
         const mode=node.getBoundingClientRect();
@@ -567,7 +562,7 @@ if (require.main === module) (async()=>{
         const icons=Array.from(field.querySelectorAll('#task-stop > svg,#answer-send > svg'),svg=>svg.getBoundingClientRect().width);
         const box=field.getBoundingClientRect();
         return [stop.width,stop.height,send.width,send.height,send.left-stop.right,box.right-send.right,...icons];
-      }),[32,32,32,32,4,5,18,18]);
+      }),[32,32,32,32,4,5,16,16]);
       const disclosure=local.locator('.am-sidebar-disclosure');
       assert.equal(await disclosure.locator('svg').count(),0);
       assert.deepEqual(await disclosure.boundingBox(),await local.locator('.am-machine-name').boundingBox());
@@ -610,7 +605,7 @@ if (require.main === module) (async()=>{
       assert.deepEqual(await plusGlyph.evaluate(icon=>{
         const style=getComputedStyle(icon.querySelector('path'));
         return [getComputedStyle(icon).width,style.stroke,style.strokeWidth];
-      }),['18px',await plus.evaluate(button=>getComputedStyle(button).color),'1.75px']);
+      }),['16px',await plus.evaluate(button=>getComputedStyle(button).color),'1.75px']);
       assert.equal(await nav.evaluate(node=>getComputedStyle(node).display),'contents');
       assert.equal(await nav.locator('[data-tab]:visible').count(),0);
       const footer=draftPage.locator('.am-side-footer');
@@ -635,7 +630,7 @@ if (require.main === module) (async()=>{
         const version=node.querySelector('.am-version'),box=version.getBoundingClientRect();
         return [icon.left-bounds.left,bounds.right-parseFloat(getComputedStyle(sidebar).borderRightWidth)-
           box.right+parseFloat(getComputedStyle(version).paddingInlineEnd)];
-      }),[17,17]);
+      }),[18,18]);
       const buttonShape=button=>button.evaluate(node=>{
         const style=getComputedStyle(node);
         return [style.width,style.height,style.borderRadius];
@@ -643,10 +638,10 @@ if (require.main === module) (async()=>{
       const settings=footer.locator('#settings-open'),feedback=footer.locator('#fb-open');
       const footerIcons=[settings,feedback,localUpdate];
       const hoverFills=[];
-      for(const button of footerIcons){
+      for(const [index,button] of footerIcons.entries()){
         assert.deepEqual(await buttonShape(button),['28px','28px','8px']);
         const art=await button.locator('svg').first().boundingBox();
-        assert.deepEqual([art.width,art.height],[18,18]);
+        assert.deepEqual([art.width,art.height],index===2?[18,18]:[16,16]);
         await button.hover();
         hoverFills.push(await button.evaluate(async node=>{
           await Promise.all(node.getAnimations().map(animation=>animation.finished));
@@ -968,10 +963,11 @@ if (require.main === module) (async()=>{
       assert.equal(await form.locator('.am-compose-field').evaluate(node=>getComputedStyle(node).borderRadius),'16px');
       assert.equal(await draftPage.locator('#compose .am-compose-field').evaluate(node=>getComputedStyle(node).borderRadius),'16px');
       const balanced=field=>field.evaluate(node=>{
-        const svg=node.querySelector('button svg').getBoundingClientRect();
         const text=node.querySelector('textarea');
-        const start=text.getBoundingClientRect().left+parseFloat(getComputedStyle(text).paddingLeft);
-        return Math.abs((svg.left-node.getBoundingClientRect().left)-(start-svg.right))<=1;
+        const textLeft=text.getBoundingClientRect().left;
+        const leading=[...node.querySelectorAll('button:not([hidden]) svg')].map(icon=>icon.getBoundingClientRect()).filter(icon=>icon.right<textLeft);
+        const start=textLeft+parseFloat(getComputedStyle(text).paddingLeft);
+        return Math.abs((leading[0].left-node.getBoundingClientRect().left)-(start-leading.at(-1).right))<=1;
       });
       assert.equal(await balanced(form.locator('.am-compose-field')),true);
       const oneLineHeight=(await form.locator('textarea').boundingBox()).height;
@@ -993,8 +989,8 @@ if (require.main === module) (async()=>{
       const modelTrigger=form.getByRole('button',{name:'Модель',exact:true});
       assert.equal(await modelTrigger.evaluate(node=>{
         const context=node.closest('.am-draft-options'),field=context.previousElementSibling;
-        const [plus,text,send]=Array.from(field.children,item=>item.getBoundingClientRect());
-        return plus.right<=text.left&&text.right<=send.left&&plus.top===text.top&&text.top===send.top&&
+        const [plus,shield,text,send]=Array.from(field.children,item=>item.getBoundingClientRect());
+        return plus.right<=shield.left&&shield.right<=text.left&&text.right<=send.left&&plus.top===shield.top&&shield.top===text.top&&text.top===send.top&&
           context.querySelectorAll('.am-select-trigger').length===3&&
           field.getBoundingClientRect().bottom<context.getBoundingClientRect().top;
       }),true);
@@ -1019,11 +1015,21 @@ if (require.main === module) (async()=>{
         await Promise.all(button.getAnimations().map(animation=>animation.finished));
         const style=getComputedStyle(button),icon=getComputedStyle(button.querySelector('svg'));
         return style.borderRadius==='8px'&&style.width==='32px'&&style.height==='32px'&&
-          icon.width==='18px'&&icon.height==='18px'&&style.backgroundColor!=='rgba(0, 0, 0, 0)';
+          icon.width==='16px'&&icon.height==='16px'&&style.backgroundColor!=='rgba(0, 0, 0, 0)';
       }));
       await select(draftPage,'task-draft-computer','Мак');
-      assert.equal(await form.locator('#task-draft-access').textContent(),'Обычный доступ');
-      assert.equal(await accessAbove(form.locator('#task-draft-access')),true);
+      assert.equal(await form.locator('#task-draft-access').getAttribute('aria-label'),'Обычный доступ');
+      assert.equal(await form.locator('.am-compose-field > #task-draft-access').isVisible(),true);
+      const shield=form.locator('#task-draft-access');
+      await shield.press('Space');
+      const defaultAccess=draftPage.getByRole('menuitemradio',{name:'По настройкам исполнителя'});
+      await defaultAccess.waitFor();
+      assert.equal(await defaultAccess.getAttribute('aria-checked'),'true');
+      await defaultAccess.press('ArrowDown');
+      const standardAccess=draftPage.getByRole('menuitemradio',{name:'Обычный доступ'});
+      assert.equal(await standardAccess.evaluate(node=>node===document.activeElement),true);
+      await standardAccess.press('Escape');
+      assert.equal(await shield.evaluate(node=>node===document.activeElement),true);
       await addPath.click();
       const folderGlyph=selector=>draftPage.locator(selector).evaluate(button=>{
         const icon=button.querySelector('svg');
@@ -1036,16 +1042,15 @@ if (require.main === module) (async()=>{
       );
       const pickRequest=draftPage.waitForRequest(req=>new URL(req.url()).pathname==='/api/pick');
       await pathMenu.getByRole('button',{name:'Добавить файл…',exact:true}).click();
-      assert.deepEqual((await pickRequest).postDataJSON(),{kind:'file',current:''});
+      assert.deepEqual((await pickRequest).postDataJSON(),{kind:'attach-file',current:''});
       await pathMenu.waitFor({state:'hidden'});
       await form.getByRole('button',{name:'Убрать вложение notes.txt'}).waitFor();
       assert.equal(await form.locator('textarea').inputValue(),'');
       await select(draftPage,'task-draft-computer','ПК-1');
-      await form.getByText('Вложения находятся на другом компьютере.').waitFor();
       await form.getByRole('button',{name:'Убрать вложение notes.txt'}).click();
-      assert.equal(await form.locator('#task-draft-access').textContent(),'Доступ задаётся на ПК-1');
+      assert.equal(await form.locator('#task-draft-access').getAttribute('aria-label'),'Доступ задаётся на ПК-1');
       await addPath.click();
-      assert.equal(await pathMenu.getByRole('button',{name:'Добавить файл…'}).isVisible(),false);
+      assert.equal(await pathMenu.getByRole('button',{name:'Добавить файл…'}).isVisible(),true);
       assert.equal(await pathMenu.getByRole('textbox').isVisible(),false);
       await pathMenu.getByRole('button',{name:'Указать путь…'}).click();
       const remotePath=pathMenu.getByRole('textbox',{name:'Путь на компьютере исполнителя'});
@@ -1055,12 +1060,12 @@ if (require.main === module) (async()=>{
       await form.getByRole('button',{name:'Убрать вложение notes.md'}).click();
       await draftPage.locator('.am-chat-body').evaluate(chat=>{
         const data=new DataTransfer();
-        data.items.add(new File(['Draft notes'],'brief.txt',{type:'text/plain'}));
+        data.items.add(new File([new Uint8Array([0,1,255])],'brief.dat',{type:'application/octet-stream'}));
         chat.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:data}));
         if(chat.querySelector('.am-attachment-drop').hidden)throw Error('File drop feedback is missing');
         chat.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:data}));
       });
-      await form.getByRole('button',{name:'Убрать вложение brief.txt'}).click();
+      await form.getByRole('button',{name:'Убрать вложение brief.dat'}).waitFor();
       await form.locator('textarea').fill('/mo');
       await draftPage.getByRole('option',{name:/\/model/}).waitFor();
       await form.locator('textarea').press('Enter');
@@ -1122,7 +1127,7 @@ if (require.main === module) (async()=>{
       await form.locator('textarea').press('Enter');
       const {op_id,...payload}=(await start).postDataJSON();
       assert.match(op_id,/^window-/);
-      assert.deepEqual(payload,{project:'tools',computer:'pc1',agent:'codex',model:'gpt-6.2-astra[effort=high]',text:directTask.title});
+      assert.deepEqual(payload,{project:'tools',computer:'pc1',agent:'codex',model:'gpt-6.2-astra[effort=high]',text:directTask.title,attachments:[{path:'brief.dat',data:'AAH/'}]});
       const ownerBubble=draftPage.locator('#thread .am-outgoing').filter({hasText:directTask.title});
       const conversation=draftPage.locator('#thread');
       await conversation.getByText('Настройки сохранены',{exact:true}).waitFor();
@@ -1162,13 +1167,13 @@ if (require.main === module) (async()=>{
       await ownerMessage.getByRole('status').getByText('Скопировано',{exact:true}).waitFor();
       assert.equal(await draftPage.evaluate(()=>window.testCopiedMessage),directTask.title);
       await draftPage.locator('#answer-text').fill('Уточнение исполнителю');
-      assert.equal(await replyAccess.textContent(),'Доступ на ПК-1');
+      assert.equal(await replyAccess.getAttribute('aria-label'),'Доступ на ПК-1');
       assert.equal(await replyAccess.getAttribute('title'),'Доступ задаётся на ПК-1');
       assert.equal(await accessBelow(replyAccess),true);
       const footerCenters=await draftPage.locator('#answer-context').evaluate(async footer=>{
         await document.fonts.ready;
         const canvas=document.createElement('canvas').getContext('2d');
-        return [...footer.querySelectorAll('#answer-model,#answer-access > span,#answer-access > svg,#answer-tokens > svg')].map(node=>{
+        return [...footer.querySelectorAll('#answer-model,#answer-access > svg,#answer-tokens > svg')].map(node=>{
           const bounds=node.getBoundingClientRect();
           if(node instanceof SVGElement){
             const graphic=node.getBBox();
@@ -1184,7 +1189,7 @@ if (require.main === module) (async()=>{
           return center;
         });
       });
-      assert.equal(footerCenters.length,4);
+      assert.equal(footerCenters.length,3);
       assert(Math.max(...footerCenters)-Math.min(...footerCenters)<=0.5,JSON.stringify(footerCenters));
       const viewportEnd=await draftPage.locator('#thread').evaluate(thread=>{
         const field=document.querySelector('#compose .am-compose-field').getBoundingClientRect();
@@ -1289,7 +1294,7 @@ if (require.main === module) (async()=>{
           const css=getComputedStyle(button),icon=button.querySelector('svg').getBoundingClientRect();
           return [button.offsetWidth,button.offsetHeight,icon.width,icon.height,css.borderRadius,css.backgroundColor];
         });
-        assert.deepEqual(style.slice(0,5),[28,28,18,18,'8px']);
+        assert.deepEqual(style.slice(0,5),[28,28,16,16,'8px']);
         if(index===0)chromeStyle=style;
         else assert.deepEqual(style,chromeStyle);
         if(process.env.SCREENSHOT_DIR&&index<2)await archive.locator('.am-queue-header').screenshot({path:path.join(process.env.SCREENSHOT_DIR,index?'filter-hover.png':'clear-hover.png')});
@@ -1823,7 +1828,7 @@ if (require.main === module) (async()=>{
       assert.deepEqual(await modal.locator('.am-settings-nav [data-tab] > svg').evaluateAll(icons=>icons.map(icon=>{
         const {width,height}=icon.getBoundingClientRect();
         return [width,height,icon.getAttribute('aria-hidden')];
-      })),Array(4).fill([18,18,'true']));
+      })),Array(4).fill([16,16,'true']));
       await modal.locator('[data-tab=server]').click();
       const name=modal.getByRole('textbox',{name:'Имя в сети',exact:true});
       const nameLabel=modal.locator('label[for=computer-name] > span');

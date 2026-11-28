@@ -145,17 +145,22 @@ func claudeTaskArgs(s TaskRunSpec) ([]string, error) {
 	return args, ExplicitResume(args, s.Session)
 }
 
-func codexTaskArgs(s TaskRunSpec) ([]string, error) {
+func validateCodexTaskSession(s TaskRunSpec) error {
 	if s.Resume && s.Session == "" {
-		return nil, errors.New("a resumed Codex task needs its recorded thread id")
+		return errors.New("a resumed Codex task needs its recorded thread id")
 	}
 	if !s.Resume && s.Session != "" {
-		return nil, errors.New("a new Codex task must not name a thread")
+		return errors.New("a new Codex task must not name a thread")
 	}
 	if s.Session != "" {
-		if err := rejectLooseID(s.Session); err != nil {
-			return nil, err
-		}
+		return rejectLooseID(s.Session)
+	}
+	return nil
+}
+
+func codexTaskArgs(s TaskRunSpec) ([]string, error) {
+	if err := validateCodexTaskSession(s); err != nil {
+		return nil, err
 	}
 	args := []string{s.CLI, "exec", "--json", "--skip-git-repo-check"}
 	if s.Profile == ProfileMessengerOnly {
@@ -172,6 +177,15 @@ func codexTaskArgs(s TaskRunSpec) ([]string, error) {
 			args = append(args, "--sandbox", "workspace-write")
 		}
 	}
+	args = appendCodexTaskConfig(args, s)
+	if s.Resume {
+		args = append(args, "resume", s.Session, taskPrompt(s.Profile))
+		return args, ExplicitResume(args, s.Session)
+	}
+	return append(args, taskPrompt(s.Profile)), nil
+}
+
+func appendCodexTaskConfig(args []string, s TaskRunSpec) []string {
 	server := map[string]any{
 		"command":                     s.Messenger,
 		"args":                        taskMCPArgs(s),
@@ -191,11 +205,7 @@ func codexTaskArgs(s TaskRunSpec) ([]string, error) {
 			args = append(args, "-c", "model_reasoning_effort="+string(encoded))
 		}
 	}
-	if s.Resume {
-		args = append(args, "resume", s.Session, taskPrompt(s.Profile))
-		return args, ExplicitResume(args, s.Session)
-	}
-	return append(args, taskPrompt(s.Profile)), nil
+	return args
 }
 
 // TaskEventResult is what a worker run's event stream showed.
@@ -497,6 +507,12 @@ func TaskFeedEntries(provider string, line []byte) []FeedEntry {
 			}
 		}
 	case "codex":
+		if e["type"] == "item.text_delta" {
+			if text, _ := e["delta"].(string); text != "" {
+				return []FeedEntry{{Kind: "text_delta", Text: text}}
+			}
+			return nil
+		}
 		item, _ := e["item"].(map[string]any)
 		if e["type"] == "item.started" && item["type"] == "command_execution" {
 			if id, ok := item["id"].(string); ok && id != "" {

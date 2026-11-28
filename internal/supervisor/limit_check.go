@@ -56,6 +56,28 @@ func (s *Supervisor) checkLimits(ctx context.Context, read LimitReader) {
 // checkLimitsOnce reads and stores the limits once; it returns why it did
 // not, or "".
 func (s *Supervisor) checkLimitsOnce(ctx context.Context, read LimitReader) string {
+	return s.checkCodexLimits(ctx, read, false)
+}
+
+// RefreshCodexLimits implements Codex's account usage command in the window.
+func (s *Supervisor) RefreshCodexLimits(ctx context.Context) error {
+	if why := s.checkCodexLimits(ctx, readCodexLimits, true); why != "" {
+		return errors.New(why)
+	}
+	return nil
+}
+
+func (s *Supervisor) checkCodexLimits(ctx context.Context, read LimitReader, explicit bool) string {
+	if !s.limitRead.TryLock() {
+		if explicit {
+			return "Лимиты Codex уже обновляются."
+		}
+		return ""
+	}
+	defer s.limitRead.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err.Error()
+	}
 	agents, err := s.store.ComputerAgents()
 	if err != nil {
 		return "agents not read: " + err.Error()
@@ -73,6 +95,10 @@ func (s *Supervisor) checkLimitsOnce(ctx context.Context, read LimitReader) stri
 		if err := s.store.RecordAgentLimit("codex", checkedLimit(l, time.Now())); err != nil {
 			return "not stored: " + err.Error()
 		}
+		return ""
+	}
+	if explicit {
+		return "Включите Codex в настройках агентов."
 	}
 	return ""
 }

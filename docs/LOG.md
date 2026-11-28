@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-28 — T-384, T-386, T-388, T-389, T-391 and T-392
+
+Codex integrated the first-run flow, normal Codex worker streaming, local Codex usage, binary attachments for new tasks, manual update checks, and sleep modes on [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257). Window review checked both themes and browser engines, and corrected settings heading hierarchy, notice stacking and keyboard focus. See [HANDOFF.md](HANDOFF.md) for remaining installed checks and follow-up scope.
+
 ## 2026-11-28 — T-390 Sidebar limits
 
 Codex added a sidebar popover for recorded agent usage windows and preserved the optional account plan from the existing limit read. Fixture checks in Chromium and WebKit cover usage, reset timing and stale remote snapshots. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).

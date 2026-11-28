@@ -87,6 +87,7 @@ type Supervisor struct {
 	// uncertain.
 	streamOpening  atomic.Int32
 	beforeSignal   func()
+	limitRead      sync.Mutex
 	dispatch       sync.Mutex
 	stopping       atomic.Bool
 	starting       atomic.Bool
@@ -104,6 +105,7 @@ type Supervisor struct {
 	// nil when this client cannot update itself.
 	findUpdate UpdateFinder
 	auto       autoUpdateState
+	awake      *awakePolicy
 }
 
 type activeJob struct {
@@ -177,6 +179,9 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 	journal.Printf("client started, version %s", buildinfo.Current().Version)
 	defer journal.Printf("client stopped")
 	dbPath := filepath.Join(root, dbName)
+	if err := platform.MarkFreshWindowSetup(root, dbPath); err != nil {
+		journal.Printf("record first window setup: %v", err)
+	}
 	store, err := core.Open(dbPath)
 	if err != nil {
 		return err
@@ -212,6 +217,7 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 	sup := &Supervisor{
 		store: store, root: root, launcher: launcher, cancel: cancel, ctx: ctx, startUpdate: options.StartUpdate, findUpdate: options.FindUpdate,
 		networkWake: make(chan struct{}, 1), taskWake: make(chan struct{}, 1), projectStorage: options.ProjectStorage,
+		awake: initialAwakePolicy(root),
 	}
 	defer sup.bg.Wait()
 	defer sup.codex.closeAll()
@@ -287,6 +293,11 @@ func RunWithOptions(parent context.Context, root string, launcher Launcher, opti
 		}
 	}
 	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		sup.runAwake(ctx)
+	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

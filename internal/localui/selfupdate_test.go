@@ -78,6 +78,24 @@ func TestSelfUpdateIsOffWithoutAnUpdater(t *testing.T) {
 	}
 }
 
+func TestDesktopUpdateCheckRequiresExplicitEmptyRequest(t *testing.T) {
+	fake := &fakeSelfUpdater{}
+	handler := newDesktopHandler(actionHost, "secret", nil, nil, diagnostics.CheckCLI, Desktop{
+		SelfUpdate: &SelfUpdate{Updater: fake},
+	})
+	for _, body := range []string{`null`, `[]`, `{"install":true}`, `{} {}`} {
+		if w := postAction(handler, "update-check", body); w.Code != 400 {
+			t.Fatalf("%s: got %d", body, w.Code)
+		}
+	}
+	if w := postAction(handler, "update-check", `{}`); w.Code != 503 {
+		t.Fatalf("unsigned build returned %d", w.Code)
+	}
+	if fake.checks != 0 || fake.applies != 0 {
+		t.Fatal("manual lookup started the installer")
+	}
+}
+
 func TestSelfUpdateCheckInstallAndRelaunch(t *testing.T) {
 	fake := &fakeSelfUpdater{state: selfupdate.Status{State: "idle"}}
 	relaunched := make(chan struct{}, 1)

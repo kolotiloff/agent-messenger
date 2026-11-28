@@ -14,7 +14,9 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     page.setDefaultTimeout(5000);
     let cursor = 1, mark, wake, releaseCancel, downloadProgress;
     const cancellations=[];
+    const updateRequests=[];
     let cancelResponse='ok';
+    let published='1.0.1-preview.104';
     function publish(state, version, id = 'upd-fixture') {
       mark = {id, state, version, at: Date.now() / 1000};
       cursor++;
@@ -34,7 +36,10 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           if (body.cursor === String(cursor)) await new Promise(resolve => {wake = resolve;});
           return route.fulfill({json:{ok:true,result:{broker:'fixture', self:'host', cursor:String(cursor), marks:mark?{'dev-pc':mark}:{}}}});
         }
-        if (body.action === 'update') publish('waiting');
+        if (body.action === 'update') {
+          updateRequests.push(body.device);
+          publish('waiting');
+        }
         if (body.action === 'cancel-update') {
           cancellations.push(body);
           if(cancelResponse==='refused')return route.fulfill({status:400,json:{detail:'Компьютер сейчас не на связи.'}});
@@ -48,6 +53,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         '/api/window':{projects:[{name:'Проект'}],project:'Проект',computer_name:'Мак',agents:[],tasks:[task],coordinator:{},folder:'/fixture'},
         '/api/client-info':{client:'running',client_version:'1.0.0-preview.104'},
         '/api/self-update':{installed_version:'1.0.1-preview.104'},
+        '/api/update-check':{ok:true,installed_version:'1.0.1-preview.104',version:published},
         '/api/update-progress':downloadProgress,
         '/api/server':server,
         '/api/task':{task,items:[]},
@@ -260,6 +266,39 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     assert.equal(await success.locator('.am-notice-timer').count(),0);
     await success.getByRole('button',{name:'Закрыть'}).click();
     server.updates=[];
+    publish('done','1.0.1-preview.104','fixture-success');
+    peer.version='1.0.1-preview.104';
+    peer.update_pending=false;
+    await page.locator('#settings-open').click();
+    assert.equal(await page.locator('#settings-program-version').textContent(),'v1.0.1');
+    await page.locator('#settings-update-check').click();
+    const checked=page.locator('#notices').getByText('Установлена последняя версия.',{exact:true});
+    await checked.waitFor();
+    if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'manual-local-current.png')});
+    await page.locator('#settings-close').click();
+    await checked.waitFor();
+    await page.locator('#notices .am-notice').filter({hasText:'Установлена последняя версия.'}).getByRole('button',{name:'Закрыть'}).click();
+    published='1.0.7-preview.110';
+    const priorRequests=updateRequests.length;
+    await card.locator('.am-machine-name').click({button:'right'});
+    await menu.getByRole('menuitem',{name:'Проверить обновления'}).click();
+    await page.locator('#notices').getByText('Опубликована v1.0.7',{exact:true}).waitFor();
+    if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'manual-peer-available.png')});
+    assert.equal(updateRequests.length,priorRequests,'checking a release must not request an update');
+    server.peers.push({id:'offline',name:'ПК без связи',age:99,version:'1.0.0-preview.103'});
+    await page.locator('button[data-tab=server]').click();
+    await page.locator('#settings-network-update-check').click();
+    const review=page.locator('#network-update-dialog');
+    await review.waitFor();
+    if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'manual-network-review.png')});
+    assert.equal(await review.locator('li').filter({hasText:'ПК без связи'}).getByText('Не в сети',{exact:true}).count(),1);
+    assert.equal(updateRequests.length,priorRequests,'review must precede any update requests');
+    await review.getByRole('button',{name:'Обновить компьютеры'}).click();
+    await review.getByText('Запрос отправлен',{exact:true}).waitFor();
+    if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'manual-network-requested.png')});
+    assert.deepEqual(updateRequests.slice(priorRequests),[peer.id]);
+    await review.getByRole('button',{name:'Закрыть',exact:true}).click();
+    await page.locator('button[data-tab=tasks]').click();
     // Use the actual window with simulated macOS updater callbacks.
     await page.emulateMedia({reducedMotion:'no-preference'});
     await page.evaluate(()=>{

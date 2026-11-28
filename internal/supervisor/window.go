@@ -191,8 +191,12 @@ func (s *Supervisor) SetProjectFolder(name, folder string) error {
 
 // OwnerStartTask records an assignment from the window without a coordinator.
 func (s *Supervisor) OwnerStartTask(project, computer, provider, model, op, text, access string) (string, error) {
+	return s.OwnerStartTaskWithAttachments(project, computer, provider, model, op, text, access, nil)
+}
+
+func (s *Supervisor) OwnerStartTaskWithAttachments(project, computer, provider, model, op, text, access string, files []core.TaskAttachment) (string, error) {
 	id, _, err := s.store.StartTask(core.StartTaskRequest{
-		Project: project, Computer: computer, Provider: provider, Model: model, OpID: op, Text: text, ByOwner: true, Access: access,
+		Project: project, Computer: computer, Provider: provider, Model: model, OpID: op, Text: text, ByOwner: true, Access: access, Attachments: files,
 	})
 	if err == nil {
 		s.wakeTaskDispatch()

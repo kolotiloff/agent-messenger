@@ -795,8 +795,9 @@ type StartTaskRequest struct {
 	// Lock explicitly names a shared resource (T-072): a task with a
 	// lock does not launch while an earlier open task with the same lock
 	// runs on the same computer. Empty means no lock.
-	Lock       string
-	Assignment TaskAssignment
+	Lock        string
+	Assignment  TaskAssignment
+	Attachments []TaskAttachment
 }
 
 // MessageSender identifies the coordinator chat that wrote one task message.
@@ -896,6 +897,10 @@ func normalizeStartTask(r StartTaskRequest) (StartTaskRequest, error) {
 		return r, fmt.Errorf("%w: lock must be a short one-line resource name (at most %d characters)", ErrRejected, MaxTaskLock)
 	}
 	r.Lock = lock
+	var err error
+	if r.Attachments, err = normalizeTaskAttachments(r.Attachments); err != nil {
+		return r, err
+	}
 	if !r.Assignment.valid() || r.Assignment.OriginalID != "" {
 		return r, fmt.Errorf("%w: invalid task_type, difficulty or retry_of", ErrRejected)
 	}
@@ -915,6 +920,13 @@ func existingStartTask(tx *sql.Tx, r StartTaskRequest) (string, error) {
 	assignment, err := readTaskAssignment(tx, id)
 	if err != nil {
 		return id, err
+	}
+	files, err := getTaskAttachments(tx, id)
+	if err != nil {
+		return id, err
+	}
+	if !sameTaskAttachments(files, r.Attachments) {
+		return id, fmt.Errorf("%w: this operation id was used with different attachments", ErrRejected)
 	}
 	assignment.OriginalID = ""
 	if assignment != r.Assignment {
@@ -1046,6 +1058,9 @@ func recordLocalTask(tx *sql.Tx, r StartTaskRequest, computer string, origin *ne
 		}
 	}
 	if _, err := storeTaskAssignment(tx, id, r.Project, r.Assignment, origin != nil); err != nil {
+		return "", err
+	}
+	if err := putTaskAttachments(tx, id, r.Attachments); err != nil {
 		return "", err
 	}
 	if err := insertTaskRun(tx, id, 1, "start", r.Text); err != nil {
@@ -1673,8 +1688,9 @@ type TaskBrief struct {
 	FollowUp string `json:"follow_up,omitempty"`
 	// OwnerNotes is what the owner wrote while the task worked (T-085);
 	// HeldReport is the report that was not sent because of them.
-	OwnerNotes string `json:"owner_notes,omitempty"`
-	HeldReport string `json:"held_report,omitempty"`
+	OwnerNotes  string           `json:"owner_notes,omitempty"`
+	HeldReport  string           `json:"held_report,omitempty"`
+	Attachments []TaskAttachment `json:"-"`
 }
 
 // continuedTaskNote tells a continued worker what this run is.
@@ -1741,6 +1757,9 @@ func (s *Store) ReadTask(run, receipt string, includeTask bool) (TaskBrief, erro
 			}
 			b.Note = ownerNoteTaskNote
 			_ = tx.QueryRow(`SELECT COALESCE(disposition_text,'') FROM task_runs WHERE task_id=? AND ordinal=?`, t.ID, r.Ordinal-1).Scan(&b.HeldReport)
+		}
+		if b.Attachments, err = getTaskAttachments(tx, t.ID); err != nil {
+			return err
 		}
 		if b.OwnerNotes, err = ownerNotesOf(tx, r.ID); err != nil {
 			return err

@@ -149,7 +149,8 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			return
 		}
 		mutation := r.URL.Path == "/api/enqueue" || r.URL.Path == "/api/pause" || r.URL.Path == "/api/resume" || r.URL.Path == "/api/outbox/ack" || r.URL.Path == "/api/check-cli" || r.URL.Path == "/api/setup-claude" || r.URL.Path == "/api/setup-codex" || r.URL.Path == "/api/authorize-setup" || r.URL.Path == "/api/restart-client" || r.URL.Path == "/api/pick" || r.URL.Path == "/api/agent-login" || r.URL.Path == "/api/agent-logout" || r.URL.Path == "/api/agent-install" || r.URL.Path == "/api/agent-find" || r.URL.Path == "/api/agent-setup-finish" || r.URL.Path == "/api/agent-page" || r.URL.Path == "/api/agent-uninstall" || r.URL.Path == "/api/agent-trust" || r.URL.Path == taskFileRoute || taskMutation(r.URL.Path) ||
-			((r.URL.Path == "/api/self-update" || r.URL.Path == machineOrderRoute) && r.Method != http.MethodGet)
+			r.URL.Path == "/api/update-check" ||
+			((r.URL.Path == "/api/self-update" || r.URL.Path == machineOrderRoute || r.URL.Path == sleepModeRoute || r.URL.Path == onboardingRoute) && r.Method != http.MethodGet)
 		method := http.MethodGet
 		if mutation {
 			method = http.MethodPost
@@ -236,6 +237,9 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 		if r.URL.Path == "/api/check-cli" {
 			deadline = 20 * time.Second
 		}
+		if r.URL.Path == "/api/update-check" {
+			deadline = 20 * time.Second
+		}
 		if r.URL.Path == "/api/server-action" {
 			// Joining or checking a server goes over the network.
 			deadline = 22 * time.Second
@@ -292,8 +296,8 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			}
 			limit := int64(64 << 10)
 			if r.URL.Path == "/api/task-start" {
-				// The task may contain 20,000 characters that JSON escapes.
-				limit = 256 << 10
+				// Include task text, escaping and base64 attachment overhead.
+				limit = 512 << 10
 			}
 			if r.URL.Path == "/api/feedback" {
 				// A remark may carry a picture (T-135).
@@ -302,6 +306,14 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			r.Body = http.MaxBytesReader(w, r.Body, limit)
 			decoder := json.NewDecoder(r.Body)
 			decoder.DisallowUnknownFields()
+			if r.URL.Path == "/api/update-check" {
+				serveUpdateCheck(w, r.WithContext(ctx), decoder, desktop.updateCheckChannel())
+				return
+			}
+			if r.URL.Path == sleepModeRoute || r.URL.Path == onboardingRoute {
+				serveWindowPreference(w, r.WithContext(ctx), desktop.setupRoot, call, decoder)
+				return
+			}
 			if r.URL.Path == machineOrderRoute {
 				serveMachineOrder(w, r, desktop.setupRoot, decoder)
 				return
@@ -507,6 +519,10 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 			writeJSON(w, clientInfo(ctx, call, restart))
 			return
 		}
+		if r.URL.Path == sleepModeRoute || r.URL.Path == onboardingRoute {
+			serveWindowPreference(w, r.WithContext(ctx), desktop.setupRoot, call, nil)
+			return
+		}
 		req := control.Request{}
 		switch r.URL.Path {
 		case "/api/outbox":
@@ -695,7 +711,7 @@ func taskMutation(path string) bool {
 	switch path {
 	case "/api/usage-export":
 		return true
-	case "/api/project-create", "/api/project-folder", "/api/task-start", "/api/task-answer", "/api/task-note", "/api/agent-set", "/api/agent-models", "/api/agent-access", "/api/agent-pause", "/api/agent-remove", "/api/task-cancel", "/api/task-hide", "/api/task-rename", "/api/task-archive", "/api/task-hide-history", "/api/server-action", "/api/coordinator-connect", "/api/project-rules", "/api/project-title", "/api/project-remove", "/api/feedback", "/api/feedback-export", "/api/feedback-clear":
+	case "/api/codex-account-limits", "/api/project-create", "/api/project-folder", "/api/task-start", "/api/task-answer", "/api/task-note", "/api/agent-set", "/api/agent-models", "/api/agent-access", "/api/agent-pause", "/api/agent-remove", "/api/task-cancel", "/api/task-hide", "/api/task-rename", "/api/task-archive", "/api/task-hide-history", "/api/server-action", "/api/coordinator-connect", "/api/project-rules", "/api/project-title", "/api/project-remove", "/api/feedback", "/api/feedback-export", "/api/feedback-clear":
 		return true
 	}
 	return false
@@ -709,6 +725,12 @@ func validTaskHistoryFilter(agent, computer string) bool {
 
 func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bool) {
 	switch path {
+	case "/api/codex-account-limits":
+		var input struct{}
+		if err := decoder.Decode(&input); err != nil {
+			return control.Request{}, false
+		}
+		return control.Request{Cmd: "codex-account-limits"}, true
 	case "/api/usage-export":
 		var in struct {
 			Project  string   `json:"project"`
@@ -776,13 +798,14 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 		return control.Request{Cmd: "coordinator-connect", Alias: in.Project, Provider: in.Agent}, true
 	case "/api/task-start":
 		var in struct {
-			Access   string `json:"access"`
-			Project  string `json:"project"`
-			Computer string `json:"computer"`
-			Agent    string `json:"agent"`
-			Model    string `json:"model"`
-			OpID     string `json:"op_id"`
-			Text     string `json:"text"`
+			Attachments []core.TaskAttachment `json:"attachments"`
+			Access      string                `json:"access"`
+			Project     string                `json:"project"`
+			Computer    string                `json:"computer"`
+			Agent       string                `json:"agent"`
+			Model       string                `json:"model"`
+			OpID        string                `json:"op_id"`
+			Text        string                `json:"text"`
 		}
 		if decoder.Decode(&in) != nil || !core.ValidProjectName(in.Project) || !core.TaskProviders[in.Agent] ||
 			!validTaskHistoryFilter(in.Agent, in.Computer) || !core.ValidTaskModel(in.Model) || !core.ValidTaskAccess(in.Access) ||
@@ -793,7 +816,10 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 		if in.Access != "" {
 			cmd = "task-owner-start-with-access"
 		}
-		return control.Request{Cmd: cmd, Access: in.Access, Project: in.Project, Computer: in.Computer, Provider: in.Agent, Model: in.Model, Confirmation: in.OpID, Text: in.Text}, true
+		if len(in.Attachments) != 0 {
+			cmd = "task-owner-start-with-attachments"
+		}
+		return control.Request{Cmd: cmd, Access: in.Access, Project: in.Project, Computer: in.Computer, Provider: in.Agent, Model: in.Model, Confirmation: in.OpID, Text: in.Text, Attachments: in.Attachments}, true
 	case "/api/task-answer":
 		var in struct {
 			Task     string `json:"task"`

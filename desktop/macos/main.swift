@@ -10,12 +10,31 @@ final class TitlebarWebView: WKWebView {
     var dragZones: [NSRect] = []
     var dragHoles: [NSRect] = []
     var fileDropZones: [NSRect] = []
+    var fileDropDraft: Int?
+    private let attachmentQueue = DispatchQueue(label: "Kotel file drop")
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         let local = convert(sender.draggingLocation, from: nil)
         let point = NSPoint(x: local.x, y: isFlipped ? local.y : bounds.height - local.y)
         guard fileDropZones.contains(where: { $0.contains(point) }) else { return super.performDragOperation(sender) }
         let items = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
         guard !items.isEmpty else { return super.performDragOperation(sender) }
+        if let draft = fileDropDraft {
+            let urls = Array(items.prefix(17))
+            attachmentQueue.async { [weak self] in
+                var result: [String: Any]
+                do {
+                    result = ["groups": try DraftDrop.items(urls)]
+                } catch {
+                    result = ["error": (error as? DraftDrop)?.rawValue ?? DraftDrop.unreadable.rawValue]
+                }
+                guard let data = try? JSONSerialization.data(withJSONObject: result),
+                      let json = String(data: data, encoding: .utf8) else { return }
+                DispatchQueue.main.async { [weak self] in
+                    self?.evaluateJavaScript("window.messengerDropAttachments?.(\(json), \(draft), \(point.x), \(point.y))")
+                }
+            }
+            return true
+        }
         let paths = items.prefix(17).map(\.path)
         guard let data = try? JSONSerialization.data(withJSONObject: paths),
               let json = String(data: data, encoding: .utf8) else { return false }
@@ -38,6 +57,55 @@ final class TitlebarWebView: WKWebView {
             return
         }
         window.performDrag(with: event)
+    }
+}
+
+// Read only URLs supplied by the owner's native drop. Limit allocation and
+// reject special files without opening them as streams.
+private enum DraftDrop: String, Error {
+    case limit
+    case unreadable
+
+    static func items(_ urls: [URL]) throws -> [[String: Any]] {
+        guard urls.count <= 16 else { throw DraftDrop.limit }
+        var remaining = 112 * 1024
+        var count = 0
+        let manager = FileManager.default
+        let keys: [URLResourceKey] = [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey]
+        return try urls.map { url in
+            var files = [[String: Any]]()
+            func read(_ entry: URL, _ relative: String) throws {
+                count += 1
+                guard count <= 64 else { throw DraftDrop.limit }
+                let values = try entry.resourceValues(forKeys: Set(keys))
+                guard values.isSymbolicLink != true else { throw DraftDrop.unreadable }
+                if values.isDirectory == true {
+                    files.append(["path": relative, "dir": true])
+                    for child in try manager.contentsOfDirectory(at: entry, includingPropertiesForKeys: keys) {
+                        try read(child, relative + "/" + child.lastPathComponent)
+                    }
+                } else if values.isRegularFile == true {
+                    let fd = Darwin.open(entry.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK)
+                    guard fd >= 0 else { throw DraftDrop.unreadable }
+                    let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+                    defer { try? handle.close() }
+                    var statInfo = stat()
+                    guard fstat(fd, &statInfo) == 0, statInfo.st_mode & S_IFMT == S_IFREG else {
+                        throw DraftDrop.unreadable
+                    }
+                    guard statInfo.st_size <= remaining else { throw DraftDrop.limit }
+                    let data = try handle.read(upToCount: remaining + 1) ?? Data()
+                    guard data.count <= remaining else { throw DraftDrop.limit }
+                    remaining -= data.count
+                    files.append(["path": relative, "data": data.base64EncodedString()])
+                } else {
+                    throw DraftDrop.unreadable
+                }
+            }
+            let name = url.lastPathComponent
+            try read(url, name)
+            return ["name": name, "files": files]
+        }
     }
 }
 
@@ -490,6 +558,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             view.dragZones = rects(body["zones"])
             view.dragHoles = rects(body["holes"])
             view.fileDropZones = rects(body["fileDrop"])
+            view.fileDropDraft = body["fileDropDraft"] as? Int
         }
     }
 

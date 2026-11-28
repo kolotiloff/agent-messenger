@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/kolotiloff/agent-messenger/internal/adapters"
+	"github.com/kolotiloff/agent-messenger/internal/buildinfo"
 	"github.com/kolotiloff/agent-messenger/internal/core"
 	"github.com/kolotiloff/agent-messenger/internal/journal"
 	"github.com/kolotiloff/agent-messenger/internal/platform"
@@ -183,6 +184,10 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 		s.runNotStarted(runID, task.ID, err.Error())
 		return
 	}
+	codexStream := task.Provider == "codex" && task.Profile == adapters.ProfileWorker
+	if codexStream {
+		args = adapters.CodexTaskServerArgs(spec)
+	}
 	if task.Provider == "cursor" {
 		if err := ensureCursorTaskServer(exe, task.Environment); err != nil {
 			s.runNotStarted(runID, task.ID, "Cursor MCP settings: "+err.Error())
@@ -212,10 +217,23 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 		return
 	}
 	cmd.Stdout = stdoutW
+	defer stdoutW.Close()
+	var codexIn io.WriteCloser
+	if codexStream {
+		codexIn, err = cmd.StdinPipe()
+		if err != nil {
+			_ = stdout.Close()
+			s.runNotStarted(runID, task.ID, err.Error())
+			return
+		}
+	}
 	started := false
 	defer func() {
 		if !started {
 			_ = stdout.Close()
+			if codexIn != nil {
+				_ = codexIn.Close()
+			}
 		}
 	}()
 	record := recordedRun{ID: reservation, Root: s.root, Provider: task.Provider, Environment: task.Environment, ConversationID: task.SessionID, TaskRunID: run.ID}
@@ -271,15 +289,17 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 		var result adapters.TaskEventResult
 		stopUsage, usageDone := make(chan struct{}), make(chan struct{})
 		watchingUsage := false
-		reader := bufio.NewReader(stdout)
 		bound := false
 		var outputNoted time.Time
 		finalNoted := false
 		activeCommands := make(map[string]bool)
 		// Batch partial text so the window can follow it without writing
 		// every provider fragment to SQLite and to the network outbox.
+		var partialMu sync.Mutex
 		var partial strings.Builder
 		var partialAt time.Time
+		var partialTimer *time.Timer
+		const partialInterval = 150 * time.Millisecond
 		flushPartial := func() {
 			if partial.Len() > 0 {
 				_ = s.store.AppendTaskRunItem(runID, "text_delta", "", partial.String(), "")
@@ -288,87 +308,127 @@ func (s *Supervisor) runTask(ctx context.Context, runID string) {
 			}
 		}
 
-		for {
-			line, err := reader.ReadBytes('\n')
-			if len(line) > 0 {
-				live.lastOutput.Store(time.Now().UnixNano())
-				if time.Since(outputNoted) >= core.RunOutputStep() {
-					outputNoted = time.Now()
-					_ = s.store.NoteRunOutput(runID)
-				}
-				model := result.Model
-				adapters.ParseTaskEvent(task.Provider, line, &result)
-				if result.Completed && !finalNoted {
-					// T-172: the worker's turn ended. If its process does not
-					// end too, say what keeps it; nothing is closed here.
-					finalNoted = true
-					live.turnEnded.Store(true)
-					_ = s.store.NoteRunOutput(runID)
-					_ = s.store.NoteRunFinal(runID)
-					if usage := result.Usage; usage != nil {
-						_ = s.store.NoteLiveTokens(runID, usage.Input+usage.Output)
-					}
-					go s.watchLinger(runID, task.ID, task.Provider, obs, lingerDone)
-				}
-				if result.Model != model {
-					_ = s.store.SetTaskRunModel(runID, result.Model)
-				}
-				for _, item := range adapters.TaskFeedEntries(task.Provider, line) {
-					switch item.Kind {
-					case "text_delta":
-						partial.WriteString(item.Text)
-						if time.Since(partialAt) >= 150*time.Millisecond || partial.Len() >= 1000 {
-							flushPartial()
-						}
-						continue
-					case "command_start":
-						if activeCommands[item.Title] {
-							continue
-						}
-						activeCommands[item.Title] = true
-						live.activeCommands.Add(1)
-						item.Title = runID + "/" + item.Title
-					case "command_end":
-						if !activeCommands[item.Title] {
-							continue
-						}
-						delete(activeCommands, item.Title)
-						live.activeCommands.Add(-1)
-						item.Title = runID + "/" + item.Title
-					}
-					flushPartial()
-					partialAt = time.Time{}
-					_ = s.store.AppendTaskRunItem(runID, item.Kind, item.Title, item.Text, item.Description)
-				}
-				if !bound && result.Session != "" {
-					bound = true
-					if s.store.BindTaskSession(runID, result.Session) != nil {
-						// A different conversation: its tools stay closed, and
-						// the run will fail verification. Stop it early.
-						_ = platform.SignalGroup(obs.PGID)
-					} else if task.Provider == "codex" {
-						watchingUsage = true
-						session, hasModel := result.Session, result.Model != ""
-						go func() {
-							defer close(usageDone)
-							s.watchCodexTask(ctx, stopUsage, runID, task, session, launched, spec.Resume, hasModel)
-						}()
-					}
-				}
+		bind := func(session string) error {
+			bound = true
+			if err := s.store.BindTaskSession(runID, session); err != nil {
+				return err
 			}
-			if err != nil {
+			if task.Provider == "codex" {
+				watchingUsage = true
+				hasModel := result.Model != ""
+				go func() {
+					defer close(usageDone)
+					s.watchCodexTask(ctx, stopUsage, runID, task, session, launched, spec.Resume, hasModel)
+				}()
+			}
+			return nil
+		}
+		processLine := func(line []byte) {
+			live.lastOutput.Store(time.Now().UnixNano())
+			if time.Since(outputNoted) >= core.RunOutputStep() {
+				outputNoted = time.Now()
+				_ = s.store.NoteRunOutput(runID)
+			}
+			model := result.Model
+			adapters.ParseTaskEvent(task.Provider, line, &result)
+			if result.Completed && !finalNoted {
+				// T-172: the worker's turn ended. If its process does not
+				// end too, say what keeps it; nothing is closed here.
+				finalNoted = true
+				live.turnEnded.Store(true)
+				_ = s.store.NoteRunOutput(runID)
+				_ = s.store.NoteRunFinal(runID)
+				if usage := result.Usage; usage != nil {
+					_ = s.store.NoteLiveTokens(runID, usage.Input+usage.Output)
+				}
+				go s.watchLinger(runID, task.ID, task.Provider, obs, lingerDone)
+			}
+			if result.Model != model {
+				_ = s.store.SetTaskRunModel(runID, result.Model)
+			}
+			for _, item := range adapters.TaskFeedEntries(task.Provider, line) {
+				switch item.Kind {
+				case "text_delta":
+					partialMu.Lock()
+					partial.WriteString(item.Text)
+					delay := partialInterval - time.Since(partialAt)
+					if delay <= 0 || partial.Len() >= 1000 {
+						flushPartial()
+					} else if partialTimer == nil {
+						partialTimer = time.AfterFunc(delay, func() {
+							partialMu.Lock()
+							partialTimer = nil
+							flushPartial()
+							partialMu.Unlock()
+						})
+					}
+					partialMu.Unlock()
+					continue
+				case "command_start":
+					if activeCommands[item.Title] {
+						continue
+					}
+					activeCommands[item.Title] = true
+					live.activeCommands.Add(1)
+					item.Title = runID + "/" + item.Title
+				case "command_end":
+					if !activeCommands[item.Title] {
+						continue
+					}
+					delete(activeCommands, item.Title)
+					live.activeCommands.Add(-1)
+					item.Title = runID + "/" + item.Title
+				}
+				partialMu.Lock()
 				flushPartial()
-				if errors.Is(err, io.EOF) {
-					err = nil
+				partialAt = time.Time{}
+				partialMu.Unlock()
+				_ = s.store.AppendTaskRunItem(runID, item.Kind, item.Title, item.Text, item.Description)
+			}
+			if !bound && result.Session != "" {
+				if err := bind(result.Session); err != nil {
+					// A different conversation keeps its tools closed.
+					_ = platform.SignalGroup(obs.PGID)
 				}
-				if watchingUsage {
-					close(stopUsage)
-					<-usageDone
-				}
-				readDone <- readOutcome{result, err}
-				return
 			}
 		}
+		var readErr error
+		if codexStream {
+			readErr = adapters.StreamCodexTask(codexIn, stdout, spec, task.Folder, buildinfo.Version, func(session string) error {
+				if err := bind(session); err != nil {
+					return err
+				}
+				result.Session = session
+				return nil
+			}, processLine)
+			// EOF asks the idle server to exit after its verified turn.
+			_ = codexIn.Close()
+		} else {
+			reader := bufio.NewReader(stdout)
+			for {
+				line, err := reader.ReadBytes('\n')
+				if len(line) > 0 {
+					processLine(line)
+				}
+				if err != nil {
+					if !errors.Is(err, io.EOF) {
+						readErr = err
+					}
+					break
+				}
+			}
+		}
+		partialMu.Lock()
+		if partialTimer != nil {
+			partialTimer.Stop()
+		}
+		flushPartial()
+		partialMu.Unlock()
+		if watchingUsage {
+			close(stopUsage)
+			<-usageDone
+		}
+		readDone <- readOutcome{result, readErr}
 	}()
 
 	cancelled := false

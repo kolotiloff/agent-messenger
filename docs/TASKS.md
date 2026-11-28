@@ -64,6 +64,10 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 | T-385 | Show reply activity and Claude Code text fragments, delay the process warning and keep personal chats open until explicitly archived. | window / worker / MCP | PR #257. Browser fixtures exercise reply and archive transitions, and core and MCP tests cover persistence and coordinator scope. |
 | T-387 | Add scoped task shortcuts, simplify the context label, group agents by installation status, and show composer commands and attachments. | window / macOS | PR #257. Check group hover, icon alignment, grouped routes, attachment payload and drop feedback, command keyboard activation, and both settings groups with fixture data. |
 | T-390 | Show agent limits together beside App settings. | window | PR #257. Local and peer snapshots, reported plan, progress bars and reset times verified in Chromium and WebKit with fixture data. Installed acceptance remains pending. |
+| T-384 | Provide optional first-run setup and a safe path back to it. | window | PR #257. Five steps covered with browser fixtures, including dismissal and a personal chat. |
+| T-386 | Stream Codex worker text through app-server. | worker | PR #257. Fake CLI coverage includes incremental text, continuation, cancellation, restart and peer delivery. Installed acceptance remains open. |
+| T-391 | Add manual update checks, global notices and review before network updates. | window / desktop | PR #257. Signed metadata and browser fixture checks cover local and peer states. Installed upgrades remain to be exercised. |
+| T-392 | Add sleep modes and audit the window's shared styles. | window / platform | PR #257. Browser checks, a macOS sleep assertion, and platform compile checks. |
 | T-371 | Manage task names and archive entries. | window / network | Origin-owned edits, replicated metadata and explicit manual close upon interruption. Remote observer editing remains open. |
 | T-370 | Refine Statistics, Settings navigation, context details and offline presence. | window | [PR #253](https://github.com/kolotiloff/agent-messenger/pull/253). |
 | T-369 | Adjust the dark palette and compare sidebar task highlights. | window | Dark appearance uses a slightly darker sidebar and brighter text. The preview compares the current highlight with stronger row fills. |
@@ -200,9 +204,9 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 - T-386. Stream Codex worker text through app-server. Preserve saved sessions, scoped tools, worker identity, cancellation and receipt verification. Verify incremental text, restart and remote delivery before switching the normal worker path. See D-274.
 
-- T-388. Discover and execute provider-native slash commands through provider-specific capabilities. A provider command appears only if the selected transport and model support the action. Keep terminal-only commands out until there is a matching window action.
+- T-388. The local Codex usage command is wired to the provider’s account RPC. Discover and execute further native commands through provider-specific capabilities. A provider command appears only if the selected transport and model support the action. Keep terminal-only commands out until there is a matching window action.
 
-- T-389. Transfer actual binary attachments and directory contents to remote executors. Verify limits, cleanup, user intent, retry identity and access isolation before enabling upload.
+- T-389. New tasks can transfer bounded binary attachments and directories to compatible peers. Add binary transfers for follow-ups. Verify limits, cleanup, user intent, retry identity and access isolation before enabling upload.
 
 - T-384. Add an optional first-run setup in the Kotel window. 1. Choose language and appearance. 2. Select and check an installed agent and default model. 3. Open a project or folder, or start a chat without either. 4. Optionally connect other computers and set up the coordinator. 5. Optionally enable and test notifications, then open the first chat. Use the existing settings and platform dialogs. Allow users to close the flow or choose “Set up later” at any step, reopen it from Settings, and avoid displaying it again on updates or migrated installations. See D-273.
 

@@ -14,6 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	brokerapi "github.com/kolotiloff/agent-messenger/internal/broker"
 	"github.com/kolotiloff/agent-messenger/internal/modelcatalog"
 )
 
@@ -191,33 +192,34 @@ func taskLink(tx *sql.Tx, task string) (taskLinks, error) {
 
 // netBody is the content of a message. Task is always the origin's task ID.
 type netBody struct {
-	Access           string `json:"access,omitempty"`
-	Kind             string `json:"kind"`
-	Task             string `json:"task"`
-	Project          string `json:"project,omitempty"`
-	Agent            string `json:"agent,omitempty"`
-	SenderAgent      string `json:"sender_agent,omitempty"`
-	SenderModel      string `json:"sender_model,omitempty"`
-	Title            string `json:"title,omitempty"`
-	TitleVersion     int64  `json:"title_version,omitempty"`
-	ArchiveVersion   int64  `json:"archive_version,omitempty"`
-	Description      string `json:"description,omitempty"`
-	Text             string `json:"text,omitempty"`
-	Model            string `json:"model,omitempty"`
-	CoordinatorModel bool   `json:"coordinator_model,omitempty"`
-	ByOwner          bool   `json:"by_owner,omitempty"`
-	Folder           string `json:"folder,omitempty"`
-	Mirror           string `json:"mirror,omitempty"`
-	Reason           string `json:"reason,omitempty"`
-	State            string `json:"state,omitempty"`
-	Detail           string `json:"detail,omitempty"`
-	Audience         string `json:"audience,omitempty"`
-	Event            string `json:"event,omitempty"`
-	Question         string `json:"question,omitempty"`
-	OpID             string `json:"op_id,omitempty"`
-	By               string `json:"by,omitempty"`
-	Failure          string `json:"failure_reason,omitempty"`
-	Reset            string `json:"failure_reset,omitempty"`
+	Attachments      []TaskAttachment `json:"attachments,omitempty"`
+	Access           string           `json:"access,omitempty"`
+	Kind             string           `json:"kind"`
+	Task             string           `json:"task"`
+	Project          string           `json:"project,omitempty"`
+	Agent            string           `json:"agent,omitempty"`
+	SenderAgent      string           `json:"sender_agent,omitempty"`
+	SenderModel      string           `json:"sender_model,omitempty"`
+	Title            string           `json:"title,omitempty"`
+	TitleVersion     int64            `json:"title_version,omitempty"`
+	ArchiveVersion   int64            `json:"archive_version,omitempty"`
+	Description      string           `json:"description,omitempty"`
+	Text             string           `json:"text,omitempty"`
+	Model            string           `json:"model,omitempty"`
+	CoordinatorModel bool             `json:"coordinator_model,omitempty"`
+	ByOwner          bool             `json:"by_owner,omitempty"`
+	Folder           string           `json:"folder,omitempty"`
+	Mirror           string           `json:"mirror,omitempty"`
+	Reason           string           `json:"reason,omitempty"`
+	State            string           `json:"state,omitempty"`
+	Detail           string           `json:"detail,omitempty"`
+	Audience         string           `json:"audience,omitempty"`
+	Event            string           `json:"event,omitempty"`
+	Question         string           `json:"question,omitempty"`
+	OpID             string           `json:"op_id,omitempty"`
+	By               string           `json:"by,omitempty"`
+	Failure          string           `json:"failure_reason,omitempty"`
+	Reset            string           `json:"failure_reset,omitempty"`
 	// Rules are the starting computer's worker rules (T-050). A computer
 	// before preview.38 ignores them.
 	Rules string `json:"rules,omitempty"`
@@ -279,6 +281,9 @@ func enqueueNetFrom(tx *sql.Tx, self, broker, to, opID, task string, b netBody) 
 	raw, err := json.Marshal(b)
 	if err != nil {
 		return err
+	}
+	if len(b.Attachments) > 0 && len(raw) > brokerapi.MaxMessageBody {
+		return fmt.Errorf("%w: the network message exceeds %d KiB", ErrRejected, brokerapi.MaxMessageBody>>10)
 	}
 	_, err = tx.Exec(`INSERT INTO net_outbox(broker,recipient,op_id,kind,task_id,body,created_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT(op_id) DO NOTHING`,
 		broker, to, opID, b.Kind, task, string(raw), now())
@@ -724,6 +729,9 @@ func prepareRemoteTask(tx *sql.Tx, r StartTaskRequest) (remoteTaskConfig, error)
 	if r.Access != "" && (!previewBuild.MatchString(peer.Version) || !peerBuildAtLeast(peer.Version, 118)) {
 		return cfg, fmt.Errorf("%w: update the executor to build 118 or later before requesting per-task access", ErrRejected)
 	}
+	if len(r.Attachments) > 0 && (!previewBuild.MatchString(peer.Version) || !peerBuildAtLeast(peer.Version, 120)) {
+		return cfg, fmt.Errorf("%w: update the executor to build 120 or later before sending attachments", ErrRejected)
+	}
 	centralModels := usesCoordinatorModels(peer.Version)
 	if centralModels {
 		self, err := localComputer(tx)
@@ -783,7 +791,13 @@ func recordRemoteTask(tx *sql.Tx, r StartTaskRequest, self string, cfg remoteTas
 	if r.Access != "" {
 		kind = "start_with_access"
 	}
-	return id, enqueueNetFrom(tx, self, cfg.broker, r.Computer, "start."+id, id, netBody{Kind: kind, Access: r.Access, Task: id, Project: r.Project, Agent: r.Provider, Title: title, Text: r.Text, Model: r.Model, CoordinatorModel: cfg.centralModels, ByOwner: r.ByOwner, Rules: r.Rules, Lock: r.Lock, SenderAgent: sender, SenderModel: senderModel, Analytics: analytics})
+	if len(r.Attachments) > 0 {
+		kind = "start_with_attachments"
+	}
+	if err := putTaskAttachments(tx, id, r.Attachments); err != nil {
+		return "", err
+	}
+	return id, enqueueNetFrom(tx, self, cfg.broker, r.Computer, "start."+id, id, netBody{Kind: kind, Attachments: r.Attachments, Access: r.Access, Task: id, Project: r.Project, Agent: r.Provider, Title: title, Text: r.Text, Model: r.Model, CoordinatorModel: cfg.centralModels, ByOwner: r.ByOwner, Rules: r.Rules, Lock: r.Lock, SenderAgent: sender, SenderModel: senderModel, Analytics: analytics})
 }
 
 // answerRemoteTask sends an answer to the computer that runs the task.
@@ -1177,7 +1191,7 @@ func (s *Store) netUndeliverable(seq int64, opID, broker, recipient string) erro
 			return nil
 		}
 		switch kind {
-		case "start", "start_with_access":
+		case "start", "start_with_access", "start_with_attachments":
 			const why = "the other computer is no longer in the network; the task never reached it"
 			if err := setTaskState(tx, task, "failed", why); err != nil {
 				return err
@@ -1352,6 +1366,12 @@ func decodeNetIncoming(m NetIncoming) (netBody, bool) {
 	// Ignore IDs that cannot travel back in a reply.
 	valid := json.Unmarshal(m.Body, &b) == nil && netRef.MatchString(b.Task) &&
 		(b.Question == "" || netRef.MatchString(b.Question))
+	if b.Kind == "start_with_attachments" {
+		valid = valid && len(b.Attachments) > 0 && ValidTaskAccess(b.Access)
+		b.Kind = "start"
+	} else if len(b.Attachments) > 0 {
+		valid = false
+	}
 	if b.Kind == "start_with_access" {
 		valid = valid && b.Access != "" && ValidTaskAccess(b.Access)
 		b.Kind = "start"
@@ -1446,6 +1466,9 @@ func remoteStartRequest(tx *sql.Tx, from netLink, b netBody) (StartTaskRequest, 
 		return r, fmt.Errorf("%w: invalid task access", ErrRejected)
 	}
 	r = StartTaskRequest{Access: b.Access, Project: b.Project, OpID: mirrorOp(from), Provider: b.Agent, Title: b.Title, Text: strings.TrimSpace(b.Text), Model: strings.TrimSpace(b.Model), Rules: strings.TrimSpace(b.Rules), SenderAgent: b.SenderAgent, SenderModel: b.SenderModel, ByOwner: b.ByOwner}
+	if r.Attachments, err = normalizeTaskAttachments(b.Attachments); err != nil {
+		return r, err
+	}
 	var assignment TaskAssignment
 	if json.Unmarshal(b.Analytics, &assignment) == nil && assignment.valid() {
 		r.Assignment = assignment

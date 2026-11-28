@@ -31,7 +31,7 @@ func taskTools() []map[string]any {
 			"properties": map[string]any{"text": map[string]any{"type": "string", "minLength": 1, "maxLength": core.MaxDispositionText, "description": desc}, "images": images}}
 	}
 	return []map[string]any{
-		{"name": "read_task", "description": "Read your task: its text, project and folder. On a resumed run it returns your question and its answer instead of the task text, which this conversation already has; pass include_task: true to get the text again. owner_notes is what the owner wrote to you while you worked: take it into account.",
+		{"name": "read_task", "description": "Read your task: its text, project and folder. attachment_paths are absolute paths to files or directories the owner shared with this task. On a resumed run it returns your question and its answer instead of the task text, which this conversation already has; pass include_task: true to get the text again. owner_notes is what the owner wrote to you while you worked: take it into account.",
 			"inputSchema": map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{
 				"include_task": map[string]any{"type": "boolean", "description": "also return the task text on a resumed run"},
 			}}},
@@ -66,6 +66,8 @@ func ServeTask(dbPath, run, receipt string, in io.Reader, out io.Writer) error {
 func serveTask(store *core.Store, run, receipt string, in io.Reader, out io.Writer) error {
 	scanner := bufio.NewScanner(in)
 	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
+	var attachments taskAttachmentFiles
+	defer attachments.close()
 	for scanner.Scan() {
 		var request rpcRequest
 		if json.Unmarshal(scanner.Bytes(), &request) != nil || request.ID == nil {
@@ -98,7 +100,7 @@ func serveTask(store *core.Store, run, receipt string, in io.Reader, out io.Writ
 				result = map[string]any{"content": []map[string]any{{"type": "text", "text": "not a Kotel task run"}}, "isError": true}
 				break
 			}
-			result = callTaskTool(store, run, receipt, request.Params)
+			result = callTaskTool(store, run, receipt, request.Params, &attachments)
 		default:
 			rpcErr = map[string]any{"code": -32601, "message": "Method not found"}
 		}
@@ -119,7 +121,7 @@ func serveTask(store *core.Store, run, receipt string, in io.Reader, out io.Writ
 	return scanner.Err()
 }
 
-func callTaskTool(store *core.Store, run, receipt string, params map[string]any) map[string]any {
+func callTaskTool(store *core.Store, run, receipt string, params map[string]any, files ...*taskAttachmentFiles) map[string]any {
 	name, _ := params["name"].(string)
 	args, _ := params["arguments"].(map[string]any)
 	var value any
@@ -131,7 +133,20 @@ func callTaskTool(store *core.Store, run, receipt string, params map[string]any)
 			err = errors.New("read_task takes only include_task")
 			break
 		}
-		value, err = store.ReadTask(run, receipt, include)
+		var brief core.TaskBrief
+		brief, err = store.ReadTask(run, receipt, include)
+		if err != nil {
+			break
+		}
+		// Use the same private directory for repeated reads in this MCP process.
+		var paths []string
+		if len(brief.Attachments) > 0 && len(files) != 0 {
+			paths, err = files[0].materialize(brief.Attachments)
+		}
+		value = struct {
+			core.TaskBrief
+			Paths []string `json:"attachment_paths,omitempty"`
+		}{brief, paths}
 	case core.DispositionReport:
 		var parts core.ReportParts
 		var text string

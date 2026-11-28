@@ -4,13 +4,14 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"github.com/kolotiloff/agent-messenger/internal/adapters"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/kolotiloff/agent-messenger/internal/adapters"
 )
 
 // taskWorkerFixture imitates a Claude (`-p`) or Codex (`exec`) worker run. It
@@ -20,18 +21,24 @@ import (
 // $MESSENGER_TASK_LOG.
 func taskWorkerFixture(mode string) int {
 	args := os.Args[1:]
-	codex := len(args) > 0 && args[0] == "exec"
+	appServer := len(args) > 0 && args[0] == "app-server"
+	codex := appServer || len(args) > 0 && args[0] == "exec"
 	cursor := false
 	for _, a := range args {
 		cursor = cursor || a == "--approve-mcps"
 	}
 	wd, _ := os.Getwd()
-	if logPath := os.Getenv("MESSENGER_TASK_LOG"); logPath != "" {
-		line, _ := json.Marshal(map[string]any{"args": args, "cwd": wd, "worker_run": os.Getenv(adapters.WorkerRunVariable)})
-		if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
-			f.Write(append(line, '\n'))
-			f.Close()
+	logRun := func(sandbox, resumed string) {
+		if logPath := os.Getenv("MESSENGER_TASK_LOG"); logPath != "" {
+			line, _ := json.Marshal(map[string]any{"args": args, "cwd": wd, "worker_run": os.Getenv(adapters.WorkerRunVariable), "sandbox": sandbox, "resumed": resumed})
+			if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
+				f.Write(append(line, '\n'))
+				f.Close()
+			}
 		}
+	}
+	if !appServer {
+		logRun("", "")
 	}
 	var session, command string
 	var mcpArgs []string
@@ -112,8 +119,73 @@ func taskWorkerFixture(mode string) int {
 		line, _ := json.Marshal(v)
 		fmt.Printf("%s\n", line)
 	}
+	notify := func(method string, params map[string]any) {
+		params["threadId"] = session
+		params["turnId"] = "fixture-turn"
+		emit(map[string]any{"method": method, "params": params})
+	}
+	if appServer {
+		requests := bufio.NewScanner(os.Stdin)
+		for requests.Scan() {
+			var request struct {
+				ID     int
+				Method string
+				Params struct {
+					ThreadID, Cwd, Sandbox, ApprovalPolicy string
+				}
+			}
+			if err := json.Unmarshal(requests.Bytes(), &request); err != nil {
+				return 8
+			}
+			var result any
+			switch request.Method {
+			case "initialize":
+				result = map[string]any{}
+			case "initialized":
+				continue
+			case "thread/start", "thread/resume":
+				logRun(request.Params.Sandbox, request.Params.ThreadID)
+				if request.Method == "thread/resume" && mode != "wrong-session" {
+					session = request.Params.ThreadID
+				}
+				policy := "workspaceWrite"
+				if request.Params.Sandbox == "danger-full-access" {
+					policy = "dangerFullAccess"
+				}
+				result = map[string]any{"thread": map[string]any{"id": session, "status": map[string]any{"type": "idle"}}, "cwd": request.Params.Cwd, "approvalPolicy": request.Params.ApprovalPolicy, "sandbox": map[string]any{"type": policy}}
+			case "turn/start":
+				if request.Params.ThreadID != session {
+					return 8
+				}
+				if mode == "stream" {
+					notify("item/reasoning/textDelta", map[string]any{"delta": "private fixture reasoning"})
+					notify("item/agentMessage/delta", map[string]any{"itemId": "text", "delta": "Первый "})
+					notify("item/agentMessage/delta", map[string]any{"itemId": "text", "delta": "ответ"})
+				}
+				result = map[string]any{"turn": map[string]any{"id": "fixture-turn", "status": "inProgress"}}
+			default:
+				return 8
+			}
+			emit(map[string]any{"id": request.ID, "result": result})
+			if request.Method == "turn/start" {
+				break
+			}
+		}
+		if mode == "stream" {
+			release := filepath.Join(os.Getenv("MESSENGER_TASK_DIR"), "finish-stream")
+			for until := time.Now().Add(6 * time.Second); ; {
+				if _, err := os.Stat(release); err == nil || time.Now().After(until) {
+					break
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			notify("item/completed", map[string]any{"item": map[string]any{"type": "agentMessage", "id": "text", "text": "Первый ответ"}})
+		}
+	}
 	if codex {
-		emit(map[string]any{"type": "thread.started", "thread_id": session})
+		if !appServer {
+			emit(map[string]any{"type": "thread.started", "thread_id": session})
+		}
 		if mode == "report-model" {
 			at := time.Now()
 			profile := os.Getenv("CODEX_HOME")
@@ -196,14 +268,16 @@ func taskWorkerFixture(mode string) int {
 	}
 	_ = json.Unmarshal([]byte(raw), &brief)
 	finish := func() {
-		if codex {
+		if appServer {
+			notify("turn/completed", map[string]any{"turn": map[string]any{"id": "fixture-turn", "status": "completed"}})
+		} else if codex {
 			emit(map[string]any{"type": "turn.completed"})
 		} else {
 			emit(map[string]any{"type": "result", "subtype": "success", "is_error": false, "session_id": session})
 		}
 	}
 	switch mode {
-	case "report", "report-model", "wrong-session":
+	case "report", "report-model", "wrong-session", "stream":
 		tool("report", map[string]any{"text": "done: " + brief.Task})
 	case "reconnect-report", "capacity-report":
 		tool("report", map[string]any{"text": "work summary"})
