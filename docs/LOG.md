@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-28 — T-380 Voice preview feedback
+
+Codex fixed overflowing settings selectors, added received size and percentage to model rows, and added a ten-second microphone check with early stop, local playback and optional transcription. Chromium and WebKit verified selector geometry and the simulated download and microphone flows. The native Swift shell type-checked. Build 121 predates these review changes. The revised Mac preview and live microphone acceptance are pending.
+
 ## 2026-11-28 — T-380 Voice preferences
 
 Codex added a focused-composer keyboard shortcut with hold and toggle modes, spoken language, a system microphone test and optional stop after silence. Both browser fixtures exercise the bridge. Native Swift type-checking passed. Live input and the next native bundle remain pending.

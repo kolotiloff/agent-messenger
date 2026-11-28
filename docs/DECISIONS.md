@@ -1055,3 +1055,5 @@ Offer a provider-native action only when the chosen provider and route can execu
 ## D-280 — Downloadable local dictation
 
 Keep model selection in Voice settings and download weights on explicit request. Enable the composer microphone only when a selected local model is ready and dictation is enabled. The native client captures audio and transcribes it on the user's computer. The first implementation uses a bundled, pinned recognizer with separately verified model weights. Review recording interaction against the owner's forthcoming examples before native acceptance. See T-380.
+
+The microphone check records up to ten seconds, allows an early stop, and offers local replay. If a speech model is selected, show its transcript in the check panel. Revoke the playback URL when leaving Voice or starting a new recording. Show model download progress in the model row with received size, total size, and percentage.

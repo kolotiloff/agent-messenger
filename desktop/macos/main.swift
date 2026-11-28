@@ -544,13 +544,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             switch body["action"] as? String {
             case "start", "test-microphone":
                 guard window.isKeyWindow else { dictation.onEvent?(id, "failed", nil); return }
+                let requestedLanguage = body["language"] as? String ?? "auto"
+                let language = ["ru", "en"].contains(requestedLanguage) ? requestedLanguage : "auto"
                 if body["action"] as? String == "test-microphone" {
-                    dictation.testMicrophone(id)
+                    dictation.testMicrophone(id, language: language)
                 } else {
-                    let language = body["language"] as? String ?? "auto"
                     let silence = body["silence"] as? Int ?? 0
-                    dictation.start(id, language: ["ru", "en"].contains(language) ? language : "auto",
-                                    silence: [5, 15, 30].contains(silence) ? silence : 0)
+                    dictation.start(id, language: language, silence: [5, 15, 30].contains(silence) ? silence : 0)
                 }
             case "stop": dictation.stop(id)
             default: dictation.cancel(id)

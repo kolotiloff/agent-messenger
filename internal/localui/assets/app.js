@@ -6779,6 +6779,8 @@
     const modelList=$('voice-models');
     const rows=new Map();
     const sizes=new Intl.NumberFormat(amLocale,{style:'unit',unit:'megabyte',maximumFractionDigits:0});
+    const megabytes=new Intl.NumberFormat(amLocale,{maximumFractionDigits:0});
+    const percentages=new Intl.NumberFormat(amLocale,{style:'percent'});
     let snapshot=null;
     enabled.addEventListener('click',()=>{
       if(!snapshot?.supported||enabled.getAttribute('aria-disabled')==='true')return;
@@ -6790,9 +6792,8 @@
       const details=el('div',undefined,'am-access-text am-voice-model-details');
       const title=el('p',undefined,'am-access-title');
       const subtitle=el('p',undefined,'am-access-note');
-      const progress=el('div',undefined,'am-update-bar');
+      const progress=el('p',undefined,'am-access-note');
       progress.setAttribute('role','progressbar');
-      progress.append(el('span'));
       details.append(title,subtitle,progress);
       const size=el('span',undefined,'am-small am-muted');
       const button=el('button');
@@ -6822,20 +6823,26 @@
         const item=rows.get(model.id)||createRow(model);
         const selected=model.state==='installed'&&state.selected===model.id;
         const downloading=model.state==='downloading';
-        const fraction=Number.isFinite(model.progress)?Math.min(1,Math.max(0,model.progress)):null;
-        const percent=fraction?.toLocaleString(amLocale,{style:'percent'});
-        item.size.textContent=sizes.format(model.size/1e6);
+        const total=sizes.format(model.size/1e6);
+        item.size.textContent=total;
         item.title.textContent=model.name;
-        item.subtitle.textContent=downloading?(percent?`${tr('Загрузка…')} ${percent}`:tr('Загрузка…')):
-          selected?tr('Выбрана'):model.state==='installed'?tr('Установлена'):
+        item.subtitle.textContent=selected?tr('Выбрана'):model.state==='installed'?tr('Установлена'):
           model.state==='error'?tr('Не удалось загрузить модель'):'';
         item.subtitle.hidden=!item.subtitle.textContent;
         item.subtitle.classList.toggle('am-status-bad',model.state==='error');
         item.progress.hidden=!downloading;
-        item.progress.setAttribute('aria-label',`${tr('Загрузка модели')} ${model.name}`);
-        if(fraction===null)item.progress.removeAttribute('aria-valuenow');
-        else item.progress.setAttribute('aria-valuenow',String(Math.round(fraction*100)));
-        item.progress.style.setProperty('--am-update-share',fraction??0);
+        if(downloading){
+          const bytes=Math.min(model.size,Math.max(0,model.bytesDownloaded??0));
+          const percent=Math.floor(100*bytes/model.size);
+          const progress=tr('Загрузка, {downloaded} из {total} ({percent})')
+            .replace('{downloaded}',megabytes.format(bytes/1e6))
+            .replace('{total}',total)
+            .replace('{percent}',percentages.format(percent/100));
+          item.progress.textContent=progress;
+          item.progress.setAttribute('aria-label',`${tr('Загрузка модели')} ${model.name}`);
+          item.progress.setAttribute('aria-valuenow',String(percent));
+          item.progress.setAttribute('aria-valuetext',progress);
+        }
         item.action=downloading?'cancel-download':model.state==='installed'?'select':'download';
         const label=downloading?tr('Отменить'):model.state==='installed'?tr('Выбрать'):
           model.state==='error'?tr('Повторить'):tr('Загрузить');
@@ -6900,7 +6907,7 @@
       bridge.postMessage({action,id,language:language.value,silence:Number(silence.value)});
     }
     function cancel(){
-      if(microphoneTest)finishMicrophoneTest('');
+      clearMicrophoneTest();
       heldShortcut=null;
       if(!active)return;
       const {id,target}=active;
@@ -6929,7 +6936,7 @@
     function start(target){
       const key=context(target);
       if(!ready||!key||active)return false;
-      if(microphoneTest)finishMicrophoneTest('');
+      clearMicrophoneTest();
       const {input}=target;
       active={id:crypto.randomUUID(),target,key,event:'',value:input.value,start:input.selectionStart,end:input.selectionEnd};
       paint(target);
@@ -6937,19 +6944,49 @@
       return true;
     }
     const testButton=$('voice-mic-test'),testStatus=$('voice-mic-status');
-    function finishMicrophoneTest(event){
+    const testResult=$('voice-mic-result'),testStop=$('voice-mic-stop'),testTime=$('voice-mic-time');
+    const testAudio=$('voice-mic-audio'),testText=$('voice-mic-text');
+    const testTranscript=$('voice-mic-transcript');
+    let testTimer;
+    function endMicrophoneTimer(){
+      clearInterval(testTimer);
+      testTime.hidden=true;
+      testStop.hidden=true;
+    }
+    function clearMicrophoneTest(){
       const id=microphoneTest;
+      finishMicrophoneTest('');
+      if(id)send('cancel',id);
+      if(!testAudio.hidden){
+        testAudio.pause();
+        URL.revokeObjectURL(testAudio.src);
+        testAudio.removeAttribute('src');
+        testAudio.load();
+        testAudio.hidden=true;
+      }
+      testResult.hidden=true;
+      testTranscript.hidden=true;
+      testText.textContent='';
+    }
+    function finishMicrophoneTest(event){
+      endMicrophoneTimer();
       microphoneTest=null;
       testButton.disabled=false;
-      testStatus.textContent=event==='microphone-ready'?tr('Микрофон работает'):messages[event]||'';
-      if(!event)send('cancel',id);
+      testStatus.textContent=event==='microphone-ready'||event==='text'?tr('Микрофон работает'):messages[event]||'';
     }
     testButton.addEventListener('click',()=>{
       cancel();
       microphoneTest=crypto.randomUUID();
       testButton.disabled=true;
-      testStatus.textContent=tr('Скажите несколько слов');
+      testResult.hidden=false;
+      testStatus.textContent=tr('Подготовка микрофона…');
       send('test-microphone',microphoneTest);
+    });
+    testStop.addEventListener('click',()=>{
+      if(!microphoneTest)return;
+      endMicrophoneTimer();
+      testStatus.textContent=messages.processing;
+      send('stop',microphoneTest);
     });
     for(const input of [$('task-draft-text'),$('answer-text')]){
       const button=el('button',undefined,'am-send-icon am-quiet-button am-dictation-button');
@@ -6984,7 +7021,35 @@
     };
     window.messengerDictationEvent=({id,event,text})=>{
       if(microphoneTest===id){
-        if(event!=='recording')finishMicrophoneTest(event);
+        if(event==='recording'){
+          const duration=Number(text),start=performance.now();
+          const updateTime=()=>{
+            const elapsed=Math.min(duration,Math.floor((performance.now()-start)/1000));
+            testTime.textContent=tr('{elapsed} из {duration}')
+              .replace('{elapsed}',`0:${String(elapsed).padStart(2,'0')}`)
+              .replace('{duration}',`0:${String(duration).padStart(2,'0')}`);
+          };
+          testStatus.textContent=tr('Скажите несколько слов');
+          if(duration>0){
+            updateTime();
+            testTime.hidden=false;
+            testTimer=setInterval(updateTime,250);
+          }
+          testStop.hidden=false;
+        }else if(event==='processing'){
+          endMicrophoneTimer();
+          testStatus.textContent=messages.processing;
+        }else if(event==='microphone-audio'){
+          const samples=Uint8Array.from(atob(text),character=>character.charCodeAt(0));
+          testAudio.src=URL.createObjectURL(new Blob([samples],{type:'audio/wav'}));
+          testAudio.hidden=false;
+        }else{
+          finishMicrophoneTest(event);
+          if(event==='text'&&text){
+            testText.textContent=text;
+            testTranscript.hidden=false;
+          }
+        }
         return;
       }
       if(active?.id!==id)return;

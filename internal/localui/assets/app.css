@@ -253,7 +253,6 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-field { display:flex; flex-direction:column; gap:var(--am-gap-control); }
 #am-concept .am-field.am-inline-setting { flex-direction:row; align-items:center; justify-content:space-between; }
 #am-concept .am-inline-setting > :last-child { width:min(var(--am-settings-control-width),50%); flex:none; min-width:0; }
-#am-concept .am-inline-setting .am-select-trigger { width:100%; }
 #am-concept .am-folder-pick { display:flex; gap:var(--am-gap-control); }
 #am-concept .am-folder-pick button { flex-shrink:0; white-space:nowrap; }
 
@@ -1428,20 +1427,27 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 /* T-270: the project page is a column of cards, like the server page. */
 #am-concept .am-settings-group { display:flex; flex-direction:column; gap:var(--am-gap-section); }
 #am-concept .am-card > .am-setting-row:first-child { padding-top:0; border-top:0; }
-#am-concept #voice-models-title { margin:0; }
+#am-concept #voice-page .am-settings-group > h3 { margin:0; }
+#am-concept #voice-mode-row { --am-settings-control-width:18em; }
 #am-concept .am-voice-model-details { overflow-wrap:anywhere; }
 #am-concept .am-voice-model-list > .am-setting-row { display:grid; grid-template-columns:minmax(0,1fr) max-content minmax(max-content,var(--am-settings-control-width)); }
 #am-concept .am-voice-model-list > .am-setting-row:first-child { padding-block-start:0; border-block-start:0; }
+#am-concept .am-voice-model-list > .am-setting-row + .am-setting-row { margin-block-start:var(--am-gap-content); }
 #am-concept .am-voice-model-list > .am-setting-row > button { justify-self:end; }
 #am-concept #voice-shortcut-row kbd { background:var(--am-soft); border-radius:var(--am-radius-s); padding:var(--am-space-1) var(--am-space-2); white-space:nowrap; }
-#am-concept #voice-mic-status:empty { display:none; }
+#am-concept .am-voice-mic-result { display:grid; gap:var(--am-gap-control); padding:var(--am-gap-content); border:1px solid var(--am-line); border-radius:var(--am-radius-s); }
+#am-concept .am-voice-mic-test-head { display:flex; align-items:center; flex-wrap:wrap; gap:var(--am-gap-control); }
+#am-concept .am-voice-mic-test-head > button { margin-inline-start:auto; }
+#am-concept .am-voice-mic-test-head:has(#voice-mic-time:not([hidden]))::before { content:""; width:var(--am-space-2); height:var(--am-space-2); border-radius:50%; background:var(--am-bad); }
+#am-concept .am-voice-mic-result p { margin:0; overflow-wrap:anywhere; }
+#am-concept .am-voice-mic-result audio { width:100%; }
+#am-concept .am-voice-mic-transcript { display:grid; gap:var(--am-space-1); padding:var(--am-gap-content); border-radius:var(--am-radius-s); background:var(--am-soft); }
 @media (max-width:620px) {
   #am-concept .am-voice-model-list > .am-setting-row { grid-template-columns:minmax(0,1fr) max-content auto; }
   #am-concept #voice-page .am-inline-setting { flex-wrap:wrap; gap:var(--am-gap-control); }
   #am-concept #voice-page .am-inline-setting > :last-child { width:100%; }
 }
 #am-concept .am-voice-model-details .am-status-bad { color:var(--am-bad); }
-#am-concept .am-voice-model-details > .am-update-bar { margin-block-start:var(--am-space-1); }
 #am-concept .am-coord-head { display:flex; flex-direction:column; gap:var(--am-gap-line); margin-bottom:var(--am-space-1); }
 #am-concept .am-coord-box details button { margin-top:var(--am-space-2); }
 #am-concept .am-connect-body { display:flex; flex-direction:column; align-items:flex-start; gap:var(--am-space-2); }

@@ -55,13 +55,48 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     await page.getByText('Диктовка недоступна в этой версии Kotel').waitFor();
     assert.equal(await voiceSwitch.isDisabled(),true);
     await models(state);
+    for (const width of [1200, 800, 600]) {
+      await page.setViewportSize({width,height:800});
+      const rows = await page.locator('#voice-page .am-inline-setting').evaluateAll(rows => rows.map(row => {
+        const label = row.querySelector('label').getBoundingClientRect();
+        const trigger = row.querySelector('.am-select-trigger').getBoundingClientRect();
+        const bounds = row.getBoundingClientRect();
+        return {
+          contained: trigger.left >= bounds.left - 1 && trigger.right <= bounds.right + 1,
+          endsAtRight: Math.abs(trigger.right - bounds.right) < 1,
+          stacked: label.bottom <= trigger.top,
+        };
+      }));
+      for (const row of rows) {
+        assert.deepEqual(row, {contained:true,endsAtRight:true,stacked:width===600}, `Voice selector at ${width}px`);
+      }
+    }
+    await page.setViewportSize({width:1200,height:800});
     await page.getByRole('button',{name:'Проверить микрофон'}).click();
     const microphoneCheck=await last();
     assert.equal(microphoneCheck.action,'test-microphone');
-    await emit(microphoneCheck.id,'recording');
+    await emit(microphoneCheck.id,'recording','10');
     await page.getByText('Скажите несколько слов').waitFor();
-    await emit(microphoneCheck.id,'microphone-ready');
-    await page.getByText('Микрофон работает').waitFor();
+    await page.locator('#voice-mic-time').filter({hasText:/0:\d\d из 0:10/}).waitFor();
+    await page.getByRole('button',{name:'Остановить запись'}).click();
+    assert.deepEqual(await last(),{...microphoneCheck,action:'stop'});
+    const wave=Buffer.alloc(44+32000);
+    wave.write('RIFF');wave.writeUInt32LE(wave.length-8,4);wave.write('WAVEfmt ',8);
+    wave.writeUInt32LE(16,16);wave.writeUInt16LE(1,20);wave.writeUInt16LE(1,22);
+    wave.writeUInt32LE(16000,24);wave.writeUInt32LE(32000,28);
+    wave.writeUInt16LE(2,32);wave.writeUInt16LE(16,34);
+    wave.write('data',36);wave.writeUInt32LE(32000,40);
+    await emit(microphoneCheck.id,'microphone-audio',wave.toString('base64'));
+    const playback=page.locator('#voice-mic-audio');
+    await playback.waitFor();
+    await page.waitForFunction(()=>document.querySelector('#voice-mic-audio').duration===1);
+    await emit(microphoneCheck.id,'text','Проверка записи');
+    await page.getByText('Проверка записи',{exact:true}).waitFor();
+    await page.getByRole('button',{name:'Проверить микрофон'}).click();
+    await playback.waitFor({state:'hidden'});
+    assert.equal(await playback.getAttribute('src'),null);
+    await emit((await last()).id,'microphone-unavailable');
+    await page.locator('#voice-mic-status').getByText('Микрофон недоступен.').waitFor();
     for(const [label,option] of [['Режим сочетания','Удерживать во время речи'],['Язык речи','Русский'],['Остановка после тишины','15 секунд']]){
       await page.getByRole('button',{name:label,exact:true}).click();
       await page.getByRole('option',{name:option,exact:true}).click();
@@ -77,8 +112,11 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     assert.equal(await voiceSwitch.getAttribute('aria-checked'),'true');
     await page.getByRole('button',{name:'Загрузить Whisper Tiny'}).click();
     assert.deepEqual(await last(),{action:'download',model:tiny.id});
-    await models({...enabled,models:[{...tiny,state:'downloading',progress:.37},base]});
+    await models({...enabled,models:[{...tiny,state:'downloading',bytesDownloaded:0},base]});
     const progress = page.getByRole('progressbar',{name:'Загрузка модели Whisper Tiny'});
+    assert.match(await progress.textContent(), /Загрузка, 0 из 75\s+МБ \(0\s*%\)/);
+    await models({...enabled,models:[{...tiny,state:'downloading',bytesDownloaded:28000000},base]});
+    assert.match(await progress.textContent(), /Загрузка, 28 из 75\s+МБ \(37\s*%\)/);
     assert.equal(await progress.getAttribute('aria-valuenow'),'37');
     await page.getByRole('button',{name:'Отменить Whisper Tiny'}).click();
     assert.deepEqual(await last(),{action:'cancel-download',model:tiny.id});

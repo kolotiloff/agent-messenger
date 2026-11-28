@@ -54,8 +54,20 @@
       <h3 id="voice-microphone-title">Микрофон</h3>
       <div class="am-card">
         <div class="am-setting-row">
-          <div class="am-access-text"><p class="am-access-title">Системный микрофон</p><p id="voice-mic-status" class="am-access-note" role="status"></p></div>
+          <div class="am-access-text"><p class="am-access-title">Системный микрофон</p></div>
           <button id="voice-mic-test" type="button">Проверить микрофон</button>
+        </div>
+        <div id="voice-mic-result" class="am-voice-mic-result" hidden>
+          <div class="am-voice-mic-test-head">
+            <p id="voice-mic-status" class="am-access-note" role="status"></p>
+            <span id="voice-mic-time" class="am-small am-muted" hidden></span>
+            <button id="voice-mic-stop" type="button" hidden>Остановить запись</button>
+          </div>
+          <audio id="voice-mic-audio" controls aria-label="Прослушать запись" hidden></audio>
+          <div id="voice-mic-transcript" class="am-voice-mic-transcript" hidden>
+            <p class="am-access-note">Распознанный текст</p>
+            <p id="voice-mic-text"></p>
+          </div>
         </div>
         <div class="am-setting-row am-field am-inline-setting"><label for="voice-silence">Остановка после тишины</label><select id="voice-silence"><option value="0">Выключена</option><option value="5">5 секунд</option><option value="15">15 секунд</option><option value="30">30 секунд</option></select></div>
       </div>

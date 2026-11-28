@@ -84,7 +84,7 @@ final class ComposerDictation: NSObject, URLSessionDownloadDelegate, @unchecked 
     private struct Download {
         let task: URLSessionDownloadTask
         let staging: URL
-        var progress = 0
+        var bytesDownloaded: Int64 = 0
     }
 
     private lazy var downloads = URLSession(configuration: .ephemeral, delegate: self, delegateQueue: .main)
@@ -95,6 +95,7 @@ final class ComposerDictation: NSObject, URLSessionDownloadDelegate, @unchecked 
     private var engine: AVAudioEngine?
     private var audio: DictationAudio?
     private var modelForRecording: URL?
+    private var microphoneTest = false
     private var language = "auto"
     private var process: Process?
     private var processDirectory: URL?
@@ -131,7 +132,7 @@ final class ComposerDictation: NSObject, URLSessionDownloadDelegate, @unchecked 
             var row: [String: Any] = ["id": model.id, "name": model.name, "size": model.size]
             if let job = activeDownloads[model.id] {
                 row["state"] = "downloading"
-                row["progress"] = Double(job.progress) / 100
+                row["bytesDownloaded"] = job.bytesDownloaded
             } else if installedURL(model) != nil {
                 row["state"] = "installed"
             } else if let error = downloadErrors[model.id] {
@@ -200,9 +201,8 @@ final class ComposerDictation: NSObject, URLSessionDownloadDelegate, @unchecked 
             finishDownload(model, error: "checksum-failed")
             return
         }
-        let percent = min(99, Int(100 * totalBytesWritten / model.size))
-        guard percent != job.progress else { return }
-        job.progress = percent
+        guard 100 * totalBytesWritten / model.size > 100 * job.bytesDownloaded / model.size else { return }
+        job.bytesDownloaded = totalBytesWritten
         activeDownloads[model.id] = job
         reportModels()
     }
@@ -276,26 +276,28 @@ final class ComposerDictation: NSObject, URLSessionDownloadDelegate, @unchecked 
             return
         }
         modelForRecording = model
-        requestRecording(id, language: language, silence: silence, microphoneTest: false)
+        requestRecording(id, language: language, silence: silence)
     }
 
-    func testMicrophone(_ id: String) {
+    func testMicrophone(_ id: String, language: String) {
         cancel()
         self.id = id
-        requestRecording(id, language: "auto", silence: 0, microphoneTest: true)
+        microphoneTest = true
+        modelForRecording = selectedURL
+        requestRecording(id, language: language, silence: 0)
     }
 
-    private func requestRecording(_ id: String, language: String, silence: Int, microphoneTest: Bool) {
+    private func requestRecording(_ id: String, language: String, silence: Int) {
         AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
             DispatchQueue.main.async {
                 guard let self, self.id == id else { return }
                 guard granted else { self.complete(id, event: "microphone-denied"); return }
-                self.record(id, language: language, silence: silence, microphoneTest: microphoneTest)
+                self.record(id, language: language, silence: silence)
             }
         }
     }
 
-    private func record(_ id: String, language: String, silence: Int, microphoneTest: Bool) {
+    private func record(_ id: String, language: String, silence: Int) {
         let engine = AVAudioEngine()
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
@@ -311,16 +313,10 @@ final class ComposerDictation: NSObject, URLSessionDownloadDelegate, @unchecked 
         engine.prepare()
         do { try engine.start() }
         catch { complete(id, event: "microphone-unavailable"); return }
-        onEvent?(id, "recording", nil)
-        if microphoneTest {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
-                guard let self, self.id == id else { return }
-                self.complete(id, event: audio.finish().isEmpty ? "empty" : "microphone-ready")
-            }
-            return
-        }
         self.language = language
-        DispatchQueue.main.asyncAfter(deadline: .now() + 60) { [weak self] in self?.stop(id) }
+        let duration = microphoneTest ? 10 : 60
+        onEvent?(id, "recording", microphoneTest ? String(duration) : nil)
+        DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(duration)) { [weak self] in self?.stop(id) }
         if silence > 0 { watchSilence(id, seconds: Double(silence)) }
     }
 
@@ -333,9 +329,12 @@ final class ComposerDictation: NSObject, URLSessionDownloadDelegate, @unchecked 
     }
 
     func stop(_ id: String) {
-        guard self.id == id, let model = modelForRecording else { return }
-        guard let audio, let executable else {
-            complete(id, event: audio == nil ? "empty" : "model-not-ready")
+        guard self.id == id, let audio else { return }
+        let isTest = microphoneTest
+        let model = modelForRecording
+        let executable = self.executable
+        guard isTest || (model != nil && executable != nil) else {
+            complete(id, event: "model-not-ready")
             return
         }
         modelForRecording = nil
@@ -352,9 +351,16 @@ final class ComposerDictation: NSObject, URLSessionDownloadDelegate, @unchecked 
                                                         attributes: [.posixPermissions: 0o700])
                 let wave = directory.appendingPathComponent("audio.wav")
                 try Self.writeAudio(samples, sampleRate: audio.sampleRate, to: wave)
+                let playback = isTest ? try Data(contentsOf: wave).base64EncodedString() : nil
                 DispatchQueue.main.async {
                     guard self.id == id else { try? self.files.removeItem(at: directory); return }
-                    self.transcribe(id, executable: executable, model: model, language: language, directory: directory, wave: wave)
+                    if let playback { self.onEvent?(id, "microphone-audio", playback) }
+                    if let executable, let model {
+                        self.transcribe(id, executable: executable, model: model, language: language, directory: directory, wave: wave)
+                    } else {
+                        try? self.files.removeItem(at: directory)
+                        self.complete(id, event: "microphone-ready")
+                    }
                 }
             } catch {
                 try? FileManager.default.removeItem(at: directory)
@@ -460,6 +466,7 @@ final class ComposerDictation: NSObject, URLSessionDownloadDelegate, @unchecked 
         guard id == nil || self.id == id else { return }
         self.id = nil
         modelForRecording = nil
+        microphoneTest = false
         releaseMicrophone()
         audio = nil
         if process?.isRunning == true { process?.terminate() }
