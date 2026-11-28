@@ -6069,13 +6069,16 @@
     if(local){
       local.textContent=updateCheckScope==='local'?tr('Проверка обновлений…'):tr('Проверить обновления');
       local.disabled=!!updateCheckScope||localUpdateRunning()||updateInProgress(updateMark(null));
+      const menuCheck=$('settings-menu-update');
+      menuCheck.lastElementChild.textContent=local.textContent;
+      menuCheck.disabled=local.disabled;
       $('settings-update-install').hidden=!checkedLocalUpdate;
       $('settings-update-install').disabled=local.disabled;
     }
     const network=$('settings-network-update-check');
     if(network){
-      network.closest('.am-network-updates').hidden=!updateNetwork()||!(server?.peers||[]).length;
-      network.textContent=updateCheckScope==='network'?tr('Проверка обновлений…'):tr('Проверить обновления в сети');
+      $('settings-network-update-row').hidden=!updateNetwork()||!(server?.peers||[]).length;
+      network.textContent=updateCheckScope==='network'?tr('Проверка обновлений…'):tr('Проверить обновления');
       network.disabled=!!updateCheckScope||localUpdateRunning()||serverBusy||networkUpdatesSending;
     }
     renderDeviceMenuFooter();
@@ -6487,11 +6490,47 @@
   });
   $('answer-text').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();sendAnswer();}});
   $('project-dialog-close').addEventListener('click',()=>$('project-dialog').close());
-  $('settings-open').addEventListener('click',()=>{
+  const settingsTrigger=$('settings-open'),settingsMenu=$('settings-menu');
+  const settingsMenuItems=()=>[...settingsMenu.querySelectorAll('button:not(:disabled)')];
+  const positionSettingsMenu=()=>positionPopover(settingsMenu,settingsTrigger,200,false,true);
+  function toggleSettingsMenu(){
+    if(settingsMenu.matches(':popover-open')){settingsMenu.hidePopover();return;}
+    settingsMenu.showPopover();
+    positionSettingsMenu();
+    settingsMenuItems()[0].focus();
+  }
+  settingsTrigger.addEventListener('click',toggleSettingsMenu);
+  settingsTrigger.addEventListener('keydown',event=>{
+    if(event.key!=='ArrowDown')return;
+    event.preventDefault();
+    if(!settingsMenu.matches(':popover-open'))toggleSettingsMenu();
+  });
+  settingsMenu.addEventListener('toggle',()=>settingsTrigger.setAttribute('aria-expanded',String(settingsMenu.matches(':popover-open'))));
+  settingsMenu.addEventListener('keydown',event=>{
+    if(event.key==='Escape'&&!event.isComposing){
+      event.preventDefault();event.stopPropagation();
+      settingsMenu.hidePopover();settingsTrigger.focus();return;
+    }
+    const direction=event.key==='ArrowDown'?1:event.key==='ArrowUp'?-1:0;
+    if(!direction)return;
+    event.preventDefault();
+    const entries=settingsMenuItems(),index=entries.indexOf(document.activeElement);
+    entries[(index+direction+entries.length)%entries.length].focus();
+  });
+  window.addEventListener('resize',()=>{if(settingsMenu.matches(':popover-open'))positionSettingsMenu();});
+  const openSettingsAction=$('settings-menu-open');
+  openSettingsAction.prepend(settingsTrigger.querySelector('svg').cloneNode(true));
+  function chooseSettingsAction(action){
+    settingsMenu.hidePopover();
+    settingsTrigger.focus();
+    action();
+  }
+  $('settings-menu-update').addEventListener('click',()=>chooseSettingsAction(()=>void manualUpdateCheck('local')));
+  openSettingsAction.addEventListener('click',()=>chooseSettingsAction(()=>{
     $('auto-update-status').textContent='';
     if(taskSidebarPreview)show('settings');
     else{$('settings-dialog').showModal();renderNotices();loadServer();}
-  });
+  }));
   $('settings-dialog').addEventListener('close',renderNotices);
   if(taskSidebarPreview){
     const dialog=$('settings-dialog');
@@ -6544,7 +6583,7 @@
   $('auto-update-toggle').addEventListener('click',toggleAutoUpdate);
   $('settings-close').addEventListener('click',()=>$('settings-dialog').close());
   setupPictureViewer();
-  $('fb-open').addEventListener('click',openFeedback);
+  $('fb-open').addEventListener('click',()=>chooseSettingsAction(openFeedback));
   $('fb-close').addEventListener('click',()=>$('fb-dialog').close());
   $('fb-save').addEventListener('click',saveFeedback);
   $('fb-export').addEventListener('click',exportFeedback);

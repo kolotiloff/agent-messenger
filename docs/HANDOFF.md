@@ -8,7 +8,7 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
-PR #257 is the candidate for Kotel 1.0.17 (build 120). It adds scoped task shortcuts, grouped agent settings, first-run setup, a compact agent limits popover, and sleep controls in the main window and General settings. Manual update checks are available for this window and individual connected computers, with an explicit review for a network update. Update notices belong to the window and follow it across chats and settings.
+PR #257 is the candidate for Kotel 1.0.17 (build 120). It adds scoped task shortcuts, grouped agent settings, first-run setup, a compact agent limits popover, and sleep controls in the main window and General settings. General settings place the local and network update checks in consecutive rows. The sidebar gear opens Settings, local update check, and Feedback. Individual connected computers also offer a manual check, and the network update still requires review. Update notices belong to the window and follow it across chats and settings.
 
 Personal chats stay in Projects until archived by the owner. The coordinator can still archive its completed tasks. Both Claude Code and the normal Codex worker now send incremental text through the task feed. The window shows activity as soon as a reply is requested and waits one minute before warning about a worker that remains active after a reported result.
 

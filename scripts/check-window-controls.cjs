@@ -121,6 +121,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.locator('#project-dialog-close').click();
       assert.equal(writes.length, 0, 'opening/cancelling onboarding must not change backend state');
       await page.locator('#settings-open').click();
+      await page.locator('#settings-menu-open').click();
       await choose('Тёмная');
       assert.equal(await theme(), 'dark');
       const dark = await page.locator('body').evaluate(node => getComputedStyle(node).backgroundColor);
@@ -135,6 +136,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         await page.reload();
         assert.equal(await theme(), 'light');
         await page.locator('#settings-open').click();
+        await page.locator('#settings-menu-open').click();
       }
       // Keyboard selection and Escape must work inside the modal as well.
       await trigger.focus();
@@ -157,6 +159,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.getByRole('option', {name: 'English', exact: true}).click();
       await page.waitForFunction(() => document.documentElement.lang === 'en');
       await page.locator('#settings-open').click();
+      await page.locator('#settings-menu-open').click();
       await page.locator('[aria-controls="lang-select-menu"]').click();
       await page.getByRole('option', {name: 'Русский', exact: true}).click();
       await page.waitForFunction(() => document.documentElement.lang === 'ru');
@@ -165,11 +168,13 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       const autoRow = page.locator('#auto-update-row'), autoToggle = page.locator('#auto-update-toggle');
       const serverRead = page.waitForResponse(response => new URL(response.url()).pathname === '/api/server');
       await page.locator('#settings-open').click();
+      await page.locator('#settings-menu-open').click();
       await serverRead;
       assert.equal(await autoRow.isVisible(), false, 'no switch where automatic updates are unavailable');
       await page.locator('#settings-close').click();
       autoSupported = true;
       await page.locator('#settings-open').click();
+      await page.locator('#settings-menu-open').click();
       await autoRow.waitFor();
       assert.equal(await autoToggle.getAttribute('aria-checked'), 'false');
       assert.equal(await page.locator('#auto-update-status').isVisible(), false);
@@ -187,12 +192,14 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.waitForFunction(() => document.getElementById('auto-update-toggle').getAttribute('aria-checked') === 'false');
       await page.locator('#settings-close').click();
       await page.locator('#settings-open').click();
+      await page.locator('#settings-menu-open').click();
       assert.equal(await page.locator('#auto-update-status').isVisible(), false, 'an old refusal is gone when settings open again');
       await page.locator('#settings-close').click();
       for (const width of [1100, 600]) {
         await page.setViewportSize({width, height: 850});
         for (const [value, label] of [['light', 'Светлая'], ['dark', 'Тёмная']]) {
           await page.locator('#settings-open').click();
+          await page.locator('#settings-menu-open').click();
           await choose(label);
           assert.equal(await theme(), value);
           if (process.env.SCREENSHOT_DIR && !native) {
@@ -1373,6 +1380,14 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert.deepEqual(hides, [{peer: 'host', task: 'old-1'}, {peer: 'host', task: 'old-2'}]);
       // Feedback: the export takes the new remarks, and the exported ones can
       // be cleared once passed on (owner, 2026-11-16).
+      await page.locator('#settings-open').focus();
+      await page.keyboard.press('ArrowDown');
+      await page.locator('#settings-menu').waitFor();
+      assert.deepEqual(await page.locator('#settings-menu button span').allTextContents(),
+        ['Настройки','Проверить обновления','Отзыв о программе']);
+      await page.keyboard.press('Escape');
+      assert.equal(await page.locator('#settings-open').evaluate(node=>node===document.activeElement),true);
+      await page.locator('#settings-open').click();
       await page.locator('#fb-open').click();
       assert.equal(await page.locator('#fb-export').innerText(), 'Выгрузить новые отзывы (2)');
       await page.locator('#fb-export').click();

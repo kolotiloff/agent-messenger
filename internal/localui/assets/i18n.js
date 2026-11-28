@@ -983,7 +983,7 @@
   'Версия программы':'Program version',
   'Проверить обновления':'Check for updates',
   'Проверка обновлений…':'Checking for updates…',
-  'Проверить обновления в сети':'Check for network updates',
+  'Обновления на других компьютерах в сети':'Updates on other computers on the network',
   'Обновления в сети':'Network updates',
   'Обновить компьютеры':'Update computers',
   'Доступна версия ':'Version available: ',

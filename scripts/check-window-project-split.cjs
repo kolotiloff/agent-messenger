@@ -461,6 +461,7 @@ if (require.main === module) (async()=>{
       await footerCancel.hover();
       assert.deepEqual(await cancelAppearance(footerCancel),settingsAppearance);
       await settingsButton.click();
+      await pendingUpdate.locator('#settings-menu-open').click();
       await pendingUpdate.locator('#settings-dialog [data-tab=server]').click();
       assert.equal(await pendingUpdate.locator('#network-roster').count(),0);
     }finally{await pendingUpdate.close();}
@@ -635,8 +636,8 @@ if (require.main === module) (async()=>{
         const style=getComputedStyle(node);
         return [style.width,style.height,style.borderRadius];
       });
-      const settings=footer.locator('#settings-open'),feedback=footer.locator('#fb-open');
-      const footerIcons=[settings,feedback,localUpdate];
+      const settings=footer.locator('#settings-open'),limits=footer.locator('#limits-open');
+      const footerIcons=[settings,limits,localUpdate];
       const hoverFills=[];
       for(const [index,button] of footerIcons.entries()){
         assert.deepEqual(await buttonShape(button),['28px','28px','8px']);
@@ -717,6 +718,7 @@ if (require.main === module) (async()=>{
       const settingsOpen=draftPage.locator('#settings-open');
       const settingsNav=settingsDialog.getByRole('navigation',{name:'Разделы'});
       await settingsOpen.click();
+      await draftPage.locator('#settings-menu-open').click();
       const general=settingsDialog.locator('#settings-page');
       await general.waitFor();
       assert.deepEqual(await general.evaluate(screen=>{
@@ -833,7 +835,8 @@ if (require.main === module) (async()=>{
       await draftPage.keyboard.press('Escape');
       await settingsDialog.waitFor({state:'hidden'});
       await draftPage.waitForFunction(()=>document.activeElement?.id==='settings-open');
-      await feedback.click();
+      await settingsOpen.click();
+      await draftPage.locator('#fb-open').click();
       await draftPage.locator('#fb-dialog').waitFor();
       assert.equal(await headerHeight('#fb-dialog .am-dialog-header'),dialogHeaderHeight);
       await draftPage.locator('#fb-close').click();
@@ -901,6 +904,7 @@ if (require.main === module) (async()=>{
       assert.equal(await draftPage.locator('#stats-computer').inputValue(),'pc1');
       await standaloneStats.locator('#stats-close').click();
       await settingsOpen.click();
+      await draftPage.locator('#settings-menu-open').click();
       await settingsNav.locator('[data-tab=agents]').click();
       assert.equal(await draftPage.locator('#agents-computer').inputValue(),'local');
       assert.deepEqual(await settingsDialog.locator('[data-agent-group=installed] .am-agent-card').evaluateAll(cards=>
@@ -1286,7 +1290,7 @@ if (require.main === module) (async()=>{
       const hides=()=>seen.filter(req=>['/api/task-hide','/api/task-hide-history'].includes(req.path)).length;
       const initialHides=hides();
       let chromeStyle;
-      for(const [index,selector] of ['#archive-clear','#agent-filter + button','#project-select + button','#sidebar-group + button','#settings-open','#fb-open','#stats-open','#list-toggle'].entries()){
+      for(const [index,selector] of ['#archive-clear','#agent-filter + button','#project-select + button','#sidebar-group + button','#settings-open','#limits-open','#stats-open','#list-toggle'].entries()){
         const control=draftPage.locator(selector);
         await control.hover();
         const style=await control.evaluate(async button=>{
@@ -1812,6 +1816,7 @@ if (require.main === module) (async()=>{
       await compactPreview.locator('#task-draft-text').waitFor();
       await compactPreview.locator('#task-draft-text').fill('Черновик');
       await compactPreview.locator('#settings-open').click();
+      await compactPreview.locator('#settings-menu-open').click();
       await compactPreview.waitForFunction(()=>document.activeElement.id==='settings-title');
       const closeSettings=compactPreview.locator('#settings-close');
       assert.equal(await closeSettings.evaluate(n=>n.matches(':hover,:focus-visible')),false);

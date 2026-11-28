@@ -1199,6 +1199,10 @@ body.am-native #am-concept .am-panel-toggle { margin-left:auto; }
 #am-concept .am-agent-setup-actions .am-step-sub { white-space:normal; overflow-wrap:anywhere; }
 #am-concept .am-sleep-menu .am-select-option { inline-size:100%; justify-content:space-between; gap:var(--am-gap-control); border:0; background:transparent; color:var(--am-text); text-align:start; }
 #am-concept .am-sleep-menu .am-select-option:is(:hover,:focus-visible,[aria-pressed=true]) { background:var(--am-menu-hover); }
+#am-concept .am-settings-menu .am-select-option { inline-size:100%; justify-content:flex-start; gap:var(--am-gap-control); border:0; background:transparent; color:var(--am-text); text-align:start; }
+#am-concept .am-settings-menu .am-select-option:is(:hover,:focus-visible):not(:disabled) { background:var(--am-menu-hover); }
+#am-concept .am-settings-menu .am-select-option:disabled { color:var(--am-disabled-text); }
+#am-concept .am-settings-menu .am-select-option svg { flex:none; width:var(--am-action-icon-size); height:var(--am-action-icon-size); fill:none; stroke:currentColor; stroke-width:var(--am-action-icon-stroke); stroke-linecap:round; stroke-linejoin:round; }
 #am-concept .am-select-check svg { fill:none; stroke:currentColor; stroke-width:var(--am-action-icon-stroke); stroke-linecap:round; stroke-linejoin:round; }
 #am-concept .am-sleep-status { display:block; padding:var(--am-gap-control); }
 #am-concept #sleep-open[data-active=true] { color:var(--am-text); }
