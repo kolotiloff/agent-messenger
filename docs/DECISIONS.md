@@ -1017,3 +1017,7 @@ The version footer and update actions in context menus belong to the selected co
 ## D-272 — Keep the composer editable while stopping a turn
 
 The task owner can draft the next message while a stop is pending and after the turn ends. The send control respects the stop state and the saved continuation capability. Closing a stuck task remains an explicit recovery action with the existing process checks. See T-381.
+
+## D-273 — Optional first-run setup
+
+Offer a short setup on a new installation and let users close or skip it at any step. Use the same settings for language and appearance, agent and model, optional workspace, network and coordinator, and notifications. Direct chat is available after skipping. Keep the dismissal on that installation and reopen setup from Settings. Upgrades and migrated installations retain their existing configuration and do not trigger setup. See T-384.

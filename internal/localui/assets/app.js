@@ -715,7 +715,7 @@
     node.setAttribute('aria-labelledby',label.id);
     tabNode.setAttribute('role','presentation');tabNode.draggable=true;
     close.setAttribute('aria-label',tr('Закрыть вкладку')+' '+task.title);
-    close.append(svgIcon(['M6 6l12 12M18 6L6 18']));
+    close.append(svgIcon(closeIconPaths));
     input.rows=1;input.maxLength=20000;input.setAttribute('aria-label',tr('Ответ исполнителю'));
     input.placeholder=tr('Написать исполнителю…');send.type='submit';
     compose.hidden=true;compose.append(input,send);
@@ -1211,7 +1211,7 @@
     if(!canCancel){b.setAttribute('role','img');return b;}
     b.setAttribute('aria-description',caption);
     b.type='button';b.dataset.key='cancel-update-'+(peer?.id||'local');
-    b.append(svgIcon(['M6 6l12 12M18 6L6 18']));
+    b.append(svgIcon(closeIconPaths));
     b.addEventListener('keydown',e=>e.stopPropagation());
     b.addEventListener('click',e=>{e.stopPropagation();void cancelUpdate(state);});
     return b;
@@ -1288,7 +1288,7 @@
       const body=el('div',undefined,'am-notice-body');body.append(el('span',n.title,'am-notice-title'));if(n.text)body.append(el('span',n.text,'am-small am-muted am-notice-text'));
       const close=el('button',undefined,'am-icon-btn am-close-x');close.type='button';
       close.setAttribute('aria-label',tr('Закрыть'));
-      close.append(svgIcon(['M6 6l12 12M18 6L6 18']));
+      close.append(svgIcon(closeIconPaths));
       close.addEventListener('click',()=>closeNotice(n.key));
       card.append(icon,body,close);
       box.append(card);
@@ -2832,7 +2832,9 @@
     const menu=$('task-draft-add-menu'),pathInput=$('task-draft-path'),manual=$('task-draft-manual-path');
     const status=$('task-draft-path-status'),insertButton=$('task-draft-insert-path'),showPath=$('task-draft-show-path');
     const draftComputer=$('task-draft-computer');
-    const pickers=[['file',$('task-draft-file')],['folder',$('task-draft-folder')]];
+    const folderPicker=$('task-draft-folder');
+    folderPicker.prepend(svgIcon(folderIconPaths));
+    const pickers=[['file',$('task-draft-file')],['folder',folderPicker]];
     const isOpen=()=>menu.matches(':popover-open');
     let target,busy=false;
     function valid(current){
@@ -3979,6 +3981,8 @@
     icon.classList.add('am-update-spin');
     return icon;
   }
+  const closeIconPaths=['M6 6l12 12M18 6L6 18'];
+  const folderIconPaths=['M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z'];
   function svgIcon(paths,circle){
     const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');svg.setAttribute('focusable','false');
     if(circle){const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx','12');c.setAttribute('cy','12');c.setAttribute('r','3');svg.append(c);}
@@ -5423,7 +5427,7 @@
     const make=(action,label,paths,cls)=>{const b=el('button',undefined,'am-window-btn'+(cls?' '+cls:''));b.type='button';b.title=label;b.setAttribute('aria-label',label);b.tabIndex=-1;b.append(svgIcon(paths));b.addEventListener('click',()=>window.amWindow(action));bar.append(b);};
     make('minimize',tr('Свернуть'),['M5 12h14']);
     make('maximize',tr('Развернуть'),['M6 6h12v12H6z']);
-    make('close',tr('Закрыть'),['M6 6l12 12M18 6L6 18'],'am-window-close');
+    make('close',tr('Закрыть'),closeIconPaths,'am-window-close');
     if(taskSidebarPreview)bar.prepend($('list-toggle'));
     root.append(bar);
     const dragZone=e=>{
@@ -6029,7 +6033,7 @@
   if(taskSidebarPreview){
     enhanceSelect($('stats-computer'));enhanceSelect($('agents-computer'));
     const draftContextIcons={
-      'task-draft-project':['M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z'],
+      'task-draft-project':folderIconPaths,
       'task-draft-computer':serverIconPaths
     };
     for(const id of ['task-draft-project','task-draft-computer','task-draft-model']){

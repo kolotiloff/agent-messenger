@@ -363,7 +363,17 @@ if (require.main === module) (async()=>{
       const footerCancel=pendingUpdate.locator('.am-side-footer').getByRole('button',{name:'Отменить обновление'});
       await footerCancel.waitFor();
       assert.equal(await footerCancel.getAttribute('data-request'),'upd-local');
-      await pendingUpdate.locator('#settings-open').click();
+      const cancelAppearance=button=>button.evaluate(async node=>{
+        await Promise.all(node.getAnimations().map(animation=>animation.finished));
+        const style=getComputedStyle(node);
+        return [style.width,style.height,style.borderRadius,style.backgroundColor];
+      });
+      const settingsButton=pendingUpdate.locator('#settings-open');
+      await settingsButton.hover();
+      const settingsAppearance=await cancelAppearance(settingsButton);
+      await footerCancel.hover();
+      assert.deepEqual(await cancelAppearance(footerCancel),settingsAppearance);
+      await settingsButton.click();
       await pendingUpdate.locator('#settings-dialog [data-tab=server]').click();
       assert.equal(await pendingUpdate.locator('#network-roster').count(),0);
     }finally{await pendingUpdate.close();}
@@ -560,7 +570,7 @@ if (require.main === module) (async()=>{
       await local.getByText('Мак, координатор',{exact:true}).waitFor();
       await card(draftPage,'vps').getByText('VPS-PC2, сервер',{exact:true}).waitFor();
       const roleWeights=await draftPage.locator('.am-machine-label .am-inline-role').evaluateAll(roles=>roles.map(role=>[getComputedStyle(role).fontWeight,getComputedStyle(role.parentElement).fontWeight]));
-      assert(roleWeights.length>=2 && roleWeights.every(([role,name])=>role==='400'&&Number(name)>400),JSON.stringify(roleWeights));
+      assert(roleWeights.length>=2 && roleWeights.every(([role,name])=>role==='400'&&name==='400'),JSON.stringify(roleWeights));
       const remote=card(draftPage,'pc1').locator('.am-machine-name');
       assert.equal(await remote.locator('.am-version,.am-update-icon').count(),0);
       await remote.hover();
@@ -586,7 +596,6 @@ if (require.main === module) (async()=>{
         });
         assert.deepEqual(base.slice(0,2),role.slice(0,2));
         assert.equal(role[2],'400');
-        assert(Number(base[2])>Number(role[2]));
         assert.notEqual(base[3],role[3]);
       }
       const message=draftPage.locator('#thread .am-message-group').first();
@@ -925,6 +934,15 @@ if (require.main === module) (async()=>{
       assert.equal(await form.locator('#task-draft-access').textContent(),'Обычный доступ');
       assert.equal(await accessAbove(form.locator('#task-draft-access')),true);
       await addPath.click();
+      const folderGlyph=selector=>draftPage.locator(selector).evaluate(button=>{
+        const icon=button.querySelector('svg');
+        const style=getComputedStyle(icon);
+        return [icon.querySelector('path').getAttribute('d'),style.width,style.height,style.strokeWidth];
+      });
+      assert.deepEqual(
+        await folderGlyph('#task-draft-folder'),
+        await folderGlyph('[aria-controls="task-draft-project-menu"]'),
+      );
       const pickRequest=draftPage.waitForRequest(req=>new URL(req.url()).pathname==='/api/pick');
       await pathMenu.getByRole('button',{name:'Выбрать файл…',exact:true}).click();
       assert.deepEqual((await pickRequest).postDataJSON(),{kind:'file',current:''});

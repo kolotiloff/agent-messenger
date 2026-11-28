@@ -52,6 +52,8 @@ T-381 keeps the owner’s composer visible and editable while stopping a turn an
 
 T-382 uses regular weight for computer and task names in the task sidebar and medium weight for the project, conversation, and archive headings. The public screenshots reflect these weights.
 
+T-383 shares the closed folder glyph across the two draft pickers, and uses the same close path for dynamic window, tab, notice and update controls. Per-computer update actions in the task sidebar are text in the context menu. The local version footer still shows the download icon and uses the 18 px action viewport for update states. T-384 records the optional first-run setup as backlog.
+
 T-361 through T-363 track clickable paths from plain report file lists and Markdown, the built-in reader, file actions and chronological work progress. The integration branch shows confirmed provider file changes below a verified final report and opens supported local documents directly in the window. macOS on-device dictation inserts text in the draft.
 
 The T-363 summary belongs directly under the final answer. Its header shows task totals, followed by the first three file rows and a control to reveal the rest. The card has no undo action.

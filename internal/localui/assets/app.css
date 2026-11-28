@@ -506,8 +506,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
   #am-concept .am-update-spin { animation:none; }
 }
 #am-concept .am-update-icon svg { width:13px; height:13px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
-#am-concept.am-task-sidebar-preview .am-version-row > .am-update-wait { width:var(--am-control-compact); height:var(--am-control-compact); }
-#am-concept.am-task-sidebar-preview .am-version-row > .am-update-wait > svg { width:var(--am-text-xl); height:var(--am-text-xl); stroke-width:1.5; }
+#am-concept.am-task-sidebar-preview .am-version-row > .am-update-wait { width:var(--am-control-compact); height:var(--am-control-compact); border-radius:var(--am-radius-s); }
 
 /* Main pane and tabs */
 #am-concept .am-main { display:flex; flex-direction:column; gap:var(--am-gap-content); min-width:0; min-height:0; padding:var(--am-pane-inset) 0; overflow:hidden; }
@@ -788,14 +787,14 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-token-popover p + p { margin-block-start:var(--am-space-1); }
 #am-concept .am-draft-add-menu { --am-quiet-hover:var(--am-menu-hover); }
 #am-concept .am-draft-add-menu :is(#task-draft-local-pick > button,#task-draft-show-path) { width:100%; justify-content:flex-start; padding-block:0; gap:var(--am-gap-control); }
-#am-concept .am-draft-add-menu button > svg { width:var(--am-space-4); height:var(--am-space-4); fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; flex:none; }
+#am-concept .am-draft-add-menu button > svg { width:var(--am-space-4); height:var(--am-space-4); fill:none; stroke:currentColor; stroke-width:var(--am-action-icon-stroke); stroke-linecap:round; stroke-linejoin:round; flex:none; }
 #am-concept .am-draft-add-menu .am-folder-pick { margin:var(--am-space-1); }
 #am-concept #task-draft-path-status { margin:var(--am-space-1); padding:0 var(--am-space-2); overflow-wrap:anywhere; }
 #am-concept #task-draft-path-status:empty { display:none; }
 #am-concept #task-draft .am-select-trigger { justify-content:flex-start; border:0; background:transparent; padding-inline:var(--am-space-2); font:inherit; }
 #am-concept #task-draft .am-select-trigger:enabled { color:inherit; }
 #am-concept #task-draft .am-select-trigger:is(:hover,:focus-visible,[aria-expanded=true]):enabled { background:var(--am-field-hover); color:var(--am-text); }
-#am-concept .am-draft-options .am-select-trigger > svg { width:var(--am-space-4); height:var(--am-space-4); flex:none; fill:none; stroke:currentColor; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; }
+#am-concept .am-draft-options .am-select-trigger > svg { width:var(--am-space-4); height:var(--am-space-4); flex:none; fill:none; stroke:currentColor; stroke-width:var(--am-action-icon-stroke); stroke-linecap:round; stroke-linejoin:round; }
 #am-concept #task-draft-status { margin:var(--am-gap-control) 0 0; }
 #am-concept #task-draft-status:empty { display:none; }
 #am-concept :is(#answer-status,#task-stop-status) { margin:0 var(--am-space-4) var(--am-gap-control); font-size:var(--am-text-s); line-height:1.45; }
@@ -1358,7 +1357,7 @@ body.am-mac-titlebar #am-concept .am-tabs, body.am-mac-titlebar #am-concept .am-
 #am-concept .am-update-cancel svg:last-child,
 #am-concept .am-update-cancel:is(:hover,:focus-visible) svg:first-child { display:none; }
 #am-concept .am-update-cancel:is(:hover,:focus-visible) svg:last-child { display:block; color:var(--am-bad); }
-#am-concept button.am-update-cancel:is(:hover,:focus-visible):not(:disabled) { background:color-mix(in srgb,var(--am-bad) 14%,transparent); }
+#am-concept:not(.am-task-sidebar-preview) button.am-update-cancel:is(:hover,:focus-visible):not(:disabled) { background:color-mix(in srgb,var(--am-bad) 14%,transparent); }
 
 .am-compose[data-context-only]>:not(#answer-context):not(#answer-token-menu){display:none}
 

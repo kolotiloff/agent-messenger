@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-28 — T-383 Rendered icon audit and T-384 First-run setup outline
+
+Codex measured painted SVG bounds and control hover fills in WebKit, shared the folder and dynamic close artwork, and aligned the local update status viewport with the action button. The optional first-run setup is recorded in T-384. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).
+
 ## 2026-11-28 — T-382 Lighter task window headings
 
 Codex reduced the project, conversation, archive, and computer heading weights and compared both revisions in WebKit. The published README images were refreshed in the branch. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).
