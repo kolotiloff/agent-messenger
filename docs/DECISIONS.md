@@ -968,11 +968,11 @@ Use the same typography as Connection mode. Place this computer and its peers in
 
 ## D-261 — Keep computer update notices outside the conversation
 
-Place update notices above the conversation in a fixed area outside its scrollable history. They stay visible until dismissed, subject to the existing three-notice limit. Keep confirmations modal.
+Place update notices above the conversation in a fixed area outside its scrollable history. General defaults to manual dismissal and offers automatic dismissal after eight seconds. Hover or focus keeps the notice visible. The three-notice limit applies to both modes. Keep confirmations modal.
 
 ## D-262 — Manage computers from the sidebar
 
-Keep the original connection layout in Network settings and remove the duplicate roster. The context menu footer uses the installed version on the right and the shared update control on the left. The local sidebar footer still provides the same controls. Project folders use the enclosing computer, or this computer in the project-only view. Open project settings with the selected project.
+Keep the original connection layout in Network settings and remove the duplicate roster. The context menu and local sidebar footer align the shared update control and installed version together at the trailing edge. Keep the same arrow, spinner and cancel icon. Project folders use the enclosing computer, or this computer in the project-only view. Open project settings with the selected project.
 
 
 ## D-263 — Brighten dark appearance and apply font preferences throughout the interface

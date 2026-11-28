@@ -6,6 +6,8 @@ One entry per work session, newest first. Write what was done, which tool did it
 
 Codex refined the Statistics insets, matched Efficiency row spacing to Archive, widened Settings navigation, aligned context details, and added last-contact information for offline computers. [PR #253](https://github.com/kolotiloff/agent-messenger/pull/253) carries the window changes. T-371 and T-372 specify shared task naming and lifecycle, and simultaneous task conversations.
 
+The T-365 follow-up groups the update control with the installed version, aligns the menu insets with shared menus, and adds an optional dismissal timer to the standard notice close control.
+
 ## 2026-11-27 — T-365, T-366 and T-369 Window review follow-up
 
 Codex restored the Connection mode styles, pinned update notices above the conversation, reused update icons in context menu footers, and applied font preferences throughout the window. The dark sidebar is slightly darker and ordinary text is brighter. A combined isolated preview includes the relative timestamp from T-368 and compares both sidebar highlights. Chromium and WebKit checks passed for window controls, project and sidebar behavior, and the update and cancellation paths. The native installed window remains pending.

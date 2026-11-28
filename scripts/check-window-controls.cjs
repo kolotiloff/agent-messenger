@@ -476,7 +476,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.locator('#notices .am-notice-text[title]').first().waitFor();
       assert.equal(await clippedReason.getAttribute('title'),await clippedReason.textContent(),'a clipped reason still exposes its full text');
       if(process.env.SCREENSHOT_DIR&&!native) await page.screenshot({animations:'disabled',path:path.join(process.env.SCREENSHOT_DIR,'notices.png')});
-      await page.locator('#notices .am-toast-close').first().click();
+      await page.locator('#notices').getByRole('button',{name:'Закрыть',exact:true}).first().click();
       assert.equal(await page.locator('#notices .am-notice').count(), 2);
       updates = [];
       assert.deepEqual(errors, []);

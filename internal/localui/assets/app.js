@@ -619,7 +619,7 @@
     menu.dataset.stopTask=status?.task||'';
     menu.replaceChildren(...(status?[el('div',status.text,'am-context-status')]:items));
     if(device){
-      const footer=el('div',undefined,'am-context-device');
+      const footer=el('div',undefined,'am-context-device am-version-row');
       footer.dataset.device=device;
       menu.append(footer);
       renderDeviceMenuFooter(footer);
@@ -768,7 +768,7 @@
     if(state.cancelling){
       const status=el('span',undefined,'am-update-icon am-update-wait am-update-cancelling');
       status.title=caption;status.setAttribute('role','img');status.setAttribute('aria-label',caption);
-      status.append(svgIcon(['M6 3h12M6 21h12M8 3v5l8 8v5M16 3v5l-8 8v5']));
+      status.append(updateSpinner());
       status.addEventListener('click',e=>e.stopPropagation());
       return status;
     }
@@ -784,22 +784,34 @@
     b.addEventListener('click',e=>{e.stopPropagation();void cancelUpdate(state);});
     return b;
   }
-  // Update messages sit above the thread until dismissed.
   const notices=[],noticeSince=Date.now();
+  const noticePreference='messenger-notice-dismissal',noticeDuration=8000;
+  let autoCloseNotices=recall(noticePreference)==='automatic';
   const waitingUpdateNotices=new Map();
   function closedNotices(){try{return JSON.parse(localStorage.getItem('messenger-notices-closed')||'{}')||{};}catch(_){return {};}}
   // T-181: no scroll of their own; at most noticeLimit are shown and a new
   // one pushes out the oldest, which then counts as closed.
   const noticeLimit=3;
   function closeNotice(key){
-    const i=notices.findIndex(n=>n.key===key);if(i>=0)notices.splice(i,1);
+    const i=notices.findIndex(n=>n.key===key);
+    if(i>=0){clearTimeout(notices[i].timer);notices.splice(i,1);}
     const closed=closedNotices(),cut=Date.now()-2*24*3600*1000;closed[key]=Date.now();
     for(const k of Object.keys(closed))if(closed[k]<cut)delete closed[k];
     remember('messenger-notices-closed',JSON.stringify(closed));renderNotices();
   }
+  function scheduleNoticeClose(notice){
+    clearTimeout(notice.timer);
+    if(!autoCloseNotices)return;
+    notice.timer=setTimeout(()=>{
+      const card=$('notices').querySelector('[data-key="'+CSS.escape(notice.key)+'"]');
+      if(card?.matches(':hover,:focus-within'))scheduleNoticeClose(notice);
+      else closeNotice(notice.key);
+    },noticeDuration);
+  }
   function addNotice(key,kind,title,text){
     if(notices.some(n=>n.key===key)||closedNotices()[key])return;
-    notices.push({key,kind,title,text:text||''});
+    const notice={key,kind,title,text:text||''};
+    notices.push(notice);scheduleNoticeClose(notice);
     while(notices.length>noticeLimit)closeNotice(notices[0].key);
     renderNotices();
   }
@@ -842,7 +854,10 @@
       const icon=document.createElementNS('http://www.w3.org/2000/svg','svg');icon.setAttribute('viewBox','0 0 24 24');icon.setAttribute('aria-hidden','true');icon.classList.add('am-notice-icon');
       icon.innerHTML='<circle cx="12" cy="12" r="9"/>'+noticeIcons[n.kind];
       const body=el('div',undefined,'am-notice-body');body.append(el('span',n.title,'am-notice-title'));if(n.text)body.append(el('span',n.text,'am-small am-muted am-notice-text'));
-      const close=el('button','×','am-toast-close');close.type='button';close.setAttribute('aria-label',tr('Закрыть'));close.addEventListener('click',()=>closeNotice(n.key));
+      const close=el('button',undefined,'am-icon-btn am-close-x');close.type='button';
+      close.setAttribute('aria-label',tr('Закрыть'));
+      close.append(svgIcon(['M6 6l12 12M18 6L6 18']));
+      close.addEventListener('click',()=>closeNotice(n.key));
       card.append(icon,body,close);
       box.append(card);
     }
@@ -5414,6 +5429,14 @@
   applyChatFont();
   enhanceSelect(chatFont);
   chatFont.addEventListener('change',()=>applyChatFont(true));
+  const noticeDismissal=$('notice-dismissal');
+  noticeDismissal.value=autoCloseNotices?'automatic':'manual';
+  enhanceSelect(noticeDismissal);
+  noticeDismissal.addEventListener('change',()=>{
+    autoCloseNotices=noticeDismissal.value==='automatic';
+    remember(noticePreference,noticeDismissal.value);
+    notices.forEach(scheduleNoticeClose);
+  });
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{if(document.documentElement.dataset.theme==='system')applyTheme('system');});
   $('theme-select').addEventListener('change',()=>applyTheme($('theme-select').value,true));
   // The language applies on reload: every text is drawn again in it (T-059).
