@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-28 — T-375 Inline conversation notices
+
+Codex restored the shared content gap between the reply composer and connection warnings or action errors. The window fixture checks the connection warning and the normal layout after reconnection.
+
 ## 2026-11-28 — T-341 Dock icon contour
 
 Codex made the existing edge sheen more visible in local build 129. Pixel comparisons at every shipped size confirmed the changes stay along the sides and preserve the artwork’s alpha.

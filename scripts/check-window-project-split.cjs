@@ -456,12 +456,21 @@ if (require.main === module) (async()=>{
       await preview.locator('#compose[data-task="tools-2"]').waitFor();
       await answer.fill('Черновик для удалённого компьютера');
       assert.equal(await send.isEnabled(),true);
+      const lostBar=preview.locator('#lost-bar');
+      const replyComposer=preview.locator('#compose');
+      const composerInset=()=>replyComposer.evaluate(node=>getComputedStyle(node).paddingBlockStart);
+      assert.equal(await composerInset(),'0px');
       remoteLost=true;
-      await preview.locator('#lost-bar').waitFor();
+      await lostBar.waitFor();
+      assert.equal(await composerInset(),'12px');
+      const banner=await lostBar.boundingBox();
+      const field=await replyComposer.locator('.am-compose-field').boundingBox();
+      assert(field.y-banner.y-banner.height>=12,'The connection warning must clear the input field');
       assert.equal(await send.isDisabled(),true);
       await answer.fill('Изменённый черновик без связи');
       remoteLost=false;
-      await preview.locator('#lost-bar').waitFor({state:'hidden'});
+      await lostBar.waitFor({state:'hidden'});
+      assert.equal(await composerInset(),'0px');
       assert.equal(await send.isEnabled(),true);
       assert.equal(await answer.inputValue(),'Изменённый черновик без связи');
     }finally{sameFeed.release();otherWindow.release();otherFeed.release();await preview.close();}
