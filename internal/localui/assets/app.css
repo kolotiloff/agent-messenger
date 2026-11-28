@@ -500,8 +500,8 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-theme-setting > :last-child { flex:0 0 var(--am-settings-control-width); }
 #am-concept .am-theme-setting .am-select-trigger { width:100%; }
 #am-concept .am-theme-setting.am-auto-update > :last-child { flex:0 0 auto; }
-#am-concept .am-program-version { flex-wrap:wrap; }
-#am-concept .am-theme-setting.am-program-version > .am-program-update-actions { flex:0 1 auto; display:flex; flex-wrap:wrap; justify-content:flex-end; gap:var(--am-gap-control); max-inline-size:100%; }
+#am-concept .am-program-version > p { min-inline-size:0; overflow-wrap:anywhere; }
+#am-concept .am-theme-setting.am-program-version > .am-program-update-actions { flex:0 0 auto; display:flex; flex-wrap:wrap; justify-content:flex-end; gap:var(--am-gap-control); max-inline-size:60%; }
 #am-concept .am-network-update-rows { list-style:none; margin:0; padding:0; }
 #am-concept .am-network-update-row { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1.5fr); align-items:center; gap:var(--am-gap-content); padding-block:var(--am-space-2); overflow-wrap:anywhere; border-block-end:1px solid var(--am-line); }
 #am-concept .am-network-update-row > :last-child { text-align:end; }
@@ -1199,6 +1199,7 @@ body.am-native #am-concept .am-panel-toggle { margin-left:auto; }
 #am-concept .am-agent-setup-actions .am-step-sub { white-space:normal; overflow-wrap:anywhere; }
 #am-concept .am-sleep-menu .am-select-option { inline-size:100%; justify-content:space-between; gap:var(--am-gap-control); border:0; background:transparent; color:var(--am-text); text-align:start; }
 #am-concept .am-sleep-menu .am-select-option:is(:hover,:focus-visible,[aria-pressed=true]) { background:var(--am-menu-hover); }
+#am-concept .am-settings-menu { inline-size:max-content; max-inline-size:calc(100vw - 2 * var(--am-menu-inset)); }
 #am-concept .am-settings-menu .am-select-option { inline-size:100%; justify-content:flex-start; gap:var(--am-gap-control); border:0; background:transparent; color:var(--am-text); text-align:start; }
 #am-concept .am-settings-menu .am-select-option:is(:hover,:focus-visible):not(:disabled) { background:var(--am-menu-hover); }
 #am-concept .am-settings-menu .am-select-option:disabled { color:var(--am-disabled-text); }

@@ -6492,7 +6492,7 @@
   $('project-dialog-close').addEventListener('click',()=>$('project-dialog').close());
   const settingsTrigger=$('settings-open'),settingsMenu=$('settings-menu');
   const settingsMenuItems=()=>[...settingsMenu.querySelectorAll('button:not(:disabled)')];
-  const positionSettingsMenu=()=>positionPopover(settingsMenu,settingsTrigger,200,false,true);
+  const positionSettingsMenu=()=>positionPopover(settingsMenu,settingsTrigger,null,false,true);
   function toggleSettingsMenu(){
     if(settingsMenu.matches(':popover-open')){settingsMenu.hidePopover();return;}
     settingsMenu.showPopover();
