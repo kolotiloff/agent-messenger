@@ -8,29 +8,58 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
 (async () => {
   const playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   const engine = process.env.BROWSER_ENGINE || 'chromium';
+  const macTitlebar = process.env.MAC_TITLEBAR === '1';
   const browser = await playwright[engine].launch();
   try {
     const page = await browser.newPage({viewport:{width:1450,height:900},colorScheme:'dark'});
     page.setDefaultTimeout(6500);
     const output=process.env.SCREENSHOT_DIR;
     if(output)await fs.mkdir(output,{recursive:true});
-    const reads = [], writes = [];
+    const reads = [], writes = [], errors=[];
+    page.on('pageerror',error=>errors.push(error.message));
     let stoppedPrimary=false;
-    await page.addInitScript(() => {
+    let startedTask=null;
+    await page.addInitScript(macTitlebar => {
+      if(window===window.top){
+        window.amMacTitlebar=macTitlebar;
+        window.dictationCommands=[];
+        window.webkit={messageHandlers:{
+          composerDictation:{postMessage:message=>window.dictationCommands.push(message)},
+          titlebar:{postMessage:message=>{window.titlebarAreas=message;}},
+        }};
+      }
       const every = window.setInterval;
-      window.setInterval = (callback, delay, ...args) => every(callback, delay===5000 ? 100 : delay, ...args);
-    });
+      window.setInterval = (callback, delay, ...args) => every(callback, delay===2000 ? 200 : delay, ...args);
+    },macTitlebar);
     await page.route('https://messenger-preview.test/**', async route => {
       const request = route.request();
       const url = new URL(request.url());
       if (url.pathname.startsWith('/api/')) {
-        if (url.pathname==='/api/task') reads.push({id:url.searchParams.get('id'),pane:url.searchParams.has('cursor')});
+        if (url.pathname==='/api/task') reads.push({id:url.searchParams.get('id'),pane:request.frame().parentFrame()!=null});
         if (request.method()==='POST') {
           writes.push({path:url.pathname, body:request.postDataJSON()});
+          if(url.pathname==='/api/pick')return route.fulfill({json:{ok:true,attachments:[{path:'photo.png',data:'AAH/'}]}});
+          if(url.pathname==='/api/task-start'){
+            const payload=request.postDataJSON();
+            const existing=reply(new URL('/api/window',url),payload.project,projects).tasks[0];
+            startedTask={...existing,id:'draft-started',title:payload.text};
+            return route.fulfill({json:{ok:true,result:startedTask.id}});
+          }
           return route.fulfill({json:{ok:true}});
         }
+        if(url.pathname==='/api/task'&&startedTask&&url.searchParams.get('id')===startedTask.id)
+          return route.fulfill({json:{task:startedTask,items:[{kind:'task',author:'owner',at:startedTask.created_at,text:startedTask.title}]}});
         const json=reply(url,url.searchParams.get('project') || 'game',projects);
-        if(url.pathname==='/api/window'&&stoppedPrimary)json.tasks=json.tasks.map(task=>task.id==='game-4'?{...task,state:'cancelled',can_continue:true}:task);
+        if(url.pathname==='/api/window'&&startedTask?.project===json.project)json.tasks=[...json.tasks,startedTask];
+        if(url.pathname==='/api/usage-stats')json.recent.push({
+          ...json.recent.find(task=>task.project==='game'),id:'game-3',project:'game',title:'Звуки меню'
+        });
+        if(url.pathname==='/api/window')json.tasks=json.tasks.map(task=>{
+          if(request.frame().parentFrame()&&task.id==='game-1')return {...task,state:'interrupted',can_continue:true,remote:{name:'Проверочный компьютер'}};
+          if(request.frame().parentFrame()&&task.id==='game-2')return {...task,owner_question:{id:'fixture-question',text:'Подтвердите проверку'}};
+          if(task.id==='game-4'&&stoppedPrimary)return {...task,state:'cancelled',can_continue:true};
+          return task;
+        });
         if(url.pathname==='/api/task'){
           json.task={...json.task};
           delete json.task.project;
@@ -49,18 +78,44 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         }
         return route.fulfill({json});
       }
-      if (url.pathname === '/') {
+      if (url.pathname === '/' || url.pathname === '/task-pane') {
         const body = (await fs.readFile(path.join(assets,'index.html'),'utf8'))
           .replace('id="am-concept"','id="am-concept" class="am-task-sidebar-preview"');
-        return route.fulfill({contentType:'text/html; charset=utf-8',body});
+        const ancestors=url.pathname==='/'?"'none'":"'self'";
+        const frameSource=url.pathname==='/'?"; frame-src 'self'":"";
+        return route.fulfill({contentType:'text/html; charset=utf-8',body,headers:{
+          'content-security-policy':"default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; font-src 'self'; img-src 'self' blob:; frame-ancestors "+ancestors+frameSource
+        }});
       }
       return route.fulfill({path:path.join(assets,url.pathname.slice(1))});
     });
     await page.goto('https://messenger-preview.test/#preview-only');
     await page.getByText(/Ответ по задаче game-/).waitFor();
     const mainTitle=page.locator('#task-head h3');
+    const initialTab=page.locator('#task-head').getByRole('tab');
+    const initialTitle=await initialTab.textContent();
+    await initialTab.evaluate(button=>{
+      const row=button.closest('.am-task-toolbar').getBoundingClientRect();
+      const tab=button.closest('.am-pane-tab').getBoundingClientRect();
+      if(Math.abs(row.top-tab.top)>=1||Math.abs(row.bottom-tab.bottom)>1)
+        throw new Error('The single tab must fill the caption through its bottom border');
+    });
+    const newTask=page.locator('#task-draft-text');
+    const initialClose=page.getByRole('button',{name:'Закрыть вкладку '+initialTitle,exact:true});
+    await initialClose.click();
+    await newTask.waitFor();
+    assert.equal(await mainTitle.textContent(),'Новая задача');
+    assert.equal(await initialTab.count(),0);
+    await page.waitForResponse(response=>new URL(response.url()).pathname==='/api/window');
+    assert.equal(await mainTitle.textContent(),'Новая задача');
+    const initialRow=page.locator('#machines .am-sidebar-task').filter({hasText:initialTitle});
+    await initialRow.click();
+    await initialTab.waitFor();
+    await initialTab.press('Delete');
+    await newTask.waitFor();
+    await initialRow.click();
+    await initialTab.waitFor();
     const primary=page.locator('#answer-text');
-    const initialTitle=await mainTitle.textContent();
     await primary.fill('Основной черновик');
     const open = async (title, command='Открыть во вкладке') => {
       const task=page.locator('#machines .am-sidebar-task').filter({hasText:title});
@@ -68,30 +123,60 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.getByRole('menuitem',{name:command,exact:true}).click();
     };
     const first='Экран настроек', second='Проверка навигации', third='Параллельная задача';
-    const strip=page.getByRole('tablist',{name:'Вкладки задач'});
-    const tabs=strip.getByRole('tab');
-    const tab = title => strip.getByRole('tab',{name:title,exact:true});
+    const strip=page.locator('.am-pane-strip');
+    const tabs=page.locator('.am-pane-tab').getByRole('tab');
+    const tab = title => page.getByRole('tab',{name:title,exact:true});
+    const tabChip = title => tab(title).locator('xpath=..');
     const panel = title => page.getByRole('tabpanel',{name:title,exact:true});
+    const content = title => title===third?panel(title):panel(title).frameLocator('iframe');
+    const replyBox = title => content(title).getByRole('textbox',{name:'Ответ исполнителю'});
     const count = id => reads.filter(read=>read.id===id&&read.pane).length;
+    const openStatistic = async title => {
+      await page.locator('#stats-open').click();
+      await page.locator('#stats-top').getByRole('button',{name:new RegExp(title)}).click();
+      await page.locator('#stats-dialog').waitFor({state:'hidden'});
+    };
     await open(first);
-    await panel(first).getByText('Ответ по задаче game-1').waitFor();
+    await content(first).getByText('Ответ по задаче game-1').waitFor();
     assert.equal(await mainTitle.isVisible(),false);
     assert.equal(await strip.evaluate(node=>!!node.closest('.am-task-toolbar')),true);
+    const singleInset=(await tabChip(third).boundingBox()).x-(await page.locator('#task-layout').boundingBox()).x;
+    const archive=page.locator('#list-toggle');
+    const singleArchiveBox=await archive.boundingBox();
+    await page.mouse.move(0,0);
+    const background=title=>tabChip(title).evaluate(node=>getComputedStyle(node).backgroundColor);
+    const selectedRow=page.locator('#machines .am-sidebar-task[aria-pressed=true]');
+    const selectedFill=await selectedRow.evaluate(node=>getComputedStyle(node).backgroundColor);
+    assert.equal(await background(first),selectedFill);
+    assert.equal(await background(third),'rgba(0, 0, 0, 0)');
+    const inactiveRow=page.locator('#machines .am-sidebar-task').filter({hasText:third});
+    await inactiveRow.hover();
+    const hoverFill=await inactiveRow.evaluate(node=>getComputedStyle(node).backgroundColor);
+    await tab(third).hover();
+    assert.equal(await background(third),hoverFill);
+    assert.notEqual(hoverFill,selectedFill);
+    await page.mouse.move(0,0);
+    const tabStyle=await tabChip(first).evaluate(node=>{
+      const style=getComputedStyle(node);
+      return {radius:style.borderRadius,edge:style.borderInlineEndWidth};
+    });
+    assert.deepEqual(tabStyle,{radius:'0px',edge:'1px'});
+    assert.equal((await tabChip(first).boundingBox()).height,(await strip.boundingBox()).height);
     assert.equal(await primary.inputValue(),'Основной черновик');
-    const draft=panel(first).getByRole('textbox',{name:'Ответ исполнителю'});
+    const draft=replyBox(first);
     assert.equal(await draft.getAttribute('placeholder'),'Продолжить в этой сессии…');
     await draft.fill('Отдельный черновик');
     await draft.press('Escape');
     assert.equal(await page.locator('dialog[open]').count(),0);
     assert.equal(writes.some(write=>write.path==='/api/task-stop'),false);
     await open(second);
-    await panel(second).getByText('Ответ по задаче game-2').waitFor();
+    await content(second).getByText('Ответ по задаче game-2').waitFor();
     assert.equal(await panel(first).count(),0);
     const hiddenReads=count('game-1'), visibleReads=count('game-2');
     await page.waitForTimeout(350);
     assert.equal(count('game-1'),hiddenReads);
     assert(count('game-2')>visibleReads);
-    const ownerReply=panel(second).getByRole('textbox',{name:'Ответ исполнителю'});
+    const ownerReply=replyBox(second);
     await ownerReply.fill('Подтверждаю');
     const ownerRequest=page.waitForRequest(request=>new URL(request.url()).pathname==='/api/task-answer');
     await ownerReply.press('Enter');
@@ -102,69 +187,217 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     await tab(first).click();
     assert.equal(await draft.inputValue(),'Отдельный черновик');
     assert.equal(await primary.inputValue(),'Основной черновик');
-    await panel(first).getByRole('button',{name:'Отправить ответ'}).click();
-    assert.deepEqual(writes.filter(write=>write.path==='/api/task-note').map(write=>[
-      write.path,write.body.task,write.body.text
-    ]),[['/api/task-note','game-1','Отдельный черновик']]);
+    await content(first).locator('#answer-add').click();
+    const picker=content(first).getByRole('button',{name:'Добавить файл…',exact:true});
+    await picker.click();
+    await content(first).getByRole('button',{name:'Убрать вложение photo.png',exact:true}).waitFor();
+    const replyRequest=page.waitForRequest(request=>new URL(request.url()).pathname==='/api/task-note');
+    await content(first).getByRole('button',{name:'Отправить сообщение'}).click();
+    const sentReply=(await replyRequest).postDataJSON();
+    assert.equal(sentReply.task,'game-1');
+    assert.equal(sentReply.text,'Отдельный черновик\n\nВложения\nphoto.png');
+    assert.deepEqual(sentReply.attachments,[{path:'photo.png',data:'AAH/'}]);
+    assert.equal(writes.find(write=>write.path==='/api/pick').body.kind,'attach-file');
     assert.equal(await primary.inputValue(),'Основной черновик');
-    await open(third,'Открыть рядом');
-    await panel(third).getByText('Ответ по задаче game-4').waitFor();
-    assert.equal(count('game-4'),0,'the pane for the current task should use the primary feed');
-    await tab(first).click();
-    await panel(first).waitFor();
-    await panel(third).waitFor();
-    const board=page.locator('.am-pane-board');
-    for(const [label,layout] of [['Столбцы','columns'],['Строки','stack'],['Сетка','grid']]){
-      await page.locator('.am-task-toolbar').getByRole('button',{name:label,exact:true}).click();
-      assert.equal(await board.getAttribute('data-layout'),layout);
-      assert.equal(await board.locator('.am-pane-grid').evaluate(grid=>getComputedStyle(grid).gap),'1px');
-      for(const title of [first,third]) {
-        assert.equal(await panel(title).evaluate(node=>getComputedStyle(node).borderWidth),'0px');
-      }
-    }
     await tab(first).focus();
     await tab(first).press('Alt+ArrowRight');
-    assert.deepEqual(await tabs.allTextContents(),[third,second,first]);
-    const source=await tab(first).boundingBox(),target=await tab(third).boundingBox();
-    const fromX=source.x+source.width/2,fromY=source.y+source.height/2;
-    const toX=target.x+target.width/2,toY=target.y+target.height/2;
-    await page.mouse.move(fromX,fromY);
-    await page.mouse.down();
-    await page.mouse.move(fromX-12,fromY,{steps:4});
-    await page.mouse.move(toX,toY,{steps:6});
-    await page.mouse.move(toX+1,toY);
-    await page.mouse.up();
-    assert.deepEqual(await tabs.allTextContents(),[first,third,second]);
-    const dragTask=page.locator('#machines .am-sidebar-task').filter({hasText:second});
-    const start=await dragTask.boundingBox();
-    await page.mouse.move(start.x+start.width/2,start.y+start.height/2);
-    await page.mouse.down();
-    await page.mouse.move(start.x+start.width/2+16,start.y+start.height/2,{steps:5});
-    const drop=page.locator('[data-drop-layout=stack]');
-    await drop.waitFor();
-    const toolbarBounds=await page.locator('.am-task-toolbar').boundingBox();
-    assert.equal(Math.round((await drop.boundingBox()).y-toolbarBounds.y-toolbarBounds.height),12);
-    if(output)await page.screenshot({path:path.join(output,'task-drop-layouts.png')});
-    const end=await drop.boundingBox();
-    await page.mouse.move(end.x+end.width/2,end.y+end.height/2,{steps:8});
-    await page.mouse.move(end.x+end.width/2+1,end.y+end.height/2);
-    await page.mouse.up();
-    await drop.waitFor({state:'hidden'});
-    assert.equal(await board.getAttribute('data-layout'),'stack');
-    assert.equal(await tab(second).getAttribute('aria-selected'),'true');
-    assert.equal(await dragTask.getAttribute('aria-pressed'),'true');
-    const upper=await panel(first).boundingBox(), lower=await panel(third).boundingBox();
-    assert(lower.y>=upper.y+upper.height,'rows display distinct conversations vertically');
-    await page.locator('.am-task-toolbar').getByRole('button',{name:'Сетка',exact:true}).click();
-    await tab(first).click();
-    if(output){
-      await page.mouse.move(0,0);
-      await page.screenshot({path:path.join(output,'task-grid.png')});
+    assert.deepEqual(await strip.getByRole('tab').allTextContents(),[third,second,first]);
+    async function startDrag(locator){
+      const rect=await locator.boundingBox(),x=rect.x+rect.width/2,y=rect.y+rect.height/2;
+      await page.mouse.move(x,y);
+      await page.mouse.down();
+      await page.mouse.move(x+16,y,{steps:5});
     }
+    async function dragTo(x,y){
+      await page.mouse.move(x,y,{steps:8});
+      await page.mouse.move(x+1,y);
+    }
+    const board=page.locator('.am-pane-board');
+    const cell=title=>panel(title).locator('xpath=ancestor::*[contains(@class,"am-pane-cell")]');
+    const preview=page.locator('.am-pane-preview');
+    await tab(third).click();
+    const original=await cell(third).boundingBox();
+    await startDrag(tab(first));
+    for(const [fraction,left] of [[0.45,true],[0.55,false]]){
+      await dragTo(original.x+original.width*fraction,original.y+original.height/2);
+      await preview.waitFor();
+      const side=await preview.boundingBox();
+      const header=await page.locator('.am-task-toolbar').boundingBox();
+      assert(Math.abs(side.x-original.x-(left?0:original.width/2))<2);
+      assert(Math.abs(side.height-(original.y+original.height-header.y))<2);
+    }
+    await dragTo(original.x+original.width/2,original.y+original.height-12);
+    await preview.waitFor();
+    const wholeHeight=original.height+(await page.locator('.am-task-toolbar').boundingBox()).height;
+    assert(Math.abs((await preview.boundingBox()).height-wholeHeight/2)<2);
+    assert.equal(await page.locator('.am-pane-targets,.am-pane-layouts').count(),0);
+    await page.mouse.up();
+    await preview.waitFor({state:'hidden'});
+    const top=await cell(third).boundingBox(),bottom=await cell(first).boundingBox();
+    assert(bottom.y>=top.y+top.height&&bottom.width===top.width);
+    assert.equal(count('game-4'),0,'the originally selected chat retains the primary document');
+    await replyBox(first).fill('Черновик в нижней панели');
+    const sidebarTask=page.locator('#machines .am-sidebar-task').filter({hasText:second});
+    await page.evaluate(()=>{
+      const original=DataTransfer.prototype.setDragImage;
+      DataTransfer.prototype.setDragImage=function(node,...args){
+        window.taskUsedMachineDragImage=!!node.closest('.am-machine-name');
+        return original.call(this,node,...args);
+      };
+    });
+    await startDrag(sidebarTask.locator('.am-sidebar-task-title'));
+    await dragTo(top.x+top.width*0.56,top.y+12);
+    await preview.waitFor();
+    const highlight=await preview.boundingBox();
+    assert(Math.abs(highlight.width-top.width/2)<2&&Math.abs(highlight.height-top.height)<2);
+    if(output)await page.screenshot({path:path.join(output,'task-split-preview.png')});
+    await page.mouse.up();
+    await preview.waitFor({state:'hidden'});
+    await content(second).getByText('Ответ по задаче game-2').waitFor();
+    assert.equal(await replyBox(first).inputValue(),'Черновик в нижней панели');
+    assert.equal(await primary.inputValue(),'Основной черновик');
+    assert.equal(await strip.isVisible(),false);
+    assert.equal(await sidebarTask.getAttribute('aria-pressed'),'true');
+    assert.notEqual(await page.evaluate(()=>window.taskUsedMachineDragImage),true);
+    assert.equal(writes.some(write=>write.path==='/api/machine-order'),false);
+    async function verifySplit(){
+      const positions=[];
+      for(const title of [third,second,first]){
+        const header=tab(title).locator('xpath=ancestor::*[@role="tablist"]');
+        assert.equal(await panel(title).getAttribute('id'),await tab(title).getAttribute('aria-controls'));
+        const head=await header.boundingBox(),body=await panel(title).boundingBox();
+        const chip=await tabChip(title).boundingBox();
+        assert(Math.abs(head.x-body.x)<1&&Math.abs(head.width-body.width)<1);
+        assert(Math.abs(head.y+head.height-body.y)<1);
+        assert(Math.abs(chip.y-head.y)<1&&Math.abs(chip.height-(head.height-1))<1);
+        positions.push(head);
+      }
+      const [left,right,below]=positions;
+      assert(right.x>left.x&&right.y===left.y&&below.y>left.y&&below.x===left.x&&below.width>left.width+right.width-2);
+    }
+    await verifySplit();
+    await open(first);
+    await verifySplit();
+    const lowerPane=await cell(first).boundingBox();
+    await tab(third).click();
+    await verifySplit();
+    assert.deepEqual(await cell(first).boundingBox(),lowerPane,'switching a visible tab keeps the pane in place');
+    assert.equal(await replyBox(first).inputValue(),'Черновик в нижней панели');
+    await tab(first).click();
+    await verifySplit();
+    const workspaceTabs=await tabs.count();
+    const otherTask='Экспорт отчёта';
+    await page.locator('#machines .am-sidebar-task').filter({hasText:otherTask}).click();
+    await content(otherTask).getByText('Ответ по задаче tools-1',{exact:true}).waitFor();
+    assert.deepEqual(await cell(otherTask).boundingBox(),lowerPane);
+    assert.equal(await tabs.count(),workspaceTabs);
+    assert.equal(await tab(first).count(),0);
+    await panel(third).waitFor();
+    await panel(second).waitFor();
+    await page.locator('#machines .am-sidebar-task').filter({hasText:first}).click();
+    await verifySplit();
+    assert.equal(await replyBox(first).inputValue(),'Черновик в нижней панели');
+    await sidebarTask.click();
+    await verifySplit();
+    assert.equal(await tabChip(second).getAttribute('data-active'),'');
+    await tab(first).click();
+    assert.equal((await tabChip(third).boundingBox()).x-(await cell(third).boundingBox()).x,singleInset,
+      'the first tab uses the same inset in both layouts');
+    assert.equal(await page.locator('.am-pane-toolbar').isVisible(),false);
+    const captionTop=await page.locator('#task-layout').evaluate(node=>node.getBoundingClientRect().top);
+    const archiveBox=await archive.boundingBox();
+    assert.deepEqual(archiveBox,singleArchiveBox,'splitting keeps the archive toggle in the same place');
+    for(const title of [third,second]){
+      const header=await tab(title).locator('xpath=ancestor::*[@role="tablist"]').boundingBox();
+      assert(Math.abs(header.y-captionTop)<1&&archiveBox.y>=header.y&&archiveBox.y+archiveBox.height<=header.y+header.height);
+    }
+    await archive.click();
+    await page.locator('#task-panel').waitFor();
+    assert.deepEqual(await archive.boundingBox(),archiveBox,'opening the archive keeps its toggle in place');
+    await archive.click();
+    await page.locator('#task-panel').waitFor({state:'hidden'});
+    await page.locator('#limits-open').click();
+    await page.locator('#agent-limits').waitFor();
+    const otherThread=await content(second).locator('#thread').boundingBox();
+    await page.mouse.click(otherThread.x+otherThread.width-20,otherThread.y+20);
+    await page.locator('#agent-limits').waitFor({state:'hidden'});
+    if(macTitlebar){
+      assert.equal(await page.locator('body').evaluate(node=>node.classList.contains('am-mac-titlebar')),true);
+      await page.waitForFunction(()=>[...document.querySelectorAll('[data-caption] .am-close-x,#list-toggle')].every(button=>{
+        const box=button.getBoundingClientRect();
+        return window.titlebarAreas?.holes.some(([x,y,w,h])=>Math.abs(x-box.x)<1&&Math.abs(y-box.y)<1&&Math.abs(w-box.width)<1&&Math.abs(h-box.height)<1);
+      }));
+    }
+    const close=tab(first).locator('xpath=..').locator('.am-close-x');
+    await tab(first).hover();
+    const idleCloseColor=await close.evaluate(node=>getComputedStyle(node).color);
+    await close.hover();
+    const closeStyle=await close.evaluate(node=>{
+      const style=getComputedStyle(node);
+      return {color:style.color, background:style.backgroundColor};
+    });
+    assert.equal(closeStyle.background,'rgba(0, 0, 0, 0)');
+    assert.notEqual(closeStyle.color,idleCloseColor);
+    for(const title of [first,second,third]){
+      const composer=content(title).locator('.am-compose-field:visible');
+      assert(await composer.locator(':is(#answer-send,#task-stop):visible > svg').isVisible());
+      assert.equal(await content(title).locator('.am-watch-compose').count(),0);
+      const thread=content(title).locator('#thread');
+      assert(await thread.locator('.am-message-content').count());
+      assert(await thread.evaluate(node=>{
+        const footer=node.parentElement.querySelector('.am-chat-footer').getBoundingClientRect();
+        return footer.height>0&&Math.abs(node.getBoundingClientRect().bottom-footer.bottom)<1;
+      }),title+' has a scrollbar beside its composer');
+    }
+    const leftComposer=await content(third).locator('.am-compose-field:visible').boundingBox();
+    const rightComposer=await content(second).locator('.am-compose-field:visible').boundingBox();
+    assert(Math.abs(leftComposer.y-rightComposer.y)<2,`same-height panes align their reply fields (${leftComposer.y}, ${rightComposer.y})`);
+    await page.evaluate(()=>window.messengerDictationModels({enabled:true,ready:true,supported:true,selected:null,models:[]}));
+    await content(second).locator('#compose .am-dictation-button').click();
+    const recording=await page.evaluate(()=>window.dictationCommands.at(-1));
+    assert.equal(recording.action,'start');
+    await page.evaluate(id=>{
+      window.messengerDictationEvent({id,event:'recording'});
+      window.messengerDictationEvent({id,event:'text',text:'Проверочный голос'});
+    },recording.id);
+    assert.equal(await replyBox(second).inputValue(),'Проверочный голос');
+    await replyBox(second).fill('');
+    await content(second).locator('#compose .am-dictation-button').click();
+    const sendRecording=await page.evaluate(()=>window.dictationCommands.at(-1));
+    await page.evaluate(id=>window.messengerDictationEvent({id,event:'recording'}),sendRecording.id);
+    const sendVoiceReply=content(second).locator('#answer-send');
+    const dictationStop=content(second).locator('#compose .am-dictation-stop');
+    const rightMic=await dictationStop.boundingBox();
+    assert((await sendVoiceReply.boundingBox()).x<rightMic.x);
+    const buttonStyle=button=>button.evaluate(async node=>{
+      await new Promise(resolve=>requestAnimationFrame(resolve));
+      await Promise.all(node.getAnimations().map(animation=>animation.finished.catch(()=>{})));
+      const style=getComputedStyle(node);
+      return [style.borderRadius,style.backgroundColor,style.borderTopWidth];
+    });
+    await page.mouse.move(1,1);
+    assert.deepEqual(await buttonStyle(dictationStop),await buttonStyle(sendVoiceReply));
+    await dictationStop.hover();
+    const stopHover=await buttonStyle(dictationStop);
+    await sendVoiceReply.hover();
+    assert.deepEqual(stopHover,await buttonStyle(sendVoiceReply));
+    const voiceReply=page.waitForResponse(res=>new URL(res.url()).pathname==='/api/task-answer');
+    await sendVoiceReply.click();
+    assert.equal(await sendVoiceReply.isDisabled(),true);
+    assert.equal(await page.evaluate(()=>window.dictationCommands.at(-1).action),'stop');
+    await page.evaluate(id=>{
+      window.messengerDictationEvent({id,event:'text',text:'Подтверждаю голосом'});
+      window.messengerDictationEvent({id,event:'text',text:'Дубликат'});
+    },sendRecording.id);
+    assert.equal((await voiceReply).request().postDataJSON().text,'Подтверждаю голосом');
+    assert.equal(writes.filter(write=>write.body?.text==='Подтверждаю голосом').length,1);
+    assert.equal(await primary.inputValue(),'Основной черновик');
+    assert.equal(await replyBox(first).inputValue(),'Черновик в нижней панели');
+    if(output)await page.screenshot({path:path.join(output,'task-split.png')});
     await page.setViewportSize({width:760,height:850});
-    const panes=page.locator('.am-pane-grid');
-    const narrow=await panes.evaluate(grid=>getComputedStyle(grid).gridTemplateColumns.split(' ').length);
-    assert.equal(narrow,1);
+    assert.equal(await page.locator('.am-pane-grid').evaluate(grid=>getComputedStyle(grid).gridTemplateColumns.split(' ').length),1);
+    await page.waitForFunction(()=>document.querySelectorAll('.am-pane-header[data-caption]').length===1);
+    assert.equal(await archive.evaluate(node=>node.parentElement.classList.contains('am-task-toolbar')),true);
     await page.setViewportSize({width:1450,height:900});
     await page.evaluate(()=>{
       Object.defineProperty(document,'hidden',{configurable:true,value:true});
@@ -177,23 +410,43 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       delete document.hidden;
       document.dispatchEvent(new Event('visibilitychange'));
     });
+    await tab(third).click();
+    await openStatistic(first);
+    await tabChip(first).and(page.locator('[data-active]')).waitFor();
+    await verifySplit();
+    assert.equal(await replyBox(first).inputValue(),'Черновик в нижней панели');
     await page.locator('#stats-open').click();
     const before=count('game-1')+count('game-2')+count('game-3');
     await page.waitForTimeout(350);
     assert.equal(count('game-1')+count('game-2')+count('game-3'),before);
+    assert.deepEqual(errors,[]);
     await page.reload();
     await tabs.first().waitFor();
-    assert.deepEqual(await tabs.allTextContents(),[first,third,second]);
+    await verifySplit();
     assert.equal(await tab(first).getAttribute('aria-selected'),'true');
     await panel(first).waitFor();
     await panel(third).waitFor();
     for(const title of [first,second,third]){
+      if(title===third)assert.equal(await strip.getByRole('tab',{name:third,exact:true}).isVisible(),true);
       await tab(title).focus();
       await tab(title).press('Delete');
     }
     assert.equal(await board.count(),0);
-    assert.equal(await mainTitle.textContent(),initialTitle);
-    assert.equal(await primary.evaluate(input=>input===document.activeElement),true);
+    await newTask.waitFor();
+    assert.equal(await mainTitle.textContent(),'Новая задача');
+    assert.equal(await newTask.evaluate(input=>input===document.activeElement),true);
+    await page.waitForResponse(response=>new URL(response.url()).pathname==='/api/window');
+    assert.equal(await page.locator('#thread .am-message-content').count(),0);
+    assert.equal(await mainTitle.textContent(),'Новая задача');
+    await page.locator('#machines .am-sidebar-task').filter({hasText:initialTitle}).click();
+    await primary.waitFor();
+    await page.locator('#answer-model').click();
+    await page.getByRole('menuitemradio',{name:'Astra 6.2 High',exact:true}).click();
+    await page.locator('#answer-access').click();
+    await page.getByRole('menuitemradio',{name:/С ограничениями/}).click();
+    await primary.fill('Продолжи проверку');
+    assert(await page.locator('#answer-send').isDisabled());
+    assert(await page.locator('#task-stop').isVisible());
     stoppedPrimary=true;
     const stopped=page.locator('#thread .am-system-event');
     await stopped.getByText('Работа остановлена',{exact:true}).waitFor();
@@ -207,6 +460,75 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     const continuation=(await followup).postDataJSON();
     assert.equal(continuation.task,'game-4');
     assert.equal(continuation.text,'Продолжи проверку');
+    assert.equal(continuation.model,'gpt-6.2-astra[effort=high]');
+    assert.equal(continuation.access,'standard');
+    await openStatistic('Звуки меню');
+    await page.getByText('Ответ по задаче game-3',{exact:true}).waitFor();
+    assert.equal(await board.count(),0);
+    await open(first);
+    await tab(first).press('Delete');
+    const singleHeaderTab=tab('Звуки меню');
+    await singleHeaderTab.waitFor();
+    const heading=await singleHeaderTab.boundingBox();
+    await startDrag(page.locator('#machines .am-sidebar-task').filter({hasText:first}).locator('.am-sidebar-task-meta'));
+    await dragTo(heading.x+heading.width/2,heading.y+heading.height/2);
+    await preview.waitFor();
+    assert(Math.abs((await preview.boundingBox()).y-heading.y)<1);
+    await page.mouse.up();
+    await preview.waitFor({state:'hidden'});
+    assert((await cell(first).boundingBox()).x<(await cell('Звуки меню').boundingBox()).x,
+      'dropping over the active title opens a column to its left');
+    const statsSlot=await cell(first).boundingBox();
+    const otherColumn=await cell('Звуки меню').boundingBox();
+    await openStatistic('Экспорт отчёта');
+    await panel('Экспорт отчёта').frameLocator('iframe').getByText('Ответ по задаче tools-1',{exact:true}).waitFor();
+    assert.deepEqual(await cell('Экспорт отчёта').boundingBox(),statsSlot);
+    assert.deepEqual(await cell('Звуки меню').boundingBox(),otherColumn);
+    assert.equal(await tab(first).count(),0);
+    assert.equal(await tabs.count(),2);
+    await openStatistic(first);
+    await panel(first).waitFor();
+    assert.deepEqual(await cell(first).boundingBox(),statsSlot);
+    await singleHeaderTab.click();
+    await sidebarTask.click();
+    await archive.click();
+    const archivedTask=page.locator('#task-list .am-task').filter({hasText:'Звуки меню'});
+    await archivedTask.click();
+    assert.equal(await archivedTask.getAttribute('aria-pressed'),'true');
+    await archive.click();
+    assert.deepEqual(await cell('Звуки меню').boundingBox(),otherColumn);
+    assert.deepEqual(await cell(first).boundingBox(),statsSlot);
+    assert.equal(await tabs.count(),2);
+    await tab(first).click();
+    await page.locator('#task-new').click();
+    await newTask.waitFor();
+    assert.deepEqual(await cell('Новая задача').boundingBox(),statsSlot);
+    assert.deepEqual(await cell('Звуки меню').boundingBox(),otherColumn);
+    assert.equal(await tabs.count(),2);
+    const draftFoot=page.locator('#task-draft .am-composer-context');
+    const replyFoot=panel('Звуки меню').frameLocator('iframe').locator('#answer-context');
+    assert.equal((await draftFoot.boundingBox()).y,(await replyFoot.boundingBox()).y);
+    assert.equal((await draftFoot.boundingBox()).height,(await replyFoot.boundingBox()).height);
+    const newTitle='Задача из активной панели';
+    const sendDraft=page.locator('#task-draft-send');
+    await sendDraft.waitFor({state:'hidden'});
+    await page.evaluate(()=>window.messengerDictationModels({enabled:true,ready:true,supported:true,selected:null,models:[]}));
+    await page.locator('#task-draft .am-dictation-button').click();
+    const draftRecording=await page.evaluate(()=>window.dictationCommands.at(-1));
+    await page.evaluate(id=>window.messengerDictationEvent({id,event:'recording'}),draftRecording.id);
+    await sendDraft.click();
+    assert.equal(await page.evaluate(()=>window.dictationCommands.at(-1).action),'stop');
+    await page.evaluate(({id,text})=>window.messengerDictationEvent({id,event:'text',text}),{id:draftRecording.id,text:newTitle});
+    await panel(newTitle).getByText(newTitle,{exact:true}).waitFor();
+    assert.deepEqual(await cell(newTitle).boundingBox(),statsSlot);
+    assert.deepEqual(await cell('Звуки меню').boundingBox(),otherColumn);
+    assert.equal(await tabs.count(),2);
+    await tabChip(newTitle).locator('.am-close-x').click();
+    await tabChip('Звуки меню').locator('.am-close-x').click();
+    await newTask.waitFor();
+    assert.equal(await tabs.count(),0);
+    assert.equal(await mainTitle.textContent(),'Новая задача');
+    assert.deepEqual(errors,[]);
     console.log(JSON.stringify({engine,result:'passed'}));
   } finally {
     await browser.close();

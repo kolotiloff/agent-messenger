@@ -1,6 +1,12 @@
 'use strict';
 (() => {
   const root = document.getElementById('am-concept');
+  const paneLocation=location.pathname==='/task-pane'&&window.parent!==window?new URLSearchParams(location.search):null;
+  const paneHost=paneLocation?window.parent:null;
+  if(paneHost)root.classList.add('am-embedded-chat');
+  // Post native actions from the main document. Native origins and frame guards stay in force.
+  const nativeHandlers=(paneHost||window).webkit?.messageHandlers;
+  let embeddedChatVisible=false;
   const taskSidebarPreview=root.classList.contains('am-task-sidebar-preview');
   // The Mac app and the Windows window draw their own frame and title (D-054).
   if(window.amTransparentWindow)document.body.classList.add('am-transparent-window');
@@ -208,6 +214,7 @@
     document.documentElement.dataset.theme=theme;$('theme-select').value=theme;syncSelects();
     // The Windows window colours its title bar like the page.
     if(window.amTitleBar){const dark=theme==='dark'||(theme==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);try{window.amTitleBar(dark);}catch(_){}}
+    forEachPaneWindow(child=>child.messengerPaneAppearance?.(theme,root.dataset.chatFont));
     if(persist) {
       if(window.webkit?.messageHandlers?.appearance)window.webkit.messageHandlers.appearance.postMessage(theme);
       else try {localStorage.setItem('messenger-theme',theme);} catch(_) {}
@@ -218,6 +225,7 @@
     if(!select.value)select.value='inter';
     root.dataset.chatFont=select.value;
     centreReplyLabels();
+    forEachPaneWindow(child=>child.messengerPaneAppearance?.(document.documentElement.dataset.theme,select.value));
     document.fonts?.ready.then(centreReplyLabels);
     if(persist){
       if(window.webkit?.messageHandlers?.chatFont)window.webkit.messageHandlers.chatFont.postMessage(select.value);
@@ -251,7 +259,7 @@
     }
   }
   function recall(key){if(nativePreferences.has(key)&&window.messengerPreferences?.[key]!=null)return window.messengerPreferences[key];try{return localStorage.getItem(key)||'';}catch(_){return '';}}
-  let view=null,project=recall('messenger-project'),selectedTask='',selectedShared=null,feed=null,feedSignature='',viewSignature='';
+  let view=null,project=paneLocation?.get('project')||recall('messenger-project'),selectedTask=paneLocation?.get('task')||'',selectedShared=null,feed=null,feedSignature='',viewSignature='';
   // T-133: the task shown last, and whether the feed should go to its end on
   // the next render (a new task opened, or the owner just wrote).
   let feedShown='',feedStick=false,feedPinned=true,feedCount=0;
@@ -493,12 +501,15 @@
     return sharedWorkerRunning(t)?{...t,pending_launch:false,worker_observed:true}:t;
   }
   const taskPanes=new Map();
-  const paneLayouts=['columns','stack','grid'];
   const restartOutcome='the client restarted during this run; the outcome is unknown and nothing is retried';
   const restartLabel=()=>tr('Клиент перезапустился во время работы; результат неизвестен');
-  let paneBoard=null,paneStrip=null,paneToolbar=null,paneGrid=null,paneTimer=null,paneActive=null,paneDragging=null;
+  let paneBoard=null,paneStrip=null,paneToolbar=null,paneGrid=null,paneActive=null,paneDragging=null;
+  let taskWorkspaceCleared=false;
+  const narrowPaneLayout=matchMedia('(max-width:780px)');
+  let paneTree=null,paneLegacy='',paneDropPreview=null;
+  const openPanes=()=>[...taskPanes.values()].filter(pane=>pane.placement!=='parked');
   function savePanes(){
-    remember('kotel-task-panes',JSON.stringify([...taskPanes.values()].map(({id,project,title,placement})=>({id,project,title,placement}))));
+    remember('kotel-task-panes',JSON.stringify(openPanes().map(({id,project,title,placement})=>({id,project,title,placement}))));
     remember('kotel-active-pane',paneActive?.id||'');
   }
   function preservePaneFocus(move){
@@ -510,229 +521,321 @@
       if(selection)focused.setSelectionRange(...selection);
     }
   }
+  function clearTaskWorkspace(){
+    taskWorkspaceCleared=true;
+    selectedTask='';selectedShared=null;feed=null;topTaskScope='';
+    renderThread();renderTaskList();startWindowWatch();
+  }
+  function focusEmptyWorkspace(){
+    if(draftOpen)$('task-draft-text').focus({preventScroll:true});
+    else $('thread').focus({preventScroll:true});
+  }
   function closePane(pane){
-    const before=[...taskPanes.values()],index=before.indexOf(pane);
-    const hadFocus=pane.tab.contains(document.activeElement)||pane.node.contains(document.activeElement);
-    abortPaneRequest(pane);
+    const before=openPanes(),index=before.indexOf(pane);
+    const primary=$('task-primary-pane');
+    const hadFocus=pane.tab.contains(document.activeElement)||pane.cell.contains(document.activeElement);
+    const closedDraft=draftOpen&&pane===paneActive;
+    if(closedDraft)closeTaskDraft();
+    if(pane.header.contains(paneStrip))placePaneCaption([]);
+    pane.chat.contentWindow?.messengerCancelDictation?.();
     taskPanes.delete(pane.id);
-    pane.tab.remove();pane.node.remove();
+    paneTree=trimPaneTree(paneTree,new Set(taskPanes.keys()));
+    remember('kotel-pane-layout',JSON.stringify(paneTree));
+    if(primary.parentNode===pane.cell)paneGrid.append(primary);
+    pane.tab.remove();pane.cell.remove();
     if(paneActive===pane)paneActive=before[index+1]||before[index-1]||null;
-    if(!taskPanes.size&&paneBoard){
-      const primary=paneGrid.querySelector('.am-chat');
-      primary.hidden=false;primary.style.removeProperty('order');
+    if(before.length===1&&paneBoard){
+      primary.hidden=false;
       primary.removeAttribute('role');primary.removeAttribute('aria-labelledby');
       $('task-head').hidden=false;paneToolbar.remove();
       preservePaneFocus(()=>paneBoard.replaceWith(primary));
+      taskPanes.clear();
       paneBoard=paneStrip=paneToolbar=paneGrid=null;
-      clearInterval(paneTimer);paneTimer=null;
-    }
+      clearTaskWorkspace();
+    }else if(closedDraft)renderThread();
     syncTaskPanes();renderMachines();
     if(hadFocus){
       if(paneActive)paneActive.label.focus({preventScroll:true});
-      else if(!$('compose').hidden&&!$('answer-text').disabled)$('answer-text').focus({preventScroll:true});
-      else $('thread').focus({preventScroll:true});
+      else focusEmptyWorkspace();
     }
     savePanes();
   }
-  function paneVisible(pane){
-    return pane.node.isConnected&&!pane.node.hidden&&!document.hidden&&tab==='tasks';
-  }
-  function abortPaneRequest(pane){
-    pane.request?.abort();pane.request=null;
-  }
-  function renderPaneControls(pane){
-    const task=pane.task;
-    const canSend=canSendTaskMessage(task);
-    pane.input.placeholder=taskMessagePlaceholder(task);
-    pane.compose.hidden=!canDraftTaskMessage(task)&&!pane.input.value.trim();
-    pane.input.disabled=!canDraftTaskMessage(task);
-    pane.input.readOnly=pane.busy;
-    pane.send.disabled=!canSend||pane.busy||!pane.input.value.trim();
-  }
-  async function sendPaneReply(pane){
-    if(pane.send.disabled)return;
-    const task=pane.task,text=pane.input.value.trim(),question=task.owner_question;
-    const key=question?'messenger-answer-op:'+question.id:'messenger-note-op:'+task.id+':'+text;
-    let op=recall(key);
-    if(!op){op='window-'+(question?.id||task.id)+'-'+crypto.randomUUID();remember(key,op);}
-    pane.busy=true;pane.status.textContent=tr('Отправляем сообщение…');renderPaneControls(pane);
-    try{
-      await postAPI(question?'/api/task-answer':'/api/task-note',{task:task.id,op_id:op,text,...(question?{question:question.id}:{})});
-      if(!question)try{localStorage.removeItem(key);}catch(_){}
-      pane.input.value='';await updatePane(pane);
-    }catch(error){pane.status.textContent=error.message+tr(' Повтор с тем же текстом безопасен.');}
-    finally{pane.busy=false;renderPaneControls(pane);}
-  }
-  function renderPaneSnapshot(pane,snapshot,offset=0){
-    const scroll=pane.body.scrollTop;
-    const fileSource=taskFileSource(snapshot.task);
-    const stick=pane.body.scrollHeight-scroll-pane.body.clientHeight<32;
-    if(!offset)pane.body.replaceChildren();
-    for(const it of snapshot.items||[]){
-      if(!['task','answer','text','question','report','note','outcome'].includes(it.kind)||(!it.text&&it.kind!=='outcome'))continue;
-      const message=el('div',undefined,'am-pane-message');
-      if(it.kind==='outcome'&&it.state==='cancelled')message.append(stoppedNote(it,snapshot.task));
-      else{
-        const role=it.author==='owner'?tr('Вы'):it.author==='coordinator'?tr('Координатор'):it.kind==='outcome'?tr('Статус'):tr('Исполнитель');
-        message.append(el('span',role,'am-small am-muted'),richText(it.kind==='outcome'&&it.text===restartOutcome?restartLabel():it.text,undefined,fileSource));
-      }
-      pane.body.append(message);
+  function paneVisibility(pane,visible){
+    if(visible&&!pane.chat.hasAttribute('src')){
+      pane.chat.src='/task-pane?'+new URLSearchParams({task:pane.id,project:pane.project});
     }
-    pane.count=offset+(snapshot.items?.length||0);
-    pane.cursor=snapshot.cursor||'';
-    pane.task=snapshot.task;
-    pane.label.textContent=pane.heading.textContent=snapshot.task.title||pane.title;
-    if(pane.title!==pane.label.textContent){pane.title=pane.label.textContent;savePanes();}
-    pane.label.title=pane.title;
-    pane.close.setAttribute('aria-label',tr('Закрыть вкладку')+' '+pane.title);
-    pane.status.textContent=taskStatus(snapshot.task)[0];
-    renderPaneControls(pane);
-    pane.body.scrollTop=stick?pane.body.scrollHeight:scroll;
+    pane.chat.hidden=!visible;
+    pane.chat.contentWindow?.messengerPaneVisible?.(visible&&tab==='tasks'&&!document.hidden);
   }
-  async function updatePane(pane){
-    if(!paneVisible(pane))return;
-    if(pane.request)return;
-    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),5000);
-    pane.request=controller;
-    try{
-      const query=new URLSearchParams({id:pane.id,cursor:pane.cursor||''});
-      const snapshot=await api('/api/task?'+query,5000,controller.signal);
-      if(controller.signal.aborted||!paneVisible(pane)||snapshot.task?.id!==pane.id)return;
-      if(snapshot.append_from&&snapshot.append_from!==pane.count){pane.cursor='';return;}
-      renderPaneSnapshot(pane,snapshot,snapshot.append_from||0);
-    }catch(error){if(!controller.signal.aborted)pane.status.textContent=tr('Не удалось загрузить задачу');}
-    finally{clearTimeout(timer);if(pane.request===controller)pane.request=null;}
+  function trimPaneTree(tree,ids){
+    if(typeof tree==='string')return ids.delete(tree)?tree:null;
+    if(!tree||!['x','y'].includes(tree.axis)||!Array.isArray(tree.children))return null;
+    return paneGroup(tree.axis,tree.children.map(child=>trimPaneTree(child,ids)).filter(Boolean));
+  }
+  function paneGroup(axis,children){
+    return children.length>1?{axis,children}:children[0]||null;
+  }
+  function mapPaneTree(tree,target,replacement){
+    if(typeof tree==='string')return tree===target?replacement:tree;
+    return paneGroup(tree.axis,tree.children.map(child=>mapPaneTree(child,target,replacement)));
+  }
+  function applyPaneTree(visible){
+    if(!visible.length)return;
+    const remaining=new Set(visible);
+    let tree=trimPaneTree(paneTree,remaining);
+    if(paneLegacy&&visible.length>1){
+      const rows=[];
+      for(let i=0;i<visible.length;i+=2)rows.push(paneGroup('x',visible.slice(i,i+2)));
+      tree=paneLegacy==='grid'?paneGroup('y',rows):paneGroup(paneLegacy==='stack'?'y':'x',visible);
+      paneLegacy='';
+    }else if(remaining.size){
+      tree=paneGroup('x',[tree,...remaining].filter(Boolean));
+    }
+    if(visible.length>1&&JSON.stringify(tree)!==JSON.stringify(paneTree)){
+      paneTree=tree;
+      remember('kotel-pane-layout',JSON.stringify(tree));
+    }
+    const positions=[];
+    function place(node,left,top,right,bottom){
+      if(typeof node==='string'){positions.push({node,left,top,right,bottom});return;}
+      const {axis,children}=node;
+      const cuts=Array.from({length:children.length+1},(_,i)=>
+        axis==='x'?left+(right-left)*i/children.length:top+(bottom-top)*i/children.length);
+      children.forEach((child,i)=>{
+        if(axis==='x')place(child,cuts[i],top,cuts[i+1],bottom);
+        else place(child,left,cuts[i],right,cuts[i+1]);
+      });
+    }
+    place(tree,0,0,1,1);
+    const edges=(start,end)=>[...new Set(positions.flatMap(position=>[position[start],position[end]]))].sort((a,b)=>a-b);
+    const xs=edges('left','right'),ys=edges('top','bottom');
+    const tracks=stops=>stops.slice(1).map((stop,i)=>`minmax(0,${stop-stops[i]}fr)`).join(' ');
+    paneGrid.style.gridTemplateColumns=tracks(xs);
+    paneGrid.style.gridTemplateRows=tracks(ys);
+    for(const [i,{node,left,top,right,bottom}] of positions.entries()){
+      const cell=taskPanes.get(node).cell;
+      cell.style.setProperty('--pane-row',String(i+1));
+      cell.style.gridArea=[ys.indexOf(top)+1,xs.indexOf(left)+1,ys.indexOf(bottom)+1,xs.indexOf(right)+1].join(' / ');
+    }
+    return positions;
+  }
+  function placePaneCaption(positions){
+    const layout=$('task-layout');
+    const top=positions.length<=1?[]:narrowPaneLayout.matches?positions.slice(0,1):positions.filter(position=>position.top===0);
+    const first=taskPanes.get(top[0]?.node)?.header;
+    const last=taskPanes.get(top.at(-1)?.node)?.header;
+    const destination=last||paneToolbar;
+    layout.toggleAttribute('data-split-caption',!!last);
+    paneToolbar.hidden=!!last||(draftOpen&&!paneActive);
+    for(const {header} of taskPanes.values()){
+      header.toggleAttribute('data-caption',top.some(position=>taskPanes.get(position.node).header===header));
+      header.toggleAttribute('data-caption-start',header===first);
+      header.toggleAttribute('data-caption-end',header===last);
+    }
+    if(paneStrip.parentElement!==destination)destination.append(paneStrip);
+    paneStrip.setAttribute('role',last?'presentation':'tablist');
+  }
+  narrowPaneLayout.addEventListener('change',syncTaskPanes);
+  if(!paneHost)window.messengerPaneTitle=(frame,title)=>{
+    const pane=taskPanes.get(frame.closest('.am-pane-cell')?.dataset.taskPane);
+    if(!pane||pane.chat!==frame)return;
+    pane.title=title;
+    if(!draftOpen||pane!==paneActive)setTaskTabTitle(pane,title);
+    savePanes();
+  };
+  function forEachPaneWindow(action){
+    for(const pane of taskPanes.values()){
+      if(pane.chat.hasAttribute('src'))action(pane.chat.contentWindow);
+    }
   }
   function syncTaskPanes(){
     if(!paneBoard)return;
-    const enabled=tab==='tasks'&&!document.hidden;
-    const primary=paneGrid.querySelector('.am-chat');
+    const primary=$('task-primary-pane');
     const current=taskPanes.get(selectedTask);
     const usePrimary=!!current&&current.project===project;
-    const showPrimary=usePrimary&&(current===paneActive||current.placement==='alongside');
-    primary.hidden=!!paneActive&&!draftOpen&&!showPrimary;
-    if(showPrimary){
+    const primaryPane=draftOpen?paneActive:usePrimary&&(current===paneActive||current.placement==='alongside')?current:null;
+    primary.hidden=!!paneActive&&!primaryPane;
+    if(primaryPane){
       primary.setAttribute('role','tabpanel');
-      primary.setAttribute('aria-labelledby',current.label.id);
+      primary.setAttribute('aria-labelledby',primaryPane.label.id);
     }
-    if(!showPrimary){
-      primary.removeAttribute('role');primary.removeAttribute('aria-labelledby');
-      primary.style.removeProperty('order');
-    }
-    $('task-head').hidden=!draftOpen;
-    paneToolbar.hidden=draftOpen;
-    let index=0,visible=0;
-    for(const pane of taskPanes.values()){
-      const active=pane===paneActive;
-      const showing=!draftOpen&&!!paneActive&&(active||pane.placement==='alongside');
-      const full=usePrimary&&pane===current&&showPrimary;
-      pane.node.hidden=!showing||full;
-      pane.node.style.order=index;
-      if(full)primary.style.order=index;
-      pane.label.setAttribute('aria-controls',full?primary.id:pane.node.id);
-      if(showing)visible++;
-      index++;
-      pane.label.setAttribute('aria-selected',String(active));
-      pane.label.tabIndex=active?0:-1;
-      pane.close.tabIndex=active?0:-1;
-      if(!enabled||pane.node.hidden)abortPaneRequest(pane);
-      else updatePane(pane);
-    }
-    paneBoard.style.setProperty('--am-watch-visible',Math.max(1,visible));
+    if(!primaryPane){primary.removeAttribute('role');primary.removeAttribute('aria-labelledby');}
+    $('task-head').hidden=!!paneActive||!draftOpen;
+    const shown=pane=>!!paneActive&&(pane===paneActive||pane.placement==='alongside');
+    const ordered=[...taskPanes.values()];
+    const visibleIDs=ordered.filter(shown).map(pane=>pane.id),visible=visibleIDs.length;
+    const primaryParent=primaryPane?.cell||paneGrid;
+    preservePaneFocus(()=>{
+      if(primary.parentNode!==primaryParent)primaryParent.append(primary);
+      let nextTab=null;
+      for(const pane of ordered.slice().reverse()){
+        const active=pane===paneActive,showing=shown(pane);
+        const full=primaryParent===pane.cell;
+        const localTab=visible>1&&showing;
+        pane.cell.hidden=!showing;
+        pane.node.hidden=!showing||full;
+        paneVisibility(pane,showing&&!full);
+        pane.header.hidden=!localTab;
+        if(localTab){
+          if(pane.tab.parentNode!==pane.header)pane.header.append(pane.tab);
+        }else if(pane.placement==='parked'){
+          pane.tab.remove();
+        }else{
+          if(pane.tab.parentNode!==paneStrip||pane.tab.nextElementSibling!==nextTab)paneStrip.insertBefore(pane.tab,nextTab);
+          nextTab=pane.tab;
+        }
+        pane.tab.toggleAttribute('data-active',active);
+        setTaskTabTitle(pane,draftOpen&&active?tr('Новая задача'):pane.title);
+        pane.label.setAttribute('aria-controls',full?primary.id:pane.node.id);
+        pane.label.setAttribute('aria-selected',String(active||localTab));
+        pane.label.tabIndex=active||visible>1?0:-1;
+        pane.close.tabIndex=pane.label.tabIndex;
+      }
+      paneStrip.hidden=!nextTab;
+    });
+    const positions=visible?applyPaneTree(visibleIDs):[];
+    if(!visible){paneGrid.style.gridTemplateColumns='';paneGrid.style.gridTemplateRows='';}
+    preservePaneFocus(()=>placePaneCaption(positions));
     paneBoard.toggleAttribute('data-single',visible<=1);
-    paneBoard.style.setProperty('--am-watch-order',index);
-    paneBoard.toggleAttribute('data-odd-grid',visible>1&&visible%2!==0);
-    if(!enabled&&paneTimer){clearInterval(paneTimer);paneTimer=null;}
-    if(enabled&&!paneTimer)paneTimer=setInterval(()=>taskPanes.forEach(updatePane),5000);
   }
   function activatePane(pane){
+    // A regular tab can already be visible beside a split pane. Keep it
+    // in that split when focus moves to another visible tab.
+    if(paneActive&&paneActive!==pane&&!paneActive.cell.hidden&&!pane.cell.hidden)paneActive.placement='alongside';
     paneActive=pane;
+    taskWorkspaceCleared=false;
     if(draftOpen){closeTaskDraft();renderThread();}
-    syncTaskPanes();renderMachines();savePanes();
+    syncTaskPanes();renderMachines();
+    if(!$('task-panel').hidden)renderTaskList();
+    savePanes();
+  }
+  function switchActivePane(task,name){
+    const previous=paneActive,pane=taskPanes.get(task.id);
+    if(pane&&!pane.cell.hidden){activatePane(pane);return;}
+    replacePaneTask(previous,task,name);
+  }
+  function replacePaneTask(previous,task,name){
+    let layout=null;
+    if(previous){
+      // Keep the displaced document for its draft without adding a tab.
+      previous.placement='parked';
+      const visible=new Set([...taskPanes.values()].filter(item=>!item.cell.hidden).map(item=>item.id));
+      const tree=trimPaneTree(paneTree,visible);
+      if(tree)layout=mapPaneTree(tree,previous.id,task.id);
+    }
+    openTaskPane(task,name,'tab',false,layout);
+    if(previous)reorderPane(taskPanes.get(task.id),previous);
   }
   function reorderPane(pane,target){
     const ordered=[...taskPanes.values()];
     const from=ordered.indexOf(pane),to=ordered.indexOf(target);
     if(from<0||to<0||from===to)return;
     ordered.splice(from,1);ordered.splice(to,0,pane);
-    const next=ordered[to+1];
     taskPanes.clear();
     ordered.forEach(item=>taskPanes.set(item.id,item));
-    preservePaneFocus(()=>{
-      paneStrip.insertBefore(pane.tab,next?.tab||null);
-      paneGrid.insertBefore(pane.node,next?.node||null);
-    });
+    syncTaskPanes();
     savePanes();
   }
-  function setPaneLayout(layout){
-    if(!paneLayouts.includes(layout))layout='grid';
-    paneBoard.dataset.layout=layout;
-    for(const button of paneToolbar.querySelectorAll('[data-pane-layout]')){
-      button.setAttribute('aria-pressed',String(button.dataset.paneLayout===layout));
-    }
-    remember('kotel-pane-layout',layout);
+  function createTaskTab(title,controls){
+    const tab=el('div',undefined,'am-pane-tab');
+    const label=el('button',undefined,'am-quiet-button');
+    const close=el('button',undefined,'am-icon-btn am-close-x');
+    label.type=close.type='button';
+    label.setAttribute('role','tab');label.setAttribute('aria-controls',controls);
+    tab.setAttribute('role','presentation');
+    close.append(svgIcon(closeIconPaths));
+    tab.append(label,close);
+    const result={tab,label,close};
+    setTaskTabTitle(result,title);
+    return result;
   }
-  function openTaskPane(task,name,placement='tab',restore=false){
+  function setTaskTabTitle({label,close},title){
+    if(label.title===title&&label.textContent===title)return;
+    label.textContent=label.title=title;
+    close.setAttribute('aria-label',tr('Закрыть вкладку')+' '+title);
+  }
+  let primaryTab=null;
+  function showPrimaryTaskTab(task,draggable){
+    const head=$('task-head');
+    if(!primaryTab){
+      const strip=el('div',undefined,'am-pane-strip');
+      strip.setAttribute('role','tablist');strip.setAttribute('aria-label',tr('Вкладки задач'));
+      primaryTab={...createTaskTab(task.title,'thread'),strip};
+      const {tab,label,close}=primaryTab;
+      tab.setAttribute('data-active','');label.setAttribute('aria-selected','true');
+      strip.append(tab);
+      const dismiss=()=>{clearTaskWorkspace();renderMachines();focusEmptyWorkspace();};
+      close.onclick=dismiss;
+      label.onkeydown=event=>{
+        if(event.key==='Delete'){event.preventDefault();dismiss();}
+      };
+      tab.ondragend=finishPaneDrag;
+    }
+    setTaskTabTitle(primaryTab,task.title);
+    primaryTab.tab.draggable=draggable;
+    primaryTab.tab.ondragstart=draggable?event=>startPaneDrag(event,task,project,true):null;
+    if(primaryTab.strip.parentNode!==head)head.replaceChildren(primaryTab.strip);
+  }
+  function openTaskPane(task,name,placement='tab',restore=false,layout=null,target=''){
     if(!paneBoard){
+      primaryTab?.strip.remove();
       paneBoard=el('div',undefined,'am-pane-board');
       paneGrid=el('div',undefined,'am-pane-grid');
       paneStrip=el('div',undefined,'am-pane-strip');
       paneStrip.setAttribute('role','tablist');paneStrip.setAttribute('aria-label',tr('Вкладки задач'));
       paneToolbar=el('div',undefined,'am-pane-toolbar');
-      const layouts=el('div',undefined,'am-pane-layouts');
-      for(const [mode,text] of [['columns',tr('Столбцы')],['stack',tr('Строки')],['grid',tr('Сетка')]]){
-        const button=el('button',text,'am-quiet-button');
-        button.type='button';button.dataset.paneLayout=mode;button.onclick=()=>{
-          for(const pane of taskPanes.values())pane.placement='alongside';
-          setPaneLayout(mode);syncTaskPanes();savePanes();
-        };layouts.append(button);
-      }
-      paneToolbar.append(paneStrip,layouts);paneBoard.append(paneGrid);
+      paneToolbar.append(paneStrip);paneBoard.append(paneGrid);
       $('task-head').after(paneToolbar);
       const primary=$('task-layout').querySelector('.am-chat');
       primary.id='task-primary-pane';
       preservePaneFocus(()=>{primary.replaceWith(paneBoard);paneGrid.append(primary);});
-      setPaneLayout(recall('kotel-pane-layout'));
+      const saved=recall('kotel-pane-layout');
+      paneLegacy=['columns','stack','grid'].includes(saved)?saved:'';
+      try{paneTree=paneLegacy?null:JSON.parse(saved||'null');}catch(_){paneTree=null;}
       const current=selectedTaskRow();
       if(!restore&&current&&current.id!==task.id)openTaskPane(current,project,placement,true);
     }
-    if(placement==='alongside'&&paneActive)paneActive.placement='alongside';
+    if(layout){
+      paneTree=layout;
+      paneLegacy='';
+      remember('kotel-pane-layout',JSON.stringify(paneTree));
+    }
+    if(placement==='alongside'&&!restore){
+      const reference=taskPanes.get(target)||paneActive;
+      if(reference)reference.placement='alongside';
+      if(!layout&&!paneLegacy&&reference&&reference.id!==task.id){
+        const shown=new Set([...taskPanes.values()].filter(pane=>!pane.cell.hidden&&pane.id!==task.id).map(pane=>pane.id));
+        shown.add(reference.id);
+        const existing=trimPaneTree(paneTree,shown);
+        const current=paneGroup('x',[existing,...shown].filter(Boolean));
+        paneTree=mapPaneTree(current,reference.id,paneGroup('x',[reference.id,task.id]));
+        remember('kotel-pane-layout',JSON.stringify(paneTree));
+      }
+    }
     if(taskPanes.has(task.id)){
       const pane=taskPanes.get(task.id);
       pane.placement=placement;activatePane(pane);return;
     }
-    const node=el('section',undefined,'am-watch-pane'), tabNode=el('div',undefined,'am-pane-tab');
-    const label=el('button',task.title,'am-quiet-button');
-    const close=el('button',undefined,'am-icon-btn am-close-x');
-    const status=el('span',tr('Загружаем задачу…'),'am-small am-muted');
-    const heading=el('h3',task.title);
-    const body=el('div',undefined,'am-watch-body');
-    const input=el('textarea',undefined,'am-watch-input');
-    const compose=el('form',undefined,'am-watch-compose');
-    const send=el('button',tr('Отправить ответ'));
+    const cell=el('div',undefined,'am-pane-cell'),header=el('div',undefined,'am-pane-header');
+    const node=el('section',undefined,'am-pane-conversation');
+    const chat=el('iframe',undefined,'am-pane-chat');chat.title=task.title;
     const uid=crypto.randomUUID();
     node.id='kotel-pane-'+uid;node.setAttribute('role','tabpanel');
-    label.type=close.type='button';label.id='kotel-tab-'+uid;
-    label.title=task.title;label.setAttribute('role','tab');label.setAttribute('aria-controls',node.id);
+    header.setAttribute('role','tablist');header.setAttribute('aria-label',tr('Вкладки задач'));
+    const {tab:tabNode,label,close}=createTaskTab(task.title,node.id);
+    label.id='kotel-tab-'+uid;
     node.setAttribute('aria-labelledby',label.id);
-    tabNode.setAttribute('role','presentation');tabNode.draggable=true;
-    close.setAttribute('aria-label',tr('Закрыть вкладку')+' '+task.title);
-    close.append(svgIcon(closeIconPaths));
-    input.rows=1;input.maxLength=20000;input.setAttribute('aria-label',tr('Ответ исполнителю'));
-    input.placeholder=tr('Написать исполнителю…');send.type='submit';
-    compose.hidden=true;compose.append(input,send);
-    status.setAttribute('role','status');
-    body.tabIndex=0;
-    const pane={id:task.id,project:name,title:task.title,placement,node,tab:tabNode,label,close,heading,body,status,input,send,compose,count:0};
-    label.onclick=()=>activatePane(pane);
-    close.onclick=()=>closePane(pane);
-    input.oninput=()=>renderPaneControls(pane);
-    compose.onsubmit=event=>{event.preventDefault();sendPaneReply(pane);};
-    input.onkeydown=event=>{
-      if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();sendPaneReply(pane);}
+    tabNode.draggable=true;
+    const pane={id:task.id,project:name,title:task.title,placement,cell,header,node,chat,tab:tabNode,label,close};
+    cell.dataset.taskPane=task.id;
+    chat.addEventListener('load',()=>paneVisibility(pane,!node.hidden));
+    label.onclick=()=>{
+      if(draftOpen&&pane===paneActive)$('task-draft-text').focus({preventScroll:true});
+      else activatePane(pane);
     };
+    close.onclick=()=>closePane(pane);
     label.onkeydown=event=>{
-      const ordered=[...taskPanes.values()],index=ordered.indexOf(pane);
+      const ordered=openPanes(),index=ordered.indexOf(pane);
       if(event.key==='Delete'){event.preventDefault();closePane(pane);return;}
       const direction=event.key==='ArrowLeft'?-1:event.key==='ArrowRight'?1:0;
       const next=direction?ordered[(index+direction+ordered.length)%ordered.length]:
@@ -745,69 +848,103 @@
         next.label.scrollIntoView({block:'nearest',inline:'nearest'});
       }
     };
-    tabNode.ondragstart=event=>{
-      startPaneDrag(event,pane,pane.project);
-    };
+    tabNode.ondragstart=event=>startPaneDrag(event,pane,pane.project,true);
+    const canReorder=()=>paneDragging?.fromTab&&tabNode.parentNode===paneStrip&&
+      pane!==paneActive&&paneDragging.task.id!==pane.id;
     tabNode.ondragover=event=>{
-      if(paneDragging&&paneDragging.task.id!==pane.id){event.preventDefault();event.dataTransfer.dropEffect='move';tabNode.classList.add('am-pane-drop');}
+      if(!canReorder())return;
+      event.preventDefault();event.stopPropagation();event.dataTransfer.dropEffect='move';
+      paneDropPreview.hidden=true;
+      tabNode.classList.add('am-pane-drop');
     };
     tabNode.ondragleave=()=>tabNode.classList.remove('am-pane-drop');
     tabNode.ondrop=event=>{
-      if(paneDragging){
-        event.preventDefault();
+      if(canReorder()){
+        event.preventDefault();event.stopPropagation();
         const source=taskPanes.get(paneDragging.task.id);
-        if(source)reorderPane(source,pane);
-        else openTaskPane(paneDragging.task,paneDragging.project);
+        reorderPane(source,pane);
         finishPaneDrag();
       }
     };
     tabNode.ondragend=finishPaneDrag;
-    tabNode.append(label,close);node.append(heading,status,body,compose);
-    paneStrip.append(tabNode);paneGrid.append(node);taskPanes.set(task.id,pane);
+    node.append(chat);
+    header.hidden=true;cell.hidden=true;cell.append(header,node);
+    paneStrip.append(tabNode);paneGrid.append(cell);taskPanes.set(task.id,pane);
     if(!restore)activatePane(pane);
   }
-  function startPaneDrag(event,task,name){
-    paneDragging={task,project:name};
+  function startPaneDrag(event,task,name,fromTab=false){
+    paneDragging={task,project:name,fromTab};
     $('task-layout').classList.add('am-pane-dragging');
     event.dataTransfer.effectAllowed='move';
     event.dataTransfer.setData('text/plain',task.id);
   }
   function finishPaneDrag(){
+    if(!paneDragging)return;
     paneDragging=null;
-    $('task-layout').classList.remove('am-pane-dragging');
-    $('task-layout').querySelectorAll('.am-pane-drop').forEach(node=>node.classList.remove('am-pane-drop'));
+    if(paneDropPreview)paneDropPreview.hidden=true;
+    const layout=$('task-layout');
+    layout.classList.remove('am-pane-dragging');
+    layout.querySelectorAll('.am-pane-drop').forEach(node=>node.classList.remove('am-pane-drop'));
+    renderMachines();
   }
   function installPaneDropTargets(){
     const layout=$('task-layout');
-    const targets=el('div',undefined,'am-pane-targets');
-    const layouts=[
-      ['columns',tr('Столбцы'),'M12 5v14'],
-      ['stack',tr('Строки'),'M4 12h16'],
-      ['grid',tr('Сетка'),'M12 5v14M4 12h16'],
-    ];
-    for(const [mode,title,divider] of layouts){
-      const target=el('div',undefined,'am-pane-target');
-      const preview=el('div',undefined,'am-pane-target-preview');
-      preview.append(svgIcon(['M4 5h16v14H4z',divider]),el('span',title));
-      target.append(preview);
-      target.dataset.dropLayout=mode;
-      target.ondragover=event=>{
-        if(!paneDragging)return;
-        event.preventDefault();event.dataTransfer.dropEffect='move';target.classList.add('am-pane-drop');
-      };
-      target.ondragleave=event=>{if(!target.contains(event.relatedTarget))target.classList.remove('am-pane-drop');};
-      target.ondrop=event=>{
-        if(!paneDragging)return;
-        event.preventDefault();
-        const {task,project:name}=paneDragging;
-        finishPaneDrag();
-        openTaskPane(task,name,'alongside');
-        for(const pane of taskPanes.values())pane.placement='alongside';
-        setPaneLayout(mode);syncTaskPanes();savePanes();
-      };
-      targets.append(target);
+    paneDropPreview=el('div',undefined,'am-pane-preview');
+    paneDropPreview.hidden=true;paneDropPreview.setAttribute('aria-hidden','true');
+    layout.append(paneDropPreview);
+    function dropEdge(event){
+      if(!paneDragging||draftOpen)return;
+      const onToolbar=event.target.closest('.am-task-toolbar')&&!event.target.closest('#list-toggle');
+      const cell=event.target.closest('.am-pane-cell')||(onToolbar&&!paneActive?.cell.hidden?paneActive?.cell:null);
+      const chat=cell||event.target.closest('.am-chat')||(onToolbar?layout.querySelector('.am-chat'):null);
+      const id=cell?.dataset.taskPane||selectedTask;
+      if(!chat||!id||id===paneDragging.task.id||(!cell&&(selectedShared||!selectedTaskRow())))return;
+      const body=chat.getBoundingClientRect();
+      const header=cell?.querySelector('.am-pane-header:not([hidden])')||layout.querySelector('.am-task-toolbar');
+      const top=header.getBoundingClientRect().top;
+      const rect=new DOMRect(body.left,top,body.width,body.bottom-top);
+      const x=(event.clientX-rect.left)/rect.width,y=(event.clientY-rect.top)/rect.height;
+      if(x<0||x>=1||y<0||y>=1)return;
+      const onHeader=onToolbar||event.target.closest('.am-pane-header');
+      let edge=x<0.5?'left':'right';
+      if(!onHeader&&x>=0.25&&x<0.75){
+        if(y<0.25)edge='top';
+        else if(y>=0.75)edge='bottom';
+      }
+      return {edge,id,rect};
     }
-    layout.append(targets);
+    layout.addEventListener('dragover',event=>{
+      if(!paneDragging)return;
+      const drop=dropEdge(event);
+      paneDropPreview.hidden=!drop;
+      if(!drop)return;
+      event.preventDefault();event.dataTransfer.dropEffect='move';
+      const {rect,edge}=drop,bounds=layout.getBoundingClientRect();
+      const inline=edge==='left'||edge==='right';
+      const width=inline?rect.width/2:rect.width,height=inline?rect.height:rect.height/2;
+      paneDropPreview.style.left=rect.left-bounds.left+(edge==='right'?width:0)+'px';
+      paneDropPreview.style.top=rect.top-bounds.top+(edge==='bottom'?height:0)+'px';
+      paneDropPreview.style.width=width+'px';paneDropPreview.style.height=height+'px';
+    });
+    layout.addEventListener('dragleave',event=>{
+      if(paneDragging&&!layout.contains(event.relatedTarget))paneDropPreview.hidden=true;
+    });
+    layout.addEventListener('drop',event=>{
+      const drop=dropEdge(event);
+      if(!paneDragging)return;
+      const {task,project:name}=paneDragging;
+      finishPaneDrag();
+      if(!drop)return;
+      event.preventDefault();
+      const {id,edge}=drop;
+      const keep=new Set([...taskPanes.values()].filter(pane=>!pane.cell.hidden&&pane.id!==task.id).map(pane=>pane.id));
+      keep.add(id);
+      const existing=trimPaneTree(paneTree,keep);
+      const base=paneGroup('x',[existing,...keep].filter(Boolean));
+      const split=paneGroup(edge==='left'||edge==='right'?'x':'y',
+        edge==='left'||edge==='top'?[task.id,id]:[id,task.id]);
+      openTaskPane(task,name,'alongside',false,mapPaneTree(base,id,split),id);
+    });
   }
   function taskMenu(event,t,p,name,inArchive=false){
     event.preventDefault();
@@ -1044,6 +1181,15 @@
     const items=[];
     for(const it of entries){
       const item=contextMenuItem(menu,it.text,it.pick);
+      if(it.detail){
+        const detail=el('span',it.detail,'am-small am-muted am-menu-option-detail');
+        detail.id='device-menu-detail-'+items.length;
+        const copy=el('span',undefined,'am-menu-option-copy');
+        copy.append(el('span',it.text),detail);
+        item.replaceChildren(copy);
+        item.setAttribute('aria-label',it.text);
+        item.setAttribute('aria-describedby',detail.id);
+      }
       if(typeof it.selected==='boolean'){
         item.setAttribute('role','menuitemradio');
         item.setAttribute('aria-checked',String(it.selected));
@@ -1514,6 +1660,7 @@
     renderMachines();
   }
   machineList.addEventListener('dragstart',event=>{
+    if(paneDragging)return;
     const card=event.target.closest('[draggable=true]')?.closest('[data-machine-order]');
     if(!card)return;
     draggedMachine=card.dataset.machineOrder;
@@ -1560,6 +1707,7 @@
     moveMachine(from,card.dataset.machineOrder,after);
   });
   machineList.addEventListener('dragend',()=>{
+    if(!draggedMachine)return;
     clearMachineDrag();renderMachines();
   });
   // T-271: the computers that have a card in the current render.
@@ -1773,17 +1921,19 @@
     const candidates=name?[name]:Array.from(new Set([preferred,...projects]));
     const available=candidates.find(candidate=>projects.includes(candidate)&&taskDraftComputers(candidate)
       .some(p=>(computer===undefined||p.id===computer)&&taskDraftModels(p).length));
+    if(!available)return null;
     const label=tr('Новая задача, {group}').replace('{group}',()=>group);
     const plus=iconButton(label,['M12 4v16M4 12h16'],false,()=>{
       show('tasks');openTaskDraft(true,available,computer);loadServer();
     });
     plus.classList.add('am-chrome-icon','am-group-new');
     plus.dataset.sidebarFocus=JSON.stringify(['new',name,computer]);
-    plus.disabled=!online||!available||draftSending;
+    plus.disabled=!online||draftSending;
     return plus;
   }
   function sidebarTaskRows(body,head,card,computer,items=[],projectGroup=''){
-    if(!projectGroup)head.append(sidebarNewTask(computerName(computer)||computer,'',computer==='local'?'':computer));
+    const plus=!projectGroup&&sidebarNewTask(computerName(computer)||computer,'',computer==='local'?'':computer);
+    if(plus)head.append(plus);
     const key=projectGroup?JSON.stringify([projectGroup,computer]):computer;
     if(!items.length)return;
     const rows=el('div',undefined,'am-sidebar-task-rows');
@@ -1870,7 +2020,8 @@
       appendRows(rows,tasks,name);
       const heading=el('div',undefined,'am-folder-row');
       heading.append(button);
-      if(!computer)heading.append(sidebarNewTask(projectTitle(name),name));
+      const plus=!computer&&sidebarNewTask(projectTitle(name),name);
+      if(plus)heading.append(plus);
       folder.append(heading,rows);container.append(folder);
     }
   }
@@ -1909,7 +2060,7 @@
       row.append(title,meta);
       row.addEventListener('click',()=>{
         if(tab!=='tasks')show('tasks');
-        if(paneBoard&&!selection)openTaskPane(t,name,taskPanes.get(t.id)?.placement||'tab');
+        if(paneBoard&&!selection)switchActivePane(t,name);
         else selectProject(name,selection?'':t.id,'',selection);
       });
       if(!peer){
@@ -1955,7 +2106,7 @@
     else if(!pending.isEqualNode(next))pending.replaceWith(next);
   }
   function renderMachines(){
-    if(draggedMachine)return;
+    if(draggedMachine||paneDragging)return;
     collectNotices();
     pickedComputers=new Set();
     const live=$('machines'),box=live.cloneNode(false),busyTasks=busyTasksByComputer(view?.project===project?view:null);
@@ -2275,6 +2426,7 @@
   // a filtered remainder and an empty pane.
   let topTaskScope='';
   function computerChanged(before=statsProjectScope()){
+    taskWorkspaceCleared=false;
     renderMachines();
     if(tab==='stats'&&!updateStatsProjectScope(before))reloadStats();
     if(tab==='agents')renderAgents();
@@ -2436,6 +2588,7 @@
   // On refresh (quiet) the caller loads the conversation itself, and an
   // empty list changes nothing.
   function openTopTask(quiet){
+    if(taskWorkspaceCleared)return;
     const g=taskGroups(view,!taskSidebarPreview),it=g.active[0]||g.planned[0]||[...g.attention,...g.done].sort((x,y)=>String(y.t.created_at).localeCompare(String(x.t.created_at)))[0];
     if(!it){if(quiet)return;selectedTask='';selectedShared=null;feed=null;feedSignature='';renderTaskList();renderThread();return;}
     if(it.peer){selectedShared={peer:it.peer.peer,id:it.t.id};selectedTask='';feed=null;feedSignature='';renderTaskList();renderThread();startWindowWatch();return;}
@@ -2533,7 +2686,8 @@
     }
     // Another computer's task is read-only and says which computer gave it.
     const ownRow=(t,name)=>{
-      const row=el('button',undefined,'am-task');row.type='button';row.setAttribute('aria-pressed',String(!draftOpen&&name===project&&t.id===selectedTask));
+      const selected=paneActive?name===paneActive.project&&t.id===paneActive.id:name===project&&t.id===selectedTask;
+      const row=el('button',undefined,'am-task');row.type='button';row.setAttribute('aria-pressed',String(!draftOpen&&selected));
       if(taskSidebarPreview){
         const computer=t.remote&&!t.remote.from?(t.remote.name||t.remote.id):computerName('local');
         appendArchiveTask(row,t,name,computer,taskStatus(t),null);
@@ -2555,8 +2709,10 @@
         row.append(agent,el('span',t.title,'am-task-title'),status);
       }
       row.addEventListener('click',()=>{
+        if(paneBoard){switchActivePane(t,name);return;}
         if(name!==project){selectProject(name,t.id,'');return;}
         if(draftOpen)closeTaskDraft();
+        taskWorkspaceCleared=false;
         selectedTask=t.id;selectedShared=null;feedSignature='';renderTaskList();renderThread();loadFeed();if(taskSidebarPreview)renderMachines();
       });
       row.addEventListener('contextmenu',e=>taskMenu(e,t,null,name,taskSidebarPreview));
@@ -2570,6 +2726,7 @@
         const selection={peer:p.peer,id:t.id};
         if(name!==project){selectProject(name,'','',selection);return;}
         if(draftOpen)closeTaskDraft();
+        taskWorkspaceCleared=false;
         selectedShared=selection;selectedTask='';feed=null;feedSignature='';renderTaskList();renderThread();startWindowWatch();if(taskSidebarPreview)renderMachines();
       });
       row.addEventListener('contextmenu',e=>taskMenu(e,t,p,name));
@@ -2796,18 +2953,33 @@
     if(!hasProject)box.append(setupButton(tr('Начать личный чат'),()=>openPersonalChat().catch(showError)));
     return box;
   }
-  function showComposerAccess(node,enabled,remote='',compact=false){
+  function restrictedAccessDetail(provider){
+    switch(provider){
+      case 'codex':return tr('Работает в песочнице с записью в папку проекта.');
+      case 'claude':return tr('Может редактировать проект. Команды проверяются по правилам Claude Code.');
+      case 'cursor':return tr('Работает в песочнице Cursor.');
+      default:return tr('Применяются ограничения агента.');
+    }
+  }
+  function showComposerAccess(node,enabled,remote='',compact=false,provider='',requestedFull=false){
     node.hidden=enabled==null&&!remote;
     const remoteDetail=tr('Доступ задаётся на {computer}').replace('{computer}',()=>remote);
-    const label=remote?(compact?tr('Доступ на {computer}').replace('{computer}',()=>remote):remoteDetail):enabled?tr('Любые команды'):tr('Обычный доступ');
-    const detail=remote?(compact?remoteDetail:tr('Разрешения задаются на компьютере исполнителя.')):enabled?label:tr('Используются обычные разрешения агента.');
-    node.classList.toggle('am-full-access',!remote&&enabled===true);
+    const label=requestedFull?tr('Запрошен полный доступ'):remote?(compact?tr('Доступ на {computer}').replace('{computer}',()=>remote):remoteDetail):enabled?tr('Полный доступ'):tr('С ограничениями');
+    const detail=requestedFull?tr('Полный доступ действует, только если его разрешил компьютер исполнителя.'):
+      remote?remoteDetail:enabled?tr('Доступ к сети и файлам за пределами проекта без подтверждения.'):restrictedAccessDetail(provider);
+    node.classList.toggle('am-full-access',!requestedFull&&!remote&&enabled===true);
     node.title=node.hidden?'':detail;
     node.setAttribute('aria-label',label);
     node.replaceChildren();
     if(node.hidden)return;
     const icon=svgIcon(['M12 2.25 3.75 6v5.25c0 4.5 3 7.5 8.25 10.5 5.25-3 8.25-6 8.25-10.5V6z']);
     node.append(icon);
+  }
+  function showComposerRoute(node,icon,label,detail=label){
+    const name=node.lastElementChild;
+    if(name)name.textContent=label;
+    else node.append(svgIcon(icon),el('span',label));
+    node.title=detail;
   }
   function taskDraftComputers(name){
     const local={id:'',name:view?.computer_name||tr('Этот компьютер'),agents:view?.agents||[]};
@@ -2844,6 +3016,14 @@
   function canDraftTask(name){
     return online&&taskDraftComputers(name).some(computer=>taskDraftModels(computer).length);
   }
+  let draftCanSend=false;
+  function renderDraftAction(){
+    const input=$('task-draft-text');
+    const dictation=composerDictation?.submissionState(input);
+    const send=$('task-draft-send');
+    send.hidden=!dictation&&!composerMessage(input);
+    send.disabled=send.hidden||!draftCanSend||!!composerAttachmentProblem(input)||dictation==='queued';
+  }
   function renderTaskDraft(preferredProject,preferredComputer){
     const projectSelect=$('task-draft-project'),computerSelect=$('task-draft-computer'),modelSelect=$('task-draft-model');
     const projects=(view?.projects||[]).map(p=>[p.name,p.title||p.name]);
@@ -2870,14 +3050,17 @@
     const access=$('task-draft-access');
     const route=JSON.stringify([name,computer?.id,provider]);
     if(access.dataset.route!==route){access.dataset.route=route;access.value='';}
+    if(access.value==='full'&&!computer?.id&&!agent?.full_access)access.value='';
     access.disabled=draftSending;
     showComposerAccess(access,access.value?access.value==='full':agent&&!computer.id?!!agent.full_access:null,
-      !access.value&&agent&&computer.id?(computer.name||tr('компьютере исполнителя')):'');
+      !access.value&&agent&&computer.id?(computer.name||tr('компьютере исполнителя')):'',false,provider,
+      access.value==='full'&&!!computer?.id);
     const input=$('task-draft-text');
     input.readOnly=draftSending;
     $('task-draft-add').disabled=draftSending;
     const attachmentProblem=composerAttachmentProblem(input);
-    $('task-draft-send').disabled=draftSending||!online||!name||!computer||!model||!composerMessage(input)||!!attachmentProblem;
+    draftCanSend=!draftSending&&online&&!!name&&!!computer&&!!model;
+    renderDraftAction();
     const status=$('task-draft-status');
     status.textContent=draftSending?tr('Отправляем задачу…'):draftAttempt?.error||attachmentProblem||(!computer?tr('Для этого проекта нет доступных компьютеров с агентами.'):!models.length?tr('Включите модель в настройках агента.'):!online?tr('Клиент недоступен'):'');
     status.classList.toggle('am-status-bad',!draftSending&&!!(draftAttempt?.error||attachmentProblem));
@@ -2886,12 +3069,23 @@
   }
   $('task-draft-access').addEventListener('click',event=>{
     const button=event.currentTarget,rect=button.getBoundingClientRect();
-    const choices=[['',tr('По настройкам исполнителя')],['standard',tr('Обычный доступ')]];
     const provider=$('task-draft-model').value.split(':')[0];
-    if($('task-draft-computer').value||view?.agents?.some(a=>a.agent===provider&&a.full_access))
-      choices.push(['full',tr('Любые команды в пределах разрешений')]);
-    popMenu(rect.left,rect.bottom,choices.map(([value,text])=>({text,selected:value===button.value,pick:()=>{button.value=value;renderTaskDraft();button.focus();}})),null,'',button);
+    const remote=!!$('task-draft-computer').value;
+    const choices=composerAccessChoices(provider,remote);
+    popMenu(rect.left,rect.bottom,choices.map(([value,text,detail])=>({text,detail,selected:value===button.value,pick:()=>{button.value=value;renderTaskDraft();button.focus();}})),null,'',button);
   });
+  function composerAccessChoices(provider,remote){
+    const choices=[
+      ['',tr('Как на компьютере исполнителя'),tr('Использовать доступ, заданный для этого агента.')],
+      ['standard',tr('С ограничениями'),restrictedAccessDetail(provider)]
+    ];
+    if(remote||view?.agents?.some(a=>a.agent===provider&&a.full_access)){
+      const detail=remote?tr('Полный доступ действует, только если его разрешил компьютер исполнителя.'):
+        tr('Доступ к сети и файлам за пределами проекта без подтверждения.');
+      choices.push(['full',tr('Полный доступ'),detail]);
+    }
+    return choices;
+  }
   function closeTaskDraft(){
     draftAttachmentContext++;
     composerDictation?.cancel();
@@ -2905,7 +3099,7 @@
     draftOpen=true;
     $('task-new').setAttribute('aria-expanded','true');
     $('task-draft').hidden=false;
-    if(!$('task-draft-text').value)$('task-draft-project').value=sidebarProject||project;
+    if(!$('task-draft-text').value)$('task-draft-project').value=paneActive?.project||sidebarProject||project;
     renderThread();
     if(name){draftAttachmentContext++;renderTaskDraft(name,computer);}
     if(focus)$('task-draft-text').focus();
@@ -2922,7 +3116,7 @@
     const bytes=files.reduce((sum,file)=>sum+(file.data?atob(file.data).length:0),0);
     if(files.length>64||bytes>112*1024)return tr('Вложения превышают лимит: 112 КБ или 64 файла и папки.');
     if(input.id==='task-draft-text'&&attachments.some(item=>item.computer!==undefined&&item.computer!==$('task-draft-computer').value))return tr('Вложения находятся на другом компьютере.');
-    return composerMessage(input).length>input.maxLength?tr('Сообщение с вложениями слишком длинное.'):'';
+    return (input.id==='answer-text'?replyContent(input).text:composerMessage(input)).length>input.maxLength?tr('Сообщение с вложениями слишком длинное.'):'';
   }
   function updateComposerAttachments(input,items){
     composerAttachments.set(input,items);
@@ -2991,12 +3185,11 @@
         if(isOpen()){menu.hidePopover();return;}
         if(busy)return;
         target={trigger,input,isDraft,computer:draftComputer.value,task:selectedTask};
-        const local=isDraft?!draftComputer.disabled&&!draftComputer.value:!selectedTaskRow()?.remote;
-        $('task-draft-local-pick').hidden=!isDraft&&!local;
+        $('task-draft-local-pick').hidden=false;
         manual.hidden=true;showPath.setAttribute('aria-expanded','false');
         status.textContent='';pathInput.value='';insertButton.disabled=true;
         menu.showPopover();trigger.setAttribute('aria-expanded','true');place(trigger);
-        (isDraft||local?pickers[0][1]:showPath).focus({preventScroll:true});
+        pickers[0][1].focus({preventScroll:true});
       });
     }
     menu.addEventListener('toggle',()=>{
@@ -3022,7 +3215,6 @@
       busy=true;for(const [,picker] of pickers)picker.disabled=true;
       status.textContent='';
       try{
-        if(!current.isDraft){insert(await requestPath(kind,pathInput.value.trim()),current);return;}
         const {attachments}=await choosePath('attach-'+kind,pathInput.value.trim());
         if(!valid(current)||!attachments?.length)return;
         const error=addComposerReferences(current.input,[{name:attachments[0].path.split('/')[0],files:attachments}]);
@@ -3058,6 +3250,12 @@
       report(input,addComposerReferences(input,eligible.map(path=>pathAttachment(path,input.id==='task-draft-text'?'':undefined))));
     }
     window.messengerDropFiles=(paths,x,y)=>{
+      const frame=document.elementFromPoint(x,y)?.closest('.am-pane-chat');
+      if(frame){
+        const rect=frame.getBoundingClientRect();
+        frame.contentWindow?.messengerDropFiles?.(paths,x-rect.left,y-rect.top);
+        return;
+      }
       reset();
       if(Array.isArray(paths)&&chat.contains(document.elementFromPoint(x,y)))addPaths(dropTarget(),paths);
     };
@@ -3081,9 +3279,9 @@
       const input=dropTarget();
       if(!input)return;
       const data=event.dataTransfer;
-      if(input.id==='task-draft-text'&&(data.files.length||[...data.items].some(item=>item.kind==='file'))){
-        const context=draftAttachmentContext;
-        const current=()=>context===draftAttachmentContext&&input===dropTarget();
+      if(data.files.length||[...data.items].some(item=>item.kind==='file')){
+        const context=draftAttachmentContext,task=selectedTask;
+        const current=()=>input===dropTarget()&&(input.id==='task-draft-text'?context===draftAttachmentContext:task===selectedTask);
         try{
           const items=await readComposerDrop(data);
           if(items.length&&current())report(input,addComposerReferences(input,items));
@@ -3098,20 +3296,7 @@
         }catch(_){return [];}
       });
       if(paths.length&&isLocal(input)){addPaths(input,paths);return;}
-      const files=[...data.files];
-      if(!files.length||files.length>16||files.some(file=>file.size>input.maxLength)){
-        report(input,tr('Перетащите файл из Finder или выберите его через меню вложений.'));return;
-      }
-      const task=selectedTask,computer=draftComputer.value;
-      try{
-        const decoder=new TextDecoder('utf-8',{fatal:true});
-        const items=await Promise.all(files.map(async file=>{
-          const text=decoder.decode(await file.arrayBuffer());
-          if(text.includes('\0'))throw Error();
-          return {name:file.name,text:tr('Файл {name}').replace('{name}',()=>file.name)+'\n'+text};
-        }));
-        if(input===dropTarget()&&task===selectedTask&&computer===draftComputer.value)report(input,addComposerReferences(input,items));
-      }catch(_){if(input===dropTarget())report(input,tr('Браузер передаёт только содержимое текстовых файлов. Выберите файл в приложении.'));}
+      report(input,tr('Перетащите файл из Finder или выберите его через меню вложений.'));
     });
   }
   async function readComposerDrop(data){
@@ -3287,9 +3472,10 @@
     if(menu.matches(':popover-open'))positionPopover(menu,trigger,null,true);
   }
   async function sendTaskDraft(event){
-    event.preventDefault();
-    if(composerDictation?.finishFor($('task-draft-text')))return;
+    event?.preventDefault();
     if(!draftOpen||$('task-draft-send').disabled)return;
+    if(composerDictation?.finishFor($('task-draft-text'),sendTaskDraft))return;
+    const originPane=paneActive;
     const selection=$('task-draft-model').value;
     const split=selection.indexOf(':');
     const payload={
@@ -3308,7 +3494,12 @@
       draftAttempt=null;
       $('task-draft-access').value='';
       const input=$('task-draft-text');input.value='';updateComposerAttachments(input,[]);sizeComposer(input);
-      if(draftOpen){
+      if(originPane&&taskPanes.get(originPane.id)===originPane&&!originPane.cell.hidden){
+        const active=paneActive;
+        replacePaneTask(originPane,{id,title:payload.text.split('\n',1)[0].slice(0,160)},payload.project);
+        if(active===originPane)selectProject(payload.project,id,'');
+        else activatePane(active);
+      }else if(!originPane&&draftOpen){
         if(sidebarProject)sidebarProject=payload.project;
         selectProject(payload.project,id,'');
         if(tab!=='tasks')show('tasks');
@@ -3431,7 +3622,8 @@
   function renderSharedTask(t,p){
     t=sharedDisplayTask(t);
     const thread=$('thread'),head=$('task-head');
-    head.replaceChildren(taskSidebarPreview?conversationTitle(t.title):sharedTaskHeader(t,p));
+    if(taskSidebarPreview&&!paneHost&&!paneBoard)showPrimaryTaskTab(t,false);
+    else head.replaceChildren(taskSidebarPreview?conversationTitle(t.title):sharedTaskHeader(t,p));
     const box=el('div',undefined,'am-settings');
     if(t.report){box.append(el('h3',tr('Начало отчёта')),el('p',t.report,'am-shared-report'));}
     else box.append(el('p',tr('Отчёта пока нет.'),'am-muted'));
@@ -3683,7 +3875,6 @@
     const status=$('task-stop-status');
     const canStop=canStopTask(t),progress=canStop?stopProgress(t):'';
     const text=stopMessage(progress);
-    $('task-stop').hidden=!canStop||!!text;
     if(status.textContent!==text)status.textContent=text;
     answerControls();
   }
@@ -3703,7 +3894,8 @@
     });
   }
   function stopSelectedTask(){
-    if(!$('compose').hidden&&!$('task-stop').hidden)void stopTask(selectedTaskRow());
+    const task=selectedTaskRow();
+    if(task&&!$('compose').hidden&&!$('compose').inert&&canStopTask(task)&&!stopProgress(task))void stopTask(task);
   }
   async function stopTask(row,name=project){
     if(!row)return;
@@ -3951,6 +4143,11 @@
     const count=items.filter(it=>it.kind!=='command_end').length,fresh=feedShown!==t.id,atBottom=fresh||feedStick||feedPinned,grew=!fresh&&!atBottom&&count>feedCount;feedShown=t.id;feedStick=false;feedCount=count;feedSignature=signature;
     const displayModel=taskModelLabel(t),quiet=quietLine(t);
     const header=taskSidebarPreview?conversationTitle(t.title):taskFeedHeader(t,displayModel,quiet);
+    const frame=paneHost?window.frameElement:null;
+    if(frame&&t.title&&frame.title!==t.title){
+      frame.title=t.title;
+      paneHost.messengerPaneTitle?.(frame,t.title);
+    }
     const opened=new Set(fresh?[]:[...thread.querySelectorAll('details[open][data-key]')].map(d=>d.dataset.key));
     const direct=items[0]?.author==='owner';
     // Keep live output visible until a verified reply for this run is available.
@@ -4209,7 +4406,8 @@
       if(date)out.unshift(date);
       if(quiet)out.push(quiet);
     }
-    head.replaceChildren(header);
+    if(taskSidebarPreview&&!paneHost&&!paneBoard)showPrimaryTaskTab(t,true);
+    else head.replaceChildren(header);
     thread.replaceChildren(...out);
     for(const d of thread.querySelectorAll('details[data-key]'))if(opened.has(d.dataset.key))d.open=true;
     // T-131: a task sent to another computer can be closed here also when
@@ -4239,16 +4437,15 @@
       const contextOnly=compose.hidden&&!!(t.context_window||t.usage);
       compose.toggleAttribute('data-context-only',contextOnly);
       if(contextOnly)compose.hidden=false;
-      const model=$('answer-model');
-      model.textContent=displayModel;
-      model.title=displayModel?taskModelDetail(t):'';
-      showComposerAccess($('answer-access'),!!t.full_access,t.remote&&!t.remote.from?(t.remote.name||tr('компьютере исполнителя')):'',true);
+      const name=t.project||project;
+      const computer=taskComputer(t);
+      showComposerRoute($('answer-project'),folderIconPaths,projectTitle(name),t.folder||projectTitle(name));
+      showComposerRoute($('answer-computer'),serverIconPaths,computerName(computer)||t.remote?.name||computer);
       renderComposerTokens(t,displayModel,!compose.hidden);
-      $('answer-context').hidden=!displayModel&&$('answer-tokens').hidden&&$('answer-access').hidden;
+      $('answer-context').hidden=false;
     }
     box.disabled=!canDraft;
     box.placeholder=taskMessagePlaceholder(t);
-    $('answer-send').hidden=!canDraft;
     $('answer-add').hidden=!taskSidebarPreview||!canDraft;
     if(compose.dataset.task!==t.id){compose.dataset.task=t.id;box.value='';updateComposerAttachments(box,[]);$('answer-status').textContent='';}
     renderStopControls(t);
@@ -4322,41 +4519,119 @@
     if(t?.remote?.from)return tr('Писать исполнителю можно на компьютере «')+t.remote.name+'»';
     return tr('Написать исполнителю…');
   }
-  function canSendTaskMessage(t){return !!t&&!t.archived&&!t.remote?.from&&!stopProgress(t)&&(!taskUnreachable(t)||t.can_continue)&&!!(t.owner_question||canNote(t));}
+  const continuationSettings=new Map();
+  function continuationModels(t){
+    const agents=t.remote?(server?.peers||[]).find(p=>p.id===t.remote.id)?.agents:view?.agents;
+    return orderedModels(new Set(agents?.find(a=>a.agent===t.agent)?.models||[]));
+  }
+  function canSelectContinuationSettings(t){
+    return canDraftTaskMessage(t)&&!t.owner_question&&(t.can_continue||t.state==='running')&&!t.remote?.unaccepted;
+  }
+  function renderContinuationSettings(t){
+    const pending=continuationSettings.get(t.id)||{};
+    const model=$('answer-model'),access=$('answer-access');
+    const editable=canSelectContinuationSettings(t)&&!answering&&!stopProgress(t);
+    model.disabled=!editable||!continuationModels(t).length;
+    model.textContent=pending.model?modelName(pending.model):taskModelLabel(t);
+    model.title=model.disabled?taskModelDetail(t):tr('Модель следующего запуска');
+    access.disabled=!editable;
+    const remote=t.remote&&!t.remote.from?(t.remote.name||tr('компьютере исполнителя')):'';
+    const inherits=!pending.access||pending.access==='default';
+    showComposerAccess(access,inherits?!!t.full_access:pending.access==='full',inherits?remote:'',true,t.agent,pending.access==='full'&&!!remote);
+    if(!access.disabled)access.title=tr('Уровень защиты следующего запуска')+' · '+access.getAttribute('aria-label');
+  }
+  function selectContinuationSetting(event,key){
+    const task=selectedTaskRow(),button=event.currentTarget,rect=button.getBoundingClientRect();
+    if(!canSelectContinuationSettings(task))return;
+    const pending=continuationSettings.get(task.id)||{};
+    const choices=key==='model'
+      ?continuationModels(task).map(model=>[model,modelName(model),''])
+      :composerAccessChoices(task.agent,!!task.remote).map(([value,...labels])=>[value||'default',...labels]);
+    const entries=[['',tr('Оставить текущую настройку'),''],...choices].map(([value,text,detail])=>({
+      text,detail,selected:(pending[key]||'')===value,pick:()=>{
+        const next={...pending};
+        if(value)next[key]=value;
+        else delete next[key];
+        if(Object.keys(next).length)continuationSettings.set(task.id,next);
+        else continuationSettings.delete(task.id);
+        answerControls();
+        button.focus();
+      }
+    }));
+    popMenu(rect.left,rect.bottom,entries,null,'',button);
+  }
+  $('answer-model').addEventListener('click',event=>selectContinuationSetting(event,'model'));
+  $('answer-access').addEventListener('click',event=>selectContinuationSetting(event,'access'));
+  function settingsNeedStop(t){
+    return !!t&&!t.owner_question&&continuationSettings.has(t.id)&&!t.can_continue;
+  }
+  function canSendTaskMessage(t){return !!t&&!t.archived&&!t.remote?.from&&!stopProgress(t)&&!settingsNeedStop(t)&&(!taskUnreachable(t)||t.can_continue)&&!!(t.owner_question||canNote(t));}
   function answerControls(){
-    const task=selectedTaskRow(),box=$('answer-text'),send=$('answer-send');
+    const task=selectedTaskRow(),box=$('answer-text');
     const available=canSendTaskMessage(task);
-    box.title=canDraftTaskMessage(task)&&!available?tr('Отправка пока недоступна. Черновик сохранится, пока открыта задача.'):'';
-    send.title=box.title||tr('Отправить ответ');
+    if(task&&taskSidebarPreview)renderContinuationSettings(task);
+    box.title=settingsNeedStop(task)?tr('Остановите текущий запуск, чтобы продолжить с новыми настройками.'):canDraftTaskMessage(task)&&!available?tr('Отправка пока недоступна. Черновик сохранится, пока открыта задача.'):'';
     const problem=composerAttachmentProblem(box);
-    send.disabled=answering||!available||!composerMessage(box)||!!problem;
+    renderAnswerAction();
     if(problem)$('answer-status').textContent=problem;
     else if($('answer-status').textContent===tr('Сообщение с вложениями слишком длинное.'))$('answer-status').textContent='';
     composerDictation?.sync();
   }
-  async function sendNote(){
-    const t=selectedTaskRow();if(!canNote(t)||answering)return;
-    const box=$('answer-text'),text=composerMessage(box);if(!text||composerAttachmentProblem(box))return;
-    const key='messenger-note-op:'+t.id+':'+text;
-    let op=recall(key);
-    if(!op){op='window-'+t.id+'-'+crypto.randomUUID();remember(key,op);}
-    answering=true;answerControls();$('answer-status').textContent=tr('Отправляем сообщение…');
-    try{await postAPI('/api/task-note',{task:t.id,op_id:op,text});try{localStorage.removeItem(key);}catch(_){}if(selectedTask===t.id){showError(null);$('answer-status').textContent='';box.value='';updateComposerAttachments(box,[]);sizeAnswer();feedSignature='';feedStick=true;}await refresh();}
-    catch(error){if(selectedTask===t.id)$('answer-status').textContent='';showError({message:error.message+tr(' Повтор с тем же текстом безопасен.'),command:error.command,hint:error.hint});}
-    finally{answering=false;answerControls();}
+  function renderAnswerAction(){
+    const task=selectedTaskRow(),box=$('answer-text'),send=$('answer-send'),stop=$('task-stop');
+    const dictation=composerDictation?.submissionState(box);
+    const hasText=!!replyContent(box).text;
+    const showStop=!!task&&canStopTask(task)&&!stopProgress(task)&&
+      (!taskSidebarPreview||settingsNeedStop(task)||!hasText&&!dictation&&!answering);
+    stop.hidden=!showStop;
+    send.hidden=!canDraftTaskMessage(task)||(taskSidebarPreview&&!hasText&&!dictation&&!answering);
+    send.title=box.title||tr('Отправить сообщение');
+    send.disabled=answering||!canSendTaskMessage(task)||!!composerAttachmentProblem(box)||
+      (dictation?dictation==='queued':!hasText);
   }
+  function replyContent(input){
+    const groups=(composerAttachments.get(input)||[]).filter(item=>item.files);
+    const names=groups.length?tr('Вложения')+'\n'+groups.map(item=>item.name).join('\n'):'';
+    const text=[composerMessage(input),names].filter(Boolean).join('\n\n');
+    return {text,attachments:groups.flatMap(item=>item.files)};
+  }
+  let attachedReplyAttempt;
   async function sendAnswer(){
-    if(composerDictation?.finishFor($('answer-text')))return;
-    const t=selectedTaskRow(),q=t?.owner_question;
-    if($('compose').inert||!canSendTaskMessage(t))return;
-    if(!q&&canNote(t))return sendNote();
-    if(!q||answering||t.remote?.from)return;
-    const box=$('answer-text'),text=composerMessage(box);if(!text||composerAttachmentProblem(box))return;
-    let op=recall('messenger-answer-op:'+q.id);
-    if(!op){op='window-'+q.id+'-'+crypto.randomUUID();remember('messenger-answer-op:'+q.id,op);}
-    answering=true;answerControls();$('answer-status').textContent=tr('Отправляем ответ…');
-    try{await postAPI('/api/task-answer',{task:t.id,question:q.id,op_id:op,text});if(selectedTask===t.id){showError(null);$('answer-status').textContent='';box.value='';updateComposerAttachments(box,[]);sizeAnswer();feedSignature='';feedStick=true;}await refresh();}
-    catch(error){if(selectedTask===t.id)$('answer-status').textContent='';showError({message:error.message+tr(' Повтор с тем же текстом безопасен.'),command:error.command,hint:error.hint});}
+    const box=$('answer-text');
+    const task=selectedTaskRow(),question=task?.owner_question?.id;
+    if($('compose').inert||answering||!canSendTaskMessage(task))return;
+    if(composerAttachmentProblem(box))return;
+    if(composerDictation?.finishFor(box,sendAnswer))return;
+    const {text,attachments}=replyContent(box);
+    if(!text)return;
+    const settings=question?null:continuationSettings.get(task.id);
+    const payload={task:task.id,text,...settings};
+    if(question)payload.question=question;
+    const storageKey=settings?'messenger-continue-op:'+JSON.stringify(payload):question?'messenger-answer-op:'+question:'messenger-note-op:'+task.id+':'+text;
+    if(attachments.length){
+      payload.attachments=attachments;
+      const identity=JSON.stringify(payload);
+      if(attachedReplyAttempt?.identity!==identity)attachedReplyAttempt={identity,op:'window-'+crypto.randomUUID()};
+      payload.op_id=attachedReplyAttempt.op;
+    }else{
+      payload.op_id=recall(storageKey)||'window-'+(question||task.id)+'-'+crypto.randomUUID();
+      remember(storageKey,payload.op_id);
+    }
+    answering=true;answerControls();
+    $('answer-status').textContent=question?tr('Отправляем ответ…'):tr('Отправляем сообщение…');
+    try{
+      await postAPI(question?'/api/task-answer':'/api/task-note',payload);
+      if(settings)continuationSettings.delete(task.id);
+      if(attachments.length)attachedReplyAttempt=null;
+      else if(!question){try{localStorage.removeItem(storageKey);}catch(_){}}
+      if(selectedTask===task.id){showError(null);$('answer-status').textContent='';box.value='';updateComposerAttachments(box,[]);sizeAnswer();feedSignature='';feedStick=true;}
+      await refresh();
+    }
+    catch(error){
+      if(selectedTask===task.id)$('answer-status').textContent='';
+      const message=attachments.length?error.message:error.message+tr(' Повтор с тем же текстом безопасен.');
+      showError({message,command:error.command,hint:error.hint});
+    }
     finally{answering=false;answerControls();}
   }
   // Agent cards (T-061, D-070): the agent's name with a check, settings and
@@ -4486,6 +4761,15 @@
     event.preventDefault();event.stopPropagation();
     limitsMenu.hidePopover();limitsTrigger.focus();
   });
+  function dismissAgentLimits(){
+    if(limitsMenu.matches(':popover-open'))limitsMenu.hidePopover();
+  }
+  if(!paneHost)window.messengerDismissAgentLimits=dismissAgentLimits;
+  document.addEventListener('pointerdown',event=>{
+    // Popover light-dismiss only sees pointers in its own document.
+    if(paneHost){paneHost.messengerDismissAgentLimits?.();return;}
+    if(!event.composedPath().includes(limitsMenu)&&!event.composedPath().includes(limitsTrigger))dismissAgentLimits();
+  },true);
   function updateOpenAgentLimits(){
     if(limitsMenu.matches(':popover-open'))renderAgentLimits();
   }
@@ -4633,7 +4917,7 @@
     const agents=view?.agents||[],bar=$('access-bar');bar.hidden=!agents.length||(!taskSidebarPreview&&!!computerFilter&&computerFilter!=='local');
     const on=agents.filter(a=>a.full_access).length,all=!!agents.length&&on===agents.length;
     $('access-toggle').setAttribute('aria-checked',all?'true':on?'mixed':'false');
-    $('access-title').textContent=on&&!all?tr('Любые команды: разрешены не всем'):tr('Любые команды');
+    $('access-title').textContent=on&&!all?tr('Полный доступ у части агентов'):tr('Полный доступ для агентов');
     // D-109: other computers' tasks follow this computer's agents unless the
     // owner turns it off; on until the window has heard otherwise.
     const net=!server||server.net_full_access!==false;
@@ -4765,7 +5049,7 @@
     startWindowWatch();
     try{
       const f=await api('/api/task?'+q);
-      if(request!==feedRequest||id!==selectedTask||name!==project||f.task.id!==id)return;
+      if(request!==feedRequest||(paneHost&&!embeddedChatVisible)||id!==selectedTask||name!==project||f.task.id!==id)return;
       if(f.append_from){
         if(!previous||previous.items.length!==f.append_from)return !full&&await loadFeed(true);
         f.items=[...previous.items,...f.items];
@@ -4785,7 +5069,7 @@
   let windowWatch=null,watchRetryAt=0;
   function windowWatchScope(){return new URLSearchParams({project,task:tab==='tasks'?selectedTask:''}).toString();}
   function startWindowWatch(){
-    if(!view?.change_watch||Date.now()<watchRetryAt)return;
+    if(!view?.change_watch||Date.now()<watchRetryAt||(paneHost&&!embeddedChatVisible))return;
     const scope=windowWatchScope();
     if(windowWatch?.scope===scope)return;
     windowWatch?.controller.abort();
@@ -4822,6 +5106,7 @@
     }
   }
   async function refresh(pollFeed=!windowWatch){
+    if(paneHost&&!embeddedChatVisible)return;
     if(refreshing){refreshQueued=true;return;}refreshing=true;
     const requestScope=taskWindowQuery();
     try{
@@ -4829,15 +5114,15 @@
       const q=new URLSearchParams(requestScope);
       if(windowHistoryScope===requestScope&&view?.history_version)q.set('history_version',view.history_version);
       try{v=await api('/api/window?'+q);}
-      catch(error){if(requestScope!==taskWindowQuery())return;if(Date.now()-clientInfoAt>5000)loadClientInfo();online=false;offlineReason=error.name==='TimeoutError'||error.name==='TypeError'?tr('Окно потеряло связь с программой Kotel. Закройте окно и откройте снова.'):error.message;renderProjects();renderMachines();renderNotice();return false;}
-      if(requestScope!==taskWindowQuery())return;
+      catch(error){if(requestScope!==taskWindowQuery())return;if(!paneHost&&Date.now()-clientInfoAt>5000)loadClientInfo();online=false;offlineReason=error.name==='TimeoutError'||error.name==='TypeError'?tr('Окно потеряло связь с программой Kotel. Закройте окно и откройте снова.'):error.message;if(paneHost)renderThread();else{renderProjects();renderMachines();renderNotice();}return false;}
+      if(requestScope!==taskWindowQuery()||(paneHost&&!embeddedChatVisible))return;
       const cameOnline=!online;
-      online=true;lastWindowRefresh=Date.now();offlineReason='';if(Date.now()-clientInfoAt>10000)loadClientInfo();
+      online=true;lastWindowRefresh=Date.now();offlineReason='';if(!paneHost&&Date.now()-clientInfoAt>10000)loadClientInfo();
       // The first answer: learn the client's version before the start screen
       // goes, so an update starts without the old window showing.
-      if(booting){await loadClientInfo();booting=false;renderBoot();}
+      if(booting){if(!paneHost)await loadClientInfo();booting=false;renderBoot();}
       if(requestScope!==taskWindowQuery())return;
-      if(!v.projects.some(p=>p.name===project))setProject(v.project||'');
+      if(!paneHost&&!v.projects.some(p=>p.name===project))setProject(v.project||'');
       if(v.history_unchanged){
         const live=new Set(v.tasks.map(t=>t.id));
         v.tasks.push(...(view?.tasks||[]).filter(t=>finishedStates.includes(t.state)&&!t.keep_open&&!live.has(t.id)));
@@ -4855,16 +5140,16 @@
           auxTaskScope=previousScope===taskWindowQuery(view.project)?previousScope:'';
         }
         viewSignature=signature;view=v;noteWelcomeDone();
-        if(!v.history_paged&&selectedTask&&!v.tasks.some(t=>t.id===selectedTask)){selectedTask='';feed=null;feedSignature='';}
+        if(!paneHost&&!v.history_paged&&selectedTask&&!v.tasks.some(t=>t.id===selectedTask)){selectedTask='';feed=null;feedSignature='';}
         if(selectedShared&&!sharedSelection())selectedShared=null;
         // Choose the top task before drawing, so a project switch goes from
         // loading straight to the conversation without an empty pane between.
         if(!selectedTask&&!selectedShared&&tab==='tasks'&&v.project)openTopTask(true);
-        render();if(taskSidebarPreview)loadSidebarProjects();
+        if(paneHost)renderThread();
+        else{render();if(taskSidebarPreview)loadSidebarProjects();}
       }
-      else if(cameOnline){renderMachines();renderNotice();}
-      updateOpenAgentLimits();
-      applyTopTaskScope();
+      else if(cameOnline){if(paneHost)renderThread();else{renderMachines();renderNotice();}}
+      if(!paneHost){updateOpenAgentLimits();applyTopTaskScope();}
       // Nothing chosen yet (the first start, or the chosen task went away):
       // show the top task instead of an empty conversation.
       if(!selectedTask&&!selectedShared&&tab==='tasks'&&view?.project)openTopTask(true);
@@ -4892,7 +5177,7 @@
     }catch(_){}finally{discovering=false;}
   }
   function show(next){
-    if(next!=='tasks')composerDictation?.cancel();
+    if(next!=='tasks'||tab==='voice')composerDictation?.cancel();
     tab=next;root.querySelectorAll('[data-screen]').forEach(n=>n.hidden=n.dataset.screen!==tab&&!(taskSidebarPreview&&n.dataset.screen==='tasks'));renderToasts();
     syncTaskPanes();
     root.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n.dataset.tab===tab)));
@@ -4906,7 +5191,8 @@
       }else if(!dialog.open)dialog.showModal();
     }
     renderNotices();
-    $('list-toggle').hidden=!view?.project||(!taskSidebarPreview&&tab!=='tasks');if(tab==='server'||tab==='settings')loadServer();if(tab==='project')renderProjectPage();if(tab==='stats')reloadStats();if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),settings:tr('Настройки программы'),agents:tr('Агенты'),project:tr('Проект'),server:tr('Сеть'),stats:tr('Статистика')}[tab];startWindowWatch();
+    $('list-toggle').hidden=!view?.project||(!taskSidebarPreview&&tab!=='tasks');if(tab==='server'||tab==='settings')loadServer();if(tab==='project')renderProjectPage();if(tab==='stats')reloadStats();if(tab==='agents')renderAgents();$('screen-title').textContent={tasks:tr('Задачи'),settings:tr('Настройки программы'),agents:tr('Агенты'),voice:tr('Голос'),project:tr('Проект'),server:tr('Сеть'),stats:tr('Статистика')}[tab];startWindowWatch();
+    if(tab==='voice')composerDictation?.refreshModels();
     if(tab==='tasks'&&combinedTasks()){renderTaskList();loadProjectActivity();}
     if(tab==='tasks'&&setupPaneShown())renderThread();
   }
@@ -5259,10 +5545,17 @@
       row.append(when,titleCell,duration,tokens);
       if(!task.usage_missing&&typeof task.input_tokens==='number')tokens.title=usageLong(task);
       row.addEventListener('click',()=>{
+        if(paneBoard){
+          show('tasks');
+          switchActivePane({...task,title:task.title||tr('Без названия')},task.project||project);
+          return;
+        }
         if(task.project&&task.project!==project&&(taskSidebarPreview
           ?statsProjects().some(entry=>entry.name===task.project):splitProjects.includes(task.project))){
           show('tasks');selectProject(task.project,task.id);return;
         }
+        if(draftOpen)closeTaskDraft();
+        taskWorkspaceCleared=false;
         selectedTask=task.id;selectedShared=null;feed=null;feedSignature='';show('tasks');renderThread();refresh();
       });
       top.append(row);
@@ -5726,7 +6019,7 @@
   }
   window.addEventListener('focus',()=>{
     for(const [provider,at] of authOpened){if(Date.now()-at>=10*60*1000)authOpened.delete(provider);else if(!checking.has(provider))checkCard(provider,true);}
-    pollSetup();viewSignature='';refresh();
+    if(!paneHost)pollSetup();viewSignature='';refresh();
   });
 
   let setupProvider='';
@@ -5944,7 +6237,7 @@
       window.amWindow(e.detail===2?'maximize':'drag');
     });
   }
-  const titleInteractive='button,input,select,textarea,a,[role=switch],[popover],.am-machine-card,.am-project,.am-splitter,.am-window-controls';
+  const titleInteractive='button,input,select,textarea,a,[role=switch],[popover],.am-machine-card,.am-project,.am-splitter,.am-window-controls,.am-pane-tab';
   // Mac (T-082): the page runs under a transparent title bar with the
   // system's buttons at the top left. The app moves the window by the empty
   // parts of the top, so the page tells it where they are: the tab row and
@@ -5981,6 +6274,7 @@
       // A modal covers the title row, so its controls must receive clicks.
       if(!root.querySelector('dialog:modal')){
         const tabs=root.querySelector('.am-tabs'),side=root.querySelector('.am-sidebar');
+        const paneHeaders=[...root.querySelectorAll('.am-pane-header[data-caption]')];
         if(taskSidebarPreview&&tab==='tasks'){
           const main=root.querySelector('.am-main'),r=main.getBoundingClientRect();
           const height=parseFloat(getComputedStyle(main).paddingBlockStart);
@@ -5989,18 +6283,21 @@
         }else if(tabs&&tabs.offsetParent){const r=tabs.getBoundingClientRect();zones.push(new DOMRect(r.left,0,r.width,r.bottom));}
         if(side){const r=side.getBoundingClientRect(),first=side.firstElementChild?.getBoundingClientRect();zones.push(new DOMRect(r.left,r.top,r.width,Math.max(16,(first?first.top:r.top+40)-r.top)));}
         if(navToggle?.offsetWidth)holes.push(navToggle.getBoundingClientRect());
-        for(const parent of [tabs,side,toolbar])for(const node of parent?parent.querySelectorAll(titleInteractive):[]){
+        for(const parent of [tabs,side,toolbar,...paneHeaders])for(const node of parent?parent.querySelectorAll(titleInteractive):[]){
           const r=node.getBoundingClientRect();
           if(r.width&&r.height&&zones.some(z=>r.left<z.right&&r.right>z.left&&r.top<z.bottom&&r.bottom>z.top))holes.push(r);
         }
       }
-      const fileDrop=tab==='tasks'&&!root.querySelector('dialog:modal')?[root.querySelector('.am-chat-body')?.getBoundingClientRect()].filter(Boolean):[];
+      const fileDrop=tab==='tasks'&&!root.querySelector('dialog:modal')?
+        [...root.querySelectorAll('.am-chat-body,.am-pane-chat')].filter(node=>node.offsetWidth).map(node=>node.getBoundingClientRect()):[];
       const message={zones:zones.map(box),holes:holes.map(box),fileDrop:fileDrop.map(box),fileDropDraft:draftOpen?draftAttachmentContext:null},text=JSON.stringify(message);
       if(text!==last){last=text;bridge.postMessage(message);}
     };
     const later=()=>{if(!queued){queued=true;requestAnimationFrame(send);}};
     new ResizeObserver(later).observe(document.documentElement);
     if(toolbar)new ResizeObserver(later).observe(toolbar);
+    const layout=$('task-layout');
+    new MutationObserver(later).observe(layout,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden']});
     new MutationObserver(later).observe($('task-draft'),{attributeFilter:['hidden']});
     $('task-draft-computer').addEventListener('change',later);
     if(navToggle)new MutationObserver(later).observe(navToggle,{attributeFilter:['aria-expanded']});
@@ -6010,7 +6307,7 @@
     addEventListener('resize',later);
     later();
   }
-  window.messengerRefresh=()=>{viewSignature='';refresh();};
+  window.messengerRefresh=()=>{viewSignature='';refresh();forEachPaneWindow(child=>child.messengerRefresh?.());};
   // «Выбрать»: the local server opens the system's own dialog (D-053); the
   // Mac app keeps its native folder dialog for the project folder.
   async function choosePath(kind,current){
@@ -6404,8 +6701,10 @@
     else startUpdate();
   });
   $('app-update-button').append(updateSpinner());
-  if(!window.webkit?.messageHandlers?.updates){selfUpdateTimer=setInterval(loadSelfUpdate,60000);loadSelfUpdate();}
-  pollUpdateProgress();
+  if(!paneHost){
+    if(!window.webkit?.messageHandlers?.updates){selfUpdateTimer=setInterval(loadSelfUpdate,60000);loadSelfUpdate();}
+    pollUpdateProgress();
+  }
   root.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>show(b.dataset.tab)));
   $('list-toggle').addEventListener('click',()=>{
     const expanded=$('list-toggle').getAttribute('aria-expanded')!=='true';
@@ -6430,6 +6729,7 @@
     });
   }
   function selectProject(name,task='',computer,shared=null){
+    taskWorkspaceCleared=false;
     if(draftOpen)closeTaskDraft();
     if(!taskSidebarPreview&&(!combinedTasks()||computer!==''))taskHistories.clear();
     setProject(name,computer);remember('messenger-project',name);
@@ -6512,8 +6812,9 @@
   $('task-stop').addEventListener('click',stopSelectedTask);
   $('lost-close').addEventListener('click',()=>closeHere());
   document.addEventListener('keydown',e=>{
-    if(tab==='tasks'&&e.key==='Escape'&&!e.isComposing&&!$('task-stop').hidden&&!$('compose').hidden&&!$('compose').inert&&
-      !document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true],.am-pane-toolbar,.am-watch-pane')){
+    const task=selectedTaskRow();
+    if(tab==='tasks'&&e.key==='Escape'&&!e.isComposing&&task&&canStopTask(task)&&!stopProgress(task)&&!$('compose').hidden&&!$('compose').inert&&
+      !document.querySelector('dialog[open]')&&!e.target.closest?.('[role=listbox],[aria-expanded=true],.am-pane-toolbar,.am-pane-cell')){
       e.preventDefault();stopSelectedTask();
     }
   });
@@ -6562,6 +6863,8 @@
     else{$('settings-dialog').showModal();renderNotices();loadServer();}
   }));
   $('settings-dialog').addEventListener('close',renderNotices);
+  $('settings-dialog').addEventListener('close',()=>{if(tab==='voice')composerDictation?.cancel();});
+  const microphonePaths=['M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z','M5 10v1a7 7 0 0 0 14 0v-1M12 18v3M9 21h6'];
   if(taskSidebarPreview){
     const dialog=$('settings-dialog');
     const previousBody=dialog.querySelector('.am-dialog-body');
@@ -6587,6 +6890,14 @@
       button.prepend(icon);
       sections.append(button);
       views.append(root.querySelector(`[data-screen=${section}]`));
+    }
+    if(nativeHandlers?.composerDictation){
+      const voiceTab=el('button',tr('Голос'),'am-tab');
+      voiceTab.type='button';voiceTab.dataset.tab='voice';voiceTab.setAttribute('aria-pressed','false');
+      voiceTab.prepend(svgIcon(microphonePaths));
+      voiceTab.addEventListener('click',()=>show('voice'));
+      sections.querySelector('[data-tab=agents]').after(voiceTab);
+      views.append($('voice-page'));
     }
     layout.append(sections,views);
     previousBody.replaceWith(layout);
@@ -6720,8 +7031,10 @@
   });
   // T-275: a hidden window asks for the network every minute, not every
   // 5 or 15 s, and catches up when shown.
-  setInterval(()=>{serverPolls++;if(document.hidden?serverPolls%12===0:(tab==='server'||serverPolls%3===0))loadServer();},5000);
-  loadServer();
+  if(!paneHost){
+    setInterval(()=>{serverPolls++;if(document.hidden?serverPolls%12===0:(tab==='server'||serverPolls%3===0))loadServer();},5000);
+    loadServer();
+  }
   let initialTheme=window.messengerInitialTheme;
   if(!initialTheme)try{initialTheme=localStorage.getItem('messenger-theme');}catch(_){}
   const sidebarFilterIcon=taskSidebarPreview?computerFilterIcon:null;
@@ -6762,24 +7075,136 @@
       if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();$('task-draft').requestSubmit();}
     });
   }
+  function setupVoiceSettings(send){
+    const enabled=$('voice-enabled');
+    const note=$('voice-enabled-note');
+    const modelList=$('voice-models');
+    const rows=new Map();
+    const sizes=new Intl.NumberFormat(amLocale,{style:'unit',unit:'megabyte',maximumFractionDigits:0});
+    const megabytes=new Intl.NumberFormat(amLocale,{maximumFractionDigits:0});
+    const percentages=new Intl.NumberFormat(amLocale,{style:'percent'});
+    let snapshot=null;
+    enabled.addEventListener('click',()=>{
+      if(!snapshot?.supported||enabled.getAttribute('aria-disabled')==='true')return;
+      enabled.setAttribute('aria-disabled','true');
+      send('set-enabled',{enabled:String(!snapshot.enabled)});
+    });
+    function createRow(model){
+      const row=el('div',undefined,'am-setting-row');
+      const details=el('div',undefined,'am-access-text am-voice-model-details');
+      const title=el('p',undefined,'am-access-title');
+      const subtitle=el('p',undefined,'am-access-note');
+      const progress=el('p',undefined,'am-access-note');
+      progress.setAttribute('role','progressbar');
+      details.append(title,subtitle,progress);
+      const size=el('span',undefined,'am-small am-muted');
+      const button=el('button');
+      button.type='button';
+      const remove=el('button',undefined,'am-icon-btn am-chrome-icon');
+      remove.type='button';
+      remove.title=tr('Удалить модель');
+      remove.setAttribute('aria-label',`${remove.title} ${model.name}`);
+      remove.append($('archive-clear').querySelector('svg').cloneNode(true));
+      remove.addEventListener('click',()=>{
+        if(remove.getAttribute('aria-disabled')==='true')return;
+        remove.setAttribute('aria-disabled','true');
+        send('remove-model',{model:model.id});
+      });
+      const selectedLabel=el('span',undefined,'am-small am-muted am-voice-model-selected');
+      const selection=el('span');
+      selectedLabel.append(svgIcon(['M5 12l4 4L19 6']),selection);
+      const actions=el('div',undefined,'am-actions am-actions-end');
+      actions.append(remove,selectedLabel,button);
+      const item={row,title,subtitle,progress,size,button,remove,selectedLabel,selection,action:''};
+      button.addEventListener('click',()=>{
+        if(button.getAttribute('aria-disabled')==='true')return;
+        button.setAttribute('aria-disabled','true');
+        send(item.action,{model:model.id});
+      });
+      row.append(details,size,actions);
+      modelList.append(row);
+      rows.set(model.id,item);
+      return item;
+    }
+    return state=>{
+      snapshot=state;
+      enabled.disabled=!state.supported;
+      enabled.removeAttribute('aria-disabled');
+      enabled.setAttribute('aria-checked',String(state.enabled));
+      note.textContent=!state.supported?tr('Диктовка недоступна в этой версии Kotel'):
+        state.enabled&&!state.ready?tr('Чтобы начать диктовать, загрузите и выберите модель'):
+        tr('Речь распознаётся на этом компьютере');
+      $('voice-models-section').hidden=!state.supported||!state.models.length;
+      for(const id of ['voice-shortcut-row','voice-mode-row','voice-microphone'])$(id).hidden=!state.supported;
+      for(const model of state.models){
+        const item=rows.get(model.id)||createRow(model);
+        const installed=model.state==='installed';
+        const selected=installed&&state.selected===model.id;
+        const downloading=model.state==='downloading';
+        const total=sizes.format(model.size/1e6);
+        item.size.textContent=total;
+        item.title.textContent=model.name;
+        const removalError=model.removalError==='recording'?tr('Завершите запись перед удалением модели'):
+          model.removalError?tr('Не удалось удалить модель'):'';
+        item.subtitle.textContent=removalError||(model.state==='error'?tr('Не удалось загрузить модель'):
+          installed&&!selected?tr('Скачана'):'');
+        item.subtitle.hidden=!item.subtitle.textContent;
+        item.subtitle.classList.toggle('am-status-bad',model.state==='error'||!!removalError);
+        item.progress.hidden=!downloading;
+        if(downloading){
+          const bytes=Math.min(model.size,Math.max(0,model.bytesDownloaded??0));
+          const percent=Math.floor(100*bytes/model.size);
+          const progress=tr('Загрузка, {downloaded} из {total} ({percent})')
+            .replace('{downloaded}',megabytes.format(bytes/1e6))
+            .replace('{total}',total)
+            .replace('{percent}',percentages.format(percent/100));
+          item.progress.textContent=progress;
+          item.progress.setAttribute('aria-label',`${tr('Загрузка модели')} ${model.name}`);
+          item.progress.setAttribute('aria-valuenow',String(percent));
+          item.progress.setAttribute('aria-valuetext',progress);
+        }
+        item.action=downloading?'cancel-download':model.state==='installed'?'select':'download';
+        const label=downloading?tr('Отменить'):model.state==='installed'?tr('Выбрать'):
+          model.state==='error'?tr('Повторить'):tr('Загрузить');
+        if(item.button.textContent!==label)item.button.textContent=label;
+        item.button.setAttribute('aria-label',`${label} ${model.name}`);
+        item.button.hidden=selected;
+        item.button.removeAttribute('aria-disabled');
+        item.remove.hidden=!installed;
+        item.remove.removeAttribute('aria-disabled');
+        item.selectedLabel.hidden=!selected;
+        item.selection.textContent=selected?(state.enabled?tr('Используется'):tr('Выбрана')):'';
+      }
+    };
+  }
   function setupComposerDictation(){
-    const bridge=window.webkit?.messageHandlers?.composerDictation;
+    const bridge=nativeHandlers?.composerDictation;
     if(!bridge)return null;
     const messages={
-      recording:tr('Идёт диктовка. Нажмите на микрофон, чтобы вставить текст.'),
+      recording:tr('Идёт диктовка'),
       processing:tr('Распознаём речь…'),
-      unavailable:tr('Для языка интерфейса недоступно распознавание речи на этом Mac.'),
       'microphone-denied':tr('Разрешите Kotel доступ к микрофону в настройках macOS.'),
-      'speech-denied':tr('Разрешите Kotel распознавание речи в настройках macOS.'),
-      'dictation-disabled':tr('Служба распознавания Apple недоступна. Проверьте настройки Siri и диктовки в macOS.'),
       'microphone-unavailable':tr('Микрофон недоступен.'),
+      'model-not-ready':tr('Выберите загруженную модель в разделе «Голос»'),
       empty:tr('Не удалось расслышать речь.'),
       failed:tr('Не удалось распознать речь. Попробуйте снова.')
     };
-    const microphone=['M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z','M5 10v1a7 7 0 0 0 14 0v-1M12 18v3M9 21h6'];
-    const square=['M7 7h10v10H7z'];
+    const square=['M8 6h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z'];
     const targets=[];
+    let ready=false;
     let active=null;
+    let microphoneTest=null;
+    let heldShortcut=null;
+    const mode=$('voice-mode'),language=$('voice-language'),silence=$('voice-silence');
+    for(const control of [mode,language,silence]){
+      const saved=recall(control.id);
+      if([...control.options].some(option=>option.value===saved))control.value=saved;
+      enhanceSelect(control);
+      control.addEventListener('change',()=>remember(control.id,control.value));
+    }
+    function sendModelAction(action,params){bridge.postMessage({action,...params});}
+    function refreshModels(){sendModelAction('models');}
+    const showVoiceSettings=setupVoiceSettings(sendModelAction);
     function context(target){
       const input=target.input;
       if(tab!=='tasks'||input.disabled||input.readOnly||input.closest('[hidden],[inert]'))return '';
@@ -6791,19 +7216,37 @@
     }
     function paint(target,event=''){
       const pressed=active?.target===target;
-      const label=event==='recording'?tr('Завершить диктовку'):pressed?tr('Отменить диктовку'):tr('Диктовать');
+      const recording=pressed&&event==='recording';
+      const processing=pressed&&event==='processing';
+      const label=!ready?tr('Настройте диктовку в разделе «Голос»'):
+        recording||processing?tr('Завершить диктовку'):pressed?tr('Отменить диктовку'):tr('Диктовать');
+      target.button.disabled=!ready||processing;
       target.button.setAttribute('aria-pressed',String(pressed));
       target.button.setAttribute('aria-label',label);
       target.button.title=label;
-      target.button.replaceChildren(svgIcon(event==='recording'?square:microphone));
-      target.status.textContent=messages[event]||'';
+      target.button.classList.toggle('am-dictation-stop',recording||processing);
+      target.button.replaceChildren(svgIcon(recording||processing?square:microphonePaths));
+      target.display.hidden=!(recording||processing);
+      target.meter.hidden=!recording;
+      target.caption.textContent=recording||processing?messages[event]:'';
+      target.status.textContent=recording||processing?'':messages[event]||'';
       target.status.hidden=!target.status.textContent;
-      target.status.classList.toggle('am-status-bad',!!event&&event!=='recording'&&event!=='processing');
+      if(target.input.id==='task-draft-text')renderDraftAction();
+      else renderAnswerAction();
+    }
+    function paintLevel(target,level){
+      const bars=target.meter.children;
+      for(let index=0;index<bars.length-1;index++){
+        bars[index].style.setProperty('--am-dictation-level',bars[index+1].style.getPropertyValue('--am-dictation-level'));
+      }
+      bars[bars.length-1].style.setProperty('--am-dictation-level',String(level/100));
     }
     function send(action,id){
-      bridge.postMessage({action,id,language:document.documentElement.lang});
+      bridge.postMessage({action,id,language:language.value,silence:Number(silence.value)});
     }
     function cancel(){
+      clearMicrophoneTest();
+      heldShortcut=null;
       if(!active)return;
       const {id,target}=active;
       active=null;
@@ -6819,28 +7262,113 @@
         target.button.hidden=!key;
       }
     }
-    function finishFor(input){
+    function submissionState(input){
+      if(active?.target.input===input)return active.submit?'queued':'recording';
+    }
+    function finishFor(input,submit){
       if(active?.target.input!==input)return false;
+      if(submit){
+        active.submit=submit;
+        paint(active.target,active.event);
+      }
       if(active.event==='recording'){
         active.event='processing';
         paint(active.target,'processing');
         send('stop',active.id);
-      }
+      }else if(!active.event)active.stopOnStart=true;
       return true;
     }
+    function start(target){
+      const key=context(target);
+      if(!ready||!key||active)return false;
+      clearMicrophoneTest();
+      const {input}=target;
+      active={id:crypto.randomUUID(),target,key,event:'',value:input.value,start:input.selectionStart,end:input.selectionEnd};
+      for(const bar of target.meter.children)bar.style.removeProperty('--am-dictation-level');
+      paint(target);
+      send('start',active.id);
+      return true;
+    }
+    const testButton=$('voice-mic-test'),testStatus=$('voice-mic-status');
+    const testResult=$('voice-mic-result'),testStop=$('voice-mic-stop'),testTime=$('voice-mic-time');
+    const testAudio=$('voice-mic-audio'),testText=$('voice-mic-text');
+    const testTranscript=$('voice-mic-transcript');
+    let testTimer;
+    function endMicrophoneTimer(){
+      clearInterval(testTimer);
+      testTime.hidden=true;
+      testStop.hidden=true;
+    }
+    function clearMicrophoneTest(){
+      const id=microphoneTest;
+      finishMicrophoneTest('');
+      if(id)send('cancel',id);
+      if(!testAudio.hidden){
+        testAudio.pause();
+        testAudio.controls=false;
+        URL.revokeObjectURL(testAudio.src);
+        testAudio.removeAttribute('src');
+        testAudio.load();
+        testAudio.hidden=true;
+      }
+      testResult.hidden=true;
+      testTranscript.hidden=true;
+      testText.textContent='';
+    }
+    function finishMicrophoneTest(event){
+      endMicrophoneTimer();
+      microphoneTest=null;
+      testButton.disabled=false;
+      testStatus.textContent=event==='microphone-ready'||event==='text'?tr('Микрофон работает'):messages[event]||'';
+    }
+    testButton.addEventListener('click',()=>{
+      cancel();
+      microphoneTest=crypto.randomUUID();
+      testButton.disabled=true;
+      testResult.hidden=false;
+      testStatus.textContent=tr('Подготовка микрофона…');
+      send('test-microphone',microphoneTest);
+    });
+    testStop.addEventListener('click',()=>{
+      if(!microphoneTest)return;
+      endMicrophoneTimer();
+      testStatus.textContent=messages.processing;
+      send('stop',microphoneTest);
+    });
     for(const input of [$('task-draft-text'),$('answer-text')]){
       const button=el('button',undefined,'am-send-icon am-quiet-button am-dictation-button');
-      const status=el('p',undefined,'am-small am-muted am-dictation-status');
+      const status=el('p',undefined,'am-small am-muted am-status-bad am-dictation-status');
+      const entry=el('div',undefined,'am-dictation-entry');
+      const display=el('div',undefined,'am-dictation-display');
+      const caption=el('span',undefined,'am-small am-muted');
+      caption.setAttribute('role','status');
+      const meter=el('span',undefined,'am-dictation-meter');
+      meter.setAttribute('aria-hidden','true');
+      meter.append(...Array.from({length:36},()=>el('span')));
+      const cancelButton=el('button',undefined,'am-send-icon am-quiet-button am-dictation-cancel');
+      cancelButton.type='button';
+      cancelButton.title=tr('Отменить диктовку');
+      cancelButton.setAttribute('aria-label',cancelButton.title);
+      cancelButton.append(svgIcon(closeIconPaths));
+      cancelButton.addEventListener('click',()=>{
+        cancel();
+        input.focus({preventScroll:true});
+      });
+      display.append(cancelButton,caption,meter);
       button.type='button';
       button.hidden=true;
       status.setAttribute('role','status');
-      input.after(button);
-      const statusAnchor=input.form||input.parentElement;
+      input.before(entry);
+      entry.append(input,display);
+      if(taskSidebarPreview)entry.parentElement.append(button);
+      else entry.after(button);
+      const statusAnchor=input.form||entry.parentElement;
       statusAnchor.append(status);
-      const target={input,button,status,key:''};
+      const target={input,button,status,display,caption,meter,key:''};
       targets.push(target);
       paint(target);
       button.addEventListener('click',()=>{
+        if(!ready)return;
         if(active?.target===target){
           if(active.event==='recording')finishFor(input);else cancel();
           return;
@@ -6848,23 +7376,67 @@
         const key=context(target);
         if(!key)return;
         cancel();
-        active={id:crypto.randomUUID(),target,key,event:'',value:input.value,start:input.selectionStart,end:input.selectionEnd};
-        paint(target);
-        send('start',active.id);
+        if(start(target))input.focus({preventScroll:true});
       });
     }
+    window.messengerDictationModels=state=>{
+      showVoiceSettings(state);
+      if(ready===state.ready)return;
+      ready=state.ready;
+      if(!ready)cancel();
+      for(const target of targets)paint(target);
+    };
     window.messengerDictationEvent=({id,event,text})=>{
+      if(microphoneTest===id){
+        if(event==='recording'){
+          const duration=Number(text),start=performance.now();
+          const updateTime=()=>{
+            const elapsed=Math.min(duration,Math.floor((performance.now()-start)/1000));
+            testTime.textContent=tr('{elapsed} из {duration}')
+              .replace('{elapsed}',`0:${String(elapsed).padStart(2,'0')}`)
+              .replace('{duration}',`0:${String(duration).padStart(2,'0')}`);
+          };
+          testStatus.textContent=tr('Скажите несколько слов');
+          if(duration>0){
+            updateTime();
+            testTime.hidden=false;
+            testTimer=setInterval(updateTime,250);
+          }
+          testStop.hidden=false;
+        }else if(event==='processing'){
+          endMicrophoneTimer();
+          testStatus.textContent=messages.processing;
+        }else if(event==='microphone-audio'){
+          const samples=Uint8Array.from(atob(text),character=>character.charCodeAt(0));
+          testAudio.src=URL.createObjectURL(new Blob([samples],{type:'audio/wav'}));
+          testAudio.controls=true;
+          testAudio.hidden=false;
+        }else{
+          finishMicrophoneTest(event);
+          if(event==='text'&&text){
+            testText.textContent=text;
+            testTranscript.hidden=false;
+          }
+        }
+        return;
+      }
       if(active?.id!==id)return;
-      const {target,key,value,start,end}=active;
+      if(event==='level'){
+        const level=Number(text);
+        if(active.event==='recording'&&Number.isFinite(level))paintLevel(active.target,Math.max(0,Math.min(100,level)));
+        return;
+      }
+      const {target,key,value,start,end,submit}=active;
       if(context(target)!==key){cancel();return;}
       if(event==='recording'||event==='processing'){
         active.event=event;
         paint(target,event);
+        if(event==='recording'&&active.stopOnStart)finishFor(target.input);
         return;
       }
       active=null;
       paint(target,event);
-      if(event!=='text'||!text)return;
+      if(event!=='text'||!text?.trim())return;
       const input=target.input;
       const from=value===input.value?start:input.selectionStart;
       const to=value===input.value?end:input.selectionEnd;
@@ -6874,24 +7446,56 @@
       if(limit>0){
         input.setRangeText(insertion.slice(0,limit),from,to,'end');
         input.dispatchEvent(new Event('input',{bubbles:true}));
+        if(submit)void submit();
       }
-      input.focus();
+      if(!submit)input.focus();
     };
     window.messengerCancelDictation=cancel;
     document.addEventListener('keydown',event=>{
-      if(event.key!=='Escape'||!active||event.isComposing)return;
+      if(event.isComposing)return;
+      const shortcut=event.code==='KeyD'&&event.metaKey&&event.shiftKey&&!event.ctrlKey&&!event.altKey;
+      const target=targets.find(item=>item.input===document.activeElement);
+      if(shortcut&&target&&ready&&context(target)){
+        event.preventDefault();
+        if(event.repeat)return;
+        if(active?.target===target){
+          if(mode.value==='toggle'){
+            if(!active.event)active.stopOnStart=true;
+            else finishFor(target.input);
+          }
+        }else if(start(target)&&mode.value==='hold')heldShortcut=active.id;
+        return;
+      }
+      if(event.key!=='Escape'||(!active&&!microphoneTest))return;
       event.preventDefault();
       event.stopImmediatePropagation();
       cancel();
     },true);
+    document.addEventListener('keyup',event=>{
+      if(!['KeyD','MetaLeft','MetaRight','ShiftLeft','ShiftRight'].includes(event.code)||!heldShortcut)return;
+      const id=heldShortcut;
+      heldShortcut=null;
+      if(active?.id!==id)return;
+      if(!active.event)active.stopOnStart=true;
+      else finishFor(active.target.input);
+    },true);
     window.addEventListener('pagehide',cancel);
-    return {cancel,sync,finishFor};
+    refreshModels();
+    return {cancel,sync,finishFor,submissionState,refreshModels};
   }
   composerDictation=setupComposerDictation();
+  if(!paneHost){
+    for(const callback of ['messengerDictationEvent','messengerDictationModels','messengerCancelDictation']){
+      const own=window[callback];
+      if(own)window[callback]=(...args)=>{own(...args);forEachPaneWindow(child=>child[callback]?.(...args));};
+    }
+    const saveResult=window.taskFiles.saved;
+    window.taskFiles.saved=(...args)=>{saveResult(...args);forEachPaneWindow(child=>child.taskFiles?.saved(...args));};
+  }
   centreControlText();
-  applyTheme(initialTheme||'system');
+  applyTheme(paneHost?.document.documentElement.dataset.theme||initialTheme||'system');
   const chatFont=$('chat-font-select');
-  chatFont.value=window.messengerInitialChatFont||recall('messenger-chat-font');
+  chatFont.value=paneHost?.document.getElementById('am-concept')?.dataset.chatFont||window.messengerInitialChatFont||recall('messenger-chat-font');
   applyChatFont();
   enhanceSelect(chatFont);
   chatFont.addEventListener('change',()=>applyChatFont(true));
@@ -6927,7 +7531,7 @@
     const t=$('thread');if(feedPinned)t.scrollTop=t.scrollHeight;
   })).observe(chatFooter);
   new ResizeObserver(updateNoticeTooltips).observe($('notices'));
-  if(taskSidebarPreview){
+  if(taskSidebarPreview&&!paneHost){
     try{
       for(const saved of JSON.parse(recall('kotel-task-panes')||'[]')){
         if(saved?.id&&saved.project&&saved.title)openTaskPane(saved,saved.project,saved.placement==='tab'?'tab':'alongside',true);
@@ -7165,6 +7769,29 @@
       if(typeof state?.model==='string'){defaultTaskModel=state.model;if(draftOpen)renderTaskDraft();}
       if(windowSetupEnabled&&(state?.pending||resume==='0')&&!setupDialog.open)showWindowSetup(0);
     }).catch(()=>{});
+  }
+  if(paneHost){
+    window.messengerPaneAppearance=(theme,font)=>{
+      applyTheme(theme);chatFont.value=font;applyChatFont();
+    };
+    window.messengerPaneVisible=visible=>{
+      if(embeddedChatVisible===visible)return;
+      embeddedChatVisible=visible;
+      if(visible)refresh();
+      else{
+        windowWatch?.controller.abort();windowWatch=null;
+        feedRequest++;
+        composerDictation?.cancel();
+      }
+    };
+    // Keep explicit selection even when the task is outside the current history page.
+    setInterval(()=>{if(embeddedChatVisible){updateTimers();if(!windowWatch||Date.now()-lastWindowRefresh>=15000)refresh();}},2000);
+    window.addEventListener('storage',event=>{
+      if(['voice-mode','voice-language','voice-silence'].includes(event.key)&&event.newValue!=null){
+        $(event.key).value=event.newValue;syncSelects();
+      }
+    });
+    return;
   }
   loadSleep();setInterval(loadSleep,5000);
   show('tasks');loadMachineOrder();refresh().then(loadWindowSetup);loadDiscovery();pollSetup();setInterval(()=>{if(setupPending)pollSetup();},2000);

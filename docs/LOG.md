@@ -2,6 +2,92 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+
+## 2026-11-28 — T-393 — Chat continuation settings
+
+- Added model and access menus to the chat composer and routed their selections through the same-session continuation after the current run ends.
+- The remote continuation uses a versioned delivery so older executors cannot silently launch the turn with the previous settings. The worker's current launch policy still bounds access.
+- Added local and network continuation fixtures and a split-window composer scenario. Live provider acceptance remains pending.
+
+## 2026-11-28 — T-380 Match dictation Stop and Send styling
+
+Codex removed the separate circular background from the dictation Stop button. It now uses the existing quiet icon-button style. The pane fixture compares the dictation Stop and Send treatments at rest and on hover.
+
+## 2026-11-28 — T-380 Keep the existing send button treatment
+
+The owner confirmed the requested change was to Stop and Send behavior. Codex restored the existing arrow, transparent background, and hover treatment in both composers.
+
+## 2026-11-28 — T-372 Composer context alignment
+
+Codex moved the draft access control below the field and showed the assigned project and computer in the same row of existing conversations. The split fixture checks matching row height and alignment while a task is drafted beside a conversation.
+
+## 2026-11-28 — T-380 Composer action and dictation submission
+
+Codex kept the microphone at the right edge and used the neighboring action for Stop while a task is active and the chat field is empty. Text and dictation show Send in the same position. Send during dictation waits for successful transcription before submitting.
+
+## 2026-11-28 — T-372 Start tasks in the active pane
+
+Codex kept the new-task composer and the submitted conversation in the active pane in draft PR #261. The pane fixture submits a task in a split and checks that both columns keep their positions.
+
+## 2026-11-28 — T-372 and T-389
+
+- Use a closeable, full-height caption tab for the default conversation. Closing the last tab opens New Task.
+- Add reply attachments to notes, answers and continuations. Local and peer fixtures exercise retry validation, an outdated executor and receipt-scoped delivery. Stopped personal chats stay in Projects until the owner archives them. A coordinated stop still goes to history. Local build 119 needs a background update for the current archive behavior and binary replies.
+
+## 2026-11-28 — T-372 Sidebar switching and split drops
+
+Codex made task clicks in the sidebar, Statistics, and Archive reuse the active pane and separated task drag sources from computer reordering in draft PR #261. The conversation body and caption accept split drops. The pane fixture covers selection, preserved layout and drafts, and previews near the middle and on the heading. The default conversation uses the same closeable tab. Closing the last tab by mouse or keyboard returns to the new-task screen, which stays open on refresh.
+
+## 2026-11-28 — T-375 Full-height chat scrollbar
+
+Codex extended the scrollable viewport to the pane edge in draft PR #261. The footer height is reserved in the scrollable content so the last message actions stay above the fixed composer. Tab close and sidebar add buttons highlight the glyph alone.
+
+The upper pane tabs now occupy the shared caption row with the archive toggle. Dark mode uses a slightly lighter text color for the primary sidebar labels.
+
+T-372 preserves the previous active pane when focus moves between visible tabs, including a regular tab displayed alongside a split. Statistics opens the chosen conversation through the same pane routing when tabs are open. Full-height tabs share the sidebar task fills for selection and hover. The archive toggle keeps the same position in single and split layouts.
+
+T-390 reduces the limits header to the title and computer filter, increases the bottom inset, and dismisses the popover when the user clicks an embedded conversation.
+
+## 2026-11-28 — T-372 Split task workspace and T-341 Dock icon
+
+Codex replaced layout presets with edge-based splits in draft PR #261. Pane-local tabs use the regular conversation and composer. The macOS icon is smaller, with a softer reflection over both sides.
+
+## 2026-11-28 — T-375 Inline conversation notices
+
+Codex restored the shared content gap between the reply composer and connection warnings or action errors. The window fixture checks the connection warning and the normal layout after reconnection.
+
+## 2026-11-28 — T-341 Dock icon contour
+
+Codex made the existing edge sheen more visible in local build 129. Pixel comparisons at every shipped size confirmed the changes stay along the sides and preserve the artwork’s alpha.
+
+## 2026-11-28 — T-375 Reply composer clearance
+
+Codex increased the scrolling inset below the last message actions to 32 px in draft PR #261. The window fixture checks the gap while hovering the timestamp and after the reply field grows.
+
+## 2026-11-28 — T-380 Voice typography
+
+Codex used standard setting rows inside the Voice cards, combined the microphone label with its test button, and gave the speech-language value enough room to fit. Preview 127 retains the Dock icon’s contour reflection.
+
+## 2026-11-28 — T-056 Task access menu
+
+Codex added provider-specific access descriptions to the task menu and simplified the wording of both access switches. The remote menu describes full access as a request. Preview 126 uses a thin reflection along the existing macOS Dock icon contour after the side-lighting review.
+
+## 2026-11-28 — T-380 Inline dictation
+
+Codex added a microphone-level history, separate Cancel and Stop controls, and an inline recognition state to both composers in draft PR #261. Chromium and WebKit verified stable composer geometry and the recording interactions. The native Swift shell type-checked. Build 122 predates the change.
+
+## 2026-11-28 — T-380 and T-387 Review follow-up
+
+Codex moved Voice section headings inside their cards, added status and removal for downloaded models, and hid sidebar task shortcuts for groups without a launchable model. The native removal fixture checked removal of selected and unselected models and refusal during recording. Build 122 predates these changes.
+
+## 2026-11-28 — T-380 Voice preview feedback
+
+Codex fixed overflowing settings selectors, added received size and percentage to model rows, and added a ten-second microphone check with early stop, local playback and optional transcription. Chromium and WebKit verified selector geometry and the simulated download and microphone flows. The native Swift shell type-checked. Build 121 predates these review changes. The revised Mac preview and live microphone acceptance are pending.
+
+## 2026-11-28 — T-380 Voice preferences
+
+Codex added a focused-composer keyboard shortcut with hold and toggle modes, spoken language, a system microphone test and optional stop after silence. Both browser fixtures exercise the bridge. Native Swift type-checking passed. Live input and the next native bundle remain pending.
+
 ## 2026-11-28 — T-368 and T-387 Chat and agent settings
 
 Codex clarified the manual CLI picker label, rendered the status rows before showing the dialog, stabilized its scroll gutter, and removed the extra padding below the last status row. The chat now leaves a 16 px inset between its bottom content and composer.
@@ -9,6 +95,10 @@ Codex clarified the manual CLI picker label, rendered the status rows before sho
 ## 2026-11-28 — T-369 Dark theme text refinement
 
 The owner approved the regular window typography in local build 120. Codex slightly brightened the main and secondary text in the standard dark palette for the next owner-requested bundle.
+
+## 2026-11-28 — T-380 Local dictation work in progress
+
+Codex built the requested Mac typography preview from the tree in PR #260. In parallel, Codex added downloadable model controls, local recording and offline transcription code, and packaging for a pinned standalone recognizer. The browser bridge fixture passed in Chromium and WebKit. The pending native bundle and microphone acceptance are separate from today's typography preview.
 
 ## 2026-11-28 — T-384 and T-390 Mac review follow-up
 

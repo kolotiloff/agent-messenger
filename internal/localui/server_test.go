@@ -71,6 +71,7 @@ func TestUIAllowsOnlyCrossSiteStartPageNavigation(t *testing.T) {
 		{"GET", "/", "no-cors", "script", 403},
 		{"GET", "/?x=1", "navigate", "document", 403},
 		{"GET", "/app.js", "navigate", "document", 403},
+		{"GET", "/task-pane", "navigate", "iframe", 403},
 		{"GET", "/api/overview", "navigate", "document", 403},
 	} {
 		r := httptest.NewRequest(test.method, "http://127.0.0.1:1234"+test.path, nil)
@@ -138,7 +139,7 @@ func TestUIUnavailableIsNotEmptySuccess(t *testing.T) {
 
 func TestUIAssetsEmbeddedWithoutPrivateCapability(t *testing.T) {
 	h := newHandler("127.0.0.1:1234", "secret-token", nil, nil)
-	for _, path := range []string{"/", "/app.js", "/i18n.js", "/app.css", "/design-v1.css", "/fonts/Inter.woff2", "/fonts/SourceSans3.woff2"} {
+	for _, path := range []string{"/", "/task-pane", "/app.js", "/i18n.js", "/app.css", "/design-v1.css", "/fonts/Inter.woff2", "/fonts/SourceSans3.woff2"} {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest("GET", "http://127.0.0.1:1234"+path, nil))
 		if w.Code != http.StatusOK || strings.Contains(w.Body.String(), "secret-token") {
@@ -146,6 +147,22 @@ func TestUIAssetsEmbeddedWithoutPrivateCapability(t *testing.T) {
 		}
 		if path == "/" && !strings.Contains(w.Body.String(), `id="am-concept" class="am-task-sidebar-preview"`) {
 			t.Fatal("the regular window route must use the current task layout")
+		}
+		policy := w.Header().Get("Content-Security-Policy")
+		frameOptions := w.Header().Get("X-Frame-Options")
+		switch path {
+		case "/":
+			if frameOptions != "DENY" || !strings.Contains(policy, "frame-src 'self'") || !strings.Contains(policy, "frame-ancestors 'none'") {
+				t.Fatal("the outer window must allow only its own frames and cannot be framed")
+			}
+		case "/task-pane":
+			if frameOptions != "SAMEORIGIN" || !strings.Contains(policy, "frame-ancestors 'self'") || strings.Contains(policy, "frame-src") {
+				t.Fatal("the task pane must allow only same-origin embedding and cannot embed a frame")
+			}
+		default:
+			if frameOptions != "DENY" || !strings.Contains(policy, "frame-ancestors 'none'") {
+				t.Fatalf("asset %s lost its frame protection", path)
+			}
 		}
 		if strings.HasSuffix(path, ".woff2") &&
 			(w.Header().Get("Content-Type") != "font/woff2" || !strings.HasPrefix(w.Body.String(), "wOF2") ||

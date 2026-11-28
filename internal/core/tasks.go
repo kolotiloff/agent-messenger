@@ -1761,6 +1761,9 @@ func (s *Store) ReadTask(run, receipt string, includeTask bool) (TaskBrief, erro
 		if b.Attachments, err = getTaskAttachments(tx, t.ID); err != nil {
 			return err
 		}
+		if b.Attachments, err = appendRunAttachments(tx, r, b.Attachments); err != nil {
+			return err
+		}
 		if b.OwnerNotes, err = ownerNotesOf(tx, r.ID); err != nil {
 			return err
 		}
@@ -2164,6 +2167,9 @@ func answerTask(machine, tx *sql.Tx, task, question, opID, text, by string, from
 		if err := insertTaskRun(tx, task, ordinal+1, "answer", text, sender); err != nil {
 			return err
 		}
+		if _, err := tx.Exec(`UPDATE task_runs SET op_id=? WHERE task_id=? AND ordinal=? AND EXISTS (SELECT 1 FROM message_attachments WHERE task_id=? AND op_id=?)`, opID, task, ordinal+1, task, opID); err != nil {
+			return err
+		}
 		if err := setTaskState(tx, task, "running", "answered; the same conversation resumes"); err != nil {
 			return err
 		}
@@ -2201,9 +2207,9 @@ func (s *Store) ContinueTaskChecked(task, opID, text, by string, gone WorkerGone
 			return err
 		}
 		if link.remote != nil {
-			return continueRemoteTask(machine, tx, task, *link.remote, opID, text, coordinatorSender(by, senders))
+			return continueRemoteTask(machine, tx, task, *link.remote, opID, text, coordinatorSender(by, senders), TaskContinuation{})
 		}
-		return continueTaskTx(machine, tx, task, opID, text, gone, false, coordinatorSender(by, senders))
+		return continueTaskTx(machine, tx, task, opID, text, gone, false, coordinatorSender(by, senders), TaskContinuation{})
 	})
 }
 
@@ -2213,12 +2219,12 @@ func canResumeTask(state string) bool {
 
 // continueTaskTx continues a task that runs on this computer. fromNet is
 // set when the computer that started it asked (T-113).
-func continueTaskTx(machine, tx *sql.Tx, task, opID, text string, gone WorkerGone, fromNet bool, sender MessageSender) error {
+func continueTaskTx(machine, tx *sql.Tx, task, opID, text string, gone WorkerGone, fromNet bool, sender MessageSender, options TaskContinuation) error {
 	var oldTask, oldInput string
 	err := tx.QueryRow(`SELECT task_id,input FROM task_runs WHERE op_id=?`, opID).Scan(&oldTask, &oldInput)
 	if err == nil {
 		if oldTask == task && oldInput == text {
-			return nil
+			return checkContinuationOptions(tx, task, opID, options)
 		}
 		return fmt.Errorf("%w: this operation id was used for another follow-up", ErrRejected)
 	}
@@ -2272,6 +2278,11 @@ func continueTaskTx(machine, tx *sql.Tx, task, opID, text string, gone WorkerGon
 	}
 	if open != 0 {
 		return fmt.Errorf("%w: a run of this task is not finished or its outcome is unclear", ErrRejected)
+	}
+	if options != (TaskContinuation{}) {
+		if err := applyContinuationOptions(machine, tx, t, opID, options); err != nil {
+			return err
+		}
 	}
 	var ordinal int
 	if err := tx.QueryRow(`SELECT MAX(ordinal) FROM task_runs WHERE task_id=?`, task).Scan(&ordinal); err != nil {

@@ -14,7 +14,6 @@
 <key>LSMinimumSystemVersion</key><string>15.0</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>NSMicrophoneUsageDescription</key><string>Микрофон нужен, чтобы надиктовать черновик сообщения в Kotel.</string>
-<key>NSSpeechRecognitionUsageDescription</key><string>Kotel распознаёт диктовку на этом устройстве и вставляет текст в черновик сообщения.</string>
 <key>NSPrincipalClass</key><string>NSApplication</string>
 <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
 </dict></plist>

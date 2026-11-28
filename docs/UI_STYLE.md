@@ -25,7 +25,7 @@ Scale: 4, 8, 12, 16, 24 (`--am-space-1/2/3/4/6`). Pick the gap by meaning:
 
 Expanded efficiency details start 16 px inside the parent row and share its trailing edge. The 12 px inner inset aligns the first metric label with the model name. The detail table adds no extra padding at its outer edges.
 
-Window notices stay in the same upper corner when Settings opens. Leave the final period off short notice titles. Keep punctuation in explanatory text and keep the ellipsis on actions in progress.
+Window notices stay in the same upper corner when Settings opens. Leave the final period off short notice titles. Keep punctuation in explanatory text and keep the ellipsis on actions in progress. In a conversation, leave one content gap (12 px) between an inline connection warning or action error and the reply composer.
 
 The sidebar action and project filter, statistics periods and filter controls use the same 8 px control gap. Compact list rows keep their 4 px gap. The first computer begins 8 px below the Mac project filter. Settings section headings sit above the first card with the section gap. Computer, Archive and Statistics task rows share the list hover fill. Statistics tasks have the same 4 px gap as archived tasks. Dropdown options have 4 px vertical and 12 px horizontal padding. Only the hovered or keyboard-focused option gets a background, and a check marks the selected value. Panes use `--am-pane-inset` (16 px, or 12 px in a narrow window). The Projects divider aligns with the full-width task toolbar. The Archive header starts below the toolbar. The quiet Clear Archive icon sits beside the count and opens a confirmation dialog. The footer aligns the visible icon and version text edges by applying the icon's internal inset to the version text.
 
@@ -46,7 +46,11 @@ In the wide task window, Projects and Archive use the section inset (`--am-gap-s
 
 The composer keeps its surface radius (16 px) at every height. Use one control gap (8 px) for padding on all four sides and for spacing between controls. The inset icon controls use the next smaller radius (12 px). Ordinary buttons, one-line inputs and selector triggers share the compact control height (28 px) in the current window layout.
 
-The conversation and composer share a centered column up to `--am-chat-max` (760 px), with a minimum chat gutter of 24 px on each side. The scrollbar stays at the edge of the chat pane and ends at the footer. In an existing conversation the access shield and model sit below the reply field.
+The conversation and composer share a centered column up to `--am-chat-max` (760 px), with a minimum chat gutter of 24 px on each side. The scrollbar runs beside the fixed composer to the bottom edge of each chat pane. Reserve the measured footer height in the scrollable content. With the reply composer open, leave one region gap plus one control gap (32 px total) between the last message actions and the composer at the end of the history. In an existing conversation the access shield and model sit below the reply field.
+
+Tab close and sidebar group add buttons use a transparent background. On hover, keyboard focus or press, highlight the icon using the primary text color.
+
+Pane tabs in the top row align with the window controls. Lower panes keep a tab at the top of their own content. A tab spans its header height and has a trailing divider. Use the sidebar task fills for selection and hover. Keep the archive toggle at the same trailing inset when the workspace splits. The primary labels in the left sidebar use `--am-sidebar-text`, with a modest increase in dark-mode brightness.
 
 Message actions and the timestamp share a visible row one control gap (8 px) below the message. The executor's timestamp starts at the text edge, followed by the actions. An outgoing row ends at the bubble edge, with the timestamp before the actions. The next message group starts one region gap (24 px) below the row.
 
@@ -60,6 +64,7 @@ Message actions and the timestamp share a visible row one control gap (8 px) bel
 ## Components
 
 - `.am-card` is the one card look (agent cards, server sections); `.am-card-head` holds a title and a `.am-badge`.
+- In Voice, use the page title for the section name and standard setting-label typography inside each card.
 - `.am-field` is a label with a field under it.
 - Notes about a screen (what works, what does not yet) go in a side column, not between the cards: `.am-server-layout` with `.am-server-aside`. In a window narrower than 1000 px the column moves above the cards.
 - `.am-chrome-icon` shares the 28 px square, 16 px glyph box, 8 px corner radius and hover fill for standalone main-window controls.
@@ -78,10 +83,14 @@ Standard dialogs share the 44 px header with 4 px vertical and 16 px horizontal 
 
 In a dialog or popover with an overflowing list, keep the title, search and filters in a fixed header. Scroll only the content below the header. Keep the scrollbar inside the content area, clear of the top edge and the rounded corners. The model picker and agent limits follow this pattern.
 
+The limits popover uses one section inset below its list and dismisses on an outside click, including in an embedded chat pane.
+
 Informational popovers such as agent limits and the context window use `--am-space-3` (12 px) vertically and `--am-space-4` (16 px) horizontally. Compact menu item spacing belongs to action rows.
 
 Text in a control is centred by eye, not by the line box: system fonts leave more room below the text than above it, so buttons, tabs, select fields and inputs get `--am-text-nudge` (4) as their top padding and none at the bottom. Measured: 11 px above the capitals and 11 below in a 32 px button.
 
 The task sidebar uses a 4 px gap between New Task, Projects and the computer list. Projects starts on the icon column. A collapsed computer or project folder shows its current task total after its label, using the same muted numeral as the heading counts. Expanded groups omit the numeral. Only outermost groups have a new task shortcut. The plus uses the row padding at the trailing edge and has a transparent hit area and appears on row hover or keyboard focus. Show it by default when hover is unavailable. Each task highlight starts at its nesting level. Task and archive buttons share 4 px vertical and 12 px horizontal padding. Both filters use a 16 px horizontal sliders icon in a compact button. The layers button groups tasks by computer, by project, by computer then project, or by project then computer. Folders in both states and computers use the same 16 px box, drawing bounds and stroke weight. Both folder states share the tab. In the open state the rounded front lip projects beyond the rear wall. Online computers use a muted server glyph. A slash and an accessible offline label identify disconnected computers.
+
+In a split task workspace, place each tab directly above its conversation and divide panes with the standard rule. A drag highlights the half of the target pane that the moved conversation will occupy. Keep the standard thread, composer and bottom inset in every pane.
 
 Mutually exclusive settings pages can use `.am-segmented-tabs` with equal-width segments and a single inset indicator on a soft track. Only the indicator moves, over 160 ms after user input. Reduced motion switches it immediately. Use tab and tabpanel semantics, arrow-key navigation and a visible keyboard focus ring. Navigating between tabs changes the view only.

@@ -135,7 +135,17 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("X-Frame-Options", "DENY")
-		w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; font-src 'self'; img-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+		policy := "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; font-src 'self'; img-src 'self' blob:; media-src blob:; base-uri 'none'; form-action 'none'"
+		switch r.URL.Path {
+		case "/":
+			policy += "; frame-src 'self'; frame-ancestors 'none'"
+		case "/task-pane":
+			w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+			policy += "; frame-ancestors 'self'"
+		default:
+			policy += "; frame-ancestors 'none'"
+		}
+		w.Header().Set("Content-Security-Policy", policy)
 		if r.Host != host {
 			http.Error(w, "invalid host", http.StatusForbidden)
 			return
@@ -162,7 +172,7 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 		}
 		if !strings.HasPrefix(r.URL.Path, "/api/") {
 			files := map[string]string{
-				"/": "index.html", "/app.js": "app.js", "/i18n.js": "i18n.js", "/app.css": "app.css", "/design-v1.css": "design-v1.css", "/icon.svg": "icon.svg",
+				"/": "index.html", "/task-pane": "index.html", "/app.js": "app.js", "/i18n.js": "i18n.js", "/app.css": "app.css", "/design-v1.css": "design-v1.css", "/icon.svg": "icon.svg",
 				"/file-viewer.js": "file-viewer.js", "/file-viewer.css": "file-viewer.css",
 				"/fonts/Inter.woff2": "fonts/Inter.woff2", "/fonts/SourceSans3.woff2": "fonts/SourceSans3.woff2",
 			}
@@ -295,7 +305,7 @@ func newDesktopHandler(host, token string, call caller, discover func(context.Co
 				return
 			}
 			limit := int64(64 << 10)
-			if r.URL.Path == "/api/task-start" {
+			if r.URL.Path == "/api/task-start" || r.URL.Path == "/api/task-answer" || r.URL.Path == "/api/task-note" {
 				// Include task text, escaping and base64 attachment overhead.
 				limit = 512 << 10
 			}
@@ -820,27 +830,37 @@ func decodeTaskMutation(path string, decoder *json.Decoder) (control.Request, bo
 			cmd = "task-owner-start-with-attachments"
 		}
 		return control.Request{Cmd: cmd, Access: in.Access, Project: in.Project, Computer: in.Computer, Provider: in.Agent, Model: in.Model, Confirmation: in.OpID, Text: in.Text, Attachments: in.Attachments}, true
-	case "/api/task-answer":
+	case "/api/task-answer", "/api/task-note":
 		var in struct {
-			Task     string `json:"task"`
-			Question string `json:"question"`
-			OpID     string `json:"op_id"`
-			Text     string `json:"text"`
+			Model       string                `json:"model,omitempty"`
+			Access      string                `json:"access,omitempty"`
+			Task        string                `json:"task"`
+			Question    string                `json:"question,omitempty"`
+			OpID        string                `json:"op_id"`
+			Text        string                `json:"text"`
+			Attachments []core.TaskAttachment `json:"attachments,omitempty"`
 		}
-		if decoder.Decode(&in) != nil || in.Task == "" || len(in.Task) > 128 || in.Question == "" || len(in.Question) > 128 || in.OpID == "" || len(in.OpID) > 128 || strings.TrimSpace(in.Text) == "" || len(in.Text) > 4*core.MaxTaskText {
+		answer := path == "/api/task-answer"
+		if decoder.Decode(&in) != nil || in.Task == "" || len(in.Task) > 128 ||
+			answer != (in.Question != "") || len(in.Question) > 128 ||
+			in.OpID == "" || len(in.OpID) > 128 || strings.TrimSpace(in.Text) == "" || len(in.Text) > 4*core.MaxTaskText {
 			return control.Request{}, false
 		}
-		return control.Request{Cmd: "task-owner-answer", MessageID: in.Task, ConversationID: in.Question, Confirmation: in.OpID, Text: in.Text}, true
-	case "/api/task-note":
-		var in struct {
-			Task string `json:"task"`
-			OpID string `json:"op_id"`
-			Text string `json:"text"`
-		}
-		if decoder.Decode(&in) != nil || in.Task == "" || len(in.Task) > 128 || in.OpID == "" || len(in.OpID) > 128 || strings.TrimSpace(in.Text) == "" || len(in.Text) > 4*core.MaxTaskText {
+		options := core.TaskContinuation{Model: in.Model, Access: in.Access}
+		if !options.Valid() || (answer && options != (core.TaskContinuation{})) {
 			return control.Request{}, false
 		}
-		return control.Request{Cmd: "task-owner-note", MessageID: in.Task, Confirmation: in.OpID, Text: in.Text}, true
+		cmd := "task-owner-note"
+		if answer {
+			cmd = "task-owner-answer"
+		}
+		if len(in.Attachments) != 0 {
+			cmd = "task-owner-message-with-attachments"
+		}
+		if options != (core.TaskContinuation{}) {
+			cmd = "task-owner-continue-with-settings"
+		}
+		return control.Request{Cmd: cmd, Model: in.Model, Access: in.Access, MessageID: in.Task, ConversationID: in.Question, Confirmation: in.OpID, Text: in.Text, Attachments: in.Attachments}, true
 	case "/api/server-action":
 		var in struct {
 			Action    string `json:"action,omitempty"`

@@ -282,6 +282,8 @@ An interrupted run (the client restarted while it ran) was a dead end: nobody sa
 
 2026-11-09, Claude Code, owner's decision. Changes the default of D-097. The owner found two switches in two places confusing: «Любые команды» on «Агенты» and «Любые команды для задач других компьютеров» on «Сервер». Both are about what agents may do, so the second one is now under the first on «Агенты» («И для задач с других компьютеров»). It is on by default: a new computer, set up by someone who will not look for it, works as it is, and the network holds only the owner's own computers. A computer where the owner turned it off keeps that. With it on, any computer of the network, or anyone holding its device key, can run any command on a computer whose agents have «Любые команды»; the owner accepted that.
 
+The task composer describes restrictions using the selected provider. A full-access request for another computer remains subject to the executor’s settings. The access menu does not offer interactive approval modes. See T-056.
+
 ## D-110 — The owner's message answers a question to the coordinator (T-125)
 
 2026-11-09, Claude Code, owner's request («Разве автор не главнее»). A worker that asked the coordinator has ended its run and waits; an owner note (T-085) used to wait for the coordinator's answer too. Now the owner's message to such a task answers its open question at once, as the owner, and the same conversation continues. The coordinator gets an owner_answered event for that question and its own answer is refused as already given. Pending notes travel with that answer as before. Tasks of other computers still take no notes.
@@ -838,7 +840,7 @@ The left panel contains running, waiting, planned and attention-needed tasks. Ar
 
 Start Archive cards with the subdued completion time, using capitalized Today and Yesterday with the time and a calendar date with the time for older tasks. Show the computer in the time tooltip along with the task dates. Follow the time with the sidebar-style task title, including the comma-separated project prefix in All mode. Show agent and model, duration or terminal status, and reported tokens below, separated by commas. Abbreviate the archive token unit to t. and keep the complete count in the tooltip. Use the same compact provider logo in each task list. Both lists ellipsize long titles and metadata in one line and expose the full text in tooltips. Keep project grouping for pagination, without separators. Put Clear archive above the rows. It applies to the selected project and agent scope and retains records used by statistics. Use a compact inset in General settings.
 
-Keep the owner composer editable in an active task while Send is temporarily unavailable, including a lost remote connection. Preserve the draft when the same open task changes between a message and a question. Keep routing through the owner window and use the confirmed task state when sending.
+Keep the owner composer editable in an active task while Send is temporarily unavailable, including a lost remote connection. Leave one content gap between a warning and the reply composer. Preserve the draft when the same open task changes between a message and a question. Keep routing through the owner window and use the confirmed task state when sending.
 
 In the Projects sidebar, align active-task text with the computer name. Include the computer icon width and label gap in the task's leading inset. Keep the hover, focus, and selection surfaces full width. Align the chat heading with Projects and Archive, showing the full task name above the date or New Task in the draft. Show individual message times on hover and keyboard focus, above the worker header on the left and below outgoing messages on the right.
 
@@ -987,7 +989,7 @@ The computer that created a task writes its display title to the task record. Th
 
 ## D-265 — Open concurrent task views inside the main window
 
-Use tabs for switching and closing task views. Use Open alongside to keep concurrent conversations visible in the same workspace, with side-by-side, stacked and grid layouts. Every pane addresses an existing task and keeps its own draft and scroll position. See T-372.
+Use tabs for switching and closing task views. Clicking a task in the sidebar, Statistics, or Archive switches the active pane or focuses its existing visible pane. Read-only summaries from another computer still use the main view. The surrounding panes stay in place and the displaced conversation keeps its in-memory draft and scroll position. Drag an open tab or sidebar task over a conversation or its header to divide that pane. The header and the middle of the conversation choose a column by the pointer's horizontal position. The top and bottom bands around the horizontal center choose rows. Highlight the destination before the drop. Splits can be nested. Open alongside is available from the task menu. Each pane uses the regular conversation. A conversation opened in the main view, including the default selection, has the same closeable tab as a split pane. Remember the split arrangement with the open tabs. Closing the last tab clears the conversation selection and returns to the new-task screen. A background refresh preserves that screen. See T-372.
 
 ## D-266 — Stop a turn and keep the conversation available
 
@@ -999,7 +1001,7 @@ A project file link opens a tab in the existing task toolbar and a reader alongs
 
 ## D-268 — Keep permission details beside the model in an existing conversation
 
-The new task composer keeps its access choice. An existing conversation shows its access mode or executor computer beside the model below the reply field. Its scrolling viewport ends at the footer. Stop ends a turn and adds an unboxed system event. The original conversation can accept a follow-up when its recorded continuation capability allows it. See T-375.
+The new task composer keeps its access choice. An existing conversation shows its access mode or executor computer beside the model below the reply field. Its scrollbar runs to the bottom of the pane beside the fixed footer. When the reply composer is visible, the history reserves the footer height plus 32 px so the last action row can scroll clear of the field. Stop ends a turn and adds an unboxed system event. The original conversation can accept a follow-up when its recorded continuation capability allows it. See T-375.
 
 ## D-269 — Recognize a coordinator registration through the installed bundle link
 
@@ -1030,7 +1032,7 @@ Show turn activity while waiting for public text and use partial text when the p
 
 ## D-275 — Task shortcuts and composer inputs
 
-A computer heading opens a draft for that computer. A project heading opens a draft for that project. Show the shortcut only on the outermost groups in the current sidebar grouping. Reveal it on row hover or keyboard focus and use the row highlight. Use the standard row inset. Keep it visible on devices without hover. Keep the existing project, model and availability rules. The context indicator labels the reported window percentage consistently across live and saved turns.
+A computer heading opens a draft for that computer. A project heading opens a draft for that project. Show the shortcut only on the outermost groups in the current sidebar grouping when that group has a launchable model. Reveal it on row hover or keyboard focus and use the row highlight. Use the standard row inset. Keep it visible on devices without hover. Keep the existing project, model and availability rules. The context indicator labels the reported window percentage consistently across live and saved turns.
 
 Agent settings group providers by detected installation on the local computer. Installation remains explicit and remote settings remain read-only. Installed rows show the provider, its enable switch and its settings action. In the agent dialog, use the standard divider after Models and status marks for CLI installation and sign-in in place of step numbers. Use 16 px provider artwork in window controls and retain the compact metadata marks.
 
@@ -1039,6 +1041,8 @@ The composer can add selected paths and UTF-8 browser drops as removable draft i
 ## D-276 — Agent limits in the sidebar
 
 Show measured usage windows in a popover beside App settings. Group snapshots by the reporting computer and display a subscription only when the provider reports it. Opening the popover reads the window's existing snapshots. Mark disconnected computers and passed reset times so an old measurement cannot read as a confirmed refill. See T-390.
+
+Keep the title and computer filter in the fixed header, leave a section inset below the scrolling list, and dismiss the popover on an outside click, including in a split conversation.
 
 ## D-277 — Update checks and window notices
 
@@ -1050,4 +1054,19 @@ Expose system sleep, awake while a local agent runs, and always awake next to Se
 
 ## D-279 — Composer capabilities
 
-Offer a provider-native action only when the chosen provider and route can execute it. Keep the local Codex usage action backed by the provider’s account limits request. Send binary attachments with a new task only after explicit selection, require a compatible remote executor, and expose an isolated copy through the receipt-scoped worker tool. Follow-up binary uploads require their own transport. See T-388 and T-389.
+Offer a provider-native action only when the chosen provider and route can execute it. Keep the local Codex usage action backed by the provider’s account limits request. Send binary attachments with a new task only after explicit selection, require a compatible remote executor, and expose an isolated copy through the receipt-scoped worker tool. Notes, answers and continuations commit the selected files with the message. Each message has its own operation identity. The receiving run sees its files through the existing receipt-scoped tool. Older clients reject the attachment command, and older peers are refused before enqueue. See T-388 and T-389.
+
+## D-280 — Downloadable local dictation
+
+Keep model selection in Voice settings and download weights on explicit request. Enable the composer microphone only when a selected local model is ready and dictation is enabled. The native client captures audio and transcribes it on the user's computer. The first implementation uses a bundled, pinned recognizer with separately verified model weights. Review recording interaction against the owner's forthcoming examples before native acceptance. See T-380.
+
+The microphone check records up to ten seconds, allows an early stop, and offers local replay. If a speech model is selected, show its transcript in the check panel. Revoke the playback URL when leaving Voice or starting a new recording. Show model download progress in the model row with received size, total size, and percentage.
+
+Use standard card headings in Voice. Show the selected model as in use while dictation is enabled. Offer the existing trash icon for downloaded models and clear the selection when its file is removed. Keep weights open by an active recording or transcription until that operation finishes.
+
+Show the recording and recognition states inside the composer without resizing it. Draw the recording history from microphone levels. Keep cancellation separate from stopping so the user can discard a recording or insert its transcript.
+
+
+## D-281 — Model and access for a saved conversation
+
+The chat composer can select the model and access for the next launch of an existing session. The provider, project and executor stay attached to the session. The owner can make selections during a working run and use Stop before sending the next turn. Selected settings are committed together with the continuation. The executor still applies its access policy at launch, including the separate network-access limit.

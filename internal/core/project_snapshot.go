@@ -132,6 +132,7 @@ func writeProjectSnapshot(ctx context.Context, db *sql.DB, project string, withD
 		{"task_outputs", "task_id IN (SELECT id FROM snapshot.tasks)"},
 		{"task_images", "task_id IN (SELECT id FROM snapshot.tasks)"},
 		{"task_attachments", "task_id IN (SELECT id FROM snapshot.tasks)"},
+		{"message_attachments", "task_id IN (SELECT id FROM snapshot.tasks)"},
 	}
 	if withDelivery {
 		tables = append(tables, struct{ name, where string }{
@@ -174,7 +175,7 @@ func writeProjectSnapshot(ctx context.Context, db *sql.DB, project string, withD
  INSERT INTO snapshot.meta SELECT key,value FROM main.meta
  WHERE key='computer_id'
  OR (key GLOB 'net_continue_prev:*' AND substr(key,length('net_continue_prev:')+1) IN (SELECT id FROM snapshot.tasks))
- OR (key GLOB 'net_continue:*' AND substr(value,1,instr(value,char(10))-1) IN (SELECT id FROM snapshot.tasks));`); err != nil {
+ OR ((key GLOB 'net_continue:*' OR key GLOB 'continue_settings:*') AND substr(value,1,instr(value,char(10))-1) IN (SELECT id FROM snapshot.tasks));`); err != nil {
 			return fmt.Errorf("copy project delivery metadata: %w", err)
 		}
 		// New project messages start beyond all already allocated legacy
@@ -215,6 +216,10 @@ func writeProjectSnapshot(ctx context.Context, db *sql.DB, project string, withD
 func copyProjectTable(ctx context.Context, tx *sql.Tx, source, table, where, project string) error {
 	var ddl string
 	if err := tx.QueryRowContext(ctx, "SELECT sql FROM "+source+".sqlite_schema WHERE type='table' AND name=?", table).Scan(&ddl); err != nil {
+		if errors.Is(err, sql.ErrNoRows) && (table == "message_attachments" || table == "task_attachments") {
+			// The source can predate either attachment table.
+			return nil
+		}
 		return err
 	}
 	definition, ok := strings.CutPrefix(ddl, "CREATE TABLE ")

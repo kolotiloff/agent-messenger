@@ -826,7 +826,7 @@ func answerRemoteTask(machine, tx *sql.Tx, t Task, remote netLink, question, opI
 	}
 	// The op id names this answer, not only the question: a question that
 	// opens again after a refusal (row 26) gets a second answer.
-	return enqueueNet(tx, remote.broker, remote.peer, "answer."+question+"."+opID, t.ID, netBody{Kind: "answer", Task: t.ID, Question: question, OpID: opID, Text: text, By: by, SenderAgent: sender.Agent, SenderModel: sender.Model})
+	return enqueueTaskMessage(machine, tx, remote, "answer."+question+"."+opID, t.ID, opID, netBody{Kind: "answer", Task: t.ID, Question: question, OpID: opID, Text: text, By: by, SenderAgent: sender.Agent, SenderModel: sender.Model})
 }
 
 // cancelRemoteTask asks the computer that runs the task to cancel it. A
@@ -1197,7 +1197,7 @@ func (s *Store) netUndeliverable(seq int64, opID, broker, recipient string) erro
 				return err
 			}
 			return insertTaskEvent(tx, project, task, AudienceCoordinator, "failed", why, "")
-		case "continue":
+		case "continue", continueWithSettingsKind:
 			t, err := scanTask(tx.QueryRow(`SELECT `+taskColumns+` FROM tasks WHERE id=?`, task).Scan)
 			if err != nil {
 				return err
@@ -1369,7 +1369,7 @@ func decodeNetIncoming(m NetIncoming) (netBody, bool) {
 	if b.Kind == "start_with_attachments" {
 		valid = valid && len(b.Attachments) > 0 && ValidTaskAccess(b.Access)
 		b.Kind = "start"
-	} else if len(b.Attachments) > 0 {
+	} else if len(b.Attachments) > 0 && b.Kind != "note" && b.Kind != "answer" && b.Kind != "continue" && b.Kind != continueWithSettingsKind {
 		valid = false
 	}
 	if b.Kind == "start_with_access" {
@@ -1504,7 +1504,10 @@ func applyAnswer(machine, tx *sql.Tx, from netLink, opID string, b netBody) erro
 		return err
 	}
 	err = savepoint(tx, func() error {
-		return answerTask(machine, tx, t.ID, b.Question, "net:"+from.broker+":"+from.peer+":"+opID, b.Text, b.By, true, false, MessageSender{Agent: b.SenderAgent, Model: b.SenderModel})
+		op := "net:" + from.broker + ":" + from.peer + ":" + opID
+		return withMessageAttachments(tx, t.ID, op, "answer", b.Text, b.Attachments, func() error {
+			return answerTask(machine, tx, t.ID, b.Question, op, b.Text, b.By, true, false, MessageSender{Agent: b.SenderAgent, Model: b.SenderModel})
+		})
 	})
 	if errors.Is(err, ErrRejected) {
 		// State tells the asking computer whether the question is still open

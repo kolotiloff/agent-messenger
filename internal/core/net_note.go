@@ -69,7 +69,7 @@ func noteRemoteTask(machine, tx *sql.Tx, t Task, remote netLink, opID, text, aut
 	if author == AudienceOwner {
 		msg.By = AudienceOwner
 	}
-	if err := enqueueNet(tx, remote.broker, remote.peer, "note."+opID, t.ID, msg); err != nil {
+	if err := enqueueTaskMessage(machine, tx, remote, "note."+opID, t.ID, opID, msg); err != nil {
 		return err
 	}
 	if author == AudienceOwner {
@@ -90,7 +90,10 @@ func applyNote(machine, tx *sql.Tx, from netLink, b netBody) error {
 		author = AudienceOwner
 	}
 	err = savepoint(tx, func() error {
-		return addNoteTx(machine, tx, t.ID, "", "net:"+from.broker+":"+from.peer+":"+b.OpID, b.Text, author, true, nil, MessageSender{Agent: b.SenderAgent, Model: b.SenderModel})
+		op := "net:" + from.broker + ":" + from.peer + ":" + b.OpID
+		return withMessageAttachments(tx, t.ID, op, "note", b.Text, b.Attachments, func() error {
+			return addNoteTx(machine, tx, t.ID, "", op, b.Text, author, true, nil, MessageSender{Agent: b.SenderAgent, Model: b.SenderModel})
+		})
 	})
 	if errors.Is(err, ErrRejected) {
 		return enqueueNet(tx, from.broker, from.peer, "note-refused."+b.OpID, t.ID, netBody{Kind: "note_refused", Task: from.task, OpID: b.OpID, Reason: refusalText(err)})
