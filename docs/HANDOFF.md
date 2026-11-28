@@ -46,6 +46,8 @@ T-378 limits the version footer and update actions to computer context menus. Pr
 
 T-379 aligns the painted reply labels to the shield and context ring for the selected font. The active model uses the main text color, and the ring shows an accent segment when a measurement exists. Chromium and WebKit exercised the reply footer.
 
+T-380 keeps the compose field stationary during dictation, explains when macOS Dictation is disabled, and distinguishes the selected provider from the model. Window and composer actions share icon geometry within each control size. The 20 px archive provider icons stay. The public screenshots use a fictional HiDPI WebKit preview with a simulated macOS caption. The live data directory remains on the compatibility path pending a signed migration build and pilot under D-248.
+
 T-361 through T-363 track clickable paths from plain report file lists and Markdown, the built-in reader, file actions and chronological work progress. The integration branch shows confirmed provider file changes below a verified final report and opens supported local documents directly in the window. macOS on-device dictation inserts text in the draft.
 
 The T-363 summary belongs directly under the final answer. Its header shows task totals, followed by the first three file rows and a control to reveal the rest. The card has no undo action.

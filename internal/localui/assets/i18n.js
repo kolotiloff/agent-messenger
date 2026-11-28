@@ -104,6 +104,7 @@
   'Микрофон недоступен.':'The microphone is unavailable.',
   'Не удалось расслышать речь.':'No speech was detected.',
   'Не удалось распознать речь. Попробуйте снова.':'Could not transcribe speech. Try again.',
+  'Включите диктовку в системных настройках macOS, в разделе «Клавиатура».':'Turn on Dictation in macOS System Settings under Keyboard.',
   'Не удалось прочитать настройки Cursor':'Could not read Cursor settings',
   'Чат в Claude Code, Codex или Cursor. Раздаёт задачи и собирает отчёты.':'A Claude Code, Codex or Cursor chat. Assigns tasks and collects reports.',
   'Подключите Claude Code, Codex или Cursor координатором, чтобы давать задачи с этого компьютера':'Connect Claude Code, Codex or Cursor as coordinator to assign tasks from this computer',

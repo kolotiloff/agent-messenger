@@ -918,8 +918,9 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         const exportAction=await exportButton.boundingBox();
         assert(Math.abs(exportAction.x+exportAction.width-toolbar.x-toolbar.width)<=1,'statistics actions stay at the right edge');
         assert(compare.x+compare.width<=exportAction.x && Math.abs(compare.y-exportAction.y)<=1,'statistics actions stay together');
+        assert.deepEqual([compare.width,compare.height,exportAction.width,exportAction.height],[28,28,28,28]);
         if(width===1100) {
-          assert(filters.x+filters.width<=compare.x && Math.abs(filters.y-compare.y)<=1,'statistics actions share the filter row');
+          assert(filters.x+filters.width<=compare.x && Math.abs(filters.y+filters.height/2-compare.y-compare.height/2)<=1,'statistics actions are centered on the filter row');
         } else {
           assert(filters.y+filters.height<=compare.y || filters.x+filters.width<=compare.x,'statistics actions do not overlap the wrapped filters');
         }

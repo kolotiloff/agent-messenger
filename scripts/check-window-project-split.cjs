@@ -470,7 +470,7 @@ if (require.main === module) (async()=>{
         const icons=Array.from(field.querySelectorAll('#task-stop > svg,#answer-send > svg'),svg=>svg.getBoundingClientRect().width);
         const box=field.getBoundingClientRect();
         return [stop.width,stop.height,send.width,send.height,send.left-stop.right,box.right-send.right,...icons];
-      }),[32,32,32,32,4,5,16,16]);
+      }),[32,32,32,32,4,5,18,18]);
       const disclosure=local.locator('.am-sidebar-disclosure');
       assert.equal(await disclosure.locator('svg').count(),0);
       assert.deepEqual(await disclosure.boundingBox(),await local.locator('.am-machine-name').boundingBox());
@@ -513,7 +513,7 @@ if (require.main === module) (async()=>{
       assert.deepEqual(await plusGlyph.evaluate(icon=>{
         const style=getComputedStyle(icon.querySelector('path'));
         return [getComputedStyle(icon).width,style.stroke,style.strokeWidth];
-      }),['18px',await plus.evaluate(button=>getComputedStyle(button).color),'2px']);
+      }),['18px',await plus.evaluate(button=>getComputedStyle(button).color),'1.75px']);
       assert.equal(await nav.evaluate(node=>getComputedStyle(node).display),'contents');
       assert.equal(await nav.locator('[data-tab]:visible').count(),0);
       const footer=draftPage.locator('.am-side-footer');
@@ -917,8 +917,9 @@ if (require.main === module) (async()=>{
       await addPath.hover();
       assert(await addPath.evaluate(async button=>{
         await Promise.all(button.getAnimations().map(animation=>animation.finished));
-        const style=getComputedStyle(button),field=getComputedStyle(button.closest('.am-compose-field'));
-        return parseFloat(style.borderRadius)===parseFloat(field.borderRadius)-4&&style.backgroundColor!=='rgba(0, 0, 0, 0)';
+        const style=getComputedStyle(button),icon=getComputedStyle(button.querySelector('svg'));
+        return style.borderRadius==='8px'&&style.width==='32px'&&style.height==='32px'&&
+          icon.width==='18px'&&icon.height==='18px'&&style.backgroundColor!=='rgba(0, 0, 0, 0)';
       }));
       await select(draftPage,'task-draft-computer','Мак');
       assert.equal(await form.locator('#task-draft-access').textContent(),'Обычный доступ');
@@ -960,6 +961,11 @@ if (require.main === module) (async()=>{
       assert.deepEqual(scrollBounds,['hidden',true,true,true,0]);
       const checkedModel=modelMenu.locator('[aria-selected=true]');
       assert.equal(await checkedModel.textContent(),'Sol 6.2 Medium');
+      assert.deepEqual(await modelTrigger.locator('.am-select-value > span').allTextContents(),['Codex',' Sol 6.2 Medium']);
+      assert.equal(await modelTrigger.locator('.am-select-value').evaluate(node=>{
+        const [provider,model]=node.children;
+        return getComputedStyle(provider).color!==getComputedStyle(model).color;
+      }),true);
       assert.deepEqual(await modelMenu.locator('.am-model-group-title').allTextContents(),['Claude Code','Codex','Cursor']);
       assert.deepEqual(await modelMenu.getByRole('group').evaluateAll(groups=>groups.map(group=>[
         getComputedStyle(group).paddingBlockStart,

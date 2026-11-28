@@ -76,7 +76,12 @@
       }
     }
     function sync(){
-      renderLabel(value,select.selectedOptions[0]);
+      const option=select.selectedOptions[0];
+      const provider=grouped&&names[option?.value.split(':',1)[0]];
+      if(provider&&option.textContent.startsWith(provider+' ')){
+        value.replaceChildren(el('span',provider,'am-model-trigger-provider'),
+          el('span',option.textContent.slice(provider.length),'am-muted'));
+      }else renderLabel(value,option);
       if(iconPaths){
         trigger.title=label+', '+value.textContent;
         trigger.setAttribute('aria-label',trigger.title);
@@ -6061,11 +6066,12 @@
       unavailable:tr('Для языка интерфейса недоступно распознавание речи на этом Mac.'),
       'microphone-denied':tr('Разрешите Kotel доступ к микрофону в настройках macOS.'),
       'speech-denied':tr('Разрешите Kotel распознавание речи в настройках macOS.'),
+      'dictation-disabled':tr('Включите диктовку в системных настройках macOS, в разделе «Клавиатура».'),
       'microphone-unavailable':tr('Микрофон недоступен.'),
       empty:tr('Не удалось расслышать речь.'),
       failed:tr('Не удалось распознать речь. Попробуйте снова.')
     };
-    const microphone=['M9 6a3 3 0 0 1 6 0v6a3 3 0 0 1-6 0z','M5 11v1a7 7 0 0 0 14 0v-1m-7 8v3'];
+    const microphone=['M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z','M5 10v1a7 7 0 0 0 14 0v-1M12 18v3M9 21h6'];
     const square=['M7 7h10v10H7z'];
     const targets=[];
     let active=null;
@@ -6124,7 +6130,8 @@
       button.hidden=true;
       status.setAttribute('role','status');
       input.after(button);
-      input.parentElement.after(status);
+      const statusAnchor=input.form||input.parentElement;
+      statusAnchor.append(status);
       const target={input,button,status,key:''};
       targets.push(target);
       paint(target);
