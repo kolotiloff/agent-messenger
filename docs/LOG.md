@@ -8,6 +8,10 @@ Codex extended the scrollable viewport to the pane edge in draft PR #261. The fo
 
 The upper pane tabs now occupy the shared caption row with the archive toggle. Dark mode uses a slightly lighter text color for the primary sidebar labels.
 
+T-372 preserves the previous active pane when focus moves between visible tabs, including a regular tab displayed alongside a split. Statistics opens the chosen conversation through the same pane routing when tabs are open. Single and split headers use the same leading tab inset, and the tab fill follows hover and keyboard focus.
+
+T-390 reduces the limits header to the title and computer filter, increases the bottom inset, and dismisses the popover when the user clicks an embedded conversation.
+
 ## 2026-11-28 — T-372 Split task workspace and T-341 Dock icon
 
 Codex replaced layout presets with edge-based splits in draft PR #261. Pane-local tabs use the regular conversation and composer. The macOS icon is smaller, with a softer reflection over both sides.

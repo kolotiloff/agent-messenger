@@ -161,6 +161,8 @@ if (require.main === module) (async()=>{
     assert.ok((await limits.boundingBox()).y<(await limitsButton.boundingBox()).y);
     const limitsHeader=limits.locator('.am-agent-limits-header');
     const limitsContent=limits.locator('#agent-limits-body');
+    assert.equal(await limitsHeader.getByText('Использовано',{exact:true}).count(),0);
+    assert.equal(await limitsContent.evaluate(node=>getComputedStyle(node).marginBlockEnd),'16px');
     const insets=node=>{const style=getComputedStyle(node);return [style.paddingBlock,style.paddingInline];};
     const limitsInsets=await limitsHeader.evaluate(insets);
     const headerBefore=await limitsHeader.boundingBox();
@@ -190,6 +192,11 @@ if (require.main === module) (async()=>{
     await limitsPage.keyboard.press('Escape');
     await limits.waitFor({state:'hidden'});
     assert.equal(await limitsButton.evaluate(button=>button===document.activeElement),true);
+    await limitsButton.click();
+    await limits.waitFor();
+    const outside=await limitsPage.locator('#thread').boundingBox();
+    await limitsPage.mouse.click(outside.x+outside.width-20,outside.y+20);
+    await limits.waitFor({state:'hidden'});
     await limitsPage.context().close();
     for(const theme of ['light','dark']){
       const page=await open(projects,{width:1200,height:800},theme,undefined,true);

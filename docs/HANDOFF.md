@@ -56,6 +56,10 @@ The T-375 follow-up extends the scrollbar to the bottom of every chat pane. The 
 
 The top panes share the caption row with the archive toggle. Lower panes keep their local headers. The primary labels in the left sidebar are slightly lighter in the dark theme.
 
+Switching between visible split tabs keeps both panes in place, including when one was also opened as a regular tab. Opening a task from Statistics activates its existing pane or opens its conversation. The first tab has the same leading inset in the caption and a split header. The tab background responds to hover and keyboard focus.
+
+The agent limits popover has a title and computer filter in its header, a section inset below the list, and outside-click dismissal across conversation panes.
+
 T-373 adds a follow-up composer to stopped and recoverable conversations. The original worker conversation and messages remain attached to the task; stopping the follow-up is an independent operation. Recovery still requires confirmation that the old worker ended. Split views use one line at each boundary. The macOS native buttons and sidebar toggle share the top row, and the Linux shell uses an alpha visual when the compositor supports it. Local and peer stop/resume tests and both browser engines passed. The Linux binaries cross-compiled for both architectures and the macOS shell type-checked. Native appearance still needs observation.
 
 T-374 places project references in document tabs beside the chat. A separate, resizable text preview is an explicit action. The coordinator setup status and the executor's injected tool connection are independent. General defaults to Inter and retains saved choices. The model search groups available options by agent. Computer and project context menus show update and cancel as text actions above the installed version. The message footer appears on hover or focus and remains visible on touch screens.

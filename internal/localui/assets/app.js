@@ -686,6 +686,9 @@
     paneBoard.toggleAttribute('data-single',visible<=1);
   }
   function activatePane(pane){
+    // A regular tab can already be visible beside a split pane. Keep it
+    // in that split when focus moves to another visible tab.
+    if(paneActive&&paneActive!==pane&&!paneActive.cell.hidden&&!pane.cell.hidden)paneActive.placement='alongside';
     paneActive=pane;
     if(draftOpen){closeTaskDraft();renderThread();}
     syncTaskPanes();renderMachines();savePanes();
@@ -4575,6 +4578,15 @@
     event.preventDefault();event.stopPropagation();
     limitsMenu.hidePopover();limitsTrigger.focus();
   });
+  function dismissAgentLimits(){
+    if(limitsMenu.matches(':popover-open'))limitsMenu.hidePopover();
+  }
+  if(!paneHost)window.messengerDismissAgentLimits=dismissAgentLimits;
+  document.addEventListener('pointerdown',event=>{
+    // Popover light-dismiss only sees pointers in its own document.
+    if(paneHost){paneHost.messengerDismissAgentLimits?.();return;}
+    if(!event.composedPath().includes(limitsMenu)&&!event.composedPath().includes(limitsTrigger))dismissAgentLimits();
+  },true);
   function updateOpenAgentLimits(){
     if(limitsMenu.matches(':popover-open'))renderAgentLimits();
   }
@@ -5350,10 +5362,18 @@
       row.append(when,titleCell,duration,tokens);
       if(!task.usage_missing&&typeof task.input_tokens==='number')tokens.title=usageLong(task);
       row.addEventListener('click',()=>{
+        if(paneBoard){
+          show('tasks');
+          const pane=taskPanes.get(task.id);
+          if(pane)activatePane(pane);
+          else openTaskPane({...task,title:task.title||tr('Без названия')},task.project||project);
+          return;
+        }
         if(task.project&&task.project!==project&&(taskSidebarPreview
           ?statsProjects().some(entry=>entry.name===task.project):splitProjects.includes(task.project))){
           show('tasks');selectProject(task.project,task.id);return;
         }
+        if(draftOpen)closeTaskDraft();
         selectedTask=task.id;selectedShared=null;feed=null;feedSignature='';show('tasks');renderThread();refresh();
       });
       top.append(row);

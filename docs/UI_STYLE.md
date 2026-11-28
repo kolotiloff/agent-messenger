@@ -83,6 +83,8 @@ Standard dialogs share the 44 px header with 4 px vertical and 16 px horizontal 
 
 In a dialog or popover with an overflowing list, keep the title, search and filters in a fixed header. Scroll only the content below the header. Keep the scrollbar inside the content area, clear of the top edge and the rounded corners. The model picker and agent limits follow this pattern.
 
+The limits popover uses one section inset below its list and dismisses on an outside click, including in an embedded chat pane.
+
 Informational popovers such as agent limits and the context window use `--am-space-3` (12 px) vertically and `--am-space-4` (16 px) horizontally. Compact menu item spacing belongs to action rows.
 
 Text in a control is centred by eye, not by the line box: system fonts leave more room below the text than above it, so buttons, tabs, select fields and inputs get `--am-text-nudge` (4) as their top padding and none at the bottom. Measured: 11 px above the capitals and 11 below in a 32 px button.

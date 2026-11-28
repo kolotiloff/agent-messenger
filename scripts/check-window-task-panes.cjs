@@ -40,6 +40,9 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
           return route.fulfill({json:{ok:true}});
         }
         const json=reply(url,url.searchParams.get('project') || 'game',projects);
+        if(url.pathname==='/api/usage-stats')json.recent.push({
+          ...json.recent.find(task=>task.project==='game'),id:'game-3',project:'game',title:'Звуки меню'
+        });
         if(url.pathname==='/api/window')json.tasks=json.tasks.map(task=>{
           if(request.frame().parentFrame()&&task.id==='game-1')return {...task,state:'interrupted',can_continue:true,remote:{name:'Проверочный компьютер'}};
           if(request.frame().parentFrame()&&task.id==='game-2')return {...task,owner_question:{id:'fixture-question',text:'Подтвердите проверку'}};
@@ -90,14 +93,29 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     const strip=page.locator('.am-pane-strip');
     const tabs=page.locator('.am-pane-tab').getByRole('tab');
     const tab = title => page.getByRole('tab',{name:title,exact:true});
+    const tabChip = title => tab(title).locator('xpath=..');
     const panel = title => page.getByRole('tabpanel',{name:title,exact:true});
     const content = title => title===third?panel(title):panel(title).frameLocator('iframe');
     const replyBox = title => content(title).getByRole('textbox',{name:'Ответ исполнителю'});
     const count = id => reads.filter(read=>read.id===id&&read.pane).length;
+    const openStatistic = async title => {
+      await page.locator('#stats-open').click();
+      await page.locator('#stats-top').getByRole('button',{name:new RegExp(title)}).click();
+      await page.locator('#stats-dialog').waitFor({state:'hidden'});
+    };
     await open(first);
     await content(first).getByText('Ответ по задаче game-1').waitFor();
     assert.equal(await mainTitle.isVisible(),false);
     assert.equal(await strip.evaluate(node=>!!node.closest('.am-task-toolbar')),true);
+    const singleInset=(await tabChip(third).boundingBox()).x-(await page.locator('#task-layout').boundingBox()).x;
+    await page.mouse.move(0,0);
+    const background=title=>tabChip(title).evaluate(node=>getComputedStyle(node).backgroundColor);
+    assert.equal(await background(first),'rgba(0, 0, 0, 0)','the active tab rests without a fill');
+    await tab(first).hover();
+    assert.notEqual(await background(first),'rgba(0, 0, 0, 0)');
+    await tab(first).click();
+    await page.mouse.move(0,0);
+    assert.equal(await background(first),'rgba(0, 0, 0, 0)','a pointer click does not leave a fill');
     assert.equal(await primary.inputValue(),'Основной черновик');
     const draft=replyBox(first);
     assert.equal(await draft.getAttribute('placeholder'),'Продолжить в этой сессии…');
@@ -187,6 +205,17 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert(right.x>left.x&&right.y===left.y&&below.y>left.y&&below.x===left.x&&below.width>left.width+right.width-2);
     }
     await verifySplit();
+    await open(first);
+    await verifySplit();
+    const lowerPane=await cell(first).boundingBox();
+    await tab(third).click();
+    await verifySplit();
+    assert.deepEqual(await cell(first).boundingBox(),lowerPane,'switching a visible tab keeps the pane in place');
+    assert.equal(await replyBox(first).inputValue(),'Черновик в нижней панели');
+    await tab(first).click();
+    await verifySplit();
+    assert.equal((await tabChip(third).boundingBox()).x-(await cell(third).boundingBox()).x,singleInset,
+      'the first tab uses the same inset in both layouts');
     assert.equal(await page.locator('.am-task-toolbar').isVisible(),false);
     const captionTop=await page.locator('#task-layout').evaluate(node=>node.getBoundingClientRect().top);
     const archive=page.locator('#list-toggle');
@@ -196,6 +225,11 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       assert(Math.abs(header.y-captionTop)<1&&archiveBox.y>=header.y&&archiveBox.y+archiveBox.height<=header.y+header.height);
     }
     assert.equal(await archive.evaluate(node=>node.closest('.am-pane-header')?.hasAttribute('data-caption-end')),true);
+    await page.locator('#limits-open').click();
+    await page.locator('#agent-limits').waitFor();
+    const otherThread=await content(second).locator('#thread').boundingBox();
+    await page.mouse.click(otherThread.x+otherThread.width-20,otherThread.y+20);
+    await page.locator('#agent-limits').waitFor({state:'hidden'});
     if(macTitlebar){
       assert.equal(await page.locator('body').evaluate(node=>node.classList.contains('am-mac-titlebar')),true);
       await page.waitForFunction(()=>[...document.querySelectorAll('[data-caption] .am-close-x')].every(button=>{
@@ -255,6 +289,11 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       delete document.hidden;
       document.dispatchEvent(new Event('visibilitychange'));
     });
+    await tab(third).click();
+    await openStatistic(first);
+    await tabChip(first).and(page.locator('[data-active]')).waitFor();
+    await verifySplit();
+    assert.equal(await replyBox(first).inputValue(),'Черновик в нижней панели');
     await page.locator('#stats-open').click();
     const before=count('game-1')+count('game-2')+count('game-3');
     await page.waitForTimeout(350);
@@ -287,6 +326,15 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     const continuation=(await followup).postDataJSON();
     assert.equal(continuation.task,'game-4');
     assert.equal(continuation.text,'Продолжи проверку');
+    await openStatistic('Звуки меню');
+    await page.getByText('Ответ по задаче game-3',{exact:true}).waitFor();
+    assert.equal(await board.count(),0);
+    await open(first,'Открыть рядом');
+    await openStatistic('Экспорт отчёта');
+    await panel('Экспорт отчёта').frameLocator('iframe').getByText('Ответ по задаче tools-1',{exact:true}).waitFor();
+    await panel(first).waitFor();
+    await panel('Звуки меню').waitFor();
+    assert.deepEqual(errors,[]);
     console.log(JSON.stringify({engine,result:'passed'}));
   } finally {
     await browser.close();

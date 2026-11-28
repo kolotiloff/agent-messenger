@@ -1042,6 +1042,8 @@ The composer can add selected paths and UTF-8 browser drops as removable draft i
 
 Show measured usage windows in a popover beside App settings. Group snapshots by the reporting computer and display a subscription only when the provider reports it. Opening the popover reads the window's existing snapshots. Mark disconnected computers and passed reset times so an old measurement cannot read as a confirmed refill. See T-390.
 
+Keep the title and computer filter in the fixed header, leave a section inset below the scrolling list, and dismiss the popover on an outside click, including in a split conversation.
+
 ## D-277 — Update checks and window notices
 
 Expose a manual check in General settings, the window menu and a computer’s context menu. A selected computer’s menu displays its version without repeating its name. Review the list of eligible connected computers before requesting a network update. Each target verifies that its own signed artifact is compatible. Keep update feedback in the window’s notification area across navigation. See T-391.
