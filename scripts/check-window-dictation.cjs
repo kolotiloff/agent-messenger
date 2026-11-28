@@ -63,7 +63,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
     for (const [event,message] of [
       ['microphone-denied','Разрешите Kotel доступ к микрофону'],
       ['speech-denied','Разрешите Kotel распознавание речи'],
-      ['dictation-disabled','Включите диктовку в системных настройках macOS'],
+      ['dictation-disabled','Служба распознавания Apple недоступна'],
       ['unavailable','Для языка интерфейса недоступно распознавание'],
     ]) {
       await mic.click();

@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-28 — T-381 Keep the composer available while stopping
+
+Codex kept the owner’s composer editable through the stop transition and verified draft preservation. The Apple Speech notice reflects that error 201 can refer to Siri or Dictation. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).
+
 ## 2026-11-28 — T-380 Dictation layout and action icons
 
 Codex found the macOS Dictation-disabled error in the speech service logs, added a specific UI status and kept it out of composer layout. The selected model separates provider and model visually. Updated action icon geometry and the fictional HiDPI README screenshots. The data move sequence is recorded in D-248. See [PR #257](https://github.com/kolotiloff/agent-messenger/pull/257).

@@ -76,7 +76,7 @@ final class ComposerDictation {
     private func fallbackEvent(for error: Error?) -> String {
         var underlying = error.map { $0 as NSError }
         while let current = underlying {
-            // The local Speech service reports this when Dictation is off in Keyboard settings.
+            // Apple documents this error for disabled Siri or Dictation.
             if current.domain == "kLSRErrorDomain", current.code == 201 {
                 return "dictation-disabled"
             }

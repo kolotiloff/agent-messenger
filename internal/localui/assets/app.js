@@ -3317,7 +3317,7 @@
     return !!t.remote&&!t.remote.from&&(t.state==='blocked'||t.state==='interrupted'||(activeStates.includes(t.state)&&(!!t.remote.lost||!!t.remote.silent)));
   }
   function canStopTask(t){return activeStates.includes(t.state)&&!taskUnreachable(t);}
-  function stopProgress(t){return t.remote?.cancel_state||stopSubmissions.get(t.id);}
+  function stopProgress(t){return activeStates.includes(t.state)?t.remote?.cancel_state||stopSubmissions.get(t.id):'';}
   function stopMessage(progress){
     return {
       sending:tr('Отправляем запрос на остановку…'),
@@ -3326,14 +3326,12 @@
     }[progress]||'';
   }
   function renderStopControls(t){
-    const field=$('answer-text').parentElement,status=$('task-stop-status');
+    const status=$('task-stop-status');
     const canStop=canStopTask(t),progress=canStop?stopProgress(t):'';
-    const text=stopMessage(progress),wasHidden=field.hidden;
+    const text=stopMessage(progress);
     $('task-stop').hidden=!canStop||!!text;
-    field.hidden=!!text;
-    $('answer-status').hidden=!!text;
-    if(wasHidden&&!field.hidden)sizeAnswer();
     if(status.textContent!==text)status.textContent=text;
+    answerControls();
   }
   function closeHere(row=selectedTaskRow(),name=project){
     if(!row)return;
@@ -3822,8 +3820,6 @@
     head.replaceChildren(header);
     thread.replaceChildren(...out);
     for(const d of thread.querySelectorAll('details[data-key]'))if(opened.has(d.dataset.key))d.open=true;
-    // A task another computer started is answered there.
-    const q=t.remote?.from?null:t.owner_question;
     // T-131: a task sent to another computer can be closed here also when
     // its outcome there is already unknown.
     // T-131: an unreachable task can be closed here. Sending waits for contact.
@@ -3842,7 +3838,7 @@
     if(t.can_continue&&(unreachable||stuckHere))$('lost-text').textContent+=' '+tr('Новое сообщение продолжит сессию после проверки процесса.');
     const active=activeStates.includes(t.state),box=$('answer-text'),compose=$('compose');
     if(compose.dataset.task!==t.id&&$('answer-add').getAttribute('aria-expanded')==='true')$('task-draft-add-menu').hidePopover();
-    const note=canNote(t),canDraft=canDraftTaskMessage(t);
+    const canDraft=canDraftTaskMessage(t);
     const liveTokens=$('answer-live-tokens'),reportedTokens=t.quiet?.live_tokens;
     liveTokens.hidden=taskSidebarPreview||reportedTokens==null||t.state!=='running';
     liveTokens.textContent=liveTokens.hidden?'':tokensText(reportedTokens)+tr(' т.');
@@ -3863,10 +3859,8 @@
     $('answer-send').hidden=!canDraft;
     $('answer-add').hidden=!taskSidebarPreview||!canDraft;
     if(compose.dataset.task!==t.id){compose.dataset.task=t.id;box.value='';$('answer-status').textContent='';}
-    box.title=canDraft&&(unreachable&&!t.can_continue||!q&&!note)?tr('Отправка пока недоступна. Черновик сохранится, пока открыта задача.'):'';
-    $('answer-send').title=box.title||tr('Отправить ответ');
     renderStopControls(t);
-    sizeAnswer();answerControls();
+    sizeAnswer();
     if(atBottom){thread.scrollTop=thread.scrollHeight;feedPinned=true;}
     else if(grew)$('to-bottom').classList.add('am-has-new');
     toBottomState();
@@ -3927,8 +3921,7 @@
     return note;
   }
   function canDraftTaskMessage(t){
-    return !!t&&!t.archived&&!t.remote?.from&&!!(t.owner_question||activeStates.includes(t.state)||canNote(t)||
-      (t.remote&&(t.remote.lost||t.remote.silent)));
+    return !!t&&!t.archived&&!t.remote?.from;
   }
   function taskMessagePlaceholder(t){
     if(t?.owner_question)return tr('Ответить исполнителю…');
@@ -3938,7 +3931,14 @@
     return tr('Написать исполнителю…');
   }
   function canSendTaskMessage(t){return !!t&&!t.archived&&!t.remote?.from&&!stopProgress(t)&&(!taskUnreachable(t)||t.can_continue)&&!!(t.owner_question||canNote(t));}
-  function answerControls(){$('answer-send').disabled=answering||!canSendTaskMessage(selectedTaskRow())||!$('answer-text').value.trim();composerDictation?.sync();}
+  function answerControls(){
+    const task=selectedTaskRow(),box=$('answer-text'),send=$('answer-send');
+    const available=canSendTaskMessage(task);
+    box.title=canDraftTaskMessage(task)&&!available?tr('Отправка пока недоступна. Черновик сохранится, пока открыта задача.'):'';
+    send.title=box.title||tr('Отправить ответ');
+    send.disabled=answering||!available||!box.value.trim();
+    composerDictation?.sync();
+  }
   async function sendNote(){
     const t=selectedTaskRow();if(!canNote(t)||answering)return;
     const text=$('answer-text').value.trim();if(!text)return;
@@ -6066,7 +6066,7 @@
       unavailable:tr('Для языка интерфейса недоступно распознавание речи на этом Mac.'),
       'microphone-denied':tr('Разрешите Kotel доступ к микрофону в настройках macOS.'),
       'speech-denied':tr('Разрешите Kotel распознавание речи в настройках macOS.'),
-      'dictation-disabled':tr('Включите диктовку в системных настройках macOS, в разделе «Клавиатура».'),
+      'dictation-disabled':tr('Служба распознавания Apple недоступна. Проверьте настройки Siri и диктовки в macOS.'),
       'microphone-unavailable':tr('Микрофон недоступен.'),
       empty:tr('Не удалось расслышать речь.'),
       failed:tr('Не удалось распознать речь. Попробуйте снова.')

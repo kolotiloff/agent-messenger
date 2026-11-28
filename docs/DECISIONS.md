@@ -1013,3 +1013,7 @@ Offer project-then-computer alongside the previous grouping modes. Remember a co
 ## D-271 — Keep version and update actions in computer menus
 
 The version footer and update actions in context menus belong to the selected computer. Project folder menus contain only project actions in every sidebar grouping. This updates the project menu behavior in T-365 and T-374.
+
+## D-272 — Keep the composer editable while stopping a turn
+
+The task owner can draft the next message while a stop is pending and after the turn ends. The send control respects the stop state and the saved continuation capability. Closing a stuck task remains an explicit recovery action with the existing process checks. See T-381.
