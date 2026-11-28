@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-27 — T-338 and T-365 build 119
+
+[PR #253](https://github.com/kolotiloff/agent-messenger/pull/253) merged the desktop migration and task controls after [all eight checks passed](https://github.com/kolotiloff/agent-messenger/actions/runs/46090410913). The font menu sizes itself to its longest label. Chromium and WebKit verified the complete label and its checkmark. The [signed release workflow](https://github.com/kolotiloff/agent-messenger/actions/runs/46092302620) was dispatched for 1.0.16-preview.119 from the merged source.
+
 ## 2026-11-27 — T-338 and T-361 through T-372 desktop integration
 
 The release branch combines provider compatibility, the macOS bundle path migration, on-device draft dictation, file previews, verified change summaries and simultaneous conversations. The signed-install harness now exercises the old managed commands through two bundle replacements. Native microphone input and the owner’s Dock item still require observation on an installed Mac.

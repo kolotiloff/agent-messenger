@@ -8,13 +8,15 @@ The owner asked the agent to finish the program without them ("доделай б
 
 ## Current state
 
-[PR #253](https://github.com/kolotiloff/agent-messenger/pull/253) prepares build 119. Right-click a running task to stop it or an interrupted task to close it manually. A shared third-party snapshot can be hidden locally. The coordinator can resume an interrupted conversation when the executor can verify that its old worker is gone. This release retains prior executable paths and name-bound MCP permissions. Fresh connections use `kotel`.
+Kotel 1.0.16 (build 119) is the desktop migration from 1.0.15. [PR #253](https://github.com/kolotiloff/agent-messenger/pull/253) merged at `d6e6ca59d8e1a334f016cce5c7addf2334776b41` after all eight PR checks passed. The [release run](https://github.com/kolotiloff/agent-messenger/actions/runs/46092302620) records the signed upgrade on each platform and publication status. Keep the original repository address until the owner confirms the installed computers have moved over.
+
+Right-click a running task to stop it or an interrupted task to close it manually. A shared third-party snapshot can be hidden locally. The coordinator can resume an interrupted conversation when the executor can verify that its old worker is gone. This release retains prior executable paths and name-bound MCP permissions. Fresh connections use `kotel`.
 
 The dark and light public screenshots use fictional data. The macOS bundle migration, on-device dictation bridge, scoped file reader, independent task panes and archive actions have targeted checks. Audible dictation and the live Dock item still need observation on an installed Mac. Previously approved provider registrations were exercised with stock build 118 and candidate 119 in disposable profiles without model calls.
 
 T-367 updates the GitHub README header with the approved tagline and a short explanation of how the coordinator and workers share the work.
 
-[Kotel 1.0.15 (build 118)](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.15-preview.118) is public in the original repository. The [release workflow](https://github.com/kolotiloff/agent-messenger/actions/runs/46073340337) signed the packages, exercised upgrades from build 117 on all five targets and verified the public channel. The release source is `2e5d796efe1a1a7d27cbde54a95fa40d30d58cc4`.
+[Kotel 1.0.15 (build 118)](https://github.com/kolotiloff/agent-messenger/releases/tag/v1.0.15-preview.118) was the preceding public build in the original repository. The [release workflow](https://github.com/kolotiloff/agent-messenger/actions/runs/46073340337) signed the packages, exercised upgrades from build 117 on all five targets and verified the public channel. The release source is `2e5d796efe1a1a7d27cbde54a95fa40d30d58cc4`.
 
 Build 118 includes the monochrome icon, the Graphite theme, task grouping, Network versions and updates, and per-task access controls. The local update button, version and other footer controls are at the bottom left. The My network card uses the same label typography as Connection mode and a uniform row spacing. Statistics row hover matches the Archive’s color and 4 px gap.
 
@@ -32,7 +34,7 @@ T-361 through T-363 track clickable paths from plain report file lists and Markd
 
 The T-363 summary belongs directly under the final answer. Its header shows task totals, followed by the first three file rows and a control to reveal the rest. The card has no undo action.
 
-T-364 is required for the next desktop update. On an upgraded Mac, the bundle already declares Kotel but its installed package can still be named Agent Messenger.app. An isolated in-place rename preserved the bundle's file identity and passed signature verification. Stock-build upgrade, Dock, search and subsequent signed-update acceptance remain open.
+T-364 migrates a stock legacy-named app to Kotel.app on launch and retains the previous executable path for managed clients. The isolated build 118 upgrade and replacement of the migrated bundle passed. The owner’s existing Dock pin and application search still need observation after the update.
 
 T-368 moves the chat timestamp and actions into a visible row below each text message. The localized age updates while the window is visible. Older messages display a date, and the timestamp tooltip shows the full local date and time.
 
