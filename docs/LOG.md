@@ -2,6 +2,10 @@
 
 One entry per work session, newest first. Write what was done, which tool did it, the PR, and anything the next session must know. Keep entries to a few lines; details belong in PRs and reports.
 
+## 2026-11-28 — T-372 Sidebar switching and split drops
+
+Codex made task clicks in the sidebar, Statistics, and Archive reuse the active pane and separated task drag sources from computer reordering in draft PR #261. The conversation body and caption accept split drops. The pane fixture covers selection, preserved layout and drafts, and previews near the middle and on the heading.
+
 ## 2026-11-28 — T-375 Full-height chat scrollbar
 
 Codex extended the scrollable viewport to the pane edge in draft PR #261. The footer height is reserved in the scrollable content so the last message actions stay above the fixed composer. Tab close and sidebar add buttons highlight the glyph alone.

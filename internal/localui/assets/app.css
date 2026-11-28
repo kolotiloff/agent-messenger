@@ -424,6 +424,7 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 }
 #am-concept .am-task-exits { position:fixed; overflow:hidden; pointer-events:none; z-index:1; }
 #am-concept .am-sidebar-task { display:grid; grid-template-columns:minmax(0,1fr); min-width:0; text-align:start; overflow-wrap:anywhere; border:0; }
+#am-concept .am-sidebar-task[draggable=true] { cursor:grab; user-select:none; }
 #am-concept .am-sidebar-task-title { font-size:var(--am-text-m); }
 #am-concept .am-sidebar-task-meta { font-size:var(--am-text-xs); }
 @media (max-width:620px) {

@@ -49,7 +49,7 @@ Order set by the owner (2026-11-08): design first (T-061 agent cards and setting
 
 | ID | Task | Owner | Branch / notes |
 |---|---|---|---|
-| T-372 | Open multiple task conversations and keep separate drafts. | window | Draft PR #261 adds edge-based nested splits, pane-local tabs, and the regular conversation in each pane. Selecting a visible tab preserves the split and its drafts. Statistics opens the chosen task in the current workspace. |
+| T-372 | Open multiple task conversations and keep separate drafts. | window | Draft PR #261 adds nested splits, pane-local tabs, and the regular conversation in each pane. Task clicks in the sidebar, Statistics, and Archive reuse the active pane and preserve the surrounding layout. The chat body and header accept split drops. |
 | T-373 | Resume a saved conversation after Stop and align native window chrome and split dividers. | desktop | Store and browser scenarios verified. Native window appearance remains to be observed on Linux and macOS. |
 | T-374 | Open project files beside the chat and refine settings, models and update menus. | window / desktop | Browser fixtures cover document tabs, file actions, grouped models and update states. Native preview placement needs installed acceptance. |
 | T-375 | Keep the reply area clear and align the task toolbar, archive and main controls. | window | Implemented on PR #257, with a full-height conversation scrollbar in draft PR #261. Browser fixtures cover split panes, composer growth, spacing below the connection warning and at the end of the thread, archive controls and a follow-up sent to a stopped task. |

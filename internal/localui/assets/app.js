@@ -506,8 +506,9 @@
   let paneBoard=null,paneStrip=null,paneToolbar=null,paneGrid=null,paneActive=null,paneDragging=null;
   const narrowPaneLayout=matchMedia('(max-width:780px)');
   let paneTree=null,paneLegacy='',paneDropPreview=null;
+  const openPanes=()=>[...taskPanes.values()].filter(pane=>pane.placement!=='parked');
   function savePanes(){
-    remember('kotel-task-panes',JSON.stringify([...taskPanes.values()].map(({id,project,title,placement})=>({id,project,title,placement}))));
+    remember('kotel-task-panes',JSON.stringify(openPanes().map(({id,project,title,placement})=>({id,project,title,placement}))));
     remember('kotel-active-pane',paneActive?.id||'');
   }
   function preservePaneFocus(move){
@@ -520,7 +521,7 @@
     }
   }
   function closePane(pane){
-    const before=[...taskPanes.values()],index=before.indexOf(pane);
+    const before=openPanes(),index=before.indexOf(pane);
     const primary=$('task-primary-pane');
     const hadFocus=pane.tab.contains(document.activeElement)||pane.cell.contains(document.activeElement);
     if(pane.header.contains(paneStrip))placePaneCaption([]);
@@ -531,11 +532,12 @@
     if(primary.parentNode===pane.cell)paneGrid.append(primary);
     pane.tab.remove();pane.cell.remove();
     if(paneActive===pane)paneActive=before[index+1]||before[index-1]||null;
-    if(!taskPanes.size&&paneBoard){
+    if(before.length===1&&paneBoard){
       primary.hidden=false;
       primary.removeAttribute('role');primary.removeAttribute('aria-labelledby');
       $('task-head').hidden=false;paneToolbar.remove();
       preservePaneFocus(()=>paneBoard.replaceWith(primary));
+      taskPanes.clear();
       paneBoard=paneStrip=paneToolbar=paneGrid=null;
     }
     syncTaskPanes();renderMachines();
@@ -664,6 +666,8 @@
         pane.header.hidden=!localTab;
         if(localTab){
           if(pane.tab.parentNode!==pane.header)pane.header.append(pane.tab);
+        }else if(pane.placement==='parked'){
+          pane.tab.remove();
         }else{
           if(pane.tab.parentNode!==paneStrip||pane.tab.nextElementSibling!==nextTab)paneStrip.insertBefore(pane.tab,nextTab);
           nextTab=pane.tab;
@@ -687,7 +691,23 @@
     if(paneActive&&paneActive!==pane&&!paneActive.cell.hidden&&!pane.cell.hidden)paneActive.placement='alongside';
     paneActive=pane;
     if(draftOpen){closeTaskDraft();renderThread();}
-    syncTaskPanes();renderMachines();savePanes();
+    syncTaskPanes();renderMachines();
+    if(!$('task-panel').hidden)renderTaskList();
+    savePanes();
+  }
+  function switchActivePane(task,name){
+    const previous=paneActive,pane=taskPanes.get(task.id);
+    if(pane&&!pane.cell.hidden){activatePane(pane);return;}
+    let layout=null;
+    if(previous){
+      // Keep the displaced document for its draft without adding a tab.
+      previous.placement='parked';
+      const visible=new Set([...taskPanes.values()].filter(item=>!item.cell.hidden).map(item=>item.id));
+      const tree=trimPaneTree(paneTree,visible);
+      if(tree)layout=mapPaneTree(tree,previous.id,task.id);
+    }
+    openTaskPane(task,name,'tab',false,layout);
+    if(previous)reorderPane(taskPanes.get(task.id),previous);
   }
   function reorderPane(pane,target){
     const ordered=[...taskPanes.values()];
@@ -758,7 +778,7 @@
     label.onclick=()=>activatePane(pane);
     close.onclick=()=>closePane(pane);
     label.onkeydown=event=>{
-      const ordered=[...taskPanes.values()],index=ordered.indexOf(pane);
+      const ordered=openPanes(),index=ordered.indexOf(pane);
       if(event.key==='Delete'){event.preventDefault();closePane(pane);return;}
       const direction=event.key==='ArrowLeft'?-1:event.key==='ArrowRight'?1:0;
       const next=direction?ordered[(index+direction+ordered.length)%ordered.length]:
@@ -771,19 +791,21 @@
         next.label.scrollIntoView({block:'nearest',inline:'nearest'});
       }
     };
-    tabNode.ondragstart=event=>{
-      startPaneDrag(event,pane,pane.project);
-    };
+    tabNode.ondragstart=event=>startPaneDrag(event,pane,pane.project,true);
+    const canReorder=()=>paneDragging?.fromTab&&tabNode.parentNode===paneStrip&&
+      pane!==paneActive&&paneDragging.task.id!==pane.id;
     tabNode.ondragover=event=>{
-      if(tabNode.parentNode===paneStrip&&paneDragging&&paneDragging.task.id!==pane.id){event.preventDefault();event.dataTransfer.dropEffect='move';tabNode.classList.add('am-pane-drop');}
+      if(!canReorder())return;
+      event.preventDefault();event.stopPropagation();event.dataTransfer.dropEffect='move';
+      paneDropPreview.hidden=true;
+      tabNode.classList.add('am-pane-drop');
     };
     tabNode.ondragleave=()=>tabNode.classList.remove('am-pane-drop');
     tabNode.ondrop=event=>{
-      if(tabNode.parentNode===paneStrip&&paneDragging){
+      if(canReorder()){
         event.preventDefault();event.stopPropagation();
         const source=taskPanes.get(paneDragging.task.id);
-        if(source)reorderPane(source,pane);
-        else openTaskPane(paneDragging.task,paneDragging.project);
+        reorderPane(source,pane);
         finishPaneDrag();
       }
     };
@@ -793,18 +815,20 @@
     paneStrip.append(tabNode);paneGrid.append(cell);taskPanes.set(task.id,pane);
     if(!restore)activatePane(pane);
   }
-  function startPaneDrag(event,task,name){
-    paneDragging={task,project:name};
+  function startPaneDrag(event,task,name,fromTab=false){
+    paneDragging={task,project:name,fromTab};
     $('task-layout').classList.add('am-pane-dragging');
     event.dataTransfer.effectAllowed='move';
     event.dataTransfer.setData('text/plain',task.id);
   }
   function finishPaneDrag(){
+    if(!paneDragging)return;
     paneDragging=null;
     if(paneDropPreview)paneDropPreview.hidden=true;
     const layout=$('task-layout');
     layout.classList.remove('am-pane-dragging');
     layout.querySelectorAll('.am-pane-drop').forEach(node=>node.classList.remove('am-pane-drop'));
+    renderMachines();
   }
   function installPaneDropTargets(){
     const layout=$('task-layout');
@@ -813,15 +837,24 @@
     layout.append(paneDropPreview);
     function dropEdge(event){
       if(!paneDragging||draftOpen)return;
-      const cell=event.target.closest('.am-pane-cell');
-      const chat=cell||event.target.closest('.am-chat');
+      const onToolbar=event.target.closest('.am-task-toolbar')&&!event.target.closest('#list-toggle');
+      const cell=event.target.closest('.am-pane-cell')||(onToolbar&&!paneActive?.cell.hidden?paneActive?.cell:null);
+      const chat=cell||event.target.closest('.am-chat')||(onToolbar?layout.querySelector('.am-chat'):null);
       const id=cell?.dataset.taskPane||selectedTask;
-      if(!chat||!id||id===paneDragging.task.id||(!cell&&selectedShared))return;
-      const rect=chat.getBoundingClientRect();
+      if(!chat||!id||id===paneDragging.task.id||(!cell&&(selectedShared||!selectedTaskRow())))return;
+      const body=chat.getBoundingClientRect();
+      const header=cell?.querySelector('.am-pane-header:not([hidden])')||layout.querySelector('.am-task-toolbar');
+      const top=header.getBoundingClientRect().top;
+      const rect=new DOMRect(body.left,top,body.width,body.bottom-top);
       const x=(event.clientX-rect.left)/rect.width,y=(event.clientY-rect.top)/rect.height;
-      const distances=[['left',x],['right',1-x],['top',y],['bottom',1-y]];
-      const [edge,distance]=distances.reduce((best,next)=>next[1]<best[1]?next:best);
-      if(distance>=0&&distance<=0.25)return {edge,id,rect};
+      if(x<0||x>=1||y<0||y>=1)return;
+      const onHeader=onToolbar||event.target.closest('.am-pane-header');
+      let edge=x<0.5?'left':'right';
+      if(!onHeader&&x>=0.25&&x<0.75){
+        if(y<0.25)edge='top';
+        else if(y>=0.75)edge='bottom';
+      }
+      return {edge,id,rect};
     }
     layout.addEventListener('dragover',event=>{
       if(!paneDragging)return;
@@ -1570,6 +1603,7 @@
     renderMachines();
   }
   machineList.addEventListener('dragstart',event=>{
+    if(paneDragging)return;
     const card=event.target.closest('[draggable=true]')?.closest('[data-machine-order]');
     if(!card)return;
     draggedMachine=card.dataset.machineOrder;
@@ -1616,6 +1650,7 @@
     moveMachine(from,card.dataset.machineOrder,after);
   });
   machineList.addEventListener('dragend',()=>{
+    if(!draggedMachine)return;
     clearMachineDrag();renderMachines();
   });
   // T-271: the computers that have a card in the current render.
@@ -1968,7 +2003,7 @@
       row.append(title,meta);
       row.addEventListener('click',()=>{
         if(tab!=='tasks')show('tasks');
-        if(paneBoard&&!selection)openTaskPane(t,name,taskPanes.get(t.id)?.placement||'tab');
+        if(paneBoard&&!selection)switchActivePane(t,name);
         else selectProject(name,selection?'':t.id,'',selection);
       });
       if(!peer){
@@ -2014,7 +2049,7 @@
     else if(!pending.isEqualNode(next))pending.replaceWith(next);
   }
   function renderMachines(){
-    if(draggedMachine)return;
+    if(draggedMachine||paneDragging)return;
     collectNotices();
     pickedComputers=new Set();
     const live=$('machines'),box=live.cloneNode(false),busyTasks=busyTasksByComputer(view?.project===project?view:null);
@@ -2592,7 +2627,8 @@
     }
     // Another computer's task is read-only and says which computer gave it.
     const ownRow=(t,name)=>{
-      const row=el('button',undefined,'am-task');row.type='button';row.setAttribute('aria-pressed',String(!draftOpen&&name===project&&t.id===selectedTask));
+      const selected=paneActive?name===paneActive.project&&t.id===paneActive.id:name===project&&t.id===selectedTask;
+      const row=el('button',undefined,'am-task');row.type='button';row.setAttribute('aria-pressed',String(!draftOpen&&selected));
       if(taskSidebarPreview){
         const computer=t.remote&&!t.remote.from?(t.remote.name||t.remote.id):computerName('local');
         appendArchiveTask(row,t,name,computer,taskStatus(t),null);
@@ -2614,6 +2650,7 @@
         row.append(agent,el('span',t.title,'am-task-title'),status);
       }
       row.addEventListener('click',()=>{
+        if(paneBoard){switchActivePane(t,name);return;}
         if(name!==project){selectProject(name,t.id,'');return;}
         if(draftOpen)closeTaskDraft();
         selectedTask=t.id;selectedShared=null;feedSignature='';renderTaskList();renderThread();loadFeed();if(taskSidebarPreview)renderMachines();
@@ -5360,9 +5397,7 @@
       row.addEventListener('click',()=>{
         if(paneBoard){
           show('tasks');
-          const pane=taskPanes.get(task.id);
-          if(pane)activatePane(pane);
-          else openTaskPane({...task,title:task.title||tr('Без названия')},task.project||project);
+          switchActivePane({...task,title:task.title||tr('Без названия')},task.project||project);
           return;
         }
         if(task.project&&task.project!==project&&(taskSidebarPreview

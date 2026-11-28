@@ -56,7 +56,7 @@ The T-375 follow-up extends the scrollbar to the bottom of every chat pane. The 
 
 The top panes share the caption row with the archive toggle. Lower panes keep their local headers. The primary labels in the left sidebar are slightly lighter in the dark theme.
 
-Switching between visible split tabs keeps both panes in place, including when one was also opened as a regular tab. Opening a task from Statistics activates its existing pane or opens its conversation. Tabs fill their header height, use the sidebar task colors for selection and hover, and have a trailing divider. The archive toggle stays at the window edge as the panes change.
+Switching between visible split tabs keeps both panes in place, including when one was also opened as a regular tab. A task click in the sidebar, Statistics, or Archive replaces the active conversation in its pane or focuses the existing visible pane. The displaced conversation's draft is retained in memory. The whole conversation accepts task drops, including its center and heading. Additional panes are opened by dragging or by using an explicit task menu command. Tabs fill their header height, use the sidebar task colors for selection and hover, and have a trailing divider. The archive toggle stays at the window edge as the panes change.
 
 The agent limits popover has a title and computer filter in its header, a section inset below the list, and outside-click dismissal across conversation panes.
 
