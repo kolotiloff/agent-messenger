@@ -1082,7 +1082,6 @@ body { margin:0; padding:12px; box-sizing:border-box; background:light-dark(#fff
 #am-concept .am-setup-body { display:flex; flex-direction:column; gap:var(--am-gap-section); padding-top:var(--am-space-4); }
 #am-concept #agent-setup .am-setup-body { gap:var(--am-gap-content); }
 #am-concept .am-agent-settings-rows > .am-setting-row { padding-block:var(--am-gap-content); }
-#am-concept .am-agent-settings-rows > .am-setting-row:last-child { padding-block-end:0; }
 #am-concept .am-agent-settings-rows .am-folder-pick { flex:0 1 75%; min-width:0; }
 @media (max-width:620px) {
   #am-concept .am-agent-settings-rows > .am-setting-row:has(.am-folder-pick) {
@@ -1202,8 +1201,7 @@ body.am-native #am-concept .am-panel-toggle { margin-left:auto; }
 #am-concept .am-agent-roster > .am-agent-card + .am-agent-card { border-block-start:1px solid var(--am-line); }
 #am-concept .am-agent-roster .am-agent-head { margin:0; }
 #am-concept .am-agent-roster .am-provider-heading { font-size:var(--am-text-m); font-weight:400; }
-#am-concept .am-agent-roster .am-agent-activity { font-size:var(--am-text-s); color:var(--am-muted); white-space:nowrap; }
-#am-concept .am-agent-setup-actions { margin-block-start:var(--am-gap-control); }
+#am-concept .am-agent-setup-actions { border-block-start:1px solid var(--am-line); }
 #am-concept .am-agent-setup-actions .am-step > button { min-height:var(--am-control-compact); height:var(--am-control-compact); }
 #am-concept .am-agent-setup-actions .am-step-sub { white-space:normal; overflow-wrap:anywhere; }
 #am-concept .am-sleep-menu .am-select-option { inline-size:100%; justify-content:space-between; gap:var(--am-gap-control); border:0; background:transparent; color:var(--am-text); text-align:start; }

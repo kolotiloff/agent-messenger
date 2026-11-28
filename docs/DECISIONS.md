@@ -1032,7 +1032,7 @@ Show turn activity while waiting for public text and use partial text when the p
 
 A computer heading opens a draft for that computer. A project heading opens a draft for that project. Show the shortcut only on the outermost groups in the current sidebar grouping. Reveal it on row hover or keyboard focus and use the row highlight. Use the standard row inset. Keep it visible on devices without hover. Keep the existing project, model and availability rules. The context indicator labels the reported window percentage consistently across live and saved turns.
 
-Agent settings group providers by detected installation on the local computer. Installation remains explicit and remote settings remain read-only. Use 16 px provider artwork in window controls and retain the compact metadata marks.
+Agent settings group providers by detected installation on the local computer. Installation remains explicit and remote settings remain read-only. Installed rows show the provider, its enable switch and its settings action. In the agent dialog, use the standard divider after Models and a neutral status mark for unchecked sign-in. Use 16 px provider artwork in window controls and retain the compact metadata marks.
 
 The composer can add selected paths and UTF-8 browser drops as removable draft inputs. The selected or dropped local path is a reference for the executor on that computer. A path on another computer must be supplied explicitly. The slash picker runs supported window actions. Provider-native commands and opaque attachment transfer are tracked by T-388 and T-389.
 

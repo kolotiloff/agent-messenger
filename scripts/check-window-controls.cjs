@@ -79,7 +79,7 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
         const fixtures = {
           '/api/window': {projects: created ? [{name: 'Welcome test'}] : [], project: created ? 'Welcome test' : '',
             folder: created ? '/fictional/project' : '', messenger: '/fictional/messenger', data_root: '/fictional/data',
-            agents: [...(registered ? [{agent: 'cursor', cli: '/fictional/cursor', models: []}] : []), ...(installed ? [{agent:'codex',cli:'/fictional/codex',models:[],trust:{state:trusted?'trusted':'not_trusted'}}] : [])], tasks: [],
+            agents: [...(registered ? [{agent: 'cursor', cli: '/fictional/cursor', models: []}] : []), ...(installed ? [{agent:'codex',cli:'/fictional/codex',models:[],project_running:1,project_today:21,trust:{state:trusted?'trusted':'not_trusted'}}] : [])], tasks: [],
             coordinator: {connected, client: 'cursor-vscode', active: coordinatorActive},
             cursor_link: {state: connected ? 'connected' : created ? 'missing' : 'no_folder', ...(connected ? {server_name: cursorServerName} : {})},
             computer_name: 'Theme test', tasks_enabled: true},
@@ -419,7 +419,15 @@ const assets = path.resolve(__dirname, '../internal/localui/assets');
       await page.reload();
       await page.locator('[data-tab=agents]').click();
       await page.locator('[data-agent-group=installed] article[data-provider=codex]').waitFor({timeout:10000});
+      assert.equal((await codex.innerText()).trim(),'Codex');
+      assert(await codex.getByRole('switch').isVisible());
       await codex.getByRole('button',{name:'Настройки',exact:true}).click();
+      const setupRows=agentSetup.locator('.am-agent-settings-rows');
+      const setupActions=setupRows.locator('#agent-setup-actions');
+      assert.equal(await setupActions.evaluate(node=>getComputedStyle(node).borderBlockStart),await setupRows.locator('.am-setting-row').last().evaluate(node=>getComputedStyle(node).borderBlockStart));
+      const account=setupActions.locator('.am-step').filter({hasText:'Вход в аккаунт'});
+      assert.equal(await account.locator('.am-mark').textContent(),'?');
+      await account.getByText('Ещё не проверен',{exact:true}).waitFor();
       await agentSetup.getByRole('button',{name:'Войти',exact:true}).click();
       assert.deepEqual(writes.filter(w=>w.path==='/api/agent-login').map(w=>w.body),[{provider:'codex',cli:'/fictional/codex',environment:''}]);
       await page.locator('#toasts').getByText('Fixture terminal failed',{exact:true}).waitFor();

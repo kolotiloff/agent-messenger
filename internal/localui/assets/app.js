@@ -4545,16 +4545,8 @@
       sw.disabled=!a&&!cli;
       sw.addEventListener('click',async()=>{sw.disabled=true;try{await setAgentOn(provider,!on);}finally{sw.disabled=false;}});
       head.append(heading);
-      if(cli||a){
-        const running=a?.project_running||0,todayTasks=a?.project_today||0;
-        if(running||todayTasks){
-          const activity=el('button',[running?running+tr(' идёт'):'',todayTasks?todayTasks+tr(' сегодня'):''].filter(Boolean).join(', '),'am-agent-activity am-quiet-button');
-          activity.type='button';activity.title=tr('Задачи');
-          activity.addEventListener('click',()=>{$('agent-filter').value=provider;syncSelects();show('tasks');renderTaskList();});
-          head.append(activity);
-        }
-        head.append(sw);
-      }else if(missing){
+      if(cli||a)head.append(sw);
+      else if(missing){
         const install=el('button',tr('Установить'));
         install.type='button';install.addEventListener('click',()=>{openAgentSetup(provider);installAgent(provider);});
         head.append(install);
@@ -5756,9 +5748,10 @@
     steps.append(programRow);
     if(cli){
       const authNote=rowNote.get(provider+':auth');
-      const authRow=stepRow(auth==='authenticated'?'ok':2,tr('Вход в аккаунт'),
+      const authRow=stepRow(auth==='authenticated'?'ok':auth==='not_authenticated'?'–':'?',tr('Вход в аккаунт'),
         authNote||(auth==='authenticated'?tr('Вход выполнен'):auth==='not_authenticated'?tr('Вход не выполнен'):tr('Ещё не проверен')),
         authNote||checking.has(provider)?null:auth==='authenticated'?[tr('Выйти'),()=>logoutFromCard(provider,cli,environment)]:[tr('Войти'),()=>loginFromCard(provider,cli,environment)]);
+      authRow.firstElementChild.setAttribute('aria-hidden','true');
       authRow.querySelector('.am-step-sub')?.setAttribute('role','status');
       steps.append(authRow);
       if(view?.folder&&agent?.trust?.state&&agent.trust.state!=='trusted'){
@@ -5768,7 +5761,7 @@
     const previous=$('agent-setup-actions');
     if(previous?.outerHTML===steps.outerHTML)return;
     if(previous)previous.replaceWith(steps);
-    else $('agent-models-open').closest('.am-agent-settings-rows').after(steps);
+    else $('agent-models-open').closest('.am-agent-settings-rows').append(steps);
   }
   function openAgentSetup(provider){
     setupProvider=provider;const a=(view?.agents||[]).find(x=>x.agent===provider),found=discovery.find(d=>d.provider===provider);
